@@ -69,6 +69,13 @@ export class DependencyManager {
    * @param unsubscribe - Function to call when unsubscribing
    */
   addDependency(dep: Dependency, unsubscribe: () => void): void {
+    if (this.depMap.has(dep)) {
+      // Already tracking this dependency. Unsubscribe the new one immediately
+      // to prevents duplicates and memory leaks.
+      unsubscribe();
+      return;
+    }
+
     this.depMap.set(dep, unsubscribe);
     this.depRefs.push(new WeakRef(dep));
 
