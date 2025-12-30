@@ -1,0 +1,15 @@
+# tsconfig
+# pnpm
+.pnpm-store
+.pnpm-modules.yaml
+.pnpm-debug.log
+.pnpm-log.txt
+node_modules/
+dist/
+coverage/
+
+# Benchmark results
+benchmarks/results/
+
+# Performance baseline (optional - commit if you want to track baseline)
+.performance/

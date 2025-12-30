@@ -1,0 +1,85 @@
+{
+  "name": "@but212/reactive-atom",
+  "version": "1.1.0",
+  "type": "module",
+  "description": "A reactive state management library that combines the power of `atom`, `computed`, and `effect` for seamless management of reactive state.",
+  "main": "dist/index.cjs",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "vite build",
+    "test": "vitest",
+    "test:unit": "vitest __tests__/unit",
+    "test:integration": "vitest __tests__/integration",
+    "test:watch": "vitest --watch",
+    "test:coverage": "vitest --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "prepublishOnly": "pnpm run build",
+    "bench": "tsx benchmarks/index.ts",
+    "bench:micro": "tsx benchmarks/index.ts micro",
+    "bench:macro": "tsx benchmarks/index.ts macro",
+    "bench:atom": "tsx benchmarks/index.ts atom",
+    "bench:computed": "tsx benchmarks/index.ts computed",
+    "bench:effect": "tsx benchmarks/index.ts effect",
+    "bench:batch": "tsx benchmarks/index.ts batch",
+    "bench:diamond": "tsx benchmarks/index.ts diamond",
+    "bench:todo": "tsx benchmarks/index.ts todo",
+    "bench:dashboard": "tsx benchmarks/index.ts dashboard",
+    "bench:graph": "tsx benchmarks/index.ts graph",
+    "bench:memory": "tsx benchmarks/index.ts memory",
+    "bench:gc": "tsx benchmarks/index.ts gc",
+    "bench:leak": "tsx benchmarks/index.ts leak",
+    "bench:baseline": "tsx scripts/save-baseline.ts",
+    "bench:check": "tsx scripts/check-regression.ts"
+  },
+  "keywords": [
+    "reactive",
+    "atom",
+    "computed",
+    "effect",
+    "reactive-atom",
+    "signal",
+    "reactive-signal"
+  ],
+  "author": "Jeongil Suk",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/but212/reactive-atom.git"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.3.10",
+    "@types/node": "^24.10.4",
+    "@vitest/coverage-v8": "^3.2.4",
+    "@vitest/ui": "^3.2.4",
+    "benchmark": "^2.1.4",
+    "chart.js": "^4.5.1",
+    "happy-dom": "^20.0.11",
+    "tinybench": "^5.1.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.0",
+    "vite-plugin-dts": "^4.5.4",
+    "vitest": "^3.2.4"
+  },
+  "optionalDependencies": {
+    "canvas": "^3.2.0"
+  }
+}
