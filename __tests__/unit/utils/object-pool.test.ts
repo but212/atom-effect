@@ -2,6 +2,7 @@
  * @fileoverview Object Pool tests (coverage supplement)
  */
 
+import { describe, expect, it } from 'vitest';
 import {
   Notification,
   notificationPool,
@@ -9,7 +10,6 @@ import {
   SchedulerCallback,
   schedulerCallbackPool,
 } from '@/utils/object-pool';
-import { describe, expect, it } from 'vitest';
 
 describe('ObjectPool', () => {
   it('creates a new object', () => {

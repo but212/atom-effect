@@ -2,11 +2,11 @@
  * @fileoverview Effect-specific tests (coverage supplement)
  */
 
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { atom } from '@/core/atom';
 import { effect } from '@/core/effect';
 import { EffectError } from '@/errors/errors';
 import { debug } from '@/utils/debug';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 describe('Effect - Error Handling and Edge Cases', () => {
   beforeEach(() => {

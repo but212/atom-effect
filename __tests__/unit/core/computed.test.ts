@@ -2,10 +2,10 @@
  * @fileoverview Computed-specific tests (coverage supplement)
  */
 
+import { describe, expect, it, vi } from 'vitest';
 import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
 import { ComputedError } from '@/errors/errors';
-import { describe, expect, it, vi } from 'vitest';
 
 describe('Computed - Error Handling and Edge Cases', () => {
   it('rejects invalid function types', () => {

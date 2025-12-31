@@ -2,9 +2,9 @@
  * @fileoverview DependencyManager tests
  */
 
+import { describe, expect, it, vi } from 'vitest';
 import { DependencyManager } from '@/tracking/dependency-manager';
 import type { Dependency } from '@/types';
-import { describe, expect, it, vi } from 'vitest';
 
 describe('DependencyManager', () => {
   it('can add a dependency', () => {

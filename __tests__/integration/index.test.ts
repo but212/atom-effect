@@ -2,6 +2,7 @@
  * @fileoverview Comprehensive tests for reactive state management library
  */
 
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AsyncState,
   atom,
@@ -14,7 +15,6 @@ import {
   isEffect,
   untracked,
 } from '@/index';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ========================================
 // 1. Atom Basic Behavior

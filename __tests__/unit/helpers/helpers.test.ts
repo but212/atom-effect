@@ -2,11 +2,11 @@
  * @fileoverview Helpers tests (coverage supplement)
  */
 
+import { describe, expect, it } from 'vitest';
 import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
 import { AtomError } from '@/errors/errors';
 import { batch, isComputed, untracked } from '@/index';
-import { describe, expect, it } from 'vitest';
 
 describe('batch - Error Handling', () => {
   it('rejects invalid callback types', () => {

@@ -2,6 +2,7 @@
  * @fileoverview Error class tests (coverage supplement)
  */
 
+import { describe, expect, it } from 'vitest';
 import {
   AtomError,
   ComputedError,
@@ -10,7 +11,6 @@ import {
   SchedulerError,
   wrapError,
 } from '@/errors/errors';
-import { describe, expect, it } from 'vitest';
 
 describe('Error Classes', () => {
   it('AtomError has correct properties', () => {

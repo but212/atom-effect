@@ -2,11 +2,11 @@
  * @fileoverview Atom-specific tests (coverage supplement)
  */
 
+import { describe, expect, it, vi } from 'vitest';
 import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
 import { AtomError } from '@/errors/errors';
 import { debug } from '@/utils/debug';
-import { describe, expect, it, vi } from 'vitest';
 
 describe('Atom - Error Handling and Edge Cases', () => {
   it('rejects invalid subscriber types', () => {
