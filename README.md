@@ -274,6 +274,10 @@ const doubled = computed(() => count.value * 2); // ReadonlyAtom<number>
 const user = atom<User | null>(null); // Explicit typing
 ```
 
+## Contributing
+
+Contributions are welcome! Feel free to open an issue or submit a pull request if you have any suggestions, bug reports, or improvements.
+
 ## License
 
 MIT © [Jeongil Suk](https://github.com/but212)
