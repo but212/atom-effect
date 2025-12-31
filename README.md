@@ -1,504 +1,590 @@
 # @but212/reactive-atom
 
 [![npm version](https://img.shields.io/npm/v/@but212/reactive-atom.svg)](https://www.npmjs.com/package/@but212/reactive-atom)
-[![npm downloads](https://img.shields.io/npm/dm/@but212/reactive-atom.svg)](https://www.npmjs.com/package/@but212/reactive-atom)
-[![CI](https://github.com/but212/reactive-atom/workflows/CI/badge.svg)](https://github.com/but212/reactive-atom/actions)
-[![codecov](https://codecov.io/gh/but212/reactive-atom/branch/main/graph/badge.svg)](https://codecov.io/gh/but212/reactive-atom)
-[![bundle size](https://img.shields.io/bundlephobia/minzip/@but212/reactive-atom)](https://bundlephobia.com/package/@but212/reactive-atom)
-[![license](https://img.shields.io/npm/l/@but212/reactive-atom.svg)](https://github.com/but212/reactive-atom/blob/main/LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg)](https://www.typescriptlang.org/)
 
-> A lightweight TypeScript library for fine-grained reactive state management
+A lightweight, high-performance reactive state management library for TypeScript/JavaScript applications. Built with zero dependencies and exceptional performance in mind.
 
-**reactive-atom** is a library that provides fine-grained reactive state management by combining `atom`, `computed`, and `effect`. It implements a paradigm similar to React signals and Vue's reactivity system in TypeScript.
+## ✨ Features
 
-## 🆕 What's New in v1.1.0
+### Core Primitives
 
-- **🛡️ Production Safety**: Infinite loop detection now safely disposes effects in production (prevents crashes)
-- **📐 Type Safety**: Async computed functions now enforce `defaultValue` at compile-time
-- **⚙️ Scheduler API**: New `scheduler.setMaxFlushIterations()` for complex dependency graphs
-- **💾 Memory Safety**: Enhanced with WeakMap usage to prevent memory leaks
-- **🔒 Overflow Protection**: Promise ID overflow prevention for long-running applications
+- **🔥 `atom`** - Reactive state primitive with automatic dependency tracking
+- **⚡ `computed`** - Derived state with sync/async support and smart caching
+- **🎯 `effect`** - Side effect management with automatic cleanup
+- **📦 `batch`** - Batch multiple updates for optimal performance
 
-[View Changelog](./CHANGELOG.md)
+### Performance & Optimization
 
-## ✨ Key Features
+- **Zero Dependencies** - Minimal footprint, maximum control
+- **Object Pooling** - Reduced GC pressure through resource reuse
+- **Lazy Initialization** - Memory-efficient state management
+- **WeakRef-based Tracking** - Prevents memory leaks automatically
+- **queueMicrotask Scheduler** - Optimal async execution
+- **O(1) Operations** - Subscription management with Map-based lookup
+- **Smart Caching** - Computed values recompute only when dependencies change
 
-- **Fine-grained Dependency Tracking**: Automatically tracks dependencies and recomputes only what's necessary
-- **Sync/Async Support**: `computed` supports both synchronous and asynchronous (Promise-returning) functions
-- **Framework-Agnostic**: Not limited to UI updates - applicable to any reactive logic
-- **Minimalist API**: Simple API consisting of `atom`, `computed`, `effect`, `batch`, and `untracked`
-- **Batch Updates**: Optimize performance by processing multiple state changes at once
-- **Type Safety**: Full TypeScript support with compile-time type checking (async computed enforces defaultValue)
-- **Developer-Friendly**: Circular reference detection, debug info, infinite loop protection, etc.
-- **Lightweight**: Pure TypeScript implementation with zero external dependencies
-- **Memory Optimized**: WeakRef-based automatic GC, Object pooling reduces GC pressure by 45%
-- **Production Safe**: Automatic disposal on infinite loops prevents system hangs
+### Developer Experience
+
+- **Full TypeScript Support** - Strict type checking with comprehensive types
+- **Circular Dependency Detection** - Development mode safety checks
+- **Infinite Loop Protection** - Configurable thresholds with sliding window algorithm
+- **Auto Debug IDs** - Automatic ID assignment (`atom_1`, `computed_2`, etc.)
+- **Structured Errors** - Clear error class hierarchy for better debugging
+- **Comprehensive JSDoc** - Inline documentation for all APIs
 
 ## 📦 Installation
 
 ```bash
-# npm
 npm install @but212/reactive-atom
-
-# pnpm
+# or
 pnpm add @but212/reactive-atom
-
-# yarn
+# or
 yarn add @but212/reactive-atom
 ```
 
 ## 🚀 Quick Start
 
-### 1. Atom - Basic State
+```typescript
+import { atom, computed, effect, batch } from '@but212/reactive-atom';
+
+// Create reactive state
+const count = atom(0);
+const name = atom('Alice');
+
+// Derived state
+const greeting = computed(() => `Hello, ${name.value}! Count: ${count.value}`);
+
+// Side effects with automatic cleanup
+const dispose = effect(() => {
+  console.log(greeting.value);
+  // This runs whenever count or name changes
+});
+
+// Batch updates for performance
+batch(() => {
+  count.value = 1;
+  name.value = 'Bob';
+  // Effect runs only once after both updates
+});
+
+// Cleanup
+dispose();
+```
+
+## 📚 API Reference
+
+### `atom<T>(initialValue: T, options?: AtomOptions): WritableAtom<T>`
+
+Creates a reactive state container.
 
 ```typescript
-import { atom } from '@but212/reactive-atom';
-
 const count = atom(0);
+const user = atom({ name: 'Alice', age: 30 });
 
-// Read value
+// Read value (tracks dependencies)
 console.log(count.value); // 0
 
-// Write value
-count.value = 10;
-console.log(count.value); // 10
+// Write value (notifies subscribers)
+count.value = 1;
 
-// Subscribe
+// Peek without tracking
+console.log(count.peek()); // 1
+
+// Subscribe to changes
 const unsubscribe = count.subscribe((newValue, oldValue) => {
-  console.log(`${oldValue} → ${newValue}`);
+  console.log(`Changed from ${oldValue} to ${newValue}`);
 });
 
-count.value = 20; // Console: "10 → 20"
-
-// Unsubscribe
-unsubscribe();
+// Options
+const syncAtom = atom(0, { sync: true }); // Synchronous updates
 ```
 
-### 2. Computed - Derived State
+**Methods:**
+
+- `get value()` - Read current value and track dependency
+- `set value(newValue)` - Update value and notify subscribers
+- `peek()` - Read without tracking dependencies
+- `subscribe(listener)` - Subscribe to changes, returns unsubscribe function
+- `dispose()` - Clean up all subscriptions
+- `subscriberCount()` - Get number of active subscribers
+
+---
+
+### `computed<T>(fn: () => T, options?: ComputedOptions<T>): ReadonlyAtom<T>`
+
+Creates a derived state that automatically recomputes when dependencies change.
 
 ```typescript
-import { atom, computed } from '@but212/reactive-atom';
-
-const firstName = atom('John');
-const lastName = atom('Doe');
-
 // Synchronous computed
-const fullName = computed(() => `${firstName.value} ${lastName.value}`);
-console.log(fullName.value); // "John Doe"
+const count = atom(0);
+const doubled = computed(() => count.value * 2);
 
-firstName.value = 'Jane';
-console.log(fullName.value); // "Jane Doe"
+console.log(doubled.value); // 0
+count.value = 5;
+console.log(doubled.value); // 10
 
-// Asynchronous computed (defaultValue is required for async)
+// Async computed (requires defaultValue)
+const userId = atom(1);
 const userData = computed(
   async () => {
-    const response = await fetch(`/api/user/${userId.value}`);
+    const response = await fetch(`/api/users/${userId.value}`);
     return response.json();
   },
-  { defaultValue: null } // Required for async computed
+  { defaultValue: null }
 );
 
-console.log(userData.state); // "pending" | "resolved" | "rejected"
-console.log(userData.value); // defaultValue or resolved value
+// Lazy computed (computes only when accessed)
+const expensive = computed(() => heavyComputation(), { lazy: true });
 ```
 
-### 3. Effect - Side Effects
+**Options:**
+
+- `defaultValue` - Default value (required for async functions)
+- `lazy` - Compute only when accessed (default: `false`)
+- `sync` - Synchronous updates (default: `false`)
+
+**Methods:**
+
+- `get value()` - Get computed value (recomputes if stale)
+- `peek()` - Get cached value without recomputing
+- `dispose()` - Clean up and stop tracking
+
+---
+
+### `effect(fn: () => void | (() => void)): () => void`
+
+Runs a side effect and re-runs when dependencies change.
 
 ```typescript
-import { atom, effect } from '@but212/reactive-atom';
-
 const count = atom(0);
 
-// Automatically tracks dependencies
-effect(() => {
-  console.log(`Count: ${count.value}`);
+// Basic effect
+const dispose = effect(() => {
+  console.log(`Count is: ${count.value}`);
 });
-// Console: "Count: 0"
-
-count.value = 1;
-// Console: "Count: 1"
 
 // Effect with cleanup
-effect(() => {
+const dispose2 = effect(() => {
   const timer = setInterval(() => {
     console.log(count.value);
   }, 1000);
-
-  // Cleanup function
+  
+  // Cleanup function runs before next execution or disposal
   return () => clearInterval(timer);
 });
+
+// Stop the effect
+dispose();
+dispose2();
 ```
 
-### 4. Batch - Batch Updates
+**Features:**
 
-```typescript
-import { atom, batch } from '@but212/reactive-atom';
+- Automatic dependency tracking
+- Cleanup function support
+- Infinite loop detection
+- Automatic disposal on errors
 
-const x = atom(0);
-const y = atom(0);
-const sum = computed(() => x.value + y.value);
-
-effect(() => {
-  console.log(`Sum: ${sum.value}`);
-});
-
-// Without batch: effect runs twice
-x.value = 10;
-y.value = 20;
-
-// With batch: effect runs only once
-batch(() => {
-  x.value = 100;
-  y.value = 200;
-});
-```
-
-### 5. Untracked - Break Dependency Tracking
-
-```typescript
-import { atom, computed, untracked } from '@but212/reactive-atom';
-
-const count = atom(0);
-const multiplier = atom(2);
-
-// Only tracks count, not multiplier
-const result = computed(() => {
-  const c = count.value;
-  const m = untracked(() => multiplier.value);
-  return c * m;
-});
-
-count.value = 5; // result recomputes
-multiplier.value = 3; // result does NOT recompute
-```
-
-## 📚 Core Concepts
-
-### Atom
-
-An **atom** is the most basic unit of state. It holds a single value and notifies subscribers when the value changes.
-
-```typescript
-const count = atom(0);
-const user = atom({ name: 'John', age: 30 });
-
-// Synchronous notification (default: async via microtask)
-const syncAtom = atom(0, { sync: true });
-```
-
-### Computed
-
-A **computed** value automatically recalculates when its dependencies change. It supports both synchronous and asynchronous computations.
-
-```typescript
-// Synchronous
-const doubled = computed(() => count.value * 2);
-
-// Asynchronous with default value (REQUIRED for async)
-const userData = computed(
-  async () => {
-    const res = await fetch(`/api/user/${userId.value}`);
-    return res.json();
-  },
-  { defaultValue: null } // TypeScript enforces this for async
-);
-
-// Lazy evaluation (computes only when accessed)
-const expensive = computed(() => heavyComputation(), { lazy: true });
-
-// Error handling with async
-const safeData = computed(
-  async () => {
-    const res = await fetch('/api/data');
-    if (!res.ok) throw new Error('Failed');
-    return res.json();
-  },
-  {
-    defaultValue: [], // Required for async
-    onError: (error) => console.error('Fetch failed:', error),
-  }
-);
-```
-
-### Effect
-
-An **effect** runs side effects when dependencies change. It automatically tracks all reactive values accessed during execution.
-
-```typescript
-// Basic effect
-effect(() => {
-  document.title = `Count: ${count.value}`;
-});
-
-// Effect with cleanup
-effect(() => {
-  const controller = new AbortController();
-
-  fetch('/api/data', { signal: controller.signal })
-    .then((res) => res.json())
-    .then((data) => console.log(data));
-
-  // Cleanup on re-run or disposal
-  return () => controller.abort();
-});
-
-// Synchronous effect (runs immediately)
-effect(
-  () => {
-    console.log('Immediate:', count.value);
-  },
-  { sync: true }
-);
-
-// Infinite loop protection (auto-disposes in production)
-effect(
-  () => {
-    if (count.value < 10) {
-      count.value++; // Detected and safely stopped
-    }
-  },
-  { 
-    trackModifications: true,
-    maxExecutionsPerSecond: 100 // Default, configurable
-  }
-);
-```
-
-## 🎯 Advanced Usage
-
-### Batch Updates
-
-Batch multiple state changes to trigger effects only once:
-
-```typescript
-batch(() => {
-  firstName.value = 'Jane';
-  lastName.value = 'Smith';
-  age.value = 25;
-});
-// Effects run only once after all changes
-```
-
-### Untracked Reads
-
-Read reactive values without creating dependencies:
-
-```typescript
-const result = computed(() => {
-  const a = atom1.value; // Tracked
-  const b = untracked(() => atom2.value); // Not tracked
-  return a + b;
-});
-```
-
-### Peeking Values
-
-Read current value without triggering dependency tracking:
-
-```typescript
-const current = count.peek(); // No dependency created
-```
-
-### Disposal
-
-Clean up resources when done:
-
-```typescript
-const myAtom = atom(0);
-const myComputed = computed(() => myAtom.value * 2);
-const myEffect = effect(() => console.log(myComputed.value));
-
-// Dispose individual resources
-myEffect.dispose();
-myComputed.dispose();
-myAtom.dispose();
-```
-
-### Scheduler Configuration
-
-Configure scheduler behavior for complex dependency graphs:
-
-```typescript
-import { scheduler } from '@but212/reactive-atom';
-
-// Increase max iterations for deep dependency chains
-scheduler.setMaxFlushIterations(5000); // Default: 1000
-
-// Now complex graphs won't hit iteration limits
-batch(() => {
-  // Many interconnected updates...
-});
-```
-
-## 🔧 API Reference
-
-### `atom<T>(initialValue: T, options?: AtomOptions): Atom<T>`
-
-Creates a reactive atom.
-
-**Options:**
-
-- `sync?: boolean` - If true, notify subscribers synchronously (default: `false`)
-
-**Methods:**
-
-- `value: T` - Get/set the current value
-- `subscribe(listener: (newValue: T, oldValue: T) => void): () => void` - Subscribe to changes
-- `peek(): T` - Read value without tracking
-- `dispose(): void` - Clean up resources
-
-### `computed<T>(fn: () => T | Promise<T>, options?: ComputedOptions<T>): ComputedAtom<T>`
-
-Creates a computed value.
-
-**Function Overloads:**
-
-```typescript
-// Synchronous: defaultValue is optional
-computed<T>(fn: () => T, options?: ComputedOptions<T>): ComputedAtom<T>
-
-// Asynchronous: defaultValue is REQUIRED
-computed<T>(
-  fn: () => Promise<T>,
-  options: ComputedOptions<T> & { defaultValue: T }
-): ComputedAtom<T>
-```
-
-**Options:**
-
-- `equal?: (a: T, b: T) => boolean` - Custom equality function
-- `defaultValue?: T` - Default value (required for async computed)
-- `lazy?: boolean` - Lazy evaluation (default: `true`)
-- `onError?: (error: Error) => void` - Error handler
-
-**Properties:**
-
-- `value: T` - Get the computed value
-- `state: AsyncStateType` - Async state: `"idle" | "pending" | "resolved" | "rejected"`
-
-**Methods:**
-
-- `subscribe(listener: () => void): () => void` - Subscribe to changes
-- `peek(): T` - Read value without tracking
-- `dispose(): void` - Clean up resources
-
-### `effect(fn: EffectFunction, options?: EffectOptions): EffectObject`
-
-Runs side effects when dependencies change.
-
-**Options:**
-
-- `sync?: boolean` - Run synchronously (default: `false`)
-- `maxExecutionsPerSecond?: number` - Infinite loop threshold (default: `100`)
-- `trackModifications?: boolean` - Track dependency modifications (default: `false`)
-
-**Methods:**
-
-- `dispose(): void` - Stop the effect
-- `run(): void` - Manually run the effect
+---
 
 ### `batch(fn: () => void): void`
 
-Batches multiple state changes.
+Batch multiple updates to execute effects only once.
+
+```typescript
+const firstName = atom('John');
+const lastName = atom('Doe');
+const fullName = computed(() => `${firstName.value} ${lastName.value}`);
+
+effect(() => console.log(fullName.value));
+// Logs: "John Doe"
+
+// Without batch - logs twice
+firstName.value = 'Jane';  // Logs: "Jane Doe"
+lastName.value = 'Smith';  // Logs: "Jane Smith"
+
+// With batch - logs once
+batch(() => {
+  firstName.value = 'Alice';
+  lastName.value = 'Johnson';
+}); // Logs: "Alice Johnson" (only once)
+```
+
+---
 
 ### `untracked<T>(fn: () => T): T`
 
-Reads reactive values without tracking dependencies.
-
-### `scheduler`
-
-Global scheduler instance for advanced configuration.
-
-**Methods:**
-
-- `setMaxFlushIterations(max: number): void` - Set maximum batch iterations (min: 10, default: 1000)
-
-**Example:**
+Execute a function without tracking dependencies.
 
 ```typescript
-import { scheduler } from '@but212/reactive-atom';
+const a = atom(1);
+const b = atom(2);
 
-// For complex dependency graphs
-scheduler.setMaxFlushIterations(5000);
+const sum = computed(() => {
+  const aValue = a.value; // Tracked
+  const bValue = untracked(() => b.value); // NOT tracked
+  return aValue + bValue;
+});
+
+console.log(sum.value); // 3
+b.value = 10;
+console.log(sum.value); // 3 (didn't recompute, b is not a dependency)
+a.value = 5;
+console.log(sum.value); // 15 (recomputed because a changed)
 ```
 
-## 🚀 Performance
+---
 
-- **Atom creation**: ~2M ops/sec
-- **Computed recomputation**: ~339K ops/sec
-- **Unsubscribe**: O(1) complexity (10-1000x faster than v1.0)
-- **Memory efficient**: WeakRef-based automatic GC
-- **GC pressure**: 45% reduction with object pooling
+### Type Guards
 
-## 🧪 Testing
+```typescript
+import { isAtom, isComputed, isEffect } from '@but212/reactive-atom';
 
-```bash
-# Run tests
-pnpm test
+const a = atom(1);
+const c = computed(() => a.value * 2);
 
-# Run tests with coverage
-pnpm test:coverage
-
-# Run tests in watch mode
-pnpm test:watch
-
-# Run benchmarks
-pnpm bench
+isAtom(a);      // true
+isComputed(c);  // true
+isEffect(a);    // false
 ```
 
-## 📊 Benchmarks
+---
+
+### Configuration
+
+```typescript
+import { DEBUG_CONFIG, POOL_CONFIG, SCHEDULER_CONFIG, scheduler } from '@but212/reactive-atom';
+
+// Debug configuration
+DEBUG_CONFIG.ENABLE_CIRCULAR_DEPENDENCY_DETECTION = true;
+DEBUG_CONFIG.ENABLE_INFINITE_LOOP_DETECTION = true;
+DEBUG_CONFIG.MAX_EFFECT_ITERATIONS = 100;
+
+// Object pooling
+POOL_CONFIG.INITIAL_SIZE = 16;
+POOL_CONFIG.MAX_SIZE = 256;
+
+// Scheduler
+SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS = 100;
+scheduler.setMaxFlushIterations(200);
+```
+
+---
+
+### Error Classes
+
+```typescript
+import { AtomError, ComputedError, EffectError, SchedulerError } from '@but212/reactive-atom';
+
+try {
+  // Your code
+} catch (error) {
+  if (error instanceof EffectError) {
+    console.error('Effect execution failed:', error);
+  }
+}
+```
+
+## 🎯 Use Cases
+
+### State Management
+
+```typescript
+// Application state
+const todoList = atom([]);
+const filter = atom('all'); // 'all' | 'active' | 'completed'
+
+const filteredTodos = computed(() => {
+  const todos = todoList.value;
+  const currentFilter = filter.value;
+  
+  if (currentFilter === 'active') {
+    return todos.filter(t => !t.completed);
+  }
+  if (currentFilter === 'completed') {
+    return todos.filter(t => t.completed);
+  }
+  return todos;
+});
+
+// Update UI on changes
+effect(() => {
+  renderTodoList(filteredTodos.value);
+});
+```
+
+### Form Handling
+
+```typescript
+const formData = atom({ email: '', password: '' });
+const isValid = computed(() => {
+  const { email, password } = formData.value;
+  return email.includes('@') && password.length >= 8;
+});
+
+const submitButton = document.querySelector('#submit');
+effect(() => {
+  submitButton.disabled = !isValid.value;
+});
+```
+
+### API Integration
+
+```typescript
+const userId = atom(null);
+const userProfile = computed(async () => {
+  if (!userId.value) return null;
+  const res = await fetch(`/api/users/${userId.value}`);
+  return res.json();
+}, { defaultValue: null });
+
+effect(() => {
+  if (userProfile.value) {
+    updateUI(userProfile.value);
+  }
+});
+```
+
+## 🔧 Advanced Patterns
+
+### Derived Atoms
+
+```typescript
+function createDerivedAtom<T, U>(
+  source: ReadonlyAtom<T>,
+  transform: (value: T) => U
+): ReadonlyAtom<U> {
+  return computed(() => transform(source.value));
+}
+
+const count = atom(0);
+const doubled = createDerivedAtom(count, n => n * 2);
+```
+
+### Persistent State
+
+```typescript
+function persistentAtom<T>(key: string, initialValue: T) {
+  const stored = localStorage.getItem(key);
+  const a = atom<T>(stored ? JSON.parse(stored) : initialValue);
+  
+  effect(() => {
+    localStorage.setItem(key, JSON.stringify(a.value));
+  });
+  
+  return a;
+}
+
+const theme = persistentAtom('theme', 'light');
+```
+
+### Async State Machine
+
+```typescript
+const AsyncState = {
+  IDLE: 'idle',
+  LOADING: 'loading',
+  SUCCESS: 'success',
+  ERROR: 'error'
+} as const;
+
+const status = atom(AsyncState.IDLE);
+const data = atom(null);
+const error = atom(null);
+
+async function fetchData(url: string) {
+  status.value = AsyncState.LOADING;
+  try {
+    const response = await fetch(url);
+    data.value = await response.json();
+    status.value = AsyncState.SUCCESS;
+  } catch (e) {
+    error.value = e;
+    status.value = AsyncState.ERROR;
+  }
+}
+```
+
+## 📊 Performance
+
+Based on comprehensive benchmarks in `docs/BENCHMARKS.md`:
+
+| Operation | Performance | Notes |
+|-----------|-------------|-------|
+| Atom creation | ~2M ops/sec | Ultra-fast primitive creation |
+| Atom read/write | ~340K ops/sec | Sub-microsecond operations |
+| Computed recomputation | ~339K ops/sec | Smart caching reduces overhead |
+| Effect execution | ~200K ops/sec | Automatic dependency tracking |
+| Batch updates | ~150K ops/sec | Optimized for multiple changes |
+| Unsubscribe | O(1) | Constant-time cleanup |
+
+### Running Benchmarks
 
 ```bash
 # Run all benchmarks
 pnpm bench
 
-# Run micro benchmarks only
+# Micro-benchmarks (atom, computed, effect)
 pnpm bench:micro
 
-# Run macro benchmarks only
+# Macro-benchmarks (real-world scenarios)
 pnpm bench:macro
 
-# Run specific benchmark
-pnpm bench:atom
-pnpm bench:computed
-pnpm bench:effect
+# Set performance baseline
+pnpm bench:baseline
+
+# Check for regressions
+pnpm bench:regression
+```
+
+See [docs/BENCHMARKS.md](./docs/BENCHMARKS.md) for detailed benchmark documentation.
+
+## 🧪 Testing
+
+The library includes a comprehensive test suite with 400+ test cases:
+
+```bash
+# Run all tests
+pnpm test
+
+# Run with coverage
+pnpm test:coverage
+
+# Run unit tests only
+pnpm test:unit
+
+# Run integration tests
+pnpm test:integration
+
+# Watch mode
+pnpm test:watch
+```
+
+### Test Coverage
+
+- **Unit Tests**: Core primitives (atom, computed, effect, batch, untracked)
+- **Integration Tests**: Complex reactive flows and edge cases
+- **DOM Tests**: Browser integration (form binding, conditional rendering, list rendering)
+- **Performance Tests**: Memory leaks, GC pressure, large-scale scenarios
+
+## 🏗️ Project Structure
+
+```text
+reactive-atom/
+├── src/
+│   ├── core/           # Core primitives (atom, computed, effect)
+│   ├── scheduler/      # Batch execution and task scheduling
+│   ├── tracking/       # Dependency tracking system
+│   ├── types/          # TypeScript type definitions
+│   ├── utils/          # Utilities (debug, type guards, object pool)
+│   ├── errors/         # Error classes and messages
+│   ├── constants.ts    # Configuration constants
+│   └── index.ts        # Public API exports
+├── __tests__/          # Test suite
+│   ├── unit/           # Unit tests
+│   ├── integration/    # Integration tests
+│   └── dom/            # DOM integration tests
+├── __benchmarks__/     # Performance benchmarks
+│   ├── micro/          # Micro-benchmarks
+│   └── macro/          # Macro-benchmarks
+├── docs/               # Documentation
+│   └── BENCHMARKS.md   # Benchmark documentation
+└── scripts/            # Build and utility scripts
+```
+
+## 🔒 Type Safety
+
+Full TypeScript support with strict type checking:
+
+```typescript
+// Type inference
+const count = atom(0);           // WritableAtom<number>
+const name = atom('Alice');      // WritableAtom<string>
+
+// Generic types
+const user = atom<User | null>(null);
+
+// Readonly computed
+const doubled = computed(() => count.value * 2); // ReadonlyAtom<number>
+// doubled.value = 10; // ❌ Error: Cannot assign to 'value'
+
+// Async computed requires defaultValue
+const data = computed(async () => {
+  return await fetchData();
+}, { defaultValue: [] });
+```
+
+## 🛠️ Development
+
+```bash
+# Install dependencies
+pnpm install
+
+# Build
+pnpm build
+
+# Run tests
+pnpm test
+
+# Type checking
+pnpm typecheck
+
+# Linting
+pnpm lint
+pnpm lint:fix
+
+# Formatting
+pnpm format
+```
+
+## 📋 Configuration Options
+
+### Debug Configuration
+
+```typescript
+DEBUG_CONFIG.ENABLE_CIRCULAR_DEPENDENCY_DETECTION = true;  // Detect circular deps
+DEBUG_CONFIG.ENABLE_INFINITE_LOOP_DETECTION = true;        // Detect infinite loops
+DEBUG_CONFIG.MAX_EFFECT_ITERATIONS = 100;                  // Max effect iterations
+DEBUG_CONFIG.EFFECT_WINDOW_SIZE = 10;                      // Sliding window size
+```
+
+### Object Pool Configuration
+
+```typescript
+POOL_CONFIG.INITIAL_SIZE = 16;   // Initial pool size
+POOL_CONFIG.MAX_SIZE = 256;      // Maximum pool size
+```
+
+### Scheduler Configuration
+
+```typescript
+SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS = 100;  // Max batch iterations
+scheduler.setMaxFlushIterations(200);          // Runtime configuration
 ```
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please read our [Contributing Guide](./CONTRIBUTING.md) for details.
+Contributions are welcome! See [PUBLISHING.md](./PUBLISHING.md) for development guidelines.
 
 ## 📄 License
 
 MIT © [Jeongil Suk](https://github.com/but212)
+
+## 📝 Changelog
+
+See [CHANGELOG.md](./CHANGELOG.md) for version history and changes.
 
 ## 🔗 Links
 
 - [GitHub Repository](https://github.com/but212/reactive-atom)
 - [npm Package](https://www.npmjs.com/package/@but212/reactive-atom)
 - [Issue Tracker](https://github.com/but212/reactive-atom/issues)
-- [Changelog](./CHANGELOG.md)
 
-## 💡 Inspiration
+## 🎓 Inspiration
 
-This library is inspired by:
-
-- [Solid.js Signals](https://www.solidjs.com/docs/latest/api#createsignal)
-- [Vue 3 Reactivity](https://vuejs.org/guide/extras/reactivity-in-depth.html)
-- [Preact Signals](https://preactjs.com/guide/v10/signals/)
-- [MobX](https://mobx.js.org/)
-
-## 🌟 Why reactive-atom?
-
-| Feature | reactive-atom | Solid Signals | Vue Reactivity | Preact Signals |
-|---------|---------------|---------------|----------------|----------------|
-| Framework-agnostic | ✅ | ❌ | ✅ | ❌ |
-| Async computed | ✅ | ❌ | ❌ | ❌ |
-| TypeScript-first | ✅ | ✅ | ✅ | ✅ |
-| Zero dependencies | ✅ | ❌ | ❌ | ❌ |
-| Memory optimized | ✅ | ✅ | ✅ | ❌ |
-| Bundle size | ~5KB | ~3KB | ~10KB | ~2KB |
+This library draws inspiration from modern reactive frameworks including Solid.js, Vue 3, and Preact Signals, while focusing on minimal footprint and maximum performance.
 
 ---
 
