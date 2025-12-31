@@ -1,4 +1,4 @@
-import { ReadonlyAtom, ComputedAtom, EffectObject } from '../types';
+import type { ComputedAtom, EffectObject, ReadonlyAtom } from '../types';
 import { debug } from './debug';
 
 export function isAtom(obj: unknown): obj is ReadonlyAtom {

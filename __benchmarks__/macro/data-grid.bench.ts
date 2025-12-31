@@ -4,10 +4,10 @@
  */
 
 import { bench, describe } from 'vitest';
-import { atom, computed, batch } from '../../src/index.js';
-import { macroBenchOptions } from '../utils/setup.js';
-import { generateGridData } from '../fixtures/index.js';
+import { atom, batch, computed } from '../../src/index.js';
 import type { DataGridRow } from '../fixtures/index.js';
+import { generateGridData } from '../fixtures/index.js';
+import { macroBenchOptions } from '../utils/setup.js';
 
 describe('Data Grid Scenarios', () => {
   bench(

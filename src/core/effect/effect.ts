@@ -5,6 +5,9 @@
 import { EFFECT_STATE_FLAGS, SCHEDULER_CONFIG } from '../../constants';
 import { EffectError, isPromise, wrapError } from '../../errors/errors';
 import { ERROR_MESSAGES } from '../../errors/messages';
+import { scheduler } from '../../scheduler';
+import { type DependencyTracker, trackingContext } from '../../tracking';
+import { DependencyManager } from '../../tracking/dependency-manager';
 import type {
   Dependency,
   EffectFunction,
@@ -13,9 +16,6 @@ import type {
   ReadonlyAtom,
 } from '../../types';
 import { debug, generateId } from '../../utils/debug';
-import { DependencyManager } from '../../tracking/dependency-manager';
-import { scheduler } from '../../scheduler';
-import { type DependencyTracker, trackingContext } from '../../tracking';
 import { isAtom } from '../../utils/type-guards';
 
 class EffectImpl implements EffectObject, DependencyTracker {

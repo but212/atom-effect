@@ -5,8 +5,8 @@
 
 import { bench, describe } from 'vitest';
 import { atom, computed, effect } from '../../src/index.js';
-import { macroBenchOptions } from '../utils/setup.js';
 import type { TodoItem } from '../fixtures/index.js';
+import { macroBenchOptions } from '../utils/setup.js';
 
 describe('Todo App Scenarios', () => {
   bench(

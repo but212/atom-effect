@@ -6,12 +6,12 @@
 
 import { ComputedError, isPromise } from '../../errors/errors';
 import { ERROR_MESSAGES } from '../../errors/messages';
+import { scheduler } from '../../scheduler';
+import { trackingContext } from '../../tracking';
+import { DependencyManager } from '../../tracking/dependency-manager';
 import type { ComputedAtom, ComputedOptions, Dependency, Subscriber } from '../../types';
 import { debug, generateId, NO_DEFAULT_VALUE } from '../../utils/debug';
-import { DependencyManager } from '../../tracking/dependency-manager';
-import { scheduler } from '../../scheduler';
 import { SubscriberManager } from '../../utils/subscriber-manager';
-import { trackingContext } from '../../tracking';
 import { AsyncComputationHandler, PromiseIdManager } from './computed-async-handler';
 import { DependencySyncManager } from './computed-dependencies';
 import {

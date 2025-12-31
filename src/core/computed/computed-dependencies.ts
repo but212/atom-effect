@@ -4,9 +4,9 @@
 
 import { ComputedError, wrapError } from '../../errors/errors';
 import { ERROR_MESSAGES } from '../../errors/messages';
+import type { DependencyManager } from '../../tracking/dependency-manager';
 import type { Dependency } from '../../types';
 import { debug } from '../../utils/debug';
-import type { DependencyManager } from '../../tracking/dependency-manager';
 
 /**
  * Dependency synchronization manager

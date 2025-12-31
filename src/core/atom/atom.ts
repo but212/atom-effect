@@ -4,10 +4,10 @@
 
 import { AtomError } from '../../errors/errors';
 import { ERROR_MESSAGES } from '../../errors/messages';
-import type { AtomOptions, WritableAtom } from '../../types';
-import { debug, generateId } from '../../utils/debug';
 import { scheduler } from '../../scheduler';
 import { trackingContext } from '../../tracking';
+import type { AtomOptions, WritableAtom } from '../../types';
+import { debug, generateId } from '../../utils/debug';
 
 class AtomImpl<T> implements WritableAtom<T> {
   private _value: T;

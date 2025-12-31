@@ -3,17 +3,13 @@
  */
 
 export { AsyncState, DEBUG_CONFIG, POOL_CONFIG, SCHEDULER_CONFIG } from './constants';
-
-export { atom } from './core';
-export { computed } from './core';
-export { effect } from './core';
+export { atom, computed, effect } from './core';
 
 export { AtomError, ComputedError, EffectError, SchedulerError } from './errors/errors';
 
 export { batch, scheduler } from './scheduler';
 export { untracked } from './tracking';
-export { isAtom, isComputed, isEffect } from './utils/type-guards';
+export * from './types';
 
 export { debug as DEBUG_RUNTIME } from './utils/debug';
-
-export * from './types';
+export { isAtom, isComputed, isEffect } from './utils/type-guards';

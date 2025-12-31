@@ -1,4 +1,4 @@
-import { Dependency } from '../types';
+import type { Dependency } from '../types';
 
 export class DependencyManager {
   private depMap = new WeakMap<Dependency, () => void>();

@@ -1,4 +1,4 @@
-import { ReadonlyAtom } from './atom';
+import type { ReadonlyAtom } from './atom';
 
 export type AsyncStateType = 'idle' | 'pending' | 'resolved' | 'rejected';
 

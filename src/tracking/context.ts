@@ -1,4 +1,4 @@
-import { Listener } from './tracking.types';
+import type { Listener } from './tracking.types';
 
 export interface TrackingContext {
   current: Listener | null;
