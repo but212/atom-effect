@@ -136,6 +136,7 @@ export class DependencyManager {
           } catch (error) {
             console.warn('[DependencyManager] Error during unsubscribe:', error);
           }
+          this.depMap.delete(dep);
         }
       }
     }

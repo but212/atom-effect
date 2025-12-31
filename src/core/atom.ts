@@ -207,6 +207,8 @@ class AtomImpl<T> implements WritableAtom<T> {
       const fnCount = this._fnSubCount;
       const objSubs = this._objSubs;
       const objCount = this._objSubCount;
+      // ...
+
 
       // Notify function subscribers
       for (let i = 0; i < fnCount; i++) {

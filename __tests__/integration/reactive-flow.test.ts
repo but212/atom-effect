@@ -49,20 +49,20 @@ describe('Integration: Todo App State Management', () => {
 
       switch (currentFilter) {
         case 'active':
-          return allTodos.filter((t) => !t.completed);
+          return allTodos.filter((t: Todo) => !t.completed);
         case 'completed':
-          return allTodos.filter((t) => t.completed);
+          return allTodos.filter((t: Todo) => t.completed);
         default:
           return allTodos;
       }
     });
 
-    const completedCount = computed(() => todos.value.filter((t) => t.completed).length);
+    const completedCount = computed(() => todos.value.filter((t: Todo) => t.completed).length);
 
-    const activeCount = computed(() => todos.value.filter((t) => !t.completed).length);
+    const activeCount = computed(() => todos.value.filter((t: Todo) => !t.completed).length);
 
     const highPriorityCount = computed(
-      () => todos.value.filter((t) => t.priority === 'high' && !t.completed).length
+      () => todos.value.filter((t: Todo) => t.priority === 'high' && !t.completed).length
     );
 
     const stats = computed(() => ({
@@ -104,10 +104,10 @@ describe('Integration: Todo App State Management', () => {
     // Filter todos
     filter.value = 'active';
     expect(filteredTodos.value).toHaveLength(2);
-    expect(filteredTodos.value.every((t) => !t.completed)).toBe(true);
+    expect(filteredTodos.value.every((t: Todo) => !t.completed)).toBe(true);
 
     // Complete a todo
-    const updatedTodos = todos.value.map((t) => (t.id === 1 ? { ...t, completed: true } : t));
+    const updatedTodos = todos.value.map((t: Todo) => (t.id === 1 ? { ...t, completed: true } : t));
     todos.value = updatedTodos;
 
     await new Promise((resolve) => setTimeout(resolve, 10));
@@ -329,7 +329,9 @@ describe('Integration: Complex Application State', () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
     const withBatchCount = computations.length;
 
-    // Batching should result in fewer or equal computations (타이밍 이슈로 인해 equal 허용)
+    // Batching should result in fewer or equal computations
+    console.log('withoutBatchCount:', withoutBatchCount);
+    console.log('withBatchCount:', withBatchCount);
     expect(withBatchCount).toBeLessThanOrEqual(withoutBatchCount);
     expect(result.value).toBe(25); // 10 * 2 + 5
   });
@@ -397,7 +399,7 @@ describe('Integration: Async Data Fetching', () => {
       },
       {
         defaultValue: 'Default',
-        onError: (err) => errorLogs.push(err),
+        onError: (err: Error) => errorLogs.push(err),
       }
     );
 

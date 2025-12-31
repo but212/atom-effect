@@ -41,9 +41,10 @@ describe('DependencyManager', () => {
     const unsubscribe = vi.fn();
 
     manager.addDependency(mockDep, unsubscribe);
-    manager.addDependency(mockDep, unsubscribe);
+    manager.addDependency(mockDep, unsubscribe); // Duplicated add
 
-    expect(manager.count).toBe(2); // 중복 허용 (unsubscribe가 다를 수 있음)
+    // Duplicate detection prevents duplicates
+    expect(manager.count).toBe(1);
   });
 
   it('모든 의존성을 구독 해제할 수 있다', () => {
@@ -107,8 +108,8 @@ describe('DependencyManager', () => {
     // 스케줄링이 한 번만 되어야 함
     await new Promise((resolve) => setTimeout(resolve, 10));
 
-    // 정상적으로 추가되었는지 확인
-    expect(manager.count).toBe(3);
+    // 중복 방지로 인해 1개만 남아야 함
+    expect(manager.count).toBe(1);
   });
 
   it('getDependencies로 의존성 목록을 가져올 수 있다', () => {

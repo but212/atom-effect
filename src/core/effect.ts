@@ -63,6 +63,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
   private readonly _history: Float64Array;
   private _historyIdx: number;
   private _historyCount: number; // Number of valid entries in history
+  private _executionCount: number;
   private readonly _historyCapacity: number;
 
   constructor(fn: EffectFunction, options: EffectOptions = {}) {
@@ -89,6 +90,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
     this._history = new Float64Array(this._historyCapacity);
     this._historyIdx = 0;
     this._historyCount = 0;
+    this._executionCount = 0;
 
     // Debug attachment
     debug.attachDebugInfo(this, 'effect', this._id);
@@ -206,16 +208,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
   }
 
   get executionCount(): number {
-    // Current valid window size logic
-    // We need to count how many valid timestamps are within the last window
-    // But specific requirement is just total execution times? 
-    // The original code was executionTimes.length - startIndex.
-    // However, that was technically the "tracked" execution count for loop detection.
-    // If the user wants TOTAL executions since start, original code did NOT provide that 
-    // (it cleaned up old ones).
-    // So "executionCount" in original code essentially meant "recent execution count".
-    // We will mimic that behavior by returning the count within the ring buffer.
-    return this._historyCount;
+    return this._executionCount;
   }
 
   get isExecuting(): boolean {
@@ -248,6 +241,8 @@ class EffectImpl implements EffectObject, DependencyTracker {
    * Records execution time and checks for infinite loops using Ring Buffer
    */
   private _recordExecution(now: number): void {
+    if (this._maxExecutions <= 0) return;
+
     const oneSecondAgo = now - 1000;
     
     // Add new timestamp
@@ -256,6 +251,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
     if (this._historyCount < this._historyCapacity) {
       this._historyCount++;
     }
+    this._executionCount++;
 
     // Check execution count within 1 second
     // Iterate backwards from current index

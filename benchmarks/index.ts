@@ -17,6 +17,10 @@ import { runAtomOperationsBenchmark } from './micro/atom-operations.bench';
 import { runBatchOperationsBenchmark } from './micro/batch-operations.bench';
 import { runComputedOperationsBenchmark } from './micro/computed-operations.bench';
 import { runEffectOperationsBenchmark } from './micro/effect-operations.bench';
+// DOM benchmarks
+import { runDOMEventBenchmark } from './dom/event.bench';
+import { runDOMRenderBenchmark } from './dom/render.bench';
+import { runDOMUpdateBenchmark } from './dom/update.bench';
 import { useDist } from './utils/import-lib';
 import { getEnvironment, Reporter } from './utils/reporter';
 
@@ -121,6 +125,17 @@ async function runMemory() {
   console.log('\n✅ Memory benchmarks completed');
 }
 
+/**
+ * run DOM benchmarks
+ */
+async function runDOM() {
+  console.log('\n🚀 Running DOM Benchmarks...\n');
+  await runDOMRenderBenchmark();
+  await runDOMUpdateBenchmark();
+  await runDOMEventBenchmark();
+  console.log('\n✅ DOM benchmarks completed');
+}
+
 // CLI interface
 const args = process.argv.slice(2);
 const command = args[0] || 'all';
@@ -169,6 +184,18 @@ const command = args[0] || 'all';
     case 'leak':
       await runLeakDetectionBenchmark();
       break;
+    case 'dom':
+      await runDOM();
+      break;
+    case 'dom:render':
+      await runDOMRenderBenchmark();
+      break;
+    case 'dom:update':
+      await runDOMUpdateBenchmark();
+      break;
+    case 'dom:event':
+      await runDOMEventBenchmark();
+      break;
     default:
       console.log(`
 Usage: npm run bench [command]
@@ -191,6 +218,11 @@ Commands:
 
   gc          Run GC pressure benchmark
   leak        Run leak detection benchmark
+  
+  dom         Run all DOM benchmarks
+  dom:render  Run DOM rendering benchmark
+  dom:update  Run DOM update benchmark
+  dom:event   Run DOM event benchmark
       `);
   }
 })().catch(console.error);
