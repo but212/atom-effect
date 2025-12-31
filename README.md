@@ -1,4 +1,4 @@
-# @but212/reactive-atom
+# reactive-atom
 
 [![npm version](https://img.shields.io/npm/v/@but212/reactive-atom.svg)](https://www.npmjs.com/package/@but212/reactive-atom)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
