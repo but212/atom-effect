@@ -4,40 +4,44 @@
  * @optimized Class-based architecture with cache locality and branchless patterns
  */
 
-import { ComputedError, isPromise } from "../../errors/errors";
-import type { AtomError } from "../../errors/errors";
-import { ERROR_MESSAGES } from "../../errors/messages";
-import { scheduler } from "../../scheduler";
-import { trackingContext } from "../../tracking";
-import { DependencyManager } from "../../tracking/dependency-manager";
-import type { ComputedAtom, ComputedOptions, Dependency, Subscriber } from "../../types";
-import { debug, generateId, NO_DEFAULT_VALUE } from "../../utils/debug";
-import { SubscriberManager } from "../../utils/subscriber-manager";
-import { COMPUTED_STATE_FLAGS, AsyncState } from "../../constants";
-import type { AsyncStateType } from "../../types";
-import { wrapError } from "../../errors/errors";
+import { AsyncState, COMPUTED_STATE_FLAGS } from '../../constants';
+import type { AtomError } from '../../errors/errors';
+import { ComputedError, isPromise, wrapError } from '../../errors/errors';
+import { ERROR_MESSAGES } from '../../errors/messages';
+import { scheduler } from '../../scheduler';
+import { trackingContext } from '../../tracking';
+import { DependencyManager } from '../../tracking/dependency-manager';
+import type {
+  AsyncStateType,
+  ComputedAtom,
+  ComputedOptions,
+  Dependency,
+  Subscriber,
+} from '../../types';
+import { debug, generateId, NO_DEFAULT_VALUE } from '../../utils/debug';
+import { SubscriberManager } from '../../utils/subscriber-manager';
 
 /**
  * Optimized ComputedAtom implementation with class-based architecture
- * 
+ *
  * Key optimizations:
  * - Cache-friendly field layout (hot fields first)
  * - Inline bit flags (no separate class instance)
  * - Branchless fast path for value access
  * - Reduced indirection and closure overhead
- * 
+ *
  * @template T - The type of the computed value
  */
 class ComputedAtomImpl<T> implements ComputedAtom<T> {
   // === HOT PATH: Most frequently accessed fields (cache line 1) ===
   private _value: T;
   private _stateFlags: number;
-  
+
   // === WARM PATH: Frequently accessed fields (cache line 2) ===
   private _error: AtomError | null = null;
   private _promiseId = 0;
   private readonly _equal: (a: T, b: T) => boolean;
-  
+
   // === COLD PATH: Infrequently accessed fields ===
   private readonly _fn: () => T | Promise<T>;
   private readonly _defaultValue: T;
@@ -50,16 +54,21 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
   private readonly MAX_PROMISE_ID = Number.MAX_SAFE_INTEGER - 1;
 
   constructor(fn: () => T | Promise<T>, options: ComputedOptions<T> = {}) {
-    if (typeof fn !== "function") {
+    if (typeof fn !== 'function') {
       throw new ComputedError(ERROR_MESSAGES.COMPUTED_MUST_BE_FUNCTION);
     }
 
     this._fn = fn;
     this._stateFlags = COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE;
     this._value = undefined as T;
-    
-    const { equal = Object.is, defaultValue = NO_DEFAULT_VALUE as T, lazy = true, onError = null } = options;
-    
+
+    const {
+      equal = Object.is,
+      defaultValue = NO_DEFAULT_VALUE as T,
+      lazy = true,
+      onError = null,
+    } = options;
+
     this._equal = equal;
     this._defaultValue = defaultValue;
     this._hasDefaultValue = defaultValue !== NO_DEFAULT_VALUE;
@@ -69,7 +78,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
     this._dependencyManager = new DependencyManager();
     this._id = generateId();
 
-    debug.attachDebugInfo(this as unknown as ComputedAtom<T>, "computed", this._id);
+    debug.attachDebugInfo(this as unknown as ComputedAtom<T>, 'computed', this._id);
 
     if (debug.enabled) {
       const debugObj = this as unknown as ComputedAtom<T> & {
@@ -78,7 +87,8 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
         dependencies: ReturnType<DependencyManager['getDependencies']>;
         stateFlags: string;
       };
-      debugObj.subscriberCount = () => this._functionSubscribers.size + this._objectSubscribers.size;
+      debugObj.subscriberCount = () =>
+        this._functionSubscribers.size + this._objectSubscribers.size;
       debugObj.isDirty = () => this._isDirty();
       debugObj.dependencies = this._dependencyManager.getDependencies();
       debugObj.stateFlags = this._getFlagsAsString();
@@ -97,8 +107,10 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
 
   get value(): T {
     // Branchless fast path: single bitwise check for (resolved AND not dirty)
-    const isFastPath = (this._stateFlags & (COMPUTED_STATE_FLAGS.RESOLVED | COMPUTED_STATE_FLAGS.DIRTY)) === COMPUTED_STATE_FLAGS.RESOLVED;
-    
+    const isFastPath =
+      (this._stateFlags & (COMPUTED_STATE_FLAGS.RESOLVED | COMPUTED_STATE_FLAGS.DIRTY)) ===
+      COMPUTED_STATE_FLAGS.RESOLVED;
+
     if (isFastPath) {
       this._registerTracking();
       return this._value;
@@ -111,7 +123,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
   }
 
   subscribe(listener: () => void): () => void {
-    if (typeof listener !== "function") {
+    if (typeof listener !== 'function') {
       throw new ComputedError(ERROR_MESSAGES.COMPUTED_SUBSCRIBER_MUST_BE_FUNCTION);
     }
     return this._functionSubscribers.add(listener);
@@ -321,7 +333,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
     this._setPending();
 
     // Branchless promise ID increment with overflow protection
-    this._promiseId = (this._promiseId >= this.MAX_PROMISE_ID) ? 1 : this._promiseId + 1;
+    this._promiseId = this._promiseId >= this.MAX_PROMISE_ID ? 1 : this._promiseId + 1;
     const promiseId = this._promiseId;
 
     promise
@@ -472,7 +484,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
 
   private _addDependency(dep: Dependency): void {
     debug.checkCircular(dep, this as unknown as ComputedAtom<T>);
-    
+
     const count = this._dependencyManager.count;
     debug.warn(count > debug.maxDependencies, ERROR_MESSAGES.LARGE_DEPENDENCY_GRAPH(count));
 
@@ -527,7 +539,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
     const current = trackingContext.getCurrent();
     if (!current) return;
 
-    if (typeof current === "function") {
+    if (typeof current === 'function') {
       this._functionSubscribers.add(current);
     } else if (current.addDependency) {
       current.addDependency(this as unknown as ComputedAtom<T>);
@@ -567,7 +579,13 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
  * ```
  */
 export function computed<T>(fn: () => T, options?: ComputedOptions<T>): ComputedAtom<T>;
-export function computed<T>(fn: () => Promise<T>, options: ComputedOptions<T> & { defaultValue: T }): ComputedAtom<T>;
-export function computed<T>(fn: () => T | Promise<T>, options: ComputedOptions<T> = {}): ComputedAtom<T> {
+export function computed<T>(
+  fn: () => Promise<T>,
+  options: ComputedOptions<T> & { defaultValue: T }
+): ComputedAtom<T>;
+export function computed<T>(
+  fn: () => T | Promise<T>,
+  options: ComputedOptions<T> = {}
+): ComputedAtom<T> {
   return new ComputedAtomImpl(fn, options) as unknown as ComputedAtom<T>;
 }
