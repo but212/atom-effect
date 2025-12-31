@@ -19,6 +19,15 @@ jobs:
         with:
           fetch-depth: 0
       
+      - name: Check version match
+        run: |
+          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          if [ "$TAG_VERSION" != "$PACKAGE_VERSION" ]; then
+            echo "Error: Tag version ($TAG_VERSION) does not match package.json version ($PACKAGE_VERSION)"
+            exit 1
+          fi
+      
       - name: Check changelog update
         run: |
           TAG_VERSION=${GITHUB_REF#refs/tags/v}
