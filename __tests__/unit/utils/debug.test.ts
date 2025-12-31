@@ -1,28 +1,28 @@
 /**
- * @fileoverview Debug 유틸리티 테스트 (커버리지 보완)
+ * @fileoverview Debug utility tests (coverage supplement)
  */
 
-import { describe, expect, it, vi } from 'vitest';
 import { ComputedError } from '@/errors/errors';
-import { DEBUG_ID, DEBUG_NAME, DEBUG_TYPE, debug, NO_DEFAULT_VALUE } from '@/utils/debug';
+import { debug, DEBUG_ID, DEBUG_NAME, DEBUG_TYPE, NO_DEFAULT_VALUE } from '@/utils/debug';
+import { describe, expect, it, vi } from 'vitest';
 
-describe('debug 설정', () => {
-  it('개발 모드 감지가 작동한다', () => {
-    // NODE_ENV에 따라 enabled가 설정됨
+describe('debug configuration', () => {
+  it('development mode detection works', () => {
+    // enabled is set based on NODE_ENV
     expect(typeof debug.enabled).toBe('boolean');
   });
 
-  it('maxDependencies 기본값이 설정되어 있다', () => {
+  it('maxDependencies default value is set', () => {
     expect(debug.maxDependencies).toBe(1000);
   });
 
-  it('warnInfiniteLoop 기본값이 true다', () => {
+  it('warnInfiniteLoop default value is true', () => {
     expect(debug.warnInfiniteLoop).toBe(true);
   });
 });
 
 describe('debug.warn', () => {
-  it('조건이 true일 때 경고를 출력한다', () => {
+  it('outputs warning when condition is true', () => {
     const originalEnabled = debug.enabled;
     debug.enabled = true;
 
@@ -36,7 +36,7 @@ describe('debug.warn', () => {
     debug.enabled = originalEnabled;
   });
 
-  it('조건이 false면 경고를 출력하지 않는다', () => {
+  it('does not output warning when condition is false', () => {
     const originalEnabled = debug.enabled;
     debug.enabled = true;
 
@@ -50,7 +50,7 @@ describe('debug.warn', () => {
     debug.enabled = originalEnabled;
   });
 
-  it('개발 모드가 아니면 경고를 출력하지 않는다', () => {
+  it('does not output warning when not in development mode', () => {
     const originalEnabled = debug.enabled;
     debug.enabled = false;
 
@@ -66,7 +66,7 @@ describe('debug.warn', () => {
 });
 
 describe('debug.checkCircular', () => {
-  it('직접 순환 참조를 감지한다', () => {
+  it('detects direct circular reference', () => {
     const node = {};
 
     expect(() => {
@@ -78,7 +78,7 @@ describe('debug.checkCircular', () => {
     }).toThrow(/circular dependency/i);
   });
 
-  it('간접 순환 참조를 감지한다 (개발 모드)', () => {
+  it('detects indirect circular reference (development mode)', () => {
     const originalEnabled = debug.enabled;
     debug.enabled = true;
 
@@ -94,7 +94,7 @@ describe('debug.checkCircular', () => {
     debug.enabled = originalEnabled;
   });
 
-  it('프로덕션 모드에서는 간접 순환 참조를 검사하지 않는다', () => {
+  it('does not check indirect circular reference in production mode', () => {
     const originalEnabled = debug.enabled;
     debug.enabled = false;
 
@@ -103,16 +103,16 @@ describe('debug.checkCircular', () => {
     const nodeC: any = { dependencies: new Set([nodeB]) };
     nodeA.dependencies.add(nodeC);
 
-    // 프로덕션에서는 에러가 발생하지 않음 (성능을 위해)
-    // 단, 직접 순환은 여전히 감지됨
+    // No error in production (for performance)
+    // However, direct circular is still detected
     expect(() => {
-      debug.checkCircular(nodeB, nodeA); // 간접 순환
+      debug.checkCircular(nodeB, nodeA); // indirect circular
     }).not.toThrow();
 
     debug.enabled = originalEnabled;
   });
 
-  it('dependencies가 없는 노드도 처리한다', () => {
+  it('handles nodes without dependencies', () => {
     const originalEnabled = debug.enabled;
     debug.enabled = true;
 
@@ -126,7 +126,7 @@ describe('debug.checkCircular', () => {
     debug.enabled = originalEnabled;
   });
 
-  it('visited Set이 제공되면 재귀적으로 검사한다', () => {
+  it('checks recursively when visited Set is provided', () => {
     const originalEnabled = debug.enabled;
     debug.enabled = true;
 
@@ -141,7 +141,7 @@ describe('debug.checkCircular', () => {
 });
 
 describe('debug.attachDebugInfo', () => {
-  it('개발 모드에서 디버그 정보를 첨부한다', () => {
+  it('attaches debug info in development mode', () => {
     const originalEnabled = debug.enabled;
     debug.enabled = true;
 
@@ -155,7 +155,7 @@ describe('debug.attachDebugInfo', () => {
     debug.enabled = originalEnabled;
   });
 
-  it('프로덕션 모드에서는 디버그 정보를 첨부하지 않는다', () => {
+  it('does not attach debug info in production mode', () => {
     const originalEnabled = debug.enabled;
     debug.enabled = false;
 
@@ -171,7 +171,7 @@ describe('debug.attachDebugInfo', () => {
 });
 
 describe('debug.getDebugName', () => {
-  it('디버그 이름을 반환한다', () => {
+  it('returns debug name', () => {
     const originalEnabled = debug.enabled;
     debug.enabled = true;
 
@@ -183,19 +183,19 @@ describe('debug.getDebugName', () => {
     debug.enabled = originalEnabled;
   });
 
-  it('디버그 정보가 없으면 undefined를 반환한다', () => {
+  it('returns undefined when debug info is not present', () => {
     const obj = {};
     expect(debug.getDebugName(obj)).toBeUndefined();
   });
 
-  it('null이나 undefined도 처리한다', () => {
+  it('handles null and undefined', () => {
     expect(debug.getDebugName(null)).toBeUndefined();
     expect(debug.getDebugName(undefined)).toBeUndefined();
   });
 });
 
 describe('debug.getDebugType', () => {
-  it('디버그 타입을 반환한다', () => {
+  it('returns debug type', () => {
     const originalEnabled = debug.enabled;
     debug.enabled = true;
 
@@ -207,23 +207,23 @@ describe('debug.getDebugType', () => {
     debug.enabled = originalEnabled;
   });
 
-  it('디버그 정보가 없으면 undefined를 반환한다', () => {
+  it('returns undefined when debug info is not present', () => {
     const obj = {};
     expect(debug.getDebugType(obj)).toBeUndefined();
   });
 
-  it('null이나 undefined도 처리한다', () => {
+  it('handles null and undefined', () => {
     expect(debug.getDebugType(null)).toBeUndefined();
     expect(debug.getDebugType(undefined)).toBeUndefined();
   });
 });
 
 describe('NO_DEFAULT_VALUE Symbol', () => {
-  it('unique Symbol이다', () => {
+  it('is a unique Symbol', () => {
     expect(typeof NO_DEFAULT_VALUE).toBe('symbol');
   });
 
-  it('다른 값과 구별된다', () => {
+  it('is distinguishable from other values', () => {
     expect(NO_DEFAULT_VALUE).not.toBe(undefined);
     expect(NO_DEFAULT_VALUE).not.toBe(null);
     expect(NO_DEFAULT_VALUE).not.toBe(0);

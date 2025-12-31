@@ -1,14 +1,14 @@
 /**
- * @fileoverview Computed 전용 테스트 (커버리지 보완)
+ * @fileoverview Computed-specific tests (coverage supplement)
  */
 
-import { describe, expect, it, vi } from 'vitest';
 import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
 import { ComputedError } from '@/errors/errors';
+import { describe, expect, it, vi } from 'vitest';
 
-describe('Computed - 에러 처리 및 엣지 케이스', () => {
-  it('잘못된 타입의 함수를 거부한다', () => {
+describe('Computed - Error Handling and Edge Cases', () => {
+  it('rejects invalid function types', () => {
     expect(() => {
       computed('not a function' as any);
     }).toThrow(ComputedError);
@@ -18,7 +18,7 @@ describe('Computed - 에러 처리 및 엣지 케이스', () => {
     }).toThrow(ComputedError);
   });
 
-  it('잘못된 타입의 구독자를 거부한다', () => {
+  it('rejects invalid subscriber types', () => {
     const c = computed(() => 1);
 
     expect(() => {
@@ -26,17 +26,17 @@ describe('Computed - 에러 처리 및 엣지 케이스', () => {
     }).toThrow(ComputedError);
   });
 
-  it('defaultValue 없이 pending 상태에서 value 접근 시 에러', () => {
+  it('throws error when accessing value in pending state without defaultValue', () => {
     const c = computed(async () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
       return 42;
     });
 
-    // pending 상태에서 defaultValue 없이 접근
+    // Access without defaultValue in pending state
     expect(() => c.value).toThrow(ComputedError);
   });
 
-  it('비동기 계산 중 rejected 상태 처리', async () => {
+  it('handles rejected state during async computation', async () => {
     const c = computed(
       async () => {
         await new Promise((resolve) => setTimeout(resolve, 10));
@@ -45,7 +45,7 @@ describe('Computed - 에러 처리 및 엣지 케이스', () => {
       { defaultValue: 0 }
     );
 
-    // 초기 defaultValue
+    // Initial defaultValue
     expect(c.value).toBe(0);
     expect(c.isPending).toBe(true);
 
@@ -56,7 +56,7 @@ describe('Computed - 에러 처리 및 엣지 케이스', () => {
     expect(c.lastError).toBeInstanceOf(Error);
   });
 
-  it('rejected 상태에서 recoverable defaultValue 반환', async () => {
+  it('returns recoverable defaultValue in rejected state', async () => {
     const c = computed(
       async () => {
         throw new Error('Test error');
@@ -64,14 +64,14 @@ describe('Computed - 에러 처리 및 엣지 케이스', () => {
       { defaultValue: 999 }
     );
 
-    c.value; // 계산 트리거
+    c.value; // Trigger computation
     await new Promise((resolve) => setTimeout(resolve, 10));
 
-    // recoverable=true이고 defaultValue가 있으면 에러 대신 defaultValue 반환
+    // When recoverable=true and defaultValue exists, return defaultValue instead of error
     expect(c.value).toBe(999);
   });
 
-  it('비동기 onError 콜백 에러 처리', async () => {
+  it('handles async onError callback errors', async () => {
     const onError = vi.fn();
     const c = computed(
       async () => {
@@ -81,13 +81,13 @@ describe('Computed - 에러 처리 및 엣지 케이스', () => {
       { defaultValue: 0, onError }
     );
 
-    c.value; // 계산 트리거
+    c.value; // Trigger computation
     await new Promise((resolve) => setTimeout(resolve, 20));
 
     expect(onError).toHaveBeenCalled();
   });
 
-  it('onError 콜백 자체가 에러를 발생시켜도 안전', async () => {
+  it('is safe even when onError callback throws an error', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     const c = computed(
@@ -107,23 +107,23 @@ describe('Computed - 에러 처리 및 엣지 케이스', () => {
     consoleError.mockRestore();
   });
 
-  it('recomputing 중에는 peek()처럼 동작한다', () => {
+  it('behaves like peek() during recomputing', () => {
     const count = atom(0);
     let _recomputeValue = 0;
 
     const c = computed(() => {
-      _recomputeValue = c.peek(); // recomputing 중 자기 자신 참조
+      _recomputeValue = c.peek(); // Self-reference during recomputing
       return count.value * 2;
     });
 
-    c.value; // 초기 계산
-    // recomputing 플래그 체크로 무한 재귀 방지
+    c.value; // Initial computation
+    // Recomputing flag check prevents infinite recursion
   });
 
-  it('lazy=false 초기 계산 실패는 무시된다', () => {
+  it('ignores initial computation failure when lazy=false', () => {
     const shouldFail = atom(true);
 
-    // lazy=false이지만 초기 계산 실패는 무시
+    // lazy=false but initial computation failure is ignored
     const c = computed(
       () => {
         if (shouldFail.value) throw new Error('Init error');
@@ -132,11 +132,11 @@ describe('Computed - 에러 처리 및 엣지 케이스', () => {
       { lazy: false }
     );
 
-    // 에러가 발생하지 않아야 함 (try-catch로 무시)
+    // Should not throw error (ignored by try-catch)
     expect(c).toBeDefined();
   });
 
-  it('구독자 실행 중 에러 처리', async () => {
+  it('handles errors during subscriber execution', async () => {
     const count = atom(0);
     const c = computed(() => count.value * 2);
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -145,14 +145,14 @@ describe('Computed - 에러 처리 및 엣지 케이스', () => {
       throw new Error('Subscriber error');
     });
 
-    c.value; // 초기 계산
+    c.value; // Initial computation
     count.value = 1;
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     consoleError.mockRestore();
   });
 
-  it('비동기 계산이 여러 번 트리거되어도 안전하다', async () => {
+  it('is safe even when async computation is triggered multiple times', async () => {
     const trigger = atom(0);
 
     const c = computed(
@@ -163,54 +163,54 @@ describe('Computed - 에러 처리 및 엣지 케이스', () => {
       { defaultValue: 0 }
     );
 
-    c.value; // 초기 계산 트리거
+    c.value; // Trigger initial computation
 
     trigger.value = 1;
     trigger.value = 2;
 
-    // 모든 비동기 계산이 완료될 때까지 충분히 대기
+    // Wait long enough for all async computations to complete
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    // 최종 값이 반영되어야 함
+    // Final value should be reflected
     expect(c.value).toBe(20);
   });
 
-  it('invalidate()가 재계산을 트리거한다', async () => {
+  it('invalidate() triggers recomputation', async () => {
     const computeFn = vi.fn(() => Math.random());
     const c = computed(computeFn);
 
     const first = c.value;
     expect(computeFn).toHaveBeenCalledTimes(1);
 
-    const second = c.value; // 캐시됨
+    const second = c.value; // Cached
     expect(computeFn).toHaveBeenCalledTimes(1);
     expect(first).toBe(second);
 
     c.invalidate();
     await new Promise((resolve) => setTimeout(resolve, 10));
 
-    const _third = c.value; // 재계산됨
+    const _third = c.value; // Recomputed
     expect(computeFn).toHaveBeenCalledTimes(2);
   });
 
-  it('dispose 후에는 구독자에게 알리지 않는다', async () => {
+  it('does not notify subscribers after dispose', async () => {
     const count = atom(0);
     const c = computed(() => count.value * 2);
     const listener = vi.fn();
 
     c.subscribe(listener);
-    c.value; // 초기 계산
+    c.value; // Initial computation
 
     c.dispose();
 
     count.value = 10;
     await new Promise((resolve) => setTimeout(resolve, 10));
 
-    // dispose 후에는 구독자에게 알림이 가지 않음
+    // No notification to subscribers after dispose
     expect(listener).not.toHaveBeenCalled();
   });
 
-  it('잘못된 의존성은 에러를 발생시킨다', () => {
+  it('throws error for invalid dependencies', () => {
     const badAtom = {
       get value() {
         throw new Error('Access failed');
@@ -223,7 +223,7 @@ describe('Computed - 에러 처리 및 엣지 케이스', () => {
     expect(() => c.value).toThrow();
   });
 
-  it('computed 체인이 정상 동작한다', async () => {
+  it('computed chain works correctly', async () => {
     const count = atom(0);
     const doubled = computed(() => count.value * 2);
     const quadrupled = computed(() => doubled.value * 2);
@@ -236,7 +236,7 @@ describe('Computed - 에러 처리 및 엣지 케이스', () => {
     expect(quadrupled.value).toBe(20);
   });
 
-  it('구독자 에러가 다른 구독자에 영향을 주지 않는다', async () => {
+  it('subscriber error does not affect other subscribers', async () => {
     const count = atom(0);
     const c = computed(() => count.value * 2);
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -259,13 +259,13 @@ describe('Computed - 에러 처리 및 엣지 케이스', () => {
     consoleError.mockRestore();
   });
 
-  it('dispose 시 의존성이 정리된다', async () => {
+  it('dependencies are cleaned up on dispose', async () => {
     const count = atom(0);
     const c = computed(() => count.value * 2);
     const listener = vi.fn();
 
     c.subscribe(listener);
-    c.value; // 의존성 등록
+    c.value; // Register dependencies
 
     count.value = 1;
     await new Promise((resolve) => setTimeout(resolve, 10));
@@ -279,8 +279,8 @@ describe('Computed - 에러 처리 및 엣지 케이스', () => {
     expect(listener).not.toHaveBeenCalled();
   });
 
-  describe('추가 엣지 케이스', () => {
-    it('onError 콜백이 호출된다', async () => {
+  describe('Additional Edge Cases', () => {
+    it('onError callback is called', async () => {
       const errorHandler = vi.fn();
 
       const c = computed(
@@ -294,7 +294,7 @@ describe('Computed - 에러 처리 및 엣지 케이스', () => {
       expect(errorHandler).toHaveBeenCalled();
     });
 
-    it('onError 콜백에서 에러가 발생해도 안전하다', async () => {
+    it('is safe even when error occurs in onError callback', async () => {
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       const c = computed(
@@ -314,7 +314,7 @@ describe('Computed - 에러 처리 및 엣지 케이스', () => {
       consoleError.mockRestore();
     });
 
-    it('비동기 computed의 onError가 호출된다', async () => {
+    it('async computed onError is called', async () => {
       const errorHandler = vi.fn();
 
       const c = computed(
@@ -332,7 +332,7 @@ describe('Computed - 에러 처리 및 엣지 케이스', () => {
       expect(c.hasError).toBe(true);
     });
 
-    it('invalidate()로 강제 재계산', async () => {
+    it('invalidate() forces recomputation', async () => {
       let computeCount = 0;
       const count = atom(0);
 
@@ -341,18 +341,18 @@ describe('Computed - 에러 처리 및 엣지 케이스', () => {
         return count.value * 2;
       });
 
-      c.value; // 첫 계산
+      c.value; // First computation
       expect(computeCount).toBe(1);
 
-      c.value; // 캐시 사용
+      c.value; // Use cache
       expect(computeCount).toBe(1);
 
-      c.invalidate(); // 강제 무효화
-      c.value; // 재계산
+      c.invalidate(); // Force invalidation
+      c.value; // Recompute
       expect(computeCount).toBe(2);
     });
 
-    it('lazy=false일 때 즉시 계산된다', () => {
+    it('computes immediately when lazy=false', () => {
       let isComputed = false;
 
       const c = computed(
@@ -363,12 +363,12 @@ describe('Computed - 에러 처리 및 엣지 케이스', () => {
         { lazy: false }
       );
 
-      // value 접근 전에 이미 계산되었어야 함
+      // Should already be computed before value access
       expect(isComputed).toBe(true);
       expect(c.value).toBe(42);
     });
 
-    it('lazy=false에서 초기 에러는 무시된다', () => {
+    it('ignores initial error when lazy=false', () => {
       const c = computed(
         () => {
           throw new Error('Initial error');
@@ -376,11 +376,11 @@ describe('Computed - 에러 처리 및 엣지 케이스', () => {
         { lazy: false }
       );
 
-      // 초기 에러는 무시되고, value 접근 시 재계산
+      // Initial error is ignored, recomputes on value access
       expect(() => c.value).toThrow('Initial error');
     });
 
-    it('구독자가 없으면 재계산하지 않는다', async () => {
+    it('does not recompute without subscribers', async () => {
       let computeCount = 0;
       const count = atom(0);
 
@@ -389,22 +389,22 @@ describe('Computed - 에러 처리 및 엣지 케이스', () => {
         return count.value * 2;
       });
 
-      c.value; // 첫 계산
+      c.value; // First computation
       expect(computeCount).toBe(1);
 
-      // 구독자 없이 atom 변경
+      // Change atom without subscribers
       count.value = 1;
       await new Promise((resolve) => setTimeout(resolve, 10));
 
-      // 구독자가 없으므로 재계산되지 않음 (lazy)
+      // No recomputation without subscribers (lazy)
       expect(computeCount).toBe(1);
 
-      // value 접근 시 재계산
+      // Recompute on value access
       c.value;
       expect(computeCount).toBe(2);
     });
 
-    it('async state 속성들이 정확하다', async () => {
+    it('async state properties are accurate', async () => {
       const c = computed(
         async () => {
           await new Promise((resolve) => setTimeout(resolve, 20));
@@ -413,7 +413,7 @@ describe('Computed - 에러 처리 및 엣지 케이스', () => {
         { defaultValue: 0 }
       );
 
-      // value 접근으로 계산 시작
+      // Start computation with value access
       expect(c.value).toBe(0); // defaultValue
       expect(c.isPending).toBe(true);
       expect(c.isResolved).toBe(false);
@@ -421,14 +421,14 @@ describe('Computed - 에러 처리 및 엣지 케이스', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      // 완료 후: resolved
+      // After completion: resolved
       expect(c.isPending).toBe(false);
       expect(c.isResolved).toBe(true);
       expect(c.hasError).toBe(false);
       expect(c.value).toBe(42);
     });
 
-    it('peek()는 재계산을 트리거하지 않는다', () => {
+    it('peek() does not trigger recomputation', () => {
       let computeCount = 0;
       const count = atom(0);
 
@@ -437,23 +437,23 @@ describe('Computed - 에러 처리 및 엣지 케이스', () => {
         return count.value * 2;
       });
 
-      c.value; // 첫 계산
+      c.value; // First computation
       expect(computeCount).toBe(1);
 
       count.value = 1;
 
-      // peek는 dirty를 체크하지 않음
+      // peek does not check dirty
       const peeked = c.peek();
-      expect(peeked).toBe(0); // 이전 값
-      expect(computeCount).toBe(1); // 재계산 안됨
+      expect(peeked).toBe(0); // Previous value
+      expect(computeCount).toBe(1); // No recomputation
     });
 
-    it('state 속성이 올바르게 동작한다', () => {
+    it('state property works correctly', () => {
       const c = computed(() => 42);
 
       expect(c.state).toBe('idle');
 
-      c.value; // 계산 시작
+      c.value; // Start computation
 
       expect(c.state).toBe('resolved');
       expect(c.value).toBe(42);

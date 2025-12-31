@@ -1,5 +1,5 @@
 /**
- * @fileoverview SubscriberManager 테스트
+ * @fileoverview SubscriberManager tests
  */
 
 import { describe, expect, it, vi } from 'vitest';
@@ -7,7 +7,7 @@ import { SubscriberManager } from '@/utils/subscriber-manager';
 
 describe('SubscriberManager', () => {
   describe('add', () => {
-    it('구독자를 추가할 수 있다', () => {
+    it('can add a subscriber', () => {
       const manager = new SubscriberManager<() => void>();
       const subscriber = vi.fn();
 
@@ -17,7 +17,7 @@ describe('SubscriberManager', () => {
       expect(manager.has(subscriber)).toBe(true);
     });
 
-    it('중복 구독자는 무시한다', () => {
+    it('ignores duplicate subscribers', () => {
       const manager = new SubscriberManager<() => void>();
       const subscriber = vi.fn();
 
@@ -27,7 +27,7 @@ describe('SubscriberManager', () => {
       expect(manager.size).toBe(1);
     });
 
-    it('unsubscribe 함수를 반환한다', () => {
+    it('returns an unsubscribe function', () => {
       const manager = new SubscriberManager<() => void>();
       const subscriber = vi.fn();
 
@@ -39,7 +39,7 @@ describe('SubscriberManager', () => {
       expect(manager.has(subscriber)).toBe(false);
     });
 
-    it('여러 구독자를 추가할 수 있다', () => {
+    it('can add multiple subscribers', () => {
       const manager = new SubscriberManager<() => void>();
       const sub1 = vi.fn();
       const sub2 = vi.fn();
@@ -54,7 +54,7 @@ describe('SubscriberManager', () => {
   });
 
   describe('remove', () => {
-    it('구독자를 제거할 수 있다', () => {
+    it('can remove a subscriber', () => {
       const manager = new SubscriberManager<() => void>();
       const subscriber = vi.fn();
 
@@ -66,7 +66,7 @@ describe('SubscriberManager', () => {
       expect(manager.has(subscriber)).toBe(false);
     });
 
-    it('존재하지 않는 구독자 제거 시 false 반환', () => {
+    it('returns false when removing non-existent subscriber', () => {
       const manager = new SubscriberManager<() => void>();
       const subscriber = vi.fn();
 
@@ -75,7 +75,7 @@ describe('SubscriberManager', () => {
       expect(removed).toBe(false);
     });
 
-    it('중간 구독자를 제거해도 순서가 유지된다 (swap-and-pop)', () => {
+    it('maintains order when removing middle subscriber (swap-and-pop)', () => {
       const manager = new SubscriberManager<() => void>();
       const sub1 = vi.fn();
       const sub2 = vi.fn();
@@ -85,7 +85,7 @@ describe('SubscriberManager', () => {
       manager.add(sub2);
       manager.add(sub3);
 
-      // 중간 제거
+      // Remove middle subscriber
       manager.remove(sub2);
 
       expect(manager.size).toBe(2);
@@ -93,13 +93,13 @@ describe('SubscriberManager', () => {
       expect(manager.has(sub2)).toBe(false);
       expect(manager.has(sub3)).toBe(true);
 
-      // 남은 구독자 확인
+      // Verify remaining subscribers
       const subscribers = manager.toArray();
       expect(subscribers).toContain(sub1);
       expect(subscribers).toContain(sub3);
     });
 
-    it('마지막 구독자를 제거할 수 있다', () => {
+    it('can remove the last subscriber', () => {
       const manager = new SubscriberManager<() => void>();
       const sub1 = vi.fn();
       const sub2 = vi.fn();
@@ -116,7 +116,7 @@ describe('SubscriberManager', () => {
   });
 
   describe('has', () => {
-    it('구독자 존재 여부를 확인할 수 있다', () => {
+    it('can check if a subscriber exists', () => {
       const manager = new SubscriberManager<() => void>();
       const subscriber = vi.fn();
 
@@ -131,7 +131,7 @@ describe('SubscriberManager', () => {
   });
 
   describe('forEach', () => {
-    it('모든 구독자를 순회한다', () => {
+    it('iterates over all subscribers', () => {
       const manager = new SubscriberManager<(value: number) => void>();
       const sub1 = vi.fn();
       const sub2 = vi.fn();
@@ -150,7 +150,7 @@ describe('SubscriberManager', () => {
       expect(sub3).toHaveBeenCalledWith(42);
     });
 
-    it('빈 매니저에서 forEach는 아무것도 실행하지 않는다', () => {
+    it('forEach does nothing on empty manager', () => {
       const manager = new SubscriberManager<() => void>();
       const callback = vi.fn();
 
@@ -159,7 +159,7 @@ describe('SubscriberManager', () => {
       expect(callback).not.toHaveBeenCalled();
     });
 
-    it('forEach 중 에러가 발생하면 전파된다', () => {
+    it('propagates errors thrown during forEach', () => {
       const manager = new SubscriberManager<() => void>();
       const sub = vi.fn(() => {
         throw new Error('Test error');
@@ -174,7 +174,7 @@ describe('SubscriberManager', () => {
   });
 
   describe('forEachSafe', () => {
-    it('에러를 잡아서 처리한다', () => {
+    it('catches and handles errors', () => {
       const manager = new SubscriberManager<() => void>();
       const sub1 = vi.fn();
       const sub2 = vi.fn(() => {
@@ -196,7 +196,7 @@ describe('SubscriberManager', () => {
       expect(onError).toHaveBeenCalledWith(expect.any(Error));
     });
 
-    it('onError가 없으면 console.error로 로그한다', () => {
+    it('logs to console.error when onError is not provided', () => {
       const manager = new SubscriberManager<() => void>();
       const sub = vi.fn(() => {
         throw new Error('Test error');
@@ -214,7 +214,7 @@ describe('SubscriberManager', () => {
   });
 
   describe('size & hasSubscribers', () => {
-    it('size가 정확하다', () => {
+    it('size is accurate', () => {
       const manager = new SubscriberManager<() => void>();
 
       expect(manager.size).toBe(0);
@@ -229,7 +229,7 @@ describe('SubscriberManager', () => {
       expect(manager.size).toBe(0);
     });
 
-    it('hasSubscribers가 정확하다', () => {
+    it('hasSubscribers is accurate', () => {
       const manager = new SubscriberManager<() => void>();
 
       expect(manager.hasSubscribers).toBe(false);
@@ -243,7 +243,7 @@ describe('SubscriberManager', () => {
   });
 
   describe('clear', () => {
-    it('모든 구독자를 제거한다', () => {
+    it('removes all subscribers', () => {
       const manager = new SubscriberManager<() => void>();
 
       manager.add(vi.fn());
@@ -258,7 +258,7 @@ describe('SubscriberManager', () => {
       expect(manager.hasSubscribers).toBe(false);
     });
 
-    it('clear 후 다시 추가할 수 있다 (lazy re-initialization)', () => {
+    it('can add subscribers again after clear (lazy re-initialization)', () => {
       const manager = new SubscriberManager<() => void>();
       const sub = vi.fn();
 
@@ -272,7 +272,7 @@ describe('SubscriberManager', () => {
   });
 
   describe('toArray', () => {
-    it('모든 구독자를 배열로 반환한다', () => {
+    it('returns all subscribers as an array', () => {
       const manager = new SubscriberManager<() => void>();
       const sub1 = vi.fn();
       const sub2 = vi.fn();
@@ -287,7 +287,7 @@ describe('SubscriberManager', () => {
       expect(arr).toContain(sub2);
     });
 
-    it('빈 매니저는 빈 배열을 반환한다', () => {
+    it('returns an empty array for empty manager', () => {
       const manager = new SubscriberManager<() => void>();
 
       const arr = manager.toArray();
@@ -295,21 +295,21 @@ describe('SubscriberManager', () => {
       expect(arr).toEqual([]);
     });
 
-    it('반환된 배열은 복사본이다', () => {
+    it('returned array is a copy', () => {
       const manager = new SubscriberManager<() => void>();
       const sub = vi.fn();
 
       manager.add(sub);
 
       const arr = manager.toArray();
-      arr.push(vi.fn()); // 배열 수정
+      arr.push(vi.fn()); // Modify array
 
-      expect(manager.size).toBe(1); // 원본은 영향받지 않음
+      expect(manager.size).toBe(1); // Original is not affected
     });
   });
 
-  describe('unsubscribe 중복 호출 방지', () => {
-    it('unsubscribe를 여러 번 호출해도 안전하다', () => {
+  describe('prevent duplicate unsubscribe calls', () => {
+    it('is safe to call unsubscribe multiple times', () => {
       const manager = new SubscriberManager<() => void>();
       const subscriber = vi.fn();
 
@@ -318,13 +318,13 @@ describe('SubscriberManager', () => {
       unsub();
       expect(manager.size).toBe(0);
 
-      unsub(); // 두 번째 호출
-      expect(manager.size).toBe(0); // 여전히 0
+      unsub(); // Second call
+      expect(manager.size).toBe(0); // Still 0
     });
   });
 
-  describe('타입 안전성', () => {
-    it('다양한 함수 시그니처를 지원한다', () => {
+  describe('type safety', () => {
+    it('supports various function signatures', () => {
       type Listener1 = () => void;
       type Listener2 = (value: number) => void;
       type Listener3 = (value: number, oldValue: number) => void;

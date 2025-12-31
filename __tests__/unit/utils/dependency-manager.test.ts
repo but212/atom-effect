@@ -1,13 +1,13 @@
 /**
- * @fileoverview DependencyManager 테스트
+ * @fileoverview DependencyManager tests
  */
 
-import { describe, expect, it, vi } from 'vitest';
 import { DependencyManager } from '@/tracking/dependency-manager';
 import type { Dependency } from '@/types';
+import { describe, expect, it, vi } from 'vitest';
 
 describe('DependencyManager', () => {
-  it('의존성을 추가할 수 있다', () => {
+  it('can add a dependency', () => {
     const manager = new DependencyManager();
     const mockDep: Dependency = {
       subscribe: vi.fn(() => () => {}),
@@ -19,7 +19,7 @@ describe('DependencyManager', () => {
     expect(manager.count).toBe(1);
   });
 
-  it('의존성 존재 여부를 확인할 수 있다', () => {
+  it('can check if a dependency exists', () => {
     const manager = new DependencyManager();
     const mockDep: Dependency = {
       subscribe: vi.fn(() => () => {}),
@@ -33,7 +33,7 @@ describe('DependencyManager', () => {
     expect(manager.hasDependency(mockDep)).toBe(true);
   });
 
-  it('중복 의존성을 감지한다', () => {
+  it('detects duplicate dependencies', () => {
     const manager = new DependencyManager();
     const mockDep: Dependency = {
       subscribe: vi.fn(() => () => {}),
@@ -47,7 +47,7 @@ describe('DependencyManager', () => {
     expect(manager.count).toBe(1);
   });
 
-  it('모든 의존성을 구독 해제할 수 있다', () => {
+  it('can unsubscribe all dependencies', () => {
     const manager = new DependencyManager();
     const unsubscribe1 = vi.fn();
     const unsubscribe2 = vi.fn();
@@ -71,7 +71,7 @@ describe('DependencyManager', () => {
     expect(unsubscribe3).toHaveBeenCalled();
   });
 
-  it('unsubscribe 실패 시 에러를 처리한다', () => {
+  it('handles errors when unsubscribe fails', () => {
     const manager = new DependencyManager();
     const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const unsubscribe = vi.fn(() => {
@@ -81,38 +81,38 @@ describe('DependencyManager', () => {
     const mockDep: Dependency = { subscribe: vi.fn(() => () => {}) };
     manager.addDependency(mockDep, unsubscribe);
 
-    // 에러가 발생해도 unsubscribeAll은 완료되어야 함
+    // unsubscribeAll should complete even if an error occurs
     expect(() => manager.unsubscribeAll()).not.toThrow();
     expect(consoleWarn).toHaveBeenCalled();
 
     consoleWarn.mockRestore();
   });
 
-  it('빈 매니저에서 unsubscribeAll을 호출해도 안전하다', () => {
+  it('is safe to call unsubscribeAll on empty manager', () => {
     const manager = new DependencyManager();
 
     expect(() => manager.unsubscribeAll()).not.toThrow();
     expect(manager.count).toBe(0);
   });
 
-  it('정리 스케줄링이 중복 호출되지 않는다', async () => {
+  it('cleanup scheduling is not called multiple times', async () => {
     const manager = new DependencyManager();
     const mockDep: Dependency = { subscribe: vi.fn(() => () => {}) };
     const unsubscribe = vi.fn();
 
-    // 여러 번 추가하여 스케줄링 트리거
+    // Add multiple times to trigger scheduling
     manager.addDependency(mockDep, unsubscribe);
     manager.addDependency(mockDep, unsubscribe);
     manager.addDependency(mockDep, unsubscribe);
 
-    // 스케줄링이 한 번만 되어야 함
+    // Scheduling should only happen once
     await new Promise((resolve) => setTimeout(resolve, 10));
 
-    // 중복 방지로 인해 1개만 남아야 함
+    // Only 1 should remain due to duplicate prevention
     expect(manager.count).toBe(1);
   });
 
-  it('getDependencies로 의존성 목록을 가져올 수 있다', () => {
+  it('can get dependency list with getDependencies', () => {
     const manager = new DependencyManager();
     const mockDep: Dependency = { subscribe: vi.fn(() => () => {}) };
     const unsubscribe = vi.fn();
@@ -124,7 +124,7 @@ describe('DependencyManager', () => {
     expect(deps[0]).toBe(mockDep);
   });
 
-  it('WeakRef를 사용하여 GC된 의존성을 자동 정리한다', () => {
+  it('automatically cleans up GCed dependencies using WeakRef', () => {
     const manager = new DependencyManager();
     let mockDep: Dependency | null = { subscribe: vi.fn(() => () => {}) };
     const unsubscribe = vi.fn();
@@ -132,20 +132,20 @@ describe('DependencyManager', () => {
     manager.addDependency(mockDep, unsubscribe);
     expect(manager.count).toBe(1);
 
-    // 의존성 해제 시뮬레이션
+    // Simulate dependency release
     mockDep = null;
 
-    // 명시적 cleanup 호출 (실제로는 GC 후 cleanup이 자동 호출됨)
+    // Explicit cleanup call (in practice, cleanup is called automatically after GC)
     manager.cleanup();
 
-    // WeakRef.deref()가 undefined를 반환하므로 count가 0이 되어야 함
-    // 주의: 이 테스트는 실제 GC 동작에 의존하지 않음 (명시적 cleanup 호출)
-    // getDependencies는 살아있는 의존성만 반환
+    // WeakRef.deref() returns undefined, so count should be 0
+    // Note: This test does not depend on actual GC behavior (explicit cleanup call)
+    // getDependencies returns only living dependencies
     const deps = manager.getDependencies();
-    expect(deps.length).toBeLessThanOrEqual(1); // GC 타이밍에 따라 0 또는 1
+    expect(deps.length).toBeLessThanOrEqual(1); // 0 or 1 depending on GC timing
   });
 
-  it('cleanup을 호출하여 죽은 WeakRef를 정리할 수 있다', () => {
+  it('can clean up dead WeakRefs by calling cleanup', () => {
     const manager = new DependencyManager();
     const mockDep1: Dependency = { subscribe: vi.fn(() => () => {}) };
     const mockDep2: Dependency = { subscribe: vi.fn(() => () => {}) };
@@ -154,37 +154,37 @@ describe('DependencyManager', () => {
     manager.addDependency(mockDep1, unsubscribe);
     manager.addDependency(mockDep2, unsubscribe);
 
-    // cleanup 호출
+    // Call cleanup
     manager.cleanup();
 
-    // 살아있는 의존성은 유지되어야 함
+    // Living dependencies should be preserved
     expect(manager.getDependencies()).toHaveLength(2);
   });
 
-  it('setCleanupThreshold로 자동 cleanup 임계값을 설정할 수 있다', () => {
+  it('can set auto cleanup threshold with setCleanupThreshold', () => {
     const manager = new DependencyManager();
     const mockDep: Dependency = { subscribe: vi.fn(() => () => {}) };
     const unsubscribe = vi.fn();
 
-    // 임계값을 5로 설정
+    // Set threshold to 5
     manager.setCleanupThreshold(5);
 
-    // 5개 추가하면 자동 cleanup 트리거
+    // Adding 5 triggers auto cleanup
     for (let i = 0; i < 5; i++) {
       manager.addDependency(mockDep, unsubscribe);
     }
 
-    // cleanup이 자동으로 호출되었는지 확인 (count는 cleanup 후에도 유지)
+    // Check if cleanup was called automatically (count is preserved after cleanup)
     expect(manager.count).toBeGreaterThan(0);
   });
 
-  it('음수 임계값은 1로 보정된다', () => {
+  it('negative threshold is corrected to 1', () => {
     const manager = new DependencyManager();
 
-    // 음수 설정 시도
+    // Attempt to set negative value
     manager.setCleanupThreshold(-10);
 
-    // 최소값 1로 보정되어야 함 (내부 동작 확인은 어렵지만 에러가 없어야 함)
+    // Should be corrected to minimum value 1 (internal behavior is hard to verify but should not error)
     expect(() => manager.setCleanupThreshold(0)).not.toThrow();
   });
 });

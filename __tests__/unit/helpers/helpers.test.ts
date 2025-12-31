@@ -1,15 +1,15 @@
 /**
- * @fileoverview Helpers 테스트 (커버리지 보완)
+ * @fileoverview Helpers tests (coverage supplement)
  */
 
-import { describe, expect, it } from 'vitest';
 import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
 import { AtomError } from '@/errors/errors';
 import { batch, isComputed, untracked } from '@/index';
+import { describe, expect, it } from 'vitest';
 
-describe('batch - 에러 처리', () => {
-  it('잘못된 타입의 콜백을 거부한다', () => {
+describe('batch - Error Handling', () => {
+  it('rejects invalid callback types', () => {
     expect(() => {
       batch('not a function' as any);
     }).toThrow(AtomError);
@@ -19,7 +19,7 @@ describe('batch - 에러 처리', () => {
     }).toThrow(AtomError);
   });
 
-  it('batch 내부 에러를 래핑한다', () => {
+  it('wraps errors inside batch', () => {
     expect(() => {
       batch(() => {
         throw new Error('Batch error');
@@ -27,7 +27,7 @@ describe('batch - 에러 처리', () => {
     }).toThrow(AtomError);
   });
 
-  it('batch는 반환값을 전달한다', () => {
+  it('batch passes through return value', () => {
     const result = batch(() => {
       return 42;
     });
@@ -36,12 +36,12 @@ describe('batch - 에러 처리', () => {
   });
 });
 
-describe('batch - 동기 실행', () => {
-  it('batch는 동기적으로 실행되어야 한다', () => {
+describe('batch - Synchronous Execution', () => {
+  it('batch should execute synchronously', () => {
     const a = atom(0);
     const calls: number[] = [];
 
-    a.subscribe((newVal) => {
+    a.subscribe((newVal: number) => {
       if (newVal !== undefined) calls.push(newVal);
     });
 
@@ -51,20 +51,20 @@ describe('batch - 동기 실행', () => {
       a.value = 3;
     });
 
-    // batch 종료 직후 바로 호출되어야 함 (비동기 대기 불필요)
+    // Should be called immediately after batch ends (no async wait needed)
     expect(calls).toEqual([3]);
   });
 
-  it('batch 내부의 여러 atom 업데이트가 동기적으로 실행된다', () => {
+  it('multiple atom updates inside batch execute synchronously', () => {
     const a = atom(0);
     const b = atom(0);
     const calls: string[] = [];
 
-    a.subscribe((newVal) => {
+    a.subscribe((newVal: number) => {
       if (newVal !== undefined) calls.push(`a:${newVal}`);
     });
 
-    b.subscribe((newVal) => {
+    b.subscribe((newVal: number) => {
       if (newVal !== undefined) calls.push(`b:${newVal}`);
     });
 
@@ -74,18 +74,18 @@ describe('batch - 동기 실행', () => {
       a.value = 3;
     });
 
-    // batch 종료 직후 모든 업데이트가 완료되어야 함
-    // Set의 순서는 보장되지 않으므로 포함 여부만 확인
+    // All updates should be complete immediately after batch ends
+    // Set order is not guaranteed, so only check for inclusion
     expect(calls).toContain('a:3');
     expect(calls).toContain('b:2');
     expect(calls).toHaveLength(2);
   });
 
-  it('중첩된 batch도 동기적으로 실행된다', () => {
+  it('nested batch also executes synchronously', () => {
     const a = atom(0);
     const calls: number[] = [];
 
-    a.subscribe((newVal) => {
+    a.subscribe((newVal: number) => {
       if (newVal !== undefined) calls.push(newVal);
     });
 
@@ -97,13 +97,13 @@ describe('batch - 동기 실행', () => {
       a.value = 3;
     });
 
-    // 가장 바깥 batch 종료 직후 호출되어야 함
+    // Should be called immediately after outermost batch ends
     expect(calls).toEqual([3]);
   });
 
-  it('batch 내부에서 computed가 즉시 업데이트된다', () => {
+  it('computed updates immediately inside batch', () => {
     const a = atom(0);
-    const b = computed(() => a.value * 2, { lazy: false }); // non-lazy로 즉시 계산
+    const b = computed(() => a.value * 2, { lazy: false }); // non-lazy for immediate computation
     const calls: number[] = [];
 
     b.subscribe(() => {
@@ -116,14 +116,14 @@ describe('batch - 동기 실행', () => {
       a.value = 3;
     });
 
-    // batch 종료 직후 computed가 업데이트되어야 함
-    expect(b.value).toBe(6); // computed 값 자체는 업데이트됨
-    expect(calls).toEqual([6]); // subscriber도 호출되어야 함
+    // Computed should be updated immediately after batch ends
+    expect(b.value).toBe(6); // computed value itself is updated
+    expect(calls).toEqual([6]); // subscriber should also be called
   });
 });
 
-describe('untracked - 에러 처리', () => {
-  it('잘못된 타입의 콜백을 거부한다', () => {
+describe('untracked - Error Handling', () => {
+  it('rejects invalid callback types', () => {
     expect(() => {
       untracked('not a function' as any);
     }).toThrow(AtomError);
@@ -133,7 +133,7 @@ describe('untracked - 에러 처리', () => {
     }).toThrow(AtomError);
   });
 
-  it('untracked 내부 에러를 래핑한다', () => {
+  it('wraps errors inside untracked', () => {
     expect(() => {
       untracked(() => {
         throw new Error('Untracked error');
@@ -141,7 +141,7 @@ describe('untracked - 에러 처리', () => {
     }).toThrow(AtomError);
   });
 
-  it('untracked는 반환값을 전달한다', () => {
+  it('untracked passes through return value', () => {
     const result = untracked(() => {
       return 'test';
     });
@@ -150,17 +150,17 @@ describe('untracked - 에러 처리', () => {
   });
 });
 
-describe('isComputed - 다양한 케이스', () => {
-  it('개발 모드가 아닐 때도 작동한다', () => {
+describe('isComputed - Various Cases', () => {
+  it('works even when not in development mode', () => {
     const a = atom(0);
     const c = computed(() => 0);
 
-    // 개발 모드가 아니어도 invalidate 메서드로 판별
+    // Even without dev mode, identifies by invalidate method
     expect(isComputed(a)).toBe(false);
     expect(isComputed(c)).toBe(true);
   });
 
-  it('invalidate 메서드가 있으면 computed로 인식', () => {
+  it('recognizes as computed if invalidate method exists', () => {
     const fakeComputed = {
       value: 0,
       subscribe: () => () => {},
@@ -170,8 +170,8 @@ describe('isComputed - 다양한 케이스', () => {
     expect(isComputed(fakeComputed)).toBe(true);
   });
 
-  it('디버그 타입 정보를 우선 사용한다', () => {
-    // 이미 index.test.ts에서 충분히 테스트됨
+  it('prioritizes debug type information', () => {
+    // Already sufficiently tested in index.test.ts
     expect(true).toBe(true);
   });
 });

@@ -1,14 +1,14 @@
 /**
- * @fileoverview Effect 전용 테스트 (커버리지 보완)
+ * @fileoverview Effect-specific tests (coverage supplement)
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { atom } from '@/core/atom';
 import { effect } from '@/core/effect';
 import { EffectError } from '@/errors/errors';
 import { debug } from '@/utils/debug';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-describe('Effect - 에러 처리 및 엣지 케이스', () => {
+describe('Effect - Error Handling and Edge Cases', () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -18,7 +18,7 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
     vi.useRealTimers();
   });
 
-  it('잘못된 타입의 함수를 거부한다', () => {
+  it('rejects invalid function types', () => {
     expect(() => {
       effect('not a function' as any);
     }).toThrow(EffectError);
@@ -28,7 +28,7 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
     }).toThrow(EffectError);
   });
 
-  it('dispose된 effect는 run() 호출 시 에러', async () => {
+  it('throws error when run() is called on disposed effect', async () => {
     const e = effect(() => {});
     await vi.runAllTimersAsync();
 
@@ -37,7 +37,7 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
     expect(() => e.run()).toThrow(EffectError);
   });
 
-  it('이미 실행 중인 effect는 재실행되지 않는다', async () => {
+  it('does not re-execute effect that is already running', async () => {
     const calls: number[] = [];
     let executionCount = 0;
     const a = atom(0);
@@ -46,11 +46,11 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
       () => {
         executionCount++;
         calls.push(executionCount);
-        a.value; // 의존성 추적
+        a.value; // dependency tracking
 
-        // 첫 실행 중에 atom을 변경하여 재실행 트리거 시도
+        // Attempt to trigger re-execution during first run by changing atom
         if (executionCount === 1) {
-          a.value = 1; // sync:true이므로 즉시 재실행 시도하지만 isExecuting() 체크로 무시됨
+          a.value = 1; // sync:true so immediate re-execution attempt, but ignored due to isExecuting() check
         }
       },
       { sync: true }
@@ -58,18 +58,18 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
 
     await vi.runAllTimersAsync();
 
-    // isExecuting() 체크 덕분에 실행 중 트리거는 무시되고 1번만 실행
-    // 이후 비동기로 한 번 더 실행될 수 있음
+    // Thanks to isExecuting() check, trigger during execution is ignored and runs only once
+    // May run once more asynchronously afterwards
     expect(calls[0]).toBe(1);
     expect(executionCount).toBeGreaterThanOrEqual(1);
   });
 
-  it('cleanup 함수가 함수가 아니면 무시된다', async () => {
+  it('ignores cleanup function if not a function', async () => {
     const count = atom(0);
 
     const e = effect(() => {
       count.value;
-      return 'not a function' as any; // 함수가 아닌 값 반환
+      return 'not a function' as any; // return non-function value
     });
 
     await vi.runAllTimersAsync();
@@ -77,11 +77,11 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
     count.value = 1;
     await vi.runAllTimersAsync();
 
-    // 에러 없이 정상 동작해야 함
+    // Should work normally without error
     expect(e.isDisposed).toBe(false);
   });
 
-  it('cleanup 실행 중 에러가 발생해도 안전', async () => {
+  it('is safe even when error occurs during cleanup execution', async () => {
     const count = atom(0);
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -101,7 +101,7 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
     consoleError.mockRestore();
   });
 
-  it('effect 함수 실행 중 에러 처리', async () => {
+  it('handles error during effect function execution', async () => {
     const count = atom(0);
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -120,7 +120,7 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
     consoleError.mockRestore();
   });
 
-  it('비동기 effect 에러 처리', async () => {
+  it('handles async effect error', async () => {
     vi.useRealTimers();
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -136,7 +136,7 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
     vi.useFakeTimers();
   });
 
-  it('의존성 접근 실패 시 에러 발생', async () => {
+  it('throws error on dependency access failure', async () => {
     const badAtom = {
       get value() {
         throw new Error('Access failed');
@@ -156,7 +156,7 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
     consoleError.mockRestore();
   });
 
-  it('dispose는 항상 안전하게 동작한다', async () => {
+  it('dispose always works safely', async () => {
     const count = atom(0);
     const calls: number[] = [];
 
@@ -167,19 +167,19 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
     await vi.runAllTimersAsync();
     expect(calls.length).toBeGreaterThan(0);
 
-    // dispose 호출
+    // call dispose
     e.dispose();
 
     expect(() => e.dispose()).not.toThrow();
     expect(e.isDisposed).toBe(true);
   });
 
-  it('executionCount가 증가한다', async () => {
-    const count = atom(0, { sync: true }); // atom도 sync로
+  it('executionCount increments', async () => {
+    const count = atom(0, { sync: true }); // atom also sync
 
     const e = effect(
       () => {
-        count.value; // 의존성만 추적
+        count.value; // only track dependency
       },
       { sync: true, maxExecutionsPerSecond: 100 }
     );
@@ -190,30 +190,30 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
     count.value = 1;
     count.value = 2;
 
-    // executionCount가 증가했는지 확인
+    // verify executionCount increased
     expect(e.executionCount).toBeGreaterThan(initialCount);
   });
 
-  it('많은 실행을 처리할 수 있다', async () => {
-    const count = atom(0, { sync: true }); // atom도 sync로
+  it('can handle many executions', async () => {
+    const count = atom(0, { sync: true }); // atom also sync
 
     const e = effect(
       () => {
-        count.value; // 의존성만 추적
+        count.value; // only track dependency
       },
       { sync: true, maxExecutionsPerSecond: 1000 }
     );
 
-    // 150회 업데이스트
+    // 150 updates
     for (let i = 0; i < 150; i++) {
       count.value = i;
     }
 
-    // 에러 없이 많은 실행을 처리해야 함 (executionCount > 100)
+    // should handle many executions without error (executionCount > 100)
     expect(e.executionCount).toBeGreaterThan(100);
   });
 
-  it('trackModifications 옵션으로 descriptor가 변경된다', async () => {
+  it('trackModifications option modifies descriptor', async () => {
     const count = atom(0);
 
     const _e = effect(
@@ -230,11 +230,11 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
     expect(descriptor?.set).toBeDefined();
   });
 
-  it('trackModifications로 수정된 의존성이 추적된다', async () => {
+  it('tracks modified dependencies with trackModifications', async () => {
     vi.useRealTimers();
     const count = atom(0);
 
-    // 개발 모드가 아니면 테스트 스킵
+    // skip test if not in development mode
     if (typeof process === 'undefined' || (process as any).env?.NODE_ENV !== 'development') {
       expect(true).toBe(true);
       vi.useFakeTimers();
@@ -246,19 +246,19 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
     effect(
       () => {
         const current = count.value;
-        count.value = current + 1; // 읽고 쓰기
+        count.value = current + 1; // read and write
       },
       { trackModifications: true, sync: true, maxExecutionsPerSecond: 5 }
     );
 
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    // 경고가 발생했는지 확인
+    // verify warning occurred
     consoleWarn.mockRestore();
     vi.useFakeTimers();
   });
 
-  it('trackModifications 옵션이 dispose된다', async () => {
+  it('trackModifications option is disposed', async () => {
     const count = atom(0);
 
     const e = effect(
@@ -270,12 +270,12 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
 
     await vi.runAllTimersAsync();
 
-    // dispose는 항상 안전해야 함
+    // dispose should always be safe
     expect(() => e.dispose()).not.toThrow();
     expect(e.isDisposed).toBe(true);
   });
 
-  it('isAtom 타입 가드가 정확하다 (effect 내부)', async () => {
+  it('isAtom type guard is accurate (inside effect)', async () => {
     const count = atom(0);
     const notAtom = { value: 0 };
 
@@ -285,7 +285,7 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
 
     await vi.runAllTimersAsync();
 
-    // 내부 isAtom 함수 테스트
+    // internal isAtom function test
     const isAtomFn = (obj: any): boolean => {
       return (
         obj !== null &&
@@ -300,7 +300,7 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
     expect(isAtomFn(notAtom)).toBe(false);
   });
 
-  it('비동기 cleanup이 dispose 후에는 실행되지 않는다', async () => {
+  it('async cleanup does not execute after dispose', async () => {
     vi.useRealTimers();
     const cleanup = vi.fn();
 
@@ -309,17 +309,17 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
       return cleanup;
     });
 
-    // cleanup이 설정되기 전에 dispose
+    // dispose before cleanup is set
     e.dispose();
 
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    // dispose되었으므로 cleanup이 설정되지 않아야 함
+    // cleanup should not be set since disposed
     expect(e.isDisposed).toBe(true);
     vi.useFakeTimers();
   });
 
-  it('run() 메서드로 수동 실행 가능', async () => {
+  it('can manually execute with run() method', async () => {
     const calls: number[] = [];
 
     const e = effect(
@@ -336,8 +336,8 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
     expect(calls.length).toBe(initialCount + 1);
   });
 
-  describe('무한 루프 감지 및 메모리 관리', () => {
-    it('maxExecutionsPerSecond 초과 시 effect가 dispose된다', async () => {
+  describe('Infinite Loop Detection and Memory Management', () => {
+    it('disposes effect when maxExecutionsPerSecond is exceeded', async () => {
       vi.useRealTimers();
       const count = atom(0);
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -349,10 +349,10 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
         { maxExecutionsPerSecond: 5, sync: true }
       );
 
-      // 잠시 대기 후 확인
+      // wait briefly then check
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // 5번 초과 실행되어 dispose되어야 함
+      // should be disposed after exceeding 5 executions
       expect(e.isDisposed).toBe(true);
       expect(consoleError).toHaveBeenCalled();
 
@@ -360,7 +360,7 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
       vi.useFakeTimers();
     });
 
-    it('실행 시간 슬라이딩 윈도우가 메모리를 정리한다', async () => {
+    it('execution time sliding window cleans up memory', async () => {
       vi.useRealTimers();
       const count = atom(0);
       let executionCount = 0;
@@ -368,7 +368,7 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
       const e = effect(
         () => {
           executionCount++;
-          // CLEANUP_THRESHOLD(100) 이상 실행
+          // execute more than CLEANUP_THRESHOLD(100)
           if (executionCount < 150) {
             count.value = count.value + 1;
           }
@@ -378,7 +378,7 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // 메모리 정리 로직이 작동했어야 함 (splice 호출)
+      // memory cleanup logic should have worked (splice called)
       expect(executionCount).toBeGreaterThan(100);
 
       e.dispose();
@@ -387,25 +387,25 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
   });
 
   describe('trackModifications', () => {
-    it('trackModifications가 활성화되면 descriptor를 수정한다', () => {
+    it('modifies descriptor when trackModifications is enabled', () => {
       const count = atom(0);
 
       const e = effect(
         () => {
-          count.value; // 의존성 등록
+          count.value; // register dependency
         },
         { trackModifications: true, sync: true }
       );
 
-      // trackModifications가 활성화되었으므로 descriptor가 수정되었을 것
-      // 이는 내부 동작이므로 직접 검증하기 어렵지만, dispose 시 복원되는 것으로 확인
+      // descriptor should be modified since trackModifications is enabled
+      // this is internal behavior so hard to verify directly, but confirmed by restoration on dispose
       expect(e.isDisposed).toBe(false);
 
       e.dispose();
       expect(e.isDisposed).toBe(true);
     });
 
-    it('trackModifications가 descriptor를 복원한다', () => {
+    it('trackModifications restores descriptor', () => {
       const count = atom(0);
 
       const e = effect(
@@ -415,21 +415,21 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
         { trackModifications: true, sync: true }
       );
 
-      // descriptor가 수정되었는지 확인
+      // verify descriptor was modified
       const descriptor = Object.getOwnPropertyDescriptor(count, 'value');
       expect(descriptor).toBeDefined();
 
       e.dispose();
 
-      // dispose 후 원래 descriptor로 복원되어야 함
+      // should restore to original descriptor after dispose
       const restoredDescriptor = Object.getOwnPropertyDescriptor(count, 'value');
       expect(restoredDescriptor).toBeDefined();
     });
 
-    it('trackModifications 없이는 descriptor를 수정하지 않는다', () => {
+    it('does not modify descriptor without trackModifications', () => {
       const count = atom(0);
 
-      // trackModifications 없이 effect 생성
+      // create effect without trackModifications
       const e = effect(
         () => {
           count.value;
@@ -437,7 +437,7 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
         { sync: true }
       );
 
-      // 정상 동작
+      // normal operation
       expect(e.isDisposed).toBe(false);
 
       e.dispose();
@@ -445,8 +445,8 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
     });
   });
 
-  describe('cleanup 에러 처리', () => {
-    it('cleanup 함수 실행 중 에러가 발생해도 안전하다', async () => {
+  describe('Cleanup Error Handling', () => {
+    it('is safe even when error occurs during cleanup function execution', async () => {
       const count = atom(0);
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -459,30 +459,30 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
 
       await vi.runAllTimersAsync();
 
-      // cleanup 에러는 잡혀서 console.error로 출력됨
+      // cleanup error is caught and output to console.error
       e.dispose();
       expect(consoleError).toHaveBeenCalled();
 
       consoleError.mockRestore();
     });
 
-    it('cleanup이 함수가 아니면 무시된다', async () => {
+    it('ignores cleanup if not a function', async () => {
       const count = atom(0);
 
       const e = effect(() => {
         count.value;
-        return 'not a function' as any; // cleanup이 함수가 아님
+        return 'not a function' as any; // cleanup is not a function
       });
 
       await vi.runAllTimersAsync();
 
-      // 에러 없이 dispose 되어야 함
+      // should dispose without error
       expect(() => e.dispose()).not.toThrow();
     });
   });
 
-  describe('비동기 effect 에러 처리', () => {
-    it('비동기 effect 실행 중 에러가 발생해도 안전하다', async () => {
+  describe('Async Effect Error Handling', () => {
+    it('is safe even when error occurs during async effect execution', async () => {
       vi.useRealTimers();
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -500,7 +500,7 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
       vi.useFakeTimers();
     });
 
-    it('비동기 cleanup이 Promise를 반환해도 처리된다', async () => {
+    it('handles async cleanup that returns Promise', async () => {
       vi.useRealTimers();
       const cleanupCalled = vi.fn();
 
@@ -519,28 +519,28 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
     });
   });
 
-  describe('타입 가드 및 내부 로직', () => {
-    it('isAtom 타입 가드가 atom을 올바르게 감지한다', () => {
+  describe('Type Guards and Internal Logic', () => {
+    it('isAtom type guard correctly detects atom', () => {
       const count = atom(0);
 
       const e = effect(
         () => {
-          count.value; // atom 사용
+          count.value; // use atom
         },
         { trackModifications: true, sync: true }
       );
 
-      // trackModifications가 활성화되면 isAtom 체크가 수행됨
+      // isAtom check is performed when trackModifications is enabled
       expect(e.isDisposed).toBe(false);
       e.dispose();
     });
 
-    it('atom이 아닌 객체는 trackModifications를 적용하지 않는다', () => {
+    it('does not apply trackModifications to non-atom objects', () => {
       const notAtom = { value: 0 };
 
       const e = effect(
         () => {
-          // atom이 아닌 객체는 trackModifications 적용 안됨
+          // trackModifications is not applied to non-atom objects
           const _ = notAtom.value;
         },
         { trackModifications: true, sync: true }
@@ -550,26 +550,26 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
       e.dispose();
     });
 
-    it('trackModifications와 debug 모드에서 읽기 후 쓰기 경고', () => {
+    it('warns on read-then-write with trackModifications and debug mode', () => {
       const wasEnabled = debug.enabled;
       debug.enabled = true;
 
       const count = atom(0);
       const warnSpy = vi.spyOn(debug, 'warn').mockImplementation(() => {});
 
-      // sync=true로 즉시 실행
+      // sync=true for immediate execution
       const e = effect(
         () => {
-          const val = count.value; // 읽기
+          const val = count.value; // read
           if (val === 0) {
-            count.value = 1; // 쓰기 - 경고 발생 가능
+            count.value = 1; // write - may trigger warning
           }
         },
         { trackModifications: true, sync: true, maxExecutionsPerSecond: 3 }
       );
 
-      // 경고가 발생했을 수 있음 (읽기 후 쓰기 감지)
-      // 하지만 무한 루프로 인해 dispose될 수도 있음
+      // warning may have occurred (read-then-write detection)
+      // but may also be disposed due to infinite loop
 
       if (!e.isDisposed) {
         e.dispose();
@@ -579,7 +579,7 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
       debug.enabled = wasEnabled;
     });
 
-    it('여러 atom에 대한 의존성 추적', async () => {
+    it('tracks dependencies on multiple atoms', async () => {
       const count1 = atom(0);
       const count2 = atom(0);
       const count3 = atom(0);
@@ -607,7 +607,7 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
       e.dispose();
     });
 
-    it('의존성 구독 실패 시 에러 처리', () => {
+    it('handles error when dependency subscription fails', () => {
       const _badDep = {
         subscribe: () => {
           throw new Error('Subscribe failed');
@@ -617,14 +617,14 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
       expect(() => {
         effect(
           () => {
-            // badDep를 사용하려 하지만 subscribe 실패
+            // attempts to use badDep but subscribe fails
           },
           { sync: true }
         );
-      }).not.toThrow(); // execute는 정상 실행됨
+      }).not.toThrow(); // execute runs normally
     });
 
-    it('Effect 실행 중 새로운 의존성이 추가되고 기존 의존성이 제거됨', async () => {
+    it('adds new dependencies and removes old ones during effect execution', async () => {
       const condition = atom(true);
       const count1 = atom(0);
       const count2 = atom(10);
@@ -645,17 +645,17 @@ describe('Effect - 에러 처리 및 엣지 케이스', () => {
       await vi.runAllTimersAsync();
       expect(result).toBe(10); // count1.value * 2 = 10
 
-      // condition 변경으로 의존성 전환
+      // dependency switch when condition changes
       condition.value = false;
       await vi.runAllTimersAsync();
       expect(result).toBe(30); // count2.value * 3 = 30
 
-      // 이제 count1은 의존성이 아님
+      // count1 is no longer a dependency
       count1.value = 100;
       await vi.runAllTimersAsync();
-      expect(result).toBe(30); // 변화 없음
+      expect(result).toBe(30); // no change
 
-      // count2만 의존성
+      // only count2 is a dependency
       count2.value = 20;
       await vi.runAllTimersAsync();
       expect(result).toBe(60); // count2.value * 3 = 60
