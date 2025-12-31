@@ -6,14 +6,14 @@
 
 A lightweight, high-performance reactive state management library for TypeScript/JavaScript applications. Built with zero dependencies and exceptional performance in mind.
 
-## ✨ Features
+## Features
 
 ### Core Primitives
 
-- **🔥 `atom`** - Reactive state primitive with automatic dependency tracking
-- **⚡ `computed`** - Derived state with sync/async support and smart caching
-- **🎯 `effect`** - Side effect management with automatic cleanup
-- **📦 `batch`** - Batch multiple updates for optimal performance
+- **`atom`** - Reactive state primitive with automatic dependency tracking
+- **`computed`** - Derived state with sync/async support and smart caching
+- **`effect`** - Side effect management with automatic cleanup
+- **`batch`** - Batch multiple updates for optimal performance
 
 ### Performance & Optimization
 
@@ -34,7 +34,7 @@ A lightweight, high-performance reactive state management library for TypeScript
 - **Structured Errors** - Clear error class hierarchy for better debugging
 - **Comprehensive JSDoc** - Inline documentation for all APIs
 
-## 📦 Installation
+## Installation
 
 ```bash
 npm install @but212/reactive-atom
@@ -44,7 +44,7 @@ pnpm add @but212/reactive-atom
 yarn add @but212/reactive-atom
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ```typescript
 import { atom, computed, effect, batch } from '@but212/reactive-atom';
@@ -73,7 +73,7 @@ batch(() => {
 dispose();
 ```
 
-## 📚 API Reference
+## API Reference
 
 ### `atom<T>(initialValue: T, options?: AtomOptions): WritableAtom<T>`
 
@@ -287,7 +287,7 @@ try {
 }
 ```
 
-## 🎯 Use Cases
+## Use Cases
 
 ### State Management
 
@@ -347,7 +347,7 @@ effect(() => {
 });
 ```
 
-## 🔧 Advanced Patterns
+## Advanced Patterns
 
 ### Derived Atoms
 
@@ -407,7 +407,7 @@ async function fetchData(url: string) {
 }
 ```
 
-## 📊 Performance
+## Performance
 
 Based on comprehensive benchmarks in `docs/BENCHMARKS.md`:
 
@@ -441,7 +441,7 @@ pnpm bench:regression
 
 See [docs/BENCHMARKS.md](./docs/BENCHMARKS.md) for detailed benchmark documentation.
 
-## 🧪 Testing
+## Testing
 
 The library includes a comprehensive test suite with 400+ test cases:
 
@@ -469,7 +469,7 @@ pnpm test:watch
 - **DOM Tests**: Browser integration (form binding, conditional rendering, list rendering)
 - **Performance Tests**: Memory leaks, GC pressure, large-scale scenarios
 
-## 🏗️ Project Structure
+## Project Structure
 
 ```text
 reactive-atom/
@@ -494,7 +494,7 @@ reactive-atom/
 └── scripts/            # Build and utility scripts
 ```
 
-## 🔒 Type Safety
+## Type Safety
 
 Full TypeScript support with strict type checking:
 
@@ -516,7 +516,7 @@ const data = computed(async () => {
 }, { defaultValue: [] });
 ```
 
-## 🛠️ Development
+## Development
 
 ```bash
 # Install dependencies
@@ -539,7 +539,7 @@ pnpm lint:fix
 pnpm format
 ```
 
-## 📋 Configuration Options
+## Configuration Options
 
 ### Debug Configuration
 
@@ -564,28 +564,6 @@ SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS = 100;  // Max batch iterations
 scheduler.setMaxFlushIterations(200);          // Runtime configuration
 ```
 
-## 🤝 Contributing
-
-Contributions are welcome! See [PUBLISHING.md](./PUBLISHING.md) for development guidelines.
-
-## 📄 License
+## License
 
 MIT © [Jeongil Suk](https://github.com/but212)
-
-## 📝 Changelog
-
-See [CHANGELOG.md](./CHANGELOG.md) for version history and changes.
-
-## 🔗 Links
-
-- [GitHub Repository](https://github.com/but212/reactive-atom)
-- [npm Package](https://www.npmjs.com/package/@but212/reactive-atom)
-- [Issue Tracker](https://github.com/but212/reactive-atom/issues)
-
-## 🎓 Inspiration
-
-This library draws inspiration from modern reactive frameworks including Solid.js, Vue 3, and Preact Signals, while focusing on minimal footprint and maximum performance.
-
----
-
-**Made with ❤️ by [Jeongil Suk](https://github.com/but212)**
