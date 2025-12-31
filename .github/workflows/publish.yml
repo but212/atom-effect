@@ -1,8 +1,9 @@
 name: Publish to NPM
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - "v*"
 
 jobs:
   publish:
@@ -15,6 +16,16 @@ jobs:
     
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Check changelog update
+        run: |
+          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          if ! grep -q "## \[${TAG_VERSION}\]" CHANGELOG.md; then
+            echo "Error: CHANGELOG.md does not contain an entry for version ${TAG_VERSION}"
+            exit 1
+          fi
       
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
