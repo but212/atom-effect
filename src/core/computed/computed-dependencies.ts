@@ -1,13 +1,12 @@
 /**
  * @fileoverview Computed dependency management
- * @description Handles dependency tracking and subscription with delta sync optimization
  */
 
 import { ComputedError, wrapError } from '../../errors/errors';
 import { ERROR_MESSAGES } from '../../errors/messages';
 import type { Dependency } from '../../types';
 import { debug } from '../../utils/debug';
-import type { DependencyManager } from '../../utils/dependency-manager';
+import type { DependencyManager } from '../../tracking/dependency-manager';
 
 /**
  * Dependency synchronization manager

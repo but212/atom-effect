@@ -4,7 +4,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { SchedulerError } from '@/errors/errors';
-import { scheduler } from '@/utils/scheduler';
+import { scheduler } from '@/index';
 
 describe('Scheduler', () => {
   // Scheduler는 Promise.resolve()를 사용하므로 실제 타이머 사용

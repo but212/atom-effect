@@ -3,8 +3,8 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import type { Dependency } from '@/types/types';
-import { DependencyManager } from '@/utils/dependency-manager';
+import type { Dependency } from '@/types';
+import { DependencyManager } from '@/tracking/dependency-manager';
 
 describe('DependencyManager', () => {
   it('의존성을 추가할 수 있다', () => {

@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
 import { effect } from '@/core/effect';
-import { batch, untracked } from '@/helpers/helpers';
+import { batch, untracked } from '@/index';
 
 // ========================================
 // Type Definitions for Test Scenarios

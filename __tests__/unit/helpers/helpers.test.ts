@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
 import { AtomError } from '@/errors/errors';
-import { batch, isComputed, untracked } from '@/helpers/helpers';
+import { batch, isComputed, untracked } from '@/index';
 
 describe('batch - 에러 처리', () => {
   it('잘못된 타입의 콜백을 거부한다', () => {
