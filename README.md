@@ -33,7 +33,7 @@ const name = atom('Alice');
 const greeting = computed(() => `Hello, ${name.value}! Count: ${count.value}`);
 
 // Side effects with automatic cleanup
-const dispose = effect(() => {
+const effectObj = effect(() => {
   console.log(greeting.value);
 });
 
@@ -43,7 +43,7 @@ batch(() => {
   name.value = 'Bob';
 }); // Effect runs only once
 
-dispose();
+effectObj.dispose();
 ```
 
 ## Core API
@@ -87,9 +87,10 @@ const userData = computed(
 
 **Options:**
 
+- `equal` - Custom equality function (default: `Object.is`)
 - `defaultValue` - Required for async functions
-- `lazy` - Compute only when accessed (default: `false`)
-- `sync` - Synchronous updates (default: `false`)
+- `lazy` - Compute only when accessed (default: `true`)
+- `onError` - Error callback for computation failures
 
 ### `effect(fn)`
 
@@ -98,14 +99,14 @@ Runs side effects with automatic dependency tracking and cleanup.
 ```typescript
 const count = atom(0);
 
-const dispose = effect(() => {
+const effectObj = effect(() => {
   console.log(`Count: ${count.value}`);
   
   // Optional cleanup
   return () => console.log('cleanup');
 });
 
-dispose(); // Stop the effect
+effectObj.dispose(); // Stop the effect
 ```
 
 ### `batch(fn)`
@@ -207,13 +208,16 @@ isComputed(doubled); // true
 ### Configuration
 
 ```typescript
-import { DEBUG_CONFIG, POOL_CONFIG } from '@but212/reactive-atom';
+import { DEBUG_CONFIG, POOL_CONFIG, SCHEDULER_CONFIG } from '@but212/reactive-atom';
 
-DEBUG_CONFIG.ENABLE_CIRCULAR_DEPENDENCY_DETECTION = true;
-DEBUG_CONFIG.MAX_EFFECT_ITERATIONS = 100;
+// Read-only configuration constants (for reference)
+DEBUG_CONFIG.MAX_DEPENDENCIES;     // 1000
+DEBUG_CONFIG.WARN_INFINITE_LOOP;   // true
 
-POOL_CONFIG.INITIAL_SIZE = 16;
-POOL_CONFIG.MAX_SIZE = 256;
+POOL_CONFIG.MAX_SIZE;               // 1000
+POOL_CONFIG.WARMUP_SIZE;            // 100
+
+SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_SECOND; // 100
 ```
 
 ### Error Handling
