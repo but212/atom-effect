@@ -37,10 +37,3 @@ jobs:
 
             - name: Run macro benchmarks
               run: pnpm bench:macro
-
-            - name: Upload benchmark results
-              uses: actions/upload-artifact@v4
-              with:
-                  name: benchmark-results
-                  path: benchmarks/results/
-                  retention-days: 30
