@@ -210,14 +210,14 @@ isComputed(doubled); // true
 ```typescript
 import { DEBUG_CONFIG, POOL_CONFIG, SCHEDULER_CONFIG } from '@but212/reactive-atom';
 
-// Read-only configuration constants (for reference)
-DEBUG_CONFIG.MAX_DEPENDENCIES;     // 1000
-DEBUG_CONFIG.WARN_INFINITE_LOOP;   // true
+// You can access read-only configuration constants for reference.
+console.log(DEBUG_CONFIG.MAX_DEPENDENCIES);     // 1000
+console.log(DEBUG_CONFIG.WARN_INFINITE_LOOP);   // true
 
-POOL_CONFIG.MAX_SIZE;               // 1000
-POOL_CONFIG.WARMUP_SIZE;            // 100
+console.log(POOL_CONFIG.MAX_SIZE);               // 1000
+console.log(POOL_CONFIG.WARMUP_SIZE);            // 100
 
-SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_SECOND; // 100
+console.log(SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_SECOND); // 100
 ```
 
 ### Error Handling
