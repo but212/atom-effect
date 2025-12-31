@@ -1,6 +1,6 @@
 {
   "name": "@but212/reactive-atom",
-  "version": "1.1.0",
+  "version": "0.1.0",
   "type": "module",
   "description": "A reactive state management library that combines the power of `atom`, `computed`, and `effect` for seamless management of reactive state.",
   "main": "dist/index.cjs",
@@ -21,22 +21,14 @@
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
     "prepublishOnly": "pnpm run build",
-    "bench": "tsx benchmarks/index.ts",
-    "bench:micro": "tsx benchmarks/index.ts micro",
-    "bench:macro": "tsx benchmarks/index.ts macro",
-    "bench:atom": "tsx benchmarks/index.ts atom",
-    "bench:computed": "tsx benchmarks/index.ts computed",
-    "bench:effect": "tsx benchmarks/index.ts effect",
-    "bench:batch": "tsx benchmarks/index.ts batch",
-    "bench:diamond": "tsx benchmarks/index.ts diamond",
-    "bench:todo": "tsx benchmarks/index.ts todo",
-    "bench:dashboard": "tsx benchmarks/index.ts dashboard",
-    "bench:graph": "tsx benchmarks/index.ts graph",
-    "bench:memory": "tsx benchmarks/index.ts memory",
-    "bench:gc": "tsx benchmarks/index.ts gc",
-    "bench:leak": "tsx benchmarks/index.ts leak",
+    "bench": "vitest bench",
+    "bench:micro": "vitest bench __benchmarks__/micro",
+    "bench:macro": "vitest bench __benchmarks__/macro",
+    "bench:atom": "vitest bench __benchmarks__/micro/atom.bench",
+    "bench:computed": "vitest bench __benchmarks__/micro/computed.bench",
+    "bench:effect": "vitest bench __benchmarks__/micro/effect.bench",
     "bench:baseline": "tsx scripts/save-baseline.ts",
-    "bench:check": "tsx scripts/check-regression.ts"
+    "bench:regression": "tsx scripts/check-regression.ts"
   },
   "keywords": [
     "reactive",
@@ -70,19 +62,13 @@
     "@types/node": "^24.10.4",
     "@vitest/coverage-v8": "^3.2.4",
     "@vitest/ui": "^3.2.4",
-    "benchmark": "^2.1.4",
-    "chart.js": "^4.5.1",
     "happy-dom": "^20.0.11",
     "jsdom": "^27.4.0",
-    "solid-js": "^1.9.10",
     "tinybench": "^5.1.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.0",
     "vite-plugin-dts": "^4.5.4",
     "vitest": "^3.2.4"
-  },
-  "optionalDependencies": {
-    "canvas": "^3.2.0"
   }
 }

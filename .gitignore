@@ -7,6 +7,14 @@
 node_modules/
 dist/
 coverage/
+*.log
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+.performance/ults/
 
 # Benchmark results
 benchmarks/results/
