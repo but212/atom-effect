@@ -70,7 +70,9 @@ function createTodoApp(todoCount: number) {
   };
 
   const toggleTodo = (id: number) => {
-    todos.value = todos.value.map((t: Todo) => (t.id === id ? { ...t, completed: !t.completed } : t));
+    todos.value = todos.value.map((t: Todo) =>
+      t.id === id ? { ...t, completed: !t.completed } : t
+    );
   };
 
   const toggleAll = () => {

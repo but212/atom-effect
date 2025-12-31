@@ -4,7 +4,10 @@
 
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
-
+// DOM benchmarks
+import { runDOMEventBenchmark } from './dom/event.bench';
+import { runDOMRenderBenchmark } from './dom/render.bench';
+import { runDOMUpdateBenchmark } from './dom/update.bench';
 // Macro benchmarks
 import { runDashboardBenchmark } from './macro/dashboard.bench';
 import { runDiamondProblemBenchmark } from './macro/diamond-problem.bench';
@@ -17,10 +20,6 @@ import { runAtomOperationsBenchmark } from './micro/atom-operations.bench';
 import { runBatchOperationsBenchmark } from './micro/batch-operations.bench';
 import { runComputedOperationsBenchmark } from './micro/computed-operations.bench';
 import { runEffectOperationsBenchmark } from './micro/effect-operations.bench';
-// DOM benchmarks
-import { runDOMEventBenchmark } from './dom/event.bench';
-import { runDOMRenderBenchmark } from './dom/render.bench';
-import { runDOMUpdateBenchmark } from './dom/update.bench';
 import { useDist } from './utils/import-lib';
 import { getEnvironment, Reporter } from './utils/reporter';
 
@@ -28,12 +27,7 @@ const reporter = new Reporter();
 
 function runSubprocess(command: 'micro' | 'macro'): void {
   const isWin = process.platform === 'win32';
-  const tsxBin = path.join(
-    process.cwd(),
-    'node_modules',
-    '.bin',
-    isWin ? 'tsx.cmd' : 'tsx'
-  );
+  const tsxBin = path.join(process.cwd(), 'node_modules', '.bin', isWin ? 'tsx.cmd' : 'tsx');
 
   const result = isWin
     ? spawnSync('cmd.exe', ['/d', '/s', '/c', tsxBin, 'benchmarks/index.ts', command], {

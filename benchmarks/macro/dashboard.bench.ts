@@ -40,7 +40,9 @@ function createDashboard(widgetCount: number, dataPointsPerWidget: number) {
   });
 
   // total data points
-  const totalDataPoints = computed(() => widgets.value.reduce((sum: number, w: Widget) => sum + w.data.length, 0));
+  const totalDataPoints = computed(() =>
+    widgets.value.reduce((sum: number, w: Widget) => sum + w.data.length, 0)
+  );
 
   const averageValue = computed(() => {
     const allValues = widgets.value.flatMap((w: Widget) => w.data.map((d: DataPoint) => d.value));

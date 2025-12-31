@@ -1,4 +1,3 @@
-
 import { JSDOM } from 'jsdom';
 
 export function setupDOM() {
@@ -11,8 +10,8 @@ export function setupDOM() {
 }
 
 export function teardownDOM() {
-  delete (global as any).window;
-  delete (global as any).document;
-  delete (global as any).Node;
-  delete (global as any).HTMLElement;
+  (global as any).window = undefined;
+  (global as any).document = undefined;
+  (global as any).Node = undefined;
+  (global as any).HTMLElement = undefined;
 }

@@ -12,11 +12,11 @@ import { trackingContext } from '../utils/tracking';
 
 /**
  * Reactive atom implementation
- * 
+ *
  * Atom is the fundamental unit of reactive state. It holds a value and notifies
  * subscribers when the value changes. Atoms support both function-based and
  * object-based subscribers for flexibility in different use cases.
- * 
+ *
  * Features:
  * - Automatic dependency tracking via trackingContext
  * - Duplicate subscriber prevention
@@ -28,7 +28,7 @@ class AtomImpl<T> implements WritableAtom<T> {
   private _value: T;
   /** Version counter for stale notification prevention */
   private _version: number;
-  
+
   /** Function-based subscribers */
   private _fnSubs: Array<(newValue?: T, oldValue?: T) => void>;
   /** Count of active function subscribers */
@@ -37,7 +37,7 @@ class AtomImpl<T> implements WritableAtom<T> {
   private _objSubs: Array<{ execute: () => void }>;
   /** Count of active object subscribers */
   private _objSubCount: number;
-  
+
   /** Whether to notify synchronously (bypass scheduler) */
   private readonly _sync: boolean;
   /** Unique identifier for debugging */
@@ -87,7 +87,7 @@ class AtomImpl<T> implements WritableAtom<T> {
   /**
    * Registers the current tracking context as a subscriber.
    * Handles both function-based and object-based trackers.
-   * 
+   *
    * If addDependency exists, it handles subscription management externally,
    * so we don't add as direct subscriber to avoid double subscription.
    */
@@ -121,7 +121,7 @@ class AtomImpl<T> implements WritableAtom<T> {
   private _addFnSub(sub: (newValue?: T, oldValue?: T) => void): () => void {
     const subs = this._fnSubs;
     const idx = this._fnSubCount;
-    
+
     // Check for duplicate subscription
     for (let i = 0; i < idx; i++) {
       if (subs[i] === sub) return this._createUnsub(i, true);
@@ -129,7 +129,7 @@ class AtomImpl<T> implements WritableAtom<T> {
 
     subs[idx] = sub;
     this._fnSubCount = idx + 1;
-    
+
     return this._createUnsub(idx, true);
   }
 
@@ -139,7 +139,7 @@ class AtomImpl<T> implements WritableAtom<T> {
   private _addObjSub(sub: { execute: () => void }): void {
     const subs = this._objSubs;
     const count = this._objSubCount;
-    
+
     // Check for duplicate subscription
     for (let i = 0; i < count; i++) {
       if (subs[i] === sub) return;
@@ -168,10 +168,10 @@ class AtomImpl<T> implements WritableAtom<T> {
   private _removeFnSub(idx: number): void {
     const count = this._fnSubCount;
     if (idx >= count) return;
-    
+
     const lastIdx = count - 1;
     const subs = this._fnSubs;
-    
+
     // Swap with last element and pop
     subs[idx] = subs[lastIdx] as (newValue?: T, oldValue?: T) => void;
     subs[lastIdx] = undefined as any;
@@ -184,10 +184,10 @@ class AtomImpl<T> implements WritableAtom<T> {
   private _removeObjSub(idx: number): void {
     const count = this._objSubCount;
     if (idx >= count) return;
-    
+
     const lastIdx = count - 1;
     const subs = this._objSubs;
-    
+
     subs[idx] = subs[lastIdx] as { execute: () => void };
     subs[lastIdx] = undefined as any;
     this._objSubCount = lastIdx;
@@ -209,7 +209,6 @@ class AtomImpl<T> implements WritableAtom<T> {
       const objCount = this._objSubCount;
       // ...
 
-
       // Notify function subscribers
       for (let i = 0; i < fnCount; i++) {
         try {
@@ -218,7 +217,9 @@ class AtomImpl<T> implements WritableAtom<T> {
             fn(newValue, oldValue);
           }
         } catch (e) {
-          console.error(new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, e as Error));
+          console.error(
+            new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, e as Error)
+          );
         }
       }
 
@@ -230,7 +231,9 @@ class AtomImpl<T> implements WritableAtom<T> {
             sub.execute();
           }
         } catch (e) {
-          console.error(new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, e as Error));
+          console.error(
+            new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, e as Error)
+          );
         }
       }
     };
@@ -285,27 +288,27 @@ class AtomImpl<T> implements WritableAtom<T> {
 
 /**
  * Creates a reactive atom that holds a value and notifies subscribers on changes.
- * 
+ *
  * @example
  * ```typescript
  * const count = atom(0);
- * 
+ *
  * // Read value (registers dependency if in tracking context)
  * console.log(count.value); // 0
- * 
+ *
  * // Write value (notifies subscribers)
  * count.value = 1;
- * 
+ *
  * // Manual subscription
  * const unsub = count.subscribe((newVal, oldVal) => {
  *   console.log(`Changed from ${oldVal} to ${newVal}`);
  * });
- * 
+ *
  * // Cleanup
  * unsub();
  * count.dispose();
  * ```
- * 
+ *
  * @param initialValue - The initial value of the atom
  * @param options - Configuration options
  * @param options.sync - If true, notifications are synchronous (default: false)

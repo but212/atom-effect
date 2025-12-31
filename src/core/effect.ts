@@ -33,7 +33,7 @@ function isAtom(obj: unknown): obj is ReadonlyAtom {
 
 /**
  * Effect Implementation Class
- * 
+ *
  * Optimized for V8 performance:
  * - Stable hidden class (all properties initialized in constructor)
  * - Ring buffer for execution history (Float64Array)
@@ -52,7 +52,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
   /** Bitwise flags for state (EXECUTING, DISPOSED) */
   private _flags: number;
   private _cleanup: (() => void) | null;
-  
+
   // Dependency Tracking
   private readonly _depManager: DependencyManager;
   private readonly _modifiedDeps: Set<unknown>;
@@ -70,7 +70,8 @@ class EffectImpl implements EffectObject, DependencyTracker {
     // Configuration
     this._fn = fn;
     this._sync = options.sync ?? false;
-    this._maxExecutions = options.maxExecutionsPerSecond ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_SECOND;
+    this._maxExecutions =
+      options.maxExecutionsPerSecond ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_SECOND;
     this._trackModifications = options.trackModifications ?? false;
     this._id = generateId();
 
@@ -244,7 +245,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
     if (this._maxExecutions <= 0) return;
 
     const oneSecondAgo = now - 1000;
-    
+
     // Add new timestamp
     this._history[this._historyIdx] = now;
     this._historyIdx = (this._historyIdx + 1) % this._historyCapacity;
@@ -257,20 +258,20 @@ class EffectImpl implements EffectObject, DependencyTracker {
     // Iterate backwards from current index
     let count = 0;
     let idx = (this._historyIdx - 1 + this._historyCapacity) % this._historyCapacity;
-    
+
     for (let i = 0; i < this._historyCount; i++) {
-        if (this._history[idx]! < oneSecondAgo) {
-            // Found a timestamp older than 1s, we can stop counting for "recent"
-            // And technically we could "clean up" the count, but for ring buffer we just overwrite.
-            // But to match 'executionCount' behavior of mostly recent:
-            // We can lazily update _historyCount? No, _historyCount tracks valid entries in buffer.
-            
-            // To strictly match "infinite loop suspected" logic:
-            // We need count of events > maxExecutionsPerSecond within 1s.
-            break;
-        }
-        count++;
-        idx = (idx - 1 + this._historyCapacity) % this._historyCapacity;
+      if (this._history[idx]! < oneSecondAgo) {
+        // Found a timestamp older than 1s, we can stop counting for "recent"
+        // And technically we could "clean up" the count, but for ring buffer we just overwrite.
+        // But to match 'executionCount' behavior of mostly recent:
+        // We can lazily update _historyCount? No, _historyCount tracks valid entries in buffer.
+
+        // To strictly match "infinite loop suspected" logic:
+        // We need count of events > maxExecutionsPerSecond within 1s.
+        break;
+      }
+      count++;
+      idx = (idx - 1 + this._historyCapacity) % this._historyCapacity;
     }
 
     if (count > this._maxExecutions) {
@@ -294,7 +295,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
       this._originalDescriptors.set(dep, originalDescriptor);
       this._trackedDeps.add(dep);
 
-      // We need to capture 'this' carefully. 
+      // We need to capture 'this' carefully.
       // Since this is called from addDependency which is a bound method, 'this' refers to the instance.
       const self = this;
 
@@ -394,11 +395,11 @@ export function effect(fn: EffectFunction, options: EffectOptions = {}): EffectO
   if (typeof fn !== 'function') {
     throw new EffectError(ERROR_MESSAGES.EFFECT_MUST_BE_FUNCTION);
   }
-  
+
   const effectInstance = new EffectImpl(fn, options);
-  
+
   // Initial run
   effectInstance.execute();
-  
+
   return effectInstance;
 }

@@ -248,12 +248,10 @@ export function computed<T>(
 
     if (typeof current === 'function') {
       functionSubscribers.add(current);
-    } else {
-      if (current.addDependency) {
-        current.addDependency(computedObject);
-      } else if (current.execute) {
-        objectSubscribers.add(current as Subscriber);
-      }
+    } else if (current.addDependency) {
+      current.addDependency(computedObject);
+    } else if (current.execute) {
+      objectSubscribers.add(current as Subscriber);
     }
   };
 
