@@ -1,44 +1,40 @@
 import { bench, describe } from 'vitest';
-import { atom, computed, effect, batch } from '../../src/index.js';
+import { atom, batch, computed, effect } from '../../src/index.js';
 
 describe('Batch Efficiency', () => {
-    bench('form reset overhead (batch)', () => {
-        const formFields = Array.from({ length: 20 }, () => atom('initial'));
-        
-        const isValid = computed(() => 
-            formFields.every(f => f.value.length > 0)
-        );
+  bench('form reset overhead (batch)', () => {
+    const formFields = Array.from({ length: 20 }, () => atom('initial'));
 
-        let effectRuns = 0;
-        effect(() => {
-            const _ = isValid.value;
-            effectRuns++;
-        });
+    const isValid = computed(() => formFields.every((f) => f.value.length > 0));
 
-        // Reset form
-        batch(() => {
-            formFields.forEach(f => {
-                f.value = '';
-            });
-        });
+    let _effectRuns = 0;
+    effect(() => {
+      const _ = isValid.value;
+      _effectRuns++;
     });
 
-     bench('form reset overhead (no batch)', () => {
-        const formFields = Array.from({ length: 20 }, () => atom('initial'));
-        
-        const isValid = computed(() => 
-            formFields.every(f => f.value.length > 0)
-        );
-
-        let effectRuns = 0;
-        effect(() => {
-            const _ = isValid.value;
-            effectRuns++;
-        });
-
-        // Reset form
-        formFields.forEach(f => {
-            f.value = '';
-        });
+    // Reset form
+    batch(() => {
+      formFields.forEach((f) => {
+        f.value = '';
+      });
     });
+  });
+
+  bench('form reset overhead (no batch)', () => {
+    const formFields = Array.from({ length: 20 }, () => atom('initial'));
+
+    const isValid = computed(() => formFields.every((f) => f.value.length > 0));
+
+    let _effectRuns = 0;
+    effect(() => {
+      const _ = isValid.value;
+      _effectRuns++;
+    });
+
+    // Reset form
+    formFields.forEach((f) => {
+      f.value = '';
+    });
+  });
 });
