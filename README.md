@@ -169,11 +169,17 @@ effect(() => {
 const userId = atom(1);
 const userData = computed(async () => {
   const res = await fetch(`/api/users/${userId.value}`);
+  if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
   return res.json();
-}, { defaultValue: null });
+}, {
+  defaultValue: null,
+  onError: (e) => console.error('Failed to fetch user data:', e)
+});
 
 effect(() => {
-  if (userData.value) updateUI(userData.value);
+  if (userData.value) {
+    console.log('User loaded:', userData.value.name);
+  }
 });
 ```
 
