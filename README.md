@@ -10,14 +10,13 @@ A lightweight, high-performance reactive state management library for TypeScript
 
 - **Core Primitives**: `atom`, `computed`, `effect`, `batch`, `untracked`
 - **Zero Dependencies** - Minimal footprint
-- **Smart Performance** - Object pooling, lazy initialization, O(1) operations
 - **Full TypeScript Support** - Strict type checking
 - **Developer Friendly** - Circular dependency detection, infinite loop protection, auto debug IDs
 
 ## Installation
 
 ```bash
-npm install atom-effect
+npm i @but212/atom-effect
 ```
 
 ## Quick Start
