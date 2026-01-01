@@ -17,7 +17,7 @@ A lightweight, high-performance reactive state management library for TypeScript
 ## Installation
 
 ```bash
-npm install atom-effect
+npm i @but212/atom-effect
 ```
 
 ## Quick Start
