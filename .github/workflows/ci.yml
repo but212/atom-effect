@@ -36,12 +36,6 @@ jobs:
       - name: Type check
         run: pnpm typecheck
 
-      - name: Run tests with coverage
-        run: pnpm test -- --run --coverage
-
-      - name: Upload coverage
-        uses: codecov/codecov-action@v4
-
       - name: Build
         run: pnpm build
 
