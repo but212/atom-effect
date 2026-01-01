@@ -298,7 +298,6 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
     this._dependencyBuffer.clear();
     const newDependencies = this._dependencyBuffer;
 
-
     try {
       const result = trackingContext.run(this._trackable, this._fn);
 
