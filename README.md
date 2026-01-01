@@ -175,6 +175,12 @@ const userData = computed(async () => {
   defaultValue: null,
   onError: (e) => console.error('Failed to fetch user data:', e)
 });
+
+effect(() => {
+  if (userData.value) {
+    console.log('User loaded:', userData.value.name);
+  }
+});
 ```
 
 ### Persistent State
