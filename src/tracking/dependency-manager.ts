@@ -36,16 +36,19 @@ import type { Dependency } from '../types';
  */
 export class DependencyManager {
   /**
-   * WeakMap storing dependency -> unsubscribe function mappings.
-   * Allows O(1) lookup and automatic garbage collection.
+   * Array of tracked dependencies.
+   * Managed as a simple array for maximum performance (no WeakRef overhead).
    */
-  private depMap = new WeakMap<Dependency, () => void>();
+  private readonly depRefs: Array<Dependency>;
 
   /**
-   * Array of WeakRefs for iteration over live dependencies.
-   * WeakRefs allow the referenced objects to be garbage collected.
+   * Map of dependencies to their unsubscribe functions.
+   * WeakMap ensures automatic cleanup when dependency is garbage collected.
    */
-  private depRefs: WeakRef<Dependency>[] = [];
+  private readonly depMap: WeakMap<Dependency, () => void>;
+
+  /** Current number of active dependencies */
+  private count: number;
 
   /**
    * Number of additions before triggering automatic cleanup.
@@ -58,6 +61,12 @@ export class DependencyManager {
    */
   private addCount = 0;
 
+  constructor() {
+    this.depRefs = [];
+    this.depMap = new WeakMap();
+    this.count = 0;
+  }
+
   /**
    * Adds a dependency with its associated unsubscribe callback.
    *
@@ -65,7 +74,7 @@ export class DependencyManager {
    * immediately called to prevent duplicate subscriptions.
    *
    * @param dep - The dependency to track (atom, computed, etc.)
-   * @param unsubscribe - Callback to invoke when removing the dependency
+   * @param cleanup - Callback to invoke when removing the dependency
    *
    * @remarks
    * - Duplicate dependencies are rejected with immediate unsubscribe
@@ -78,14 +87,19 @@ export class DependencyManager {
    * manager.addDependency(atom, unsubscribe);
    * ```
    */
-  addDependency(dep: Dependency, unsubscribe: () => void): void {
+  addDependency(dep: Dependency, cleanup: () => void): void {
+    // Check if already tracking
     if (this.depMap.has(dep)) {
-      unsubscribe();
+      cleanup(); // Call new cleanup immediately to prevent duplicate subscriptions
       return;
     }
 
-    this.depMap.set(dep, unsubscribe);
-    this.depRefs.push(new WeakRef(dep));
+    // Add strong ref
+    const idx = this.count++;
+    this.depRefs[idx] = dep;
+  
+    // Store unsubscribe
+    this.depMap.set(dep, cleanup);
 
     if (++this.addCount >= this.cleanupThreshold) {
       this.cleanup();
@@ -120,6 +134,32 @@ export class DependencyManager {
       } catch (error) {
         console.warn('[DependencyManager] Error during unsubscribe:', error);
       }
+
+      // O(N) scan but usually fast since N is small (num deps per effect)
+      // Using simple loop for best V8 performance
+      const refs = this.depRefs;
+      const cnt = this.count;
+      let idx = -1;
+      
+      for (let i = 0; i < cnt; i++) {
+        const d = refs[i];
+        if (d === dep) {
+          idx = i;
+          break;
+        }
+      }
+
+      if (idx !== -1) {
+        // Swap and pop
+        const lastIdx = cnt - 1;
+        refs[idx] = refs[lastIdx] as Dependency;
+        // Clear the last element to avoid memory leaks if it's the only strong reference
+        // and to keep the array length consistent with `count`.
+        // Using `undefined as any` to satisfy TypeScript when `depRefs` is `Array<Dependency>`.
+        refs[lastIdx] = undefined as any; 
+        this.count = lastIdx;
+      }
+
       this.depMap.delete(dep);
       return true;
     }
@@ -143,6 +183,7 @@ export class DependencyManager {
    * ```
    */
   hasDependency(dep: Dependency): boolean {
+    // O(1) check using WeakMap
     return this.depMap.has(dep);
   }
 
@@ -164,8 +205,9 @@ export class DependencyManager {
    * ```
    */
   unsubscribeAll(): void {
-    for (let i = 0; i < this.depRefs.length; i++) {
-      const dep = this.depRefs[i]!.deref();
+    // Iterate over the currently active dependencies
+    for (let i = 0; i < this.count; i++) {
+      const dep = this.depRefs[i];
       if (dep) {
         const unsubscribe = this.depMap.get(dep);
         if (unsubscribe) {
@@ -178,20 +220,22 @@ export class DependencyManager {
         }
       }
     }
-    this.depRefs.length = 0;
+    this.depRefs.length = 0; // Clear the strong references
+    this.count = 0;
     this.addCount = 0;
   }
 
   /**
-   * Removes stale WeakRefs from the internal array.
+   * Removes stale references from the internal array.
    *
-   * WeakRefs whose targets have been garbage collected are filtered out
-   * to prevent unbounded growth of the depRefs array.
+   * This method iterates through the `depRefs` array and removes any dependencies
+   * that are no longer present in the `depMap` (meaning their unsubscribe
+   * callback has been garbage collected or explicitly deleted).
    *
    * @remarks
    * - Called automatically every `cleanupThreshold` additions
    * - Can be called manually for immediate cleanup
-   * - Time complexity: O(n) where n is the number of WeakRefs
+   * - Time complexity: O(n) where n is the number of dependencies
    *
    * @example
    * ```typescript
@@ -200,7 +244,33 @@ export class DependencyManager {
    * ```
    */
   cleanup(): void {
-    this.depRefs = this.depRefs.filter((ref) => ref.deref() !== undefined);
+    let writeIdx = 0;
+    const refs = this.depRefs;
+    const currentCount = this.count;
+
+    for (let i = 0; i < currentCount; i++) {
+      const dep = refs[i];
+      // Check if the dependency is still tracked in the WeakMap
+      if (dep && this.depMap.has(dep)) {
+        if (writeIdx !== i) {
+          refs[writeIdx] = dep;
+        }
+        writeIdx++;
+      } else {
+        // If not in WeakMap, it means it was garbage collected or explicitly removed
+        // and its strong reference in depRefs needs to be cleaned up.
+        // The unsubscribe callback was already called by removeDependency or GC'd.
+      }
+    }
+
+    // Clear out any remaining elements beyond the new count
+    for (let i = writeIdx; i < currentCount; i++) {
+      refs[i] = undefined as any; // Clear strong reference
+    }
+
+    // Truncate array to new size
+    this.count = writeIdx;
+    refs.length = writeIdx;
   }
 
   /**
@@ -217,9 +287,9 @@ export class DependencyManager {
    * console.log(`Tracking ${manager.count} dependencies`);
    * ```
    */
-  get count(): number {
+  get liveCount(): number { // Renamed to liveCount to avoid conflict with `this.count` property
     this.cleanup();
-    return this.depRefs.length;
+    return this.count;
   }
 
   /**
@@ -240,8 +310,8 @@ export class DependencyManager {
    */
   getDependencies(): Dependency[] {
     const liveDeps: Dependency[] = [];
-    for (let i = 0; i < this.depRefs.length; i++) {
-      const dep = this.depRefs[i]!.deref();
+    for (let i = 0; i < this.count; i++) {
+      const dep = this.depRefs[i];
       if (dep !== undefined) {
         liveDeps.push(dep);
       }

@@ -362,25 +362,7 @@ describe('Effect - Behavior', () => {
     await vi.runAllTimersAsync();
   });
 
-  it('descriptor is restored on dispose', async () => {
-    const count = atom(0);
 
-    const e = effect(
-      () => {
-        count.value;
-      },
-      { trackModifications: true }
-    );
-
-    await vi.runAllTimersAsync();
-
-    const _descriptorBefore = Object.getOwnPropertyDescriptor(count, 'value');
-    e.dispose();
-    const descriptorAfter = Object.getOwnPropertyDescriptor(count, 'value');
-
-    // Verify original descriptor is restored after dispose
-    expect(descriptorAfter).toBeDefined();
-  });
 
   it('sync option works', () => {
     const count = atom(0, { sync: true });

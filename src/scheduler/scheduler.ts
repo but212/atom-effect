@@ -27,7 +27,12 @@ import { SchedulerError } from '../errors/errors';
  */
 class Scheduler {
   /** Queue of callbacks waiting for microtask execution */
-  private queue: Set<() => void> = new Set();
+  /** Queue buffers for double buffering optimization */
+  private queueA: Set<() => void> = new Set();
+  private queueB: Set<() => void> = new Set();
+
+  /** Currently active queue receiving new tasks */
+  private queue: Set<() => void> = this.queueA;
 
   /** Whether the scheduler is currently processing the queue */
   private isProcessing: boolean = false;
@@ -99,13 +104,17 @@ class Scheduler {
     if (this.isProcessing || this.queue.size === 0) return;
 
     this.isProcessing = true;
-    const callbacks = Array.from(this.queue);
-    this.queue.clear();
+
+    // Double buffering: Swap queues to snapshot current tasks
+    // This allows adding new tasks to the other queue while processing
+    const jobs = this.queue;
+    this.queue = this.queue === this.queueA ? this.queueB : this.queueA;
 
     queueMicrotask(() => {
-      for (let i = 0; i < callbacks.length; i++) {
+      // Performance: Iterate Set directly to avoid Array.from() allocation
+      for (const callback of jobs) {
         try {
-          callbacks[i]?.();
+          callback?.();
         } catch (error) {
           console.error(
             new SchedulerError('Error occurred during scheduler execution', error as Error)
@@ -113,8 +122,10 @@ class Scheduler {
         }
       }
 
+      jobs.clear();
       this.isProcessing = false;
 
+      // If new tasks were added to the active queue (the one we swapped to), flush again
       if (this.queue.size > 0 && !this.isBatching) {
         this.flush();
       }
@@ -161,18 +172,21 @@ class Scheduler {
           break;
         }
 
-        const callbacks = Array.from(this.queue);
-        this.queue.clear();
+        // Double buffering: Swap and process
+        const jobs = this.queue;
+        this.queue = this.queue === this.queueA ? this.queueB : this.queueA;
 
-        for (let i = 0; i < callbacks.length; i++) {
+        for (const callback of jobs) {
           try {
-            callbacks[i]?.();
+            callback?.();
           } catch (error) {
             console.error(
               new SchedulerError('Error occurred during batch execution', error as Error)
             );
           }
         }
+
+        jobs.clear();
 
         if (this.batchQueueSize > 0) {
           for (let i = 0; i < this.batchQueueSize; i++) {

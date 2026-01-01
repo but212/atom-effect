@@ -200,7 +200,7 @@ export class DependencySyncManager {
    * dependencies have been garbage collected (due to WeakRef usage).
    */
   getDependencyCount(): number {
-    return this.dependencyManager.count;
+    return this.dependencyManager.liveCount;
   }
 
   /**

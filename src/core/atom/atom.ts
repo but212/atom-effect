@@ -16,8 +16,9 @@ import { AtomError } from '../../errors/errors';
 import { ERROR_MESSAGES } from '../../errors/messages';
 import { scheduler } from '../../scheduler';
 import { trackingContext } from '../../tracking';
-import type { AtomOptions, WritableAtom } from '../../types';
+import type { AtomOptions, Subscriber, WritableAtom } from '../../types';
 import { debug, generateId } from '../../utils/debug';
+import { SubscriberManager } from '../../utils/subscriber-manager';
 
 /**
  * Internal implementation of the WritableAtom interface.
@@ -36,23 +37,26 @@ class AtomImpl<T> implements WritableAtom<T> {
   /** Version counter for change detection and stale notification prevention */
   private _version: number;
 
-  /** Array of function-based subscribers */
-  private _fnSubs: Array<(newValue?: T, oldValue?: T) => void>;
+  /** Manager for function-based subscribers */
+  private readonly _functionSubscribers: SubscriberManager<(newValue?: T, oldValue?: T) => void>;
 
-  /** Count of active function subscribers (may differ from array length due to sparse removal) */
-  private _fnSubCount: number;
-
-  /** Array of object-based subscribers with execute method */
-  private _objSubs: Array<{ execute: () => void }>;
-
-  /** Count of active object subscribers */
-  private _objSubCount: number;
+  /** Manager for object-based subscribers with execute method */
+  private readonly _objectSubscribers: SubscriberManager<Subscriber>;
 
   /** Whether notifications should be synchronous (bypass scheduler batching) */
   private readonly _sync: boolean;
 
   /** Unique identifier for debugging purposes */
   private readonly _id: string;
+
+  /** Bound notification method to avoid closure allocation */
+  private readonly _notifyTask: () => void;
+
+  /** Pending old value for coalesced notifications */
+  private _pendingOldValue: T | undefined;
+
+  /** Whether a notification task is currently scheduled */
+  private _isNotificationScheduled: boolean = false;
 
   /**
    * Creates a new AtomImpl instance.
@@ -63,12 +67,13 @@ class AtomImpl<T> implements WritableAtom<T> {
   constructor(initialValue: T, sync: boolean) {
     this._value = initialValue;
     this._version = 0;
-    this._fnSubs = [];
-    this._fnSubCount = 0;
-    this._objSubs = [];
-    this._objSubCount = 0;
+    this._value = initialValue;
+    this._version = 0;
+    this._functionSubscribers = new SubscriberManager();
+    this._objectSubscribers = new SubscriberManager();
     this._sync = sync;
     this._id = generateId().toString();
+    this._notifyTask = this._flushNotifications.bind(this);
 
     debug.attachDebugInfo(this, 'atom', generateId());
   }
@@ -108,7 +113,8 @@ class AtomImpl<T> implements WritableAtom<T> {
     const currentVersion = ++this._version;
     this._value = newValue;
 
-    if ((this._fnSubCount | this._objSubCount) === 0) return;
+    if (!this._functionSubscribers.hasSubscribers && !this._objectSubscribers.hasSubscribers)
+      return;
 
     this._notify(newValue, oldValue, currentVersion);
   }
@@ -128,116 +134,16 @@ class AtomImpl<T> implements WritableAtom<T> {
       if (fnWithDep.addDependency !== undefined) {
         fnWithDep.addDependency(this);
       } else {
-        this._addFnSub(current as (newValue?: T, oldValue?: T) => void);
+        this._functionSubscribers.add(current as (newValue?: T, oldValue?: T) => void);
       }
     } else {
       const tracker = current as { execute?: () => void; addDependency?: (dep: unknown) => void };
       if (tracker.addDependency !== undefined) {
         tracker.addDependency(this);
       } else if (tracker.execute !== undefined) {
-        this._addObjSub(tracker as { execute: () => void });
+        this._objectSubscribers.add(tracker as Subscriber);
       }
     }
-  }
-
-  /**
-   * Adds a function-based subscriber.
-   *
-   * @param sub - The subscriber function to add
-   * @returns An unsubscribe function
-   *
-   * @remarks
-   * Prevents duplicate subscriptions by checking existing subscribers.
-   */
-  private _addFnSub(sub: (newValue?: T, oldValue?: T) => void): () => void {
-    const subs = this._fnSubs;
-    const idx = this._fnSubCount;
-
-    for (let i = 0; i < idx; i++) {
-      if (subs[i] === sub) return this._createUnsub(i, true);
-    }
-
-    subs[idx] = sub;
-    this._fnSubCount = idx + 1;
-
-    return this._createUnsub(idx, true);
-  }
-
-  /**
-   * Adds an object-based subscriber.
-   *
-   * @param sub - The subscriber object with an execute method
-   *
-   * @remarks
-   * Prevents duplicate subscriptions by checking existing subscribers.
-   */
-  private _addObjSub(sub: { execute: () => void }): void {
-    const subs = this._objSubs;
-    const count = this._objSubCount;
-
-    for (let i = 0; i < count; i++) {
-      if (subs[i] === sub) return;
-    }
-
-    subs[count] = sub;
-    this._objSubCount = count + 1;
-  }
-
-  /**
-   * Creates an unsubscribe function for a subscriber at the given index.
-   *
-   * @param idx - The index of the subscriber
-   * @param isFn - Whether this is a function subscriber (true) or object subscriber (false)
-   * @returns An unsubscribe function
-   */
-  private _createUnsub(idx: number, isFn: boolean): () => void {
-    return () => {
-      if (isFn) {
-        this._removeFnSub(idx);
-      } else {
-        this._removeObjSub(idx);
-      }
-    };
-  }
-
-  /**
-   * Removes a function subscriber at the given index.
-   *
-   * @param idx - The index of the subscriber to remove
-   *
-   * @remarks
-   * Uses swap-and-pop removal for O(1) performance.
-   */
-  private _removeFnSub(idx: number): void {
-    const count = this._fnSubCount;
-    if (idx >= count) return;
-
-    const lastIdx = count - 1;
-    const subs = this._fnSubs;
-
-    subs[idx] = subs[lastIdx] as (newValue?: T, oldValue?: T) => void;
-    subs[lastIdx] = undefined as any;
-    this._fnSubCount = lastIdx;
-  }
-
-  /**
-   * Removes an object subscriber at the given index.
-   *
-   * @param idx - The index of the subscriber to remove
-   *
-   * @remarks
-   * Uses swap-and-pop removal for O(1) performance.
-   */
-  private _removeObjSub(idx: number): void {
-    const count = this._objSubCount;
-    if (idx >= count) return;
-
-    const lastIdx = count - 1;
-    const subs = this._objSubs;
-
-    subs[idx] = subs[lastIdx] as { execute: () => void };
-    subs[lastIdx] = undefined as any;
-    this._objSubCount = lastIdx;
   }
 
   /**
@@ -252,47 +158,55 @@ class AtomImpl<T> implements WritableAtom<T> {
    * Errors from individual subscribers are caught and logged without
    * interrupting other subscribers.
    */
+  /**
+   * Schedules a notification.
+   * Uses coalescing: if a notification is already scheduled, we update the state
+   * but don't schedule a new task. The pending task will see the latest value.
+   */
   private _notify(newValue: T, oldValue: T, currentVersion: number): void {
-    const doNotify = (): void => {
-      if (this._version !== currentVersion) return;
-
-      const fnSubs = this._fnSubs;
-      const fnCount = this._fnSubCount;
-      const objSubs = this._objSubs;
-      const objCount = this._objSubCount;
-
-      for (let i = 0; i < fnCount; i++) {
-        try {
-          const fn = fnSubs[i];
-          if (fn) {
-            fn(newValue, oldValue);
-          }
-        } catch (e) {
-          console.error(
-            new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, e as Error)
-          );
-        }
-      }
-
-      for (let i = 0; i < objCount; i++) {
-        try {
-          const sub = objSubs[i];
-          if (sub) {
-            sub.execute();
-          }
-        } catch (e) {
-          console.error(
-            new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, e as Error)
-          );
-        }
-      }
-    };
+    if (!this._isNotificationScheduled) {
+      this._pendingOldValue = oldValue;
+      this._isNotificationScheduled = true;
+      // We don't need to store currentVersion because the flush task
+      // will always read the latest version and value.
+    }
 
     if (this._sync && !scheduler.isBatching) {
-      doNotify();
+      this._flushNotifications();
     } else {
-      scheduler.schedule(doNotify);
+      scheduler.schedule(this._notifyTask);
     }
+  }
+
+  /**
+   * Executes the pending notifications.
+   * Bound to 'this' in constructor to avoid closure allocation.
+   */
+  private _flushNotifications(): void {
+    if (!this._isNotificationScheduled) return;
+
+    // Capture state and reset flags BEFORE notifying to handle re-entrancy
+    const oldValue = this._pendingOldValue as T;
+    const newValue = this._value;
+
+    this._pendingOldValue = undefined;
+    this._isNotificationScheduled = false;
+
+    this._functionSubscribers.forEachSafe(
+      (sub) => sub(newValue, oldValue),
+      (err) =>
+        console.error(
+          new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, err as Error)
+        )
+    );
+
+    this._objectSubscribers.forEachSafe(
+      (sub) => sub.execute(),
+      (err) =>
+        console.error(
+          new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, err as Error)
+        )
+    );
   }
 
   /**
@@ -314,7 +228,7 @@ class AtomImpl<T> implements WritableAtom<T> {
     if (typeof listener !== 'function') {
       throw new AtomError(ERROR_MESSAGES.ATOM_SUBSCRIBER_MUST_BE_FUNCTION);
     }
-    return this._addFnSub(listener);
+    return this._functionSubscribers.add(listener);
   }
 
   /**
@@ -338,10 +252,8 @@ class AtomImpl<T> implements WritableAtom<T> {
    * undefined to help with garbage collection.
    */
   dispose(): void {
-    this._fnSubs.length = 0;
-    this._objSubs.length = 0;
-    this._fnSubCount = 0;
-    this._objSubCount = 0;
+    this._functionSubscribers.clear();
+    this._objectSubscribers.clear();
     this._value = undefined as T;
   }
 
@@ -351,7 +263,7 @@ class AtomImpl<T> implements WritableAtom<T> {
    * @returns The count of function and object subscribers combined
    */
   subscriberCount(): number {
-    return this._fnSubCount + this._objSubCount;
+    return this._functionSubscribers.size + this._objectSubscribers.size;
   }
 }
 

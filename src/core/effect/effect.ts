@@ -94,19 +94,6 @@ class EffectImpl implements EffectObject, DependencyTracker {
   private readonly _modifiedDeps: Set<unknown>;
 
   /**
-   * Stores original property descriptors for dependencies when modification
-   * tracking is enabled, allowing restoration on disposal.
-   * @readonly
-   */
-  private readonly _originalDescriptors: WeakMap<Dependency, PropertyDescriptor>;
-
-  /**
-   * Set of dependencies that have modification tracking applied.
-   * @readonly
-   */
-  private readonly _trackedDeps: Set<Dependency>;
-
-  /**
    * Circular buffer storing timestamps of recent executions for
    * infinite loop detection.
    * @readonly
@@ -127,6 +114,11 @@ class EffectImpl implements EffectObject, DependencyTracker {
    * Total number of times this effect has been executed.
    */
   private _executionCount: number;
+
+  /**
+   * Reusable buffer for dependency tracking during execution.
+   */
+  private readonly _dependencyBuffer: Set<unknown>;
 
   /**
    * Maximum capacity of the execution history buffer.
@@ -172,9 +164,8 @@ class EffectImpl implements EffectObject, DependencyTracker {
 
     this._depManager = new DependencyManager();
     this._modifiedDeps = new Set();
-    this._originalDescriptors = new WeakMap();
-    this._trackedDeps = new Set();
-
+    this._dependencyBuffer = new Set();
+    
     this._historyCapacity = this._maxExecutions + 5;
     this._history = new Float64Array(this._historyCapacity);
     this._historyIdx = 0;
@@ -232,20 +223,6 @@ class EffectImpl implements EffectObject, DependencyTracker {
     this._setDisposed();
     this._safeCleanup();
     this._depManager.unsubscribeAll();
-
-    if (this._trackedDeps.size > 0) {
-      this._trackedDeps.forEach((dep) => {
-        const descriptor = this._originalDescriptors.get(dep);
-        if (descriptor) {
-          try {
-            Object.defineProperty(dep, 'value', descriptor);
-          } catch (_error) {
-            debug.warn(true, 'Failed to restore original descriptor');
-          }
-        }
-      });
-      this._trackedDeps.clear();
-    }
   };
 
   /**
@@ -266,21 +243,14 @@ class EffectImpl implements EffectObject, DependencyTracker {
    * @internal
    */
   public addDependency = (dep: unknown): void => {
-    try {
-      const unsubscribe = (dep as Dependency).subscribe(() => {
-        if (this._sync) {
-          this.execute();
-        } else {
-          scheduler.schedule(this.execute);
-        }
-      });
-      this._depManager.addDependency(dep as Dependency, unsubscribe);
-
-      if (this._trackModifications && isAtom(dep)) {
-        this._trackModificationsForDep(dep);
+    // Stage 1: Collect into buffer first (synchronous collection)
+    if (this.isExecuting) {
+      this._dependencyBuffer.add(dep);
+      // Eagerly subscribe to catch synchronous updates that happen later in the same execution
+      // (e.g. read-then-write patterns)
+      if (!this._depManager.hasDependency(dep as Dependency)) {
+          this._subscribeTo(dep as Dependency);
       }
-    } catch (error) {
-      throw wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_EXECUTION_FAILED);
     }
   };
 
@@ -316,11 +286,13 @@ class EffectImpl implements EffectObject, DependencyTracker {
 
     this._setExecuting(true);
     this._safeCleanup();
-    this._depManager.unsubscribeAll();
+    this._dependencyBuffer.clear();
     this._modifiedDeps.clear();
 
     try {
       const result = trackingContext.run(this, this._fn);
+
+      this._syncDependencies();
 
       this._checkLoopWarnings();
 
@@ -344,6 +316,43 @@ class EffectImpl implements EffectObject, DependencyTracker {
       this._setExecuting(false);
     }
   };
+
+  private _syncDependencies(): void {
+    const newDeps = this._dependencyBuffer;
+    const current = this._depManager.getDependencies();
+
+    for (let i = 0; i < current.length; i++) {
+        const dep = current[i]!;
+        if (!newDeps.has(dep)) {
+            this._depManager.removeDependency(dep);
+        }
+    }
+
+    for (const dep of newDeps) {
+        if (!this._depManager.hasDependency(dep as Dependency)) {
+             this._subscribeTo(dep as Dependency);
+        }
+    }
+  }
+
+  private _subscribeTo(dep: Dependency): void {
+      try {
+        const unsubscribe = dep.subscribe(() => {
+            if (this._trackModifications && this.isExecuting) {
+                this._modifiedDeps.add(dep);
+            }
+    
+            if (this._sync) {
+                this.execute();
+            } else {
+                scheduler.schedule(this.execute);
+            }
+        });
+        this._depManager.addDependency(dep, unsubscribe);
+      } catch (error) {
+         console.error(wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_EXECUTION_FAILED));
+      }
+  }
 
   /**
    * Indicates whether this effect has been disposed.
@@ -518,43 +527,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
     }
   }
 
-  /**
-   * Sets up modification tracking for a dependency.
-   *
-   * @param dep - The dependency (atom) to track modifications on
-   *
-   * @remarks
-   * This method intercepts the `value` setter on the dependency to detect
-   * when the effect modifies a dependency it also reads. This pattern
-   * (read-after-write within the same effect) often indicates an infinite loop.
-   *
-   * The original property descriptor is preserved and can be restored
-   * when the effect is disposed.
-   *
-   * @internal
-   */
-  private _trackModificationsForDep(dep: any): void {
-    const proto = Object.getPrototypeOf(dep);
-    const originalDescriptor = Object.getOwnPropertyDescriptor(proto, 'value');
-    if (originalDescriptor?.set && !this._originalDescriptors.has(dep)) {
-      this._originalDescriptors.set(dep, originalDescriptor);
-      this._trackedDeps.add(dep);
 
-      const self = this;
-
-      Object.defineProperty(dep, 'value', {
-        set(newValue: unknown) {
-          self._modifiedDeps.add(dep);
-          originalDescriptor.set?.call(dep, newValue);
-        },
-        get() {
-          return dep.peek();
-        },
-        configurable: true,
-        enumerable: true,
-      });
-    }
-  }
 
   /**
    * Checks for and warns about potential infinite loop patterns.
