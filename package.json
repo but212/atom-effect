@@ -27,8 +27,7 @@
     "bench:atom": "vitest bench __benchmarks__/micro/atom.bench",
     "bench:computed": "vitest bench __benchmarks__/micro/computed.bench",
     "bench:effect": "vitest bench __benchmarks__/micro/effect.bench",
-    "bench:baseline": "tsx scripts/save-baseline.ts",
-    "bench:regression": "tsx scripts/check-regression.ts"
+    "bench:realistic": "vitest bench __benchmarks__/realistic"
   },
   "keywords": [
     "reactive",
