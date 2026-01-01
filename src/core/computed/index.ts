@@ -11,6 +11,7 @@ import { ERROR_MESSAGES } from '../../errors/messages';
 import { scheduler } from '../../scheduler';
 import { trackingContext } from '../../tracking';
 import { DependencyManager } from '../../tracking/dependency-manager';
+import type { DependencyTracker } from '../../tracking/tracking.types';
 import type {
   AsyncStateType,
   ComputedAtom,
@@ -20,7 +21,6 @@ import type {
 } from '../../types';
 import { debug, generateId, NO_DEFAULT_VALUE } from '../../utils/debug';
 import { SubscriberManager } from '../../utils/subscriber-manager';
-import type { DependencyTracker } from '../../tracking/tracking.types';
 
 type TrackableListener = (() => void) & {
   addDependency: (dep: unknown) => void;
@@ -528,7 +528,11 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
     if (!current) return;
 
     // Check for addDependency first to support TrackableListener
-    if (typeof current === 'object' && current !== null && (current as DependencyTracker).addDependency) {
+    if (
+      typeof current === 'object' &&
+      current !== null &&
+      (current as DependencyTracker).addDependency
+    ) {
       (current as DependencyTracker).addDependency!(this as unknown as ComputedAtom<T>);
     } else if (typeof current === 'function') {
       const fnWithDep = current as TrackableListener;
