@@ -11,6 +11,7 @@ import { ERROR_MESSAGES } from '../../errors/messages';
 import { scheduler } from '../../scheduler';
 import { trackingContext } from '../../tracking';
 import { DependencyManager } from '../../tracking/dependency-manager';
+import type { DependencyTracker } from '../../tracking/tracking.types';
 import type {
   AsyncStateType,
   ComputedAtom,
@@ -20,6 +21,10 @@ import type {
 } from '../../types';
 import { debug, generateId, NO_DEFAULT_VALUE } from '../../utils/debug';
 import { SubscriberManager } from '../../utils/subscriber-manager';
+
+type TrackableListener = (() => void) & {
+  addDependency: (dep: unknown) => void;
+};
 
 /**
  * Optimized ComputedAtom implementation with class-based architecture
@@ -51,6 +56,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
   private readonly _objectSubscribers: SubscriberManager<Subscriber>;
   private readonly _dependencyManager: DependencyManager;
   private readonly _dependencyBuffer: Set<unknown>;
+  private readonly _trackable: TrackableListener;
   private readonly _id: number;
   private readonly MAX_PROMISE_ID = Number.MAX_SAFE_INTEGER - 1;
 
@@ -78,6 +84,9 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
     this._objectSubscribers = new SubscriberManager<Subscriber>();
     this._dependencyManager = new DependencyManager();
     this._dependencyBuffer = new Set();
+    this._trackable = Object.assign(() => this._markDirty(), {
+      addDependency: (dep: unknown) => this._dependencyBuffer.add(dep),
+    });
     this._id = generateId();
 
     debug.attachDebugInfo(this as unknown as ComputedAtom<T>, 'computed', this._id);
@@ -294,12 +303,8 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
     this._dependencyBuffer.clear();
     const newDependencies = this._dependencyBuffer;
 
-    const tempMarkDirty = Object.assign(() => this._markDirty(), {
-      addDependency: (dep: unknown) => newDependencies.add(dep),
-    });
-
     try {
-      const result = trackingContext.run(tempMarkDirty, this._fn);
+      const result = trackingContext.run(this._trackable, this._fn);
 
       if (isPromise(result)) {
         // Update dependencies before async handling
@@ -522,11 +527,21 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
     const current = trackingContext.getCurrent();
     if (!current) return;
 
-    if (typeof current === 'function') {
-      this._functionSubscribers.add(current);
-    } else if (current.addDependency) {
-      current.addDependency(this as unknown as ComputedAtom<T>);
-    } else if (current.execute) {
+    // Check for addDependency first to support TrackableListener
+    if (
+      typeof current === 'object' &&
+      current !== null &&
+      (current as DependencyTracker).addDependency
+    ) {
+      (current as DependencyTracker).addDependency!(this as unknown as ComputedAtom<T>);
+    } else if (typeof current === 'function') {
+      const fnWithDep = current as TrackableListener;
+      if (fnWithDep.addDependency) {
+        fnWithDep.addDependency(this as unknown as ComputedAtom<T>);
+      } else {
+        this._functionSubscribers.add(current as () => void);
+      }
+    } else if ((current as DependencyTracker).execute) {
       this._objectSubscribers.add(current as Subscriber);
     }
   }
