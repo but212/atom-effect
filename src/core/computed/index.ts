@@ -50,6 +50,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
   private readonly _functionSubscribers: SubscriberManager<() => void>;
   private readonly _objectSubscribers: SubscriberManager<Subscriber>;
   private readonly _dependencyManager: DependencyManager;
+  private readonly _dependencyBuffer: Set<unknown>;
   private readonly _id: number;
   private readonly MAX_PROMISE_ID = Number.MAX_SAFE_INTEGER - 1;
 
@@ -75,7 +76,9 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
     this._onError = onError;
     this._functionSubscribers = new SubscriberManager<() => void>();
     this._objectSubscribers = new SubscriberManager<Subscriber>();
+    this._objectSubscribers = new SubscriberManager<Subscriber>();
     this._dependencyManager = new DependencyManager();
+    this._dependencyBuffer = new Set();
     this._id = generateId();
 
     debug.attachDebugInfo(this as unknown as ComputedAtom<T>, 'computed', this._id);
@@ -288,8 +291,12 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
 
     this._setRecomputing(true);
 
-    // Track dependencies during computation
-    const newDependencies = new Set<unknown>();
+    this._setRecomputing(true);
+
+    // Reuse buffer to avoid allocation
+    this._dependencyBuffer.clear();
+    const newDependencies = this._dependencyBuffer;
+
     const tempMarkDirty = Object.assign(() => this._markDirty(), {
       addDependency: (dep: unknown) => newDependencies.add(dep),
     });
@@ -446,46 +453,25 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
   }
 
   private _performDeltaSync(current: Dependency[], newDeps: Set<unknown>): void {
-    const existingSet = new Set(current);
-    const toRemove: Dependency[] = [];
-    const toAdd: Dependency[] = [];
-
-    // Find dependencies to remove
     for (let i = 0; i < current.length; i++) {
       const dep = current[i]!;
       if (!newDeps.has(dep)) {
-        toRemove.push(dep);
+        this._dependencyManager.removeDependency(dep);
       }
     }
 
-    // Find dependencies to add
     newDeps.forEach((dep) => {
-      if (!existingSet.has(dep as Dependency)) {
-        toAdd.push(dep as Dependency);
+      const d = dep as Dependency;
+      if (!this._dependencyManager.hasDependency(d)) {
+        this._addDependency(d);
       }
-    });
-
-    // Unsubscribe removed dependencies
-    for (let i = 0; i < toRemove.length; i++) {
-      this._dependencyManager.removeDependency(toRemove[i]!);
-    }
-
-    // Subscribe to new dependencies
-    for (let i = 0; i < toAdd.length; i++) {
-      this._addDependency(toAdd[i]!);
-    }
-
-    // Update dependencies array in place
-    current.length = 0;
-    newDeps.forEach((dep) => {
-      current.push(dep as Dependency);
     });
   }
 
   private _addDependency(dep: Dependency): void {
     debug.checkCircular(dep, this as unknown as ComputedAtom<T>);
 
-    const count = this._dependencyManager.count;
+    const count = this._dependencyManager.liveCount;
     debug.warn(count > debug.maxDependencies, ERROR_MESSAGES.LARGE_DEPENDENCY_GRAPH(count));
 
     try {

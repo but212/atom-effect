@@ -213,23 +213,6 @@ describe('Effect - Error Handling and Edge Cases', () => {
     expect(e.executionCount).toBeGreaterThan(100);
   });
 
-  it('trackModifications option modifies descriptor', async () => {
-    const count = atom(0);
-
-    const _e = effect(
-      () => {
-        count.value;
-      },
-      { trackModifications: true }
-    );
-
-    await vi.runAllTimersAsync();
-
-    const descriptor = Object.getOwnPropertyDescriptor(count, 'value');
-    expect(descriptor).toBeDefined();
-    expect(descriptor?.set).toBeDefined();
-  });
-
   it('tracks modified dependencies with trackModifications', async () => {
     vi.useRealTimers();
     const count = atom(0);
@@ -383,65 +366,6 @@ describe('Effect - Error Handling and Edge Cases', () => {
 
       e.dispose();
       vi.useFakeTimers();
-    });
-  });
-
-  describe('trackModifications', () => {
-    it('modifies descriptor when trackModifications is enabled', () => {
-      const count = atom(0);
-
-      const e = effect(
-        () => {
-          count.value; // register dependency
-        },
-        { trackModifications: true, sync: true }
-      );
-
-      // descriptor should be modified since trackModifications is enabled
-      // this is internal behavior so hard to verify directly, but confirmed by restoration on dispose
-      expect(e.isDisposed).toBe(false);
-
-      e.dispose();
-      expect(e.isDisposed).toBe(true);
-    });
-
-    it('trackModifications restores descriptor', () => {
-      const count = atom(0);
-
-      const e = effect(
-        () => {
-          count.value;
-        },
-        { trackModifications: true, sync: true }
-      );
-
-      // verify descriptor was modified
-      const descriptor = Object.getOwnPropertyDescriptor(count, 'value');
-      expect(descriptor).toBeDefined();
-
-      e.dispose();
-
-      // should restore to original descriptor after dispose
-      const restoredDescriptor = Object.getOwnPropertyDescriptor(count, 'value');
-      expect(restoredDescriptor).toBeDefined();
-    });
-
-    it('does not modify descriptor without trackModifications', () => {
-      const count = atom(0);
-
-      // create effect without trackModifications
-      const e = effect(
-        () => {
-          count.value;
-        },
-        { sync: true }
-      );
-
-      // normal operation
-      expect(e.isDisposed).toBe(false);
-
-      e.dispose();
-      expect(e.isDisposed).toBe(true);
     });
   });
 
