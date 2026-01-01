@@ -67,8 +67,6 @@ class AtomImpl<T> implements WritableAtom<T> {
   constructor(initialValue: T, sync: boolean) {
     this._value = initialValue;
     this._version = 0;
-    this._value = initialValue;
-    this._version = 0;
     this._functionSubscribers = new SubscriberManager();
     this._objectSubscribers = new SubscriberManager();
     this._sync = sync;

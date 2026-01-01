@@ -288,8 +288,6 @@ export class DependencyManager {
    * ```
    */
   get liveCount(): number {
-    // Renamed to liveCount to avoid conflict with `this.count` property
-    this.cleanup();
     return this.count;
   }
 
