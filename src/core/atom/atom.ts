@@ -163,7 +163,7 @@ class AtomImpl<T> implements WritableAtom<T> {
    * Uses coalescing: if a notification is already scheduled, we update the state
    * but don't schedule a new task. The pending task will see the latest value.
    */
-  private _notify(newValue: T, oldValue: T, currentVersion: number): void {
+  private _notify(_newValue: T, oldValue: T, _currentVersion: number): void {
     if (!this._isNotificationScheduled) {
       this._pendingOldValue = oldValue;
       this._isNotificationScheduled = true;
@@ -195,17 +195,13 @@ class AtomImpl<T> implements WritableAtom<T> {
     this._functionSubscribers.forEachSafe(
       (sub) => sub(newValue, oldValue),
       (err) =>
-        console.error(
-          new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, err as Error)
-        )
+        console.error(new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, err as Error))
     );
 
     this._objectSubscribers.forEachSafe(
       (sub) => sub.execute(),
       (err) =>
-        console.error(
-          new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, err as Error)
-        )
+        console.error(new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, err as Error))
     );
   }
 

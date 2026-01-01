@@ -14,7 +14,6 @@ import { type DependencyTracker, trackingContext } from '../../tracking';
 import { DependencyManager } from '../../tracking/dependency-manager';
 import type { Dependency, EffectFunction, EffectObject, EffectOptions } from '../../types';
 import { debug, generateId } from '../../utils/debug';
-import { isAtom } from '../../utils/type-guards';
 
 /**
  * Internal implementation of the EffectObject interface.
@@ -165,7 +164,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
     this._depManager = new DependencyManager();
     this._modifiedDeps = new Set();
     this._dependencyBuffer = new Set();
-    
+
     this._historyCapacity = this._maxExecutions + 5;
     this._history = new Float64Array(this._historyCapacity);
     this._historyIdx = 0;
@@ -249,7 +248,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
       // Eagerly subscribe to catch synchronous updates that happen later in the same execution
       // (e.g. read-then-write patterns)
       if (!this._depManager.hasDependency(dep as Dependency)) {
-          this._subscribeTo(dep as Dependency);
+        this._subscribeTo(dep as Dependency);
       }
     }
   };
@@ -322,36 +321,36 @@ class EffectImpl implements EffectObject, DependencyTracker {
     const current = this._depManager.getDependencies();
 
     for (let i = 0; i < current.length; i++) {
-        const dep = current[i]!;
-        if (!newDeps.has(dep)) {
-            this._depManager.removeDependency(dep);
-        }
+      const dep = current[i]!;
+      if (!newDeps.has(dep)) {
+        this._depManager.removeDependency(dep);
+      }
     }
 
     for (const dep of newDeps) {
-        if (!this._depManager.hasDependency(dep as Dependency)) {
-             this._subscribeTo(dep as Dependency);
-        }
+      if (!this._depManager.hasDependency(dep as Dependency)) {
+        this._subscribeTo(dep as Dependency);
+      }
     }
   }
 
   private _subscribeTo(dep: Dependency): void {
-      try {
-        const unsubscribe = dep.subscribe(() => {
-            if (this._trackModifications && this.isExecuting) {
-                this._modifiedDeps.add(dep);
-            }
-    
-            if (this._sync) {
-                this.execute();
-            } else {
-                scheduler.schedule(this.execute);
-            }
-        });
-        this._depManager.addDependency(dep, unsubscribe);
-      } catch (error) {
-         console.error(wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_EXECUTION_FAILED));
-      }
+    try {
+      const unsubscribe = dep.subscribe(() => {
+        if (this._trackModifications && this.isExecuting) {
+          this._modifiedDeps.add(dep);
+        }
+
+        if (this._sync) {
+          this.execute();
+        } else {
+          scheduler.schedule(this.execute);
+        }
+      });
+      this._depManager.addDependency(dep, unsubscribe);
+    } catch (error) {
+      console.error(wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_EXECUTION_FAILED));
+    }
   }
 
   /**
@@ -526,8 +525,6 @@ class EffectImpl implements EffectObject, DependencyTracker {
       }
     }
   }
-
-
 
   /**
    * Checks for and warns about potential infinite loop patterns.

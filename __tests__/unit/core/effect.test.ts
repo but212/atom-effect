@@ -213,8 +213,6 @@ describe('Effect - Error Handling and Edge Cases', () => {
     expect(e.executionCount).toBeGreaterThan(100);
   });
 
-
-
   it('tracks modified dependencies with trackModifications', async () => {
     vi.useRealTimers();
     const count = atom(0);
@@ -370,8 +368,6 @@ describe('Effect - Error Handling and Edge Cases', () => {
       vi.useFakeTimers();
     });
   });
-
-
 
   describe('Cleanup Error Handling', () => {
     it('is safe even when error occurs during cleanup function execution', async () => {

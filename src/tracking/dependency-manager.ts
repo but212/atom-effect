@@ -97,7 +97,7 @@ export class DependencyManager {
     // Add strong ref
     const idx = this.count++;
     this.depRefs[idx] = dep;
-  
+
     // Store unsubscribe
     this.depMap.set(dep, cleanup);
 
@@ -140,7 +140,7 @@ export class DependencyManager {
       const refs = this.depRefs;
       const cnt = this.count;
       let idx = -1;
-      
+
       for (let i = 0; i < cnt; i++) {
         const d = refs[i];
         if (d === dep) {
@@ -156,7 +156,7 @@ export class DependencyManager {
         // Clear the last element to avoid memory leaks if it's the only strong reference
         // and to keep the array length consistent with `count`.
         // Using `undefined as any` to satisfy TypeScript when `depRefs` is `Array<Dependency>`.
-        refs[lastIdx] = undefined as any; 
+        refs[lastIdx] = undefined as any;
         this.count = lastIdx;
       }
 
@@ -287,7 +287,8 @@ export class DependencyManager {
    * console.log(`Tracking ${manager.count} dependencies`);
    * ```
    */
-  get liveCount(): number { // Renamed to liveCount to avoid conflict with `this.count` property
+  get liveCount(): number {
+    // Renamed to liveCount to avoid conflict with `this.count` property
     this.cleanup();
     return this.count;
   }

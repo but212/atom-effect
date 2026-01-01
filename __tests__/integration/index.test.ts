@@ -362,8 +362,6 @@ describe('Effect - Behavior', () => {
     await vi.runAllTimersAsync();
   });
 
-
-
   it('sync option works', () => {
     const count = atom(0, { sync: true });
     const calls: number[] = [];

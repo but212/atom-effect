@@ -296,7 +296,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
     // Reuse buffer to avoid allocation
     this._dependencyBuffer.clear();
     const newDependencies = this._dependencyBuffer;
-    
+
     const tempMarkDirty = Object.assign(() => this._markDirty(), {
       addDependency: (dep: unknown) => newDependencies.add(dep),
     });
