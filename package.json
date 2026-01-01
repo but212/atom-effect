@@ -1,6 +1,6 @@
 {
   "name": "@but212/atom-effect",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "description": "A reactive state management library that combines the power of `atom`, `computed`, and `effect` for seamless management of reactive state.",
   "main": "dist/index.cjs",
