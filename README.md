@@ -204,7 +204,7 @@ const theme = persistentAtom('theme', 'light');
 ### Type Guards
 
 ```typescript
-import { isAtom, isComputed, isEffect } from 'atom-effect';
+import { isAtom, isComputed, isEffect } from '@but212/atom-effect';
 
 isAtom(count);      // true
 isComputed(doubled); // true
@@ -213,7 +213,7 @@ isComputed(doubled); // true
 ### Configuration
 
 ```typescript
-import { DEBUG_CONFIG, POOL_CONFIG, SCHEDULER_CONFIG } from 'atom-effect';
+import { DEBUG_CONFIG, POOL_CONFIG, SCHEDULER_CONFIG } from '@but212/atom-effect';
 
 // You can access read-only configuration constants for reference.
 console.log(DEBUG_CONFIG.MAX_DEPENDENCIES);     // 1000
@@ -228,7 +228,7 @@ console.log(SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_SECOND); // 100
 ### Error Handling
 
 ```typescript
-import { AtomError, ComputedError, EffectError } from 'atom-effect';
+import { AtomError, ComputedError, EffectError } from '@but212/atom-effect';
 
 try {
   // Your code
