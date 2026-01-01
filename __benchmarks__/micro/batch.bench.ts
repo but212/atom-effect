@@ -54,9 +54,9 @@ describe('Batch vs Non-Batch', () => {
     () => {
       const atoms = Array.from({ length: 10 }, () => atom(0));
       const c = computed(() => atoms.reduce((sum, a) => sum + a.value, 0));
-      let value = 0;
+      let _value = 0;
       const e = effect(() => {
-        value = c.value;
+        _value = c.value;
       });
 
       atoms.forEach((a, i) => {
@@ -73,9 +73,9 @@ describe('Batch vs Non-Batch', () => {
     () => {
       const atoms = Array.from({ length: 10 }, () => atom(0));
       const c = computed(() => atoms.reduce((sum, a) => sum + a.value, 0));
-      let value = 0;
+      let _value = 0;
       const e = effect(() => {
-        value = c.value;
+        _value = c.value;
       });
 
       batch(() => {

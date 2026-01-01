@@ -2,9 +2,9 @@
  * @fileoverview Debug utility tests (coverage supplement)
  */
 
-import { ComputedError } from '@/errors/errors';
-import { debug, DEBUG_ID, DEBUG_NAME, DEBUG_TYPE, NO_DEFAULT_VALUE } from '@/utils/debug';
 import { describe, expect, it, vi } from 'vitest';
+import { ComputedError } from '@/errors/errors';
+import { DEBUG_ID, DEBUG_NAME, DEBUG_TYPE, debug, NO_DEFAULT_VALUE } from '@/utils/debug';
 
 describe('debug configuration', () => {
   it('development mode detection works', () => {

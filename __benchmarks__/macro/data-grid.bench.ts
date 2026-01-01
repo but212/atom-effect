@@ -177,7 +177,7 @@ describe('Data Grid with Selection', () => {
   bench(
     'select/deselect rows',
     () => {
-      const rows = atom<DataGridRow[]>(generateGridData(1000));
+      const _rows = atom<DataGridRow[]>(generateGridData(1000));
       const selectedIds = atom<Set<number>>(new Set());
 
       const selectedCount = computed(() => selectedIds.value.size);

@@ -13,4 +13,3 @@ export * from './types';
 
 export { debug as DEBUG_RUNTIME } from './utils/debug';
 export { isAtom, isComputed, isEffect } from './utils/type-guards';
-

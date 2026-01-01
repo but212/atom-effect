@@ -8,13 +8,7 @@ import { ERROR_MESSAGES } from '../../errors/messages';
 import { scheduler } from '../../scheduler';
 import { type DependencyTracker, trackingContext } from '../../tracking';
 import { DependencyManager } from '../../tracking/dependency-manager';
-import type {
-  Dependency,
-  EffectFunction,
-  EffectObject,
-  EffectOptions,
-  ReadonlyAtom,
-} from '../../types';
+import type { Dependency, EffectFunction, EffectObject, EffectOptions } from '../../types';
 import { debug, generateId } from '../../utils/debug';
 import { isAtom } from '../../utils/type-guards';
 

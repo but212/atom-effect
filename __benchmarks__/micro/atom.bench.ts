@@ -137,9 +137,9 @@ describe('Atom Subscription', () => {
     'notify subscribers (1 subscriber)',
     () => {
       const a = atom(0);
-      let count = 0;
+      let _count = 0;
       a.subscribe(() => {
-        count++;
+        _count++;
       });
       a.value = 1;
     },
@@ -150,10 +150,10 @@ describe('Atom Subscription', () => {
     'notify subscribers (10 subscribers)',
     () => {
       const a = atom(0);
-      let count = 0;
+      let _count = 0;
       for (let i = 0; i < 10; i++) {
         a.subscribe(() => {
-          count++;
+          _count++;
         });
       }
       a.value = 1;
