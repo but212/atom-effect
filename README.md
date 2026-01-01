@@ -1,6 +1,6 @@
-# reactive-atom
+# atom-effect
 
-[![npm version](https://img.shields.io/npm/v/@but212/reactive-atom.svg)](https://www.npmjs.com/package/@but212/reactive-atom)
+[![npm version](https://img.shields.io/npm/v/atom-effect.svg)](https://www.npmjs.com/package/atom-effect)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg)](https://www.typescriptlang.org/)
 
@@ -17,13 +17,13 @@ A lightweight, high-performance reactive state management library for TypeScript
 ## Installation
 
 ```bash
-npm install @but212/reactive-atom
+npm install atom-effect
 ```
 
 ## Quick Start
 
 ```typescript
-import { atom, computed, effect, batch } from '@but212/reactive-atom';
+import { atom, computed, effect, batch } from 'atom-effect';
 
 // Create reactive state
 const count = atom(0);
@@ -199,7 +199,7 @@ const theme = persistentAtom('theme', 'light');
 ### Type Guards
 
 ```typescript
-import { isAtom, isComputed, isEffect } from '@but212/reactive-atom';
+import { isAtom, isComputed, isEffect } from 'atom-effect';
 
 isAtom(count);      // true
 isComputed(doubled); // true
@@ -208,7 +208,7 @@ isComputed(doubled); // true
 ### Configuration
 
 ```typescript
-import { DEBUG_CONFIG, POOL_CONFIG, SCHEDULER_CONFIG } from '@but212/reactive-atom';
+import { DEBUG_CONFIG, POOL_CONFIG, SCHEDULER_CONFIG } from 'atom-effect';
 
 // You can access read-only configuration constants for reference.
 console.log(DEBUG_CONFIG.MAX_DEPENDENCIES);     // 1000
@@ -223,7 +223,7 @@ console.log(SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_SECOND); // 100
 ### Error Handling
 
 ```typescript
-import { AtomError, ComputedError, EffectError } from '@but212/reactive-atom';
+import { AtomError, ComputedError, EffectError } from 'atom-effect';
 
 try {
   // Your code

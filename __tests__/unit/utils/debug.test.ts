@@ -2,9 +2,9 @@
  * @fileoverview Debug utility tests (coverage supplement)
  */
 
-import { describe, expect, it, vi } from 'vitest';
 import { ComputedError } from '@/errors/errors';
-import { DEBUG_ID, DEBUG_NAME, DEBUG_TYPE, debug, NO_DEFAULT_VALUE } from '@/utils/debug';
+import { debug, DEBUG_ID, DEBUG_NAME, DEBUG_TYPE, NO_DEFAULT_VALUE } from '@/utils/debug';
+import { describe, expect, it, vi } from 'vitest';
 
 describe('debug configuration', () => {
   it('development mode detection works', () => {
@@ -30,7 +30,7 @@ describe('debug.warn', () => {
 
     debug.warn(true, 'Test warning');
 
-    expect(consoleWarn).toHaveBeenCalledWith('[Reactive Atom] Test warning');
+    expect(consoleWarn).toHaveBeenCalledWith('[Atom Effect] Test warning');
 
     consoleWarn.mockRestore();
     debug.enabled = originalEnabled;

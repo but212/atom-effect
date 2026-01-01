@@ -1,5 +1,5 @@
 {
-  "name": "@but212/reactive-atom",
+  "name": "atom-effect",
   "version": "0.1.0",
   "type": "module",
   "description": "A reactive state management library that combines the power of `atom`, `computed`, and `effect` for seamless management of reactive state.",
@@ -35,7 +35,7 @@
     "atom",
     "computed",
     "effect",
-    "reactive-atom",
+    "atom-effect",
     "signal",
     "reactive-signal"
   ],
@@ -54,7 +54,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/but212/reactive-atom.git"
+    "url": "git+https://github.com/but212/atom-effect.git"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.10",

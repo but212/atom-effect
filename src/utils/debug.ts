@@ -27,7 +27,7 @@ export const debug: DebugConfig = {
 
   warn(condition: boolean, message: string): void {
     if (this.enabled && condition) {
-      console.warn(`[Reactive Atom] ${message}`);
+      console.warn(`[Atom Effect] ${message}`);
     }
   },
 

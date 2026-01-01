@@ -1,6 +1,6 @@
 # Benchmark Documentation
 
-Comprehensive benchmarking suite for `@but212/reactive-atom` to measure performance and detect regressions.
+Comprehensive benchmarking suite for `atom-effect` to measure performance and detect regressions.
 
 ## Overview
 

@@ -1,5 +1,5 @@
 /**
- * @fileoverview Reactive state management library - Main entry point
+ * @fileoverview Atom Effect - Main entry point
  */
 
 export { AsyncState, DEBUG_CONFIG, POOL_CONFIG, SCHEDULER_CONFIG } from './constants';
@@ -13,3 +13,4 @@ export * from './types';
 
 export { debug as DEBUG_RUNTIME } from './utils/debug';
 export { isAtom, isComputed, isEffect } from './utils/type-guards';
+
