@@ -1,10 +1,10 @@
 /**
- * @fileoverview Error class hierarchy for reactive-atom library
+ * @fileoverview Error class hierarchy for atom-effect library
  * @description Structured error classes with cause tracking and recoverability flags
  */
 
 /**
- * Base error class for all reactive-atom errors
+ * Base error class for all atom-effect errors
  *
  * Provides enhanced error information including:
  * - Original cause tracking for error chains

@@ -1,5 +1,5 @@
 /**
- * @fileoverview Constants and configuration for reactive-atom library
+ * @fileoverview Constants and configuration for atom-effect library
  * @description Centralized constants for async states, bit flags, and performance tuning
  */
 

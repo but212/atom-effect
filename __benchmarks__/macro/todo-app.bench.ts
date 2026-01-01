@@ -115,13 +115,13 @@ describe('Todo App Scenarios', () => {
         return todos.value.filter((t) => t.completed);
       });
 
-      const completedCount = computed(() => todos.value.filter((t) => t.completed).length);
+      const _completedCount = computed(() => todos.value.filter((t) => t.completed).length);
 
-      const activeCount = computed(() => todos.value.filter((t) => !t.completed).length);
+      const _activeCount = computed(() => todos.value.filter((t) => !t.completed).length);
 
-      let displayCount = 0;
+      let _displayCount = 0;
       const e = effect(() => {
-        displayCount = filteredTodos.value.length;
+        _displayCount = filteredTodos.value.length;
       });
 
       // Create 50 todos
@@ -166,15 +166,15 @@ describe('Todo App with Effects', () => {
 
       const totalCount = computed(() => todos.value.length);
       const completedCount = computed(() => todos.value.filter((t) => t.completed).length);
-      const activeCount = computed(() => todos.value.filter((t) => !t.completed).length);
+      const _activeCount = computed(() => todos.value.filter((t) => !t.completed).length);
       const completionRate = computed(() =>
         totalCount.value === 0 ? 0 : (completedCount.value / totalCount.value) * 100
       );
 
-      let statsUpdates = 0;
+      let _statsUpdates = 0;
       const e = effect(() => {
         // Simulate UI update
-        statsUpdates++;
+        _statsUpdates++;
         const _ = completionRate.value;
       });
 

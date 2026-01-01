@@ -1,5 +1,5 @@
 /**
- * @fileoverview Reactive state management library - Main entry point
+ * @fileoverview Atom Effect - Main entry point
  */
 
 export { AsyncState, DEBUG_CONFIG, POOL_CONFIG, SCHEDULER_CONFIG } from './constants';

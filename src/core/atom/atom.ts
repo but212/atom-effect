@@ -356,7 +356,7 @@ class AtomImpl<T> implements WritableAtom<T> {
 }
 
 /**
- * Creates a new reactive atom with the given initial value.
+ * Creates a new atom with the given initial value.
  *
  * @template T - The type of value stored in the atom
  * @param initialValue - The initial value of the atom

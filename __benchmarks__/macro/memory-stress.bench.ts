@@ -33,9 +33,9 @@ describe('Memory Allocation', () => {
     () => {
       const a = atom(0);
       const effects = Array.from({ length: 1000 }, () => {
-        let value = 0;
+        let _value = 0;
         return effect(() => {
-          value = a.value;
+          _value = a.value;
         });
       });
       effects.forEach((e) => e.dispose());
@@ -112,12 +112,12 @@ describe('Memory Leak Detection', () => {
     () => {
       const a = atom(0);
       const effects = Array.from({ length: 1000 }, () => {
-        let resources: number[] = [];
+        let _resources: number[] = [];
         return effect(() => {
           const _ = a.value;
-          resources = Array.from({ length: 100 }, (_, i) => i);
+          _resources = Array.from({ length: 100 }, (_, i) => i);
           return () => {
-            resources = [];
+            _resources = [];
           };
         });
       });

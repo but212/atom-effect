@@ -12,9 +12,9 @@ describe('Effect Creation', () => {
     'create effect (single dependency)',
     () => {
       const a = atom(0);
-      let value = 0;
+      let _value = 0;
       const e = effect(() => {
-        value = a.value;
+        _value = a.value;
       });
       e.dispose();
     },
@@ -27,9 +27,9 @@ describe('Effect Creation', () => {
       const a = atom(1);
       const b = atom(2);
       const c = atom(3);
-      let sum = 0;
+      let _sum = 0;
       const e = effect(() => {
-        sum = a.value + b.value + c.value;
+        _sum = a.value + b.value + c.value;
       });
       e.dispose();
     },
@@ -41,9 +41,9 @@ describe('Effect Creation', () => {
     () => {
       const a = atom(0);
       const effects = Array.from({ length: 10 }, () => {
-        let value = 0;
+        let _value = 0;
         return effect(() => {
-          value = a.value;
+          _value = a.value;
         });
       });
       effects.forEach((e) => e.dispose());
@@ -57,9 +57,9 @@ describe('Effect Execution', () => {
     'effect runs on dependency change',
     () => {
       const a = atom(0);
-      let count = 0;
+      let _count = 0;
       const e = effect(() => {
-        count = a.value;
+        _count = a.value;
       });
       a.value = 1;
       e.dispose();
@@ -72,9 +72,9 @@ describe('Effect Execution', () => {
     () => {
       const a = atom(1);
       const b = atom(2);
-      let sum = 0;
+      let _sum = 0;
       const e = effect(() => {
-        sum = a.value + b.value;
+        _sum = a.value + b.value;
       });
       a.value = 10;
       b.value = 20;
@@ -88,9 +88,9 @@ describe('Effect Execution', () => {
     () => {
       const a = atom(1);
       const doubled = computed(() => a.value * 2);
-      let value = 0;
+      let _value = 0;
       const e = effect(() => {
-        value = doubled.value;
+        _value = doubled.value;
       });
       a.value = 2;
       e.dispose();
@@ -104,9 +104,9 @@ describe('Effect Re-execution', () => {
     'effect re-runs 10 times',
     () => {
       const a = atom(0);
-      let count = 0;
+      let _count = 0;
       const e = effect(() => {
-        count = a.value;
+        _count = a.value;
       });
       for (let i = 0; i < 10; i++) {
         a.value = i;
@@ -120,17 +120,17 @@ describe('Effect Re-execution', () => {
     'multiple effects on same dependency',
     () => {
       const a = atom(0);
-      let c1 = 0;
-      let c2 = 0;
-      let c3 = 0;
+      let _c1 = 0;
+      let _c2 = 0;
+      let _c3 = 0;
       const e1 = effect(() => {
-        c1 = a.value;
+        _c1 = a.value;
       });
       const e2 = effect(() => {
-        c2 = a.value;
+        _c2 = a.value;
       });
       const e3 = effect(() => {
-        c3 = a.value;
+        _c3 = a.value;
       });
       a.value = 1;
       e1.dispose();
@@ -146,11 +146,11 @@ describe('Effect Cleanup', () => {
     'effect with cleanup function',
     () => {
       const a = atom(0);
-      let cleaned = false;
+      let _cleaned = false;
       const e = effect(() => {
         const _ = a.value;
         return () => {
-          cleaned = true;
+          _cleaned = true;
         };
       });
       a.value = 1; // Triggers cleanup
@@ -163,11 +163,11 @@ describe('Effect Cleanup', () => {
     'effect cleanup on dependency change',
     () => {
       const a = atom(0);
-      let cleanupCount = 0;
+      let _cleanupCount = 0;
       const e = effect(() => {
         const _ = a.value;
         return () => {
-          cleanupCount++;
+          _cleanupCount++;
         };
       });
       for (let i = 0; i < 5; i++) {
@@ -184,9 +184,9 @@ describe('Effect Disposal', () => {
     'dispose effect',
     () => {
       const a = atom(0);
-      let value = 0;
+      let _value = 0;
       const e = effect(() => {
-        value = a.value;
+        _value = a.value;
       });
       e.dispose();
     },
@@ -197,11 +197,11 @@ describe('Effect Disposal', () => {
     'dispose effect with cleanup',
     () => {
       const a = atom(0);
-      let cleaned = false;
+      let _cleaned = false;
       const e = effect(() => {
         const _ = a.value;
         return () => {
-          cleaned = true;
+          _cleaned = true;
         };
       });
       e.dispose();
@@ -214,9 +214,9 @@ describe('Effect Disposal', () => {
     () => {
       const a = atom(0);
       const effects = Array.from({ length: 10 }, () => {
-        let value = 0;
+        let _value = 0;
         return effect(() => {
-          value = a.value;
+          _value = a.value;
         });
       });
       effects.forEach((e) => e.dispose());

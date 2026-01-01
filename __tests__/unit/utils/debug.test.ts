@@ -30,7 +30,7 @@ describe('debug.warn', () => {
 
     debug.warn(true, 'Test warning');
 
-    expect(consoleWarn).toHaveBeenCalledWith('[Reactive Atom] Test warning');
+    expect(consoleWarn).toHaveBeenCalledWith('[Atom Effect] Test warning');
 
     consoleWarn.mockRestore();
     debug.enabled = originalEnabled;
