@@ -22,7 +22,7 @@ npm i @but212/atom-effect
 ## Quick Start
 
 ```typescript
-import { atom, computed, effect, batch } from 'atom-effect';
+import { atom, computed, effect, batch } from '@but212/atom-effect';
 
 // Create reactive state
 const count = atom(0);
