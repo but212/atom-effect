@@ -76,7 +76,6 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
     this._onError = onError;
     this._functionSubscribers = new SubscriberManager<() => void>();
     this._objectSubscribers = new SubscriberManager<Subscriber>();
-    this._objectSubscribers = new SubscriberManager<Subscriber>();
     this._dependencyManager = new DependencyManager();
     this._dependencyBuffer = new Set();
     this._id = generateId();
@@ -288,8 +287,6 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
     if (!this._isDirty() && this._isResolved()) {
       return;
     }
-
-    this._setRecomputing(true);
 
     this._setRecomputing(true);
 
