@@ -247,7 +247,7 @@ try {
 | Atom read/write | ~4.0M ops/sec |
 | Computed creation | ~1.4M ops/sec |
 | Computed recomputation | ~270K ops/sec |
-| Effect execution | ~400K ops/sec |
+| Effect execution | ~375K ops/sec |
 | Batch update (2 atoms) | ~2.0M ops/sec |
 | Untracked read | ~2.9M ops/sec |
 
