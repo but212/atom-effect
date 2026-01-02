@@ -43,8 +43,8 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
   private _stateFlags: number;
 
   // === WARM PATH: Frequently accessed fields (cache line 2) ===
-  private _error: AtomError | null = null;
-  private _promiseId = 0;
+  private _error: AtomError | null;
+  private _promiseId: number;
   private readonly _equal: (a: T, b: T) => boolean;
 
   // === COLD PATH: Infrequently accessed fields ===
@@ -58,28 +58,30 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
   private readonly _dependencyBuffer: Set<unknown>;
   private readonly _trackable: TrackableListener;
   private readonly _id: number;
-  private readonly MAX_PROMISE_ID = Number.MAX_SAFE_INTEGER - 1;
+  private readonly MAX_PROMISE_ID: number;
 
   constructor(fn: () => T | Promise<T>, options: ComputedOptions<T> = {}) {
     if (typeof fn !== 'function') {
       throw new ComputedError(ERROR_MESSAGES.COMPUTED_MUST_BE_FUNCTION);
     }
 
-    this._fn = fn;
-    this._stateFlags = COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE;
+    // 1. Fixed order initialization (HOT PATH first)
     this._value = undefined as T;
+    this._stateFlags = COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE;
 
-    const {
-      equal = Object.is,
-      defaultValue = NO_DEFAULT_VALUE as T,
-      lazy = true,
-      onError = null,
-    } = options;
+    // WARM PATH
+    this._error = null;
+    this._promiseId = 0;
+    this._equal = options.equal ?? Object.is;
 
-    this._equal = equal;
-    this._defaultValue = defaultValue;
-    this._hasDefaultValue = defaultValue !== NO_DEFAULT_VALUE;
-    this._onError = onError;
+    // COLD PATH & Constants
+    this._fn = fn;
+    this._defaultValue = 'defaultValue' in options ? options.defaultValue : (NO_DEFAULT_VALUE as T);
+    this._hasDefaultValue = this._defaultValue !== (NO_DEFAULT_VALUE as T);
+    this._onError = options.onError ?? null;
+    this.MAX_PROMISE_ID = Number.MAX_SAFE_INTEGER - 1;
+
+    // Managers & Structures
     this._functionSubscribers = new SubscriberManager<() => void>();
     this._objectSubscribers = new SubscriberManager<Subscriber>();
     this._dependencyManager = new DependencyManager();
@@ -105,7 +107,8 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
       debugObj.stateFlags = this._getFlagsAsString();
     }
 
-    if (!lazy) {
+    // Lazy check - normalized access
+    if (options.lazy === false) {
       try {
         this._recompute();
       } catch {
@@ -546,6 +549,9 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
     }
   }
 }
+
+// Optimization: Freeze prototype to prevent shape changes
+Object.freeze(ComputedAtomImpl.prototype);
 
 /**
  * Creates a computed value that automatically tracks and reacts to dependencies
