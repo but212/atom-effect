@@ -76,8 +76,8 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
 
     // COLD PATH & Constants
     this._fn = fn;
-    this._defaultValue = options.defaultValue ?? (NO_DEFAULT_VALUE as T);
-    this._hasDefaultValue = options.defaultValue !== undefined;
+    this._defaultValue = 'defaultValue' in options ? options.defaultValue : (NO_DEFAULT_VALUE as T);
+    this._hasDefaultValue = this._defaultValue !== (NO_DEFAULT_VALUE as T);
     this._onError = options.onError ?? null;
     this.MAX_PROMISE_ID = Number.MAX_SAFE_INTEGER - 1;
 
