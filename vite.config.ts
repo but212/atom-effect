@@ -28,6 +28,7 @@ export default defineConfig({
       include: ['src/**/*'],
       exclude: ['src/**/*.test.ts', 'node_modules'],
       insertTypesEntry: true,
+      rollupTypes: true,
     }),
   ],
 });
