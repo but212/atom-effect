@@ -1,8 +1,17 @@
 # Changelog
 
+## [0.1.5] - 2026-01-02
+
+### Build
+
+- **Artifact Optimization**: Optimized build output to satisfy `mjs, cjs, d.ts` structure.
+  - Bundled type definitions into a single `index.d.ts` using `vite-plugin-dts` (`rollupTypes: true`).
+  - Configured `vite.config.ts` to output clean artifacts while maintaining sourcemaps (`.map`) for debugging support.
+  - Standardized `package.json` paths (`main`, `module`, `types`) to explicitly use `./dist/` prefix.
+
 ## [0.1.4] - 2026-01-02
 
-### Changed
+### Changed - 0.1.4
 
 - `ComputedAtomImpl` V8 Hidden Class Monomorphism by enforcing strict property initialization order.
 
