@@ -1,8 +1,15 @@
 # Changelog
 
-## [0.1.3] - 2026-01-02
+## [unreleased]
 
 ### Changed
+
+- **Performance**
+  - Optimized `ComputedAtomImpl` V8 Hidden Class Monomorphism by enforcing strict property initialization order.
+
+## [0.1.3] - 2026-01-02
+
+### Changed - 0.1.3
 
 - **Performance**
   - Implemented "Delta Sync" (Diffing) in `Effect` and `Computed` to minimize subscription churn.
@@ -12,7 +19,7 @@
 - **Stability**
   - Replaced `AtomImpl`'s custom subscription logic with `SubscriberManager` to fix potential index corruption bugs.
 
-### Fixed
+### Fixed - 0.1.3
 
 - **Effect**: Resolved an issue where infinite loops caused by synchronous self-modification were not detected due to delayed subscription.
 
