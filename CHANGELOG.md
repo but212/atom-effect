@@ -1,11 +1,10 @@
 # Changelog
 
-## [unreleased]
+## [0.1.4] - 2026-01-02
 
 ### Changed
 
-- **Performance**
-  - Optimized `ComputedAtomImpl` V8 Hidden Class Monomorphism by enforcing strict property initialization order.
+- `ComputedAtomImpl` V8 Hidden Class Monomorphism by enforcing strict property initialization order.
 
 ## [0.1.3] - 2026-01-02
 
