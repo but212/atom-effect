@@ -13,6 +13,12 @@ import { depArrayPool, EMPTY_DEPS } from '../../pool';
 import { scheduler } from '../../scheduler';
 import { trackingContext } from '../../tracking';
 import type { DependencyTracker } from '../../tracking/tracking.types';
+
+interface SchedulerJob {
+  (): void;
+  _nextEpoch?: number;
+}
+
 import type {
   AsyncStateType,
   ComputedAtom,
@@ -70,7 +76,14 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
   private readonly _objectSubscribers: SubscriberManager<Subscriber>;
   // Optimized: Replaced DependencyManager with direct array + map
   private _dependencies: Dependency[];
-  private readonly _subscriptions: WeakMap<Dependency, () => void>;
+  
+  // ⚡ HFT Optimization: Map<number, Unsub> instead of WeakMap
+  // dependency.id is Smi, so map lookup is extremely fast (integer key optimization)
+  private readonly _subscriptions: Map<number, () => void>;
+  
+  // ⚡ HFT Optimization: Reusable SchedulerJob to prevent closure allocation
+  private readonly _recomputeJob: SchedulerJob;
+  
   private readonly _trackable: TrackableListener;
   // private readonly _id: number; // Replaced by public id
   private readonly MAX_PROMISE_ID: number;
@@ -108,7 +121,18 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
 
     // Optimized Dependency Management
     this._dependencies = EMPTY_DEPS as Dependency[];
-    this._subscriptions = new WeakMap();
+    this._subscriptions = new Map();
+
+    // ⚡ Pre-allocate recompute job
+    this._recomputeJob = () => {
+      if (this._isDirty()) {
+        try {
+          this._recompute();
+        } catch {
+          // Error already handled
+        }
+      }
+    };
 
     // Trackable closure for dependency collection
     // We bind it once to avoid allocation during recompute
@@ -215,11 +239,11 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
 
     if (this._dependencies !== EMPTY_DEPS) {
       for (const dep of this._dependencies) {
-        const unsub = this._subscriptions.get(dep);
+        const unsub = this._subscriptions.get(dep.id);
         if (unsub) unsub();
-        this._subscriptions.delete(dep);
+        this._subscriptions.delete(dep.id);
       }
-      depArrayPool.release(this._dependencies);
+      depArrayPool.release(this._dependencies as Dependency[]);
     }
     this._dependencies = EMPTY_DEPS as Dependency[];
 
@@ -447,10 +471,10 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
 
         // If lastSeenEpoch != epoch, it was NOT collected in this run -> Removed
         if (dep._lastSeenEpoch !== epoch) {
-          const unsub = this._subscriptions.get(dep);
+          const unsub = this._subscriptions.get(dep.id);
           if (unsub) {
             unsub();
-            this._subscriptions.delete(dep);
+            this._subscriptions.delete(dep.id);
           }
         }
       }
@@ -462,12 +486,12 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
       if (!dep) continue;
 
       // Check if already subscribed
-      if (!this._subscriptions.has(dep)) {
+      if (!this._subscriptions.has(dep.id)) {
         // New dependency
         debug.checkCircular(dep, this as unknown as ComputedAtom<T>);
         // Subscription
         const unsub = dep.subscribe(() => this._markDirty());
-        this._subscriptions.set(dep, unsub);
+        this._subscriptions.set(dep.id, unsub);
       }
     }
   }

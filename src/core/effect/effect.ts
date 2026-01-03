@@ -51,7 +51,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
 
   // Optimized Dependency Management
   private _dependencies: Dependency[];
-  private readonly _subscriptions: WeakMap<Dependency, () => void>;
+  private readonly _subscriptions: Map<number, () => void>;
 
   // Execution State
   private _nextDeps: Dependency[] | null;
@@ -77,7 +77,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
 
     // Dependencies
     this._dependencies = EMPTY_DEPS as Dependency[];
-    this._subscriptions = new WeakMap();
+    this._subscriptions = new Map();
     this._nextDeps = null;
 
     this._modifiedDeps = new Set();
@@ -142,9 +142,9 @@ class EffectImpl implements EffectObject, DependencyTracker {
     // Unsubscribe all
     if (this._dependencies !== EMPTY_DEPS) {
       for (const dep of this._dependencies) {
-        const unsub = this._subscriptions.get(dep);
+        const unsub = this._subscriptions.get(dep.id);
         if (unsub) unsub();
-        this._subscriptions.delete(dep);
+        this._subscriptions.delete(dep.id);
       }
       depArrayPool.release(this._dependencies);
       this._dependencies = EMPTY_DEPS as Dependency[];
@@ -181,7 +181,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
       this._nextDeps.push(d);
 
       // Eagerly subscribe to catch synchronous updates
-      if (!this._subscriptions.has(d)) {
+      if (!this._subscriptions.has(d.id)) {
         this._subscribeTo(d);
       }
     }
@@ -235,7 +235,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
       const result = trackingContext.run(this, this._fn);
 
       // Commit dependencies
-      this._syncDependencies(prevDeps, nextDeps, epoch);
+      this._syncDependencies(prevDeps, epoch);
       this._dependencies = nextDeps;
       committed = true;
 
@@ -256,7 +256,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
       }
     } catch (error) {
       // Commit partial dependencies for recovery (eager subscription already happened)
-      this._syncDependencies(prevDeps, nextDeps, epoch);
+      this._syncDependencies(prevDeps, epoch);
       this._dependencies = nextDeps;
       committed = true;
 
@@ -290,10 +290,10 @@ class EffectImpl implements EffectObject, DependencyTracker {
         if (!dep) continue;
 
         if (dep._lastSeenEpoch !== epoch) {
-          const unsub = this._subscriptions.get(dep);
+          const unsub = this._subscriptions.get(dep.id);
           if (unsub) {
             unsub();
-            this._subscriptions.delete(dep);
+            this._subscriptions.delete(dep.id);
           }
         }
       }
@@ -313,7 +313,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
           scheduler.schedule(this.execute);
         }
       });
-      this._subscriptions.set(dep, unsubscribe);
+      this._subscriptions.set(dep.id, unsubscribe);
     } catch (error) {
       console.error(wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_EXECUTION_FAILED));
     }
