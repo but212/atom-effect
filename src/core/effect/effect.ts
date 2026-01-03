@@ -7,10 +7,10 @@
  */
 
 import { EFFECT_STATE_FLAGS, SCHEDULER_CONFIG, SMI_MAX } from '../../constants';
+import { nextEpoch } from '../../epoch';
 import { EffectError, isPromise, wrapError } from '../../errors/errors';
 import { ERROR_MESSAGES } from '../../errors/messages';
 import { depArrayPool, EMPTY_DEPS } from '../../pool';
-import { nextEpoch } from '../../epoch';
 import { scheduler } from '../../scheduler';
 import { type DependencyTracker, trackingContext } from '../../tracking';
 import type { Dependency, EffectFunction, EffectObject, EffectOptions } from '../../types';
@@ -74,7 +74,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
     this._trackModifications = options.trackModifications ?? false;
 
     this._cleanup = null;
-    
+
     // Dependencies
     this._dependencies = EMPTY_DEPS as Dependency[];
     this._subscriptions = new WeakMap();
@@ -138,16 +138,16 @@ class EffectImpl implements EffectObject, DependencyTracker {
 
     this._setDisposed();
     this._safeCleanup();
-    
+
     // Unsubscribe all
     if (this._dependencies !== EMPTY_DEPS) {
-        for(const dep of this._dependencies) {
-            const unsub = this._subscriptions.get(dep);
-            if (unsub) unsub();
-            this._subscriptions.delete(dep);
-        }
-        depArrayPool.release(this._dependencies);
-        this._dependencies = EMPTY_DEPS as Dependency[];
+      for (const dep of this._dependencies) {
+        const unsub = this._subscriptions.get(dep);
+        if (unsub) unsub();
+        this._subscriptions.delete(dep);
+      }
+      depArrayPool.release(this._dependencies);
+      this._dependencies = EMPTY_DEPS as Dependency[];
     }
   };
 
@@ -173,13 +173,13 @@ class EffectImpl implements EffectObject, DependencyTracker {
     if (this.isExecuting && this._nextDeps) {
       const d = dep as Dependency;
       const epoch = this._currentEpoch;
-      
+
       // O(1) deduplication via Epoch
       if (d._lastSeenEpoch === epoch) return;
       d._lastSeenEpoch = epoch;
-      
+
       this._nextDeps.push(d);
-      
+
       // Eagerly subscribe to catch synchronous updates
       if (!this._subscriptions.has(d)) {
         this._subscribeTo(d);
@@ -220,15 +220,15 @@ class EffectImpl implements EffectObject, DependencyTracker {
     this._setExecuting(true);
     this._safeCleanup();
     this._modifiedDeps.clear();
-    
+
     // ⚡ HFT Optimization: Pooled Array + Epoch
     const prevDeps = this._dependencies;
     const nextDeps = depArrayPool.acquire();
     const epoch = nextEpoch();
-    
+
     this._nextDeps = nextDeps;
     this._currentEpoch = epoch;
-    
+
     let committed = false;
 
     try {
@@ -238,7 +238,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
       this._syncDependencies(prevDeps, nextDeps, epoch);
       this._dependencies = nextDeps;
       committed = true;
-      
+
       this._checkLoopWarnings();
 
       if (isPromise(result)) {
@@ -259,45 +259,45 @@ class EffectImpl implements EffectObject, DependencyTracker {
       this._syncDependencies(prevDeps, nextDeps, epoch);
       this._dependencies = nextDeps;
       committed = true;
-        
+
       console.error(wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_EXECUTION_FAILED));
       this._cleanup = null;
     } finally {
       this._setExecuting(false);
       this._nextDeps = null;
-      
+
       if (committed) {
-         if (prevDeps !== EMPTY_DEPS) {
-             depArrayPool.release(prevDeps);
-         }
+        if (prevDeps !== EMPTY_DEPS) {
+          depArrayPool.release(prevDeps);
+        }
       } else {
-         depArrayPool.release(nextDeps);
+        depArrayPool.release(nextDeps);
       }
     }
   };
 
-  private _syncDependencies(prevDeps: Dependency[], nextDeps: Dependency[], epoch: number): void {
-     // Unsubscribe removed dependencies
-      if (prevDeps !== EMPTY_DEPS) {
-          for (let i = 0; i < prevDeps.length; i++) {
-              const dep = prevDeps[i];
-              // Safety
-              if (!dep) continue;
-              
-              if (dep._lastSeenEpoch !== epoch) {
-                  const unsub = this._subscriptions.get(dep);
-                  if (unsub) {
-                      unsub();
-                      this._subscriptions.delete(dep);
-                  }
-              }
+  private _syncDependencies(prevDeps: Dependency[], _nextDeps: Dependency[], epoch: number): void {
+    // Unsubscribe removed dependencies
+    if (prevDeps !== EMPTY_DEPS) {
+      for (let i = 0; i < prevDeps.length; i++) {
+        const dep = prevDeps[i];
+        // Safety
+        if (!dep) continue;
+
+        if (dep._lastSeenEpoch !== epoch) {
+          const unsub = this._subscriptions.get(dep);
+          if (unsub) {
+            unsub();
+            this._subscriptions.delete(dep);
           }
+        }
       }
-      
-      // New dependencies were EAGERLY subscribed in addDependency.
-      // So we don't need to iterate nextDeps to subscribe here.
-      // However, we still need to ensure consistency if something was missed?
-      // No, execute is synchronous, and addDependency is called synchronously during execution.
+    }
+
+    // New dependencies were EAGERLY subscribed in addDependency.
+    // So we don't need to iterate nextDeps to subscribe here.
+    // However, we still need to ensure consistency if something was missed?
+    // No, execute is synchronous, and addDependency is called synchronously during execution.
   }
 
   private _subscribeTo(dep: Dependency): void {

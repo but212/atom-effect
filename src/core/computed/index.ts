@@ -5,11 +5,11 @@
  */
 
 import { AsyncState, COMPUTED_STATE_FLAGS, SMI_MAX } from '../../constants';
+import { nextEpoch } from '../../epoch';
 import type { AtomError } from '../../errors/errors';
 import { ComputedError, isPromise, wrapError } from '../../errors/errors';
 import { ERROR_MESSAGES } from '../../errors/messages';
 import { depArrayPool, EMPTY_DEPS } from '../../pool';
-import { nextEpoch } from '../../epoch';
 import { scheduler } from '../../scheduler';
 import { trackingContext } from '../../tracking';
 import type { DependencyTracker } from '../../tracking/tracking.types';
@@ -81,7 +81,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
     }
 
     // 1. Smi Fields Initialization
-    this.id = generateId() & SMI_MAX; 
+    this.id = generateId() & SMI_MAX;
     this.version = 0;
     this.flags = 0;
     this._lastSeenEpoch = -1;
@@ -105,24 +105,24 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
     // Managers & Structures
     this._functionSubscribers = new SubscriberManager<() => void>();
     this._objectSubscribers = new SubscriberManager<Subscriber>();
-    
+
     // Optimized Dependency Management
     this._dependencies = EMPTY_DEPS as Dependency[];
     this._subscriptions = new WeakMap();
-    
+
     // Trackable closure for dependency collection
     // We bind it once to avoid allocation during recompute
     this._trackable = Object.assign(() => this._markDirty(), {
-      addDependency: (dep: unknown) => {
-         // This is called by Atom.value getter via trackingContext
-         // We'll handle the actual collection logic inside recompute's context
-         // but here we just need to ensure it works if called directly?
-         // Actually, trackingContext.run sets the current collector.
-         // When Atom calls _track(current), current is this._trackable.
-         // But we need the *active* collector buffer.
-         // We can store the active buffer in a temporary field or rely on the fact 
-         // that _recompute sets up the collection environment.
-         // See recompute implementation below.
+      addDependency: (_dep: unknown) => {
+        // This is called by Atom.value getter via trackingContext
+        // We'll handle the actual collection logic inside recompute's context
+        // but here we just need to ensure it works if called directly?
+        // Actually, trackingContext.run sets the current collector.
+        // When Atom calls _track(current), current is this._trackable.
+        // But we need the *active* collector buffer.
+        // We can store the active buffer in a temporary field or rely on the fact
+        // that _recompute sets up the collection environment.
+        // See recompute implementation below.
       },
     });
 
@@ -212,17 +212,17 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
     // We cannot iterate WeakMap, but we know which deps we have in _dependencies (if still holding them)
     // Wait, _syncDependencies iterates _dependencies.
     // So current _dependencies can be used to unsubscribe.
-    
+
     if (this._dependencies !== EMPTY_DEPS) {
-       for(const dep of this._dependencies) {
-           const unsub = this._subscriptions.get(dep);
-           if (unsub) unsub();
-           this._subscriptions.delete(dep);
-       }
-       depArrayPool.release(this._dependencies);
+      for (const dep of this._dependencies) {
+        const unsub = this._subscriptions.get(dep);
+        if (unsub) unsub();
+        this._subscriptions.delete(dep);
+      }
+      depArrayPool.release(this._dependencies);
     }
     this._dependencies = EMPTY_DEPS as Dependency[];
-    
+
     this._functionSubscribers.clear();
     this._objectSubscribers.clear();
     this._stateFlags = COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE;
@@ -356,19 +356,19 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
     const prevDeps = this._dependencies;
     const nextDeps = depArrayPool.acquire();
     const epoch = nextEpoch();
-    
+
     let depCount = 0;
 
     // Collector function (closure-free if possible, but we need closure for nextDeps capture)
     // To allow `_trackable.addDependency` to work, we need to wire it up.
-    // We override `addDependency` of `_trackable` temporarily? 
+    // We override `addDependency` of `_trackable` temporarily?
     // Or we use a scoped collector.
-    
+
     const collect = (dep: Dependency) => {
       // O(1) deduplication check
       if (dep._lastSeenEpoch === epoch) return;
       dep._lastSeenEpoch = epoch;
-      
+
       // Add to buffer
       if (depCount < nextDeps.length) {
         nextDeps[depCount] = dep;
@@ -395,7 +395,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
         this._syncDependencies(prevDeps, nextDeps, epoch);
         this._dependencies = nextDeps;
         committed = true;
-        
+
         this._handleAsyncComputation(result);
         this._setRecomputing(false);
         return;
@@ -405,71 +405,71 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
       this._syncDependencies(prevDeps, nextDeps, epoch);
       this._dependencies = nextDeps;
       committed = true;
-      
+
       this._handleSyncResult(result);
     } catch (err) {
       // On error, we must still sync dependencies that were collected up to the error point.
       // This ensures that if a dependency caused the error (or was accessed before),
       // we subscribe to it so we can recompute when it changes (recovery).
-      
+
       nextDeps.length = depCount;
       this._syncDependencies(prevDeps, nextDeps, epoch);
       this._dependencies = nextDeps;
       committed = true;
-      
+
       this._handleComputationError(err);
     } finally {
       this._trackable.addDependency = originalAdd;
-      
+
       if (committed) {
-         // Success: Release old deps
-         if (prevDeps !== EMPTY_DEPS) {
-             depArrayPool.release(prevDeps as Dependency[]);
-         }
+        // Success: Release old deps
+        if (prevDeps !== EMPTY_DEPS) {
+          depArrayPool.release(prevDeps as Dependency[]);
+        }
       } else {
-         // Failure: Release new deps (unused)
-         depArrayPool.release(nextDeps);
+        // Failure: Release new deps (unused)
+        depArrayPool.release(nextDeps);
       }
     }
   }
-  
+
   /**
    * Synchronizes subscriptions based on dependency changes.
    * O(N) Diff using Epoch.
    */
   private _syncDependencies(prevDeps: Dependency[], nextDeps: Dependency[], epoch: number): void {
-      // 1. Unsubscribe removed dependencies
-      if (prevDeps !== EMPTY_DEPS) {
-          for (let i = 0; i < prevDeps.length; i++) {
-              const dep = prevDeps[i];
-              // Safety check for sparse arrays or strict null checks
-              if (!dep) continue;
-              
-              // If lastSeenEpoch != epoch, it was NOT collected in this run -> Removed
-              if (dep._lastSeenEpoch !== epoch) {
-                  const unsub = this._subscriptions.get(dep);
-                  if (unsub) {
-                      unsub();
-                      this._subscriptions.delete(dep);
-                  }
-              }
-          }
-      }
+    // 1. Unsubscribe removed dependencies
+    if (prevDeps !== EMPTY_DEPS) {
+      for (let i = 0; i < prevDeps.length; i++) {
+        const dep = prevDeps[i];
+        // Safety check for sparse arrays or strict null checks
+        if (!dep) continue;
 
-      // 2. Subscribe to new dependencies
-      for (let i = 0; i < nextDeps.length; i++) {
-          const dep = nextDeps[i];
-          if (!dep) continue;
-          
-          // Check if already subscribed
-          if (!this._subscriptions.has(dep)) {
-              // New dependency
-              debug.checkCircular(dep, this as unknown as ComputedAtom<T>);
-              // Subscription
-              const unsub = dep.subscribe(() => this._markDirty());
-              this._subscriptions.set(dep, unsub);
+        // If lastSeenEpoch != epoch, it was NOT collected in this run -> Removed
+        if (dep._lastSeenEpoch !== epoch) {
+          const unsub = this._subscriptions.get(dep);
+          if (unsub) {
+            unsub();
+            this._subscriptions.delete(dep);
           }
+        }
       }
+    }
+
+    // 2. Subscribe to new dependencies
+    for (let i = 0; i < nextDeps.length; i++) {
+      const dep = nextDeps[i];
+      if (!dep) continue;
+
+      // Check if already subscribed
+      if (!this._subscriptions.has(dep)) {
+        // New dependency
+        debug.checkCircular(dep, this as unknown as ComputedAtom<T>);
+        // Subscription
+        const unsub = dep.subscribe(() => this._markDirty());
+        this._subscriptions.set(dep, unsub);
+      }
+    }
   }
 
   private _handleSyncResult(result: T): void {
@@ -485,7 +485,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
       this._notifySubscribers();
     }
   }
-  
+
   private _handleAsyncComputation(promise: Promise<T>): void {
     this._setPending();
 
@@ -593,9 +593,9 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
       });
     }
   }
-  
+
   private _notifySubscribers(): void {
-      // ... same as before
+    // ... same as before
     if (!this._functionSubscribers.hasSubscribers && !this._objectSubscribers.hasSubscribers) {
       return;
     }

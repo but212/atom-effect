@@ -28,7 +28,7 @@ import { SchedulerError } from '../errors/errors';
 /**
  * Phases of the scheduler execution cycle.
  */
-export const enum SchedulerPhase {
+export enum SchedulerPhase {
   IDLE = 0,
   BATCHING = 1,
   FLUSHING = 2,

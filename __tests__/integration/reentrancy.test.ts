@@ -1,7 +1,6 @@
-
-import { describe, it, expect, vi } from 'vitest';
-import { atom, effect, batch } from '@/index';
-import { scheduler, SchedulerPhase } from '@/scheduler/scheduler';
+import { describe, expect, it } from 'vitest';
+import { atom, batch, effect } from '@/index';
+import { SchedulerPhase, scheduler } from '@/scheduler/scheduler';
 
 describe('Scheduler Re-entrancy & Phases', () => {
   it('reports correct phase during execution', async () => {
@@ -13,23 +12,23 @@ describe('Scheduler Re-entrancy & Phases', () => {
       phaseInEffect = scheduler.phase;
     });
 
-    // Initial run is synchronous inside effect() call? 
+    // Initial run is synchronous inside effect() call?
     // Wait, effect() runs immediately.
     // However, during execution, is it flushing?
     // If sync: true, it runs immediately.
     // If sync: false, it runs immediately (setup) but updates are scheduled.
-    
-    // During initial run, we are inside `effect.execute()`. 
+
+    // During initial run, we are inside `effect.execute()`.
     // Scheduler is not necessarily flushing, unless effect was triggered by flush.
     // Let's force a flush.
-    
+
     a.value = 1;
-    await new Promise(r => setTimeout(r, 0));
-    
+    await new Promise((r) => setTimeout(r, 0));
+
     // When a.value = 1, scheduler queues the effect.
     // await tick -> scheduler.flush() runs.
     // Inside flush(), phase should be FLUSHING.
-    
+
     expect(phaseInEffect).toBe(SchedulerPhase.FLUSHING);
   });
 
@@ -50,13 +49,13 @@ describe('Scheduler Re-entrancy & Phases', () => {
     });
 
     trigger.value = 1;
-    await new Promise(r => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
 
     // trigger: 1 captures first.
     // reactor.value = 1 -> queues reactor effect.
     // trigger effect finishes.
     // reactor effect runs.
-    
+
     expect(logs).toContain('trigger: 1');
     expect(logs).toContain('reactor: 1');
   });

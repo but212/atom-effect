@@ -12,12 +12,12 @@
  * ```
  */
 
+import { SMI_MAX } from '../../constants';
 import { AtomError } from '../../errors/errors';
 import { ERROR_MESSAGES } from '../../errors/messages';
 import { scheduler } from '../../scheduler';
 import { trackingContext } from '../../tracking';
 import type { AtomOptions, Subscriber, WritableAtom } from '../../types';
-import { SMI_MAX } from '../../constants';
 import { debug, generateId } from '../../utils/debug';
 import { SubscriberManager } from '../../utils/subscriber-manager';
 

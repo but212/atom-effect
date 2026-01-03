@@ -72,4 +72,4 @@ export const DEBUG_CONFIG = {
  * Maximum Small Integer (Smi) value in V8 (31-bit signed integer)
  * Used for IDs and Versions to prevent HeapNumber allocation
  */
-export const SMI_MAX = 0x3FFFFFFF;
+export const SMI_MAX = 0x3fffffff;
