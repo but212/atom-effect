@@ -6,12 +6,13 @@
  * support cleanup functions, async operations, and infinite loop detection.
  */
 
-import { EFFECT_STATE_FLAGS, SCHEDULER_CONFIG } from '../../constants';
+import { EFFECT_STATE_FLAGS, SCHEDULER_CONFIG, SMI_MAX } from '../../constants';
 import { EffectError, isPromise, wrapError } from '../../errors/errors';
 import { ERROR_MESSAGES } from '../../errors/messages';
+import { depArrayPool, EMPTY_DEPS } from '../../pool';
+import { nextEpoch } from '../../epoch';
 import { scheduler } from '../../scheduler';
 import { type DependencyTracker, trackingContext } from '../../tracking';
-import { DependencyManager } from '../../tracking/dependency-manager';
 import type { Dependency, EffectFunction, EffectObject, EffectOptions } from '../../types';
 import { debug, generateId } from '../../utils/debug';
 
@@ -34,136 +35,52 @@ import { debug, generateId } from '../../utils/debug';
  * @implements {DependencyTracker}
  */
 class EffectImpl implements EffectObject, DependencyTracker {
-  /**
-   * The effect function to execute.
-   * @readonly
-   */
+  // === Smi Fields (Fixed Order for V8 Hidden Class) ===
+  private readonly _id: number;
+  private _flags: number;
+  // Effect is not a dependency, so it doesn't need _lastSeenEpoch for itself.
+  // But we use _epoch during execution to track collected dependencies.
+  private _currentEpoch: number;
+
   private readonly _fn: EffectFunction;
-
-  /**
-   * Whether the effect should execute synchronously when dependencies change.
-   * When false, execution is scheduled through the scheduler for batching.
-   * @readonly
-   */
   private readonly _sync: boolean;
-
-  /**
-   * Maximum number of executions allowed per second before triggering
-   * infinite loop detection.
-   * @readonly
-   */
   private readonly _maxExecutions: number;
-
-  /**
-   * Whether to track modifications to dependencies for debugging purposes.
-   * When enabled, warns if an effect modifies a dependency it reads.
-   * @readonly
-   */
   private readonly _trackModifications: boolean;
 
-  /**
-   * Unique identifier for this effect instance, used for debugging.
-   * @readonly
-   */
-  private readonly _id: number;
-
-  /**
-   * Bit flags representing the current state of the effect.
-   * Uses EFFECT_STATE_FLAGS constants for DISPOSED and EXECUTING states.
-   */
-  private _flags: number;
-
-  /**
-   * The cleanup function returned by the last effect execution.
-   * Called before re-execution or disposal.
-   */
   private _cleanup: (() => void) | null;
 
-  /**
-   * Manages dependency subscriptions for automatic re-execution.
-   * @readonly
-   */
-  private readonly _depManager: DependencyManager;
+  // Optimized Dependency Management
+  private _dependencies: Dependency[];
+  private readonly _subscriptions: WeakMap<Dependency, () => void>;
 
-  /**
-   * Set of dependencies that were modified during the current execution.
-   * Used for detecting potential infinite loops.
-   * @readonly
-   */
+  // Execution State
+  private _nextDeps: Dependency[] | null;
   private readonly _modifiedDeps: Set<unknown>;
-
-  /**
-   * Circular buffer storing timestamps of recent executions for
-   * infinite loop detection.
-   * @readonly
-   */
   private readonly _history: Float64Array;
-
-  /**
-   * Current write index in the execution history circular buffer.
-   */
   private _historyIdx: number;
-
-  /**
-   * Number of entries currently stored in the execution history.
-   */
   private _historyCount: number;
-
-  /**
-   * Total number of times this effect has been executed.
-   */
   private _executionCount: number;
-
-  /**
-   * Reusable buffer for dependency tracking during execution.
-   */
-  private readonly _dependencyBuffer: Set<unknown>;
-
-  /**
-   * Maximum capacity of the execution history buffer.
-   * @readonly
-   */
   private readonly _historyCapacity: number;
 
-  /**
-   * Creates a new EffectImpl instance.
-   *
-   * @param fn - The effect function to execute. May return a cleanup function
-   *             or a Promise that resolves to a cleanup function.
-   * @param options - Configuration options for the effect
-   * @param options.sync - If true, re-executes synchronously on dependency changes.
-   *                       Defaults to false (scheduled execution).
-   * @param options.maxExecutionsPerSecond - Maximum executions per second before
-   *                                          infinite loop detection triggers.
-   *                                          Defaults to SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_SECOND.
-   * @param options.trackModifications - If true, tracks and warns about dependencies
-   *                                     that are both read and modified. Defaults to false.
-   *
-   * @example
-   * ```typescript
-   * const impl = new EffectImpl(
-   *   () => {
-   *     console.log(counter.value);
-   *     return () => console.log('cleanup');
-   *   },
-   *   { sync: true }
-   * );
-   * ```
-   */
   constructor(fn: EffectFunction, options: EffectOptions = {}) {
+    this._id = generateId() & SMI_MAX;
+    this._flags = 0;
+    this._currentEpoch = -1;
+
     this._fn = fn;
     this._sync = options.sync ?? false;
     this._maxExecutions =
       options.maxExecutionsPerSecond ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_SECOND;
     this._trackModifications = options.trackModifications ?? false;
-    this._id = generateId();
 
-    this._flags = 0;
     this._cleanup = null;
+    
+    // Dependencies
+    this._dependencies = EMPTY_DEPS as Dependency[];
+    this._subscriptions = new WeakMap();
+    this._nextDeps = null;
 
-    this._depManager = new DependencyManager();
     this._modifiedDeps = new Set();
-    this._dependencyBuffer = new Set();
 
     this._historyCapacity = this._maxExecutions + 5;
     this._history = new Float64Array(this._historyCapacity);
@@ -221,7 +138,17 @@ class EffectImpl implements EffectObject, DependencyTracker {
 
     this._setDisposed();
     this._safeCleanup();
-    this._depManager.unsubscribeAll();
+    
+    // Unsubscribe all
+    if (this._dependencies !== EMPTY_DEPS) {
+        for(const dep of this._dependencies) {
+            const unsub = this._subscriptions.get(dep);
+            if (unsub) unsub();
+            this._subscriptions.delete(dep);
+        }
+        depArrayPool.release(this._dependencies);
+        this._dependencies = EMPTY_DEPS as Dependency[];
+    }
   };
 
   /**
@@ -242,13 +169,20 @@ class EffectImpl implements EffectObject, DependencyTracker {
    * @internal
    */
   public addDependency = (dep: unknown): void => {
-    // Stage 1: Collect into buffer first (synchronous collection)
-    if (this.isExecuting) {
-      this._dependencyBuffer.add(dep);
-      // Eagerly subscribe to catch synchronous updates that happen later in the same execution
-      // (e.g. read-then-write patterns)
-      if (!this._depManager.hasDependency(dep as Dependency)) {
-        this._subscribeTo(dep as Dependency);
+    // Stage 1: Collect into buffer (nextDeps)
+    if (this.isExecuting && this._nextDeps) {
+      const d = dep as Dependency;
+      const epoch = this._currentEpoch;
+      
+      // O(1) deduplication via Epoch
+      if (d._lastSeenEpoch === epoch) return;
+      d._lastSeenEpoch = epoch;
+      
+      this._nextDeps.push(d);
+      
+      // Eagerly subscribe to catch synchronous updates
+      if (!this._subscriptions.has(d)) {
+        this._subscribeTo(d);
       }
     }
   };
@@ -285,14 +219,26 @@ class EffectImpl implements EffectObject, DependencyTracker {
 
     this._setExecuting(true);
     this._safeCleanup();
-    this._dependencyBuffer.clear();
     this._modifiedDeps.clear();
+    
+    // ⚡ HFT Optimization: Pooled Array + Epoch
+    const prevDeps = this._dependencies;
+    const nextDeps = depArrayPool.acquire();
+    const epoch = nextEpoch();
+    
+    this._nextDeps = nextDeps;
+    this._currentEpoch = epoch;
+    
+    let committed = false;
 
     try {
       const result = trackingContext.run(this, this._fn);
 
-      this._syncDependencies();
-
+      // Commit dependencies
+      this._syncDependencies(prevDeps, nextDeps, epoch);
+      this._dependencies = nextDeps;
+      committed = true;
+      
       this._checkLoopWarnings();
 
       if (isPromise(result)) {
@@ -309,29 +255,49 @@ class EffectImpl implements EffectObject, DependencyTracker {
         this._cleanup = typeof result === 'function' ? result : null;
       }
     } catch (error) {
+      // Commit partial dependencies for recovery (eager subscription already happened)
+      this._syncDependencies(prevDeps, nextDeps, epoch);
+      this._dependencies = nextDeps;
+      committed = true;
+        
       console.error(wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_EXECUTION_FAILED));
       this._cleanup = null;
     } finally {
       this._setExecuting(false);
+      this._nextDeps = null;
+      
+      if (committed) {
+         if (prevDeps !== EMPTY_DEPS) {
+             depArrayPool.release(prevDeps);
+         }
+      } else {
+         depArrayPool.release(nextDeps);
+      }
     }
   };
 
-  private _syncDependencies(): void {
-    const newDeps = this._dependencyBuffer;
-    const current = this._depManager.getDependencies();
-
-    for (let i = 0; i < current.length; i++) {
-      const dep = current[i]!;
-      if (!newDeps.has(dep)) {
-        this._depManager.removeDependency(dep);
+  private _syncDependencies(prevDeps: Dependency[], nextDeps: Dependency[], epoch: number): void {
+     // Unsubscribe removed dependencies
+      if (prevDeps !== EMPTY_DEPS) {
+          for (let i = 0; i < prevDeps.length; i++) {
+              const dep = prevDeps[i];
+              // Safety
+              if (!dep) continue;
+              
+              if (dep._lastSeenEpoch !== epoch) {
+                  const unsub = this._subscriptions.get(dep);
+                  if (unsub) {
+                      unsub();
+                      this._subscriptions.delete(dep);
+                  }
+              }
+          }
       }
-    }
-
-    for (const dep of newDeps) {
-      if (!this._depManager.hasDependency(dep as Dependency)) {
-        this._subscribeTo(dep as Dependency);
-      }
-    }
+      
+      // New dependencies were EAGERLY subscribed in addDependency.
+      // So we don't need to iterate nextDeps to subscribe here.
+      // However, we still need to ensure consistency if something was missed?
+      // No, execute is synchronous, and addDependency is called synchronously during execution.
   }
 
   private _subscribeTo(dep: Dependency): void {
@@ -347,7 +313,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
           scheduler.schedule(this.execute);
         }
       });
-      this._depManager.addDependency(dep, unsubscribe);
+      this._subscriptions.set(dep, unsubscribe);
     } catch (error) {
       console.error(wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_EXECUTION_FAILED));
     }
@@ -541,10 +507,10 @@ class EffectImpl implements EffectObject, DependencyTracker {
    */
   private _checkLoopWarnings(): void {
     if (this._trackModifications && debug.enabled) {
-      const dependencies = this._depManager.getDependencies();
+      const dependencies = this._dependencies;
       for (let i = 0; i < dependencies.length; i++) {
-        const dep = dependencies[i]!;
-        if (this._modifiedDeps.has(dep)) {
+        const dep = dependencies[i];
+        if (dep && this._modifiedDeps.has(dep)) {
           debug.warn(
             true,
             `Effect is reading a dependency (${

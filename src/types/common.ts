@@ -16,6 +16,9 @@ export interface Subscriber {
  * Interface for subscribable dependencies
  */
 export interface Dependency {
+  readonly id: number;
+  version: number;
+  _lastSeenEpoch: number;
   subscribe(listener: (() => void) | Subscriber): () => void;
   peek?(): unknown;
   value?: unknown;
