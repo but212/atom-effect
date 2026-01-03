@@ -129,15 +129,6 @@ Benchmark results show:
 **Date**: 2026-01-04  
 **Environment**: GitHub Actions (`ubuntu-latest`), Node.js 20.x, V8 Engine
 
-### Performance Highlights
-
-- **Atom Read/Write**: ~4.4M ops/sec
-- **Computed Creation**: ~1.7M ops/sec
-- **Computed Recompute**: ~510K ops/sec
-- **Ultra-low Latency**: ~0.0003ms P99 for atom writes
-
----
-
 ### 1. Micro-Benchmarks
 
 #### Computed - Micro
@@ -224,5 +215,5 @@ Benchmark results show:
 | --- | --- | --- | --- |
 | Create 100 | 38,383 | 0.0261 | 0.0950 |
 | Toggle Status | 14,598 | 0.0685 | 0.0881 |
-| Filter Active | 25,332 | 0.0395 | 0.0617 |
+| Filter (All/Active/Completed) | 25,332 | 0.0395 | 0.0617 |
 | Complete Workflow | 26,622 | 0.0376 | 0.0606 |
