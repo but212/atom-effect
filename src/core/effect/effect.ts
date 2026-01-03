@@ -276,12 +276,17 @@ class EffectImpl implements EffectObject, DependencyTracker {
     }
   };
 
-  private _syncDependencies(prevDeps: Dependency[], _nextDeps: Dependency[], epoch: number): void {
-    // Unsubscribe removed dependencies
+  /**
+   * Synchronizes subscriptions by unsubscribing from removed dependencies.
+   * Uses epoch-based O(N) diff to identify stale dependencies.
+   *
+   * @param prevDeps - Previous dependency array
+   * @param epoch - Current execution epoch for staleness detection
+   */
+  private _syncDependencies(prevDeps: Dependency[], epoch: number): void {
     if (prevDeps !== EMPTY_DEPS) {
       for (let i = 0; i < prevDeps.length; i++) {
         const dep = prevDeps[i];
-        // Safety
         if (!dep) continue;
 
         if (dep._lastSeenEpoch !== epoch) {
@@ -293,11 +298,6 @@ class EffectImpl implements EffectObject, DependencyTracker {
         }
       }
     }
-
-    // New dependencies were EAGERLY subscribed in addDependency.
-    // So we don't need to iterate nextDeps to subscribe here.
-    // However, we still need to ensure consistency if something was missed?
-    // No, execute is synchronous, and addDependency is called synchronously during execution.
   }
 
   private _subscribeTo(dep: Dependency): void {

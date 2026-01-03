@@ -595,7 +595,6 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
   }
 
   private _notifySubscribers(): void {
-    // ... same as before
     if (!this._functionSubscribers.hasSubscribers && !this._objectSubscribers.hasSubscribers) {
       return;
     }
