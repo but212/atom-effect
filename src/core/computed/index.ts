@@ -10,14 +10,9 @@ import type { AtomError } from '../../errors/errors';
 import { ComputedError, isPromise, wrapError } from '../../errors/errors';
 import { ERROR_MESSAGES } from '../../errors/messages';
 import { depArrayPool, EMPTY_DEPS } from '../../pool';
-import { scheduler } from '../../scheduler';
+import { scheduler, type SchedulerJob } from '../../scheduler';
 import { trackingContext } from '../../tracking';
 import type { DependencyTracker } from '../../tracking/tracking.types';
-
-interface SchedulerJob {
-  (): void;
-  _nextEpoch?: number;
-}
 
 import type {
   AsyncStateType,
@@ -74,15 +69,11 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
   private readonly _onError: ((error: Error) => void) | null;
   private readonly _functionSubscribers: SubscriberManager<() => void>;
   private readonly _objectSubscribers: SubscriberManager<Subscriber>;
-  // Optimized: Replaced DependencyManager with direct array + map
   private _dependencies: Dependency[];
-
-  // ⚡ HFT Optimization: Map<number, Unsub> instead of WeakMap
-  // dependency.id is Smi, so map lookup is extremely fast (integer key optimization)
   private readonly _subscriptions: Map<number, () => void>;
 
-  // ⚡ HFT Optimization: Reusable SchedulerJob to prevent closure allocation
   private readonly _recomputeJob: SchedulerJob;
+  private readonly _notifyJob: SchedulerJob;
 
   private readonly _trackable: TrackableListener;
   // private readonly _id: number; // Replaced by public id
@@ -123,7 +114,6 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
     this._dependencies = EMPTY_DEPS as Dependency[];
     this._subscriptions = new Map();
 
-    // ⚡ Pre-allocate recompute job
     this._recomputeJob = () => {
       if (this._isDirty()) {
         try {
@@ -132,6 +122,18 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
           // Error already handled
         }
       }
+    };
+
+    this._notifyJob = () => {
+      this._functionSubscribers.forEachSafe(
+        (subscriber) => subscriber(),
+        (err) => console.error(err)
+      );
+
+      this._objectSubscribers.forEachSafe(
+        (subscriber) => subscriber.execute(),
+        (err) => console.error(err)
+      );
     };
 
     // Trackable closure for dependency collection
@@ -243,7 +245,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
         if (unsub) unsub();
         this._subscriptions.delete(dep.id);
       }
-      depArrayPool.release(this._dependencies as Dependency[]);
+      depArrayPool.release(this._dependencies);
     }
     this._dependencies = EMPTY_DEPS as Dependency[];
 
@@ -376,7 +378,6 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
 
     this._setRecomputing(true);
 
-    // ⚡ HFT Optimization: Pooled Array + Epoch
     const prevDeps = this._dependencies;
     const nextDeps = depArrayPool.acquire();
     const epoch = nextEpoch();
@@ -606,15 +607,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
     this._setIdle();
 
     if (this._functionSubscribers.hasSubscribers || this._objectSubscribers.hasSubscribers) {
-      scheduler.schedule(() => {
-        if (this._isDirty()) {
-          try {
-            this._recompute();
-          } catch {
-            // Error already handled
-          }
-        }
-      });
+      scheduler.schedule(this._recomputeJob);
     }
   }
 
@@ -623,17 +616,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
       return;
     }
 
-    scheduler.schedule(() => {
-      this._functionSubscribers.forEachSafe(
-        (subscriber) => subscriber(),
-        (err) => console.error(err)
-      );
-
-      this._objectSubscribers.forEachSafe(
-        (subscriber) => subscriber.execute(),
-        (err) => console.error(err)
-      );
-    });
+    scheduler.schedule(this._notifyJob);
   }
 
   private _registerTracking(): void {

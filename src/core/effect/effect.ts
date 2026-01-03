@@ -221,7 +221,6 @@ class EffectImpl implements EffectObject, DependencyTracker {
     this._safeCleanup();
     this._modifiedDeps.clear();
 
-    // ⚡ HFT Optimization: Pooled Array + Epoch
     const prevDeps = this._dependencies;
     const nextDeps = depArrayPool.acquire();
     const epoch = nextEpoch();

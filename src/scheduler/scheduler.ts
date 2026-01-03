@@ -34,7 +34,7 @@ export enum SchedulerPhase {
   FLUSHING = 2,
 }
 
-type SchedulerJob = (() => void) & { _nextEpoch?: number };
+export type SchedulerJob = (() => void) & { _nextEpoch?: number };
 
 class Scheduler {
   /** Queue of callbacks waiting for microtask execution */
@@ -189,6 +189,10 @@ class Scheduler {
     this.isFlushingSync = true;
 
     try {
+      // Increment epoch first so batch jobs can pass the dedup check
+      // (they were marked with the previous epoch during schedule())
+      this._epoch++;
+
       if (this.batchQueueSize > 0) {
         for (let i = 0; i < this.batchQueueSize; i++) {
           // O(1) Unique dedup check for batch queue transfer
@@ -241,11 +245,9 @@ class Scheduler {
 
         if (this.batchQueueSize > 0) {
           for (let i = 0; i < this.batchQueueSize; i++) {
-            const job = this.batchQueue[i]!;
-            if (job._nextEpoch !== this._epoch) {
-              job._nextEpoch = this._epoch;
-              this.queue[this.queueSize++] = job;
-            }
+            // Jobs scheduled during flush processing should always execute
+            // (dedup was already done when they were added to batchQueue)
+            this.queue[this.queueSize++] = this.batchQueue[i]!;
           }
           this.batchQueueSize = 0;
         }
