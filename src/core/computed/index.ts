@@ -10,9 +10,10 @@ import type { AtomError } from '../../errors/errors';
 import { ComputedError, isPromise, wrapError } from '../../errors/errors';
 import { ERROR_MESSAGES } from '../../errors/messages';
 import { depArrayPool, EMPTY_DEPS } from '../../pool';
-import { scheduler } from '../../scheduler';
+import { type SchedulerJob, scheduler } from '../../scheduler';
 import { trackingContext } from '../../tracking';
 import type { DependencyTracker } from '../../tracking/tracking.types';
+
 import type {
   AsyncStateType,
   ComputedAtom,
@@ -68,9 +69,12 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
   private readonly _onError: ((error: Error) => void) | null;
   private readonly _functionSubscribers: SubscriberManager<() => void>;
   private readonly _objectSubscribers: SubscriberManager<Subscriber>;
-  // Optimized: Replaced DependencyManager with direct array + map
   private _dependencies: Dependency[];
-  private readonly _subscriptions: WeakMap<Dependency, () => void>;
+  private readonly _subscriptions: Map<number, () => void>;
+
+  private readonly _recomputeJob: SchedulerJob;
+  private readonly _notifyJob: SchedulerJob;
+
   private readonly _trackable: TrackableListener;
   // private readonly _id: number; // Replaced by public id
   private readonly MAX_PROMISE_ID: number;
@@ -108,7 +112,29 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
 
     // Optimized Dependency Management
     this._dependencies = EMPTY_DEPS as Dependency[];
-    this._subscriptions = new WeakMap();
+    this._subscriptions = new Map();
+
+    this._recomputeJob = () => {
+      if (this._isDirty()) {
+        try {
+          this._recompute();
+        } catch {
+          // Error already handled
+        }
+      }
+    };
+
+    this._notifyJob = () => {
+      this._functionSubscribers.forEachSafe(
+        (subscriber) => subscriber(),
+        (err) => console.error(err)
+      );
+
+      this._objectSubscribers.forEachSafe(
+        (subscriber) => subscriber.execute(),
+        (err) => console.error(err)
+      );
+    };
 
     // Trackable closure for dependency collection
     // We bind it once to avoid allocation during recompute
@@ -215,9 +241,9 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
 
     if (this._dependencies !== EMPTY_DEPS) {
       for (const dep of this._dependencies) {
-        const unsub = this._subscriptions.get(dep);
+        const unsub = this._subscriptions.get(dep.id);
         if (unsub) unsub();
-        this._subscriptions.delete(dep);
+        this._subscriptions.delete(dep.id);
       }
       depArrayPool.release(this._dependencies);
     }
@@ -352,7 +378,6 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
 
     this._setRecomputing(true);
 
-    // ⚡ HFT Optimization: Pooled Array + Epoch
     const prevDeps = this._dependencies;
     const nextDeps = depArrayPool.acquire();
     const epoch = nextEpoch();
@@ -447,10 +472,10 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
 
         // If lastSeenEpoch != epoch, it was NOT collected in this run -> Removed
         if (dep._lastSeenEpoch !== epoch) {
-          const unsub = this._subscriptions.get(dep);
+          const unsub = this._subscriptions.get(dep.id);
           if (unsub) {
             unsub();
-            this._subscriptions.delete(dep);
+            this._subscriptions.delete(dep.id);
           }
         }
       }
@@ -462,12 +487,12 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
       if (!dep) continue;
 
       // Check if already subscribed
-      if (!this._subscriptions.has(dep)) {
+      if (!this._subscriptions.has(dep.id)) {
         // New dependency
         debug.checkCircular(dep, this as unknown as ComputedAtom<T>);
         // Subscription
         const unsub = dep.subscribe(() => this._markDirty());
-        this._subscriptions.set(dep, unsub);
+        this._subscriptions.set(dep.id, unsub);
       }
     }
   }
@@ -582,35 +607,16 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
     this._setIdle();
 
     if (this._functionSubscribers.hasSubscribers || this._objectSubscribers.hasSubscribers) {
-      scheduler.schedule(() => {
-        if (this._isDirty()) {
-          try {
-            this._recompute();
-          } catch {
-            // Error already handled
-          }
-        }
-      });
+      scheduler.schedule(this._recomputeJob);
     }
   }
 
   private _notifySubscribers(): void {
-    // ... same as before
     if (!this._functionSubscribers.hasSubscribers && !this._objectSubscribers.hasSubscribers) {
       return;
     }
 
-    scheduler.schedule(() => {
-      this._functionSubscribers.forEachSafe(
-        (subscriber) => subscriber(),
-        (err) => console.error(err)
-      );
-
-      this._objectSubscribers.forEachSafe(
-        (subscriber) => subscriber.execute(),
-        (err) => console.error(err)
-      );
-    });
+    scheduler.schedule(this._notifyJob);
   }
 
   private _registerTracking(): void {

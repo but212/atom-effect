@@ -12,22 +12,8 @@ describe('Scheduler Re-entrancy & Phases', () => {
       phaseInEffect = scheduler.phase;
     });
 
-    // Initial run is synchronous inside effect() call?
-    // Wait, effect() runs immediately.
-    // However, during execution, is it flushing?
-    // If sync: true, it runs immediately.
-    // If sync: false, it runs immediately (setup) but updates are scheduled.
-
-    // During initial run, we are inside `effect.execute()`.
-    // Scheduler is not necessarily flushing, unless effect was triggered by flush.
-    // Let's force a flush.
-
     a.value = 1;
     await new Promise((r) => setTimeout(r, 0));
-
-    // When a.value = 1, scheduler queues the effect.
-    // await tick -> scheduler.flush() runs.
-    // Inside flush(), phase should be FLUSHING.
 
     expect(phaseInEffect).toBe(SchedulerPhase.FLUSHING);
   });

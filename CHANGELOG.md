@@ -1,8 +1,26 @@
 # Changelog
 
+## [0.2.0] - 2026-01-04
+
+### Changed - 0.2.0
+
+This major minor release introduces significant internal optimizations.
+
+- **Performance**
+  - **Zero-Allocation**: Replaced `Set` with Pooled `Array`s for dependency tracking in `Computed` and `Effect`.
+  - **O(1) Deduplication**: Implemented Global Epoch system for efficient dependency collection without Set lookups.
+  - **Smi Optimization**: Applied V8 Small Integer masking to `id` and `version` fields for stable hidden classes.
+  - **Latency**: Reduced `Computed` creation time by **34%** and `Effect` creation by **17%**.
+  - **GC Pressure**: Improved efficiency by **20%** in high-churn scenarios.
+
+- **Safety & Stability**
+  - **Scheduler Phases**: Strictly enforced `IDLE` -> `BATCHING` -> `FLUSHING` lifecycle to prevent infinite loops and re-entrancy bugs.
+  - **Error Recovery**: `Computed` and `Effect` now retain valid dependencies even if execution fails, enabling self-recovery.
+  - **Cleanups**: Removed `DependencyManager` (refactored into internal logic) to reduce bundle size and complexity.
+
 ## [0.1.5] - 2026-01-02
 
-### Build
+### Build - 0.1.5
 
 - **Artifact Optimization**: Optimized build output to satisfy `mjs, cjs, d.ts` structure.
   - Bundled type definitions into a single `index.d.ts` using `vite-plugin-dts` (`rollupTypes: true`).

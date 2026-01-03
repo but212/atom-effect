@@ -34,14 +34,20 @@ export enum SchedulerPhase {
   FLUSHING = 2,
 }
 
+export type SchedulerJob = (() => void) & { _nextEpoch?: number };
+
 class Scheduler {
   /** Queue of callbacks waiting for microtask execution */
   /** Queue buffers for double buffering optimization */
-  private queueA: Set<() => void> = new Set();
-  private queueB: Set<() => void> = new Set();
+  private queueA: SchedulerJob[] = [];
+  private queueB: SchedulerJob[] = [];
 
   /** Currently active queue receiving new tasks */
-  private queue: Set<() => void> = this.queueA;
+  private queue: SchedulerJob[] = this.queueA;
+  private queueSize = 0;
+
+  /** Epoch for O(1) deduplication */
+  private _epoch = 0;
 
   /** Whether the scheduler is currently processing the queue */
   private isProcessing: boolean = false;
@@ -53,7 +59,7 @@ class Scheduler {
   private batchDepth: number = 0;
 
   /** Array of callbacks queued during batching */
-  private batchQueue: Array<() => void> = [];
+  private batchQueue: SchedulerJob[] = [];
 
   /** Current size of the batch queue (for array reuse) */
   private batchQueueSize = 0;
@@ -95,15 +101,19 @@ class Scheduler {
    * });
    * ```
    */
-  schedule(callback: () => void): void {
+  schedule(callback: SchedulerJob): void {
     if (typeof callback !== 'function') {
       throw new SchedulerError('Scheduler callback must be a function');
     }
 
+    // O(1) Unique dedup check
+    if (callback._nextEpoch === this._epoch) return;
+    callback._nextEpoch = this._epoch;
+
     if (this.isBatching || this.isFlushingSync) {
       this.batchQueue[this.batchQueueSize++] = callback;
     } else {
-      this.queue.add(callback);
+      this.queue[this.queueSize++] = callback;
       if (!this.isProcessing) {
         this.flush();
       }
@@ -123,20 +133,27 @@ class Scheduler {
    * processing is active has no effect.
    */
   private flush(): void {
-    if (this.isProcessing || this.queue.size === 0) return;
+    if (this.isProcessing || this.queueSize === 0) return;
 
     this.isProcessing = true;
 
     // Double buffering: Swap queues to snapshot current tasks
     // This allows adding new tasks to the other queue while processing
     const jobs = this.queue;
+    const count = this.queueSize;
+
+    // Swap queues
     this.queue = this.queue === this.queueA ? this.queueB : this.queueA;
+    this.queueSize = 0;
+
+    // Increment epoch to invalidate previous task deduplication
+    this._epoch++;
 
     queueMicrotask(() => {
-      // Performance: Iterate Set directly to avoid Array.from() allocation
-      for (const callback of jobs) {
+      // Performance: Iterate Array by index
+      for (let i = 0; i < count; i++) {
         try {
-          callback?.();
+          jobs[i]?.();
         } catch (error) {
           console.error(
             new SchedulerError('Error occurred during scheduler execution', error as Error)
@@ -144,11 +161,12 @@ class Scheduler {
         }
       }
 
-      jobs.clear();
+      // Reuse array capacity
+      jobs.length = 0;
       this.isProcessing = false;
 
       // If new tasks were added to the active queue (the one we swapped to), flush again
-      if (this.queue.size > 0 && !this.isBatching) {
+      if (this.queueSize > 0 && !this.isBatching) {
         this.flush();
       }
     });
@@ -171,16 +189,25 @@ class Scheduler {
     this.isFlushingSync = true;
 
     try {
+      // Increment epoch first so batch jobs can pass the dedup check
+      // (they were marked with the previous epoch during schedule())
+      this._epoch++;
+
       if (this.batchQueueSize > 0) {
         for (let i = 0; i < this.batchQueueSize; i++) {
-          this.queue.add(this.batchQueue[i]!);
+          // O(1) Unique dedup check for batch queue transfer
+          const job = this.batchQueue[i]!;
+          if (job._nextEpoch !== this._epoch) {
+            job._nextEpoch = this._epoch;
+            this.queue[this.queueSize++] = job;
+          }
         }
         this.batchQueueSize = 0;
       }
 
       let iterations = 0;
 
-      while (this.queue.size > 0) {
+      while (this.queueSize > 0) {
         if (++iterations > this.maxFlushIterations) {
           console.error(
             new SchedulerError(
@@ -189,18 +216,24 @@ class Scheduler {
                 `Consider increasing the limit with scheduler.setMaxFlushIterations()`
             )
           );
-          this.queue.clear();
+          // clear queue
+          this.queueSize = 0;
+          this.queue.length = 0;
           this.batchQueueSize = 0;
           break;
         }
 
         // Double buffering: Swap and process
         const jobs = this.queue;
-        this.queue = this.queue === this.queueA ? this.queueB : this.queueA;
+        const count = this.queueSize;
 
-        for (const callback of jobs) {
+        this.queue = this.queue === this.queueA ? this.queueB : this.queueA;
+        this.queueSize = 0;
+        this._epoch++;
+
+        for (let i = 0; i < count; i++) {
           try {
-            callback?.();
+            jobs[i]?.();
           } catch (error) {
             console.error(
               new SchedulerError('Error occurred during batch execution', error as Error)
@@ -208,11 +241,13 @@ class Scheduler {
           }
         }
 
-        jobs.clear();
+        jobs.length = 0;
 
         if (this.batchQueueSize > 0) {
           for (let i = 0; i < this.batchQueueSize; i++) {
-            this.queue.add(this.batchQueue[i]!);
+            // Jobs scheduled during flush processing should always execute
+            // (dedup was already done when they were added to batchQueue)
+            this.queue[this.queueSize++] = this.batchQueue[i]!;
           }
           this.batchQueueSize = 0;
         }

@@ -51,7 +51,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
 
   // Optimized Dependency Management
   private _dependencies: Dependency[];
-  private readonly _subscriptions: WeakMap<Dependency, () => void>;
+  private readonly _subscriptions: Map<number, () => void>;
 
   // Execution State
   private _nextDeps: Dependency[] | null;
@@ -77,7 +77,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
 
     // Dependencies
     this._dependencies = EMPTY_DEPS as Dependency[];
-    this._subscriptions = new WeakMap();
+    this._subscriptions = new Map();
     this._nextDeps = null;
 
     this._modifiedDeps = new Set();
@@ -142,9 +142,9 @@ class EffectImpl implements EffectObject, DependencyTracker {
     // Unsubscribe all
     if (this._dependencies !== EMPTY_DEPS) {
       for (const dep of this._dependencies) {
-        const unsub = this._subscriptions.get(dep);
+        const unsub = this._subscriptions.get(dep.id);
         if (unsub) unsub();
-        this._subscriptions.delete(dep);
+        this._subscriptions.delete(dep.id);
       }
       depArrayPool.release(this._dependencies);
       this._dependencies = EMPTY_DEPS as Dependency[];
@@ -181,7 +181,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
       this._nextDeps.push(d);
 
       // Eagerly subscribe to catch synchronous updates
-      if (!this._subscriptions.has(d)) {
+      if (!this._subscriptions.has(d.id)) {
         this._subscribeTo(d);
       }
     }
@@ -221,7 +221,6 @@ class EffectImpl implements EffectObject, DependencyTracker {
     this._safeCleanup();
     this._modifiedDeps.clear();
 
-    // ⚡ HFT Optimization: Pooled Array + Epoch
     const prevDeps = this._dependencies;
     const nextDeps = depArrayPool.acquire();
     const epoch = nextEpoch();
@@ -235,7 +234,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
       const result = trackingContext.run(this, this._fn);
 
       // Commit dependencies
-      this._syncDependencies(prevDeps, nextDeps, epoch);
+      this._syncDependencies(prevDeps, epoch);
       this._dependencies = nextDeps;
       committed = true;
 
@@ -256,7 +255,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
       }
     } catch (error) {
       // Commit partial dependencies for recovery (eager subscription already happened)
-      this._syncDependencies(prevDeps, nextDeps, epoch);
+      this._syncDependencies(prevDeps, epoch);
       this._dependencies = nextDeps;
       committed = true;
 
@@ -276,28 +275,28 @@ class EffectImpl implements EffectObject, DependencyTracker {
     }
   };
 
-  private _syncDependencies(prevDeps: Dependency[], _nextDeps: Dependency[], epoch: number): void {
-    // Unsubscribe removed dependencies
+  /**
+   * Synchronizes subscriptions by unsubscribing from removed dependencies.
+   * Uses epoch-based O(N) diff to identify stale dependencies.
+   *
+   * @param prevDeps - Previous dependency array
+   * @param epoch - Current execution epoch for staleness detection
+   */
+  private _syncDependencies(prevDeps: Dependency[], epoch: number): void {
     if (prevDeps !== EMPTY_DEPS) {
       for (let i = 0; i < prevDeps.length; i++) {
         const dep = prevDeps[i];
-        // Safety
         if (!dep) continue;
 
         if (dep._lastSeenEpoch !== epoch) {
-          const unsub = this._subscriptions.get(dep);
+          const unsub = this._subscriptions.get(dep.id);
           if (unsub) {
             unsub();
-            this._subscriptions.delete(dep);
+            this._subscriptions.delete(dep.id);
           }
         }
       }
     }
-
-    // New dependencies were EAGERLY subscribed in addDependency.
-    // So we don't need to iterate nextDeps to subscribe here.
-    // However, we still need to ensure consistency if something was missed?
-    // No, execute is synchronous, and addDependency is called synchronously during execution.
   }
 
   private _subscribeTo(dep: Dependency): void {
@@ -313,7 +312,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
           scheduler.schedule(this.execute);
         }
       });
-      this._subscriptions.set(dep, unsubscribe);
+      this._subscriptions.set(dep.id, unsubscribe);
     } catch (error) {
       console.error(wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_EXECUTION_FAILED));
     }
