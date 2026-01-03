@@ -67,3 +67,9 @@ export const DEBUG_CONFIG = {
   /** Enable infinite loop detection warnings */
   WARN_INFINITE_LOOP: true,
 } as const;
+
+/**
+ * Maximum Small Integer (Smi) value in V8 (31-bit signed integer)
+ * Used for IDs and Versions to prevent HeapNumber allocation
+ */
+export const SMI_MAX = 0x3fffffff;

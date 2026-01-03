@@ -12,6 +12,7 @@
  * ```
  */
 
+import { SMI_MAX } from '../../constants';
 import { AtomError } from '../../errors/errors';
 import { ERROR_MESSAGES } from '../../errors/messages';
 import { scheduler } from '../../scheduler';
@@ -31,11 +32,22 @@ import { SubscriberManager } from '../../utils/subscriber-manager';
  * synchronous or batched notifications based on configuration.
  */
 class AtomImpl<T> implements WritableAtom<T> {
+  // === Smi Fields (Fixed Order for V8 Hidden Class) ===
+  /** Unique numerical identifier (Smi) */
+  readonly id: number;
+
+  /** Version counter for change detection (Smi) */
+  version: number;
+
+  /** Internal flags (Smi) */
+  flags: number;
+
+  /** Last seen epoch for dependency collection (Smi) */
+  _lastSeenEpoch: number;
+
+  // === Object Fields ===
   /** Current value stored in the atom */
   private _value: T;
-
-  /** Version counter for change detection and stale notification prevention */
-  private _version: number;
 
   /** Manager for function-based subscribers */
   private readonly _functionSubscribers: SubscriberManager<(newValue?: T, oldValue?: T) => void>;
@@ -45,9 +57,6 @@ class AtomImpl<T> implements WritableAtom<T> {
 
   /** Whether notifications should be synchronous (bypass scheduler batching) */
   private readonly _sync: boolean;
-
-  /** Unique identifier for debugging purposes */
-  private readonly _id: string;
 
   /** Bound notification method to avoid closure allocation */
   private readonly _notifyTask: () => void;
@@ -65,15 +74,20 @@ class AtomImpl<T> implements WritableAtom<T> {
    * @param sync - Whether to notify subscribers synchronously
    */
   constructor(initialValue: T, sync: boolean) {
+    // 1. Smi Fields Initialization
+    this.id = generateId() & SMI_MAX;
+    this.version = 0;
+    this.flags = 0;
+    this._lastSeenEpoch = -1;
+
+    // 2. Object Fields Initialization
     this._value = initialValue;
-    this._version = 0;
     this._functionSubscribers = new SubscriberManager();
     this._objectSubscribers = new SubscriberManager();
     this._sync = sync;
-    this._id = generateId().toString();
     this._notifyTask = this._flushNotifications.bind(this);
 
-    debug.attachDebugInfo(this, 'atom', generateId());
+    debug.attachDebugInfo(this, 'atom', this.id);
   }
 
   /**
@@ -108,7 +122,9 @@ class AtomImpl<T> implements WritableAtom<T> {
     if (Object.is(this._value, newValue)) return;
 
     const oldValue = this._value;
-    const currentVersion = ++this._version;
+    // Smi masked increment
+    this.version = (this.version + 1) & SMI_MAX;
+    const currentVersion = this.version;
     this._value = newValue;
 
     if (!this._functionSubscribers.hasSubscribers && !this._objectSubscribers.hasSubscribers)

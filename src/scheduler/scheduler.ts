@@ -25,6 +25,15 @@ import { SchedulerError } from '../errors/errors';
  * scheduler.endBatch(); // Both execute synchronously here
  * ```
  */
+/**
+ * Phases of the scheduler execution cycle.
+ */
+export enum SchedulerPhase {
+  IDLE = 0,
+  BATCHING = 1,
+  FLUSHING = 2,
+}
+
 class Scheduler {
   /** Queue of callbacks waiting for microtask execution */
   /** Queue buffers for double buffering optimization */
@@ -54,6 +63,19 @@ class Scheduler {
 
   /** Maximum iterations allowed during flush to prevent infinite loops */
   private maxFlushIterations: number = 1000;
+
+  /**
+   * Gets the current phase of the scheduler.
+   */
+  get phase(): SchedulerPhase {
+    if (this.isProcessing || this.isFlushingSync) {
+      return SchedulerPhase.FLUSHING;
+    }
+    if (this.isBatching) {
+      return SchedulerPhase.BATCHING;
+    }
+    return SchedulerPhase.IDLE;
+  }
 
   /**
    * Schedules a callback for execution.
