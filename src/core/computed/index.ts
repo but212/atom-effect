@@ -10,7 +10,7 @@ import type { AtomError } from '../../errors/errors';
 import { ComputedError, isPromise, wrapError } from '../../errors/errors';
 import { ERROR_MESSAGES } from '../../errors/messages';
 import { depArrayPool, EMPTY_DEPS } from '../../pool';
-import { scheduler, type SchedulerJob } from '../../scheduler';
+import { type SchedulerJob, scheduler } from '../../scheduler';
 import { trackingContext } from '../../tracking';
 import type { DependencyTracker } from '../../tracking/tracking.types';
 
