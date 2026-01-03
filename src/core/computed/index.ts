@@ -76,14 +76,14 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
   private readonly _objectSubscribers: SubscriberManager<Subscriber>;
   // Optimized: Replaced DependencyManager with direct array + map
   private _dependencies: Dependency[];
-  
+
   // ⚡ HFT Optimization: Map<number, Unsub> instead of WeakMap
   // dependency.id is Smi, so map lookup is extremely fast (integer key optimization)
   private readonly _subscriptions: Map<number, () => void>;
-  
+
   // ⚡ HFT Optimization: Reusable SchedulerJob to prevent closure allocation
   private readonly _recomputeJob: SchedulerJob;
-  
+
   private readonly _trackable: TrackableListener;
   // private readonly _id: number; // Replaced by public id
   private readonly MAX_PROMISE_ID: number;

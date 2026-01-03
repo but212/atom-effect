@@ -145,7 +145,7 @@ class Scheduler {
     // Swap queues
     this.queue = this.queue === this.queueA ? this.queueB : this.queueA;
     this.queueSize = 0;
-    
+
     // Increment epoch to invalidate previous task deduplication
     this._epoch++;
 
@@ -222,10 +222,10 @@ class Scheduler {
         // Double buffering: Swap and process
         const jobs = this.queue;
         const count = this.queueSize;
-        
+
         this.queue = this.queue === this.queueA ? this.queueB : this.queueA;
         this.queueSize = 0;
-        this._epoch++; 
+        this._epoch++;
 
         for (let i = 0; i < count; i++) {
           try {
