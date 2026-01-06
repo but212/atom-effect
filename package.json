@@ -9,10 +9,6 @@
   "files": [
     "dist"
   ],
-  "packageManager": "pnpm@9.15.4",
-  "engines": {
-    "node": ">=18"
-  },
   "scripts": {
     "build": "vite build",
     "test": "vitest",
