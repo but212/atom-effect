@@ -246,7 +246,7 @@ describe('Computed - Behavior', () => {
     const listener = vi.fn();
 
     const c = computed(() => ({ x: a.value.x }), {
-      equal: (prev, next) => prev.x === next.x,
+      equal: (prev: { x: number }, next: { x: number }) => prev.x === next.x,
     });
 
     c.subscribe(listener);
@@ -442,7 +442,7 @@ describe('Batch - Processing', () => {
     const a = atom(0);
     const calls: number[] = [];
 
-    a.subscribe((newVal) => {
+    a.subscribe((newVal?: number) => {
       if (newVal !== undefined) calls.push(newVal);
     });
 
@@ -582,7 +582,7 @@ describe('Edge Cases', () => {
     const count = atom(0);
     const calls: number[] = [];
 
-    count.subscribe((newVal) => {
+    count.subscribe((newVal?: number) => {
       if (newVal !== undefined) calls.push(newVal);
     });
 

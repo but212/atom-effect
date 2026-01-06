@@ -141,7 +141,7 @@ describe('SubscriberManager', () => {
       manager.add(sub2);
       manager.add(sub3);
 
-      manager.forEach((subscriber) => {
+      manager.forEach((subscriber: (value: number) => void) => {
         subscriber(42);
       });
 
@@ -168,7 +168,7 @@ describe('SubscriberManager', () => {
       manager.add(sub);
 
       expect(() => {
-        manager.forEach((subscriber) => subscriber());
+        manager.forEach((subscriber: () => void) => subscriber());
       }).toThrow('Test error');
     });
   });
@@ -188,7 +188,7 @@ describe('SubscriberManager', () => {
 
       const onError = vi.fn();
 
-      manager.forEachSafe((subscriber) => subscriber(), onError);
+      manager.forEachSafe((subscriber: () => void) => subscriber(), onError);
 
       expect(sub1).toHaveBeenCalled();
       expect(sub2).toHaveBeenCalled();
@@ -206,7 +206,7 @@ describe('SubscriberManager', () => {
 
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      manager.forEachSafe((subscriber) => subscriber());
+      manager.forEachSafe((subscriber: () => void) => subscriber());
 
       expect(consoleError).toHaveBeenCalled();
       consoleError.mockRestore();
@@ -341,9 +341,9 @@ describe('SubscriberManager', () => {
       manager2.add(sub2);
       manager3.add(sub3);
 
-      manager1.forEach((s) => s());
-      manager2.forEach((s) => s(10));
-      manager3.forEach((s) => s(10, 5));
+      manager1.forEach((s: () => void) => s());
+      manager2.forEach((s: (value: number) => void) => s(10));
+      manager3.forEach((s: (value: number, oldValue: number) => void) => s(10, 5));
 
       expect(sub1).toHaveBeenCalled();
       expect(sub2).toHaveBeenCalledWith(10);

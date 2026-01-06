@@ -41,7 +41,7 @@ describe('batch - Synchronous Execution', () => {
     const a = atom(0);
     const calls: number[] = [];
 
-    a.subscribe((newVal: number) => {
+    a.subscribe((newVal?: number) => {
       if (newVal !== undefined) calls.push(newVal);
     });
 
@@ -60,11 +60,11 @@ describe('batch - Synchronous Execution', () => {
     const b = atom(0);
     const calls: string[] = [];
 
-    a.subscribe((newVal: number) => {
+    a.subscribe((newVal?: number) => {
       if (newVal !== undefined) calls.push(`a:${newVal}`);
     });
 
-    b.subscribe((newVal: number) => {
+    b.subscribe((newVal?: number) => {
       if (newVal !== undefined) calls.push(`b:${newVal}`);
     });
 
@@ -85,7 +85,7 @@ describe('batch - Synchronous Execution', () => {
     const a = atom(0);
     const calls: number[] = [];
 
-    a.subscribe((newVal: number) => {
+    a.subscribe((newVal?: number) => {
       if (newVal !== undefined) calls.push(newVal);
     });
 

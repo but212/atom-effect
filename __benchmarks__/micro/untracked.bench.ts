@@ -13,7 +13,7 @@ describe('Untracked Reads', () => {
     () => {
       const a = atom(42);
       const value = untracked(() => a.value);
-      return value;
+      void value;
     },
     microBenchOptions
   );
@@ -25,7 +25,7 @@ describe('Untracked Reads', () => {
       const b = atom(2);
       const c = atom(3);
       const sum = untracked(() => a.value + b.value + c.value);
-      return sum;
+      void sum;
     },
     microBenchOptions
   );
@@ -36,7 +36,7 @@ describe('Untracked Reads', () => {
       const a = atom(42);
       const peeked = a.peek();
       const untracked_value = untracked(() => a.value);
-      return peeked + untracked_value;
+      void (peeked + untracked_value);
     },
     microBenchOptions
   );
@@ -53,7 +53,7 @@ describe('Tracked vs Untracked', () => {
       const _ = sum.value;
       a.value = 10; // Triggers recomputation
       const __ = sum.value;
-      return __;
+      void __;
     },
     microBenchOptions
   );
@@ -68,7 +68,7 @@ describe('Tracked vs Untracked', () => {
       const _ = sum.value;
       a.value = 10; // Does NOT trigger recomputation
       const __ = sum.value;
-      return __;
+      void __;
     },
     microBenchOptions
   );
@@ -92,7 +92,7 @@ describe('Mixed Tracked and Untracked', () => {
       const __ = result.value;
       untracked1.value = 100; // Does NOT trigger recomputation
       const ___ = result.value;
-      return ___;
+      void ___;
     },
     microBenchOptions
   );
@@ -115,7 +115,7 @@ describe('Mixed Tracked and Untracked', () => {
         });
       });
 
-      return value;
+      void value;
     },
     microBenchOptions
   );
@@ -130,7 +130,7 @@ describe('Untracked Performance', () => {
       const _ = sum.value;
       atoms[0].value = 1;
       const __ = sum.value;
-      return __;
+      void __;
     },
     microBenchOptions
   );
@@ -152,7 +152,7 @@ describe('Untracked Performance', () => {
       const __ = sum.value;
       untrackedAtoms[0].value = 1; // No recomputation
       const ___ = sum.value;
-      return ___;
+      void ___;
     },
     microBenchOptions
   );
@@ -165,7 +165,7 @@ describe('Untracked Performance', () => {
       const _ = sum.value;
       atoms[0].value = 1; // No recomputation
       const __ = sum.value;
-      return __;
+      void __;
     },
     microBenchOptions
   );

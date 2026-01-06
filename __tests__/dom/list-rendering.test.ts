@@ -31,9 +31,9 @@ describe('DOM List Rendering', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     const lis = ul.querySelectorAll('li');
     expect(lis.length).toBe(3);
-    expect(lis[0].textContent).toBe('Apple');
-    expect(lis[1].textContent).toBe('Banana');
-    expect(lis[2].textContent).toBe('Cherry');
+    expect(lis[0]!.textContent).toBe('Apple');
+    expect(lis[1]!.textContent).toBe('Banana');
+    expect(lis[2]!.textContent).toBe('Cherry');
   });
 
   it('should update list when item added', async () => {
@@ -55,7 +55,7 @@ describe('DOM List Rendering', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(ul.children.length).toBe(2);
-    expect(ul.children[1].textContent).toBe('Banana');
+    expect(ul.children[1]!.textContent).toBe('Banana');
   });
 
   it('should update list when item removed', async () => {
@@ -77,6 +77,6 @@ describe('DOM List Rendering', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(ul.children.length).toBe(1);
-    expect(ul.children[0].textContent).toBe('Apple');
+    expect(ul.children[0]!.textContent).toBe('Apple');
   });
 });

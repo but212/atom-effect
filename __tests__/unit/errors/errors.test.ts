@@ -119,6 +119,16 @@ describe('wrapError Utility', () => {
     expect(wrapped.message).toContain('scheduling');
     expect(wrapped.cause).toBe(genericError);
   });
+
+  it('wraps non-error objects as unexpected error', () => {
+    const wrapped = wrapError('string error', AtomError, 'test');
+    expect(wrapped).toBeInstanceOf(AtomError);
+    expect(wrapped.message).toContain('Unexpected error (test): string error');
+    expect(wrapped.cause).toBe(null);
+
+    const wrapped2 = wrapError(42, AtomError, 'test');
+    expect(wrapped2.message).toContain('42');
+  });
 });
 
 describe('isPromise Type Guard', () => {
