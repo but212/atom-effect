@@ -1,21 +1,21 @@
-import { describe, expect, it, vi } from 'vitest';
-import { computed } from '../../../src/core/computed';
+import { describe, expect, it } from 'vitest';
 import { atom } from '../../../src/core/atom';
+import { computed } from '../../../src/core/computed';
 import { debug } from '../../../src/utils/debug';
 
 describe('Computed - Extra Coverage', () => {
   it('covers debug fields in ComputedAtomImpl', () => {
     const wasEnabled = debug.enabled;
     debug.enabled = true;
-    
+
     const c = computed(() => 1);
     const debugObj = c as any;
-    
+
     expect(debugObj.subscriberCount()).toBe(0);
     expect(debugObj.isDirty()).toBe(true);
     expect(debugObj.dependencies).toBeDefined();
     expect(typeof debugObj.stateFlags).toBe('string');
-    
+
     debug.enabled = wasEnabled;
   });
 
@@ -37,24 +37,23 @@ describe('Computed - Extra Coverage', () => {
     const a = atom(0);
     const b = atom(0);
     const cond = atom(true);
-    
+
     const c = computed(() => {
       if (cond.value) return a.value;
       return b.value;
     });
-    
+
     c.value; // Initial access
     expect((a as any).subscriberCount()).toBe(1);
     expect((b as any).subscriberCount()).toBe(0);
 
     cond.value = false;
     // Wait for async notification from cond to c
-    await new Promise(resolve => setTimeout(resolve, 0));
-    
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
     c.value; // recompute!
-    
+
     expect((a as any).subscriberCount()).toBe(0);
     expect((b as any).subscriberCount()).toBe(1);
   });
-
 });

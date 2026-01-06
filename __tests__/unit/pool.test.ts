@@ -1,6 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { depArrayPool, EMPTY_DEPS } from '../../src/pool';
-import { Dependency } from '../../src/types';
 
 describe('ArrayPool', () => {
   beforeEach(() => {
@@ -24,7 +23,7 @@ describe('ArrayPool', () => {
     const arr = Object.freeze([]);
     // This should trigger the frozen check
     depArrayPool.release(arr as any);
-    
+
     const stats = depArrayPool.getStats();
     if (stats) {
       expect(stats.rejected.frozen).toBe(1);
@@ -42,7 +41,7 @@ describe('ArrayPool', () => {
   it('should not release arrays exceeding maxReusableCapacity', () => {
     const largeArr = new Array(300).fill(null);
     depArrayPool.release(largeArr as any);
-    
+
     const stats = depArrayPool.getStats();
     if (stats) {
       expect(stats.rejected.tooLarge).toBe(1);
@@ -51,8 +50,8 @@ describe('ArrayPool', () => {
 
   it('should not exceed maxPoolSize', () => {
     const arrays = Array.from({ length: 60 }, () => depArrayPool.acquire());
-    arrays.forEach(arr => depArrayPool.release(arr));
-    
+    arrays.forEach((arr) => depArrayPool.release(arr));
+
     const stats = depArrayPool.getStats();
     if (stats) {
       expect(stats.poolSize).toBe(50); // maxPoolSize is 50

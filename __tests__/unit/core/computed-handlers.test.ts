@@ -1,5 +1,9 @@
-import { describe, it, expect, vi } from 'vitest';
-import { SyncComputationHandler, ComputationErrorHandler, StateValueHandlers } from '../../../src/core/computed/computed-handlers';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  ComputationErrorHandler,
+  StateValueHandlers,
+  SyncComputationHandler,
+} from '../../../src/core/computed/computed-handlers';
 import { ComputedStateFlags } from '../../../src/core/computed/computed-state-flags';
 import { ComputedError } from '../../../src/errors/errors';
 
@@ -9,10 +13,12 @@ describe('computed-handlers', () => {
       const flags = new ComputedStateFlags();
       const notify = vi.fn();
       const handler = new SyncComputationHandler<number>(flags, Object.is, notify);
-      
+
       let val = 0;
       const getValue = () => val;
-      const setValue = (v: number) => { val = v; };
+      const setValue = (v: number) => {
+        val = v;
+      };
       const setError = vi.fn();
 
       handler.handle(10, getValue, setValue, setError);
@@ -28,13 +34,15 @@ describe('computed-handlers', () => {
       const flags = new ComputedStateFlags();
       const notify = vi.fn();
       const handler = new SyncComputationHandler<number>(flags, Object.is, notify);
-      
+
       let val = 10;
       flags.setResolved();
       flags.clearDirty();
-      
+
       const getValue = () => val;
-      const setValue = (v: number) => { val = v; };
+      const setValue = (v: number) => {
+        val = v;
+      };
       const setError = vi.fn();
 
       handler.handle(10, getValue, setValue, setError);
@@ -51,7 +59,7 @@ describe('computed-handlers', () => {
       const setError = vi.fn();
 
       expect(() => handler.handle(new Error('test'), setError)).toThrow(ComputedError);
-      
+
       expect(flags.isRejected()).toBe(true);
       expect(flags.isDirty()).toBe(false);
       expect(setError).toHaveBeenCalled();
@@ -83,7 +91,7 @@ describe('computed-handlers', () => {
       const handler = new StateValueHandlers<number>(flags, 100, true);
       const recoverableError = new ComputedError('fail');
       recoverableError.recoverable = true;
-      
+
       expect(handler.handleRejected(recoverableError)).toBe(100);
     });
 
@@ -92,7 +100,7 @@ describe('computed-handlers', () => {
       const handler = new StateValueHandlers<number>(flags, 100, true);
       const critError = new ComputedError('critical');
       critError.recoverable = false;
-      
+
       expect(() => handler.handleRejected(critError)).toThrow(critError);
     });
 

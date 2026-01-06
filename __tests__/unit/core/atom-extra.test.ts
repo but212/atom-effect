@@ -6,7 +6,7 @@ describe('Atom - Extra Coverage', () => {
   it('covers manual function tracker path in _track', () => {
     const a = atom(0);
     const listener = vi.fn();
-    
+
     // trackingContext.run sets the current collector.
     // When a.value is called, it calls _track(listener).
     // listener is a plain function, so it should be added to _functionSubscribers.
@@ -24,7 +24,7 @@ describe('Atom - Extra Coverage', () => {
     const a = atom(0);
     const execute = vi.fn();
     const tracker = { execute };
-    
+
     trackingContext.run(tracker as any, () => {
       a.value;
     });
@@ -37,19 +37,19 @@ describe('Atom - Extra Coverage', () => {
     const tracker = {
       execute: () => {
         throw new Error('Object subscriber fail');
-      }
+      },
     };
-    
+
     trackingContext.run(tracker as any, () => {
       a.value;
     });
 
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-    
+
     a.value = 1;
     // Wait for async notification
-    await new Promise(res => setTimeout(res, 0));
-    
+    await new Promise((res) => setTimeout(res, 0));
+
     expect(consoleError).toHaveBeenCalled();
     consoleError.mockRestore();
   });

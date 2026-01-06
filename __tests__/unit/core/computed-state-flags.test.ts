@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { ComputedStateFlags } from '../../../src/core/computed/computed-state-flags';
+import { describe, expect, it } from 'vitest';
 import { AsyncState } from '../../../src/constants';
+import { ComputedStateFlags } from '../../../src/core/computed/computed-state-flags';
 
 describe('ComputedStateFlags', () => {
   it('should initialize with DIRTY | IDLE state', () => {
@@ -77,11 +77,11 @@ describe('ComputedStateFlags', () => {
     const flags = new ComputedStateFlags();
     expect(flags.toString()).toContain('DIRTY');
     expect(flags.toString()).toContain('IDLE');
-    
+
     flags.setResolved();
     flags.clearDirty();
     expect(flags.toString()).toBe('RESOLVED');
-    
+
     flags.setDirty();
     flags.setRecomputing(true);
     expect(flags.toString()).toContain('DIRTY');
