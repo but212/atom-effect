@@ -13,7 +13,7 @@ describe('Memory Stability', () => {
       return { state, derived, stop };
     };
 
-    const components: any[] = [];
+    const components: ReturnType<typeof createComponent>[] = [];
 
     // Mount 50 components
     for (let i = 0; i < 50; i++) {
@@ -27,7 +27,7 @@ describe('Memory Stability', () => {
 
     // Unmount them
     for (const comp of components) {
-      comp.stop();
+      comp.stop.dispose();
     }
 
     // Note: We can't easily measure memory usage *inside* the benchmark loop

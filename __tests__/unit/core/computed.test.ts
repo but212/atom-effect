@@ -10,11 +10,11 @@ import { ComputedError } from '@/errors/errors';
 describe('Computed - Error Handling and Edge Cases', () => {
   it('rejects invalid function types', () => {
     expect(() => {
-      computed('not a function' as any);
+      computed('not a function' as unknown as () => void);
     }).toThrow(ComputedError);
 
     expect(() => {
-      computed(null as any);
+      computed(null as unknown as () => void);
     }).toThrow(ComputedError);
   });
 
@@ -22,7 +22,7 @@ describe('Computed - Error Handling and Edge Cases', () => {
     const c = computed(() => 1);
 
     expect(() => {
-      c.subscribe('not a function' as any);
+      c.subscribe('not a function' as unknown as (newValue?: number, oldValue?: number) => void);
     }).toThrow(ComputedError);
   });
 
@@ -218,7 +218,7 @@ describe('Computed - Error Handling and Edge Cases', () => {
       subscribe: () => () => {},
     };
 
-    const c = computed(() => (badAtom as any).value);
+    const c = computed(() => (badAtom as unknown as { value: unknown }).value);
 
     expect(() => c.value).toThrow();
   });

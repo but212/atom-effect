@@ -50,12 +50,12 @@
         "noUnusedLabels": "error",
         "noUnusedPrivateClassMembers": "off",
         "noUnusedVariables": "warn",
-        "useExhaustiveDependencies": "off",
+        "useExhaustiveDependencies": "warn",
         "useIsNan": "error",
         "useValidForDirection": "error"
       },
       "performance": {
-        "noAccumulatingSpread": "off",
+        "noAccumulatingSpread": "warn",
         "noDelete": "error"
       },
       "style": {
@@ -76,14 +76,14 @@
         "noCatchAssign": "error",
         "noClassAssign": "error",
         "noCompareNegZero": "error",
-        "noConfusingVoidType": "off",
+        "noConfusingVoidType": "warn",
         "noControlCharactersInRegex": "error",
         "noDebugger": "warn",
         "noDoubleEquals": "error",
         "noDuplicateCase": "error",
         "noDuplicateClassMembers": "error",
         "noDuplicateObjectKeys": "error",
-        "noExplicitAny": "off",
+        "noExplicitAny": "warn",
         "noFallthroughSwitchClause": "error",
         "noFunctionAssign": "error",
         "noGlobalAssign": "error",

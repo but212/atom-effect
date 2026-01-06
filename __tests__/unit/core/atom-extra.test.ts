@@ -25,7 +25,7 @@ describe('Atom - Extra Coverage', () => {
     const execute = vi.fn();
     const tracker = { execute };
 
-    trackingContext.run(tracker as any, () => {
+    trackingContext.run(tracker, () => {
       a.value;
     });
 
@@ -40,7 +40,7 @@ describe('Atom - Extra Coverage', () => {
       },
     };
 
-    trackingContext.run(tracker as any, () => {
+    trackingContext.run(tracker, () => {
       a.value;
     });
 

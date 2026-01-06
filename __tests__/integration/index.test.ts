@@ -224,16 +224,16 @@ describe('Computed - Behavior', () => {
 
   it('detects indirect circular reference (development mode)', () => {
     // Only detect indirect circular reference in development mode
-    if (typeof process === 'undefined' || (process as any).env?.NODE_ENV !== 'development') {
+    if (typeof process === 'undefined' || process.env?.NODE_ENV !== 'development') {
       // Skip test in production
       expect(true).toBe(true);
       return;
     }
 
     // Simulate A → B → C → A circular structure
-    const nodeA: any = { dependencies: new Set() };
-    const nodeB: any = { dependencies: new Set([nodeA]) };
-    const nodeC: any = { dependencies: new Set([nodeB]) };
+    const nodeA = { dependencies: new Set<unknown>() };
+    const nodeB = { dependencies: new Set<unknown>([nodeA]) };
+    const nodeC = { dependencies: new Set<unknown>([nodeB]) };
     nodeA.dependencies.add(nodeC); // complete the cycle
 
     expect(() => {
@@ -538,15 +538,15 @@ describe('Edge Cases', () => {
     const _unsubscribe = a.subscribe(listener);
 
     // Check subscriber count before dispose (debug mode)
-    if ((a as any).subscriberCount) {
-      expect((a as any).subscriberCount()).toBe(1);
+    if ('subscriberCount' in a) {
+      expect((a as unknown as { subscriberCount: () => number }).subscriberCount()).toBe(1);
     }
 
     a.dispose();
 
     // Check if subscribers are cleaned up after dispose
-    if ((a as any).subscriberCount) {
-      expect((a as any).subscriberCount()).toBe(0);
+    if ('subscriberCount' in a) {
+      expect((a as unknown as { subscriberCount: () => number }).subscriberCount()).toBe(0);
     }
 
     // No notification after dispose
@@ -562,15 +562,20 @@ describe('Edge Cases', () => {
     c.value;
 
     // Check atom subscribers
-    if ((a as any).subscriberCount) {
-      expect((a as any).subscriberCount()).toBeGreaterThan(0);
+    if ('subscriberCount' in a) {
+      expect((a as unknown as { subscriberCount: () => number }).subscriberCount()).toBeGreaterThan(
+        0
+      );
     }
 
     c.dispose();
 
     // After dispose, computed should not subscribe to atom
     // (subscription should be removed)
-    const subscriberCount = (a as any).subscriberCount?.() || 0;
+    const subscriberCount =
+      'subscriberCount' in a
+        ? (a as unknown as { subscriberCount: () => number }).subscriberCount()
+        : 0;
     const listener = vi.fn();
     a.subscribe(listener);
 
@@ -641,7 +646,7 @@ describe('Performance Tests', () => {
 
     for (let i = 0; i < 50; i++) {
       const prev = current;
-      current = computed(() => prev.value + 1) as any;
+      current = computed(() => prev.value + 1) as unknown as ReturnType<typeof atom<number>>;
     }
 
     expect(current.value).toBe(51);

@@ -1,9 +1,9 @@
 export const __DEV__ = process.env.NODE_ENV !== 'production';
 
 // Scheduler & Atom interfaces to prevent circular deps
-export interface IScheduler {
-  markDirty(atom: any): void;
-  scheduleNotify(atom: any): void;
+export interface IScheduler<T> {
+  markDirty(atom: T): void;
+  scheduleNotify(atom: T): void;
 }
 
 export interface IAtom {

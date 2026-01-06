@@ -41,7 +41,7 @@ describe('computed-async-handler', () => {
   describe('AsyncComputationHandler', () => {
     let flags: ComputedStateFlags;
     let promiseManager: PromiseIdManager;
-    let notify: any;
+    let notify: ReturnType<typeof vi.fn>;
     let handler: AsyncComputationHandler<number>;
 
     beforeEach(() => {

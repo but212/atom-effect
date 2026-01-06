@@ -9,8 +9,12 @@ describe('Computed - Extra Coverage', () => {
     debug.enabled = true;
 
     const c = computed(() => 1);
-    const debugObj = c as any;
-
+    const debugObj = c as unknown as {
+      subscriberCount(): number;
+      isDirty(): boolean;
+      dependencies: unknown;
+      stateFlags: string;
+    };
     expect(debugObj.subscriberCount()).toBe(0);
     expect(debugObj.isDirty()).toBe(true);
     expect(debugObj.dependencies).toBeDefined();
@@ -44,8 +48,8 @@ describe('Computed - Extra Coverage', () => {
     });
 
     c.value; // Initial access
-    expect((a as any).subscriberCount()).toBe(1);
-    expect((b as any).subscriberCount()).toBe(0);
+    expect((a as unknown as { subscriberCount: () => number }).subscriberCount()).toBe(1);
+    expect((b as unknown as { subscriberCount: () => number }).subscriberCount()).toBe(0);
 
     cond.value = false;
     // Wait for async notification from cond to c
@@ -53,7 +57,7 @@ describe('Computed - Extra Coverage', () => {
 
     c.value; // recompute!
 
-    expect((a as any).subscriberCount()).toBe(0);
-    expect((b as any).subscriberCount()).toBe(1);
+    expect((a as unknown as { subscriberCount: () => number }).subscriberCount()).toBe(0);
+    expect((b as unknown as { subscriberCount: () => number }).subscriberCount()).toBe(1);
   });
 });

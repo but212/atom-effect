@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { depArrayPool, EMPTY_DEPS } from '../../src/pool';
+import type { Dependency } from '../../src/types/common';
 
 describe('ArrayPool', () => {
   beforeEach(() => {
@@ -22,7 +23,7 @@ describe('ArrayPool', () => {
   it('should not release frozen arrays', () => {
     const arr = Object.freeze([]);
     // This should trigger the frozen check
-    depArrayPool.release(arr as any);
+    depArrayPool.release(arr as unknown as Dependency[]);
 
     const stats = depArrayPool.getStats();
     if (stats) {
@@ -31,7 +32,7 @@ describe('ArrayPool', () => {
   });
 
   it('should not release arrays that are the empty constant', () => {
-    depArrayPool.release(EMPTY_DEPS as any, EMPTY_DEPS);
+    depArrayPool.release(EMPTY_DEPS as unknown as Dependency[], EMPTY_DEPS);
     const stats = depArrayPool.getStats();
     if (stats) {
       expect(stats.released).toBe(0);
@@ -40,7 +41,7 @@ describe('ArrayPool', () => {
 
   it('should not release arrays exceeding maxReusableCapacity', () => {
     const largeArr = new Array(300).fill(null);
-    depArrayPool.release(largeArr as any);
+    depArrayPool.release(largeArr as unknown as Dependency[]);
 
     const stats = depArrayPool.getStats();
     if (stats) {

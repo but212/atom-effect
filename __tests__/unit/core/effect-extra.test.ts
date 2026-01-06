@@ -75,9 +75,11 @@ describe('Effect - Extra Coverage', () => {
     });
 
     // Should still be subscribed to 'a' because it was accessed before error
-    expect((a as any).subscriberCount()).toBeGreaterThan(0);
+    expect((a as unknown as { subscriberCount: () => number }).subscriberCount()).toBeGreaterThan(
+      0
+    );
     // Should NOT be subscribed to 'b' because it was NOT accessed due to error
-    expect((b as any).subscriberCount()).toBe(0);
+    expect((b as unknown as { subscriberCount: () => number }).subscriberCount()).toBe(0);
 
     consoleError.mockRestore();
   });

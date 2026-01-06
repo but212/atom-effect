@@ -100,10 +100,10 @@ describe('Notification', () => {
 
   it('execute calls the listener', () => {
     let called = false;
-    let receivedNew: any;
-    let receivedOld: any;
+    let receivedNew: unknown;
+    let receivedOld: unknown;
 
-    const listener = (newVal: any, oldVal: any) => {
+    const listener = <T>(newVal: T, oldVal: T) => {
       called = true;
       receivedNew = newVal;
       receivedOld = oldVal;

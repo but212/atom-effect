@@ -136,8 +136,8 @@ describe('Memory Leak Detection', () => {
     () => {
       // Create potential circular references
       for (let i = 0; i < 100; i++) {
-        const a = atom({ ref: null as any });
-        const b = atom({ ref: null as any });
+        const a = atom<{ ref: unknown | null }>({ ref: null });
+        const b = atom<{ ref: unknown | null }>({ ref: null });
 
         a.value = { ref: b };
         b.value = { ref: a };
