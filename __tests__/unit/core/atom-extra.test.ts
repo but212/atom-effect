@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { atom } from '../../../src/core/atom/atom';
 import { trackingContext } from '../../../src/tracking';
+import { tick } from '../../utils/test-helpers';
 
 describe('Atom - Extra Coverage', () => {
   it('covers manual function tracker path in _track', async () => {
@@ -20,7 +21,7 @@ describe('Atom - Extra Coverage', () => {
     a.value = 1;
 
     // Wait for the asynchronous scheduler to run and trigger the listener.
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await tick();
 
     expect(listener).toHaveBeenCalledTimes(1);
   });
@@ -40,7 +41,7 @@ describe('Atom - Extra Coverage', () => {
     a.value = 1;
 
     // Wait for the asynchronous scheduler to run and trigger the tracker.
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await tick();
 
     expect(execute).toHaveBeenCalledTimes(1);
   });
@@ -61,7 +62,7 @@ describe('Atom - Extra Coverage', () => {
 
     a.value = 1;
     // Wait for async notification
-    await new Promise((res) => setTimeout(res, 0));
+    await tick();
 
     expect(consoleError).toHaveBeenCalled();
     consoleError.mockRestore();

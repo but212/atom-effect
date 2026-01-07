@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { atom } from '../../../src/core/atom';
 import { computed } from '../../../src/core/computed';
 import { debug } from '../../../src/utils/debug';
+import { tick } from '../../utils/test-helpers';
 
 describe('Computed - Extra Coverage', () => {
   it('covers debug fields in ComputedAtomImpl', () => {
@@ -53,7 +54,7 @@ describe('Computed - Extra Coverage', () => {
 
     cond.value = false;
     // Wait for async notification from cond to c
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await tick();
 
     c.value; // recompute!
 

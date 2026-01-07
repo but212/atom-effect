@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { atom } from '../../../src/core/atom';
 import { effect } from '../../../src/core/effect/effect';
 import { debug } from '../../../src/utils/debug';
+import { sleep, tick } from '../../utils/test-helpers';
 
 describe('Effect - Extra Coverage', () => {
   it('covers trackModifications and loop warnings', () => {
@@ -55,11 +56,11 @@ describe('Effect - Extra Coverage', () => {
     a.value = 1;
 
     // Wait for async scheduler
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await tick();
     expect(runCount).toBe(2); // Initial run + first update
 
     // Wait > 1s to ensure history buffer logic triggers a break
-    await new Promise((resolve) => setTimeout(resolve, 1100));
+    await sleep(1100);
 
     // trigger another execution
     a.value = 2;
