@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.1] - 2026-01-08
+
+### Changed - 0.2.1
+
+- Replaced `WeakMap` with pure array-based lookup in `SubscriberManager`.
+
 ## [0.2.0] - 2026-01-04
 
 ### Changed - 0.2.0
