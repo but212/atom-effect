@@ -1,21 +1,21 @@
 /**
  * @fileoverview Subscriber management utility
- * @description Manages subscribers with O(1) add/remove operations using Array + WeakMap
+ * @description Manages subscribers with cache-friendly array-based operations
  */
 
 /**
- * Manages subscribers with optimized O(1) operations
+ * Manages subscribers with optimized operations
  *
- * Uses a combination of Array (for iteration) and WeakMap (for O(1) lookup)
- * to provide both fast iteration and fast add/remove operations.
+ * Uses a simple array for maximum cache locality.
+ * For typical subscriber counts (<100), linear search outperforms
+ * hash-based lookups due to cache friendliness.
  *
  * Key optimizations:
  * - Array for cache-friendly sequential iteration
- * - WeakMap for O(1) lookup and automatic GC
- * - Swap-and-pop for O(1) removal
+ * - Swap-and-pop for O(1) removal (after linear search)
  * - Lazy initialization to save memory
  *
- * @template T - Subscriber type (any object type for WeakMap compatibility)
+ * @template T - Subscriber type
  *
  * @example
  * ```ts
@@ -31,9 +31,8 @@
  * unsub();
  * ```
  */
-export class SubscriberManager<T extends object> {
+export class SubscriberManager<T> {
   private subscribers: T[] | null = null;
-  private subscriberIndex: WeakMap<T, number> | null = null;
 
   /**
    * Adds a subscriber and returns an unsubscribe function
@@ -42,7 +41,7 @@ export class SubscriberManager<T extends object> {
    * Duplicate subscribers are ignored (idempotent).
    *
    * @param subscriber - Function to add as subscriber
-   * @returns Unsubscribe function (O(1) removal)
+   * @returns Unsubscribe function
    *
    * @example
    * ```ts
@@ -55,19 +54,16 @@ export class SubscriberManager<T extends object> {
     // Lazy initialization
     if (!this.subscribers) {
       this.subscribers = [];
-      this.subscriberIndex = new WeakMap();
     }
 
-    // Check for duplicates (O(1))
-    if (this.subscriberIndex!.has(subscriber)) {
+    // Check for duplicates (linear scan - fast for small arrays due to cache)
+    if (this.subscribers.indexOf(subscriber) !== -1) {
       // Already subscribed, return no-op unsubscribe
       return () => {};
     }
 
-    // Add subscriber (O(1))
-    const index = this.subscribers.length;
+    // Add subscriber
     this.subscribers.push(subscriber);
-    this.subscriberIndex!.set(subscriber, index);
 
     // Return unsubscribe function with duplicate protection
     let isUnsubscribed = false;
@@ -81,21 +77,20 @@ export class SubscriberManager<T extends object> {
   /**
    * Removes a subscriber using swap-and-pop optimization
    *
-   * Time complexity: O(1)
-   * - Swaps target with last element
-   * - Pops last element
-   * - Updates index mapping
+   * Linear search + O(1) swap-and-pop removal.
+   * For small arrays, this is faster than hash-based approaches
+   * due to cache locality.
    *
    * @param subscriber - Subscriber to remove
    * @returns True if removed, false if not found
    */
   remove(subscriber: T): boolean {
-    if (!this.subscribers || !this.subscriberIndex) {
+    if (!this.subscribers) {
       return false;
     }
 
-    const idx = this.subscriberIndex.get(subscriber);
-    if (idx === undefined) {
+    const idx = this.subscribers.indexOf(subscriber);
+    if (idx === -1) {
       return false; // Not found
     }
 
@@ -103,14 +98,11 @@ export class SubscriberManager<T extends object> {
 
     // Swap with last element (O(1))
     if (idx !== lastIndex) {
-      const lastSubscriber = this.subscribers[lastIndex]!;
-      this.subscribers[idx] = lastSubscriber;
-      this.subscriberIndex.set(lastSubscriber, idx);
+      this.subscribers[idx] = this.subscribers[lastIndex]!;
     }
 
     // Pop last element (O(1))
     this.subscribers.pop();
-    this.subscriberIndex.delete(subscriber);
 
     return true;
   }
@@ -122,7 +114,8 @@ export class SubscriberManager<T extends object> {
    * @returns True if registered
    */
   has(subscriber: T): boolean {
-    return this.subscriberIndex?.has(subscriber) ?? false;
+    if (!this.subscribers) return false;
+    return this.subscribers.indexOf(subscriber) !== -1;
   }
 
   /**
@@ -198,10 +191,6 @@ export class SubscriberManager<T extends object> {
    * Subsequent operations will re-initialize lazily.
    */
   clear(): void {
-    if (this.subscribers) {
-      this.subscribers.length = 0;
-    }
-    this.subscriberIndex = null;
     this.subscribers = null;
   }
 
