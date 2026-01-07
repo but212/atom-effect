@@ -82,9 +82,9 @@ describe('debug.checkCircular', () => {
     const originalEnabled = debug.enabled;
     debug.enabled = true;
 
-    const nodeA: any = { dependencies: new Set() };
-    const nodeB: any = { dependencies: new Set([nodeA]) };
-    const nodeC: any = { dependencies: new Set([nodeB]) };
+    const nodeA = { dependencies: new Set<unknown>() };
+    const nodeB = { dependencies: new Set<unknown>([nodeA]) };
+    const nodeC = { dependencies: new Set<unknown>([nodeB]) };
     nodeA.dependencies.add(nodeC); // A → C → B → A
 
     expect(() => {
@@ -98,9 +98,9 @@ describe('debug.checkCircular', () => {
     const originalEnabled = debug.enabled;
     debug.enabled = false;
 
-    const nodeA: any = { dependencies: new Set() };
-    const nodeB: any = { dependencies: new Set([nodeA]) };
-    const nodeC: any = { dependencies: new Set([nodeB]) };
+    const nodeA = { dependencies: new Set<unknown>() };
+    const nodeB = { dependencies: new Set<unknown>([nodeA]) };
+    const nodeC = { dependencies: new Set<unknown>([nodeB]) };
     nodeA.dependencies.add(nodeC);
 
     // No error in production (for performance)
@@ -145,7 +145,7 @@ describe('debug.attachDebugInfo', () => {
     const originalEnabled = debug.enabled;
     debug.enabled = true;
 
-    const obj: any = {};
+    const obj: Record<symbol, unknown> = {};
     debug.attachDebugInfo(obj, 'test', 123);
 
     expect(obj[DEBUG_NAME]).toBe('test_123');
@@ -159,12 +159,12 @@ describe('debug.attachDebugInfo', () => {
     const originalEnabled = debug.enabled;
     debug.enabled = false;
 
-    const obj: any = {};
+    const obj = {};
     debug.attachDebugInfo(obj, 'test', 456);
 
-    expect(obj[DEBUG_NAME]).toBeUndefined();
-    expect(obj[DEBUG_ID]).toBeUndefined();
-    expect(obj[DEBUG_TYPE]).toBeUndefined();
+    expect((obj as Record<symbol, unknown>)[DEBUG_NAME]).toBeUndefined();
+    expect((obj as Record<symbol, unknown>)[DEBUG_ID]).toBeUndefined();
+    expect((obj as Record<symbol, unknown>)[DEBUG_TYPE]).toBeUndefined();
 
     debug.enabled = originalEnabled;
   });
@@ -175,7 +175,7 @@ describe('debug.getDebugName', () => {
     const originalEnabled = debug.enabled;
     debug.enabled = true;
 
-    const obj: any = {};
+    const obj = {};
     debug.attachDebugInfo(obj, 'atom', 1);
 
     expect(debug.getDebugName(obj)).toBe('atom_1');
@@ -199,7 +199,7 @@ describe('debug.getDebugType', () => {
     const originalEnabled = debug.enabled;
     debug.enabled = true;
 
-    const obj: any = {};
+    const obj = {};
     debug.attachDebugInfo(obj, 'computed', 2);
 
     expect(debug.getDebugType(obj)).toBe('computed');

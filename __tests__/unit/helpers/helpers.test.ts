@@ -11,11 +11,11 @@ import { batch, isComputed, untracked } from '@/index';
 describe('batch - Error Handling', () => {
   it('rejects invalid callback types', () => {
     expect(() => {
-      batch('not a function' as any);
+      batch('not a function' as unknown as () => void);
     }).toThrow(AtomError);
 
     expect(() => {
-      batch(null as any);
+      batch(null as unknown as () => void);
     }).toThrow(AtomError);
   });
 
@@ -41,7 +41,7 @@ describe('batch - Synchronous Execution', () => {
     const a = atom(0);
     const calls: number[] = [];
 
-    a.subscribe((newVal: number) => {
+    a.subscribe((newVal?: number) => {
       if (newVal !== undefined) calls.push(newVal);
     });
 
@@ -60,11 +60,11 @@ describe('batch - Synchronous Execution', () => {
     const b = atom(0);
     const calls: string[] = [];
 
-    a.subscribe((newVal: number) => {
+    a.subscribe((newVal?: number) => {
       if (newVal !== undefined) calls.push(`a:${newVal}`);
     });
 
-    b.subscribe((newVal: number) => {
+    b.subscribe((newVal?: number) => {
       if (newVal !== undefined) calls.push(`b:${newVal}`);
     });
 
@@ -85,7 +85,7 @@ describe('batch - Synchronous Execution', () => {
     const a = atom(0);
     const calls: number[] = [];
 
-    a.subscribe((newVal: number) => {
+    a.subscribe((newVal?: number) => {
       if (newVal !== undefined) calls.push(newVal);
     });
 
@@ -125,11 +125,11 @@ describe('batch - Synchronous Execution', () => {
 describe('untracked - Error Handling', () => {
   it('rejects invalid callback types', () => {
     expect(() => {
-      untracked('not a function' as any);
+      untracked('not a function' as unknown as () => void);
     }).toThrow(AtomError);
 
     expect(() => {
-      untracked(null as any);
+      untracked(null as unknown as () => void);
     }).toThrow(AtomError);
   });
 

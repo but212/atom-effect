@@ -12,7 +12,7 @@ describe('Atom Creation', () => {
     'create atom with primitive value',
     () => {
       const a = atom(0);
-      return a;
+      void a;
     },
     microBenchOptions
   );
@@ -21,7 +21,7 @@ describe('Atom Creation', () => {
     'create atom with object value',
     () => {
       const a = atom({ count: 0, name: 'test' });
-      return a;
+      void a;
     },
     microBenchOptions
   );
@@ -30,7 +30,7 @@ describe('Atom Creation', () => {
     'create 100 atoms',
     () => {
       const atoms = Array.from({ length: 100 }, (_, i) => atom(i));
-      return atoms;
+      void atoms;
     },
     microBenchOptions
   );
@@ -42,7 +42,7 @@ describe('Atom Read Operations', () => {
     () => {
       const a = atom(42);
       const _ = a.value;
-      return _;
+      void _;
     },
     microBenchOptions
   );
@@ -51,7 +51,7 @@ describe('Atom Read Operations', () => {
     'read atom.peek()',
     () => {
       const a = atom(42);
-      return a.peek();
+      void a.peek();
     },
     microBenchOptions
   );
@@ -64,7 +64,7 @@ describe('Atom Read Operations', () => {
       for (const a of atoms) {
         sum += a.value;
       }
-      return sum;
+      void sum;
     },
     microBenchOptions
   );

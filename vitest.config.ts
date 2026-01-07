@@ -1,10 +1,12 @@
 import path from 'node:path';
 import { defineConfig } from 'vitest/config';
 
+const SRC_PATH = path.resolve(__dirname, 'src');
+
 export default defineConfig({
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      '@': SRC_PATH,
     },
   },
   test: {
@@ -13,21 +15,22 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
       exclude: [
-        'node_modules/',
-        'dist/',
+        'node_modules/**',
+        'dist/**',
         '**/*.config.ts',
-        '**/benchmarks/**',
+        '__benchmarks__/**',
         '**/*.test.ts',
         '__tests__/**',
-        'src/types.ts', // 타입 정의 파일
-        'scripts/',
+        'src/types/**',
+        'src/types.ts',
+        'scripts/**',
       ],
     },
     projects: [
       {
         resolve: {
           alias: {
-            '@': path.resolve(__dirname, './src'),
+            '@': SRC_PATH,
           },
         },
         test: {
@@ -40,7 +43,7 @@ export default defineConfig({
       {
         resolve: {
           alias: {
-            '@': path.resolve(__dirname, './src'),
+            '@': SRC_PATH,
           },
         },
         test: {

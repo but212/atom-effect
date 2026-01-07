@@ -11,11 +11,11 @@ describe('Scheduler', () => {
 
   it('rejects invalid callback types', () => {
     expect(() => {
-      scheduler.schedule('not a function' as any);
+      scheduler.schedule('not a function' as unknown as () => void);
     }).toThrow(SchedulerError);
 
     expect(() => {
-      scheduler.schedule(null as any);
+      scheduler.schedule(null as unknown as () => void);
     }).toThrow(SchedulerError);
   });
 
@@ -148,14 +148,14 @@ describe('Scheduler', () => {
     scheduler.endBatch();
 
     // Stays at 0, does not go negative
-    expect((scheduler as any).batchDepth).toBe(0);
+    expect((scheduler as unknown as { batchDepth: number }).batchDepth).toBe(0);
   });
 
   it('does not flush when queue is empty', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     // Call flush with empty queue
-    (scheduler as any).flush();
+    (scheduler as unknown as { flush: () => void }).flush();
 
     await new Promise((resolve) => setTimeout(resolve, 10));
 

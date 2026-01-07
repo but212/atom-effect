@@ -20,11 +20,11 @@ describe('Effect - Error Handling and Edge Cases', () => {
 
   it('rejects invalid function types', () => {
     expect(() => {
-      effect('not a function' as any);
+      effect('not a function' as unknown as () => void);
     }).toThrow(EffectError);
 
     expect(() => {
-      effect(null as any);
+      effect(null as unknown as () => void);
     }).toThrow(EffectError);
   });
 
@@ -69,7 +69,7 @@ describe('Effect - Error Handling and Edge Cases', () => {
 
     const e = effect(() => {
       count.value;
-      return 'not a function' as any; // return non-function value
+      return 'not a function' as unknown as () => void; // return non-function value
     });
 
     await vi.runAllTimersAsync();
@@ -147,7 +147,7 @@ describe('Effect - Error Handling and Edge Cases', () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     effect(() => {
-      (badAtom as any).value;
+      (badAtom as unknown as { value: unknown }).value;
     });
 
     await vi.runAllTimersAsync();
@@ -218,7 +218,7 @@ describe('Effect - Error Handling and Edge Cases', () => {
     const count = atom(0);
 
     // skip test if not in development mode
-    if (typeof process === 'undefined' || (process as any).env?.NODE_ENV !== 'development') {
+    if (typeof process === 'undefined' || process.env?.NODE_ENV !== 'development') {
       expect(true).toBe(true);
       vi.useFakeTimers();
       return;
@@ -269,7 +269,7 @@ describe('Effect - Error Handling and Edge Cases', () => {
     await vi.runAllTimersAsync();
 
     // internal isAtom function test
-    const isAtomFn = (obj: any): boolean => {
+    const isAtomFn = <T>(obj: T): boolean => {
       return (
         obj !== null &&
         typeof obj === 'object' &&
@@ -395,7 +395,7 @@ describe('Effect - Error Handling and Edge Cases', () => {
 
       const e = effect(() => {
         count.value;
-        return 'not a function' as any; // cleanup is not a function
+        return 'not a function' as unknown as () => void; // cleanup is not a function
       });
 
       await vi.runAllTimersAsync();

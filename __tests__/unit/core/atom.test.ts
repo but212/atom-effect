@@ -13,11 +13,13 @@ describe('Atom - Error Handling and Edge Cases', () => {
     const count = atom(0);
 
     expect(() => {
-      count.subscribe('not a function' as any);
+      count.subscribe(
+        'not a function' as unknown as (newValue?: number, oldValue?: number) => void
+      );
     }).toThrow(AtomError);
 
     expect(() => {
-      count.subscribe(null as any);
+      count.subscribe(null as unknown as (newValue?: number, oldValue?: number) => void);
     }).toThrow(AtomError);
   });
 
@@ -274,7 +276,7 @@ describe('Atom - Error Handling and Edge Cases', () => {
       const count = atom(0);
 
       // subscriberCount method should exist
-      const atomWithDebug = count as any;
+      const atomWithDebug = count as unknown as { subscriberCount?: () => number };
       if (atomWithDebug.subscriberCount) {
         expect(atomWithDebug.subscriberCount()).toBe(0);
 
