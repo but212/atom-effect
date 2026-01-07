@@ -162,43 +162,6 @@ effect(() => {
 });
 ```
 
-### API Integration
-
-```typescript
-const userId = atom(1);
-const userData = computed(async () => {
-  const res = await fetch(`/api/users/${userId.value}`);
-  if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-  return res.json();
-}, {
-  defaultValue: null,
-  onError: (e) => console.error('Failed to fetch user data:', e)
-});
-
-effect(() => {
-  if (userData.value) {
-    console.log('User loaded:', userData.value.name);
-  }
-});
-```
-
-### Persistent State
-
-```typescript
-function persistentAtom<T>(key: string, initialValue: T) {
-  const stored = localStorage.getItem(key);
-  const a = atom<T>(stored ? JSON.parse(stored) : initialValue);
-  
-  effect(() => {
-    localStorage.setItem(key, JSON.stringify(a.value));
-  });
-  
-  return a;
-}
-
-const theme = persistentAtom('theme', 'light');
-```
-
 ## Utilities
 
 ### Type Guards
