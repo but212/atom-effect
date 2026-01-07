@@ -3,7 +3,7 @@ import { atom } from '../../../src/core/atom/atom';
 import { trackingContext } from '../../../src/tracking';
 
 describe('Atom - Extra Coverage', () => {
-  it('covers manual function tracker path in _track', () => {
+  it('covers manual function tracker path in _track', async () => {
     const a = atom(0);
     const listener = vi.fn();
 
@@ -14,13 +14,18 @@ describe('Atom - Extra Coverage', () => {
       a.value;
     });
 
+    // trackingContext.run calls the listener once initially.
+    expect(listener).toHaveBeenCalledTimes(1);
+
     a.value = 1;
-    // Batching might be enabled, so we wait or flush.
-    // Atom handles notification via scheduler.
-    // But since it's a unit test, we can just wait.
+
+    // Wait for the asynchronous scheduler to run and trigger the listener.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(listener).toHaveBeenCalledTimes(2);
   });
 
-  it('covers manual object tracker path in _track (without addDependency)', () => {
+  it('covers manual object tracker path in _track (without addDependency)', async () => {
     const a = atom(0);
     const execute = vi.fn();
     const tracker = { execute };
@@ -29,7 +34,15 @@ describe('Atom - Extra Coverage', () => {
       a.value;
     });
 
+    // trackingContext.run calls execute once initially.
+    expect(execute).toHaveBeenCalledTimes(1);
+
     a.value = 1;
+
+    // Wait for the asynchronous scheduler to run and trigger the tracker.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(execute).toHaveBeenCalledTimes(2);
   });
 
   it('covers subscriber error logging for object subscribers', async () => {

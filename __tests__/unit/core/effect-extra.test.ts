@@ -42,18 +42,21 @@ describe('Effect - Extra Coverage', () => {
 
   it('covers history buffer break in _recordExecution', async () => {
     const a = atom(0);
+    let runCount = 0;
     const _fx = effect(
       () => {
         a.value;
+        runCount++;
       },
       { maxExecutionsPerSecond: 10 }
     );
 
     // Fill history with one item
     a.value = 1;
+    expect(runCount).toBe(2); // Initial run + first update
 
-    // Wait > 1s
-    await new Promise((res) => setTimeout(res, 1100));
+    // Wait > 1s to ensure history buffer logic triggers a break
+    await new Promise((resolve) => setTimeout(resolve, 1100));
 
     // trigger another execution
     a.value = 2;
