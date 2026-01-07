@@ -14,15 +14,15 @@ describe('Atom - Extra Coverage', () => {
       a.value;
     });
 
-    // trackingContext.run calls the listener once initially.
-    expect(listener).toHaveBeenCalledTimes(1);
+    // trackingContext.run just sets context and runs fn, it doesn't call listener.
+    expect(listener).toHaveBeenCalledTimes(0);
 
     a.value = 1;
 
     // Wait for the asynchronous scheduler to run and trigger the listener.
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(listener).toHaveBeenCalledTimes(2);
+    expect(listener).toHaveBeenCalledTimes(1);
   });
 
   it('covers manual object tracker path in _track (without addDependency)', async () => {
@@ -34,15 +34,15 @@ describe('Atom - Extra Coverage', () => {
       a.value;
     });
 
-    // trackingContext.run calls execute once initially.
-    expect(execute).toHaveBeenCalledTimes(1);
+    // trackingContext.run just sets context and runs fn, it doesn't call execute.
+    expect(execute).toHaveBeenCalledTimes(0);
 
     a.value = 1;
 
     // Wait for the asynchronous scheduler to run and trigger the tracker.
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(execute).toHaveBeenCalledTimes(2);
+    expect(execute).toHaveBeenCalledTimes(1);
   });
 
   it('covers subscriber error logging for object subscribers', async () => {

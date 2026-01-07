@@ -53,6 +53,9 @@ describe('Effect - Extra Coverage', () => {
 
     // Fill history with one item
     a.value = 1;
+
+    // Wait for async scheduler
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(runCount).toBe(2); // Initial run + first update
 
     // Wait > 1s to ensure history buffer logic triggers a break
