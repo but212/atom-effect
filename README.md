@@ -256,7 +256,7 @@ See [docs/BENCHMARKS.md](./docs/BENCHMARKS.md) for details.
 ## Testing
 
 ```bash
-pnpm test              # Run all tests (400+ test cases)
+pnpm test              # Run all tests (296 test cases)
 pnpm test:coverage     # With coverage
 pnpm bench             # Run benchmarks
 ```
