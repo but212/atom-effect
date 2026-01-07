@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.2] - 2026-01-08
+
+### Changed - 0.2.2
+
+- Updated README.md
+
 ## [0.2.1] - 2026-01-08
 
 ### Changed - 0.2.1
