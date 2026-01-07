@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { atom } from '../../../src/core/atom/atom';
 import { trackingContext } from '../../../src/tracking';
+import { tick } from '../../utils/test-helpers';
 
 describe('Atom - Extra Coverage', () => {
-  it('covers manual function tracker path in _track', () => {
+  it('covers manual function tracker path in _track', async () => {
     const a = atom(0);
     const listener = vi.fn();
 
@@ -14,13 +15,18 @@ describe('Atom - Extra Coverage', () => {
       a.value;
     });
 
+    // trackingContext.run just sets context and runs fn, it doesn't call listener.
+    expect(listener).toHaveBeenCalledTimes(0);
+
     a.value = 1;
-    // Batching might be enabled, so we wait or flush.
-    // Atom handles notification via scheduler.
-    // But since it's a unit test, we can just wait.
+
+    // Wait for the asynchronous scheduler to run and trigger the listener.
+    await tick();
+
+    expect(listener).toHaveBeenCalledTimes(1);
   });
 
-  it('covers manual object tracker path in _track (without addDependency)', () => {
+  it('covers manual object tracker path in _track (without addDependency)', async () => {
     const a = atom(0);
     const execute = vi.fn();
     const tracker = { execute };
@@ -29,7 +35,15 @@ describe('Atom - Extra Coverage', () => {
       a.value;
     });
 
+    // trackingContext.run just sets context and runs fn, it doesn't call execute.
+    expect(execute).toHaveBeenCalledTimes(0);
+
     a.value = 1;
+
+    // Wait for the asynchronous scheduler to run and trigger the tracker.
+    await tick();
+
+    expect(execute).toHaveBeenCalledTimes(1);
   });
 
   it('covers subscriber error logging for object subscribers', async () => {
@@ -48,7 +62,7 @@ describe('Atom - Extra Coverage', () => {
 
     a.value = 1;
     // Wait for async notification
-    await new Promise((res) => setTimeout(res, 0));
+    await tick();
 
     expect(consoleError).toHaveBeenCalled();
     consoleError.mockRestore();

@@ -5,6 +5,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { SchedulerError } from '@/errors/errors';
 import { scheduler } from '@/index';
+import { sleep } from '../../utils/test-helpers';
 
 describe('Scheduler', () => {
   // Scheduler uses Promise.resolve() so we use real timers
@@ -25,7 +26,7 @@ describe('Scheduler', () => {
     scheduler.schedule(callback);
     expect(callback).not.toHaveBeenCalled();
 
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await sleep(10);
     expect(callback).toHaveBeenCalled();
   });
 
@@ -36,7 +37,7 @@ describe('Scheduler', () => {
     scheduler.schedule(callback);
     scheduler.schedule(callback);
 
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await sleep(10);
 
     // Uses Set so duplicates are removed (called at least once)
     expect(callback).toHaveBeenCalled();
@@ -64,7 +65,7 @@ describe('Scheduler', () => {
     scheduler.schedule(callback);
     scheduler.endBatch();
 
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await sleep(10);
 
     expect(callback).toHaveBeenCalled();
     expect(scheduler.isBatching).toBe(false);
@@ -93,7 +94,7 @@ describe('Scheduler', () => {
     scheduler.endBatch();
     expect(scheduler.isBatching).toBe(false);
 
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await sleep(10);
     expect(callback).toHaveBeenCalled();
   });
 
@@ -112,7 +113,7 @@ describe('Scheduler', () => {
     scheduler.schedule(errorCallback);
     scheduler.schedule(normalCallback);
 
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await sleep(10);
 
     expect(errorCallback).toHaveBeenCalled();
     expect(normalCallback).toHaveBeenCalled();
@@ -133,12 +134,12 @@ describe('Scheduler', () => {
     scheduler.schedule(callback1);
 
     // Wait for first callback execution
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await sleep(10);
     expect(callback1).toHaveBeenCalled();
 
     // Add second callback
     scheduler.schedule(callback2);
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await sleep(10);
     expect(callback2).toHaveBeenCalled();
   });
 
@@ -157,7 +158,7 @@ describe('Scheduler', () => {
     // Call flush with empty queue
     (scheduler as unknown as { flush: () => void }).flush();
 
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await sleep(10);
 
     // Should complete without errors
     expect(consoleError).not.toHaveBeenCalled();
@@ -170,7 +171,7 @@ describe('Scheduler', () => {
 
     scheduler.schedule(callback);
 
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await sleep(10);
 
     // Callback should be executed only once
     expect(callback).toHaveBeenCalledTimes(1);
