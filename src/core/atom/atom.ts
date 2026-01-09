@@ -220,11 +220,11 @@ class AtomImpl<T> implements WritableAtom<T> {
   }
 
   /**
-   * Subscribes a listener function to value changes.
+   * Subscribes a listener function or Subscriber object to value changes.
    *
-   * @param listener - Function to call when the value changes
+   * @param listener - Function or Subscriber object to call when the value changes
    * @returns An unsubscribe function
-   * @throws {AtomError} If listener is not a function
+   * @throws {AtomError} If listener is not a function or Subscriber
    *
    * @example
    * ```ts
@@ -234,7 +234,12 @@ class AtomImpl<T> implements WritableAtom<T> {
    * // Later: unsub();
    * ```
    */
-  subscribe(listener: (newValue?: T, oldValue?: T) => void): () => void {
+  subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
+    // Support Subscriber object for zero-allocation pattern
+    if (typeof listener === 'object' && listener !== null && 'execute' in listener) {
+      return this._objectSubscribers.add(listener);
+    }
+
     if (typeof listener !== 'function') {
       throw new AtomError(ERROR_MESSAGES.ATOM_SUBSCRIBER_MUST_BE_FUNCTION);
     }

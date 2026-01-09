@@ -39,7 +39,7 @@ type TrackableListener = (() => void) & {
  *
  * @template T - The type of the computed value
  */
-class ComputedAtomImpl<T> implements ComputedAtom<T> {
+class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
   // === Smi Fields (Fixed Order for V8 Hidden Class) ===
   /** Unique numerical identifier (Smi) */
   readonly id: number;
@@ -197,7 +197,12 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
     return result;
   }
 
-  subscribe(listener: () => void): () => void {
+  subscribe(listener: (() => void) | Subscriber): () => void {
+    // Support Subscriber object for zero-allocation pattern
+    if (typeof listener === 'object' && listener !== null && 'execute' in listener) {
+      return this._objectSubscribers.add(listener);
+    }
+
     if (typeof listener !== 'function') {
       throw new ComputedError(ERROR_MESSAGES.COMPUTED_SUBSCRIBER_MUST_BE_FUNCTION);
     }
@@ -491,9 +496,9 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
         nextUnsubs[i] = dep._tempUnsub;
         dep._tempUnsub = undefined; // Consumed
       } else {
-        // New dependency: subscribe
+        // New dependency: subscribe with 'this' (Zero Allocation - no closure!)
         debug.checkCircular(dep, this as unknown as ComputedAtom<T>);
-        nextUnsubs[i] = dep.subscribe(() => this._markDirty());
+        nextUnsubs[i] = dep.subscribe(this);
       }
     }
 
@@ -618,6 +623,14 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
   // (Replaced by _syncDependencies and inline pool logic)
 
   // === PRIVATE: Subscriber Management ===
+
+  /**
+   * Subscriber interface implementation (Zero-Allocation pattern)
+   * Called by dependencies when they change - delegates to _markDirty
+   */
+  execute(): void {
+    this._markDirty();
+  }
 
   private _markDirty(): void {
     if (this._isRecomputing() || this._isDirty()) return;
