@@ -38,6 +38,7 @@ export function endFlush(): void {
 }
 
 export function incrementFlushExecutionCount(): number {
+  if (!isFlushing) return 0;
   return ++flushExecutionCount;
 }
 
