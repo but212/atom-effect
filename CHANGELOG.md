@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.2] - 2026-01-09
+
+### Changed - 0.3.2
+
+- **Architecture**: Implemented "Push-State, Pull-Value" reactive propagation pattern (used by MobX, Vue 3, Preact/Signals).
+  - `Computed._markDirty()` now propagates dirty flags synchronously without scheduler registration.
+  - Removed `_recomputeJob` field from `Computed` (lazy recomputation via `value` getter).
+  - Removed redundant `_notifySubscribers()` calls after recomputation.
+  - Call stack DFS provides implicit topological ordering, eliminating glitches.
+
 ## [0.3.1] - 2026-01-09
 
 ### Changed - 0.3.1

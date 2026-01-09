@@ -10,7 +10,6 @@ import type { AtomError } from '../../errors/errors';
 import { ComputedError, isPromise, wrapError } from '../../errors/errors';
 import { ERROR_MESSAGES } from '../../errors/messages';
 import { depArrayPool, EMPTY_DEPS, EMPTY_UNSUBS, unsubArrayPool } from '../../pool';
-import { type SchedulerJob, scheduler } from '../../scheduler';
 import { trackingContext } from '../../tracking';
 import type { DependencyTracker } from '../../tracking/tracking.types';
 
@@ -72,8 +71,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
   private _dependencies: Dependency[];
   private _unsubscribes: (() => void)[];
 
-  private readonly _recomputeJob: SchedulerJob;
-  private readonly _notifyJob: SchedulerJob;
+  private readonly _notifyJob: () => void;
 
   private readonly _trackable: TrackableListener;
   // private readonly _id: number; // Replaced by public id
@@ -114,16 +112,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
     this._dependencies = EMPTY_DEPS as Dependency[];
     this._unsubscribes = EMPTY_UNSUBS as (() => void)[];
 
-    this._recomputeJob = () => {
-      if (this._isDirty()) {
-        try {
-          this._recompute();
-        } catch {
-          // Error already handled
-        }
-      }
-    };
-
+    // Pre-bound notification function (no scheduler - Push-State, Pull-Value pattern)
     this._notifyJob = () => {
       this._functionSubscribers.forEachSafe(
         (subscriber) => subscriber(),
@@ -522,17 +511,11 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
   }
 
   private _handleSyncResult(result: T): void {
-    const shouldUpdate = !this._isResolved() || !this._equal(this._value, result);
-
     this._value = result;
     this._clearDirty();
     this._setResolved();
     this._error = null;
     this._setRecomputing(false);
-
-    if (shouldUpdate) {
-      this._notifySubscribers();
-    }
   }
 
   private _handleAsyncComputation(promise: Promise<T>): void {
@@ -554,17 +537,13 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
   }
 
   private _handleAsyncResolution(resolvedValue: T): void {
-    const shouldUpdate = !this._isResolved() || !this._equal(this._value, resolvedValue);
-
+    // Note: In Push-State, Pull-Value pattern, subscribers were already
+    // notified during _markDirty(). No need to notify again after recompute.
     this._value = resolvedValue;
     this._clearDirty();
     this._setResolved();
     this._error = null;
     this._setRecomputing(false);
-
-    if (shouldUpdate) {
-      this._notifySubscribers();
-    }
   }
 
   private _handleAsyncRejection(err: unknown): void {
@@ -632,23 +611,40 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
     this._markDirty();
   }
 
+  /**
+   * Push-State, Pull-Value pattern:
+   * - Only marks dirty and propagates to subscribers (Push-State)
+   * - NO scheduler registration for Computed atoms
+   * - Actual recomputation happens lazily on .value access (Pull-Value)
+   * - Effects will schedule themselves via their subscription callbacks
+   * - Call stack DFS provides implicit topological ordering
+   */
   private _markDirty(): void {
     if (this._isRecomputing() || this._isDirty()) return;
 
     this._setDirty();
     this._setIdle();
 
+    // Push-State: Propagate dirty flag to subscribers (no scheduling!)
+    // This enables implicit topological sort via call stack
     if (this._functionSubscribers.hasSubscribers || this._objectSubscribers.hasSubscribers) {
-      scheduler.schedule(this._recomputeJob);
+      this._notifyJob();
     }
   }
 
+  /**
+   * Notifies subscribers synchronously after value change.
+   * In Push-State, Pull-Value pattern:
+   * - Computed subscribers will mark themselves dirty (propagation)
+   * - Effect subscribers will schedule their own execution
+   */
   private _notifySubscribers(): void {
     if (!this._functionSubscribers.hasSubscribers && !this._objectSubscribers.hasSubscribers) {
       return;
     }
 
-    scheduler.schedule(this._notifyJob);
+    // Synchronous notification - Effects schedule themselves
+    this._notifyJob();
   }
 
   private _registerTracking(): void {
