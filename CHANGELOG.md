@@ -4,7 +4,7 @@
 
 ### Changed - 0.3.2
 
-- **Architecture**: Implemented "Push-State, Pull-Value" reactive propagation pattern (used by MobX, Vue 3, Preact/Signals).
+- **Architecture**: Implemented "Push-State, Pull-Value" reactive propagation pattern.
   - `Computed._markDirty()` now propagates dirty flags synchronously without scheduler registration.
   - Removed `_recomputeJob` field from `Computed` (lazy recomputation via `value` getter).
   - Removed redundant `_notifySubscribers()` calls after recomputation.
