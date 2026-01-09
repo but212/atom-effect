@@ -27,7 +27,8 @@
     "bench:atom": "vitest bench __benchmarks__/micro/atom.bench",
     "bench:computed": "vitest bench __benchmarks__/micro/computed.bench",
     "bench:effect": "vitest bench __benchmarks__/micro/effect.bench",
-    "bench:realistic": "vitest bench __benchmarks__/realistic"
+    "bench:realistic": "vitest bench __benchmarks__/realistic",
+    "bench:propagation": "vitest bench __benchmarks__/micro/propagation.bench"
   },
   "keywords": [
     "reactive",

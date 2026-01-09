@@ -38,3 +38,6 @@ jobs:
 
       - name: Run macro benchmarks
         run: pnpm bench:macro
+
+      - name: Run realistic benchmarks
+        run: pnpm bench:realistic
