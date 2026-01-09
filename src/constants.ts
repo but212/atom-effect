@@ -89,4 +89,5 @@ export const SMI_MAX = 0x3fffffff;
 /**
  * Environment detection
  */
-export const IS_DEV = typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production';
+export const IS_DEV =
+  typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production';

@@ -7,7 +7,12 @@
  */
 
 import { EFFECT_STATE_FLAGS, IS_DEV, SCHEDULER_CONFIG, SMI_MAX } from '../../constants';
-import { nextEpoch } from '../../epoch';
+import {
+  flushEpoch,
+  flushExecutionCount,
+  incrementFlushExecutionCount,
+  nextEpoch,
+} from '../../epoch';
 import { EffectError, isPromise, wrapError } from '../../errors/errors';
 import { ERROR_MESSAGES } from '../../errors/messages';
 import { depArrayPool, EMPTY_DEPS } from '../../pool';
@@ -15,7 +20,6 @@ import { scheduler } from '../../scheduler';
 import { type DependencyTracker, trackingContext } from '../../tracking';
 import type { Dependency, EffectFunction, EffectObject, EffectOptions } from '../../types';
 import { debug, generateId } from '../../utils/debug';
-import { flushEpoch, flushExecutionCount, incrementFlushExecutionCount } from '../../epoch';
 
 /**
  * Internal implementation of the EffectObject interface.
