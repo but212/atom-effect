@@ -66,13 +66,43 @@ export const NO_DEFAULT_VALUE: unique symbol = Symbol('noDefaultValue');
  *
  * @internal
  */
-function hasDependencies(obj: unknown): obj is { dependencies: Set<unknown> } {
+function hasDependencies(obj: unknown): obj is { dependencies: unknown[] } {
   return (
     obj !== null &&
     typeof obj === 'object' &&
     'dependencies' in obj &&
-    (obj as { dependencies: unknown }).dependencies instanceof Set
+    Array.isArray((obj as { dependencies: unknown }).dependencies)
   );
+}
+
+/**
+ * Global epoch for circular dependency checks to avoid Set allocations.
+ */
+let globalCheckEpoch = 0;
+
+/**
+ * Internal recursive helper for circular check
+ */
+function checkCircularInternal(dep: unknown, current: unknown, epoch: number): void {
+  const d = dep as { _visitedEpoch?: number };
+
+  // Optimization: visited check
+  if (d._visitedEpoch === epoch) {
+    return; // Already visited this node in this traversal
+  }
+  d._visitedEpoch = epoch;
+
+  if (dep === current) {
+    throw new ComputedError('Indirect circular dependency detected');
+  }
+
+  // Recursively check nested dependencies
+  if (hasDependencies(dep)) {
+    const deps = dep.dependencies;
+    for (let i = 0; i < deps.length; i++) {
+      checkCircularInternal(deps[i], current, epoch);
+    }
+  }
 }
 
 /**
@@ -99,6 +129,7 @@ function hasDependencies(obj: unknown): obj is { dependencies: Set<unknown> } {
  * debug.attachDebugInfo(atom, 'atom', 42);
  * ```
  */
+
 export const debug: DebugConfig = {
   /**
    * Whether debug mode is enabled.
@@ -169,7 +200,7 @@ export const debug: DebugConfig = {
    * debug.checkCircular(computedC, computedA);
    * ```
    */
-  checkCircular(dep: unknown, current: unknown, visited = new Set<unknown>()): void {
+  checkCircular(dep: unknown, current: unknown, _unusedVisited?: unknown): void {
     // Direct circular reference check (A→A) - Always checked even in production
     if (dep === current) {
       throw new ComputedError('Direct circular dependency detected');
@@ -180,19 +211,9 @@ export const debug: DebugConfig = {
       return;
     }
 
-    // Indirect circular reference check (A→B→C→A)
-    if (visited.has(dep)) {
-      throw new ComputedError('Indirect circular dependency detected');
-    }
-
-    visited.add(dep);
-
-    // Recursively check nested dependencies using type guard
-    if (hasDependencies(dep)) {
-      for (const nestedDep of dep.dependencies) {
-        this.checkCircular(nestedDep, current, visited);
-      }
-    }
+    // Start new traversal
+    globalCheckEpoch++;
+    checkCircularInternal(dep, current, globalCheckEpoch);
   },
 
   /**

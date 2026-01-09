@@ -15,7 +15,7 @@ import {
 } from '../../epoch';
 import { EffectError, isPromise, wrapError } from '../../errors/errors';
 import { ERROR_MESSAGES } from '../../errors/messages';
-import { depArrayPool, EMPTY_DEPS } from '../../pool';
+import { depArrayPool, EMPTY_DEPS, EMPTY_UNSUBS, unsubArrayPool } from '../../pool';
 import { scheduler } from '../../scheduler';
 import { type DependencyTracker, trackingContext } from '../../tracking';
 import type { Dependency, EffectFunction, EffectObject, EffectOptions } from '../../types';
@@ -61,11 +61,11 @@ class EffectImpl implements EffectObject, DependencyTracker {
 
   // Optimized Dependency Management
   private _dependencies: Dependency[];
-  private readonly _subscriptions: Map<number, () => void>;
+  private _unsubscribes: (() => void)[];
 
   // Execution State
   private _nextDeps: Dependency[] | null;
-  private readonly _modifiedDeps: Set<unknown>;
+  private _nextUnsubs: (() => void)[] | null;
 
   // Dev mode only: Timestamp history for fallback detection/debugging
   private _history: number[] | null;
@@ -88,10 +88,11 @@ class EffectImpl implements EffectObject, DependencyTracker {
 
     // Dependencies
     this._dependencies = EMPTY_DEPS as Dependency[];
-    this._subscriptions = new Map();
+    this._unsubscribes = EMPTY_UNSUBS as (() => void)[];
     this._nextDeps = null;
+    this._nextUnsubs = null;
 
-    this._modifiedDeps = new Set();
+    // this._modifiedDeps = new Set(); // Removed
 
     this._lastFlushEpoch = -1;
     this._executionsInEpoch = 0;
@@ -152,12 +153,16 @@ class EffectImpl implements EffectObject, DependencyTracker {
     this._safeCleanup();
 
     // Unsubscribe all
-    if (this._dependencies !== EMPTY_DEPS) {
-      for (const dep of this._dependencies) {
-        const unsub = this._subscriptions.get(dep.id);
+    if (this._unsubscribes !== EMPTY_UNSUBS) {
+      for (let i = 0; i < this._unsubscribes.length; i++) {
+        const unsub = this._unsubscribes[i];
         if (unsub) unsub();
-        this._subscriptions.delete(dep.id);
       }
+      unsubArrayPool.release(this._unsubscribes);
+      this._unsubscribes = EMPTY_UNSUBS as (() => void)[];
+    }
+
+    if (this._dependencies !== EMPTY_DEPS) {
       depArrayPool.release(this._dependencies);
       this._dependencies = EMPTY_DEPS as Dependency[];
     }
@@ -182,7 +187,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
    */
   public addDependency = (dep: unknown): void => {
     // Stage 1: Collect into buffer (nextDeps)
-    if (this.isExecuting && this._nextDeps) {
+    if (this.isExecuting && this._nextDeps && this._nextUnsubs) {
       const d = dep as Dependency;
       const epoch = this._currentEpoch;
 
@@ -192,8 +197,13 @@ class EffectImpl implements EffectObject, DependencyTracker {
 
       this._nextDeps.push(d);
 
-      // Eagerly subscribe to catch synchronous updates
-      if (!this._subscriptions.has(d.id)) {
+      // Eagerly subscribe or reuse existing subscription
+      if (d._tempUnsub) {
+        // Reuse existing
+        this._nextUnsubs.push(d._tempUnsub);
+        d._tempUnsub = undefined; // Mark reused
+      } else {
+        // New subscription
         this._subscribeTo(d);
       }
     }
@@ -230,13 +240,24 @@ class EffectImpl implements EffectObject, DependencyTracker {
 
     this._setExecuting(true);
     this._safeCleanup();
-    this._modifiedDeps.clear();
+    // this._modifiedDeps.clear(); // Epoch handles this
 
     const prevDeps = this._dependencies;
+    const prevUnsubs = this._unsubscribes;
     const nextDeps = depArrayPool.acquire();
+    const nextUnsubs = unsubArrayPool.acquire();
     const epoch = nextEpoch();
 
+    // 1. Map existing subscriptions for O(1) reuse
+    if (prevDeps !== EMPTY_DEPS && prevUnsubs !== EMPTY_UNSUBS) {
+      for (let i = 0; i < prevDeps.length; i++) {
+        const dep = prevDeps[i];
+        if (dep) dep._tempUnsub = prevUnsubs[i];
+      }
+    }
+
     this._nextDeps = nextDeps;
+    this._nextUnsubs = nextUnsubs;
     this._currentEpoch = epoch;
 
     let committed = false;
@@ -244,9 +265,9 @@ class EffectImpl implements EffectObject, DependencyTracker {
     try {
       const result = trackingContext.run(this, this._fn);
 
-      // Commit dependencies
-      this._syncDependencies(prevDeps, epoch);
+      // Commit dependencies (Cleaning up unused is done below)
       this._dependencies = nextDeps;
+      this._unsubscribes = nextUnsubs;
       committed = true;
 
       this._checkLoopWarnings();
@@ -265,23 +286,53 @@ class EffectImpl implements EffectObject, DependencyTracker {
         this._cleanup = typeof result === 'function' ? result : null;
       }
     } catch (error) {
-      // Commit partial dependencies for recovery (eager subscription already happened)
-      this._syncDependencies(prevDeps, epoch);
-      this._dependencies = nextDeps;
-      committed = true;
+      // Error handling:
+      // We must still commit what we collected to maintain consistency?
+      // Or fallback?
+      // In old code: "Commit partial dependencies".
+      committed = true; // Treat as committed so we clean up old deps properly
 
       console.error(wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_EXECUTION_FAILED));
       this._cleanup = null;
     } finally {
       this._setExecuting(false);
       this._nextDeps = null;
+      this._nextUnsubs = null;
 
       if (committed) {
+        // Cleanup unused old subscriptions
         if (prevDeps !== EMPTY_DEPS) {
+          for (let i = 0; i < prevDeps.length; i++) {
+            const dep = prevDeps[i];
+            if (dep?._tempUnsub) {
+              // Not reused
+              dep._tempUnsub();
+              dep._tempUnsub = undefined;
+            }
+          }
           depArrayPool.release(prevDeps);
         }
+        if (prevUnsubs !== EMPTY_UNSUBS) {
+          unsubArrayPool.release(prevUnsubs);
+        }
       } else {
+        // Should not happen if we always set committed=true on error too,
+        // but if catastrophic failure:
         depArrayPool.release(nextDeps);
+
+        // Clean up any NEW subscriptions made in this failed run
+        for (let i = 0; i < nextUnsubs.length; i++) {
+          nextUnsubs[i]?.(); // Unsubscribe
+        }
+        unsubArrayPool.release(nextUnsubs);
+
+        // Also clean up _tempUnsub markers on prevDeps so they aren't leaking
+        if (prevDeps !== EMPTY_DEPS) {
+          for (let i = 0; i < prevDeps.length; i++) {
+            const dep = prevDeps[i];
+            if (dep) dep._tempUnsub = undefined;
+          }
+        }
       }
     }
   };
@@ -293,28 +344,13 @@ class EffectImpl implements EffectObject, DependencyTracker {
    * @param prevDeps - Previous dependency array
    * @param epoch - Current execution epoch for staleness detection
    */
-  private _syncDependencies(prevDeps: Dependency[], epoch: number): void {
-    if (prevDeps !== EMPTY_DEPS) {
-      for (let i = 0; i < prevDeps.length; i++) {
-        const dep = prevDeps[i];
-        if (!dep) continue;
-
-        if (dep._lastSeenEpoch !== epoch) {
-          const unsub = this._subscriptions.get(dep.id);
-          if (unsub) {
-            unsub();
-            this._subscriptions.delete(dep.id);
-          }
-        }
-      }
-    }
-  }
+  // _syncDependencies removed (inline logic in execute)
 
   private _subscribeTo(dep: Dependency): void {
     try {
       const unsubscribe = dep.subscribe(() => {
         if (this._trackModifications && this.isExecuting) {
-          this._modifiedDeps.add(dep);
+          dep._modifiedAtEpoch = this._currentEpoch;
         }
 
         if (this._sync) {
@@ -323,9 +359,13 @@ class EffectImpl implements EffectObject, DependencyTracker {
           scheduler.schedule(this.execute);
         }
       });
-      this._subscriptions.set(dep.id, unsubscribe);
+      // Store in nextUnsubs
+      if (this._nextUnsubs) {
+        this._nextUnsubs.push(unsubscribe);
+      }
     } catch (error) {
       console.error(wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_EXECUTION_FAILED));
+      if (this._nextUnsubs) this._nextUnsubs.push(() => {});
     }
   }
 
@@ -545,7 +585,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
       const dependencies = this._dependencies;
       for (let i = 0; i < dependencies.length; i++) {
         const dep = dependencies[i];
-        if (dep && this._modifiedDeps.has(dep)) {
+        if (dep && dep._modifiedAtEpoch === this._currentEpoch) {
           debug.warn(
             true,
             `Effect is reading a dependency (${

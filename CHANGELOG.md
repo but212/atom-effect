@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.1] - 2026-01-09
+
+### Changed - 0.3.1
+
+- **Memory & Performance**: Complete removal of `Map` and `Set` in critical dependency paths.
+  - Replaced `Computed._subscriptions` and `Effect._subscriptions` (Map) with Pooled Arrays (`EMPTY_UNSUBS`,`unsubArrayPool`).
+  - Implemented O(N) dependency synchronization using `_tempUnsub` and `_lastSeenEpoch`.
+  - Removed `_modifiedDeps` Set in `Effect` in favor of zero-allocation `_modifiedAtEpoch` checks.
+  - Optimized `debug.checkCircular` to use global epoch counter, removing Set allocations in development mode.
+  - **Result**: Significant reduction in memory churn and improved creation/execution performance.
+
 ## [0.3.0] - 2026-01-09
 
 ### Added - 0.3.0
