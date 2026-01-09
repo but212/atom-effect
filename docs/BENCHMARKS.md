@@ -124,7 +124,7 @@ Benchmark results show:
 - **Margin of error**: Statistical variance
 - **Percentiles (p75, p95, p99)**: Distribution of execution times
 
-## Latest Results (v0.3.0)
+## Latest Results (v0.3.1)
 
 **Date**: 2026-01-09  
 **Environment**: GitHub Actions (`ubuntu-latest`), Node.js 20.x, V8 Engine
@@ -135,80 +135,80 @@ Benchmark results show:
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Create (Primitive) | 4,943,419 | 0.0002 | 0.0005 |
-| Create (Object) | 4,757,323 | 0.0002 | 0.0005 |
-| Create 100 Atoms | 53,122 | 0.0188 | 0.0272 |
-| Read (Value) | 4,075,639 | 0.0002 | 0.0006 |
-| Read (Peek) | 4,865,005 | 0.0002 | 0.0005 |
-| Write (Single) | 4,528,597 | 0.0002 | 0.0005 |
-| Write (10 times) | 2,721,916 | 0.0004 | 0.0007 |
-| Subscribe/Unsubscribe | 3,822,804 | 0.0003 | 0.0006 |
-| Notify (1 Subscriber) | 2,210,603 | 0.0005 | 0.0009 |
-| Notify (10 Subscribers) | 1,330,812 | 0.0008 | 0.0014 |
-| Dispose | 4,775,302 | 0.0002 | 0.0005 |
-| Dispose (with Subscribers) | 3,553,582 | 0.0003 | 0.0006 |
+| Create (Primitive) | 4,951,313 | 0.0002 | 0.0003 |
+| Create (Object) | 5,002,031 | 0.0002 | 0.0003 |
+| Create 100 Atoms | 61,051 | 0.0164 | 0.0261 |
+| Read (Value) | 4,177,850 | 0.0002 | 0.0003 |
+| Read (Peek) | 5,005,398 | 0.0002 | 0.0002 |
+| Write (Single) | 4,368,481 | 0.0002 | 0.0003 |
+| Write (10 times) | 2,765,410 | 0.0004 | 0.0004 |
+| Subscribe/Unsubscribe | 3,914,313 | 0.0003 | 0.0004 |
+| Notify (1 Subscriber) | 2,059,217 | 0.0005 | 0.0008 |
+| Notify (10 Subscribers) | 1,488,070 | 0.0007 | 0.0010 |
+| Dispose | 4,810,228 | 0.0002 | 0.0003 |
+| Dispose (with Subscribers) | 3,706,937 | 0.0003 | 0.0005 |
 
 #### Computed - Micro
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Create (Single Dep) | 1,712,685 | 0.0006 | 0.0012 |
-| Create (3 Deps) | 1,141,028 | 0.0009 | 0.0015 |
-| Create Chain (100) | 8,202 | 0.1219 | 0.2694 |
-| Read (Single Dep) | 699,525 | 0.0014 | 0.0024 |
-| Read (Multiple) | 498,191 | 0.0020 | 0.0031 |
-| Nested Computation | 371,318 | 0.0027 | 0.0041 |
-| Recompute (Single Dep) | 565,927 | 0.0018 | 0.0024 |
-| Recompute (Chain of 10) | 87,315 | 0.0115 | 0.0186 |
-| No Recompute (Unchanged) | 639,454 | 0.0016 | 0.0024 |
-| Lazy (Not Accessed) | 1,663,589 | 0.0006 | 0.0012 |
-| Lazy (Accessed Once) | 719,785 | 0.0014 | 0.0020 |
-| Cache Invalidation | 569,353 | 0.0018 | 0.0025 |
-| Diamond Invalidation | 237,543 | 0.0042 | 0.0056 |
-| Dispose | 1,449,065 | 0.0007 | 0.0014 |
-| Dispose Chain | 235,368 | 0.0042 | 0.0067 |
+| Create (Single Dep) | 1,838,997 | 0.0005 | 0.0009 |
+| Create (3 Deps) | 1,215,427 | 0.0008 | 0.0013 |
+| Create Chain (100) | 9,457 | 0.1057 | 0.2617 |
+| Read (Single Dep) | 628,525 | 0.0016 | 0.0020 |
+| Read (Multiple) | 480,760 | 0.0021 | 0.0025 |
+| Nested Computation | 353,355 | 0.0028 | 0.0046 |
+| Recompute (Single Dep) | 499,157 | 0.0020 | 0.0034 |
+| Recompute (Chain of 10) | 82,557 | 0.0121 | 0.0215 |
+| No Recompute (Unchanged) | 582,317 | 0.0017 | 0.0030 |
+| Lazy (Not Accessed) | 1,866,691 | 0.0005 | 0.0007 |
+| Lazy (Accessed Once) | 619,044 | 0.0016 | 0.0021 |
+| Cache Invalidation | 505,008 | 0.0020 | 0.0024 |
+| Diamond Invalidation | 225,264 | 0.0044 | 0.0052 |
+| Dispose | 1,592,825 | 0.0006 | 0.0012 |
+| Dispose Chain | 273,933 | 0.0037 | 0.0065 |
 
 #### Effect - Micro
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Create (Single Dep) | 619,348 | 0.0016 | 0.0031 |
-| Create (Multiple Deps) | 411,289 | 0.0024 | 0.0042 |
-| Create 10 Effects | 70,525 | 0.0142 | 0.0258 |
-| Execution (Dep Change) | 514,657 | 0.0019 | 0.0033 |
-| Execution (Multiple) | 455,031 | 0.0022 | 0.0035 |
-| With Computed Dep | 308,028 | 0.0032 | 0.0050 |
-| Re-runs (10 times) | 438,161 | 0.0023 | 0.0036 |
-| Multiple on Same Dep | 218,448 | 0.0046 | 0.0075 |
-| With Cleanup | 505,813 | 0.0020 | 0.0032 |
-| Cleanup on Dep Change | 484,882 | 0.0021 | 0.0033 |
-| Dispose | 631,749 | 0.0016 | 0.0028 |
-| Dispose (with Cleanup) | 616,676 | 0.0016 | 0.0027 |
-| Dispose 10 Effects | 70,082 | 0.0143 | 0.0308 |
+| Create (Single Dep) | 548,311 | 0.0018 | 0.0040 |
+| Create (Multiple Deps) | 427,541 | 0.0023 | 0.0044 |
+| Create 10 Effects | 69,694 | 0.0143 | 0.0274 |
+| Execution (Dep Change) | 495,978 | 0.0020 | 0.0039 |
+| Execution (Multiple) | 438,632 | 0.0023 | 0.0044 |
+| With Computed Dep | 286,505 | 0.0035 | 0.0060 |
+| Re-runs (10 times) | 414,804 | 0.0024 | 0.0041 |
+| Multiple on Same Dep | 211,504 | 0.0047 | 0.0077 |
+| With Cleanup | 474,235 | 0.0021 | 0.0039 |
+| Cleanup on Dep Change | 459,345 | 0.0022 | 0.0042 |
+| Dispose | 569,301 | 0.0018 | 0.0032 |
+| Dispose (with Cleanup) | 562,372 | 0.0018 | 0.0032 |
+| Dispose 10 Effects | 69,107 | 0.0145 | 0.0261 |
 
 #### Batch & Untracked - Micro
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Batch Update (2) | 1,923,937 | 0.0005 | 0.0011 |
-| Batch Update (10) | 349,563 | 0.0029 | 0.0041 |
-| Batch Update (100) | 48,801 | 0.0205 | 0.0296 |
-| Without Batch (10) | 71,429 | 0.0140 | 0.0239 |
-| With Batch (10) | 56,323 | 0.0178 | 0.0284 |
-| Nested Batch (2 levels) | 1,788,330 | 0.0006 | 0.0010 |
-| Nested Batch (5 levels) | 479,886 | 0.0021 | 0.0028 |
-| Batch with Computed | 303,759 | 0.0033 | 0.0048 |
-| Batch with Diamond | 267,570 | 0.0037 | 0.0049 |
-| Untracked Read (Single) | 3,292,253 | 0.0003 | 0.0007 |
-| Untracked Read (Multiple) | 1,578,163 | 0.0006 | 0.0012 |
-| Peek vs Value | 3,271,451 | 0.0003 | 0.0007 |
-| Tracked (3 Deps) | 426,551 | 0.0023 | 0.0037 |
-| Untracked (Ignores) | 552,385 | 0.0018 | 0.0027 |
-| Partial Tracking | 389,876 | 0.0026 | 0.0034 |
-| Nested Untracked | 1,196,296 | 0.0008 | 0.0015 |
-| 100% Tracking | 171,439 | 0.0058 | 0.0091 |
-| 50% Tracking | 172,411 | 0.0058 | 0.0077 |
-| 0% Tracking | 250,731 | 0.0040 | 0.0053 |
+| Batch Update (2) | 1,925,168 | 0.0005 | 0.0007 |
+| Batch Update (10) | 380,064 | 0.0026 | 0.0032 |
+| Batch Update (100) | 51,406 | 0.0195 | 0.0304 |
+| Without Batch (10) | 86,279 | 0.0116 | 0.0232 |
+| With Batch (10) | 61,443 | 0.0163 | 0.0305 |
+| Nested Batch (2 levels) | 1,633,395 | 0.0006 | 0.0008 |
+| Nested Batch (5 levels) | 483,023 | 0.0021 | 0.0024 |
+| Batch with Computed | 273,509 | 0.0037 | 0.0043 |
+| Batch with Diamond | 233,644 | 0.0043 | 0.0051 |
+| Untracked Read (Single) | 3,071,948 | 0.0003 | 0.0005 |
+| Untracked Read (Multiple) | 1,521,800 | 0.0007 | 0.0010 |
+| Peek vs Value | 3,140,476 | 0.0003 | 0.0004 |
+| Tracked (3 Deps) | 394,308 | 0.0025 | 0.0036 |
+| Untracked (Ignores) | 493,788 | 0.0020 | 0.0024 |
+| Partial Tracking | 344,700 | 0.0029 | 0.0035 |
+| Nested Untracked | 1,163,452 | 0.0009 | 0.0010 |
+| 100% Tracking | 206,512 | 0.0048 | 0.0081 |
+| 50% Tracking | 183,118 | 0.0055 | 0.0106 |
+| 0% Tracking | 245,094 | 0.0041 | 0.0047 |
 
 ---
 
