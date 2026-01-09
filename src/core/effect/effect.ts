@@ -420,8 +420,9 @@ class EffectImpl implements EffectObject, DependencyTracker {
    * @internal
    */
   private _setExecuting(value: boolean): void {
-    if (value) this._flags |= EFFECT_STATE_FLAGS.EXECUTING;
-    else this._flags &= ~EFFECT_STATE_FLAGS.EXECUTING;
+    // Branchless: clear the bit, then OR with the mask if value is true
+    const mask = EFFECT_STATE_FLAGS.EXECUTING;
+    this._flags = (this._flags & ~mask) | (-Number(value) & mask);
   }
 
   /**

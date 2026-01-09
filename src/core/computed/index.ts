@@ -329,11 +329,9 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
   }
 
   private _setRecomputing(value: boolean): void {
-    if (value) {
-      this._stateFlags |= COMPUTED_STATE_FLAGS.RECOMPUTING;
-    } else {
-      this._stateFlags &= ~COMPUTED_STATE_FLAGS.RECOMPUTING;
-    }
+    // Branchless: clear the bit, then OR with the mask if value is true
+    const mask = COMPUTED_STATE_FLAGS.RECOMPUTING;
+    this._stateFlags = (this._stateFlags & ~mask) | (-Number(value) & mask);
   }
 
   private _getAsyncState(): AsyncStateType {

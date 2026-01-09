@@ -88,7 +88,6 @@ export class PromiseIdManager {
    * ```
    */
   next(): number {
-    // Prevent Promise ID overflow (wrap around at MAX_SAFE_INTEGER)
     if (this.lastPromiseId >= this.MAX_PROMISE_ID) {
       this.lastPromiseId = 0;
     }
