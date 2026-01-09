@@ -511,8 +511,13 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
   }
 
   private _handleSyncResult(result: T): void {
-    // In Push-State pattern, subscribers were notified in _markDirty()
-    // No need for additional notification here
+    // Increment version only if value actually changed (respects `equal` option)
+    // This allows downstream Computed atoms to potentially skip recomputation
+    const valueChanged = !this._isResolved() || !this._equal(this._value, result);
+    if (valueChanged) {
+      this.version = (this.version + 1) & SMI_MAX;
+    }
+
     this._value = result;
     this._clearDirty();
     this._setResolved();
@@ -539,8 +544,13 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
   }
 
   private _handleAsyncResolution(resolvedValue: T): void {
-    // In Push-State pattern, subscribers were notified in _markDirty()
-    // No need for additional notification here
+    // Increment version only if value actually changed (respects `equal` option)
+    // This allows downstream Computed atoms to potentially skip recomputation
+    const valueChanged = !this._isResolved() || !this._equal(this._value, resolvedValue);
+    if (valueChanged) {
+      this.version = (this.version + 1) & SMI_MAX;
+    }
+
     this._value = resolvedValue;
     this._clearDirty();
     this._setResolved();
@@ -615,11 +625,10 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
 
   /**
    * Push-State, Pull-Value pattern:
-   * - Only marks dirty and propagates to subscribers (Push-State)
-   * - NO scheduler registration for Computed atoms
-   * - Actual recomputation happens lazily on .value access (Pull-Value)
-   * - Effects will schedule themselves via their subscription callbacks
-   * - Call stack DFS provides implicit topological ordering
+   * Marks this computed as dirty and propagates to all subscribers.
+   * - Object subscribers (Computed atoms): will mark themselves dirty
+   * - Function subscribers (Effects): will schedule their execution
+   * Actual recomputation happens lazily when .value is accessed (Pull).
    */
   private _markDirty(): void {
     if (this._isRecomputing() || this._isDirty()) return;
@@ -627,22 +636,16 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
     this._setDirty();
     this._setIdle();
 
-    // Push-State: Propagate dirty flag to ALL subscribers
-    // - Object subscribers (Computed atoms): will mark themselves dirty
-    // - Function subscribers (Effects): will schedule execution
-    // The `equal` check in _notifySubscribers prevents DOUBLE notification after recompute
+    // Propagate dirty flag to ALL subscribers synchronously
     this._notifyJob();
   }
 
   /**
-   * Notifies subscribers synchronously after value change.
-   * In Push-State, Pull-Value pattern:
-   * - Computed subscribers will mark themselves dirty (propagation)
-   * - Effect subscribers will schedule their own execution
+   * Notifies function subscribers (Effects) of state changes.
+   * Currently only called from _handleAsyncRejection to notify Effects of errors.
+   * In normal operation, Effects are notified via _markDirty during dirty propagation.
    */
   private _notifySubscribers(): void {
-    // Only notify function subscribers (Effects) - called after recompute with equality check
-    // Object subscribers (Computed atoms) were already notified in _markDirty
     if (!this._functionSubscribers.hasSubscribers) {
       return;
     }
