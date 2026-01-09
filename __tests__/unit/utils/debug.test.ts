@@ -82,10 +82,10 @@ describe('debug.checkCircular', () => {
     const originalEnabled = debug.enabled;
     debug.enabled = true;
 
-    const nodeA = { dependencies: new Set<unknown>() };
-    const nodeB = { dependencies: new Set<unknown>([nodeA]) };
-    const nodeC = { dependencies: new Set<unknown>([nodeB]) };
-    nodeA.dependencies.add(nodeC); // A → C → B → A
+    const nodeA: { dependencies: unknown[] } = { dependencies: [] };
+    const nodeB = { dependencies: [nodeA] };
+    const nodeC = { dependencies: [nodeB] };
+    nodeA.dependencies.push(nodeC); // A → C → B → A
 
     expect(() => {
       debug.checkCircular(nodeC, nodeA);
@@ -98,10 +98,10 @@ describe('debug.checkCircular', () => {
     const originalEnabled = debug.enabled;
     debug.enabled = false;
 
-    const nodeA = { dependencies: new Set<unknown>() };
-    const nodeB = { dependencies: new Set<unknown>([nodeA]) };
-    const nodeC = { dependencies: new Set<unknown>([nodeB]) };
-    nodeA.dependencies.add(nodeC);
+    const nodeA: { dependencies: unknown[] } = { dependencies: [] };
+    const nodeB = { dependencies: [nodeA] };
+    const nodeC = { dependencies: [nodeB] };
+    nodeA.dependencies.push(nodeC);
 
     // No error in production (for performance)
     // However, direct circular is still detected
@@ -117,7 +117,7 @@ describe('debug.checkCircular', () => {
     debug.enabled = true;
 
     const node1 = {};
-    const node2 = { dependencies: new Set() };
+    const node2 = { dependencies: [] };
 
     expect(() => {
       debug.checkCircular(node1, node2);
@@ -126,15 +126,17 @@ describe('debug.checkCircular', () => {
     debug.enabled = originalEnabled;
   });
 
-  it('checks recursively when visited Set is provided', () => {
+  it('checks recursively with epoch-based optimization', () => {
     const originalEnabled = debug.enabled;
     debug.enabled = true;
 
-    const visited = new Set();
-    const node = {};
+    const nodeA = { dependencies: [] };
+    const nodeB = { dependencies: [nodeA] };
 
-    debug.checkCircular(node, {}, visited);
-    expect(visited.has(node)).toBe(true);
+    // Should not throw for non-circular dependency
+    expect(() => {
+      debug.checkCircular(nodeB, {});
+    }).not.toThrow();
 
     debug.enabled = originalEnabled;
   });

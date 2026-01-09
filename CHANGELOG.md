@@ -4,12 +4,11 @@
 
 ### Changed - 0.3.1
 
-- **Memory & Performance**: Complete removal of `Map` and `Set` in critical dependency paths.
-  - Replaced `Computed._subscriptions` and `Effect._subscriptions` (Map) with Pooled Arrays (`EMPTY_UNSUBS`,`unsubArrayPool`).
-  - Implemented O(N) dependency synchronization using `_tempUnsub` and `_lastSeenEpoch`.
-  - Removed `_modifiedDeps` Set in `Effect` in favor of zero-allocation `_modifiedAtEpoch` checks.
-  - Optimized `debug.checkCircular` to use global epoch counter, removing Set allocations in development mode.
-  - **Result**: Significant reduction in memory churn and improved creation/execution performance.
+- Replaced `Map` with `Array` for `_subscriptions` in `Computed` and `Effect`.
+- Replaced `Set` with epoch check for `_modifiedDeps` in `Effect`.
+- `Computed` now implements `Subscriber` interface, allowing direct object subscription instead of closures.
+- Updated `Atom.subscribe` and `Computed.subscribe` to accept `Subscriber` objects.
+- `debug.checkCircular` now uses epoch-based traversal instead of `Set`.
 
 ## [0.3.0] - 2026-01-09
 
