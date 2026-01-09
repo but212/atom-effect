@@ -304,11 +304,11 @@ class EffectImpl implements EffectObject, DependencyTracker {
       this._nextUnsubs = null;
 
       if (committed) {
-         // Cleanup unused old subscriptions
+        // Cleanup unused old subscriptions
         if (prevDeps !== EMPTY_DEPS) {
           for (let i = 0; i < prevDeps.length; i++) {
             const dep = prevDeps[i];
-            if (dep && dep._tempUnsub) {
+            if (dep?._tempUnsub) {
               // Not reused
               dep._tempUnsub();
               dep._tempUnsub = undefined;
@@ -323,19 +323,19 @@ class EffectImpl implements EffectObject, DependencyTracker {
         // Should not happen if we always set committed=true on error too,
         // but if catastrophic failure:
         depArrayPool.release(nextDeps);
-        
+
         // Clean up any NEW subscriptions made in this failed run
         for (let i = 0; i < nextUnsubs.length; i++) {
-            nextUnsubs[i]?.(); // Unsubscribe
+          nextUnsubs[i]?.(); // Unsubscribe
         }
         unsubArrayPool.release(nextUnsubs);
-        
+
         // Also clean up _tempUnsub markers on prevDeps so they aren't leaking
         if (prevDeps !== EMPTY_DEPS) {
-           for (let i = 0; i < prevDeps.length; i++) {
-               const dep = prevDeps[i];
-               if (dep) dep._tempUnsub = undefined;
-           }
+          for (let i = 0; i < prevDeps.length; i++) {
+            const dep = prevDeps[i];
+            if (dep) dep._tempUnsub = undefined;
+          }
         }
       }
     }
@@ -365,7 +365,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
       });
       // Store in nextUnsubs
       if (this._nextUnsubs) {
-          this._nextUnsubs.push(unsubscribe);
+        this._nextUnsubs.push(unsubscribe);
       }
     } catch (error) {
       console.error(wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_EXECUTION_FAILED));

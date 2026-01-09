@@ -242,7 +242,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
       unsubArrayPool.release(this._unsubscribes);
       this._unsubscribes = EMPTY_UNSUBS as (() => void)[];
     }
-    
+
     if (this._dependencies !== EMPTY_DEPS) {
       depArrayPool.release(this._dependencies);
       this._dependencies = EMPTY_DEPS as Dependency[];
@@ -469,7 +469,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
     prevDeps: Dependency[],
     nextDeps: Dependency[],
     prevUnsubs: (() => void)[],
-    epoch: number
+    _epoch: number
   ): void {
     // 1. Map existing subscriptions to dependencies for O(1) lookup during sync
     if (prevDeps !== EMPTY_DEPS && prevUnsubs !== EMPTY_UNSUBS) {
@@ -504,7 +504,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
     if (prevDeps !== EMPTY_DEPS) {
       for (let i = 0; i < prevDeps.length; i++) {
         const dep = prevDeps[i];
-        if (dep && dep._tempUnsub) {
+        if (dep?._tempUnsub) {
           // Still has _tempUnsub => was not reused in nextDeps => Removed
           dep._tempUnsub();
           dep._tempUnsub = undefined;

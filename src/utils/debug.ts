@@ -100,7 +100,7 @@ function checkCircularInternal(dep: unknown, current: unknown, epoch: number): v
   if (hasDependencies(dep)) {
     const deps = dep.dependencies;
     for (let i = 0; i < deps.length; i++) {
-        checkCircularInternal(deps[i], current, epoch);
+      checkCircularInternal(deps[i], current, epoch);
     }
   }
 }
