@@ -509,7 +509,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
       );
       this.dispose();
       console.error(error);
-      if (process.env.NODE_ENV !== 'production') {
+      if (IS_DEV) {
         throw error;
       }
     }

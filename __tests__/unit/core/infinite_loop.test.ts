@@ -96,15 +96,6 @@ describe('Infinite Loop Detection (Epoch Based)', () => {
       });
       count.value = 1;
     });
-
-    // Initial run (1) + updates (LIMIT-1) = LIMIT?
-    // Let's trace:
-    // 1. Init: val=0. count=1. executions=1.
-    // 2. Flush: count=1 -> effect runs. executions=2. val=1. count=2.
-    // ...
-    // if val < LIMIT checks current val.
-    // We want total executions.
-
     expect(executions).toBeGreaterThanOrEqual(LIMIT);
   });
 });
