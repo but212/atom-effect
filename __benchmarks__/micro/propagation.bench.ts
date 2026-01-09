@@ -25,8 +25,8 @@ describe('Propagation Performance', () => {
 
   bench('1 to N (Fan Out 1000)', () => {
     fanOutSource.value++;
-    for (let i = 0; i < 1000; i++) {
-      fanOutTargets[i].value;
+    for (const target of fanOutTargets) {
+      target.value;
     }
   });
 
