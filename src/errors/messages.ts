@@ -37,9 +37,9 @@ export const ERROR_MESSAGES = {
   COMPUTED_MUST_BE_FUNCTION: 'Computed function must be a function',
 
   /**
-   * Error thrown when subscribe() receives a non-function listener.
+   * Error thrown when subscribe() receives an invalid listener.
    */
-  COMPUTED_SUBSCRIBER_MUST_BE_FUNCTION: 'Subscriber listener must be a function',
+  COMPUTED_SUBSCRIBER_MUST_BE_FUNCTION: 'Subscriber listener must be a function or Subscriber object',
 
   /**
    * Error thrown when accessing a pending async computed without a default value.
@@ -66,9 +66,9 @@ export const ERROR_MESSAGES = {
   // ─────────────────────────────────────────────────────────────────
 
   /**
-   * Error thrown when atom.subscribe() receives a non-function listener.
+   * Error thrown when atom.subscribe() receives an invalid listener.
    */
-  ATOM_SUBSCRIBER_MUST_BE_FUNCTION: 'Subscription listener must be a function',
+  ATOM_SUBSCRIBER_MUST_BE_FUNCTION: 'Subscription listener must be a function or Subscriber object',
 
   /**
    * Error thrown when the atom subscriber notification process fails.
