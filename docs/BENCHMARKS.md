@@ -128,7 +128,7 @@ Benchmark results show:
 ## Latest Results (v0.3.2)
 
 **Date**: 2026-01-09  
-**Environment**: Local (Windows), Node.js 20.x, V8 Engine  
+**Environment**: GitHub Actions (ubuntu-latest), Node.js 20.x, V8 Engine  
 **Architecture**: Push-State, Pull-Value reactive propagation
 
 ### 1. Micro-Benchmarks
@@ -306,6 +306,8 @@ Benchmark results show:
 | --- | --- | --- | --- |
 | Form reset (batch) | 41,038 | 0.0244 | 0.0543 |
 | Form reset (no batch) | 61,157 | 0.0164 | 0.0303 |
+
+> **Note**: The "no batch" case appears faster because it measures only the **scheduling cost** (updates are coalesced via microtask queue). The "batch" case includes **synchronous flush overhead**. Both result in the same Effect execution count (1 run). Use `batch()` when you need **guaranteed synchronous** completion.
 
 #### Input Latency
 
