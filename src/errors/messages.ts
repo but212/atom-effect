@@ -39,7 +39,8 @@ export const ERROR_MESSAGES = {
   /**
    * Error thrown when subscribe() receives an invalid listener.
    */
-  COMPUTED_SUBSCRIBER_MUST_BE_FUNCTION: 'Subscriber listener must be a function or Subscriber object',
+  COMPUTED_SUBSCRIBER_MUST_BE_FUNCTION:
+    'Subscriber listener must be a function or Subscriber object',
 
   /**
    * Error thrown when accessing a pending async computed without a default value.
