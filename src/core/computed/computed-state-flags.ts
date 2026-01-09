@@ -330,11 +330,9 @@ export class ComputedStateFlags {
    * ```
    */
   setRecomputing(value: boolean): void {
-    if (value) {
-      this.stateFlags |= COMPUTED_STATE_FLAGS.RECOMPUTING;
-    } else {
-      this.stateFlags &= ~COMPUTED_STATE_FLAGS.RECOMPUTING;
-    }
+    // Branchless: clear the bit, then OR with the mask if value is true
+    const mask = COMPUTED_STATE_FLAGS.RECOMPUTING;
+    this.stateFlags = (this.stateFlags & ~mask) | (-Number(value) & mask);
   }
 
   /**

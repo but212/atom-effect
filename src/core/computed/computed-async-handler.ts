@@ -88,11 +88,10 @@ export class PromiseIdManager {
    * ```
    */
   next(): number {
-    // Prevent Promise ID overflow (wrap around at MAX_SAFE_INTEGER)
-    if (this.lastPromiseId >= this.MAX_PROMISE_ID) {
-      this.lastPromiseId = 0;
-    }
-    return ++this.lastPromiseId;
+    // Branchless: modulo wrap-around to prevent overflow
+    // Increment first, then wrap using modulo. +1 ensures 1-based IDs.
+    this.lastPromiseId = (this.lastPromiseId % this.MAX_PROMISE_ID) + 1;
+    return this.lastPromiseId;
   }
 
   /**

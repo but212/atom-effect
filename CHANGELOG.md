@@ -9,6 +9,13 @@
   - Helps prevent infinite loops in complex dependency graphs.
   - Defaults to `SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH`.
 
+### Changed - 0.3.0
+
+- **Optimization**
+  - Applied branchless optimizations to hot paths in `Computed` and `Effect` state management.
+    - Replaced `if/else` branches with bitwise masking for `setRecomputing` and `setExecuting` flags to prevent branch misprediction.
+    - Optimized `PromiseIdManager` overflow check using modulo arithmetic instead of conditional branching.
+
 ## [0.2.2] - 2026-01-08
 
 ### Changed - 0.2.2
