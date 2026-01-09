@@ -9,7 +9,7 @@ import { nextEpoch } from '../../epoch';
 import type { AtomError } from '../../errors/errors';
 import { ComputedError, isPromise, wrapError } from '../../errors/errors';
 import { ERROR_MESSAGES } from '../../errors/messages';
-import { depArrayPool, EMPTY_DEPS } from '../../pool';
+import { depArrayPool, EMPTY_DEPS, EMPTY_UNSUBS, unsubArrayPool } from '../../pool';
 import { type SchedulerJob, scheduler } from '../../scheduler';
 import { trackingContext } from '../../tracking';
 import type { DependencyTracker } from '../../tracking/tracking.types';
@@ -70,7 +70,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
   private readonly _functionSubscribers: SubscriberManager<() => void>;
   private readonly _objectSubscribers: SubscriberManager<Subscriber>;
   private _dependencies: Dependency[];
-  private readonly _subscriptions: Map<number, () => void>;
+  private _unsubscribes: (() => void)[];
 
   private readonly _recomputeJob: SchedulerJob;
   private readonly _notifyJob: SchedulerJob;
@@ -112,7 +112,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
 
     // Optimized Dependency Management
     this._dependencies = EMPTY_DEPS as Dependency[];
-    this._subscriptions = new Map();
+    this._unsubscribes = EMPTY_UNSUBS as (() => void)[];
 
     this._recomputeJob = () => {
       if (this._isDirty()) {
@@ -234,20 +234,19 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
 
   dispose(): void {
     // Unsubscribe from all dependencies
-    // Iterate stored subscriptions
-    // We cannot iterate WeakMap, but we know which deps we have in _dependencies (if still holding them)
-    // Wait, _syncDependencies iterates _dependencies.
-    // So current _dependencies can be used to unsubscribe.
-
-    if (this._dependencies !== EMPTY_DEPS) {
-      for (const dep of this._dependencies) {
-        const unsub = this._subscriptions.get(dep.id);
+    if (this._unsubscribes !== EMPTY_UNSUBS) {
+      for (let i = 0; i < this._unsubscribes.length; i++) {
+        const unsub = this._unsubscribes[i];
         if (unsub) unsub();
-        this._subscriptions.delete(dep.id);
       }
-      depArrayPool.release(this._dependencies);
+      unsubArrayPool.release(this._unsubscribes);
+      this._unsubscribes = EMPTY_UNSUBS as (() => void)[];
     }
-    this._dependencies = EMPTY_DEPS as Dependency[];
+    
+    if (this._dependencies !== EMPTY_DEPS) {
+      depArrayPool.release(this._dependencies);
+      this._dependencies = EMPTY_DEPS as Dependency[];
+    }
 
     this._functionSubscribers.clear();
     this._objectSubscribers.clear();
@@ -415,7 +414,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
 
       if (isPromise(result)) {
         // Sync dependencies before awaiting
-        this._syncDependencies(prevDeps, nextDeps, epoch);
+        this._syncDependencies(prevDeps, nextDeps, this._unsubscribes, epoch);
         this._dependencies = nextDeps;
         committed = true;
 
@@ -425,7 +424,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
       }
 
       // Sync dependencies for synchronous result
-      this._syncDependencies(prevDeps, nextDeps, epoch);
+      this._syncDependencies(prevDeps, nextDeps, this._unsubscribes, epoch);
       this._dependencies = nextDeps;
       committed = true;
 
@@ -436,7 +435,9 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
       // we subscribe to it so we can recompute when it changes (recovery).
 
       nextDeps.length = depCount;
-      this._syncDependencies(prevDeps, nextDeps, epoch);
+      nextDeps.length = depCount;
+      this._syncDependencies(prevDeps, nextDeps, this._unsubscribes, epoch);
+      this._dependencies = nextDeps;
       this._dependencies = nextDeps;
       committed = true;
 
@@ -460,39 +461,62 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
    * Synchronizes subscriptions based on dependency changes.
    * O(N) Diff using Epoch.
    */
-  private _syncDependencies(prevDeps: Dependency[], nextDeps: Dependency[], epoch: number): void {
-    // 1. Unsubscribe removed dependencies
-    if (prevDeps !== EMPTY_DEPS) {
+  /**
+   * Synchronizes subscriptions based on dependency changes using O(N) strategy.
+   * Maps unsubs 1:1 with dependencies array.
+   */
+  private _syncDependencies(
+    prevDeps: Dependency[],
+    nextDeps: Dependency[],
+    prevUnsubs: (() => void)[],
+    epoch: number
+  ): void {
+    // 1. Map existing subscriptions to dependencies for O(1) lookup during sync
+    if (prevDeps !== EMPTY_DEPS && prevUnsubs !== EMPTY_UNSUBS) {
       for (let i = 0; i < prevDeps.length; i++) {
         const dep = prevDeps[i];
-        // Safety check for sparse arrays or strict null checks
-        if (!dep) continue;
-
-        // If lastSeenEpoch != epoch, it was NOT collected in this run -> Removed
-        if (dep._lastSeenEpoch !== epoch) {
-          const unsub = this._subscriptions.get(dep.id);
-          if (unsub) {
-            unsub();
-            this._subscriptions.delete(dep.id);
-          }
-        }
+        if (dep) dep._tempUnsub = prevUnsubs[i];
       }
     }
 
-    // 2. Subscribe to new dependencies
+    // 2. Build new unsubscribe array
+    const nextUnsubs = unsubArrayPool.acquire();
+
+    // Ensure nextUnsubs has same length as nextDeps
+    nextUnsubs.length = nextDeps.length;
+
     for (let i = 0; i < nextDeps.length; i++) {
       const dep = nextDeps[i];
       if (!dep) continue;
 
-      // Check if already subscribed
-      if (!this._subscriptions.has(dep.id)) {
-        // New dependency
+      if (dep._tempUnsub) {
+        // Reuse existing subscription
+        nextUnsubs[i] = dep._tempUnsub;
+        dep._tempUnsub = undefined; // Consumed
+      } else {
+        // New dependency: subscribe
         debug.checkCircular(dep, this as unknown as ComputedAtom<T>);
-        // Subscription
-        const unsub = dep.subscribe(() => this._markDirty());
-        this._subscriptions.set(dep.id, unsub);
+        nextUnsubs[i] = dep.subscribe(() => this._markDirty());
       }
     }
+
+    // 3. Cleanup unused subscriptions (from removals)
+    if (prevDeps !== EMPTY_DEPS) {
+      for (let i = 0; i < prevDeps.length; i++) {
+        const dep = prevDeps[i];
+        if (dep && dep._tempUnsub) {
+          // Still has _tempUnsub => was not reused in nextDeps => Removed
+          dep._tempUnsub();
+          dep._tempUnsub = undefined;
+        }
+      }
+    }
+
+    // 4. Release old unsub array and update reference
+    if (prevUnsubs !== EMPTY_UNSUBS) {
+      unsubArrayPool.release(prevUnsubs);
+    }
+    this._unsubscribes = nextUnsubs;
   }
 
   private _handleSyncResult(result: T): void {

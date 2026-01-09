@@ -18,9 +18,42 @@ export interface Subscriber {
 export interface Dependency {
   readonly id: number;
   version: number;
+  /**
+   * Last epoch seen by this dependency (used for invalidation)
+   */
   _lastSeenEpoch: number;
+
+  /**
+   * Temporary field for O(N) sync strategy (avoiding Map/indexOf)
+   * @internal
+   */
+  _tempUnsub?: (() => void) | undefined;
+
+  /**
+   * Epoch when this dependency was last modified (for debug/tracking)
+   * @internal
+   */
+  _modifiedAtEpoch?: number;
+
+  /**
+   * Epoch when this dependency was last visited (for circular check)
+   * @internal
+   */
+  _visitedEpoch?: number;
+
+  /**
+   * Subscribe to dependency updates
+   */
   subscribe(listener: (() => void) | Subscriber): () => void;
+
+  /**
+   * Peek at value without subscribing
+   */
   peek?(): unknown;
+
+  /**
+   * Current value (if cached)
+   */
   value?: unknown;
 }
 

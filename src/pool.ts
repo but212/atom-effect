@@ -5,6 +5,7 @@ import { __DEV__ } from './types/internal';
 // ⚡ Shared Constants
 export const EMPTY_DEPS: readonly Dependency[] = Object.freeze([]);
 export const EMPTY_SUBS: readonly Subscriber[] = Object.freeze([]);
+export const EMPTY_UNSUBS: readonly (() => void)[] = Object.freeze([]);
 
 /**
  * Generic Array Pool (Type-safe pooling for different array types)
@@ -78,6 +79,7 @@ class ArrayPool<T> {
   }
 }
 
-// ⚡ Per-type Pool Instances (V8 Shape Optimization)
+// Per-type Pool Instances (V8 Shape Optimization)
 export const depArrayPool = new ArrayPool<Dependency>();
 export const subArrayPool = new ArrayPool<Subscriber>();
+export const unsubArrayPool = new ArrayPool<() => void>();
