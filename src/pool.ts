@@ -2,7 +2,7 @@ import type { Dependency, Subscriber } from './types';
 import type { PoolStats } from './types/internal';
 import { __DEV__ } from './types/internal';
 
-// ⚡ Shared Constants
+// Shared Constants
 export const EMPTY_DEPS: readonly Dependency[] = Object.freeze([]);
 export const EMPTY_SUBS: readonly Subscriber[] = Object.freeze([]);
 export const EMPTY_UNSUBS: readonly (() => void)[] = Object.freeze([]);
@@ -29,10 +29,10 @@ class ArrayPool<T> {
   }
 
   release(arr: T[], emptyConst?: readonly T[]): void {
-    // ⚡ 1. Reference check first
+    // 1. Reference check first
     if (emptyConst && arr === emptyConst) return;
 
-    // ⚡ 2. Frozen check
+    // 2. Frozen check
     if (Object.isFrozen(arr)) {
       if (__DEV__ && this.stats) this.stats.rejected.frozen++;
       return;
