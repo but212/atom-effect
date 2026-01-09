@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.2] - 2026-01-09
+
+### Changed - 0.3.2
+
+- **Architecture**: Implemented "Push-State, Pull-Value" reactive propagation pattern.
+  - `Computed._markDirty()` now propagates dirty flags synchronously without scheduler registration.
+  - Removed `_recomputeJob` field from `Computed` (lazy recomputation via `value` getter).
+  - Call stack DFS provides implicit topological ordering, eliminating glitches.
+  - **Version-based optimization**: `Computed.version` only increments when value actually changes (respects `equal` option). Enables downstream Computed atoms to detect unchanged dependencies.
+  - **Note**: Effects are scheduled during dirty propagation and cannot be skipped by equality checks.
+
 ## [0.3.1] - 2026-01-09
 
 ### Changed - 0.3.1

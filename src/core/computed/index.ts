@@ -10,7 +10,6 @@ import type { AtomError } from '../../errors/errors';
 import { ComputedError, isPromise, wrapError } from '../../errors/errors';
 import { ERROR_MESSAGES } from '../../errors/messages';
 import { depArrayPool, EMPTY_DEPS, EMPTY_UNSUBS, unsubArrayPool } from '../../pool';
-import { type SchedulerJob, scheduler } from '../../scheduler';
 import { trackingContext } from '../../tracking';
 import type { DependencyTracker } from '../../tracking/tracking.types';
 
@@ -72,8 +71,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
   private _dependencies: Dependency[];
   private _unsubscribes: (() => void)[];
 
-  private readonly _recomputeJob: SchedulerJob;
-  private readonly _notifyJob: SchedulerJob;
+  private readonly _notifyJob: () => void;
 
   private readonly _trackable: TrackableListener;
   // private readonly _id: number; // Replaced by public id
@@ -114,16 +112,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
     this._dependencies = EMPTY_DEPS as Dependency[];
     this._unsubscribes = EMPTY_UNSUBS as (() => void)[];
 
-    this._recomputeJob = () => {
-      if (this._isDirty()) {
-        try {
-          this._recompute();
-        } catch {
-          // Error already handled
-        }
-      }
-    };
-
+    // Pre-bound notification function (no scheduler - Push-State, Pull-Value pattern)
     this._notifyJob = () => {
       this._functionSubscribers.forEachSafe(
         (subscriber) => subscriber(),
@@ -522,17 +511,18 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
   }
 
   private _handleSyncResult(result: T): void {
-    const shouldUpdate = !this._isResolved() || !this._equal(this._value, result);
+    // Increment version only if value actually changed (respects `equal` option)
+    // This allows downstream Computed atoms to potentially skip recomputation
+    const valueChanged = !this._isResolved() || !this._equal(this._value, result);
+    if (valueChanged) {
+      this.version = (this.version + 1) & SMI_MAX;
+    }
 
     this._value = result;
     this._clearDirty();
     this._setResolved();
     this._error = null;
     this._setRecomputing(false);
-
-    if (shouldUpdate) {
-      this._notifySubscribers();
-    }
   }
 
   private _handleAsyncComputation(promise: Promise<T>): void {
@@ -554,17 +544,18 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
   }
 
   private _handleAsyncResolution(resolvedValue: T): void {
-    const shouldUpdate = !this._isResolved() || !this._equal(this._value, resolvedValue);
+    // Increment version only if value actually changed (respects `equal` option)
+    // This allows downstream Computed atoms to potentially skip recomputation
+    const valueChanged = !this._isResolved() || !this._equal(this._value, resolvedValue);
+    if (valueChanged) {
+      this.version = (this.version + 1) & SMI_MAX;
+    }
 
     this._value = resolvedValue;
     this._clearDirty();
     this._setResolved();
     this._error = null;
     this._setRecomputing(false);
-
-    if (shouldUpdate) {
-      this._notifySubscribers();
-    }
   }
 
   private _handleAsyncRejection(err: unknown): void {
@@ -632,23 +623,37 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
     this._markDirty();
   }
 
+  /**
+   * Push-State, Pull-Value pattern:
+   * Marks this computed as dirty and propagates to all subscribers.
+   * - Object subscribers (Computed atoms): will mark themselves dirty
+   * - Function subscribers (Effects): will schedule their execution
+   * Actual recomputation happens lazily when .value is accessed (Pull).
+   */
   private _markDirty(): void {
     if (this._isRecomputing() || this._isDirty()) return;
 
     this._setDirty();
     this._setIdle();
 
-    if (this._functionSubscribers.hasSubscribers || this._objectSubscribers.hasSubscribers) {
-      scheduler.schedule(this._recomputeJob);
-    }
+    // Propagate dirty flag to ALL subscribers synchronously
+    this._notifyJob();
   }
 
+  /**
+   * Notifies function subscribers (Effects) of state changes.
+   * Currently only called from _handleAsyncRejection to notify Effects of errors.
+   * In normal operation, Effects are notified via _markDirty during dirty propagation.
+   */
   private _notifySubscribers(): void {
-    if (!this._functionSubscribers.hasSubscribers && !this._objectSubscribers.hasSubscribers) {
+    if (!this._functionSubscribers.hasSubscribers) {
       return;
     }
 
-    scheduler.schedule(this._notifyJob);
+    this._functionSubscribers.forEachSafe(
+      (subscriber) => subscriber(),
+      (err) => console.error(err)
+    );
   }
 
   private _registerTracking(): void {
