@@ -52,10 +52,22 @@ export const POOL_CONFIG = {
  * Controls batching behavior and performance limits
  */
 export const SCHEDULER_CONFIG = {
-  /** Maximum effect executions per second to detect infinite loops */
+  /** Maximum effect executions per second to detect infinite loops (Legacy/Fallback) */
   MAX_EXECUTIONS_PER_SECOND: 100,
   /** Threshold for cleaning up old execution timestamps */
   CLEANUP_THRESHOLD: 100,
+
+  /**
+   * Maximum executions per effect within a single flush cycle
+   * Increased from 10 to 50 based on evaluation report
+   */
+  MAX_EXECUTIONS_PER_EFFECT: 50,
+
+  /**
+   * Maximum total executions across all effects in a single flush cycle
+   * Increased from 1000 to 5000 based on evaluation report
+   */
+  MAX_EXECUTIONS_PER_FLUSH: 5000,
 } as const;
 
 /**
@@ -73,3 +85,8 @@ export const DEBUG_CONFIG = {
  * Used for IDs and Versions to prevent HeapNumber allocation
  */
 export const SMI_MAX = 0x3fffffff;
+
+/**
+ * Environment detection
+ */
+export const IS_DEV = typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production';

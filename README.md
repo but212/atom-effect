@@ -108,6 +108,11 @@ const effectObj = effect(() => {
 effectObj.dispose(); // Stop the effect
 ```
 
+**Options:**
+
+- `sync` - Run synchronously (default: `false`)
+- `maxExecutionsPerFlush` - Maximum executions per flush cycle to prevent infinite loops (default: `SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH`)
+
 ### `batch(fn)`
 
 Batches multiple updates to run effects only once.
@@ -219,7 +224,7 @@ See [docs/BENCHMARKS.md](./docs/BENCHMARKS.md) for details.
 ## Testing
 
 ```bash
-pnpm test              # Run all tests (296 test cases)
+pnpm test              # Run all tests (299 test cases)
 pnpm test:coverage     # With coverage
 pnpm bench             # Run benchmarks
 ```

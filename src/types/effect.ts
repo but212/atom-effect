@@ -1,6 +1,7 @@
 export interface EffectOptions {
   sync?: boolean;
   maxExecutionsPerSecond?: number;
+  maxExecutionsPerFlush?: number;
   trackModifications?: boolean;
 }
 

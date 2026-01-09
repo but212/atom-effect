@@ -201,7 +201,7 @@ describe('Effect - Error Handling and Edge Cases', () => {
       () => {
         count.value; // only track dependency
       },
-      { sync: true, maxExecutionsPerSecond: 1000 }
+      { sync: true, maxExecutionsPerSecond: 1000, maxExecutionsPerFlush: 200 }
     );
 
     // 150 updates
