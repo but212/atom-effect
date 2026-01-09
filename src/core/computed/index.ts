@@ -511,6 +511,8 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
   }
 
   private _handleSyncResult(result: T): void {
+    // In Push-State pattern, subscribers were notified in _markDirty()
+    // No need for additional notification here
     this._value = result;
     this._clearDirty();
     this._setResolved();
@@ -537,8 +539,8 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
   }
 
   private _handleAsyncResolution(resolvedValue: T): void {
-    // Note: In Push-State, Pull-Value pattern, subscribers were already
-    // notified during _markDirty(). No need to notify again after recompute.
+    // In Push-State pattern, subscribers were notified in _markDirty()
+    // No need for additional notification here
     this._value = resolvedValue;
     this._clearDirty();
     this._setResolved();
@@ -625,11 +627,11 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
     this._setDirty();
     this._setIdle();
 
-    // Push-State: Propagate dirty flag to subscribers (no scheduling!)
-    // This enables implicit topological sort via call stack
-    if (this._functionSubscribers.hasSubscribers || this._objectSubscribers.hasSubscribers) {
-      this._notifyJob();
-    }
+    // Push-State: Propagate dirty flag to ALL subscribers
+    // - Object subscribers (Computed atoms): will mark themselves dirty
+    // - Function subscribers (Effects): will schedule execution
+    // The `equal` check in _notifySubscribers prevents DOUBLE notification after recompute
+    this._notifyJob();
   }
 
   /**
@@ -639,12 +641,16 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
    * - Effect subscribers will schedule their own execution
    */
   private _notifySubscribers(): void {
-    if (!this._functionSubscribers.hasSubscribers && !this._objectSubscribers.hasSubscribers) {
+    // Only notify function subscribers (Effects) - called after recompute with equality check
+    // Object subscribers (Computed atoms) were already notified in _markDirty
+    if (!this._functionSubscribers.hasSubscribers) {
       return;
     }
 
-    // Synchronous notification - Effects schedule themselves
-    this._notifyJob();
+    this._functionSubscribers.forEachSafe(
+      (subscriber) => subscriber(),
+      (err) => console.error(err)
+    );
   }
 
   private _registerTracking(): void {

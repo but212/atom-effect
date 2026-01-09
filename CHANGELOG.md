@@ -9,6 +9,7 @@
   - Removed `_recomputeJob` field from `Computed` (lazy recomputation via `value` getter).
   - Removed redundant `_notifySubscribers()` calls after recomputation.
   - Call stack DFS provides implicit topological ordering, eliminating glitches.
+  - **Note**: The `equal` option now only prevents propagation to downstream `Computed` atoms. Effects are scheduled during dirty propagation and cannot be skipped by equality checks.
 
 ## [0.3.1] - 2026-01-09
 
