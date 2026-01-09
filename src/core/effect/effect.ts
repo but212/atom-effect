@@ -205,10 +205,6 @@ class EffectImpl implements EffectObject, DependencyTracker {
       } else {
         // New subscription
         this._subscribeTo(d);
-        // _subscribeTo pushes to _nextUnsubs inside? No, _subscribeTo returns nothing currently.
-        // I need to modify _subscribeTo to return unsub or push to _nextUnsubs.
-        // Let's modify _subscribeTo to return unsub, and push here.
-        // But wait, _subscribeTo is below. I'll modify it.
       }
     }
   };
@@ -369,10 +365,6 @@ class EffectImpl implements EffectObject, DependencyTracker {
       }
     } catch (error) {
       console.error(wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_EXECUTION_FAILED));
-      // Push noop to keep index alignment?
-      // If subscribe fails, we should probably not hold the dep?
-      // But dep IS in nextDeps. If we don't have unsub, we have an issue.
-      // Push noop.
       if (this._nextUnsubs) this._nextUnsubs.push(() => {});
     }
   }

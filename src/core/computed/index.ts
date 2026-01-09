@@ -435,11 +435,8 @@ class ComputedAtomImpl<T> implements ComputedAtom<T> {
       // we subscribe to it so we can recompute when it changes (recovery).
 
       nextDeps.length = depCount;
-      nextDeps.length = depCount;
       this._syncDependencies(prevDeps, nextDeps, this._unsubscribes, epoch);
       this._dependencies = nextDeps;
-      this._dependencies = nextDeps;
-      committed = true;
 
       this._handleComputationError(err);
     } finally {
