@@ -6,8 +6,13 @@
  * support cleanup functions, async operations, and infinite loop detection.
  */
 
-import { EFFECT_STATE_FLAGS, SCHEDULER_CONFIG, SMI_MAX } from '../../constants';
-import { nextEpoch } from '../../epoch';
+import { EFFECT_STATE_FLAGS, IS_DEV, SCHEDULER_CONFIG, SMI_MAX } from '../../constants';
+import {
+  flushEpoch,
+  flushExecutionCount,
+  incrementFlushExecutionCount,
+  nextEpoch,
+} from '../../epoch';
 import { EffectError, isPromise, wrapError } from '../../errors/errors';
 import { ERROR_MESSAGES } from '../../errors/messages';
 import { depArrayPool, EMPTY_DEPS } from '../../pool';
@@ -42,9 +47,14 @@ class EffectImpl implements EffectObject, DependencyTracker {
   // But we use _epoch during execution to track collected dependencies.
   private _currentEpoch: number;
 
+  // Epoch-based infinite loop detection
+  private _lastFlushEpoch: number;
+  private _executionsInEpoch: number;
+
   private readonly _fn: EffectFunction;
   private readonly _sync: boolean;
   private readonly _maxExecutions: number;
+  private readonly _maxExecutionsPerFlush: number;
   private readonly _trackModifications: boolean;
 
   private _cleanup: (() => void) | null;
@@ -56,11 +66,10 @@ class EffectImpl implements EffectObject, DependencyTracker {
   // Execution State
   private _nextDeps: Dependency[] | null;
   private readonly _modifiedDeps: Set<unknown>;
-  private readonly _history: Float64Array;
-  private _historyIdx: number;
-  private _historyCount: number;
+
+  // Dev mode only: Timestamp history for fallback detection/debugging
+  private _history: number[] | null;
   private _executionCount: number;
-  private readonly _historyCapacity: number;
 
   constructor(fn: EffectFunction, options: EffectOptions = {}) {
     this._id = generateId() & SMI_MAX;
@@ -71,6 +80,8 @@ class EffectImpl implements EffectObject, DependencyTracker {
     this._sync = options.sync ?? false;
     this._maxExecutions =
       options.maxExecutionsPerSecond ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_SECOND;
+    this._maxExecutionsPerFlush =
+      options.maxExecutionsPerFlush ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_EFFECT;
     this._trackModifications = options.trackModifications ?? false;
 
     this._cleanup = null;
@@ -82,10 +93,11 @@ class EffectImpl implements EffectObject, DependencyTracker {
 
     this._modifiedDeps = new Set();
 
-    this._historyCapacity = this._maxExecutions + 5;
-    this._history = new Float64Array(this._historyCapacity);
-    this._historyIdx = 0;
-    this._historyCount = 0;
+    this._lastFlushEpoch = -1;
+    this._executionsInEpoch = 0;
+
+    // Only allocate history in dev mode or if explicitly enabled
+    this._history = IS_DEV ? [] : null;
     this._executionCount = 0;
 
     debug.attachDebugInfo(this, 'effect', this._id);
@@ -214,8 +226,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
   public execute = (): void => {
     if (this.isDisposed || this.isExecuting) return;
 
-    const now = Date.now();
-    this._recordExecution(now);
+    this._checkInfiniteLoop();
 
     this._setExecuting(true);
     this._safeCleanup();
@@ -438,57 +449,81 @@ class EffectImpl implements EffectObject, DependencyTracker {
   }
 
   /**
-   * Records an execution timestamp and checks for infinite loop conditions.
+   * Checks for infinite loop conditions using epoch-based detection.
+   * Falls back to timestamp-based detection in development mode.
    *
-   * @param now - The current timestamp in milliseconds (from `Date.now()`)
-   *
-   * @remarks
-   * This method implements a circular buffer to track recent execution
-   * timestamps. If the number of executions within the last second exceeds
-   * `_maxExecutions`, the effect is disposed and an error is thrown (in debug mode)
-   * or logged (in production mode).
-   *
-   * The circular buffer approach provides O(1) insertion and efficient
-   * memory usage for tracking execution history.
-   *
-   * @throws {EffectError} In debug mode, throws when infinite loop is detected
-   *
+   * @throws {EffectError} When infinite loop is detected
    * @internal
    */
-  private _recordExecution(now: number): void {
-    if (this._maxExecutions <= 0) return;
-
-    const oneSecondAgo = now - 1000;
-
-    this._history[this._historyIdx] = now;
-    this._historyIdx = (this._historyIdx + 1) % this._historyCapacity;
-    if (this._historyCount < this._historyCapacity) {
-      this._historyCount++;
+  private _checkInfiniteLoop(): void {
+    // Phase 1: Epoch-based fast check
+    if (this._lastFlushEpoch !== flushEpoch) {
+      this._lastFlushEpoch = flushEpoch;
+      this._executionsInEpoch = 0;
     }
+
+    this._executionsInEpoch++;
+
+    // Check per-effect limit
+    if (this._executionsInEpoch > this._maxExecutionsPerFlush) {
+      this._throwInfiniteLoopError('per-effect');
+    }
+
+    // Check global limit
+    if (incrementFlushExecutionCount() > SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH) {
+      this._throwInfiniteLoopError('global');
+    }
+
     this._executionCount++;
 
-    let count = 0;
-    let idx = (this._historyIdx - 1 + this._historyCapacity) % this._historyCapacity;
+    // Phase 2: Timestamp-based fallback (Dev mode only)
+    if (this._history) {
+      const now = Date.now();
+      this._history.push(now);
 
-    for (let i = 0; i < this._historyCount; i++) {
-      if (this._history[idx]! < oneSecondAgo) {
-        break;
+      // Keep only recent history
+      if (this._history.length > SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_SECOND + 10) {
+        this._history.shift();
       }
+
+      this._checkTimestampLoop(now);
+    }
+  }
+
+  private _checkTimestampLoop(now: number): void {
+    const history = this._history;
+    if (!history || this._maxExecutions <= 0) return;
+
+    const oneSecondAgo = now - 1000;
+    let count = 0;
+
+    // Count executions in last second
+    for (let i = history.length - 1; i >= 0; i--) {
+      if (history[i]! < oneSecondAgo) break;
       count++;
-      idx = (idx - 1 + this._historyCapacity) % this._historyCapacity;
     }
 
     if (count > this._maxExecutions) {
-      const message = `Effect executed ${count} times within 1 second. Infinite loop suspected`;
-      const error = new EffectError(message);
-
+      const error = new EffectError(
+        `Effect executed ${count} times within 1 second. Infinite loop suspected`
+      );
       this.dispose();
       console.error(error);
-
-      if (debug.enabled) {
+      if (IS_DEV) {
         throw error;
       }
     }
+  }
+
+  private _throwInfiniteLoopError(type: 'per-effect' | 'global'): never {
+    const error = new EffectError(
+      `Infinite loop detected (${type}): ` +
+        `effect executed ${this._executionsInEpoch} times in current flush. ` +
+        `Total executions in flush: ${flushExecutionCount}`
+    );
+    this.dispose();
+    console.error(error);
+    throw error;
   }
 
   /**

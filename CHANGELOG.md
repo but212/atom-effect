@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.0] - 2026-01-09
+
+### Added - 0.3.0
+
+- Added `maxExecutionsPerFlush` option to `EffectOptions`.
+  - Allows configuring the maximum number of executions allowed for a specific effect during a single flush cycle.
+  - Helps prevent infinite loops in complex dependency graphs.
+  - Defaults to `SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH`.
+
 ## [0.2.2] - 2026-01-08
 
 ### Changed - 0.2.2

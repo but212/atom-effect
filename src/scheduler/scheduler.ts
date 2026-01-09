@@ -1,3 +1,4 @@
+import { endFlush, startFlush } from '../epoch';
 import { SchedulerError } from '../errors/errors';
 
 /**
@@ -150,6 +151,9 @@ class Scheduler {
     this._epoch++;
 
     queueMicrotask(() => {
+      // Start detection cycle
+      const flushStarted = startFlush();
+
       // Performance: Iterate Array by index
       for (let i = 0; i < count; i++) {
         try {
@@ -164,6 +168,9 @@ class Scheduler {
       // Reuse array capacity
       jobs.length = 0;
       this.isProcessing = false;
+
+      // End detection cycle
+      if (flushStarted) endFlush();
 
       // If new tasks were added to the active queue (the one we swapped to), flush again
       if (this.queueSize > 0 && !this.isBatching) {
@@ -187,6 +194,7 @@ class Scheduler {
    */
   private flushSync(): void {
     this.isFlushingSync = true;
+    const flushStarted = startFlush();
 
     try {
       // Increment epoch first so batch jobs can pass the dedup check
@@ -254,6 +262,7 @@ class Scheduler {
       }
     } finally {
       this.isFlushingSync = false;
+      if (flushStarted) endFlush();
     }
   }
 
