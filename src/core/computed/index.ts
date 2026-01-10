@@ -634,7 +634,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
     if (this._isRecomputing() || this._isDirty()) return;
 
     this._setDirty();
-    this._setIdle();
+    // this._setIdle();
 
     // Propagate dirty flag to ALL subscribers synchronously
     this._notifyJob();
