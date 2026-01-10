@@ -463,32 +463,30 @@ describe('Computed - Error Handling and Edge Cases', () => {
     it('recomputes when dirty even if in pending/rejected state', async () => {
       const dep = atom(0);
       let computeCount = 0;
-      
+
       const c = computed(
         async () => {
           computeCount++;
           const val = dep.value;
-          await new Promise(resolve => setTimeout(resolve, 10));
+          await new Promise((resolve) => setTimeout(resolve, 10));
           if (val < 0) throw new Error('Negative');
           return val;
-        }, 
+        },
         { defaultValue: -1 }
       );
 
       // 1. Start pending state
-      c.value; 
+      c.value;
       expect(c.isPending).toBe(true);
       expect(computeCount).toBe(1);
 
-
-
       // 2. Change dependency while pending -> becomes dirty
-      dep.value = 1; 
-      
+      dep.value = 1;
+
       // Need to wait briefly to ensure subscribers notified (scheduler)
-      await new Promise(resolve => setTimeout(resolve, 0));
-      
-      const val = c.value; // Should trigger new computation
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      const _val = c.value; // Should trigger new computation
 
       expect(computeCount).toBe(2);
     });
