@@ -125,7 +125,7 @@ Benchmark results show:
 - **Margin of error**: Statistical variance
 - **Percentiles (p75, p95, p99)**: Distribution of execution times
 
-## Latest Results (v0.3.2)
+## Latest Results (v0.3.3)
 
 **Date**: 2026-01-10  
 **Environment**: GitHub Actions (ubuntu-latest), Node.js 20.x, V8 Engine  

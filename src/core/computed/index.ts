@@ -349,15 +349,13 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
 
   private _computeValue(): T {
     if (this._isRecomputing()) return this._value;
-    if (this._isPending()) return this._handlePending();
-    if (this._isRejected()) return this._handleRejected();
 
     if (this._isDirty() || this._isIdle()) {
       this._recompute();
-      if (this._isPending()) {
-        return this._handlePending();
-      }
     }
+
+    if (this._isPending()) return this._handlePending();
+    if (this._isRejected()) return this._handleRejected();
 
     return this._value;
   }
@@ -527,6 +525,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
 
   private _handleAsyncComputation(promise: Promise<T>): void {
     this._setPending();
+    this._clearDirty();
 
     // Branchless promise ID increment with overflow protection
     this._promiseId = this._promiseId >= this.MAX_PROMISE_ID ? 1 : this._promiseId + 1;
