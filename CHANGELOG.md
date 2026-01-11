@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.3] - 2026-01-10
+
+### Fixed
+
+- Fixed computed caching bug where `_setIdle()` in `_markDirty()` cleared the RESOLVED flag, causing computed values to re-execute on every access instead of returning cached values.
+
 ## [0.3.2] - 2026-01-09
 
 ### Changed - 0.3.2

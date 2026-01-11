@@ -211,14 +211,14 @@ try {
 
 | Operation | Performance |
 | --- | --- |
-| Atom creation | ~5.2M ops/sec |
-| Atom read/write | ~4.6M ops/sec |
-| Computed creation | ~1.74M ops/sec |
-| Computed recomputation | ~495K ops/sec |
-| Effect execution | ~497K ops/sec |
-| Batch update (2 atoms) | ~1.93M ops/sec |
-| Untracked read | ~3.21M ops/sec |
-| Deep chain (100 levels) | ~8.9K ops/sec |
+| Atom creation | ~5.18M ops/sec |
+| Atom read/write | ~4.50M ops/sec |
+| Computed creation | ~1.85M ops/sec |
+| Computed recomputation | ~492K ops/sec |
+| Effect execution | ~508K ops/sec |
+| Batch update (2 atoms) | ~2.03M ops/sec |
+| Untracked read | ~3.07M ops/sec |
+| Deep chain (100 levels) | ~9.1K ops/sec |
 
 See [docs/BENCHMARKS.md](./docs/BENCHMARKS.md) for details.
 

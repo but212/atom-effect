@@ -9,7 +9,14 @@ import { nextEpoch } from '../../epoch';
 import type { AtomError } from '../../errors/errors';
 import { ComputedError, isPromise, wrapError } from '../../errors/errors';
 import { ERROR_MESSAGES } from '../../errors/messages';
-import { depArrayPool, EMPTY_DEPS, EMPTY_UNSUBS, unsubArrayPool } from '../../pool';
+import {
+  depArrayPool,
+  EMPTY_DEPS,
+  EMPTY_UNSUBS,
+  EMPTY_VERSIONS,
+  unsubArrayPool,
+  versionArrayPool,
+} from '../../pool';
 import { trackingContext } from '../../tracking';
 import type { DependencyTracker } from '../../tracking/tracking.types';
 
@@ -69,6 +76,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
   private readonly _functionSubscribers: SubscriberManager<() => void>;
   private readonly _objectSubscribers: SubscriberManager<Subscriber>;
   private _dependencies: Dependency[];
+  private _dependencyVersions: number[];
   private _unsubscribes: (() => void)[];
 
   private readonly _notifyJob: () => void;
@@ -110,6 +118,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
 
     // Optimized Dependency Management
     this._dependencies = EMPTY_DEPS as Dependency[];
+    this._dependencyVersions = EMPTY_VERSIONS as number[];
     this._unsubscribes = EMPTY_UNSUBS as (() => void)[];
 
     // Pre-bound notification function (no scheduler - Push-State, Pull-Value pattern)
@@ -128,17 +137,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
     // Trackable closure for dependency collection
     // We bind it once to avoid allocation during recompute
     this._trackable = Object.assign(() => this._markDirty(), {
-      addDependency: (_dep: unknown) => {
-        // This is called by Atom.value getter via trackingContext
-        // We'll handle the actual collection logic inside recompute's context
-        // but here we just need to ensure it works if called directly?
-        // Actually, trackingContext.run sets the current collector.
-        // When Atom calls _track(current), current is this._trackable.
-        // But we need the *active* collector buffer.
-        // We can store the active buffer in a temporary field or rely on the fact
-        // that _recompute sets up the collection environment.
-        // See recompute implementation below.
-      },
+      addDependency: (_dep: unknown) => {},
     });
 
     debug.attachDebugInfo(this as unknown as ComputedAtom<T>, 'computed', this.id);
@@ -170,17 +169,6 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
   // === PUBLIC API ===
 
   get value(): T {
-    // Branchless fast path: single bitwise check for (resolved AND not dirty)
-    const isFastPath =
-      (this._stateFlags & (COMPUTED_STATE_FLAGS.RESOLVED | COMPUTED_STATE_FLAGS.DIRTY)) ===
-      COMPUTED_STATE_FLAGS.RESOLVED;
-
-    if (isFastPath) {
-      this._registerTracking();
-      return this._value;
-    }
-
-    // Slow path: state transition required
     const result = this._computeValue();
     this._registerTracking();
     return result;
@@ -224,6 +212,10 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
 
   invalidate(): void {
     this._markDirty();
+    if (this._dependencyVersions !== EMPTY_VERSIONS) {
+      versionArrayPool.release(this._dependencyVersions);
+      this._dependencyVersions = EMPTY_VERSIONS as number[];
+    }
   }
 
   dispose(): void {
@@ -240,6 +232,11 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
     if (this._dependencies !== EMPTY_DEPS) {
       depArrayPool.release(this._dependencies);
       this._dependencies = EMPTY_DEPS as Dependency[];
+    }
+
+    if (this._dependencyVersions !== EMPTY_VERSIONS) {
+      versionArrayPool.release(this._dependencyVersions);
+      this._dependencyVersions = EMPTY_VERSIONS as number[];
     }
 
     this._functionSubscribers.clear();
@@ -349,28 +346,27 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
 
   private _computeValue(): T {
     if (this._isRecomputing()) return this._value;
-    if (this._isPending()) return this._handlePending();
-    if (this._isRejected()) return this._handleRejected();
 
     if (this._isDirty() || this._isIdle()) {
       this._recompute();
-      if (this._isPending()) {
-        return this._handlePending();
-      }
     }
+
+    if (this._isPending()) return this._handlePending();
+    if (this._isRejected()) return this._handleRejected();
 
     return this._value;
   }
 
   private _recompute(): void {
-    if (!this._isDirty() && this._isResolved()) {
-      return;
-    }
+    // Note: Caller has already verified recomputation is needed via _shouldRecompute()
+    if (this._isRecomputing()) return;
 
     this._setRecomputing(true);
 
     const prevDeps = this._dependencies;
+    const prevVersions = this._dependencyVersions;
     const nextDeps = depArrayPool.acquire();
+    const nextVersions = versionArrayPool.acquire();
     const epoch = nextEpoch();
 
     let depCount = 0;
@@ -388,8 +384,10 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
       // Add to buffer
       if (depCount < nextDeps.length) {
         nextDeps[depCount] = dep;
+        nextVersions[depCount] = dep.version;
       } else {
         nextDeps.push(dep);
+        nextVersions.push(dep.version);
       }
       depCount++;
     };
@@ -405,11 +403,13 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
 
       // Trim array to actual count
       nextDeps.length = depCount;
+      nextVersions.length = depCount;
 
       if (isPromise(result)) {
         // Sync dependencies before awaiting
         this._syncDependencies(prevDeps, nextDeps, this._unsubscribes, epoch);
         this._dependencies = nextDeps;
+        this._dependencyVersions = nextVersions;
         committed = true;
 
         this._handleAsyncComputation(result);
@@ -420,6 +420,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
       // Sync dependencies for synchronous result
       this._syncDependencies(prevDeps, nextDeps, this._unsubscribes, epoch);
       this._dependencies = nextDeps;
+      this._dependencyVersions = nextVersions;
       committed = true;
 
       this._handleSyncResult(result);
@@ -429,8 +430,11 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
       // we subscribe to it so we can recompute when it changes (recovery).
 
       nextDeps.length = depCount;
+      nextVersions.length = depCount;
       this._syncDependencies(prevDeps, nextDeps, this._unsubscribes, epoch);
       this._dependencies = nextDeps;
+      this._dependencyVersions = nextVersions;
+      committed = true;
 
       this._handleComputationError(err);
     } finally {
@@ -441,9 +445,13 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
         if (prevDeps !== EMPTY_DEPS) {
           depArrayPool.release(prevDeps as Dependency[]);
         }
+        if (prevVersions !== EMPTY_VERSIONS) {
+          versionArrayPool.release(prevVersions);
+        }
       } else {
         // Failure: Release new deps (unused)
         depArrayPool.release(nextDeps);
+        versionArrayPool.release(nextVersions);
       }
     }
   }
@@ -485,8 +493,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
         nextUnsubs[i] = dep._tempUnsub;
         dep._tempUnsub = undefined; // Consumed
       } else {
-        // New dependency: subscribe with 'this' (Zero Allocation - no closure!)
-        debug.checkCircular(dep, this as unknown as ComputedAtom<T>);
+        debug.checkCircular(dep, this);
         nextUnsubs[i] = dep.subscribe(this);
       }
     }
@@ -527,6 +534,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
 
   private _handleAsyncComputation(promise: Promise<T>): void {
     this._setPending();
+    this._clearDirty();
 
     // Branchless promise ID increment with overflow protection
     this._promiseId = this._promiseId >= this.MAX_PROMISE_ID ? 1 : this._promiseId + 1;
@@ -630,6 +638,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
    * - Function subscribers (Effects): will schedule their execution
    * Actual recomputation happens lazily when .value is accessed (Pull).
    */
+
   private _markDirty(): void {
     if (this._isRecomputing() || this._isDirty()) return;
 

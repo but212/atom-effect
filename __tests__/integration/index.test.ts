@@ -231,10 +231,10 @@ describe('Computed - Behavior', () => {
     }
 
     // Simulate A → B → C → A circular structure
-    const nodeA = { dependencies: new Set<unknown>() };
-    const nodeB = { dependencies: new Set<unknown>([nodeA]) };
-    const nodeC = { dependencies: new Set<unknown>([nodeB]) };
-    nodeA.dependencies.add(nodeC); // complete the cycle
+    const nodeA: { dependencies: unknown[] } = { dependencies: [] };
+    const nodeB = { dependencies: [nodeA] };
+    const nodeC = { dependencies: [nodeB] };
+    nodeA.dependencies.push(nodeC); // complete the cycle
 
     expect(() => {
       DEBUG_RUNTIME.checkCircular(nodeC, nodeA);

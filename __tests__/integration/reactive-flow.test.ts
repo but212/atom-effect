@@ -329,9 +329,6 @@ describe('Integration: Complex Application State', () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
     const withBatchCount = computations.length;
 
-    // Batching should result in fewer or equal computations
-    console.log('withoutBatchCount:', withoutBatchCount);
-    console.log('withBatchCount:', withBatchCount);
     expect(withBatchCount).toBeLessThanOrEqual(withoutBatchCount);
     expect(result.value).toBe(25); // 10 * 2 + 5
   });

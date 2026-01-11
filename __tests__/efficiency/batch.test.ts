@@ -5,7 +5,7 @@ describe('Batch Efficiency', () => {
   test('batch significantly reduces effect executions', async () => {
     const formFields = Array.from({ length: 20 }, () => atom('initial'));
 
-    const isValid = computed(() => formFields.every((f) => f.value.length > 0));
+    const isValid = computed(() => formFields.map((f) => f.value).join(''));
 
     let withBatchRuns = 0;
     let withoutBatchRuns = 0;
@@ -32,7 +32,7 @@ describe('Batch Efficiency', () => {
 
     // Test WITHOUT batch
     const formFields2 = Array.from({ length: 20 }, () => atom('initial'));
-    const isValid2 = computed(() => formFields2.every((f) => f.value.length > 0));
+    const isValid2 = computed(() => formFields2.map((f) => f.value).join(''));
 
     const fx2 = effect(() => {
       const _ = isValid2.value;
