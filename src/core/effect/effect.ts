@@ -15,9 +15,16 @@ import {
 } from '../../epoch';
 import { EffectError, isPromise, wrapError } from '../../errors/errors';
 import { ERROR_MESSAGES } from '../../errors/messages';
-import { depArrayPool, EMPTY_DEPS, EMPTY_UNSUBS, unsubArrayPool } from '../../pool';
+import {
+  depArrayPool,
+  EMPTY_DEPS,
+  EMPTY_UNSUBS,
+  EMPTY_VERSIONS,
+  unsubArrayPool,
+  versionArrayPool,
+} from '../../pool';
 import { scheduler } from '../../scheduler';
-import { type DependencyTracker, trackingContext } from '../../tracking';
+import { type DependencyTracker, trackingContext, untracked } from '../../tracking';
 import type { Dependency, EffectFunction, EffectObject, EffectOptions } from '../../types';
 import { debug, generateId } from '../../utils/debug';
 
@@ -61,10 +68,12 @@ class EffectImpl implements EffectObject, DependencyTracker {
 
   // Optimized Dependency Management
   private _dependencies: Dependency[];
+  private _dependencyVersions: number[];
   private _unsubscribes: (() => void)[];
 
   // Execution State
   private _nextDeps: Dependency[] | null;
+  private _nextVersions: number[] | null;
   private _nextUnsubs: (() => void)[] | null;
 
   // Dev mode only: Timestamp history for fallback detection/debugging
@@ -88,8 +97,10 @@ class EffectImpl implements EffectObject, DependencyTracker {
 
     // Dependencies
     this._dependencies = EMPTY_DEPS as Dependency[];
+    this._dependencyVersions = EMPTY_VERSIONS as number[];
     this._unsubscribes = EMPTY_UNSUBS as (() => void)[];
     this._nextDeps = null;
+    this._nextVersions = null;
     this._nextUnsubs = null;
 
     // this._modifiedDeps = new Set(); // Removed
@@ -123,6 +134,11 @@ class EffectImpl implements EffectObject, DependencyTracker {
   public run = (): void => {
     if (this.isDisposed) {
       throw new EffectError(ERROR_MESSAGES.EFFECT_MUST_BE_FUNCTION);
+    }
+    // Force execution by clearing versions
+    if (this._dependencyVersions !== EMPTY_VERSIONS) {
+       versionArrayPool.release(this._dependencyVersions);
+       this._dependencyVersions = EMPTY_VERSIONS as number[];
     }
     this.execute();
   };
@@ -166,6 +182,11 @@ class EffectImpl implements EffectObject, DependencyTracker {
       depArrayPool.release(this._dependencies);
       this._dependencies = EMPTY_DEPS as Dependency[];
     }
+
+    if (this._dependencyVersions !== EMPTY_VERSIONS) {
+      versionArrayPool.release(this._dependencyVersions);
+      this._dependencyVersions = EMPTY_VERSIONS as number[];
+    }
   };
 
   /**
@@ -187,7 +208,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
    */
   public addDependency = (dep: unknown): void => {
     // Stage 1: Collect into buffer (nextDeps)
-    if (this.isExecuting && this._nextDeps && this._nextUnsubs) {
+    if (this.isExecuting && this._nextDeps && this._nextUnsubs && this._nextVersions) {
       const d = dep as Dependency;
       const epoch = this._currentEpoch;
 
@@ -196,6 +217,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
       d._lastSeenEpoch = epoch;
 
       this._nextDeps.push(d);
+      this._nextVersions.push(d.version);
 
       // Eagerly subscribe or reuse existing subscription
       if (d._tempUnsub) {
@@ -236,6 +258,10 @@ class EffectImpl implements EffectObject, DependencyTracker {
   public execute = (): void => {
     if (this.isDisposed || this.isExecuting) return;
 
+    // Avoidable propagation check
+    if (!this._shouldExecute()) return;
+
+
     this._checkInfiniteLoop();
 
     this._setExecuting(true);
@@ -243,8 +269,10 @@ class EffectImpl implements EffectObject, DependencyTracker {
     // this._modifiedDeps.clear(); // Epoch handles this
 
     const prevDeps = this._dependencies;
+    const prevVersions = this._dependencyVersions;
     const prevUnsubs = this._unsubscribes;
     const nextDeps = depArrayPool.acquire();
+    const nextVersions = versionArrayPool.acquire();
     const nextUnsubs = unsubArrayPool.acquire();
     const epoch = nextEpoch();
 
@@ -257,6 +285,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
     }
 
     this._nextDeps = nextDeps;
+    this._nextVersions = nextVersions;
     this._nextUnsubs = nextUnsubs;
     this._currentEpoch = epoch;
 
@@ -267,6 +296,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
 
       // Commit dependencies (Cleaning up unused is done below)
       this._dependencies = nextDeps;
+      this._dependencyVersions = nextVersions;
       this._unsubscribes = nextUnsubs;
       committed = true;
 
@@ -297,6 +327,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
     } finally {
       this._setExecuting(false);
       this._nextDeps = null;
+      this._nextVersions = null;
       this._nextUnsubs = null;
 
       if (committed) {
@@ -315,10 +346,14 @@ class EffectImpl implements EffectObject, DependencyTracker {
         if (prevUnsubs !== EMPTY_UNSUBS) {
           unsubArrayPool.release(prevUnsubs);
         }
+        if (prevVersions !== EMPTY_VERSIONS) {
+          versionArrayPool.release(prevVersions);
+        }
       } else {
         // Should not happen if we always set committed=true on error too,
         // but if catastrophic failure:
         depArrayPool.release(nextDeps);
+        versionArrayPool.release(nextVersions);
 
         // Clean up any NEW subscriptions made in this failed run
         for (let i = 0; i < nextUnsubs.length; i++) {
@@ -565,6 +600,36 @@ class EffectImpl implements EffectObject, DependencyTracker {
     this.dispose();
     console.error(error);
     throw error;
+  }
+
+  /**
+   * Checks if efficient execution is possible by comparing dependency versions.
+   * Returns true if execution is needed, false if it can be safely skipped.
+   *
+   * @internal
+   */
+  private _shouldExecute(): boolean {
+    if (this._dependencies === EMPTY_DEPS) return true;
+    if (this._dependencyVersions === EMPTY_VERSIONS) return true;
+
+    for (let i = 0; i < this._dependencies.length; i++) {
+      const dep = this._dependencies[i];
+      if (!dep) continue;
+
+      if ('value' in dep) {
+        try {
+          untracked(() => (dep as { value: unknown }).value);
+        } catch {
+          return true;
+        }
+      }
+
+      if (dep.version !== this._dependencyVersions[i]) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   /**

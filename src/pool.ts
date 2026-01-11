@@ -7,6 +7,8 @@ export const EMPTY_DEPS: readonly Dependency[] = Object.freeze([]);
 export const EMPTY_SUBS: readonly Subscriber[] = Object.freeze([]);
 export const EMPTY_UNSUBS: readonly (() => void)[] = Object.freeze([]);
 
+export const EMPTY_VERSIONS: readonly number[] = Object.freeze([]);
+
 /**
  * Generic Array Pool (Type-safe pooling for different array types)
  */
@@ -83,3 +85,4 @@ class ArrayPool<T> {
 export const depArrayPool = new ArrayPool<Dependency>();
 export const subArrayPool = new ArrayPool<Subscriber>();
 export const unsubArrayPool = new ArrayPool<() => void>();
+export const versionArrayPool = new ArrayPool<number>();
