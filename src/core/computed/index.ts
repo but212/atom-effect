@@ -493,9 +493,8 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
         nextUnsubs[i] = dep._tempUnsub;
         dep._tempUnsub = undefined; // Consumed
       } else {
-        // New dependency: subscribe with 'this' (Zero Allocation - no closure!)
-        debug.checkCircular(dep, this as unknown as ComputedAtom<T>);
-        nextUnsubs[i] = dep.subscribe(() => this.execute());
+        debug.checkCircular(dep, this);
+        nextUnsubs[i] = dep.subscribe(this);
       }
     }
 
