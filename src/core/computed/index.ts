@@ -17,7 +17,7 @@ import {
   unsubArrayPool,
   versionArrayPool,
 } from '../../pool';
-import { trackingContext, untracked } from '../../tracking';
+import { trackingContext } from '../../tracking';
 import type { DependencyTracker } from '../../tracking/tracking.types';
 
 import type {
@@ -137,8 +137,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
     // Trackable closure for dependency collection
     // We bind it once to avoid allocation during recompute
     this._trackable = Object.assign(() => this._markDirty(), {
-      addDependency: (_dep: unknown) => {
-      },
+      addDependency: (_dep: unknown) => {},
     });
 
     debug.attachDebugInfo(this as unknown as ComputedAtom<T>, 'computed', this.id);
@@ -640,7 +639,6 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
    * - Function subscribers (Effects): will schedule their execution
    * Actual recomputation happens lazily when .value is accessed (Pull).
    */
-
 
   private _markDirty(): void {
     if (this._isRecomputing() || this._isDirty()) return;

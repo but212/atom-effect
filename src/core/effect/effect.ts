@@ -137,8 +137,8 @@ class EffectImpl implements EffectObject, DependencyTracker {
     }
     // Force execution by clearing versions
     if (this._dependencyVersions !== EMPTY_VERSIONS) {
-       versionArrayPool.release(this._dependencyVersions);
-       this._dependencyVersions = EMPTY_VERSIONS as number[];
+      versionArrayPool.release(this._dependencyVersions);
+      this._dependencyVersions = EMPTY_VERSIONS as number[];
     }
     this.execute();
   };
@@ -260,7 +260,6 @@ class EffectImpl implements EffectObject, DependencyTracker {
 
     // Avoidable propagation check
     if (!this._shouldExecute()) return;
-
 
     this._checkInfiniteLoop();
 
