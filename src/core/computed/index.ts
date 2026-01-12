@@ -7,7 +7,7 @@
 import { AsyncState, COMPUTED_STATE_FLAGS, SMI_MAX } from '../../constants';
 import { ReactiveDependency } from '../../core/base/reactive-dependency';
 import { syncDependencies } from '../../core/utils/dep-tracking';
-import { nextEpoch } from '../../epoch';
+import { nextEpoch } from '../../internal/epoch';
 import type { AtomError } from '../../errors/errors';
 import { ComputedError, isPromise, wrapError } from '../../errors/errors';
 import { ERROR_MESSAGES } from '../../errors/messages';
@@ -18,7 +18,7 @@ import {
   EMPTY_VERSIONS,
   unsubArrayPool,
   versionArrayPool,
-} from '../../pool';
+} from '../../internal/pool';
 import { trackingContext } from '../../tracking';
 import type { DependencyTracker } from '../../tracking/tracking.types';
 

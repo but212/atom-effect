@@ -1,10 +1,21 @@
 # Changelog
 
-## [0.3.3] - 2026-01-10
+## [0.3.3]
 
 ### Fixed
 
 - Fixed computed caching bug where `_setIdle()` in `_markDirty()` cleared the RESOLVED flag, causing computed values to re-execute on every access instead of returning cached values.
+
+### Changed
+
+- **Architecture**: Moved internal modules (`pool.ts`, `epoch.ts`, `scheduler/`) to `src/internal/` for better encapsulation.
+
+### Added
+
+- **Memory Tests**: Added comprehensive memory and stability tests in `__tests__/unit/memory/`:
+  - `gc-verification.test.ts`: WeakRef-based GC verification tests
+  - `circular-reference.test.ts`: Circular dependency detection tests
+  - `fuzz.test.ts`: Heavy fuzz testing (1000 atoms, 500 computed, 10000 updates)
 
 ## [0.3.2] - 2026-01-09
 

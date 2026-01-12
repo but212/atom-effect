@@ -1,5 +1,5 @@
 import { endFlush, startFlush } from '../epoch';
-import { SchedulerError } from '../errors/errors';
+import { SchedulerError } from '../../errors/errors';
 
 /**
  * Scheduler for managing reactive updates and batching operations.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { currentEpoch, nextEpoch } from '../../src/epoch';
+import { currentEpoch, nextEpoch } from '../../src/internal/epoch';
 
 describe('epoch', () => {
   it('should start at 0', () => {

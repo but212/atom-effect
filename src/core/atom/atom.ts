@@ -14,7 +14,7 @@
 
 import { SMI_MAX } from '../../constants';
 import { ReactiveDependency } from '../../core/base/reactive-dependency';
-import { scheduler } from '../../scheduler';
+import { scheduler } from '../../internal/scheduler';
 import { trackingContext } from '../../tracking';
 import type { AtomOptions, Subscriber, WritableAtom } from '../../types';
 import { debug } from '../../utils/debug';

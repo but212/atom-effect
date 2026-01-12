@@ -13,7 +13,7 @@ import {
   flushExecutionCount,
   incrementFlushExecutionCount,
   nextEpoch,
-} from '../../epoch';
+} from '../../internal/epoch';
 import { EffectError, isPromise, wrapError } from '../../errors/errors';
 import { ERROR_MESSAGES } from '../../errors/messages';
 import {
@@ -23,8 +23,8 @@ import {
   EMPTY_VERSIONS,
   unsubArrayPool,
   versionArrayPool,
-} from '../../pool';
-import { scheduler } from '../../scheduler';
+} from '../../internal/pool';
+import { scheduler } from '../../internal/scheduler';
 import { type DependencyTracker, trackingContext, untracked } from '../../tracking';
 import type { Dependency, EffectFunction, EffectObject, EffectOptions } from '../../types';
 import { debug } from '../../utils/debug';

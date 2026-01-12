@@ -1,4 +1,4 @@
-import { EMPTY_DEPS, EMPTY_UNSUBS, unsubArrayPool } from '../../pool';
+import { EMPTY_DEPS, EMPTY_UNSUBS, unsubArrayPool } from '../../internal/pool';
 import type { Dependency } from '../../types';
 import { debug } from '../../utils/debug';
 

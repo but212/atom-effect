@@ -2,7 +2,7 @@ import { describe, expect, test, vi } from 'vitest';
 import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
 import { effect } from '@/core/effect';
-import { batch } from '@/scheduler';
+import { batch } from '@/internal/scheduler';
 import {
   Counter,
   type FrameworkInfo,
