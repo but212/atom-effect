@@ -9,6 +9,9 @@
 ### Changed
 
 - **Architecture**: Moved internal modules (`pool.ts`, `epoch.ts`, `scheduler/`) to `src/internal/` for better encapsulation.
+- **Documentation**: Reduced excessive JSDoc comments across 7 core files (~1,200 lines removed):
+  - `debug.ts`, `object-pool.ts`, `subscriber-manager.ts`, `atom.ts`, `effect.ts`, `computed/index.ts`, `context.ts`
+  - Retained essential API documentation while removing redundant `@fileoverview`, `@remarks`, and `@example` blocks.
 
 ### Added
 
