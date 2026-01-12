@@ -1,6 +1,7 @@
+import { IS_DEV } from '@/constants';
 import type { Dependency, Subscriber } from '../types';
 import type { PoolStats } from '../types/internal';
-import { __DEV__ } from '../types/internal';
+
 
 // Shared Constants
 export const EMPTY_DEPS: readonly Dependency[] = Object.freeze([]);
@@ -17,7 +18,7 @@ class ArrayPool<T> {
   private readonly maxPoolSize = 50;
   private readonly maxReusableCapacity = 256;
 
-  private stats = __DEV__
+  private stats = IS_DEV
     ? {
         acquired: 0,
         released: 0,
@@ -26,7 +27,7 @@ class ArrayPool<T> {
     : null;
 
   acquire(): T[] {
-    if (__DEV__ && this.stats) this.stats.acquired++;
+    if (IS_DEV && this.stats) this.stats.acquired++;
     return this.pool.pop() ?? [];
   }
 
@@ -36,30 +37,30 @@ class ArrayPool<T> {
 
     // 2. Frozen check
     if (Object.isFrozen(arr)) {
-      if (__DEV__ && this.stats) this.stats.rejected.frozen++;
+      if (IS_DEV && this.stats) this.stats.rejected.frozen++;
       return;
     }
 
     // 3. Size check
     if (arr.length > this.maxReusableCapacity) {
-      if (__DEV__ && this.stats) this.stats.rejected.tooLarge++;
+      if (IS_DEV && this.stats) this.stats.rejected.tooLarge++;
       return;
     }
 
     // 4. Pool capacity check
     if (this.pool.length >= this.maxPoolSize) {
-      if (__DEV__ && this.stats) this.stats.rejected.poolFull++;
+      if (IS_DEV && this.stats) this.stats.rejected.poolFull++;
       return;
     }
 
     // 5. Normal release
     arr.length = 0;
     this.pool.push(arr);
-    if (__DEV__ && this.stats) this.stats.released++;
+    if (IS_DEV && this.stats) this.stats.released++;
   }
 
   getStats(): PoolStats | null {
-    if (!__DEV__ || !this.stats) return null;
+    if (!IS_DEV || !this.stats) return null;
     const { acquired, released, rejected } = this.stats;
     const totalRejected = rejected.frozen + rejected.tooLarge + rejected.poolFull;
     return {
@@ -73,7 +74,7 @@ class ArrayPool<T> {
 
   reset(): void {
     this.pool.length = 0;
-    if (__DEV__ && this.stats) {
+    if (IS_DEV && this.stats) {
       this.stats.acquired = 0;
       this.stats.released = 0;
       this.stats.rejected = { frozen: 0, tooLarge: 0, poolFull: 0 };
