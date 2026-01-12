@@ -15,7 +15,7 @@ import { ReactiveNode } from './reactive-node';
  * This ensures all Smi fields (from Base, Dependency, and Subclass) are
  * packed together at the start of the object for V8 optimization.
  */
-export abstract class ReactiveDependency extends ReactiveNode {
+export abstract class ReactiveDependency<T> extends ReactiveNode {
   // === Smi Fields (Continued from ReactiveNode) ===
   /** Version counter for change detection (Smi) */
   version: number;
@@ -32,7 +32,7 @@ export abstract class ReactiveDependency extends ReactiveNode {
   // === Abstract Accessors for Object Fields ===
   // Implemented by subclasses to control field layout
   protected abstract get _functionSubscribers(): SubscriberManager<
-    (newValue?: any, oldValue?: any) => void
+    (newValue?: T, oldValue?: T) => void
   >;
   protected abstract get _objectSubscribers(): SubscriberManager<Subscriber>;
 
@@ -43,7 +43,7 @@ export abstract class ReactiveDependency extends ReactiveNode {
    * @returns An unsubscribe function
    * @throws {AtomError} If listener is not a function or Subscriber
    */
-  subscribe(listener: ((newValue?: any, oldValue?: any) => void) | Subscriber): () => void {
+  subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
     // Support Subscriber object for zero-allocation pattern
     if (typeof listener === 'object' && listener !== null && 'execute' in listener) {
       return this._objectSubscribers.add(listener);
@@ -68,7 +68,7 @@ export abstract class ReactiveDependency extends ReactiveNode {
    * @param newValue - The new value
    * @param oldValue - The old value
    */
-  protected _notifySubscribers(newValue: any, oldValue: any): void {
+  protected _notifySubscribers(newValue: T | undefined, oldValue: T | undefined): void {
     this._functionSubscribers.forEachSafe(
       (sub) => sub(newValue, oldValue),
       (err) =>

@@ -30,7 +30,7 @@ import { SubscriberManager } from '../../utils/subscriber-manager';
  * It supports both function-based and object-based subscribers, and handles
  * synchronous or batched notifications based on configuration.
  */
-class AtomImpl<T> extends ReactiveDependency implements WritableAtom<T> {
+class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
   // === Object Fields ===
   /** Current value stored in the atom */
   private _value: T;

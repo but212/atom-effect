@@ -47,7 +47,7 @@ type TrackableListener = (() => void) & {
  *
  * @template T - The type of the computed value
  */
-class ComputedAtomImpl<T> extends ReactiveDependency implements ComputedAtom<T>, Subscriber {
+class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<T>, Subscriber {
   // === HOT PATH: Most frequently accessed fields (cache line 1) ===
   private _value: T;
 
@@ -64,7 +64,9 @@ class ComputedAtomImpl<T> extends ReactiveDependency implements ComputedAtom<T>,
   private readonly _defaultValue: T;
   private readonly _hasDefaultValue: boolean;
   private readonly _onError: ((error: Error) => void) | null;
-  private readonly _functionSubscribersStore: SubscriberManager<() => void>;
+  private readonly _functionSubscribersStore: SubscriberManager<
+    (newValue?: T, oldValue?: T) => void
+  >;
   private readonly _objectSubscribersStore: SubscriberManager<Subscriber>;
   private _dependencies: Dependency[];
   private _dependencyVersions: number[];
@@ -102,7 +104,9 @@ class ComputedAtomImpl<T> extends ReactiveDependency implements ComputedAtom<T>,
     this.MAX_PROMISE_ID = Number.MAX_SAFE_INTEGER - 1;
 
     // Managers & Structures
-    this._functionSubscribersStore = new SubscriberManager<() => void>();
+    this._functionSubscribersStore = new SubscriberManager<
+      (newValue?: T, oldValue?: T) => void
+    >();
     this._objectSubscribersStore = new SubscriberManager<Subscriber>();
 
     // Optimized Dependency Management
@@ -156,8 +160,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency implements ComputedAtom<T>,
   }
 
   // === Abstract Accessor Implementations ===
-  protected get _functionSubscribers(): SubscriberManager<() => void> {
-    // @ts-ignore - The types match but TypeScript needs help seeing () => void is compatible with generic
+  protected get _functionSubscribers(): SubscriberManager<(newValue?: T, oldValue?: T) => void> {
     return this._functionSubscribersStore;
   }
 
