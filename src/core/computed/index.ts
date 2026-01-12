@@ -7,10 +7,10 @@
 import { AsyncState, COMPUTED_STATE_FLAGS, SMI_MAX } from '../../constants';
 import { ReactiveDependency } from '../../core/base/reactive-dependency';
 import { syncDependencies } from '../../core/utils/dep-tracking';
-import { nextEpoch } from '../../internal/epoch';
 import type { AtomError } from '../../errors/errors';
 import { ComputedError, isPromise, wrapError } from '../../errors/errors';
 import { ERROR_MESSAGES } from '../../errors/messages';
+import { nextEpoch } from '../../internal/epoch';
 import {
   depArrayPool,
   EMPTY_DEPS,
@@ -104,9 +104,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this.MAX_PROMISE_ID = Number.MAX_SAFE_INTEGER - 1;
 
     // Managers & Structures
-    this._functionSubscribersStore = new SubscriberManager<
-      (newValue?: T, oldValue?: T) => void
-    >();
+    this._functionSubscribersStore = new SubscriberManager<(newValue?: T, oldValue?: T) => void>();
     this._objectSubscribersStore = new SubscriberManager<Subscriber>();
 
     // Optimized Dependency Management

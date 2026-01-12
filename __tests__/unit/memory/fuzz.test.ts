@@ -131,9 +131,7 @@ describe('Fuzz Testing - Heavy Mode', () => {
           () => atoms[Math.floor(random() * atoms.length)]!
         );
 
-        computeds.push(
-          computed(() => deps.reduce((sum, dep) => sum + dep.value, 0))
-        );
+        computeds.push(computed(() => deps.reduce((sum, dep) => sum + dep.value, 0)));
       }
 
       // Perform batched updates
@@ -193,9 +191,9 @@ describe('Fuzz Testing - Heavy Mode', () => {
 
         effects.push(
           effect(() => {
-            let sum = 0;
+            let _sum = 0;
             for (const idx of depIndices) {
-              sum += atoms[idx]!.value;
+              _sum += atoms[idx]!.value;
             }
             return () => {
               // Cleanup
@@ -293,9 +291,7 @@ describe('Fuzz Testing - Heavy Mode', () => {
           for (let j = 0; j < numDeps; j++) {
             deps.push(activeAtoms[Math.floor(random() * activeAtoms.length)]!);
           }
-          activeComputeds.push(
-            computed(() => deps.reduce((sum, d) => sum + d.value, 0))
-          );
+          activeComputeds.push(computed(() => deps.reduce((sum, d) => sum + d.value, 0)));
         } else if (op < 0.7 && activeAtoms.length > 20) {
           // Dispose random atom
           const idx = Math.floor(random() * activeAtoms.length);

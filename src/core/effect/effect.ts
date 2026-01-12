@@ -8,14 +8,14 @@
 
 import { EFFECT_STATE_FLAGS, IS_DEV, SCHEDULER_CONFIG } from '../../constants';
 import { ReactiveNode } from '../../core/base/reactive-node';
+import { EffectError, isPromise, wrapError } from '../../errors/errors';
+import { ERROR_MESSAGES } from '../../errors/messages';
 import {
   flushEpoch,
   flushExecutionCount,
   incrementFlushExecutionCount,
   nextEpoch,
 } from '../../internal/epoch';
-import { EffectError, isPromise, wrapError } from '../../errors/errors';
-import { ERROR_MESSAGES } from '../../errors/messages';
 import {
   depArrayPool,
   EMPTY_DEPS,

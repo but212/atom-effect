@@ -184,17 +184,17 @@ describe('Circular Reference Detection', () => {
 
     it('should update diamond pattern only once per source change', async () => {
       const a = atom(1);
-      let bComputeCount = 0;
-      let cComputeCount = 0;
+      let _bComputeCount = 0;
+      let _cComputeCount = 0;
       let dComputeCount = 0;
 
       const b = computed(() => {
-        bComputeCount++;
+        _bComputeCount++;
         return a.value * 2;
       });
 
       const c = computed(() => {
-        cComputeCount++;
+        _cComputeCount++;
         return a.value * 3;
       });
 
