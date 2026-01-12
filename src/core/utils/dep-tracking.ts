@@ -1,0 +1,70 @@
+import { EMPTY_DEPS, EMPTY_UNSUBS, unsubArrayPool } from '../../pool';
+import type { Dependency } from '../../types';
+import { debug } from '../../utils/debug';
+
+/**
+ * Synchronizes subscriptions based on dependency changes using O(N) strategy.
+ * Maps unsubs 1:1 with dependencies array.
+ *
+ * Shared logic for Computed and Effect to manage their dependencies.
+ *
+ * @param nextDeps - The new list of dependencies collected
+ * @param prevDeps - The previous list of dependencies
+ * @param prevUnsubs - The previous list of unsubscribe functions
+ * @param tracker - The object tracking these dependencies (Computed or Effect)
+ * @returns The new list of unsubscribe functions
+ */
+export function syncDependencies(
+  nextDeps: Dependency[],
+  prevDeps: Dependency[],
+  prevUnsubs: (() => void)[],
+  tracker: unknown
+): (() => void)[] {
+  // 1. Map existing subscriptions to dependencies for O(1) lookup during sync
+  if (prevDeps !== EMPTY_DEPS && prevUnsubs !== EMPTY_UNSUBS) {
+    for (let i = 0; i < prevDeps.length; i++) {
+      const dep = prevDeps[i];
+      if (dep) dep._tempUnsub = prevUnsubs[i];
+    }
+  }
+
+  // 2. Build new unsubscribe array
+  const nextUnsubs = unsubArrayPool.acquire();
+
+  // Ensure nextUnsubs has same length as nextDeps
+  nextUnsubs.length = nextDeps.length;
+
+  for (let i = 0; i < nextDeps.length; i++) {
+    const dep = nextDeps[i];
+    if (!dep) continue;
+
+    if (dep._tempUnsub) {
+      // Reuse existing subscription
+      nextUnsubs[i] = dep._tempUnsub;
+      dep._tempUnsub = undefined; // Consumed
+    } else {
+      debug.checkCircular(dep, tracker);
+      // @ts-expect-error - tracker type is either Effect or Computed, both valid for subscribe
+      nextUnsubs[i] = dep.subscribe(tracker);
+    }
+  }
+
+  // 3. Cleanup unused subscriptions (from removals)
+  if (prevDeps !== EMPTY_DEPS) {
+    for (let i = 0; i < prevDeps.length; i++) {
+      const dep = prevDeps[i];
+      if (dep?._tempUnsub) {
+        // Still has _tempUnsub => was not reused in nextDeps => Removed
+        dep._tempUnsub();
+        dep._tempUnsub = undefined;
+      }
+    }
+  }
+
+  // 4. Release old unsub array
+  if (prevUnsubs !== EMPTY_UNSUBS) {
+    unsubArrayPool.release(prevUnsubs);
+  }
+
+  return nextUnsubs;
+}

@@ -356,7 +356,7 @@ describe('Effect - Error Handling and Edge Cases', () => {
             count.value = count.value + 1;
           }
         },
-        { maxExecutionsPerSecond: 200, sync: true }
+        { maxExecutionsPerSecond: 200, sync: true, maxExecutionsPerFlush: 200 }
       );
 
       await new Promise((resolve) => setTimeout(resolve, 100));

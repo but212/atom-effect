@@ -5,6 +5,8 @@
  */
 
 import { AsyncState, COMPUTED_STATE_FLAGS, SMI_MAX } from '../../constants';
+import { ReactiveDependency } from '../../core/base/reactive-dependency';
+import { syncDependencies } from '../../core/utils/dep-tracking';
 import { nextEpoch } from '../../epoch';
 import type { AtomError } from '../../errors/errors';
 import { ComputedError, isPromise, wrapError } from '../../errors/errors';
@@ -27,7 +29,7 @@ import type {
   Dependency,
   Subscriber,
 } from '../../types';
-import { debug, generateId, NO_DEFAULT_VALUE } from '../../utils/debug';
+import { debug, NO_DEFAULT_VALUE } from '../../utils/debug';
 import { SubscriberManager } from '../../utils/subscriber-manager';
 
 type TrackableListener = (() => void) & {
@@ -45,23 +47,12 @@ type TrackableListener = (() => void) & {
  *
  * @template T - The type of the computed value
  */
-class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
-  // === Smi Fields (Fixed Order for V8 Hidden Class) ===
-  /** Unique numerical identifier (Smi) */
-  readonly id: number;
-
-  /** Version counter for change detection (Smi) */
-  version: number;
-
-  /** Internal flags (Smi) */
-  flags: number;
-
-  /** Last seen epoch for dependency collection (Smi) */
-  _lastSeenEpoch: number;
-
+class ComputedAtomImpl<T> extends ReactiveDependency implements ComputedAtom<T>, Subscriber {
   // === HOT PATH: Most frequently accessed fields (cache line 1) ===
   private _value: T;
-  private _stateFlags: number;
+
+  // NOTE: We reused 'flags' from ReactiveNode for state flags!
+  // Smi fields from ReactiveDependency: id, flags, version, _lastSeenEpoch
 
   // === WARM PATH: Frequently accessed fields (cache line 2) ===
   private _error: AtomError | null;
@@ -73,8 +64,8 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
   private readonly _defaultValue: T;
   private readonly _hasDefaultValue: boolean;
   private readonly _onError: ((error: Error) => void) | null;
-  private readonly _functionSubscribers: SubscriberManager<() => void>;
-  private readonly _objectSubscribers: SubscriberManager<Subscriber>;
+  private readonly _functionSubscribersStore: SubscriberManager<() => void>;
+  private readonly _objectSubscribersStore: SubscriberManager<Subscriber>;
   private _dependencies: Dependency[];
   private _dependencyVersions: number[];
   private _unsubscribes: (() => void)[];
@@ -90,15 +81,13 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
       throw new ComputedError(ERROR_MESSAGES.COMPUTED_MUST_BE_FUNCTION);
     }
 
-    // 1. Smi Fields Initialization
-    this.id = generateId() & SMI_MAX;
-    this.version = 0;
-    this.flags = 0;
-    this._lastSeenEpoch = -1;
+    // 1. Smi Fields Initialization (via super)
+    super();
 
     // 2. Fixed order initialization (HOT PATH first)
     this._value = undefined as T;
-    this._stateFlags = COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE;
+    // We use inherited 'flags' and initialize it with DIRTY | IDLE
+    this.flags = COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE;
 
     // WARM PATH
     this._error = null;
@@ -113,8 +102,8 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
     this.MAX_PROMISE_ID = Number.MAX_SAFE_INTEGER - 1;
 
     // Managers & Structures
-    this._functionSubscribers = new SubscriberManager<() => void>();
-    this._objectSubscribers = new SubscriberManager<Subscriber>();
+    this._functionSubscribersStore = new SubscriberManager<() => void>();
+    this._objectSubscribersStore = new SubscriberManager<Subscriber>();
 
     // Optimized Dependency Management
     this._dependencies = EMPTY_DEPS as Dependency[];
@@ -123,12 +112,12 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
 
     // Pre-bound notification function (no scheduler - Push-State, Pull-Value pattern)
     this._notifyJob = () => {
-      this._functionSubscribers.forEachSafe(
+      this._functionSubscribersStore.forEachSafe(
         (subscriber) => subscriber(),
         (err) => console.error(err)
       );
 
-      this._objectSubscribers.forEachSafe(
+      this._objectSubscribersStore.forEachSafe(
         (subscriber) => subscriber.execute(),
         (err) => console.error(err)
       );
@@ -150,7 +139,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
         stateFlags: string;
       };
       debugObj.subscriberCount = () =>
-        this._functionSubscribers.size + this._objectSubscribers.size;
+        this._functionSubscribersStore.size + this._objectSubscribersStore.size;
       debugObj.isDirty = () => this._isDirty();
       debugObj.dependencies = this._dependencies;
       debugObj.stateFlags = this._getFlagsAsString();
@@ -166,24 +155,22 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
     }
   }
 
+  // === Abstract Accessor Implementations ===
+  protected get _functionSubscribers(): SubscriberManager<() => void> {
+    // @ts-ignore - The types match but TypeScript needs help seeing () => void is compatible with generic
+    return this._functionSubscribersStore;
+  }
+
+  protected get _objectSubscribers(): SubscriberManager<Subscriber> {
+    return this._objectSubscribersStore;
+  }
+
   // === PUBLIC API ===
 
   get value(): T {
     const result = this._computeValue();
     this._registerTracking();
     return result;
-  }
-
-  subscribe(listener: (() => void) | Subscriber): () => void {
-    // Support Subscriber object for zero-allocation pattern
-    if (typeof listener === 'object' && listener !== null && 'execute' in listener) {
-      return this._objectSubscribers.add(listener);
-    }
-
-    if (typeof listener !== 'function') {
-      throw new ComputedError(ERROR_MESSAGES.COMPUTED_SUBSCRIBER_MUST_BE_FUNCTION);
-    }
-    return this._functionSubscribers.add(listener);
   }
 
   peek(): T {
@@ -239,9 +226,9 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
       this._dependencyVersions = EMPTY_VERSIONS as number[];
     }
 
-    this._functionSubscribers.clear();
-    this._objectSubscribers.clear();
-    this._stateFlags = COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE;
+    this._functionSubscribersStore.clear();
+    this._objectSubscribersStore.clear();
+    this.flags = COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE;
     this._error = null;
     this._value = undefined as T;
     this._promiseId = (this._promiseId + 1) % this.MAX_PROMISE_ID;
@@ -250,24 +237,24 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
   // === PRIVATE: State Flag Operations (inlined for performance) ===
 
   private _isDirty(): boolean {
-    return (this._stateFlags & COMPUTED_STATE_FLAGS.DIRTY) !== 0;
+    return (this.flags & COMPUTED_STATE_FLAGS.DIRTY) !== 0;
   }
 
   private _setDirty(): void {
-    this._stateFlags |= COMPUTED_STATE_FLAGS.DIRTY;
+    this.flags |= COMPUTED_STATE_FLAGS.DIRTY;
   }
 
   private _clearDirty(): void {
-    this._stateFlags &= ~COMPUTED_STATE_FLAGS.DIRTY;
+    this.flags &= ~COMPUTED_STATE_FLAGS.DIRTY;
   }
 
   private _isIdle(): boolean {
-    return (this._stateFlags & COMPUTED_STATE_FLAGS.IDLE) !== 0;
+    return (this.flags & COMPUTED_STATE_FLAGS.IDLE) !== 0;
   }
 
   private _setIdle(): void {
-    this._stateFlags |= COMPUTED_STATE_FLAGS.IDLE;
-    this._stateFlags &= ~(
+    this.flags |= COMPUTED_STATE_FLAGS.IDLE;
+    this.flags &= ~(
       COMPUTED_STATE_FLAGS.PENDING |
       COMPUTED_STATE_FLAGS.RESOLVED |
       COMPUTED_STATE_FLAGS.REJECTED
@@ -275,12 +262,12 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
   }
 
   private _isPending(): boolean {
-    return (this._stateFlags & COMPUTED_STATE_FLAGS.PENDING) !== 0;
+    return (this.flags & COMPUTED_STATE_FLAGS.PENDING) !== 0;
   }
 
   private _setPending(): void {
-    this._stateFlags |= COMPUTED_STATE_FLAGS.PENDING;
-    this._stateFlags &= ~(
+    this.flags |= COMPUTED_STATE_FLAGS.PENDING;
+    this.flags &= ~(
       COMPUTED_STATE_FLAGS.IDLE |
       COMPUTED_STATE_FLAGS.RESOLVED |
       COMPUTED_STATE_FLAGS.REJECTED
@@ -288,12 +275,12 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
   }
 
   private _isResolved(): boolean {
-    return (this._stateFlags & COMPUTED_STATE_FLAGS.RESOLVED) !== 0;
+    return (this.flags & COMPUTED_STATE_FLAGS.RESOLVED) !== 0;
   }
 
   private _setResolved(): void {
-    this._stateFlags |= COMPUTED_STATE_FLAGS.RESOLVED;
-    this._stateFlags &= ~(
+    this.flags |= COMPUTED_STATE_FLAGS.RESOLVED;
+    this.flags &= ~(
       COMPUTED_STATE_FLAGS.IDLE |
       COMPUTED_STATE_FLAGS.PENDING |
       COMPUTED_STATE_FLAGS.REJECTED |
@@ -302,12 +289,12 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
   }
 
   private _isRejected(): boolean {
-    return (this._stateFlags & COMPUTED_STATE_FLAGS.REJECTED) !== 0;
+    return (this.flags & COMPUTED_STATE_FLAGS.REJECTED) !== 0;
   }
 
   private _setRejected(): void {
-    this._stateFlags |= COMPUTED_STATE_FLAGS.REJECTED | COMPUTED_STATE_FLAGS.HAS_ERROR;
-    this._stateFlags &= ~(
+    this.flags |= COMPUTED_STATE_FLAGS.REJECTED | COMPUTED_STATE_FLAGS.HAS_ERROR;
+    this.flags &= ~(
       COMPUTED_STATE_FLAGS.IDLE |
       COMPUTED_STATE_FLAGS.PENDING |
       COMPUTED_STATE_FLAGS.RESOLVED
@@ -315,13 +302,13 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
   }
 
   private _isRecomputing(): boolean {
-    return (this._stateFlags & COMPUTED_STATE_FLAGS.RECOMPUTING) !== 0;
+    return (this.flags & COMPUTED_STATE_FLAGS.RECOMPUTING) !== 0;
   }
 
   private _setRecomputing(value: boolean): void {
     // Branchless: clear the bit, then OR with the mask if value is true
     const mask = COMPUTED_STATE_FLAGS.RECOMPUTING;
-    this._stateFlags = (this._stateFlags & ~mask) | (-Number(value) & mask);
+    this.flags = (this.flags & ~mask) | (-Number(value) & mask);
   }
 
   private _getAsyncState(): AsyncStateType {
@@ -407,7 +394,8 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
 
       if (isPromise(result)) {
         // Sync dependencies before awaiting
-        this._syncDependencies(prevDeps, nextDeps, this._unsubscribes, epoch);
+        // Using shared logic!
+        this._unsubscribes = syncDependencies(nextDeps, prevDeps, this._unsubscribes, this);
         this._dependencies = nextDeps;
         this._dependencyVersions = nextVersions;
         committed = true;
@@ -418,7 +406,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
       }
 
       // Sync dependencies for synchronous result
-      this._syncDependencies(prevDeps, nextDeps, this._unsubscribes, epoch);
+      this._unsubscribes = syncDependencies(nextDeps, prevDeps, this._unsubscribes, this);
       this._dependencies = nextDeps;
       this._dependencyVersions = nextVersions;
       committed = true;
@@ -431,7 +419,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
 
       nextDeps.length = depCount;
       nextVersions.length = depCount;
-      this._syncDependencies(prevDeps, nextDeps, this._unsubscribes, epoch);
+      this._unsubscribes = syncDependencies(nextDeps, prevDeps, this._unsubscribes, this);
       this._dependencies = nextDeps;
       this._dependencyVersions = nextVersions;
       committed = true;
@@ -454,67 +442,6 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
         versionArrayPool.release(nextVersions);
       }
     }
-  }
-
-  /**
-   * Synchronizes subscriptions based on dependency changes.
-   * O(N) Diff using Epoch.
-   */
-  /**
-   * Synchronizes subscriptions based on dependency changes using O(N) strategy.
-   * Maps unsubs 1:1 with dependencies array.
-   */
-  private _syncDependencies(
-    prevDeps: Dependency[],
-    nextDeps: Dependency[],
-    prevUnsubs: (() => void)[],
-    _epoch: number
-  ): void {
-    // 1. Map existing subscriptions to dependencies for O(1) lookup during sync
-    if (prevDeps !== EMPTY_DEPS && prevUnsubs !== EMPTY_UNSUBS) {
-      for (let i = 0; i < prevDeps.length; i++) {
-        const dep = prevDeps[i];
-        if (dep) dep._tempUnsub = prevUnsubs[i];
-      }
-    }
-
-    // 2. Build new unsubscribe array
-    const nextUnsubs = unsubArrayPool.acquire();
-
-    // Ensure nextUnsubs has same length as nextDeps
-    nextUnsubs.length = nextDeps.length;
-
-    for (let i = 0; i < nextDeps.length; i++) {
-      const dep = nextDeps[i];
-      if (!dep) continue;
-
-      if (dep._tempUnsub) {
-        // Reuse existing subscription
-        nextUnsubs[i] = dep._tempUnsub;
-        dep._tempUnsub = undefined; // Consumed
-      } else {
-        debug.checkCircular(dep, this);
-        nextUnsubs[i] = dep.subscribe(this);
-      }
-    }
-
-    // 3. Cleanup unused subscriptions (from removals)
-    if (prevDeps !== EMPTY_DEPS) {
-      for (let i = 0; i < prevDeps.length; i++) {
-        const dep = prevDeps[i];
-        if (dep?._tempUnsub) {
-          // Still has _tempUnsub => was not reused in nextDeps => Removed
-          dep._tempUnsub();
-          dep._tempUnsub = undefined;
-        }
-      }
-    }
-
-    // 4. Release old unsub array and update reference
-    if (prevUnsubs !== EMPTY_UNSUBS) {
-      unsubArrayPool.release(prevUnsubs);
-    }
-    this._unsubscribes = nextUnsubs;
   }
 
   private _handleSyncResult(result: T): void {
@@ -582,7 +509,9 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
       }
     }
 
-    this._notifySubscribers();
+    // Use internal notify which uses abstract accessors
+    // We need to notify manually because this is an async rejection handled internally
+    this._notifySubscribers(undefined, undefined);
   }
 
   private _handleComputationError(err: unknown): never {
@@ -618,9 +547,6 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
     throw this._error;
   }
 
-  // === PRIVATE: Dependency Management ===
-  // (Replaced by _syncDependencies and inline pool logic)
-
   // === PRIVATE: Subscriber Management ===
 
   /**
@@ -649,22 +575,6 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
     this._notifyJob();
   }
 
-  /**
-   * Notifies function subscribers (Effects) of state changes.
-   * Currently only called from _handleAsyncRejection to notify Effects of errors.
-   * In normal operation, Effects are notified via _markDirty during dirty propagation.
-   */
-  private _notifySubscribers(): void {
-    if (!this._functionSubscribers.hasSubscribers) {
-      return;
-    }
-
-    this._functionSubscribers.forEachSafe(
-      (subscriber) => subscriber(),
-      (err) => console.error(err)
-    );
-  }
-
   private _registerTracking(): void {
     const current = trackingContext.getCurrent();
     if (!current) return;
@@ -681,10 +591,10 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber {
       if (fnWithDep.addDependency) {
         fnWithDep.addDependency(this as unknown as ComputedAtom<T>);
       } else {
-        this._functionSubscribers.add(current as () => void);
+        this._functionSubscribersStore.add(current as () => void);
       }
     } else if ((current as DependencyTracker).execute) {
-      this._objectSubscribers.add(current as Subscriber);
+      this._objectSubscribersStore.add(current as Subscriber);
     }
   }
 }

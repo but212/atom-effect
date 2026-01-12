@@ -13,12 +13,11 @@
  */
 
 import { SMI_MAX } from '../../constants';
-import { AtomError } from '../../errors/errors';
-import { ERROR_MESSAGES } from '../../errors/messages';
+import { ReactiveDependency } from '../../core/base/reactive-dependency';
 import { scheduler } from '../../scheduler';
 import { trackingContext } from '../../tracking';
 import type { AtomOptions, Subscriber, WritableAtom } from '../../types';
-import { debug, generateId } from '../../utils/debug';
+import { debug } from '../../utils/debug';
 import { SubscriberManager } from '../../utils/subscriber-manager';
 
 /**
@@ -31,29 +30,18 @@ import { SubscriberManager } from '../../utils/subscriber-manager';
  * It supports both function-based and object-based subscribers, and handles
  * synchronous or batched notifications based on configuration.
  */
-class AtomImpl<T> implements WritableAtom<T> {
-  // === Smi Fields (Fixed Order for V8 Hidden Class) ===
-  /** Unique numerical identifier (Smi) */
-  readonly id: number;
-
-  /** Version counter for change detection (Smi) */
-  version: number;
-
-  /** Internal flags (Smi) */
-  flags: number;
-
-  /** Last seen epoch for dependency collection (Smi) */
-  _lastSeenEpoch: number;
-
+class AtomImpl<T> extends ReactiveDependency implements WritableAtom<T> {
   // === Object Fields ===
   /** Current value stored in the atom */
   private _value: T;
 
   /** Manager for function-based subscribers */
-  private readonly _functionSubscribers: SubscriberManager<(newValue?: T, oldValue?: T) => void>;
+  private readonly _functionSubscribersStore: SubscriberManager<
+    (newValue?: T, oldValue?: T) => void
+  >;
 
   /** Manager for object-based subscribers with execute method */
-  private readonly _objectSubscribers: SubscriberManager<Subscriber>;
+  private readonly _objectSubscribersStore: SubscriberManager<Subscriber>;
 
   /** Whether notifications should be synchronous (bypass scheduler batching) */
   private readonly _sync: boolean;
@@ -74,20 +62,26 @@ class AtomImpl<T> implements WritableAtom<T> {
    * @param sync - Whether to notify subscribers synchronously
    */
   constructor(initialValue: T, sync: boolean) {
-    // 1. Smi Fields Initialization
-    this.id = generateId() & SMI_MAX;
-    this.version = 0;
-    this.flags = 0;
-    this._lastSeenEpoch = -1;
+    // 1. Smi Fields Initialization (via super)
+    super();
 
     // 2. Object Fields Initialization
     this._value = initialValue;
-    this._functionSubscribers = new SubscriberManager();
-    this._objectSubscribers = new SubscriberManager();
+    this._functionSubscribersStore = new SubscriberManager();
+    this._objectSubscribersStore = new SubscriberManager();
     this._sync = sync;
     this._notifyTask = this._flushNotifications.bind(this);
 
     debug.attachDebugInfo(this, 'atom', this.id);
+  }
+
+  // === Abstract Accessor Implementations ===
+  protected get _functionSubscribers(): SubscriberManager<(newValue?: T, oldValue?: T) => void> {
+    return this._functionSubscribersStore;
+  }
+
+  protected get _objectSubscribers(): SubscriberManager<Subscriber> {
+    return this._objectSubscribersStore;
   }
 
   /**
@@ -127,7 +121,10 @@ class AtomImpl<T> implements WritableAtom<T> {
     const currentVersion = this.version;
     this._value = newValue;
 
-    if (!this._functionSubscribers.hasSubscribers && !this._objectSubscribers.hasSubscribers)
+    if (
+      !this._functionSubscribersStore.hasSubscribers &&
+      !this._objectSubscribersStore.hasSubscribers
+    )
       return;
 
     this._notify(newValue, oldValue, currentVersion);
@@ -148,30 +145,18 @@ class AtomImpl<T> implements WritableAtom<T> {
       if (fnWithDep.addDependency !== undefined) {
         fnWithDep.addDependency(this);
       } else {
-        this._functionSubscribers.add(current as (newValue?: T, oldValue?: T) => void);
+        this._functionSubscribersStore.add(current as (newValue?: T, oldValue?: T) => void);
       }
     } else {
       const tracker = current as { execute?: () => void; addDependency?: (dep: unknown) => void };
       if (tracker.addDependency !== undefined) {
         tracker.addDependency(this);
       } else if (tracker.execute !== undefined) {
-        this._objectSubscribers.add(tracker as Subscriber);
+        this._objectSubscribersStore.add(tracker as Subscriber);
       }
     }
   }
 
-  /**
-   * Notifies all subscribers of a value change.
-   *
-   * @param newValue - The new value
-   * @param oldValue - The previous value
-   * @param currentVersion - The version at the time of change
-   *
-   * @remarks
-   * Notifications are skipped if the version has changed (stale update).
-   * Errors from individual subscribers are caught and logged without
-   * interrupting other subscribers.
-   */
   /**
    * Schedules a notification.
    * Uses coalescing: if a notification is already scheduled, we update the state
@@ -206,44 +191,8 @@ class AtomImpl<T> implements WritableAtom<T> {
     this._pendingOldValue = undefined;
     this._isNotificationScheduled = false;
 
-    this._functionSubscribers.forEachSafe(
-      (sub) => sub(newValue, oldValue),
-      (err) =>
-        console.error(new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, err as Error))
-    );
-
-    this._objectSubscribers.forEachSafe(
-      (sub) => sub.execute(),
-      (err) =>
-        console.error(new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, err as Error))
-    );
-  }
-
-  /**
-   * Subscribes a listener function or Subscriber object to value changes.
-   *
-   * @param listener - Function or Subscriber object to call when the value changes
-   * @returns An unsubscribe function
-   * @throws {AtomError} If listener is not a function or Subscriber
-   *
-   * @example
-   * ```ts
-   * const unsub = myAtom.subscribe((newVal, oldVal) => {
-   *   console.log(`Changed from ${oldVal} to ${newVal}`);
-   * });
-   * // Later: unsub();
-   * ```
-   */
-  subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
-    // Support Subscriber object for zero-allocation pattern
-    if (typeof listener === 'object' && listener !== null && 'execute' in listener) {
-      return this._objectSubscribers.add(listener);
-    }
-
-    if (typeof listener !== 'function') {
-      throw new AtomError(ERROR_MESSAGES.ATOM_SUBSCRIBER_MUST_BE_FUNCTION);
-    }
-    return this._functionSubscribers.add(listener);
+    // Use base class notification which is generic
+    this._notifySubscribers(newValue, oldValue);
   }
 
   /**
@@ -267,18 +216,9 @@ class AtomImpl<T> implements WritableAtom<T> {
    * undefined to help with garbage collection.
    */
   dispose(): void {
-    this._functionSubscribers.clear();
-    this._objectSubscribers.clear();
+    this._functionSubscribersStore.clear();
+    this._objectSubscribersStore.clear();
     this._value = undefined as T;
-  }
-
-  /**
-   * Gets the total number of active subscribers.
-   *
-   * @returns The count of function and object subscribers combined
-   */
-  subscriberCount(): number {
-    return this._functionSubscribers.size + this._objectSubscribers.size;
   }
 }
 
