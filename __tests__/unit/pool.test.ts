@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { depArrayPool, EMPTY_DEPS } from '../../src/pool';
+import { depArrayPool, EMPTY_DEPS } from '../../src/internal/pool';
 import type { Dependency } from '../../src/types/common';
 
 describe('ArrayPool', () => {

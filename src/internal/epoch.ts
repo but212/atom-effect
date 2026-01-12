@@ -1,4 +1,4 @@
-import { IS_DEV, SMI_MAX } from './constants';
+import { IS_DEV, SMI_MAX } from '../constants';
 
 let collectorEpoch = 0;
 

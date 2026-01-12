@@ -2,8 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SCHEDULER_CONFIG } from '../../../src/constants';
 import { atom } from '../../../src/core/atom/atom';
 import { effect } from '../../../src/core/effect/effect';
-import { resetFlushState, startFlush } from '../../../src/epoch';
-import { batch } from '../../../src/scheduler/batch';
+import { resetFlushState, startFlush } from '../../../src/internal/epoch';
+import { batch } from '../../../src/internal/scheduler/batch';
 
 describe('Infinite Loop Detection (Epoch Based)', () => {
   afterEach(() => {
