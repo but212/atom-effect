@@ -1,4 +1,5 @@
-export const __DEV__ = process.env.NODE_ENV !== 'production';
+// Security: Guard against undefined process in browser environments
+export const __DEV__ = typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production';
 
 // Scheduler & Atom interfaces to prevent circular deps
 export interface IScheduler<T> {
