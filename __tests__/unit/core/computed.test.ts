@@ -5,7 +5,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
-import { ComputedError } from '@/errors/errors';
+import { AtomError, ComputedError } from '@/errors/errors';
 
 describe('Computed - Error Handling and Edge Cases', () => {
   it('rejects invalid function types', () => {
@@ -23,7 +23,7 @@ describe('Computed - Error Handling and Edge Cases', () => {
 
     expect(() => {
       c.subscribe('not a function' as unknown as (newValue?: number, oldValue?: number) => void);
-    }).toThrow(ComputedError);
+    }).toThrow(AtomError);
   });
 
   it('throws error when accessing value in pending state without defaultValue', () => {

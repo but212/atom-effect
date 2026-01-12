@@ -6,7 +6,8 @@
  * support cleanup functions, async operations, and infinite loop detection.
  */
 
-import { EFFECT_STATE_FLAGS, IS_DEV, SCHEDULER_CONFIG, SMI_MAX } from '../../constants';
+import { EFFECT_STATE_FLAGS, IS_DEV, SCHEDULER_CONFIG } from '../../constants';
+import { ReactiveNode } from '../../core/base/reactive-node';
 import {
   flushEpoch,
   flushExecutionCount,
@@ -26,7 +27,7 @@ import {
 import { scheduler } from '../../scheduler';
 import { type DependencyTracker, trackingContext, untracked } from '../../tracking';
 import type { Dependency, EffectFunction, EffectObject, EffectOptions } from '../../types';
-import { debug, generateId } from '../../utils/debug';
+import { debug } from '../../utils/debug';
 
 /**
  * Internal implementation of the EffectObject interface.
@@ -46,10 +47,10 @@ import { debug, generateId } from '../../utils/debug';
  * @implements {EffectObject}
  * @implements {DependencyTracker}
  */
-class EffectImpl implements EffectObject, DependencyTracker {
+class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker {
   // === Smi Fields (Fixed Order for V8 Hidden Class) ===
-  private readonly _id: number;
-  private _flags: number;
+  // Inherited from ReactiveNode: id, flags
+
   // Effect is not a dependency, so it doesn't need _lastSeenEpoch for itself.
   // But we use _epoch during execution to track collected dependencies.
   private _currentEpoch: number;
@@ -58,6 +59,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
   private _lastFlushEpoch: number;
   private _executionsInEpoch: number;
 
+  // === COLD PATH ===
   private readonly _fn: EffectFunction;
   private readonly _sync: boolean;
   private readonly _maxExecutions: number;
@@ -81,9 +83,13 @@ class EffectImpl implements EffectObject, DependencyTracker {
   private _executionCount: number;
 
   constructor(fn: EffectFunction, options: EffectOptions = {}) {
-    this._id = generateId() & SMI_MAX;
-    this._flags = 0;
+    // 1. Smi Fields Initialization (via super)
+    super();
+
+    // 2. Additional Smi Fields
     this._currentEpoch = -1;
+    this._lastFlushEpoch = -1;
+    this._executionsInEpoch = 0;
 
     this._fn = fn;
     this._sync = options.sync ?? false;
@@ -103,16 +109,11 @@ class EffectImpl implements EffectObject, DependencyTracker {
     this._nextVersions = null;
     this._nextUnsubs = null;
 
-    // this._modifiedDeps = new Set(); // Removed
-
-    this._lastFlushEpoch = -1;
-    this._executionsInEpoch = 0;
-
     // Only allocate history in dev mode or if explicitly enabled
     this._history = IS_DEV ? [] : null;
     this._executionCount = 0;
 
-    debug.attachDebugInfo(this, 'effect', this._id);
+    debug.attachDebugInfo(this, 'effect', this.id);
   }
 
   /**
@@ -371,15 +372,6 @@ class EffectImpl implements EffectObject, DependencyTracker {
     }
   };
 
-  /**
-   * Synchronizes subscriptions by unsubscribing from removed dependencies.
-   * Uses epoch-based O(N) diff to identify stale dependencies.
-   *
-   * @param prevDeps - Previous dependency array
-   * @param epoch - Current execution epoch for staleness detection
-   */
-  // _syncDependencies removed (inline logic in execute)
-
   private _subscribeTo(dep: Dependency): void {
     try {
       const unsubscribe = dep.subscribe(() => {
@@ -422,7 +414,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
    * ```
    */
   get isDisposed(): boolean {
-    return (this._flags & EFFECT_STATE_FLAGS.DISPOSED) !== 0;
+    return (this.flags & EFFECT_STATE_FLAGS.DISPOSED) !== 0;
   }
 
   /**
@@ -466,7 +458,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
    * ```
    */
   get isExecuting(): boolean {
-    return (this._flags & EFFECT_STATE_FLAGS.EXECUTING) !== 0;
+    return (this.flags & EFFECT_STATE_FLAGS.EXECUTING) !== 0;
   }
 
   /**
@@ -479,7 +471,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
    * @internal
    */
   private _setDisposed(): void {
-    this._flags |= EFFECT_STATE_FLAGS.DISPOSED;
+    this.flags |= EFFECT_STATE_FLAGS.DISPOSED;
   }
 
   /**
@@ -496,7 +488,7 @@ class EffectImpl implements EffectObject, DependencyTracker {
   private _setExecuting(value: boolean): void {
     // Branchless: clear the bit, then OR with the mask if value is true
     const mask = EFFECT_STATE_FLAGS.EXECUTING;
-    this._flags = (this._flags & ~mask) | (-Number(value) & mask);
+    this.flags = (this.flags & ~mask) | (-Number(value) & mask);
   }
 
   /**
