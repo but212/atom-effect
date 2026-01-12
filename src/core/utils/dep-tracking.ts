@@ -1,5 +1,5 @@
 import { EMPTY_DEPS, EMPTY_UNSUBS, unsubArrayPool } from '../../internal/pool';
-import type { Dependency } from '../../types';
+import type { Dependency, Subscriber } from '../../types';
 import { debug } from '../../utils/debug';
 
 /**
@@ -18,7 +18,7 @@ export function syncDependencies(
   nextDeps: Dependency[],
   prevDeps: Dependency[],
   prevUnsubs: (() => void)[],
-  tracker: unknown
+  tracker: Subscriber
 ): (() => void)[] {
   // 1. Map existing subscriptions to dependencies for O(1) lookup during sync
   if (prevDeps !== EMPTY_DEPS && prevUnsubs !== EMPTY_UNSUBS) {
@@ -44,7 +44,6 @@ export function syncDependencies(
       dep._tempUnsub = undefined; // Consumed
     } else {
       debug.checkCircular(dep, tracker);
-      // @ts-expect-error - tracker type is either Effect or Computed, both valid for subscribe
       nextUnsubs[i] = dep.subscribe(tracker);
     }
   }
