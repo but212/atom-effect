@@ -61,5 +61,10 @@ export function syncDependencies(
     }
   }
 
+  // 4. Release old unsub array
+  if (prevUnsubs !== EMPTY_UNSUBS) {
+    unsubArrayPool.release(prevUnsubs);
+  }
+
   return nextUnsubs;
 }

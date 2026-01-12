@@ -8,6 +8,7 @@
 
 import { EFFECT_STATE_FLAGS, IS_DEV, SCHEDULER_CONFIG } from '../../constants';
 import { ReactiveNode } from '../../core/base/reactive-node';
+import { syncDependencies } from '../../core/utils/dep-tracking';
 import {
   flushEpoch,
   flushExecutionCount,
@@ -277,16 +278,17 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     const epoch = nextEpoch();
 
     // 1. Map existing subscriptions for O(1) reuse
-    if (prevDeps !== EMPTY_DEPS && prevUnsubs !== EMPTY_UNSUBS) {
-      for (let i = 0; i < prevDeps.length; i++) {
-        const dep = prevDeps[i];
-        if (dep) dep._tempUnsub = prevUnsubs[i];
-      }
-    }
+    // (Handled by syncDependencies after collection)
 
     this._nextDeps = nextDeps;
     this._nextVersions = nextVersions;
+    // We don't need nextUnsubs here as syncDependencies will create it
+    // But we need to pass a placeholder or handle it in syncDependencies
+    // Actually syncDependencies creates a new array.
+    // However, Effect's addDependency uses _nextUnsubs for direct subscription!
+    // We need to keep _nextUnsubs for addDependency logic.
     this._nextUnsubs = nextUnsubs;
+
     this._currentEpoch = epoch;
 
     let committed = false;
@@ -295,9 +297,10 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       const result = trackingContext.run(this, this._fn);
 
       // Commit dependencies (Cleaning up unused is done below)
+      // Use shared logic for syncing!
+      this._unsubscribes = syncDependencies(nextDeps, prevDeps, prevUnsubs, this);
       this._dependencies = nextDeps;
       this._dependencyVersions = nextVersions;
-      this._unsubscribes = nextUnsubs;
       committed = true;
 
       this._checkLoopWarnings();
@@ -331,24 +334,14 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       this._nextUnsubs = null;
 
       if (committed) {
-        // Cleanup unused old subscriptions
+        // Success: Release old deps
         if (prevDeps !== EMPTY_DEPS) {
-          for (let i = 0; i < prevDeps.length; i++) {
-            const dep = prevDeps[i];
-            if (dep?._tempUnsub) {
-              // Not reused
-              dep._tempUnsub();
-              dep._tempUnsub = undefined;
-            }
-          }
           depArrayPool.release(prevDeps);
-        }
-        if (prevUnsubs !== EMPTY_UNSUBS) {
-          unsubArrayPool.release(prevUnsubs);
         }
         if (prevVersions !== EMPTY_VERSIONS) {
           versionArrayPool.release(prevVersions);
         }
+        // prevUnsubs is released inside syncDependencies
       } else {
         // Should not happen if we always set committed=true on error too,
         // but if catastrophic failure:

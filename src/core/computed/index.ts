@@ -156,8 +156,8 @@ class ComputedAtomImpl<T> extends ReactiveDependency implements ComputedAtom<T>,
   }
 
   // === Abstract Accessor Implementations ===
-  // @ts-expect-error - The types match but TypeScript needs help seeing () => void is compatible with generic
   protected get _functionSubscribers(): SubscriberManager<() => void> {
+    // @ts-ignore - The types match but TypeScript needs help seeing () => void is compatible with generic
     return this._functionSubscribersStore;
   }
 
