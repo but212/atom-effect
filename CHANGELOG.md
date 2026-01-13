@@ -4,6 +4,13 @@
 
 ### Changed
 
+- **Performance**: Optimized `Atom` value setter and tracking logic
+  - Removed unused `currentVersion` dead store allocation
+  - Eliminated unused parameters (`_newValue`, `_currentVersion`) from notification method
+  - Renamed `_notify()` → `_scheduleNotification()` for semantic clarity
+  - Simplified nullish check to idiomatic truthy check in `value` getter
+  - Condensed `_track()` comments for improved readability
+
 - **Type Safety**: Refactored dependency tracking with User-Defined Type Guards
   - Added explicit interfaces: `DependencySubscriber`, `ExecutableSubscriber`
   - Implemented type guards: `hasDependencyMethod()`, `isPlainListener()`, `hasExecuteMethod()`, `isTrackableFunction()`
@@ -16,7 +23,7 @@
 
 - Fixed computed caching bug where `_setIdle()` in `_markDirty()` cleared the RESOLVED flag, causing computed values to re-execute on every access instead of returning cached values.
 
-### Changed
+### Changed - 0.3.3
 
 - **Architecture**: Moved internal modules (`pool.ts`, `epoch.ts`, `scheduler/`) to `src/internal/` for better encapsulation.
 - **Documentation**: Reduced excessive JSDoc comments across 7 core files (~1,200 lines removed):
