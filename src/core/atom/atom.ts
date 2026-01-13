@@ -7,7 +7,11 @@ import type { AtomOptions, Subscriber, WritableAtom } from '@/types';
 import { debug } from '@/utils/debug';
 import { SubscriberManager } from '@/utils/subscriber-manager';
 
-/** Internal WritableAtom implementation with optimized subscriber management */
+/**
+ * Internal {@link WritableAtom} implementation.
+ * Extends {@link ReactiveDependency} to provide reactive state that can be observed and updated.
+ * Optimized for fast subscriber notification and tracking.
+ */
 class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
   private _value: T;
   private readonly _functionSubscribersStore: SubscriberManager<
@@ -29,22 +33,29 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
     debug.attachDebugInfo(this, 'atom', this.id);
   }
 
+  /** Gets the manager for function-based subscribers. */
   protected get _functionSubscribers(): SubscriberManager<(newValue?: T, oldValue?: T) => void> {
     return this._functionSubscribersStore;
   }
 
+  /** Gets the manager for object-based subscribers. */
   protected get _objectSubscribers(): SubscriberManager<Subscriber> {
     return this._objectSubscribersStore;
   }
 
-  /** Gets value and registers as dependency in current tracking context */
+  /**
+   * Returns the current value and registers the atom as a dependency in the current tracking context.
+   */
   get value(): T {
     const current = trackingContext.getCurrent();
     if (current) this._track(current);
     return this._value;
   }
 
-  /** Sets value and notifies subscribers if changed (uses Object.is) */
+  /**
+   * Sets a new value and schedules notifications if the value has changed.
+   * Uses `Object.is` for comparison.
+   */
   set value(newValue: T) {
     if (Object.is(this._value, newValue)) return;
 
@@ -105,11 +116,16 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
     this._notifySubscribers(newValue, oldValue);
   }
 
-  /** Gets value without registering as dependency */
+  /**
+   * Returns the current value without registering as a dependency in the tracking context.
+   */
   peek(): T {
     return this._value;
   }
 
+  /**
+   * Disposes of the atom, clearing all subscribers and resetting the value.
+   */
   dispose(): void {
     this._functionSubscribersStore.clear();
     this._objectSubscribersStore.clear();
@@ -119,8 +135,21 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
 
 /**
  * Creates a reactive atom holding mutable state.
- * @param initialValue - Initial value
- * @param options - { sync?: boolean } for immediate notifications
+ *
+ * Atoms are the building blocks of reactive state. When an atom's value changes,
+ * any effects or computed atoms that depend on it will be automatically re-executed.
+ *
+ * @param initialValue - The initial value of the atom.
+ * @param options - Configuration options.
+ * @param options.sync - If true, notifications are delivered synchronously when the value changes.
+ * @returns A writable atom object.
+ *
+ * @example
+ * ```ts
+ * const count = atom(0);
+ * count.value = 1; // Notifies subscribers
+ * console.log(count.value); // 1
+ * ```
  */
 export function atom<T>(initialValue: T, options: AtomOptions = {}): WritableAtom<T> {
   return new AtomImpl(initialValue, options.sync ?? false);

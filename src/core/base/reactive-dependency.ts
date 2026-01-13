@@ -16,7 +16,6 @@ import { ReactiveNode } from './reactive-node';
  * packed together at the start of the object for V8 optimization.
  */
 export abstract class ReactiveDependency<T> extends ReactiveNode {
-  // === Smi Fields (Continued from ReactiveNode) ===
   /** Version counter for change detection (Smi) */
   version: number;
 
@@ -29,8 +28,6 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
     this._lastSeenEpoch = -1;
   }
 
-  // === Abstract Accessors for Object Fields ===
-  // Implemented by subclasses to control field layout
   protected abstract get _functionSubscribers(): SubscriberManager<
     (newValue?: T, oldValue?: T) => void
   >;

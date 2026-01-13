@@ -2,8 +2,17 @@ import { AsyncState, COMPUTED_STATE_FLAGS } from '@/constants';
 import type { AsyncStateType } from '@/types';
 
 /**
- * Bit flag manager for computed state. Uses bitwise ops for O(1) operations.
- * Flags: DIRTY(0), IDLE(1), PENDING(2), RESOLVED(3), REJECTED(4), RECOMPUTING(5), HAS_ERROR(6)
+ * Bit flag manager for computed state.
+ * Uses bitwise operations for O(1) state transitions and checks.
+ *
+ * Flags:
+ * - DIRTY: Needs recomputation
+ * - IDLE: Initial state, no value yet
+ * - PENDING: Async computation in progress
+ * - RESOLVED: Computation successful, has valid value
+ * - REJECTED: Computation failed, has error
+ * - RECOMPUTING: Currently executing computation function
+ * - HAS_ERROR: Indicates presence of an error
  */
 export class ComputedStateFlags {
   private stateFlags: number;
@@ -12,22 +21,27 @@ export class ComputedStateFlags {
     this.stateFlags = COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE;
   }
 
+  /** Checks if the state is DIRTY (needs re-evaluation) */
   isDirty(): boolean {
     return (this.stateFlags & COMPUTED_STATE_FLAGS.DIRTY) !== 0;
   }
 
+  /** Marks the state as DIRTY */
   setDirty(): void {
     this.stateFlags |= COMPUTED_STATE_FLAGS.DIRTY;
   }
 
+  /** Clears the DIRTY flag */
   clearDirty(): void {
     this.stateFlags &= ~COMPUTED_STATE_FLAGS.DIRTY;
   }
 
+  /** Checks if the state is IDLE */
   isIdle(): boolean {
     return (this.stateFlags & COMPUTED_STATE_FLAGS.IDLE) !== 0;
   }
 
+  /** Sets the state to IDLE and clears other status flags */
   setIdle(): void {
     this.stateFlags |= COMPUTED_STATE_FLAGS.IDLE;
     this.stateFlags &= ~(
@@ -37,10 +51,12 @@ export class ComputedStateFlags {
     );
   }
 
+  /** Checks if the state is PENDING */
   isPending(): boolean {
     return (this.stateFlags & COMPUTED_STATE_FLAGS.PENDING) !== 0;
   }
 
+  /** Sets the state to PENDING and clears other status flags */
   setPending(): void {
     this.stateFlags |= COMPUTED_STATE_FLAGS.PENDING;
     this.stateFlags &= ~(
@@ -50,10 +66,12 @@ export class ComputedStateFlags {
     );
   }
 
+  /** Checks if the state is RESOLVED */
   isResolved(): boolean {
     return (this.stateFlags & COMPUTED_STATE_FLAGS.RESOLVED) !== 0;
   }
 
+  /** Sets the state to RESOLVED and clears other status flags */
   setResolved(): void {
     this.stateFlags |= COMPUTED_STATE_FLAGS.RESOLVED;
     this.stateFlags &= ~(
@@ -64,10 +82,12 @@ export class ComputedStateFlags {
     );
   }
 
+  /** Checks if the state is REJECTED */
   isRejected(): boolean {
     return (this.stateFlags & COMPUTED_STATE_FLAGS.REJECTED) !== 0;
   }
 
+  /** Sets the state to REJECTED and HAS_ERROR, clearing other status flags */
   setRejected(): void {
     this.stateFlags |= COMPUTED_STATE_FLAGS.REJECTED | COMPUTED_STATE_FLAGS.HAS_ERROR;
     this.stateFlags &= ~(
@@ -77,16 +97,21 @@ export class ComputedStateFlags {
     );
   }
 
+  /** Checks if RECOMPUTING flag is set */
   isRecomputing(): boolean {
     return (this.stateFlags & COMPUTED_STATE_FLAGS.RECOMPUTING) !== 0;
   }
 
-  /** Branchless set/clear of recomputing flag */
+  /**
+   * Sets or clears the RECOMPUTING flag.
+   * @param value - true to set, false to clear.
+   */
   setRecomputing(value: boolean): void {
     const mask = COMPUTED_STATE_FLAGS.RECOMPUTING;
     this.stateFlags = (this.stateFlags & ~mask) | (-Number(value) & mask);
   }
 
+  /** Returns the current async state as a string enum value */
   getAsyncState(): AsyncStateType {
     if (this.isPending()) return AsyncState.PENDING;
     if (this.isResolved()) return AsyncState.RESOLVED;
@@ -94,7 +119,10 @@ export class ComputedStateFlags {
     return AsyncState.IDLE;
   }
 
-  /** Single bitwise check: resolved AND not dirty */
+  /**
+   * Optimization: checks if the value can be returned immediately.
+   * Path is fast if RESOLVED and NOT DIRTY.
+   */
   isFastPath(): boolean {
     return (
       (this.stateFlags & (COMPUTED_STATE_FLAGS.RESOLVED | COMPUTED_STATE_FLAGS.DIRTY)) ===
@@ -102,10 +130,12 @@ export class ComputedStateFlags {
     );
   }
 
+  /** Resets flags to initial state (DIRTY | IDLE) */
   reset(): void {
     this.stateFlags = COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE;
   }
 
+  /** Returns a string representation of the active flags */
   toString(): string {
     const states: string[] = [];
     if (this.isDirty()) states.push('DIRTY');

@@ -3,14 +3,16 @@ import type { Dependency, Subscriber } from '@/types';
 import type { PoolStats } from '@/types/internal';
 
 // Shared Constants
-export const EMPTY_DEPS: readonly Dependency[] = Object.freeze([]);
-export const EMPTY_SUBS: readonly Subscriber[] = Object.freeze([]);
-export const EMPTY_UNSUBS: readonly (() => void)[] = Object.freeze([]);
+export const EMPTY_DEPS = Object.freeze([]) as unknown as Dependency[];
+export const EMPTY_SUBS = Object.freeze([]) as unknown as Subscriber[];
+export const EMPTY_UNSUBS = Object.freeze([]) as unknown as (() => void)[];
 
-export const EMPTY_VERSIONS: readonly number[] = Object.freeze([]);
+export const EMPTY_VERSIONS = Object.freeze([]) as unknown as number[];
 
 /**
- * Generic Array Pool (Type-safe pooling for different array types)
+ * Generic Array Pool.
+ * Provides type-safe pooling for different array types to reduce GC pressure.
+ * Supports capacity limits and stats tracking in development mode.
  */
 class ArrayPool<T> {
   private pool: T[][] = [];
@@ -25,39 +27,42 @@ class ArrayPool<T> {
       }
     : null;
 
+  /** Acquires an array from the pool or creates a new one if the pool is empty. */
   acquire(): T[] {
     if (IS_DEV && this.stats) this.stats.acquired++;
     return this.pool.pop() ?? [];
   }
 
+  /**
+   * Releases an array back to the pool.
+   * Clears the array before storing it.
+   * @param arr - The array to release.
+   * @param emptyConst - Optional reference to a constant empty array to skip.
+   */
   release(arr: T[], emptyConst?: readonly T[]): void {
-    // 1. Reference check first
     if (emptyConst && arr === emptyConst) return;
 
-    // 2. Frozen check
     if (Object.isFrozen(arr)) {
       if (IS_DEV && this.stats) this.stats.rejected.frozen++;
       return;
     }
 
-    // 3. Size check
     if (arr.length > this.maxReusableCapacity) {
       if (IS_DEV && this.stats) this.stats.rejected.tooLarge++;
       return;
     }
 
-    // 4. Pool capacity check
     if (this.pool.length >= this.maxPoolSize) {
       if (IS_DEV && this.stats) this.stats.rejected.poolFull++;
       return;
     }
 
-    // 5. Normal release
     arr.length = 0;
     this.pool.push(arr);
     if (IS_DEV && this.stats) this.stats.released++;
   }
 
+  /** Returns current stats for the pool (dev mode only). */
   getStats(): PoolStats | null {
     if (!IS_DEV || !this.stats) return null;
     const { acquired, released, rejected } = this.stats;
@@ -71,6 +76,7 @@ class ArrayPool<T> {
     };
   }
 
+  /** Resets the pool and its stats. */
   reset(): void {
     this.pool.length = 0;
     if (IS_DEV && this.stats) {

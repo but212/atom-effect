@@ -1,7 +1,3 @@
-/**
- * @fileoverview Atom Effect - Main entry point
- */
-
 export { AsyncState, DEBUG_CONFIG, POOL_CONFIG, SCHEDULER_CONFIG } from '@/constants';
 export { atom, computed, effect } from '@/core';
 

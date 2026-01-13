@@ -12,7 +12,7 @@ import { trackingContext } from './context';
  * @param fn - The function to execute without tracking
  * @returns The result of the executed function
  * @throws {AtomError} If the callback is not a function
- * @throws {AtomError} If an error occurs during execution
+ * @throws Propagates any error thrown by the callback function
  *
  * @example
  * ```typescript
@@ -34,8 +34,6 @@ export function untracked<T>(fn: () => T): T {
 
   try {
     return fn();
-  } catch (error) {
-    throw new AtomError('Error occurred during untracked execution', error as Error);
   } finally {
     trackingContext.current = prev;
   }
