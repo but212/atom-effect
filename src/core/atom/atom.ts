@@ -1,10 +1,10 @@
-import { SMI_MAX } from '../../constants';
-import { ReactiveDependency } from '../../core/base/reactive-dependency';
-import { scheduler } from '../../internal/scheduler';
-import { trackingContext } from '../../tracking';
-import type { AtomOptions, Subscriber, WritableAtom } from '../../types';
-import { debug } from '../../utils/debug';
-import { SubscriberManager } from '../../utils/subscriber-manager';
+import { SMI_MAX } from '@/constants';
+import { ReactiveDependency } from '@/core/base/reactive-dependency';
+import { scheduler } from '@/internal/scheduler';
+import { trackingContext } from '@/tracking';
+import type { AtomOptions, Subscriber, WritableAtom } from '@/types';
+import { debug } from '@/utils/debug';
+import { SubscriberManager } from '@/utils/subscriber-manager';
 
 /** Internal WritableAtom implementation with optimized subscriber management */
 class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {

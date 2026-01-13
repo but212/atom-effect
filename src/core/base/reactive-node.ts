@@ -1,5 +1,5 @@
-import { SMI_MAX } from '../../constants';
-import { generateId } from '../../utils/debug';
+import { SMI_MAX } from '@/constants';
+import { generateId } from '@/utils/debug';
 
 /**
  * Base class for all reactive nodes (Atoms, Computed, Effects).

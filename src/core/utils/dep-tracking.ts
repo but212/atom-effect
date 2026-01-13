@@ -1,6 +1,6 @@
-import { EMPTY_DEPS, EMPTY_UNSUBS, unsubArrayPool } from '../../internal/pool';
-import type { Dependency, Subscriber } from '../../types';
-import { debug } from '../../utils/debug';
+import { EMPTY_DEPS, EMPTY_UNSUBS, unsubArrayPool } from '@/internal/pool';
+import type { Dependency, Subscriber } from '@/types';
+import { debug } from '@/utils/debug';
 
 /**
  * Synchronizes subscriptions based on dependency changes using O(N) strategy.

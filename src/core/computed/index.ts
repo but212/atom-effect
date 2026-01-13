@@ -1,10 +1,10 @@
-import { AsyncState, COMPUTED_STATE_FLAGS, SMI_MAX } from '../../constants';
-import { ReactiveDependency } from '../../core/base/reactive-dependency';
-import { syncDependencies } from '../../core/utils/dep-tracking';
-import type { AtomError } from '../../errors/errors';
-import { ComputedError, isPromise, wrapError } from '../../errors/errors';
-import { ERROR_MESSAGES } from '../../errors/messages';
-import { nextEpoch } from '../../internal/epoch';
+import { AsyncState, COMPUTED_STATE_FLAGS, SMI_MAX } from '@/constants';
+import { ReactiveDependency } from '@/core/base/reactive-dependency';
+import { syncDependencies } from '@/core/utils/dep-tracking';
+import type { AtomError } from '@/errors/errors';
+import { ComputedError, isPromise, wrapError } from '@/errors/errors';
+import { ERROR_MESSAGES } from '@/errors/messages';
+import { nextEpoch } from '@/internal/epoch';
 import {
   depArrayPool,
   EMPTY_DEPS,

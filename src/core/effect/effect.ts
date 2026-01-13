@@ -1,13 +1,13 @@
-import { EFFECT_STATE_FLAGS, IS_DEV, SCHEDULER_CONFIG } from '../../constants';
-import { ReactiveNode } from '../../core/base/reactive-node';
-import { EffectError, isPromise, wrapError } from '../../errors/errors';
-import { ERROR_MESSAGES } from '../../errors/messages';
+import { EFFECT_STATE_FLAGS, IS_DEV, SCHEDULER_CONFIG } from '@/constants';
+import { ReactiveNode } from '@/core/base/reactive-node';
+import { EffectError, isPromise, wrapError } from '@/errors/errors';
+import { ERROR_MESSAGES } from '@/errors/messages';
 import {
   flushEpoch,
   flushExecutionCount,
   incrementFlushExecutionCount,
   nextEpoch,
-} from '../../internal/epoch';
+} from '@/internal/epoch';
 import {
   depArrayPool,
   EMPTY_DEPS,
@@ -15,11 +15,11 @@ import {
   EMPTY_VERSIONS,
   unsubArrayPool,
   versionArrayPool,
-} from '../../internal/pool';
-import { scheduler } from '../../internal/scheduler';
-import { type DependencyTracker, trackingContext, untracked } from '../../tracking';
-import type { Dependency, EffectFunction, EffectObject, EffectOptions } from '../../types';
-import { debug } from '../../utils/debug';
+} from '@/internal/pool';
+import { scheduler } from '@/internal/scheduler';
+import { type DependencyTracker, trackingContext, untracked } from '@/tracking';
+import type { Dependency, EffectFunction, EffectObject, EffectOptions } from '@/types';
+import { debug } from '@/utils/debug';
 
 /** Internal effect implementation with dependency tracking and infinite loop detection */
 class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker {

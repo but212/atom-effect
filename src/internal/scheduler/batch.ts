@@ -1,4 +1,4 @@
-import { AtomError } from '../../errors/errors';
+import { AtomError } from '@/errors/errors';
 import { scheduler } from './scheduler';
 
 /**

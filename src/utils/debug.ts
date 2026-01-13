@@ -1,6 +1,6 @@
-import { DEBUG_CONFIG } from '../constants';
-import { ComputedError } from '../errors/errors';
-import type { DebugConfig } from '../types';
+import { DEBUG_CONFIG } from '@/constants';
+import { ComputedError } from '@/errors/errors';
+import type { DebugConfig } from '@/types';
 
 /** Symbol for debug display name on reactive objects */
 export const DEBUG_NAME: unique symbol = Symbol('debugName');
