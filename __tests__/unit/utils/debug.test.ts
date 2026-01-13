@@ -4,6 +4,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { ComputedError } from '@/errors/errors';
+import type { Dependency } from '@/types';
 import { DEBUG_ID, DEBUG_NAME, DEBUG_TYPE, debug, NO_DEFAULT_VALUE } from '@/utils/debug';
 
 describe('debug configuration', () => {
@@ -67,7 +68,7 @@ describe('debug.warn', () => {
 
 describe('debug.checkCircular', () => {
   it('detects direct circular reference', () => {
-    const node = {};
+    const node = {} as Dependency;
 
     expect(() => {
       debug.checkCircular(node, node);
@@ -82,10 +83,10 @@ describe('debug.checkCircular', () => {
     const originalEnabled = debug.enabled;
     debug.enabled = true;
 
-    const nodeA: { dependencies: unknown[] } = { dependencies: [] };
-    const nodeB = { dependencies: [nodeA] };
-    const nodeC = { dependencies: [nodeB] };
-    nodeA.dependencies.push(nodeC); // A → C → B → A
+    const nodeA = { dependencies: [] } as unknown as Dependency;
+    const nodeB = { dependencies: [nodeA] } as unknown as Dependency;
+    const nodeC = { dependencies: [nodeB] } as unknown as Dependency;
+    (nodeA as unknown as { dependencies: unknown[] }).dependencies.push(nodeC); // A → C → B → A
 
     expect(() => {
       debug.checkCircular(nodeC, nodeA);
@@ -98,10 +99,10 @@ describe('debug.checkCircular', () => {
     const originalEnabled = debug.enabled;
     debug.enabled = false;
 
-    const nodeA: { dependencies: unknown[] } = { dependencies: [] };
-    const nodeB = { dependencies: [nodeA] };
-    const nodeC = { dependencies: [nodeB] };
-    nodeA.dependencies.push(nodeC);
+    const nodeA = { dependencies: [] } as unknown as Dependency;
+    const nodeB = { dependencies: [nodeA] } as unknown as Dependency;
+    const nodeC = { dependencies: [nodeB] } as unknown as Dependency;
+    (nodeA as unknown as { dependencies: unknown[] }).dependencies.push(nodeC);
 
     // No error in production (for performance)
     // However, direct circular is still detected
@@ -116,8 +117,8 @@ describe('debug.checkCircular', () => {
     const originalEnabled = debug.enabled;
     debug.enabled = true;
 
-    const node1 = {};
-    const node2 = { dependencies: [] };
+    const node1 = {} as Dependency;
+    const node2 = { dependencies: [] } as unknown as Dependency;
 
     expect(() => {
       debug.checkCircular(node1, node2);
@@ -130,8 +131,8 @@ describe('debug.checkCircular', () => {
     const originalEnabled = debug.enabled;
     debug.enabled = true;
 
-    const nodeA = { dependencies: [] };
-    const nodeB = { dependencies: [nodeA] };
+    const nodeA = { dependencies: [] } as unknown as Dependency;
+    const nodeB = { dependencies: [nodeA] } as unknown as Dependency;
 
     // Should not throw for non-circular dependency
     expect(() => {

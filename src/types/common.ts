@@ -74,7 +74,7 @@ export interface DebugConfig {
   warnInfiniteLoop: boolean;
   warn(condition: boolean, message: string): void;
   /** Checks for circular dependencies between reactive nodes */
-  checkCircular(dep: Dependency, current: Dependency): void;
+  checkCircular(dep: Dependency, current: object): void;
   attachDebugInfo(obj: object, type: string, id: number): void;
   /** Returns debug name if available (requires obj to have DEBUG_NAME symbol) */
   getDebugName(obj: object | null | undefined): string | undefined;

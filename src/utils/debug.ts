@@ -22,7 +22,7 @@ function hasDependencies(obj: Dependency): obj is Dependency & { dependencies: D
 let globalCheckEpoch = 0;
 
 /** Internal recursive checker for circular dependency detection */
-function checkCircularInternal(dep: Dependency, current: Dependency, epoch: number): void {
+function checkCircularInternal(dep: Dependency, current: object, epoch: number): void {
   if (dep._visitedEpoch === epoch) {
     return;
   }
@@ -64,7 +64,7 @@ export const debug: DebugConfig = {
    * Direct check runs always; indirect check only in dev mode.
    * @throws {ComputedError} When circular dependency detected
    */
-  checkCircular(dep: Dependency, current: Dependency): void {
+  checkCircular(dep: Dependency, current: object): void {
     if (dep === current) {
       throw new ComputedError('Direct circular dependency detected');
     }

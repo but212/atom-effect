@@ -15,6 +15,7 @@ import {
   isEffect,
   untracked,
 } from '@/index';
+import type { Dependency } from '@/types';
 
 // ========================================
 // 1. Atom Basic Behavior
@@ -213,7 +214,7 @@ describe('Computed - Behavior', () => {
     // Directly test checkCircular function
     const mockComputed = {
       dependencies: new Set(),
-    };
+    } as unknown as Dependency;
 
     // Attempt to add atom as its own dependency
     expect(() => {
@@ -231,10 +232,10 @@ describe('Computed - Behavior', () => {
     }
 
     // Simulate A → B → C → A circular structure
-    const nodeA: { dependencies: unknown[] } = { dependencies: [] };
-    const nodeB = { dependencies: [nodeA] };
-    const nodeC = { dependencies: [nodeB] };
-    nodeA.dependencies.push(nodeC); // complete the cycle
+    const nodeA = { dependencies: [] } as unknown as Dependency;
+    const nodeB = { dependencies: [nodeA] } as unknown as Dependency;
+    const nodeC = { dependencies: [nodeB] } as unknown as Dependency;
+    (nodeA as unknown as { dependencies: unknown[] }).dependencies.push(nodeC); // complete the cycle
 
     expect(() => {
       DEBUG_RUNTIME.checkCircular(nodeC, nodeA);
