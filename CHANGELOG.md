@@ -8,6 +8,8 @@
   - Removed unused variables, parameters, and redundant type checks across core classes
   - Renamed `_notify()` to `_scheduleNotification()` and simplified `Atom` getter logic
   - Optimized `Computed` hot paths and merged `Effect` execution conditions for better performance
+  - Simplified `isPromise` nullish check and `hasSubscribers` getter in utility modules
+  - Consolidated `hasDependencyMethod` type guard branches for cleaner code
 
 - **Type Safety**: Refactored dependency tracking with User-Defined Type Guards
   - Added explicit interfaces: `DependencySubscriber`, `ExecutableSubscriber`

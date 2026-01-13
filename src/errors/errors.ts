@@ -151,9 +151,5 @@ export function wrapError(
  * ```
  */
 export function isPromise<T>(value: unknown): value is Promise<T> {
-  return (
-    value !== null &&
-    value !== undefined &&
-    typeof (value as { then?: unknown }).then === 'function'
-  );
+  return value != null && typeof (value as { then?: unknown }).then === 'function';
 }

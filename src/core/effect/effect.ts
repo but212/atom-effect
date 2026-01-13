@@ -350,7 +350,8 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 
   private _shouldExecute(): boolean {
     // Early exit: no deps or no version cache means first run or invalidated
-    if (this._dependencies === EMPTY_DEPS || this._dependencyVersions === EMPTY_VERSIONS) return true;
+    if (this._dependencies === EMPTY_DEPS || this._dependencyVersions === EMPTY_VERSIONS)
+      return true;
 
     for (let i = 0; i < this._dependencies.length; i++) {
       const dep = this._dependencies[i];

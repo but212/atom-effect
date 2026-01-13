@@ -31,13 +31,11 @@ function isNonNullObject(value: unknown): value is Record<string, unknown> {
 
 /** Checks if the value implements the DependencySubscriber interface. */
 export function hasDependencyMethod(value: unknown): value is DependencySubscriber {
-  if (isNonNullObject(value)) {
-    return typeof value.addDependency === 'function';
-  }
-  if (typeof value === 'function') {
-    return typeof (value as TrackableFunction).addDependency === 'function';
-  }
-  return false;
+  return (
+    (typeof value === 'object' || typeof value === 'function') &&
+    value !== null &&
+    typeof (value as DependencySubscriber).addDependency === 'function'
+  );
 }
 
 /** Checks if the value is a function with an addDependency method. */
