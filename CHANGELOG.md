@@ -4,7 +4,7 @@
 
 ### Changed
 
-- **Core Optimizations**: Streamlined `Atom`, `Computed`, and `Effect` implementations
+- **Refactor and Simplify**: Streamlined `Atom`, `Computed`, and `Effect` implementations
   - Removed unused variables, parameters, and redundant type checks across core classes
   - Renamed `_notify()` to `_scheduleNotification()` and simplified `Atom` getter logic
   - Optimized `Computed` hot paths and merged `Effect` execution conditions for better performance
