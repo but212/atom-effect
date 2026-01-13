@@ -1,4 +1,4 @@
-import { EFFECT_STATE_FLAGS, IS_DEV, SCHEDULER_CONFIG } from '@/constants';
+import { EFFECT_STATE_FLAGS, IS_DEV, SCHEDULER_CONFIG, TIME_CONSTANTS } from '@/constants';
 import { ReactiveNode } from '@/core/base/reactive-node';
 import { EffectError, isPromise, wrapError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
@@ -317,7 +317,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     const history = this._history;
     if (!history || this._maxExecutions <= 0) return;
 
-    const oneSecondAgo = now - 1000;
+    const oneSecondAgo = now - TIME_CONSTANTS.ONE_SECOND_MS;
     let count = 0;
 
     for (let i = history.length - 1; i >= 0; i--) {

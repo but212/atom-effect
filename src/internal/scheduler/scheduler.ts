@@ -1,3 +1,4 @@
+import { SCHEDULER_CONFIG } from '@/constants';
 import { SchedulerError } from '../../errors/errors';
 import { endFlush, startFlush } from '../epoch';
 
@@ -25,7 +26,7 @@ class Scheduler {
   private batchQueue: SchedulerJob[] = [];
   private batchQueueSize = 0;
   private isFlushingSync: boolean = false;
-  private maxFlushIterations: number = 1000;
+  private maxFlushIterations: number = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
 
   get phase(): SchedulerPhase {
     if (this.isProcessing || this.isFlushingSync) {
@@ -172,8 +173,10 @@ class Scheduler {
   }
 
   setMaxFlushIterations(max: number): void {
-    if (max < 10) {
-      throw new SchedulerError('Max flush iterations must be at least 10');
+    if (max < SCHEDULER_CONFIG.MIN_FLUSH_ITERATIONS) {
+      throw new SchedulerError(
+        `Max flush iterations must be at least ${SCHEDULER_CONFIG.MIN_FLUSH_ITERATIONS}`
+      );
     }
     this.maxFlushIterations = max;
   }
