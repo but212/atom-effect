@@ -22,13 +22,13 @@
     "format": "biome format --write .",
     "prepublishOnly": "pnpm run build",
     "bench": "vitest bench --config vitest.bench.config.ts",
-    "bench:micro": "vitest bench __benchmarks__/micro --config vitest.bench.config.ts",
-    "bench:macro": "vitest bench __benchmarks__/macro --config vitest.bench.config.ts",
-    "bench:atom": "vitest bench __benchmarks__/micro/atom.bench --config vitest.bench.config.ts",
-    "bench:computed": "vitest bench __benchmarks__/micro/computed.bench --config vitest.bench.config.ts",
-    "bench:effect": "vitest bench __benchmarks__/micro/effect.bench --config vitest.bench.config.ts",
-    "bench:realistic": "vitest bench __benchmarks__/realistic --config vitest.bench.config.ts",
-    "bench:propagation": "vitest bench __benchmarks__/micro/propagation.bench --config vitest.bench.config.ts"
+    "bench:micro": "pnpm run bench __benchmarks__/micro",
+    "bench:macro": "pnpm run bench __benchmarks__/macro",
+    "bench:atom": "pnpm run bench __benchmarks__/micro/atom.bench",
+    "bench:computed": "pnpm run bench __benchmarks__/micro/computed.bench",
+    "bench:effect": "pnpm run bench __benchmarks__/micro/effect.bench",
+    "bench:realistic": "pnpm run bench __benchmarks__/realistic",
+    "bench:propagation": "pnpm run bench __benchmarks__/micro/propagation.bench"
   },
   "keywords": [
     "reactive",
