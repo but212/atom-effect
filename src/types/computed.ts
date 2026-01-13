@@ -1,4 +1,4 @@
-import { AsyncState } from '@/constants';
+import type { AsyncState } from '@/constants';
 import type { ReadonlyAtom } from './atom';
 
 /** Type derived from AsyncState constant values */
