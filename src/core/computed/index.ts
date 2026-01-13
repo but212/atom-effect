@@ -14,11 +14,7 @@ import {
   versionArrayPool,
 } from '@/internal/pool';
 import { trackingContext } from '@/tracking';
-import {
-  hasDependencyMethod,
-  hasExecuteMethod,
-  isPlainListener,
-} from '@/tracking/tracking.types';
+import { hasDependencyMethod, hasExecuteMethod, isPlainListener } from '@/tracking/tracking.types';
 
 import type {
   AsyncStateType,
@@ -31,7 +27,7 @@ import { debug, NO_DEFAULT_VALUE } from '@/utils/debug';
 import { SubscriberManager } from '@/utils/subscriber-manager';
 
 type TrackableListener = (() => void) & {
-  addDependency: (dep: unknown) => void;
+  addDependency: (dep: Dependency) => void;
 };
 
 /**
@@ -100,7 +96,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     };
 
     this._trackable = Object.assign(() => this._markDirty(), {
-      addDependency: (_dep: unknown) => {},
+      addDependency: (_dep: Dependency) => {},
     });
 
     debug.attachDebugInfo(this as unknown as ComputedAtom<T>, 'computed', this.id);
@@ -336,7 +332,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     };
 
     const originalAdd = this._trackable.addDependency;
-    this._trackable.addDependency = collect as (dep: unknown) => void;
+    this._trackable.addDependency = collect;
 
     let committed = false;
 
@@ -503,7 +499,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
 
     // Priority 1: Has addDependency method (TrackableListener or DependencyTracker)
     if (hasDependencyMethod(current)) {
-      current.addDependency(this as unknown as ComputedAtom<T>);
+      current.addDependency(this);
       return;
     }
 
