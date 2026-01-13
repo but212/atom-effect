@@ -1,8 +1,16 @@
 # Changelog
 
-## [0.4.0]
+## [Unreleased]
 
 ### Changed
+
+- **Breaking Change**: `batch` and `untracked` now propagate original errors instead of wrapping them in `AtomError`.
+  - Removed `try-catch` overhead from these functions for better performance.
+  - Consumers expecting `AtomError` wrappers should update their error handling logic to catch specific error types directly.
+
+## [0.4.0]
+
+### Changed - 0.4.0
 
 - **Refactor and Simplify**: Streamlined `Atom`, `Computed`, and `Effect` implementations
   - Removed unused variables, parameters, and redundant type checks across core classes

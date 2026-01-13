@@ -12,7 +12,7 @@ import { scheduler } from './scheduler';
  * @param callback - The function containing batched updates
  * @returns The result of the callback function
  * @throws {AtomError} If the callback is not a function
- * @throws {AtomError} If an error occurs during batch execution
+ * @throws Propagates any error thrown by the callback function
  *
  * @example
  * ```typescript
@@ -39,8 +39,6 @@ export function batch<T>(callback: () => T): T {
 
   try {
     return callback();
-  } catch (error) {
-    throw new AtomError('Error occurred during batch execution', error as Error);
   } finally {
     scheduler.endBatch();
   }

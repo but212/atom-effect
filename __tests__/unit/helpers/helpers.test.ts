@@ -19,12 +19,12 @@ describe('batch - Error Handling', () => {
     }).toThrow(AtomError);
   });
 
-  it('wraps errors inside batch', () => {
+  it('propagates errors from callback', () => {
     expect(() => {
       batch(() => {
         throw new Error('Batch error');
       });
-    }).toThrow(AtomError);
+    }).toThrow('Batch error');
   });
 
   it('batch passes through return value', () => {
@@ -133,12 +133,12 @@ describe('untracked - Error Handling', () => {
     }).toThrow(AtomError);
   });
 
-  it('wraps errors inside untracked', () => {
+  it('propagates errors from callback', () => {
     expect(() => {
       untracked(() => {
         throw new Error('Untracked error');
       });
-    }).toThrow(AtomError);
+    }).toThrow('Untracked error');
   });
 
   it('untracked passes through return value', () => {
