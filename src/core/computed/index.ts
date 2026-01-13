@@ -12,9 +12,13 @@ import {
   EMPTY_VERSIONS,
   unsubArrayPool,
   versionArrayPool,
-} from '../../internal/pool';
-import { trackingContext } from '../../tracking';
-import type { DependencyTracker } from '../../tracking/tracking.types';
+} from '@/internal/pool';
+import { trackingContext } from '@/tracking';
+import {
+  hasDependencyMethod,
+  hasExecuteMethod,
+  isPlainListener,
+} from '@/tracking/tracking.types';
 
 import type {
   AsyncStateType,
@@ -22,9 +26,9 @@ import type {
   ComputedOptions,
   Dependency,
   Subscriber,
-} from '../../types';
-import { debug, NO_DEFAULT_VALUE } from '../../utils/debug';
-import { SubscriberManager } from '../../utils/subscriber-manager';
+} from '@/types';
+import { debug, NO_DEFAULT_VALUE } from '@/utils/debug';
+import { SubscriberManager } from '@/utils/subscriber-manager';
 
 type TrackableListener = (() => void) & {
   addDependency: (dep: unknown) => void;
@@ -497,21 +501,21 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     const current = trackingContext.getCurrent();
     if (!current) return;
 
-    if (
-      typeof current === 'object' &&
-      current !== null &&
-      (current as DependencyTracker).addDependency
-    ) {
-      (current as DependencyTracker).addDependency!(this as unknown as ComputedAtom<T>);
-    } else if (typeof current === 'function') {
-      const fnWithDep = current as TrackableListener;
-      if (fnWithDep.addDependency) {
-        fnWithDep.addDependency(this as unknown as ComputedAtom<T>);
-      } else {
-        this._functionSubscribersStore.add(current as () => void);
-      }
-    } else if ((current as DependencyTracker).execute) {
-      this._objectSubscribersStore.add(current as Subscriber);
+    // Priority 1: Has addDependency method (TrackableListener or DependencyTracker)
+    if (hasDependencyMethod(current)) {
+      current.addDependency(this as unknown as ComputedAtom<T>);
+      return;
+    }
+
+    // Priority 2: Plain function callback
+    if (isPlainListener(current)) {
+      this._functionSubscribersStore.add(current);
+      return;
+    }
+
+    // Priority 3: Object with execute method (Subscriber pattern)
+    if (hasExecuteMethod(current)) {
+      this._objectSubscribersStore.add(current);
     }
   }
 }

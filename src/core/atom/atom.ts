@@ -2,6 +2,11 @@ import { SMI_MAX } from '@/constants';
 import { ReactiveDependency } from '@/core/base/reactive-dependency';
 import { scheduler } from '@/internal/scheduler';
 import { trackingContext } from '@/tracking';
+import {
+  hasDependencyMethod,
+  hasExecuteMethod,
+  isPlainListener,
+} from '@/tracking/tracking.types';
 import type { AtomOptions, Subscriber, WritableAtom } from '@/types';
 import { debug } from '@/utils/debug';
 import { SubscriberManager } from '@/utils/subscriber-manager';
@@ -64,20 +69,21 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
   }
 
   private _track(current: unknown): void {
-    if (typeof current === 'function') {
-      const fnWithDep = current as { addDependency?: (dep: unknown) => void };
-      if (fnWithDep.addDependency !== undefined) {
-        fnWithDep.addDependency(this);
-      } else {
-        this._functionSubscribersStore.add(current as (newValue?: T, oldValue?: T) => void);
-      }
-    } else {
-      const tracker = current as { execute?: () => void; addDependency?: (dep: unknown) => void };
-      if (tracker.addDependency !== undefined) {
-        tracker.addDependency(this);
-      } else if (tracker.execute !== undefined) {
-        this._objectSubscribersStore.add(tracker as Subscriber);
-      }
+    // Priority 1: Function or object with addDependency (TrackableListener pattern)
+    if (hasDependencyMethod(current)) {
+      current.addDependency(this);
+      return;
+    }
+
+    // Priority 2: Plain function callback (no addDependency)
+    if (isPlainListener(current)) {
+      this._functionSubscribersStore.add(current as (newValue?: T, oldValue?: T) => void);
+      return;
+    }
+
+    // Priority 3: Object with execute method (Subscriber pattern)
+    if (hasExecuteMethod(current)) {
+      this._objectSubscribersStore.add(current);
     }
   }
 

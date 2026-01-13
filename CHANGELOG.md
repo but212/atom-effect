@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- **Type Safety**: Refactored dependency tracking with User-Defined Type Guards
+  - Added explicit interfaces: `DependencySubscriber`, `ExecutableSubscriber`
+  - Implemented type guards: `hasDependencyMethod()`, `isPlainListener()`, `hasExecuteMethod()`, `isTrackableFunction()`
+  - Replaced unsafe `as` type assertions with runtime-validated type guards in `Atom._track()` and `Computed._registerTracking()`
+  - Improved code clarity with priority-based tracking logic and explicit comments
+
 ## [0.3.3]
 
 ### Fixed
