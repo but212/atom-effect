@@ -1,5 +1,5 @@
-import { AsyncState, COMPUTED_STATE_FLAGS } from '../../constants';
-import type { AsyncStateType } from '../../types';
+import { AsyncState, COMPUTED_STATE_FLAGS } from '@/constants';
+import type { AsyncStateType } from '@/types';
 
 /**
  * Bit flag manager for computed state. Uses bitwise ops for O(1) operations.

@@ -1,10 +1,4 @@
 /**
- * @fileoverview Centralized error messages for better maintainability
- * @description All error messages in English for international accessibility
- * @module errors/messages
- */
-
-/**
  * Centralized error message constants for the atom-effect library.
  *
  * @description

@@ -1,7 +1,7 @@
-import type { AtomError } from '../../errors/errors';
-import { ComputedError, wrapError } from '../../errors/errors';
-import { ERROR_MESSAGES } from '../../errors/messages';
-import { NO_DEFAULT_VALUE } from '../../utils/debug';
+import type { AtomError } from '@/errors/errors';
+import { ComputedError, wrapError } from '@/errors/errors';
+import { ERROR_MESSAGES } from '@/errors/messages';
+import { NO_DEFAULT_VALUE } from '@/utils/debug';
 import type { ComputedStateFlags } from './computed-state-flags';
 
 /** Handles sync computation results with value comparison */

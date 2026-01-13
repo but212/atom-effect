@@ -1,6 +1,6 @@
 import { IS_DEV } from '@/constants';
-import type { Dependency, Subscriber } from '../types';
-import type { PoolStats } from '../types/internal';
+import type { Dependency, Subscriber } from '@/types';
+import type { PoolStats } from '@/types/internal';
 
 // Shared Constants
 export const EMPTY_DEPS: readonly Dependency[] = Object.freeze([]);

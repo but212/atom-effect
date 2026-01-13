@@ -1,7 +1,7 @@
-import { AtomError } from '../../errors/errors';
-import { ERROR_MESSAGES } from '../../errors/messages';
-import type { Subscriber } from '../../types';
-import type { SubscriberManager } from '../../utils/subscriber-manager';
+import { AtomError } from '@/errors/errors';
+import { ERROR_MESSAGES } from '@/errors/messages';
+import type { Subscriber } from '@/types';
+import type { SubscriberManager } from '@/utils/subscriber-manager';
 import { ReactiveNode } from './reactive-node';
 
 /**

@@ -80,7 +80,7 @@ export class SubscriberManager<T> {
   }
 
   get hasSubscribers(): boolean {
-    return this.size > 0;
+    return this.subscribers !== null && this.subscribers.length > 0;
   }
 
   clear(): void {

@@ -73,10 +73,13 @@ export interface DebugConfig {
   maxDependencies: number;
   warnInfiniteLoop: boolean;
   warn(condition: boolean, message: string): void;
-  checkCircular(dep: unknown, current: unknown, visited?: Set<unknown>): void;
+  /** Checks for circular dependencies between reactive nodes */
+  checkCircular(dep: Dependency, current: object): void;
   attachDebugInfo(obj: object, type: string, id: number): void;
-  getDebugName(obj: unknown): string | undefined;
-  getDebugType(obj: unknown): string | undefined;
+  /** Returns debug name if available (requires obj to have DEBUG_NAME symbol) */
+  getDebugName(obj: object | null | undefined): string | undefined;
+  /** Returns debug type if available (requires obj to have DEBUG_TYPE symbol) */
+  getDebugType(obj: object | null | undefined): string | undefined;
 }
 
 /**

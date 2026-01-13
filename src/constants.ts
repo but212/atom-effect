@@ -1,7 +1,10 @@
 /**
- * @fileoverview Constants and configuration for atom-effect library
- * @description Centralized constants for async states, bit flags, and performance tuning
+ * Time-related constants (in milliseconds)
  */
+export const TIME_CONSTANTS = {
+  /** One second in milliseconds */
+  ONE_SECOND_MS: 1000,
+} as const;
 
 /**
  * Async computation states for computed atoms
@@ -11,7 +14,7 @@ export const AsyncState = {
   PENDING: 'pending' as const,
   RESOLVED: 'resolved' as const,
   REJECTED: 'rejected' as const,
-};
+} as const;
 
 /**
  * Bit flags for effect state management
@@ -68,6 +71,12 @@ export const SCHEDULER_CONFIG = {
    * Increased from 1000 to 5000 based on evaluation report
    */
   MAX_EXECUTIONS_PER_FLUSH: 5000,
+
+  /** Maximum iterations for synchronous flush loop to prevent infinite loops */
+  MAX_FLUSH_ITERATIONS: 1000,
+
+  /** Minimum allowed value for max flush iterations */
+  MIN_FLUSH_ITERATIONS: 10,
 } as const;
 
 /**

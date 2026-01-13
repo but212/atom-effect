@@ -1,5 +1,5 @@
-import { POOL_CONFIG } from '../constants';
-import type { Poolable } from '../types';
+import { POOL_CONFIG } from '@/constants';
+import type { Poolable } from '@/types';
 
 /**
  * Object pool to reduce GC pressure by reusing objects.

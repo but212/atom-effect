@@ -1,12 +1,29 @@
 # Changelog
 
+## [0.4.0]
+
+### Changed
+
+- **Core Optimizations**: Streamlined `Atom`, `Computed`, and `Effect` implementations
+  - Removed unused variables, parameters, and redundant type checks across core classes
+  - Renamed `_notify()` to `_scheduleNotification()` and simplified `Atom` getter logic
+  - Optimized `Computed` hot paths and merged `Effect` execution conditions for better performance
+  - Simplified `isPromise` nullish check and `hasSubscribers` getter in utility modules
+  - Consolidated `hasDependencyMethod` type guard branches for cleaner code
+
+- **Type Safety**: Refactored dependency tracking with User-Defined Type Guards
+  - Added explicit interfaces: `DependencySubscriber`, `ExecutableSubscriber`
+  - Implemented type guards: `hasDependencyMethod()`, `isPlainListener()`, `hasExecuteMethod()`, `isTrackableFunction()`
+  - Replaced unsafe `as` type assertions with runtime-validated type guards in `Atom._track()` and `Computed._registerTracking()`
+  - Improved code clarity with priority-based tracking logic and explicit comments
+
 ## [0.3.3]
 
 ### Fixed
 
 - Fixed computed caching bug where `_setIdle()` in `_markDirty()` cleared the RESOLVED flag, causing computed values to re-execute on every access instead of returning cached values.
 
-### Changed
+### Changed - 0.3.3
 
 - **Architecture**: Moved internal modules (`pool.ts`, `epoch.ts`, `scheduler/`) to `src/internal/` for better encapsulation.
 - **Documentation**: Reduced excessive JSDoc comments across 7 core files (~1,200 lines removed):

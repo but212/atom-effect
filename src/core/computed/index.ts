@@ -1,10 +1,10 @@
-import { AsyncState, COMPUTED_STATE_FLAGS, SMI_MAX } from '../../constants';
-import { ReactiveDependency } from '../../core/base/reactive-dependency';
-import { syncDependencies } from '../../core/utils/dep-tracking';
-import type { AtomError } from '../../errors/errors';
-import { ComputedError, isPromise, wrapError } from '../../errors/errors';
-import { ERROR_MESSAGES } from '../../errors/messages';
-import { nextEpoch } from '../../internal/epoch';
+import { AsyncState, COMPUTED_STATE_FLAGS, SMI_MAX } from '@/constants';
+import { ReactiveDependency } from '@/core/base/reactive-dependency';
+import { syncDependencies } from '@/core/utils/dep-tracking';
+import type { AtomError } from '@/errors/errors';
+import { ComputedError, isPromise, wrapError } from '@/errors/errors';
+import { ERROR_MESSAGES } from '@/errors/messages';
+import { nextEpoch } from '@/internal/epoch';
 import {
   depArrayPool,
   EMPTY_DEPS,
@@ -12,9 +12,9 @@ import {
   EMPTY_VERSIONS,
   unsubArrayPool,
   versionArrayPool,
-} from '../../internal/pool';
-import { trackingContext } from '../../tracking';
-import type { DependencyTracker } from '../../tracking/tracking.types';
+} from '@/internal/pool';
+import { trackingContext } from '@/tracking';
+import { hasDependencyMethod, hasExecuteMethod, isPlainListener } from '@/tracking/tracking.types';
 
 import type {
   AsyncStateType,
@@ -22,12 +22,12 @@ import type {
   ComputedOptions,
   Dependency,
   Subscriber,
-} from '../../types';
-import { debug, NO_DEFAULT_VALUE } from '../../utils/debug';
-import { SubscriberManager } from '../../utils/subscriber-manager';
+} from '@/types';
+import { debug, NO_DEFAULT_VALUE } from '@/utils/debug';
+import { SubscriberManager } from '@/utils/subscriber-manager';
 
 type TrackableListener = (() => void) & {
-  addDependency: (dep: unknown) => void;
+  addDependency: (dep: Dependency) => void;
 };
 
 /**
@@ -96,7 +96,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     };
 
     this._trackable = Object.assign(() => this._markDirty(), {
-      addDependency: (_dep: unknown) => {},
+      addDependency: (_dep: Dependency) => {},
     });
 
     debug.attachDebugInfo(this as unknown as ComputedAtom<T>, 'computed', this.id);
@@ -274,8 +274,9 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   }
 
   private _getAsyncState(): AsyncStateType {
-    if (this._isPending()) return AsyncState.PENDING;
+    // Hot path first: RESOLVED is the most common state after initial computation
     if (this._isResolved()) return AsyncState.RESOLVED;
+    if (this._isPending()) return AsyncState.PENDING;
     if (this._isRejected()) return AsyncState.REJECTED;
     return AsyncState.IDLE;
   }
@@ -332,7 +333,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     };
 
     const originalAdd = this._trackable.addDependency;
-    this._trackable.addDependency = collect as (dep: unknown) => void;
+    this._trackable.addDependency = collect;
 
     let committed = false;
 
@@ -437,7 +438,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._clearDirty();
     this._setRecomputing(false);
 
-    if (this._onError && typeof this._onError === 'function') {
+    if (this._onError) {
       try {
         this._onError(error);
       } catch (callbackError) {
@@ -456,7 +457,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._clearDirty();
     this._setRecomputing(false);
 
-    if (this._onError && typeof this._onError === 'function') {
+    if (this._onError) {
       try {
         this._onError(error);
       } catch (callbackError) {
@@ -497,21 +498,21 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     const current = trackingContext.getCurrent();
     if (!current) return;
 
-    if (
-      typeof current === 'object' &&
-      current !== null &&
-      (current as DependencyTracker).addDependency
-    ) {
-      (current as DependencyTracker).addDependency!(this as unknown as ComputedAtom<T>);
-    } else if (typeof current === 'function') {
-      const fnWithDep = current as TrackableListener;
-      if (fnWithDep.addDependency) {
-        fnWithDep.addDependency(this as unknown as ComputedAtom<T>);
-      } else {
-        this._functionSubscribersStore.add(current as () => void);
-      }
-    } else if ((current as DependencyTracker).execute) {
-      this._objectSubscribersStore.add(current as Subscriber);
+    // Priority 1: Has addDependency method (TrackableListener or DependencyTracker)
+    if (hasDependencyMethod(current)) {
+      current.addDependency(this);
+      return;
+    }
+
+    // Priority 2: Plain function callback
+    if (isPlainListener(current)) {
+      this._functionSubscribersStore.add(current);
+      return;
+    }
+
+    // Priority 3: Object with execute method (Subscriber pattern)
+    if (hasExecuteMethod(current)) {
+      this._objectSubscribersStore.add(current);
     }
   }
 }

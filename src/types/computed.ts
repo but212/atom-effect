@@ -1,6 +1,8 @@
+import { AsyncState } from '@/constants';
 import type { ReadonlyAtom } from './atom';
 
-export type AsyncStateType = 'idle' | 'pending' | 'resolved' | 'rejected';
+/** Type derived from AsyncState constant values */
+export type AsyncStateType = (typeof AsyncState)[keyof typeof AsyncState];
 
 export interface ComputedOptions<T = unknown> {
   equal?: (a: T, b: T) => boolean;

@@ -1,6 +1,6 @@
-import type { AtomError } from '../../errors/errors';
-import { ComputedError, wrapError } from '../../errors/errors';
-import { ERROR_MESSAGES } from '../../errors/messages';
+import type { AtomError } from '@/errors/errors';
+import { ComputedError, wrapError } from '@/errors/errors';
+import { ERROR_MESSAGES } from '@/errors/messages';
 import type { ComputedStateFlags } from './computed-state-flags';
 
 /** Manages Promise IDs to prevent race conditions in async computed */

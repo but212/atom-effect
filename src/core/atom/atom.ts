@@ -1,10 +1,11 @@
-import { SMI_MAX } from '../../constants';
-import { ReactiveDependency } from '../../core/base/reactive-dependency';
-import { scheduler } from '../../internal/scheduler';
-import { trackingContext } from '../../tracking';
-import type { AtomOptions, Subscriber, WritableAtom } from '../../types';
-import { debug } from '../../utils/debug';
-import { SubscriberManager } from '../../utils/subscriber-manager';
+import { SMI_MAX } from '@/constants';
+import { ReactiveDependency } from '@/core/base/reactive-dependency';
+import { scheduler } from '@/internal/scheduler';
+import { trackingContext } from '@/tracking';
+import { hasDependencyMethod, hasExecuteMethod, isPlainListener } from '@/tracking/tracking.types';
+import type { AtomOptions, Subscriber, WritableAtom } from '@/types';
+import { debug } from '@/utils/debug';
+import { SubscriberManager } from '@/utils/subscriber-manager';
 
 /** Internal WritableAtom implementation with optimized subscriber management */
 class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
@@ -39,9 +40,7 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
   /** Gets value and registers as dependency in current tracking context */
   get value(): T {
     const current = trackingContext.getCurrent();
-    if (current !== null && current !== undefined) {
-      this._track(current);
-    }
+    if (current) this._track(current);
     return this._value;
   }
 
@@ -51,42 +50,42 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
 
     const oldValue = this._value;
     this.version = (this.version + 1) & SMI_MAX;
-    const currentVersion = this.version;
     this._value = newValue;
 
+    // Early exit: no subscribers to notify
     if (
       !this._functionSubscribersStore.hasSubscribers &&
       !this._objectSubscribersStore.hasSubscribers
     )
       return;
 
-    this._notify(newValue, oldValue, currentVersion);
+    this._scheduleNotification(oldValue);
   }
 
   private _track(current: unknown): void {
-    if (typeof current === 'function') {
-      const fnWithDep = current as { addDependency?: (dep: unknown) => void };
-      if (fnWithDep.addDependency !== undefined) {
-        fnWithDep.addDependency(this);
-      } else {
-        this._functionSubscribersStore.add(current as (newValue?: T, oldValue?: T) => void);
-      }
-    } else {
-      const tracker = current as { execute?: () => void; addDependency?: (dep: unknown) => void };
-      if (tracker.addDependency !== undefined) {
-        tracker.addDependency(this);
-      } else if (tracker.execute !== undefined) {
-        this._objectSubscribersStore.add(tracker as Subscriber);
-      }
+    // Priority 1: TrackableListener pattern (addDependency method)
+    if (hasDependencyMethod(current)) {
+      current.addDependency(this);
+      return;
+    }
+    // Priority 2: Plain function callback
+    if (isPlainListener(current)) {
+      this._functionSubscribersStore.add(current as (newValue?: T, oldValue?: T) => void);
+      return;
+    }
+    // Priority 3: Subscriber pattern (execute method)
+    if (hasExecuteMethod(current)) {
+      this._objectSubscribersStore.add(current);
     }
   }
 
-  private _notify(_newValue: T, oldValue: T, _currentVersion: number): void {
+  private _scheduleNotification(oldValue: T): void {
     if (!this._isNotificationScheduled) {
       this._pendingOldValue = oldValue;
       this._isNotificationScheduled = true;
     }
 
+    // Hot path first: sync mode without batching flushes immediately
     if (this._sync && !scheduler.isBatching) {
       this._flushNotifications();
     } else {

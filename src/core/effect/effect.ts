@@ -1,13 +1,13 @@
-import { EFFECT_STATE_FLAGS, IS_DEV, SCHEDULER_CONFIG } from '../../constants';
-import { ReactiveNode } from '../../core/base/reactive-node';
-import { EffectError, isPromise, wrapError } from '../../errors/errors';
-import { ERROR_MESSAGES } from '../../errors/messages';
+import { EFFECT_STATE_FLAGS, IS_DEV, SCHEDULER_CONFIG, TIME_CONSTANTS } from '@/constants';
+import { ReactiveNode } from '@/core/base/reactive-node';
+import { EffectError, isPromise, wrapError } from '@/errors/errors';
+import { ERROR_MESSAGES } from '@/errors/messages';
 import {
   flushEpoch,
   flushExecutionCount,
   incrementFlushExecutionCount,
   nextEpoch,
-} from '../../internal/epoch';
+} from '@/internal/epoch';
 import {
   depArrayPool,
   EMPTY_DEPS,
@@ -15,11 +15,11 @@ import {
   EMPTY_VERSIONS,
   unsubArrayPool,
   versionArrayPool,
-} from '../../internal/pool';
-import { scheduler } from '../../internal/scheduler';
-import { type DependencyTracker, trackingContext, untracked } from '../../tracking';
-import type { Dependency, EffectFunction, EffectObject, EffectOptions } from '../../types';
-import { debug } from '../../utils/debug';
+} from '@/internal/pool';
+import { scheduler } from '@/internal/scheduler';
+import { type DependencyTracker, trackingContext, untracked } from '@/tracking';
+import type { Dependency, EffectFunction, EffectObject, EffectOptions } from '@/types';
+import { debug } from '@/utils/debug';
 
 /** Internal effect implementation with dependency tracking and infinite loop detection */
 class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker {
@@ -111,22 +111,21 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   };
 
   /** Adds dependency to tracking list (called by tracking context) */
-  public addDependency = (dep: unknown): void => {
+  public addDependency = (dep: Dependency): void => {
     if (this.isExecuting && this._nextDeps && this._nextUnsubs && this._nextVersions) {
-      const d = dep as Dependency;
       const epoch = this._currentEpoch;
 
-      if (d._lastSeenEpoch === epoch) return;
-      d._lastSeenEpoch = epoch;
+      if (dep._lastSeenEpoch === epoch) return;
+      dep._lastSeenEpoch = epoch;
 
-      this._nextDeps.push(d);
-      this._nextVersions.push(d.version);
+      this._nextDeps.push(dep);
+      this._nextVersions.push(dep.version);
 
-      if (d._tempUnsub) {
-        this._nextUnsubs.push(d._tempUnsub);
-        d._tempUnsub = undefined;
+      if (dep._tempUnsub) {
+        this._nextUnsubs.push(dep._tempUnsub);
+        dep._tempUnsub = undefined;
       } else {
-        this._subscribeTo(d);
+        this._subscribeTo(dep);
       }
     }
   };
@@ -274,7 +273,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   }
 
   private _safeCleanup(): void {
-    if (this._cleanup && typeof this._cleanup === 'function') {
+    if (this._cleanup) {
       try {
         this._cleanup();
       } catch (error) {
@@ -318,7 +317,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     const history = this._history;
     if (!history || this._maxExecutions <= 0) return;
 
-    const oneSecondAgo = now - 1000;
+    const oneSecondAgo = now - TIME_CONSTANTS.ONE_SECOND_MS;
     let count = 0;
 
     for (let i = history.length - 1; i >= 0; i--) {
@@ -350,8 +349,9 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   }
 
   private _shouldExecute(): boolean {
-    if (this._dependencies === EMPTY_DEPS) return true;
-    if (this._dependencyVersions === EMPTY_VERSIONS) return true;
+    // Early exit: no deps or no version cache means first run or invalidated
+    if (this._dependencies === EMPTY_DEPS || this._dependencyVersions === EMPTY_VERSIONS)
+      return true;
 
     for (let i = 0; i < this._dependencies.length; i++) {
       const dep = this._dependencies[i];

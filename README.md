@@ -150,62 +150,9 @@ const sum = computed(() => {
 });
 ```
 
-## Common Patterns
-
-### Form Validation
-
-```typescript
-const email = atom('');
-const password = atom('');
-
-const isValid = computed(() => {
-  return email.value.includes('@') && password.value.length >= 8;
-});
-
-effect(() => {
-  submitButton.disabled = !isValid.value;
-});
-```
-
 ## Utilities
 
-### Type Guards
-
-```typescript
-import { isAtom, isComputed, isEffect } from '@but212/atom-effect';
-
-isAtom(count);      // true
-isComputed(doubled); // true
-```
-
-### Configuration
-
-```typescript
-import { DEBUG_CONFIG, POOL_CONFIG, SCHEDULER_CONFIG } from '@but212/atom-effect';
-
-// You can access read-only configuration constants for reference.
-console.log(DEBUG_CONFIG.MAX_DEPENDENCIES);     // 1000
-console.log(DEBUG_CONFIG.WARN_INFINITE_LOOP);   // true
-
-console.log(POOL_CONFIG.MAX_SIZE);               // 1000
-console.log(POOL_CONFIG.WARMUP_SIZE);            // 100
-
-console.log(SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_SECOND); // 100
-```
-
-### Error Handling
-
-```typescript
-import { AtomError, ComputedError, EffectError } from '@but212/atom-effect';
-
-try {
-  // Your code
-} catch (error) {
-  if (error instanceof EffectError) {
-    console.error('Effect failed:', error);
-  }
-}
-```
+Type guards (`isAtom`, `isComputed`, `isEffect`), configuration constants (`DEBUG_CONFIG`, `POOL_CONFIG`, `SCHEDULER_CONFIG`), and error classes (`AtomError`, `ComputedError`, `EffectError`) are available.
 
 ## Performance
 
@@ -222,38 +169,21 @@ try {
 
 See [docs/BENCHMARKS.md](./docs/BENCHMARKS.md) for details.
 
-## Testing
-
-```bash
-pnpm test              # Run all tests (299 test cases)
-pnpm test:coverage     # With coverage
-pnpm bench             # Run benchmarks
-```
-
 ## Development
 
 ```bash
 pnpm install           # Install dependencies
 pnpm build             # Build
-pnpm test              # Test
+pnpm test              # Run tests (299 test cases)
+pnpm test:coverage     # With coverage
+pnpm bench             # Run benchmarks
 pnpm typecheck         # Type checking
 pnpm lint              # Lint code
 ```
 
-## TypeScript Support
-
-```typescript
-const count = atom(0);              // WritableAtom<number>
-const doubled = computed(() => count.value * 2); // ReadonlyAtom<number>
-
-// doubled.value = 10; // ❌ Error: Cannot assign to readonly
-
-const user = atom<User | null>(null); // Explicit typing
-```
-
 ## Contributing
 
-Contributions are welcome! Feel free to open an issue or submit a pull request if you have any suggestions, bug reports, or improvements.
+Contributions are welcome! Feel free to open an issue or submit a pull request.
 
 ## License
 

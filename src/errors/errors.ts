@@ -1,9 +1,4 @@
 /**
- * @fileoverview Error class hierarchy for atom-effect library
- * @description Structured error classes with cause tracking and recoverability flags
- */
-
-/**
  * Base error class for all atom-effect errors
  *
  * Provides enhanced error information including:
@@ -156,9 +151,5 @@ export function wrapError(
  * ```
  */
 export function isPromise<T>(value: unknown): value is Promise<T> {
-  return (
-    value !== null &&
-    value !== undefined &&
-    typeof (value as { then?: unknown }).then === 'function'
-  );
+  return value != null && typeof (value as { then?: unknown }).then === 'function';
 }
