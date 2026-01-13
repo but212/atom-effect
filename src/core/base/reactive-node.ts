@@ -1,4 +1,5 @@
 import { SMI_MAX } from '@/constants';
+import type { DependencyId } from '@/types';
 import { generateId } from '@/utils/debug';
 
 /**
@@ -10,13 +11,13 @@ import { generateId } from '@/utils/debug';
  */
 export class ReactiveNode {
   /** Unique numerical identifier (Smi) */
-  readonly id: number;
+  readonly id: DependencyId;
 
   /** Internal flags (Smi) for state management (Disposed, Dirty, etc.) */
   flags: number;
 
   constructor() {
-    this.id = generateId() & SMI_MAX;
+    this.id = (generateId() & SMI_MAX) as DependencyId;
     this.flags = 0;
   }
 }

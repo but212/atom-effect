@@ -2,7 +2,7 @@ import { AsyncState, COMPUTED_STATE_FLAGS, SMI_MAX } from '@/constants';
 import { ReactiveDependency } from '@/core/base/reactive-dependency';
 import { syncDependencies } from '@/core/utils/dep-tracking';
 import type { AtomError } from '@/errors/errors';
-import { ComputedError, isPromise, wrapError } from '@/errors/errors';
+import { ComputedError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
 import { nextEpoch } from '@/internal/epoch';
 import {
@@ -14,7 +14,6 @@ import {
   versionArrayPool,
 } from '@/internal/pool';
 import { trackingContext } from '@/tracking';
-import { hasDependencyMethod, hasExecuteMethod, isPlainListener } from '@/tracking/tracking.types';
 
 import type {
   AsyncStateType,
@@ -24,7 +23,14 @@ import type {
   Subscriber,
 } from '@/types';
 import { debug, NO_DEFAULT_VALUE } from '@/utils/debug';
+import { wrapError } from '@/utils/error';
 import { SubscriberManager } from '@/utils/subscriber-manager';
+import {
+  hasDependencyMethod,
+  hasExecuteMethod,
+  isPlainListener,
+  isPromise,
+} from '@/utils/type-guards';
 
 type TrackableListener = (() => void) & {
   addDependency: (dep: Dependency) => void;

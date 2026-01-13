@@ -1,6 +1,6 @@
 import { EFFECT_STATE_FLAGS, IS_DEV, SCHEDULER_CONFIG, TIME_CONSTANTS } from '@/constants';
 import { ReactiveNode } from '@/core/base/reactive-node';
-import { EffectError, isPromise, wrapError } from '@/errors/errors';
+import { EffectError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
 import {
   flushEpoch,
@@ -20,6 +20,8 @@ import { scheduler } from '@/internal/scheduler';
 import { type DependencyTracker, trackingContext, untracked } from '@/tracking';
 import type { Dependency, EffectFunction, EffectObject, EffectOptions } from '@/types';
 import { debug } from '@/utils/debug';
+import { wrapError } from '@/utils/error';
+import { isPromise } from '@/utils/type-guards';
 
 /**
  * Internal context used during effect execution to track dependency changes.

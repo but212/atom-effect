@@ -1,3 +1,5 @@
+import type { DependencyId } from './branded';
+
 /**
  * Interface for poolable objects
  */
@@ -16,7 +18,7 @@ export interface Subscriber {
  * Interface for subscribable dependencies
  */
 export interface Dependency {
-  readonly id: number;
+  readonly id: DependencyId;
   version: number;
   /**
    * Last epoch seen by this dependency (used for invalidation)
