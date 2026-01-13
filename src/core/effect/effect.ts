@@ -22,6 +22,16 @@ import type { Dependency, EffectFunction, EffectObject, EffectOptions } from '@/
 import { debug } from '@/utils/debug';
 
 /** Internal effect implementation with dependency tracking and infinite loop detection */
+
+interface EffectContext {
+  prevDeps: Dependency[];
+  prevVersions: number[];
+  prevUnsubs: (() => void)[];
+  nextDeps: Dependency[];
+  nextVersions: number[];
+  nextUnsubs: (() => void)[];
+}
+
 class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker {
   private _currentEpoch: number;
   private _lastFlushEpoch: number;
@@ -59,9 +69,9 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     this._trackModifications = options.trackModifications ?? false;
 
     this._cleanup = null;
-    this._dependencies = EMPTY_DEPS as Dependency[];
-    this._dependencyVersions = EMPTY_VERSIONS as number[];
-    this._unsubscribes = EMPTY_UNSUBS as (() => void)[];
+    this._dependencies = EMPTY_DEPS;
+    this._dependencyVersions = EMPTY_VERSIONS;
+    this._unsubscribes = EMPTY_UNSUBS;
     this._nextDeps = null;
     this._nextVersions = null;
     this._nextUnsubs = null;
@@ -96,17 +106,17 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
         if (unsub) unsub();
       }
       unsubArrayPool.release(this._unsubscribes);
-      this._unsubscribes = EMPTY_UNSUBS as (() => void)[];
+      this._unsubscribes = EMPTY_UNSUBS;
     }
 
     if (this._dependencies !== EMPTY_DEPS) {
       depArrayPool.release(this._dependencies);
-      this._dependencies = EMPTY_DEPS as Dependency[];
+      this._dependencies = EMPTY_DEPS;
     }
 
     if (this._dependencyVersions !== EMPTY_VERSIONS) {
       versionArrayPool.release(this._dependencyVersions);
-      this._dependencyVersions = EMPTY_VERSIONS as number[];
+      this._dependencyVersions = EMPTY_VERSIONS;
     }
   };
 
@@ -139,34 +149,13 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     this._setExecuting(true);
     this._safeCleanup();
 
-    const prevDeps = this._dependencies;
-    const prevVersions = this._dependencyVersions;
-    const prevUnsubs = this._unsubscribes;
-    const nextDeps = depArrayPool.acquire();
-    const nextVersions = versionArrayPool.acquire();
-    const nextUnsubs = unsubArrayPool.acquire();
-    const epoch = nextEpoch();
-
-    if (prevDeps !== EMPTY_DEPS && prevUnsubs !== EMPTY_UNSUBS) {
-      for (let i = 0; i < prevDeps.length; i++) {
-        const dep = prevDeps[i];
-        if (dep) dep._tempUnsub = prevUnsubs[i];
-      }
-    }
-
-    this._nextDeps = nextDeps;
-    this._nextVersions = nextVersions;
-    this._nextUnsubs = nextUnsubs;
-    this._currentEpoch = epoch;
-
+    const context = this._prepareEffectContext();
     let committed = false;
 
     try {
       const result = trackingContext.run(this, this._fn);
 
-      this._dependencies = nextDeps;
-      this._dependencyVersions = nextVersions;
-      this._unsubscribes = nextUnsubs;
+      this._commitEffect(context);
       committed = true;
 
       this._checkLoopWarnings();
@@ -189,45 +178,86 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       console.error(wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_EXECUTION_FAILED));
       this._cleanup = null;
     } finally {
+      this._cleanupEffect(context, committed);
       this._setExecuting(false);
-      this._nextDeps = null;
-      this._nextVersions = null;
-      this._nextUnsubs = null;
+    }
+  };
 
-      if (committed) {
-        if (prevDeps !== EMPTY_DEPS) {
-          for (let i = 0; i < prevDeps.length; i++) {
-            const dep = prevDeps[i];
-            if (dep?._tempUnsub) {
-              dep._tempUnsub();
-              dep._tempUnsub = undefined;
-            }
-          }
-          depArrayPool.release(prevDeps);
-        }
-        if (prevUnsubs !== EMPTY_UNSUBS) {
-          unsubArrayPool.release(prevUnsubs);
-        }
-        if (prevVersions !== EMPTY_VERSIONS) {
-          versionArrayPool.release(prevVersions);
-        }
-      } else {
-        depArrayPool.release(nextDeps);
-        versionArrayPool.release(nextVersions);
-        for (let i = 0; i < nextUnsubs.length; i++) {
-          nextUnsubs[i]?.();
-        }
-        unsubArrayPool.release(nextUnsubs);
+  private _prepareEffectContext(): EffectContext {
+    const prevDeps = this._dependencies;
+    const prevVersions = this._dependencyVersions;
+    const prevUnsubs = this._unsubscribes;
+    const nextDeps = depArrayPool.acquire();
+    const nextVersions = versionArrayPool.acquire();
+    const nextUnsubs = unsubArrayPool.acquire();
+    const epoch = nextEpoch();
 
-        if (prevDeps !== EMPTY_DEPS) {
-          for (let i = 0; i < prevDeps.length; i++) {
-            const dep = prevDeps[i];
-            if (dep) dep._tempUnsub = undefined;
+    if (prevDeps !== EMPTY_DEPS && prevUnsubs !== EMPTY_UNSUBS) {
+      for (let i = 0; i < prevDeps.length; i++) {
+        const dep = prevDeps[i];
+        if (dep) dep._tempUnsub = prevUnsubs[i];
+      }
+    }
+
+    this._nextDeps = nextDeps;
+    this._nextVersions = nextVersions;
+    this._nextUnsubs = nextUnsubs;
+    this._currentEpoch = epoch;
+
+    return { prevDeps, prevVersions, prevUnsubs, nextDeps, nextVersions, nextUnsubs };
+  }
+
+  private _commitEffect(ctx: EffectContext): void {
+    // Structural Guarantee: nextDeps length is controlled by the tracking phase
+    // We use the context's nextDeps directly, avoiding `this._nextDeps!`
+    const trackedCount = ctx.nextDeps.length;
+
+    ctx.nextDeps.length = trackedCount;
+    ctx.nextVersions.length = trackedCount;
+
+    this._dependencies = ctx.nextDeps;
+    this._dependencyVersions = ctx.nextVersions;
+    this._unsubscribes = ctx.nextUnsubs;
+  }
+
+  private _cleanupEffect(ctx: EffectContext, committed: boolean): void {
+    this._nextDeps = null;
+    this._nextVersions = null;
+    this._nextUnsubs = null;
+
+    if (committed) {
+      if (ctx.prevDeps !== EMPTY_DEPS) {
+        for (let i = 0; i < ctx.prevDeps.length; i++) {
+          const dep = ctx.prevDeps[i];
+          if (dep?._tempUnsub) {
+            dep._tempUnsub();
+            dep._tempUnsub = undefined;
           }
+        }
+        depArrayPool.release(ctx.prevDeps as Dependency[]);
+      }
+      if (ctx.prevUnsubs !== EMPTY_UNSUBS) {
+        unsubArrayPool.release(ctx.prevUnsubs);
+      }
+      if (ctx.prevVersions !== EMPTY_VERSIONS) {
+        versionArrayPool.release(ctx.prevVersions);
+      }
+    } else {
+      depArrayPool.release(ctx.nextDeps);
+      versionArrayPool.release(ctx.nextVersions);
+      for (let i = 0; i < ctx.nextUnsubs.length; i++) {
+        ctx.nextUnsubs[i]?.();
+      }
+      unsubArrayPool.release(ctx.nextUnsubs);
+
+      if (ctx.prevDeps !== EMPTY_DEPS) {
+        for (let i = 0; i < ctx.prevDeps.length; i++) {
+          const dep = ctx.prevDeps[i];
+          if (dep) dep._tempUnsub = undefined;
         }
       }
     }
-  };
+  }
 
   private _subscribeTo(dep: Dependency): void {
     try {

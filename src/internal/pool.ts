@@ -3,11 +3,11 @@ import type { Dependency, Subscriber } from '@/types';
 import type { PoolStats } from '@/types/internal';
 
 // Shared Constants
-export const EMPTY_DEPS: readonly Dependency[] = Object.freeze([]);
-export const EMPTY_SUBS: readonly Subscriber[] = Object.freeze([]);
-export const EMPTY_UNSUBS: readonly (() => void)[] = Object.freeze([]);
+export const EMPTY_DEPS = Object.freeze([]) as unknown as Dependency[];
+export const EMPTY_SUBS = Object.freeze([]) as unknown as Subscriber[];
+export const EMPTY_UNSUBS = Object.freeze([]) as unknown as (() => void)[];
 
-export const EMPTY_VERSIONS: readonly number[] = Object.freeze([]);
+export const EMPTY_VERSIONS = Object.freeze([]) as unknown as number[];
 
 /**
  * Generic Array Pool (Type-safe pooling for different array types)

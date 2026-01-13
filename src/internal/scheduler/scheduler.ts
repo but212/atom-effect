@@ -8,7 +8,10 @@ export enum SchedulerPhase {
   FLUSHING = 2,
 }
 
-export type SchedulerJob = (() => void) & { _nextEpoch?: number };
+export interface SchedulerJob {
+  (): void;
+  _nextEpoch?: number;
+}
 
 /**
  * Scheduler for reactive updates with batching support.
@@ -62,6 +65,7 @@ class Scheduler {
 
     this.isProcessing = true;
 
+    // Swap queues
     const jobs = this.queue;
     const count = this.queueSize;
 
@@ -72,17 +76,8 @@ class Scheduler {
     queueMicrotask(() => {
       const flushStarted = startFlush();
 
-      for (let i = 0; i < count; i++) {
-        try {
-          jobs[i]?.();
-        } catch (error) {
-          console.error(
-            new SchedulerError('Error occurred during scheduler execution', error as Error)
-          );
-        }
-      }
+      this._processJobs(jobs, count);
 
-      jobs.length = 0;
       this.isProcessing = false;
 
       if (flushStarted) endFlush();
@@ -98,64 +93,75 @@ class Scheduler {
     const flushStarted = startFlush();
 
     try {
-      this._epoch++;
-
-      if (this.batchQueueSize > 0) {
-        for (let i = 0; i < this.batchQueueSize; i++) {
-          const job = this.batchQueue[i]!;
-          if (job._nextEpoch !== this._epoch) {
-            job._nextEpoch = this._epoch;
-            this.queue[this.queueSize++] = job;
-          }
-        }
-        this.batchQueueSize = 0;
-      }
-
-      let iterations = 0;
-
-      while (this.queueSize > 0) {
-        if (++iterations > this.maxFlushIterations) {
-          console.error(
-            new SchedulerError(
-              `Maximum flush iterations (${this.maxFlushIterations}) exceeded. Possible infinite loop.`
-            )
-          );
-          this.queueSize = 0;
-          this.queue.length = 0;
-          this.batchQueueSize = 0;
-          break;
-        }
-
-        const jobs = this.queue;
-        const count = this.queueSize;
-
-        this.queue = this.queue === this.queueA ? this.queueB : this.queueA;
-        this.queueSize = 0;
-        this._epoch++;
-
-        for (let i = 0; i < count; i++) {
-          try {
-            jobs[i]?.();
-          } catch (error) {
-            console.error(
-              new SchedulerError('Error occurred during batch execution', error as Error)
-            );
-          }
-        }
-
-        jobs.length = 0;
-
-        if (this.batchQueueSize > 0) {
-          for (let i = 0; i < this.batchQueueSize; i++) {
-            this.queue[this.queueSize++] = this.batchQueue[i]!;
-          }
-          this.batchQueueSize = 0;
-        }
-      }
+      this._mergeBatchQueue();
+      this._drainQueue();
     } finally {
       this.isFlushingSync = false;
       if (flushStarted) endFlush();
     }
+  }
+
+  private _mergeBatchQueue(): void {
+    this._epoch++;
+    if (this.batchQueueSize > 0) {
+      for (let i = 0; i < this.batchQueueSize; i++) {
+        const job = this.batchQueue[i];
+        if (job && job._nextEpoch !== this._epoch) {
+          job._nextEpoch = this._epoch;
+          this.queue[this.queueSize++] = job;
+        }
+      }
+      this.batchQueueSize = 0;
+    }
+  }
+
+  private _drainQueue(): void {
+    let iterations = 0;
+
+    while (this.queueSize > 0) {
+      if (++iterations > this.maxFlushIterations) {
+        this._handleFlushOverflow();
+        break;
+      }
+
+      this._processCurrentQueue();
+      this._mergeBatchQueue();
+    }
+  }
+
+  private _processCurrentQueue(): void {
+    const jobs = this.queue;
+    const count = this.queueSize;
+
+    this.queue = this.queue === this.queueA ? this.queueB : this.queueA;
+    this.queueSize = 0;
+    this._epoch++;
+
+    this._processJobs(jobs, count);
+  }
+
+  private _handleFlushOverflow(): void {
+    console.error(
+      new SchedulerError(
+        `Maximum flush iterations (${this.maxFlushIterations}) exceeded. Possible infinite loop.`
+      )
+    );
+    this.queueSize = 0;
+    this.queue.length = 0;
+    this.batchQueueSize = 0;
+  }
+
+  private _processJobs(jobs: SchedulerJob[], count: number): void {
+    for (let i = 0; i < count; i++) {
+      try {
+        jobs[i]?.();
+      } catch (error) {
+        console.error(
+          new SchedulerError('Error occurred during scheduler execution', error as Error)
+        );
+      }
+    }
+    jobs.length = 0;
   }
 
   startBatch(): void {

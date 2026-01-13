@@ -79,9 +79,9 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._functionSubscribersStore = new SubscriberManager<(newValue?: T, oldValue?: T) => void>();
     this._objectSubscribersStore = new SubscriberManager<Subscriber>();
 
-    this._dependencies = EMPTY_DEPS as Dependency[];
-    this._dependencyVersions = EMPTY_VERSIONS as number[];
-    this._unsubscribes = EMPTY_UNSUBS as (() => void)[];
+    this._dependencies = EMPTY_DEPS;
+    this._dependencyVersions = EMPTY_VERSIONS;
+    this._unsubscribes = EMPTY_UNSUBS;
 
     this._notifyJob = () => {
       this._functionSubscribersStore.forEachSafe(
@@ -166,7 +166,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._markDirty();
     if (this._dependencyVersions !== EMPTY_VERSIONS) {
       versionArrayPool.release(this._dependencyVersions);
-      this._dependencyVersions = EMPTY_VERSIONS as number[];
+      this._dependencyVersions = EMPTY_VERSIONS;
     }
   }
 
@@ -177,17 +177,17 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
         if (unsub) unsub();
       }
       unsubArrayPool.release(this._unsubscribes);
-      this._unsubscribes = EMPTY_UNSUBS as (() => void)[];
+      this._unsubscribes = EMPTY_UNSUBS;
     }
 
     if (this._dependencies !== EMPTY_DEPS) {
       depArrayPool.release(this._dependencies);
-      this._dependencies = EMPTY_DEPS as Dependency[];
+      this._dependencies = EMPTY_DEPS;
     }
 
     if (this._dependencyVersions !== EMPTY_VERSIONS) {
       versionArrayPool.release(this._dependencyVersions);
-      this._dependencyVersions = EMPTY_VERSIONS as number[];
+      this._dependencyVersions = EMPTY_VERSIONS;
     }
 
     this._functionSubscribersStore.clear();
@@ -310,79 +310,97 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
 
     this._setRecomputing(true);
 
-    const prevDeps = this._dependencies;
-    const prevVersions = this._dependencyVersions;
-    const nextDeps = depArrayPool.acquire();
-    const nextVersions = versionArrayPool.acquire();
-    const epoch = nextEpoch();
-
-    let depCount = 0;
-
-    const collect = (dep: Dependency) => {
-      if (dep._lastSeenEpoch === epoch) return;
-      dep._lastSeenEpoch = epoch;
-
-      if (depCount < nextDeps.length) {
-        nextDeps[depCount] = dep;
-        nextVersions[depCount] = dep.version;
-      } else {
-        nextDeps.push(dep);
-        nextVersions.push(dep.version);
-      }
-      depCount++;
-    };
-
-    const originalAdd = this._trackable.addDependency;
-    this._trackable.addDependency = collect;
-
+    const context = this._prepareComputationContext();
     let committed = false;
 
     try {
       const result = trackingContext.run(this._trackable, this._fn);
 
-      nextDeps.length = depCount;
-      nextVersions.length = depCount;
-
       if (isPromise(result)) {
-        this._unsubscribes = syncDependencies(nextDeps, prevDeps, this._unsubscribes, this);
-        this._dependencies = nextDeps;
-        this._dependencyVersions = nextVersions;
+        this._commitDependencies(context);
         committed = true;
-
         this._handleAsyncComputation(result);
-        this._setRecomputing(false);
-        return;
+      } else {
+        this._commitDependencies(context);
+        committed = true;
+        this._handleSyncResult(result);
       }
-
-      this._unsubscribes = syncDependencies(nextDeps, prevDeps, this._unsubscribes, this);
-      this._dependencies = nextDeps;
-      this._dependencyVersions = nextVersions;
-      committed = true;
-
-      this._handleSyncResult(result);
     } catch (err) {
-      nextDeps.length = depCount;
-      nextVersions.length = depCount;
-      this._unsubscribes = syncDependencies(nextDeps, prevDeps, this._unsubscribes, this);
-      this._dependencies = nextDeps;
-      this._dependencyVersions = nextVersions;
+      this._commitDependencies(context);
       committed = true;
-
       this._handleComputationError(err);
     } finally {
-      this._trackable.addDependency = originalAdd;
+      this._cleanupContext(context, committed);
+      this._setRecomputing(false);
+    }
+  }
 
-      if (committed) {
-        if (prevDeps !== EMPTY_DEPS) {
-          depArrayPool.release(prevDeps as Dependency[]);
-        }
-        if (prevVersions !== EMPTY_VERSIONS) {
-          versionArrayPool.release(prevVersions);
-        }
+  private _prepareComputationContext() {
+    const prevDeps = this._dependencies;
+    const prevVersions = this._dependencyVersions;
+    const nextDeps = depArrayPool.acquire();
+    const nextVersions = versionArrayPool.acquire();
+    const epoch = nextEpoch();
+    const state = { depCount: 0 };
+
+    const collect = (dep: Dependency) => {
+      if (dep._lastSeenEpoch === epoch) return;
+      dep._lastSeenEpoch = epoch;
+
+      if (state.depCount < nextDeps.length) {
+        nextDeps[state.depCount] = dep;
+        nextVersions[state.depCount] = dep.version;
       } else {
-        depArrayPool.release(nextDeps);
-        versionArrayPool.release(nextVersions);
+        nextDeps.push(dep);
+        nextVersions.push(dep.version);
       }
+      state.depCount++;
+    };
+
+    const originalAdd = this._trackable.addDependency;
+    this._trackable.addDependency = collect;
+
+    return { prevDeps, prevVersions, nextDeps, nextVersions, originalAdd, state };
+  }
+
+  private _commitDependencies(ctx: {
+    nextDeps: Dependency[];
+    nextVersions: number[];
+    state: { depCount: number };
+    prevDeps: Dependency[];
+  }): void {
+    const { nextDeps, nextVersions, state, prevDeps } = ctx;
+
+    nextDeps.length = state.depCount;
+    nextVersions.length = state.depCount;
+
+    this._unsubscribes = syncDependencies(nextDeps, prevDeps, this._unsubscribes, this);
+    this._dependencies = nextDeps;
+    this._dependencyVersions = nextVersions;
+  }
+
+  private _cleanupContext(
+    ctx: {
+      nextDeps: Dependency[];
+      nextVersions: number[];
+      originalAdd: (dep: Dependency) => void;
+      prevDeps: Dependency[];
+      prevVersions: number[];
+    },
+    committed: boolean
+  ): void {
+    this._trackable.addDependency = ctx.originalAdd;
+
+    if (committed) {
+      if (ctx.prevDeps !== EMPTY_DEPS) {
+        depArrayPool.release(ctx.prevDeps as Dependency[]);
+      }
+      if (ctx.prevVersions !== EMPTY_VERSIONS) {
+        versionArrayPool.release(ctx.prevVersions);
+      }
+    } else {
+      depArrayPool.release(ctx.nextDeps);
+      versionArrayPool.release(ctx.nextVersions);
     }
   }
 

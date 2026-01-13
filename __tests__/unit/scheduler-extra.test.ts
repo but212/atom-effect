@@ -42,7 +42,7 @@ describe('Scheduler - Extra Coverage', () => {
 
     expect(consoleError).toHaveBeenCalledWith(
       expect.objectContaining({
-        message: expect.stringContaining('Error occurred during batch execution'),
+        message: expect.stringContaining('Error occurred during scheduler execution'),
       })
     );
 
