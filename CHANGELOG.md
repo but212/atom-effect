@@ -4,12 +4,10 @@
 
 ### Changed
 
-- **Performance**: Optimized `Atom` value setter and tracking logic
-  - Removed unused `currentVersion` dead store allocation
-  - Eliminated unused parameters (`_newValue`, `_currentVersion`) from notification method
-  - Renamed `_notify()` → `_scheduleNotification()` for semantic clarity
-  - Simplified nullish check to idiomatic truthy check in `value` getter
-  - Condensed `_track()` comments for improved readability
+- **Core Optimizations**: Streamlined `Atom`, `Computed`, and `Effect` implementations
+  - Removed unused variables, parameters, and redundant type checks across core classes
+  - Renamed `_notify()` to `_scheduleNotification()` and simplified `Atom` getter logic
+  - Optimized `Computed` hot paths and merged `Effect` execution conditions for better performance
 
 - **Type Safety**: Refactored dependency tracking with User-Defined Type Guards
   - Added explicit interfaces: `DependencySubscriber`, `ExecutableSubscriber`

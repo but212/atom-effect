@@ -274,8 +274,9 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   }
 
   private _getAsyncState(): AsyncStateType {
-    if (this._isPending()) return AsyncState.PENDING;
+    // Hot path first: RESOLVED is the most common state after initial computation
     if (this._isResolved()) return AsyncState.RESOLVED;
+    if (this._isPending()) return AsyncState.PENDING;
     if (this._isRejected()) return AsyncState.REJECTED;
     return AsyncState.IDLE;
   }
@@ -437,7 +438,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._clearDirty();
     this._setRecomputing(false);
 
-    if (this._onError && typeof this._onError === 'function') {
+    if (this._onError) {
       try {
         this._onError(error);
       } catch (callbackError) {
@@ -456,7 +457,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._clearDirty();
     this._setRecomputing(false);
 
-    if (this._onError && typeof this._onError === 'function') {
+    if (this._onError) {
       try {
         this._onError(error);
       } catch (callbackError) {
