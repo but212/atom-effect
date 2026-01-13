@@ -3,12 +3,18 @@ import { ComputedError, wrapError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
 import type { ComputedStateFlags } from './computed-state-flags';
 
-/** Manages Promise IDs to prevent race conditions in async computed */
+/**
+ * Manages unique identifiers for Promises to prevent race conditions in asynchronous computations.
+ * Each new computation increments the ID; results from superseded Promises are ignored.
+ */
 export class PromiseIdManager {
   private lastPromiseId = 0;
   private readonly MAX_PROMISE_ID = Number.MAX_SAFE_INTEGER - 1;
 
-  /** Generates next unique ID with overflow protection */
+  /**
+   * Generates the next unique ID.
+   * Resets to 0 if the maximum safe integer is reached.
+   */
   next(): number {
     if (this.lastPromiseId >= this.MAX_PROMISE_ID) {
       this.lastPromiseId = 0;
@@ -16,21 +22,29 @@ export class PromiseIdManager {
     return ++this.lastPromiseId;
   }
 
+  /** Returns the current (latest) Promise ID */
   current(): number {
     return this.lastPromiseId;
   }
 
-  /** Checks if ID is still current (not superseded) */
+  /**
+   * Verifies if the given ID is still the most recent.
+   * @param id - The Promise ID to check.
+   */
   isValid(id: number): boolean {
     return id === this.lastPromiseId;
   }
 
+  /** Forces invalidation of the current Promise by incrementing the ID */
   invalidate(): void {
     this.next();
   }
 }
 
-/** Handles async computation lifecycle with race condition prevention */
+/**
+ * Handles the lifecycle of asynchronous computations.
+ * Manages transitions to PENDING, handles resolution/rejection, and prevents race conditions.
+ */
 export class AsyncComputationHandler<T> {
   constructor(
     private stateFlags: ComputedStateFlags,
@@ -40,6 +54,13 @@ export class AsyncComputationHandler<T> {
     private notifySubscribers: () => void
   ) {}
 
+  /**
+   * Orchestrates the execution of an asynchronous computation.
+   * @param result - The Promise returning the computed value.
+   * @param getValue - Function to get the current stored value for comparison.
+   * @param setValue - Function to update the stored value.
+   * @param setError - Function to store computation errors.
+   */
   handle(
     result: Promise<T>,
     getValue: () => T,

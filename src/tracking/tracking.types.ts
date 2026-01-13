@@ -29,7 +29,7 @@ function isNonNullObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-/** Checks if the value implements the DependencySubscriber interface. */
+/** Checks if the value implements the {@link DependencySubscriber} interface. */
 export function hasDependencyMethod(value: unknown): value is DependencySubscriber {
   return (
     (typeof value === 'object' || typeof value === 'function') &&
@@ -38,7 +38,7 @@ export function hasDependencyMethod(value: unknown): value is DependencySubscrib
   );
 }
 
-/** Checks if the value is a function with an addDependency method. */
+/** Checks if the value is a function with an `addDependency` method. */
 export function isTrackableFunction(
   value: unknown
 ): value is TrackableFunction & DependencySubscriber {
@@ -47,14 +47,14 @@ export function isTrackableFunction(
   );
 }
 
-/** Checks if the value is a plain function without tracking capabilities. */
+/** Checks if the value is a plain function without dependency tracking capabilities. */
 export function isPlainListener(value: unknown): value is () => void {
   return (
     typeof value === 'function' && typeof (value as TrackableFunction).addDependency !== 'function'
   );
 }
 
-/** Checks if the value implements the ExecutableSubscriber interface. */
+/** Checks if the value implements the {@link ExecutableSubscriber} interface. */
 export function hasExecuteMethod(value: unknown): value is ExecutableSubscriber {
   return isNonNullObject(value) && typeof value.execute === 'function';
 }

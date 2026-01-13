@@ -14,8 +14,9 @@ export interface SchedulerJob {
 }
 
 /**
- * Scheduler for reactive updates with batching support.
- * Uses epoch-based O(1) deduplication and double buffering.
+ * Scheduler for reactive updates.
+ * Manages the execution of effects and computed updates using batching and double-buffering.
+ * Supports both asynchronous (microtask-based) and synchronous (manual or batch-end) flushing.
  */
 class Scheduler {
   private queueA: SchedulerJob[] = [];
@@ -41,6 +42,12 @@ class Scheduler {
     return SchedulerPhase.IDLE;
   }
 
+  /**
+   * Schedules a task for execution.
+   * Tasks are deduplicated within the same flush cycle using epoch tracking.
+   * @param callback - The function to execute.
+   * @throws {SchedulerError} If the callback is not a function.
+   */
   schedule(callback: SchedulerJob): void {
     if (typeof callback !== 'function') {
       throw new SchedulerError('Scheduler callback must be a function');
@@ -164,11 +171,15 @@ class Scheduler {
     jobs.length = 0;
   }
 
+  /** Starts a new batch of updates. Updates will be deferred until endBatch is called. */
   startBatch(): void {
     this.batchDepth++;
     this.isBatching = true;
   }
 
+  /**
+   * Ends the current batch. If the batch depth reaches zero, all pending updates are flushed synchronously.
+   */
   endBatch(): void {
     this.batchDepth = Math.max(0, this.batchDepth - 1);
 
@@ -178,6 +189,11 @@ class Scheduler {
     }
   }
 
+  /**
+   * Configures the maximum number of iterations allowed during a synchronous flush.
+   * Used to prevent infinite loops.
+   * @param max - Maximum iterations count.
+   */
   setMaxFlushIterations(max: number): void {
     if (max < SCHEDULER_CONFIG.MIN_FLUSH_ITERATIONS) {
       throw new SchedulerError(

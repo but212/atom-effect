@@ -9,7 +9,6 @@ import { generateId } from '@/utils/debug';
  * - Provides common identity and flag management.
  */
 export class ReactiveNode {
-  // === Smi Fields (Fixed Order for V8 Hidden Class) ===
   /** Unique numerical identifier (Smi) */
   readonly id: number;
 

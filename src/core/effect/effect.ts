@@ -21,8 +21,9 @@ import { type DependencyTracker, trackingContext, untracked } from '@/tracking';
 import type { Dependency, EffectFunction, EffectObject, EffectOptions } from '@/types';
 import { debug } from '@/utils/debug';
 
-/** Internal effect implementation with dependency tracking and infinite loop detection */
-
+/**
+ * Internal context used during effect execution to track dependency changes.
+ */
 interface EffectContext {
   prevDeps: Dependency[];
   prevVersions: number[];
@@ -32,26 +33,54 @@ interface EffectContext {
   nextUnsubs: (() => void)[];
 }
 
+/**
+ * Internal effect implementation with dependency tracking and infinite loop detection.
+ * Extends {@link ReactiveNode} and implements {@link EffectObject} and {@link DependencyTracker}.
+ */
+
 class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker {
+  /** Current execution epoch for tracking freshness */
   private _currentEpoch: number;
+  /** Epoch of the last scheduler flush */
   private _lastFlushEpoch: number;
+  /** Number of executions within the current flush */
   private _executionsInEpoch: number;
 
+  /** The effect function to execute */
   private readonly _fn: EffectFunction;
+  /** Whether to execute synchronously on dependency change */
   private readonly _sync: boolean;
+  /** Maximum allowed executions per second */
   private readonly _maxExecutions: number;
+  /** Maximum allowed executions per scheduler flush */
   private readonly _maxExecutionsPerFlush: number;
+  /** Whether to track if dependencies are modified during execution */
   private readonly _trackModifications: boolean;
 
+  /** Cleanup function returned by the last execution */
   private _cleanup: (() => void) | null;
+  /** Current active dependencies */
   private _dependencies: Dependency[];
+  /** Cached versions of dependencies at last execution */
   private _dependencyVersions: number[];
+  /** Unsubscribe functions for current dependencies */
   private _unsubscribes: (() => void)[];
+  /** Temporary storage for dependencies being tracked in current execution */
   private _nextDeps: Dependency[] | null;
+  /** Temporary storage for dependency versions being tracked in current execution */
   private _nextVersions: number[] | null;
+  /** Temporary storage for unsubscribes being tracked in current execution */
   private _nextUnsubs: (() => void)[] | null;
+  /** Execution timestamps for rate limiting (dev only) */
   private _history: number[] | null;
+  /** Total number of executions */
   private _executionCount: number;
+
+  /**
+   * Creates a new EffectImpl instance.
+   * @param fn - The effect function to run.
+   * @param options - Configuration options for the effect.
+   */
 
   constructor(fn: EffectFunction, options: EffectOptions = {}) {
     super();
@@ -81,7 +110,11 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     debug.attachDebugInfo(this, 'effect', this.id);
   }
 
-  /** Manually triggers effect execution */
+  /**
+   * Manually triggers effect execution.
+   * Forces re-execution even if dependencies haven't changed.
+   * @throws {EffectError} If the effect is already disposed.
+   */
   public run = (): void => {
     if (this.isDisposed) {
       throw new EffectError(ERROR_MESSAGES.EFFECT_MUST_BE_FUNCTION);
@@ -93,7 +126,10 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     this.execute();
   };
 
-  /** Disposes effect and cleans up all resources */
+  /**
+   * Disposes of the effect, cleaning up all subscriptions and resources.
+   * Prevents further executions and releases arrays back to pools.
+   */
   public dispose = (): void => {
     if (this.isDisposed) return;
 
@@ -120,7 +156,11 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     }
   };
 
-  /** Adds dependency to tracking list (called by tracking context) */
+  /**
+   * Adds a dependency to the current tracking context.
+   * Called automatically when a reactive node is accessed during execution.
+   * @param dep - The dependency to track.
+   */
   public addDependency = (dep: Dependency): void => {
     if (this.isExecuting && this._nextDeps && this._nextUnsubs && this._nextVersions) {
       const epoch = this._currentEpoch;
@@ -140,7 +180,11 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     }
   };
 
-  /** Executes effect with dependency tracking */
+  /**
+   * Executes the effect function.
+   * Handles dependency tracking, cleanup, and infinite loop protection.
+   * If the function returns a cleanup function or a Promise, it will be handled accordingly.
+   */
   public execute = (): void => {
     if (this.isDisposed || this.isExecuting) return;
     if (!this._shouldExecute()) return;
@@ -183,6 +227,10 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     }
   };
 
+  /**
+   * Prepares the execution context by acquiring pools and setting up epoch.
+   * @returns The prepared EffectContext.
+   */
   private _prepareEffectContext(): EffectContext {
     const prevDeps = this._dependencies;
     const prevVersions = this._dependencyVersions;
@@ -207,6 +255,10 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     return { prevDeps, prevVersions, prevUnsubs, nextDeps, nextVersions, nextUnsubs };
   }
 
+  /**
+   * Commits the tracked dependencies as the current active dependencies.
+   * @param ctx - The current effect context.
+   */
   private _commitEffect(ctx: EffectContext): void {
     // Structural Guarantee: nextDeps length is controlled by the tracking phase
     // We use the context's nextDeps directly, avoiding `this._nextDeps!`
@@ -220,6 +272,11 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     this._unsubscribes = ctx.nextUnsubs;
   }
 
+  /**
+   * Cleans up the effect execution context, releasing resources back to pools.
+   * @param ctx - The effect context to clean up.
+   * @param committed - Whether the changes were committed to the effect.
+   */
   private _cleanupEffect(ctx: EffectContext, committed: boolean): void {
     this._nextDeps = null;
     this._nextVersions = null;
@@ -234,7 +291,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
             dep._tempUnsub = undefined;
           }
         }
-        depArrayPool.release(ctx.prevDeps as Dependency[]);
+        depArrayPool.release(ctx.prevDeps);
       }
       if (ctx.prevUnsubs !== EMPTY_UNSUBS) {
         unsubArrayPool.release(ctx.prevUnsubs);
@@ -259,6 +316,10 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     }
   }
 
+  /**
+   * Subscribes to a dependency's changes.
+   * @param dep - The dependency to subscribe to.
+   */
   private _subscribeTo(dep: Dependency): void {
     try {
       const unsubscribe = dep.subscribe(() => {
@@ -281,14 +342,23 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     }
   }
 
+  /**
+   * Whether the effect has been disposed.
+   */
   get isDisposed(): boolean {
     return (this.flags & EFFECT_STATE_FLAGS.DISPOSED) !== 0;
   }
 
+  /**
+   * Total number of times this effect has executed.
+   */
   get executionCount(): number {
     return this._executionCount;
   }
 
+  /**
+   * Whether the effect is currently executing.
+   */
   get isExecuting(): boolean {
     return (this.flags & EFFECT_STATE_FLAGS.EXECUTING) !== 0;
   }
@@ -302,6 +372,9 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     this.flags = (this.flags & ~mask) | (-Number(value) & mask);
   }
 
+  /**
+   * Executes the cleanup function if it exists.
+   */
   private _safeCleanup(): void {
     if (this._cleanup) {
       try {
@@ -313,6 +386,10 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     }
   }
 
+  /**
+   * Checks for infinite loops by tracking execution counts within a flush and time period.
+   * @throws {EffectError} If an infinite loop is detected.
+   */
   private _checkInfiniteLoop(): void {
     if (this._lastFlushEpoch !== flushEpoch) {
       this._lastFlushEpoch = flushEpoch;
@@ -378,6 +455,10 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     throw error;
   }
 
+  /**
+   * Determines if the effect should execute based on dependency versions.
+   * @returns true if any dependency has changed or if it's the first run.
+   */
   private _shouldExecute(): boolean {
     // Early exit: no deps or no version cache means first run or invalidated
     if (this._dependencies === EMPTY_DEPS || this._dependencyVersions === EMPTY_VERSIONS)
@@ -403,6 +484,10 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     return false;
   }
 
+  /**
+   * Checks for potential infinite loops where an effect modifies its own dependencies.
+   * Only active if trackModifications is enabled and debug is on.
+   */
   private _checkLoopWarnings(): void {
     if (this._trackModifications && debug.enabled) {
       const dependencies = this._dependencies;
@@ -422,10 +507,27 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 }
 
 /**
- * Creates a reactive effect that re-executes when dependencies change.
- * @param fn - Effect function (may return cleanup function or Promise)
- * @param options - { sync?: boolean, maxExecutionsPerSecond?: number, trackModifications?: boolean }
- * @throws {EffectError} If fn is not a function
+ * Creates a reactive effect that re-executes when its dependencies change.
+ *
+ * An effect automatically tracks any reactive state (atoms, computed) accessed during its execution.
+ * When those dependencies change, the effect is scheduled for re-execution.
+ *
+ * @param fn - The effect function to execute. Can return a cleanup function or a Promise that resolves to one.
+ * @param options - Configuration options for the effect.
+ * @param options.sync - If true, the effect runs synchronously when dependencies change. Defaults to false (scheduled).
+ * @param options.maxExecutionsPerSecond - Rate limiting for the effect.
+ * @param options.trackModifications - If true, warns when an effect modifies its own dependencies.
+ * @returns An object representing the effect with `run()` and `dispose()` methods.
+ * @throws {EffectError} If `fn` is not a function.
+ *
+ * @example
+ * ```ts
+ * const count = atom(0);
+ * const stop = effect(() => {
+ *   console.log('Count changed:', count.value);
+ *   return () => console.log('Cleaning up...');
+ * });
+ * ```
  */
 export function effect(fn: EffectFunction, options: EffectOptions = {}): EffectObject {
   if (typeof fn !== 'function') {

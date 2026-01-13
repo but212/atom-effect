@@ -393,7 +393,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
 
     if (committed) {
       if (ctx.prevDeps !== EMPTY_DEPS) {
-        depArrayPool.release(ctx.prevDeps as Dependency[]);
+        depArrayPool.release(ctx.prevDeps);
       }
       if (ctx.prevVersions !== EMPTY_VERSIONS) {
         versionArrayPool.release(ctx.prevVersions);

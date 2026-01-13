@@ -1,6 +1,6 @@
 /**
  * Manages subscribers with optimized array-based operations.
- * Uses linear search (cache-friendly for small arrays) + swap-and-pop removal.
+ * Uses linear search (cache-friendly for small arrays) and swap-and-pop removal for performance.
  */
 export class SubscriberManager<T> {
   private subscribers: T[] | null = null;

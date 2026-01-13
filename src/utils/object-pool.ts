@@ -2,8 +2,9 @@ import { POOL_CONFIG } from '@/constants';
 import type { Poolable } from '@/types';
 
 /**
- * Object pool to reduce GC pressure by reusing objects.
- * @template T - Type implementing Poolable interface
+ * Object pool for managing reusable objects that implement the {@link Poolable} interface.
+ * Helps reduce GC pressure in performance-critical paths.
+ * @template T - Type implementing Poolable interface.
  */
 class ObjectPool<T extends Poolable> {
   private pool: T[] = [];
@@ -40,13 +41,14 @@ class ObjectPool<T extends Poolable> {
     }
   }
 
+  /** Releases all objects from the pool and resets the size count. */
   clear(): void {
     this.pool.length = 0;
     this.poolSize = 0;
   }
 }
 
-/** Poolable notification for subscriber callbacks */
+/** Poolable entry for atom/computed notifications. */
 class Notification<T = unknown> implements Poolable {
   listener: Function | null = null;
   newValue: T | undefined = undefined;
@@ -64,6 +66,7 @@ class Notification<T = unknown> implements Poolable {
     }
   }
 
+  /** Resets the notification state for reuse. */
   reset(): void {
     this.listener = null;
     this.newValue = undefined;
@@ -71,7 +74,7 @@ class Notification<T = unknown> implements Poolable {
   }
 }
 
-/** Poolable scheduler callback */
+/** Poolable entry for scheduler task callbacks. */
 class SchedulerCallback implements Poolable {
   callback: (() => void) | null = null;
 

@@ -1,6 +1,7 @@
 import type { ComputedAtom, EffectObject, ReadonlyAtom } from '@/types';
 import { debug } from './debug';
 
+/** Checks if the given object is a ReadonlyAtom. */
 export function isAtom(obj: unknown): obj is ReadonlyAtom {
   return (
     obj !== null &&
@@ -11,6 +12,7 @@ export function isAtom(obj: unknown): obj is ReadonlyAtom {
   );
 }
 
+/** Checks if the given object is a ComputedAtom. */
 export function isComputed(obj: unknown): obj is ComputedAtom {
   if (debug.enabled && (obj === null || obj === undefined || typeof obj === 'object')) {
     const debugType = debug.getDebugType(obj);
@@ -25,6 +27,7 @@ export function isComputed(obj: unknown): obj is ComputedAtom {
   );
 }
 
+/** Checks if the given object is an EffectObject. */
 export function isEffect(obj: unknown): obj is EffectObject {
   return (
     obj !== null &&

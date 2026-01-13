@@ -4,7 +4,10 @@ import { ERROR_MESSAGES } from '@/errors/messages';
 import { NO_DEFAULT_VALUE } from '@/utils/debug';
 import type { ComputedStateFlags } from './computed-state-flags';
 
-/** Handles sync computation results with value comparison */
+/**
+ * Handles synchronous computation results.
+ * Manages value updates, dirty flag clearing, and subscriber notifications with value comparison.
+ */
 export class SyncComputationHandler<T> {
   constructor(
     private stateFlags: ComputedStateFlags,
@@ -12,6 +15,13 @@ export class SyncComputationHandler<T> {
     private notifySubscribers: () => void
   ) {}
 
+  /**
+   * Processes the result of a sync computation.
+   * @param result - The computed value.
+   * @param getValue - Function to get the current stored value for comparison.
+   * @param setValue - Function to update the stored value.
+   * @param setError - Function to clear or set computation errors.
+   */
   handle(
     result: T,
     getValue: () => T,
@@ -32,13 +42,22 @@ export class SyncComputationHandler<T> {
   }
 }
 
-/** Handles computation errors - always re-throws after state update */
+/**
+ * Handles errors occurring during computation.
+ * Ensures the state is updated to REJECTED and re-throws the error.
+ */
 export class ComputationErrorHandler {
   constructor(
     private stateFlags: ComputedStateFlags,
     private onError: ((error: Error) => void) | null
   ) {}
 
+  /**
+   * Processes a computation error.
+   * @param err - The raw error caught.
+   * @param setError - Function to store the error in the computed node.
+   * @throws {ComputedError} Always re-throws the wrapped error.
+   */
   handle(err: unknown, setError: (error: AtomError | null) => void): never {
     const error = wrapError(err, ComputedError, ERROR_MESSAGES.COMPUTED_COMPUTATION_FAILED);
 
@@ -59,7 +78,10 @@ export class ComputationErrorHandler {
   }
 }
 
-/** Provides state-specific value access handling */
+/**
+ * Provides state-specific handling for value access.
+ * Determines how to return a value based on whether the state is recomputing, pending, or rejected.
+ */
 export class StateValueHandlers<T> {
   constructor(
     private stateFlags: ComputedStateFlags,
@@ -67,10 +89,15 @@ export class StateValueHandlers<T> {
     private hasDefaultValue: boolean
   ) {}
 
+  /** Handles access while recomputing (returns current cached value) */
   handleRecomputing(currentValue: T): T {
     return currentValue;
   }
 
+  /**
+   * Handles access while the state is PENDING.
+   * @throws {ComputedError} If no default value is provided.
+   */
   handlePending(): T {
     if (this.hasDefaultValue) {
       return this.defaultValue;
@@ -78,6 +105,11 @@ export class StateValueHandlers<T> {
     throw new ComputedError(ERROR_MESSAGES.COMPUTED_ASYNC_PENDING_NO_DEFAULT);
   }
 
+  /**
+   * Handles access while the state is REJECTED.
+   * @param error - The error that caused rejection.
+   * @throws {AtomError} If the error is not recoverable or no default value exists.
+   */
   handleRejected(error: AtomError | null): T {
     if (error?.recoverable && this.hasDefaultValue) {
       return this.defaultValue;
@@ -85,6 +117,7 @@ export class StateValueHandlers<T> {
     throw error;
   }
 
+  /** Checks if a provided value is a valid default value (not NO_DEFAULT_VALUE) */
   static hasDefault<T>(defaultValue: T): boolean {
     return defaultValue !== NO_DEFAULT_VALUE;
   }
