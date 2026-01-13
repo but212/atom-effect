@@ -1,6 +1,6 @@
 import { DEBUG_CONFIG } from '@/constants';
 import { ComputedError } from '@/errors/errors';
-import type { DebugConfig } from '@/types';
+import type { DebugConfig, Dependency } from '@/types';
 
 /** Symbol for debug display name on reactive objects */
 export const DEBUG_NAME: unique symbol = Symbol('debugName');
@@ -14,24 +14,19 @@ export const DEBUG_TYPE: unique symbol = Symbol('type');
 /** Sentinel to distinguish "no default" from explicit `undefined` */
 export const NO_DEFAULT_VALUE: unique symbol = Symbol('noDefaultValue');
 
-function hasDependencies(obj: unknown): obj is { dependencies: unknown[] } {
-  return (
-    obj !== null &&
-    typeof obj === 'object' &&
-    'dependencies' in obj &&
-    Array.isArray((obj as { dependencies: unknown }).dependencies)
-  );
+/** Type guard for objects with dependencies array */
+function hasDependencies(obj: Dependency): obj is Dependency & { dependencies: Dependency[] } {
+  return 'dependencies' in obj && Array.isArray((obj as { dependencies: unknown }).dependencies);
 }
 
 let globalCheckEpoch = 0;
 
-function checkCircularInternal(dep: unknown, current: unknown, epoch: number): void {
-  const d = dep as { _visitedEpoch?: number };
-
-  if (d._visitedEpoch === epoch) {
+/** Internal recursive checker for circular dependency detection */
+function checkCircularInternal(dep: Dependency, current: Dependency, epoch: number): void {
+  if (dep._visitedEpoch === epoch) {
     return;
   }
-  d._visitedEpoch = epoch;
+  dep._visitedEpoch = epoch;
 
   if (dep === current) {
     throw new ComputedError('Indirect circular dependency detected');
@@ -40,7 +35,8 @@ function checkCircularInternal(dep: unknown, current: unknown, epoch: number): v
   if (hasDependencies(dep)) {
     const deps = dep.dependencies;
     for (let i = 0; i < deps.length; i++) {
-      checkCircularInternal(deps[i], current, epoch);
+      const child = deps[i];
+      if (child) checkCircularInternal(child, current, epoch);
     }
   }
 }
@@ -68,7 +64,7 @@ export const debug: DebugConfig = {
    * Direct check runs always; indirect check only in dev mode.
    * @throws {ComputedError} When circular dependency detected
    */
-  checkCircular(dep: unknown, current: unknown, _unusedVisited?: unknown): void {
+  checkCircular(dep: Dependency, current: Dependency): void {
     if (dep === current) {
       throw new ComputedError('Direct circular dependency detected');
     }
@@ -92,15 +88,15 @@ export const debug: DebugConfig = {
     target[DEBUG_TYPE] = type;
   },
 
-  getDebugName(obj: unknown): string | undefined {
-    if (obj !== null && typeof obj === 'object' && DEBUG_NAME in obj) {
+  getDebugName(obj: object | null | undefined): string | undefined {
+    if (obj != null && DEBUG_NAME in obj) {
       return (obj as Record<symbol, unknown>)[DEBUG_NAME] as string | undefined;
     }
     return undefined;
   },
 
-  getDebugType(obj: unknown): string | undefined {
-    if (obj !== null && typeof obj === 'object' && DEBUG_TYPE in obj) {
+  getDebugType(obj: object | null | undefined): string | undefined {
+    if (obj != null && DEBUG_TYPE in obj) {
       return (obj as Record<symbol, unknown>)[DEBUG_TYPE] as string | undefined;
     }
     return undefined;

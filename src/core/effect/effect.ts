@@ -111,22 +111,21 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   };
 
   /** Adds dependency to tracking list (called by tracking context) */
-  public addDependency = (dep: unknown): void => {
+  public addDependency = (dep: Dependency): void => {
     if (this.isExecuting && this._nextDeps && this._nextUnsubs && this._nextVersions) {
-      const d = dep as Dependency;
       const epoch = this._currentEpoch;
 
-      if (d._lastSeenEpoch === epoch) return;
-      d._lastSeenEpoch = epoch;
+      if (dep._lastSeenEpoch === epoch) return;
+      dep._lastSeenEpoch = epoch;
 
-      this._nextDeps.push(d);
-      this._nextVersions.push(d.version);
+      this._nextDeps.push(dep);
+      this._nextVersions.push(dep.version);
 
-      if (d._tempUnsub) {
-        this._nextUnsubs.push(d._tempUnsub);
-        d._tempUnsub = undefined;
+      if (dep._tempUnsub) {
+        this._nextUnsubs.push(dep._tempUnsub);
+        dep._tempUnsub = undefined;
       } else {
-        this._subscribeTo(d);
+        this._subscribeTo(dep);
       }
     }
   };
