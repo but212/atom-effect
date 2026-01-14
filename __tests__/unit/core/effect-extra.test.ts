@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { atom } from '../../../src/core/atom';
 import { effect } from '../../../src/core/effect/effect';
+import { endFlush, resetFlushState, startFlush } from '../../../src/internal/epoch';
 import { debug } from '../../../src/utils/debug';
 import { sleep, tick } from '../../utils/test-helpers';
 
@@ -87,6 +88,177 @@ describe('Effect - Extra Coverage', () => {
     );
     // Should NOT be subscribed to 'b' because it was NOT accessed due to error
     expect((b as unknown as { subscriberCount: () => number }).subscriberCount()).toBe(0);
+
+    consoleError.mockRestore();
+  });
+
+  it('covers _shouldExecute error handling in untracked read', () => {
+    const dep = {
+      get value() {
+        throw new Error('access failed');
+      },
+      subscribe: () => () => {},
+      version: 0,
+    };
+
+    const fx = effect(() => {}, { sync: true });
+    // biome-ignore lint/suspicious/noExplicitAny: Access private
+    const impl = fx as any;
+    impl._dependencies = [dep];
+    impl._dependencyVersions = [0];
+
+    // Should return true (re-execute) if checking deps fails
+    expect(impl._shouldExecute()).toBe(true);
+  });
+
+  it('covers subscription failure in _subscribeTo', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const dep = {
+      get value() {
+        return 1;
+      },
+      subscribe: () => {
+        throw new Error('sub failed');
+      },
+      version: 1,
+    };
+
+    const fx = effect(() => {});
+    const impl = fx as any;
+
+    // Manually trigger addDependency inside execution context
+    // We need to simulate execution state
+    impl._setExecuting(true);
+    impl._prepareEffectContext();
+
+    // Now call addDependency, which calls _subscribeTo
+    // biome-ignore lint/suspicious/noExplicitAny: Access private
+    impl.addDependency(dep as any);
+
+    // Cleanup
+    impl._setExecuting(false);
+
+    expect(consoleError).toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
+  it('covers cleanup failure in uncommitted transaction', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const unsubSpy = vi.fn();
+
+    const fx = effect(() => {});
+    const impl = fx as any;
+
+    // Setup state for _cleanupEffect
+    const ctx = {
+      prevDeps: [],
+      prevVersions: [],
+      prevUnsubs: [],
+      // biome-ignore lint/suspicious/noExplicitAny: Mock dependency
+      nextDeps: [{} as any], // Mock dependency
+      nextVersions: [1],
+      nextUnsubs: [unsubSpy],
+    };
+
+    // Call cleanup with committed=false
+    impl._cleanupEffect(ctx, false);
+
+    expect(unsubSpy).toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
+  it('covers global flush execution limit', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    // Set maxExecutionsPerSecond high to avoid timestamp-based loop detection
+    const fx = effect(() => {}, {
+      maxExecutionsPerFlush: 10000,
+      maxExecutionsPerSecond: 100000, // Higher than our loop count
+    });
+    // biome-ignore lint/suspicious/noExplicitAny: Access private
+    const impl = fx as any;
+
+    let caughtError: any = null;
+
+    // Ensure we are in a flushing state so counters increment
+    resetFlushState();
+    const flushStarted = startFlush();
+
+    try {
+      expect(flushStarted).toBe(true);
+
+      // Attempt enough iterations to hit global limit (10000)
+      // We need > 10000 iterations.
+      for (let i = 0; i < 11000; i++) {
+        impl._executionsInEpoch = 0; // Reset local counter to avoid local limit
+        impl._checkInfiniteLoop();
+      }
+      // biome-ignore lint/suspicious/noExplicitAny: Catching unknown error
+    } catch (e: any) {
+      caughtError = e;
+    } finally {
+      endFlush();
+      consoleError.mockRestore();
+    }
+
+    expect(caughtError).toBeDefined();
+    expect(caughtError.message).toContain('Infinite loop detected (global)');
+  });
+
+  it('covers history shifting', () => {
+    const fx = effect(() => {}, { maxExecutionsPerSecond: 50 });
+    // biome-ignore lint/suspicious/noExplicitAny: Access private
+    const impl = fx as any;
+
+    impl._history = [];
+    const now = Date.now();
+    // SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_SECOND is 1000
+    // We need to fill > 1000 + 10 items. Let's do 1020.
+    for (let i = 0; i < 1020; i++) {
+      impl._history.push(now - 2000);
+    }
+
+    impl._checkInfiniteLoop();
+
+    // Should have shifted items.
+    // Pushed 1020. limit is 1010.
+    // After check: push 1 -> 1021.
+    // Shift if > 1010.
+    // So final length should be 1020 (shifted 1, added 1) OR 1010 if it loops?
+    // Code: if (length > limit) shift(). Just one shift per call.
+    // So 1021 -> 1020.
+    expect(impl._history.length).toBe(1020);
+  });
+
+  it('covers cleanup of prevDeps when execution fails', () => {
+    const a = atom(0);
+    const fx = effect(() => {
+      a.value; // Add dependency
+    });
+
+    // First run successful, has prevDeps
+    // biome-ignore lint/suspicious/noExplicitAny: Access private
+    const impl = fx as any;
+    expect(impl._dependencies.length).toBe(1);
+
+    // Now force a run that fails and throws
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    // Mock dependency with _tempUnsub to verify it gets cleared
+    const dep = impl._dependencies[0];
+    dep._tempUnsub = () => {};
+
+    try {
+      impl._fn = () => {
+        throw new Error('Fail');
+      };
+      impl.run();
+    } catch {
+      // ignore
+    }
+
+    // The cleanup logic should have set _tempUnsub to undefined
+    expect(dep._tempUnsub).toBeUndefined();
 
     consoleError.mockRestore();
   });

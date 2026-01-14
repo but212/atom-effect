@@ -56,21 +56,21 @@ export const POOL_CONFIG = {
  */
 export const SCHEDULER_CONFIG = {
   /** Maximum effect executions per second to detect infinite loops (Legacy/Fallback) */
-  MAX_EXECUTIONS_PER_SECOND: 100,
+  MAX_EXECUTIONS_PER_SECOND: 1000,
   /** Threshold for cleaning up old execution timestamps */
-  CLEANUP_THRESHOLD: 100,
+  CLEANUP_THRESHOLD: 1000,
 
   /**
    * Maximum executions per effect within a single flush cycle
-   * Increased from 10 to 50 based on evaluation report
+   * Increased from 50 to 100
    */
-  MAX_EXECUTIONS_PER_EFFECT: 50,
+  MAX_EXECUTIONS_PER_EFFECT: 100,
 
   /**
    * Maximum total executions across all effects in a single flush cycle
-   * Increased from 1000 to 5000 based on evaluation report
+   * Increased from 5000 to 10000
    */
-  MAX_EXECUTIONS_PER_FLUSH: 5000,
+  MAX_EXECUTIONS_PER_FLUSH: 10000,
 
   /** Maximum iterations for synchronous flush loop to prevent infinite loops */
   MAX_FLUSH_ITERATIONS: 1000,

@@ -1,8 +1,19 @@
 # Changelog
 
+## [0.5.1]
+
+### Changed
+
+- **Scheduler Tuning**: Relaxed Scheduler limits to support higher-frequency updates and complex dependency graphs.
+  - Increased `MAX_EXECUTIONS_PER_EFFECT` from 50 to **100**.
+  - Increased `MAX_EXECUTIONS_PER_SECOND` (Legacy/Fallback) from 100 to **1000**.
+  - Increased `MAX_EXECUTIONS_PER_FLUSH` from 5000 to **10000**.
+  - Increased `CLEANUP_THRESHOLD` from 100 to **1000**.
+  - This change reduces false positives in infinite loop detection during high-load scenarios.
+
 ## [0.5.0]
 
-### Refactor
+### Refactor - 0.5.0
 
 - **Code Organization**: Centralized utility functions and improved module structure.
   - Moved generic utility functions to `src/utils/` (`ArrayPool`, `type-guards`, `error`).
@@ -12,7 +23,7 @@
   - Implemented `DependencyId` branded type to prevent accidental number assignment.
   - Updated `ReactiveNode` and `Dependency` interfaces to use `DependencyId`.
 
-### Changed
+### Changed - 0.5.0
 
 - **Breaking Change**: `batch` and `untracked` now propagate original errors instead of wrapping them in `AtomError`.
   - Removed `try-catch` overhead from these functions.
