@@ -81,7 +81,9 @@ describe('Utils & Handlers - Extra Coverage', () => {
       const pool = new ArrayPool<unknown>();
       const frozen = Object.freeze([]);
 
+      // biome-ignore lint/suspicious/noExplicitAny: Access private internals
       const initialSize = (pool as any).pool.length;
+      // biome-ignore lint/suspicious/noExplicitAny: Testing specific invalid input
       pool.release(frozen as any);
 
       // biome-ignore lint/suspicious/noExplicitAny: Access private
@@ -97,6 +99,7 @@ describe('Utils & Handlers - Extra Coverage', () => {
       const pool = new ArrayPool<unknown>();
       const hugeArray = new Array(300); // Default max is 256
 
+      // biome-ignore lint/suspicious/noExplicitAny: Access private internals
       const initialSize = (pool as any).pool.length;
       pool.release(hugeArray);
 
@@ -264,6 +267,7 @@ describe('Utils & Handlers - Extra Coverage', () => {
         throw new Error('Fail');
       });
 
+      // biome-ignore lint/suspicious/noExplicitAny: Testing generic callback
       expect(() => sm.forEachSafe((fn: any) => fn())).not.toThrow();
       expect(consoleError).toHaveBeenCalled();
       consoleError.mockRestore();
@@ -294,7 +298,9 @@ describe('Utils & Handlers - Extra Coverage', () => {
       const wasEnabled = debug.enabled;
       debug.enabled = true;
 
+      // biome-ignore lint/suspicious/noExplicitAny: Mocking internal structure
       const dep1: any = { id: 1, _visitedEpoch: -1 };
+      // biome-ignore lint/suspicious/noExplicitAny: Mocking internal structure
       const dep2: any = { id: 2, _visitedEpoch: -1, dependencies: [dep1] };
 
       // Case 1: Indirect circular
@@ -330,11 +336,14 @@ describe('Utils & Handlers - Extra Coverage', () => {
       const setValue = vi.fn();
       const setError = vi.fn();
 
+      // biome-ignore lint/suspicious/noExplicitAny: Access private internals
       (handler as any).stateFlags.setResolved();
+      // biome-ignore lint/suspicious/noExplicitAny: Access private internals
       (handler as any).stateFlags.clearDirty();
 
       const p = Promise.resolve(1);
       handler.handle(p, getValue, setValue, setError);
+      // biome-ignore lint/suspicious/noExplicitAny: Access private internals
       (handler as any).stateFlags.setResolved();
 
       return p.then(() => {

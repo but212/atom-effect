@@ -124,6 +124,7 @@ describe('Effect - Extra Coverage', () => {
     };
 
     const fx = effect(() => {});
+    // biome-ignore lint/suspicious/noExplicitAny: Access private internals
     const impl = fx as any;
 
     // Manually trigger addDependency inside execution context
@@ -147,6 +148,7 @@ describe('Effect - Extra Coverage', () => {
     const unsubSpy = vi.fn();
 
     const fx = effect(() => {});
+    // biome-ignore lint/suspicious/noExplicitAny: Access private internals
     const impl = fx as any;
 
     // Setup state for _cleanupEffect
@@ -178,6 +180,7 @@ describe('Effect - Extra Coverage', () => {
     // biome-ignore lint/suspicious/noExplicitAny: Access private
     const impl = fx as any;
 
+    // biome-ignore lint/suspicious/noExplicitAny: Catching unknown error type
     let caughtError: any = null;
 
     // Ensure we are in a flushing state so counters increment

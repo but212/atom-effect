@@ -162,6 +162,7 @@ describe('Computed - Extra Coverage', () => {
       c.value;
     });
 
+    // biome-ignore lint/suspicious/noExplicitAny: Access private internals
     const impl = c as any;
     expect(impl._functionSubscribersStore.has(plainListener)).toBe(true);
 
