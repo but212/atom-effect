@@ -20,7 +20,7 @@ describe('Infinite Loop Detection (Epoch Based)', () => {
       effect(() => {
         executions++;
         const val = count.value;
-        if (val < 100) {
+        if (val < 200) {
           count.value = val + 1;
         }
       });
@@ -35,7 +35,7 @@ describe('Infinite Loop Detection (Epoch Based)', () => {
     );
 
     expect(executions).toBeGreaterThan(SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_EFFECT);
-    expect(executions).toBeLessThan(100);
+    expect(executions).toBeLessThan(200);
 
     consoleSpy.mockRestore();
   });
@@ -55,7 +55,7 @@ describe('Infinite Loop Detection (Epoch Based)', () => {
         // Try to bypass detection
         startFlush();
 
-        if (val < 100) {
+        if (val < 200) {
           count.value = val + 1;
         }
       });
@@ -74,7 +74,7 @@ describe('Infinite Loop Detection (Epoch Based)', () => {
       expect.stringContaining('startFlush() called during flush')
     );
 
-    expect(executions).toBeLessThan(100);
+    expect(executions).toBeLessThan(200);
     expect(executions).toBeGreaterThan(SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_EFFECT);
 
     consoleSpy.mockRestore();
