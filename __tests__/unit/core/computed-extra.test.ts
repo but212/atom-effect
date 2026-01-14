@@ -192,7 +192,6 @@ describe('Computed - Extra Coverage', () => {
     expect(impl._isIdle()).toBe(true);
     expect(impl._isPending()).toBe(false);
     expect(impl._isResolved()).toBe(false);
-    expect(impl._isResolved()).toBe(false);
     expect(impl._isRejected()).toBe(false);
   });
 
