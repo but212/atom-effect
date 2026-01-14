@@ -77,7 +77,7 @@ export const debug: DebugConfig = {
     checkCircularInternal(dep, current, globalCheckEpoch);
   },
 
-  attachDebugInfo(obj: object, type: string, id: number | DependencyId): void {
+  attachDebugInfo(obj: object, type: string, id: DependencyId): void {
     if (!this.enabled) {
       return;
     }
