@@ -3,14 +3,9 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import {
-  AtomError,
-  ComputedError,
-  EffectError,
-  isPromise,
-  SchedulerError,
-  wrapError,
-} from '@/errors/errors';
+import { AtomError, ComputedError, EffectError, SchedulerError } from '@/errors/errors';
+import { wrapError } from '@/utils/error';
+import { isPromise } from '@/utils/type-guards';
 
 describe('Error Classes', () => {
   it('AtomError has correct properties', () => {

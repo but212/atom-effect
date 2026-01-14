@@ -1,6 +1,7 @@
 import type { AtomError } from '@/errors/errors';
-import { ComputedError, wrapError } from '@/errors/errors';
+import { ComputedError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
+import { wrapError } from '@/utils/error';
 import type { ComputedStateFlags } from './computed-state-flags';
 
 /**

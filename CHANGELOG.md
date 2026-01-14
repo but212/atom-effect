@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Refactor
+
+- **Code Organization**: Centralized utility functions and improved module structure.
+  - Moved generic utility functions to `src/utils/` (`ArrayPool`, `type-guards`, `error`).
+  - Consolidated tracking type guards into `src/utils/type-guards.ts`.
+  - Moved `wrapError` to `src/utils/error.ts`.
+- **Type Safety**: Introduced Branded Types for strict ID typing.
+  - Implemented `DependencyId` branded type to prevent accidental number assignment.
+  - Updated `ReactiveNode` and `Dependency` interfaces to use `DependencyId`.
+
 ### Changed
 
 - **Breaking Change**: `batch` and `untracked` now propagate original errors instead of wrapping them in `AtomError`.

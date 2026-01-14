@@ -1,6 +1,6 @@
 import { DEBUG_CONFIG } from '@/constants';
 import { ComputedError } from '@/errors/errors';
-import type { DebugConfig, Dependency } from '@/types';
+import type { DebugConfig, Dependency, DependencyId } from '@/types';
 
 /** Symbol for debug display name on reactive objects */
 export const DEBUG_NAME: unique symbol = Symbol('debugName');
@@ -77,7 +77,7 @@ export const debug: DebugConfig = {
     checkCircularInternal(dep, current, globalCheckEpoch);
   },
 
-  attachDebugInfo(obj: object, type: string, id: number): void {
+  attachDebugInfo(obj: object, type: string, id: DependencyId): void {
     if (!this.enabled) {
       return;
     }
@@ -106,4 +106,4 @@ export const debug: DebugConfig = {
 let nextId = 1;
 
 /** Generates a unique numeric ID for reactive objects */
-export const generateId = (): number => nextId++;
+export const generateId = (): DependencyId => nextId++ as DependencyId;
