@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.5.0]
 
 ### Refactor
 
@@ -15,7 +15,7 @@
 ### Changed
 
 - **Breaking Change**: `batch` and `untracked` now propagate original errors instead of wrapping them in `AtomError`.
-  - Removed `try-catch` overhead from these functions for better performance.
+  - Removed `try-catch` overhead from these functions.
   - Consumers expecting `AtomError` wrappers should update their error handling logic to catch specific error types directly.
 
 ## [0.4.0]
