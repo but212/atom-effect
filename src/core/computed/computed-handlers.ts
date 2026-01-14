@@ -2,8 +2,8 @@ import type { AtomError } from '@/errors/errors';
 import { ComputedError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
 import { NO_DEFAULT_VALUE } from '@/utils/debug';
-import type { ComputedStateFlags } from './computed-state-flags';
 import { wrapError } from '@/utils/error';
+import type { ComputedStateFlags } from './computed-state-flags';
 
 /**
  * Handles synchronous computation results.
