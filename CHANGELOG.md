@@ -1,8 +1,34 @@
 # Changelog
 
-## [0.5.1]
+## [0.6.0]
+
+### Fixed
+
+- **Async Computed**: Fixed subscriber notification on async resolution.
+  - `_handleAsyncResolution` now calls `_notifyJob()` after async computation completes, ensuring effects are re-executed when async computed values resolve.
 
 ### Changed
+
+- **Async Computed State Tracking**: All state getters now trigger dependency tracking.
+  - `.state`, `.hasError`, `.lastError`, `.isPending`, `.isResolved` getters now call `_registerTracking()`.
+  - Effects and computed values that only read state properties (e.g., `searchResults.state`) will now properly re-execute when the async state changes.
+  - This provides a more intuitive developer experience - no need to read `.value` first just to track state changes.
+
+### Added
+
+- **Example**: Added `examples/async-computed-dom.html` - A standalone demo showcasing async computed as a first-class citizen with vanilla DOM manipulation.
+  - Demonstrates GitHub user search with real-time status tracking.
+  - Shows `state`, `isPending`, `isResolved`, `hasError` reactive properties in action.
+
+## [0.5.2]
+
+### Changed - 0.5.2
+
+- **CDN**: Updated CDN options to use `unpkg` and `jsdelivr` instead of `jsDelivr`.
+
+## [0.5.1]
+
+### Changed - 0.5.1
 
 - **Scheduler Tuning**: Relaxed Scheduler limits to support higher-frequency updates and complex dependency graphs.
   - Increased `MAX_EXECUTIONS_PER_EFFECT` from 50 to **100**.

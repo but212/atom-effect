@@ -9,8 +9,11 @@ export default defineConfig({
     lib: {
       entry: resolve(__dirname, 'src/index.ts'),
       name: 'AtomEffect',
-      fileName: (format) => `index.${format === 'es' ? 'mjs' : 'cjs'}`,
-      formats: ['es', 'cjs'],
+      fileName: (format) => {
+        if (format === 'umd') return 'atom-effect.min.js';
+        return `index.${format === 'es' ? 'mjs' : 'cjs'}`;
+      },
+      formats: ['es', 'cjs', 'umd'],
     },
     sourcemap: true,
     outDir: 'dist',
