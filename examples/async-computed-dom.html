@@ -572,12 +572,13 @@
               class: "status-pending",
               showSpinner: true,
             };
-          case AsyncState.RESOLVED:
+          case AsyncState.RESOLVED: {
             const count = searchResults.value.length;
             return {
               text: count > 0 ? `${count} results found` : "No results",
               class: "status-resolved",
             };
+          }
           case AsyncState.REJECTED:
             return { text: "Error occurred", class: "status-rejected" };
           default:
