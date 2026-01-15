@@ -149,22 +149,27 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   }
 
   get state(): AsyncStateType {
+    this._registerTracking();
     return this._getAsyncState();
   }
 
   get hasError(): boolean {
+    this._registerTracking();
     return this._isRejected();
   }
 
   get lastError(): Error | null {
+    this._registerTracking();
     return this._error;
   }
 
   get isPending(): boolean {
+    this._registerTracking();
     return this._isPending();
   }
 
   get isResolved(): boolean {
+    this._registerTracking();
     return this._isResolved();
   }
 
@@ -452,6 +457,9 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._setResolved();
     this._error = null;
     this._setRecomputing(false);
+
+    // Notify subscribers when async computation resolves
+    this._notifyJob();
   }
 
   private _handleAsyncRejection(err: unknown): void {
