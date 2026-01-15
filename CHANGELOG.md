@@ -13,18 +13,13 @@
   - `.state`, `.hasError`, `.lastError`, `.isPending`, `.isResolved` getters now call `_registerTracking()`.
   - Effects and computed values that only read state properties (e.g., `searchResults.state`) will now properly re-execute when the async state changes.
   - This provides a more intuitive developer experience - no need to read `.value` first just to track state changes.
+- **CDN**: Updated CDN options to use `unpkg` and `jsdelivr` instead of `jsDelivr`.
 
 ### Added
 
 - **Example**: Added `examples/async-computed-dom.html` - A standalone demo showcasing async computed as a first-class citizen with vanilla DOM manipulation.
   - Demonstrates GitHub user search with real-time status tracking.
   - Shows `state`, `isPending`, `isResolved`, `hasError` reactive properties in action.
-
-## [0.5.2]
-
-### Changed - 0.5.2
-
-- **CDN**: Updated CDN options to use `unpkg` and `jsdelivr` instead of `jsDelivr`.
 
 ## [0.5.1]
 
@@ -74,7 +69,7 @@
 
 ## [0.3.3]
 
-### Fixed
+### Fixed - 0.3.3
 
 - Fixed computed caching bug where `_setIdle()` in `_markDirty()` cleared the RESOLVED flag, causing computed values to re-execute on every access instead of returning cached values.
 
@@ -85,7 +80,7 @@
   - `debug.ts`, `object-pool.ts`, `subscriber-manager.ts`, `atom.ts`, `effect.ts`, `computed/index.ts`, `context.ts`
   - Retained essential API documentation while removing redundant `@fileoverview`, `@remarks`, and `@example` blocks.
 
-### Added
+### Added - 0.3.3
 
 - **Memory Tests**: Added comprehensive memory and stability tests in `__tests__/unit/memory/`:
   - `gc-verification.test.ts`: WeakRef-based GC verification tests
