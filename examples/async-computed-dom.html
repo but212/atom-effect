@@ -528,7 +528,6 @@
       const { atom, computed, effect, AsyncState } = AtomEffect;
 
       // State
-      const searchQuery = atom("");
       const searchCount = atom(0);
       const debouncedQuery = atom("");
       let debounceTimer = null;
@@ -603,9 +602,15 @@
         const el = elements.statusIndicator;
 
         el.className = `status ${status.class}`;
-        el.innerHTML = status.showSpinner
-          ? `<div class="spinner"></div>${status.text}`
-          : status.text;
+        el.textContent = "";
+
+        if (status.showSpinner) {
+          const spinner = document.createElement("div");
+          spinner.className = "spinner";
+          el.appendChild(spinner);
+        }
+        
+        el.appendChild(document.createTextNode(status.text));
       });
 
       effect(() => {
@@ -640,38 +645,74 @@
         }
 
         if (results.length === 0 && state === AsyncState.RESOLVED) {
-          container.innerHTML = `
-          <div class="empty-state">
-            <div class="empty-state-icon">🤷</div>
-            <p>No results for "${query}"</p>
-          </div>`;
+          container.textContent = "";
+          
+          const emptyState = document.createElement("div");
+          emptyState.className = "empty-state";
+          
+          const icon = document.createElement("div");
+          icon.className = "empty-state-icon";
+          icon.textContent = "🤷";
+          
+          const p = document.createElement("p");
+          p.textContent = `No results for "${query}"`;
+          
+          emptyState.appendChild(icon);
+          emptyState.appendChild(p);
+          container.appendChild(emptyState);
           return;
         }
 
-        container.innerHTML = `
-        <div class="user-list">
-          ${results
-            .map(
-              (user) => `
-            <div class="user-item">
-              <div class="user-avatar">
-                <img 
-                  src="${user.avatar_url}" 
-                  alt="${user.login}"
-                  onerror="this.style.display='none'; this.parentElement.textContent='${user.login[0].toUpperCase()}'"
-                >
-              </div>
-              <div class="user-info">
-                <div class="user-name">${user.login}</div>
-                <div class="user-email">
-                  <a href="${user.html_url}" target="_blank">${user.html_url}</a>
-                </div>
-                <div class="user-company">Score: ${user.score?.toFixed(2) || "N/A"}</div>
-              </div>
-            </div>`
-            )
-            .join("")}
-        </div>`;
+        container.textContent = "";
+        const userList = document.createElement("div");
+        userList.className = "user-list";
+
+        results.forEach((user) => {
+          const item = document.createElement("div");
+          item.className = "user-item";
+
+          // Avatar
+          const avatarDiv = document.createElement("div");
+          avatarDiv.className = "user-avatar";
+          
+          const img = document.createElement("img");
+          img.src = user.avatar_url;
+          img.alt = user.login;
+          img.onerror = () => {
+            img.style.display = "none";
+            avatarDiv.textContent = (user.login[0] || "?").toUpperCase();
+          };
+          avatarDiv.appendChild(img);
+          item.appendChild(avatarDiv);
+
+          // Info
+          const infoDiv = document.createElement("div");
+          infoDiv.className = "user-info";
+
+          const nameDiv = document.createElement("div");
+          nameDiv.className = "user-name";
+          nameDiv.textContent = user.login;
+          infoDiv.appendChild(nameDiv);
+
+          const emailDiv = document.createElement("div");
+          emailDiv.className = "user-email";
+          const link = document.createElement("a");
+          link.href = user.html_url;
+          link.target = "_blank";
+          link.textContent = user.html_url;
+          emailDiv.appendChild(link);
+          infoDiv.appendChild(emailDiv);
+
+          const companyDiv = document.createElement("div");
+          companyDiv.className = "user-company";
+          companyDiv.textContent = `Score: ${user.score?.toFixed(2) || "N/A"}`;
+          infoDiv.appendChild(companyDiv);
+
+          item.appendChild(infoDiv);
+          userList.appendChild(item);
+        });
+
+        container.appendChild(userList);
       });
 
       effect(() => {
@@ -696,7 +737,6 @@
       // Events
       elements.searchInput.addEventListener("input", (e) => {
         const value = e.target.value;
-        searchQuery.value = value;
 
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
