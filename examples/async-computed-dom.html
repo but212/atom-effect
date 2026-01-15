@@ -704,11 +704,6 @@
           emailDiv.appendChild(link);
           infoDiv.appendChild(emailDiv);
 
-          const companyDiv = document.createElement("div");
-          companyDiv.className = "user-company";
-          companyDiv.textContent = `Score: ${user.score?.toFixed(2) || "N/A"}`;
-          infoDiv.appendChild(companyDiv);
-
           item.appendChild(infoDiv);
           userList.appendChild(item);
         });
