@@ -7,7 +7,8 @@
     "defaultBranch": "main"
   },
   "files": {
-    "ignoreUnknown": false
+    "ignoreUnknown": false,
+    "includes": ["**", "!examples"]
   },
   "formatter": {
     "enabled": true,
