@@ -1,8 +1,14 @@
 # Changelog
 
-## [0.5.1]
+## [0.5.2]
 
 ### Changed
+
+- **CDN**: Updated CDN options to use `unpkg` and `jsdelivr` instead of `jsDelivr`.
+
+## [0.5.1]
+
+### Changed - 0.5.1
 
 - **Scheduler Tuning**: Relaxed Scheduler limits to support higher-frequency updates and complex dependency graphs.
   - Increased `MAX_EXECUTIONS_PER_EFFECT` from 50 to **100**.
