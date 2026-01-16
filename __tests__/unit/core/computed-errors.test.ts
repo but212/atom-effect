@@ -3,9 +3,9 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { EMPTY_ERROR_ARRAY } from '@/constants';
 import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
-import { EMPTY_ERROR_ARRAY } from '@/constants';
 
 describe('Computed - Error Propagation', () => {
   describe('sync error propagation', () => {
@@ -337,7 +337,7 @@ describe('Computed - Error Propagation', () => {
       expect(b.errors.length).toBeGreaterThanOrEqual(1);
 
       // c.errors collects from the chain
-      // Same Error instances are deduplicated by Set, 
+      // Same Error instances are deduplicated by Set,
       // but wrapped errors are different instances
       expect(c.errors.length).toBeGreaterThanOrEqual(1);
 
@@ -363,13 +363,16 @@ describe('Computed - Error Propagation', () => {
 
       // b depends on a - a.value returns 0 (defaultValue)
       let aValueInsideB = -999;
-      const b = computed(() => {
-        aValueInsideB = a.value;
-        return a.value + 1;
-      }, { defaultValue: -1 });
+      const b = computed(
+        () => {
+          aValueInsideB = a.value;
+          return a.value + 1;
+        },
+        { defaultValue: -1 }
+      );
 
       const bVal = b.value;
-      
+
       // Debug: check what a.value was when b computed
       expect(aValueInsideB).toBe(0);
       expect(bVal).toBe(1);
