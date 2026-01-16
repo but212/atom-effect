@@ -410,8 +410,12 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       isPromise(result) ? this._handleAsyncComputation(result) : this._handleSyncResult(result);
     } catch (err) {
       if (!committed) {
-        this._commitDependencies(context);
-        committed = true;
+        try {
+          this._commitDependencies(context);
+          committed = true;
+        } catch (commitErr) {
+          this._handleComputationError(commitErr);
+        }
       }
       this._handleComputationError(err);
     } finally {
