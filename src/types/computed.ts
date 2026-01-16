@@ -20,7 +20,7 @@ export interface ComputedOptions<T = unknown> {
 export interface ComputedAtom<T = unknown> extends ReadonlyAtom<T> {
   /** Current asynchronous state of the computation. */
   readonly state: AsyncStateType;
-  /** true if the last computation attempt failed. */
+  /** true if self or any dependency has an error. */
   readonly hasError: boolean;
   /** The error object from the last failed computation, if any. */
   readonly lastError: Error | null;
@@ -28,6 +28,10 @@ export interface ComputedAtom<T = unknown> extends ReadonlyAtom<T> {
   readonly isPending: boolean;
   /** true if the computation has successfully completed and has a value. */
   readonly isResolved: boolean;
+  /** Accumulated errors from self and all dependencies (immutable). */
+  readonly errors: readonly Error[];
+  /** true if no errors in self or dependencies (inverse of hasError). */
+  readonly isValid: boolean;
   /** Manually invalidates the cached value, forcing recomputation on next access. */
   invalidate(): void;
   /** Disposed of the computed atom and its subscriptions. */

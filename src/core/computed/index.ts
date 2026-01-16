@@ -1,10 +1,10 @@
-import { AsyncState, COMPUTED_STATE_FLAGS, SMI_MAX } from '@/constants';
+import { AsyncState, COMPUTED_STATE_FLAGS, EMPTY_ERROR_ARRAY, SMI_MAX } from '@/constants';
 import { ReactiveDependency } from '@/core/base/reactive-dependency';
 import { syncDependencies } from '@/core/utils/dep-tracking';
 import type { AtomError } from '@/errors/errors';
 import { ComputedError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
-import { nextEpoch } from '@/internal/epoch';
+import { currentEpoch, nextEpoch } from '@/internal/epoch';
 import {
   depArrayPool,
   EMPTY_DEPS,
@@ -32,6 +32,14 @@ import {
   isPromise,
 } from '@/utils/type-guards';
 
+// AsyncState mapping
+const ASYNC_STATE_MASK =
+  COMPUTED_STATE_FLAGS.RESOLVED | COMPUTED_STATE_FLAGS.PENDING | COMPUTED_STATE_FLAGS.REJECTED;
+const ASYNC_STATE_LOOKUP = Array(ASYNC_STATE_MASK + 1).fill(AsyncState.IDLE);
+ASYNC_STATE_LOOKUP[COMPUTED_STATE_FLAGS.RESOLVED] = AsyncState.RESOLVED;
+ASYNC_STATE_LOOKUP[COMPUTED_STATE_FLAGS.PENDING] = AsyncState.PENDING;
+ASYNC_STATE_LOOKUP[COMPUTED_STATE_FLAGS.REJECTED] = AsyncState.REJECTED;
+
 type TrackableListener = (() => void) & {
   addDependency: (dep: Dependency) => void;
 };
@@ -57,6 +65,10 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   private _dependencies: Dependency[];
   private _dependencyVersions: number[];
   private _unsubscribes: (() => void)[];
+
+  // Error propagation fields
+  private _cachedErrors: readonly Error[] | null = null;
+  private _errorCacheEpoch = -1;
 
   private readonly _notifyJob: () => void;
   private readonly _trackable: TrackableListener;
@@ -139,8 +151,10 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   }
 
   get value(): T {
-    const result = this._computeValue();
+    // Register tracking FIRST so this computed becomes a dependency
+    // even if _computeValue throws. This is critical for error propagation.
     this._registerTracking();
+    const result = this._computeValue();
     return result;
   }
 
@@ -155,7 +169,68 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
 
   get hasError(): boolean {
     this._registerTracking();
-    return this._isRejected();
+
+    // 1. Check own error state
+    if (this._isRejected()) {
+      return true;
+    }
+
+    // 2. Check dependency errors (early return)
+    for (let i = 0; i < this._dependencies.length; i++) {
+      const dep = this._dependencies[i];
+      if (dep && 'hasError' in dep && (dep as unknown as ComputedAtom<unknown>).hasError) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  get isValid(): boolean {
+    return !this.hasError;
+  }
+
+  get errors(): readonly Error[] {
+    this._registerTracking();
+
+    // Fast path: no errors
+    if (!this.hasError) {
+      return EMPTY_ERROR_ARRAY;
+    }
+
+    // Check epoch cache
+    const epoch = currentEpoch();
+    if (this._errorCacheEpoch === epoch && this._cachedErrors !== null) {
+      return this._cachedErrors;
+    }
+
+    // Collect errors (lazy) using Set for deduplication
+    const errorSet = new Set<Error>();
+
+    // Own error
+    if (this._error) {
+      errorSet.add(this._error);
+    }
+
+    // Dependency errors (recursive collection, deduplicated)
+    for (let i = 0; i < this._dependencies.length; i++) {
+      const dep = this._dependencies[i];
+      if (dep && 'errors' in dep) {
+        const depErrors = (dep as unknown as ComputedAtom<unknown>).errors;
+        for (let j = 0; j < depErrors.length; j++) {
+          const err = depErrors[j];
+          if (err) {
+            errorSet.add(err);
+          }
+        }
+      }
+    }
+
+    // Cache and freeze
+    this._cachedErrors = Object.freeze([...errorSet]);
+    this._errorCacheEpoch = epoch;
+
+    return this._cachedErrors;
   }
 
   get lastError(): Error | null {
@@ -179,6 +254,9 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       versionArrayPool.release(this._dependencyVersions);
       this._dependencyVersions = EMPTY_VERSIONS;
     }
+    // Invalidate error cache
+    this._errorCacheEpoch = -1;
+    this._cachedErrors = null;
   }
 
   dispose(): void {
@@ -207,6 +285,9 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._error = null;
     this._value = undefined as T;
     this._promiseId = (this._promiseId + 1) % this.MAX_PROMISE_ID;
+    // Clear error cache
+    this._cachedErrors = null;
+    this._errorCacheEpoch = -1;
   }
 
   // State flag operations
@@ -285,11 +366,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   }
 
   private _getAsyncState(): AsyncStateType {
-    // Hot path first: RESOLVED is the most common state after initial computation
-    if (this._isResolved()) return AsyncState.RESOLVED;
-    if (this._isPending()) return AsyncState.PENDING;
-    if (this._isRejected()) return AsyncState.REJECTED;
-    return AsyncState.IDLE;
+    return ASYNC_STATE_LOOKUP[this.flags & ASYNC_STATE_MASK];
   }
 
   private _getFlagsAsString(): string {
@@ -327,18 +404,19 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     try {
       const result = trackingContext.run(this._trackable, this._fn);
 
-      if (isPromise(result)) {
-        this._commitDependencies(context);
-        committed = true;
-        this._handleAsyncComputation(result);
-      } else {
-        this._commitDependencies(context);
-        committed = true;
-        this._handleSyncResult(result);
-      }
-    } catch (err) {
       this._commitDependencies(context);
       committed = true;
+
+      isPromise(result) ? this._handleAsyncComputation(result) : this._handleSyncResult(result);
+    } catch (err) {
+      if (!committed) {
+        try {
+          this._commitDependencies(context);
+          committed = true;
+        } catch (commitErr) {
+          this._handleComputationError(commitErr);
+        }
+      }
       this._handleComputationError(err);
     } finally {
       this._cleanupContext(context, committed);
@@ -417,20 +495,22 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
 
   private _handleSyncResult(result: T): void {
     const valueChanged = !this._isResolved() || !this._equal(this._value, result);
-    if (valueChanged) {
-      this.version = (this.version + 1) & SMI_MAX;
-    }
+    this.version = (this.version + Number(valueChanged)) & SMI_MAX;
 
     this._value = result;
     this._clearDirty();
     this._setResolved();
     this._error = null;
     this._setRecomputing(false);
+    // Clear error cache on successful computation (recovery)
+    this._cachedErrors = null;
+    this._errorCacheEpoch = -1;
   }
 
   private _handleAsyncComputation(promise: Promise<T>): void {
     this._setPending();
     this._clearDirty();
+    this._notifyJob();
 
     this._promiseId = this._promiseId >= this.MAX_PROMISE_ID ? 1 : this._promiseId + 1;
     const promiseId = this._promiseId;
@@ -448,15 +528,16 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
 
   private _handleAsyncResolution(resolvedValue: T): void {
     const valueChanged = !this._isResolved() || !this._equal(this._value, resolvedValue);
-    if (valueChanged) {
-      this.version = (this.version + 1) & SMI_MAX;
-    }
+    this.version = (this.version + Number(valueChanged)) & SMI_MAX;
 
     this._value = resolvedValue;
     this._clearDirty();
     this._setResolved();
     this._error = null;
     this._setRecomputing(false);
+    // Clear error cache on successful computation (recovery)
+    this._cachedErrors = null;
+    this._errorCacheEpoch = -1;
 
     // Notify subscribers when async computation resolves
     this._notifyJob();
@@ -464,6 +545,10 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
 
   private _handleAsyncRejection(err: unknown): void {
     const error = wrapError(err, ComputedError, ERROR_MESSAGES.COMPUTED_ASYNC_COMPUTATION_FAILED);
+
+    // Increment version so effects detect the state change (pending -> rejected)
+    const stateChanged = !this._isRejected();
+    this.version = (this.version + Number(stateChanged)) & SMI_MAX;
 
     this._error = error;
     this._setRejected();
@@ -478,7 +563,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       }
     }
 
-    this._notifySubscribers(undefined, undefined);
+    this._notifyJob();
   }
 
   private _handleComputationError(err: unknown): never {
