@@ -201,8 +201,6 @@ describe('Computed - Extra Coverage', () => {
     );
   });
 
-
-
   it('covers cached array reuse optimization in prepareComputationContext', () => {
     // Strategy:
     // 1. Create a computed with many dependencies to grow a pooled array.
