@@ -164,7 +164,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
 
   get state(): AsyncStateType {
     this._registerTracking();
-    
+
     // Trigger recomputation if dirty to ensure state is fresh
     if (this._isDirty() && !this._isRecomputing()) {
       try {
@@ -173,7 +173,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
         // Errors are captured in _handleComputationError, state is now rejected
       }
     }
-    
+
     return this._getAsyncState();
   }
 
@@ -602,7 +602,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     // In a tracking context (inside another computed), always throw
     // to propagate errors through the chain.
     const isInTrackingContext = trackingContext.getCurrent() !== null;
-    
+
     if (isInTrackingContext) {
       // Propagate error to downstream computeds
       if (this._error) {
@@ -610,7 +610,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       }
       throw new ComputedError(ERROR_MESSAGES.COMPUTED_COMPUTATION_FAILED);
     }
-    
+
     // Outside tracking context (effects, UI): use recoverable behavior
     if (this._error?.recoverable && this._hasDefaultValue) {
       return this._defaultValue;
