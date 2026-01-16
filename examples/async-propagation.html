@@ -3,33 +3,34 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Async Propagation & Error Handling | atom-effect</title>
+    <title>Async Propagation | No More Callback Hell</title>
     <script src="../dist/atom-effect.min.js"></script>
     <style>
       :root {
-        /* Modern Minimalist Dark Theme */
-        --bg-body: #0f172a;       /* Slate 950 */
-        --bg-card: #1e293b;       /* Slate 800 */
-        --bg-input: #0f172a;      /* Slate 950 */
+        --bg-body: #0a0a0f;
+        --bg-card: #12121a;
+        --bg-code: #0d0d12;
+        --bg-input: #0f0f14;
         
-        --border-subtle: #334155; /* Slate 700 */
-        --border-focus: #3b82f6;  /* Blue 500 */
+        --border-subtle: #1f1f2e;
+        --border-focus: #6366f1;
         
-        --text-primary: #f8fafc;  /* Slate 50 */
-        --text-secondary: #94a3b8; /* Slate 400 */
-        --text-tertiary: #64748b; /* Slate 500 */
+        --text-primary: #f0f0f5;
+        --text-secondary: #8b8b9e;
+        --text-tertiary: #5c5c70;
         
-        --accent-primary: #3b82f6; /* Blue 500 */
-        --accent-hover: #2563eb;   /* Blue 600 */
+        --accent-primary: #6366f1;
+        --accent-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
         
-        --status-idle: #64748b;    /* Slate 500 */
-        --status-pending: #f59e0b; /* Amber 500 */
-        --status-resolved: #10b981;/* Emerald 500 */
-        --status-rejected: #ef4444;/* Red 500 */
+        --status-idle: #5c5c70;
+        --status-pending: #eab308;
+        --status-resolved: #22c55e;
+        --status-rejected: #ef4444;
         
-        --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        --callback-hell: #ef4444;
+        --declarative: #22c55e;
 
-        --font-base: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        --font-base: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
       }
 
@@ -40,46 +41,221 @@
         background: var(--bg-body);
         color: var(--text-primary);
         min-height: 100vh;
-        padding: 4rem 2rem;
-        line-height: 1.5;
+        padding: 3rem 1.5rem;
+        line-height: 1.6;
       }
 
-      .container { max-width: 900px; margin: 0 auto; }
+      .container { max-width: 1100px; margin: 0 auto; }
 
-      header { margin-bottom: 3rem; text-align: center; }
-      h1 { font-size: 2rem; font-weight: 800; margin-bottom: 0.5rem; letter-spacing: -0.025em; }
-      .subtitle { color: var(--text-secondary); max-width: 600px; margin: 0 auto; }
-
-      .card {
-        background: var(--bg-card);
-        border-radius: 12px;
-        padding: 2rem;
-        margin-bottom: 2rem;
-        border: 1px solid var(--border-subtle);
-        box-shadow: var(--shadow-card);
+      /* Header */
+      header { 
+        text-align: center; 
+        margin-bottom: 3rem;
+        padding-bottom: 2rem;
+        border-bottom: 1px solid var(--border-subtle);
       }
-
-      .card-title {
-        font-size: 1.125rem;
+      
+      .badge {
+        display: inline-block;
+        background: var(--accent-gradient);
+        color: white;
+        font-size: 0.75rem;
         font-weight: 600;
+        padding: 0.25rem 0.75rem;
+        border-radius: 999px;
+        margin-bottom: 1rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      
+      h1 { 
+        font-size: 2.5rem; 
+        font-weight: 800; 
+        margin-bottom: 0.75rem; 
+        letter-spacing: -0.03em;
+        background: linear-gradient(to right, #f0f0f5, #8b8b9e);
+        background-clip: text;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+      
+      .subtitle { 
+        color: var(--text-secondary); 
+        font-size: 1.125rem;
+        max-width: 600px; 
+        margin: 0 auto; 
+      }
+
+      /* Section */
+      .section {
+        margin-bottom: 3rem;
+      }
+      
+      .section-title {
+        font-size: 1.25rem;
+        font-weight: 700;
         margin-bottom: 1.5rem;
         display: flex;
-        justify-content: space-between;
         align-items: center;
+        gap: 0.75rem;
+      }
+      
+      .section-title .icon {
+        font-size: 1.5rem;
       }
 
-      /* Simulation Controls */
-      .controls {
+      /* Code Comparison */
+      .comparison-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.5rem;
+      }
+      
+      @media (max-width: 900px) {
+        .comparison-grid { grid-template-columns: 1fr; }
+      }
+
+      .code-card {
+        background: var(--bg-card);
+        border-radius: 16px;
+        overflow: hidden;
+        border: 1px solid var(--border-subtle);
+      }
+      
+      .code-header {
+        padding: 1rem 1.25rem;
         display: flex;
-        gap: 1rem;
-        justify-content: center;
-        margin-bottom: 2rem;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid var(--border-subtle);
+      }
+      
+      .code-header h3 {
+        font-size: 0.9375rem;
+        font-weight: 600;
+      }
+      
+      .code-tag {
+        font-size: 0.6875rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        font-weight: 600;
+        text-transform: uppercase;
+      }
+      
+      .code-tag.bad {
+        background: rgba(239, 68, 68, 0.15);
+        color: var(--callback-hell);
+      }
+      
+      .code-tag.good {
+        background: rgba(34, 197, 94, 0.15);
+        color: var(--declarative);
+      }
+
+      .code-body {
+        padding: 1.25rem;
+        font-family: var(--font-mono);
+        font-size: 0.8125rem;
+        line-height: 1.7;
+        overflow-x: auto;
+        background: var(--bg-code);
+      }
+      
+      .code-body pre {
+        margin: 0;
+        white-space: pre;
+      }
+
+      /* Syntax Highlighting */
+      .code-keyword { color: #c084fc; }
+      .code-fn { color: #60a5fa; }
+      .code-comment { color: #4a4a5e; font-style: italic; }
+      .code-str { color: #4ade80; }
+      .code-err { color: #f87171; }
+      .code-num { color: #fbbf24; }
+      .code-prop { color: #67e8f9; }
+      .indent { display: inline-block; }
+
+      /* Problems List */
+      .problems-list {
+        margin-top: 1rem;
+        padding: 1rem 1.25rem;
+        background: rgba(239, 68, 68, 0.05);
+        border-top: 1px solid rgba(239, 68, 68, 0.2);
+      }
+      
+      .problems-list li {
+        color: var(--text-secondary);
+        font-size: 0.8125rem;
+        margin-bottom: 0.5rem;
+        list-style: none;
+        display: flex;
+        align-items: flex-start;
+        gap: 0.5rem;
+      }
+      
+      .problems-list li::before {
+        content: '✗';
+        color: var(--callback-hell);
+        font-weight: bold;
+      }
+
+      /* Benefits List */
+      .benefits-list {
+        margin-top: 1rem;
+        padding: 1rem 1.25rem;
+        background: rgba(34, 197, 94, 0.05);
+        border-top: 1px solid rgba(34, 197, 94, 0.2);
+      }
+      
+      .benefits-list li {
+        color: var(--text-secondary);
+        font-size: 0.8125rem;
+        margin-bottom: 0.5rem;
+        list-style: none;
+        display: flex;
+        align-items: flex-start;
+        gap: 0.5rem;
+      }
+      
+      .benefits-list li::before {
+        content: '✓';
+        color: var(--declarative);
+        font-weight: bold;
+      }
+
+      /* Live Demo Card */
+      .demo-card {
+        background: var(--bg-card);
+        border-radius: 16px;
+        border: 1px solid var(--border-subtle);
+        overflow: hidden;
+      }
+      
+      .demo-header {
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid var(--border-subtle);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      
+      .demo-header h3 {
+        font-size: 1rem;
+        font-weight: 600;
+      }
+      
+      .demo-controls {
+        display: flex;
+        gap: 0.75rem;
       }
 
       .btn {
-        padding: 0.75rem 1.5rem;
+        padding: 0.5rem 1rem;
         border-radius: 8px;
         font-weight: 600;
+        font-size: 0.8125rem;
         cursor: pointer;
         transition: all 0.2s;
         border: 1px solid transparent;
@@ -87,320 +263,483 @@
       }
 
       .btn-success {
-        background: rgba(16, 185, 129, 0.1);
-        color: #34d399;
-        border-color: rgba(16, 185, 129, 0.2);
+        background: rgba(34, 197, 94, 0.1);
+        color: #4ade80;
+        border-color: rgba(34, 197, 94, 0.3);
       }
-      .btn-success:hover { background: rgba(16, 185, 129, 0.2); transform: translateY(-1px); }
+      .btn-success:hover { 
+        background: rgba(34, 197, 94, 0.2); 
+        transform: translateY(-1px); 
+      }
 
       .btn-fail {
         background: rgba(239, 68, 68, 0.1);
         color: #f87171;
-        border-color: rgba(239, 68, 68, 0.2);
+        border-color: rgba(239, 68, 68, 0.3);
       }
-      .btn-fail:hover { background: rgba(239, 68, 68, 0.2); transform: translateY(-1px); }
+      .btn-fail:hover { 
+        background: rgba(239, 68, 68, 0.2); 
+        transform: translateY(-1px); 
+      }
 
-      /* Flow Visualization */
-      .flow-diagram {
+      /* Pipeline Visualization */
+      .pipeline {
+        padding: 2rem 1.5rem;
         display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 1rem;
+        align-items: stretch;
+        gap: 0;
         position: relative;
-        padding: 1rem 0;
+        background: var(--bg-code);
       }
-
-      .flow-diagram::before {
-        content: '';
+      
+      .pipeline-stage {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+      }
+      
+      .pipeline-stage:not(:last-child)::after {
+        content: '→';
         position: absolute;
-        top: 2rem;
-        left: 0;
-        right: 0;
-        height: 2px;
-        background: var(--border-subtle);
-        z-index: 0;
-        margin: 0 4rem;
+        right: -0.75rem;
+        top: 2.5rem;
+        font-size: 1.25rem;
+        color: var(--border-subtle);
+        z-index: 2;
       }
+      
+      .pipeline-stage.active::after { color: var(--status-pending); }
+      .pipeline-stage.resolved::after { color: var(--status-resolved); }
+      .pipeline-stage.rejected::after { color: var(--status-rejected); }
 
-      .step-node {
-        position: relative;
-        z-index: 1;
+      .stage-card {
         background: var(--bg-card);
         border: 1px solid var(--border-subtle);
         border-radius: 12px;
-        padding: 1.25rem;
-        width: 30%;
+        padding: 1rem;
+        margin: 0 0.5rem;
         transition: all 0.3s ease;
+        flex: 1;
         display: flex;
         flex-direction: column;
-        gap: 0.75rem;
       }
-
-      .step-node.active { border-color: var(--accent-primary); box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2); }
-      .step-node.error { border-color: var(--status-rejected); }
-
-      .step-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem; }
-      .step-title { font-weight: 600; font-size: 0.9375rem; }
       
-      .status-badge {
-        font-size: 0.75rem;
-        padding: 0.125rem 0.5rem;
-        border-radius: 999px;
-        font-weight: 500;
-        text-transform: uppercase;
-        background: var(--bg-body);
-        border: 1px solid var(--border-subtle);
+      .stage-card.active { 
+        border-color: var(--status-pending); 
+        box-shadow: 0 0 20px rgba(234, 179, 8, 0.1);
+      }
+      
+      .stage-card.resolved { 
+        border-color: var(--status-resolved);
+      }
+      
+      .stage-card.rejected { 
+        border-color: var(--status-rejected);
+        background: rgba(239, 68, 68, 0.05);
       }
 
-      .status-idle { color: var(--status-idle); }
-      .status-pending { color: var(--status-pending); border-color: var(--status-pending); background: rgba(245, 158, 11, 0.1); }
-      .status-resolved { color: var(--status-resolved); border-color: var(--status-resolved); background: rgba(16, 185, 129, 0.1); }
-      .status-rejected { color: var(--status-rejected); border-color: var(--status-rejected); background: rgba(239, 68, 68, 0.1); }
+      .stage-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.75rem;
+      }
+      
+      .stage-name {
+        font-weight: 600;
+        font-size: 0.875rem;
+        color: var(--text-primary);
+      }
+      
+      .stage-badge {
+        font-size: 0.625rem;
+        padding: 0.125rem 0.375rem;
+        border-radius: 4px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
+      
+      .stage-badge.idle { background: var(--bg-body); color: var(--status-idle); }
+      .stage-badge.pending { background: rgba(234, 179, 8, 0.15); color: var(--status-pending); }
+      .stage-badge.resolved { background: rgba(34, 197, 94, 0.15); color: var(--status-resolved); }
+      .stage-badge.rejected { background: rgba(239, 68, 68, 0.15); color: var(--status-rejected); }
 
-      .step-value {
+      .stage-desc {
+        font-size: 0.75rem;
+        color: var(--text-tertiary);
+        margin-bottom: 0.75rem;
+      }
+
+      .stage-output {
+        margin-top: auto;
         font-family: var(--font-mono);
-        font-size: 0.8125rem;
-        color: var(--text-secondary);
-        background: rgba(0,0,0,0.2);
-        padding: 0.5rem;
+        font-size: 0.75rem;
+        padding: 0.625rem;
+        background: var(--bg-body);
         border-radius: 6px;
+        color: var(--text-secondary);
         min-height: 2.5rem;
         display: flex;
         align-items: center;
         word-break: break-all;
       }
+      
+      .stage-output.error {
+        color: var(--status-rejected);
+      }
 
       .spinner {
-        width: 12px; height: 12px;
-        border: 2px solid currentColor; border-top-color: transparent;
-        border-radius: 50%; animation: spin 0.8s linear infinite;
-        margin-right: 0.5rem; display: inline-block;
+        width: 10px; height: 10px;
+        border: 2px solid currentColor; 
+        border-top-color: transparent;
+        border-radius: 50%; 
+        animation: spin 0.7s linear infinite;
+        margin-right: 0.5rem;
+        display: inline-block;
       }
+      
       @keyframes spin { to { transform: rotate(360deg); } }
 
-      /* Code Panel */
-      .code-panel {
-        background: #0f172a;
-        border-radius: 8px;
-        padding: 1.5rem;
-        font-family: var(--font-mono);
-        font-size: 0.875rem;
-        line-height: 1.6;
-        border: 1px solid var(--border-subtle);
+      /* Key Insight */
+      .insight-box {
+        margin-top: 1.5rem;
+        padding: 1.25rem 1.5rem;
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+        border: 1px solid rgba(99, 102, 241, 0.2);
+        border-radius: 12px;
       }
-      .code-keyword { color: #c084fc; }
-      .code-fn { color: #60a5fa; }
-      .code-comment { color: #64748b; font-style: italic; }
-      .code-str { color: #34d399; }
+      
+      .insight-title {
+        font-size: 0.875rem;
+        font-weight: 700;
+        color: var(--accent-primary);
+        margin-bottom: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+      
+      .insight-text {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        line-height: 1.6;
+      }
+      
+      .insight-text code {
+        background: rgba(0,0,0,0.3);
+        padding: 0.125rem 0.375rem;
+        border-radius: 4px;
+        font-family: var(--font-mono);
+        font-size: 0.8125rem;
+        color: var(--text-primary);
+      }
+
+      /* Footer */
+      footer {
+        margin-top: 3rem;
+        padding-top: 2rem;
+        border-top: 1px solid var(--border-subtle);
+        text-align: center;
+        color: var(--text-tertiary);
+        font-size: 0.875rem;
+      }
+      
+      footer a {
+        color: var(--accent-primary);
+        text-decoration: none;
+      }
+      
+      footer a:hover { text-decoration: underline; }
     </style>
   </head>
   <body>
     <div class="container">
       <header>
-        <h1>Async Propagation Demo</h1>
-        <p class="subtitle">Visualizing declarative async chains without callback hell</p>
+        <span class="badge">Paradigm Shift</span>
+        <h1>No More Callback Hell</h1>
+        <p class="subtitle">See how declarative async chains eliminate nested callbacks and manual error handling</p>
       </header>
 
-      <div class="card">
-        <h2 class="card-title">Live Simulation</h2>
+      <!-- Before/After Comparison -->
+      <section class="section">
+        <h2 class="section-title">
+          <span class="icon">⚡</span>
+          The Problem vs The Solution
+        </h2>
         
-        <div class="controls">
-          <button id="btnSuccess" class="btn btn-success">▶ Run Success Chain</button>
-          <button id="btnFail" class="btn btn-fail">⚠️ Run Chain with Failure</button>
-        </div>
-
-        <div class="flow-diagram">
-          <!-- Step 1 -->
-          <div id="card1" class="step-node">
-            <div class="step-header">
-              <span class="step-title">Step 1</span>
-              <span id="badge1" class="status-badge status-idle">Idle</span>
+        <div class="comparison-grid">
+          <!-- BEFORE: Callback Hell -->
+          <div class="code-card">
+            <div class="code-header">
+              <h3>Traditional Approach</h3>
+              <span class="code-tag bad">Callback Hell</span>
             </div>
-            <div class="step-content">Fetching user data...</div>
-            <div id="val1" class="step-value">-</div>
+            <div class="code-body">
+<pre><span class="code-fn">fetchUser</span>(userId, (err, user) => {
+  <span class="code-keyword">if</span> (err) {
+    <span class="code-fn">showError</span>(<span class="code-str">"User fetch failed"</span>);
+    <span class="code-keyword">return</span>;
+  }
+  
+  <span class="code-fn">fetchRepos</span>(user.login, (err, repos) => {
+    <span class="code-keyword">if</span> (err) {
+      <span class="code-fn">showError</span>(<span class="code-str">"Repos fetch failed"</span>);
+      <span class="code-keyword">return</span>;
+    }
+    
+    <span class="code-fn">calculateStats</span>(repos, (err, stats) => {
+      <span class="code-keyword">if</span> (err) {
+        <span class="code-fn">showError</span>(<span class="code-str">"Stats calc failed"</span>);
+        <span class="code-keyword">return</span>;
+      }
+      
+      <span class="code-fn">renderDashboard</span>(user, stats);
+    });
+  });
+});</pre>
+            </div>
+            <ul class="problems-list">
+              <li>Deeply nested callbacks ("pyramid of doom")</li>
+              <li>Error handling repeated at every level</li>
+              <li>Hard to understand control flow</li>
+              <li>Re-running the chain requires rewriting logic</li>
+            </ul>
           </div>
 
-          <!-- Step 2 -->
-          <div id="card2" class="step-node">
-            <div class="step-header">
-              <span class="step-title">Step 2</span>
-              <span id="badge2" class="status-badge status-idle">Idle</span>
+          <!-- AFTER: Declarative -->
+          <div class="code-card">
+            <div class="code-header">
+              <h3>atom-effect Approach</h3>
+              <span class="code-tag good">Declarative</span>
             </div>
-            <div class="step-content">Processing data...</div>
-            <div id="val2" class="step-value">-</div>
-          </div>
+            <div class="code-body">
+<pre><span class="code-keyword">const</span> user = <span class="code-fn">computed</span>(<span class="code-keyword">async</span> () => {
+  <span class="code-keyword">return await</span> <span class="code-fn">fetchUser</span>(userId.value);
+}, { defaultValue: <span class="code-keyword">null</span> });
 
-          <!-- Step 3 -->
-          <div id="card3" class="step-node">
-            <div class="step-header">
-              <span class="step-title">Step 3</span>
-              <span id="badge3" class="status-badge status-idle">Idle</span>
+<span class="code-keyword">const</span> repos = <span class="code-fn">computed</span>(<span class="code-keyword">async</span> () => {
+  <span class="code-comment">// ✨ Auto-throws if user.value has error</span>
+  <span class="code-keyword">return await</span> <span class="code-fn">fetchRepos</span>(user.value.login);
+}, { defaultValue: [] });
+
+<span class="code-keyword">const</span> stats = <span class="code-fn">computed</span>(<span class="code-keyword">async</span> () => {
+  <span class="code-comment">// ✨ Auto-throws if repos.value has error</span>
+  <span class="code-comment">// → No manual error check needed!</span>
+  <span class="code-keyword">return</span> <span class="code-fn">calculateStats</span>(repos.value);
+}, { defaultValue: <span class="code-keyword">null</span> });</pre>
             </div>
-            <div class="step-content">Generating report...</div>
-            <div id="val3" class="step-value">-</div>
+            <ul class="benefits-list">
+              <li>Flat, readable structure</li>
+              <li>Zero error handling boilerplate</li>
+              <li>Automatic dependency tracking</li>
+              <li>Built-in loading states (<code>state</code>, <code>isPending</code>)</li>
+            </ul>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div class="card">
-        <h2 class="card-title">Declarative Code Structure</h2>
-        <div class="code-panel">
-<span class="code-comment">// 1. First Async Step</span>
-<span class="code-keyword">const</span> step1 = <span class="code-fn">computed</span>(<span class="code-keyword">async</span> () => {
-    <span class="code-keyword">await</span> <span class="code-fn">delay</span>(1000);
-    <span class="code-keyword">return</span> <span class="code-str">"User Data Found"</span>;
-});
-
-<span class="code-comment">// 2. Second Step (Depends on 1, might fail)</span>
-<span class="code-keyword">const</span> step2 = <span class="code-fn">computed</span>(<span class="code-keyword">async</span> () => {
-    <span class="code-keyword">const</span> data = step1.value; <span class="code-comment">// Auto-waits for step1!</span>
-    
-    <span class="code-keyword">if</span> (shouldFail.value) <span class="code-keyword">throw new</span> <span class="code-fn">Error</span>(<span class="code-str">"Processing Failed"</span>);
-    
-    <span class="code-keyword">await</span> <span class="code-fn">delay</span>(1000);
-    <span class="code-keyword">return</span> data + <span class="code-str">" + Processed"</span>;
-});
-
-<span class="code-comment">// 3. Final Step (Depends on 2)</span>
-<span class="code-keyword">const</span> step3 = <span class="code-fn">computed</span>(<span class="code-keyword">async</span> () => {
-    <span class="code-comment">// If step2 fails, this NEVER runs.</span>
-    <span class="code-comment">// Propagation stops automatically. No error handling logic needed here!</span>
-    <span class="code-keyword">const</span> result = step2.value; 
-    
-    <span class="code-keyword">await</span> <span class="code-fn">delay</span>(1000);
-    <span class="code-keyword">return</span> <span class="code-str">"Report: "</span> + result;
-});
+      <!-- Live Demo -->
+      <section class="section">
+        <h2 class="section-title">
+          <span class="icon">🎮</span>
+          Live Demo: GitHub Stats Pipeline
+        </h2>
+        
+        <div class="demo-card">
+          <div class="demo-header">
+            <h3>Async Pipeline Visualization</h3>
+            <div class="demo-controls">
+              <button id="btnSuccess" class="btn btn-success">▶ Run Pipeline</button>
+              <button id="btnFail" class="btn btn-fail">💥 Simulate API Error</button>
+            </div>
+          </div>
+          
+          <div class="pipeline">
+            <div id="stage1" class="pipeline-stage">
+              <div class="stage-card">
+                <div class="stage-header">
+                  <span class="stage-name">1. Fetch User</span>
+                  <span id="badge1" class="stage-badge idle">Idle</span>
+                </div>
+                <div class="stage-desc">GET /users/:username</div>
+                <div id="output1" class="stage-output">—</div>
+              </div>
+            </div>
+            
+            <div id="stage2" class="pipeline-stage">
+              <div class="stage-card">
+                <div class="stage-header">
+                  <span class="stage-name">2. Fetch Repos</span>
+                  <span id="badge2" class="stage-badge idle">Idle</span>
+                </div>
+                <div class="stage-desc">GET /users/:login/repos</div>
+                <div id="output2" class="stage-output">—</div>
+              </div>
+            </div>
+            
+            <div id="stage3" class="pipeline-stage">
+              <div class="stage-card">
+                <div class="stage-header">
+                  <span class="stage-name">3. Calculate Stats</span>
+                  <span id="badge3" class="stage-badge idle">Idle</span>
+                </div>
+                <div class="stage-desc">Aggregate star count</div>
+                <div id="output3" class="stage-output">—</div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="insight-box">
+            <div class="insight-title">
+              💡 Key Insight: True Automatic Propagation
+            </div>
+            <p class="insight-text">
+              When <strong>Stage 2</strong> fails, <strong>Stage 3 never even executes.</strong><br><br>
+              Accessing <code>repos.value</code> when upstream is in error state <strong>automatically throws</strong>,
+              causing downstream computeds to also become REJECTED.<br><br>
+              <strong>No try-catch or if(hasError) checks needed in your business logic.</strong>
+            </p>
+          </div>
         </div>
-      </div>
+      </section>
+
+      <footer>
+        <p>
+          Built with <a href="https://github.com/but212/atom-effect">atom-effect</a> — 
+          Fine-grained reactivity for async-first applications
+        </p>
+      </footer>
     </div>
 
     <script>
       const { atom, computed, effect, AsyncState } = AtomEffect;
 
-      // --- Helper ---
+      // --- Helpers ---
       const delay = (ms) => new Promise(r => setTimeout(r, ms));
-
-      // --- State ---
-      const runId = atom(0);        // Triggers re-run
-      const failMode = atom(false); // Controls failure scenario
-
-      // --- Async Chain ---
       
-      // Step 1: Initial Fetch
-      const step1 = computed(async () => {
-        // Dependencies
-        const id = runId.value;
-        if (id === 0) return null; // Initial state
-
-        await delay(1000); // Simulate network
-        return "User(ID: 123)";
-      }, { defaultValue: null });
-
-      // Step 2: Processing (May Fail)
-      const step2 = computed(async () => {
-        const data = step1.value; // Dependency on Step 1
-        if (!data) return null;
-
-        const willFail = failMode.value; // Dependency on fail flag
-
-        await delay(1000); 
-
-        if (willFail) {
-          throw new Error("Critical Failure in Step 2");
-        }
-
-        return `${data} -> Verified`;
-      }, { defaultValue: null });
-
-      // Step 3: Final Report
-      const step3 = computed(async () => {
-        // Explicitly check upstream error to demonstrate propagation behavior
-        // (Since step2 has a defaultValue, standard access would return that value.
-        //  To simulate "Stop Propagation" visual, we re-throw if upstream failed)
-        if (step2.hasError) throw step2.lastError;
-
-        const processed = step2.value; // Dependency on Step 2
-        if (!processed) return null;
-
-        // Note: This logic is safe. If Step 2 fails (Rejects), 
-        // access to step2.value throws, and THIS computed also rejects automatically.
-        // We don't need manual try/catch to bubble the error.
-
-        await delay(1000);
-        return `Report[${processed}]`;
-      }, { defaultValue: null });
-
-
-      // --- Visualizer Logic ---
-      
-      // Define UI mapping
-      const steps = [
-        { atom: step1, id: '1' },
-        { atom: step2, id: '2' },
-        { atom: step3, id: '3' }
+      // Simulated API responses
+      const mockUser = { login: 'octocat', name: 'The Octocat', id: 583231 };
+      const mockRepos = [
+        { name: 'Hello-World', stargazers_count: 2500 },
+        { name: 'Spoon-Knife', stargazers_count: 12000 },
+        { name: 'octocat.github.io', stargazers_count: 340 }
       ];
 
-      // Create an effect for each step to update its card
-      steps.forEach(({ atom, id }) => {
-        const els = {
-          card: document.getElementById(`card${id}`),
-          badge: document.getElementById(`badge${id}`),
-          val: document.getElementById(`val${id}`)
-        };
+      // --- Reactive State ---
+      const runId = atom(0);
+      const shouldFail = atom(false);
+
+      // --- Async Pipeline (Pure Declarative!) ---
+      
+      // Stage 1: Fetch User
+      const user = computed(async () => {
+        const id = runId.value;
+        if (id === 0) return null;
+        
+        await delay(800); // Simulate network latency
+        return mockUser;
+      }, { defaultValue: null });
+
+      // Stage 2: Fetch Repos (depends on user, may fail)
+      const repos = computed(async () => {
+        const userData = user.value;
+        if (!userData) return null;
+        
+        await delay(800);
+        
+        // Simulate API failure
+        if (shouldFail.value) {
+          throw new Error('API Rate Limit Exceeded');
+        }
+        
+        return mockRepos;
+      }, { defaultValue: null });
+
+      const stats = computed(async () => {
+        const repoList = repos.value;
+        if (!repoList) return null;
+        
+        await delay(600);
+        
+        const totalStars = repoList.reduce((sum, r) => sum + r.stargazers_count, 0);
+        const avgStars = Math.round(totalStars / repoList.length);
+        
+        return { totalStars, avgStars, repoCount: repoList.length };
+      }, { defaultValue: null });
+
+
+      // --- UI Bindings ---
+      const stages = [
+        { computed: user,  id: '1', format: (v) => v ? `${v.name} (@${v.login})` : '—' },
+        { computed: repos, id: '2', format: (v) => v ? `${v.length} repositories loaded` : '—' },
+        { computed: stats, id: '3', format: (v) => v ? `⭐ ${v.totalStars.toLocaleString()} total (${v.repoCount} repos)` : '—' }
+      ];
+
+      stages.forEach(({ computed: c, id, format }) => {
+        const stageEl = document.getElementById(`stage${id}`);
+        const cardEl = stageEl.querySelector('.stage-card');
+        const badgeEl = document.getElementById(`badge${id}`);
+        const outputEl = document.getElementById(`output${id}`);
 
         effect(() => {
-          const state = atom.state;
-          const val = atom.value;
-          const err = atom.lastError;
+          const state = c.state;
+          const error = c.lastError;
+          
+          let value = null;
+          try { value = c.value; } catch {}
 
-          // Reset classes
-          els.badge.className = 'status-badge';
-          els.card.classList.remove('active', 'error');
+          stageEl.className = 'pipeline-stage';
+          cardEl.className = 'stage-card';
+          badgeEl.className = 'stage-badge';
+          outputEl.classList.remove('error');
 
-          // State visual logic
-          switch(state) {
+          switch (state) {
             case AsyncState.IDLE:
-              els.badge.classList.add('status-idle');
-              els.badge.textContent = 'Idle';
-              els.val.textContent = '-';
+              badgeEl.classList.add('idle');
+              badgeEl.textContent = 'Idle';
+              outputEl.textContent = '—';
               break;
               
             case AsyncState.PENDING:
-              els.badge.classList.add('status-pending');
-              els.badge.textContent = 'Pending';
-              els.card.classList.add('active');
-              els.val.innerHTML = '<div class="spinner"></div>Running...';
+              stageEl.classList.add('active');
+              cardEl.classList.add('active');
+              badgeEl.classList.add('pending');
+              badgeEl.textContent = 'Loading';
+              outputEl.innerHTML = '<span class="spinner"></span>Fetching...';
               break;
               
             case AsyncState.RESOLVED:
-              els.badge.classList.add('status-resolved');
-              els.badge.textContent = 'Resolved';
-              els.val.textContent = val !== null ? val : '-';
+              stageEl.classList.add('resolved');
+              cardEl.classList.add('resolved');
+              badgeEl.classList.add('resolved');
+              badgeEl.textContent = 'Done';
+              outputEl.textContent = format(value);
               break;
               
             case AsyncState.REJECTED:
-              els.badge.classList.add('status-rejected');
-              els.badge.textContent = 'Strings Cut'; // The "Propagation Stopped" metaphor
-              els.card.classList.add('error');
-              els.val.textContent = "⛔ " + (err?.message || "Error");
+              stageEl.classList.add('rejected');
+              cardEl.classList.add('rejected');
+              badgeEl.classList.add('rejected');
+              badgeEl.textContent = 'Failed';
+              outputEl.classList.add('error');
+              outputEl.textContent = `⛔ ${error?.message || 'Upstream failed'}`;
               break;
           }
         });
       });
 
-
       // --- Controls ---
-      
-      document.getElementById('btnSuccess').addEventListener('click', () => {
-        failMode.value = false;
-        runId.value++; // Increment to trigger chain
-      });
+      document.getElementById('btnSuccess').onclick = () => {
+        shouldFail.value = false;
+        runId.value++;
+      };
 
-      document.getElementById('btnFail').addEventListener('click', () => {
-        failMode.value = true;
-        runId.value++; // Increment to trigger chain
-      });
-
+      document.getElementById('btnFail').onclick = () => {
+        shouldFail.value = true;
+        runId.value++;
+      };
     </script>
   </body>
 </html>
