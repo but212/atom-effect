@@ -1,6 +1,14 @@
 import { AsyncState, COMPUTED_STATE_FLAGS } from '@/constants';
 import type { AsyncStateType } from '@/types';
 
+// AsyncState mapping
+const ASYNC_STATE_MASK =
+  COMPUTED_STATE_FLAGS.RESOLVED | COMPUTED_STATE_FLAGS.PENDING | COMPUTED_STATE_FLAGS.REJECTED;
+const ASYNC_STATE_LOOKUP = Array(ASYNC_STATE_MASK + 1).fill(AsyncState.IDLE);
+ASYNC_STATE_LOOKUP[COMPUTED_STATE_FLAGS.RESOLVED] = AsyncState.RESOLVED;
+ASYNC_STATE_LOOKUP[COMPUTED_STATE_FLAGS.PENDING] = AsyncState.PENDING;
+ASYNC_STATE_LOOKUP[COMPUTED_STATE_FLAGS.REJECTED] = AsyncState.REJECTED;
+
 /**
  * Bit flag manager for computed state.
  * Uses bitwise operations for O(1) state transitions and checks.
@@ -113,10 +121,7 @@ export class ComputedStateFlags {
 
   /** Returns the current async state as a string enum value */
   getAsyncState(): AsyncStateType {
-    if (this.isPending()) return AsyncState.PENDING;
-    if (this.isResolved()) return AsyncState.RESOLVED;
-    if (this.isRejected()) return AsyncState.REJECTED;
-    return AsyncState.IDLE;
+    return ASYNC_STATE_LOOKUP[this.stateFlags & ASYNC_STATE_MASK];
   }
 
   /**

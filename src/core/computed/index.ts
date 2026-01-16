@@ -32,6 +32,14 @@ import {
   isPromise,
 } from '@/utils/type-guards';
 
+// AsyncState mapping
+const ASYNC_STATE_MASK =
+  COMPUTED_STATE_FLAGS.RESOLVED | COMPUTED_STATE_FLAGS.PENDING | COMPUTED_STATE_FLAGS.REJECTED;
+const ASYNC_STATE_LOOKUP = Array(ASYNC_STATE_MASK + 1).fill(AsyncState.IDLE);
+ASYNC_STATE_LOOKUP[COMPUTED_STATE_FLAGS.RESOLVED] = AsyncState.RESOLVED;
+ASYNC_STATE_LOOKUP[COMPUTED_STATE_FLAGS.PENDING] = AsyncState.PENDING;
+ASYNC_STATE_LOOKUP[COMPUTED_STATE_FLAGS.REJECTED] = AsyncState.REJECTED;
+
 type TrackableListener = (() => void) & {
   addDependency: (dep: Dependency) => void;
 };
@@ -358,11 +366,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   }
 
   private _getAsyncState(): AsyncStateType {
-    // Hot path first: RESOLVED is the most common state after initial computation
-    if (this._isResolved()) return AsyncState.RESOLVED;
-    if (this._isPending()) return AsyncState.PENDING;
-    if (this._isRejected()) return AsyncState.REJECTED;
-    return AsyncState.IDLE;
+    return ASYNC_STATE_LOOKUP[this.flags & ASYNC_STATE_MASK];
   }
 
   private _getFlagsAsString(): string {
@@ -400,18 +404,17 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     try {
       const result = trackingContext.run(this._trackable, this._fn);
 
-      if (isPromise(result)) {
-        this._commitDependencies(context);
-        committed = true;
-        this._handleAsyncComputation(result);
-      } else {
-        this._commitDependencies(context);
-        committed = true;
-        this._handleSyncResult(result);
-      }
-    } catch (err) {
       this._commitDependencies(context);
       committed = true;
+
+      isPromise(result)
+        ? this._handleAsyncComputation(result)
+        : this._handleSyncResult(result);
+    } catch (err) {
+      if (!committed) {
+        this._commitDependencies(context);
+        committed = true;
+      }
       this._handleComputationError(err);
     } finally {
       this._cleanupContext(context, committed);
@@ -490,9 +493,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
 
   private _handleSyncResult(result: T): void {
     const valueChanged = !this._isResolved() || !this._equal(this._value, result);
-    if (valueChanged) {
-      this.version = (this.version + 1) & SMI_MAX;
-    }
+    this.version = (this.version + Number(valueChanged)) & SMI_MAX;
 
     this._value = result;
     this._clearDirty();
@@ -524,9 +525,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
 
   private _handleAsyncResolution(resolvedValue: T): void {
     const valueChanged = !this._isResolved() || !this._equal(this._value, resolvedValue);
-    if (valueChanged) {
-      this.version = (this.version + 1) & SMI_MAX;
-    }
+    this.version = (this.version + Number(valueChanged)) & SMI_MAX;
 
     this._value = resolvedValue;
     this._clearDirty();
