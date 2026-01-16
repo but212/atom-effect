@@ -1,10 +1,10 @@
-import { AsyncState, COMPUTED_STATE_FLAGS, SMI_MAX } from '@/constants';
+import { AsyncState, COMPUTED_STATE_FLAGS, EMPTY_ERROR_ARRAY, SMI_MAX } from '@/constants';
 import { ReactiveDependency } from '@/core/base/reactive-dependency';
 import { syncDependencies } from '@/core/utils/dep-tracking';
 import type { AtomError } from '@/errors/errors';
 import { ComputedError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
-import { nextEpoch } from '@/internal/epoch';
+import { currentEpoch, nextEpoch } from '@/internal/epoch';
 import {
   depArrayPool,
   EMPTY_DEPS,
@@ -57,6 +57,10 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   private _dependencies: Dependency[];
   private _dependencyVersions: number[];
   private _unsubscribes: (() => void)[];
+
+  // Error propagation fields
+  private _cachedErrors: readonly Error[] | null = null;
+  private _errorCacheEpoch = -1;
 
   private readonly _notifyJob: () => void;
   private readonly _trackable: TrackableListener;
@@ -139,8 +143,10 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   }
 
   get value(): T {
-    const result = this._computeValue();
+    // Register tracking FIRST so this computed becomes a dependency
+    // even if _computeValue throws. This is critical for error propagation.
     this._registerTracking();
+    const result = this._computeValue();
     return result;
   }
 
@@ -155,7 +161,68 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
 
   get hasError(): boolean {
     this._registerTracking();
-    return this._isRejected();
+
+    // 1. Check own error state
+    if (this._isRejected()) {
+      return true;
+    }
+
+    // 2. Check dependency errors (early return)
+    for (let i = 0; i < this._dependencies.length; i++) {
+      const dep = this._dependencies[i];
+      if (dep && 'hasError' in dep && (dep as unknown as ComputedAtom<unknown>).hasError) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  get isValid(): boolean {
+    return !this.hasError;
+  }
+
+  get errors(): readonly Error[] {
+    this._registerTracking();
+
+    // Fast path: no errors
+    if (!this.hasError) {
+      return EMPTY_ERROR_ARRAY;
+    }
+
+    // Check epoch cache
+    const epoch = currentEpoch();
+    if (this._errorCacheEpoch === epoch && this._cachedErrors !== null) {
+      return this._cachedErrors;
+    }
+
+    // Collect errors (lazy) using Set for deduplication
+    const errorSet = new Set<Error>();
+
+    // Own error
+    if (this._error) {
+      errorSet.add(this._error);
+    }
+
+    // Dependency errors (recursive collection, deduplicated)
+    for (let i = 0; i < this._dependencies.length; i++) {
+      const dep = this._dependencies[i];
+      if (dep && 'errors' in dep) {
+        const depErrors = (dep as unknown as ComputedAtom<unknown>).errors;
+        for (let j = 0; j < depErrors.length; j++) {
+          const err = depErrors[j];
+          if (err) {
+            errorSet.add(err);
+          }
+        }
+      }
+    }
+
+    // Cache and freeze
+    this._cachedErrors = Object.freeze([...errorSet]);
+    this._errorCacheEpoch = epoch;
+
+    return this._cachedErrors;
   }
 
   get lastError(): Error | null {
@@ -179,6 +246,9 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       versionArrayPool.release(this._dependencyVersions);
       this._dependencyVersions = EMPTY_VERSIONS;
     }
+    // Invalidate error cache
+    this._errorCacheEpoch = -1;
+    this._cachedErrors = null;
   }
 
   dispose(): void {
@@ -207,6 +277,9 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._error = null;
     this._value = undefined as T;
     this._promiseId = (this._promiseId + 1) % this.MAX_PROMISE_ID;
+    // Clear error cache
+    this._cachedErrors = null;
+    this._errorCacheEpoch = -1;
   }
 
   // State flag operations
@@ -426,6 +499,9 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._setResolved();
     this._error = null;
     this._setRecomputing(false);
+    // Clear error cache on successful computation (recovery)
+    this._cachedErrors = null;
+    this._errorCacheEpoch = -1;
   }
 
   private _handleAsyncComputation(promise: Promise<T>): void {
@@ -457,6 +533,9 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._setResolved();
     this._error = null;
     this._setRecomputing(false);
+    // Clear error cache on successful computation (recovery)
+    this._cachedErrors = null;
+    this._errorCacheEpoch = -1;
 
     // Notify subscribers when async computation resolves
     this._notifyJob();

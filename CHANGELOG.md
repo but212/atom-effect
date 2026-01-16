@@ -1,13 +1,32 @@
 # Changelog
 
-## [0.6.0]
+## [Unreleased]
+
+### Added
+
+- **Error Propagation**: Implemented automatic error propagation and accumulation through computed value chains.
+  - Added `errors: readonly Error[]` to `ComputedAtom`: Returns an immutable array of deduplicated errors from self and all dependencies.
+  - Added `isValid: boolean` to `ComputedAtom`: Convenience getter (inverse of `hasError`).
+  - Extended `hasError` to propagate error status from the dependency chain.
+
+### Changed
+
+- **Graceful Error Handling**: `ComputedAtom` now catches errors thrown by dependencies and wraps them in `ComputedError`.
+  - If a computed value has a `defaultValue` and encounters a recoverable error (default for `ComputedError`), it will return the `defaultValue` on subsequent accesses instead of re-throwing. This allows downstream dependencies to continue execution (graceful degradation).
+- **Error Deduplication**: The `errors` array uses a `Set` internally to ensure the same `Error` instance only appears once, preventing duplicate error reports in diamond dependency patterns.
 
 ### Fixed
+
+- **Dependency Tracking**: Fixed an issue where computed values throwing synchronous errors would not register themselves as dependencies in parent computations. Tracking is now registered before computation execution.
+
+## [0.6.0]
+
+### Fixed - 0.6.0
 
 - **Async Computed**: Fixed subscriber notification on async resolution.
   - `_handleAsyncResolution` now calls `_notifyJob()` after async computation completes, ensuring effects are re-executed when async computed values resolve.
 
-### Changed
+### Changed - 0.6.0
 
 - **Async Computed State Tracking**: All state getters now trigger dependency tracking.
   - `.state`, `.hasError`, `.lastError`, `.isPending`, `.isResolved` getters now call `_registerTracking()`.
@@ -15,7 +34,7 @@
   - This provides a more intuitive developer experience - no need to read `.value` first just to track state changes.
 - **CDN**: Updated CDN options to use `unpkg` and `jsdelivr` instead of `jsDelivr`.
 
-### Added
+### Added - 0.6.0
 
 - **Example**: Added `examples/async-computed-dom.html` - A standalone demo showcasing async computed as a first-class citizen with vanilla DOM manipulation.
   - Demonstrates GitHub user search with real-time status tracking.

@@ -100,3 +100,9 @@ export const SMI_MAX = 0x3fffffff;
  */
 export const IS_DEV =
   typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production';
+
+/**
+ * Empty frozen error array constant to avoid allocations
+ * Used for computed atoms with no errors (the common case)
+ */
+export const EMPTY_ERROR_ARRAY: readonly Error[] = Object.freeze([]);
