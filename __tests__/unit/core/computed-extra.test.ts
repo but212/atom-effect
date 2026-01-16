@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { atom } from '../../../src/core/atom';
 import { computed } from '../../../src/core/computed';
-import { PromiseIdManager } from '../../../src/core/computed/computed-async-handler';
+
 import { ERROR_MESSAGES } from '../../../src/errors/messages';
 import { trackingContext } from '../../../src/tracking';
 import { debug } from '../../../src/utils/debug';
@@ -201,17 +201,7 @@ describe('Computed - Extra Coverage', () => {
     );
   });
 
-  it('covers PromiseIdManager wrapping logic explicitly', () => {
-    const manager = new PromiseIdManager();
-    // biome-ignore lint/suspicious/noExplicitAny: Access private internals
-    const anyManager = manager as any;
-    // Set to MAX_PROMISE_ID (MAX_SAFE_INTEGER - 1)
-    anyManager.lastPromiseId = anyManager.MAX_PROMISE_ID;
 
-    // Should wrap to 0 then increment to 1
-    expect(manager.next()).toBe(1);
-    expect(manager.current()).toBe(1);
-  });
 
   it('covers cached array reuse optimization in prepareComputationContext', () => {
     // Strategy:

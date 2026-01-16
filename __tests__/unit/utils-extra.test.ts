@@ -1,11 +1,4 @@
 import { describe, expect, it, vi } from 'vitest';
-import { AsyncState } from '../../src/constants';
-import {
-  AsyncComputationHandler,
-  PromiseIdManager,
-} from '../../src/core/computed/computed-async-handler';
-import { ComputationErrorHandler } from '../../src/core/computed/computed-handlers';
-import { ComputedStateFlags } from '../../src/core/computed/computed-state-flags';
 import { syncDependencies } from '../../src/core/utils/dep-tracking';
 import { ArrayPool } from '../../src/utils/array-pool';
 import { debug } from '../../src/utils/debug';
@@ -25,54 +18,6 @@ describe('Utils & Handlers - Extra Coverage', () => {
       expect(unsubs.length).toBe(2);
       // But slots are empty
       expect(unsubs[0]).toBeUndefined();
-    });
-  });
-
-  describe('ComputationErrorHandler', () => {
-    it('catches and logs error thrown in onError callback', () => {
-      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-      const flags = new ComputedStateFlags();
-      const errorInCallback = new Error('Callback Error');
-
-      const handler = new ComputationErrorHandler(flags, (_err) => {
-        throw errorInCallback;
-      });
-
-      try {
-        handler.handle(new Error('Original Error'), () => {});
-      } catch (_e) {
-        // Expected to rethrow original error
-      }
-
-      expect(consoleError).toHaveBeenCalledWith(
-        expect.stringContaining('Error occurred during onError callback execution'),
-        errorInCallback
-      );
-      consoleError.mockRestore();
-    });
-  });
-
-  describe('ComputedStateFlags', () => {
-    it('setIdle clears other flags', () => {
-      const flags = new ComputedStateFlags();
-      flags.setPending();
-      flags.setResolved();
-
-      flags.setIdle();
-
-      expect(flags.isIdle()).toBe(true);
-      expect(flags.isPending()).toBe(false);
-      expect(flags.isResolved()).toBe(false);
-      expect(flags.isRejected()).toBe(false);
-    });
-
-    it('getAsyncState returns IDLE when no other state matches', () => {
-      const flags = new ComputedStateFlags();
-      // Manually clear all flags to simulate "none" (though usually IDLE or DIRTY is on)
-      // biome-ignore lint/suspicious/noExplicitAny: Access private
-      (flags as any).stateFlags = 0;
-
-      expect(flags.getAsyncState()).toBe(AsyncState.IDLE);
     });
   });
 
@@ -188,65 +133,6 @@ describe('Utils & Handlers - Extra Coverage', () => {
     });
   });
 
-  describe('AsyncComputationHandler', () => {
-    it('catches and logs error thrown in onError callback via handleRejection', () => {
-      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-      const flags = new ComputedStateFlags();
-      const manager = new PromiseIdManager();
-
-      const errorInCallback = new Error('Callback Error');
-      const handler = new AsyncComputationHandler(
-        flags,
-        manager,
-        (a, b) => a === b,
-        (_err) => {
-          throw errorInCallback;
-        },
-        () => {} // notify
-      );
-
-      // We need to call handleRejection, but it is private.
-      // However, handle() calls it on promise rejection.
-
-      // We can mock the Promise to reject immediately and wait.
-      const rejectedPromise = Promise.reject(new Error('Async Fail'));
-
-      // We need to catch the promise rejection to prevent unhandled rejection in test
-      rejectedPromise.catch(() => {});
-
-      handler.handle(
-        rejectedPromise,
-        () => 0,
-        () => {},
-        () => {}
-      );
-
-      // Wait for promise microtask
-      return new Promise<void>((resolve) => {
-        setTimeout(() => {
-          expect(consoleError).toHaveBeenCalledWith(
-            expect.stringContaining('Error occurred during onError callback execution'),
-            errorInCallback
-          );
-          consoleError.mockRestore();
-          resolve();
-        }, 0);
-      });
-    });
-  });
-
-  describe('ComputedStateFlags Extra', () => {
-    it('toString returns pipe-separated flags', () => {
-      const flags = new ComputedStateFlags();
-      flags.setPending();
-      expect(flags.toString()).toContain('DIRTY'); // Default
-      expect(flags.toString()).toContain('PENDING');
-
-      flags.setResolved();
-      expect(flags.toString()).toContain('RESOLVED');
-    });
-  });
-
   describe('SubscriberManager', () => {
     it('handles removals of non-existent subscribers', () => {
       const sm = new SubscriberManager<number>();
@@ -318,70 +204,6 @@ describe('Utils & Handlers - Extra Coverage', () => {
       expect(() => debug.checkCircular(emptyDep, {})).not.toThrow();
 
       debug.enabled = wasEnabled;
-    });
-  });
-
-  describe('AsyncComputationHandler logic', () => {
-    it('handleResolution does not notify if value is equal', () => {
-      const notify = vi.fn();
-      const handler = new AsyncComputationHandler(
-        new ComputedStateFlags(),
-        new PromiseIdManager(),
-        (a, b) => a === b,
-        null,
-        notify
-      );
-
-      const getValue = () => 1;
-      const setValue = vi.fn();
-      const setError = vi.fn();
-
-      // biome-ignore lint/suspicious/noExplicitAny: Access private internals
-      (handler as any).stateFlags.setResolved();
-      // biome-ignore lint/suspicious/noExplicitAny: Access private internals
-      (handler as any).stateFlags.clearDirty();
-
-      const p = Promise.resolve(1);
-      handler.handle(p, getValue, setValue, setError);
-      // biome-ignore lint/suspicious/noExplicitAny: Access private internals
-      (handler as any).stateFlags.setResolved();
-
-      return p.then(() => {
-        expect(notify).not.toHaveBeenCalled();
-      });
-    });
-
-    it('handleRejection ignores outdated promise', () => {
-      const handler = new AsyncComputationHandler(
-        new ComputedStateFlags(),
-        new PromiseIdManager(),
-        (a, b) => a === b,
-        null,
-        () => {}
-      );
-      // biome-ignore lint/suspicious/noExplicitAny: Access private
-      const manager = (handler as any).promiseIdManager;
-
-      const p = Promise.reject('fail');
-      p.catch(() => {});
-
-      const setError = vi.fn();
-      handler.handle(
-        p,
-        () => 0,
-        () => {},
-        setError
-      );
-
-      // Invalidate promise
-      manager.next();
-
-      return new Promise<void>((resolve) => {
-        setTimeout(() => {
-          expect(setError).not.toHaveBeenCalled();
-          resolve();
-        }, 0);
-      });
     });
   });
 });

@@ -29,6 +29,10 @@
   - Demonstrates how to build robust async pipelines (User -> Repos -> Stats) without manual error plumbing.
   - Visualizes automatic error propagation and "blocked" states.
 
+### Refactor
+
+- **Internal Cleanup**: Removed redundant `ComputedStateFlags` and separate handler classes (`SyncComputationHandler`, `AsyncComputationHandler`) as their logic is now efficiently inlined within `ComputedAtom`.
+
 ## [0.6.0]
 
 ### Fixed - 0.6.0
