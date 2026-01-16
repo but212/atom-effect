@@ -18,6 +18,16 @@
 ### Fixed
 
 - **Dependency Tracking**: Fixed an issue where computed values throwing synchronous errors would not register themselves as dependencies in parent computations. Tracking is now registered before computation execution.
+- **Async Error Propagation**: Fixed an issue where async computed values did not correctly propagate error states to downstream dependencies.
+  - Ensures `hasError` is correctly set on downstream computed values even when the upstream throws (blocked state).
+  - Enables true declarative error handling in async chains (no need for manual error checks).
+
+### Example
+
+- **Async Propagation**: Added `examples/async-propagation.html` - A comprehensive demo of declarative async pipeline handling.
+  - Showcases "Callback Hell vs Atom-Effect Declarative" comparison.
+  - Demonstrates how to build robust async pipelines (User -> Repos -> Stats) without manual error plumbing.
+  - Visualizes automatic error propagation and "blocked" states.
 
 ## [0.6.0]
 

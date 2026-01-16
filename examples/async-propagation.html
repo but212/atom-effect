@@ -520,19 +520,19 @@
 }, { defaultValue: <span class="code-keyword">null</span> });
 
 <span class="code-keyword">const</span> repos = <span class="code-fn">computed</span>(<span class="code-keyword">async</span> () => {
-  <span class="code-comment">// ✨ Auto-throws if user.value has error</span>
   <span class="code-keyword">return await</span> <span class="code-fn">fetchRepos</span>(user.value.login);
 }, { defaultValue: [] });
 
 <span class="code-keyword">const</span> stats = <span class="code-fn">computed</span>(<span class="code-keyword">async</span> () => {
-  <span class="code-comment">// ✨ Auto-throws if repos.value has error</span>
-  <span class="code-comment">// → No manual error check needed!</span>
   <span class="code-keyword">return</span> <span class="code-fn">calculateStats</span>(repos.value);
-}, { defaultValue: <span class="code-keyword">null</span> });</pre>
+}, { defaultValue: <span class="code-keyword">null</span> });
+
+<span class="code-comment">// stats.hasError → true if any upstream failed</span>
+<span class="code-comment">// Errors propagate via dependency chain!</span></pre>
             </div>
             <ul class="benefits-list">
               <li>Flat, readable structure</li>
-              <li>Zero error handling boilerplate</li>
+              <li>Error awareness via <code>hasError</code></li>
               <li>Automatic dependency tracking</li>
               <li>Built-in loading states (<code>state</code>, <code>isPending</code>)</li>
             </ul>
@@ -593,13 +593,13 @@
           
           <div class="insight-box">
             <div class="insight-title">
-              💡 Key Insight: True Automatic Propagation
+              💡 Key Insight: Error Awareness Through hasError
             </div>
             <p class="insight-text">
-              When <strong>Stage 2</strong> fails, <strong>Stage 3 never even executes.</strong><br><br>
-              Accessing <code>repos.value</code> when upstream is in error state <strong>automatically throws</strong>,
-              causing downstream computeds to also become REJECTED.<br><br>
-              <strong>No try-catch or if(hasError) checks needed in your business logic.</strong>
+              When <strong>Stage 2</strong> fails, <strong>Stage 3 detects it via <code>hasError</code></strong>.<br><br>
+              The <code>hasError</code> property propagates through the dependency chain, allowing 
+              downstream computeds to know if any upstream has failed.<br><br>
+              <strong>No re-throwing needed — just check <code>hasError</code> to detect blocked states.</strong>
             </p>
           </div>
         </div>
@@ -686,6 +686,7 @@
         effect(() => {
           const state = c.state;
           const error = c.lastError;
+          const hasError = c.hasError; // Check dependency errors too
           
           let value = null;
           try { value = c.value; } catch {}
@@ -711,11 +712,21 @@
               break;
               
             case AsyncState.RESOLVED:
-              stageEl.classList.add('resolved');
-              cardEl.classList.add('resolved');
-              badgeEl.classList.add('resolved');
-              badgeEl.textContent = 'Done';
-              outputEl.textContent = format(value);
+              // Check if upstream has error (dependency error propagation)
+              if (hasError && !error) {
+                stageEl.classList.add('rejected');
+                cardEl.classList.add('rejected');
+                badgeEl.classList.add('rejected');
+                badgeEl.textContent = 'Blocked';
+                outputEl.classList.add('error');
+                outputEl.textContent = '⛔ Upstream failed';
+              } else {
+                stageEl.classList.add('resolved');
+                cardEl.classList.add('resolved');
+                badgeEl.classList.add('resolved');
+                badgeEl.textContent = 'Done';
+                outputEl.textContent = format(value);
+              }
               break;
               
             case AsyncState.REJECTED:
