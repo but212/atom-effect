@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Async Propagation & Error Handling | atom-effect</title>
+    <script src="../dist/atom-effect.min.js"></script>
+    <style>
+      :root {
+        /* Modern Minimalist Dark Theme */
+        --bg-body: #0f172a;       /* Slate 950 */
+        --bg-card: #1e293b;       /* Slate 800 */
+        --bg-input: #0f172a;      /* Slate 950 */
+        
+        --border-subtle: #334155; /* Slate 700 */
+        --border-focus: #3b82f6;  /* Blue 500 */
+        
+        --text-primary: #f8fafc;  /* Slate 50 */
+        --text-secondary: #94a3b8; /* Slate 400 */
+        --text-tertiary: #64748b; /* Slate 500 */
+        
+        --accent-primary: #3b82f6; /* Blue 500 */
+        --accent-hover: #2563eb;   /* Blue 600 */
+        
+        --status-idle: #64748b;    /* Slate 500 */
+        --status-pending: #f59e0b; /* Amber 500 */
+        --status-resolved: #10b981;/* Emerald 500 */
+        --status-rejected: #ef4444;/* Red 500 */
+        
+        --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+
+        --font-base: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+      }
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      body {
+        font-family: var(--font-base);
+        background: var(--bg-body);
+        color: var(--text-primary);
+        min-height: 100vh;
+        padding: 4rem 2rem;
+        line-height: 1.5;
+      }
+
+      .container { max-width: 900px; margin: 0 auto; }
+
+      header { margin-bottom: 3rem; text-align: center; }
+      h1 { font-size: 2rem; font-weight: 800; margin-bottom: 0.5rem; letter-spacing: -0.025em; }
+      .subtitle { color: var(--text-secondary); max-width: 600px; margin: 0 auto; }
+
+      .card {
+        background: var(--bg-card);
+        border-radius: 12px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        border: 1px solid var(--border-subtle);
+        box-shadow: var(--shadow-card);
+      }
+
+      .card-title {
+        font-size: 1.125rem;
+        font-weight: 600;
+        margin-bottom: 1.5rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      /* Simulation Controls */
+      .controls {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        margin-bottom: 2rem;
+      }
+
+      .btn {
+        padding: 0.75rem 1.5rem;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        border: 1px solid transparent;
+        font-family: inherit;
+      }
+
+      .btn-success {
+        background: rgba(16, 185, 129, 0.1);
+        color: #34d399;
+        border-color: rgba(16, 185, 129, 0.2);
+      }
+      .btn-success:hover { background: rgba(16, 185, 129, 0.2); transform: translateY(-1px); }
+
+      .btn-fail {
+        background: rgba(239, 68, 68, 0.1);
+        color: #f87171;
+        border-color: rgba(239, 68, 68, 0.2);
+      }
+      .btn-fail:hover { background: rgba(239, 68, 68, 0.2); transform: translateY(-1px); }
+
+      /* Flow Visualization */
+      .flow-diagram {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 1rem;
+        position: relative;
+        padding: 1rem 0;
+      }
+
+      .flow-diagram::before {
+        content: '';
+        position: absolute;
+        top: 2rem;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: var(--border-subtle);
+        z-index: 0;
+        margin: 0 4rem;
+      }
+
+      .step-node {
+        position: relative;
+        z-index: 1;
+        background: var(--bg-card);
+        border: 1px solid var(--border-subtle);
+        border-radius: 12px;
+        padding: 1.25rem;
+        width: 30%;
+        transition: all 0.3s ease;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+
+      .step-node.active { border-color: var(--accent-primary); box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2); }
+      .step-node.error { border-color: var(--status-rejected); }
+
+      .step-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem; }
+      .step-title { font-weight: 600; font-size: 0.9375rem; }
+      
+      .status-badge {
+        font-size: 0.75rem;
+        padding: 0.125rem 0.5rem;
+        border-radius: 999px;
+        font-weight: 500;
+        text-transform: uppercase;
+        background: var(--bg-body);
+        border: 1px solid var(--border-subtle);
+      }
+
+      .status-idle { color: var(--status-idle); }
+      .status-pending { color: var(--status-pending); border-color: var(--status-pending); background: rgba(245, 158, 11, 0.1); }
+      .status-resolved { color: var(--status-resolved); border-color: var(--status-resolved); background: rgba(16, 185, 129, 0.1); }
+      .status-rejected { color: var(--status-rejected); border-color: var(--status-rejected); background: rgba(239, 68, 68, 0.1); }
+
+      .step-value {
+        font-family: var(--font-mono);
+        font-size: 0.8125rem;
+        color: var(--text-secondary);
+        background: rgba(0,0,0,0.2);
+        padding: 0.5rem;
+        border-radius: 6px;
+        min-height: 2.5rem;
+        display: flex;
+        align-items: center;
+        word-break: break-all;
+      }
+
+      .spinner {
+        width: 12px; height: 12px;
+        border: 2px solid currentColor; border-top-color: transparent;
+        border-radius: 50%; animation: spin 0.8s linear infinite;
+        margin-right: 0.5rem; display: inline-block;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+
+      /* Code Panel */
+      .code-panel {
+        background: #0f172a;
+        border-radius: 8px;
+        padding: 1.5rem;
+        font-family: var(--font-mono);
+        font-size: 0.875rem;
+        line-height: 1.6;
+        border: 1px solid var(--border-subtle);
+      }
+      .code-keyword { color: #c084fc; }
+      .code-fn { color: #60a5fa; }
+      .code-comment { color: #64748b; font-style: italic; }
+      .code-str { color: #34d399; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>Async Propagation Demo</h1>
+        <p class="subtitle">Visualizing declarative async chains without callback hell</p>
+      </header>
+
+      <div class="card">
+        <h2 class="card-title">Live Simulation</h2>
+        
+        <div class="controls">
+          <button id="btnSuccess" class="btn btn-success">▶ Run Success Chain</button>
+          <button id="btnFail" class="btn btn-fail">⚠️ Run Chain with Failure</button>
+        </div>
+
+        <div class="flow-diagram">
+          <!-- Step 1 -->
+          <div id="card1" class="step-node">
+            <div class="step-header">
+              <span class="step-title">Step 1</span>
+              <span id="badge1" class="status-badge status-idle">Idle</span>
+            </div>
+            <div class="step-content">Fetching user data...</div>
+            <div id="val1" class="step-value">-</div>
+          </div>
+
+          <!-- Step 2 -->
+          <div id="card2" class="step-node">
+            <div class="step-header">
+              <span class="step-title">Step 2</span>
+              <span id="badge2" class="status-badge status-idle">Idle</span>
+            </div>
+            <div class="step-content">Processing data...</div>
+            <div id="val2" class="step-value">-</div>
+          </div>
+
+          <!-- Step 3 -->
+          <div id="card3" class="step-node">
+            <div class="step-header">
+              <span class="step-title">Step 3</span>
+              <span id="badge3" class="status-badge status-idle">Idle</span>
+            </div>
+            <div class="step-content">Generating report...</div>
+            <div id="val3" class="step-value">-</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">Declarative Code Structure</h2>
+        <div class="code-panel">
+<span class="code-comment">// 1. First Async Step</span>
+<span class="code-keyword">const</span> step1 = <span class="code-fn">computed</span>(<span class="code-keyword">async</span> () => {
+    <span class="code-keyword">await</span> <span class="code-fn">delay</span>(1000);
+    <span class="code-keyword">return</span> <span class="code-str">"User Data Found"</span>;
+});
+
+<span class="code-comment">// 2. Second Step (Depends on 1, might fail)</span>
+<span class="code-keyword">const</span> step2 = <span class="code-fn">computed</span>(<span class="code-keyword">async</span> () => {
+    <span class="code-keyword">const</span> data = step1.value; <span class="code-comment">// Auto-waits for step1!</span>
+    
+    <span class="code-keyword">if</span> (shouldFail.value) <span class="code-keyword">throw new</span> <span class="code-fn">Error</span>(<span class="code-str">"Processing Failed"</span>);
+    
+    <span class="code-keyword">await</span> <span class="code-fn">delay</span>(1000);
+    <span class="code-keyword">return</span> data + <span class="code-str">" + Processed"</span>;
+});
+
+<span class="code-comment">// 3. Final Step (Depends on 2)</span>
+<span class="code-keyword">const</span> step3 = <span class="code-fn">computed</span>(<span class="code-keyword">async</span> () => {
+    <span class="code-comment">// If step2 fails, this NEVER runs.</span>
+    <span class="code-comment">// Propagation stops automatically. No error handling logic needed here!</span>
+    <span class="code-keyword">const</span> result = step2.value; 
+    
+    <span class="code-keyword">await</span> <span class="code-fn">delay</span>(1000);
+    <span class="code-keyword">return</span> <span class="code-str">"Report: "</span> + result;
+});
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const { atom, computed, effect, AsyncState } = AtomEffect;
+
+      // --- Helper ---
+      const delay = (ms) => new Promise(r => setTimeout(r, ms));
+
+      // --- State ---
+      const runId = atom(0);        // Triggers re-run
+      const failMode = atom(false); // Controls failure scenario
+
+      // --- Async Chain ---
+      
+      // Step 1: Initial Fetch
+      const step1 = computed(async () => {
+        // Dependencies
+        const id = runId.value;
+        if (id === 0) return null; // Initial state
+
+        await delay(1000); // Simulate network
+        return "User(ID: 123)";
+      }, { defaultValue: null });
+
+      // Step 2: Processing (May Fail)
+      const step2 = computed(async () => {
+        const data = step1.value; // Dependency on Step 1
+        if (!data) return null;
+
+        const willFail = failMode.value; // Dependency on fail flag
+
+        await delay(1000); 
+
+        if (willFail) {
+          throw new Error("Critical Failure in Step 2");
+        }
+
+        return `${data} -> Verified`;
+      }, { defaultValue: null });
+
+      // Step 3: Final Report
+      const step3 = computed(async () => {
+        // Explicitly check upstream error to demonstrate propagation behavior
+        // (Since step2 has a defaultValue, standard access would return that value.
+        //  To simulate "Stop Propagation" visual, we re-throw if upstream failed)
+        if (step2.hasError) throw step2.lastError;
+
+        const processed = step2.value; // Dependency on Step 2
+        if (!processed) return null;
+
+        // Note: This logic is safe. If Step 2 fails (Rejects), 
+        // access to step2.value throws, and THIS computed also rejects automatically.
+        // We don't need manual try/catch to bubble the error.
+
+        await delay(1000);
+        return `Report[${processed}]`;
+      }, { defaultValue: null });
+
+
+      // --- Visualizer Logic ---
+      
+      // Define UI mapping
+      const steps = [
+        { atom: step1, id: '1' },
+        { atom: step2, id: '2' },
+        { atom: step3, id: '3' }
+      ];
+
+      // Create an effect for each step to update its card
+      steps.forEach(({ atom, id }) => {
+        const els = {
+          card: document.getElementById(`card${id}`),
+          badge: document.getElementById(`badge${id}`),
+          val: document.getElementById(`val${id}`)
+        };
+
+        effect(() => {
+          const state = atom.state;
+          const val = atom.value;
+          const err = atom.lastError;
+
+          // Reset classes
+          els.badge.className = 'status-badge';
+          els.card.classList.remove('active', 'error');
+
+          // State visual logic
+          switch(state) {
+            case AsyncState.IDLE:
+              els.badge.classList.add('status-idle');
+              els.badge.textContent = 'Idle';
+              els.val.textContent = '-';
+              break;
+              
+            case AsyncState.PENDING:
+              els.badge.classList.add('status-pending');
+              els.badge.textContent = 'Pending';
+              els.card.classList.add('active');
+              els.val.innerHTML = '<div class="spinner"></div>Running...';
+              break;
+              
+            case AsyncState.RESOLVED:
+              els.badge.classList.add('status-resolved');
+              els.badge.textContent = 'Resolved';
+              els.val.textContent = val !== null ? val : '-';
+              break;
+              
+            case AsyncState.REJECTED:
+              els.badge.classList.add('status-rejected');
+              els.badge.textContent = 'Strings Cut'; // The "Propagation Stopped" metaphor
+              els.card.classList.add('error');
+              els.val.textContent = "⛔ " + (err?.message || "Error");
+              break;
+          }
+        });
+      });
+
+
+      // --- Controls ---
+      
+      document.getElementById('btnSuccess').addEventListener('click', () => {
+        failMode.value = false;
+        runId.value++; // Increment to trigger chain
+      });
+
+      document.getElementById('btnFail').addEventListener('click', () => {
+        failMode.value = true;
+        runId.value++; // Increment to trigger chain
+      });
+
+    </script>
+  </body>
+</html>

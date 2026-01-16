@@ -506,6 +506,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   private _handleAsyncComputation(promise: Promise<T>): void {
     this._setPending();
     this._clearDirty();
+    this._notifyJob();
 
     this._promiseId = this._promiseId >= this.MAX_PROMISE_ID ? 1 : this._promiseId + 1;
     const promiseId = this._promiseId;
@@ -541,6 +542,10 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   private _handleAsyncRejection(err: unknown): void {
     const error = wrapError(err, ComputedError, ERROR_MESSAGES.COMPUTED_ASYNC_COMPUTATION_FAILED);
 
+    // Increment version so effects detect the state change (pending -> rejected)
+    const stateChanged = !this._isRejected();
+    this.version = (this.version + Number(stateChanged)) & SMI_MAX;
+
     this._error = error;
     this._setRejected();
     this._clearDirty();
@@ -554,7 +559,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       }
     }
 
-    this._notifySubscribers(undefined, undefined);
+    this._notifyJob();
   }
 
   private _handleComputationError(err: unknown): never {
