@@ -4,19 +4,19 @@
 
 ### Fixed
 
-- **Publishing**: Added `publishConfig.access: public` to `atom-effect-jquery` to fix NPM payment required error for scoped packages.
+- **Publishing**: Added `publishConfig.access: public` to `@but212/atom-effect-jquery` to fix NPM payment required error for scoped packages.
 - **Versioning**: Bumped all packages to 0.8.2.
 
 ## [0.8.1]
 
-### Fixed
+### Fixed - 0.8.1
 
 - **Publishing**: Scoped `atom-effect-jquery` to `@but212/atom-effect-jquery` to resolve NPM publishing permission errors.
 - **Versioning**: Bumped all packages to 0.8.1 to maintain unified versioning.
 
 ## [0.8.0]
 
-### Changed
+### Changed - 0.8.0
 
 - **Monorepo Migration**: Migrated from single-repo to pnpm workspace + Turborepo monorepo structure.
   - Root workspace now manages `packages/core` (@but212/atom-effect) and `packages/jquery` (atom-effect-jquery).
@@ -27,13 +27,13 @@
   - Single `v*` tag deploys both packages to NPM simultaneously.
   - Ensures compatibility between core and bindings.
 
-### Refactor
+### Refactor - 0.8.0
 
 - **Code Deduplication**: Extracted shared two-way data binding logic into `applyInputBinding` helper.
   - unified `$.fn.atomVal` (chainable) and `bindVal` (declarative) implementation.
   - Consolidated input handling logic (debounce, IME, focus tracking) in centrally managed module.
 
-### Infrastructure
+### Infrastructure - 0.8.0
 
 - Added `pnpm-workspace.yaml` for workspace definition.
 - Added `turbo.json` for build pipeline (build → test → lint).
