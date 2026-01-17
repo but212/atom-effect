@@ -153,18 +153,8 @@ describe('Data Grid Scenarios', () => {
     'batch update 100 rows in 1000 rows',
     () => {
       batch(() => {
-        // Toggle active status for 100 rows
-        // Note: immutable update of array for each row is expensive,
-        // but here we are measuring reactivity overhead of 100 triggers vs 1 batch
-        // Wait, rowsBatch.value = ... triggers ONCE.
-        // To test batch correctly, we need 100 ATOMS or 100 updates to the same atom?
-        // If we update the same atom 100 times, batching just collapses it to 1 notify.
-        // The original bench did `rows.value = ...` 100 times.
-        const current = rowsBatch.value;
         for (let i = 0; i < 100; i++) {
-          // We just create a new array 100 times.
-          // This is effectively benchmarking Array.map + atom propagation.
-          rowsBatch.value = current.map((row: DataGridRow) =>
+          rowsBatch.value = rowsBatch.value.map((row: DataGridRow) =>
             row.id === i ? { ...row, active: !row.active } : row
           );
         }

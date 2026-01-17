@@ -47,17 +47,8 @@ describe('Todo App Scenarios', () => {
   bench(
     'toggle completion status (100 todos)',
     () => {
-      // Toggle all 100 todos one by one (causing 100 updates)
-      // This benchmarks 100x array map + 100x notify.
-      // But we need to use a loop to simulate individual user actions?
-      // Or just one batch update?
-      // The original used a loop of 100 updates.
-      // We will do one update of one item to facilitate "interaction",
-      // OR repeat the loop. Original was loop.
-      const base = todosToggle.value;
       for (let i = 0; i < 100; i++) {
-        // modifying the array 100 times is heavy on JS, but fair enough for "app logic"
-        todosToggle.value = base.map((todo: TodoItem) =>
+        todosToggle.value = todosToggle.value.map((todo: TodoItem) =>
           todo.id === i + 1 ? { ...todo, completed: !todo.completed } : todo
         );
       }
