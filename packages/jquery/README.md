@@ -1,11 +1,11 @@
-# atom-effect-jquery
+# @but212/atom-effect-jquery
 
-[![npm version](https://img.shields.io/npm/v/atom-effect-jquery.svg)](https://www.npmjs.com/package/atom-effect-jquery)
-[![License](https://img.shields.io/npm/l/atom-effect-jquery.svg)](https://github.com/but212/atom-effect-jquery/blob/main/LICENSE)
+[![npm version](https://img.shields.io/npm/v/@but212/atom-effect-jquery.svg)](https://www.npmjs.com/package/@but212/atom-effect-jquery)
+[![License](https://img.shields.io/npm/l/@but212/atom-effect-jquery.svg)](https://github.com/but212/atom-effect-jquery/blob/main/LICENSE)
 
 **Reactive jQuery bindings powered by [atom-effect](https://github.com/but212/atom-effect).**
 
-`atom-effect-jquery` brings modern, fine-grained reactivity to jQuery applications. It allows you to bind DOM elements directly to atoms, ensuring efficient updates without manual DOM manipulation. It also features automatic cleanup of effects when elements are removed from the DOM, resolving one of the biggest pain points in jQuery development (memory leaks).
+`@but212/atom-effect-jquery` brings modern, fine-grained reactivity to jQuery applications. It allows you to bind DOM elements directly to atoms, ensuring efficient updates without manual DOM manipulation. It also features automatic cleanup of effects when elements are removed from the DOM, resolving one of the biggest pain points in jQuery development (memory leaks).
 
 ## Features
 
@@ -19,14 +19,19 @@
 - **Debug Mode:** Visual highlighting of DOM updates to trace reactivity.
 - **jQuery Integration:** Batching support for standard jQuery events.
 
+## Requirements
+
+- **jQuery**: >=3.0.0
+- **@but212/atom-effect**: >=0.8.0
+
 ## Installation
 
 ### NPM
 
 ```bash
-npm install atom-effect-jquery jquery @but212/atom-effect
+npm install @but212/atom-effect-jquery jquery @but212/atom-effect
 # or
-pnpm add atom-effect-jquery jquery @but212/atom-effect
+pnpm add @but212/atom-effect-jquery jquery @but212/atom-effect
 ```
 
 ### CDN
@@ -35,7 +40,7 @@ pnpm add atom-effect-jquery jquery @but212/atom-effect
 <!-- Load jQuery -->
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <!-- Load atom-effect-jquery -->
-<script src="https://cdn.jsdelivr.net/npm/atom-effect-jquery@0.6.1"></script>
+<script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.8.1"></script>
 ```
 
 ## Basic Usage
@@ -43,7 +48,7 @@ pnpm add atom-effect-jquery jquery @but212/atom-effect
 ```javascript
 // If using NPM:
 // import $ from 'jquery';
-// import 'atom-effect-jquery';
+// import '@but212/atom-effect-jquery';
 
 // 1. Create State
 const count = $.atom(0);
