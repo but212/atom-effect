@@ -1,6 +1,6 @@
 {
   "name": "@but212/atom-effect-jquery",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "description": "Reactive jQuery bindings powered by atom-effect",
   "keywords": [
     "jquery",
@@ -41,6 +41,9 @@
   },
   "author": "but212",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/but212/atom-effect.git",
