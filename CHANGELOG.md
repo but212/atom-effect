@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### Refactor
+
+- Introduced `ComputationContext` interface to types for better type safety in computed atom lifecycle.
+- Reduced duplication in `AtomImpl` and `ComputedAtomImpl` by utilizing shared tracking utility.
+
 ## [0.8.2]
 
 ### Fixed

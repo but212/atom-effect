@@ -88,3 +88,15 @@ export interface DebugConfig {
  * Transform function type
  */
 export type TransformFunction<T, U> = (value: T) => U;
+
+/**
+ * Context tracked during the computation phase of a reactive node.
+ */
+export interface ComputationContext {
+  prevDeps: Dependency[];
+  prevVersions: number[];
+  nextDeps: Dependency[];
+  nextVersions: number[];
+  originalAdd: (dep: Dependency) => void;
+  state: { depCount: number };
+}
