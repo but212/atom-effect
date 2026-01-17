@@ -1,6 +1,6 @@
 import { AsyncState, COMPUTED_STATE_FLAGS, EMPTY_ERROR_ARRAY, SMI_MAX } from '@/constants';
 import { ReactiveDependency } from '@/core/base/reactive-dependency';
-import { DependencyTracker, syncDependencies } from '@/core/utils/dep-tracking';
+import { syncDependencies, trackDependency } from '@/core/utils/dep-tracking';
 import type { AtomError } from '@/errors/errors';
 import { ComputedError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
@@ -594,7 +594,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   }
 
   private _registerTracking(): void {
-    DependencyTracker.track(
+    trackDependency(
       this,
       trackingContext.getCurrent(),
       this._functionSubscribersStore,

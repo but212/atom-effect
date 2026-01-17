@@ -5,7 +5,7 @@ import { trackingContext } from '@/tracking';
 import type { AtomOptions, Subscriber, WritableAtom } from '@/types';
 import { debug } from '@/utils/debug';
 import { SubscriberManager } from '@/utils/subscriber-manager';
-import { DependencyTracker } from '../utils/dep-tracking';
+import { trackDependency } from '../utils/dep-tracking';
 
 /**
  * Internal {@link WritableAtom} implementation.
@@ -74,12 +74,7 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
   }
 
   private _track(current: unknown): void {
-    DependencyTracker.track(
-      this,
-      current,
-      this._functionSubscribersStore,
-      this._objectSubscribersStore
-    );
+    trackDependency(this, current, this._functionSubscribersStore, this._objectSubscribersStore);
   }
 
   private _scheduleNotification(oldValue: T): void {

@@ -5,45 +5,39 @@ import type { SubscriberManager } from '@/utils/subscriber-manager';
 import { hasDependencyMethod, hasExecuteMethod, isPlainListener } from '@/utils/type-guards';
 
 /**
- * Shared utility for handling dependency tracking.
- * Centralizes the logic for registering a dependency with the current listener/tracking context.
+ * Registers a dependency with the current listener (if any).
+ *
+ * @param dependency - The reactive node to be tracked (Atom or Computed)
+ * @param current - The current listener from the tracking context
+ * @param functionSubscribers - Manager for function-based subscribers
+ * @param objectSubscribers - Manager for object-based subscribers
  */
-export class DependencyTracker {
-  /**
-   * Registers a dependency with the current listener (if any).
-   *
-   * @param dependency - The reactive node to be tracked (Atom or Computed)
-   * @param current - The current listener from the tracking context
-   * @param functionSubscribers - Manager for function-based subscribers
-   * @param objectSubscribers - Manager for object-based subscribers
-   */
-  static track<T>(
-    dependency: Dependency,
-    current: unknown,
-    functionSubscribers: SubscriberManager<(newValue?: T, oldValue?: T) => void>,
-    objectSubscribers: SubscriberManager<Subscriber>
-  ): void {
-    if (!current) return;
+export function trackDependency<T>(
+  dependency: Dependency,
+  current: unknown,
+  functionSubscribers: SubscriberManager<(newValue?: T, oldValue?: T) => void>,
+  objectSubscribers: SubscriberManager<Subscriber>
+): void {
+  if (!current) return;
 
-    // Priority 1: TrackableListener pattern (addDependency method)
-    // Used by Computed atoms to collect dependencies
-    if (hasDependencyMethod(current)) {
-      current.addDependency(dependency);
-      return;
-    }
+  // Priority 1: TrackableListener pattern (addDependency method)
+  // Used by Computed atoms to collect dependencies
+  if (hasDependencyMethod(current)) {
+    current.addDependency(dependency);
+    return;
+  }
 
-    // Priority 2: Plain function callback
-    // Used by simple effects or manual tracking
-    if (isPlainListener(current)) {
-      functionSubscribers.add(current as (newValue?: T, oldValue?: T) => void);
-      return;
-    }
+  // Priority 2: Plain function callback
+  // Used by simple effects or manual tracking
+  if (isPlainListener(current)) {
+    functionSubscribers.add(current as (newValue?: T, oldValue?: T) => void);
+    return;
+  }
 
-    // Priority 3: Subscriber pattern (execute method)
-    // Used by Effect objects or other subscribers
-    if (hasExecuteMethod(current)) {
-      objectSubscribers.add(current);
-    }
+  // Priority 3: Subscriber pattern (execute method)
+  // Used by Effect objects or other subscribers
+  if (hasExecuteMethod(current)) {
+    objectSubscribers.add(current);
   }
 }
 
