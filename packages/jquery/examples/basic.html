@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Atom Effect jQuery - Counter Example</title>
+    <!-- Load jQuery from CDN -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <!-- Load atom-effect-jquery -->
+    <script src="https://cdn.jsdelivr.net/npm/atom-effect-jquery@0.6.1"></script>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, sans-serif;
+        max-width: 600px;
+        margin: 2rem auto;
+        padding: 0 1rem;
+        text-align: center;
+      }
+      .counter-card {
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 2rem;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      }
+      h1 {
+        margin-bottom: 2rem;
+      }
+      .count-display {
+        font-size: 4rem;
+        font-weight: bold;
+        color: #333;
+        margin: 1rem 0;
+      }
+      .controls {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+      }
+      button {
+        font-size: 1.2rem;
+        padding: 0.5rem 1.5rem;
+        cursor: pointer;
+        background-color: #f0f0f0;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        transition: background 0.2s;
+      }
+      button:hover {
+        background-color: #e0e0e0;
+      }
+      button:active {
+        background-color: #d0d0d0;
+      }
+      .status {
+        margin-top: 1.5rem;
+        color: #666;
+      }
+      .doubled {
+        font-weight: bold;
+        color: #007bff;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>atom-effect-jquery</h1>
+
+    <div class="counter-card">
+      <div id="count" class="count-display">0</div>
+
+      <div class="controls">
+        <button id="decrement">-</button>
+        <button id="increment">+</button>
+      </div>
+
+      <div class="status">
+        Doubled: <span id="doubled" class="doubled">0</span>
+      </div>
+    </div>
+
+    <script>
+      // 1. Create State
+      const count = $.atom(0);
+      const doubled = $.computed(() => count.value * 2);
+
+      // 2. Bind to DOM
+      $("#count").atomText(count);
+      $("#doubled").atomText(doubled);
+
+      // 3. Update State via Events
+      // Note: Standard jQuery event handlers automatically trigger updates
+      // if enablejQueryBatching() is used, but here we just update the atom directly.
+      $("#increment").on("click", () => count.value++);
+      $("#decrement").on("click", () => count.value--);
+
+      // Example: Direct subscription if needed
+      $.effect(() => {
+        console.log(`Current count is: ${count.value}`);
+      });
+    </script>
+  </body>
+</html>

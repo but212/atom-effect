@@ -1,0 +1,64 @@
+{
+  "name": "atom-effect-jquery",
+  "version": "0.8.0",
+  "description": "Reactive jQuery bindings powered by atom-effect",
+  "keywords": [
+    "jquery",
+    "reactivity",
+    "atom",
+    "signals",
+    "state-management",
+    "binding",
+    "plugin",
+    "observer"
+  ],
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "unpkg": "./dist/atom-effect-jquery.min.js",
+  "jsdelivr": "./dist/atom-effect-jquery.min.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "prepublishOnly": "pnpm run build"
+  },
+  "author": "but212",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/but212/atom-effect.git",
+    "directory": "packages/jquery"
+  },
+  "peerDependencies": {
+    "jquery": ">=3.0.0"
+  },
+  "dependencies": {
+    "@but212/atom-effect": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/jquery": "^3.5.33",
+    "@vitest/coverage-v8": "^4.0.17",
+    "jquery": "^3.7.1",
+    "jsdom": "^27.4.0",
+    "vite": "^7.3.1",
+    "vite-plugin-dts": "^4.5.4",
+    "vitest": "^4.0.17"
+  }
+}

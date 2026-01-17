@@ -1,35 +1,63 @@
 # Changelog
 
+## [0.8.0]
+
+### Changed
+
+- **Monorepo Migration**: Migrated from single-repo to pnpm workspace + Turborepo monorepo structure.
+  - Root workspace now manages `packages/core` (@but212/atom-effect) and `packages/jquery` (atom-effect-jquery).
+  - Shared tooling: `tsconfig.base.json`, `biome.json` at root level.
+  - Turborepo enables parallel builds with dependency-aware caching.
+  - `atom-effect-jquery` now uses `workspace:*` dependency for seamless local development.
+- **Unified Versioning**: Both `@but212/atom-effect` and `atom-effect-jquery` now share the same version number.
+  - Single `v*` tag deploys both packages to NPM simultaneously.
+  - Ensures compatibility between core and bindings.
+
+### Refactor
+
+- **Code Deduplication**: Extracted shared two-way data binding logic into `applyInputBinding` helper.
+  - unified `$.fn.atomVal` (chainable) and `bindVal` (declarative) implementation.
+  - Consolidated input handling logic (debounce, IME, focus tracking) in centrally managed module.
+
+### Infrastructure
+
+- Added `pnpm-workspace.yaml` for workspace definition.
+- Added `turbo.json` for build pipeline (build → test → lint).
+- Added `tsconfig.base.json` for shared TypeScript configuration.
+- Updated `publish.yml` to deploy both packages with unified version validation.
+- Updated GitHub workflows (`ci.yml`, `benchmark.yml`) for monorepo paths.
+- Added `.turbo` to `.gitignore`.
+
 ## [0.7.0]
 
-### Added
+### Added - 0.7.0
 
 - **Error Propagation**: Implemented automatic error propagation and accumulation through computed value chains.
   - Added `errors: readonly Error[]` to `ComputedAtom`: Returns an immutable array of deduplicated errors from self and all dependencies.
   - Added `isValid: boolean` to `ComputedAtom`: Convenience getter (inverse of `hasError`).
   - Extended `hasError` to propagate error status from the dependency chain.
 
-### Changed
+### Changed - 0.7.0
 
 - **Graceful Error Handling**: `ComputedAtom` now catches errors thrown by dependencies and wraps them in `ComputedError`.
   - If a computed value has a `defaultValue` and encounters a recoverable error (default for `ComputedError`), it will return the `defaultValue` on subsequent accesses instead of re-throwing. This allows downstream dependencies to continue execution (graceful degradation).
 - **Error Deduplication**: The `errors` array uses a `Set` internally to ensure the same `Error` instance only appears once, preventing duplicate error reports in diamond dependency patterns.
 
-### Fixed
+### Fixed - 0.7.0
 
 - **Dependency Tracking**: Fixed an issue where computed values throwing synchronous errors would not register themselves as dependencies in parent computations. Tracking is now registered before computation execution.
 - **Async Error Propagation**: Fixed an issue where async computed values did not correctly propagate error states to downstream dependencies.
   - Ensures `hasError` is correctly set on downstream computed values even when the upstream throws (blocked state).
   - Enables true declarative error handling in async chains (no need for manual error checks).
 
-### Example
+### Example - 0.7.0
 
 - **Async Propagation**: Added `examples/async-propagation.html` - A comprehensive demo of declarative async pipeline handling.
   - Showcases "Callback Hell vs Atom-Effect Declarative" comparison.
   - Demonstrates how to build robust async pipelines (User -> Repos -> Stats) without manual error plumbing.
   - Visualizes automatic error propagation and "blocked" states.
 
-### Refactor
+### Refactor - 0.7.0
 
 - **Internal Cleanup**: Removed redundant `ComputedStateFlags` and separate handler classes (`SyncComputationHandler`, `AsyncComputationHandler`) as their logic is now efficiently inlined within `ComputedAtom`.
 

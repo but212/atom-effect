@@ -4,6 +4,10 @@
 .pnpm-modules.yaml
 .pnpm-debug.log
 .pnpm-log.txt
+
+# Turborepo
+.turbo
+
 node_modules/
 dist/
 coverage/

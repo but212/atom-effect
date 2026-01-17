@@ -1,37 +1,19 @@
 {
-  "name": "@but212/atom-effect",
-  "version": "0.7.0",
+  "name": "atom-effect-monorepo",
+  "version": "0.0.0",
+  "private": true,
   "type": "module",
-  "description": "A reactive state management library that combines the power of `atom`, `computed`, and `effect` for seamless management of reactive state.",
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.mjs",
-  "types": "./dist/index.d.ts",
-  "unpkg": "./dist/atom-effect.min.js",
-  "jsdelivr": "./dist/atom-effect.min.js",
-  "files": [
-    "dist"
-  ],
+  "description": "Monorepo for atom-effect reactive state management library and its ecosystem",
   "scripts": {
-    "build": "vite build",
-    "test": "vitest",
-    "test:run": "vitest run",
-    "test:unit": "vitest __tests__/unit",
-    "test:integration": "vitest __tests__/integration",
-    "test:watch": "vitest --watch",
-    "test:coverage": "vitest --coverage",
-    "typecheck": "tsc --noEmit",
-    "lint": "biome check .",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "test:run": "turbo run test:run",
+    "lint": "turbo run lint",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
-    "prepublishOnly": "pnpm run build",
-    "bench": "vitest bench --config vitest.bench.config.ts",
-    "bench:micro": "pnpm run bench __benchmarks__/micro",
-    "bench:macro": "pnpm run bench __benchmarks__/macro",
-    "bench:atom": "pnpm run bench __benchmarks__/micro/atom.bench",
-    "bench:computed": "pnpm run bench __benchmarks__/micro/computed.bench",
-    "bench:effect": "pnpm run bench __benchmarks__/micro/effect.bench",
-    "bench:realistic": "pnpm run bench __benchmarks__/realistic",
-    "bench:propagation": "pnpm run bench __benchmarks__/micro/propagation.bench"
+    "typecheck": "turbo run typecheck",
+    "bench": "turbo run bench",
+    "clean": "rimraf packages/*/dist apps/*/dist .turbo node_modules/.cache"
   },
   "keywords": [
     "reactive",
@@ -40,39 +22,23 @@
     "effect",
     "atom-effect",
     "signal",
-    "reactive-signal"
+    "monorepo"
   ],
   "author": "Jeongil Suk",
   "license": "MIT",
-  "publishConfig": {
-    "access": "public"
-  },
-  "sideEffects": false,
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.cjs"
-    }
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/but212/atom-effect.git"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.11",
-    "@types/jsdom": "^27.0.0",
-    "@types/node": "^24.10.4",
-    "@vitest/coverage-v8": "^3.2.4",
-    "@vitest/ui": "^3.2.4",
-    "happy-dom": "^20.0.11",
-    "jsdom": "^27.4.0",
-    "tinybench": "^5.1.0",
+    "rimraf": "^6.0.1",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3",
-    "vite": "^7.3.0",
-    "vite-plugin-dts": "^4.5.4",
-    "vite-tsconfig-paths": "^6.0.3",
-    "vitest": "^3.2.4"
+    "turbo": "^2.5.4",
+    "typescript": "^5.9.3"
+  },
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=20.0.0"
   }
 }
