@@ -1,10 +1,6 @@
 import { bench, describe } from 'vitest';
 import { atom, batch, computed, effect } from '../../src/index.js';
-
-const benchEffectOptions = {
-  maxExecutionsPerSecond: Infinity,
-  maxExecutionsPerFlush: Infinity,
-};
+import { benchEffectOptions } from '../utils/setup.js';
 
 describe('Batch Efficiency', () => {
   // Setup shared state - batch case

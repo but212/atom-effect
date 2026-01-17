@@ -1,5 +1,6 @@
 import { bench, describe } from 'vitest';
 import { atom, batch, computed, effect } from '../../src/index.js';
+import { benchEffectOptions } from '../utils/setup.js';
 
 describe('Frame Budget (16ms)', () => {
   // Setup 100 atoms and a computed that depends on all of them
@@ -9,7 +10,7 @@ describe('Frame Budget (16ms)', () => {
   // Effect to force read
   effect(() => {
     void heavyComputed.value;
-  });
+  }, benchEffectOptions);
 
   bench('updates per frame (100 atoms)', () => {
     // Perform 100 updates. In a non-batched system, this might trigger 100 re-evals (or at least 100 propagations).
