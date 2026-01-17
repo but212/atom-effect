@@ -7,6 +7,11 @@ import { bench, describe } from 'vitest';
 import { atom, computed, effect } from '../../src/index.js';
 import { microBenchOptions } from '../utils/setup.js';
 
+const benchEffectOptions = {
+  maxExecutionsPerSecond: Infinity,
+  maxExecutionsPerFlush: Infinity,
+};
+
 describe('Effect Creation', () => {
   bench(
     'create effect (single dependency)',
@@ -58,21 +63,21 @@ describe('Effect Execution', () => {
   // Persistent effect for execution testing
   effect(() => {
     _count = a.value;
-  });
+  }, benchEffectOptions);
 
   const aMulti = atom(1);
   const bMulti = atom(2);
   let _sum = 0;
   effect(() => {
     _sum = aMulti.value + bMulti.value;
-  });
+  }, benchEffectOptions);
 
   const aComp = atom(1);
   const doubled = computed(() => aComp.value * 2);
   let _valComp = 0;
   effect(() => {
     _valComp = doubled.value;
-  });
+  }, benchEffectOptions);
 
   bench(
     'effect runs on dependency change',
@@ -105,7 +110,7 @@ describe('Effect Re-execution', () => {
   let _count = 0;
   effect(() => {
     _count = a.value;
-  });
+  }, benchEffectOptions);
 
   const aMultiEff = atom(0);
   let _c1 = 0,
@@ -113,13 +118,13 @@ describe('Effect Re-execution', () => {
     _c3 = 0;
   effect(() => {
     _c1 = aMultiEff.value;
-  });
+  }, benchEffectOptions);
   effect(() => {
     _c2 = aMultiEff.value;
-  });
+  }, benchEffectOptions);
   effect(() => {
     _c3 = aMultiEff.value;
-  });
+  }, benchEffectOptions);
 
   bench(
     'effect re-runs 10 times',
@@ -152,7 +157,7 @@ describe('Effect Cleanup', () => {
     return () => {
       _cleanupCount++;
     };
-  });
+  }, benchEffectOptions);
 
   bench(
     'effect with cleanup function (creation/disposal)',

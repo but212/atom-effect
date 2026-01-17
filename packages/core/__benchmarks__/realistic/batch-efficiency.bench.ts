@@ -1,40 +1,47 @@
 import { bench, describe } from 'vitest';
 import { atom, batch, computed, effect } from '../../src/index.js';
 
+const benchEffectOptions = {
+  maxExecutionsPerSecond: Infinity,
+  maxExecutionsPerFlush: Infinity,
+};
+
 describe('Batch Efficiency', () => {
+  // Setup shared state - batch case
+  const formFieldsBatch = Array.from({ length: 20 }, () => atom('initial'));
+  const isValidBatch = computed(() => formFieldsBatch.every((f) => f.value.length > 0));
+  let _effectRunsBatch = 0;
+  effect(() => {
+    const _ = isValidBatch.value;
+    _effectRunsBatch++;
+  }, benchEffectOptions);
+
   bench('form reset overhead (batch)', () => {
-    const formFields = Array.from({ length: 20 }, () => atom('initial'));
+    // We toggle values to ensure change propagates
+    // If it's empty, set to 'initial', else set to ''
+    const nextVal = formFieldsBatch[0].value === '' ? 'initial' : '';
 
-    const isValid = computed(() => formFields.every((f) => f.value.length > 0));
-
-    let _effectRuns = 0;
-    effect(() => {
-      const _ = isValid.value;
-      _effectRuns++;
-    });
-
-    // Reset form
     batch(() => {
-      formFields.forEach((f) => {
-        f.value = '';
-      });
+      for (let i = 0; i < 20; i++) {
+        formFieldsBatch[i].value = nextVal;
+      }
     });
   });
 
+  // Setup shared state - no batch case
+  const formFieldsNoBatch = Array.from({ length: 20 }, () => atom('initial'));
+  const isValidNoBatch = computed(() => formFieldsNoBatch.every((f) => f.value.length > 0));
+  let _effectRunsNoBatch = 0;
+  effect(() => {
+    const _ = isValidNoBatch.value;
+    _effectRunsNoBatch++;
+  }, benchEffectOptions);
+
   bench('form reset overhead (no batch)', () => {
-    const formFields = Array.from({ length: 20 }, () => atom('initial'));
+    const nextVal = formFieldsNoBatch[0].value === '' ? 'initial' : '';
 
-    const isValid = computed(() => formFields.every((f) => f.value.length > 0));
-
-    let _effectRuns = 0;
-    effect(() => {
-      const _ = isValid.value;
-      _effectRuns++;
-    });
-
-    // Reset form
-    formFields.forEach((f) => {
-      f.value = '';
-    });
+    for (let i = 0; i < 20; i++) {
+      formFieldsNoBatch[i].value = nextVal;
+    }
   });
 });
