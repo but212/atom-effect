@@ -1,10 +1,10 @@
 import { batch, effect } from '@but212/atom-effect';
 import $ from 'jquery';
 import { debug } from './debug';
+import { applyInputBinding } from './input-binding';
 import { registry } from './registry';
 import type { BindingOptions, CssValue, ReactiveValue, ValOptions, WritableAtom } from './types';
 import { createInputBindingState } from './types';
-import { applyInputBinding } from './input-binding';
 import { getValue, isReactive } from './utils';
 
 // ============================================================================

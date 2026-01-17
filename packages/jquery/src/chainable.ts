@@ -1,8 +1,8 @@
 import { batch, effect } from '@but212/atom-effect';
 import $ from 'jquery';
 import { debug } from './debug';
-import { registry } from './registry';
 import { applyInputBinding } from './input-binding';
+import { registry } from './registry';
 import type { ReactiveValue, ValOptions, WritableAtom } from './types';
 import { getValue, isReactive } from './utils';
 
@@ -205,7 +205,7 @@ $.fn.atomHide = function (condition: ReactiveValue<boolean>): JQuery {
 $.fn.atomVal = function <T>(atom: WritableAtom<T>, options: ValOptions<T> = {}): JQuery {
   return this.each(function () {
     const { effect: fxFn, cleanup } = applyInputBinding($(this), atom, options);
-    
+
     const fx = effect(fxFn);
     registry.trackEffect(this, fx);
     registry.trackCleanup(this, cleanup);

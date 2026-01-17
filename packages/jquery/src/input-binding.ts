@@ -1,7 +1,7 @@
 import { batch } from '@but212/atom-effect';
+import { debug } from './debug';
 import type { InputBindingState, ValOptions, WritableAtom } from './types';
 import { createInputBindingState } from './types';
-import { debug } from './debug';
 
 /**
  * Applies two-way data binding configuration to an input element.
