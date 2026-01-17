@@ -158,14 +158,14 @@ Type guards (`isAtom`, `isComputed`, `isEffect`), configuration constants (`DEBU
 
 | Operation | Performance |
 | --- | --- |
-| Atom creation | ~5.04M ops/sec |
-| Atom read/write | ~4.57M ops/sec |
+| Atom creation | ~4.95M ops/sec |
+| Atom read/write | ~9.32M ops/sec |
 | Computed creation | ~1.75M ops/sec |
-| Computed recomputation | ~467K ops/sec |
-| Effect execution | ~394K ops/sec |
-| Batch update (2 atoms) | ~1.77M ops/sec |
-| Untracked read | ~3.20M ops/sec |
-| Deep chain (100 levels) | ~8.2K ops/sec |
+| Computed recomputation | ~556K ops/sec |
+| Effect execution | ~4.57M ops/sec |
+| Batch update (2 atoms) | ~3.97M ops/sec |
+| Untracked read | ~6.01M ops/sec |
+| Deep chain (100 levels) | ~8.7K ops/sec |
 
 See [docs/BENCHMARKS.md](./docs/BENCHMARKS.md) for details.
 
