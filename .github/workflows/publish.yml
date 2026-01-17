@@ -22,7 +22,7 @@ jobs:
       - name: Check version match
         run: |
           TAG_VERSION=${GITHUB_REF#refs/tags/v}
-          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          PACKAGE_VERSION=$(node -p "require('./packages/core/package.json').version")
           if [ "$TAG_VERSION" != "$PACKAGE_VERSION" ]; then
             echo "Error: Tag version ($TAG_VERSION) does not match package.json version ($PACKAGE_VERSION)"
             exit 1
@@ -32,12 +32,16 @@ jobs:
         id: changelog
         run: |
           TAG_VERSION=${GITHUB_REF#refs/tags/v}
-          if ! grep -q "## \[${TAG_VERSION}\]" CHANGELOG.md; then
+          if ! grep -q "## \[${TAG_VERSION}\]" packages/core/CHANGELOG.md && ! grep -q "## \[${TAG_VERSION}\]" CHANGELOG.md; then
             echo "Error: CHANGELOG.md does not contain an entry for version ${TAG_VERSION}"
             exit 1
           fi
-          # Extract content between current version header and the next header (or EOF)
-          awk "/## \[${TAG_VERSION}\]/{flag=1;next}/## \[/{flag=0}flag" CHANGELOG.md > RELEASE_NOTES.md
+          # Try packages/core first, fallback to root
+          if [ -f packages/core/CHANGELOG.md ]; then
+            awk "/## \[${TAG_VERSION}\]/{flag=1;next}/## \[/{flag=0}flag" packages/core/CHANGELOG.md > RELEASE_NOTES.md
+          else
+            awk "/## \[${TAG_VERSION}\]/{flag=1;next}/## \[/{flag=0}flag" CHANGELOG.md > RELEASE_NOTES.md
+          fi
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -62,12 +66,13 @@ jobs:
         run: pnpm typecheck
 
       - name: Run tests
-        run: pnpm test -- --run
+        run: pnpm test:run
 
       - name: Build
         run: pnpm build
 
       - name: Publish to NPM
+        working-directory: packages/core
         run: pnpm publish --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

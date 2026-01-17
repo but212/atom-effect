@@ -1,33 +1,15 @@
 # Changelog
 
-## [0.8.0]
-
-### Changed
-
-- **Monorepo Migration**: Migrated from single-repo to pnpm workspace + Turborepo monorepo structure.
-  - Root workspace now manages `packages/core` (@but212/atom-effect) and `packages/jquery` (atom-effect-jquery).
-  - Shared tooling: `tsconfig.base.json`, `biome.json` at root level.
-  - Turborepo enables parallel builds with dependency-aware caching.
-  - `atom-effect-jquery` now uses `workspace:*` dependency for seamless local development.
-
-### Infrastructure
-
-- Added `pnpm-workspace.yaml` for workspace definition.
-- Added `turbo.json` for build pipeline (build → test → lint).
-- Added `tsconfig.base.json` for shared TypeScript configuration.
-- Updated GitHub workflows (`ci.yml`, `publish.yml`, `benchmark.yml`) for monorepo paths.
-- Added `.turbo` to `.gitignore`.
-
 ## [0.7.0]
 
-### Added - 0.7.0
+### Added
 
 - **Error Propagation**: Implemented automatic error propagation and accumulation through computed value chains.
   - Added `errors: readonly Error[]` to `ComputedAtom`: Returns an immutable array of deduplicated errors from self and all dependencies.
   - Added `isValid: boolean` to `ComputedAtom`: Convenience getter (inverse of `hasError`).
   - Extended `hasError` to propagate error status from the dependency chain.
 
-### Changed - 0.7.0
+### Changed
 
 - **Graceful Error Handling**: `ComputedAtom` now catches errors thrown by dependencies and wraps them in `ComputedError`.
   - If a computed value has a `defaultValue` and encounters a recoverable error (default for `ComputedError`), it will return the `defaultValue` on subsequent accesses instead of re-throwing. This allows downstream dependencies to continue execution (graceful degradation).

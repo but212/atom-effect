@@ -32,10 +32,13 @@ jobs:
         run: pnpm build
 
       - name: Run micro benchmarks
+        working-directory: packages/core
         run: pnpm bench:micro
 
       - name: Run macro benchmarks
+        working-directory: packages/core
         run: pnpm bench:macro
 
       - name: Run realistic benchmarks
+        working-directory: packages/core
         run: pnpm bench:realistic
