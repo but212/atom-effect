@@ -9,13 +9,17 @@
   - Shared tooling: `tsconfig.base.json`, `biome.json` at root level.
   - Turborepo enables parallel builds with dependency-aware caching.
   - `atom-effect-jquery` now uses `workspace:*` dependency for seamless local development.
+- **Unified Versioning**: Both `@but212/atom-effect` and `atom-effect-jquery` now share the same version number.
+  - Single `v*` tag deploys both packages to NPM simultaneously.
+  - Ensures compatibility between core and bindings.
 
 ### Infrastructure
 
 - Added `pnpm-workspace.yaml` for workspace definition.
 - Added `turbo.json` for build pipeline (build → test → lint).
 - Added `tsconfig.base.json` for shared TypeScript configuration.
-- Updated GitHub workflows (`ci.yml`, `publish.yml`, `benchmark.yml`) for monorepo paths.
+- Updated `publish.yml` to deploy both packages with unified version validation.
+- Updated GitHub workflows (`ci.yml`, `benchmark.yml`) for monorepo paths.
 - Added `.turbo` to `.gitignore`.
 
 ## [0.7.0]
