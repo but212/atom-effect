@@ -2,8 +2,8 @@ import { batch, effect } from '@but212/atom-effect';
 import $ from 'jquery';
 import { debug } from './debug';
 import { registry } from './registry';
+import { applyInputBinding } from './input-binding';
 import type { ReactiveValue, ValOptions, WritableAtom } from './types';
-import { createInputBindingState, type InputBindingState } from './types';
 import { getValue, isReactive } from './utils';
 
 /**
@@ -203,105 +203,12 @@ $.fn.atomHide = function (condition: ReactiveValue<boolean>): JQuery {
  * Supports IME (Input Method Editor) for CJK languages.
  */
 $.fn.atomVal = function <T>(atom: WritableAtom<T>, options: ValOptions<T> = {}): JQuery {
-  const {
-    debounce: debounceMs,
-    event = 'input',
-    parse = (v: string) => v as unknown as T,
-    format = (v: T) => String(v ?? ''),
-  } = options;
-
   return this.each(function () {
-    const $el = $(this);
-
-    // Unified state context - explicit lifecycle phases
-    const state: InputBindingState = createInputBindingState();
-
-    // Phase transition: idle → composing
-    const onCompositionStart = () => {
-      state.phase = 'composing';
-    };
-
-    // Phase transition: composing → idle, then sync
-    const onCompositionEnd = () => {
-      state.phase = 'idle';
-      syncAtomFromDom();
-    };
-
-    $el.on('compositionstart', onCompositionStart);
-    $el.on('compositionend', onCompositionEnd);
-
-    const onFocus = () => {
-      state.hasFocus = true;
-    };
-    const onBlur = () => {
-      state.hasFocus = false;
-      // Force formatting on blur to ensure clean display
-      const formatted = format(atom.value);
-      if ($el.val() !== formatted) {
-        $el.val(formatted);
-      }
-    };
-
-    $el.on('focus', onFocus);
-    $el.on('blur', onBlur);
-
-    // Core sync: DOM → Atom
-    const syncAtomFromDom = () => {
-      // Guard: only sync when idle
-      if (state.phase !== 'idle') return;
-
-      state.phase = 'syncing-to-atom';
-      batch(() => {
-        atom.value = parse($el.val() as string);
-      });
-      state.phase = 'idle';
-    };
-
-    const onInput = () => {
-      // Guard: skip during composition or sync phases
-      if (state.phase !== 'idle') return;
-
-      if (debounceMs) {
-        if (state.timeoutId) clearTimeout(state.timeoutId);
-        state.timeoutId = window.setTimeout(syncAtomFromDom, debounceMs);
-      } else {
-        syncAtomFromDom();
-      }
-    };
-
-    $el.on(event, onInput);
-    $el.on('change', onInput);
-
-    // Core sync: Atom → DOM
-    const fx = effect(() => {
-      const formatted = format(atom.value);
-      const currentVal = $el.val() as string;
-
-      // Update only if value differs
-      if (currentVal !== formatted) {
-        // Don't interrupt user input if parsed value matches
-        if (state.hasFocus && parse(currentVal) === atom.value) {
-          return;
-        }
-
-        state.phase = 'syncing-to-dom';
-        $el.val(formatted);
-        debug.domUpdated($el, 'val', formatted);
-        state.phase = 'idle';
-      }
-    });
-
+    const { effect: fxFn, cleanup } = applyInputBinding($(this), atom, options);
+    
+    const fx = effect(fxFn);
     registry.trackEffect(this, fx);
-
-    registry.trackCleanup(this, () => {
-      $el.off(event, onInput);
-      $el.off('change', onInput);
-      $el.off('compositionstart', onCompositionStart);
-      $el.off('compositionend', onCompositionEnd);
-      $el.off('focus', onFocus);
-      $el.off('blur', onBlur);
-      if (state.timeoutId) clearTimeout(state.timeoutId);
-    });
+    registry.trackCleanup(this, cleanup);
   });
 };
 

@@ -13,6 +13,12 @@
   - Single `v*` tag deploys both packages to NPM simultaneously.
   - Ensures compatibility between core and bindings.
 
+### Refactor
+
+- **Code Deduplication**: Extracted shared two-way data binding logic into `applyInputBinding` helper.
+  - unified `$.fn.atomVal` (chainable) and `bindVal` (declarative) implementation.
+  - Consolidated input handling logic (debounce, IME, focus tracking) in centrally managed module.
+
 ### Infrastructure
 
 - Added `pnpm-workspace.yaml` for workspace definition.
@@ -37,21 +43,21 @@
   - If a computed value has a `defaultValue` and encounters a recoverable error (default for `ComputedError`), it will return the `defaultValue` on subsequent accesses instead of re-throwing. This allows downstream dependencies to continue execution (graceful degradation).
 - **Error Deduplication**: The `errors` array uses a `Set` internally to ensure the same `Error` instance only appears once, preventing duplicate error reports in diamond dependency patterns.
 
-### Fixed
+### Fixed - 0.7.0
 
 - **Dependency Tracking**: Fixed an issue where computed values throwing synchronous errors would not register themselves as dependencies in parent computations. Tracking is now registered before computation execution.
 - **Async Error Propagation**: Fixed an issue where async computed values did not correctly propagate error states to downstream dependencies.
   - Ensures `hasError` is correctly set on downstream computed values even when the upstream throws (blocked state).
   - Enables true declarative error handling in async chains (no need for manual error checks).
 
-### Example
+### Example - 0.7.0
 
 - **Async Propagation**: Added `examples/async-propagation.html` - A comprehensive demo of declarative async pipeline handling.
   - Showcases "Callback Hell vs Atom-Effect Declarative" comparison.
   - Demonstrates how to build robust async pipelines (User -> Repos -> Stats) without manual error plumbing.
   - Visualizes automatic error propagation and "blocked" states.
 
-### Refactor
+### Refactor - 0.7.0
 
 - **Internal Cleanup**: Removed redundant `ComputedStateFlags` and separate handler classes (`SyncComputationHandler`, `AsyncComputationHandler`) as their logic is now efficiently inlined within `ComputedAtom`.
 

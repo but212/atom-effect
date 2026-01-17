@@ -4,6 +4,7 @@ import { debug } from './debug';
 import { registry } from './registry';
 import type { BindingOptions, CssValue, ReactiveValue, ValOptions, WritableAtom } from './types';
 import { createInputBindingState } from './types';
+import { applyInputBinding } from './input-binding';
 import { getValue, isReactive } from './utils';
 
 // ============================================================================
@@ -166,98 +167,10 @@ function bindVal<T>(
   const atom = Array.isArray(valConfig) ? valConfig[0] : valConfig;
   const options = Array.isArray(valConfig) ? valConfig[1] : {};
 
-  const {
-    debounce: debounceMs,
-    event = 'input',
-    parse = (v: string) => v as unknown as T,
-    format = (v: T) => String(v ?? ''),
-  } = options;
+  const { effect, cleanup } = applyInputBinding(ctx.$el, atom, options);
 
-  const state = createInputBindingState();
-
-  // IME composition support (CJK input)
-  const onCompositionStart = () => {
-    state.phase = 'composing';
-  };
-
-  const onCompositionEnd = () => {
-    state.phase = 'idle';
-    syncAtomFromDom();
-  };
-
-  ctx.$el.on('compositionstart', onCompositionStart);
-  ctx.$el.on('compositionend', onCompositionEnd);
-
-  // Focus tracking for smart formatting
-  const onFocus = () => {
-    state.hasFocus = true;
-  };
-  const onBlur = () => {
-    state.hasFocus = false;
-    // Force formatting on blur to ensure clean display
-    const formatted = format(atom.value);
-    if (ctx.$el.val() !== formatted) {
-      ctx.$el.val(formatted);
-    }
-  };
-
-  ctx.$el.on('focus', onFocus);
-  ctx.$el.on('blur', onBlur);
-
-  // Core sync: DOM → Atom
-  const syncAtomFromDom = () => {
-    if (state.phase !== 'idle') return;
-
-    state.phase = 'syncing-to-atom';
-    batch(() => {
-      atom.value = parse(ctx.$el.val() as string);
-    });
-    state.phase = 'idle';
-  };
-
-  // Input handler with optional debounce
-  const onInput = () => {
-    if (state.phase !== 'idle') return;
-
-    if (debounceMs) {
-      if (state.timeoutId) clearTimeout(state.timeoutId);
-      state.timeoutId = window.setTimeout(syncAtomFromDom, debounceMs);
-    } else {
-      syncAtomFromDom();
-    }
-  };
-
-  ctx.$el.on(event, onInput);
-  ctx.$el.on('change', onInput);
-
-  ctx.trackCleanup(() => {
-    ctx.$el.off(event, onInput);
-    ctx.$el.off('change', onInput);
-    ctx.$el.off('compositionstart', onCompositionStart);
-    ctx.$el.off('compositionend', onCompositionEnd);
-    ctx.$el.off('focus', onFocus);
-    ctx.$el.off('blur', onBlur);
-    if (state.timeoutId) clearTimeout(state.timeoutId);
-  });
-
-  // Core sync: Atom → DOM
-  ctx.effects.push(() => {
-    const formatted = format(atom.value);
-    const currentVal = ctx.$el.val() as string;
-
-    // Update only if value differs
-    if (currentVal !== formatted) {
-      // Don't interrupt user input if parsed value matches
-      if (state.hasFocus && parse(currentVal) === atom.value) {
-        return;
-      }
-
-      state.phase = 'syncing-to-dom';
-      ctx.$el.val(formatted);
-      debug.domUpdated(ctx.$el, 'val', formatted);
-      state.phase = 'idle';
-    }
-  });
+  ctx.effects.push(effect);
+  ctx.trackCleanup(cleanup);
 }
 
 function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): void {
