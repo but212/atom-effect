@@ -1,6 +1,6 @@
 import { AsyncState, COMPUTED_STATE_FLAGS, EMPTY_ERROR_ARRAY, SMI_MAX } from '@/constants';
 import { ReactiveDependency } from '@/core/base/reactive-dependency';
-import { syncDependencies } from '@/core/utils/dep-tracking';
+import { syncDependencies, trackDependency } from '@/core/utils/dep-tracking';
 import type { AtomError } from '@/errors/errors';
 import { ComputedError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
@@ -17,6 +17,7 @@ import { trackingContext } from '@/tracking';
 
 import type {
   AsyncStateType,
+  ComputationContext,
   ComputedAtom,
   ComputedOptions,
   Dependency,
@@ -25,12 +26,7 @@ import type {
 import { debug, NO_DEFAULT_VALUE } from '@/utils/debug';
 import { wrapError } from '@/utils/error';
 import { SubscriberManager } from '@/utils/subscriber-manager';
-import {
-  hasDependencyMethod,
-  hasExecuteMethod,
-  isPlainListener,
-  isPromise,
-} from '@/utils/type-guards';
+import { isPromise } from '@/utils/type-guards';
 
 // AsyncState mapping
 const ASYNC_STATE_MASK =
@@ -424,7 +420,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     }
   }
 
-  private _prepareComputationContext() {
+  private _prepareComputationContext(): ComputationContext {
     const prevDeps = this._dependencies;
     const prevVersions = this._dependencyVersions;
     const nextDeps = depArrayPool.acquire();
@@ -452,12 +448,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     return { prevDeps, prevVersions, nextDeps, nextVersions, originalAdd, state };
   }
 
-  private _commitDependencies(ctx: {
-    nextDeps: Dependency[];
-    nextVersions: number[];
-    state: { depCount: number };
-    prevDeps: Dependency[];
-  }): void {
+  private _commitDependencies(ctx: ComputationContext): void {
     const { nextDeps, nextVersions, state, prevDeps } = ctx;
 
     nextDeps.length = state.depCount;
@@ -468,16 +459,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._dependencyVersions = nextVersions;
   }
 
-  private _cleanupContext(
-    ctx: {
-      nextDeps: Dependency[];
-      nextVersions: number[];
-      originalAdd: (dep: Dependency) => void;
-      prevDeps: Dependency[];
-      prevVersions: number[];
-    },
-    committed: boolean
-  ): void {
+  private _cleanupContext(ctx: ComputationContext, committed: boolean): void {
     this._trackable.addDependency = ctx.originalAdd;
 
     if (committed) {
@@ -612,25 +594,12 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   }
 
   private _registerTracking(): void {
-    const current = trackingContext.getCurrent();
-    if (!current) return;
-
-    // Priority 1: Has addDependency method (TrackableListener or DependencyTracker)
-    if (hasDependencyMethod(current)) {
-      current.addDependency(this);
-      return;
-    }
-
-    // Priority 2: Plain function callback
-    if (isPlainListener(current)) {
-      this._functionSubscribersStore.add(current);
-      return;
-    }
-
-    // Priority 3: Object with execute method (Subscriber pattern)
-    if (hasExecuteMethod(current)) {
-      this._objectSubscribersStore.add(current);
-    }
+    trackDependency(
+      this,
+      trackingContext.getCurrent(),
+      this._functionSubscribersStore,
+      this._objectSubscribersStore
+    );
   }
 }
 

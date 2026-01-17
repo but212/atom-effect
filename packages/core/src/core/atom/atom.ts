@@ -5,7 +5,7 @@ import { trackingContext } from '@/tracking';
 import type { AtomOptions, Subscriber, WritableAtom } from '@/types';
 import { debug } from '@/utils/debug';
 import { SubscriberManager } from '@/utils/subscriber-manager';
-import { hasDependencyMethod, hasExecuteMethod, isPlainListener } from '@/utils/type-guards';
+import { trackDependency } from '../utils/dep-tracking';
 
 /**
  * Internal {@link WritableAtom} implementation.
@@ -74,20 +74,7 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
   }
 
   private _track(current: unknown): void {
-    // Priority 1: TrackableListener pattern (addDependency method)
-    if (hasDependencyMethod(current)) {
-      current.addDependency(this);
-      return;
-    }
-    // Priority 2: Plain function callback
-    if (isPlainListener(current)) {
-      this._functionSubscribersStore.add(current as (newValue?: T, oldValue?: T) => void);
-      return;
-    }
-    // Priority 3: Subscriber pattern (execute method)
-    if (hasExecuteMethod(current)) {
-      this._objectSubscribersStore.add(current);
-    }
+    trackDependency(this, current, this._functionSubscribersStore, this._objectSubscribersStore);
   }
 
   private _scheduleNotification(oldValue: T): void {

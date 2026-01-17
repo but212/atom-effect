@@ -9,7 +9,7 @@ export default defineConfig({
       entry: 'src/index.ts',
       name: 'AtomEffectJQuery',
       formats: ['es', 'cjs', 'umd'],
-      fileName: (format) =>
+      fileName: (format: string) =>
         format === 'umd' ? 'atom-effect-jquery.min.js' : `index.${format === 'es' ? 'mjs' : 'cjs'}`,
     },
     rollupOptions: {
