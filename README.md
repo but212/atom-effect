@@ -12,7 +12,7 @@ A lightweight, high-performance reactive state management ecosystem for TypeScri
 | Package | Version | Description |
 | --------- | --------- | ------------- |
 | [@but212/atom-effect](./packages/core) | [![npm](https://img.shields.io/npm/v/@but212/atom-effect.svg)](https://www.npmjs.com/package/@but212/atom-effect) | Core reactive primitives (`atom`, `computed`, `effect`) |
-| [atom-effect-jquery](./packages/jquery) | [![npm](https://img.shields.io/npm/v/atom-effect-jquery.svg)](https://www.npmjs.com/package/atom-effect-jquery) | jQuery reactive bindings |
+| [@but212/atom-effect-jquery](./packages/jquery) | [![npm](https://img.shields.io/npm/v/@but212/atom-effect-jquery.svg)](https://www.npmjs.com/package/@but212/atom-effect-jquery) | jQuery reactive bindings |
 
 ## Quick Start
 
@@ -36,11 +36,11 @@ count.value = 5; // Logs: "Count: 5, Doubled: 10"
 ### jQuery Bindings
 
 ```bash
-npm i atom-effect-jquery jquery
+npm i @but212/atom-effect-jquery jquery
 ```
 
 ```javascript
-import 'atom-effect-jquery';
+import '@but212/atom-effect-jquery';
 
 const count = $.atom(0);
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1]
+
+### Fixed
+
+- **Publishing**: Scoped `atom-effect-jquery` to `@but212/atom-effect-jquery` to resolve NPM publishing permission errors.
+- **Versioning**: Bumped all packages to 0.8.1 to maintain unified versioning.
+
 ## [0.8.0]
 
 ### Changed
