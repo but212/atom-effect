@@ -5,12 +5,7 @@
 
 import { bench, describe } from 'vitest';
 import { atom, computed, effect } from '../../src/index.js';
-import { microBenchOptions } from '../utils/setup.js';
-
-const benchEffectOptions = {
-  maxExecutionsPerSecond: Infinity,
-  maxExecutionsPerFlush: Infinity,
-};
+import { benchEffectOptions, microBenchOptions } from '../utils/setup.js';
 
 describe('Effect Creation', () => {
   bench(

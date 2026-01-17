@@ -5,7 +5,7 @@
 
 import { bench, describe } from 'vitest';
 import { atom, computed, effect } from '../../src/index.js';
-import { forceGC, getMemoryUsage, memoryBenchOptions } from '../utils/setup.js';
+import { benchEffectOptions, forceGC, getMemoryUsage, memoryBenchOptions } from '../utils/setup.js';
 
 describe('Memory Allocation', () => {
   bench(
@@ -36,7 +36,7 @@ describe('Memory Allocation', () => {
         let _value = 0;
         return effect(() => {
           _value = a.value;
-        });
+        }, benchEffectOptions);
       });
       effects.forEach((e) => e.dispose());
       a.dispose();
@@ -119,7 +119,7 @@ describe('Memory Leak Detection', () => {
           return () => {
             _resources = [];
           };
-        });
+        }, benchEffectOptions);
       });
 
       // Trigger cleanups

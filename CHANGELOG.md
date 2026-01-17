@@ -11,14 +11,14 @@
 
 ## [0.8.3]
 
-### Refactor
+### Refactor - 0.8.3
 
 - Introduced `ComputationContext` interface to types for better type safety in computed atom lifecycle.
 - Reduced duplication in `AtomImpl` and `ComputedAtomImpl` by utilizing shared tracking utility.
 
 ## [0.8.2]
 
-### Fixed
+### Fixed - 0.8.2
 
 - **Publishing**: Added `publishConfig.access: public` to `@but212/atom-effect-jquery` to fix NPM payment required error for scoped packages.
 - **Versioning**: Bumped all packages to 0.8.2.

@@ -58,6 +58,14 @@ export function formatOpsPerSec(ops: number): string {
 }
 
 /**
+ * Options for Effect to disable infinite loop detection in benchmarks
+ */
+export const benchEffectOptions = {
+  maxExecutionsPerSecond: Infinity,
+  maxExecutionsPerFlush: Infinity,
+};
+
+/**
  * Format time in appropriate unit
  */
 export function formatTime(ms: number): string {
@@ -135,7 +143,7 @@ export function getMemoryUsage(): {
  * Run Node with --expose-gc flag to enable
  */
 export function forceGC(): void {
-  if (global.gc) {
-    global.gc();
+  if (globalThis.gc) {
+    globalThis.gc();
   }
 }
