@@ -19,11 +19,6 @@
 - **Debug Mode:** Visual highlighting of DOM updates to trace reactivity.
 - **jQuery Integration:** Batching support for standard jQuery events.
 
-## Requirements
-
-- **jQuery**: >=3.0.0
-- **@but212/atom-effect**: >=0.8.0
-
 ## Installation
 
 ### NPM
