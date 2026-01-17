@@ -129,7 +129,7 @@ Benchmark results show:
 
 **Date**: 2026-01-18  
 **Environment**: Github Actions, Node.js 20.x, V8 Engine  
-**Methdology Update**: Benchmarks now isolate object creation and disable infinite loop detection (`maxExecutions: Infinity`) to measure pure engine throughput without artificial throttling.
+**Methodology Update**: Benchmarks now isolate object creation and disable infinite loop detection (`maxExecutions: Infinity`) to measure pure engine throughput without artificial throttling.
 
 ### 1. Micro-Benchmarks
 
