@@ -40,7 +40,7 @@ pnpm add @but212/atom-effect-jquery jquery @but212/atom-effect
 <!-- Load jQuery -->
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <!-- Load atom-effect-jquery -->
-<script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.8.1"></script>
+<script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.8.2"></script>
 ```
 
 ## Basic Usage

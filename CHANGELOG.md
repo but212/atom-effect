@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.2]
+
+### Fixed
+
+- **Publishing**: Added `publishConfig.access: public` to `atom-effect-jquery` to fix NPM payment required error for scoped packages.
+- **Versioning**: Bumped all packages to 0.8.2.
+
 ## [0.8.1]
 
 ### Fixed
