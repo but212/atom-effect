@@ -37,10 +37,12 @@ describe('Atom Creation', () => {
 });
 
 describe('Atom Read Operations', () => {
+  const a = atom(42);
+  const atoms = Array.from({ length: 100 }, (_, i) => atom(i));
+
   bench(
     'read atom.value',
     () => {
-      const a = atom(42);
       const _ = a.value;
       void _;
     },
@@ -50,7 +52,6 @@ describe('Atom Read Operations', () => {
   bench(
     'read atom.peek()',
     () => {
-      const a = atom(42);
       void a.peek();
     },
     microBenchOptions
@@ -59,7 +60,6 @@ describe('Atom Read Operations', () => {
   bench(
     'read 100 atoms sequentially',
     () => {
-      const atoms = Array.from({ length: 100 }, (_, i) => atom(i));
       let sum = 0;
       for (const a of atoms) {
         sum += a.value;
@@ -71,11 +71,14 @@ describe('Atom Read Operations', () => {
 });
 
 describe('Atom Write Operations', () => {
+  const a = atom(0);
+  const atoms = Array.from({ length: 100 }, (_, i) => atom(i));
+  const objAtom = atom({ count: 0 });
+
   bench(
     'write atom.value (single)',
     () => {
-      const a = atom(0);
-      a.value = 1;
+      a.value += 1;
     },
     microBenchOptions
   );
@@ -83,7 +86,8 @@ describe('Atom Write Operations', () => {
   bench(
     'write atom.value (10 times)',
     () => {
-      const a = atom(0);
+      // Toggle back and forth to ensure changes propagate if connected (though here isolated)
+      // and to avoid any "same value" optimization skipping internal logic
       for (let i = 0; i < 10; i++) {
         a.value = i;
       }
@@ -94,9 +98,8 @@ describe('Atom Write Operations', () => {
   bench(
     'write 100 atoms',
     () => {
-      const atoms = Array.from({ length: 100 }, (_, i) => atom(i));
       for (let i = 0; i < atoms.length; i++) {
-        atoms[i].value = i * 2;
+        atoms[i].value += 1;
       }
     },
     microBenchOptions
@@ -105,18 +108,28 @@ describe('Atom Write Operations', () => {
   bench(
     'write atom with object (shallow)',
     () => {
-      const a = atom({ count: 0 });
-      a.value = { count: 1 };
+      // Create new object to ensure reference change
+      objAtom.value = { count: objAtom.value.count + 1 };
     },
     microBenchOptions
   );
 });
 
 describe('Atom Subscription', () => {
+  const a = atom(0);
+  const aForNotify = atom(0);
+  const aForMultiNotify = atom(0);
+
+  // Setup for notification benchmarks
+  aForNotify.subscribe(() => {});
+
+  for (let i = 0; i < 10; i++) {
+    aForMultiNotify.subscribe(() => {});
+  }
+
   bench(
     'subscribe and unsubscribe',
     () => {
-      const a = atom(0);
       const unsubscribe = a.subscribe(() => {});
       unsubscribe();
     },
@@ -126,7 +139,6 @@ describe('Atom Subscription', () => {
   bench(
     'subscribe with 10 listeners',
     () => {
-      const a = atom(0);
       const unsubscribes = Array.from({ length: 10 }, () => a.subscribe(() => {}));
       unsubscribes.forEach((u) => u());
     },
@@ -136,12 +148,7 @@ describe('Atom Subscription', () => {
   bench(
     'notify subscribers (1 subscriber)',
     () => {
-      const a = atom(0);
-      let _count = 0;
-      a.subscribe(() => {
-        _count++;
-      });
-      a.value = 1;
+      aForNotify.value += 1;
     },
     microBenchOptions
   );
@@ -149,20 +156,15 @@ describe('Atom Subscription', () => {
   bench(
     'notify subscribers (10 subscribers)',
     () => {
-      const a = atom(0);
-      let _count = 0;
-      for (let i = 0; i < 10; i++) {
-        a.subscribe(() => {
-          _count++;
-        });
-      }
-      a.value = 1;
+      aForMultiNotify.value += 1;
     },
     microBenchOptions
   );
 });
 
 describe('Atom Disposal', () => {
+  // Disposal benchmarks necessarily involve creation/cleanup in the loop
+  // or a complex setup. We'll keep creation in loop for straightforward disposal testing.
   bench(
     'dispose atom',
     () => {

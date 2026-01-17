@@ -1,37 +1,32 @@
 import { bench, describe } from 'vitest';
-import { atom, computed, effect } from '../../src/index.js';
+import { atom, batch, computed, effect } from '../../src/index.js';
 
 describe('Frame Budget (16ms)', () => {
-  bench('updates per frame', () => {
-    const atoms = Array.from({ length: 100 }, () => atom(0));
-    const computed1 = computed(() => atoms.reduce((s, a) => s + a.value, 0));
+  // Setup 100 atoms and a computed that depends on all of them
+  const atoms = Array.from({ length: 100 }, () => atom(0));
+  const heavyComputed = computed(() => atoms.reduce((s, a) => s + a.value, 0));
 
-    effect(() => {
-      // Force read
-      const _ = computed1.value;
-    });
+  // Effect to force read
+  effect(() => {
+    void heavyComputed.value;
+  });
 
-    const _start = performance.now();
-    const _updates = 0;
-
-    // Run as many updates as possible in ~16ms
-    // Note: In a real benchmark runner like tinybench, this might be tricky because
-    // the benchmark function itself is timed.
-    // However, we can measure "how long N updates take" or "how many updates in fixed time".
-    // Here we simulate a frame workload and return the count, but standard
-    // benchmarking frameworks usually measure the *duration* of the function.
-    // So we will fix the number of updates to a reasonable high number and measure time,
-    // OR we try to fit in 16ms.
-    // For a standard benchmark, it's better to process a fixed batch and see if it's fast enough.
-    // But the user requested "updates per frame".
-
-    // Let's try to simulate a heavy frame workload.
-    // We will perform a fixed number of updates that represents a "heavy" frame
-    // and see how fast it is (ops/sec -> implies frame time).
-
-    // Let's update 100 atoms effectively.
+  bench('updates per frame (100 atoms)', () => {
+    // Perform 100 updates. In a non-batched system, this might trigger 100 re-evals (or at least 100 propagations).
+    // In optimized systems, it should be faster.
     for (let i = 0; i < 100; i++) {
       atoms[i].value++;
     }
+    // Read final value to ensure propagation
+    void heavyComputed.value;
+  });
+
+  bench('updates per frame (100 atoms, batched)', () => {
+    batch(() => {
+      for (let i = 0; i < 100; i++) {
+        atoms[i].value++;
+      }
+    });
+    void heavyComputed.value;
   });
 });
