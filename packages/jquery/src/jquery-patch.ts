@@ -1,5 +1,5 @@
-import $ from 'jquery';
 import { batch } from '@but212/atom-effect';
+import $ from 'jquery';
 import { registry } from './registry';
 
 /**
@@ -12,11 +12,11 @@ let isjQueryOverridesEnabled = false;
 
 /**
  * Patches jQuery methods to integrate with the reactive system.
- * 
+ *
  * 1. Lifecycle Overrides (.remove, .empty, .detach):
  *    - Automatically cleans up effects/bindings when elements are removed.
  *    - Preserves bindings when elements are detached.
- * 
+ *
  * 2. Event Batching (.on, .off):
  *    - Wraps event handlers in batch() to optimize rendering.
  */
@@ -36,7 +36,7 @@ export function enablejQueryOverrides() {
   $.fn.remove = function (selector?: string) {
     // Filter elements if selector is provided, as per jQuery docs
     const $target = selector ? this.filter(selector) : this;
-    
+
     $target.each(function () {
       registry.cleanupTree(this);
     });
@@ -48,7 +48,7 @@ export function enablejQueryOverrides() {
   $.fn.empty = function () {
     this.each(function () {
       const children = this.querySelectorAll('*');
-      children.forEach(child => registry.cleanup(child));
+      children.forEach((child) => registry.cleanup(child));
       // Note: cleanupTree(this) would unsubscribe the element itself, which is incorrect for .empty().
       // We must clean up all descendants. `querySelectorAll('*')` achieves this.
     });
@@ -59,7 +59,7 @@ export function enablejQueryOverrides() {
   // .detach() - Remove from DOM + Keep Subscription (Marking)
   $.fn.detach = function (selector?: string) {
     const $target = selector ? this.filter(selector) : this;
-    
+
     $target.each(function () {
       registry.keep(this);
     });
@@ -82,7 +82,7 @@ export function enablejQueryOverrides() {
 
     if (fnIndex !== -1) {
       const originalFn = args[fnIndex];
-      
+
       let wrappedFn: Function | undefined;
       if (handlerMap.has(originalFn)) {
         wrappedFn = handlerMap.get(originalFn);

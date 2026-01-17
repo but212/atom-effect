@@ -463,13 +463,14 @@ $(<span class="code-string">'#results'</span>).<span class="code-method">atomLis
             return { text: 'Idle', class: 'status-idle', showSpinner: false };
           case 'pending':
             return { text: `Searching "${query}"...`, class: 'status-pending', showSpinner: true };
-          case 'resolved':
+          case 'resolved': {
             const count = searchResults.value.length;
             return { 
               text: count > 0 ? `${count} results found` : 'No results', 
               class: 'status-resolved',
               showSpinner: false 
             };
+          }
           case 'rejected':
             return { text: 'Error occurred', class: 'status-rejected', showSpinner: false };
           default:

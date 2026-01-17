@@ -1,13 +1,13 @@
-import $ from 'jquery';
 import {
-  atom as createAtom,
-  computed,
-  effect,
   batch,
-  untracked,
+  computed,
+  atom as createAtom,
+  effect,
   isAtom,
-  isComputed
+  isComputed,
+  untracked,
 } from '@but212/atom-effect';
+import $ from 'jquery';
 import { debug } from './debug';
 import type { AtomOptions, WritableAtom } from './types';
 
@@ -21,7 +21,7 @@ const atomMetadata = new WeakMap<WritableAtom<unknown>, { name?: string }>();
  */
 function atom<T>(initialValue: T, options: AtomOptions = {}): WritableAtom<T> {
   const instance = createAtom(initialValue, options);
-  
+
   // Store metadata
   if (options.name) {
     atomMetadata.set(instance, { name: options.name });
@@ -46,7 +46,7 @@ Object.defineProperty(atom, 'debug', {
   },
   set(value: boolean) {
     debug.enabled = value;
-  }
+  },
 });
 
 /**
@@ -55,7 +55,7 @@ Object.defineProperty(atom, 'debug', {
  * logic: Uses setTimeout to ensure it runs after all microtasks (where effects are processed).
  */
 function nextTick(): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, 0));
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 /**
@@ -70,5 +70,5 @@ $.extend({
   isAtom,
   isComputed,
   isReactive: (v: unknown) => isAtom(v) || isComputed(v),
-  nextTick
+  nextTick,
 });

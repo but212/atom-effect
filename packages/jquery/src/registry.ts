@@ -1,15 +1,15 @@
-import type { EffectObject } from './types';
 import { debug } from './debug';
+import type { EffectObject } from './types';
 import { getSelector } from './utils';
 
 /**
  * Binding Registry
- * 
+ *
  * Solving Circular Reference Issues:
  * - Prevents Atom -> Subscription -> Callback -> DOM Element cycle.
  * - Uses WeakMap to track effects and cleanup functions per DOM element.
  * - Automatically unsubscribes when DOM elements are removed via MutationObserver.
- * 
+ *
  * Preventing Memory Leaks:
  * - Must call unsubscribe() when DOM is removed.
  * - Recursively cleans up child nodes.
@@ -17,10 +17,10 @@ import { getSelector } from './utils';
 class BindingRegistry {
   // DOM Element -> Effect Array (for disposal)
   private effects = new WeakMap<Element, EffectObject[]>();
-  
+
   // DOM Element -> Custom Cleanup Function Array
   private cleanups = new WeakMap<Element, Array<() => void>>();
-  
+
   // Track bound elements (Performance optimization)
   private boundElements = new WeakSet<Element>();
 
@@ -79,9 +79,9 @@ class BindingRegistry {
     const effects = this.effects.get(el);
     if (effects) {
       this.effects.delete(el); // Delete first to prevent re-entry
-      effects.forEach(fx => {
-        try { 
-          fx.dispose(); 
+      effects.forEach((fx) => {
+        try {
+          fx.dispose();
         } catch (e) {
           debug.warn('Effect dispose error:', e);
         }
@@ -92,8 +92,10 @@ class BindingRegistry {
     const cleanups = this.cleanups.get(el);
     if (cleanups) {
       this.cleanups.delete(el); // Delete first to prevent re-entry
-      cleanups.forEach(fn => {
-        try { fn(); } catch (e) {
+      cleanups.forEach((fn) => {
+        try {
+          fn();
+        } catch (e) {
           debug.warn('Cleanup error:', e);
         }
       });
@@ -109,12 +111,12 @@ class BindingRegistry {
   cleanupTree(el: Element): void {
     // Descendants first (Depth-First)
     const children = el.querySelectorAll('*');
-    children.forEach(child => {
+    children.forEach((child) => {
       if (this.boundElements.has(child)) {
         this.cleanup(child);
       }
     });
-    
+
     // Then the element itself
     this.cleanup(el);
   }
@@ -124,7 +126,7 @@ export const registry = new BindingRegistry();
 
 /**
  * MutationObserver for Auto-Cleanup
- * 
+ *
  * jQuery's .remove() or .empty() cannot clean up external library (Atom) subscriptions.
  * MutationObserver is essential to detect DOM removals and trigger cleanup.
  */
@@ -136,10 +138,10 @@ export function enableAutoCleanup(root: Element = document.body): void {
 
   observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
-      mutation.removedNodes.forEach(node => {
+      mutation.removedNodes.forEach((node) => {
         // If the node is marked as "kept" (e.g. .detach()), skip cleanup
         if (registry.isKept(node)) {
-          return; 
+          return;
         }
 
         if (node.isConnected) {

@@ -1,9 +1,9 @@
-import $ from 'jquery';
 import { effect } from '@but212/atom-effect';
-import { registry } from './registry';
+import $ from 'jquery';
 import { debug } from './debug';
-import { getSelector } from './utils';
+import { registry } from './registry';
 import type { ListOptions, ReadonlyAtom } from './types';
+import { getSelector } from './utils';
 
 /**
  * Helper: Longest Increasing Subsequence (LIS)
@@ -77,19 +77,17 @@ function getLIS(arr: number[]): number[] {
  * Implementation of atomList with Smart Reconciliation (Keyed Diffing)
  * Uses LIS (Longest Increasing Subsequence) to minimize DOM moves.
  */
-$.fn.atomList = function<T>(
-  source: ReadonlyAtom<T[]>,
-  options: ListOptions<T>
-): JQuery {
-  return this.each(function() {
+$.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>): JQuery {
+  return this.each(function () {
     const $container = $(this);
     const containerSelector = getSelector(this);
 
     const { key, render, bind, onAdd, onRemove, empty } = options;
 
-    const getKey = typeof key === 'function'
-      ? key
-      : (item: T) => item[key as keyof T] as unknown as string | number;
+    const getKey =
+      typeof key === 'function'
+        ? key
+        : (item: T) => item[key as keyof T] as unknown as string | number;
 
     const itemMap = new Map<string | number, { $el: JQuery; item: T }>();
     let oldKeys: (string | number)[] = [];
@@ -139,16 +137,16 @@ $.fn.atomList = function<T>(
           if (removingKeys.has(k)) continue;
 
           const doRemove = () => {
-             entry.$el.remove();
-             const el = entry.$el[0];
-             if (el) registry.cleanup(el);
-             removingKeys.delete(k); // Clear from tracking when removal completes
-             debug.log('list', `${containerSelector} removed item:`, k);
+            entry.$el.remove();
+            const el = entry.$el[0];
+            if (el) registry.cleanup(el);
+            removingKeys.delete(k); // Clear from tracking when removal completes
+            debug.log('list', `${containerSelector} removed item:`, k);
           };
 
           itemMap.delete(k); // Remove from map immediately to avoid interference
           removingKeys.add(k); // Mark as being removed
-          
+
           if (onRemove) {
             Promise.resolve(onRemove(entry.$el)).then(doRemove);
           } else {
@@ -159,12 +157,12 @@ $.fn.atomList = function<T>(
 
       // 4. LIS algorithm for minimizing moves
       // Map keys to their index in the OLD list
-      const oldIndexMap = new Map<string|number, number>();
+      const oldIndexMap = new Map<string | number, number>();
       oldKeys.forEach((k, i) => oldIndexMap.set(k, i));
 
       // Construct array of old indices for the new items
-      const newIndices = newKeys.map(k => oldIndexMap.get(k) ?? -1);
-      
+      const newIndices = newKeys.map((k) => oldIndexMap.get(k) ?? -1);
+
       // Get indices of items in the new list that form the LIS (stable candidates)
       const lis = getLIS(newIndices);
       const lisSet = new Set(lis); // fast lookup
@@ -181,11 +179,11 @@ $.fn.atomList = function<T>(
           // Update Existing
           const entry = itemMap.get(key);
           if (!entry) continue; // Type guard
-          
+
           entry.item = item;
           const el = entry.$el[0];
           if (!el) continue; // Type guard
-            
+
           if (options.update) {
             options.update(entry.$el, item, i);
           }
@@ -211,20 +209,22 @@ $.fn.atomList = function<T>(
           nextNode = el; // This node is now the anchor
         } else {
           const rendered = render(item, i);
-          const $el: JQuery = (rendered instanceof Element ? $(rendered) : $(rendered as string)) as JQuery;
+          const $el: JQuery = (
+            rendered instanceof Element ? $(rendered) : $(rendered as string)
+          ) as JQuery;
           itemMap.set(key, { $el, item });
 
           if (nextNode) {
-             $el.insertBefore(nextNode);
+            $el.insertBefore(nextNode);
           } else {
-             $el.appendTo($container);
+            $el.appendTo($container);
           }
-          
+
           if (bind) bind($el, item, i);
           if (onAdd) onAdd($el);
 
           debug.log('list', `${containerSelector} added item:`, key);
-          
+
           // Use first element of new set as anchor
           const newEl = $el[0];
           if (newEl) nextNode = newEl;
@@ -242,4 +242,3 @@ $.fn.atomList = function<T>(
     });
   });
 };
-

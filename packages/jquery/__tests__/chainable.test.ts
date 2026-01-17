@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
 import $ from 'jquery';
+import { describe, expect, it } from 'vitest';
 import '../src/index';
 
 describe('Chainable Methods', () => {
@@ -49,15 +49,15 @@ describe('Chainable Methods', () => {
     const count = $.atom(1);
     const doubled = $.computed(() => count.value * 2);
     const $el = $('<div>').appendTo(document.body);
-    
+
     // Explicit subscription to wake up computed if lazy
-    // doubled.subscribe(() => {}); 
+    // doubled.subscribe(() => {});
 
     $el.atomText(doubled);
-    
+
     await $.nextTick();
     expect($el.text()).toBe('2');
-    
+
     count.value = 2;
     await $.nextTick();
     expect($el.text()).toBe('4');

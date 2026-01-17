@@ -1,10 +1,10 @@
+import { batch, effect } from '@but212/atom-effect';
 import $ from 'jquery';
-import { effect, batch } from '@but212/atom-effect';
-import { registry } from './registry';
 import { debug } from './debug';
-import { isReactive, getValue } from './utils';
-import type { BindingOptions, ReactiveValue, CssValue, WritableAtom, ValOptions } from './types';
+import { registry } from './registry';
+import type { BindingOptions, CssValue, ReactiveValue, ValOptions, WritableAtom } from './types';
 import { createInputBindingState } from './types';
+import { getValue, isReactive } from './utils';
 
 // ============================================================================
 // Binding Handler Types
@@ -92,7 +92,10 @@ function bindCss(ctx: BindingContext, cssMap: Record<string, CssValue>): void {
   }
 }
 
-function bindAttr(ctx: BindingContext, attrMap: Record<string, ReactiveValue<string | boolean | null>>): void {
+function bindAttr(
+  ctx: BindingContext,
+  attrMap: Record<string, ReactiveValue<string | boolean | null>>
+): void {
   for (const [name, value] of Object.entries(attrMap)) {
     const applyAttr = (v: string | boolean | null | undefined) => {
       if (v === null || v === undefined || v === false) {
@@ -156,18 +159,18 @@ function bindHide(ctx: BindingContext, condition: ReactiveValue<boolean>): void 
  * Supports parse/format options, debouncing, IME composition, and focus-aware updates.
  */
 function bindVal<T>(
-  ctx: BindingContext, 
+  ctx: BindingContext,
   valConfig: WritableAtom<T> | [atom: WritableAtom<T>, options: ValOptions<T>]
 ): void {
   // Parse config - can be just an atom or [atom, options] tuple
   const atom = Array.isArray(valConfig) ? valConfig[0] : valConfig;
   const options = Array.isArray(valConfig) ? valConfig[1] : {};
-  
+
   const {
     debounce: debounceMs,
     event = 'input',
     parse = (v: string) => v as unknown as T,
-    format = (v: T) => String(v ?? '')
+    format = (v: T) => String(v ?? ''),
   } = options;
 
   const state = createInputBindingState();
@@ -186,7 +189,9 @@ function bindVal<T>(
   ctx.$el.on('compositionend', onCompositionEnd);
 
   // Focus tracking for smart formatting
-  const onFocus = () => { state.hasFocus = true; };
+  const onFocus = () => {
+    state.hasFocus = true;
+  };
   const onBlur = () => {
     state.hasFocus = false;
     // Force formatting on blur to ensure clean display
@@ -202,7 +207,7 @@ function bindVal<T>(
   // Core sync: DOM → Atom
   const syncAtomFromDom = () => {
     if (state.phase !== 'idle') return;
-    
+
     state.phase = 'syncing-to-atom';
     batch(() => {
       atom.value = parse(ctx.$el.val() as string);
@@ -224,7 +229,7 @@ function bindVal<T>(
 
   ctx.$el.on(event, onInput);
   ctx.$el.on('change', onInput);
-  
+
   ctx.trackCleanup(() => {
     ctx.$el.off(event, onInput);
     ctx.$el.off('change', onInput);
@@ -239,14 +244,14 @@ function bindVal<T>(
   ctx.effects.push(() => {
     const formatted = format(atom.value);
     const currentVal = ctx.$el.val() as string;
-    
+
     // Update only if value differs
     if (currentVal !== formatted) {
       // Don't interrupt user input if parsed value matches
       if (state.hasFocus && parse(currentVal) === atom.value) {
         return;
       }
-      
+
       state.phase = 'syncing-to-dom';
       ctx.$el.val(formatted);
       debug.domUpdated(ctx.$el, 'val', formatted);
@@ -261,9 +266,11 @@ function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): void {
   // DOM → Atom
   const handler = () => {
     if (state.phase !== 'idle') return;
-    batch(() => { atom.value = ctx.$el.prop('checked'); });
+    batch(() => {
+      atom.value = ctx.$el.prop('checked');
+    });
   };
-  
+
   ctx.$el.on('change', handler);
   ctx.trackCleanup(() => ctx.$el.off('change', handler));
 
@@ -280,9 +287,12 @@ function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): void {
 // Event Binding Handler
 // ============================================================================
 
-function bindEvents(ctx: BindingContext, eventMap: Record<string, (e: JQuery.Event) => void>): void {
+function bindEvents(
+  ctx: BindingContext,
+  eventMap: Record<string, (e: JQuery.Event) => void>
+): void {
   for (const [eventName, handler] of Object.entries(eventMap)) {
-    const wrapped = function(this: HTMLElement, e: JQuery.Event) {
+    const wrapped = function (this: HTMLElement, e: JQuery.Event) {
       batch(() => handler.call(this, e));
     };
     ctx.$el.on(eventName, wrapped);
@@ -296,12 +306,14 @@ function bindEvents(ctx: BindingContext, eventMap: Record<string, (e: JQuery.Eve
 
 /**
  * Extends jQuery with atom-based data binding capabilities.
- * 
+ *
  * This plugin synchronizes DOM element states (text, html, classes, styles, etc.)
  * with reactive atoms. Handlers are modular and focused for maintainability.
  */
-$.fn.atomBind = function<T extends string | number | boolean | null | undefined>(options: BindingOptions<T>): JQuery {
-  return this.each(function() {
+$.fn.atomBind = function <T extends string | number | boolean | null | undefined>(
+  options: BindingOptions<T>
+): JQuery {
+  return this.each(function () {
     const $el = $(this);
     const effects: EffectFactory[] = [];
 
@@ -327,7 +339,7 @@ $.fn.atomBind = function<T extends string | number | boolean | null | undefined>
     if (options.on) bindEvents(ctx, options.on);
 
     // Register all collected effects
-    effects.forEach(fn => {
+    effects.forEach((fn) => {
       const fx = effect(fn);
       registry.trackEffect(this, fx);
     });

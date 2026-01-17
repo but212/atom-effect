@@ -1,10 +1,10 @@
 /**
  * Debug Mode
- * 
+ *
  * When $.atom.debug = true is enabled:
  * 1. Logs state changes to the console.
  * 2. Visually highlights DOM updates (red border flash).
- * 
+ *
  * Debug mode can be enabled in two ways:
  * 1. Environment variable (build-time): NODE_ENV=development
  * 2. Runtime: $.atom.debug = true or window.__ATOM_DEBUG__ = true
@@ -62,10 +62,7 @@ export const debug = {
   atomChanged<T>(name: string | undefined, oldVal: T, newVal: T) {
     if (debugEnabled) {
       const label = name || 'anonymous';
-      console.log(
-        `[atom-effect-jquery] Atom "${label}" changed:`,
-        oldVal, '→', newVal
-      );
+      console.log(`[atom-effect-jquery] Atom "${label}" changed:`, oldVal, '→', newVal);
     }
   },
 
@@ -77,10 +74,7 @@ export const debug = {
 
     // Console logging
     const selector = getSelector($el);
-    console.log(
-      `[atom-effect-jquery] DOM updated: ${selector}.${type} =`,
-      value
-    );
+    console.log(`[atom-effect-jquery] DOM updated: ${selector}.${type} =`, value);
 
     // Visual highlight (red border flash)
     highlightElement($el);
@@ -96,13 +90,13 @@ export const debug = {
     if (debugEnabled) {
       console.warn('[atom-effect-jquery]', ...args);
     }
-  }
+  },
 };
 
 /**
  * Visual highlight - flashes a red border.
  * Inspired by React DevTools "Highlight updates".
- * 
+ *
  * Uses data attributes to manage state and prevent style pollution
  * when updates happen rapidly.
  */
@@ -124,43 +118,42 @@ function highlightElement($el: JQuery): void {
     $el.data(ORG_STYLE_KEY, {
       outline: $el.css('outline'),
       outlineOffset: $el.css('outline-offset'),
-      transition: $el.css('transition')
+      transition: $el.css('transition'),
     });
   }
 
   // 3. Apply highlight style
   $el.css({
-    'outline': '2px solid rgba(255, 68, 68, 0.8)',
+    outline: '2px solid rgba(255, 68, 68, 0.8)',
     'outline-offset': '1px',
-    'transition': 'none' // Remove transition for instant feedback on update
+    transition: 'none', // Remove transition for instant feedback on update
   });
 
   // 4. Set timer to restore
   const timerId = setTimeout(() => {
     // Restore original styles
     const originalStyles = $el.data(ORG_STYLE_KEY);
-    
+
     // We add a transition for the fade out
     $el.css('transition', 'outline 0.5s ease-out');
-    
+
     // Defer the actual style restoration to allow transition to take effect
     requestAnimationFrame(() => {
-        $el.css({
-            'outline': originalStyles?.outline || '',
-            'outline-offset': originalStyles?.outlineOffset || ''
-        });
+      $el.css({
+        outline: originalStyles?.outline || '',
+        'outline-offset': originalStyles?.outlineOffset || '',
+      });
 
-        // 5. Cleanup data after fade out
-        // Wait for transition to finish (500ms)
-        const cleanupTimerId = setTimeout(() => {
-            $el.css('transition', originalStyles?.transition || '');
-            $el.removeData(TIMER_KEY);
-            $el.removeData(CLEANUP_TIMER_KEY);
-            $el.removeData(ORG_STYLE_KEY);
-        }, 500);
-        $el.data(CLEANUP_TIMER_KEY, cleanupTimerId);
+      // 5. Cleanup data after fade out
+      // Wait for transition to finish (500ms)
+      const cleanupTimerId = setTimeout(() => {
+        $el.css('transition', originalStyles?.transition || '');
+        $el.removeData(TIMER_KEY);
+        $el.removeData(CLEANUP_TIMER_KEY);
+        $el.removeData(ORG_STYLE_KEY);
+      }, 500);
+      $el.data(CLEANUP_TIMER_KEY, cleanupTimerId);
     });
-
   }, 100); // Flash duration
 
   $el.data(TIMER_KEY, timerId);

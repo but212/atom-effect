@@ -1,10 +1,10 @@
 import type {
-  WritableAtom,
-  ReadonlyAtom,
-  ComputedAtom,
-  EffectObject,
   AtomOptions as BaseAtomOptions,
-  ComputedOptions
+  ComputedAtom,
+  ComputedOptions,
+  EffectObject,
+  ReadonlyAtom,
+  WritableAtom,
 } from '@but212/atom-effect';
 
 /**
@@ -24,7 +24,9 @@ export type ReactiveValue<T> = T | ReadonlyAtom<T> | ComputedAtom<T>;
  * CSS value: either a direct reactive value or a tuple of [source, unit].
  * Named type provides clear bone structure for CSS binding configurations.
  */
-export type CssValue = ReactiveValue<string | number> | [source: ReactiveValue<number>, unit: string];
+export type CssValue =
+  | ReactiveValue<string | number>
+  | [source: ReactiveValue<number>, unit: string];
 
 /**
  * CSS bindings map property names to CSS values.
@@ -95,7 +97,7 @@ export function createInputBindingState(): InputBindingState {
 /**
  * Functional Component type.
  */
-export type ComponentFn<P = {}> = ($el: JQuery, props: P) => void | (() => void);
+export type ComponentFn<P = {}> = ($el: JQuery, props: P) => undefined | (() => void);
 
 declare global {
   interface JQueryStatic {
@@ -104,8 +106,11 @@ declare global {
       debug: boolean;
     };
     computed<T>(fn: () => T, options?: ComputedOptions<T>): ComputedAtom<T>;
-    computed<T>(fn: () => Promise<T>, options: ComputedOptions<T> & { defaultValue: T }): ComputedAtom<T>;
-    effect(fn: () => void | (() => void)): EffectObject;
+    computed<T>(
+      fn: () => Promise<T>,
+      options: ComputedOptions<T> & { defaultValue: T }
+    ): ComputedAtom<T>;
+    effect(fn: () => undefined | (() => void)): EffectObject;
     batch(fn: () => void): void;
     untracked<T>(fn: () => T): T;
     isAtom(v: unknown): boolean;
@@ -121,7 +126,10 @@ declare global {
     atomClass(className: string, condition: ReactiveValue<boolean>): this;
     atomCss(prop: string, source: ReactiveValue<string | number>, unit?: string): this;
     atomAttr(name: string, source: ReactiveValue<string | boolean | null>): this;
-    atomProp<T extends string | number | boolean | null | undefined>(name: string, source: ReactiveValue<T>): this;
+    atomProp<T extends string | number | boolean | null | undefined>(
+      name: string,
+      source: ReactiveValue<T>
+    ): this;
     atomShow(condition: ReactiveValue<boolean>): this;
     atomHide(condition: ReactiveValue<boolean>): this;
     atomVal<T>(atom: WritableAtom<T>, options?: ValOptions<T>): this;
@@ -129,7 +137,9 @@ declare global {
     atomOn(event: string, handler: (e: JQuery.Event) => void): this;
 
     // Integrated binding
-    atomBind<T extends string | number | boolean | null | undefined>(options: BindingOptions<T>): this;
+    atomBind<T extends string | number | boolean | null | undefined>(
+      options: BindingOptions<T>
+    ): this;
 
     // List rendering
     atomList<T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>): this;
@@ -143,10 +153,4 @@ declare global {
   }
 }
 
-export type {
-  WritableAtom,
-  ReadonlyAtom,
-  ComputedAtom,
-  EffectObject,
-  ComputedOptions
-};
+export type { WritableAtom, ReadonlyAtom, ComputedAtom, EffectObject, ComputedOptions };

@@ -1,21 +1,18 @@
+import { batch, effect } from '@but212/atom-effect';
 import $ from 'jquery';
-import { effect, batch } from '@but212/atom-effect';
-import { registry } from './registry';
 import { debug } from './debug';
-import { isReactive, getValue } from './utils';
-import type { ReactiveValue, WritableAtom, ValOptions } from './types';
+import { registry } from './registry';
+import type { ReactiveValue, ValOptions, WritableAtom } from './types';
 import { createInputBindingState, type InputBindingState } from './types';
+import { getValue, isReactive } from './utils';
 
 /**
  * Updates element text content.
  * @param source - Atom or static value.
  * @param formatter - Optional function to format the value.
  */
-$.fn.atomText = function<T>(
-  source: ReactiveValue<T>,
-  formatter?: (v: T) => string
-): JQuery {
-  return this.each(function() {
+$.fn.atomText = function <T>(source: ReactiveValue<T>, formatter?: (v: T) => string): JQuery {
+  return this.each(function () {
     const $el = $(this);
 
     if (isReactive(source)) {
@@ -37,8 +34,8 @@ $.fn.atomText = function<T>(
  * Updates element inner HTML.
  * @param source - Atom or static value.
  */
-$.fn.atomHtml = function(source: ReactiveValue<string>): JQuery {
-  return this.each(function() {
+$.fn.atomHtml = function (source: ReactiveValue<string>): JQuery {
+  return this.each(function () {
     const $el = $(this);
 
     if (isReactive(source)) {
@@ -59,11 +56,8 @@ $.fn.atomHtml = function(source: ReactiveValue<string>): JQuery {
  * @param className - The class to toggle.
  * @param condition - Boolean source value.
  */
-$.fn.atomClass = function(
-  className: string,
-  condition: ReactiveValue<boolean>
-): JQuery {
-  return this.each(function() {
+$.fn.atomClass = function (className: string, condition: ReactiveValue<boolean>): JQuery {
+  return this.each(function () {
     const $el = $(this);
 
     if (isReactive(condition)) {
@@ -85,12 +79,12 @@ $.fn.atomClass = function(
  * @param source - Value source.
  * @param unit - Optional unit (e.g., 'px', 'em').
  */
-$.fn.atomCss = function(
+$.fn.atomCss = function (
   prop: string,
   source: ReactiveValue<string | number>,
   unit?: string
 ): JQuery {
-  return this.each(function() {
+  return this.each(function () {
     const $el = $(this);
 
     if (isReactive(source)) {
@@ -112,11 +106,8 @@ $.fn.atomCss = function(
  * @param name - Attribute name.
  * @param source - Attribute value.
  */
-$.fn.atomAttr = function(
-  name: string,
-  source: ReactiveValue<string | boolean | null>
-): JQuery {
-  return this.each(function() {
+$.fn.atomAttr = function (name: string, source: ReactiveValue<string | boolean | null>): JQuery {
+  return this.each(function () {
     const $el = $(this);
 
     const applyAttr = (value: string | boolean | null) => {
@@ -144,11 +135,11 @@ $.fn.atomAttr = function(
  * @param name - Property name.
  * @param source - Property value.
  */
-$.fn.atomProp = function<T extends string | number | boolean | null | undefined>(
+$.fn.atomProp = function <T extends string | number | boolean | null | undefined>(
   name: string,
   source: ReactiveValue<T>
 ): JQuery {
-  return this.each(function() {
+  return this.each(function () {
     const $el = $(this);
 
     if (isReactive(source)) {
@@ -168,8 +159,8 @@ $.fn.atomProp = function<T extends string | number | boolean | null | undefined>
  * Shows element when condition is true.
  * @param condition - Boolean source value.
  */
-$.fn.atomShow = function(condition: ReactiveValue<boolean>): JQuery {
-  return this.each(function() {
+$.fn.atomShow = function (condition: ReactiveValue<boolean>): JQuery {
+  return this.each(function () {
     const $el = $(this);
 
     if (isReactive(condition)) {
@@ -189,8 +180,8 @@ $.fn.atomShow = function(condition: ReactiveValue<boolean>): JQuery {
  * Hides element when condition is true.
  * @param condition - Boolean source value.
  */
-$.fn.atomHide = function(condition: ReactiveValue<boolean>): JQuery {
-  return this.each(function() {
+$.fn.atomHide = function (condition: ReactiveValue<boolean>): JQuery {
+  return this.each(function () {
     const $el = $(this);
 
     if (isReactive(condition)) {
@@ -211,20 +202,17 @@ $.fn.atomHide = function(condition: ReactiveValue<boolean>): JQuery {
  * Uses InputBindingState for explicit lifecycle management.
  * Supports IME (Input Method Editor) for CJK languages.
  */
-$.fn.atomVal = function<T>(
-  atom: WritableAtom<T>,
-  options: ValOptions<T> = {}
-): JQuery {
+$.fn.atomVal = function <T>(atom: WritableAtom<T>, options: ValOptions<T> = {}): JQuery {
   const {
     debounce: debounceMs,
     event = 'input',
     parse = (v: string) => v as unknown as T,
-    format = (v: T) => String(v ?? '')
+    format = (v: T) => String(v ?? ''),
   } = options;
 
-  return this.each(function() {
+  return this.each(function () {
     const $el = $(this);
-    
+
     // Unified state context - explicit lifecycle phases
     const state: InputBindingState = createInputBindingState();
 
@@ -242,7 +230,9 @@ $.fn.atomVal = function<T>(
     $el.on('compositionstart', onCompositionStart);
     $el.on('compositionend', onCompositionEnd);
 
-    const onFocus = () => { state.hasFocus = true; };
+    const onFocus = () => {
+      state.hasFocus = true;
+    };
     const onBlur = () => {
       state.hasFocus = false;
       // Force formatting on blur to ensure clean display
@@ -259,7 +249,7 @@ $.fn.atomVal = function<T>(
     const syncAtomFromDom = () => {
       // Guard: only sync when idle
       if (state.phase !== 'idle') return;
-      
+
       state.phase = 'syncing-to-atom';
       batch(() => {
         atom.value = parse($el.val() as string);
@@ -281,19 +271,19 @@ $.fn.atomVal = function<T>(
 
     $el.on(event, onInput);
     $el.on('change', onInput);
-    
+
     // Core sync: Atom → DOM
     const fx = effect(() => {
       const formatted = format(atom.value);
       const currentVal = $el.val() as string;
-      
+
       // Update only if value differs
       if (currentVal !== formatted) {
         // Don't interrupt user input if parsed value matches
         if (state.hasFocus && parse(currentVal) === atom.value) {
           return;
         }
-        
+
         state.phase = 'syncing-to-dom';
         $el.val(formatted);
         debug.domUpdated($el, 'val', formatted);
@@ -318,21 +308,21 @@ $.fn.atomVal = function<T>(
 /**
  * Two-way binding for checkbox/radio checked state.
  */
-$.fn.atomChecked = function(atom: WritableAtom<boolean>): JQuery {
-  return this.each(function() {
+$.fn.atomChecked = function (atom: WritableAtom<boolean>): JQuery {
+  return this.each(function () {
     const $el = $(this);
-    
+
     let isUpdatingFromAtom = false;
 
     // DOM → Atom
     const handler = () => {
       if (isUpdatingFromAtom) return;
-      
+
       batch(() => {
         atom.value = $el.prop('checked');
       });
     };
-    
+
     $el.on('change', handler);
     registry.trackCleanup(this, () => $el.off('change', handler));
 
@@ -350,14 +340,11 @@ $.fn.atomChecked = function(atom: WritableAtom<boolean>): JQuery {
 /**
  * Binds an event handler that automatically runs within a batch.
  */
-$.fn.atomOn = function(
-  event: string,
-  handler: (e: JQuery.Event) => void
-): JQuery {
-  return this.each(function() {
+$.fn.atomOn = function (event: string, handler: (e: JQuery.Event) => void): JQuery {
+  return this.each(function () {
     const $el = $(this);
 
-    const wrappedHandler = function(this: HTMLElement, e: JQuery.Event) {
+    const wrappedHandler = function (this: HTMLElement, e: JQuery.Event) {
       batch(() => handler.call(this, e));
     };
 
@@ -369,8 +356,8 @@ $.fn.atomOn = function(
 /**
  * Removes all atom bindings and cleanup effects from the elements.
  */
-$.fn.atomUnbind = function(): JQuery {
-  return this.each(function() {
+$.fn.atomUnbind = function (): JQuery {
+  return this.each(function () {
     registry.cleanupTree(this);
   });
 };
