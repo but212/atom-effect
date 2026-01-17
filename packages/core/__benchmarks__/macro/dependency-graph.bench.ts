@@ -8,22 +8,53 @@ import { atom, computed } from '../../src/index.js';
 import { macroBenchOptions } from '../utils/setup.js';
 
 describe('Dependency Chain Patterns', () => {
+  const chainSource = atom(0);
+  let chainSink = computed(() => chainSource.value);
+  for (let i = 1; i < 100; i++) {
+    const prev = chainSink;
+    chainSink = computed(() => prev.value + 1);
+  }
+
+  const fanOutSource = atom(0);
+  const fanOutSinks = Array.from({ length: 100 }, (_, i) =>
+    computed(() => fanOutSource.value * (i + 1))
+  );
+
+  const diamondSource = atom(1);
+  const diamondLevel1 = Array.from({ length: 10 }, (_, i) =>
+    computed(() => diamondSource.value * (i + 1))
+  );
+  const diamondLevel2 = Array.from({ length: 10 }, (_, i) =>
+    computed(() => diamondLevel1[i].value * 2)
+  );
+  const diamondSink = computed(() => diamondLevel2.reduce((sum, c) => sum + c.value, 0));
+
+  const pyramidBase = Array.from({ length: 50 }, (_, i) => atom(i));
+
+  // Build pyramid
+  const buildPyramid = () => {
+    let currentLevel = pyramidBase.map((a) => computed(() => a.value));
+
+    for (let level = 1; level < 50; level++) {
+      const nextLevel: ReturnType<typeof computed<number>>[] = [];
+      for (let i = 0; i < currentLevel.length - 1; i++) {
+        const left = currentLevel[i];
+        const right = currentLevel[i + 1];
+        nextLevel.push(computed(() => left.value + right.value));
+      }
+      currentLevel = nextLevel;
+      if (currentLevel.length === 0) break;
+    }
+    return currentLevel[0];
+  };
+
+  const pyramidApex = buildPyramid();
+
   bench(
     'deep chain (100 levels)',
     () => {
-      const a = atom(0);
-      let current = computed(() => a.value);
-
-      // Create chain of 100 computed values
-      for (let i = 1; i < 100; i++) {
-        const prev = current;
-        current = computed(() => prev.value + 1);
-      }
-
-      // Trigger full chain recomputation
-      const _ = current.value;
-      a.value = 1;
-      const __ = current.value;
+      chainSource.value += 1;
+      const _ = chainSink.value;
     },
     macroBenchOptions
   );
@@ -31,17 +62,8 @@ describe('Dependency Chain Patterns', () => {
   bench(
     'wide fan-out (1 atom → 100 computeds)',
     () => {
-      const a = atom(0);
-      const computeds = Array.from({ length: 100 }, (_, i) => computed(() => a.value * (i + 1)));
-
-      // Trigger all recomputations
-      computeds.forEach((c) => {
-        const _ = c.value;
-      });
-
-      a.value = 1;
-
-      computeds.forEach((c) => {
+      fanOutSource.value += 1;
+      fanOutSinks.forEach((c) => {
         const _ = c.value;
       });
     },
@@ -51,20 +73,8 @@ describe('Dependency Chain Patterns', () => {
   bench(
     'diamond dependency pattern',
     () => {
-      const a = atom(1);
-
-      // Level 1: 10 computeds depend on a
-      const level1 = Array.from({ length: 10 }, (_, i) => computed(() => a.value * (i + 1)));
-
-      // Level 2: 10 computeds depend on level1
-      const level2 = Array.from({ length: 10 }, (_, i) => computed(() => level1[i].value * 2));
-
-      // Final: 1 computed depends on all level2
-      const final = computed(() => level2.reduce((sum, c) => sum + c.value, 0));
-
-      const _ = final.value;
-      a.value = 2;
-      const __ = final.value;
+      diamondSource.value += 1;
+      const _ = diamondSink.value;
     },
     macroBenchOptions
   );
@@ -72,60 +82,36 @@ describe('Dependency Chain Patterns', () => {
   bench(
     'pyramid dependency pattern (50 levels)',
     () => {
-      const base = Array.from({ length: 50 }, (_, i) => atom(i));
-
-      let currentLevel: ReturnType<typeof computed<number>>[] = base.map((a) =>
-        computed(() => a.value)
-      );
-
-      // Build pyramid
-      for (let level = 1; level < 50; level++) {
-        const nextLevel: ReturnType<typeof computed<number>>[] = [];
-        for (let i = 0; i < currentLevel.length - 1; i++) {
-          const left = currentLevel[i];
-          const right = currentLevel[i + 1];
-          nextLevel.push(computed(() => left.value + right.value));
-        }
-        currentLevel = nextLevel;
-        if (currentLevel.length === 0) break;
-      }
-
-      const apex = currentLevel[0];
-      const _ = apex.value;
-
-      // Update base
-      base[0].value = 100;
-      const __ = apex.value;
+      pyramidBase[0].value += 1;
+      const _ = pyramidApex.value;
     },
     macroBenchOptions
   );
 });
 
 describe('Complex Graph Patterns', () => {
+  const mixedAtoms = Array.from({ length: 100 }, (_, i) => atom(i));
+  const mixedComputeds = Array.from({ length: 200 }, (_, i) => {
+    const idx1 = i % mixedAtoms.length;
+    const idx2 = (i + 1) % mixedAtoms.length;
+    return computed(() => mixedAtoms[idx1].value + mixedAtoms[idx2].value);
+  });
+
+  const circA = atom(1);
+  const circB = atom(2);
+  const circC = atom(3);
+
+  const circAb = computed(() => circA.value + circB.value);
+  const circBc = computed(() => circB.value + circC.value);
+  const circCa = computed(() => circC.value + circA.value);
+  const circAll = computed(() => circAb.value + circBc.value + circCa.value);
+
   bench(
     'mixed dependencies (100 atoms, 200 computeds)',
     () => {
-      const atoms = Array.from({ length: 100 }, (_, i) => atom(i));
-
-      // Each computed depends on 2 random atoms
-      const computeds = Array.from({ length: 200 }, (_, i) => {
-        const idx1 = i % atoms.length;
-        const idx2 = (i + 1) % atoms.length;
-        return computed(() => atoms[idx1].value + atoms[idx2].value);
-      });
-
-      // Read all
-      computeds.forEach((c) => {
-        const _ = c.value;
-      });
-
-      // Update some atoms
-      for (let i = 0; i < 10; i++) {
-        atoms[i].value = i * 10;
-      }
-
-      // Re-read affected computeds
-      computeds.forEach((c) => {
+      // Update one atom, check all
+      mixedAtoms[0].value += 1;
+      mixedComputeds.forEach((c) => {
         const _ = c.value;
       });
     },
@@ -135,57 +121,37 @@ describe('Complex Graph Patterns', () => {
   bench(
     'circular avoidance pattern',
     () => {
-      const a = atom(1);
-      const b = atom(2);
-      const c = atom(3);
-
-      // a → b → c → a-like pattern (but safe)
-      const ab = computed(() => a.value + b.value);
-      const bc = computed(() => b.value + c.value);
-      const ca = computed(() => c.value + a.value);
-      const all = computed(() => ab.value + bc.value + ca.value);
-
-      const _ = all.value;
-
-      // Update should propagate correctly
-      a.value = 10;
-      const __ = all.value;
-
-      b.value = 20;
-      const ___ = all.value;
+      circA.value += 1;
+      const _ = circAll.value;
     },
     macroBenchOptions
   );
 });
 
 describe('Dynamic Dependency Patterns', () => {
+  const condAtom = atom(true);
+  const condA = atom(1);
+  const condB = atom(2);
+  const condResult = computed(() => (condAtom.value ? condA.value : condB.value));
+
+  const idxAtom = atom(0);
+  const arrValues = Array.from({ length: 10 }, (_, i) => atom(i));
+  const arrSelected = computed(() => arrValues[idxAtom.value].value);
+
   bench(
     'conditional dependencies',
     () => {
-      const condition = atom(true);
-      const a = atom(1);
-      const b = atom(2);
+      // Toggle condition to switch dependency leg
+      condAtom.value = !condAtom.value;
+      const _ = condResult.value;
 
-      const result = computed(() => (condition.value ? a.value : b.value));
-
-      // Access with condition true
-      const _ = result.value;
-
-      // Update a (should trigger)
-      a.value = 10;
-      const __ = result.value;
-
-      // Switch condition
-      condition.value = false;
-      const ___ = result.value;
-
-      // Update a (should NOT trigger)
-      a.value = 20;
-      const ____ = result.value;
-
-      // Update b (should trigger)
-      b.value = 30;
-      const _____ = result.value;
+      // Update active branch
+      if (condAtom.value) {
+        condA.value++;
+      } else {
+        condB.value++;
+      }
+      const __ = condResult.value;
     },
     macroBenchOptions
   );
@@ -193,24 +159,13 @@ describe('Dynamic Dependency Patterns', () => {
   bench(
     'array-based dynamic dependencies',
     () => {
-      const selectedIndex = atom(0);
-      const values = Array.from({ length: 10 }, (_, i) => atom(i));
+      // Change index
+      idxAtom.value = (idxAtom.value + 1) % 10;
+      const _ = arrSelected.value;
 
-      const selected = computed(() => values[selectedIndex.value].value);
-
-      // Access different indices
-      for (let i = 0; i < 10; i++) {
-        selectedIndex.value = i;
-        const _ = selected.value;
-      }
-
-      // Update values
-      values.forEach((v, i) => {
-        v.value = i * 10;
-      });
-
-      // Re-access
-      const _ = selected.value;
+      // Update underlying value
+      arrValues[idxAtom.value].value++;
+      const __ = arrSelected.value;
     },
     macroBenchOptions
   );

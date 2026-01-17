@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.8.4]
+
+### Refactor
+
+- **Benchmarks**: Overhauled the benchmark suite to ensure fairness and accuracy.
+  - **Separation of Concerns**: Lifted object creation (atoms, computed, graphs) out of the benchmark loop to measure operation cost purely, distinct from allocation cost.
+  - **Valid Mutation**: Replaced static value assignments with toggling/incrementing logic to ensure all updates trigger actual propagation and prevent compiler/runtime no-op optimizations.
+  - **New Scenarios**: Added specific benchmarks for `batch()` throughput in `frame-budget` and pure Effect re-execution in `effect.bench`.
+
 ## [0.8.3]
 
 ### Refactor
