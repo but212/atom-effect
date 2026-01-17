@@ -1,7 +1,7 @@
 # @but212/atom-effect-jquery
 
 [![npm version](https://img.shields.io/npm/v/@but212/atom-effect-jquery.svg)](https://www.npmjs.com/package/@but212/atom-effect-jquery)
-[![License](https://img.shields.io/npm/l/@but212/atom-effect-jquery.svg)](https://github.com/but212/atom-effect/blob/main/LICENSE)
+[![License](https://img.shields.io/npm/l/@but212/atom-effect-jquery.svg)](https://github.com/but212/atom-effect/blob/main/packages/jquery/LICENSE)
 
 **Reactive jQuery bindings powered by [atom-effect](https://github.com/but212/atom-effect).**
 
