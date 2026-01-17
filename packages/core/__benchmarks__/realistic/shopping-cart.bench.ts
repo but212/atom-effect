@@ -60,15 +60,8 @@ describe('Shopping Cart - Realistic', () => {
     if (cart.value.length === 0) {
       cart.value = initialItems;
     } else {
-      // 3. Update quantities (simulate immutable update on a few items)
-      // To be fast and allocation-free-ish, we just slice and replace one
-      // But for "realistic", allocation IS part of the cost (immutable updates).
-      // So we'll keep the logic but maybe optimize it slightly.
-
-      // Actually, for a pure reactivity benchmark, we should minimize the Array methods overhead
-      // if we want to measure the propagation cost. But here user wants "Realistic".
-      // Let's just modify the cart to trigger updates.
-
+      // 3. Update quantities
+      // Simulate typical user interaction: modify an item and trigger reactivity
       const currentItems = [...cart.value];
       // modify first item
       if (currentItems.length > 0) {

@@ -30,16 +30,9 @@ describe('Dependency Chain Patterns', () => {
   const diamondSink = computed(() => diamondLevel2.reduce((sum, c) => sum + c.value, 0));
 
   const pyramidBase = Array.from({ length: 50 }, (_, i) => atom(i));
-  const pyramidLevel: ReturnType<typeof computed<number>>[] = pyramidBase.map((a) =>
-    computed(() => a.value)
-  );
 
   // Build pyramid
   const buildPyramid = () => {
-    const _current = pyramidLevel;
-    // We already have the top-level build here? No, this is setup code.
-    // Wait, the original code had logic to build level by level.
-    // Let's rebuilding it properly here.
     let currentLevel = pyramidBase.map((a) => computed(() => a.value));
 
     for (let level = 1; level < 50; level++) {
