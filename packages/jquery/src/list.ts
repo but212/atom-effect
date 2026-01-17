@@ -23,14 +23,14 @@ function getLIS(arr: number[]): number[] {
   const len = arr.length;
 
   for (i = 0; i < len; i++) {
-    const arrI = arr[i];
+    const arrI = arr[i]!; // Safe: i is within bounds [0, len)
 
     // -1 is treated as "not present" or "ignored" (specific to the diff algorithm)
     if (arrI !== -1) {
-      const lastResultIndex = result[result.length - 1];
+      const lastResultIndex = result[result.length - 1]!; // Safe: result always has at least 1 element
 
       // Case A: If current value is greater than the last value in result -> append (Greedy)
-      if (arr[lastResultIndex] < arrI) {
+      if (arr[lastResultIndex]! < arrI) {
         predecessors[i] = lastResultIndex;
         result.push(i);
         continue;
@@ -43,7 +43,7 @@ function getLIS(arr: number[]): number[] {
 
       while (left < right) {
         mid = ((left + right) / 2) | 0;
-        if (arr[result[mid]] < arrI) {
+        if (arr[result[mid]!]! < arrI) {
           left = mid + 1;
         } else {
           right = mid;
@@ -51,10 +51,10 @@ function getLIS(arr: number[]): number[] {
       }
 
       // Replace if the current value is smaller than the value at the found position
-      if (arrI < arr[result[left]]) {
+      if (arrI < arr[result[left]!]!) {
         if (left > 0) {
           // Link the predecessor
-          predecessors[i] = result[left - 1];
+          predecessors[i] = result[left - 1]!; // Safe: left > 0 means left-1 >= 0
         }
         result[left] = i;
       }
@@ -63,11 +63,11 @@ function getLIS(arr: number[]): number[] {
 
   // Backtracking: reconstruct the actual LIS path using predecessors
   let u = result.length;
-  let v = result[u - 1];
+  let v = result[u - 1]!; // Safe: result has at least 1 element
 
   while (u-- > 0) {
     result[u] = v;
-    v = predecessors[v];
+    v = predecessors[v]!; // Safe: v is always a valid index from previous iteration
   }
 
   return result;
@@ -104,7 +104,8 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
 
       // 1. Prepare keys
       for (let i = 0; i < items.length; i++) {
-        const k = getKey(items[i], i);
+        const item = items[i]!; // Safe: i is within bounds
+        const k = getKey(item, i);
         newKeys.push(k);
         newKeySet.add(k);
       }
@@ -171,8 +172,8 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
       let nextNode: Node | null = null;
 
       for (let i = items.length - 1; i >= 0; i--) {
-        const key = newKeys[i];
-        const item = items[i];
+        const key = newKeys[i]!; // Safe: i is within bounds
+        const item = items[i]!; // Safe: i is within bounds
         const isStable = lisSet.has(i);
 
         if (itemMap.has(key)) {
@@ -208,6 +209,7 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
           }
           nextNode = el; // This node is now the anchor
         } else {
+          // item and key are guaranteed non-undefined from the loop invariant
           const rendered = render(item, i);
           const $el: JQuery = (
             rendered instanceof Element ? $(rendered) : $(rendered as string)
