@@ -139,15 +139,17 @@ pnpm build       # Build production bundle
 
 Verified benchmarks vs object pooling and lazy evaluation optimizations.
 
+> *Note: These numbers represent pure engine throughput in isolation. Actual app performance often depends on external factors like DOM updates and layout.*
+
 | Operation | Performance |
 | --- | --- |
-| Atom creation | ~4.95M ops/sec |
-| Atom read/write | ~9.32M ops/sec |
-| Computed creation | ~1.75M ops/sec |
-| Computed recomputation | ~556K ops/sec |
-| Effect execution | ~4.57M ops/sec |
-| Batched updates | ~3.97M ops/sec |
-| Deep chain (100 levels) | ~8.7K ops/sec |
+| Atom creation | ~4.69M ops/sec |
+| Atom read/write | ~9.52M ops/sec |
+| Computed creation | ~1.80M ops/sec |
+| Computed recomputation | ~583K ops/sec |
+| Effect execution | ~2.96M ops/sec |
+| Batched updates | ~3.82M ops/sec |
+| Deep chain (100 levels) | ~8.2K ops/sec |
 
 ## Contributing
 
