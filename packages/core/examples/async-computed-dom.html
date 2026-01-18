@@ -525,7 +525,7 @@
     <!-- Load atom-effect from dist -->
     <script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect@0.7.0"></script>
     <script>
-      const { atom, computed, effect, AsyncState } = AtomEffect;
+      const { atom, computed, effect, untracked, AsyncState } = AtomEffect;
 
       // State
       const searchCount = atom(0);
@@ -725,6 +725,9 @@
 
       effect(() => {
         if (searchResults.isResolved) {
+          const q = untracked(() => debouncedQuery.value);
+          console.log(`[Search] Query "${q}" resolved with ${searchResults.value.length} results`);
+          
           const now = new Date();
           elements.lastUpdate.textContent = now.toLocaleTimeString();
         }

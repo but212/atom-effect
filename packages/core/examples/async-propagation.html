@@ -614,7 +614,7 @@
     </div>
 
     <script>
-      const { atom, computed, effect, AsyncState } = AtomEffect;
+      const { atom, computed, effect, untracked, AsyncState } = AtomEffect;
 
       // --- Helpers ---
       const delay = (ms) => new Promise(r => setTimeout(r, ms));
@@ -725,7 +725,13 @@
                 cardEl.classList.add('resolved');
                 badgeEl.classList.add('resolved');
                 badgeEl.textContent = 'Done';
-                outputEl.textContent = format(value);
+                
+                // Use untracked when calling the formatter to avoid accidental sub-dependencies
+                outputEl.textContent = untracked(() => format(value));
+                
+                // Log run info without subscribing to runId
+                const rid = untracked(() => runId.value);
+                console.log(`[Run ${rid}] Stage ${id} resolved`);
               }
               break;
               

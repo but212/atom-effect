@@ -657,6 +657,8 @@ $(<span class="code-string">'#results'</span>).<span class="code-method">atomLis
       // Last update time
       $.effect(() => {
         if (searchResults.state === "resolved") {
+          const q = $.untracked(() => debouncedQuery.value);
+          console.log(`[Search] Query "${q}" completed with ${searchResults.value.length} results`);
           $("#last-update").text(new Date().toLocaleTimeString());
         }
       });
