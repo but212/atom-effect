@@ -228,18 +228,14 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
             }
           })
           .catch((error) => {
-            const errorObj = wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_EXECUTION_FAILED);
-            console.error(errorObj);
-            if (this._onError) this._onError(errorObj);
+            this._handleExecutionError(error);
           });
       } else {
         this._cleanup = typeof result === 'function' ? result : null;
       }
     } catch (error) {
       committed = true;
-      const errorObj = wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_EXECUTION_FAILED);
-      console.error(errorObj);
-      if (this._onError) this._onError(errorObj);
+      this._handleExecutionError(error);
       this._cleanup = null;
     } finally {
       this._cleanupEffect(context, committed);
@@ -501,6 +497,16 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     }
 
     return false;
+  }
+
+  /**
+   * Handles errors occurring during effect execution.
+   * Wraps the error, logs it to console, and calls onError callback if provided.
+   */
+  private _handleExecutionError(error: unknown): void {
+    const errorObj = wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_EXECUTION_FAILED);
+    console.error(errorObj);
+    if (this._onError) this._onError(errorObj);
   }
 
   /**
