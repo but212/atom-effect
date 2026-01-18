@@ -9,7 +9,7 @@ describe('Input Latency', () => {
     const searchQuery = atom('');
     const results = computed(() => mockData.filter((item) => item.includes(searchQuery.value)));
     const displayResults = computed(() =>
-      results.value.slice(0, 20).map((item) => `<div class="item">${item}</div>`)
+      results.value.slice(0, 20).map((item: string) => `<div class="item">${item}</div>`)
     );
 
     let _lastRender = '';

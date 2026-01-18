@@ -285,12 +285,6 @@ Benchmark results show:
 
 ### 3. Realistic-Benchmarks
 
-#### Shopping Cart (E-commerce)
-
-| Scenario | ops/sec | Mean (ms) | p99 (ms) |
-| --- | --- | --- | --- |
-| E-commerce cart workflow | 2,252,548 | 0.0004 | 0.0008 |
-
 #### Frame Budget (16ms target)
 
 | Scenario | ops/sec | Mean (ms) | p99 (ms) |
