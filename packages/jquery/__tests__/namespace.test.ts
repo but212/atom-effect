@@ -35,4 +35,11 @@ describe('Namespace', () => {
     expect($.atom.debug).toBe(true);
     $.atom.debug = false;
   });
+
+  it('should support creating atom with name', () => {
+    const a = $.atom(0, { name: 'test-atom' });
+    expect(a.value).toBe(0);
+    expect($.isReactive(a)).toBe(true);
+    expect($.isReactive({})).toBe(false);
+  });
 });
