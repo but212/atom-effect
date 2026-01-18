@@ -1,10 +1,20 @@
 import type { Listener } from './tracking.types';
 
+/** Interface for the tracking context managing dependency collection */
+export interface ITrackingContext {
+  current: Listener | null;
+
+  /** Executes fn within tracking context with given listener */
+  run<T>(listener: Listener, fn: () => T): T;
+
+  getCurrent(): Listener | null;
+}
+
 /**
  * Manages the active tracking context to identify dependencies during execution.
  */
-export class TrackingContext {
-  private current: Listener | null = null;
+export class TrackingContext implements ITrackingContext {
+  current: Listener | null = null;
 
   /**
    * Runs the provided function within the context of the given listener.
