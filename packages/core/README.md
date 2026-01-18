@@ -137,8 +137,6 @@ pnpm build       # Build production bundle
 
 ## Performance
 
-Verified benchmarks vs object pooling and lazy evaluation optimizations.
-
 > *Note: These numbers represent pure engine throughput in isolation. Actual app performance often depends on external factors like DOM updates and layout.*
 
 | Operation | Performance |
