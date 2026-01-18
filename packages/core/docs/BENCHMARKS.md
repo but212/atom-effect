@@ -187,6 +187,7 @@ Benchmark results show:
 | With Computed Dep | 2,785,125 | 0.0004 | 0.0006 |
 | Re-runs (10 times) | 991,140 | 0.0010 | 0.0013 |
 | Multiple on Same Dep | 2,968,229 | 0.0003 | 0.0006 |
+| With Cleanup | 245,939 | 0.0041 | 0.0062 |
 | Cleanup on Dep Change | 3,132,702 | 0.0003 | 0.0005 |
 | Dispose | 271,070 | 0.0037 | 0.0045 |
 | Dispose (with Cleanup) | 263,960 | 0.0038 | 0.0068 |
@@ -305,8 +306,6 @@ Benchmark results show:
 | --- | --- | --- | --- |
 | Form reset (batch) | 161,514 | 0.0062 | 0.0108 |
 | Form reset (no batch) | 882,488 | 0.0011 | 0.0017 |
-
-> **Note**: The "no batch" case measures the **scheduling cost** (updates are coalesced via microtask queue). Higher efficiency in v0.9.1 reflects the improved scheduler grouping.
 
 #### Input Latency
 
