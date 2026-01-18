@@ -116,9 +116,6 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     this._onError = options.onError ?? null;
 
     this._historyPtr = 0;
-    // Capacity = Max executions + 1 (to check the window of N+1 executions)
-    // We cap the capacity to a reasonable limit (1000) to avoid large memory allocations
-    // and skip history tracking if maxExecutions is Infinity or too high.
     const isFiniteLimit = Number.isFinite(this._maxExecutions);
     this._historyCapacity = isFiniteLimit ? Math.min(this._maxExecutions + 1, 1001) : 0;
 
