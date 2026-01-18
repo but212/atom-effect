@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
+import { atom } from '../../src/core/atom';
 import { syncDependencies } from '../../src/core/utils/dep-tracking';
+import type { Dependency, Subscriber } from '../../src/types';
 import { ArrayPool } from '../../src/utils/array-pool';
 import { debug } from '../../src/utils/debug';
 import { ObjectPool, type Poolable } from '../../src/utils/object-pool';
@@ -105,6 +107,39 @@ describe('Utils & Handlers - Extra Coverage', () => {
     });
   });
 
+  describe('DepTracking - trackDependency', () => {
+    it('tracks object with execute method', () => {
+      const dep = atom(0);
+      const sub = { execute: vi.fn() };
+      const objSubs = new SubscriberManager<Subscriber>();
+      const funcSubs = new SubscriberManager<(newValue?: unknown, oldValue?: unknown) => void>();
+
+      import('../../src/core/utils/dep-tracking').then(({ trackDependency }) => {
+        trackDependency(
+          dep as unknown as Dependency,
+          sub as unknown as Subscriber,
+          funcSubs,
+          objSubs
+        );
+        expect(objSubs.has(sub as unknown as Subscriber)).toBe(true);
+      });
+    });
+
+    it('syncDependencies reuses existing subscriptions', () => {
+      const dep = {
+        subscribe: vi.fn(() => () => {}),
+        _tempUnsub: undefined,
+      } as unknown as Dependency;
+      const unsub = () => {};
+      const prevUnsubs = [unsub];
+
+      const nextUnsubs = syncDependencies([dep], [dep], prevUnsubs, {} as unknown as Subscriber);
+
+      expect(nextUnsubs[0]).toBe(unsub);
+      expect(dep.subscribe).not.toHaveBeenCalled();
+    });
+  });
+
   describe('Type Guards', () => {
     it('isTrackableFunction identifies functions with addDependency', () => {
       const fn = () => {};
@@ -194,9 +229,15 @@ describe('Utils & Handlers - Extra Coverage', () => {
 
       expect(() => debug.checkCircular(dep1, dep2)).toThrow(/Indirect circular dependency/);
 
-      // Case 2: Early return if visited
-      // Manually mess up visited epoch to simulate re-visit in same check
-      // but checkCircular handles epoch increment.
+      // Case 2: Diamond dependency (hits visited branch)
+      // dep1 -> dep2, dep1 -> dep3, dep2 -> dep4, dep3 -> dep4
+      const d4 = { id: 4, _visitedEpoch: -1 } as unknown as any;
+      const d2 = { id: 2, _visitedEpoch: -1, dependencies: [d4] } as unknown as any;
+      const d3 = { id: 3, _visitedEpoch: -1, dependencies: [d4] } as unknown as any;
+      const d1 = { id: 1, _visitedEpoch: -1, dependencies: [d2, d3] } as unknown as any;
+
+      expect(() => debug.checkCircular(d1, {})).not.toThrow();
+      expect(d4._visitedEpoch).toBeGreaterThan(0); // This confirms line 39 in debug.ts was hit
 
       // Case 3: Dep without dependencies array
       // biome-ignore lint/suspicious/noExplicitAny: Mock dependency

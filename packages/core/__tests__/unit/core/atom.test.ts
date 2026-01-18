@@ -116,6 +116,12 @@ describe('Atom - Error Handling and Edge Cases', () => {
     expect(count.peek()).toBe(undefined); // set to undefined in dispose
   });
 
+  it('_flushNotifications early return when no notification is scheduled', () => {
+    const count = atom(0);
+    // @ts-expect-error: Access private for coverage
+    expect(() => count._flushNotifications()).not.toThrow();
+  });
+
   it('object subscriber via computed works correctly', async () => {
     const count = atom(0);
     const c = computed(() => count.value * 2);
