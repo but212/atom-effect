@@ -208,29 +208,26 @@ describe('Effect - Extra Coverage', () => {
     expect(caughtError.message).toContain('Infinite loop detected (global)');
   });
 
-  it('covers history shifting', () => {
-    const fx = effect(() => {}, { maxExecutionsPerSecond: 50 });
+  it('covers history circular buffer wrapping', () => {
+    const fx = effect(() => {}, { maxExecutionsPerSecond: 10 });
     // biome-ignore lint/suspicious/noExplicitAny: Access private
     const impl = fx as any;
+    const capacity = impl._historyCapacity; // Should be 11
 
-    impl._history = [];
+    // Manually simulate executions to fill buffer
     const now = Date.now();
-    // SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_SECOND is 1000
-    // We need to fill > 1000 + 10 items. Let's do 1020.
-    for (let i = 0; i < 1020; i++) {
-      impl._history.push(now - 2000);
+    for (let i = 0; i < capacity; i++) {
+        impl._history[i] = now - 2000;
     }
+    impl._historyPtr = capacity - 1; // Point to end
 
+    // Trigger one check (simulates execution)
     impl._checkInfiniteLoop();
 
-    // Should have shifted items.
-    // Pushed 1020. limit is 1010.
-    // After check: push 1 -> 1021.
-    // Shift if > 1010.
-    // So final length should be 1020 (shifted 1, added 1) OR 1010 if it loops?
-    // Code: if (length > limit) shift(). Just one shift per call.
-    // So 1021 -> 1020.
-    expect(impl._history.length).toBe(1020);
+    // Pointer should wrap to 0
+    expect(impl._historyPtr).toBe(0);
+    // The timestamp was written to the PREVIOUS pointer position (capacity - 1)
+    expect(impl._history[capacity - 1]).toBeGreaterThan(now - 100);
   });
 
   it('covers cleanup of prevDeps when execution fails', () => {

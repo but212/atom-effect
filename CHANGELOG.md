@@ -1,8 +1,26 @@
 # Changelog
 
+## [0.8.5]
+
+### Core
+
+#### Changed
+
+- **Performance**: Optimized Effect loop detection in debug mode.
+  - Replaced $O(N)$ array shifting with $O(1)$ Circular Buffer for execution history tracking.
+  - Reduces overhead for high-frequency effects during development.
+- **Safety**: Enhanced Epoch system robustness.
+  - Added wrap-around safety check to `nextEpoch` to prevent theoretical collision at 0.
+
+#### Added
+
+- **Effect API**: Added `onError` option to `EffectOptions`.
+  - Allows handling errors (including async rejections) that occur during effect execution.
+  - Provides a safe way to log or recover from effect failures.
+
 ## [0.8.4]
 
-### Refactor
+### Refactor - 0.8.4
 
 - **Benchmarks**: Overhauled the benchmark suite to ensure fairness and accuracy.
   - **Separation of Concerns**: Lifted object creation (atoms, computed, graphs) out of the benchmark loop to measure operation cost purely, distinct from allocation cost.

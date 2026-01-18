@@ -8,6 +8,8 @@ export interface EffectOptions {
   maxExecutionsPerFlush?: number;
   /** If true, enables detection and warning for effects that modify their own dependencies. */
   trackModifications?: boolean;
+  /** Callback function called when an execution error occurs (including async rejections). */
+  onError?: (error: unknown) => void;
 }
 
 /** Represents a running effect instance. */
