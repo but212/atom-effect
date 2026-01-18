@@ -72,25 +72,19 @@ class Scheduler {
 
     this.isProcessing = true;
 
-    // Swap queues
-    const jobs = this.queue;
-    const count = this.queueSize;
-
-    this.queue = this.queue === this.queueA ? this.queueB : this.queueA;
-    this.queueSize = 0;
-    this._epoch++;
-
     queueMicrotask(() => {
-      const flushStarted = startFlush();
+      try {
+        if (this.queueSize === 0) return;
 
-      this._processJobs(jobs, count);
+        const flushStarted = startFlush();
+        this._drainQueue();
+        if (flushStarted) endFlush();
+      } finally {
+        this.isProcessing = false;
 
-      this.isProcessing = false;
-
-      if (flushStarted) endFlush();
-
-      if (this.queueSize > 0 && !this.isBatching) {
-        this.flush();
+        if (this.queueSize > 0 && !this.isBatching) {
+          this.flush();
+        }
       }
     });
   }
