@@ -1,10 +1,18 @@
 # Changelog
 
-## [0.9.1]
+## [0.9.2]
 
 ### Core
 
 #### Changed
+
+- **Docs**: Removed performance note from README.md.
+
+## [0.9.1]
+
+### Core - 0.9.1
+
+#### Changed - 0.9.1
 
 - **Performance**: Overhauled `Scheduler` for true "Automatic Group Updates".
   - Replaced microtask-chaining with a robust `_drainQueue` mechanism.
