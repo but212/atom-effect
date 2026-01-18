@@ -3,191 +3,121 @@
 [![npm version](https://img.shields.io/npm/v/@but212/atom-effect-jquery.svg)](https://www.npmjs.com/package/@but212/atom-effect-jquery)
 [![License](https://img.shields.io/npm/l/@but212/atom-effect-jquery.svg)](https://github.com/but212/atom-effect/blob/main/packages/jquery/LICENSE)
 
-**Reactive jQuery bindings powered by [atom-effect](https://github.com/but212/atom-effect).**
-
-`@but212/atom-effect-jquery` brings modern, fine-grained reactivity to jQuery applications. It allows you to bind DOM elements directly to atoms, ensuring efficient updates without manual DOM manipulation. It also features automatic cleanup of effects when elements are removed from the DOM, resolving one of the biggest pain points in jQuery development (memory leaks).
-
-## Features
-
-- **Fine-grained Reactivity:** Powered by `@but212/atom-effect`.
-- **Two-way Data Binding:** Seamless synchronization for inputs (`val`, `checked`).
-- **Auto-Cleanup:** Effects are automatically disposed when elements are removed from the DOM (via MutationObserver).
-- **Reparenting-Safe:** DOM elements moved via `.appendTo()`, `.prependTo()`, etc. preserve their reactivity (critical for drag-and-drop libraries like Sortable).
-- **Async Removal Handling:** `atomList` properly handles async removal animations without ghost items.
-- **Smart Input Formatting:** `atomVal` allows intermediate input (e.g., `1.`, `00`) during typing; formatting is applied on blur.
-- **Optimized List Rendering:** `atomList` for efficient array rendering with LIS-based keyed diffing.
-- **Debug Mode:** Visual highlighting of DOM updates to trace reactivity.
-- **jQuery Integration:** Batching support for standard jQuery events.
+Reactive jQuery bindings.
 
 ## Installation
 
-### NPM
-
 ```bash
-npm install @but212/atom-effect-jquery jquery @but212/atom-effect
-# or
-pnpm add @but212/atom-effect-jquery jquery @but212/atom-effect
-```
-
-### CDN
-
-```html
-<!-- Load jQuery -->
-<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-<!-- Load atom-effect-jquery -->
-<script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.8.4"></script>
+npm install @but212/atom-effect-jquery jquery
 ```
 
 ## Basic Usage
 
 ```javascript
-// If using NPM:
-// import $ from 'jquery';
-// import '@but212/atom-effect-jquery';
+import $ from 'jquery';
+import '@but212/atom-effect-jquery';
 
-// 1. Create State
 const count = $.atom(0);
-const doubled = $.computed(() => count.value * 2);
 
-// 2. Bind to DOM
+// Bind text
 $('#count').atomText(count);
-$('#doubled').atomText(doubled);
 
-// 3. Update State (DOM updates automatically)
-$('#increment').on('click', () => count.value++);
-$('#decrement').on('click', () => count.value--);
-
-// 4. React to changes (Side Effects)
-$.effect(() => {
-  console.log(`Current count: ${count.value}, Doubled: ${doubled.value}`);
-});
+// Update state
+$('#btn').on('click', () => count.value++);
 ```
 
 ## API Reference
 
+All methods return the jQuery object for chaining.
+Bindings automatically clean up when elements are removed.
+
 ### Static Methods
 
-The library extends the main jQuery function `$`:
+| Method | Description |
+| --- | --- |
+| `$.atom(val)` | Creates a writable atom. |
+| `$.computed(fn)` | Creates a computed atom. |
+| `$.effect(fn)` | Runs a side effect. |
+| `$.batch(fn)` | Batches updates. |
+| `$.isAtom(val)` | Checks if value is an atom. |
 
-- `$.atom(initialValue)`: Creates a writable atom.
-- `$.computed(() => ...)`: Creates a derived computed atom.
-- `$.effect(() => ...)`: Runs a side effect.
-- `$.batch(() => ...)`: Batches multiple updates into a single render.
-- `$.nextTick()`: Returns a Promise that resolves after the next update cycle.
+### Content & Attributes
 
-### DOM Binding Methods
+| Method | Description |
+| --- | --- |
+| `.atomText(atom, formatter?)` | Binds text content. |
+| `.atomHtml(atom)` | Binds inner HTML. |
+| `.atomClass(class, boolAtom)` | Toggles class based on boolean atom. |
+| `.atomCss(prop, atom, unit?)` | Binds CSS property. |
+| `.atomAttr(attr, atom)` | Binds HTML attribute. |
+| `.atomProp(prop, atom)` | Binds DOM property. |
+| `.atomShow(boolAtom)` | Shows element if true. |
+| `.atomHide(boolAtom)` | Hides element if true. |
 
-All methods are chainable and return the jQuery object.
+### Form Bindings
 
-#### Text & Content
+#### `.atomVal(atom, options?)`
 
-- **`.atomText(atom, formatter?)`**
-  Updates `textContent`. Optional formatter function.
-- **`.atomHtml(atom)`**
-  Updates `innerHTML`. (⚠️ Use with caution regarding XSS).
+Two-way binding for inputs.
 
-#### Attributes & Styles
+- `options.debounce`: (ms) Debounce updates.
+- `options.format`: (fn) Format value on blur.
 
-- **`.atomClass(className, booleanAtom)`**
-  Toggles a class based on the atom's truthy value.
-- **`.atomCss(property, atom, unit?)`**
-  Updates a CSS property. Optional unit (e.g., 'px') can be appended.
-- **`.atomAttr(attribute, atom)`**
-  Updates an HTML attribute.
-- **`.atomProp(property, atom)`**
-  Updates a DOM property (e.g., `disabled`, `readOnly`).
-- **`.atomShow(booleanAtom)`** / **`.atomHide(booleanAtom)`**
-  Toggles visibility using jQuery's `.toggle()`.
+#### `.atomChecked(boolAtom)`
 
-#### Two-Way Binding
+Two-way binding for checkboxes/radios.
 
-- **`.atomVal(atom, options?)`**
-  Two-way binding for input elements.
-  - `options.debounce`: Debounce input updates (ms).
-  - `options.format`: Format value before ensuring it in DOM.
-  - *Note:* Automatically handles IME types (e.g., for Korean/Chinese).
-- **`.atomChecked(booleanAtom)`**
-  Two-way binding for checkboxes and radios.
+### Events
 
-#### Events
+#### `.atomOn(event, handler)`
 
-- **`.atomOn(event, handler)`**
-  Adds an event listener where the handler is automatically wrapped in `$.batch()`.
+Binds event handler wrapped in `batch()` for performance.
 
-### Unified Binding (`.atomBind`)
+### Unified Binding
 
-For cleaner code when setting multiple bindings at once.
+#### `.atomBind(bindings)`
 
-```typescript
-$('div').atomBind({
-  text: nameAtom,
-  class: { 'active': isActiveAtom },
+Apply multiple bindings at once.
+
+```javascript
+$('.card').atomBind({
+  text: titleAtom,
+  class: { 'active': isActive },
   css: { 'color': colorAtom },
-  on: { click: () => console.log('clicked') }
+  on: { click: handleClick }
 });
 ```
 
-### List Rendering (`.atomList`)
+### List Rendering
 
-Efficiently renders a list of atoms.
+#### `.atomList(listAtom, options)`
 
-```typescript
-const items = $.atom(['Apple', 'Banana']);
+Efficiently renders a list of items using keyed diffing.
 
+```javascript
 $('ul').atomList(items, {
-  // Unique key for efficient diffing (required)
-  key: (item) => item, 
-  
-  // Render function returning an HTML string or Element
-  render: (item) => `<li>${item}</li>`,
-  
-  // Optional: Bind events/atoms to the created element
+  key: (item) => item.id,
+  render: (item) => `<li>${item.name}</li>`,
   bind: ($el, item) => {
-    $el.on('click', () => alert(item));
+    $el.on('click', () => select(item));
   }
 });
 ```
 
-### Component Mounting (`.atomMount`)
+**Options**: `key` (required), `render`, `bind`, `onAdd`, `onRemove`, `empty`.
 
-Mounts a functional component that manages its own lifecycle.
+### Components
 
-```typescript
+#### `.atomMount(Component, props)`
+
+Mounts a functional component with its own lifestyle management.
+
+```javascript
 const Counter = ($el, props) => {
-  const count = $.atom(props.initial || 0);
-  
-  $el.append('<span>0</span>');
-  $el.find('span').atomText(count);
-  
-  // Return cleanup function (optional)
-  return () => console.log('Unmounted');
+  const count = $.atom(props.start);
+  $el.atomText(count);
+  return () => console.log('cleanup');
 };
 
-$('#app').atomMount(Counter, { initial: 10 });
+$('#app').atomMount(Counter, { start: 10 });
 ```
-
-## Advanced Features
-
-### Transparent Lifecycle Management
-
-Memory management is handled automatically through overrides of standard jQuery methods. You don't need to manually dispose of bindings.
-
-- **`.remove()` / `.empty()`**: Automatically cleans up all associated reactivity and event listeners to prevent memory leaks.
-- **`.detach()`**: Preserves bindings and reactivity. Perfect for moving elements around in the DOM without losing their state connection.
-- **Auto-Cleanup**: A `MutationObserver` acts as a safety net for elements removed via other means (e.g. `innerHTML`), ensuring eventual cleanup.
-
-### Performance Optimization
-
-The library automatically patches jQuery's event methods (`.on`, `.off`) to wrap handlers in `$.batch()`. This ensures that multiple state updates triggering within a single event (e.g., a click handler) are batched together, resulting in a single re-render.
-
-### Debug Mode
-
-Enable debug mode to see console logs for every DOM update and visually highlight updated elements in the browser.
-
-```typescript
-$.atom.debug = true;
-```
-
-## License
-
-MIT
