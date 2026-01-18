@@ -12,6 +12,14 @@ Lightweight, high-performance reactive state management.
 npm i @but212/atom-effect
 ```
 
+### CDN
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect@latest"></script>
+<!-- or -->
+<script src="https://unpkg.com/@but212/atom-effect@latest"></script>
+```
+
 ## Core API
 
 ### `atom(value)`
