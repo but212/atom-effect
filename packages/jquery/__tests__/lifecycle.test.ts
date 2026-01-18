@@ -111,33 +111,40 @@ describe('jQuery Lifecycle Overrides', () => {
     expect(registry.hasBind(el)).toBe(true);
     registry.cleanup(el);
     expect(registry.hasBind(el)).toBe(false);
-  }); 
+  });
 
   it('registry should handle errors during dispose and cleanup', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const el = document.createElement('div');
     $.atom.debug = true;
-    
+
     // Dispose error
     registry.trackEffect(el, {
-      dispose: () => { throw new Error('dispose fail'); }
-    } as any);
-    
+      dispose: () => {
+        throw new Error('dispose fail');
+      },
+      run: () => {},
+      isDisposed: false,
+      executionCount: 0,
+    });
+
     registry.cleanup(el);
     expect(warnSpy).toHaveBeenCalled();
-    
+
     // Cleanup error
-    registry.trackCleanup(el, () => { throw new Error('cleanup fail'); });
+    registry.trackCleanup(el, () => {
+      throw new Error('cleanup fail');
+    });
     registry.cleanup(el);
     expect(warnSpy).toHaveBeenCalledTimes(2);
-    
+
     warnSpy.mockRestore();
   });
 
   it('should support .off() with original handler and .on(events, false)', () => {
     const $el = $('<div>');
     const handler = vi.fn();
-    
+
     $el.on('click', handler);
     $el.trigger('click');
     expect(handler).toHaveBeenCalled();
@@ -156,19 +163,19 @@ describe('jQuery Lifecycle Overrides', () => {
     const $parent = $('<div>').appendTo(document.body);
     const $child1 = $('<div class="a">').appendTo($parent);
     const $child2 = $('<div class="b">').appendTo($parent);
-    
+
     registry.trackCleanup($child1[0], () => {});
     registry.trackCleanup($child2[0], () => {});
-    
+
     // remove with selector
     $parent.children().remove('.a');
     expect(registry.hasBind($child1[0])).toBe(false);
     expect(registry.hasBind($child2[0])).toBe(true);
-    
+
     // detach with selector
     $parent.children().detach('.b');
     expect(registry.isKept($child2[0])).toBe(true);
-    
+
     $parent.remove();
   });
 
@@ -176,7 +183,7 @@ describe('jQuery Lifecycle Overrides', () => {
     const $el = $('<div>');
     // fnIndex === -1 branch
     expect(() => $el.off('click')).not.toThrow();
-    
+
     // unregistered handler branch
     const unregistered = () => {};
     expect(() => $el.off('click', unregistered)).not.toThrow();

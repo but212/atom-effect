@@ -87,19 +87,19 @@ describe('Input Binding', () => {
       format: (v) => `VAL:${v}`,
     });
 
-    await new Promise(r => setTimeout(r, 10));
+    await new Promise((r) => setTimeout(r, 10));
     expect($el.val()).toBe('VAL:10');
 
     // DOM -> Atom (with debounce)
     $el.val('20').trigger('input');
     expect(val.value).toBe(10); // Not updated yet
 
-    await new Promise(r => setTimeout(r, 60));
+    await new Promise((r) => setTimeout(r, 60));
     expect(val.value).toBe(20);
 
     // Atom -> DOM (format)
     val.value = 30;
-    await new Promise(r => setTimeout(r, 10));
+    await new Promise((r) => setTimeout(r, 10));
     expect($el.val()).toBe('VAL:30');
 
     $el.remove();
@@ -109,14 +109,14 @@ describe('Input Binding', () => {
     const val = $.atom('initial');
     const $input = $('<input>').appendTo(document.body);
     $input.atomVal(val);
-    
-    await new Promise(r => setTimeout(r, 10));
+
+    await new Promise((r) => setTimeout(r, 10));
     $input.val('changed').trigger('input');
-    
+
     // Default update should be relatively immediate (nextTick)
     await $.nextTick();
     expect(val.value).toBe('changed');
-    
+
     $input.remove();
   });
 
@@ -124,26 +124,26 @@ describe('Input Binding', () => {
     // atom value is 100
     const val = $.atom(100);
     const $el = $('<input>').appendTo(document.body);
-    
+
     $el.atomVal(val, {
       parse: (v) => parseInt(v, 10),
-      format: (v) => String(v)
+      format: (v) => String(v),
     });
-    
+
     await $.nextTick();
     expect($el.val()).toBe('100');
-    
+
     // User types "100.0" -> parses to 100
     $el.trigger('focus');
     $el.val('100.0');
-    
+
     // Atom updates to 100 (same value)
     val.value = 100;
     await $.nextTick();
-    
+
     // Should NOT overwrite user's "100.0" with "100" because it parses to same thing
     expect($el.val()).toBe('100.0');
-    
+
     $el.remove();
   });
 });

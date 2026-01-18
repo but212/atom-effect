@@ -97,8 +97,8 @@ describe('Atom List', () => {
       },
       onRemove: async (_$el) => {
         removeCalled = true;
-        await new Promise(r => setTimeout(r, 10));
-      }
+        await new Promise((r) => setTimeout(r, 10));
+      },
     });
 
     await $.nextTick();
@@ -109,21 +109,21 @@ describe('Atom List', () => {
     await $.nextTick();
     expect(removeCalled).toBe(true);
     // Wait for async removal
-    await new Promise(r => setTimeout(r, 20));
+    await new Promise((r) => setTimeout(r, 20));
     expect($container.children().length).toBe(0);
 
     $container.remove();
   });
 
   it('atomList should handle empty to empty updates', async () => {
-    const items = $.atom<any[]>([]);
+    const items = $.atom<{ id: string | number }[]>([]);
     const $ul = $('<ul>').appendTo(document.body);
-    $ul.atomList(items, { 
-      key: (i) => i.id, 
-      render: () => '', 
-      empty: '<li class="empty">empty</li>' 
+    $ul.atomList(items, {
+      key: (i) => i.id,
+      render: () => '',
+      empty: '<li class="empty">empty</li>',
     });
-    
+
     await $.nextTick();
     expect($ul.find('.empty').length).toBe(1);
 

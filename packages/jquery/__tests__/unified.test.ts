@@ -65,11 +65,11 @@ describe('Unified Bind', () => {
 
     await $.nextTick();
     expect($el.css('width')).toBe('100px');
-    
+
     width.value = 200;
     opacity.value = 1;
     // CSS updates sometimes need a macrotask in JSDOM environment
-    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect($el.css('width')).toBe('200px');
     $el.remove();
@@ -116,7 +116,7 @@ describe('Unified Bind', () => {
 
     await $.nextTick();
     expect($el.html()).toBe('<b>b</b>');
-    
+
     $el.trigger('click');
     expect(count.value).toBe(1);
 
@@ -131,15 +131,15 @@ describe('Unified Bind', () => {
     const val = $.atom('v');
     const $input = $('<input>').appendTo(document.body);
     const offSpy = vi.spyOn($.fn, 'off');
-    
+
     $input.atomBind({ val });
     await $.nextTick();
-    
+
     $input.atomUnbind();
-    
+
     expect(offSpy).toHaveBeenCalledWith('input', expect.any(Function));
     expect(offSpy).toHaveBeenCalledWith('change', expect.any(Function));
-    
+
     $input.remove();
     offSpy.mockRestore();
   });
@@ -179,70 +179,71 @@ describe('Unified Bind', () => {
 
   it('atomBind should handle static null/undefined html', () => {
     const $el = $('<div>');
-    $el.atomBind({ html: null as any });
+    $el.atomBind({ html: null as unknown as string });
     expect($el.html()).toBe('');
-    
+
     const $el2 = $('<div>');
-    $el2.atomBind({ html: undefined as any });
+    $el2.atomBind({ html: undefined as unknown as string });
     expect($el2.html()).toBe('');
   });
 
   it('atomBind should support [atom, options] for val', async () => {
     const val = $.atom(0);
     const $el = $('<input>').appendTo(document.body);
-    
+
     $el.atomBind({
-      val: [val, { format: (v) => `N:${v}`, parse: (v) => parseInt(v.replace('N:', ''), 10) }]
+      val: [val, { format: (v) => `N:${v}`, parse: (v) => parseInt(v.replace('N:', ''), 10) }],
     });
-    
+
     await $.nextTick();
     expect($el.val()).toBe('N:0');
-    
+
     $el.val('N:100').trigger('input');
     await $.nextTick();
     expect(val.value).toBe(100);
-    
+
     $el.remove();
   });
 
   it('atomBind reactive branches (text, html, checked cycle)', async () => {
     // line 36-41 (bindText reactive), 48 (bindHtml reactive)
-    const textVal = $.atom<any>('val');
-    const htmlVal = $.atom<any>('<b>b</b>');
+    const textVal = $.atom<string | null>('val');
+    const htmlVal = $.atom<string | null>('<b>b</b>');
     const checkedVal = $.atom(false);
     const $elText = $('<div>').appendTo(document.body);
     const $elHtml = $('<div>').appendTo(document.body);
     const $check = $('<input type="checkbox">').appendTo(document.body);
-    
+
     $elText.atomBind({ text: textVal });
-    $elHtml.atomBind({ html: htmlVal });
+    $elHtml.atomBind({ html: htmlVal as unknown as string });
     $check.atomBind({ checked: checkedVal });
-    
+
     await $.nextTick();
     expect($elText.text()).toBe('val');
     expect($elHtml.html()).toBe('<b>b</b>');
-    
+
     // hit null branch in bindText/bindHtml
     textVal.value = null;
     htmlVal.value = null;
     await $.nextTick();
     expect($elText.text()).toBe('');
     expect($elHtml.html()).toBe('');
-    
+
     // line 181: if (state.phase !== 'idle') return; in bindChecked
     const originalProp = $.fn.prop;
-    ($.fn as any).prop = function(name: string, value?: any) {
-      const res = originalProp.apply(this, arguments as any);
+    type PropFn = (this: JQuery, name: string, value?: unknown) => JQuery | boolean | undefined;
+    ($.fn.prop as PropFn) = function (this: JQuery, name: string, value?: unknown) {
+      const res = (originalProp as PropFn).call(this, name, value);
       if (name === 'checked' && value !== undefined) {
-        $(this).trigger('change');
+        this.trigger('change');
       }
       return res;
     };
 
     checkedVal.value = true;
     await $.nextTick();
-    
-    ($.fn as any).prop = originalProp;
+
+    $.fn.prop = originalProp;
     $elText.remove();
     $elHtml.remove();
     $check.remove();

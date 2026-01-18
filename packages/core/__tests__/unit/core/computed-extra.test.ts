@@ -67,8 +67,11 @@ describe('Computed - Extra Coverage', () => {
 
   it('covers PromiseIdManager reset and next()', () => {
     const c = computed(() => 1);
-    // biome-ignore lint/suspicious/noExplicitAny: Access private internals
-    const impl = c as any;
+    interface ComputedImpl {
+      _promiseId: number;
+      _recompute: () => void;
+    }
+    const impl = c as unknown as ComputedImpl;
     // MAX_PROMISE_ID is hardcoded in impl as Number.MAX_SAFE_INTEGER - 1
     impl._promiseId = Number.MAX_SAFE_INTEGER - 2;
     const _firstId = impl._promiseId;
@@ -83,8 +86,7 @@ describe('Computed - Extra Coverage', () => {
     );
 
     expect(cAsync.value).toBe(0);
-    // biome-ignore lint/suspicious/noExplicitAny: Access private internals
-    const asyncImpl = cAsync as any;
+    const asyncImpl = cAsync as unknown as ComputedImpl;
     asyncImpl._promiseId = Number.MAX_SAFE_INTEGER - 1;
 
     // Another run to trigger reset logic
@@ -162,8 +164,11 @@ describe('Computed - Extra Coverage', () => {
       c.value;
     });
 
-    // biome-ignore lint/suspicious/noExplicitAny: Access private internals
-    const impl = c as any;
+    interface ComputedInternals {
+      _functionSubscribersStore: { has: (fn: unknown) => boolean };
+      _objectSubscribersStore: { has: (obj: unknown) => boolean };
+    }
+    const impl = c as unknown as ComputedInternals;
     expect(impl._functionSubscribersStore.has(plainListener)).toBe(true);
 
     // Case 2: Object with execute
@@ -171,17 +176,26 @@ describe('Computed - Extra Coverage', () => {
       execute: vi.fn(),
     };
 
-    // biome-ignore lint/suspicious/noExplicitAny: Mocking subscriber
-    trackingContext.run(subscriber as any, () => {
-      c.value;
-    });
+    trackingContext.run(
+      subscriber as unknown as (() => void) & { addDependency?: (d: unknown) => void },
+      () => {
+        c.value;
+      }
+    );
     expect(impl._objectSubscribersStore.has(subscriber)).toBe(true);
   });
 
   it('covers setIdle flag clearing', () => {
     const c = computed(() => 1);
-    // biome-ignore lint/suspicious/noExplicitAny: Access private internals
-    const impl = c as any;
+    interface ComputedFlagImpl {
+      flags: number;
+      _setIdle: () => void;
+      _isIdle: () => boolean;
+      _isPending: () => boolean;
+      _isResolved: () => boolean;
+      _isRejected: () => boolean;
+    }
+    const impl = c as unknown as ComputedFlagImpl;
 
     // Set some flags
     impl.flags |= 1 << 2; // PENDING
@@ -236,8 +250,7 @@ describe('Computed - Extra Coverage', () => {
     const a = atom(0);
     // Monkey patch subscribe
     const _originalSub = a.subscribe;
-    // biome-ignore lint/suspicious/noExplicitAny: Monkey patch
-    (a as any).subscribe = () => {
+    (a as unknown as { subscribe: () => never }).subscribe = () => {
       throw new Error('Sub Fail');
     };
 

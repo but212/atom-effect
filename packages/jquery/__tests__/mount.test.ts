@@ -54,7 +54,7 @@ describe('Atom Mount', () => {
     $el.atomMount(() => () => {
       throw new Error('cleanup fail');
     });
-    
+
     // Should not throw when unmounting
     expect(() => $el.atomUnmount()).not.throw();
     $el.remove();

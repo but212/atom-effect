@@ -42,7 +42,7 @@ describe('Utils', () => {
       expect(getValue(a as unknown as object)).toBe(10);
       expect(getValue(5)).toBe(5);
       expect(getValue('str')).toBe('str');
-      expect(getValue(null as any)).toBe(null);
+      expect(getValue(null as unknown)).toBe(null);
     });
   });
 

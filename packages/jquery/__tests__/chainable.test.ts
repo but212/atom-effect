@@ -160,7 +160,7 @@ describe('Chainable Methods', () => {
     // Static
     $el.atomProp('checked', true);
     expect($el.prop('checked')).toBe(true);
-    
+
     // Reactive
     const checked = $.atom(false);
     $el.atomProp('checked', checked);
@@ -173,7 +173,7 @@ describe('Chainable Methods', () => {
 
   it('atomShow and atomHide should support static and reactive values', async () => {
     const $el = $('<div>').appendTo(document.body);
-    
+
     // Static show
     $el.atomShow(true);
     expect($el.css('display')).not.toBe('none');
@@ -241,19 +241,19 @@ describe('Chainable Methods', () => {
 
   it('atomText, atomCss, atomAttr exhaustive branches', () => {
     const $el = $('<div>');
-    
+
     // atomText non-reactive branches (lines 21, 33-36)
-    $el.atomText(undefined as any);
+    $el.atomText(undefined as unknown as string);
     expect($el.text()).toBe('');
     $el.atomText('foo');
     expect($el.text()).toBe('foo');
-    
+
     // atomCss non-reactive branches (line 43, 62-72)
     $el.atomCss('color', 'red');
     expect($el.css('color')).toMatch(/rgb\(255,\s*0,\s*0\)/);
     $el.atomCss('margin', 10, 'px');
     expect($el.css('margin')).toBe('10px');
-    
+
     // atomAttr all branches (lines 93-99)
     $el.atomAttr('data-test', true);
     expect($el.attr('data-test')).toBe('data-test');
@@ -263,7 +263,7 @@ describe('Chainable Methods', () => {
     expect($el.attr('data-test')).toBe('val');
     $el.atomAttr('data-test', null);
     expect($el.attr('data-test')).toBeUndefined();
-    $el.atomAttr('data-test', undefined as any);
+    $el.atomAttr('data-test', undefined as unknown as string);
     expect($el.attr('data-test')).toBeUndefined();
   });
 
@@ -271,7 +271,7 @@ describe('Chainable Methods', () => {
     const isChecked = $.atom(false);
     const $el = $('<input type="checkbox">').appendTo(document.body);
     $el.atomChecked(isChecked);
-    
+
     // We want to trigger a 'change' event while the effect is running.
     // In chainable.ts:
     // const fx = effect(() => {
@@ -280,22 +280,23 @@ describe('Chainable Methods', () => {
     //   ...
     //   isUpdatingFromAtom = false;
     // });
-    
+
     // We can use a spy on prop to trigger change
     const originalProp = $.fn.prop;
-    ($.fn as any).prop = function(name: string, value?: any) {
-      const res = originalProp.apply(this, arguments as any);
+    type PropFn = (this: JQuery, name: string, value?: unknown) => JQuery | boolean | undefined;
+    ($.fn.prop as PropFn) = function (this: JQuery, name: string, value?: unknown) {
+      const res = (originalProp as PropFn).call(this, name, value);
       if (name === 'checked' && value !== undefined) {
         // Triggering change here will hit the handler in atomChecked
         // which has: if (isUpdatingFromAtom) return;
-        $(this).trigger('change');
+        this.trigger('change');
       }
       return res;
     };
-    
+
     isChecked.value = true;
     await $.nextTick();
-    
+
     $.fn.prop = originalProp;
     $el.remove();
   });

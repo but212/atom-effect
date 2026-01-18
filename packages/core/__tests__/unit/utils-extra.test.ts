@@ -11,11 +11,9 @@ import { isComputed, isTrackableFunction } from '../../src/utils/type-guards';
 describe('Utils & Handlers - Extra Coverage', () => {
   describe('DepTracking - syncDependencies', () => {
     it('skips null/undefined dependencies in nextDeps', () => {
-      // biome-ignore lint/suspicious/noExplicitAny: explicit invalid types test
-      const nextDeps = [null, undefined] as any[];
+      const nextDeps = [null, undefined] as unknown as Dependency[];
       // Should not crash and continue
-      // biome-ignore lint/suspicious/noExplicitAny: explicit invalid types test
-      const unsubs = syncDependencies(nextDeps, [], [], {} as any);
+      const unsubs = syncDependencies(nextDeps, [], [], {} as unknown as Subscriber);
       // length is preserved as nextDeps.length
       expect(unsubs.length).toBe(2);
       // But slots are empty
@@ -28,13 +26,10 @@ describe('Utils & Handlers - Extra Coverage', () => {
       const pool = new ArrayPool<unknown>();
       const frozen = Object.freeze([]);
 
-      // biome-ignore lint/suspicious/noExplicitAny: Access private internals
-      const initialSize = (pool as any).pool.length;
-      // biome-ignore lint/suspicious/noExplicitAny: Testing specific invalid input
-      pool.release(frozen as any);
+      const initialSize = (pool as unknown as { pool: unknown[] }).pool.length;
+      pool.release(frozen as unknown as unknown[]);
 
-      // biome-ignore lint/suspicious/noExplicitAny: Access private
-      expect((pool as any).pool.length).toBe(initialSize);
+      expect((pool as unknown as { pool: unknown[] }).pool.length).toBe(initialSize);
       // Stats check if dev mode
       const stats = pool.getStats();
       if (stats) {
@@ -46,12 +41,10 @@ describe('Utils & Handlers - Extra Coverage', () => {
       const pool = new ArrayPool<unknown>();
       const hugeArray = new Array(300); // Default max is 256
 
-      // biome-ignore lint/suspicious/noExplicitAny: Access private internals
-      const initialSize = (pool as any).pool.length;
+      const initialSize = (pool as unknown as { pool: unknown[] }).pool.length;
       pool.release(hugeArray);
 
-      // biome-ignore lint/suspicious/noExplicitAny: Access private
-      expect((pool as any).pool.length).toBe(initialSize);
+      expect((pool as unknown as { pool: unknown[] }).pool.length).toBe(initialSize);
       const stats = pool.getStats();
       if (stats) {
         expect(stats.rejected.tooLarge).toBeGreaterThan(0);
@@ -67,8 +60,7 @@ describe('Utils & Handlers - Extra Coverage', () => {
       }
 
       // Should cap at 50
-      // biome-ignore lint/suspicious/noExplicitAny: Access private
-      expect((pool as any).pool.length).toBe(50);
+      expect((pool as unknown as { pool: unknown[] }).pool.length).toBe(50);
       const stats = pool.getStats();
       if (stats) {
         expect(stats.rejected.poolFull).toBeGreaterThan(0);
@@ -77,8 +69,7 @@ describe('Utils & Handlers - Extra Coverage', () => {
 
     it('handles null stats in production simulation', () => {
       const pool = new ArrayPool<unknown>();
-      // biome-ignore lint/suspicious/noExplicitAny: Simulate Prod
-      (pool as any).stats = null; // Simulate Prod
+      (pool as unknown as { stats: null }).stats = null; // Simulate Prod
 
       expect(pool.acquire()).toEqual([]);
       pool.release([]);
@@ -95,15 +86,13 @@ describe('Utils & Handlers - Extra Coverage', () => {
     it('warmup adds to existing pool size', () => {
       const pool = new ObjectPool(() => new TestObj(), 10);
       pool.warmup(2);
-      // biome-ignore lint/suspicious/noExplicitAny: Access private
-      expect((pool as any).poolSize).toBe(2);
+      expect((pool as unknown as { poolSize: number }).poolSize).toBe(2);
 
       pool.warmup(5); // Should add 3 more to reach 5, but logic is loop from size to target
       // code: for (let i = this.poolSize; i < targetSize; i++)
       // targetSize = Math.min(count, maxPoolSize)
       // so warmup(5) sets target to 5. i goes 2->5.
-      // biome-ignore lint/suspicious/noExplicitAny: Access private
-      expect((pool as any).poolSize).toBe(5);
+      expect((pool as unknown as { poolSize: number }).poolSize).toBe(5);
     });
   });
 
@@ -143,8 +132,7 @@ describe('Utils & Handlers - Extra Coverage', () => {
   describe('Type Guards', () => {
     it('isTrackableFunction identifies functions with addDependency', () => {
       const fn = () => {};
-      // biome-ignore lint/suspicious/noExplicitAny: Monkey patch
-      (fn as any).addDependency = () => {};
+      (fn as unknown as { addDependency: () => void }).addDependency = () => {};
       expect(isTrackableFunction(fn)).toBe(true);
       expect(isTrackableFunction(() => {})).toBe(false);
     });
@@ -188,8 +176,7 @@ describe('Utils & Handlers - Extra Coverage', () => {
         throw new Error('Fail');
       });
 
-      // biome-ignore lint/suspicious/noExplicitAny: Testing generic callback
-      expect(() => sm.forEachSafe((fn: any) => fn())).not.toThrow();
+      expect(() => sm.forEachSafe((fn) => (fn as () => void)())).not.toThrow();
       expect(consoleError).toHaveBeenCalled();
       consoleError.mockRestore();
     });
@@ -219,34 +206,34 @@ describe('Utils & Handlers - Extra Coverage', () => {
       const wasEnabled = debug.enabled;
       debug.enabled = true;
 
-      // biome-ignore lint/suspicious/noExplicitAny: Mocking internal structure
-      const dep1: any = { id: 1, _visitedEpoch: -1 };
-      // biome-ignore lint/suspicious/noExplicitAny: Mocking internal structure
-      const dep2: any = { id: 2, _visitedEpoch: -1, dependencies: [dep1] };
+      interface MockDep {
+        id: number;
+        _visitedEpoch: number;
+        dependencies?: MockDep[];
+      }
+      const dep1: MockDep = { id: 1, _visitedEpoch: -1 };
+      const dep2: MockDep = { id: 2, _visitedEpoch: -1, dependencies: [dep1] };
 
       // Case 1: Indirect circular
       dep1.dependencies = [dep2];
 
-      expect(() => debug.checkCircular(dep1, dep2)).toThrow(/Indirect circular dependency/);
+      expect(() => debug.checkCircular(dep1 as unknown as Dependency, dep2)).toThrow(
+        /Indirect circular dependency/
+      );
 
       // Case 2: Diamond dependency (hits visited branch)
       // dep1 -> dep2, dep1 -> dep3, dep2 -> dep4, dep3 -> dep4
-      // biome-ignore lint/suspicious/noExplicitAny: Mocking internal dependency structure
-      const d4: any = { id: 4, _visitedEpoch: -1 };
-      // biome-ignore lint/suspicious/noExplicitAny: Mocking internal dependency structure
-      const d2: any = { id: 2, _visitedEpoch: -1, dependencies: [d4] };
-      // biome-ignore lint/suspicious/noExplicitAny: Mocking internal dependency structure
-      const d3: any = { id: 3, _visitedEpoch: -1, dependencies: [d4] };
-      // biome-ignore lint/suspicious/noExplicitAny: Mocking internal dependency structure
-      const d1: any = { id: 1, _visitedEpoch: -1, dependencies: [d2, d3] };
+      const d4: MockDep = { id: 4, _visitedEpoch: -1 };
+      const d2: MockDep = { id: 2, _visitedEpoch: -1, dependencies: [d4] };
+      const d3: MockDep = { id: 3, _visitedEpoch: -1, dependencies: [d4] };
+      const d1: MockDep = { id: 1, _visitedEpoch: -1, dependencies: [d2, d3] };
 
-      expect(() => debug.checkCircular(d1, {})).not.toThrow();
+      expect(() => debug.checkCircular(d1 as unknown as Dependency, {})).not.toThrow();
       expect(d4._visitedEpoch).toBeGreaterThan(0); // This confirms line 39 in debug.ts was hit
 
       // Case 3: Dep without dependencies array
-      // biome-ignore lint/suspicious/noExplicitAny: Mock dependency
-      const emptyDep: any = { id: 3 };
-      expect(() => debug.checkCircular(emptyDep, {})).not.toThrow();
+      const emptyDep: MockDep = { id: 3, _visitedEpoch: -1 };
+      expect(() => debug.checkCircular(emptyDep as unknown as Dependency, {})).not.toThrow();
 
       debug.enabled = wasEnabled;
     });

@@ -93,7 +93,12 @@ describe('Effect - Extra Coverage', () => {
   });
 
   it('covers _shouldExecute error handling in untracked read', () => {
-    const dep = {
+    interface MockDep {
+      get value(): unknown;
+      subscribe: () => () => void;
+      version: number;
+    }
+    const dep: MockDep = {
       get value() {
         throw new Error('access failed');
       },
@@ -102,8 +107,12 @@ describe('Effect - Extra Coverage', () => {
     };
 
     const fx = effect(() => {}, { sync: true });
-    // biome-ignore lint/suspicious/noExplicitAny: Access private
-    const impl = fx as any;
+    interface EffectImpl {
+      _dependencies: MockDep[];
+      _dependencyVersions: number[];
+      _shouldExecute: () => boolean;
+    }
+    const impl = fx as unknown as EffectImpl;
     impl._dependencies = [dep];
     impl._dependencyVersions = [0];
 
@@ -113,7 +122,12 @@ describe('Effect - Extra Coverage', () => {
 
   it('covers subscription failure in _subscribeTo', () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const dep = {
+    interface FailingDep {
+      get value(): number;
+      subscribe: () => never;
+      version: number;
+    }
+    const dep: FailingDep = {
       get value() {
         return 1;
       },
@@ -124,8 +138,12 @@ describe('Effect - Extra Coverage', () => {
     };
 
     const fx = effect(() => {});
-    // biome-ignore lint/suspicious/noExplicitAny: Access private internals
-    const impl = fx as any;
+    interface EffectInternals {
+      _setExecuting: (v: boolean) => void;
+      _prepareEffectContext: () => void;
+      addDependency: (dep: unknown) => void;
+    }
+    const impl = fx as unknown as EffectInternals;
 
     // Manually trigger addDependency inside execution context
     // We need to simulate execution state
@@ -133,8 +151,7 @@ describe('Effect - Extra Coverage', () => {
     impl._prepareEffectContext();
 
     // Now call addDependency, which calls _subscribeTo
-    // biome-ignore lint/suspicious/noExplicitAny: Access private
-    impl.addDependency(dep as any);
+    impl.addDependency(dep);
 
     // Cleanup
     impl._setExecuting(false);
@@ -148,16 +165,17 @@ describe('Effect - Extra Coverage', () => {
     const unsubSpy = vi.fn();
 
     const fx = effect(() => {});
-    // biome-ignore lint/suspicious/noExplicitAny: Access private internals
-    const impl = fx as any;
+    interface EffectCleanupImpl {
+      _cleanupEffect: (ctx: unknown, committed: boolean) => void;
+    }
+    const impl = fx as unknown as EffectCleanupImpl;
 
     // Setup state for _cleanupEffect
     const ctx = {
       prevDeps: [],
       prevVersions: [],
       prevUnsubs: [],
-      // biome-ignore lint/suspicious/noExplicitAny: Mock dependency
-      nextDeps: [{} as any], // Mock dependency
+      nextDeps: [{}], // Mock dependency
       nextVersions: [1],
       nextUnsubs: [unsubSpy],
     };
@@ -177,11 +195,14 @@ describe('Effect - Extra Coverage', () => {
       maxExecutionsPerFlush: 10000,
       maxExecutionsPerSecond: 100000, // Higher than our loop count
     });
-    // biome-ignore lint/suspicious/noExplicitAny: Access private
-    const impl = fx as any;
+    interface LoopCheckImpl {
+      _history: number[] | null;
+      _executionsInEpoch: number;
+      _checkInfiniteLoop: () => void;
+    }
+    const impl = fx as unknown as LoopCheckImpl;
 
-    // biome-ignore lint/suspicious/noExplicitAny: Catching unknown error type
-    let caughtError: any = null;
+    let caughtError: Error | null = null;
 
     // Ensure we are in a flushing state so counters increment
     resetFlushState();
@@ -197,22 +218,26 @@ describe('Effect - Extra Coverage', () => {
         impl._executionsInEpoch = 0; // Reset local counter to avoid local limit
         impl._checkInfiniteLoop();
       }
-      // biome-ignore lint/suspicious/noExplicitAny: Catching unknown error
-    } catch (e: any) {
-      caughtError = e;
+    } catch (e: unknown) {
+      caughtError = e as Error;
     } finally {
       endFlush();
       consoleError.mockRestore();
     }
 
     expect(caughtError).toBeDefined();
-    expect(caughtError.message).toContain('Infinite loop detected (global)');
+    expect(caughtError!.message).toContain('Infinite loop detected (global)');
   });
 
   it('covers history circular buffer wrapping', () => {
     const fx = effect(() => {}, { maxExecutionsPerSecond: 10 });
-    // biome-ignore lint/suspicious/noExplicitAny: Access private
-    const impl = fx as any;
+    interface HistoryImpl {
+      _historyCapacity: number;
+      _history: number[];
+      _historyPtr: number;
+      _checkInfiniteLoop: () => void;
+    }
+    const impl = fx as unknown as HistoryImpl;
     const capacity = impl._historyCapacity; // Should be 11
 
     // Manually simulate executions to fill buffer
@@ -238,15 +263,19 @@ describe('Effect - Extra Coverage', () => {
     });
 
     // First run successful, has prevDeps
-    // biome-ignore lint/suspicious/noExplicitAny: Access private
-    const impl = fx as any;
+    interface DepCleanupImpl {
+      _dependencies: Array<{ _tempUnsub?: (() => void) | undefined }>;
+      _fn: () => void;
+      run: () => void;
+    }
+    const impl = fx as unknown as DepCleanupImpl;
     expect(impl._dependencies.length).toBe(1);
 
     // Now force a run that fails and throws
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     // Mock dependency with _tempUnsub to verify it gets cleared
-    const dep = impl._dependencies[0];
+    const dep = impl._dependencies[0]!;
     dep._tempUnsub = () => {};
 
     try {
@@ -259,7 +288,7 @@ describe('Effect - Extra Coverage', () => {
     }
 
     // The cleanup logic should have set _tempUnsub to undefined
-    expect(dep._tempUnsub).toBeUndefined();
+    expect(dep!._tempUnsub).toBeUndefined();
 
     consoleError.mockRestore();
   });
