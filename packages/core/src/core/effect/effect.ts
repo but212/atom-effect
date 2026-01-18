@@ -118,7 +118,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     this._historyPtr = 0;
     // Capacity = Max executions + 1 (to check the window of N+1 executions)
     this._historyCapacity = this._maxExecutions + 1;
-    
+
     // Pre-allocate array for circular buffer in Dev mode to avoid dynamic resizing
     this._history = IS_DEV ? new Array(this._historyCapacity).fill(0) : null;
     this._executionCount = 0;
@@ -432,10 +432,10 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       const now = Date.now();
       const ptr = this._historyPtr;
       const capacity = this._historyCapacity;
-      
+
       // 1. Record current timestamp
       this._history[ptr] = now;
-      
+
       // 2. Check the oldest timestamp in our window (O(1) lookback)
       // The slot (ptr + 1) % capacity holds the oldest recorded timestamp in the circular buffer
       // (or 0 if not yet filled).
@@ -449,13 +449,13 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       // If the oldest time (capacity steps ago) is within 1 second of now, we are too fast.
       // We check > 0 to ensure the buffer is filled at least once.
       if (oldestTime > 0 && now - oldestTime < TIME_CONSTANTS.ONE_SECOND_MS) {
-         const error = new EffectError(
+        const error = new EffectError(
           `Effect executed ${capacity} times within 1 second. Infinite loop suspected`
         );
         this.dispose();
         console.error(error);
         if (this._onError) this._onError(error);
-        
+
         if (IS_DEV) {
           throw error;
         }

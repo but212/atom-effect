@@ -7,7 +7,8 @@ let collectorEpoch = 0;
  * Used for O(1) dependency management and freshness checks.
  */
 export function nextEpoch(): number {
-  return (collectorEpoch = ((collectorEpoch + 1) & SMI_MAX) || 1);
+  collectorEpoch = (collectorEpoch + 1) & SMI_MAX || 1;
+  return collectorEpoch;
 }
 
 /** Returns the current tracking epoch. */

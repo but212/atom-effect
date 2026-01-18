@@ -217,7 +217,7 @@ describe('Effect - Extra Coverage', () => {
     // Manually simulate executions to fill buffer
     const now = Date.now();
     for (let i = 0; i < capacity; i++) {
-        impl._history[i] = now - 2000;
+      impl._history[i] = now - 2000;
     }
     impl._historyPtr = capacity - 1; // Point to end
 
