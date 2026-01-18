@@ -231,10 +231,14 @@ describe('Utils & Handlers - Extra Coverage', () => {
 
       // Case 2: Diamond dependency (hits visited branch)
       // dep1 -> dep2, dep1 -> dep3, dep2 -> dep4, dep3 -> dep4
-      const d4 = { id: 4, _visitedEpoch: -1 } as unknown as any;
-      const d2 = { id: 2, _visitedEpoch: -1, dependencies: [d4] } as unknown as any;
-      const d3 = { id: 3, _visitedEpoch: -1, dependencies: [d4] } as unknown as any;
-      const d1 = { id: 1, _visitedEpoch: -1, dependencies: [d2, d3] } as unknown as any;
+      // biome-ignore lint/suspicious/noExplicitAny: Mocking internal dependency structure
+      const d4: any = { id: 4, _visitedEpoch: -1 };
+      // biome-ignore lint/suspicious/noExplicitAny: Mocking internal dependency structure
+      const d2: any = { id: 2, _visitedEpoch: -1, dependencies: [d4] };
+      // biome-ignore lint/suspicious/noExplicitAny: Mocking internal dependency structure
+      const d3: any = { id: 3, _visitedEpoch: -1, dependencies: [d4] };
+      // biome-ignore lint/suspicious/noExplicitAny: Mocking internal dependency structure
+      const d1: any = { id: 1, _visitedEpoch: -1, dependencies: [d2, d3] };
 
       expect(() => debug.checkCircular(d1, {})).not.toThrow();
       expect(d4._visitedEpoch).toBeGreaterThan(0); // This confirms line 39 in debug.ts was hit

@@ -3,13 +3,10 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { AsyncState } from '@/constants';
 import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
 import { AtomError, ComputedError } from '@/errors/errors';
 import type { Dependency } from '@/types';
-import { debug } from '@/utils/debug';
-import { tick } from '../../utils/test-helpers';
 
 describe('Computed - Error Handling and Edge Cases', () => {
   it('rejects invalid function types', () => {
@@ -570,21 +567,24 @@ describe('Computed - Error Handling and Edge Cases', () => {
       expect(errors.length).toBe(3);
       const messages = errors.map((e) => e.message);
       // Use case-insensitive matching if needed, or just exact match if we are sure
-      expect(messages.some(m => m.includes('Error A'))).toBe(true);
-      expect(messages.some(m => m.includes('Error B'))).toBe(true);
-      expect(messages.some(m => m.includes('Error C'))).toBe(true);
+      expect(messages.some((m) => m.includes('Error A'))).toBe(true);
+      expect(messages.some((m) => m.includes('Error B'))).toBe(true);
+      expect(messages.some((m) => m.includes('Error C'))).toBe(true);
     });
 
     it('covers async rejection race condition', async () => {
       let fail = true;
-      const c = computed(async () => {
-        await new Promise((r) => setTimeout(r, 10));
-        if (fail) throw new Error('Late Fail');
-        return 1;
-      }, { defaultValue: 0 });
+      const c = computed(
+        async () => {
+          await new Promise((r) => setTimeout(r, 10));
+          if (fail) throw new Error('Late Fail');
+          return 1;
+        },
+        { defaultValue: 0 }
+      );
 
       c.value; // Trigger first
-      
+
       // Trigger second before first finishes
       fail = false;
       c.invalidate();
