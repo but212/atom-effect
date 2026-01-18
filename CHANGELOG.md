@@ -1,10 +1,22 @@
 # Changelog
 
-## [0.9.0]
+## [0.9.1]
 
 ### Core
 
 #### Changed
+
+- **Performance**: Overhauled `Scheduler` for true "Automatic Group Updates".
+  - Replaced microtask-chaining with a robust `_drainQueue` mechanism.
+  - Synchronous updates within the same tick are now gathered into a single microtask execution cycle.
+  - Eliminates redundant microtask scheduling and context switching, significantly reducing CPU overhead in high-churn scenarios.
+  - Ensures a more accurate representation of engine throughput in benchmarks.
+
+## [0.9.0]
+
+### Core - 0.9.0
+
+#### Changed - 0.9.0
 
 - **Performance**: Optimized Effect loop detection in debug mode.
   - Replaced $O(N)$ array shifting with $O(1)$ Circular Buffer for execution history tracking.
@@ -12,7 +24,7 @@
 - **Safety**: Enhanced Epoch system robustness.
   - Added wrap-around safety check to `nextEpoch` to prevent theoretical collision at 0.
 
-#### Added
+#### Added - 0.9.0
 
 - **Effect API**: Added `onError` option to `EffectOptions`.
   - Allows handling errors (including async rejections) that occur during effect execution.

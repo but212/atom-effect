@@ -845,7 +845,12 @@
                 $badge.addClass("resolved").text("Done");
 
                 try {
-                  $output.text(format(value));
+                  // Use $.untracked when calling the formatter to avoid accidental sub-dependencies
+                  $output.text($.untracked(() => format(value)));
+                  
+                  // Log run info without subscribing to runId
+                  const rid = $.untracked(() => runId.value);
+                  console.log(`[Run ${rid}] Stage ${id} resolved`);
                 } catch (e) {
                   $output.text("—");
                 }
