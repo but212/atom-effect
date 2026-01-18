@@ -78,6 +78,13 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   /** Total number of executions */
   private _executionCount: number;
 
+  /** Pointer for circular buffer history */
+  private _historyPtr: number;
+  /** Capacity of the history buffer */
+  private readonly _historyCapacity: number;
+  /** Error handler callback */
+  private readonly _onError: ((error: unknown) => void) | null;
+
   /**
    * Creates a new EffectImpl instance.
    * @param fn - The effect function to run.
@@ -106,7 +113,14 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     this._nextDeps = null;
     this._nextVersions = null;
     this._nextUnsubs = null;
-    this._history = IS_DEV ? [] : null;
+    this._onError = options.onError ?? null;
+
+    this._historyPtr = 0;
+    // Capacity = Max executions + 1 (to check the window of N+1 executions)
+    this._historyCapacity = this._maxExecutions + 1;
+
+    // Pre-allocate array for circular buffer in Dev mode to avoid dynamic resizing
+    this._history = IS_DEV ? new Array(this._historyCapacity).fill(0) : null;
     this._executionCount = 0;
 
     debug.attachDebugInfo(this, 'effect', this.id);
@@ -214,14 +228,14 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
             }
           })
           .catch((error) => {
-            console.error(wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_EXECUTION_FAILED));
+            this._handleExecutionError(error);
           });
       } else {
         this._cleanup = typeof result === 'function' ? result : null;
       }
     } catch (error) {
       committed = true;
-      console.error(wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_EXECUTION_FAILED));
+      this._handleExecutionError(error);
       this._cleanup = null;
     } finally {
       this._cleanupEffect(context, committed);
@@ -410,38 +424,37 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 
     this._executionCount++;
 
-    if (this._history) {
+    if (this._history && this._maxExecutions > 0) {
       const now = Date.now();
-      this._history.push(now);
+      const ptr = this._historyPtr;
+      const capacity = this._historyCapacity;
 
-      if (this._history.length > SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_SECOND + 10) {
-        this._history.shift();
-      }
+      // 1. Record current timestamp
+      this._history[ptr] = now;
 
-      this._checkTimestampLoop(now);
-    }
-  }
+      // 2. Check the oldest timestamp in our window (O(1) lookback)
+      // The slot (ptr + 1) % capacity holds the oldest recorded timestamp in the circular buffer
+      // (or 0 if not yet filled).
+      const oldestPtr = (ptr + 1) % capacity;
+      const oldestTime = this._history[oldestPtr] ?? 0;
 
-  private _checkTimestampLoop(now: number): void {
-    const history = this._history;
-    if (!history || this._maxExecutions <= 0) return;
+      // 3. Update pointer
+      this._historyPtr = oldestPtr;
 
-    const oneSecondAgo = now - TIME_CONSTANTS.ONE_SECOND_MS;
-    let count = 0;
+      // 4. Check if we exceeded the rate limit
+      // If the oldest time (capacity steps ago) is within 1 second of now, we are too fast.
+      // We check > 0 to ensure the buffer is filled at least once.
+      if (oldestTime > 0 && now - oldestTime < TIME_CONSTANTS.ONE_SECOND_MS) {
+        const error = new EffectError(
+          `Effect executed ${capacity} times within 1 second. Infinite loop suspected`
+        );
+        this.dispose();
+        console.error(error);
+        if (this._onError) this._onError(error);
 
-    for (let i = history.length - 1; i >= 0; i--) {
-      if (history[i]! < oneSecondAgo) break;
-      count++;
-    }
-
-    if (count > this._maxExecutions) {
-      const error = new EffectError(
-        `Effect executed ${count} times within 1 second. Infinite loop suspected`
-      );
-      this.dispose();
-      console.error(error);
-      if (IS_DEV) {
-        throw error;
+        if (IS_DEV) {
+          throw error;
+        }
       }
     }
   }
@@ -484,6 +497,16 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     }
 
     return false;
+  }
+
+  /**
+   * Handles errors occurring during effect execution.
+   * Wraps the error, logs it to console, and calls onError callback if provided.
+   */
+  private _handleExecutionError(error: unknown): void {
+    const errorObj = wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_EXECUTION_FAILED);
+    console.error(errorObj);
+    if (this._onError) this._onError(errorObj);
   }
 
   /**
