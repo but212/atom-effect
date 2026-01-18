@@ -122,6 +122,23 @@ const Counter = ($el, props) => {
 $('#app').atomMount(Counter, { start: 10 });
 ```
 
+## Key Features
+
+- **Automatic Lifecycle**: Bindings clean up automatically when jQuery elements are removed (`$.cleanData` integration).
+- **Fine-grained Updates**: Only the specific element property/attribute changes, preventing full list re-renders.
+- **Batched Events**: `.atomOn` automatically wraps handlers in `$.batch()` to prevent UI jitter during multiple state changes.
+- **Reparenting-Safe**: Elements can be moved within the DOM without losing their reactive bindings.
+
+## Debug Mode
+
+Enable internal logging and dependency tracing:
+
+```javascript
+$.atom.debug = true;
+```
+
+When enabled, any potential infinite loops or self-modifying effects will trigger detailed console warnings with trace info.
+
 ## Contributing
 
 Contributions are welcome! Feel free to open an issue or submit a pull request.

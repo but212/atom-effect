@@ -75,6 +75,58 @@ computed(() => {
 });
 ```
 
+## API Reference
+
+### Detailed Options
+
+#### `atom(initialValue, options?)`
+
+- `name`: (string) Debug name.
+
+#### `computed(fn, options?)`
+
+- `equal`: (fn) Comparison function to skip re-computes.
+- `defaultValue`: (any) Value to return when pending/error.
+- `lazy`: (boolean) If true, defers evaluation until read.
+
+#### `effect(fn, options?)`
+
+- `sync`: (boolean) Runs synchronously on change.
+- `onError`: (fn) Async error handler.
+- `trackModifications`: (boolean) Warns on self-writes.
+
+### Advanced Usage
+
+#### Async Computed
+
+```typescript
+const userId = atom(1);
+const user = computed(async () => {
+  const res = await fetch(`/api/users/${userId.value}`);
+  return res.json();
+}, { defaultValue: { loading: true } });
+```
+
+## Utilities & Development
+
+### Type Guards
+
+```typescript
+import { isAtom, isComputed, isReactive } from '@but212/atom-effect';
+
+isAtom(count); // true
+isReactive(double); // true
+```
+
+### Development Commands
+
+```bash
+pnpm test        # Run unit tests
+pnpm bench       # Run benchmarks
+pnpm lint        # Run lint checks
+pnpm build       # Build production bundle
+```
+
 ## Performance
 
 Verified benchmarks vs object pooling and lazy evaluation optimizations.
@@ -88,8 +140,6 @@ Verified benchmarks vs object pooling and lazy evaluation optimizations.
 | Effect execution | ~4.57M ops/sec |
 | Batched updates | ~3.97M ops/sec |
 | Deep chain (100 levels) | ~8.7K ops/sec |
-
-Benchmarks are run on a standard environment. See [docs/BENCHMARKS.md](./docs/BENCHMARKS.md) for details.
 
 ## Contributing
 
