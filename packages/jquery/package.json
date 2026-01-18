@@ -1,6 +1,6 @@
 {
   "name": "@but212/atom-effect-jquery",
-  "version": "0.8.4",
+  "version": "0.9.0",
   "description": "Reactive jQuery bindings powered by atom-effect",
   "keywords": [
     "jquery",

@@ -192,6 +192,7 @@ describe('Effect - Extra Coverage', () => {
 
       // Attempt enough iterations to hit global limit (10000)
       // We need > 10000 iterations.
+      impl._history = null; // Disable history-based rate limit for this test
       for (let i = 0; i < 11000; i++) {
         impl._executionsInEpoch = 0; // Reset local counter to avoid local limit
         impl._checkInfiniteLoop();

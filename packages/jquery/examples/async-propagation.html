@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -7,37 +7,42 @@
     <!-- jQuery First -->
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <!-- atom-effect-jquery -->
-    <script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.8.4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.9.0"></script>
     <style>
       :root {
         --bg-body: #0a0a0f;
         --bg-card: #12121a;
         --bg-code: #0d0d12;
         --bg-input: #0f0f14;
-        
+
         --border-subtle: #1f1f2e;
         --border-focus: #6366f1;
-        
+
         --text-primary: #f0f0f5;
         --text-secondary: #8b8b9e;
         --text-tertiary: #5c5c70;
-        
+
         --accent-primary: #6366f1;
         --accent-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-        
+
         --status-idle: #5c5c70;
         --status-pending: #eab308;
         --status-resolved: #22c55e;
         --status-rejected: #ef4444;
-        
+
         --callback-hell: #ef4444;
         --declarative: #22c55e;
 
-        --font-base: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+        --font-base:
+          "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --font-mono: "JetBrains Mono", "Fira Code", Consolas, monospace;
       }
 
-      * { margin: 0; padding: 0; box-sizing: border-box; }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
 
       body {
         font-family: var(--font-base);
@@ -48,16 +53,19 @@
         line-height: 1.6;
       }
 
-      .container { max-width: 1100px; margin: 0 auto; }
+      .container {
+        max-width: 1100px;
+        margin: 0 auto;
+      }
 
       /* Header */
-      header { 
-        text-align: center; 
+      header {
+        text-align: center;
         margin-bottom: 3rem;
         padding-bottom: 2rem;
         border-bottom: 1px solid var(--border-subtle);
       }
-      
+
       .badge {
         display: inline-block;
         background: var(--accent-gradient);
@@ -70,30 +78,30 @@
         text-transform: uppercase;
         letter-spacing: 0.05em;
       }
-      
-      h1 { 
-        font-size: 2.5rem; 
-        font-weight: 800; 
-        margin-bottom: 0.75rem; 
+
+      h1 {
+        font-size: 2.5rem;
+        font-weight: 800;
+        margin-bottom: 0.75rem;
         letter-spacing: -0.03em;
         background: linear-gradient(to right, #f0f0f5, #8b8b9e);
         background-clip: text;
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
       }
-      
-      .subtitle { 
-        color: var(--text-secondary); 
+
+      .subtitle {
+        color: var(--text-secondary);
         font-size: 1.125rem;
-        max-width: 600px; 
-        margin: 0 auto; 
+        max-width: 600px;
+        margin: 0 auto;
       }
 
       /* Section */
       .section {
         margin-bottom: 3rem;
       }
-      
+
       .section-title {
         font-size: 1.25rem;
         font-weight: 700;
@@ -102,7 +110,7 @@
         align-items: center;
         gap: 0.75rem;
       }
-      
+
       .section-title .icon {
         font-size: 1.5rem;
       }
@@ -113,9 +121,11 @@
         grid-template-columns: 1fr 1fr;
         gap: 1.5rem;
       }
-      
+
       @media (max-width: 900px) {
-        .comparison-grid { grid-template-columns: 1fr; }
+        .comparison-grid {
+          grid-template-columns: 1fr;
+        }
       }
 
       .code-card {
@@ -124,7 +134,7 @@
         overflow: hidden;
         border: 1px solid var(--border-subtle);
       }
-      
+
       .code-header {
         padding: 1rem 1.25rem;
         display: flex;
@@ -132,12 +142,12 @@
         justify-content: space-between;
         border-bottom: 1px solid var(--border-subtle);
       }
-      
+
       .code-header h3 {
         font-size: 0.9375rem;
         font-weight: 600;
       }
-      
+
       .code-tag {
         font-size: 0.6875rem;
         padding: 0.25rem 0.5rem;
@@ -145,12 +155,12 @@
         font-weight: 600;
         text-transform: uppercase;
       }
-      
+
       .code-tag.bad {
         background: rgba(239, 68, 68, 0.15);
         color: var(--callback-hell);
       }
-      
+
       .code-tag.good {
         background: rgba(34, 197, 94, 0.15);
         color: var(--declarative);
@@ -164,21 +174,38 @@
         overflow-x: auto;
         background: var(--bg-code);
       }
-      
+
       .code-body pre {
         margin: 0;
         white-space: pre;
       }
 
       /* Syntax Highlighting */
-      .code-keyword { color: #c084fc; }
-      .code-fn { color: #60a5fa; }
-      .code-comment { color: #4a4a5e; font-style: italic; }
-      .code-str { color: #4ade80; }
-      .code-err { color: #f87171; }
-      .code-num { color: #fbbf24; }
-      .code-prop { color: #67e8f9; }
-      .indent { display: inline-block; }
+      .code-keyword {
+        color: #c084fc;
+      }
+      .code-fn {
+        color: #60a5fa;
+      }
+      .code-comment {
+        color: #4a4a5e;
+        font-style: italic;
+      }
+      .code-str {
+        color: #4ade80;
+      }
+      .code-err {
+        color: #f87171;
+      }
+      .code-num {
+        color: #fbbf24;
+      }
+      .code-prop {
+        color: #67e8f9;
+      }
+      .indent {
+        display: inline-block;
+      }
 
       /* Problems List */
       .problems-list {
@@ -187,7 +214,7 @@
         background: rgba(239, 68, 68, 0.05);
         border-top: 1px solid rgba(239, 68, 68, 0.2);
       }
-      
+
       .problems-list li {
         color: var(--text-secondary);
         font-size: 0.8125rem;
@@ -197,9 +224,9 @@
         align-items: flex-start;
         gap: 0.5rem;
       }
-      
+
       .problems-list li::before {
-        content: '✗';
+        content: "✗";
         color: var(--callback-hell);
         font-weight: bold;
       }
@@ -211,7 +238,7 @@
         background: rgba(34, 197, 94, 0.05);
         border-top: 1px solid rgba(34, 197, 94, 0.2);
       }
-      
+
       .benefits-list li {
         color: var(--text-secondary);
         font-size: 0.8125rem;
@@ -221,9 +248,9 @@
         align-items: flex-start;
         gap: 0.5rem;
       }
-      
+
       .benefits-list li::before {
-        content: '✓';
+        content: "✓";
         color: var(--declarative);
         font-weight: bold;
       }
@@ -235,7 +262,7 @@
         border: 1px solid var(--border-subtle);
         overflow: hidden;
       }
-      
+
       .demo-header {
         padding: 1.25rem 1.5rem;
         border-bottom: 1px solid var(--border-subtle);
@@ -243,12 +270,12 @@
         align-items: center;
         justify-content: space-between;
       }
-      
+
       .demo-header h3 {
         font-size: 1rem;
         font-weight: 600;
       }
-      
+
       .demo-controls {
         display: flex;
         gap: 0.75rem;
@@ -270,9 +297,9 @@
         color: #4ade80;
         border-color: rgba(34, 197, 94, 0.3);
       }
-      .btn-success:hover { 
-        background: rgba(34, 197, 94, 0.2); 
-        transform: translateY(-1px); 
+      .btn-success:hover {
+        background: rgba(34, 197, 94, 0.2);
+        transform: translateY(-1px);
       }
 
       .btn-fail {
@@ -280,9 +307,9 @@
         color: #f87171;
         border-color: rgba(239, 68, 68, 0.3);
       }
-      .btn-fail:hover { 
-        background: rgba(239, 68, 68, 0.2); 
-        transform: translateY(-1px); 
+      .btn-fail:hover {
+        background: rgba(239, 68, 68, 0.2);
+        transform: translateY(-1px);
       }
 
       /* Pipeline Visualization */
@@ -294,16 +321,16 @@
         position: relative;
         background: var(--bg-code);
       }
-      
+
       .pipeline-stage {
         flex: 1;
         display: flex;
         flex-direction: column;
         position: relative;
       }
-      
+
       .pipeline-stage:not(:last-child)::after {
-        content: '→';
+        content: "→";
         position: absolute;
         right: -0.75rem;
         top: 2.5rem;
@@ -311,10 +338,16 @@
         color: var(--border-subtle);
         z-index: 2;
       }
-      
-      .pipeline-stage.active::after { color: var(--status-pending); }
-      .pipeline-stage.resolved::after { color: var(--status-resolved); }
-      .pipeline-stage.rejected::after { color: var(--status-rejected); }
+
+      .pipeline-stage.active::after {
+        color: var(--status-pending);
+      }
+      .pipeline-stage.resolved::after {
+        color: var(--status-resolved);
+      }
+      .pipeline-stage.rejected::after {
+        color: var(--status-rejected);
+      }
 
       .stage-card {
         background: var(--bg-card);
@@ -327,17 +360,17 @@
         display: flex;
         flex-direction: column;
       }
-      
-      .stage-card.active { 
-        border-color: var(--status-pending); 
+
+      .stage-card.active {
+        border-color: var(--status-pending);
         box-shadow: 0 0 20px rgba(234, 179, 8, 0.1);
       }
-      
-      .stage-card.resolved { 
+
+      .stage-card.resolved {
         border-color: var(--status-resolved);
       }
-      
-      .stage-card.rejected { 
+
+      .stage-card.rejected {
         border-color: var(--status-rejected);
         background: rgba(239, 68, 68, 0.05);
       }
@@ -348,13 +381,13 @@
         align-items: center;
         margin-bottom: 0.75rem;
       }
-      
+
       .stage-name {
         font-weight: 600;
         font-size: 0.875rem;
         color: var(--text-primary);
       }
-      
+
       .stage-badge {
         font-size: 0.625rem;
         padding: 0.125rem 0.375rem;
@@ -363,11 +396,23 @@
         text-transform: uppercase;
         letter-spacing: 0.03em;
       }
-      
-      .stage-badge.idle { background: var(--bg-body); color: var(--status-idle); }
-      .stage-badge.pending { background: rgba(234, 179, 8, 0.15); color: var(--status-pending); }
-      .stage-badge.resolved { background: rgba(34, 197, 94, 0.15); color: var(--status-resolved); }
-      .stage-badge.rejected { background: rgba(239, 68, 68, 0.15); color: var(--status-rejected); }
+
+      .stage-badge.idle {
+        background: var(--bg-body);
+        color: var(--status-idle);
+      }
+      .stage-badge.pending {
+        background: rgba(234, 179, 8, 0.15);
+        color: var(--status-pending);
+      }
+      .stage-badge.resolved {
+        background: rgba(34, 197, 94, 0.15);
+        color: var(--status-resolved);
+      }
+      .stage-badge.rejected {
+        background: rgba(239, 68, 68, 0.15);
+        color: var(--status-rejected);
+      }
 
       .stage-desc {
         font-size: 0.75rem;
@@ -388,32 +433,41 @@
         align-items: center;
         word-break: break-all;
       }
-      
+
       .stage-output.error {
         color: var(--status-rejected);
       }
 
       .spinner {
-        width: 10px; height: 10px;
-        border: 2px solid currentColor; 
+        width: 10px;
+        height: 10px;
+        border: 2px solid currentColor;
         border-top-color: transparent;
-        border-radius: 50%; 
+        border-radius: 50%;
         animation: spin 0.7s linear infinite;
         margin-right: 0.5rem;
         display: inline-block;
       }
-      
-      @keyframes spin { to { transform: rotate(360deg); } }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
 
       /* Key Insight */
       .insight-box {
         margin-top: 1.5rem;
         padding: 1.25rem 1.5rem;
-        background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+        background: linear-gradient(
+          135deg,
+          rgba(99, 102, 241, 0.1) 0%,
+          rgba(139, 92, 246, 0.1) 100%
+        );
         border: 1px solid rgba(99, 102, 241, 0.2);
         border-radius: 12px;
       }
-      
+
       .insight-title {
         font-size: 0.875rem;
         font-weight: 700;
@@ -423,15 +477,15 @@
         align-items: center;
         gap: 0.5rem;
       }
-      
+
       .insight-text {
         font-size: 0.875rem;
         color: var(--text-secondary);
         line-height: 1.6;
       }
-      
+
       .insight-text code {
-        background: rgba(0,0,0,0.3);
+        background: rgba(0, 0, 0, 0.3);
         padding: 0.125rem 0.375rem;
         border-radius: 4px;
         font-family: var(--font-mono);
@@ -448,13 +502,15 @@
         color: var(--text-tertiary);
         font-size: 0.875rem;
       }
-      
+
       footer a {
         color: var(--accent-primary);
         text-decoration: none;
       }
-      
-      footer a:hover { text-decoration: underline; }
+
+      footer a:hover {
+        text-decoration: underline;
+      }
     </style>
   </head>
   <body>
@@ -462,7 +518,10 @@
       <header>
         <span class="badge">Paradigm Shift</span>
         <h1>No More Callback Hell</h1>
-        <p class="subtitle">See how declarative async chains eliminate nested callbacks and manual error handling</p>
+        <p class="subtitle">
+          See how declarative async chains eliminate nested callbacks and manual
+          error handling
+        </p>
       </header>
 
       <!-- Before/After Comparison -->
@@ -471,7 +530,7 @@
           <span class="icon">⚡</span>
           The Problem vs The Solution
         </h2>
-        
+
         <div class="comparison-grid">
           <!-- BEFORE: Callback Hell -->
           <div class="code-card">
@@ -540,7 +599,10 @@
               <li>Flat, readable async flows</li>
               <li>Full control via <code>$.effect</code></li>
               <li>Automatic dependency tracking</li>
-              <li>Built-in <code>state</code>, <code>value</code>, <code>error</code> handling</li>
+              <li>
+                Built-in <code>state</code>, <code>value</code>,
+                <code>error</code> handling
+              </li>
             </ul>
           </div>
         </div>
@@ -552,16 +614,20 @@
           <span class="icon">🎮</span>
           Live Demo: GitHub Stats Pipeline
         </h2>
-        
+
         <div class="demo-card">
           <div class="demo-header">
             <h3>Async Pipeline Visualization</h3>
             <div class="demo-controls">
-              <button id="btnSuccess" class="btn btn-success">▶ Run Pipeline</button>
-              <button id="btnFail" class="btn btn-fail">💥 Simulate API Error</button>
+              <button id="btnSuccess" class="btn btn-success">
+                ▶ Run Pipeline
+              </button>
+              <button id="btnFail" class="btn btn-fail">
+                💥 Simulate API Error
+              </button>
             </div>
           </div>
-          
+
           <div class="pipeline">
             <div id="stage1" class="pipeline-stage">
               <div class="stage-card">
@@ -573,7 +639,7 @@
                 <div id="output1" class="stage-output">—</div>
               </div>
             </div>
-            
+
             <div id="stage2" class="pipeline-stage">
               <div class="stage-card">
                 <div class="stage-header">
@@ -584,7 +650,7 @@
                 <div id="output2" class="stage-output">—</div>
               </div>
             </div>
-            
+
             <div id="stage3" class="pipeline-stage">
               <div class="stage-card">
                 <div class="stage-header">
@@ -596,16 +662,22 @@
               </div>
             </div>
           </div>
-          
+
           <div class="insight-box">
             <div class="insight-title">
               💡 Key Insight: Error Awareness Through hasError
             </div>
             <p class="insight-text">
-              When <strong>Stage 2</strong> fails, <strong>Stage 3 detects it via <code>hasError</code></strong>.<br><br>
-              The <code>hasError</code> property propagates through the dependency chain, allowing 
-              downstream computeds to know if any upstream has failed.<br><br>
-              <strong>No re-throwing needed — just check <code>hasError</code> to detect blocked states.</strong>
+              When <strong>Stage 2</strong> fails,
+              <strong>Stage 3 detects it via <code>hasError</code></strong
+              >.<br /><br />
+              The <code>hasError</code> property propagates through the
+              dependency chain, allowing downstream computeds to know if any
+              upstream has failed.<br /><br />
+              <strong
+                >No re-throwing needed — just check <code>hasError</code> to
+                detect blocked states.</strong
+              >
             </p>
           </div>
         </div>
@@ -613,29 +685,33 @@
 
       <footer>
         <p>
-          Built with <a href="https://github.com/but212/atom-effect/tree/main/packages/jquery">atom-effect-jquery</a> — 
-          Reactive jQuery bindings for async-first applications
+          Built with
+          <a
+            href="https://github.com/but212/atom-effect/tree/main/packages/jquery"
+            >atom-effect-jquery</a
+          >
+          — Reactive jQuery bindings for async-first applications
         </p>
       </footer>
     </div>
 
     <script>
       const AsyncState = {
-        IDLE: 'idle',
-        PENDING: 'pending',
-        RESOLVED: 'resolved',
-        REJECTED: 'rejected'
+        IDLE: "idle",
+        PENDING: "pending",
+        RESOLVED: "resolved",
+        REJECTED: "rejected",
       };
 
       // --- Helpers ---
-      const delay = (ms) => new Promise(r => setTimeout(r, ms));
-      
+      const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+
       // Simulated API responses
-      const mockUser = { login: 'octocat', name: 'The Octocat', id: 583231 };
+      const mockUser = { login: "octocat", name: "The Octocat", id: 583231 };
       const mockRepos = [
-        { name: 'Hello-World', stargazers_count: 2500 },
-        { name: 'Spoon-Knife', stargazers_count: 12000 },
-        { name: 'octocat.github.io', stargazers_count: 340 }
+        { name: "Hello-World", stargazers_count: 2500 },
+        { name: "Spoon-Knife", stargazers_count: 12000 },
+        { name: "octocat.github.io", stargazers_count: 340 },
       ];
 
       // --- Reactive State ---
@@ -643,55 +719,82 @@
       const shouldFail = $.atom(false);
 
       // --- Async Pipeline --
-      
+
       // Stage 1: Fetch User
-      const user = $.computed(async () => {
-        const id = runId.value;
-        if (id === 0) return null;
-        
-        await delay(800); // Simulate network latency
-        return mockUser;
-      }, { defaultValue: null });
+      const user = $.computed(
+        async () => {
+          const id = runId.value;
+          if (id === 0) return null;
+
+          await delay(800); // Simulate network latency
+          return mockUser;
+        },
+        { defaultValue: null },
+      );
 
       // Stage 2: Fetch Repos (depends on user, may fail)
-      const repos = $.computed(async () => {
-        const userData = user.value;
-        if (!userData) return null;
-        
-        await delay(800);
-        
-        // Simulate API failure
-        if (shouldFail.value) {
-          throw new Error('API Rate Limit Exceeded');
-        }
-        
-        return mockRepos;
-      }, { defaultValue: null });
+      const repos = $.computed(
+        async () => {
+          const userData = user.value;
+          if (!userData) return null;
+
+          await delay(800);
+
+          // Simulate API failure
+          if (shouldFail.value) {
+            throw new Error("API Rate Limit Exceeded");
+          }
+
+          return mockRepos;
+        },
+        { defaultValue: null },
+      );
 
       // Stage 3: Stats
-      const stats = $.computed(async () => {
-        const repoList = repos.value;
-        if (!repoList) return null;
-        
-        await delay(600);
-        
-        const totalStars = repoList.reduce((sum, r) => sum + r.stargazers_count, 0);
-        const avgStars = Math.round(totalStars / repoList.length);
-        
-        return { totalStars, avgStars, repoCount: repoList.length };
-      }, { defaultValue: null });
+      const stats = $.computed(
+        async () => {
+          const repoList = repos.value;
+          if (!repoList) return null;
+
+          await delay(600);
+
+          const totalStars = repoList.reduce(
+            (sum, r) => sum + r.stargazers_count,
+            0,
+          );
+          const avgStars = Math.round(totalStars / repoList.length);
+
+          return { totalStars, avgStars, repoCount: repoList.length };
+        },
+        { defaultValue: null },
+      );
 
       // --- UI Bindings (Using $.effect for explicit control) ---
-      
+
       const stages = [
-        { id: '1', computed: user, format: (v) => v ? `${v.name} (@${v.login})` : '—' },
-        { id: '2', computed: repos, format: (v) => v ? `${v.length} repositories loaded` : '—' },
-        { id: '3', computed: stats, format: (v) => v ? `⭐ ${v.totalStars.toLocaleString()} total (${v.repoCount} repos)` : '—' }
+        {
+          id: "1",
+          computed: user,
+          format: (v) => (v ? `${v.name} (@${v.login})` : "—"),
+        },
+        {
+          id: "2",
+          computed: repos,
+          format: (v) => (v ? `${v.length} repositories loaded` : "—"),
+        },
+        {
+          id: "3",
+          computed: stats,
+          format: (v) =>
+            v
+              ? `⭐ ${v.totalStars.toLocaleString()} total (${v.repoCount} repos)`
+              : "—",
+        },
       ];
 
       stages.forEach(({ id, computed: c, format }) => {
         const $stage = $(`#stage${id}`);
-        const $card = $stage.find('.stage-card');
+        const $card = $stage.find(".stage-card");
         const $badge = $(`#badge${id}`);
         const $output = $(`#output${id}`);
 
@@ -702,49 +805,49 @@
           const hasUpstreamError = c.hasError && !error;
 
           // Reset classes
-          $stage.removeClass('active resolved rejected');
-          $card.removeClass('active resolved rejected');
-          $badge.removeClass('idle pending resolved rejected');
-          $output.removeClass('error');
+          $stage.removeClass("active resolved rejected");
+          $card.removeClass("active resolved rejected");
+          $badge.removeClass("idle pending resolved rejected");
+          $output.removeClass("error");
 
           // Handle states with a switch for clarity
           switch (state) {
             case AsyncState.IDLE:
-              $badge.addClass('idle').text('Idle');
-              $output.text('—');
+              $badge.addClass("idle").text("Idle");
+              $output.text("—");
               break;
 
             case AsyncState.PENDING:
-              $stage.addClass('active');
-              $card.addClass('active');
-              $badge.addClass('pending').text('Loading');
+              $stage.addClass("active");
+              $card.addClass("active");
+              $badge.addClass("pending").text("Loading");
               $output.html('<span class="spinner"></span>Fetching...');
               break;
 
             case AsyncState.REJECTED:
-              $stage.addClass('rejected');
-              $card.addClass('rejected');
-              $badge.addClass('rejected').text('Failed');
-              $output.addClass('error').text(`⛔ ${error?.message || 'Error'}`);
+              $stage.addClass("rejected");
+              $card.addClass("rejected");
+              $badge.addClass("rejected").text("Failed");
+              $output.addClass("error").text(`⛔ ${error?.message || "Error"}`);
               break;
 
             case AsyncState.RESOLVED:
               if (hasUpstreamError) {
                 // Blocked by upstream failure
-                $stage.addClass('rejected'); // Use rejected style for blocked
-                $card.addClass('rejected');
-                $badge.addClass('rejected').text('Blocked');
-                $output.addClass('error').text('⛔ Upstream failed');
+                $stage.addClass("rejected"); // Use rejected style for blocked
+                $card.addClass("rejected");
+                $badge.addClass("rejected").text("Blocked");
+                $output.addClass("error").text("⛔ Upstream failed");
               } else {
                 // Success
-                $stage.addClass('resolved');
-                $card.addClass('resolved');
-                $badge.addClass('resolved').text('Done');
-                
+                $stage.addClass("resolved");
+                $card.addClass("resolved");
+                $badge.addClass("resolved").text("Done");
+
                 try {
                   $output.text(format(value));
                 } catch (e) {
-                  $output.text('—');
+                  $output.text("—");
                 }
               }
               break;
@@ -753,12 +856,12 @@
       });
 
       // --- Controls ---
-      $('#btnSuccess').on('click', () => {
+      $("#btnSuccess").on("click", () => {
         shouldFail.value = false;
         runId.value++;
       });
 
-      $('#btnFail').on('click', () => {
+      $("#btnFail").on("click", () => {
         shouldFail.value = true;
         runId.value++;
       });
