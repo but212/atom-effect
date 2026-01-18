@@ -22,6 +22,10 @@ A lightweight, high-performance reactive state management ecosystem for TypeScri
 npm i @but212/atom-effect
 ```
 
+```html
+<script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect@0.9.0"></script>
+```
+
 ```typescript
 import { atom, computed, effect } from '@but212/atom-effect';
 
@@ -37,6 +41,10 @@ count.value++; // Auto-updates
 
 ```bash
 npm i @but212/atom-effect-jquery jquery
+```
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.9.0"></script>
 ```
 
 ```javascript

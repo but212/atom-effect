@@ -11,6 +11,13 @@ Reactive jQuery bindings.
 npm install @but212/atom-effect-jquery jquery
 ```
 
+### CDN
+
+```html
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.9.0"></script>
+```
+
 ## Basic Usage
 
 ```javascript
