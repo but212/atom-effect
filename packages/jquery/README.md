@@ -121,3 +121,11 @@ const Counter = ($el, props) => {
 
 $('#app').atomMount(Counter, { start: 10 });
 ```
+
+## Contributing
+
+Contributions are welcome! Feel free to open an issue or submit a pull request.
+
+## License
+
+MIT © [Jeongil Suk](https://github.com/but212)

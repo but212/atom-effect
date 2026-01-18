@@ -90,3 +90,11 @@ Verified benchmarks vs object pooling and lazy evaluation optimizations.
 | Deep chain (100 levels) | ~8.7K ops/sec |
 
 Benchmarks are run on a standard environment. See [docs/BENCHMARKS.md](./docs/BENCHMARKS.md) for details.
+
+## Contributing
+
+Contributions are welcome! Feel free to open an issue or submit a pull request.
+
+## License
+
+MIT © [Jeongil Suk](https://github.com/but212)
