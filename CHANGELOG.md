@@ -19,7 +19,7 @@
 - **Async Drift Validation**: Implemented phase drift detection for async computed values.
   - Captures dependency version snapshot at async start (`_captureVersionSnapshot()`).
   - Validates drift on resolution: if `drift >= PHASE_THRESHOLD`, the result is stale.
-  - Stale results trigger recomputation (up to `MAX_ASYNC_RETRIES = 3`) instead of updating with outdated data.
+  - **Fail-Fast Policy**: Stale results trigger recomputation (up to `MAX_ASYNC_RETRIES = 3`). On exhaustion, throws `ComputedError` for graceful degradation via `hasError`/`defaultValue`.
   - Prevents UI flickering from race conditions while maintaining branchless performance.
 
 ## [0.10.1]

@@ -557,10 +557,22 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
         // Branchless stale detection: 1 if drift >= PHASE_THRESHOLD, else 0
         const isStale = ((PHASE_THRESHOLD - 1 - drift) >>> 31) & 1;
 
-        // If stale and retries not exhausted, trigger recomputation instead of using stale result
-        if (isStale && this._asyncRetryCount < this.MAX_ASYNC_RETRIES) {
-          this._asyncRetryCount++;
-          this._markDirty();
+        // If stale, handle retry or fail-fast
+        if (isStale) {
+          if (this._asyncRetryCount < this.MAX_ASYNC_RETRIES) {
+            // Retry: trigger recomputation with fresh dependencies
+            this._asyncRetryCount++;
+            this._markDirty();
+            return;
+          }
+
+          // Fail-Fast Policy: retries exhausted, reject with descriptive error
+          // This allows UI layer to gracefully degrade using hasError/defaultValue
+          const error = new ComputedError(
+            `Async drift exceeded threshold after ${this.MAX_ASYNC_RETRIES} retries. ` +
+              `Dependencies changed too rapidly for stable computation.`
+          );
+          this._handleAsyncRejection(error);
           return;
         }
 
