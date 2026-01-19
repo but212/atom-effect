@@ -57,13 +57,15 @@ function bindCss(ctx: BindingContext, cssMap: Record<string, CssValue>): void {
   const style = ctx.el.style as unknown as Record<string, string>;
   for (const prop in cssMap) {
     const value = cssMap[prop];
+    if (value === undefined) continue;
+    const camelProp = prop.includes('-') ? prop.replace(/-./g, (match) => match.charAt(1).toUpperCase()) : prop;
     if (Array.isArray(value)) {
       const [source, unit] = value;
       registerReactiveEffect(
         ctx.el,
         source,
         (val) => {
-          style[prop] = `${val}${unit}`;
+          style[camelProp] = `${val}${unit}`;
         },
         `css.${prop}`
       );
@@ -72,7 +74,7 @@ function bindCss(ctx: BindingContext, cssMap: Record<string, CssValue>): void {
         ctx.el,
         value,
         (val) => {
-          style[prop] = val as string;
+          style[camelProp] = val as string;
         },
         `css.${prop}`
       );
@@ -121,7 +123,7 @@ function bindShow(ctx: BindingContext, condition: ReactiveValue<boolean>): void 
     ctx.el,
     condition,
     (val) => {
-      ctx.el.style.display = val ? '' : 'none';
+      ctx.$el.toggle(!!val);
     },
     'show'
   );
@@ -132,7 +134,7 @@ function bindHide(ctx: BindingContext, condition: ReactiveValue<boolean>): void 
     ctx.el,
     condition,
     (val) => {
-      ctx.el.style.display = val ? 'none' : '';
+      ctx.$el.toggle(!val);
     },
     'hide'
   );
@@ -190,8 +192,10 @@ function bindEvents(
   const el = ctx.el;
   for (const eventName in eventMap) {
     const handler = eventMap[eventName];
-    el.addEventListener(eventName, handler as unknown as EventListener);
-    ctx.trackCleanup(() => el.removeEventListener(eventName, handler as unknown as EventListener));
+    if (typeof handler !== 'function') continue;
+    const listener = (e: Event) => handler.call(el, $.Event(e as any));
+    el.addEventListener(eventName, listener);
+    ctx.trackCleanup(() => el.removeEventListener(eventName, listener));
   }
 }
 
