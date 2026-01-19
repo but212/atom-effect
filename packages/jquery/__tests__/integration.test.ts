@@ -57,7 +57,8 @@ describe('Integration', () => {
     $search.atomVal(search);
     $list.atomList(filteredTodos, {
       key: 'id',
-      render: (todo) => `<li id="todo-${todo.id}" class="${todo.done ? 'done' : ''}">${todo.text}</li>`,
+      render: (todo) =>
+        `<li id="todo-${todo.id}" class="${todo.done ? 'done' : ''}">${todo.text}</li>`,
       update: ($el, todo) => {
         $el.toggleClass('done', todo.done);
         $el.text(todo.text);
@@ -122,8 +123,7 @@ describe('Integration', () => {
 
   it('should handle Complex Form Validation (atomBind with parse/format and computed state)', async () => {
     const age = $.atom<number | null>(null);
-    const ageText = $.atom('');
-    
+
     // Derived validity
     const isValid = $.computed(() => {
       const v = age.value;
@@ -145,7 +145,7 @@ describe('Integration', () => {
         {
           parse: (v) => {
             const parsed = parseInt(v, 10);
-            return isNaN(parsed) ? null : parsed;
+            return Number.isNaN(parsed) ? null : parsed;
           },
           format: (v) => (v === null ? '' : String(v)),
         },
@@ -217,7 +217,7 @@ describe('Integration', () => {
     ]);
 
     const $app = $('<div id="nested-app">').appendTo(document.body);
-    
+
     $app.atomList(categories, {
       key: 'id',
       render: (cat) => `
