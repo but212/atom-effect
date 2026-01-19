@@ -234,7 +234,8 @@ class Scheduler {
     const count = this.urgentQueueSize;
 
     // Swap to other buffer
-    this.urgentQueue = this.urgentQueue === this.urgentQueueA ? this.urgentQueueB : this.urgentQueueA;
+    this.urgentQueue =
+      this.urgentQueue === this.urgentQueueA ? this.urgentQueueB : this.urgentQueueA;
     this.urgentQueueSize = 0;
     this._epoch++;
 

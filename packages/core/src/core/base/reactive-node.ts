@@ -49,7 +49,8 @@ export class ReactiveNode {
    * @returns The new version after phase rotation
    */
   protected rotatePhase(): number {
-    return (this.version = (this.version + 1) & SMI_MAX);
+    this.version = (this.version + 1) & SMI_MAX;
+    return this.version;
   }
 
   /**
@@ -74,4 +75,3 @@ export class ReactiveNode {
     return (this.version - cachedVersion) & SMI_MAX;
   }
 }
-

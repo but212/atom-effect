@@ -1,4 +1,10 @@
-import { AsyncState, COMPUTED_STATE_FLAGS, EMPTY_ERROR_ARRAY, SMI_MAX, PHASE_THRESHOLD } from '@/constants';
+import {
+  AsyncState,
+  COMPUTED_STATE_FLAGS,
+  EMPTY_ERROR_ARRAY,
+  PHASE_THRESHOLD,
+  SMI_MAX,
+} from '@/constants';
 import { ReactiveDependency } from '@/core/base/reactive-dependency';
 import { syncDependencies, trackDependency } from '@/core/utils/dep-tracking';
 import type { AtomError } from '@/errors/errors';
