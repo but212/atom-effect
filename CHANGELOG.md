@@ -1,5 +1,19 @@
 # Changelog
 
+## [Unreleased]
+
+### Refactor
+
+- **Type Extraction**: Extracted `EffectExecutionContext` interface to `types/effect.ts` for consistency with `ComputationContext`.
+  - Centralized context type alongside other effect types.
+  - Updated `EffectImpl` to import the type instead of defining inline.
+  - Renamed `_prepareEffectContext()` → `_prepareEffectExecutionContext()`.
+
+- **Code Deduplication**: Unified sync/async result handlers in `ComputedAtomImpl`.
+  - Extracted shared logic into `_finalizeResolution(value: T)` method.
+  - `_handleSyncResult()` and `_handleAsyncResolution()` now delegate to unified method.
+  - Reduces code duplication and improves maintainability.
+
 ## [0.11.0]
 
 ### Core

@@ -140,7 +140,7 @@ describe('Effect - Extra Coverage', () => {
     const fx = effect(() => {});
     interface EffectInternals {
       _setExecuting: (v: boolean) => void;
-      _prepareEffectContext: () => void;
+      _prepareEffectExecutionContext: () => void;
       addDependency: (dep: unknown) => void;
     }
     const impl = fx as unknown as EffectInternals;
@@ -148,7 +148,7 @@ describe('Effect - Extra Coverage', () => {
     // Manually trigger addDependency inside execution context
     // We need to simulate execution state
     impl._setExecuting(true);
-    impl._prepareEffectContext();
+    impl._prepareEffectExecutionContext();
 
     // Now call addDependency, which calls _subscribeTo
     impl.addDependency(dep);

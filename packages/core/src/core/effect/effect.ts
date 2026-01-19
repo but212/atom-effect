@@ -18,22 +18,10 @@ import {
 } from '@/internal/pool';
 import { scheduler } from '@/internal/scheduler';
 import { type DependencyTracker, trackingContext, untracked } from '@/tracking';
-import type { Dependency, EffectFunction, EffectObject, EffectOptions } from '@/types';
+import type { Dependency, EffectExecutionContext, EffectFunction, EffectObject, EffectOptions } from '@/types';
 import { debug } from '@/utils/debug';
 import { wrapError } from '@/utils/error';
 import { isPromise } from '@/utils/type-guards';
-
-/**
- * Internal context used during effect execution to track dependency changes.
- */
-interface EffectContext {
-  prevDeps: Dependency[];
-  prevVersions: number[];
-  prevUnsubs: (() => void)[];
-  nextDeps: Dependency[];
-  nextVersions: number[];
-  nextUnsubs: (() => void)[];
-}
 
 /**
  * Internal effect implementation with dependency tracking and infinite loop detection.
@@ -214,7 +202,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     this._setExecuting(true);
     this._safeCleanup();
 
-    const context = this._prepareEffectContext();
+    const context = this._prepareEffectExecutionContext();
     let committed = false;
 
     try {
@@ -250,9 +238,9 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 
   /**
    * Prepares the execution context by acquiring pools and setting up epoch.
-   * @returns The prepared EffectContext.
+   * @returns The prepared EffectExecutionContext.
    */
-  private _prepareEffectContext(): EffectContext {
+  private _prepareEffectExecutionContext(): EffectExecutionContext {
     const prevDeps = this._dependencies;
     const prevVersions = this._dependencyVersions;
     const prevUnsubs = this._unsubscribes;
@@ -280,7 +268,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
    * Commits the tracked dependencies as the current active dependencies.
    * @param ctx - The current effect context.
    */
-  private _commitEffect(ctx: EffectContext): void {
+  private _commitEffect(ctx: EffectExecutionContext): void {
     // Structural Guarantee: nextDeps length is controlled by the tracking phase
     // We use the context's nextDeps directly, avoiding `this._nextDeps!`
     const trackedCount = ctx.nextDeps.length;
@@ -298,7 +286,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
    * @param ctx - The effect context to clean up.
    * @param committed - Whether the changes were committed to the effect.
    */
-  private _cleanupEffect(ctx: EffectContext, committed: boolean): void {
+  private _cleanupEffect(ctx: EffectExecutionContext, committed: boolean): void {
     this._nextDeps = null;
     this._nextVersions = null;
     this._nextUnsubs = null;

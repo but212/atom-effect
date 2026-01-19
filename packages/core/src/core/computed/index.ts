@@ -523,21 +523,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   }
 
   private _handleSyncResult(result: T): void {
-    const valueChanged = !this._isResolved() || !this._equal(this._value, result);
-
-    // Conditional phase rotation: only rotate if value actually changed
-    // Branchless would be: this.version = (this.version + Number(valueChanged)) & SMI_MAX
-    // But rotatePhase() is clearer and equally performant for conditional case
-    if (valueChanged) this.rotatePhase();
-
-    this._value = result;
-    this._clearDirty();
-    this._setResolved();
-    this._error = null;
-    this._setRecomputing(false);
-    // Clear error cache on successful computation (recovery)
-    this._cachedErrors = null;
-    this._errorCacheEpoch = -1;
+    this._finalizeResolution(result);
   }
 
   private _handleAsyncComputation(promise: Promise<T>): void {
@@ -608,22 +594,29 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   }
 
   private _handleAsyncResolution(resolvedValue: T): void {
-    const valueChanged = !this._isResolved() || !this._equal(this._value, resolvedValue);
+    this._finalizeResolution(resolvedValue);
+    this._notifyJob();
+  }
 
-    // Conditional phase rotation for value change detection
+  /**
+   * Unified success finalization for sync and async results.
+   * Handles phase rotation, state transition, and error cache clearing.
+   */
+  private _finalizeResolution(value: T): void {
+    const valueChanged = !this._isResolved() || !this._equal(this._value, value);
+
+    // Conditional phase rotation: only rotate if value actually changed
     if (valueChanged) this.rotatePhase();
 
-    this._value = resolvedValue;
+    this._value = value;
     this._clearDirty();
     this._setResolved();
     this._error = null;
     this._setRecomputing(false);
+
     // Clear error cache on successful computation (recovery)
     this._cachedErrors = null;
     this._errorCacheEpoch = -1;
-
-    // Notify subscribers when async computation resolves
-    this._notifyJob();
   }
 
   private _handleAsyncRejection(err: unknown): void {
