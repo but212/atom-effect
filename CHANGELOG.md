@@ -1,10 +1,10 @@
 # Changelog
 
-## [unreleased]
+## [0.10.0]
 
 ### Core
 
-#### Changed - Atom Effect Core
+#### Changed - Atom Effect Core 0.10.0
 
 - **Docs**: Clarified `batch(fn)` behavior.
   - Emphasized that `batch()` results in **Synchronous Reflection** (immediate flush) upon completion.
@@ -13,7 +13,7 @@
 
 ### jQuery
 
-#### Changed - Atom Effect jQuery
+#### Changed - Atom Effect jQuery 0.10.0
 
 - **Refactor**: Removed redundant `batch()` calls from event handlers and internal synchronization.
   - Relying on Core's automatic microtask batching for better performance and alignment with the browser's event loop.
