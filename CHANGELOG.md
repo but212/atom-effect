@@ -1,8 +1,28 @@
 # Changelog
 
-## [0.10.0]
+## [Unreleased]
 
 ### Core
+
+#### Changed - Atom Effect Core
+
+- **Changed**: Added `ATOM_STATE_FLAGS` and simplified internal logic for `AtomImpl`.
+  - Implemented lazy initialization for subscriber managers to reduce initial memory footprint.
+  - Streamlined `value` getter/setter using Guard Clauses for improved readability.
+  - Reused notification task closures to avoid unnecessary heap allocations during updates.
+
+### jQuery
+
+#### Changed - Atom Effect jQuery
+
+- **Changed**: Refactored internal logic for `atomList`, `registry`, and chainable methods.
+  - Updated `getLIS` and reconciliation loop in `atomList` for better memory usage and stability.
+  - Optimized `registry` for element tracking and recursive tree cleanup.
+  - Refined `chainable` bindings by moving invariant checks out of element iteration loops.
+
+## [0.10.0]
+
+### Core - 0.10.0
 
 #### Changed - Atom Effect Core 0.10.0
 
@@ -11,7 +31,7 @@
   - Noted that the engine already performs **Automatic Microtask Batching** by default.
   - Updated JSDoc and README to reflect these definitions.
 
-### jQuery
+### jQuery - 0.10.0
 
 #### Changed - Atom Effect jQuery 0.10.0
 

@@ -6,230 +6,204 @@ import type { ListOptions, ReadonlyAtom } from './types';
 import { getSelector } from './utils';
 
 /**
- * Helper: Longest Increasing Subsequence (LIS)
- * O(N log N) algorithm used to minimize DOM moves in the diffing algorithm.
+ * Longest Increasing Subsequence (LIS)
+ * Optimized for hardware: Uses Int32Array for memory locality and cache hits.
+ * Time Complexity: O(N log N), Space Complexity: O(N) but contiguous.
  */
-function getLIS(arr: number[]): number[] {
-  if (arr.length === 0) return [];
-
-  // predecessors: stores the index of the previous element for backtracking
-  const predecessors = arr.slice();
-
-  // result: stores the indices of the longest increasing subsequence found so far
-  // result[k] is the index of the last element of an increasing subsequence of length k+1
-  const result: number[] = [0];
-
-  let i: number, left: number, right: number, mid: number;
+function getLIS(arr: Int32Array | number[]): Int32Array {
   const len = arr.length;
+  if (len === 0) return new Int32Array(0);
 
-  for (i = 0; i < len; i++) {
-    const arrI = arr[i]!; // Safe: i is within bounds [0, len)
+  // predecessors: pointer to previous index in LIS for backtracking (N indices)
+  const predecessors = new Int32Array(len);
+  // result: indices of the currently found longest increasing subsequence
+  const result = new Int32Array(len);
+  let resultLen = 0;
 
-    // -1 is treated as "not present" or "ignored" (specific to the diff algorithm)
-    if (arrI !== -1) {
-      const lastResultIndex = result[result.length - 1]!; // Safe: result always has at least 1 element
+  for (let i = 0; i < len; i++) {
+    const val = arr[i]!;
+    if (val === -1) continue;
 
-      // Case A: If current value is greater than the last value in result -> append (Greedy)
-      if (arr[lastResultIndex]! < arrI) {
-        predecessors[i] = lastResultIndex;
-        result.push(i);
-        continue;
-      }
+    if (resultLen === 0 || arr[result[resultLen - 1]!]! < val) {
+      predecessors[i] = resultLen > 0 ? result[resultLen - 1]! : -1;
+      result[resultLen++] = i;
+      continue;
+    }
 
-      // Case B: If current value is smaller or equal -> find the insertion point (Binary Search)
-      // Updates with a smaller value to increase future possibilities without breaking the sequence
-      left = 0;
-      right = result.length - 1;
+    // Binary search for insertion point
+    let left = 0,
+      right = resultLen - 1;
+    while (left < right) {
+      const mid = (left + right) >>> 1;
+      if (arr[result[mid]!]! < val) left = mid + 1;
+      else right = mid;
+    }
 
-      while (left < right) {
-        mid = ((left + right) / 2) | 0;
-        if (arr[result[mid]!]! < arrI) {
-          left = mid + 1;
-        } else {
-          right = mid;
-        }
-      }
-
-      // Replace if the current value is smaller than the value at the found position
-      if (arrI < arr[result[left]!]!) {
-        if (left > 0) {
-          // Link the predecessor
-          predecessors[i] = result[left - 1]!; // Safe: left > 0 means left-1 >= 0
-        }
-        result[left] = i;
-      }
+    if (val < arr[result[left]!]!) {
+      if (left > 0) predecessors[i] = result[left - 1]!;
+      result[left] = i;
     }
   }
 
-  // Backtracking: reconstruct the actual LIS path using predecessors
-  let u = result.length;
-  let v = result[u - 1]!; // Safe: result has at least 1 element
-
-  while (u-- > 0) {
-    result[u] = v;
-    v = predecessors[v]!; // Safe: v is always a valid index from previous iteration
+  // Backtracking to reconstruct the LIS in the correct order
+  const lis = new Int32Array(resultLen);
+  for (let i = resultLen - 1, v = result[resultLen - 1]!; i >= 0; i--) {
+    lis[i] = v;
+    v = predecessors[v]!;
   }
 
-  return result;
+  return lis;
 }
 
 /**
- * Implementation of atomList with Smart Reconciliation (Keyed Diffing)
- * Uses LIS (Longest Increasing Subsequence) to minimize DOM moves.
+ * atomList with Smart Reconciliation
+ * Optimized for performance and data locality.
  */
 $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>): JQuery {
+  const { key, render, bind, update, onAdd, onRemove, empty } = options;
+
+  // Resolve getKey once to avoid repeated typeof checks in the Hot Path
+  const getKey =
+    typeof key === 'function'
+      ? key
+      : (item: T) => item[key as keyof T] as unknown as string | number;
+
   return this.each(function () {
     const $container = $(this);
     const containerSelector = getSelector(this);
 
-    const { key, render, bind, onAdd, onRemove, empty } = options;
-
-    const getKey =
-      typeof key === 'function'
-        ? key
-        : (item: T) => item[key as keyof T] as unknown as string | number;
-
     const itemMap = new Map<string | number, { $el: JQuery; item: T }>();
+    const removingKeys = new Set<string | number>();
     let oldKeys: (string | number)[] = [];
     let $emptyEl: JQuery | null = null;
 
-    // Track keys currently being removed (async animation etc.)
-    // This prevents duplicate items when the same key is re-added during removal
-    const removingKeys = new Set<string | number>();
-
     const fx = effect(() => {
       const items = source.value;
-      const newKeys: (string | number)[] = [];
-      const newKeySet = new Set<string | number>();
+      const itemCount = items.length;
 
-      // 1. Prepare keys
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i]!; // Safe: i is within bounds
-        const k = getKey(item, i);
-        newKeys.push(k);
-        newKeySet.add(k);
-      }
-
-      debug.log('list', `${containerSelector} updating with ${items.length} items`);
-
-      // 2. Handle Empty State
-      if (items.length === 0 && empty) {
-        if (!$emptyEl) {
-          $emptyEl = $(empty);
-          $container.append($emptyEl);
+      // 1. Handle Empty Template Logic
+      if (itemCount === 0) {
+        if (empty && !$emptyEl) {
+          $emptyEl = $(empty).appendTo($container);
         }
-        for (const [, entry] of itemMap) {
-          entry.$el.remove();
-          const el = entry.$el[0];
-          if (el) registry.cleanup(el);
-        }
-        itemMap.clear();
-        oldKeys = [];
-        return;
       } else if ($emptyEl) {
         $emptyEl.remove();
         $emptyEl = null;
       }
 
-      // 3. Remove vanished items
+      // Hot Path: If both new and old are empty, skip processing
+      if (itemCount === 0 && itemMap.size === 0) {
+        oldKeys = [];
+        return;
+      }
+
+      debug.log('list', `${containerSelector} updating with ${itemCount} items`);
+
+      // 2. Prepare keys and identify removals (O(N) with cache-friendly loop)
+      const newKeys: (string | number)[] = new Array(itemCount);
+      const newKeySet = new Set<string | number>();
+
+      for (let i = 0; i < itemCount; i++) {
+        const item = items[i] as T; // Type assertion for generic T
+        const k = getKey(item, i);
+        newKeys[i] = k;
+        newKeySet.add(k);
+      }
+
+      // 3. Remove vanished items (O(M)) - Respects onRemove callback
       for (const [k, entry] of itemMap) {
-        if (!newKeySet.has(k)) {
-          // Skip if already being removed (prevents duplicate removal attempts)
-          if (removingKeys.has(k)) continue;
+        if (newKeySet.has(k) || removingKeys.has(k)) continue;
 
-          const doRemove = () => {
-            entry.$el.remove();
-            const el = entry.$el[0];
-            if (el) registry.cleanup(el);
-            removingKeys.delete(k); // Clear from tracking when removal completes
-            debug.log('list', `${containerSelector} removed item:`, k);
-          };
+        const cleanupItem = () => {
+          entry.$el.remove();
+          const el = entry.$el[0];
+          if (el) registry.cleanup(el);
+          removingKeys.delete(k);
+          debug.log('list', `${containerSelector} removed item:`, k);
+        };
 
-          itemMap.delete(k); // Remove from map immediately to avoid interference
-          removingKeys.add(k); // Mark as being removed
+        itemMap.delete(k);
+        removingKeys.add(k);
 
-          if (onRemove) {
-            Promise.resolve(onRemove(entry.$el)).then(doRemove);
-          } else {
-            doRemove();
-          }
+        if (onRemove) {
+          const result = onRemove(entry.$el);
+          if (result instanceof Promise) result.then(cleanupItem);
+          else cleanupItem();
+        } else {
+          cleanupItem();
         }
       }
 
-      // 4. LIS algorithm for minimizing moves
-      // Map keys to their index in the OLD list
+      // If we adjusted from non-empty to empty, we can stop here after removal
+      if (itemCount === 0) {
+        oldKeys = [];
+        return;
+      }
+
+      // 4. LIS Reconciliation (O(N log N))
+      // Map keys to their OLD index for LIS input
       const oldIndexMap = new Map<string | number, number>();
-      oldKeys.forEach((k, i) => oldIndexMap.set(k, i));
+      for (let i = 0; i < oldKeys.length; i++) {
+        const k = oldKeys[i];
+        if (k !== undefined) oldIndexMap.set(k, i);
+      }
 
-      // Construct array of old indices for the new items
-      const newIndices = newKeys.map((k) => oldIndexMap.get(k) ?? -1);
+      // Input for LIS: where each new item came from in the old list
+      const newIndices = new Int32Array(itemCount);
+      for (let i = 0; i < itemCount; i++) {
+        const k = newKeys[i];
+        newIndices[i] = k !== undefined ? (oldIndexMap.get(k) ?? -1) : -1;
+      }
 
-      // Get indices of items in the new list that form the LIS (stable candidates)
-      const lis = getLIS(newIndices);
-      const lisSet = new Set(lis); // fast lookup
+      const lisArr = getLIS(newIndices);
+      let lisIdx = lisArr.length - 1;
 
-      // 5. Reconciliation (Backwards)
+      // 5. Update and Reorder (Backwards iteration for insertBefore efficiency)
       let nextNode: Node | null = null;
+      for (let i = itemCount - 1; i >= 0; i--) {
+        const k = newKeys[i]!;
+        const item = items[i]!;
+        const entry = itemMap.get(k);
 
-      for (let i = items.length - 1; i >= 0; i--) {
-        const key = newKeys[i]!; // Safe: i is within bounds
-        const item = items[i]!; // Safe: i is within bounds
-        const isStable = lisSet.has(i);
-
-        if (itemMap.has(key)) {
-          // Update Existing
-          const entry = itemMap.get(key);
-          if (!entry) continue; // Type guard
-
+        if (entry) {
+          // Existing Item: Update then potentially MOVE
           entry.item = item;
           const el = entry.$el[0];
-          if (!el) continue; // Type guard
+          if (!el) continue;
 
-          if (options.update) {
-            options.update(entry.$el, item, i);
-          }
+          if (update) update(entry.$el, item, i);
 
-          if (!isStable) {
-            // MOVED (Not in LIS)
-            if (nextNode) {
-              entry.$el.insertBefore(nextNode);
-            } else {
-              entry.$el.appendTo($container);
+          const isStable = lisIdx >= 0 && lisArr[lisIdx] === i;
+          if (isStable) {
+            lisIdx--;
+            // Even if stable in LIS, check if the relative order with nextNode is correct
+            const currentNext = el.nextSibling;
+            if (currentNext !== nextNode) {
+              if (nextNode) entry.$el.insertBefore(nextNode);
+              else entry.$el.appendTo($container);
             }
+          } else if (nextNode) {
+            entry.$el.insertBefore(nextNode);
           } else {
-            // STABLE (In LIS) - But check for gaps/interleaving
-            // If the stable item isn't strictly before the next one, fix it.
-            // (e.g., if a new item was inserted, or a neighbor moved away)
-            const nextSib = el.nextSibling;
-            if (nextNode && nextSib !== nextNode) {
-              entry.$el.insertBefore(nextNode);
-            } else if (!nextNode && nextSib) {
-              entry.$el.appendTo($container);
-            }
+            entry.$el.appendTo($container);
           }
-          nextNode = el; // This node is now the anchor
+          nextNode = el;
         } else {
-          // item and key are guaranteed non-undefined from the loop invariant
+          // New Item: Render and INSERT
           const rendered = render(item, i);
           const $el: JQuery = (
             rendered instanceof Element ? $(rendered) : $(rendered as string)
           ) as JQuery;
-          itemMap.set(key, { $el, item });
+          itemMap.set(k, { $el, item });
 
-          if (nextNode) {
-            $el.insertBefore(nextNode);
-          } else {
-            $el.appendTo($container);
-          }
+          if (nextNode) $el.insertBefore(nextNode);
+          else $el.appendTo($container);
 
           if (bind) bind($el, item, i);
           if (onAdd) onAdd($el);
 
-          debug.log('list', `${containerSelector} added item:`, key);
-
-          // Use first element of new set as anchor
-          const newEl = $el[0];
-          if (newEl) nextNode = newEl;
+          debug.log('list', `${containerSelector} added item:`, k);
+          nextNode = $el[0] || null;
         }
       }
 
@@ -239,6 +213,7 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
     registry.trackEffect(this, fx);
     registry.trackCleanup(this, () => {
       itemMap.clear();
+      removingKeys.clear();
       oldKeys = [];
       $emptyEl?.remove();
     });

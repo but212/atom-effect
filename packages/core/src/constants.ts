@@ -40,6 +40,14 @@ export const COMPUTED_STATE_FLAGS = {
 } as const;
 
 /**
+ * Bit flags for atom state management
+ */
+export const ATOM_STATE_FLAGS = {
+  SYNC: 1 << 0,
+  NOTIFICATION_SCHEDULED: 1 << 1,
+} as const;
+
+/**
  * Object pool configuration
  * Controls memory management and GC pressure reduction
  */
