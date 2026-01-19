@@ -1,19 +1,41 @@
 # Changelog
 
-## [0.10.1]
+## [0.11.0]
 
 ### Core
 
-#### Changed - Atom Effect Core
+#### Added - Discrete Phase-Shift Versioning
+
+- **Architecture**: Implemented a new **Discrete Phase-Shift** versioning system for high-performance reactive tracking.
+  - Replaced linear integer incrementing with a 30-bit cyclic phase structure (10-bit Cycle, 20-bit Phase) optimized for V8 Smi.
+  - Moved `version` field from `ReactiveDependency` to `ReactiveNode` to unify identity and status tracking across all node types (Atoms, Computed, Effects).
+- **Performance**: Introduced **Branchless Operations** for version management and priority calculation.
+  - `rotatePhase()`: O(1) bitwise rotation handling overflow and cycle increments without branches.
+  - `getShift()`: O(1) branchless modular distance calculation between versions.
+- **Glitch Reduction**: Enhanced `Scheduler` with an **Urgent Priority Queue**.
+  - Jobs with a phase shift exceeding `PHASE_THRESHOLD` (90° equivalent) are prioritized to resolve stale states first.
+  - Implemented branchless urgency detection: `((PHASE_THRESHOLD - 1 - shift) >>> 31) & 1`.
+- **Computed Optimization**: Added `_getAggregateShift()` to track total staleness across all dependencies, allowing computed nodes to inform the scheduler of their combined priority.
+- **Async Drift Validation**: Implemented phase drift detection for async computed values.
+  - Captures dependency version snapshot at async start (`_captureVersionSnapshot()`).
+  - Validates drift on resolution: if `drift >= PHASE_THRESHOLD`, the result is stale.
+  - **Fail-Fast Policy**: Stale results trigger recomputation (up to `MAX_ASYNC_RETRIES = 3`). On exhaustion, throws `ComputedError` for graceful degradation via `hasError`/`defaultValue`.
+  - Prevents UI flickering from race conditions while maintaining branchless performance.
+
+## [0.10.1]
+
+### Core - 0.10.1
+
+#### Changed - Atom Effect Core 0.10.1
 
 - **Changed**: Added `ATOM_STATE_FLAGS` and simplified internal logic for `AtomImpl`.
   - Implemented lazy initialization for subscriber managers to reduce initial memory footprint.
   - Streamlined `value` getter/setter using Guard Clauses for improved readability.
   - Reused notification task closures to avoid unnecessary heap allocations during updates.
 
-### jQuery
+### jQuery - 0.10.1
 
-#### Changed - Atom Effect jQuery
+#### Changed - Atom Effect jQuery 0.10.1
 
 - **Changed**: Refactored internal logic for `atomList`, `registry`, and chainable methods.
   - Updated `getLIS` and reconciliation loop in `atomList` for better memory usage and stability.
