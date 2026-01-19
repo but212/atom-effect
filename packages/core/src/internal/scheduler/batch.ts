@@ -2,11 +2,11 @@ import { AtomError } from '@/errors/errors';
 import { scheduler } from './scheduler';
 
 /**
- * Executes multiple reactive updates in a single batch.
+ * Executes multiple reactive updates in a single batch and flushes them synchronously.
  *
- * Batching groups multiple state changes together, deferring notifications
- * until all updates are complete. This prevents intermediate states from
- * triggering unnecessary recomputations and improves performance.
+ * While the engine automatically batches updates using microtasks, `batch()`
+ * provides a way to group multiple changes and guarantee their immediate
+ * reflection (synchronous flush) once the callback completes.
  *
  * @template T - The return type of the callback function
  * @param callback - The function containing batched updates
@@ -19,15 +19,12 @@ import { scheduler } from './scheduler';
  * const firstName = atom('John');
  * const lastName = atom('Doe');
  *
- * // Without batching: triggers 2 separate updates
- * firstName.value = 'Jane';
- * lastName.value = 'Smith';
- *
- * // With batching: triggers 1 combined update
+ * // With batching: triggers 1 combined synchronous update at the end
  * batch(() => {
  *   firstName.value = 'Jane';
  *   lastName.value = 'Smith';
  * });
+ * // Changes are guaranteed to be applied here
  * ```
  */
 export function batch<T>(callback: () => T): T {

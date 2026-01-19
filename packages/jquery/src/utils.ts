@@ -35,8 +35,9 @@ export function getValue<T>(source: ReactiveValue<T>): T {
  * @returns A string representing the element's ID, classes, or tag name.
  */
 export function getSelector(el: Element | JQuery): string {
+  if (!el) return 'unknown';
   // Handle JQuery objects by extracting the first DOM element
-  const domEl = (el as JQuery).jquery ? (el as JQuery)[0] : (el as Element);
+  const domEl = 'jquery' in el ? (el as JQuery)[0] : (el as Element);
   if (!domEl) return 'unknown';
 
   if (domEl.id) return `#${domEl.id}`;

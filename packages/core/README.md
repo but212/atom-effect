@@ -62,14 +62,16 @@ stop();
 
 ### `batch(fn)`
 
-Delays effect execution until the function completes.
+Groups multiple updates and ensures they are **flushed synchronously** when the function completes.
+
+> **Note:** While the library automatically batches updates using microtasks, `batch()` is useful when you need to ensure all effects have run immediately after a block of changes.
 
 ```typescript
 batch(() => {
   count.value = 1;
   count.value = 2;
 }); 
-// Effects run once after the batch
+// Effects are guaranteed to have run synchronously here
 ```
 
 ### `untracked(fn)`

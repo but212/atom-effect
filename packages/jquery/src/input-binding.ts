@@ -1,4 +1,3 @@
-import { batch } from '@but212/atom-effect';
 import { debug } from './debug';
 import type { InputBindingState, ValOptions, WritableAtom } from './types';
 import { createInputBindingState } from './types';
@@ -61,9 +60,7 @@ export function applyInputBinding<T>(
     if (state.phase !== 'idle') return;
 
     state.phase = 'syncing-to-atom';
-    batch(() => {
-      atom.value = parse($el.val() as string);
-    });
+    atom.value = parse($el.val() as string);
     state.phase = 'idle';
   };
 

@@ -176,4 +176,18 @@ describe('Scheduler', () => {
     // Callback should be executed only once
     expect(callback).toHaveBeenCalledTimes(1);
   });
+
+  it('re-flushes if queue is not empty after drain', async () => {
+    const callback2 = vi.fn();
+    const callback1 = vi.fn(() => {
+      // Schedule a new job while flushing
+      scheduler.schedule(callback2);
+    });
+
+    scheduler.schedule(callback1);
+    await sleep(20);
+
+    expect(callback1).toHaveBeenCalled();
+    expect(callback2).toHaveBeenCalled();
+  });
 });

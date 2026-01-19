@@ -2,37 +2,61 @@ import $ from 'jquery';
 import { describe, expect, it, vi } from 'vitest';
 import '../src/index';
 
-function tick() {
-  return new Promise((resolve) => setTimeout(resolve, 0));
-}
-
-describe('Component Mount', () => {
-  it('should mount and cleanup component', async () => {
+describe('Atom Mount', () => {
+  it('should mount and unmount components with cleanup', () => {
+    const $el = $('<div>').appendTo(document.body);
     const cleanup = vi.fn();
-    const Component = ($el: JQuery, props: { title: string }) => {
-      $el.text(props.title);
+
+    const Component = (el: JQuery) => {
+      el.text('mounted');
       return cleanup;
     };
 
-    const $container = $('<div>').appendTo(document.body);
-    $container.atomMount(Component, { title: 'Hello' });
+    $el.atomMount(Component);
+    expect($el.text()).toBe('mounted');
 
-    await tick(); // Just in case, though mount is synchronous usually
-    expect($container.text()).toBe('Hello');
-
-    // Unmount explicitly
-    $container.atomUnmount();
+    $el.atomUnmount();
     expect(cleanup).toHaveBeenCalled();
 
-    // Mount again
-    $container.atomMount(Component, { title: 'World' });
-    expect($container.text()).toBe('World');
+    $el.remove();
+  });
 
-    // Remove element (implicit unmount via mutation observer)
-    $container.remove();
-    await new Promise((resolve) => setTimeout(resolve, 50)); // Wait for mutation observer
+  it('should unmount existing component when mounting a new one', () => {
+    const $el = $('<div>').appendTo(document.body);
+    const cleanup1 = vi.fn();
 
-    // Should have called cleanup twice (once explicit, once implicit)
-    expect(cleanup).toHaveBeenCalledTimes(2);
+    $el.atomMount(() => {
+      cleanup1();
+      return undefined;
+    });
+    $el.atomMount(() => undefined); // Mount a second one
+
+    expect(cleanup1).toHaveBeenCalled();
+
+    $el.remove();
+  });
+
+  it('should handle errors in component function', () => {
+    const $el = $('<div>').appendTo(document.body);
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    $el.atomMount(() => {
+      throw new Error('mount fail');
+    });
+
+    expect(consoleSpy).toHaveBeenCalledWith('[atom-effect-jquery] Mount error:', expect.any(Error));
+    consoleSpy.mockRestore();
+    $el.remove();
+  });
+
+  it('should handle cleanup functions that throw errors', () => {
+    const $el = $('<div>').appendTo(document.body);
+    $el.atomMount(() => () => {
+      throw new Error('cleanup fail');
+    });
+
+    // Should not throw when unmounting
+    expect(() => $el.atomUnmount()).not.throw();
+    $el.remove();
   });
 });

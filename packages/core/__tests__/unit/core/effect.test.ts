@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { atom } from '@/core/atom';
 import { effect } from '@/core/effect';
 import { EffectError } from '@/errors/errors';
+import type { Dependency } from '@/types';
 import { debug } from '@/utils/debug';
 
 describe('Effect - Error Handling and Edge Cases', () => {
@@ -586,5 +587,28 @@ describe('Effect - Error Handling and Edge Cases', () => {
 
       e.dispose();
     });
+  });
+
+  it('_cleanupContext handles failure before commit', async () => {
+    const a = atom(0);
+    const e = effect(
+      () => {
+        a.value;
+        if (a.value > 0) throw new Error('Abort');
+      },
+      { sync: true }
+    );
+
+    // Initial run ok
+    expect((e as unknown as { _dependencies: Dependency[] })._dependencies.length).toBe(1);
+
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    // Trigger re-run that fails
+    a.value = 1;
+
+    // Line 333: if (ctx.prevDeps !== EMPTY_DEPS) should be hit in _cleanupContext
+    expect((e as unknown as { isDisposed: boolean }).isDisposed).toBe(false); // Effect caught its own error
+    consoleError.mockRestore();
   });
 });
