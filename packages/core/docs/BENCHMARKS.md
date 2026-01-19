@@ -128,8 +128,7 @@ Benchmark results show:
 ## Latest Results (v0.10.1)
 
 **Date**: 2026-01-19  
-**Environment**: Github Actions, Node.js 20.x, V8 Engine  
-**Methodology Update**: Integrated **Automatic Group Update (Scheduler v0.9.1)**. Performance metrics now reflect true engine throughput by eliminating redundant microtask context switching.
+**Environment**: Github Actions, Node.js 20.x, V8 Engine
 
 > *Note: These numbers represent pure engine throughput in isolation. Actual app performance often depends on external factors like DOM updates and layout.*
 
