@@ -695,12 +695,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   }
 
   private _registerTracking(): void {
-    trackDependency(
-      this,
-      trackingContext.getCurrent(),
-      this._getFnSubs(),
-      this._getObjSubs()
-    );
+    trackDependency(this, trackingContext.getCurrent(), this._getFnSubs(), this._getObjSubs());
   }
 }
 

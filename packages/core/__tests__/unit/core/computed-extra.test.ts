@@ -3,7 +3,6 @@ import { atom } from '../../../src/core/atom';
 import { computed } from '../../../src/core/computed';
 
 import { ERROR_MESSAGES } from '../../../src/errors/messages';
-import { trackingContext } from '../../../src/tracking';
 import { debug } from '../../../src/utils/debug';
 import { tick } from '../../utils/test-helpers';
 
@@ -153,7 +152,6 @@ describe('Computed - Extra Coverage', () => {
     );
     consoleSpy.mockRestore();
   });
-
 
   it('covers setIdle flag clearing', () => {
     const c = computed(() => 1);

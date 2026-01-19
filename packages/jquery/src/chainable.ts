@@ -1,8 +1,8 @@
 import { effect } from '@but212/atom-effect';
 import $ from 'jquery';
 import { debug } from './debug';
-import { applyInputBinding } from './input-binding';
 import { registerReactiveEffect } from './effect-factory';
+import { applyInputBinding } from './input-binding';
 import { registry } from './registry';
 import type { ReactiveValue, ValOptions, WritableAtom } from './types';
 
@@ -28,12 +28,7 @@ $.fn.atomText = function <T>(source: ReactiveValue<T>, formatter?: (v: T) => str
  */
 $.fn.atomHtml = function (source: ReactiveValue<string>): JQuery {
   return this.each(function () {
-    registerReactiveEffect(
-      this,
-      source,
-      (val) => $(this).html(String(val ?? '')),
-      'html'
-    );
+    registerReactiveEffect(this, source, (val) => $(this).html(String(val ?? '')), 'html');
   });
 };
 
@@ -103,12 +98,7 @@ $.fn.atomProp = function <T extends string | number | boolean | null | undefined
   source: ReactiveValue<T>
 ): JQuery {
   return this.each(function () {
-    registerReactiveEffect(
-      this,
-      source,
-      (val) => $(this).prop(name, val),
-      `prop.${name}`
-    );
+    registerReactiveEffect(this, source, (val) => $(this).prop(name, val), `prop.${name}`);
   });
 };
 
@@ -117,12 +107,7 @@ $.fn.atomProp = function <T extends string | number | boolean | null | undefined
  */
 $.fn.atomShow = function (condition: ReactiveValue<boolean>): JQuery {
   return this.each(function () {
-    registerReactiveEffect(
-      this,
-      condition,
-      (val) => $(this).toggle(Boolean(val)),
-      'show'
-    );
+    registerReactiveEffect(this, condition, (val) => $(this).toggle(Boolean(val)), 'show');
   });
 };
 
@@ -131,12 +116,7 @@ $.fn.atomShow = function (condition: ReactiveValue<boolean>): JQuery {
  */
 $.fn.atomHide = function (condition: ReactiveValue<boolean>): JQuery {
   return this.each(function () {
-    registerReactiveEffect(
-      this,
-      condition,
-      (val) => $(this).toggle(!val),
-      'hide'
-    );
+    registerReactiveEffect(this, condition, (val) => $(this).toggle(!val), 'hide');
   });
 };
 

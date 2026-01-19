@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest';
-import { atom } from '../../src/core/atom';
 import { syncDependencies } from '../../src/core/utils/dep-tracking';
 import type { Dependency, Subscriber } from '../../src/types';
 import { ArrayPool } from '../../src/utils/array-pool';
@@ -137,7 +136,6 @@ describe('Utils & Handlers - Extra Coverage', () => {
       debug.enabled = wasEnabled;
     });
   });
-
 
   describe('Debug Utils', () => {
     it('checkCircular implementation details', () => {

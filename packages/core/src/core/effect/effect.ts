@@ -18,7 +18,13 @@ import {
 } from '@/internal/pool';
 import { scheduler } from '@/internal/scheduler';
 import { type DependencyTracker, trackingContext, untracked } from '@/tracking';
-import type { Dependency, EffectExecutionContext, EffectFunction, EffectObject, EffectOptions } from '@/types';
+import type {
+  Dependency,
+  EffectExecutionContext,
+  EffectFunction,
+  EffectObject,
+  EffectOptions,
+} from '@/types';
 import { debug } from '@/utils/debug';
 import { wrapError } from '@/utils/error';
 import { isPromise } from '@/utils/type-guards';

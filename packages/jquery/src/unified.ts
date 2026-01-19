@@ -1,8 +1,8 @@
 import { effect } from '@but212/atom-effect';
 import $ from 'jquery';
 import { debug } from './debug';
-import { applyInputBinding } from './input-binding';
 import { registerReactiveEffect } from './effect-factory';
+import { applyInputBinding } from './input-binding';
 import { registry } from './registry';
 import type {
   BindingContext,
@@ -13,28 +13,17 @@ import type {
   WritableAtom,
 } from './types';
 import { createInputBindingState } from './types';
-import { getValue } from './utils';
 
 // ============================================================================
 // One-Way Binding Handlers (Atom → DOM)
 // ============================================================================
 
 function bindText<T>(ctx: BindingContext, value: ReactiveValue<T>): void {
-  registerReactiveEffect(
-    ctx.el,
-    value,
-    (val) => ctx.$el.text(String(val ?? '')),
-    'text'
-  );
+  registerReactiveEffect(ctx.el, value, (val) => ctx.$el.text(String(val ?? '')), 'text');
 }
 
 function bindHtml(ctx: BindingContext, value: ReactiveValue<string>): void {
-  registerReactiveEffect(
-    ctx.el,
-    value,
-    (val) => ctx.$el.html(String(val ?? '')),
-    'html'
-  );
+  registerReactiveEffect(ctx.el, value, (val) => ctx.$el.html(String(val ?? '')), 'html');
 }
 
 function bindClass(ctx: BindingContext, classMap: Record<string, ReactiveValue<boolean>>): void {
@@ -88,33 +77,21 @@ function bindAttr(
   }
 }
 
-function bindProp(ctx: BindingContext, propMap: Record<string, ReactiveValue<unknown>>): void {
+function bindProp<T extends string | number | boolean | null | undefined>(
+  ctx: BindingContext,
+  propMap: Record<string, ReactiveValue<T>>
+): void {
   for (const [name, value] of Object.entries(propMap)) {
-    registerReactiveEffect(
-      ctx.el,
-      value,
-      (val) => ctx.$el.prop(name, val as any),
-      `prop.${name}`
-    );
+    registerReactiveEffect(ctx.el, value, (val) => ctx.$el.prop(name, val), `prop.${name}`);
   }
 }
 
 function bindShow(ctx: BindingContext, condition: ReactiveValue<boolean>): void {
-  registerReactiveEffect(
-    ctx.el,
-    condition,
-    (val) => ctx.$el.toggle(Boolean(val)),
-    'show'
-  );
+  registerReactiveEffect(ctx.el, condition, (val) => ctx.$el.toggle(Boolean(val)), 'show');
 }
 
 function bindHide(ctx: BindingContext, condition: ReactiveValue<boolean>): void {
-  registerReactiveEffect(
-    ctx.el,
-    condition,
-    (val) => ctx.$el.toggle(!val),
-    'hide'
-  );
+  registerReactiveEffect(ctx.el, condition, (val) => ctx.$el.toggle(!val), 'hide');
 }
 
 /**

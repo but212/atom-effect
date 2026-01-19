@@ -2,8 +2,8 @@ import { effect } from '@but212/atom-effect';
 import $ from 'jquery';
 import { debug } from './debug';
 import { registry } from './registry';
-import { isReactive } from './utils';
 import type { ReactiveValue } from './types';
+import { isReactive } from './utils';
 
 /**
  * Utility to register a reactive effect or apply a static update.

@@ -494,7 +494,6 @@ describe('Computed - Error Handling and Edge Cases', () => {
   });
 
   describe('Internal Implementation - Branch Coverage', () => {
-
     it('collects dependencies correctly when state.depCount < nextDeps.length', async () => {
       const a1 = atom(1);
 
