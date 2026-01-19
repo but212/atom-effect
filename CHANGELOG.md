@@ -1,10 +1,30 @@
 # Changelog
 
-## [0.9.2]
+## [unreleased]
 
 ### Core
 
-#### Changed
+#### Changed - Atom Effect Core
+
+- **Docs**: Clarified `batch(fn)` behavior.
+  - Emphasized that `batch()` results in **Synchronous Reflection** (immediate flush) upon completion.
+  - Noted that the engine already performs **Automatic Microtask Batching** by default.
+  - Updated JSDoc and README to reflect these definitions.
+
+### jQuery
+
+#### Changed - Atom Effect jQuery
+
+- **Refactor**: Removed redundant `batch()` calls from event handlers and internal synchronization.
+  - Relying on Core's automatic microtask batching for better performance and alignment with the browser's event loop.
+  - Affects `$.fn.atomOn`, `$.fn.atomChecked`, `$.fn.atomVal`, and the global `$.fn.on` override.
+- **Docs**: Updated README to reflect that `atomOn` focuses on automatic lifecycle management (cleanup) rather than manual batching.
+
+## [0.9.2]
+
+### Core - 0.9.2
+
+#### Changed - 0.9.2
 
 - **Docs**: Removed performance note from README.md.
 

@@ -1,4 +1,4 @@
-import { batch, effect } from '@but212/atom-effect';
+import { effect } from '@but212/atom-effect';
 import $ from 'jquery';
 import { debug } from './debug';
 import { applyInputBinding } from './input-binding';
@@ -179,9 +179,7 @@ function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): void {
   // DOM → Atom
   const handler = () => {
     if (state.phase !== 'idle') return;
-    batch(() => {
-      atom.value = ctx.$el.prop('checked');
-    });
+    atom.value = ctx.$el.prop('checked');
   };
 
   ctx.$el.on('change', handler);
@@ -206,7 +204,7 @@ function bindEvents(
 ): void {
   for (const [eventName, handler] of Object.entries(eventMap)) {
     const wrapped = function (this: HTMLElement, e: JQuery.Event) {
-      batch(() => handler.call(this, e));
+      handler.call(this, e);
     };
     ctx.$el.on(eventName, wrapped);
     ctx.trackCleanup(() => ctx.$el.off(eventName, wrapped));

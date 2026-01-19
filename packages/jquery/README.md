@@ -45,7 +45,7 @@ Bindings automatically clean up when elements are removed.
 | `$.atom(val)` | Creates a writable atom. |
 | `$.computed(fn)` | Creates a computed atom. |
 | `$.effect(fn)` | Runs a side effect. |
-| `$.batch(fn)` | Batches updates. |
+| `$.batch(fn)` | Groups updates for synchronous reflection. |
 | `$.isAtom(val)` | Checks if value is an atom. |
 
 ### Content & Attributes
@@ -78,7 +78,7 @@ Two-way binding for checkboxes/radios.
 
 #### `.atomOn(event, handler)`
 
-Binds event handler wrapped in `batch()` for performance.
+Binds event handler with automatic lifecycle management (cleanup).
 
 ### Unified Binding
 
@@ -133,7 +133,6 @@ $('#app').atomMount(Counter, { start: 10 });
 
 - **Automatic Lifecycle**: Bindings clean up automatically when jQuery elements are removed (`$.cleanData` integration).
 - **Fine-grained Updates**: Only the specific element property/attribute changes, preventing full list re-renders.
-- **Batched Events**: `.atomOn` automatically wraps handlers in `$.batch()` to prevent UI jitter during multiple state changes.
 - **Reparenting-Safe**: Elements can be moved within the DOM without losing their reactive bindings.
 
 ## Debug Mode
