@@ -4,7 +4,6 @@ import { scheduler } from '@/internal/scheduler';
 import { trackingContext } from '@/tracking';
 import type { AtomOptions, Subscriber, WritableAtom } from '@/types';
 import { debug } from '@/utils/debug';
-import { SubscriberManager } from '@/utils/subscriber-manager';
 import { trackDependency } from '../utils/dep-tracking';
 
 /**
@@ -15,10 +14,9 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
   private _value: T;
   private _pendingOldValue: T | undefined;
   private _notifyTask: (() => void) | undefined;
-  private _functionSubscribersStore: SubscriberManager<
-    (newValue?: T, oldValue?: T) => void
-  > | null = null;
-  private _objectSubscribersStore: SubscriberManager<Subscriber> | null = null;
+
+  protected _fnSubs: ((newValue?: T, oldValue?: T) => void)[] | null = null;
+  protected _objSubs: Subscriber[] | null = null;
 
   constructor(initialValue: T, sync: boolean) {
     super();
@@ -29,18 +27,14 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
     debug.attachDebugInfo(this, 'atom', this.id);
   }
 
-  protected get _functionSubscribers(): SubscriberManager<(newValue?: T, oldValue?: T) => void> {
-    if (!this._functionSubscribersStore) {
-      this._functionSubscribersStore = new SubscriberManager();
-    }
-    return this._functionSubscribersStore;
+  protected _getFnSubs(): ((newValue?: T, oldValue?: T) => void)[] {
+    this._fnSubs ??= [];
+    return this._fnSubs;
   }
 
-  protected get _objectSubscribers(): SubscriberManager<Subscriber> {
-    if (!this._objectSubscribersStore) {
-      this._objectSubscribersStore = new SubscriberManager();
-    }
-    return this._objectSubscribersStore;
+  protected _getObjSubs(): Subscriber[] {
+    this._objSubs ??= [];
+    return this._objSubs;
   }
 
   /**
@@ -48,7 +42,7 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
    */
   get value(): T {
     const current = trackingContext.current;
-    if (current) trackDependency(this, current, this._functionSubscribers, this._objectSubscribers);
+    if (current) trackDependency(this, current, this._getFnSubs(), this._getObjSubs());
     return this._value;
   }
 
@@ -65,10 +59,7 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
     this.rotatePhase();
 
     // Check for subscribers: O(1) before scheduling
-    const hasFuncSubs = this._functionSubscribersStore?.hasSubscribers;
-    const hasObjSubs = this._objectSubscribersStore?.hasSubscribers;
-
-    if (hasFuncSubs || hasObjSubs) {
+    if ((this._fnSubs?.length ?? 0) > 0 || (this._objSubs?.length ?? 0) > 0) {
       this._scheduleNotification(oldValue);
     }
   }
@@ -106,25 +97,13 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
     this._notifySubscribers(newValue, oldValue);
   }
 
-  /**
-   * Overridden to avoid unnecessary manager creation during notification loop.
-   */
-  protected override _notifySubscribers(newValue: T | undefined, oldValue: T | undefined): void {
-    if (this._functionSubscribersStore) {
-      this._functionSubscribersStore.forEachSafe((sub) => sub(newValue, oldValue));
-    }
-    if (this._objectSubscribersStore) {
-      this._objectSubscribersStore.forEachSafe((sub) => sub.execute());
-    }
-  }
-
   peek(): T {
     return this._value;
   }
 
   dispose(): void {
-    this._functionSubscribersStore?.clear();
-    this._objectSubscribersStore?.clear();
+    this._fnSubs = null;
+    this._objSubs = null;
     this._value = undefined as T;
     this._notifyTask = undefined;
   }

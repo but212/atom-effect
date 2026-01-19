@@ -1,65 +1,49 @@
 import { effect } from '@but212/atom-effect';
 import $ from 'jquery';
 import { debug } from './debug';
+import { registerReactiveEffect } from './effect-factory';
 import { applyInputBinding } from './input-binding';
 import { registry } from './registry';
 import type { ReactiveValue, ValOptions, WritableAtom } from './types';
-import { isReactive } from './utils';
 
 /**
  * Updates element text content.
  */
 $.fn.atomText = function <T>(source: ReactiveValue<T>, formatter?: (v: T) => string): JQuery {
-  if (isReactive(source)) {
-    return this.each(function () {
-      const $el = $(this);
-      const fx = effect(() => {
-        const value = source.value;
-        const text = formatter ? formatter(value) : String(value ?? '');
-        $el.text(text);
-        debug.domUpdated($el, 'text', text);
-      });
-      registry.trackEffect(this, fx);
-    });
-  }
-  const text = formatter ? formatter(source as T) : String(source ?? '');
-  return this.text(text);
+  return this.each(function () {
+    registerReactiveEffect(
+      this,
+      source,
+      (val) => {
+        const text = formatter ? formatter(val) : String(val ?? '');
+        $(this).text(text);
+      },
+      'text'
+    );
+  });
 };
 
 /**
  * Updates element inner HTML.
  */
 $.fn.atomHtml = function (source: ReactiveValue<string>): JQuery {
-  if (isReactive(source)) {
-    return this.each(function () {
-      const $el = $(this);
-      const fx = effect(() => {
-        const html = String(source.value ?? '');
-        $el.html(html);
-        debug.domUpdated($el, 'html', html);
-      });
-      registry.trackEffect(this, fx);
-    });
-  }
-  return this.html(String(source ?? ''));
+  return this.each(function () {
+    registerReactiveEffect(this, source, (val) => $(this).html(String(val ?? '')), 'html');
+  });
 };
 
 /**
  * Toggles a CSS class based on boolean value.
  */
 $.fn.atomClass = function (className: string, condition: ReactiveValue<boolean>): JQuery {
-  if (isReactive(condition)) {
-    return this.each(function () {
-      const $el = $(this);
-      const fx = effect(() => {
-        const value = Boolean(condition.value);
-        $el.toggleClass(className, value);
-        debug.domUpdated($el, `class.${className}`, value);
-      });
-      registry.trackEffect(this, fx);
-    });
-  }
-  return this.toggleClass(className, Boolean(condition));
+  return this.each(function () {
+    registerReactiveEffect(
+      this,
+      condition,
+      (val) => $(this).toggleClass(className, Boolean(val)),
+      `class.${className}`
+    );
+  });
 };
 
 /**
@@ -70,51 +54,40 @@ $.fn.atomCss = function (
   source: ReactiveValue<string | number>,
   unit?: string
 ): JQuery {
-  if (isReactive(source)) {
-    return this.each(function () {
-      const $el = $(this);
-      const fx = effect(() => {
-        const value = source.value;
-        const cssValue = unit ? `${value}${unit}` : value;
-        $el.css(prop, cssValue);
-        debug.domUpdated($el, `css.${prop}`, cssValue);
-      });
-      registry.trackEffect(this, fx);
-    });
-  }
-  const val = unit ? `${source}${unit}` : (source as string | number);
-  return this.css(prop, val);
+  return this.each(function () {
+    registerReactiveEffect(
+      this,
+      source,
+      (val) => {
+        const cssValue = unit ? `${val}${unit}` : val;
+        $(this).css(prop, cssValue as string | number);
+      },
+      `css.${prop}`
+    );
+  });
 };
 
 /**
  * Updates an HTML attribute.
  */
 $.fn.atomAttr = function (name: string, source: ReactiveValue<string | boolean | null>): JQuery {
-  if (isReactive(source)) {
-    return this.each(function () {
-      const $el = $(this);
-      const fx = effect(() => {
-        const value = source.value;
-        if (value === null || value === undefined || value === false) {
+  return this.each(function () {
+    registerReactiveEffect(
+      this,
+      source,
+      (val) => {
+        const $el = $(this);
+        if (val === null || val === undefined || val === false) {
           $el.removeAttr(name);
-        } else if (value === true) {
+        } else if (val === true) {
           $el.attr(name, name);
         } else {
-          $el.attr(name, String(value));
+          $el.attr(name, String(val));
         }
-        debug.domUpdated($el, `attr.${name}`, value);
-      });
-      registry.trackEffect(this, fx);
-    });
-  }
-
-  if (source === null || source === undefined || source === false) {
-    return this.removeAttr(name);
-  }
-  if (source === true) {
-    return this.attr(name, name);
-  }
-  return this.attr(name, String(source));
+      },
+      `attr.${name}`
+    );
+  });
 };
 
 /**
@@ -124,54 +97,27 @@ $.fn.atomProp = function <T extends string | number | boolean | null | undefined
   name: string,
   source: ReactiveValue<T>
 ): JQuery {
-  if (isReactive(source)) {
-    return this.each(function () {
-      const $el = $(this);
-      const fx = effect(() => {
-        const value = source.value;
-        $el.prop(name, value);
-        debug.domUpdated($el, `prop.${name}`, value);
-      });
-      registry.trackEffect(this, fx);
-    });
-  }
-  return this.prop(name, source);
+  return this.each(function () {
+    registerReactiveEffect(this, source, (val) => $(this).prop(name, val), `prop.${name}`);
+  });
 };
 
 /**
  * Shows element when condition is true.
  */
 $.fn.atomShow = function (condition: ReactiveValue<boolean>): JQuery {
-  if (isReactive(condition)) {
-    return this.each(function () {
-      const $el = $(this);
-      const fx = effect(() => {
-        const value = Boolean(condition.value);
-        $el.toggle(value);
-        debug.domUpdated($el, 'show', value);
-      });
-      registry.trackEffect(this, fx);
-    });
-  }
-  return this.toggle(Boolean(condition));
+  return this.each(function () {
+    registerReactiveEffect(this, condition, (val) => $(this).toggle(Boolean(val)), 'show');
+  });
 };
 
 /**
  * Hides element when condition is true.
  */
 $.fn.atomHide = function (condition: ReactiveValue<boolean>): JQuery {
-  if (isReactive(condition)) {
-    return this.each(function () {
-      const $el = $(this);
-      const fx = effect(() => {
-        const value = !condition.value;
-        $el.toggle(value);
-        debug.domUpdated($el, 'hide', !value);
-      });
-      registry.trackEffect(this, fx);
-    });
-  }
-  return this.toggle(!condition);
+  return this.each(function () {
+    registerReactiveEffect(this, condition, (val) => $(this).toggle(!val), 'hide');
+  });
 };
 
 /**

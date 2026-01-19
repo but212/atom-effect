@@ -209,7 +209,7 @@ class Scheduler {
     while (this.urgentQueueSize > 0 || this.queueSize > 0) {
       if (++iterations > this.maxFlushIterations) {
         this._handleFlushOverflow();
-        break;
+        return;
       }
 
       // Process urgent queue first (glitch reduction)
@@ -268,12 +268,15 @@ class Scheduler {
 
   private _processJobs(jobs: SchedulerJob[], count: number): void {
     for (let i = 0; i < count; i++) {
-      try {
-        jobs[i]?.();
-      } catch (error) {
-        console.error(
-          new SchedulerError('Error occurred during scheduler execution', error as Error)
-        );
+      const job = jobs[i];
+      if (job) {
+        try {
+          job();
+        } catch (error) {
+          console.error(
+            new SchedulerError('Error occurred during scheduler execution', error as Error)
+          );
+        }
       }
     }
     jobs.length = 0;

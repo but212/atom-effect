@@ -494,30 +494,6 @@ describe('Computed - Error Handling and Edge Cases', () => {
   });
 
   describe('Internal Implementation - Branch Coverage', () => {
-    it('handles errors in object subscriber execute() in _notifyJob', async () => {
-      const count = atom(0);
-      const c = computed(() => count.value * 2);
-      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-      // Manually add an object subscriber that throws
-      const badSubscriber = {
-        execute: () => {
-          throw new Error('Execute error');
-        },
-      };
-
-      (
-        c as unknown as { _objectSubscribersStore: { add: (s: object) => void } }
-      )._objectSubscribersStore.add(badSubscriber);
-
-      c.value; // Initial computation
-      count.value = 1; // Trigger _notifyJob
-      await new Promise((resolve) => setTimeout(resolve, 10));
-
-      expect(consoleError).toHaveBeenCalled();
-      consoleError.mockRestore();
-    });
-
     it('collects dependencies correctly when state.depCount < nextDeps.length', async () => {
       const a1 = atom(1);
 

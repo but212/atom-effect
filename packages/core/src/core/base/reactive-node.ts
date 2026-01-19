@@ -14,9 +14,6 @@ import { generateId } from '@/utils/debug';
  * - Enables branchless operations for version comparison and priority calculation
  */
 export class ReactiveNode {
-  /** Unique numerical identifier (Smi) */
-  readonly id: DependencyId;
-
   /** Internal flags (Smi) for state management (Disposed, Dirty, etc.) */
   flags: number;
 
@@ -27,10 +24,17 @@ export class ReactiveNode {
    */
   version: number;
 
+  /** Last seen epoch for dependency collection (Smi) */
+  _lastSeenEpoch: number;
+
+  /** Unique numerical identifier (Smi) */
+  readonly id: DependencyId;
+
   constructor() {
-    this.id = (generateId() & SMI_MAX) as DependencyId;
     this.flags = 0;
     this.version = 0;
+    this._lastSeenEpoch = -1;
+    this.id = (generateId() & SMI_MAX) as DependencyId;
   }
 
   /**

@@ -1,3 +1,18 @@
+import type { Dependency } from './common';
+
+/**
+ * Internal context used during effect execution to track dependency changes.
+ * Bundles prev/next state for atomic lifecycle transitions.
+ */
+export interface EffectExecutionContext {
+  prevDeps: Dependency[];
+  prevVersions: number[];
+  prevUnsubs: (() => void)[];
+  nextDeps: Dependency[];
+  nextVersions: number[];
+  nextUnsubs: (() => void)[];
+}
+
 /** Configuration options for creating an effect. */
 export interface EffectOptions {
   /** If true, the effect runs synchronously whenever its dependencies change. */

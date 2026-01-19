@@ -1,5 +1,39 @@
 # Changelog
 
+## [Unreleased]
+
+### Refactor
+
+- **Internalization and Simplification**:
+  - Internalized subscriber management within `ReactiveDependency` by removing the `SubscriberManager` class.
+  - Simplified `Atom`, `Computed`, and `Effect` to manage subscriber arrays (`_fnSubs`, `_objSubs`) directly, reducing indirection and allocations.
+
+- **Type Extraction**: Extracted `EffectExecutionContext` interface to `types/effect.ts` for consistency with `ComputationContext`.
+  - Centralized context type alongside other effect types.
+  - Updated `EffectImpl` to import the type instead of defining inline.
+  - Renamed `_prepareEffectContext()` → `_prepareEffectExecutionContext()`.
+
+- **Code Deduplication**: Unified sync/async result handlers in `ComputedAtomImpl`.
+  - Extracted shared logic into `_finalizeResolution(value: T)` method.
+  - `_handleSyncResult()` and `_handleAsyncResolution()` now delegate to unified method.
+  - Reduces code duplication and improves maintainability.
+
+### jQuery
+
+#### Refactor & Type Safety
+
+- **Unified Reactive Logic**: Introduced `effect-factory.ts` to centralize reactive binding logic, eliminating ~40% of boilerplate in the binding layer.
+- **Decomposed List Reconciliation**: Refactored `atomList` using a structured lifecycle pattern (Empty State, Removal, LIS-Reconciliation, Patching).
+- **Improved Type Safety**: Extracted `BindingContext` and removed all `any` types and non-null assertions across reconciliation and binding hot paths.
+
+#### Performance & Hardware-Friendly Optimization
+
+- **Native DOM API Adoption**: Migrated high-frequency binding handlers (`text`, `html`, `class`, `css`, `attr`) to native properties (e.g., `textContent`, `classList`), bypassing jQuery wrapper overhead.
+- **Hybrid CSS Binding**: Optimized `bindCss` using direct `style` property access to support both camelCase and kebab-case while maintaining native speed.
+- **Allocation Optimization**: Replaced `Object.entries()` with `for...in` loops across all handlers to eliminate temporary array allocations during reactive updates.
+- **Zero-Overhead Events**: Switched to native `addEventListener` for general events while ensuring full compatibility with jQuery's `.trigger()` for form controls.
+- **Resource Efficiency**: Implemented lazy element wrapping to minimize jQuery object creation cost.
+
 ## [0.11.0]
 
 ### Core

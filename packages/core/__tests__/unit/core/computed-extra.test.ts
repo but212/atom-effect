@@ -3,7 +3,6 @@ import { atom } from '../../../src/core/atom';
 import { computed } from '../../../src/core/computed';
 
 import { ERROR_MESSAGES } from '../../../src/errors/messages';
-import { trackingContext } from '../../../src/tracking';
 import { debug } from '../../../src/utils/debug';
 import { tick } from '../../utils/test-helpers';
 
@@ -152,37 +151,6 @@ describe('Computed - Extra Coverage', () => {
       errorToThrow
     );
     consoleSpy.mockRestore();
-  });
-
-  it('covers _registerTracking for plain functions and objects', () => {
-    const c = computed(() => 1);
-
-    // Case 1: Plain function
-    const plainListener = vi.fn();
-
-    trackingContext.run(plainListener, () => {
-      c.value;
-    });
-
-    interface ComputedInternals {
-      _functionSubscribersStore: { has: (fn: unknown) => boolean };
-      _objectSubscribersStore: { has: (obj: unknown) => boolean };
-    }
-    const impl = c as unknown as ComputedInternals;
-    expect(impl._functionSubscribersStore.has(plainListener)).toBe(true);
-
-    // Case 2: Object with execute
-    const subscriber = {
-      execute: vi.fn(),
-    };
-
-    trackingContext.run(
-      subscriber as unknown as (() => void) & { addDependency?: (d: unknown) => void },
-      () => {
-        c.value;
-      }
-    );
-    expect(impl._objectSubscribersStore.has(subscriber)).toBe(true);
   });
 
   it('covers setIdle flag clearing', () => {

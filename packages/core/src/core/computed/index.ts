@@ -31,7 +31,6 @@ import type {
 } from '@/types';
 import { debug, NO_DEFAULT_VALUE } from '@/utils/debug';
 import { wrapError } from '@/utils/error';
-import { SubscriberManager } from '@/utils/subscriber-manager';
 import { isPromise } from '@/utils/type-guards';
 
 // AsyncState mapping
@@ -60,10 +59,10 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   private readonly _defaultValue: T;
   private readonly _hasDefaultValue: boolean;
   private readonly _onError: ((error: Error) => void) | null;
-  private readonly _functionSubscribersStore: SubscriberManager<
-    (newValue?: T, oldValue?: T) => void
-  >;
-  private readonly _objectSubscribersStore: SubscriberManager<Subscriber>;
+
+  protected _fnSubs: ((newValue?: T, oldValue?: T) => void)[] | null = null;
+  protected _objSubs: Subscriber[] | null = null;
+
   private _dependencies: Dependency[];
   private _dependencyVersions: number[];
   private _unsubscribes: (() => void)[];
@@ -101,23 +100,34 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._onError = options.onError ?? null;
     this.MAX_PROMISE_ID = Number.MAX_SAFE_INTEGER - 1;
 
-    this._functionSubscribersStore = new SubscriberManager<(newValue?: T, oldValue?: T) => void>();
-    this._objectSubscribersStore = new SubscriberManager<Subscriber>();
-
     this._dependencies = EMPTY_DEPS;
     this._dependencyVersions = EMPTY_VERSIONS;
     this._unsubscribes = EMPTY_UNSUBS;
 
     this._notifyJob = () => {
-      this._functionSubscribersStore.forEachSafe(
-        (subscriber) => subscriber(),
-        (err) => console.error(err)
-      );
+      const fnSubs = this._fnSubs;
+      if (fnSubs) {
+        for (let i = fnSubs.length - 1; i >= 0; i--) {
+          try {
+            const sub = fnSubs[i];
+            if (sub) sub(undefined, undefined);
+          } catch (err) {
+            console.error(err);
+          }
+        }
+      }
 
-      this._objectSubscribersStore.forEachSafe(
-        (subscriber) => subscriber.execute(),
-        (err) => console.error(err)
-      );
+      const objSubs = this._objSubs;
+      if (objSubs) {
+        for (let i = objSubs.length - 1; i >= 0; i--) {
+          try {
+            const sub = objSubs[i];
+            if (sub) sub.execute();
+          } catch (err) {
+            console.error(err);
+          }
+        }
+      }
     };
 
     this._trackable = Object.assign(() => this._markDirty(), {
@@ -133,8 +143,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
         dependencies: Dependency[];
         stateFlags: string;
       };
-      debugObj.subscriberCount = () =>
-        this._functionSubscribersStore.size + this._objectSubscribersStore.size;
+      debugObj.subscriberCount = this.subscriberCount.bind(this);
       debugObj.isDirty = () => this._isDirty();
       debugObj.dependencies = this._dependencies;
       debugObj.stateFlags = this._getFlagsAsString();
@@ -149,12 +158,14 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     }
   }
 
-  protected get _functionSubscribers(): SubscriberManager<(newValue?: T, oldValue?: T) => void> {
-    return this._functionSubscribersStore;
+  protected _getFnSubs(): ((newValue?: T, oldValue?: T) => void)[] {
+    this._fnSubs ??= [];
+    return this._fnSubs;
   }
 
-  protected get _objectSubscribers(): SubscriberManager<Subscriber> {
-    return this._objectSubscribersStore;
+  protected _getObjSubs(): Subscriber[] {
+    this._objSubs ??= [];
+    return this._objSubs;
   }
 
   get value(): T {
@@ -286,8 +297,8 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       this._dependencyVersions = EMPTY_VERSIONS;
     }
 
-    this._functionSubscribersStore.clear();
-    this._objectSubscribersStore.clear();
+    this._fnSubs = null;
+    this._objSubs = null;
     this.flags = COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE;
     this._error = null;
     this._value = undefined as T;
@@ -523,21 +534,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   }
 
   private _handleSyncResult(result: T): void {
-    const valueChanged = !this._isResolved() || !this._equal(this._value, result);
-
-    // Conditional phase rotation: only rotate if value actually changed
-    // Branchless would be: this.version = (this.version + Number(valueChanged)) & SMI_MAX
-    // But rotatePhase() is clearer and equally performant for conditional case
-    if (valueChanged) this.rotatePhase();
-
-    this._value = result;
-    this._clearDirty();
-    this._setResolved();
-    this._error = null;
-    this._setRecomputing(false);
-    // Clear error cache on successful computation (recovery)
-    this._cachedErrors = null;
-    this._errorCacheEpoch = -1;
+    this._finalizeResolution(result);
   }
 
   private _handleAsyncComputation(promise: Promise<T>): void {
@@ -608,22 +605,29 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   }
 
   private _handleAsyncResolution(resolvedValue: T): void {
-    const valueChanged = !this._isResolved() || !this._equal(this._value, resolvedValue);
+    this._finalizeResolution(resolvedValue);
+    this._notifyJob();
+  }
 
-    // Conditional phase rotation for value change detection
+  /**
+   * Unified success finalization for sync and async results.
+   * Handles phase rotation, state transition, and error cache clearing.
+   */
+  private _finalizeResolution(value: T): void {
+    const valueChanged = !this._isResolved() || !this._equal(this._value, value);
+
+    // Conditional phase rotation: only rotate if value actually changed
     if (valueChanged) this.rotatePhase();
 
-    this._value = resolvedValue;
+    this._value = value;
     this._clearDirty();
     this._setResolved();
     this._error = null;
     this._setRecomputing(false);
+
     // Clear error cache on successful computation (recovery)
     this._cachedErrors = null;
     this._errorCacheEpoch = -1;
-
-    // Notify subscribers when async computation resolves
-    this._notifyJob();
   }
 
   private _handleAsyncRejection(err: unknown): void {
@@ -695,12 +699,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   }
 
   private _registerTracking(): void {
-    trackDependency(
-      this,
-      trackingContext.getCurrent(),
-      this._functionSubscribersStore,
-      this._objectSubscribersStore
-    );
+    trackDependency(this, trackingContext.getCurrent(), this._getFnSubs(), this._getObjSubs());
   }
 }
 
