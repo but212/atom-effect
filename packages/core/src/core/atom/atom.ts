@@ -1,4 +1,4 @@
-import { SMI_MAX } from '@/constants';
+import { ATOM_STATE_FLAGS, SMI_MAX } from '@/constants';
 import { ReactiveDependency } from '@/core/base/reactive-dependency';
 import { scheduler } from '@/internal/scheduler';
 import { trackingContext } from '@/tracking';
@@ -10,133 +10,121 @@ import { trackDependency } from '../utils/dep-tracking';
 /**
  * Internal {@link WritableAtom} implementation.
  * Extends {@link ReactiveDependency} to provide reactive state that can be observed and updated.
- * Optimized for fast subscriber notification and tracking.
  */
 class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
   private _value: T;
-  private readonly _functionSubscribersStore: SubscriberManager<
-    (newValue?: T, oldValue?: T) => void
-  >;
-  private readonly _objectSubscribersStore: SubscriberManager<Subscriber>;
-  private readonly _sync: boolean;
-  private readonly _notifyTask: () => void;
   private _pendingOldValue: T | undefined;
-  private _isNotificationScheduled: boolean = false;
+  private _notifyTask: (() => void) | undefined;
+  private _functionSubscribersStore: SubscriberManager<
+    (newValue?: T, oldValue?: T) => void
+  > | null = null;
+  private _objectSubscribersStore: SubscriberManager<Subscriber> | null = null;
 
   constructor(initialValue: T, sync: boolean) {
     super();
     this._value = initialValue;
-    this._functionSubscribersStore = new SubscriberManager();
-    this._objectSubscribersStore = new SubscriberManager();
-    this._sync = sync;
-    this._notifyTask = this._flushNotifications.bind(this);
+    if (sync) this.flags |= ATOM_STATE_FLAGS.SYNC;
+    
+    // Attach debug info in dev mode
     debug.attachDebugInfo(this, 'atom', this.id);
   }
 
-  /** Gets the manager for function-based subscribers. */
   protected get _functionSubscribers(): SubscriberManager<(newValue?: T, oldValue?: T) => void> {
-    return this._functionSubscribersStore;
+    return this._functionSubscribersStore ?? (this._functionSubscribersStore = new SubscriberManager());
   }
 
-  /** Gets the manager for object-based subscribers. */
   protected get _objectSubscribers(): SubscriberManager<Subscriber> {
-    return this._objectSubscribersStore;
+    return this._objectSubscribersStore ?? (this._objectSubscribersStore = new SubscriberManager());
   }
 
   /**
-   * Returns the current value and registers the atom as a dependency in the current tracking context.
+   * Returns the current value and registers the atom as a dependency if in a tracking context.
    */
   get value(): T {
-    const current = trackingContext.getCurrent();
-    if (current) this._track(current);
+    const current = trackingContext.current;
+    if (current) trackDependency(this, current, this._functionSubscribers, this._objectSubscribers);
     return this._value;
   }
 
   /**
    * Sets a new value and schedules notifications if the value has changed.
-   * Uses `Object.is` for comparison.
    */
   set value(newValue: T) {
     if (Object.is(this._value, newValue)) return;
 
     const oldValue = this._value;
-    this.version = (this.version + 1) & SMI_MAX;
     this._value = newValue;
+    this.version = (this.version + 1) & SMI_MAX;
 
-    // Early exit: no subscribers to notify
-    if (
-      !this._functionSubscribersStore.hasSubscribers &&
-      !this._objectSubscribersStore.hasSubscribers
-    )
-      return;
-
-    this._scheduleNotification(oldValue);
+    // Check for subscribers: O(1) before scheduling
+    const hasFuncSubs = this._functionSubscribersStore?.hasSubscribers;
+    const hasObjSubs = this._objectSubscribersStore?.hasSubscribers;
+    
+    if (hasFuncSubs || hasObjSubs) {
+      this._scheduleNotification(oldValue);
+    }
   }
 
-  private _track(current: unknown): void {
-    trackDependency(this, current, this._functionSubscribersStore, this._objectSubscribersStore);
-  }
-
+  /**
+   * Schedules or flushes notifications based on sync mode and batching state.
+   */
   private _scheduleNotification(oldValue: T): void {
-    if (!this._isNotificationScheduled) {
+    if (!(this.flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED)) {
       this._pendingOldValue = oldValue;
-      this._isNotificationScheduled = true;
+      this.flags |= ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
     }
 
-    // Hot path first: sync mode without batching flushes immediately
-    if (this._sync && !scheduler.isBatching) {
+    // Flush immediately if sync and not batching
+    if ((this.flags & ATOM_STATE_FLAGS.SYNC) && !scheduler.isBatching) {
       this._flushNotifications();
-    } else {
-      scheduler.schedule(this._notifyTask);
+      return;
     }
+
+    const task = this._notifyTask ?? (this._notifyTask = () => this._flushNotifications());
+    scheduler.schedule(task);
   }
 
   private _flushNotifications(): void {
-    if (!this._isNotificationScheduled) return;
+    if (!(this.flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED)) return;
 
     const oldValue = this._pendingOldValue as T;
     const newValue = this._value;
 
     this._pendingOldValue = undefined;
-    this._isNotificationScheduled = false;
+    this.flags &= ~ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
 
     this._notifySubscribers(newValue, oldValue);
   }
 
   /**
-   * Returns the current value without registering as a dependency in the tracking context.
+   * Overridden to avoid unnecessary manager creation during notification loop.
    */
+  protected override _notifySubscribers(newValue: T | undefined, oldValue: T | undefined): void {
+    if (this._functionSubscribersStore) {
+      this._functionSubscribersStore.forEachSafe((sub) => sub(newValue, oldValue));
+    }
+    if (this._objectSubscribersStore) {
+      this._objectSubscribersStore.forEachSafe((sub) => sub.execute());
+    }
+  }
+
   peek(): T {
     return this._value;
   }
 
-  /**
-   * Disposes of the atom, clearing all subscribers and resetting the value.
-   */
   dispose(): void {
-    this._functionSubscribersStore.clear();
-    this._objectSubscribersStore.clear();
+    this._functionSubscribersStore?.clear();
+    this._objectSubscribersStore?.clear();
     this._value = undefined as T;
+    this._notifyTask = undefined;
   }
 }
 
 /**
  * Creates a reactive atom holding mutable state.
  *
- * Atoms are the building blocks of reactive state. When an atom's value changes,
- * any effects or computed atoms that depend on it will be automatically re-executed.
- *
  * @param initialValue - The initial value of the atom.
- * @param options - Configuration options.
- * @param options.sync - If true, notifications are delivered synchronously when the value changes.
- * @returns A writable atom object.
- *
- * @example
- * ```ts
- * const count = atom(0);
- * count.value = 1; // Notifies subscribers
- * console.log(count.value); // 1
- * ```
+ * @param options - Configuration options (sync: boolean).
  */
 export function atom<T>(initialValue: T, options: AtomOptions = {}): WritableAtom<T> {
   return new AtomImpl(initialValue, options.sync ?? false);

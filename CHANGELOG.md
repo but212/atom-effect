@@ -1,8 +1,19 @@
 # Changelog
 
-## [0.10.0]
+## [Unreleased]
 
 ### Core
+
+#### Changed - Atom Effect Core
+
+- **Changed**: Added `ATOM_STATE_FLAGS` and simplified internal logic for `AtomImpl`.
+  - Implemented lazy initialization for subscriber managers to reduce initial memory footprint.
+  - Streamlined `value` getter/setter using Guard Clauses for improved readability.
+  - Reused notification task closures to avoid unnecessary heap allocations during updates.
+
+## [0.10.0]
+
+### Core - 0.10.0
 
 #### Changed - Atom Effect Core 0.10.0
 
