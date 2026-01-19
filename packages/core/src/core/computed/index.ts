@@ -157,11 +157,13 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   }
 
   protected _getFnSubs(): ((newValue?: T, oldValue?: T) => void)[] {
-    return (this._fnSubs ??= []);
+    this._fnSubs ??= [];
+    return this._fnSubs;
   }
 
   protected _getObjSubs(): Subscriber[] {
-    return (this._objSubs ??= []);
+    this._objSubs ??= [];
+    return this._objSubs;
   }
 
   get value(): T {
