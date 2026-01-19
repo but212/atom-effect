@@ -1,7 +1,6 @@
 import { AtomError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
 import type { Subscriber } from '@/types';
-import type { SubscriberManager } from '@/utils/subscriber-manager';
 import { ReactiveNode } from './reactive-node';
 
 /**
@@ -11,24 +10,14 @@ import { ReactiveNode } from './reactive-node';
  * Inherits phase-shift versioning from ReactiveNode.
  *
  * Performance Note:
- * Abstract accessors are used for subscriber managers to allow subclasses
- * to define the actual storage fields *after* their own Smi fields.
- * This ensures all Smi fields (from Base, Dependency, and Subclass) are
- * packed together at the start of the object for V8 optimization.
+ * Storage fields for subscribers are defined in subclasses but managed here
+ * to ensure optimal object shape. Subclasses should initialize _fnSubs and _objSubs.
  */
 export abstract class ReactiveDependency<T> extends ReactiveNode {
-  /** Last seen epoch for dependency collection (Smi) */
-  _lastSeenEpoch: number;
-
-  constructor() {
-    super();
-    this._lastSeenEpoch = -1;
-  }
-
-  protected abstract get _functionSubscribers(): SubscriberManager<
-    (newValue?: T, oldValue?: T) => void
-  >;
-  protected abstract get _objectSubscribers(): SubscriberManager<Subscriber>;
+  /** Array of function-based subscribers */
+  protected abstract _fnSubs: ((newValue?: T, oldValue?: T) => void)[] | null;
+  /** Array of object-based subscribers */
+  protected abstract _objSubs: Subscriber[] | null;
 
   /**
    * Subscribes a listener function or Subscriber object to value changes.
@@ -38,22 +27,45 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
    * @throws {AtomError} If listener is not a function or Subscriber
    */
   subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
-    // Support Subscriber object for zero-allocation pattern
     if (typeof listener === 'object' && listener !== null && 'execute' in listener) {
-      return this._objectSubscribers.add(listener);
+      return this._addSubscriber(this._getObjSubs(), listener);
     }
 
     if (typeof listener !== 'function') {
       throw new AtomError(ERROR_MESSAGES.ATOM_SUBSCRIBER_MUST_BE_FUNCTION);
     }
-    return this._functionSubscribers.add(listener);
+    return this._addSubscriber(this._getFnSubs(), listener);
   }
 
   /**
    * Gets the total number of active subscribers.
    */
   subscriberCount(): number {
-    return this._functionSubscribers.size + this._objectSubscribers.size;
+    return (this._fnSubs?.length ?? 0) + (this._objSubs?.length ?? 0);
+  }
+
+  protected abstract _getFnSubs(): ((newValue?: T, oldValue?: T) => void)[];
+  protected abstract _getObjSubs(): Subscriber[];
+
+  private _addSubscriber<S>(subs: S[], subscriber: S): () => void {
+    if (subs.indexOf(subscriber) !== -1) return () => {};
+
+    subs.push(subscriber);
+
+    let isUnsubscribed = false;
+    return () => {
+      if (isUnsubscribed) return;
+      isUnsubscribed = true;
+
+      const idx = subs.indexOf(subscriber);
+      if (idx !== -1) {
+        const lastIndex = subs.length - 1;
+        if (idx !== lastIndex) {
+          subs[idx] = subs[lastIndex]!;
+        }
+        subs.pop();
+      }
+    };
   }
 
   /**
@@ -63,16 +75,30 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
    * @param oldValue - The old value
    */
   protected _notifySubscribers(newValue: T | undefined, oldValue: T | undefined): void {
-    this._functionSubscribers.forEachSafe(
-      (sub) => sub(newValue, oldValue),
-      (err) =>
-        console.error(new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, err as Error))
-    );
+    const fnSubs = this._fnSubs;
+    if (fnSubs) {
+      for (let i = 0; i < fnSubs.length; i++) {
+        try {
+          fnSubs[i]!(newValue, oldValue);
+        } catch (err) {
+          console.error(
+            new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, err as Error)
+          );
+        }
+      }
+    }
 
-    this._objectSubscribers.forEachSafe(
-      (sub) => sub.execute(),
-      (err) =>
-        console.error(new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, err as Error))
-    );
+    const objSubs = this._objSubs;
+    if (objSubs) {
+      for (let i = 0; i < objSubs.length; i++) {
+        try {
+          objSubs[i]!.execute();
+        } catch (err) {
+          console.error(
+            new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, err as Error)
+          );
+        }
+      }
+    }
   }
 }

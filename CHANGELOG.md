@@ -4,6 +4,10 @@
 
 ### Refactor
 
+- **Internalization and Simplification**:
+  - Internalized subscriber management within `ReactiveDependency` by removing the `SubscriberManager` class.
+  - Simplified `Atom`, `Computed`, and `Effect` to manage subscriber arrays (`_fnSubs`, `_objSubs`) directly, reducing indirection and allocations.
+
 - **Type Extraction**: Extracted `EffectExecutionContext` interface to `types/effect.ts` for consistency with `ComputationContext`.
   - Centralized context type alongside other effect types.
   - Updated `EffectImpl` to import the type instead of defining inline.

@@ -5,7 +5,6 @@ import type { Dependency, Subscriber } from '../../src/types';
 import { ArrayPool } from '../../src/utils/array-pool';
 import { debug } from '../../src/utils/debug';
 import { ObjectPool, type Poolable } from '../../src/utils/object-pool';
-import { SubscriberManager } from '../../src/utils/subscriber-manager';
 import { isComputed, isTrackableFunction } from '../../src/utils/type-guards';
 
 describe('Utils & Handlers - Extra Coverage', () => {
@@ -97,23 +96,6 @@ describe('Utils & Handlers - Extra Coverage', () => {
   });
 
   describe('DepTracking - trackDependency', () => {
-    it('tracks object with execute method', () => {
-      const dep = atom(0);
-      const sub = { execute: vi.fn() };
-      const objSubs = new SubscriberManager<Subscriber>();
-      const funcSubs = new SubscriberManager<(newValue?: unknown, oldValue?: unknown) => void>();
-
-      import('../../src/core/utils/dep-tracking').then(({ trackDependency }) => {
-        trackDependency(
-          dep as unknown as Dependency,
-          sub as unknown as Subscriber,
-          funcSubs,
-          objSubs
-        );
-        expect(objSubs.has(sub as unknown as Subscriber)).toBe(true);
-      });
-    });
-
     it('syncDependencies reuses existing subscriptions', () => {
       const dep = {
         subscribe: vi.fn(() => () => {}),
@@ -156,50 +138,6 @@ describe('Utils & Handlers - Extra Coverage', () => {
     });
   });
 
-  describe('SubscriberManager', () => {
-    it('handles removals of non-existent subscribers', () => {
-      const sm = new SubscriberManager<number>();
-      // Remove from empty
-      expect(sm.remove(1)).toBe(false);
-
-      sm.add(1);
-      // Remove non-existent
-      expect(sm.remove(2)).toBe(false);
-      // Remove existing
-      expect(sm.remove(1)).toBe(true);
-    });
-
-    it('forEachSafe handles errors without onError', () => {
-      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-      const sm = new SubscriberManager();
-      sm.add(() => {
-        throw new Error('Fail');
-      });
-
-      expect(() => sm.forEachSafe((fn) => (fn as () => void)())).not.toThrow();
-      expect(consoleError).toHaveBeenCalled();
-      consoleError.mockRestore();
-    });
-
-    it('add returns idempotent unsubscribe', () => {
-      const sm = new SubscriberManager();
-      const unsub = sm.add(1);
-
-      expect(sm.size).toBe(1);
-      unsub();
-      expect(sm.size).toBe(0);
-      unsub(); // Second call ignores
-      expect(sm.size).toBe(0);
-
-      // Re-add same
-      sm.add(1);
-      const unsub2 = sm.add(1); // Already exists
-      // This unsub2 is a no-op? No, the implementation returns empty func if exists
-      expect(sm.size).toBe(1);
-      unsub2(); // Should do nothing
-      expect(sm.size).toBe(1);
-    });
-  });
 
   describe('Debug Utils', () => {
     it('checkCircular implementation details', () => {

@@ -31,7 +31,6 @@ import type {
 } from '@/types';
 import { debug, NO_DEFAULT_VALUE } from '@/utils/debug';
 import { wrapError } from '@/utils/error';
-import { SubscriberManager } from '@/utils/subscriber-manager';
 import { isPromise } from '@/utils/type-guards';
 
 // AsyncState mapping
@@ -60,10 +59,10 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   private readonly _defaultValue: T;
   private readonly _hasDefaultValue: boolean;
   private readonly _onError: ((error: Error) => void) | null;
-  private readonly _functionSubscribersStore: SubscriberManager<
-    (newValue?: T, oldValue?: T) => void
-  >;
-  private readonly _objectSubscribersStore: SubscriberManager<Subscriber>;
+
+  protected _fnSubs: ((newValue?: T, oldValue?: T) => void)[] | null = null;
+  protected _objSubs: Subscriber[] | null = null;
+
   private _dependencies: Dependency[];
   private _dependencyVersions: number[];
   private _unsubscribes: (() => void)[];
@@ -101,23 +100,32 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._onError = options.onError ?? null;
     this.MAX_PROMISE_ID = Number.MAX_SAFE_INTEGER - 1;
 
-    this._functionSubscribersStore = new SubscriberManager<(newValue?: T, oldValue?: T) => void>();
-    this._objectSubscribersStore = new SubscriberManager<Subscriber>();
-
     this._dependencies = EMPTY_DEPS;
     this._dependencyVersions = EMPTY_VERSIONS;
     this._unsubscribes = EMPTY_UNSUBS;
 
     this._notifyJob = () => {
-      this._functionSubscribersStore.forEachSafe(
-        (subscriber) => subscriber(),
-        (err) => console.error(err)
-      );
+      const fnSubs = this._fnSubs;
+      if (fnSubs) {
+        for (let i = 0; i < fnSubs.length; i++) {
+          try {
+            fnSubs[i]!(undefined, undefined);
+          } catch (err) {
+            console.error(err);
+          }
+        }
+      }
 
-      this._objectSubscribersStore.forEachSafe(
-        (subscriber) => subscriber.execute(),
-        (err) => console.error(err)
-      );
+      const objSubs = this._objSubs;
+      if (objSubs) {
+        for (let i = 0; i < objSubs.length; i++) {
+          try {
+            objSubs[i]!.execute();
+          } catch (err) {
+            console.error(err);
+          }
+        }
+      }
     };
 
     this._trackable = Object.assign(() => this._markDirty(), {
@@ -133,8 +141,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
         dependencies: Dependency[];
         stateFlags: string;
       };
-      debugObj.subscriberCount = () =>
-        this._functionSubscribersStore.size + this._objectSubscribersStore.size;
+      debugObj.subscriberCount = this.subscriberCount.bind(this);
       debugObj.isDirty = () => this._isDirty();
       debugObj.dependencies = this._dependencies;
       debugObj.stateFlags = this._getFlagsAsString();
@@ -149,12 +156,12 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     }
   }
 
-  protected get _functionSubscribers(): SubscriberManager<(newValue?: T, oldValue?: T) => void> {
-    return this._functionSubscribersStore;
+  protected _getFnSubs(): ((newValue?: T, oldValue?: T) => void)[] {
+    return (this._fnSubs ??= []);
   }
 
-  protected get _objectSubscribers(): SubscriberManager<Subscriber> {
-    return this._objectSubscribersStore;
+  protected _getObjSubs(): Subscriber[] {
+    return (this._objSubs ??= []);
   }
 
   get value(): T {
@@ -286,8 +293,8 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       this._dependencyVersions = EMPTY_VERSIONS;
     }
 
-    this._functionSubscribersStore.clear();
-    this._objectSubscribersStore.clear();
+    this._fnSubs = null;
+    this._objSubs = null;
     this.flags = COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE;
     this._error = null;
     this._value = undefined as T;
@@ -691,8 +698,8 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     trackDependency(
       this,
       trackingContext.getCurrent(),
-      this._functionSubscribersStore,
-      this._objectSubscribersStore
+      this._getFnSubs(),
+      this._getObjSubs()
     );
   }
 }

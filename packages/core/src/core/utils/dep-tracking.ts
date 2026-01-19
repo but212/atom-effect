@@ -1,7 +1,6 @@
 import { EMPTY_DEPS, EMPTY_UNSUBS, unsubArrayPool } from '@/internal/pool';
 import type { Dependency, Subscriber } from '@/types';
 import { debug } from '@/utils/debug';
-import type { SubscriberManager } from '@/utils/subscriber-manager';
 import { hasDependencyMethod, hasExecuteMethod, isPlainListener } from '@/utils/type-guards';
 
 /**
@@ -15,8 +14,8 @@ import { hasDependencyMethod, hasExecuteMethod, isPlainListener } from '@/utils/
 export function trackDependency<T>(
   dependency: Dependency,
   current: unknown,
-  functionSubscribers: SubscriberManager<(newValue?: T, oldValue?: T) => void>,
-  objectSubscribers: SubscriberManager<Subscriber>
+  functionSubscribers: ((newValue?: T, oldValue?: T) => void)[],
+  objectSubscribers: Subscriber[]
 ): void {
   if (!current) return;
 
@@ -30,14 +29,19 @@ export function trackDependency<T>(
   // Priority 2: Plain function callback
   // Used by simple effects or manual tracking
   if (isPlainListener(current)) {
-    functionSubscribers.add(current as (newValue?: T, oldValue?: T) => void);
+    const subscriber = current as (newValue?: T, oldValue?: T) => void;
+    if (functionSubscribers.indexOf(subscriber) === -1) {
+      functionSubscribers.push(subscriber);
+    }
     return;
   }
 
   // Priority 3: Subscriber pattern (execute method)
   // Used by Effect objects or other subscribers
   if (hasExecuteMethod(current)) {
-    objectSubscribers.add(current);
+    if (objectSubscribers.indexOf(current) === -1) {
+      objectSubscribers.push(current);
+    }
   }
 }
 

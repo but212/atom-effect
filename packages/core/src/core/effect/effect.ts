@@ -29,6 +29,24 @@ import { isPromise } from '@/utils/type-guards';
  */
 
 class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker {
+  /** Cleanup function returned by the last execution */
+  private _cleanup: (() => void) | null;
+  /** Current active dependencies */
+  private _dependencies: Dependency[];
+  /** Cached versions of dependencies at last execution */
+  private _dependencyVersions: number[];
+  /** Unsubscribe functions for current dependencies */
+  private _unsubscribes: (() => void)[];
+  /** Temporary storage for dependencies being tracked in current execution */
+  private _nextDeps: Dependency[] | null;
+  /** Temporary storage for dependency versions being tracked in current execution */
+  private _nextVersions: number[] | null;
+  /** Temporary storage for unsubscribes being tracked in current execution */
+  private _nextUnsubs: (() => void)[] | null;
+
+  /** Error handler callback */
+  private readonly _onError: ((error: unknown) => void) | null;
+
   /** Current execution epoch for tracking freshness */
   private _currentEpoch: number;
   /** Epoch of the last scheduler flush */
@@ -47,20 +65,6 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   /** Whether to track if dependencies are modified during execution */
   private readonly _trackModifications: boolean;
 
-  /** Cleanup function returned by the last execution */
-  private _cleanup: (() => void) | null;
-  /** Current active dependencies */
-  private _dependencies: Dependency[];
-  /** Cached versions of dependencies at last execution */
-  private _dependencyVersions: number[];
-  /** Unsubscribe functions for current dependencies */
-  private _unsubscribes: (() => void)[];
-  /** Temporary storage for dependencies being tracked in current execution */
-  private _nextDeps: Dependency[] | null;
-  /** Temporary storage for dependency versions being tracked in current execution */
-  private _nextVersions: number[] | null;
-  /** Temporary storage for unsubscribes being tracked in current execution */
-  private _nextUnsubs: (() => void)[] | null;
   /** Execution timestamps for rate limiting (dev only) */
   private _history: number[] | null;
   /** Total number of executions */
@@ -70,8 +74,6 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   private _historyPtr: number;
   /** Capacity of the history buffer */
   private readonly _historyCapacity: number;
-  /** Error handler callback */
-  private readonly _onError: ((error: unknown) => void) | null;
 
   /**
    * Creates a new EffectImpl instance.
@@ -81,6 +83,15 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 
   constructor(fn: EffectFunction, options: EffectOptions = {}) {
     super();
+
+    this._cleanup = null;
+    this._dependencies = EMPTY_DEPS;
+    this._dependencyVersions = EMPTY_VERSIONS;
+    this._unsubscribes = EMPTY_UNSUBS;
+    this._nextDeps = null;
+    this._nextVersions = null;
+    this._nextUnsubs = null;
+    this._onError = options.onError ?? null;
 
     this._currentEpoch = -1;
     this._lastFlushEpoch = -1;
@@ -93,15 +104,6 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     this._maxExecutionsPerFlush =
       options.maxExecutionsPerFlush ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_EFFECT;
     this._trackModifications = options.trackModifications ?? false;
-
-    this._cleanup = null;
-    this._dependencies = EMPTY_DEPS;
-    this._dependencyVersions = EMPTY_VERSIONS;
-    this._unsubscribes = EMPTY_UNSUBS;
-    this._nextDeps = null;
-    this._nextVersions = null;
-    this._nextUnsubs = null;
-    this._onError = options.onError ?? null;
 
     this._historyPtr = 0;
     const isFiniteLimit = Number.isFinite(this._maxExecutions);
