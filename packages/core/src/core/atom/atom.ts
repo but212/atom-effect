@@ -1,4 +1,4 @@
-import { ATOM_STATE_FLAGS, SMI_MAX } from '@/constants';
+import { ATOM_STATE_FLAGS } from '@/constants';
 import { ReactiveDependency } from '@/core/base/reactive-dependency';
 import { scheduler } from '@/internal/scheduler';
 import { trackingContext } from '@/tracking';
@@ -60,7 +60,9 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
 
     const oldValue = this._value;
     this._value = newValue;
-    this.version = (this.version + 1) & SMI_MAX;
+
+    // Branchless phase rotation: automatically handles cycle overflow
+    this.rotatePhase();
 
     // Check for subscribers: O(1) before scheduling
     const hasFuncSubs = this._functionSubscribersStore?.hasSubscribers;

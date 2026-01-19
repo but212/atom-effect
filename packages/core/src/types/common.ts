@@ -44,6 +44,15 @@ export interface Dependency {
   _visitedEpoch?: number;
 
   /**
+   * Calculates the logical distance (shift) between current and cached version.
+   * Used for priority scheduling - large shifts indicate stale updates.
+   *
+   * @param cachedVersion - The previously cached version
+   * @returns Non-negative shift distance (0 to 0x3fffffff)
+   */
+  getShift(cachedVersion: number): number;
+
+  /**
    * Subscribe to dependency updates
    */
   subscribe(listener: (() => void) | Subscriber): () => void;

@@ -1,4 +1,4 @@
-import { AsyncState, COMPUTED_STATE_FLAGS, EMPTY_ERROR_ARRAY, SMI_MAX } from '@/constants';
+import { AsyncState, COMPUTED_STATE_FLAGS, EMPTY_ERROR_ARRAY, SMI_MAX, PHASE_THRESHOLD } from '@/constants';
 import { ReactiveDependency } from '@/core/base/reactive-dependency';
 import { syncDependencies, trackDependency } from '@/core/utils/dep-tracking';
 import type { AtomError } from '@/errors/errors';
@@ -475,9 +475,49 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     }
   }
 
+  /**
+   * Calculates aggregate shift from all dependencies.
+   * Used for scheduling priority in computed chains.
+   *
+   * Performance: O(N) where N = dependency count
+   * Branchless: Each dep.getShift uses modular arithmetic
+   *
+   * @returns Sum of all dependency shifts (capped at SMI_MAX)
+   */
+  private _getAggregateShift(): number {
+    let totalShift = 0;
+    const deps = this._dependencies;
+    const versions = this._dependencyVersions;
+
+    for (let i = 0; i < deps.length; i++) {
+      const dep = deps[i];
+      const cachedVersion = versions[i];
+      if (dep && cachedVersion !== undefined) {
+        // getShift uses branchless modular arithmetic
+        totalShift = (totalShift + dep.getShift(cachedVersion)) & SMI_MAX;
+      }
+    }
+
+    return totalShift;
+  }
+
+  /**
+   * Checks if this computed should be scheduled with urgent priority.
+   * Based on aggregate shift from all dependencies.
+   *
+   * @returns true if aggregate shift exceeds PHASE_THRESHOLD
+   */
+  isUrgent(): boolean {
+    return this._getAggregateShift() >= PHASE_THRESHOLD;
+  }
+
   private _handleSyncResult(result: T): void {
     const valueChanged = !this._isResolved() || !this._equal(this._value, result);
-    this.version = (this.version + Number(valueChanged)) & SMI_MAX;
+
+    // Conditional phase rotation: only rotate if value actually changed
+    // Branchless would be: this.version = (this.version + Number(valueChanged)) & SMI_MAX
+    // But rotatePhase() is clearer and equally performant for conditional case
+    if (valueChanged) this.rotatePhase();
 
     this._value = result;
     this._clearDirty();
@@ -510,7 +550,9 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
 
   private _handleAsyncResolution(resolvedValue: T): void {
     const valueChanged = !this._isResolved() || !this._equal(this._value, resolvedValue);
-    this.version = (this.version + Number(valueChanged)) & SMI_MAX;
+
+    // Conditional phase rotation for value change detection
+    if (valueChanged) this.rotatePhase();
 
     this._value = resolvedValue;
     this._clearDirty();
@@ -528,9 +570,9 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   private _handleAsyncRejection(err: unknown): void {
     const error = wrapError(err, ComputedError, ERROR_MESSAGES.COMPUTED_ASYNC_COMPUTATION_FAILED);
 
-    // Increment version so effects detect the state change (pending -> rejected)
+    // Rotate phase so effects detect the state change (pending -> rejected)
     const stateChanged = !this._isRejected();
-    this.version = (this.version + Number(stateChanged)) & SMI_MAX;
+    if (stateChanged) this.rotatePhase();
 
     this._error = error;
     this._setRejected();

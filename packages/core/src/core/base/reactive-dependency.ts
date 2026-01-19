@@ -7,7 +7,8 @@ import { ReactiveNode } from './reactive-node';
 /**
  * Abstract base class for reactive nodes that can be dependencies (Atom, Computed).
  *
- * Extends ReactiveNode with versioning and subscriber management.
+ * Extends ReactiveNode with subscriber management capabilities.
+ * Inherits phase-shift versioning from ReactiveNode.
  *
  * Performance Note:
  * Abstract accessors are used for subscriber managers to allow subclasses
@@ -16,15 +17,11 @@ import { ReactiveNode } from './reactive-node';
  * packed together at the start of the object for V8 optimization.
  */
 export abstract class ReactiveDependency<T> extends ReactiveNode {
-  /** Version counter for change detection (Smi) */
-  version: number;
-
   /** Last seen epoch for dependency collection (Smi) */
   _lastSeenEpoch: number;
 
   constructor() {
     super();
-    this.version = 0;
     this._lastSeenEpoch = -1;
   }
 
