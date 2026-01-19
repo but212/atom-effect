@@ -19,39 +19,61 @@ import { createInputBindingState } from './types';
 // ============================================================================
 
 function bindText<T>(ctx: BindingContext, value: ReactiveValue<T>): void {
-  registerReactiveEffect(ctx.el, value, (val) => ctx.$el.text(String(val ?? '')), 'text');
+  registerReactiveEffect(
+    ctx.el,
+    value,
+    (val) => {
+      ctx.el.textContent = String(val ?? '');
+    },
+    'text'
+  );
 }
 
 function bindHtml(ctx: BindingContext, value: ReactiveValue<string>): void {
-  registerReactiveEffect(ctx.el, value, (val) => ctx.$el.html(String(val ?? '')), 'html');
+  registerReactiveEffect(
+    ctx.el,
+    value,
+    (val) => {
+      ctx.el.innerHTML = String(val ?? '');
+    },
+    'html'
+  );
 }
 
 function bindClass(ctx: BindingContext, classMap: Record<string, ReactiveValue<boolean>>): void {
-  for (const [className, condition] of Object.entries(classMap)) {
+  for (const className in classMap) {
     registerReactiveEffect(
       ctx.el,
-      condition,
-      (val) => ctx.$el.toggleClass(className, Boolean(val)),
+      classMap[className],
+      (val) => {
+        ctx.el.classList.toggle(className, !!val);
+      },
       `class.${className}`
     );
   }
 }
 
 function bindCss(ctx: BindingContext, cssMap: Record<string, CssValue>): void {
-  for (const [prop, value] of Object.entries(cssMap)) {
+  const style = ctx.el.style as unknown as Record<string, string>;
+  for (const prop in cssMap) {
+    const value = cssMap[prop];
     if (Array.isArray(value)) {
       const [source, unit] = value;
       registerReactiveEffect(
         ctx.el,
         source,
-        (val) => ctx.$el.css(prop, `${val}${unit}`),
+        (val) => {
+          style[prop] = `${val}${unit}`;
+        },
         `css.${prop}`
       );
     } else {
       registerReactiveEffect(
         ctx.el,
         value,
-        (val) => ctx.$el.css(prop, val as string | number),
+        (val) => {
+          style[prop] = val as string;
+        },
         `css.${prop}`
       );
     }
@@ -62,36 +84,58 @@ function bindAttr(
   ctx: BindingContext,
   attrMap: Record<string, ReactiveValue<string | boolean | null>>
 ): void {
-  for (const [name, value] of Object.entries(attrMap)) {
-    const applyAttr = (v: string | boolean | null | undefined) => {
-      if (v === null || v === undefined || v === false) {
-        ctx.$el.removeAttr(name);
-      } else if (v === true) {
-        ctx.$el.attr(name, name);
-      } else {
-        ctx.$el.attr(name, String(v));
-      }
-    };
-
-    registerReactiveEffect(ctx.el, value, applyAttr, `attr.${name}`);
+  const el = ctx.el;
+  for (const name in attrMap) {
+    const value = attrMap[name];
+    registerReactiveEffect(
+      el,
+      value,
+      (v) => {
+        if (v === null || v === undefined || v === false) {
+          el.removeAttribute(name);
+          return;
+        }
+        el.setAttribute(name, v === true ? name : String(v));
+      },
+      `attr.${name}`
+    );
   }
 }
 
-function bindProp<T extends string | number | boolean | null | undefined>(
-  ctx: BindingContext,
-  propMap: Record<string, ReactiveValue<T>>
-): void {
-  for (const [name, value] of Object.entries(propMap)) {
-    registerReactiveEffect(ctx.el, value, (val) => ctx.$el.prop(name, val), `prop.${name}`);
+function bindProp(ctx: BindingContext, propMap: Record<string, ReactiveValue<unknown>>): void {
+  const el = ctx.el;
+  for (const name in propMap) {
+    registerReactiveEffect(
+      el,
+      propMap[name],
+      (val) => {
+        (el as unknown as Record<string, unknown>)[name] = val;
+      },
+      `prop.${name}`
+    );
   }
 }
 
 function bindShow(ctx: BindingContext, condition: ReactiveValue<boolean>): void {
-  registerReactiveEffect(ctx.el, condition, (val) => ctx.$el.toggle(Boolean(val)), 'show');
+  registerReactiveEffect(
+    ctx.el,
+    condition,
+    (val) => {
+      ctx.el.style.display = val ? '' : 'none';
+    },
+    'show'
+  );
 }
 
 function bindHide(ctx: BindingContext, condition: ReactiveValue<boolean>): void {
-  registerReactiveEffect(ctx.el, condition, (val) => ctx.$el.toggle(!val), 'hide');
+  registerReactiveEffect(
+    ctx.el,
+    condition,
+    (val) => {
+      ctx.el.style.display = val ? 'none' : '';
+    },
+    'hide'
+  );
 }
 
 /**
@@ -143,12 +187,11 @@ function bindEvents(
   ctx: BindingContext,
   eventMap: Record<string, (e: JQuery.Event) => void>
 ): void {
-  for (const [eventName, handler] of Object.entries(eventMap)) {
-    const wrapped = function (this: HTMLElement, e: JQuery.Event) {
-      handler.call(this, e);
-    };
-    ctx.$el.on(eventName, wrapped);
-    ctx.trackCleanup(() => ctx.$el.off(eventName, wrapped));
+  const el = ctx.el;
+  for (const eventName in eventMap) {
+    const handler = eventMap[eventName];
+    el.addEventListener(eventName, handler as unknown as EventListener);
+    ctx.trackCleanup(() => el.removeEventListener(eventName, handler as unknown as EventListener));
   }
 }
 
@@ -166,13 +209,14 @@ $.fn.atomBind = function <T extends string | number | boolean | null | undefined
   options: BindingOptions<T>
 ): JQuery {
   return this.each(function () {
+    // Lazy element wrapping: only wrap if needed by legacy handlers (like bindVal/applyInputBinding)
     const $el = $(this);
 
     // Build binding context
     const ctx: BindingContext = {
       $el,
       el: this,
-      effects: [], // No longer used for registration, but kept for type compatibility
+      effects: [],
       trackCleanup: (fn) => registry.trackCleanup(this, fn),
     };
 

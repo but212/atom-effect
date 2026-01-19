@@ -20,14 +20,19 @@
 
 ### jQuery
 
-- **Unified Reactive Logic**: Introduced `effect-factory.ts` to centralize reactive binding logic.
-  - Refactored `chainable.ts` and `unified.ts` to use `registerReactiveEffect`.
-  - Eliminated ~40% of repetitive boilerplate in the binding layer.
-- **Decomposed List Reconciliation**: Refactored `atomList` in `list.ts` using a structured lifecycle pattern.
-  - Separated concerns into: Empty State Management, Removal Processing, LIS-based Reconciliation, and DOM Patching.
-  - Significantly improved readability and removed unsafe type assertions.
-- **Improved Type Safety**: Extracted `BindingContext` to a shared named interface.
-  - Eliminated non-null assertions across reconciliation hot paths.
+#### Refactor & Type Safety
+
+- **Unified Reactive Logic**: Introduced `effect-factory.ts` to centralize reactive binding logic, eliminating ~40% of boilerplate in the binding layer.
+- **Decomposed List Reconciliation**: Refactored `atomList` using a structured lifecycle pattern (Empty State, Removal, LIS-Reconciliation, Patching).
+- **Improved Type Safety**: Extracted `BindingContext` and removed all `any` types and non-null assertions across reconciliation and binding hot paths.
+
+#### Performance & Hardware-Friendly Optimization
+
+- **Native DOM API Adoption**: Migrated high-frequency binding handlers (`text`, `html`, `class`, `css`, `attr`) to native properties (e.g., `textContent`, `classList`), bypassing jQuery wrapper overhead.
+- **Hybrid CSS Binding**: Optimized `bindCss` using direct `style` property access to support both camelCase and kebab-case while maintaining native speed.
+- **Allocation Optimization**: Replaced `Object.entries()` with `for...in` loops across all handlers to eliminate temporary array allocations during reactive updates.
+- **Zero-Overhead Events**: Switched to native `addEventListener` for general events while ensuring full compatibility with jQuery's `.trigger()` for form controls.
+- **Resource Efficiency**: Implemented lazy element wrapping to minimize jQuery object creation cost.
 
 ## [0.11.0]
 
