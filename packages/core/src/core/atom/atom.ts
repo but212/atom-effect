@@ -24,17 +24,23 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
     super();
     this._value = initialValue;
     if (sync) this.flags |= ATOM_STATE_FLAGS.SYNC;
-    
+
     // Attach debug info in dev mode
     debug.attachDebugInfo(this, 'atom', this.id);
   }
 
   protected get _functionSubscribers(): SubscriberManager<(newValue?: T, oldValue?: T) => void> {
-    return this._functionSubscribersStore ?? (this._functionSubscribersStore = new SubscriberManager());
+    if (!this._functionSubscribersStore) {
+      this._functionSubscribersStore = new SubscriberManager();
+    }
+    return this._functionSubscribersStore;
   }
 
   protected get _objectSubscribers(): SubscriberManager<Subscriber> {
-    return this._objectSubscribersStore ?? (this._objectSubscribersStore = new SubscriberManager());
+    if (!this._objectSubscribersStore) {
+      this._objectSubscribersStore = new SubscriberManager();
+    }
+    return this._objectSubscribersStore;
   }
 
   /**
@@ -59,7 +65,7 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
     // Check for subscribers: O(1) before scheduling
     const hasFuncSubs = this._functionSubscribersStore?.hasSubscribers;
     const hasObjSubs = this._objectSubscribersStore?.hasSubscribers;
-    
+
     if (hasFuncSubs || hasObjSubs) {
       this._scheduleNotification(oldValue);
     }
@@ -75,13 +81,15 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
     }
 
     // Flush immediately if sync and not batching
-    if ((this.flags & ATOM_STATE_FLAGS.SYNC) && !scheduler.isBatching) {
+    if (this.flags & ATOM_STATE_FLAGS.SYNC && !scheduler.isBatching) {
       this._flushNotifications();
       return;
     }
 
-    const task = this._notifyTask ?? (this._notifyTask = () => this._flushNotifications());
-    scheduler.schedule(task);
+    if (!this._notifyTask) {
+      this._notifyTask = () => this._flushNotifications();
+    }
+    scheduler.schedule(this._notifyTask);
   }
 
   private _flushNotifications(): void {

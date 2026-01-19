@@ -114,11 +114,12 @@ export function enableAutoCleanup(root: Element = document.body): void {
       for (let j = 0, rLen = removed.length; j < rLen; j++) {
         const node = removed[j];
         if (!node) continue;
-        
+
         // Skip if kept (detached) or still connected
         if (registry.isKept(node) || node.isConnected) continue;
 
-        if (node.nodeType === 1) { // Node.ELEMENT_NODE
+        if (node.nodeType === 1) {
+          // Node.ELEMENT_NODE
           registry.cleanupTree(node as Element);
         }
       }
@@ -132,4 +133,3 @@ export function disableAutoCleanup(): void {
   observer?.disconnect();
   observer = null;
 }
-

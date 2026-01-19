@@ -152,7 +152,7 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
       const newIndices = new Int32Array(itemCount);
       for (let i = 0; i < itemCount; i++) {
         const k = newKeys[i];
-        newIndices[i] = k !== undefined ? oldIndexMap.get(k) ?? -1 : -1;
+        newIndices[i] = k !== undefined ? (oldIndexMap.get(k) ?? -1) : -1;
       }
 
       const lisArr = getLIS(newIndices);
@@ -182,15 +182,16 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
               if (nextNode) entry.$el.insertBefore(nextNode);
               else entry.$el.appendTo($container);
             }
+          } else if (nextNode) {
+            entry.$el.insertBefore(nextNode);
           } else {
-            // Not in LIS -> Must MOVE
-            if (nextNode) entry.$el.insertBefore(nextNode);
-            else entry.$el.appendTo($container);
+            entry.$el.appendTo($container);
           }
           nextNode = el;
         } else {
           // New Item: Render and INSERT
           const rendered = render(item, i);
+          // biome-ignore lint/suspicious/noExplicitAny: jQuery overloads are complex with unions
           const $el: JQuery = $(rendered as any);
           itemMap.set(k, { $el, item });
 
@@ -217,5 +218,3 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
     });
   });
 };
-
-

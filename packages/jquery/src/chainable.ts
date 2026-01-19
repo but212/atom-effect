@@ -4,7 +4,7 @@ import { debug } from './debug';
 import { applyInputBinding } from './input-binding';
 import { registry } from './registry';
 import type { ReactiveValue, ValOptions, WritableAtom } from './types';
-import { getValue, isReactive } from './utils';
+import { isReactive } from './utils';
 
 /**
  * Updates element text content.
@@ -215,10 +215,14 @@ $.fn.atomChecked = function (atom: WritableAtom<boolean>): JQuery {
 };
 
 /**
- * Binds an event handler.
+ * Binds an event handler with automatic cleanup.
  */
 $.fn.atomOn = function (event: string, handler: (e: JQuery.Event) => void): JQuery {
-  return this.on(event, handler); // Simplified, direct delegation to jQuery
+  return this.each(function () {
+    const $el = $(this);
+    $el.on(event, handler);
+    registry.trackCleanup(this, () => $el.off(event, handler));
+  });
 };
 
 /**
@@ -229,4 +233,3 @@ $.fn.atomUnbind = function (): JQuery {
     registry.cleanupTree(this);
   });
 };
-
