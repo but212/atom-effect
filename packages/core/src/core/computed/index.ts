@@ -575,8 +575,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
           // Fail-Fast Policy: retries exhausted, reject with descriptive error
           // This allows UI layer to gracefully degrade using hasError/defaultValue
           const error = new ComputedError(
-            `Async drift exceeded threshold after ${this.MAX_ASYNC_RETRIES} retries. ` +
-              `Dependencies changed too rapidly for stable computation.`
+            `Async drift exceeded threshold after ${this.MAX_ASYNC_RETRIES} retries. Dependencies changed too rapidly for stable computation.`
           );
           this._handleAsyncRejection(error);
           return;

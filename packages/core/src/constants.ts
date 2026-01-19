@@ -116,13 +116,13 @@ export const SMI_MAX = 0x3fffffff;
  * Branchless Operations:
  * - rotatePhase: (version + 1) & 0x3fffffff
  * - getShift: (current - cached) & 0x3fffffff
- * - urgentPriority: ((shift - PHASE_THRESHOLD) >>> 31) ^ 1
+ * - urgentPriority: ((PHASE_THRESHOLD - 1 - shift) >>> 31) & 1
  */
 export const PHASE_BITS = 20;
 export const PHASE_MASK = (1 << PHASE_BITS) - 1; // 0x000fffff (1,048,575)
 
 /**
- * Phase threshold for urgent scheduling (equivalent to 90° rotation)
+ * Phase threshold for urgent scheduling (equivalent to 180° rotation)
  * When shift exceeds this value, the job is considered "urgent"
  * and placed in the priority queue for glitch reduction.
  */
