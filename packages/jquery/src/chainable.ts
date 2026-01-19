@@ -90,28 +90,31 @@ $.fn.atomCss = function (
  * Updates an HTML attribute.
  */
 $.fn.atomAttr = function (name: string, source: ReactiveValue<string | boolean | null>): JQuery {
-  const applyAttr = ($el: JQuery, value: string | boolean | null) => {
-    if (value === null || value === undefined || value === false) {
-      $el.removeAttr(name);
-    } else if (value === true) {
-      $el.attr(name, name);
-    } else {
-      $el.attr(name, String(value));
-    }
-    debug.domUpdated($el, `attr.${name}`, value);
-  };
-
   if (isReactive(source)) {
     return this.each(function () {
       const $el = $(this);
-      const fx = effect(() => applyAttr($el, source.value));
+      const fx = effect(() => {
+        const value = source.value;
+        if (value === null || value === undefined || value === false) {
+          $el.removeAttr(name);
+        } else if (value === true) {
+          $el.attr(name, name);
+        } else {
+          $el.attr(name, String(value));
+        }
+        debug.domUpdated($el, `attr.${name}`, value);
+      });
       registry.trackEffect(this, fx);
     });
   }
 
-  return this.each(function () {
-    applyAttr($(this), source);
-  });
+  if (source === null || source === undefined || source === false) {
+    return this.removeAttr(name);
+  }
+  if (source === true) {
+    return this.attr(name, name);
+  }
+  return this.attr(name, String(source));
 };
 
 /**

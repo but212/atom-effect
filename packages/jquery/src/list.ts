@@ -191,8 +191,9 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
         } else {
           // New Item: Render and INSERT
           const rendered = render(item, i);
-          // biome-ignore lint/suspicious/noExplicitAny: jQuery overloads are complex with unions
-          const $el: JQuery = $(rendered as any);
+          const $el: JQuery = (
+            rendered instanceof Element ? $(rendered) : $(rendered as string)
+          ) as JQuery;
           itemMap.set(k, { $el, item });
 
           if (nextNode) $el.insertBefore(nextNode);
