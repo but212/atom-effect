@@ -16,6 +16,11 @@
   - Jobs with a phase shift exceeding `PHASE_THRESHOLD` (90° equivalent) are prioritized to resolve stale states first.
   - Implemented branchless urgency detection: `((PHASE_THRESHOLD - 1 - shift) >>> 31) & 1`.
 - **Computed Optimization**: Added `_getAggregateShift()` to track total staleness across all dependencies, allowing computed nodes to inform the scheduler of their combined priority.
+- **Async Drift Validation**: Implemented phase drift detection for async computed values.
+  - Captures dependency version snapshot at async start (`_captureVersionSnapshot()`).
+  - Validates drift on resolution: if `drift >= PHASE_THRESHOLD`, the result is stale.
+  - Stale results trigger recomputation (up to `MAX_ASYNC_RETRIES = 3`) instead of updating with outdated data.
+  - Prevents UI flickering from race conditions while maintaining branchless performance.
 
 ## [0.10.1]
 

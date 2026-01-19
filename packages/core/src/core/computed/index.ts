@@ -66,6 +66,11 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   private _cachedErrors: readonly Error[] | null = null;
   private _errorCacheEpoch = -1;
 
+  // Async phase drift validation fields
+  private _asyncStartAggregateVersion: number = 0;
+  private _asyncRetryCount: number = 0;
+  private readonly MAX_ASYNC_RETRIES: number = 3;
+
   private readonly _notifyJob: () => void;
   private readonly _trackable: TrackableListener;
   private readonly MAX_PROMISE_ID: number;
@@ -534,18 +539,55 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._clearDirty();
     this._notifyJob();
 
+    // Capture version snapshot at async start for drift validation
+    this._asyncStartAggregateVersion = this._captureVersionSnapshot();
+    this._asyncRetryCount = 0;
+
     this._promiseId = this._promiseId >= this.MAX_PROMISE_ID ? 1 : this._promiseId + 1;
     const promiseId = this._promiseId;
 
     promise
       .then((resolvedValue) => {
         if (promiseId !== this._promiseId) return;
+
+        // Phase drift validation: check if dependencies changed significantly during async
+        const currentAggregate = this._captureVersionSnapshot();
+        const drift = (currentAggregate - this._asyncStartAggregateVersion) & SMI_MAX;
+
+        // Branchless stale detection: 1 if drift >= PHASE_THRESHOLD, else 0
+        const isStale = ((PHASE_THRESHOLD - 1 - drift) >>> 31) & 1;
+
+        // If stale and retries not exhausted, trigger recomputation instead of using stale result
+        if (isStale && this._asyncRetryCount < this.MAX_ASYNC_RETRIES) {
+          this._asyncRetryCount++;
+          this._markDirty();
+          return;
+        }
+
         this._handleAsyncResolution(resolvedValue);
       })
       .catch((err) => {
         if (promiseId !== this._promiseId) return;
         this._handleAsyncRejection(err);
       });
+  }
+
+  /**
+   * Captures the aggregate version of all dependencies.
+   * Used for phase drift validation in async computations.
+   *
+   * @returns Sum of all dependency versions (capped at SMI_MAX)
+   */
+  private _captureVersionSnapshot(): number {
+    let aggregate = 0;
+    const deps = this._dependencies;
+    for (let i = 0; i < deps.length; i++) {
+      const dep = deps[i];
+      if (dep) {
+        aggregate = (aggregate + dep.version) & SMI_MAX;
+      }
+    }
+    return aggregate;
   }
 
   private _handleAsyncResolution(resolvedValue: T): void {
