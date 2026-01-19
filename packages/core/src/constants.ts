@@ -110,10 +110,6 @@ export const SMI_MAX = 0x3fffffff;
  * Inspired by imaginary number rotation (e^iθ) for cyclic state tracking.
  *
  * Version Structure (30 bits total, fits in V8 Smi):
- * ┌──────────────┬───────────────────────────┐
- * │  Cycle (10)  │      Phase (20)           │
- * └──────────────┴───────────────────────────┘
- *
  * - Cycle (upper 10 bits): Complete rotation count (0-1023)
  * - Phase (lower 20 bits): Current angle in discrete steps (0-1,048,575)
  *
