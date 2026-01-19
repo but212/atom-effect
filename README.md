@@ -5,7 +5,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg)](https://www.typescriptlang.org/)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/but212/atom-effect)
 
-A lightweight, high-performance reactive state management ecosystem for TypeScript/JavaScript.
+A reactive state management ecosystem for TypeScript/JavaScript.
 
 ## Packages
 
