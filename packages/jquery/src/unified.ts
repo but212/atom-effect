@@ -58,7 +58,9 @@ function bindCss(ctx: BindingContext, cssMap: Record<string, CssValue>): void {
   for (const prop in cssMap) {
     const value = cssMap[prop];
     if (value === undefined) continue;
-    const camelProp = prop.includes('-') ? prop.replace(/-./g, (match) => match.charAt(1).toUpperCase()) : prop;
+    const camelProp = prop.includes('-')
+      ? prop.replace(/-./g, (match) => match.charAt(1).toUpperCase())
+      : prop;
     if (Array.isArray(value)) {
       const [source, unit] = value;
       registerReactiveEffect(
@@ -193,7 +195,7 @@ function bindEvents(
   for (const eventName in eventMap) {
     const handler = eventMap[eventName];
     if (typeof handler !== 'function') continue;
-    const listener = (e: Event) => handler.call(el, $.Event(e as any));
+    const listener = (e: Event) => handler.call(el, $.Event(e as unknown as string));
     el.addEventListener(eventName, listener);
     ctx.trackCleanup(() => el.removeEventListener(eventName, listener));
   }
