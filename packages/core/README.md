@@ -143,13 +143,14 @@ pnpm build       # Build production bundle
 
 | Operation | Performance |
 | --- | --- |
-| Atom creation | ~6.32M ops/sec |
-| Atom read/write | ~9.65M ops/sec |
-| Computed creation | ~1.88M ops/sec |
-| Computed recomputation | ~574K ops/sec |
-| Effect execution | ~2.61M ops/sec |
-| Batched updates | ~4.13M ops/sec |
-| Deep chain (100 levels) | ~8.49K ops/sec |
+| Atom creation | ~6.16M ops/sec |
+| Atom read | ~11.56M ops/sec |
+| Atom write | ~9.45M ops/sec |
+| Computed creation | ~1.85M ops/sec |
+| Computed recomputation | ~558K ops/sec |
+| Effect execution | ~2.49M ops/sec |
+| Batched updates | ~4.11M ops/sec |
+| Deep chain (100 levels) | ~8.48K ops/sec |
 
 ## Contributing
 
