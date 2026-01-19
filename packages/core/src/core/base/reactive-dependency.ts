@@ -77,9 +77,10 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
   protected _notifySubscribers(newValue: T | undefined, oldValue: T | undefined): void {
     const fnSubs = this._fnSubs;
     if (fnSubs) {
-      for (let i = 0; i < fnSubs.length; i++) {
+      for (let i = fnSubs.length - 1; i >= 0; i--) {
         try {
-          fnSubs[i]!(newValue, oldValue);
+          const sub = fnSubs[i];
+          if (sub) sub(newValue, oldValue);
         } catch (err) {
           console.error(
             new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, err as Error)
@@ -90,9 +91,10 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
 
     const objSubs = this._objSubs;
     if (objSubs) {
-      for (let i = 0; i < objSubs.length; i++) {
+      for (let i = objSubs.length - 1; i >= 0; i--) {
         try {
-          objSubs[i]!.execute();
+          const sub = objSubs[i];
+          if (sub) sub.execute();
         } catch (err) {
           console.error(
             new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, err as Error)

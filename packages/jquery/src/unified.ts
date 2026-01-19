@@ -166,7 +166,7 @@ function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): void {
   // DOM → Atom
   const handler = () => {
     if (state.phase !== 'idle') return;
-    atom.value = !!ctx.$el.prop('checked');
+    atom.value = ctx.$el.prop('checked');
   };
 
   ctx.$el.on('change', handler);
@@ -195,7 +195,8 @@ function bindEvents(
   for (const eventName in eventMap) {
     const handler = eventMap[eventName];
     if (typeof handler !== 'function') continue;
-    const listener = (e: Event) => handler.call(el, $.Event(e as unknown as string));
+    // biome-ignore lint/suspicious/noExplicitAny: JQuery.Event constructor overload requires any or complex cast to wrap native Event correctly
+    const listener = (e: Event) => handler.call(el, $.Event(e as any));
     el.addEventListener(eventName, listener);
     ctx.trackCleanup(() => el.removeEventListener(eventName, listener));
   }

@@ -107,9 +107,10 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._notifyJob = () => {
       const fnSubs = this._fnSubs;
       if (fnSubs) {
-        for (let i = 0; i < fnSubs.length; i++) {
+        for (let i = fnSubs.length - 1; i >= 0; i--) {
           try {
-            fnSubs[i]!(undefined, undefined);
+            const sub = fnSubs[i];
+            if (sub) sub(undefined, undefined);
           } catch (err) {
             console.error(err);
           }
@@ -118,9 +119,10 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
 
       const objSubs = this._objSubs;
       if (objSubs) {
-        for (let i = 0; i < objSubs.length; i++) {
+        for (let i = objSubs.length - 1; i >= 0; i--) {
           try {
-            objSubs[i]!.execute();
+            const sub = objSubs[i];
+            if (sub) sub.execute();
           } catch (err) {
             console.error(err);
           }
