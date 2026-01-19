@@ -14,6 +14,17 @@
   - `_handleSyncResult()` and `_handleAsyncResolution()` now delegate to unified method.
   - Reduces code duplication and improves maintainability.
 
+### jQuery
+
+- **Unified Reactive Logic**: Introduced `effect-factory.ts` to centralize reactive binding logic.
+  - Refactored `chainable.ts` and `unified.ts` to use `registerReactiveEffect`.
+  - Eliminated ~40% of repetitive boilerplate in the binding layer.
+- **Decomposed List Reconciliation**: Refactored `atomList` in `list.ts` using a structured lifecycle pattern.
+  - Separated concerns into: Empty State Management, Removal Processing, LIS-based Reconciliation, and DOM Patching.
+  - Significantly improved readability and removed unsafe type assertions.
+- **Improved Type Safety**: Extracted `BindingContext` to a shared named interface.
+  - Eliminated non-null assertions across reconciliation hot paths.
+
 ## [0.11.0]
 
 ### Core

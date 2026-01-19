@@ -153,4 +153,14 @@ declare global {
   }
 }
 
+/**
+ * Context passed to binding handlers for cleanup and effect registration.
+ */
+export interface BindingContext {
+  readonly $el: JQuery;
+  readonly el: HTMLElement;
+  readonly effects: Array<() => void>;
+  readonly trackCleanup: (fn: () => void) => void;
+}
+
 export type { WritableAtom, ReadonlyAtom, ComputedAtom, EffectObject, ComputedOptions };
