@@ -10,6 +10,20 @@
   - Replaced 31 inline `setTimeout` calls with `sleep()`/`waitForScheduler()` helpers in `reactive-flow.test.ts`.
   - Removed dead code branch in `dependency-graph.ts`.
 
+### jQuery
+
+#### Fixed - jQuery
+
+- **Double Cleanup**: Prevented duplicate cleanup execution on node removal.
+  - `$.fn.remove` now marks elements as "ignored" before removal, preventing `MutationObserver` from triggering a second cleanup pass.
+
+#### Refactor - jQuery
+
+- **Hashed Tree Traversal**: Optimized `cleanupTree` (used in `.empty()`, `.remove()`) to be $O(M)$ where M is the number of bound elements, instead of $O(N)$ (all descendants).
+  - Introduced `AES_BOUND` class marker to instantly locate bound descendants using `querySelectorAll` (`.aes-bound`).
+  - Significantly reduces main-thread blocking when clearing large lists or tables.
+- **Algorithm Isolation**: Moved `getLIS` (Longest Increasing Subsequence) to `utils.ts` to separate algorithmic complexity from DOM manipulation logic.
+
 ## [0.12.0]
 
 ### Refactor - 0.12.0
@@ -28,7 +42,7 @@
   - `_handleSyncResult()` and `_handleAsyncResolution()` now delegate to unified method.
   - Reduces code duplication and improves maintainability.
 
-### jQuery
+### jQuery - 0.12.0
 
 #### Refactor & Type Safety
 

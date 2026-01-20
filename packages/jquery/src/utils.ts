@@ -47,3 +47,53 @@ export function getSelector(el: Element | JQuery): string {
   }
   return domEl.tagName.toLowerCase();
 }
+
+/**
+ * Longest Increasing Subsequence (LIS)
+ * Optimized for hardware: Uses Int32Array for memory locality and cache hits.
+ * Time Complexity: O(N log N), Space Complexity: O(N) but contiguous.
+ */
+export function getLIS(arr: Int32Array | number[]): Int32Array {
+  const len = arr.length;
+  if (len === 0) return new Int32Array(0);
+
+  // predecessors: pointer to previous index in LIS for backtracking (N indices)
+  const predecessors = new Int32Array(len);
+  // result: indices of the currently found longest increasing subsequence
+  const result = new Int32Array(len);
+  let resultLen = 0;
+
+  for (let i = 0; i < len; i++) {
+    const val = arr[i]!;
+    if (val === -1) continue;
+
+    if (resultLen === 0 || arr[result[resultLen - 1]!]! < val) {
+      predecessors[i] = resultLen > 0 ? result[resultLen - 1]! : -1;
+      result[resultLen++] = i;
+      continue;
+    }
+
+    // Binary search for insertion point
+    let left = 0,
+      right = resultLen - 1;
+    while (left < right) {
+      const mid = (left + right) >>> 1;
+      if (arr[result[mid]!]! < val) left = mid + 1;
+      else right = mid;
+    }
+
+    if (val < arr[result[left]!]!) {
+      if (left > 0) predecessors[i] = result[left - 1]!;
+      result[left] = i;
+    }
+  }
+
+  // Backtracking to reconstruct the LIS in the correct order
+  const lis = new Int32Array(resultLen);
+  for (let i = resultLen - 1, v = result[resultLen - 1]!; i >= 0; i--) {
+    lis[i] = v;
+    v = predecessors[v]!;
+  }
+
+  return lis;
+}

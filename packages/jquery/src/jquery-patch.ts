@@ -38,6 +38,7 @@ export function enablejQueryOverrides() {
 
     $target.each(function () {
       registry.cleanupTree(this);
+      registry.markIgnored(this); // Prevent double-cleanup by observer
     });
 
     return originalRemove.call(this, selector);
@@ -46,10 +47,8 @@ export function enablejQueryOverrides() {
   // .empty() - Delete children + Recursive Unsubscribe
   $.fn.empty = function () {
     this.each(function () {
-      const children = this.querySelectorAll('*');
-      children.forEach((child) => registry.cleanup(child));
-      // Note: cleanupTree(this) would unsubscribe the element itself, which is incorrect for .empty().
-      // We must clean up all descendants. `querySelectorAll('*')` achieves this.
+      // Use optimized cleanupDescendants instead of expensive querySelectorAll('*')
+      registry.cleanupDescendants(this);
     });
 
     return originalEmpty.call(this);
