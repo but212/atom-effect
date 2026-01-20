@@ -1,6 +1,6 @@
 /**
  * @fileoverview Fuzz testing for reactive dependency graphs
- * @description Stress tests with random dependency graphs (Heavy mode: 1000 atoms, 500 computed, 10000 updates)
+ * @description Stress tests with random dependency graphs (Heavy mode)
  */
 
 import { describe, expect, it, vi } from 'vitest';
@@ -8,15 +8,9 @@ import { atom } from '../../../src/core/atom/atom';
 import { computed } from '../../../src/core/computed';
 import { effect } from '../../../src/core/effect/effect';
 import { batch } from '../../../src/internal/scheduler';
+import { DEFAULT_FUZZ_CONFIG, sleep } from '../../utils/test-helpers';
 
-// Configuration for Heavy fuzz testing
-const FUZZ_CONFIG = {
-  ATOM_COUNT: 1000,
-  COMPUTED_COUNT: 500,
-  UPDATE_COUNT: 10000,
-  MAX_DEPS_PER_COMPUTED: 5,
-  EFFECT_COUNT: 50,
-} as const;
+const FUZZ_CONFIG = DEFAULT_FUZZ_CONFIG;
 
 // Seeded random for reproducibility
 function seededRandom(seed: number): () => number {
@@ -36,13 +30,13 @@ describe('Fuzz Testing - Heavy Mode', () => {
       const computeds: ReturnType<typeof computed<number>>[] = [];
 
       // Create atoms
-      for (let i = 0; i < FUZZ_CONFIG.ATOM_COUNT; i++) {
+      for (let i = 0; i < FUZZ_CONFIG.atomCount; i++) {
         atoms.push(atom(Math.floor(random() * 100)));
       }
 
       // Create computed with random dependencies
-      for (let i = 0; i < FUZZ_CONFIG.COMPUTED_COUNT; i++) {
-        const numDeps = Math.floor(random() * FUZZ_CONFIG.MAX_DEPS_PER_COMPUTED) + 1;
+      for (let i = 0; i < FUZZ_CONFIG.computedCount; i++) {
+        const numDeps = Math.floor(random() * FUZZ_CONFIG.maxDepsPerComputed) + 1;
         const depIndices: number[] = [];
 
         for (let j = 0; j < numDeps; j++) {
@@ -69,7 +63,7 @@ describe('Fuzz Testing - Heavy Mode', () => {
       }
 
       // Random updates
-      for (let i = 0; i < FUZZ_CONFIG.UPDATE_COUNT; i++) {
+      for (let i = 0; i < FUZZ_CONFIG.updateCount; i++) {
         const atomIdx = Math.floor(random() * atoms.length);
         const newValue = Math.floor(random() * 100);
 
@@ -183,7 +177,7 @@ describe('Fuzz Testing - Heavy Mode', () => {
       }
 
       // Create effects with random dependencies
-      for (let i = 0; i < FUZZ_CONFIG.EFFECT_COUNT; i++) {
+      for (let i = 0; i < FUZZ_CONFIG.effectCount; i++) {
         const numDeps = Math.floor(random() * 3) + 1;
         const depIndices = Array.from({ length: numDeps }, () =>
           Math.floor(random() * atoms.length)
@@ -195,15 +189,12 @@ describe('Fuzz Testing - Heavy Mode', () => {
             for (const idx of depIndices) {
               _sum += atoms[idx]!.value;
             }
-            return () => {
-              // Cleanup
-            };
+            return () => {};
           })
         );
       }
 
-      // Wait for initial effects
-      await new Promise((r) => setTimeout(r, 50));
+      await sleep(50);
 
       // Perform updates
       for (let i = 0; i < 100; i++) {
@@ -211,8 +202,7 @@ describe('Fuzz Testing - Heavy Mode', () => {
         atoms[atomIdx]!.value = Math.floor(random() * 100);
       }
 
-      // Wait for effects to process
-      await new Promise((r) => setTimeout(r, 100));
+      await sleep(100);
 
       // Cleanup
       effects.forEach((fx) => {

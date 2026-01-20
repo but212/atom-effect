@@ -3,6 +3,11 @@ import type { EffectObject } from './types';
 import { getSelector } from './utils';
 
 /**
+ * Marker class for bound elements to optimize selector engines.
+ */
+const AES_BOUND = 'aes-bound';
+
+/**
  * Binding Registry
  *
  * Highly optimized for performance:
@@ -15,6 +20,7 @@ class BindingRegistry {
   private cleanups = new WeakMap<Element, Array<() => void>>();
   private boundElements = new WeakSet<Element>();
   private preservedNodes = new WeakSet<Node>();
+  private ignoredNodes = new WeakSet<Node>(); // Prevent redundant cleanup
 
   keep(node: Node): void {
     this.preservedNodes.add(node);
@@ -24,12 +30,23 @@ class BindingRegistry {
     return this.preservedNodes.has(node);
   }
 
+  markIgnored(node: Node): void {
+    this.ignoredNodes.add(node);
+  }
+
+  isIgnored(node: Node): boolean {
+    return this.ignoredNodes.has(node);
+  }
+
   trackEffect(el: Element, fx: EffectObject): void {
     let list = this.effects.get(el);
     if (!list) {
       list = [];
       this.effects.set(el, list);
-      this.boundElements.add(el);
+      if (!this.boundElements.has(el)) {
+        this.boundElements.add(el);
+        el.classList.add(AES_BOUND);
+      }
     }
     list.push(fx);
   }
@@ -39,7 +56,10 @@ class BindingRegistry {
     if (!list) {
       list = [];
       this.cleanups.set(el, list);
-      this.boundElements.add(el);
+      if (!this.boundElements.has(el)) {
+        this.boundElements.add(el);
+        el.classList.add(AES_BOUND);
+      }
     }
     list.push(fn);
   }
@@ -50,6 +70,7 @@ class BindingRegistry {
 
   cleanup(el: Element): void {
     if (!this.boundElements.delete(el)) return;
+    el.classList.remove(AES_BOUND);
 
     debug.cleanup(getSelector(el));
 
@@ -86,15 +107,20 @@ class BindingRegistry {
     }
   }
 
-  cleanupTree(el: Element): void {
-    // Traverse descendants (Hot Path for removal)
-    const children = el.querySelectorAll('*');
+  cleanupDescendants(el: Element): void {
+    // Traverse descendants (Hot Path: only visit bound nodes)
+    const children = el.querySelectorAll(`.${AES_BOUND}`);
     for (let i = 0, len = children.length; i < len; i++) {
       const child = children[i] as Element;
+      // Double-check bound reference
       if (child && this.boundElements.has(child)) {
         this.cleanup(child);
       }
     }
+  }
+
+  cleanupTree(el: Element): void {
+    this.cleanupDescendants(el);
     this.cleanup(el);
   }
 }
@@ -115,8 +141,8 @@ export function enableAutoCleanup(root: Element = document.body): void {
         const node = removed[j];
         if (!node) continue;
 
-        // Skip if kept (detached) or still connected
-        if (registry.isKept(node) || node.isConnected) continue;
+        // Skip if kept (detached), explicitly ignored, or still connected
+        if (registry.isKept(node) || registry.isIgnored(node) || node.isConnected) continue;
 
         if (node.nodeType === 1) {
           // Node.ELEMENT_NODE

@@ -7,6 +7,7 @@ import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
 import { AtomError, ComputedError } from '@/errors/errors';
 import type { Dependency } from '@/types';
+import { sleep, waitForScheduler } from '../../utils/test-helpers';
 
 describe('Computed - Error Handling and Edge Cases', () => {
   it('rejects invalid function types', () => {
@@ -29,7 +30,7 @@ describe('Computed - Error Handling and Edge Cases', () => {
 
   it('throws error when accessing value in pending state without defaultValue', () => {
     const c = computed(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await sleep(100);
       return 42;
     });
 
@@ -50,7 +51,7 @@ describe('Computed - Error Handling and Edge Cases', () => {
     expect(c.value).toBe(0);
     expect(c.isPending).toBe(true);
 
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await sleep(20);
 
     expect(c.hasError).toBe(true);
     expect(c.state).toBe('rejected');
@@ -66,7 +67,7 @@ describe('Computed - Error Handling and Edge Cases', () => {
     );
 
     c.value; // Trigger computation
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await sleep(10);
 
     // When recoverable=true and defaultValue exists, return defaultValue instead of error
     expect(c.value).toBe(999);
@@ -83,7 +84,7 @@ describe('Computed - Error Handling and Edge Cases', () => {
     );
 
     c.value; // Trigger computation
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await sleep(20);
 
     expect(onError).toHaveBeenCalled();
   });
@@ -148,7 +149,7 @@ describe('Computed - Error Handling and Edge Cases', () => {
 
     c.value; // Initial computation
     count.value = 1;
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitForScheduler();
 
     consoleError.mockRestore();
   });
@@ -158,9 +159,10 @@ describe('Computed - Error Handling and Edge Cases', () => {
 
     const c = computed(
       async () => {
-        await new Promise((resolve) => setTimeout(resolve, 5));
+        await sleep(5);
         return trigger.value * 10;
       },
+
       { defaultValue: 0 }
     );
 
@@ -170,7 +172,7 @@ describe('Computed - Error Handling and Edge Cases', () => {
     trigger.value = 2;
 
     // Wait long enough for all async computations to complete
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await sleep(100);
 
     // Final value should be reflected
     expect(c.value).toBe(20);
@@ -188,7 +190,7 @@ describe('Computed - Error Handling and Edge Cases', () => {
     expect(first).toBe(second);
 
     c.invalidate();
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitForScheduler();
 
     const _third = c.value; // Recomputed
     expect(computeFn).toHaveBeenCalledTimes(2);
@@ -205,7 +207,7 @@ describe('Computed - Error Handling and Edge Cases', () => {
     c.dispose();
 
     count.value = 10;
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitForScheduler();
 
     // No notification to subscribers after dispose
     expect(listener).not.toHaveBeenCalled();
@@ -232,7 +234,7 @@ describe('Computed - Error Handling and Edge Cases', () => {
     expect(quadrupled.value).toBe(0);
 
     count.value = 5;
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitForScheduler();
 
     expect(quadrupled.value).toBe(20);
   });
@@ -252,7 +254,7 @@ describe('Computed - Error Handling and Edge Cases', () => {
 
     c.value;
     count.value = 1;
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitForScheduler();
 
     expect(errorListener).toHaveBeenCalled();
     expect(normalListener).toHaveBeenCalled();
@@ -269,14 +271,16 @@ describe('Computed - Error Handling and Edge Cases', () => {
     c.value; // Register dependencies
 
     count.value = 1;
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitForScheduler();
+
     expect(listener).toHaveBeenCalled();
 
     listener.mockClear();
     c.dispose();
 
     count.value = 2;
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitForScheduler();
+
     expect(listener).not.toHaveBeenCalled();
   });
 
@@ -320,14 +324,15 @@ describe('Computed - Error Handling and Edge Cases', () => {
 
       const c = computed(
         async () => {
-          await new Promise((resolve) => setTimeout(resolve, 10));
+          await sleep(10);
           throw new Error('Async error');
         },
+
         { defaultValue: 0, onError: errorHandler }
       );
 
       expect(c.value).toBe(0);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await sleep(50);
 
       expect(errorHandler).toHaveBeenCalled();
       expect(c.hasError).toBe(true);
@@ -395,7 +400,7 @@ describe('Computed - Error Handling and Edge Cases', () => {
 
       // Change atom without subscribers
       count.value = 1;
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await waitForScheduler();
 
       // No recomputation without subscribers (lazy)
       expect(computeCount).toBe(1);
@@ -408,9 +413,10 @@ describe('Computed - Error Handling and Edge Cases', () => {
     it('async state properties are accurate', async () => {
       const c = computed(
         async () => {
-          await new Promise((resolve) => setTimeout(resolve, 20));
+          await sleep(20);
           return 42;
         },
+
         { defaultValue: 0 }
       );
 
@@ -420,7 +426,8 @@ describe('Computed - Error Handling and Edge Cases', () => {
       expect(c.isResolved).toBe(false);
       expect(c.hasError).toBe(false);
 
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(c.hasError).toBe(false);
+      await sleep(50);
 
       // After completion: resolved
       expect(c.isPending).toBe(false);
@@ -469,7 +476,7 @@ describe('Computed - Error Handling and Edge Cases', () => {
         async () => {
           computeCount++;
           const val = dep.value;
-          await new Promise((resolve) => setTimeout(resolve, 10));
+          await sleep(10);
           if (val < 0) throw new Error('Negative');
           return val;
         },
@@ -485,7 +492,7 @@ describe('Computed - Error Handling and Edge Cases', () => {
       dep.value = 1;
 
       // Need to wait briefly to ensure subscribers notified (scheduler)
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await sleep(0);
 
       const _val = c.value; // Should trigger new computation
 
@@ -552,7 +559,7 @@ describe('Computed - Error Handling and Edge Cases', () => {
       let fail = true;
       const c = computed(
         async () => {
-          await new Promise((r) => setTimeout(r, 10));
+          await sleep(10);
           if (fail) throw new Error('Late Fail');
           return 1;
         },
@@ -566,7 +573,8 @@ describe('Computed - Error Handling and Edge Cases', () => {
       c.invalidate();
       c.value;
 
-      await new Promise((r) => setTimeout(r, 50));
+      await sleep(50);
+
       // First one (the fail) should have been ignored because promiseId changed
       expect(c.isResolved).toBe(true);
     });
