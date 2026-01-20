@@ -8,6 +8,7 @@ import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
 import { effect } from '@/core/effect';
 import { batch, untracked } from '@/index';
+import { sleep, waitForScheduler } from '../utils/test-helpers';
 
 // ========================================
 // Type Definitions for Test Scenarios
@@ -93,7 +94,7 @@ describe('Integration: Todo App State Management', () => {
       ];
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitForScheduler();
 
     expect(stats.value.total).toBe(3);
     expect(stats.value.completed).toBe(1);
@@ -110,7 +111,7 @@ describe('Integration: Todo App State Management', () => {
     const updatedTodos = todos.value.map((t: Todo) => (t.id === 1 ? { ...t, completed: true } : t));
     todos.value = updatedTodos;
 
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitForScheduler();
 
     expect(stats.value.completed).toBe(2);
     expect(stats.value.completionRate).toBe(67);
@@ -160,7 +161,7 @@ describe('Integration: Todo App State Management', () => {
     expect(canRedo.value).toBe(false);
 
     addTodo({ id: 1, title: 'Task 1', completed: false, priority: 'low' });
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitForScheduler();
     expect(todos.value).toHaveLength(1);
     expect(canUndo.value).toBe(true);
 
@@ -168,21 +169,21 @@ describe('Integration: Todo App State Management', () => {
     expect(todos.value).toHaveLength(2);
 
     undo();
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitForScheduler();
     expect(todos.value).toHaveLength(1);
     expect(canRedo.value).toBe(true);
 
     undo();
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitForScheduler();
     expect(todos.value).toHaveLength(0);
     expect(canUndo.value).toBe(false);
 
     redo();
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitForScheduler();
     expect(todos.value).toHaveLength(1);
 
     redo();
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitForScheduler();
     expect(todos.value).toHaveLength(2);
     expect(canRedo.value).toBe(false);
   });
@@ -206,7 +207,7 @@ describe('Integration: User Authentication Flow', () => {
       authLogs.push(`User ${status}: ${userDisplayName.value}`);
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitForScheduler();
 
     // Initial state
     expect(isAuthenticated.value).toBe(false);
@@ -215,7 +216,7 @@ describe('Integration: User Authentication Flow', () => {
 
     // Login
     currentUser.value = { id: 1, name: 'Alice', email: 'alice@example.com' };
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitForScheduler();
 
     expect(isAuthenticated.value).toBe(true);
     expect(userDisplayName.value).toBe('Alice');
@@ -223,13 +224,13 @@ describe('Integration: User Authentication Flow', () => {
 
     // Login as admin
     currentUser.value = { id: 2, name: 'Admin', email: 'admin@admin.com' };
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitForScheduler();
 
     expect(isAdmin.value).toBe(true);
 
     // Logout
     currentUser.value = null;
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitForScheduler();
 
     expect(isAuthenticated.value).toBe(false);
     expect(authLogs.length).toBeGreaterThan(0);
@@ -265,7 +266,7 @@ describe('Integration: Complex Application State', () => {
       titleUpdates.push(title);
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitForScheduler();
 
     // Initial state
     expect(isDarkMode.value).toBe(false);
@@ -274,7 +275,7 @@ describe('Integration: Complex Application State', () => {
 
     // Update theme
     appState.value = { ...appState.value, theme: 'dark' };
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitForScheduler();
     expect(isDarkMode.value).toBe(true);
 
     // Add notifications
@@ -282,14 +283,14 @@ describe('Integration: Complex Application State', () => {
       appState.value = { ...appState.value, notifications: 5 };
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitForScheduler();
 
     expect(hasNotifications.value).toBe(true);
     expect(notificationBadge.value).toBe('5');
 
     // Many notifications
     appState.value = { ...appState.value, notifications: 150 };
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitForScheduler();
     expect(notificationBadge.value).toBe('99+');
 
     expect(titleUpdates.length).toBeGreaterThan(0);
@@ -304,20 +305,20 @@ describe('Integration: Complex Application State', () => {
       computations.push(result.value);
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitForScheduler();
 
     // Without batch: multiple recomputations
     state.value = { ...state.value, count: 10 };
     state.value = { ...state.value, multiplier: 2 };
     state.value = { ...state.value, offset: 5 };
 
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitForScheduler();
     const withoutBatchCount = computations.length;
 
     // Reset
     computations.length = 0;
     state.value = { count: 0, multiplier: 1, offset: 0 };
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitForScheduler();
 
     // With batch: single recomputation
     batch(() => {
@@ -326,7 +327,7 @@ describe('Integration: Complex Application State', () => {
       state.value = { ...state.value, offset: 5 };
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitForScheduler();
     const withBatchCount = computations.length;
 
     expect(withBatchCount).toBeLessThanOrEqual(withoutBatchCount);
@@ -344,7 +345,7 @@ describe('Integration: Async Data Fetching', () => {
 
     // Mock API
     const fetchUser = async (id: number): Promise<User> => {
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await sleep(50);
       return { id, name: `User ${id}`, email: `user${id}@example.com` };
     };
 
@@ -364,19 +365,19 @@ describe('Integration: Async Data Fetching', () => {
     expect(userData.isPending).toBe(true);
 
     // Wait for resolution
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await sleep(100);
 
     expect(userData.isResolved).toBe(true);
     expect(userData.value.name).toBe('User 1');
 
     // Change user ID
     userId.value = 2;
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitForScheduler();
     // Access value to trigger recomputation
     const _changingValue = userData.value;
     expect(userData.isPending).toBe(true);
 
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await sleep(100);
 
     expect(userData.isResolved).toBe(true);
     expect(userData.value.name).toBe('User 2');
@@ -388,7 +389,7 @@ describe('Integration: Async Data Fetching', () => {
 
     const riskyComputed = computed(
       async () => {
-        await new Promise((resolve) => setTimeout(resolve, 10));
+        await waitForScheduler();
         if (shouldFail.value) {
           throw new Error('Computation failed');
         }
@@ -405,7 +406,7 @@ describe('Integration: Async Data Fetching', () => {
     expect(initialValue).toBe('Default'); // Returns default while pending
 
     // Wait for resolution
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await sleep(50);
     expect(riskyComputed.value).toBe('Success');
     expect(riskyComputed.hasError).toBe(false);
 
@@ -417,7 +418,7 @@ describe('Integration: Async Data Fetching', () => {
     const _errorValue = riskyComputed.value; // This triggers the async computation
 
     // Wait for async computation to fail
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await sleep(100);
 
     expect(riskyComputed.hasError).toBe(true);
     expect(errorLogs.length).toBe(1);
@@ -431,7 +432,7 @@ describe('Integration: Async Data Fetching', () => {
     const _recoveredValue = riskyComputed.value;
 
     // Wait for async computation to complete
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await sleep(100);
 
     expect(riskyComputed.hasError).toBe(false);
     expect(riskyComputed.value).toBe('Success');
@@ -460,7 +461,7 @@ describe('Integration: Performance & Memory', () => {
 
     // Update source
     source.value = 10;
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitForScheduler();
 
     expect(final.value).toBe(60);
   });
@@ -518,7 +519,7 @@ describe('Integration: Performance & Memory', () => {
     // Changing trigger does trigger recomputation
     // At recomputation time, it reads the NEW untracked value (200)
     trigger.value = 1;
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitForScheduler();
     expect(result.value).toBe(400); // Recomputes with new data value (200 * 2)
     expect(expensiveComputation).toHaveBeenCalledTimes(2);
   });

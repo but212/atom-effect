@@ -1,8 +1,18 @@
 # Changelog
 
-## [0.12.0]
+## [Unreleased]
 
 ### Refactor
+
+- **Test Infrastructure**: Improved test code quality and maintainability.
+  - Added `FuzzConfig` type and `waitForScheduler()` helper to `test-helpers.ts`.
+  - Refactored `fuzz.test.ts` to use typed configuration instead of magic numbers.
+  - Replaced 31 inline `setTimeout` calls with `sleep()`/`waitForScheduler()` helpers in `reactive-flow.test.ts`.
+  - Removed dead code branch in `dependency-graph.ts`.
+
+## [0.12.0]
+
+### Refactor - 0.12.0
 
 - **Internalization and Simplification**:
   - Internalized subscriber management within `ReactiveDependency` by removing the `SubscriberManager` class.

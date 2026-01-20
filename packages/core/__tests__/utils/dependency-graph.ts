@@ -69,21 +69,7 @@ export function makeGraph(framework: FrameworkArgs, config: TestConfig, counter:
       currentLayer.push(
         framework.computed(() => {
           counter.count++;
-          // If staticFraction is < 1, maybe we behave differently?
-          // But frameworks.test.ts passes config.
-          // Standard "dynamic" test usually involves:
-          // computed(() => filter.read() ? a.read() : b.read())
-
-          // For the purpose of "essentially similar test", check config.staticFraction
-          if (config.staticFraction < 1) {
-            // Dynamic behavior
-            // For simplicity, let's just read both but maybe conditionally?
-            // The "dynamic" benchmark often uses a separate signal or modulo to switch.
-            // Let's stick to simple sum for 'static' case primarily.
-            return d1.read() + d2.read();
-          } else {
-            return d1.read() + d2.read();
-          }
+          return d1.read() + d2.read();
         })
       );
     }
