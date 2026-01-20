@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { EMPTY_ERROR_ARRAY } from '@/constants';
 import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
+import { sleep } from '../../utils/test-helpers';
 
 describe('Computed - Error Propagation', () => {
   describe('sync error propagation', () => {
@@ -152,9 +153,10 @@ describe('Computed - Error Propagation', () => {
     it('propagates async errors to downstream', async () => {
       const user = computed(
         async () => {
-          await new Promise((resolve) => setTimeout(resolve, 5));
+          await sleep(5);
           throw new Error('User fetch failed');
         },
+
         { defaultValue: null }
       );
 
@@ -170,7 +172,7 @@ describe('Computed - Error Propagation', () => {
       user.value;
       posts.value;
 
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await sleep(20);
 
       expect(user.hasError).toBe(true);
       expect(user.state).toBe('rejected');
@@ -185,7 +187,7 @@ describe('Computed - Error Propagation', () => {
       const shouldFail = atom(true, { sync: true });
       const result = computed(
         async () => {
-          await new Promise((resolve) => setTimeout(resolve, 5));
+          await sleep(5);
           if (shouldFail.value) throw new Error('Failed');
           return 42;
         },
@@ -194,7 +196,7 @@ describe('Computed - Error Propagation', () => {
 
       // Trigger first computation (will fail)
       result.value;
-      await new Promise((resolve) => setTimeout(resolve, 15));
+      await sleep(15);
 
       expect(result.hasError).toBe(true);
       expect(result.errors.length).toBeGreaterThanOrEqual(1);
@@ -203,7 +205,7 @@ describe('Computed - Error Propagation', () => {
       shouldFail.value = false;
       result.invalidate();
       result.value;
-      await new Promise((resolve) => setTimeout(resolve, 15));
+      await sleep(15);
 
       expect(result.hasError).toBe(false);
       expect(result.isValid).toBe(true);

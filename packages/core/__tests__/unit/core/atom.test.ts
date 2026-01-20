@@ -7,6 +7,7 @@ import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
 import { AtomError } from '@/errors/errors';
 import { debug } from '@/utils/debug';
+import { waitForScheduler } from '../../utils/test-helpers';
 
 describe('Atom - Error Handling and Edge Cases', () => {
   it('rejects invalid subscriber types', () => {
@@ -47,7 +48,7 @@ describe('Atom - Error Handling and Edge Cases', () => {
     count.subscribe(normalListener);
 
     count.value = 1;
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitForScheduler();
 
     expect(errorListener).toHaveBeenCalled();
     expect(normalListener).toHaveBeenCalled();
@@ -71,7 +72,7 @@ describe('Atom - Error Handling and Edge Cases', () => {
     c.value; // register dependency
 
     count.value = 5;
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitForScheduler();
 
     expect(c.value).toBe(10);
   });
@@ -102,7 +103,7 @@ describe('Atom - Error Handling and Edge Cases', () => {
     count.value = 2;
     count.value = 3;
 
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitForScheduler();
 
     // Version management ensures only final value is reflected
     expect(calls[calls.length - 1]).toBe(3);
@@ -129,7 +130,7 @@ describe('Atom - Error Handling and Edge Cases', () => {
     c.value; // register dependency (computed registers as object subscriber)
 
     count.value = 5;
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitForScheduler();
 
     expect(c.value).toBe(10);
   });
@@ -176,7 +177,7 @@ describe('Atom - Error Handling and Edge Cases', () => {
       unsub2();
 
       count.value = 1;
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await waitForScheduler();
 
       expect(listener1).toHaveBeenCalled();
       expect(listener2).not.toHaveBeenCalled(); // removed
@@ -265,7 +266,7 @@ describe('Atom - Error Handling and Edge Cases', () => {
       normalComputed.value; // register dependency
 
       count.value = 1;
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await waitForScheduler();
 
       expect(normalListener).toHaveBeenCalled();
       expect(normalComputed.value).toBe(2);

@@ -8,6 +8,7 @@ import { effect } from '@/core/effect';
 import { EffectError } from '@/errors/errors';
 import type { Dependency } from '@/types';
 import { debug } from '@/utils/debug';
+import { sleep } from '../../utils/test-helpers';
 
 describe('Effect - Error Handling and Edge Cases', () => {
   beforeEach(() => {
@@ -126,11 +127,11 @@ describe('Effect - Error Handling and Edge Cases', () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     effect(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await sleep(10);
       throw new Error('Async effect error');
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await sleep(50);
 
     expect(consoleError).toHaveBeenCalled();
     consoleError.mockRestore();
@@ -235,7 +236,7 @@ describe('Effect - Error Handling and Edge Cases', () => {
       { trackModifications: true, sync: true, maxExecutionsPerSecond: 5 }
     );
 
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await sleep(50);
 
     // verify warning occurred
     consoleWarn.mockRestore();
@@ -289,14 +290,14 @@ describe('Effect - Error Handling and Edge Cases', () => {
     const cleanup = vi.fn();
 
     const e = effect(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await sleep(10);
       return cleanup;
     });
 
     // dispose before cleanup is set
     e.dispose();
 
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await sleep(50);
 
     // cleanup should not be set since disposed
     expect(e.isDisposed).toBe(true);
@@ -334,7 +335,7 @@ describe('Effect - Error Handling and Edge Cases', () => {
       );
 
       // wait briefly then check
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await sleep(100);
 
       // should be disposed after exceeding 5 executions
       expect(e.isDisposed).toBe(true);
@@ -360,7 +361,7 @@ describe('Effect - Error Handling and Edge Cases', () => {
         { maxExecutionsPerSecond: 200, sync: true, maxExecutionsPerFlush: 200 }
       );
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await sleep(100);
 
       // memory cleanup logic should have worked (splice called)
       expect(executionCount).toBeGreaterThan(100);
@@ -412,11 +413,11 @@ describe('Effect - Error Handling and Edge Cases', () => {
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       const e = effect(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 10));
+        await sleep(10);
         throw new Error('Async effect error');
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await sleep(50);
 
       expect(consoleError).toHaveBeenCalled();
 
@@ -430,13 +431,14 @@ describe('Effect - Error Handling and Edge Cases', () => {
       const cleanupCalled = vi.fn();
 
       const e = effect(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 10));
+        await sleep(10);
         return () => {
           cleanupCalled();
         };
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await sleep(50);
+
       e.dispose();
 
       expect(cleanupCalled).toHaveBeenCalled();
