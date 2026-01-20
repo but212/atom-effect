@@ -126,7 +126,7 @@ export const PHASE_MASK = (1 << PHASE_BITS) - 1; // 0x000fffff (1,048,575)
  * When shift exceeds this value, the job is considered "urgent"
  * and placed in the priority queue for glitch reduction.
  */
-export const PHASE_THRESHOLD = 1 << 19; // 524,288
+export const PHASE_THRESHOLD = 1 << (PHASE_BITS - 1); // 524,288
 
 /**
  * Environment detection
