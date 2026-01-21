@@ -34,24 +34,34 @@ describe('Data Grid: Initialization Baseline', () => {
 describe('Data Grid: Sorting Baseline', () => {
   const data = generateGridData(1000);
 
+  let sortDir: 'asc' | 'desc' = 'asc';
+
   bench(
     '[Vanilla] sort 1000 rows by name',
     () => {
-      const sorted = [...data].sort((a, b) => a.name.localeCompare(b.name));
+      sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+      const sorted = [...data].sort((a, b) => {
+        return sortDir === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
+      });
       const _ = sorted[0];
     },
     macroBenchOptions
   );
 
   const rowsSortName = atom<DataGridRow[]>(data);
+  const sortDirAtom = atom<'asc' | 'desc'>('asc');
   const sortedRowsName = computed(() => {
-    return [...rowsSortName.value].sort((a, b) => a.name.localeCompare(b.name));
+    return [...rowsSortName.value].sort((a, b) => {
+      return sortDirAtom.value === 'asc'
+        ? a.name.localeCompare(b.name)
+        : b.name.localeCompare(a.name);
+    });
   });
 
   bench(
     '[Atom] sort 1000 rows by name',
     () => {
-      rowsSortName.value = [...rowsSortName.value];
+      sortDirAtom.value = sortDirAtom.value === 'asc' ? 'desc' : 'asc';
       const _ = sortedRowsName.value;
     },
     macroBenchOptions
