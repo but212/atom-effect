@@ -21,7 +21,6 @@ describe('Input Latency', () => {
     searchQuery.value = '';
   });
   bench('input to render latency (pure propagation)', () => {
-
     // Simulate typing "Item 1"
     const input = 'Item 1';
     for (const char of input) {
