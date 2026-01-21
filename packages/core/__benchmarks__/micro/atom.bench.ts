@@ -105,18 +105,6 @@ describe('Atom Untracked Operations (x1000)', () => {
   const atoms = Array.from({ length: 1000 }, (_, i) => atom(i));
 
   bench(
-    'untracked read 1000 atoms',
-    () => {
-      let sum = 0;
-      for (let i = 0; i < 1000; i++) {
-        sum += atoms[i].peek();
-      }
-      void sum;
-    },
-    microBenchOptions
-  );
-
-  bench(
     'untracked(fn) read 1000 atoms',
     () => {
       untracked(() => {

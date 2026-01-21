@@ -1,4 +1,4 @@
-import { bench, describe } from 'vitest';
+import { beforeEach, bench, describe } from 'vitest';
 import { atom, computed, effect } from '../../src/index.js';
 
 describe('Input Latency', () => {
@@ -16,10 +16,11 @@ describe('Input Latency', () => {
     _lastRender = displayResults.value.join('');
   });
 
-  bench('input to render latency (pure propagation)', () => {
-    // Reset
+  beforeEach(() => {
+    // Reset state before each run
     searchQuery.value = '';
-
+  });
+  bench('input to render latency (pure propagation)', () => {
     // Simulate typing "Item 1"
     const input = 'Item 1';
     for (const char of input) {
