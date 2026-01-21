@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { SchedulerError } from '../../src/errors/errors';
-import { scheduler } from '../../src/internal/scheduler/scheduler';
+import { SchedulerError } from '@/errors/errors';
+import { scheduler } from '@/internal/scheduler';
 
 describe('Scheduler - Extra Coverage', () => {
   it('prevents infinite loops with maxFlushIterations', () => {

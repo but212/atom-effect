@@ -4,10 +4,10 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { atom } from '../../../src/core/atom/atom';
-import { computed } from '../../../src/core/computed';
-import { effect } from '../../../src/core/effect/effect';
-import { batch } from '../../../src/internal/scheduler';
+import { atom } from '@/core/atom';
+import { computed } from '@/core/computed';
+import { effect } from '@/core/effect';
+import { batch } from '@/index';
 import { DEFAULT_FUZZ_CONFIG, sleep } from '../../utils/test-helpers';
 
 const FUZZ_CONFIG = DEFAULT_FUZZ_CONFIG;

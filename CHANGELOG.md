@@ -4,11 +4,19 @@
 
 ### Refactor
 
-- **Test Infrastructure**: Improved test code quality and maintainability.
-  - Added `FuzzConfig` type and `waitForScheduler()` helper to `test-helpers.ts`.
-  - Refactored `fuzz.test.ts` to use typed configuration instead of magic numbers.
-  - Replaced 31 inline `setTimeout` calls with `sleep()`/`waitForScheduler()` helpers in `reactive-flow.test.ts`.
-  - Removed dead code branch in `dependency-graph.ts`.
+- **Core Architecture Refactoring**: Flattened source structure and consolidated types for better maintainability.
+  - Flattened `core/` directory: Moved `atom.ts`, `computed.ts`, `effect.ts`, and `dep-tracking.ts` directly into `src/core/`.
+  - Consolidated Type System: Merged all interfaces from `src/types/*.ts` into a single, comprehensive `src/types.ts` file.
+  - Internal Reorganization:
+    - Moved `scheduler.ts` and `batch.ts` to `src/internal/`.
+    - Unified `ReactiveNode` and `ReactiveDependency` into `src/core/base.ts`.
+  - Path Alias Adoption: Migrated all internal and test imports to use `@/` path aliases, decoupling implementation from file-system structure.
+- **Test Suite Optimization**: Refactored core unit tests to eliminate redundancy and improve signal quality.
+  - Consolidated error handling: Unified sync and async mode error tests in `atom.test.ts` and `effect.test.ts` to ensure consistency.
+  - Reduced Overlap: Pruned redundant "happy path" tests across `atom`, `computed`, and `effect` unit tests.
+  - Smoke Test Streamlining: Refactored `reactive_core.test.ts` into a focused high-level integration suite, moving implementation-specific checks to unit tests.
+  - Structural Cleanup: Fixed structural nesting and indentation issues in `effect.test.ts` and `computed.test.ts` for better maintainability.
+- **Reliability and Type Safety**: Resolved path errors in `reactive_core.test.ts` and ensured a clean, signal-rich test suite.
 
 ### jQuery
 
@@ -19,7 +27,7 @@
 
 #### Refactor - jQuery
 
-- **Hashed Tree Traversal**: Optimized `cleanupTree` (used in `.empty()`, `.remove()`) to be $O(M)$ where M is the number of bound elements, instead of $O(N)$ (all descendants).
+- **Marker-based Tree Traversal**: Optimized `cleanupTree` (used in `.empty()`, `.remove()`) to be $O(M)$ where M is the number of bound elements, instead of $O(N)$ (all descendants).
   - Introduced `AES_BOUND` class marker to instantly locate bound descendants using `querySelectorAll` (`.aes-bound`).
   - Significantly reduces main-thread blocking when clearing large lists or tables.
 - **Algorithm Isolation**: Moved `getLIS` (Longest Increasing Subsequence) to `utils.ts` to separate algorithmic complexity from DOM manipulation logic.

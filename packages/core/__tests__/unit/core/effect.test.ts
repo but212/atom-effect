@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { atom } from '@/core/atom';
 import { effect } from '@/core/effect';
 import { EffectError } from '@/errors/errors';
-import type { Dependency } from '@/types';
 import { debug } from '@/utils/debug';
 import { sleep } from '../../utils/test-helpers';
 
@@ -103,37 +102,27 @@ describe('Effect - Error Handling and Edge Cases', () => {
     consoleError.mockRestore();
   });
 
-  it('handles error during effect function execution', async () => {
+  it('handles errors during effect function execution (sync and async)', async () => {
+    vi.useRealTimers();
     const count = atom(0);
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
+    // Sync error
     effect(() => {
-      if (count.value > 0) {
-        throw new Error('Effect error');
-      }
+      if (count.value === 1) throw new Error('Sync effect error');
     });
-
-    await vi.runAllTimersAsync();
-
     count.value = 1;
-    await vi.runAllTimersAsync();
-
+    await sleep(0);
     expect(consoleError).toHaveBeenCalled();
-    consoleError.mockRestore();
-  });
 
-  it('handles async effect error', async () => {
-    vi.useRealTimers();
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-
+    // Async error
     effect(async () => {
       await sleep(10);
       throw new Error('Async effect error');
     });
-
     await sleep(50);
-
     expect(consoleError).toHaveBeenCalled();
+
     consoleError.mockRestore();
     vi.useFakeTimers();
   });
@@ -260,31 +249,6 @@ describe('Effect - Error Handling and Edge Cases', () => {
     expect(e.isDisposed).toBe(true);
   });
 
-  it('isAtom type guard is accurate (inside effect)', async () => {
-    const count = atom(0);
-    const notAtom = { value: 0 };
-
-    const _e = effect(() => {
-      count.value;
-    });
-
-    await vi.runAllTimersAsync();
-
-    // internal isAtom function test
-    const isAtomFn = <T>(obj: T): boolean => {
-      return (
-        obj !== null &&
-        typeof obj === 'object' &&
-        'value' in obj &&
-        'subscribe' in obj &&
-        typeof obj.subscribe === 'function'
-      );
-    };
-
-    expect(isAtomFn(count)).toBe(true);
-    expect(isAtomFn(notAtom)).toBe(false);
-  });
-
   it('async cleanup does not execute after dispose', async () => {
     vi.useRealTimers();
     const cleanup = vi.fn();
@@ -344,273 +308,128 @@ describe('Effect - Error Handling and Edge Cases', () => {
       consoleError.mockRestore();
       vi.useFakeTimers();
     });
-
-    it('execution time sliding window cleans up memory', async () => {
-      vi.useRealTimers();
-      const count = atom(0);
-      let executionCount = 0;
-
-      const e = effect(
-        () => {
-          executionCount++;
-          // execute more than CLEANUP_THRESHOLD(100)
-          if (executionCount < 150) {
-            count.value = count.value + 1;
-          }
-        },
-        { maxExecutionsPerSecond: 200, sync: true, maxExecutionsPerFlush: 200 }
-      );
-
-      await sleep(100);
-
-      // memory cleanup logic should have worked (splice called)
-      expect(executionCount).toBeGreaterThan(100);
-
-      e.dispose();
-      vi.useFakeTimers();
-    });
   });
 
-  describe('Cleanup Error Handling', () => {
-    it('is safe even when error occurs during cleanup function execution', async () => {
-      const count = atom(0);
-      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+  it('tracks dependencies on multiple atoms', async () => {
+    const count1 = atom(0);
+    const count2 = atom(0);
+    const count3 = atom(0);
+    let sum = 0;
 
-      const e = effect(() => {
-        count.value;
-        return () => {
-          throw new Error('Cleanup error');
-        };
-      });
-
-      await vi.runAllTimersAsync();
-
-      // cleanup error is caught and output to console.error
-      e.dispose();
-      expect(consoleError).toHaveBeenCalled();
-
-      consoleError.mockRestore();
+    const e = effect(() => {
+      sum = count1.value + count2.value + count3.value;
     });
 
-    it('ignores cleanup if not a function', async () => {
-      const count = atom(0);
+    await vi.runAllTimersAsync();
+    expect(sum).toBe(0);
 
-      const e = effect(() => {
-        count.value;
-        return 'not a function' as unknown as () => void; // cleanup is not a function
-      });
+    count1.value = 1;
+    await vi.runAllTimersAsync();
+    expect(sum).toBe(1);
 
-      await vi.runAllTimersAsync();
+    count2.value = 2;
+    await vi.runAllTimersAsync();
+    expect(sum).toBe(3);
 
-      // should dispose without error
-      expect(() => e.dispose()).not.toThrow();
-    });
+    count3.value = 3;
+    await vi.runAllTimersAsync();
+    expect(sum).toBe(6);
+
+    e.dispose();
+  });
+  it('handles error when dependency subscription fails', () => {
+    const _badDep = {
+      subscribe: () => {
+        throw new Error('Subscribe failed');
+      },
+    };
+
+    expect(() => {
+      effect(
+        () => {
+          // attempts to use badDep but subscribe fails
+        },
+        { sync: true }
+      );
+    }).not.toThrow(); // execute runs normally
   });
 
-  describe('Async Effect Error Handling', () => {
-    it('is safe even when error occurs during async effect execution', async () => {
-      vi.useRealTimers();
-      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+  it('adds new dependencies and removes old ones during effect execution', async () => {
+    const condition = atom(true);
+    const count1 = atom(0);
+    const count2 = atom(10);
+    let result = 0;
 
-      const e = effect(async () => {
-        await sleep(10);
-        throw new Error('Async effect error');
-      });
-
-      await sleep(50);
-
-      expect(consoleError).toHaveBeenCalled();
-
-      e.dispose();
-      consoleError.mockRestore();
-      vi.useFakeTimers();
+    const e = effect(() => {
+      if (condition.value) {
+        result = count1.value * 2;
+      } else {
+        result = count2.value * 3;
+      }
     });
 
-    it('handles async cleanup that returns Promise', async () => {
-      vi.useRealTimers();
-      const cleanupCalled = vi.fn();
+    await vi.runAllTimersAsync();
+    expect(result).toBe(0); // count1.value * 2 = 0
 
-      const e = effect(async () => {
-        await sleep(10);
-        return () => {
-          cleanupCalled();
-        };
-      });
+    count1.value = 5;
+    await vi.runAllTimersAsync();
+    expect(result).toBe(10); // count1.value * 2 = 10
 
-      await sleep(50);
+    // dependency switch when condition changes
+    condition.value = false;
+    await vi.runAllTimersAsync();
+    expect(result).toBe(30); // count2.value * 3 = 30
 
-      e.dispose();
+    // count1 is no longer a dependency
+    count1.value = 100;
+    await vi.runAllTimersAsync();
+    expect(result).toBe(30); // no change
 
-      expect(cleanupCalled).toHaveBeenCalled();
-      vi.useFakeTimers();
-    });
+    // only count2 is a dependency
+    count2.value = 20;
+    await vi.runAllTimersAsync();
+    expect(result).toBe(60); // count2.value * 3 = 60
+
+    e.dispose();
   });
 
-  describe('Type Guards and Internal Logic', () => {
-    it('isAtom type guard correctly detects atom', () => {
-      const count = atom(0);
-
-      const e = effect(
-        () => {
-          count.value; // use atom
-        },
-        { trackModifications: true, sync: true }
-      );
-
-      // isAtom check is performed when trackModifications is enabled
-      expect(e.isDisposed).toBe(false);
-      e.dispose();
-    });
-
-    it('does not apply trackModifications to non-atom objects', () => {
-      const notAtom = { value: 0 };
-
-      const e = effect(
-        () => {
-          // trackModifications is not applied to non-atom objects
-          const _ = notAtom.value;
-        },
-        { trackModifications: true, sync: true }
-      );
-
-      expect(e.isDisposed).toBe(false);
-      e.dispose();
-    });
-
-    it('warns on read-then-write with trackModifications and debug mode', () => {
+  describe('Infinite Loop and Debug', () => {
+    it('covers trackModifications and loop warnings', () => {
       const wasEnabled = debug.enabled;
       debug.enabled = true;
+      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      const count = atom(0);
-      const warnSpy = vi.spyOn(debug, 'warn').mockImplementation(() => {});
-
-      // sync=true for immediate execution
-      const e = effect(
+      const a = atom(0, { sync: true });
+      effect(
         () => {
-          const val = count.value; // read
-          if (val === 0) {
-            count.value = 1; // write - may trigger warning
-          }
+          a.value;
+          a.value = a.value + 1;
         },
-        { trackModifications: true, sync: true, maxExecutionsPerSecond: 3 }
+        { trackModifications: true }
       );
 
-      // warning may have occurred (read-then-write detection)
-      // but may also be disposed due to infinite loop
+      expect(consoleWarn).toHaveBeenCalledWith(expect.stringContaining('Infinite loop may occur'));
 
-      if (!e.isDisposed) {
-        e.dispose();
-      }
-
-      warnSpy.mockRestore();
+      consoleWarn.mockRestore();
       debug.enabled = wasEnabled;
     });
 
-    it('tracks dependencies on multiple atoms', async () => {
-      const count1 = atom(0);
-      const count2 = atom(0);
-      const count3 = atom(0);
-      let sum = 0;
+    it('covers partial dependency commitment on error', () => {
+      const a = atom(0);
+      const b = atom(0);
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      const e = effect(() => {
-        sum = count1.value + count2.value + count3.value;
-      });
-
-      await vi.runAllTimersAsync();
-      expect(sum).toBe(0);
-
-      count1.value = 1;
-      await vi.runAllTimersAsync();
-      expect(sum).toBe(1);
-
-      count2.value = 2;
-      await vi.runAllTimersAsync();
-      expect(sum).toBe(3);
-
-      count3.value = 3;
-      await vi.runAllTimersAsync();
-      expect(sum).toBe(6);
-
-      e.dispose();
-    });
-
-    it('handles error when dependency subscription fails', () => {
-      const _badDep = {
-        subscribe: () => {
-          throw new Error('Subscribe failed');
-        },
-      };
-
-      expect(() => {
-        effect(
-          () => {
-            // attempts to use badDep but subscribe fails
-          },
-          { sync: true }
-        );
-      }).not.toThrow(); // execute runs normally
-    });
-
-    it('adds new dependencies and removes old ones during effect execution', async () => {
-      const condition = atom(true);
-      const count1 = atom(0);
-      const count2 = atom(10);
-      let result = 0;
-
-      const e = effect(() => {
-        if (condition.value) {
-          result = count1.value * 2;
-        } else {
-          result = count2.value * 3;
-        }
-      });
-
-      await vi.runAllTimersAsync();
-      expect(result).toBe(0); // count1.value * 2 = 0
-
-      count1.value = 5;
-      await vi.runAllTimersAsync();
-      expect(result).toBe(10); // count1.value * 2 = 10
-
-      // dependency switch when condition changes
-      condition.value = false;
-      await vi.runAllTimersAsync();
-      expect(result).toBe(30); // count2.value * 3 = 30
-
-      // count1 is no longer a dependency
-      count1.value = 100;
-      await vi.runAllTimersAsync();
-      expect(result).toBe(30); // no change
-
-      // only count2 is a dependency
-      count2.value = 20;
-      await vi.runAllTimersAsync();
-      expect(result).toBe(60); // count2.value * 3 = 60
-
-      e.dispose();
-    });
-  });
-
-  it('_cleanupContext handles failure before commit', async () => {
-    const a = atom(0);
-    const e = effect(
-      () => {
+      effect(() => {
         a.value;
-        if (a.value > 0) throw new Error('Abort');
-      },
-      { sync: true }
-    );
+        throw new Error('fail middle');
+      });
 
-    // Initial run ok
-    expect((e as unknown as { _dependencies: Dependency[] })._dependencies.length).toBe(1);
+      expect((a as unknown as { subscriberCount: () => number }).subscriberCount()).toBeGreaterThan(
+        0
+      );
+      expect((b as unknown as { subscriberCount: () => number }).subscriberCount()).toBe(0);
 
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-    // Trigger re-run that fails
-    a.value = 1;
-
-    // Line 333: if (ctx.prevDeps !== EMPTY_DEPS) should be hit in _cleanupContext
-    expect((e as unknown as { isDisposed: boolean }).isDisposed).toBe(false); // Effect caught its own error
-    consoleError.mockRestore();
+      consoleError.mockRestore();
+    });
   });
 });

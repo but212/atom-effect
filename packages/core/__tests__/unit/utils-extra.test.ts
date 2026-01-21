@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { syncDependencies } from '../../src/core/utils/dep-tracking';
-import type { Dependency, Subscriber } from '../../src/types';
-import { ArrayPool } from '../../src/utils/array-pool';
-import { debug } from '../../src/utils/debug';
-import { ObjectPool, type Poolable } from '../../src/utils/object-pool';
-import { isComputed, isTrackableFunction } from '../../src/utils/type-guards';
+import { syncDependencies } from '@/core/dep-tracking';
+import type { Dependency, Subscriber } from '@/types';
+import { ArrayPool } from '@/utils/array-pool';
+import { debug } from '@/utils/debug';
+import { ObjectPool, type Poolable } from '@/utils/object-pool';
+import { isComputed, isTrackableFunction } from '@/utils/type-guards';
 
 describe('Utils & Handlers - Extra Coverage', () => {
   describe('DepTracking - syncDependencies', () => {

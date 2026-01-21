@@ -1,5 +1,5 @@
 import { IS_DEV } from '@/constants';
-import type { PoolStats } from '@/types/internal';
+import type { PoolStats } from '@/types';
 
 /**
  * Generic Array Pool.

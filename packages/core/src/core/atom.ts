@@ -1,10 +1,10 @@
 import { ATOM_STATE_FLAGS } from '@/constants';
-import { ReactiveDependency } from '@/core/base/reactive-dependency';
+import { ReactiveDependency } from '@/core/base';
+import { trackDependency } from '@/core/dep-tracking';
 import { scheduler } from '@/internal/scheduler';
 import { trackingContext } from '@/tracking';
 import type { AtomOptions, Subscriber, WritableAtom } from '@/types';
 import { debug } from '@/utils/debug';
-import { trackDependency } from '../utils/dep-tracking';
 
 /**
  * Internal {@link WritableAtom} implementation.
