@@ -41,7 +41,8 @@ describe('Data Grid: Sorting Baseline', () => {
     () => {
       sortDir = sortDir === 'asc' ? 'desc' : 'asc';
       const sorted = [...data].sort((a, b) => {
-        return sortDir === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
+        const compare = a.name.localeCompare(b.name);
+        return sortDir === 'asc' ? compare : -compare;
       });
       const _ = sorted[0];
     },
@@ -52,9 +53,8 @@ describe('Data Grid: Sorting Baseline', () => {
   const sortDirAtom = atom<'asc' | 'desc'>('asc');
   const sortedRowsName = computed(() => {
     return [...rowsSortName.value].sort((a, b) => {
-      return sortDirAtom.value === 'asc'
-        ? a.name.localeCompare(b.name)
-        : b.name.localeCompare(a.name);
+      const compare = a.name.localeCompare(b.name);
+      return sortDirAtom.value === 'asc' ? compare : -compare;
     });
   });
 
