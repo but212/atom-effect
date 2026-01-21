@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { atom } from '../../../src/core/atom';
-import { effect } from '../../../src/core/effect/effect';
-import { endFlush, resetFlushState, startFlush } from '../../../src/internal/epoch';
-import { debug } from '../../../src/utils/debug';
+import { atom } from '@/core/atom';
+import { effect } from '@/core/effect';
+import { endFlush, resetFlushState, startFlush } from '@/internal/epoch';
+import { debug } from '@/utils/debug';
 import { sleep, tick } from '../../utils/test-helpers';
 
 describe('Effect - Extra Coverage', () => {

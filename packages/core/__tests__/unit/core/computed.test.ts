@@ -505,7 +505,7 @@ describe('Computed - Error Handling and Edge Cases', () => {
       const a1 = atom(1);
 
       // We need to inject an array into the pool to hit the branch
-      const { depArrayPool, versionArrayPool } = await import('../../../src/internal/pool');
+      const { depArrayPool, versionArrayPool } = await import('@/internal/pool');
       const arr: (Dependency | null)[] = [null, null]; // length 2
       const varr: number[] = [0, 0];
       (depArrayPool as unknown as { pool: (Dependency | null)[][] }).pool.push(arr);

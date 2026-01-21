@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { atom } from '../../../src/core/atom/atom';
-import { trackingContext } from '../../../src/tracking';
+import { atom } from '@/core/atom';
+import { trackingContext } from '@/tracking';
 import { tick } from '../../utils/test-helpers';
 
 describe('Atom - Extra Coverage', () => {

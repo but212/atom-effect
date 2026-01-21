@@ -4,6 +4,13 @@
 
 ### Refactor
 
+- **Core Architecture Refactoring**: Flattened source structure and consolidated types for better maintainability.
+  - Flattened `core/` directory: Moved `atom.ts`, `computed.ts`, `effect.ts`, and `dep-tracking.ts` directly into `src/core/`.
+  - Consolidated Type System: Merged all interfaces from `src/types/*.ts` into a single, comprehensive `src/types.ts` file.
+  - Internal Reorganization:
+    - Moved `scheduler.ts` and `batch.ts` to `src/internal/`.
+    - Unified `ReactiveNode` and `ReactiveDependency` into `src/core/base.ts`.
+  - Path Alias Adoption: Migrated all internal and test imports to use `@/` path aliases, decoupling implementation from file-system structure.
 - **Test Infrastructure**: Improved test code quality and maintainability.
   - Added `FuzzConfig` type and `waitForScheduler()` helper to `test-helpers.ts`.
   - Refactored `fuzz.test.ts` to use typed configuration instead of magic numbers.

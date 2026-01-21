@@ -5,8 +5,8 @@ import {
   PHASE_THRESHOLD,
   SMI_MAX,
 } from '@/constants';
-import { ReactiveDependency } from '@/core/base/reactive-dependency';
-import { syncDependencies, trackDependency } from '@/core/utils/dep-tracking';
+import { ReactiveDependency } from '@/core/base';
+import { syncDependencies, trackDependency } from '@/core/dep-tracking';
 import type { AtomError } from '@/errors/errors';
 import { ComputedError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';

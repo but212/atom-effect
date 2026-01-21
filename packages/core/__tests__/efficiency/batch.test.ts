@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { atom, batch, computed, effect } from '../../src/index.js';
+import { atom, batch, computed, effect } from '@/index';
 
 describe('Batch Efficiency', () => {
   test('batch significantly reduces effect executions', async () => {

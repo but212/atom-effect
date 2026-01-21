@@ -1,5 +1,5 @@
 import { EFFECT_STATE_FLAGS, IS_DEV, SCHEDULER_CONFIG, TIME_CONSTANTS } from '@/constants';
-import { ReactiveNode } from '@/core/base/reactive-node';
+import { ReactiveNode } from '@/core/base';
 import { EffectError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
 import {

@@ -7,9 +7,9 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { atom } from '../../../src/core/atom/atom';
-import { computed } from '../../../src/core/computed';
-import { effect } from '../../../src/core/effect/effect';
+import { atom } from '@/core/atom';
+import { computed } from '@/core/computed';
+import { effect } from '@/core/effect';
 
 // Helper to trigger GC if available
 function tryGC(): boolean {

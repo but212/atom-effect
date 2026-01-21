@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { atom } from '../../../src/core/atom';
-import { computed } from '../../../src/core/computed';
+import { atom } from '@/core/atom';
+import { computed } from '@/core/computed';
 
-import { ERROR_MESSAGES } from '../../../src/errors/messages';
-import { debug } from '../../../src/utils/debug';
+import { ERROR_MESSAGES } from '@/errors/messages';
+import { debug } from '@/utils/debug';
 import { tick } from '../../utils/test-helpers';
 
 describe('Computed - Extra Coverage', () => {

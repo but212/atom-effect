@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { atom, batch, effect } from '@/index';
-import { SchedulerPhase, scheduler } from '@/internal/scheduler/scheduler';
+import { SchedulerPhase, scheduler } from '@/internal/scheduler';
 
 describe('Scheduler Re-entrancy & Phases', () => {
   it('reports correct phase during execution', async () => {

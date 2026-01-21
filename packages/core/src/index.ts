@@ -3,7 +3,7 @@ export { atom, computed, effect } from '@/core';
 
 export { AtomError, ComputedError, EffectError, SchedulerError } from '@/errors/errors';
 
-export { batch, scheduler } from '@/internal/scheduler';
+export { batch, scheduler } from '@/internal';
 export { untracked } from '@/tracking';
 export * from '@/types';
 

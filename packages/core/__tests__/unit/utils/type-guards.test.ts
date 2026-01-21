@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { atom } from '../../../src/core/atom';
-import { computed } from '../../../src/core/computed';
-import { effect } from '../../../src/core/effect';
-import { debug } from '../../../src/utils/debug';
-import { isAtom, isComputed, isEffect } from '../../../src/utils/type-guards';
+import { atom } from '@/core/atom';
+import { computed } from '@/core/computed';
+import { effect } from '@/core/effect';
+import { debug } from '@/utils/debug';
+import { isAtom, isComputed, isEffect } from '@/utils/type-guards';
 
 describe('type-guards', () => {
   it('should identify atoms', () => {

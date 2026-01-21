@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { currentEpoch, endFlush, nextEpoch, startFlush } from '../../src/internal/epoch';
+import { currentEpoch, endFlush, nextEpoch, startFlush } from '@/internal/epoch';
 
 describe('epoch', () => {
   it('should start at 0', () => {
