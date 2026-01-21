@@ -40,6 +40,15 @@
   - Introduced `AES_BOUND` class marker to instantly locate bound descendants using `querySelectorAll` (`.aes-bound`).
   - Significantly reduces main-thread blocking when clearing large lists or tables.
 - **Algorithm Isolation**: Moved `getLIS` (Longest Increasing Subsequence) to `utils.ts` to separate algorithmic complexity from DOM manipulation logic.
+- **Test Suite Refactoring**: Streamlined the jQuery test suite to prioritize signal over noise and reduce maintenance cost.
+  - **Redundancy Pruning**: Merged 13 test files into 8 focused suites, eliminating contiguous overlap between unit, integration, and declarative tests.
+  - **Consolidation**:
+    - Merged `mount.test.ts` and `memory.test.ts` into `lifecycle.test.ts` (Lifecycle & Cleanup).
+    - Merged `keyed-diffing.test.ts` into `list.test.ts` (Efficient List Reconciliation).
+    - Moved global namespace checks from `namespace.test.ts` to `integration.test.ts`.
+  - **Specialization**:
+    - `input.test.ts` now serves as the single source of truth for all two-way bindings (`val`, `checked`), IME, and focus tracking.
+    - `chainable.test.ts` was slimmed down to focus purely on API surface and method chaining.
 
 ## [0.12.0]
 

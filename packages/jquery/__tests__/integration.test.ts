@@ -3,7 +3,31 @@ import { describe, expect, it } from 'vitest';
 import type { WritableAtom } from '../src/types';
 import '../src/index';
 
-describe('Integration', () => {
+describe('Integration & Core API', () => {
+  describe('Global API ($ namespace)', () => {
+    it('should expose atom and computed via $', async () => {
+      const a = $.atom(1);
+      const b = $.computed(() => a.value + 1);
+      expect(b.value).toBe(2);
+
+      a.value = 10;
+      await $.nextTick();
+      expect(b.value).toBe(11);
+    });
+
+    it('should expose utility methods', () => {
+      const a = $.atom(0);
+      expect($.isReactive(a)).toBe(true);
+      expect($.isReactive({})).toBe(false);
+    });
+
+    it('should have debug toggle', () => {
+      $.atom.debug = true;
+      expect($.atom.debug).toBe(true);
+      $.atom.debug = false;
+    });
+  });
+
   it('should handle complex updates', async () => {
     // Counter app simulation
     const count = $.atom(0);
@@ -44,7 +68,7 @@ describe('Integration', () => {
 
     const filteredTodos = $.computed(() => {
       const query = search.value.toLowerCase();
-      return todos.value.filter((todo) => todo.text.toLowerCase().includes(query));
+      return todos.value.filter((todo: Todo) => todo.text.toLowerCase().includes(query));
     });
 
     const $app = $('<div id="todo-app">').appendTo(document.body);
@@ -57,9 +81,9 @@ describe('Integration', () => {
     $search.atomVal(search);
     $list.atomList(filteredTodos, {
       key: 'id',
-      render: (todo) =>
+      render: (todo: Todo) =>
         `<li id="todo-${todo.id}" class="${todo.done ? 'done' : ''}">${todo.text}</li>`,
-      update: ($el, todo) => {
+      update: ($el, todo: Todo) => {
         $el.toggleClass('done', todo.done);
         $el.text(todo.text);
       },
@@ -80,7 +104,7 @@ describe('Integration', () => {
     expect($list.children().length).toBe(3);
 
     // Toggle done
-    todos.value = todos.value.map((t) => (t.id === 1 ? { ...t, done: true } : t));
+    todos.value = todos.value.map((t: Todo) => (t.id === 1 ? { ...t, done: true } : t));
     await $.nextTick();
     expect($list.find('#todo-1').hasClass('done')).toBe(true);
 
@@ -143,11 +167,11 @@ describe('Integration', () => {
       val: [
         age,
         {
-          parse: (v) => {
+          parse: (v: string) => {
             const parsed = parseInt(v, 10);
             return Number.isNaN(parsed) ? null : parsed;
           },
-          format: (v) => (v === null ? '' : String(v)),
+          format: (v: number | null) => (v === null ? '' : String(v)),
         },
       ],
       css: {
@@ -220,13 +244,13 @@ describe('Integration', () => {
 
     $app.atomList(categories, {
       key: 'id',
-      render: (cat) => `
+      render: (cat: Category) => `
         <div id="cat-${cat.id}" class="category">
           <h3>${cat.title}</h3>
           <ul class="item-list"></ul>
         </div>
       `,
-      bind: ($el, cat) => {
+      bind: ($el, cat: Category) => {
         $el.find('.item-list').atomList<Item>(cat.items, {
           key: 'id',
           render: (item) => `<li id="item-${item.id}">${item.name}</li>`,

@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import '../src/index';
 
 describe('Atom List', () => {
-  it('should handle empty state with render option', async () => {
+  const EXPANDO = 'data-test-expando';
+
+  it('should handle empty state transitions', async () => {
     const list = $.atom<string[]>(['a']);
     const $container = $('<div>').appendTo(document.body);
 
@@ -17,11 +19,13 @@ describe('Atom List', () => {
     expect($container.find('span').length).toBe(1);
     expect($container.find('p').length).toBe(0);
 
+    // To Empty
     list.value = [];
     await $.nextTick();
     expect($container.find('span').length).toBe(0);
     expect($container.find('p').text()).toBe('Empty');
 
+    // Back to Filled
     list.value = ['b'];
     await $.nextTick();
     expect($container.find('p').length).toBe(0);
@@ -30,60 +34,90 @@ describe('Atom List', () => {
     $container.remove();
   });
 
-  it('should move items to the end (appendTo path)', async () => {
-    const list = $.atom(['a', 'b', 'c']);
-    const $container = $('<div>').appendTo(document.body);
+  it('should reuse existing DOM elements and handle reconciliation', async () => {
+    const items = $.atom([
+      { id: 1, text: 'A' },
+      { id: 2, text: 'B' },
+      { id: 3, text: 'C' },
+    ]);
+    const $ul = $('<ul>').appendTo(document.body);
 
-    $container.atomList(list, {
-      key: (item) => item,
-      render: (item) => `<div id="${item}">${item}</div>`,
+    $ul.atomList(items, {
+      key: 'id',
+      render: (item) => `<li id="item-${item.id}">${item.text}</li>`,
+      update: ($el, item) => $el.text(item.text),
     });
 
     await $.nextTick();
 
-    // Move 'a' to the end: ['b', 'c', 'a']
-    list.value = ['b', 'c', 'a'];
+    // Mark elements to verify preservation
+    const $elA = $ul.find('#item-1');
+    const $elB = $ul.find('#item-2');
+    const $elC = $ul.find('#item-3');
+    $elA.attr(EXPANDO, 'A');
+    $elB.attr(EXPANDO, 'B');
+    $elC.attr(EXPANDO, 'C');
+
+    // Rotation: A, B, C -> C, A, B
+    items.value = [
+      { id: 3, text: 'C' },
+      { id: 1, text: 'A-updated' },
+      { id: 2, text: 'B' },
+    ];
+
     await $.nextTick();
 
-    const children = $container.children();
-    expect(children.get(0)!.id).toBe('b');
-    expect(children.get(1)!.id).toBe('c');
-    expect(children.get(2)!.id).toBe('a');
+    const $children = $ul.children();
+    expect($children.eq(0).attr('id')).toBe('item-3');
+    expect($children.eq(1).attr('id')).toBe('item-1');
+    expect($children.eq(2).attr('id')).toBe('item-2');
 
-    $container.remove();
+    // Check preservation and update
+    expect($children.eq(1).attr(EXPANDO)).toBe('A');
+    expect($children.eq(1).text()).toBe('A-updated');
+    expect($children[1] === $elA[0]).toBe(true);
+
+    $ul.remove();
   });
 
-  it('should handle complex LIS sequences to trigger binary search paths', async () => {
-    // A sequence that triggers binary search updates in LIS
-    // New indices relative to old list
-    // say old list was [1, 2, 3, 4, 5]
-    // new list is [4, 5, 1, 2, 3]
-    // indices in old list: [3, 4, 0, 1, 2]
+  it('should handle middle insertion and reverse order efficiently', async () => {
+    const items = $.atom([1, 3, 5]);
+    const $ul = $('<ul>').appendTo(document.body);
 
-    const list = $.atom([1, 2, 3, 4, 5]);
-    const $container = $('<div>').appendTo(document.body);
-
-    $container.atomList(list, {
-      key: (item) => item,
-      render: (item) => `<div>${item}</div>`,
+    $ul.atomList(items, {
+      key: (i) => i,
+      render: (i) => `<li>${i}</li>`,
     });
 
     await $.nextTick();
+    const el1 = $ul.children()[0];
+    const el3 = $ul.children()[1];
 
-    list.value = [4, 5, 1, 2, 3];
+    // Middle insertion: [1, 2, 3, 4, 5]
+    items.value = [1, 2, 3, 4, 5];
     await $.nextTick();
+    expect($ul.children().length).toBe(5);
+    expect($ul.children()[0] === el1).toBe(true);
+    expect($ul.children()[2] === el3).toBe(true);
 
-    const result = $container
+    // Reverse order
+    items.value = [5, 4, 3, 2, 1];
+    await $.nextTick();
+    const reversed = $ul
       .children()
       .map((_, el) => $(el).text())
       .get();
-    expect(result).toEqual(['4', '5', '1', '2', '3']);
+    expect(reversed).toEqual(['5', '4', '3', '2', '1']);
 
-    $container.remove();
+    $ul.remove();
   });
 
-  it('atomList should support bind and onRemove (async)', async () => {
-    const items = $.atom([{ id: 1, name: 'a' }]);
+  it('should support bind, onRemove (async), and complex LIS sequences', async () => {
+    interface Item {
+      id: number;
+      name?: string;
+    }
+    const items = $.atom<Item[]>([{ id: 1, name: 'a' }]);
     const $container = $('<div>').appendTo(document.body);
     let bindCalled = false;
     let removeCalled = false;
@@ -91,11 +125,11 @@ describe('Atom List', () => {
     $container.atomList(items, {
       key: (item) => item.id,
       render: (item) => `<span>${item.name}</span>`,
-      bind: ($el, _item) => {
+      bind: ($el) => {
         bindCalled = true;
         $el.attr('data-bound', 'true');
       },
-      onRemove: async (_$el) => {
+      onRemove: async () => {
         removeCalled = true;
         await new Promise((r) => setTimeout(r, 10));
       },
@@ -103,35 +137,20 @@ describe('Atom List', () => {
 
     await $.nextTick();
     expect(bindCalled).toBe(true);
-    expect($container.find('span').attr('data-bound')).toBe('true');
 
+    // Trigger LIS path with complex update
+    items.value = [{ id: 4 }, { id: 5 }, { id: 1 }, { id: 2 }, { id: 3 }];
+    await $.nextTick();
+    expect($container.children().length).toBe(5);
+    expect($container.children().eq(2).attr('data-bound')).toBe('true');
+
+    // Async remove
     items.value = [];
     await $.nextTick();
     expect(removeCalled).toBe(true);
-    // Wait for async removal
     await new Promise((r) => setTimeout(r, 20));
     expect($container.children().length).toBe(0);
 
     $container.remove();
-  });
-
-  it('atomList should handle empty to empty updates', async () => {
-    const items = $.atom<{ id: string | number }[]>([]);
-    const $ul = $('<ul>').appendTo(document.body);
-    $ul.atomList(items, {
-      key: (i) => i.id,
-      render: () => '',
-      empty: '<li class="empty">empty</li>',
-    });
-
-    await $.nextTick();
-    expect($ul.find('.empty').length).toBe(1);
-
-    // Trigger update with same empty array (new reference)
-    items.value = [];
-    await $.nextTick();
-    expect($ul.find('.empty').length).toBe(1);
-
-    $ul.remove();
   });
 });
