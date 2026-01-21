@@ -1,5 +1,6 @@
 import { beforeEach, bench, describe } from 'vitest';
 import { atom, computed, effect } from '../../src/index.js';
+import { benchEffectOptions } from '../utils/setup.js';
 
 describe('Input Latency', () => {
   const mockData = Array.from({ length: 1000 }, (_, i) => `Item ${i}`);
@@ -14,7 +15,7 @@ describe('Input Latency', () => {
   let _lastRender = '';
   effect(() => {
     _lastRender = displayResults.value.join('');
-  });
+  }, benchEffectOptions);
 
   beforeEach(() => {
     // Reset state before each run
