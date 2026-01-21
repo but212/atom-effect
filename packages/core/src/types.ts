@@ -1,4 +1,4 @@
-import { AsyncState } from '@/constants';
+import type { AsyncState } from '@/constants';
 
 /** Configuration options for creating an atom. */
 export interface AtomOptions {
