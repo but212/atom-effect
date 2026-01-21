@@ -11,12 +11,11 @@
     - Moved `scheduler.ts` and `batch.ts` to `src/internal/`.
     - Unified `ReactiveNode` and `ReactiveDependency` into `src/core/base.ts`.
   - Path Alias Adoption: Migrated all internal and test imports to use `@/` path aliases, decoupling implementation from file-system structure.
-- **Test Infrastructure**: Improved test code quality, maintainability, and signal-to-noise ratio.
-  - Consolidated Core Tests: Merged behavioral validations from `-extra` files into `atom.test.ts`, `computed.test.ts`, and `effect.test.ts`.
-  - Unified Error Testing: Created `error-handling.test.ts` to centralize all error propagation, accumulation, and recovery scenarios, replacing multiple fragmented test files.
-  - Redundancy Removal: Deleted 5 redundant files (`atom-extra.test.ts`, `computed-extra.test.ts`, `effect-extra.test.ts`, `computed-errors.test.ts`, `has-error-propagation.test.ts`).
-  - Implementation Decoupling: Removed tests coupled to internal private states or non-behavioral implementation details, focusing purely on external reactive contracts.
-  - Infrastructure Improvements: Added `FuzzConfig` type and `waitForScheduler()` helper to `test-helpers.ts`. Refactored `fuzz.test.ts` and `reactive-flow.test.ts` for better reliability.
+- **Test Suite Modernization**: Consolidated and streamlined the test infrastructure for the core package.
+  - Consolidated DOM Integration: Merged 5 fragmented DOM test files into a single, comprehensive `dom_integration.dom.test.ts` running in `happy-dom`.
+  - Reorganized Integration Tests: Split large, redundant tests into behavior-focused `reactive_core.test.ts` and scenario-focused `reactive_scenarios.test.ts`.
+  - Structural Cleanup: Eliminated `dom/`, `integration/`, and `efficiency/` subdirectories to reduce suite complexity.
+  - Reliability and Type Safety: Fixed race conditions using proper async orchestration and resolved type errors to ensure a clean, signal-rich test suite.
 
 ### jQuery
 

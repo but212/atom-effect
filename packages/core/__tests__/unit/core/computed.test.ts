@@ -6,8 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
 import { AtomError, ComputedError } from '@/errors/errors';
-import type { Dependency } from '@/types';
-import { tick, sleep, waitForScheduler } from '../../utils/test-helpers';
+import { sleep, waitForScheduler } from '../../utils/test-helpers';
 
 describe('Computed - Error Handling and Edge Cases', () => {
   it('rejects invalid function types', () => {
@@ -122,7 +121,6 @@ describe('Computed - Error Handling and Edge Cases', () => {
     // Recomputing flag check prevents infinite recursion
   });
 
-
   it('handles errors during subscriber execution', async () => {
     const count = atom(0);
     const c = computed(() => count.value * 2);
@@ -180,7 +178,6 @@ describe('Computed - Error Handling and Edge Cases', () => {
     const _third = c.value; // Recomputed
     expect(computeFn).toHaveBeenCalledTimes(2);
   });
-
 
   it('throws error for invalid dependencies', () => {
     const badAtom = {
@@ -468,5 +465,4 @@ describe('Computed - Error Handling and Edge Cases', () => {
       expect(computeCount).toBe(2);
     });
   });
-
 });

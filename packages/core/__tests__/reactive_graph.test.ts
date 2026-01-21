@@ -10,7 +10,7 @@ import {
   makeGraph,
   runGraph,
   type TestConfig,
-} from '../utils/dependency-graph';
+} from './utils/dependency-graph';
 
 // Adapter for atom-effect
 const framework = {

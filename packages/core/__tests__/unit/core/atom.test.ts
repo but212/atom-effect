@@ -6,8 +6,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
 import { AtomError } from '@/errors/errors';
-import { debug } from '@/utils/debug';
 import { trackingContext } from '@/tracking';
+import { debug } from '@/utils/debug';
 import { tick, waitForScheduler } from '../../utils/test-helpers';
 
 describe('Atom - Error Handling and Edge Cases', () => {
@@ -117,21 +117,21 @@ describe('Atom - Error Handling and Edge Cases', () => {
     expect(count.peek()).toBe(undefined);
   });
 
-    it('efficiently manages multiple subscribers', async () => {
-      const count = atom(0);
-      const listener1 = vi.fn();
-      const listener2 = vi.fn();
+  it('efficiently manages multiple subscribers', async () => {
+    const count = atom(0);
+    const listener1 = vi.fn();
+    const listener2 = vi.fn();
 
-      count.subscribe(listener1);
-      const unsub2 = count.subscribe(listener2);
-      unsub2();
+    count.subscribe(listener1);
+    const unsub2 = count.subscribe(listener2);
+    unsub2();
 
-      count.value = 1;
-      await waitForScheduler();
+    count.value = 1;
+    await waitForScheduler();
 
-      expect(listener1).toHaveBeenCalled();
-      expect(listener2).not.toHaveBeenCalled();
-    });
+    expect(listener1).toHaveBeenCalled();
+    expect(listener2).not.toHaveBeenCalled();
+  });
 
   describe('Sync Mode Error Handling', () => {
     it('other subscribers execute even if one throws in sync=true mode', () => {
@@ -192,7 +192,7 @@ describe('Atom - Error Handling and Edge Cases', () => {
 
       const count = atom(0);
       const atomWithDebug = count as unknown as { subscriberCount?: () => number };
-      
+
       if (atomWithDebug.subscriberCount) {
         expect(atomWithDebug.subscriberCount()).toBe(0);
         count.subscribe(vi.fn());

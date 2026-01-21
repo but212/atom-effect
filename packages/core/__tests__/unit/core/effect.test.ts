@@ -6,9 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { atom } from '@/core/atom';
 import { effect } from '@/core/effect';
 import { EffectError } from '@/errors/errors';
-import type { Dependency } from '@/types';
 import { debug } from '@/utils/debug';
-import { tick, sleep } from '../../utils/test-helpers';
+import { sleep } from '../../utils/test-helpers';
 
 describe('Effect - Error Handling and Edge Cases', () => {
   beforeEach(() => {
@@ -344,7 +343,6 @@ describe('Effect - Error Handling and Edge Cases', () => {
       consoleError.mockRestore();
       vi.useFakeTimers();
     });
-
   });
 
   describe('Cleanup Error Handling', () => {
@@ -453,7 +451,6 @@ describe('Effect - Error Handling and Edge Cases', () => {
       e.dispose();
     });
 
-
     it('tracks dependencies on multiple atoms', async () => {
       const count1 = atom(0);
       const count2 = atom(0);
@@ -539,7 +536,6 @@ describe('Effect - Error Handling and Edge Cases', () => {
     });
   });
 
-
   describe('Infinite Loop and Debug', () => {
     it('covers trackModifications and loop warnings', () => {
       const wasEnabled = debug.enabled;
@@ -548,11 +544,11 @@ describe('Effect - Error Handling and Edge Cases', () => {
 
       const a = atom(0, { sync: true });
       effect(
-          () => {
-            a.value; 
-            a.value = a.value + 1;
-          },
-          { trackModifications: true }
+        () => {
+          a.value;
+          a.value = a.value + 1;
+        },
+        { trackModifications: true }
       );
 
       expect(consoleWarn).toHaveBeenCalledWith(expect.stringContaining('Infinite loop may occur'));
@@ -571,7 +567,9 @@ describe('Effect - Error Handling and Edge Cases', () => {
         throw new Error('fail middle');
       });
 
-      expect((a as unknown as { subscriberCount: () => number }).subscriberCount()).toBeGreaterThan(0);
+      expect((a as unknown as { subscriberCount: () => number }).subscriberCount()).toBeGreaterThan(
+        0
+      );
       expect((b as unknown as { subscriberCount: () => number }).subscriberCount()).toBe(0);
 
       consoleError.mockRestore();
