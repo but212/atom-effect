@@ -307,7 +307,7 @@ describe('jQuery Lifecycle Overrides', () => {
 
   describe('Memory Leak Prevention', () => {
     it('should cleanup bindings when element is removed (MutationObserver)', async () => {
-      const count = atom(0);
+      const count = $.atom(0);
       let formatRuns = 0;
       const $el = $('<div></div>').appendTo(document.body);
 
@@ -316,7 +316,7 @@ describe('jQuery Lifecycle Overrides', () => {
         return String(v);
       });
 
-      await nextTick();
+      await $.nextTick();
       expect(formatRuns).toBe(1);
 
       $el.remove();
@@ -324,7 +324,7 @@ describe('jQuery Lifecycle Overrides', () => {
       await new Promise((r) => setTimeout(r, 50));
 
       count.value = 999;
-      await nextTick();
+      await $.nextTick();
       expect(formatRuns).toBe(1); // Should not increase
     });
   });

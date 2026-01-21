@@ -42,7 +42,7 @@ describe('Chainable Methods (Surface)', () => {
     $el2.remove();
   });
 
-  it('should support static values and formatters', () => {
+  it('should support static values, formatters, and other helpers', () => {
     const $el = $('<div>');
 
     $el.atomText(123, (v) => `V:${v}`);
@@ -53,6 +53,17 @@ describe('Chainable Methods (Surface)', () => {
 
     $el.atomAttr('disabled', true);
     expect($el.attr('disabled')).toBe('disabled');
+    $el.atomAttr('disabled', false);
+    expect($el.attr('disabled')).toBeUndefined();
+
+    const $input = $('<input type="checkbox">');
+    $input.atomProp('checked', true);
+    expect($input.prop('checked')).toBe(true);
+
+    $el.atomShow(true);
+    expect($el.css('display')).not.toBe('none');
+    $el.atomHide(true);
+    expect($el.css('display')).toBe('none');
   });
 
   it('atomUnbind should stop all reactivity', async () => {
