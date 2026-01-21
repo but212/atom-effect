@@ -11,10 +11,10 @@ import type { BenchOptions } from 'vitest';
  * - Higher iterations for statistical significance
  */
 export const microBenchOptions: BenchOptions = {
-  time: 1000, // 1 second per benchmark
-  iterations: 1000, // Minimum 1000 iterations
-  warmupTime: 100, // 100ms warmup for JIT optimization
-  warmupIterations: 10,
+  time: 1500, // 1.5 seconds per benchmark
+  iterations: 2000, // Minimum 2000 iterations
+  warmupTime: 200, // 200ms warmup for JIT optimization
+  warmupIterations: 20,
   throws: true, // Don't silently ignore errors
 };
 

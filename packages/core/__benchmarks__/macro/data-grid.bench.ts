@@ -9,10 +9,19 @@ import type { DataGridRow } from '../fixtures/index.js';
 import { generateGridData } from '../fixtures/index.js';
 import { macroBenchOptions } from '../utils/setup.js';
 
-describe('Data Grid Scenarios', () => {
-  // Initialization benchmark - Creation IS the test
+describe('Data Grid: Initialization Baseline', () => {
   bench(
-    'initialize grid with 1000 rows',
+    '[Vanilla] initialize 1000 rows',
+    () => {
+      const data = generateGridData(1000);
+      const rows = data;
+      const _ = rows[0];
+    },
+    macroBenchOptions
+  );
+
+  bench(
+    '[Atom] initialize 1000 rows',
     () => {
       const data = generateGridData(1000);
       const rows = atom<DataGridRow[]>(data);
@@ -20,145 +29,104 @@ describe('Data Grid Scenarios', () => {
     },
     macroBenchOptions
   );
+});
 
-  const rowsSortName = atom<DataGridRow[]>(generateGridData(1000));
+describe('Data Grid: Sorting Baseline', () => {
+  const data = generateGridData(1000);
+
+  bench(
+    '[Vanilla] sort 1000 rows by name',
+    () => {
+      const sorted = [...data].sort((a, b) => a.name.localeCompare(b.name));
+      const _ = sorted[0];
+    },
+    macroBenchOptions
+  );
+
+  const rowsSortName = atom<DataGridRow[]>(data);
   const sortedRowsName = computed(() => {
     return [...rowsSortName.value].sort((a, b) => a.name.localeCompare(b.name));
   });
 
   bench(
-    'sort 1000 rows by name',
+    '[Atom] sort 1000 rows by name',
     () => {
-      // Trigger re-sort by modifying data
       rowsSortName.value = [...rowsSortName.value];
       const _ = sortedRowsName.value;
     },
     macroBenchOptions
   );
+});
 
-  const rowsSortSalary = atom<DataGridRow[]>(generateGridData(1000));
-  const sortedRowsSalary = computed(() => {
-    return [...rowsSortSalary.value].sort((a, b) => b.salary - a.salary);
-  });
+describe('Data Grid: Filtering Baseline', () => {
+  const data = generateGridData(1000);
+  let dept = 'Engineering';
 
   bench(
-    'sort 1000 rows by salary',
+    '[Vanilla] filter 1000 rows by department',
     () => {
-      rowsSortSalary.value = [...rowsSortSalary.value];
-      const _ = sortedRowsSalary.value;
+      dept = dept === 'Engineering' ? 'Sales' : 'Engineering';
+      const filtered = data.filter((row: DataGridRow) => row.department === dept);
+      const _ = filtered[0];
     },
     macroBenchOptions
   );
 
-  const rowsFilter = atom<DataGridRow[]>(generateGridData(1000));
+  const rowsFilter = atom<DataGridRow[]>(data);
   const departmentFilter = atom<string>('Engineering');
   const filteredRows = computed(() => {
     return rowsFilter.value.filter((row: DataGridRow) => row.department === departmentFilter.value);
   });
 
   bench(
-    'filter 1000 rows by department',
+    '[Atom] filter 1000 rows by department',
     () => {
-      // Toggle filter
       departmentFilter.value = departmentFilter.value === 'Engineering' ? 'Sales' : 'Engineering';
       const _ = filteredRows.value;
     },
     macroBenchOptions
   );
+});
 
-  const rowsPaginate = atom<DataGridRow[]>(generateGridData(1000));
-  const page = atom(1);
-  const pageSize = atom(10);
-  const paginatedRows = computed(() => {
-    const start = (page.value - 1) * pageSize.value;
-    const end = start + pageSize.value;
-    return rowsPaginate.value.slice(start, end);
-  });
+describe('Data Grid: Complex Operations (Sort + Filter + Paginate)', () => {
+  const data = generateGridData(1000);
+  let sortDir: 'asc' | 'desc' = 'asc';
 
   bench(
-    'paginate 1000 rows (10 rows per page)',
+    '[Vanilla] sort + filter + paginate',
     () => {
-      // Go to next page, cycle 1-10
-      page.value = (page.value % 10) + 1;
-      const _ = paginatedRows.value;
-    },
-    macroBenchOptions
-  );
-
-  const rowsComplex = atom<DataGridRow[]>(generateGridData(1000));
-  const sortBy = atom<keyof DataGridRow>('name');
-  const sortDir = atom<'asc' | 'desc'>('asc');
-  const deptFilter = atom<string | null>(null);
-  const pageComplex = atom(1);
-  const pageSizeComplex = atom(20);
-
-  const sortedRowsComplex = computed(() => {
-    const sorted = [...rowsComplex.value].sort((a, b) => {
-      const aVal = a[sortBy.value];
-      const bVal = b[sortBy.value];
-      if (typeof aVal === 'string' && typeof bVal === 'string') {
-        return sortDir.value === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
-      }
-      if (typeof aVal === 'number' && typeof bVal === 'number') {
-        return sortDir.value === 'asc' ? aVal - bVal : bVal - aVal;
-      }
-      return 0;
-    });
-    return sorted;
-  });
-
-  const filteredRowsComplex = computed(() => {
-    if (!deptFilter.value) return sortedRowsComplex.value;
-    return sortedRowsComplex.value.filter(
-      (row: DataGridRow) => row.department === deptFilter.value
-    );
-  });
-
-  const paginatedRowsComplex = computed(() => {
-    const start = (pageComplex.value - 1) * pageSizeComplex.value;
-    const end = start + pageSizeComplex.value;
-    return filteredRowsComplex.value.slice(start, end);
-  });
-
-  bench(
-    'sort + filter + paginate (1000 rows)',
-    () => {
-      // Change one condition per run to trigger chain
-      if (sortDir.value === 'asc') {
-        sortDir.value = 'desc';
-      } else {
-        sortDir.value = 'asc';
-      }
-      const _ = paginatedRowsComplex.value;
-    },
-    macroBenchOptions
-  );
-
-  const rowsUpdate = atom<DataGridRow[]>(generateGridData(1000));
-
-  bench(
-    'update single row in 1000 rows',
-    () => {
-      // Update row
-      rowsUpdate.value = rowsUpdate.value.map((row: DataGridRow) =>
-        row.id === 500 ? { ...row, salary: row.salary + 1 } : row
-      );
-    },
-    macroBenchOptions
-  );
-
-  const rowsBatch = atom<DataGridRow[]>(generateGridData(1000));
-
-  bench(
-    'batch update 100 rows in 1000 rows',
-    () => {
-      batch(() => {
-        for (let i = 0; i < 100; i++) {
-          rowsBatch.value = rowsBatch.value.map((row: DataGridRow) =>
-            row.id === i ? { ...row, active: !row.active } : row
-          );
-        }
+      sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+      const sorted = [...data].sort((a, b) => {
+        return sortDir === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
       });
+      const filtered = sorted.filter((row: DataGridRow) => row.department === 'Engineering');
+      const paginated = filtered.slice(0, 20);
+      const _ = paginated[0];
+    },
+    macroBenchOptions
+  );
+
+  const rowsComplex = atom<DataGridRow[]>(data);
+  const sortDirAtom = atom<'asc' | 'desc'>('asc');
+  const sortedRowsComplex = computed(() => {
+    return [...rowsComplex.value].sort((a, b) => {
+      return sortDirAtom.value === 'asc'
+        ? a.name.localeCompare(b.name)
+        : b.name.localeCompare(a.name);
+    });
+  });
+  const filteredRowsComplex = computed(() => {
+    return sortedRowsComplex.value.filter((row: DataGridRow) => row.department === 'Engineering');
+  });
+  const paginatedRowsComplex = computed(() => {
+    return filteredRowsComplex.value.slice(0, 20);
+  });
+
+  bench(
+    '[Atom] sort + filter + paginate',
+    () => {
+      sortDirAtom.value = sortDirAtom.value === 'asc' ? 'desc' : 'asc';
+      const _ = paginatedRowsComplex.value;
     },
     macroBenchOptions
   );
