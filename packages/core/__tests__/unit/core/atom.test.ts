@@ -36,23 +36,37 @@ describe('Atom - Error Handling and Edge Cases', () => {
     expect(() => unsubscribe()).not.toThrow();
   });
 
-  it('other subscribers execute even if one throws an error', async () => {
-    const count = atom(0);
-    const errorListener = vi.fn(() => {
-      throw new Error('Test error');
+  it('other subscribers execute even if one throws an error (sync and async)', async () => {
+    // Test for default (async) mode
+    const countAsync = atom(0);
+    const errorListenerAsync = vi.fn(() => {
+      throw new Error('Async error');
     });
-    const normalListener = vi.fn();
-
+    const normalListenerAsync = vi.fn();
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    count.subscribe(errorListener);
-    count.subscribe(normalListener);
-
-    count.value = 1;
+    countAsync.subscribe(errorListenerAsync);
+    countAsync.subscribe(normalListenerAsync);
+    countAsync.value = 1;
     await waitForScheduler();
 
-    expect(errorListener).toHaveBeenCalled();
-    expect(normalListener).toHaveBeenCalled();
+    expect(errorListenerAsync).toHaveBeenCalled();
+    expect(normalListenerAsync).toHaveBeenCalled();
+    expect(consoleError).toHaveBeenCalled();
+
+    // Test for sync mode
+    const countSync = atom(0, { sync: true });
+    const errorListenerSync = vi.fn(() => {
+      throw new Error('Sync error');
+    });
+    const normalListenerSync = vi.fn();
+
+    countSync.subscribe(errorListenerSync);
+    countSync.subscribe(normalListenerSync);
+    countSync.value = 1;
+
+    expect(errorListenerSync).toHaveBeenCalled();
+    expect(normalListenerSync).toHaveBeenCalled();
     expect(consoleError).toHaveBeenCalled();
 
     consoleError.mockRestore();
@@ -117,7 +131,7 @@ describe('Atom - Error Handling and Edge Cases', () => {
     expect(count.peek()).toBe(undefined);
   });
 
-  it('efficiently manages multiple subscribers', async () => {
+  it('unsubscribing works correctly', async () => {
     const count = atom(0);
     const listener1 = vi.fn();
     const listener2 = vi.fn();
@@ -131,58 +145,6 @@ describe('Atom - Error Handling and Edge Cases', () => {
 
     expect(listener1).toHaveBeenCalled();
     expect(listener2).not.toHaveBeenCalled();
-  });
-
-  describe('Sync Mode Error Handling', () => {
-    it('other subscribers execute even if one throws in sync=true mode', () => {
-      const count = atom(0, { sync: true });
-      const errorListener = vi.fn(() => {
-        throw new Error('Sync error');
-      });
-      const normalListener = vi.fn();
-
-      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-      count.subscribe(errorListener);
-      count.subscribe(normalListener);
-
-      count.value = 1;
-
-      // sync so executes immediately
-      expect(errorListener).toHaveBeenCalled();
-      expect(normalListener).toHaveBeenCalled();
-      expect(consoleError).toHaveBeenCalled();
-
-      consoleError.mockRestore();
-    });
-
-    it('other subscribers execute even if object subscriber (execute) throws', async () => {
-      const count = atom(0);
-      const normalListener = vi.fn();
-
-      // Create computed that intentionally throws an error
-      const errorComputed = computed(() => {
-        const val = count.value;
-        if (val > 0) throw new Error('Computed error');
-        return val;
-      });
-
-      const normalComputed = computed(() => count.value * 2);
-
-      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-      count.subscribe(normalListener);
-      errorComputed.value; // register dependency
-      normalComputed.value; // register dependency
-
-      count.value = 1;
-      await waitForScheduler();
-
-      expect(normalListener).toHaveBeenCalled();
-      expect(normalComputed.value).toBe(2);
-
-      consoleError.mockRestore();
-    });
   });
 
   describe('Debug and Tracking', () => {

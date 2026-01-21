@@ -11,11 +11,12 @@
     - Moved `scheduler.ts` and `batch.ts` to `src/internal/`.
     - Unified `ReactiveNode` and `ReactiveDependency` into `src/core/base.ts`.
   - Path Alias Adoption: Migrated all internal and test imports to use `@/` path aliases, decoupling implementation from file-system structure.
-- **Test Suite Modernization**: Consolidated and streamlined the test infrastructure for the core package.
-  - Consolidated DOM Integration: Merged 5 fragmented DOM test files into a single, comprehensive `dom_integration.dom.test.ts` running in `happy-dom`.
-  - Reorganized Integration Tests: Split large, redundant tests into behavior-focused `reactive_core.test.ts` and scenario-focused `reactive_scenarios.test.ts`.
-  - Structural Cleanup: Eliminated `dom/`, `integration/`, and `efficiency/` subdirectories to reduce suite complexity.
-  - Reliability and Type Safety: Fixed race conditions using proper async orchestration and resolved type errors to ensure a clean, signal-rich test suite.
+- **Test Suite Optimization**: Refactored core unit tests to eliminate redundancy and improve signal quality.
+  - Consolidated error handling: Unified sync and async mode error tests in `atom.test.ts` and `effect.test.ts` to ensure consistency.
+  - Reduced Overlap: Pruned redundant "happy path" tests across `atom`, `computed`, and `effect` unit tests.
+  - Smoke Test Streamlining: Refactored `reactive_core.test.ts` into a focused high-level integration suite, moving implementation-specific checks to unit tests.
+  - Structural Cleanup: Fixed structural nesting and indentation issues in `effect.test.ts` and `computed.test.ts` for better maintainability.
+- **Reliability and Type Safety**: Resolved path errors in `reactive_core.test.ts` and ensured a clean, signal-rich test suite.
 
 ### jQuery
 

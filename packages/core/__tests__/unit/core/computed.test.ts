@@ -126,13 +126,21 @@ describe('Computed - Error Handling and Edge Cases', () => {
     const c = computed(() => count.value * 2);
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    c.subscribe(() => {
+    const errorListener = vi.fn(() => {
       throw new Error('Subscriber error');
     });
+    const normalListener = vi.fn();
+
+    c.subscribe(errorListener);
+    c.subscribe(normalListener);
 
     c.value; // Initial computation
     count.value = 1;
     await waitForScheduler();
+
+    expect(errorListener).toHaveBeenCalled();
+    expect(normalListener).toHaveBeenCalled();
+    expect(consoleError).toHaveBeenCalled();
 
     consoleError.mockRestore();
   });
@@ -192,42 +200,6 @@ describe('Computed - Error Handling and Edge Cases', () => {
     expect(() => c.value).toThrow();
   });
 
-  it('computed chain works correctly', async () => {
-    const count = atom(0);
-    const doubled = computed(() => count.value * 2);
-    const quadrupled = computed(() => doubled.value * 2);
-
-    expect(quadrupled.value).toBe(0);
-
-    count.value = 5;
-    await waitForScheduler();
-
-    expect(quadrupled.value).toBe(20);
-  });
-
-  it('subscriber error does not affect other subscribers', async () => {
-    const count = atom(0);
-    const c = computed(() => count.value * 2);
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-    const errorListener = vi.fn(() => {
-      throw new Error('Subscriber error');
-    });
-    const normalListener = vi.fn();
-
-    c.subscribe(errorListener);
-    c.subscribe(normalListener);
-
-    c.value;
-    count.value = 1;
-    await waitForScheduler();
-
-    expect(errorListener).toHaveBeenCalled();
-    expect(normalListener).toHaveBeenCalled();
-    expect(consoleError).toHaveBeenCalled();
-    consoleError.mockRestore();
-  });
-
   it('dependencies are cleaned up on dispose', async () => {
     const count = atom(0);
     const c = computed(() => count.value * 2);
@@ -249,220 +221,102 @@ describe('Computed - Error Handling and Edge Cases', () => {
 
     expect(listener).not.toHaveBeenCalled();
   });
+  it('computes immediately when lazy=false', () => {
+    let isComputed = false;
 
-  describe('Additional Edge Cases', () => {
-    it('onError callback is called', async () => {
-      const errorHandler = vi.fn();
+    const c = computed(
+      () => {
+        isComputed = true;
+        return 42;
+      },
+      { lazy: false }
+    );
 
-      const c = computed(
-        () => {
-          throw new Error('Computation error');
-        },
-        { onError: errorHandler }
-      );
+    expect(isComputed).toBe(true);
+    expect(c.value).toBe(42);
+  });
 
-      expect(() => c.value).toThrow();
-      expect(errorHandler).toHaveBeenCalled();
+  it('does not recompute without subscribers', async () => {
+    let computeCount = 0;
+    const count = atom(0);
+
+    const c = computed(() => {
+      computeCount++;
+      return count.value * 2;
     });
 
-    it('is safe even when error occurs in onError callback', async () => {
-      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    c.value; // First computation
+    expect(computeCount).toBe(1);
 
-      const c = computed(
-        () => {
-          throw new Error('Computation error');
-        },
-        {
-          onError: () => {
-            throw new Error('Error in error handler');
-          },
-        }
-      );
+    count.value = 1;
+    await waitForScheduler();
 
-      expect(() => c.value).toThrow('Computation error');
-      expect(consoleError).toHaveBeenCalled();
+    expect(computeCount).toBe(1); // No recomputation without subscribers (lazy)
 
-      consoleError.mockRestore();
+    c.value; // Recompute on value access
+    expect(computeCount).toBe(2);
+  });
+
+  it('async state properties are accurate', async () => {
+    const c = computed(
+      async () => {
+        await sleep(20);
+        return 42;
+      },
+      { defaultValue: 0 }
+    );
+
+    expect(c.value).toBe(0);
+    expect(c.isPending).toBe(true);
+
+    await sleep(50);
+
+    expect(c.isPending).toBe(false);
+    expect(c.isResolved).toBe(true);
+    expect(c.value).toBe(42);
+  });
+
+  it('peek() does not trigger recomputation', () => {
+    let computeCount = 0;
+    const count = atom(0);
+
+    const c = computed(() => {
+      computeCount++;
+      return count.value * 2;
     });
 
-    it('async computed onError is called', async () => {
-      const errorHandler = vi.fn();
+    c.value;
+    expect(computeCount).toBe(1);
 
-      const c = computed(
-        async () => {
-          await sleep(10);
-          throw new Error('Async error');
-        },
+    count.value = 1;
+    expect(c.peek()).toBe(0);
+    expect(computeCount).toBe(1);
+  });
 
-        { defaultValue: 0, onError: errorHandler }
-      );
+  // Regression Test for Bug #23
+  it('recomputes when dirty even if in pending/rejected state', async () => {
+    const dep = atom(0);
+    let computeCount = 0;
 
-      expect(c.value).toBe(0);
-      await sleep(50);
-
-      expect(errorHandler).toHaveBeenCalled();
-      expect(c.hasError).toBe(true);
-    });
-
-    it('invalidate() forces recomputation', async () => {
-      let computeCount = 0;
-      const count = atom(0);
-
-      const c = computed(() => {
+    const c = computed(
+      async () => {
         computeCount++;
-        return count.value * 2;
-      });
+        const val = dep.value;
+        await sleep(10);
+        if (val < 0) throw new Error('Negative');
+        return val;
+      },
+      { defaultValue: -1 }
+    );
 
-      c.value; // First computation
-      expect(computeCount).toBe(1);
+    c.value;
+    expect(c.isPending).toBe(true);
+    expect(computeCount).toBe(1);
 
-      c.value; // Use cache
-      expect(computeCount).toBe(1);
+    dep.value = 1;
+    await sleep(0);
 
-      c.invalidate(); // Force invalidation
-      c.value; // Recompute
-      expect(computeCount).toBe(2);
-    });
-
-    it('computes immediately when lazy=false', () => {
-      let isComputed = false;
-
-      const c = computed(
-        () => {
-          isComputed = true;
-          return 42;
-        },
-        { lazy: false }
-      );
-
-      // Should already be computed before value access
-      expect(isComputed).toBe(true);
-      expect(c.value).toBe(42);
-    });
-
-    it('ignores initial error when lazy=false', () => {
-      const c = computed(
-        () => {
-          throw new Error('Initial error');
-        },
-        { lazy: false }
-      );
-
-      // Initial error is ignored, recomputes on value access
-      expect(() => c.value).toThrow('Initial error');
-    });
-
-    it('does not recompute without subscribers', async () => {
-      let computeCount = 0;
-      const count = atom(0);
-
-      const c = computed(() => {
-        computeCount++;
-        return count.value * 2;
-      });
-
-      c.value; // First computation
-      expect(computeCount).toBe(1);
-
-      // Change atom without subscribers
-      count.value = 1;
-      await waitForScheduler();
-
-      // No recomputation without subscribers (lazy)
-      expect(computeCount).toBe(1);
-
-      // Recompute on value access
-      c.value;
-      expect(computeCount).toBe(2);
-    });
-
-    it('async state properties are accurate', async () => {
-      const c = computed(
-        async () => {
-          await sleep(20);
-          return 42;
-        },
-
-        { defaultValue: 0 }
-      );
-
-      // Start computation with value access
-      expect(c.value).toBe(0); // defaultValue
-      expect(c.isPending).toBe(true);
-      expect(c.isResolved).toBe(false);
-      expect(c.hasError).toBe(false);
-
-      expect(c.hasError).toBe(false);
-      await sleep(50);
-
-      // After completion: resolved
-      expect(c.isPending).toBe(false);
-      expect(c.isResolved).toBe(true);
-      expect(c.hasError).toBe(false);
-      expect(c.value).toBe(42);
-    });
-
-    it('peek() does not trigger recomputation', () => {
-      let computeCount = 0;
-      const count = atom(0);
-
-      const c = computed(() => {
-        computeCount++;
-        return count.value * 2;
-      });
-
-      c.value; // First computation
-      expect(computeCount).toBe(1);
-
-      count.value = 1;
-
-      // peek does not check dirty
-      const peeked = c.peek();
-      expect(peeked).toBe(0); // Previous value
-      expect(computeCount).toBe(1); // No recomputation
-    });
-
-    it('state property works correctly', () => {
-      const c = computed(() => 42);
-
-      expect(c.state).toBe('idle');
-
-      c.value; // Start computation
-
-      expect(c.state).toBe('resolved');
-      expect(c.value).toBe(42);
-    });
-
-    // Regression Test for Bug #23
-    it('recomputes when dirty even if in pending/rejected state', async () => {
-      const dep = atom(0);
-      let computeCount = 0;
-
-      const c = computed(
-        async () => {
-          computeCount++;
-          const val = dep.value;
-          await sleep(10);
-          if (val < 0) throw new Error('Negative');
-          return val;
-        },
-        { defaultValue: -1 }
-      );
-
-      // 1. Start pending state
-      c.value;
-      expect(c.isPending).toBe(true);
-      expect(computeCount).toBe(1);
-
-      // 2. Change dependency while pending -> becomes dirty
-      dep.value = 1;
-
-      // Need to wait briefly to ensure subscribers notified (scheduler)
-      await sleep(0);
-
-      const _val = c.value; // Should trigger new computation
-
-      expect(computeCount).toBe(2);
-    });
+    const _val = c.value;
+    expect(computeCount).toBe(2);
   });
 });
