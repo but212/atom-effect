@@ -1,3 +1,5 @@
+import { AsyncState } from '@/constants';
+
 /** Configuration options for creating an atom. */
 export interface AtomOptions {
   /** If true, the atom will notify its subscribers synchronously when its value changes. */
@@ -147,8 +149,6 @@ export interface ComputationContext {
   originalAdd: (dep: Dependency) => void;
   state: { depCount: number };
 }
-
-import type { AsyncState } from '@/constants';
 
 /** Type derived from AsyncState constant values */
 export type AsyncStateType = (typeof AsyncState)[keyof typeof AsyncState];

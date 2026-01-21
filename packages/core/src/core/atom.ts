@@ -4,7 +4,7 @@ import { scheduler } from '@/internal/scheduler';
 import { trackingContext } from '@/tracking';
 import type { AtomOptions, Subscriber, WritableAtom } from '@/types';
 import { debug } from '@/utils/debug';
-import { trackDependency } from './dep-tracking';
+import { trackDependency } from '@/core/dep-tracking';
 
 /**
  * Internal {@link WritableAtom} implementation.

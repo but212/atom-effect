@@ -1,6 +1,6 @@
 import { PHASE_THRESHOLD, SCHEDULER_CONFIG } from '@/constants';
-import { SchedulerError } from '../errors/errors';
-import { endFlush, startFlush } from './epoch';
+import { SchedulerError } from '@/errors/errors';
+import { endFlush, startFlush } from '@/internal/epoch';
 
 export enum SchedulerPhase {
   IDLE = 0,
