@@ -1,9 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { atom, batch, computed, effect } from '../src';
 
+interface Todo {
+  id: number;
+  text: string;
+  done: boolean;
+}
+
 describe('Reactive Scenarios - Todo App', () => {
   it('should manage todo list logic', async () => {
-    const todos = atom<any[]>([]);
+    const todos = atom<Todo[]>([]);
     const filter = atom('all');
 
     const filtered = computed(() => {
@@ -31,9 +37,14 @@ describe('Reactive Scenarios - Todo App', () => {
   });
 });
 
+interface User {
+  name: string;
+  email: string;
+}
+
 describe('Reactive Scenarios - Auth & App State', () => {
   it('should handle user session and derived permissions', async () => {
-    const user = atom<any>(null);
+    const user = atom<User | null>(null);
     const isAdmin = computed(() => !!user.value?.email?.endsWith('@admin.com'));
     const greeting = computed(() => (user.value ? `Hello ${user.value.name}` : 'Guest'));
 

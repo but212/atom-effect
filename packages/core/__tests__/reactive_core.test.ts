@@ -1,5 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
-import { atom, batch, computed, effect, untracked } from '../src';
+import {
+  atom,
+  batch,
+  type ComputedAtom,
+  computed,
+  effect,
+  untracked,
+  type WritableAtom,
+} from '../src';
 import { sleep, waitForScheduler } from './utils/test-helpers';
 
 describe('Reactive Core - Smoke Tests', () => {
@@ -7,7 +15,7 @@ describe('Reactive Core - Smoke Tests', () => {
     const count = atom(0);
     const doubled = computed(() => count.value * 2);
     const results: number[] = [];
-    
+
     effect(() => {
       results.push(doubled.value);
     });
@@ -67,10 +75,10 @@ describe('Reactive Core - Advanced Logic', () => {
     expect(c.value).toBe(3); // No recalculation on b change
 
     // Deep chain
-    let current = atom(1);
+    let current: ComputedAtom<number> | WritableAtom<number> = atom(1);
     for (let i = 0; i < 50; i++) {
-      const prev = current;
-      current = computed(() => prev.value + 1) as any;
+      const prev: ComputedAtom<number> | WritableAtom<number> = current;
+      current = computed(() => prev.value + 1);
     }
     expect(current.value).toBe(51);
   });
