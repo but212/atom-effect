@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Benchmarks
+
+- **Benchmark Suite Overhaul**: Refactored the benchmark suite to prioritize statistical significance and eliminate measurement noise.
+  - **Batch Operations**: Migrated micro-benchmarks (creation, read, write) to batch operations (x1000) to ensure the signal-to-noise ratio is high enough to overcome JIT and measurement overhead.
+  - **Setup Cost Isolation**: Refactored realistic scenarios (e.g., input latency) to move reactive graph initialization outside the measurement loop, focusing purely on propagation performance.
+  - **Vanilla Baselines**: Introduced Vanilla JS counterparts in macro-benchmarks (Data Grid) to provide a transparent comparison of library overhead versus direct implementation.
+  - **Consolidation**: Merged redundant micro-benchmarks (e.g., `untracked.bench.ts`) into core suites to reduce suite fragmentation.
+  - **Statistical Rigidity**: Increased iterations and warmup periods in `utils/setup.ts` to ensure consistent results (< 5% CV).
+
 ### Refactor
 
 - **Core Architecture Refactoring**: Flattened source structure and consolidated types for better maintainability.
