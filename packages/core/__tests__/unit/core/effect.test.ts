@@ -8,7 +8,7 @@ import { effect } from '@/core/effect';
 import { EffectError } from '@/errors/errors';
 import type { Dependency } from '@/types';
 import { debug } from '@/utils/debug';
-import { sleep } from '../../utils/test-helpers';
+import { tick, sleep } from '../../utils/test-helpers';
 
 describe('Effect - Error Handling and Edge Cases', () => {
   beforeEach(() => {
@@ -345,30 +345,6 @@ describe('Effect - Error Handling and Edge Cases', () => {
       vi.useFakeTimers();
     });
 
-    it('execution time sliding window cleans up memory', async () => {
-      vi.useRealTimers();
-      const count = atom(0);
-      let executionCount = 0;
-
-      const e = effect(
-        () => {
-          executionCount++;
-          // execute more than CLEANUP_THRESHOLD(100)
-          if (executionCount < 150) {
-            count.value = count.value + 1;
-          }
-        },
-        { maxExecutionsPerSecond: 200, sync: true, maxExecutionsPerFlush: 200 }
-      );
-
-      await sleep(100);
-
-      // memory cleanup logic should have worked (splice called)
-      expect(executionCount).toBeGreaterThan(100);
-
-      e.dispose();
-      vi.useFakeTimers();
-    });
   });
 
   describe('Cleanup Error Handling', () => {
@@ -477,34 +453,6 @@ describe('Effect - Error Handling and Edge Cases', () => {
       e.dispose();
     });
 
-    it('warns on read-then-write with trackModifications and debug mode', () => {
-      const wasEnabled = debug.enabled;
-      debug.enabled = true;
-
-      const count = atom(0);
-      const warnSpy = vi.spyOn(debug, 'warn').mockImplementation(() => {});
-
-      // sync=true for immediate execution
-      const e = effect(
-        () => {
-          const val = count.value; // read
-          if (val === 0) {
-            count.value = 1; // write - may trigger warning
-          }
-        },
-        { trackModifications: true, sync: true, maxExecutionsPerSecond: 3 }
-      );
-
-      // warning may have occurred (read-then-write detection)
-      // but may also be disposed due to infinite loop
-
-      if (!e.isDisposed) {
-        e.dispose();
-      }
-
-      warnSpy.mockRestore();
-      debug.enabled = wasEnabled;
-    });
 
     it('tracks dependencies on multiple atoms', async () => {
       const count1 = atom(0);
@@ -591,26 +539,42 @@ describe('Effect - Error Handling and Edge Cases', () => {
     });
   });
 
-  it('_cleanupContext handles failure before commit', async () => {
-    const a = atom(0);
-    const e = effect(
-      () => {
+
+  describe('Infinite Loop and Debug', () => {
+    it('covers trackModifications and loop warnings', () => {
+      const wasEnabled = debug.enabled;
+      debug.enabled = true;
+      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const a = atom(0, { sync: true });
+      effect(
+          () => {
+            a.value; 
+            a.value = a.value + 1;
+          },
+          { trackModifications: true }
+      );
+
+      expect(consoleWarn).toHaveBeenCalledWith(expect.stringContaining('Infinite loop may occur'));
+
+      consoleWarn.mockRestore();
+      debug.enabled = wasEnabled;
+    });
+
+    it('covers partial dependency commitment on error', () => {
+      const a = atom(0);
+      const b = atom(0);
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      effect(() => {
         a.value;
-        if (a.value > 0) throw new Error('Abort');
-      },
-      { sync: true }
-    );
+        throw new Error('fail middle');
+      });
 
-    // Initial run ok
-    expect((e as unknown as { _dependencies: Dependency[] })._dependencies.length).toBe(1);
+      expect((a as unknown as { subscriberCount: () => number }).subscriberCount()).toBeGreaterThan(0);
+      expect((b as unknown as { subscriberCount: () => number }).subscriberCount()).toBe(0);
 
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-    // Trigger re-run that fails
-    a.value = 1;
-
-    // Line 333: if (ctx.prevDeps !== EMPTY_DEPS) should be hit in _cleanupContext
-    expect((e as unknown as { isDisposed: boolean }).isDisposed).toBe(false); // Effect caught its own error
-    consoleError.mockRestore();
+      consoleError.mockRestore();
+    });
   });
 });

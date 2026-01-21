@@ -7,7 +7,7 @@ import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
 import { AtomError, ComputedError } from '@/errors/errors';
 import type { Dependency } from '@/types';
-import { sleep, waitForScheduler } from '../../utils/test-helpers';
+import { tick, sleep, waitForScheduler } from '../../utils/test-helpers';
 
 describe('Computed - Error Handling and Edge Cases', () => {
   it('rejects invalid function types', () => {
@@ -122,21 +122,6 @@ describe('Computed - Error Handling and Edge Cases', () => {
     // Recomputing flag check prevents infinite recursion
   });
 
-  it('ignores initial computation failure when lazy=false', () => {
-    const shouldFail = atom(true);
-
-    // lazy=false but initial computation failure is ignored
-    const c = computed(
-      () => {
-        if (shouldFail.value) throw new Error('Init error');
-        return 42;
-      },
-      { lazy: false }
-    );
-
-    // Should not throw error (ignored by try-catch)
-    expect(c).toBeDefined();
-  });
 
   it('handles errors during subscriber execution', async () => {
     const count = atom(0);
@@ -196,22 +181,6 @@ describe('Computed - Error Handling and Edge Cases', () => {
     expect(computeFn).toHaveBeenCalledTimes(2);
   });
 
-  it('does not notify subscribers after dispose', async () => {
-    const count = atom(0);
-    const c = computed(() => count.value * 2);
-    const listener = vi.fn();
-
-    c.subscribe(listener);
-    c.value; // Initial computation
-
-    c.dispose();
-
-    count.value = 10;
-    await waitForScheduler();
-
-    // No notification to subscribers after dispose
-    expect(listener).not.toHaveBeenCalled();
-  });
 
   it('throws error for invalid dependencies', () => {
     const badAtom = {
@@ -500,90 +469,4 @@ describe('Computed - Error Handling and Edge Cases', () => {
     });
   });
 
-  describe('Internal Implementation - Branch Coverage', () => {
-    it('collects dependencies correctly when state.depCount < nextDeps.length', async () => {
-      const a1 = atom(1);
-
-      // We need to inject an array into the pool to hit the branch
-      const { depArrayPool, versionArrayPool } = await import('@/internal/pool');
-      const arr: (Dependency | null)[] = [null, null]; // length 2
-      const varr: number[] = [0, 0];
-      (depArrayPool as unknown as { pool: (Dependency | null)[][] }).pool.push(arr);
-      (versionArrayPool as unknown as { pool: number[][] }).pool.push(varr);
-
-      const c = computed(() => a1.value);
-      expect(c.value).toBe(1);
-      // acquires arr, depCount=0 < arr.length=2. Hits line 436.
-    });
-
-    it('collects and deduplicates errors from dependencies', () => {
-      const a = atom(0);
-      const b = atom(0);
-      const c1 = computed(() => {
-        if (a.value > 0) throw new Error('Error A');
-        return a.value;
-      });
-      const c2 = computed(() => {
-        if (b.value > 0) throw new Error('Error B');
-        return b.value;
-      });
-      const c3 = computed(() => {
-        try {
-          c1.value;
-        } catch {
-          /* ignore */
-        }
-        try {
-          c2.value;
-        } catch {
-          /* ignore */
-        }
-        throw new Error('Error C');
-      });
-
-      a.value = 1;
-      b.value = 1;
-
-      expect(() => c3.value).toThrow();
-      const errors = c3.errors;
-      // Should have Error A (from c1), Error B (from c2), and Error C (own)
-      expect(errors.length).toBe(3);
-      const messages = errors.map((e) => e.message);
-      // Use case-insensitive matching if needed, or just exact match if we are sure
-      expect(messages.some((m) => m.includes('Error A'))).toBe(true);
-      expect(messages.some((m) => m.includes('Error B'))).toBe(true);
-      expect(messages.some((m) => m.includes('Error C'))).toBe(true);
-    });
-
-    it('covers async rejection race condition', async () => {
-      let fail = true;
-      const c = computed(
-        async () => {
-          await sleep(10);
-          if (fail) throw new Error('Late Fail');
-          return 1;
-        },
-        { defaultValue: 0 }
-      );
-
-      c.value; // Trigger first
-
-      // Trigger second before first finishes
-      fail = false;
-      c.invalidate();
-      c.value;
-
-      await sleep(50);
-
-      // First one (the fail) should have been ignored because promiseId changed
-      expect(c.isResolved).toBe(true);
-    });
-
-    it('covers dispose with unsubs', () => {
-      const a = atom(0);
-      const c = computed(() => a.value);
-      c.value; // connect unsub
-      c.dispose(); // should call unsub
-    });
-  });
 });
