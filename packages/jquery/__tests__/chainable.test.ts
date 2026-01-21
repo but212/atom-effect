@@ -60,10 +60,13 @@ describe('Chainable Methods (Surface)', () => {
     $input.atomProp('checked', true);
     expect($input.prop('checked')).toBe(true);
 
-    $el.atomShow(true);
-    expect($el.css('display')).not.toBe('none');
-    $el.atomHide(true);
-    expect($el.css('display')).toBe('none');
+    // atomShow/atomHide require DOM-attached element for computed style
+    const $showHide = $('<div>').appendTo(document.body);
+    $showHide.atomShow(true);
+    expect($showHide.css('display')).not.toBe('none');
+    $showHide.atomHide(true);
+    expect($showHide.css('display')).toBe('none');
+    $showHide.remove();
   });
 
   it('atomUnbind should stop all reactivity', async () => {
