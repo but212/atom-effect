@@ -1,5 +1,18 @@
 # Changelog
 
+## [unreleased]
+
+### Core
+
+#### Performance
+
+- **Subscriber Management**: Refined internal storage and notification paths using bitwise flags and pre-initialized arrays.
+- **State Logic**: Improved state transition logic and dependency checks for more consistent performance.
+
+#### Refactor
+
+- **Internal Cleanup**: Simplified property access and synchronized state flags to improve code clarity and maintainability.
+
 ## [0.13.1]
 
 ### jQuery
@@ -35,9 +48,9 @@
   - Structural Cleanup: Fixed structural nesting and indentation issues in `effect.test.ts` and `computed.test.ts` for better maintainability.
 - **Reliability and Type Safety**: Resolved path errors in `reactive_core.test.ts` and ensured a clean, signal-rich test suite.
 
-### jQuery
+### jQuery - 0.13.0
 
-#### Fixed - jQuery
+#### Fixed
 
 - **Double Cleanup**: Prevented duplicate cleanup execution on node removal.
   - `$.fn.remove` now marks elements as "ignored" before removal, preventing `MutationObserver` from triggering a second cleanup pass.

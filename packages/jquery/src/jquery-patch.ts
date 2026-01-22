@@ -122,5 +122,8 @@ export function enablejQueryOverrides() {
   };
 }
 
-// Alias for backward compatibility if needed, though we are refactoring.
+/**
+ * @deprecated use `enablejQueryOverrides()` instead.
+ * This alias will be removed in the future.
+ */
 export const enablejQueryBatching = enablejQueryOverrides;

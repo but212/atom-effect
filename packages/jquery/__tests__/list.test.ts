@@ -153,4 +153,32 @@ describe('Atom List', () => {
 
     $container.remove();
   });
+
+  it('should add _aes-bound marker class to bound elements', async () => {
+    const items = $.atom([
+      { id: 1, text: 'A' },
+      { id: 2, text: 'B' },
+    ]);
+    const $ul = $('<ul>').appendTo(document.body);
+
+    $ul.atomList(items, {
+      key: 'id',
+      render: (item) => `<li>${item.text}</li>`,
+      bind: ($el, item) => {
+        // Any binding triggers the marker
+        $el.atomText($.computed(() => item.text));
+      },
+    });
+
+    await $.nextTick();
+
+    // Verify marker class is present on bound elements
+    const $children = $ul.children();
+    expect($children.eq(0).hasClass('_aes-bound')).toBe(true);
+    expect($children.eq(1).hasClass('_aes-bound')).toBe(true);
+
+    // Marker should be removed after cleanup
+    $ul.remove();
+    expect($children.eq(0).hasClass('_aes-bound')).toBe(false);
+  });
 });

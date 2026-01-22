@@ -28,27 +28,27 @@ export class ArrayPool<T> {
   /**
    * Releases an array back to the pool.
    * Clears the array before storing it.
-   * @param arr - The array to release.
-   * @param emptyConst - Optional reference to a constant empty array to skip.
    */
   release(arr: T[], emptyConst?: readonly T[]): void {
-    if (emptyConst && arr === emptyConst) return;
-
-    if (Object.isFrozen(arr)) {
-      if (IS_DEV && this.stats) this.stats.rejected.frozen++;
+    // 1. Skip if empty constant or frozen (expensive check)
+    if ((emptyConst && arr === emptyConst) || Object.isFrozen(arr)) {
+      if (IS_DEV && this.stats && arr !== emptyConst) this.stats.rejected.frozen++;
       return;
     }
 
-    if (arr.length > this.maxReusableCapacity) {
-      if (IS_DEV && this.stats) this.stats.rejected.tooLarge++;
+    // 2. Reject based on capacity or pool size
+    const len = arr.length;
+    const poolLen = this.pool.length;
+
+    if (len > this.maxReusableCapacity || poolLen >= this.maxPoolSize) {
+      if (IS_DEV && this.stats) {
+        if (len > this.maxReusableCapacity) this.stats.rejected.tooLarge++;
+        else this.stats.rejected.poolFull++;
+      }
       return;
     }
 
-    if (this.pool.length >= this.maxPoolSize) {
-      if (IS_DEV && this.stats) this.stats.rejected.poolFull++;
-      return;
-    }
-
+    // 3. Clear and store
     arr.length = 0;
     this.pool.push(arr);
     if (IS_DEV && this.stats) this.stats.released++;

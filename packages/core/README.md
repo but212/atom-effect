@@ -54,10 +54,10 @@ Runs a function immediately and re-runs it whenever its dependencies change.
 - Returns a `dispose` function to stop the effect.
 
 ```typescript
-const stop = effect(() => {
+const eff = effect(() => {
   console.log(count.value);
 });
-stop();
+eff.dispose();  // Stop the effect
 ```
 
 ### `batch(fn)`
@@ -122,10 +122,10 @@ const user = computed(async () => {
 ### Type Guards
 
 ```typescript
-import { isAtom, isComputed, isReactive } from '@but212/atom-effect';
+import { isAtom, isComputed, isEffect } from '@but212/atom-effect';
 
-isAtom(count); // true
-isReactive(double); // true
+isAtom(count);     // true
+isComputed(double); // true
 ```
 
 ### Development Commands

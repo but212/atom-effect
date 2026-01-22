@@ -15,8 +15,8 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
   private _pendingOldValue: T | undefined;
   private _notifyTask: (() => void) | undefined;
 
-  protected _fnSubs: ((newValue?: T, oldValue?: T) => void)[] | null = null;
-  protected _objSubs: Subscriber[] | null = null;
+  protected _fnSubs: ((newValue?: T, oldValue?: T) => void)[] = [];
+  protected _objSubs: Subscriber[] = [];
 
   constructor(initialValue: T, sync: boolean) {
     super();
@@ -27,22 +27,12 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
     debug.attachDebugInfo(this, 'atom', this.id);
   }
 
-  protected _getFnSubs(): ((newValue?: T, oldValue?: T) => void)[] {
-    this._fnSubs ??= [];
-    return this._fnSubs;
-  }
-
-  protected _getObjSubs(): Subscriber[] {
-    this._objSubs ??= [];
-    return this._objSubs;
-  }
-
   /**
    * Returns the current value and registers the atom as a dependency if in a tracking context.
    */
   get value(): T {
     const current = trackingContext.current;
-    if (current) trackDependency(this, current, this._getFnSubs(), this._getObjSubs());
+    if (current) trackDependency(this, current, this._fnSubs, this._objSubs);
     return this._value;
   }
 
@@ -59,7 +49,8 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
     this.rotatePhase();
 
     // Check for subscribers: O(1) before scheduling
-    if ((this._fnSubs?.length ?? 0) > 0 || (this._objSubs?.length ?? 0) > 0) {
+    // Use NODE_FLAGS for faster check
+    if (this.flags & (ATOM_STATE_FLAGS.HAS_FN_SUBS | ATOM_STATE_FLAGS.HAS_OBJ_SUBS)) {
       this._scheduleNotification(oldValue);
     }
   }
@@ -102,8 +93,9 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
   }
 
   dispose(): void {
-    this._fnSubs = null;
-    this._objSubs = null;
+    this._fnSubs = [];
+    this._objSubs = [];
+    this.flags |= ATOM_STATE_FLAGS.DISPOSED;
     this._value = undefined as T;
     this._notifyTask = undefined;
   }

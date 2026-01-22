@@ -17,12 +17,22 @@ export const AsyncState = {
 } as const;
 
 /**
+ * Common bit flags for all reactive nodes (ReactiveNode)
+ * Reserved lower bits for base class state
+ */
+export const NODE_FLAGS = {
+  DISPOSED: 1 << 0,
+  HAS_FN_SUBS: 1 << 1,
+  HAS_OBJ_SUBS: 1 << 2,
+} as const;
+
+/**
  * Bit flags for effect state management
  * Using bit flags for efficient state checks (O(1) operations)
  */
 export const EFFECT_STATE_FLAGS = {
-  DISPOSED: 1 << 0, // 0001 - Effect has been disposed
-  EXECUTING: 1 << 1, // 0010 - Effect is currently executing
+  ...NODE_FLAGS,
+  EXECUTING: 1 << 3,
 } as const;
 
 /**
@@ -30,21 +40,23 @@ export const EFFECT_STATE_FLAGS = {
  * Enables fast state transitions and checks without multiple boolean fields
  */
 export const COMPUTED_STATE_FLAGS = {
-  DIRTY: 1 << 0, // 0001 - Needs recomputation
-  IDLE: 1 << 1, // 0010 - Initial state, not computed yet
-  PENDING: 1 << 2, // 0100 - Async computation in progress
-  RESOLVED: 1 << 3, // 1000 - Successfully computed
-  REJECTED: 1 << 4, // 10000 - Computation failed
-  RECOMPUTING: 1 << 5, // 100000 - Currently recomputing
-  HAS_ERROR: 1 << 6, // 1000000 - Has error state
+  ...NODE_FLAGS,
+  DIRTY: 1 << 3,
+  IDLE: 1 << 4,
+  PENDING: 1 << 5,
+  RESOLVED: 1 << 6,
+  REJECTED: 1 << 7,
+  RECOMPUTING: 1 << 8,
+  HAS_ERROR: 1 << 9,
 } as const;
 
 /**
  * Bit flags for atom state management
  */
 export const ATOM_STATE_FLAGS = {
-  SYNC: 1 << 0,
-  NOTIFICATION_SCHEDULED: 1 << 1,
+  ...NODE_FLAGS,
+  SYNC: 1 << 3,
+  NOTIFICATION_SCHEDULED: 1 << 4,
 } as const;
 
 /**
