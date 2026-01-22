@@ -49,6 +49,8 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   private _nextVersions: number[] | null;
   /** Temporary storage for unsubscribes being tracked in current execution */
   private _nextUnsubs: (() => void)[] | null;
+  /** Cached closure for scheduler deduplication */
+  private _executeTask: (() => void) | undefined;
 
   /** Error handler callback */
   private readonly _onError: ((error: unknown) => void) | null;
@@ -97,6 +99,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     this._nextDeps = null;
     this._nextVersions = null;
     this._nextUnsubs = null;
+    this._executeTask = undefined;
     this._onError = options.onError ?? null;
 
     this._currentEpoch = -1;
@@ -132,7 +135,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
    * Forces re-execution even if dependencies haven't changed.
    * @throws {EffectError} If the effect is already disposed.
    */
-  public run = (): void => {
+  public run(): void {
     if (this.isDisposed) {
       throw new EffectError(ERROR_MESSAGES.EFFECT_MUST_BE_FUNCTION);
     }
@@ -141,24 +144,26 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       this._dependencyVersions = EMPTY_VERSIONS as number[];
     }
     this.execute();
-  };
+  }
 
   /**
    * Disposes of the effect, cleaning up all subscriptions and resources.
    * Prevents further executions and releases arrays back to pools.
    */
-  public dispose = (): void => {
+  public dispose(): void {
     if (this.isDisposed) return;
 
     this._setDisposed();
     this._safeCleanup();
 
     if (this._unsubscribes !== EMPTY_UNSUBS) {
-      for (let i = 0; i < this._unsubscribes.length; i++) {
-        const unsub = this._unsubscribes[i];
+      const unsubs = this._unsubscribes;
+      const len = unsubs.length;
+      for (let i = 0; i < len; i++) {
+        const unsub = unsubs[i];
         if (unsub) unsub();
       }
-      unsubArrayPool.release(this._unsubscribes);
+      unsubArrayPool.release(unsubs);
       this._unsubscribes = EMPTY_UNSUBS;
     }
 
@@ -171,14 +176,14 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       versionArrayPool.release(this._dependencyVersions);
       this._dependencyVersions = EMPTY_VERSIONS;
     }
-  };
+  }
 
   /**
    * Adds a dependency to the current tracking context.
    * Called automatically when a reactive node is accessed during execution.
    * @param dep - The dependency to track.
    */
-  public addDependency = (dep: Dependency): void => {
+  public addDependency(dep: Dependency): void {
     if (this.isExecuting && this._nextDeps && this._nextUnsubs && this._nextVersions) {
       const epoch = this._currentEpoch;
 
@@ -195,14 +200,14 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
         this._subscribeTo(dep);
       }
     }
-  };
+  }
 
   /**
    * Executes the effect function.
    * Handles dependency tracking, cleanup, and infinite loop protection.
    * If the function returns a cleanup function or a Promise, it will be handled accordingly.
    */
-  public execute = (): void => {
+  public execute(): void {
     if (this.isDisposed || this.isExecuting) return;
     if (!this._shouldExecute()) return;
 
@@ -242,7 +247,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       this._cleanupEffect(context, committed);
       this._setExecuting(false);
     }
-  };
+  }
 
   /**
    * Prepares the execution context by acquiring pools and setting up epoch.
@@ -347,7 +352,10 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
         if (this._sync) {
           this.execute();
         } else {
-          scheduler.schedule(this.execute);
+          if (!this._executeTask) {
+            this._executeTask = () => this.execute();
+          }
+          scheduler.schedule(this._executeTask);
         }
       });
       if (this._nextUnsubs) {

@@ -21,6 +21,9 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
   constructor(initialValue: T, sync: boolean) {
     super();
     this._value = initialValue;
+    this._pendingOldValue = undefined;
+    this._notifyTask = undefined;
+
     if (sync) this.flags |= ATOM_STATE_FLAGS.SYNC;
 
     // Attach debug info in dev mode
