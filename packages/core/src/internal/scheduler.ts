@@ -44,15 +44,15 @@ interface PhaseShiftNode {
  */
 class Scheduler {
   // Normal queue (double-buffered)
-  private queueA: SchedulerJob[] = [];
-  private queueB: SchedulerJob[] = [];
-  private queue: SchedulerJob[] = this.queueA;
+  private _queues: [SchedulerJob[], SchedulerJob[]] = [[], []];
+  private _queueIndex: 0 | 1 = 0;
+  private queue: SchedulerJob[] = this._queues[0];
   private queueSize = 0;
 
-  // Urgent queue for high-priority jobs (phase shift > THRESHOLD)
-  private urgentQueueA: SchedulerJob[] = [];
-  private urgentQueueB: SchedulerJob[] = [];
-  private urgentQueue: SchedulerJob[] = this.urgentQueueA;
+  // Urgent queue (double-buffered)
+  private _urgentQueues: [SchedulerJob[], SchedulerJob[]] = [[], []];
+  private _urgentQueueIndex: 0 | 1 = 0;
+  private urgentQueue: SchedulerJob[] = this._urgentQueues[0];
   private urgentQueueSize = 0;
 
   private _epoch = 0;
@@ -91,20 +91,14 @@ class Scheduler {
       throw new SchedulerError('Scheduler callback must be a function');
     }
 
-    // O(1) dedup via epoch
     if (callback._nextEpoch === this._epoch) return;
     callback._nextEpoch = this._epoch;
 
     if (this.isBatching || this.isFlushingSync) {
-      // During batching, all jobs go to batchQueue (priority determined at merge time)
       this.batchQueue[this.batchQueueSize++] = callback;
     } else {
-      // Calculate urgency using branchless operation
-      // urgentPriority = 1 if shift >= THRESHOLD, else 0
       const isUrgent = this._calculateUrgency(callback, sourceNode);
 
-      // Branchless queue selection using multiplication
-      // If isUrgent=1: adds to urgentQueue, else adds to normal queue
       this.urgentQueue[this.urgentQueueSize] = callback;
       this.queue[this.queueSize] = callback;
       this.urgentQueueSize += isUrgent;
@@ -184,7 +178,6 @@ class Scheduler {
         const job = this.batchQueue[i];
         if (job && job._nextEpoch !== this._epoch) {
           job._nextEpoch = this._epoch;
-          // Batch jobs go to normal queue (priority already accounted for during batching)
           this.queue[this.queueSize++] = job;
         }
       }
@@ -234,8 +227,8 @@ class Scheduler {
     const count = this.urgentQueueSize;
 
     // Swap to other buffer
-    this.urgentQueue =
-      this.urgentQueue === this.urgentQueueA ? this.urgentQueueB : this.urgentQueueA;
+    this._urgentQueueIndex = (this._urgentQueueIndex ^ 1) as 0 | 1;
+    this.urgentQueue = this._urgentQueues[this._urgentQueueIndex];
     this.urgentQueueSize = 0;
     this._epoch++;
 
@@ -246,7 +239,8 @@ class Scheduler {
     const jobs = this.queue;
     const count = this.queueSize;
 
-    this.queue = this.queue === this.queueA ? this.queueB : this.queueA;
+    this._queueIndex = (this._queueIndex ^ 1) as 0 | 1;
+    this.queue = this._queues[this._queueIndex];
     this.queueSize = 0;
     this._epoch++;
 
