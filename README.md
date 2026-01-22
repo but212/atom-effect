@@ -90,7 +90,7 @@ userId.value = 2;
 
 ### Pattern 2: Batching Updates
 
-Sometimes you change multiple things at once and want to avoid intermediate states.
+By default, effects are batched via microtasks—multiple synchronous updates result in a single effect run. Use `batch()` when you need the effect to run **synchronously** after the updates.
 
 ```typescript
 import { atom, effect, batch } from '@but212/atom-effect';
@@ -102,15 +102,17 @@ effect(() => {
   console.log(`Fullname: ${firstName.value} ${lastName.value}`);
 });
 
-// Without batch: may trigger effect twice
-// firstName.value = "Jane";
-// lastName.value = "Smith";
+// Without batch: effect runs on the next microtask (async)
+firstName.value = "Jane";
+lastName.value = "Smith";
+// Effect has not run yet here
 
-// With batch: triggers effect once
+// With batch: effect runs immediately after batch ends (sync)
 batch(() => {
-  firstName.value = "Jane";
-  lastName.value = "Smith";
+  firstName.value = "Alice";
+  lastName.value = "Brown";
 });
+// Effect has already run here
 ```
 
 ### Pattern 3: Peeking without Tracking
