@@ -1,20 +1,7 @@
 # @but212/atom-effect
 
-> **A high-performance, V8-optimized reactive state management library.**
-
 [![npm version](https://img.shields.io/npm/v/@but212/atom-effect.svg)](https://www.npmjs.com/package/@but212/atom-effect)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-## Why This Library?
-
-Most reactivity libraries focus on Developer Experience (DX). We focus on **Raw Performance**.
-
-*   **V8 Optimized**: Internals are hand-tuned for V8 hidden classes and memory layout.
-*   **Glitch-Free**: Guarantees consistent state updates without "zombie children" or redundant computations.
-*   **Memory Efficient**: Uses Smi (Small Integer) field packing to minimize object size.
-
-**Use this if:** You are building a high-frequency trading dashboard, a complex data visualization, or a game UI where every microsecond counts.
-**Maybe not if:** You just want the simplest possible state for a Todo app (though it works great there too!).
 
 ---
 
@@ -55,25 +42,29 @@ count.value++;
 ## Core Concepts
 
 ### 1. Atom (`atom`)
-*   **What**: A mutable value wrapper.
-*   **Why**: Primitive values (numbers, strings) can't be observed. Atoms wrap them so the system can track who is reading them.
-*   **When**: Use for your "source of truth" state.
+
+- **What**: A mutable value wrapper.
+- **Why**: Primitive values can't be observed. Atoms wrap them so the system can track readers.
+- **When**: Use for your source of truth state.
 
 ### 2. Computed (`computed`)
-*   **What**: A value derived from atoms or other computeds.
-*   **Why**: It caches the result. It only recalculates if the input *actually* changed, and only when someone reads it.
-*   **When**: Use for expensive calculations (filtering lists, math) or transforming data.
+
+- **What**: A value derived from atoms or other computeds.
+- **Why**: It caches the result and only recalculates when inputs actually change.
+- **When**: Use for derived data or transformations.
 
 ### 3. Effect (`effect`)
-*   **What**: A function that runs when observed data changes.
-*   **Why**: To bridge reactivity to the outside world (DOM updates, console logs, network requests).
-*   **When**: Use for side effects. Do *not* use to update other atoms (use `computed` for that).
+
+- **What**: A function that runs when observed data changes.
+- **Why**: To bridge reactivity to the outside world (DOM updates, logging, network requests).
+- **When**: Use for side effects. Avoid using to update other atoms (use `computed` for that).
 
 ---
 
-## Tactical Examples
+## Examples
 
 ### Pattern 1: Async Resource with Cleanup
+
 Handling async data often requires cleaning up stale requests. `effect` supports a cleanup function.
 
 ```typescript
@@ -104,7 +95,8 @@ userId.value = 2;
 ```
 
 ### Pattern 2: Batching Updates
-Sometimes you change multiple things at once and don't want the UI to flicker.
+
+Sometimes you change multiple things at once and want to avoid intermediate states.
 
 ```typescript
 import { atom, effect, batch } from '@but212/atom-effect';
@@ -116,7 +108,7 @@ effect(() => {
   console.log(`Fullname: ${firstName.value} ${lastName.value}`);
 });
 
-// Without batch: triggers effect twice
+// Without batch: may trigger effect twice
 // firstName.value = "Jane";
 // lastName.value = "Smith";
 
@@ -128,6 +120,7 @@ batch(() => {
 ```
 
 ### Pattern 3: Peeking without Tracking
+
 Sometimes you need to read a value inside an effect *without* re-running the effect when that value changes.
 
 ```typescript
@@ -149,10 +142,10 @@ effect(() => {
 
 ## Documentation Links
 
-*   **[Architecture & Design](./ARCHITECTURE.md)**: Deep dive into V8 optimizations and internals.
-*   **[Contributing Guide](./CONTRIBUTING.md)**: How to set up, test, and contribute.
-*   **[Migration Guide](./MIGRATION.md)**: Upgrading from previous versions.
-*   **[Changelog](./CHANGELOG.md)**: Release notes.
+- **[Architecture & Design](./ARCHITECTURE.md)**: Internal design decisions and V8 considerations.
+- **[Contributing Guide](./CONTRIBUTING.md)**: How to set up, test, and contribute.
+- **[Migration Guide](./MIGRATION.md)**: Upgrading from previous versions.
+- **[Changelog](./CHANGELOG.md)**: Release notes.
 
 ---
 
@@ -160,7 +153,7 @@ effect(() => {
 
 | Package | Description |
 | --- | --- |
-| **[`@but212/atom-effect`](./packages/core)** | The core library (Zero dependencies). |
+| **[`@but212/atom-effect`](./packages/core)** | The core library (zero dependencies). |
 | **[`@but212/atom-effect-jquery`](./packages/jquery)** | jQuery integration bindings. |
 
 ## License

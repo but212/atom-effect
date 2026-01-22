@@ -4,35 +4,40 @@ Welcome! We appreciate your interest in contributing to `@but212/atom-effect`. T
 
 ## Prerequisites
 
-*   **Node.js**: Ensure you have a recent version installed.
-*   **pnpm**: We use `pnpm` for package management. Please do not use `npm` or `yarn`.
+- **Node.js**: Ensure you have a recent version installed.
+- **pnpm**: We use `pnpm` for package management. Please do not use `npm` or `yarn`.
 
 ## Getting Started
 
-1.  **Clone the repository**:
-    ```bash
-    git clone https://github.com/but212/atom-effect.git
-    cd atom-effect
-    ```
+1. **Clone the repository**:
 
-2.  **Install dependencies**:
-    ```bash
-    pnpm install
-    ```
-    > **Important**: Do not delete `pnpm-lock.yaml`. It ensures dependency consistency across environments.
+   ```bash
+   git clone https://github.com/but212/atom-effect.git
+   cd atom-effect
+   ```
 
-3.  **Build the project**:
-    ```bash
-    pnpm build
-    ```
+2. **Install dependencies**:
+
+   ```bash
+   pnpm install
+   ```
+
+   > **Important**: Do not delete `pnpm-lock.yaml`. It ensures dependency consistency across environments.
+
+3. **Build the project**:
+
+   ```bash
+   pnpm build
+   ```
 
 ## Development Workflow
 
 ### Project Structure
 
 This is a monorepo containing:
-*   `packages/core`: The main reactivity library.
-*   `packages/jquery`: jQuery adapters.
+
+- `packages/core`: The main reactivity library.
+- `packages/jquery`: jQuery adapters.
 
 Most contributions will likely be in `packages/core`.
 
@@ -40,45 +45,53 @@ Most contributions will likely be in `packages/core`.
 
 We use **Vitest** for testing.
 
-*   Run all tests:
-    ```bash
-    pnpm test
-    ```
-*   Run tests in watch mode:
-    ```bash
-    pnpm test:watch
-    ```
+- Run all tests:
+
+  ```bash
+  pnpm test
+  ```
+
+- Run tests in watch mode:
+
+  ```bash
+  pnpm test:watch
+  ```
 
 ### Type Checking
 
 We use TypeScript for static analysis.
 
-*   Run type check:
-    ```bash
-    pnpm typecheck
-    ```
+- Run type check:
+
+  ```bash
+  pnpm typecheck
+  ```
 
 ### Linting and Formatting
 
 We use **Biome** for linting and formatting.
 
-*   Check for issues:
-    ```bash
-    pnpm biome check .
-    ```
-*   Fix issues:
-    ```bash
-    pnpm biome check --apply .
-    ```
+- Check for issues:
+
+  ```bash
+  pnpm biome check .
+  ```
+
+- Fix issues:
+
+  ```bash
+  pnpm biome check --apply .
+  ```
 
 ## Coding Standards
 
-*   **Performance First**: We prioritize performance optimizations (V8 hidden classes, Smi packing) over code readability in the core logic. Please read [ARCHITECTURE.md](./ARCHITECTURE.md) before making structural changes.
-*   **Tests Required**: Every feature or bug fix must include a regression test.
-*   **No Unintended Breaking Changes**: If you change the public API, please discuss it in an issue first.
+- **Performance Awareness**: We pay attention to V8 characteristics (hidden classes, Smi packing) in core logic. Please read [ARCHITECTURE.md](./ARCHITECTURE.md) before making structural changes.
+- **Tests Required**: Every feature or bug fix should include a regression test.
+- **API Stability**: If you change the public API, please discuss it in an issue first.
 
 ## Release Process
 
 (Internal use)
-1.  Versioning is handled via changesets (if applicable) or manual version bumps.
-2.  CI/CD pipelines handle the publishing to npm.
+
+1. Versioning is handled via changesets (if applicable) or manual version bumps.
+2. CI/CD pipelines handle the publishing to npm.
