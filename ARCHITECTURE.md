@@ -17,8 +17,8 @@ The dependency tracking uses a subscription pattern:
 
 To avoid code duplication and ensure consistent behavior, the core tracking logic is centralized in `packages/core/src/core/dep-tracking.ts`. This module handles:
 
-- `syncDependencies`: The algorithm to update the dependency graph during re-execution.
-- Link management: Adding/removing links between nodes.
+- `trackDependency`: Registers a dependency with the current tracking context during value access.
+- `syncDependencies`: Updates the dependency graph when a Computed or Effect re-executes.
 
 ## Reactivity Primitives
 
