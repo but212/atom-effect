@@ -5,7 +5,7 @@ import { getSelector } from './utils';
 /**
  * Marker class for bound elements to optimize selector engines.
  */
-const AES_BOUND = 'aes-bound';
+const AES_BOUND = '_aes-bound';
 
 /**
  * Binding Registry

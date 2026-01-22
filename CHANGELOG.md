@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.13.1]
+
+### jQuery
+
+#### Fixed - jQuery
+
+- **Marker Class**: Changed `aes-bound` to `_aes-bound` to avoid potential conflicts with other libraries.
+
 ## [0.13.0]
 
 ### Benchmarks
