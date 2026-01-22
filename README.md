@@ -35,8 +35,6 @@ count.value++;
 // Output: "Count: 1, Double: 2"
 ```
 
----
-
 ## Core Concepts
 
 ### 1. Atom (`atom`)
@@ -56,8 +54,6 @@ count.value++;
 - **What**: A function that runs when observed data changes.
 - **Why**: To bridge reactivity to the outside world (DOM updates, logging, network requests).
 - **When**: Use for side effects. Avoid using to update other atoms (use `computed` for that).
-
----
 
 ## Examples
 
@@ -136,8 +132,6 @@ effect(() => {
 });
 ```
 
----
-
 ## Documentation Links
 
 - **[Architecture & Design](./ARCHITECTURE.md)**: Internal design decisions and V8 considerations.
@@ -145,13 +139,9 @@ effect(() => {
 - **[Migration Guide](./MIGRATION.md)**: Upgrading from previous versions.
 - **[Changelog](./CHANGELOG.md)**: Release notes.
 
----
-
 ## Packages
 
 | Package | Description |
-| --- | --- |
-| **[`@but212/atom-effect`](./packages/core)** | The core library (zero dependencies). |
 | **[`@but212/atom-effect-jquery`](./packages/jquery)** | jQuery integration bindings. |
 
 ## License
