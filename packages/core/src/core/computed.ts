@@ -92,7 +92,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
 
     this._error = null;
     this._promiseId = 0;
-    this._equal = options.equal ?? ((a: T, b: T) => a === b);
+    this._equal = options.equal ?? Object.is;
 
     this._fn = fn;
     this._defaultValue = 'defaultValue' in options ? options.defaultValue : (NO_DEFAULT_VALUE as T);
