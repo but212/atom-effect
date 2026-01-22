@@ -39,7 +39,7 @@ export class ArrayPool<T> {
     // 2. Reject based on capacity or pool size
     const len = arr.length;
     const poolLen = this.pool.length;
-    
+
     if (len > this.maxReusableCapacity || poolLen >= this.maxPoolSize) {
       if (IS_DEV && this.stats) {
         if (len > this.maxReusableCapacity) this.stats.rejected.tooLarge++;

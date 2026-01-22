@@ -154,7 +154,6 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     }
   }
 
-
   get value(): T {
     // Register tracking FIRST so this computed becomes a dependency
     // even if _computeValue throws. This is critical for error propagation.
@@ -184,7 +183,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     for (let i = 0; i < deps.length; i++) {
       const dep = deps[i];
       if (dep) {
-        aggregateErrorFlags |= (dep.flags & COMPUTED_STATE_FLAGS.HAS_ERROR);
+        aggregateErrorFlags |= dep.flags & COMPUTED_STATE_FLAGS.HAS_ERROR;
       }
     }
 
@@ -286,7 +285,8 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
 
     this._fnSubs = [];
     this._objSubs = [];
-    this.flags = COMPUTED_STATE_FLAGS.DISPOSED | COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE;
+    this.flags =
+      COMPUTED_STATE_FLAGS.DISPOSED | COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE;
     this._error = null;
     this._value = undefined as T;
     this._promiseId = (this._promiseId + 1) % this.MAX_PROMISE_ID;
@@ -355,10 +355,9 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   private _setRejected(): void {
     // Branchless state transition: update flags in single operation
     const mask =
-      COMPUTED_STATE_FLAGS.IDLE |
-      COMPUTED_STATE_FLAGS.PENDING |
-      COMPUTED_STATE_FLAGS.RESOLVED;
-    this.flags = (this.flags & ~mask) | (COMPUTED_STATE_FLAGS.REJECTED | COMPUTED_STATE_FLAGS.HAS_ERROR);
+      COMPUTED_STATE_FLAGS.IDLE | COMPUTED_STATE_FLAGS.PENDING | COMPUTED_STATE_FLAGS.RESOLVED;
+    this.flags =
+      (this.flags & ~mask) | (COMPUTED_STATE_FLAGS.REJECTED | COMPUTED_STATE_FLAGS.HAS_ERROR);
   }
 
   private _isRecomputing(): boolean {

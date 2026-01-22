@@ -27,7 +27,6 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
     debug.attachDebugInfo(this, 'atom', this.id);
   }
 
-
   /**
    * Returns the current value and registers the atom as a dependency if in a tracking context.
    */
