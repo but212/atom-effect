@@ -175,20 +175,20 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   get hasError(): boolean {
     this._registerTracking();
 
-    // 1. Check own error state
-    if (this._isRejected()) {
-      return true;
-    }
+    // Fast path: check Reject flag
+    if (this._isRejected()) return true;
 
-    // 2. Check dependency errors (early return)
-    for (let i = 0; i < this._dependencies.length; i++) {
-      const dep = this._dependencies[i];
-      if (dep && 'hasError' in dep && (dep as unknown as ComputedAtom<unknown>).hasError) {
-        return true;
+    // Check dependency errors: O(N) loop
+    const deps = this._dependencies;
+    let aggregateErrorFlags = 0;
+    for (let i = 0; i < deps.length; i++) {
+      const dep = deps[i];
+      if (dep) {
+        aggregateErrorFlags |= (dep.flags & COMPUTED_STATE_FLAGS.HAS_ERROR);
       }
     }
 
-    return false;
+    return aggregateErrorFlags !== 0;
   }
 
   get isValid(): boolean {
@@ -353,12 +353,12 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   }
 
   private _setRejected(): void {
-    this.flags |= COMPUTED_STATE_FLAGS.REJECTED | COMPUTED_STATE_FLAGS.HAS_ERROR;
-    this.flags &= ~(
+    // Branchless state transition: update flags in single operation
+    const mask =
       COMPUTED_STATE_FLAGS.IDLE |
       COMPUTED_STATE_FLAGS.PENDING |
-      COMPUTED_STATE_FLAGS.RESOLVED
-    );
+      COMPUTED_STATE_FLAGS.RESOLVED;
+    this.flags = (this.flags & ~mask) | (COMPUTED_STATE_FLAGS.REJECTED | COMPUTED_STATE_FLAGS.HAS_ERROR);
   }
 
   private _isRecomputing(): boolean {
@@ -502,7 +502,6 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       const dep = deps[i];
       const cachedVersion = versions[i];
       if (dep && cachedVersion !== undefined) {
-        // getShift uses branchless modular arithmetic
         totalShift = (totalShift + dep.getShift(cachedVersion)) & SMI_MAX;
       }
     }

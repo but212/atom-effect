@@ -66,8 +66,8 @@ export function syncDependencies(
   prevUnsubs: (() => void)[],
   tracker: Subscriber
 ): (() => void)[] {
-  // 1. Map existing subscriptions to dependencies for O(1) lookup during sync
-  if (prevDeps !== EMPTY_DEPS && prevUnsubs !== EMPTY_UNSUBS) {
+  // 1. Map existing subscriptions: dense iteration
+  if (prevDeps !== EMPTY_DEPS) {
     for (let i = 0; i < prevDeps.length; i++) {
       const dep = prevDeps[i];
       if (dep) dep._tempUnsub = prevUnsubs[i];
@@ -76,31 +76,29 @@ export function syncDependencies(
 
   // 2. Build new unsubscribe array
   const nextUnsubs = unsubArrayPool.acquire();
-
-  // Ensure nextUnsubs has same length as nextDeps
   nextUnsubs.length = nextDeps.length;
 
   for (let i = 0; i < nextDeps.length; i++) {
     const dep = nextDeps[i];
     if (!dep) continue;
 
-    if (dep._tempUnsub) {
-      // Reuse existing subscription
-      nextUnsubs[i] = dep._tempUnsub;
-      dep._tempUnsub = undefined; // Consumed
+    const reuse = dep._tempUnsub;
+    if (reuse) {
+      nextUnsubs[i] = reuse;
+      dep._tempUnsub = undefined;
     } else {
       debug.checkCircular(dep, tracker);
       nextUnsubs[i] = dep.subscribe(tracker);
     }
   }
 
-  // 3. Cleanup unused subscriptions (from removals)
+  // 3. Cleanup unused subscriptions
   if (prevDeps !== EMPTY_DEPS) {
     for (let i = 0; i < prevDeps.length; i++) {
-      const dep = prevDeps[i];
-      if (dep?._tempUnsub) {
-        // Still has _tempUnsub => was not reused in nextDeps => Removed
-        dep._tempUnsub();
+      const dep = prevDeps[i]!;
+      const staleUnsub = dep._tempUnsub;
+      if (staleUnsub) {
+        staleUnsub();
         dep._tempUnsub = undefined;
       }
     }

@@ -386,6 +386,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 
   private _setExecuting(value: boolean): void {
     const mask = EFFECT_STATE_FLAGS.EXECUTING;
+    // Branchless toggle: -Number(value) results in 0 or -1 (all bits 1)
     this.flags = (this.flags & ~mask) | (-Number(value) & mask);
   }
 
@@ -476,12 +477,14 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
    * @returns true if any dependency has changed or if it's the first run.
    */
   private _shouldExecute(): boolean {
-    // Early exit: no deps or no version cache means first run or invalidated
-    if (this._dependencies === EMPTY_DEPS || this._dependencyVersions === EMPTY_VERSIONS)
-      return true;
+    const deps = this._dependencies;
+    const versions = this._dependencyVersions;
 
-    for (let i = 0; i < this._dependencies.length; i++) {
-      const dep = this._dependencies[i];
+    if (deps === EMPTY_DEPS || versions === EMPTY_VERSIONS) return true;
+
+    let changedMask = 0;
+    for (let i = 0; i < deps.length; i++) {
+      const dep = deps[i];
       if (!dep) continue;
 
       if ('value' in dep) {
@@ -492,12 +495,11 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
         }
       }
 
-      if (dep.version !== this._dependencyVersions[i]) {
-        return true;
-      }
+      // Bitwise accumulation of change state without if-branch
+      changedMask |= Number(dep.version !== versions[i]!);
     }
 
-    return false;
+    return changedMask !== 0;
   }
 
   /**

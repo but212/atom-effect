@@ -4,18 +4,14 @@
 
 ### Core
 
-#### Performance - Core
+#### Performance
 
-- **Zero-Branching Storage**: Refactored `ReactiveDependency` to initialize subscriber arrays (`_fnSubs`, `_objSubs`) as empty arrays `[]` instead of `null`, eliminating null-check branches in hot notification paths.
-- **Branchless Subscriber Management**: Implemented bitwise duplicate checks (`~idx`) and "Swap-and-Pop" ($O(1)$) removal for subscriber management without conditional branching.
-- **Flag-driven Notifications**: Optimized `_notifySubscribers` and scheduling logic using bitwise flag checks (`NODE_FLAGS`) for instant subscriber detection.
+- **Subscriber Management**: Refined internal storage and notification paths using bitwise flags and pre-initialized arrays.
+- **State Logic**: Improved state transition logic and dependency checks for more consistent performance.
 
-#### Refactor - Core
+#### Refactor
 
-- **Direct Property Access**: Removed lazy-initialization methods (`_getFnSubs`, `_getObjSubs`) in favor of direct access to pre-initialized subscriber arrays, reducing call overhead.
-- **State Consistency**: Integrated flag synchronization into `trackDependency` to ensure `NODE_FLAGS` remain accurate during raw array manipulations.
-- **Interface Exposure**: Added `flags` to the `Dependency` interface to enable zero-overhead state inspection across the core engine.
-- **Cleanup**: Pruned verbose implementation comments in `base.ts` to improve maintainability and focus on core logic.
+- **Internal Cleanup**: Simplified property access and synchronized state flags to improve code clarity and maintainability.
 
 ## [0.13.1]
 
