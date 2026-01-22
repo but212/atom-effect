@@ -13,11 +13,23 @@ export class ReactiveNode {
   _lastSeenEpoch: number;
   readonly id: DependencyId;
 
+  /** @internal */
+  _tempUnsub: (() => void) | undefined;
+  /** @internal */
+  _modifiedAtEpoch: number;
+  /** @internal */
+  _visitedEpoch: number;
+
   constructor() {
     this.flags = 0;
     this.version = 0;
     this._lastSeenEpoch = -1;
     this.id = (generateId() & SMI_MAX) as DependencyId;
+
+    // Initialize tracking fields to establish a stable Hidden Class (Shape) for V8
+    this._tempUnsub = undefined;
+    this._modifiedAtEpoch = -1;
+    this._visitedEpoch = -1;
   }
 
   /**
@@ -97,7 +109,8 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
   protected _notifySubscribers(newValue: T | undefined, oldValue: T | undefined): void {
     if (this.flags & (NODE_FLAGS.HAS_FN_SUBS | NODE_FLAGS.HAS_OBJ_SUBS)) {
       const fnSubs = this._fnSubs;
-      for (let i = 0; i < fnSubs.length; i++) {
+      const fnLen = fnSubs.length;
+      for (let i = 0; i < fnLen; i++) {
         try {
           fnSubs[i]!(newValue, oldValue);
         } catch (err) {
@@ -108,7 +121,8 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
       }
 
       const objSubs = this._objSubs;
-      for (let i = 0; i < objSubs.length; i++) {
+      const objLen = objSubs.length;
+      for (let i = 0; i < objLen; i++) {
         try {
           objSubs[i]!.execute();
         } catch (err) {

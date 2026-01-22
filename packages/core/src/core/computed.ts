@@ -41,9 +41,17 @@ ASYNC_STATE_LOOKUP[COMPUTED_STATE_FLAGS.RESOLVED] = AsyncState.RESOLVED;
 ASYNC_STATE_LOOKUP[COMPUTED_STATE_FLAGS.PENDING] = AsyncState.PENDING;
 ASYNC_STATE_LOOKUP[COMPUTED_STATE_FLAGS.REJECTED] = AsyncState.REJECTED;
 
-type TrackableListener = (() => void) & {
-  addDependency: (dep: Dependency) => void;
-};
+/**
+ * Internal helper for stable Hidden Class in V8
+ * @internal
+ */
+class ComputedTrackable<T> implements Subscriber {
+  constructor(private readonly _owner: ComputedAtomImpl<T>) {}
+  execute(): void {
+    this._owner._markDirty();
+  }
+  addDependency(_dep: Dependency): void {}
+}
 
 /**
  * Computed atom with lazy evaluation, caching, and async support.
@@ -77,7 +85,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   private readonly MAX_ASYNC_RETRIES: number = 3;
 
   private readonly _notifyJob: () => void;
-  private readonly _trackable: TrackableListener;
+  private readonly _trackable: ComputedTrackable<T>;
   private readonly MAX_PROMISE_ID: number;
 
   constructor(fn: () => T | Promise<T>, options: ComputedOptions<T> = {}) {
@@ -107,7 +115,8 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._notifyJob = () => {
       if (this.flags & (COMPUTED_STATE_FLAGS.HAS_FN_SUBS | COMPUTED_STATE_FLAGS.HAS_OBJ_SUBS)) {
         const fnSubs = this._fnSubs;
-        for (let i = 0; i < fnSubs.length; i++) {
+        const fnLen = fnSubs.length;
+        for (let i = 0; i < fnLen; i++) {
           try {
             fnSubs[i]!(undefined, undefined);
           } catch (err) {
@@ -116,7 +125,8 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
         }
 
         const objSubs = this._objSubs;
-        for (let i = 0; i < objSubs.length; i++) {
+        const objLen = objSubs.length;
+        for (let i = 0; i < objLen; i++) {
           try {
             objSubs[i]!.execute();
           } catch (err) {
@@ -126,9 +136,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       }
     };
 
-    this._trackable = Object.assign(() => this._markDirty(), {
-      addDependency: (_dep: Dependency) => {},
-    });
+    this._trackable = new ComputedTrackable(this);
 
     debug.attachDebugInfo(this as unknown as ComputedAtom<T>, 'computed', this.id);
 
@@ -676,7 +684,8 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._markDirty();
   }
 
-  private _markDirty(): void {
+  /** @internal */
+  _markDirty(): void {
     if (this._isRecomputing() || this._isDirty()) return;
 
     this._setDirty();

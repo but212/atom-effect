@@ -34,76 +34,37 @@ interface PhaseShiftNode {
 
 /**
  * Scheduler for reactive updates with double-buffered priority queues.
- *
- * This scheduler implements a "Dual-Queue, Dual-Buffer" strategy to ensure
- * glitch-free propagation and high throughput:
- *
- * 1. **Priority Queues**: Normal and Urgent queues. Urgent jobs (stale updates)
- *    are processed first to reduce intermediate state glitches.
- * 2. **Double Buffering**: Each queue type has two buffers. While one buffer
- *    is being processed (drained), new jobs can be safely added to the other
- *    buffer without allocation or locking.
- * 3. **Branchless Routing**: Uses bitwise operations to route jobs to the
- *    correct queue and swap buffers, reducing branch misprediction overhead.
  */
 class Scheduler {
-  /**
-   * Internal buffers for the double-buffering system.
-   * Format: [normal_buffers, urgent_buffers] where each type has [buffer_A, buffer_B].
-   */
-  private _queueBuffers: [[SchedulerJob[], SchedulerJob[]], [SchedulerJob[], SchedulerJob[]]] = [
-    [[], []], // Normal [0][0], [0][1]
-    [[], []], // Urgent [1][0], [1][1]
-  ];
-
-  /**
-   * Current active buffer index for each queue type.
-   * [0]: Normal queue buffer index (0 or 1).
-   * [1]: Urgent queue buffer index (0 or 1).
-   * Toggled branchlessly using XOR: index ^= 1
-   */
-  private _bufferIndices = new Uint8Array(2);
-
-  /**
-   * Number of items in the CURRENTLY ACTIVE buffer for each queue type.
-   * [0]: Normal size
-   * [1]: Urgent size
-   */
-  private _sizes = new Uint32Array(2);
-
-  /**
-   * Cached references to the currently active buffers for fast access.
-   * [0]: Reference to the active normal queue array.
-   * [1]: Reference to the active urgent queue array.
-   */
+  private _queueBuffers: [[SchedulerJob[], SchedulerJob[]], [SchedulerJob[], SchedulerJob[]]];
+  private _bufferIndices: Uint8Array;
+  private _sizes: Uint32Array;
   private _activeQueues: [SchedulerJob[], SchedulerJob[]];
-
-  /** Unique ID for the current flush cycle, used for job deduplication. */
-  private _epoch = 0;
-
-  /** Flag indicating if a microtask-scheduled flush is in progress. */
-  private isProcessing = false;
-
-  /** Flag indicating if we are currently batching updates. */
-  public isBatching = false;
-
-  /** Current nesting depth of batch() calls. */
-  private batchDepth = 0;
-
-  /** Temporary storage for jobs scheduled during a batch session. */
-  private batchQueue: SchedulerJob[] = [];
-
-  /** Number of jobs in the batchQueue. */
-  private batchQueueSize = 0;
-
-  /** Flag indicating if a synchronous flush (via endBatch) is in progress. */
-  private isFlushingSync = false;
-
-  /** Maximum iterations allowed in a single drain cycle to prevent infinite loops. */
-  private maxFlushIterations: number = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
+  private _epoch: number;
+  private isProcessing: boolean;
+  public isBatching: boolean;
+  private batchDepth: number;
+  private batchQueue: SchedulerJob[];
+  private batchQueueSize: number;
+  private isFlushingSync: boolean;
+  private maxFlushIterations: number;
 
   constructor() {
+    this._queueBuffers = [
+      [[], []], // Normal [0][0], [0][1]
+      [[], []], // Urgent [1][0], [1][1]
+    ];
+    this._bufferIndices = new Uint8Array(2);
+    this._sizes = new Uint32Array(2);
     this._activeQueues = [this._queueBuffers[0][0], this._queueBuffers[1][0]];
+    this._epoch = 0;
+    this.isProcessing = false;
+    this.isBatching = false;
+    this.batchDepth = 0;
+    this.batchQueue = [];
+    this.batchQueueSize = 0;
+    this.isFlushingSync = false;
+    this.maxFlushIterations = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
   }
 
   /**
@@ -224,9 +185,11 @@ class Scheduler {
    */
   private _mergeBatchQueue(): void {
     this._epoch++;
-    if (this.batchQueueSize > 0) {
-      for (let i = 0; i < this.batchQueueSize; i++) {
-        const job = this.batchQueue[i];
+    const size = this.batchQueueSize;
+    if (size > 0) {
+      const queue = this.batchQueue;
+      for (let i = 0; i < size; i++) {
+        const job = queue[i];
         if (job && job._nextEpoch !== this._epoch) {
           job._nextEpoch = this._epoch;
           this._activeQueues[0][this._sizes[0]!++] = job;

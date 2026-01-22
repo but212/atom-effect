@@ -6,22 +6,42 @@ import type { PoolStats } from '@/types';
  * Provides type-safe pooling for different array types to reduce GC pressure.
  * Supports capacity limits and stats tracking in development mode.
  */
-export class ArrayPool<T> {
-  private pool: T[][] = [];
-  private readonly maxPoolSize = 50;
-  private readonly maxReusableCapacity = 256;
+/** @internal */
+class PoolStatsCollector {
+  acquired = 0;
+  released = 0;
+  rejected = new PoolStatsRejected();
+}
 
-  private stats = IS_DEV
-    ? {
-        acquired: 0,
-        released: 0,
-        rejected: { frozen: 0, tooLarge: 0, poolFull: 0 },
-      }
-    : null;
+/** @internal */
+class PoolStatsRejected {
+  frozen = 0;
+  tooLarge = 0;
+  poolFull = 0;
+}
+
+/**
+ * Generic Array Pool.
+ * Provides type-safe pooling for different array types to reduce GC pressure.
+ * Supports capacity limits and stats tracking in development mode.
+ */
+export class ArrayPool<T> {
+  private pool: T[][];
+  private readonly maxPoolSize: number;
+  private readonly maxReusableCapacity: number;
+  private stats: PoolStatsCollector | null;
+
+  constructor() {
+    this.pool = [];
+    this.maxPoolSize = 50;
+    this.maxReusableCapacity = 256;
+    this.stats = IS_DEV ? new PoolStatsCollector() : null;
+  }
 
   /** Acquires an array from the pool or creates a new one if the pool is empty. */
   acquire(): T[] {
-    if (IS_DEV && this.stats) this.stats.acquired++;
+    const stats = this.stats;
+    if (IS_DEV && stats) stats.acquired++;
     return this.pool.pop() ?? [];
   }
 
@@ -32,37 +52,46 @@ export class ArrayPool<T> {
   release(arr: T[], emptyConst?: readonly T[]): void {
     // 1. Skip if empty constant or frozen (expensive check)
     if ((emptyConst && arr === emptyConst) || Object.isFrozen(arr)) {
-      if (IS_DEV && this.stats && arr !== emptyConst) this.stats.rejected.frozen++;
+      const stats = this.stats;
+      if (IS_DEV && stats && arr !== emptyConst) stats.rejected.frozen++;
       return;
     }
 
     // 2. Reject based on capacity or pool size
     const len = arr.length;
-    const poolLen = this.pool.length;
+    const pool = this.pool;
+    const poolLen = pool.length;
 
     if (len > this.maxReusableCapacity || poolLen >= this.maxPoolSize) {
-      if (IS_DEV && this.stats) {
-        if (len > this.maxReusableCapacity) this.stats.rejected.tooLarge++;
-        else this.stats.rejected.poolFull++;
+      const stats = this.stats;
+      if (IS_DEV && stats) {
+        if (len > this.maxReusableCapacity) stats.rejected.tooLarge++;
+        else stats.rejected.poolFull++;
       }
       return;
     }
 
     // 3. Clear and store
     arr.length = 0;
-    this.pool.push(arr);
-    if (IS_DEV && this.stats) this.stats.released++;
+    pool.push(arr);
+    const stats = this.stats;
+    if (IS_DEV && stats) stats.released++;
   }
 
   /** Returns current stats for the pool (dev mode only). */
   getStats(): PoolStats | null {
-    if (!IS_DEV || !this.stats) return null;
-    const { acquired, released, rejected } = this.stats;
+    const stats = this.stats;
+    if (!IS_DEV || !stats) return null;
+    const { acquired, released, rejected } = stats;
     const totalRejected = rejected.frozen + rejected.tooLarge + rejected.poolFull;
     return {
       acquired,
       released,
-      rejected,
+      rejected: {
+        frozen: rejected.frozen,
+        tooLarge: rejected.tooLarge,
+        poolFull: rejected.poolFull,
+      },
       leaked: acquired - released - totalRejected,
       poolSize: this.pool.length,
     };
@@ -71,10 +100,13 @@ export class ArrayPool<T> {
   /** Resets the pool and its stats. */
   reset(): void {
     this.pool.length = 0;
-    if (IS_DEV && this.stats) {
-      this.stats.acquired = 0;
-      this.stats.released = 0;
-      this.stats.rejected = { frozen: 0, tooLarge: 0, poolFull: 0 };
+    const stats = this.stats;
+    if (IS_DEV && stats) {
+      stats.acquired = 0;
+      stats.released = 0;
+      stats.rejected.frozen = 0;
+      stats.rejected.tooLarge = 0;
+      stats.rejected.poolFull = 0;
     }
   }
 }
