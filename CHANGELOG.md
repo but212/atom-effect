@@ -1,5 +1,16 @@
 # Changelog
 
+## [unreleased]
+
+### Core
+
+#### Performance - Scheduler
+
+- **Dual-Queue, Dual-Buffer Strategy**: Optimized the scheduler for high-frequency updates and high-throughput reactive graphs.
+  - Introduced **Urgent/Normal Priority Queues** to reduce intermediate state glitches by prioritizing stale updates.
+  - Implemented **Double Buffering** for both queues, allowing safe job scheduling during a flush cycle without blocking or re-allocations.
+- **Branchless Routing**: Replaced conditional branches in the hot `schedule` path with bitwise routing logic and XOR-based buffer swapping to minimize CPU branch misprediction.
+
 ## [0.13.1]
 
 ### jQuery
