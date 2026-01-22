@@ -49,6 +49,8 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   private _nextVersions: number[] | null;
   /** Temporary storage for unsubscribes being tracked in current execution */
   private _nextUnsubs: (() => void)[] | null;
+  /** Cached closure for scheduler deduplication */
+  private _executeTask: (() => void) | undefined;
 
   /** Error handler callback */
   private readonly _onError: ((error: unknown) => void) | null;
@@ -97,6 +99,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     this._nextDeps = null;
     this._nextVersions = null;
     this._nextUnsubs = null;
+    this._executeTask = undefined;
     this._onError = options.onError ?? null;
 
     this._currentEpoch = -1;
@@ -349,7 +352,10 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
         if (this._sync) {
           this.execute();
         } else {
-          scheduler.schedule(() => this.execute());
+          if (!this._executeTask) {
+            this._executeTask = () => this.execute();
+          }
+          scheduler.schedule(this._executeTask);
         }
       });
       if (this._nextUnsubs) {
