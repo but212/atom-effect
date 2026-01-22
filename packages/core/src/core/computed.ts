@@ -60,8 +60,8 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   private readonly _hasDefaultValue: boolean;
   private readonly _onError: ((error: Error) => void) | null;
 
-  protected _fnSubs: ((newValue?: T, oldValue?: T) => void)[] | null = null;
-  protected _objSubs: Subscriber[] | null = null;
+  protected _fnSubs: ((newValue?: T, oldValue?: T) => void)[] = [];
+  protected _objSubs: Subscriber[] = [];
 
   private _dependencies: Dependency[];
   private _dependencyVersions: number[];
@@ -105,24 +105,20 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._unsubscribes = EMPTY_UNSUBS;
 
     this._notifyJob = () => {
-      const fnSubs = this._fnSubs;
-      if (fnSubs) {
-        for (let i = fnSubs.length - 1; i >= 0; i--) {
+      if (this.flags & (COMPUTED_STATE_FLAGS.HAS_FN_SUBS | COMPUTED_STATE_FLAGS.HAS_OBJ_SUBS)) {
+        const fnSubs = this._fnSubs;
+        for (let i = 0; i < fnSubs.length; i++) {
           try {
-            const sub = fnSubs[i];
-            if (sub) sub(undefined, undefined);
+            fnSubs[i]!(undefined, undefined);
           } catch (err) {
             console.error(err);
           }
         }
-      }
 
-      const objSubs = this._objSubs;
-      if (objSubs) {
-        for (let i = objSubs.length - 1; i >= 0; i--) {
+        const objSubs = this._objSubs;
+        for (let i = 0; i < objSubs.length; i++) {
           try {
-            const sub = objSubs[i];
-            if (sub) sub.execute();
+            objSubs[i]!.execute();
           } catch (err) {
             console.error(err);
           }
@@ -158,15 +154,6 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     }
   }
 
-  protected _getFnSubs(): ((newValue?: T, oldValue?: T) => void)[] {
-    this._fnSubs ??= [];
-    return this._fnSubs;
-  }
-
-  protected _getObjSubs(): Subscriber[] {
-    this._objSubs ??= [];
-    return this._objSubs;
-  }
 
   get value(): T {
     // Register tracking FIRST so this computed becomes a dependency
@@ -297,9 +284,9 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       this._dependencyVersions = EMPTY_VERSIONS;
     }
 
-    this._fnSubs = null;
-    this._objSubs = null;
-    this.flags = COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE;
+    this._fnSubs = [];
+    this._objSubs = [];
+    this.flags = COMPUTED_STATE_FLAGS.DISPOSED | COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE;
     this._error = null;
     this._value = undefined as T;
     this._promiseId = (this._promiseId + 1) % this.MAX_PROMISE_ID;
@@ -699,7 +686,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   }
 
   private _registerTracking(): void {
-    trackDependency(this, trackingContext.getCurrent(), this._getFnSubs(), this._getObjSubs());
+    trackDependency(this, trackingContext.getCurrent(), this._fnSubs, this._objSubs);
   }
 }
 

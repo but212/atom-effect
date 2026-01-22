@@ -1,3 +1,4 @@
+import { NODE_FLAGS } from '@/constants';
 import { EMPTY_DEPS, EMPTY_UNSUBS, unsubArrayPool } from '@/internal/pool';
 import type { Dependency, Subscriber } from '@/types';
 import { debug } from '@/utils/debug';
@@ -32,6 +33,7 @@ export function trackDependency<T>(
     const subscriber = current as (newValue?: T, oldValue?: T) => void;
     if (functionSubscribers.indexOf(subscriber) === -1) {
       functionSubscribers.push(subscriber);
+      dependency.flags |= NODE_FLAGS.HAS_FN_SUBS;
     }
     return;
   }
@@ -41,6 +43,7 @@ export function trackDependency<T>(
   if (hasExecuteMethod(current)) {
     if (objectSubscribers.indexOf(current) === -1) {
       objectSubscribers.push(current);
+      dependency.flags |= NODE_FLAGS.HAS_OBJ_SUBS;
     }
   }
 }

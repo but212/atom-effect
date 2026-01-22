@@ -60,6 +60,7 @@ export interface Subscriber {
 export interface Dependency {
   readonly id: DependencyId;
   version: number;
+  flags: number;
   /**
    * Last epoch seen by this dependency (used for invalidation)
    */
