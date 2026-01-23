@@ -52,6 +52,10 @@
         padding: 40px;
       }
 
+      main {
+        display: contents;
+      }
+
       /* Header */
       header {
         grid-column: 1 / -1;
@@ -259,45 +263,46 @@
     </style>
   </head>
   <body>
-    <main class="container">
+    <div class="container">
       <header>
         <div class="logo">BASIC<br />COUNTER<span>.</span></div>
         <div class="badge">atom-effect-jquery</div>
       </header>
 
-      <!-- Main Counter -->
-      <section class="grid-main">
-        <div class="card card-blue">
-          <div id="count" class="display-value">0</div>
-          <div class="controls">
-            <button id="decrement" class="btn btn-decrement">−</button>
-            <button id="increment" class="btn btn-increment">+</button>
+      <main>
+        <!-- Main Counter -->
+        <section class="grid-main">
+          <div class="card card-blue">
+            <div id="count" class="display-value">0</div>
+            <div class="controls">
+              <button id="decrement" class="btn btn-decrement">−</button>
+              <button id="increment" class="btn btn-increment">+</button>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <!-- Derived Data -->
-      <section class="grid-side">
-        <div class="card card-yellow" style="text-align: left">
-          <div class="stat-item">
-            <div class="stat-label">01 / DOUBLED VALUE</div>
-            <div id="doubled" class="stat-value">0</div>
+        <!-- Derived Data -->
+        <section class="grid-side">
+          <div class="card card-yellow" style="text-align: left">
+            <div class="stat-item">
+              <div class="stat-label">01 / DOUBLED VALUE</div>
+              <div id="doubled" class="stat-value">0</div>
+            </div>
+            <div class="stat-item" style="margin-bottom: 0">
+              <div class="stat-label">02 / PARITY STATE</div>
+              <div id="parity" class="stat-value">EVEN</div>
+            </div>
           </div>
-          <div class="stat-item" style="margin-bottom: 0">
-            <div class="stat-label">02 / PARITY STATE</div>
-            <div id="parity" class="stat-value">EVEN</div>
-          </div>
-        </div>
-      </section>
+        </section>
 
-      <!-- Logic Overview -->
-      <section class="info-section">
-        <div class="info-card">
-          <div class="info-tag tag-red"></div>
-          <h2 class="info-title">Atomic State</h2>
-          <pre
-            class="code-block"
-          ><span class="code-comment">// 1. SOURCE ATOM</span>
+        <!-- Logic Overview -->
+        <section class="info-section">
+          <div class="info-card">
+            <div class="info-tag tag-red"></div>
+            <h2 class="info-title">Atomic State</h2>
+            <pre
+              class="code-block"
+            ><span class="code-comment">// 1. SOURCE ATOM</span>
 <span class="code-keyword">const</span> count = $.<span class="code-function">atom</span>(<span class="code-num">0</span>);
 
 <span class="code-comment">// 2. DERIVED COMPUTED</span>
@@ -307,25 +312,26 @@
 
 <span class="code-comment">// 3. JQUERY BINDING</span>
 $(<span class="code-string">'#count'</span>).<span class="code-function">atomText</span>(count);</pre>
-        </div>
-
-        <div class="info-card">
-          <div class="info-tag tag-blue"></div>
-          <h2 class="info-title">jQuery Sync</h2>
-          <div style="font-weight: 700; line-height: 1.4">
-            <p style="margin-bottom: 20px">
-              atom-effect-jquery bridges the gap between atomic state and
-              jQuery's chainable API. Updates are fine-grained and automatic.
-            </p>
-            <ul style="list-style: square; padding-left: 20px">
-              <li>Direct <code>atomText()</code> Integration</li>
-              <li>Auto-cleanup on DOM removal</li>
-              <li>No manual <code>text()</code> updates needed</li>
-              <li>Minimalistic Boilerplate</li>
-            </ul>
           </div>
-        </div>
-      </section>
+
+          <div class="info-card">
+            <div class="info-tag tag-blue"></div>
+            <h2 class="info-title">jQuery Sync</h2>
+            <div style="font-weight: 700; line-height: 1.4">
+              <p style="margin-bottom: 20px">
+                atom-effect-jquery bridges the gap between atomic state and
+                jQuery's chainable API. Updates are fine-grained and automatic.
+              </p>
+              <ul style="list-style: square; padding-left: 20px">
+                <li>Direct <code>atomText()</code> Integration</li>
+                <li>Auto-cleanup on DOM removal</li>
+                <li>No manual <code>text()</code> updates needed</li>
+                <li>Minimalistic Boilerplate</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+      </main>
 
       <footer>
         <div class="footer-brand">
@@ -336,7 +342,7 @@ $(<span class="code-string">'#count'</span>).<span class="code-function">atomTex
           © 2026 Jeong Il Suk
         </address>
       </footer>
-    </main>
+    </div>
 
     <script>
       // 1. Create State

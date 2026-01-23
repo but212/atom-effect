@@ -48,6 +48,10 @@
         padding: 40px;
       }
 
+      main {
+        display: contents;
+      }
+
       /* Header */
       header {
         grid-column: 1 / -1;
@@ -375,68 +379,69 @@
     </style>
   </head>
   <body>
-    <main class="container">
+    <div class="container">
       <header>
         <div class="logo">JQUERY<br />ASYNC<span>.</span></div>
         <div class="badge">atom-effect-jquery</div>
       </header>
 
-      <!-- Main Interaction Area -->
-      <section class="grid-main">
-        <div class="card card-blue">
-          <h2 class="card-title">Search Engine</h2>
-          <input
-            type="text"
-            id="search-input"
-            class="search-input"
-            placeholder="TYPE USERNAME..."
-          />
-          <div style="margin-top: 20px">
-            <div id="status-indicator" class="status status-idle">IDLE</div>
-          </div>
-        </div>
-
-        <div class="card">
-          <h2 class="card-title">Results Stream</h2>
-          <div id="results-container">
-            <div class="empty-state">SEARCH KEYWORD REQUIRED</div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Sidebar / Live Data -->
-      <section class="grid-side">
-        <div class="card card-yellow">
-          <h2 class="card-title">System Live</h2>
-          <div class="stats-grid">
-            <div class="stat-item">
-              <div id="search-count" class="stat-value">0</div>
-              <div class="stat-label">Queries</div>
-            </div>
-            <div class="stat-item">
-              <div id="current-state" class="stat-value">IDLE</div>
-              <div class="stat-label">State</div>
-            </div>
-            <div class="stat-item">
-              <div id="result-count" class="stat-value">0</div>
-              <div class="stat-label">Items</div>
-            </div>
-            <div id="last-update-wrapper" class="stat-item">
-              <div id="last-update" class="stat-value">--:--</div>
-              <div class="stat-label">Pulse</div>
+      <main>
+        <!-- Main Interaction Area -->
+        <section class="grid-main">
+          <div class="card card-blue">
+            <h2 class="card-title">Search Engine</h2>
+            <input
+              type="text"
+              id="search-input"
+              class="search-input"
+              placeholder="TYPE USERNAME..."
+            />
+            <div style="margin-top: 20px">
+              <div id="status-indicator" class="status status-idle">IDLE</div>
             </div>
           </div>
-        </div>
-      </section>
 
-      <!-- Technical Overview -->
-      <section class="info-section">
-        <div class="info-card">
-          <div class="info-tag tag-red"></div>
-          <h2 class="info-title">The Bindings</h2>
-          <pre
-            class="code-block"
-          ><span class="code-comment">// 1. JQUERY CHAINING</span>
+          <div class="card">
+            <h2 class="card-title">Results Stream</h2>
+            <div id="results-container">
+              <div class="empty-state">SEARCH KEYWORD REQUIRED</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Sidebar / Live Data -->
+        <section class="grid-side">
+          <div class="card card-yellow">
+            <h2 class="card-title">System Live</h2>
+            <div class="stats-grid">
+              <div class="stat-item">
+                <div id="search-count" class="stat-value">0</div>
+                <div class="stat-label">Queries</div>
+              </div>
+              <div class="stat-item">
+                <div id="current-state" class="stat-value">IDLE</div>
+                <div class="stat-label">State</div>
+              </div>
+              <div class="stat-item">
+                <div id="result-count" class="stat-value">0</div>
+                <div class="stat-label">Items</div>
+              </div>
+              <div id="last-update-wrapper" class="stat-item">
+                <div id="last-update" class="stat-value">--:--</div>
+                <div class="stat-label">Pulse</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Technical Overview -->
+        <section class="info-section">
+          <div class="info-card">
+            <div class="info-tag tag-red"></div>
+            <h2 class="info-title">The Bindings</h2>
+            <pre
+              class="code-block"
+            ><span class="code-comment">// 1. JQUERY CHAINING</span>
 $(<span class="code-string">'#input'</span>).<span class="code-function">atomVal</span>(query);
 
 <span class="code-comment">// 2. AUTOMATIC SYNC</span>
@@ -446,26 +451,27 @@ $(<span class="code-string">'#text'</span>).<span class="code-function">atomText
 $(<span class="code-string">'#list'</span>).<span class="code-function">atomList</span>(data, {
   render: u => <span class="code-string">`&lt;li&gt;${u.name}&lt;/li&gt;`</span>
 });</pre>
-        </div>
-
-        <div class="info-card">
-          <div class="info-tag tag-yellow"></div>
-          <h2 class="info-title">Why jQuery?</h2>
-          <div style="font-weight: 700; line-height: 1.4">
-            <p style="margin-bottom: 20px">
-              atom-effect-jquery brings modern reactivity to the most
-              battle-tested DOM library. Benefit from jQuery's ecosystem while
-              enjoying fine-grained, declarative state management.
-            </p>
-            <ul style="list-style: square; padding-left: 20px">
-              <li>Chainable API Design</li>
-              <li>Auto DOM Cleanup</li>
-              <li>Minimal Memory Footprint</li>
-              <li>Legacy Project Friendly</li>
-            </ul>
           </div>
-        </div>
-      </section>
+
+          <div class="info-card">
+            <div class="info-tag tag-yellow"></div>
+            <h2 class="info-title">Why jQuery?</h2>
+            <div style="font-weight: 700; line-height: 1.4">
+              <p style="margin-bottom: 20px">
+                atom-effect-jquery brings modern reactivity to the most
+                battle-tested DOM library. Benefit from jQuery's ecosystem while
+                enjoying fine-grained, declarative state management.
+              </p>
+              <ul style="list-style: square; padding-left: 20px">
+                <li>Chainable API Design</li>
+                <li>Auto DOM Cleanup</li>
+                <li>Minimal Memory Footprint</li>
+                <li>Legacy Project Friendly</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+      </main>
 
       <footer>
         <div>ATOM EFFECT / JQUERY EDITION</div>
@@ -474,7 +480,7 @@ $(<span class="code-string">'#list'</span>).<span class="code-function">atomList
           © 2026 Jeong Il Suk
         </address>
       </footer>
-    </main>
+    </div>
 
     <!-- Dependencies -->
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
@@ -635,7 +641,9 @@ $(<span class="code-string">'#list'</span>).<span class="code-function">atomList
                 <div class="user-info">
                   <div class="user-name">${user.login}</div>
                   <div class="user-email">
-                    <a href="${user.html_url}" target="_blank">${user.html_url.replace("https://", "")}</a>
+                    <a href="${user.html_url}" target="_blank">
+                      ${new URL(user.html_url).hostname}${new URL(user.html_url).pathname}
+                    </a>
                   </div>
                 </div>
               </div>

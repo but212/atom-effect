@@ -54,6 +54,10 @@
         padding: 40px;
       }
 
+      main {
+        display: contents;
+      }
+
       /* Header */
       header {
         grid-column: 1 / -1;
@@ -426,7 +430,7 @@
         .comparison-grid,
         .pipeline,
         .info-card {
-          grid-columns: 1 / -1;
+          grid-column: 1 / -1;
           display: flex;
           flex-direction: column;
         }
@@ -434,24 +438,25 @@
     </style>
   </head>
   <body>
-    <main class="container">
+    <div class="container">
       <header>
         <div class="logo">ASYNC<br />PIPELINE<span>.</span></div>
         <div class="badge">Async Propagation</div>
       </header>
 
-      <!-- Before/After -->
-      <section class="section">
-        <h2 class="section-title">01 / THE EVOLUTION</h2>
-        <div class="comparison-grid">
-          <div class="card card-red">
-            <div class="card-header">
-              <h3>Traditional Complexity</h3>
-              <span class="code-tag bad">Callback Hell</span>
-            </div>
-            <pre
-              class="code-block"
-            ><span class="code-fn">fetchUser</span>(id, (err, user) => {
+      <main>
+        <!-- Before/After -->
+        <section class="section">
+          <h2 class="section-title">01 / THE EVOLUTION</h2>
+          <div class="comparison-grid">
+            <div class="card card-red">
+              <div class="card-header">
+                <h3>Traditional Complexity</h3>
+                <span class="code-tag bad">Callback Hell</span>
+              </div>
+              <pre
+                class="code-block"
+              ><span class="code-fn">fetchUser</span>(id, (err, user) => {
   <span class="code-keyword">if</span> (err) <span class="code-keyword">return</span> <span class="code-fn">error</span>();
   <span class="code-fn">fetchRepos</span>(user.id, (err, repos) => {
     <span class="code-keyword">if</span> (err) <span class="code-keyword">return</span> <span class="code-fn">error</span>();
@@ -460,21 +465,21 @@
     });
   });
 });</pre>
-            <ul class="list-style problems-list">
-              <li>Pyramid of Doom</li>
-              <li>Manual Error Handling</li>
-              <li>Fragile Control Flow</li>
-            </ul>
-          </div>
-
-          <div class="card card-blue">
-            <div class="card-header">
-              <h3>Atomic Declarative</h3>
-              <span class="code-tag good">Declarative</span>
+              <ul class="list-style problems-list">
+                <li>Pyramid of Doom</li>
+                <li>Manual Error Handling</li>
+                <li>Fragile Control Flow</li>
+              </ul>
             </div>
-            <pre
-              class="code-block"
-            ><span class="code-keyword">const</span> user = <span class="code-function">computed</span>(<span class="code-keyword">async</span> () => {
+
+            <div class="card card-blue">
+              <div class="card-header">
+                <h3>Atomic Declarative</h3>
+                <span class="code-tag good">Declarative</span>
+              </div>
+              <pre
+                class="code-block"
+              ><span class="code-keyword">const</span> user = <span class="code-function">computed</span>(<span class="code-keyword">async</span> () => {
   <span class="code-keyword">return await</span> <span class="code-fn">fetchUser</span>(id.value);
 });
 
@@ -483,90 +488,93 @@
 });
 
 <span class="code-comment">// Errors propagate automatically!</span></pre>
-            <ul class="list-style benefits-list">
-              <li>Flat Architecture</li>
-              <li>Auto Dependency Tracking</li>
-              <li>Built-in Propagation</li>
-            </ul>
+              <ul class="list-style benefits-list">
+                <li>Flat Architecture</li>
+                <li>Auto Dependency Tracking</li>
+                <li>Built-in Propagation</li>
+              </ul>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <!-- Live Pipeline -->
-      <section class="section">
-        <div class="demo-header">
-          <h2 class="section-title">02 / LIVE EXECUTION</h2>
-          <div class="demo-controls">
-            <button id="btnSuccess" class="btn btn-success">RUN STREAM</button>
-            <button id="btnFail" class="btn btn-fail">TRIGGER FAILURE</button>
-          </div>
-        </div>
-
-        <div class="pipeline">
-          <div id="stage1" class="pipeline-stage">
-            <div class="stage-card">
-              <div class="stage-header">
-                <span class="stage-name">1. Fetch User</span>
-                <span id="badge1" class="stage-badge idle">Idle</span>
-              </div>
-              <div class="stage-desc">REST /users/:id</div>
-              <div id="output1" class="stage-output">—</div>
+        <!-- Live Pipeline -->
+        <section class="section">
+          <div class="demo-header">
+            <h2 class="section-title">02 / LIVE EXECUTION</h2>
+            <div class="demo-controls">
+              <button id="btnSuccess" class="btn btn-success">
+                RUN STREAM
+              </button>
+              <button id="btnFail" class="btn btn-fail">TRIGGER FAILURE</button>
             </div>
           </div>
 
-          <div id="stage2" class="pipeline-stage">
-            <div class="stage-card">
-              <div class="stage-header">
-                <span class="stage-name">2. Fetch Repos</span>
-                <span id="badge2" class="stage-badge idle">Idle</span>
+          <div class="pipeline">
+            <div id="stage1" class="pipeline-stage">
+              <div class="stage-card">
+                <div class="stage-header">
+                  <span class="stage-name">1. Fetch User</span>
+                  <span id="badge1" class="stage-badge idle">Idle</span>
+                </div>
+                <div class="stage-desc">REST /users/:id</div>
+                <div id="output1" class="stage-output">—</div>
               </div>
-              <div class="stage-desc">REST /repos/:id</div>
-              <div id="output2" class="stage-output">—</div>
+            </div>
+
+            <div id="stage2" class="pipeline-stage">
+              <div class="stage-card">
+                <div class="stage-header">
+                  <span class="stage-name">2. Fetch Repos</span>
+                  <span id="badge2" class="stage-badge idle">Idle</span>
+                </div>
+                <div class="stage-desc">REST /repos/:id</div>
+                <div id="output2" class="stage-output">—</div>
+              </div>
+            </div>
+
+            <div id="stage3" class="pipeline-stage">
+              <div class="stage-card">
+                <div class="stage-header">
+                  <span class="stage-name">3. Compute Stats</span>
+                  <span id="badge3" class="stage-badge idle">Idle</span>
+                </div>
+                <div class="stage-desc">AGGREGATE BY STAR</div>
+                <div id="output3" class="stage-output">—</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Insights -->
+        <section class="insight-section">
+          <div class="info-card">
+            <div class="info-tag tag-circle"></div>
+            <h2 class="info-title">Error Awareness</h2>
+            <div class="info-content">
+              <p style="margin-bottom: 20px">
+                When Stage 2 fails, Stage 3 detects it instantly via the
+                <code>hasError</code> property. The error state flows through
+                the recovery chain, allowing downstream consumers to enter
+                "Blocked" or "Error" states gracefully without manual
+                <code>try-catch</code> everywhere.
+              </p>
             </div>
           </div>
 
-          <div id="stage3" class="pipeline-stage">
-            <div class="stage-card">
-              <div class="stage-header">
-                <span class="stage-name">3. Compute Stats</span>
-                <span id="badge3" class="stage-badge idle">Idle</span>
-              </div>
-              <div class="stage-desc">AGGREGATE BY STAR</div>
-              <div id="output3" class="stage-output">—</div>
+          <div class="info-card">
+            <div class="info-tag tag-yellow"></div>
+            <h2 class="info-title">The Benefit</h2>
+            <div class="info-content">
+              <ul style="list-style: square; padding-left: 20px">
+                <li>No more nested error handling logic</li>
+                <li>Uniform async state tracking across the app</li>
+                <li>Clear visualization of state dependency</li>
+                <li>Surgical updates based on async resolution</li>
+              </ul>
             </div>
           </div>
-        </div>
-      </section>
-
-      <!-- Insights -->
-      <section class="insight-section">
-        <div class="info-card">
-          <div class="info-tag tag-circle"></div>
-          <h2 class="info-title">Error Awareness</h2>
-          <div class="info-content">
-            <p style="margin-bottom: 20px">
-              When Stage 2 fails, Stage 3 detects it instantly via the
-              <code>hasError</code> property. The error state flows through the
-              recovery chain, allowing downstream consumers to enter "Blocked"
-              or "Error" states gracefully without manual
-              <code>try-catch</code> everywhere.
-            </p>
-          </div>
-        </div>
-
-        <div class="info-card">
-          <div class="info-tag tag-yellow"></div>
-          <h2 class="info-title">The Benefit</h2>
-          <div class="info-content">
-            <ul style="list-style: square; padding-left: 20px">
-              <li>No more nested error handling logic</li>
-              <li>Uniform async state tracking across the app</li>
-              <li>Clear visualization of state dependency</li>
-              <li>Surgical updates based on async resolution</li>
-            </ul>
-          </div>
-        </div>
-      </section>
+        </section>
+      </main>
 
       <footer>
         <div>ATOM EFFECT / CORE PROPAGATION</div>
@@ -575,7 +583,7 @@
           © 2026 Jeong Il Suk
         </address>
       </footer>
-    </main>
+    </div>
 
     <script>
       const { atom, computed, effect, untracked, AsyncState } = AtomEffect;
