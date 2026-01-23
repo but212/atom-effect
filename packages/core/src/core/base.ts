@@ -36,7 +36,6 @@ export class ReactiveNode {
     this._tempUnsub = undefined;
   }
 
-
   /**
    * Calculates the logical distance (shift) between current and cached version.
    */

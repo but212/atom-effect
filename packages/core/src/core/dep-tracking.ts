@@ -1,5 +1,6 @@
 import { NODE_FLAGS } from '@/constants';
 import { EMPTY_DEPS, EMPTY_UNSUBS, unsubArrayPool } from '@/internal/pool';
+import { type DependencySubscriber } from '@/tracking/tracking.types';
 import type { Dependency, Subscriber } from '@/types';
 import { debug } from '@/utils/debug';
 
@@ -14,9 +15,9 @@ export function trackDependency<T>(
   // Inlined from hasDependencyMethod to avoid call overhead
   if (
     (typeof current === 'object' || typeof current === 'function') &&
-    typeof (current as any).addDependency === 'function'
+    typeof (current as DependencySubscriber).addDependency === 'function'
   ) {
-    (current as any).addDependency(dependency);
+    (current as DependencySubscriber).addDependency(dependency);
     return;
   }
 
@@ -31,7 +32,7 @@ export function trackDependency<T>(
   }
 
   // Inlined from hasExecuteMethod
-  if (typeof current === 'object' && typeof (current as any).execute === 'function') {
+  if (typeof current === 'object' && typeof (current as Subscriber).execute === 'function') {
     if (objectSubscribers.indexOf(current as Subscriber) === -1) {
       objectSubscribers.push(current as Subscriber);
       dependency.flags |= NODE_FLAGS.HAS_OBJ_SUBS;
