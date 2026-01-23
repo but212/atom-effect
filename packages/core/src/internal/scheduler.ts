@@ -204,7 +204,7 @@ class Scheduler {
 
     this._sizes[0] = targetSize;
     this.batchQueueSize = 0;
-    if (queue.length > 1000) queue.length = 0;
+    if (queue.length > SCHEDULER_CONFIG.BATCH_QUEUE_SHRINK_THRESHOLD) queue.length = 0;
   }
 
   private _drainQueue(): void {
