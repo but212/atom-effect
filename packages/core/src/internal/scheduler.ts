@@ -98,19 +98,21 @@ class Scheduler {
       throw new SchedulerError('Scheduler callback must be a function');
     }
 
-    if (callback._nextEpoch === this._epoch) return;
-    callback._nextEpoch = this._epoch;
+    const epoch = this._epoch;
+    if (callback._nextEpoch === epoch) return;
+    callback._nextEpoch = epoch;
 
     if (this.isBatching || this.isFlushingSync) {
       this.batchQueue[this.batchQueueSize++] = callback;
-    } else {
-      // Truly branchless routing: 0 -> normal, 1 -> urgent
-      const urgent = this._calculateUrgency(callback, sourceNode);
-      this._activeQueues[urgent][this._sizes[urgent]!++] = callback;
+      return;
+    }
 
-      if (!this.isProcessing) {
-        this.flush();
-      }
+    // Branchless routing: 0 -> normal, 1 -> urgent
+    const urgent = this._calculateUrgency(callback, sourceNode);
+    this._activeQueues[urgent][this._sizes[urgent]!++] = callback;
+
+    if (!this.isProcessing) {
+      this.flush();
     }
   }
 
@@ -181,29 +183,36 @@ class Scheduler {
 
   /**
    * Merges jobs from the batching queue into the primary normal queue.
-   * Increments the epoch to ensure stale jobs from previous iterations are discarded.
+   * Increments the epoch/uses provided epoch to ensure deduplication.
    */
   private _mergeBatchQueue(): void {
-    this._epoch++;
     const size = this.batchQueueSize;
-    if (size > 0) {
-      const queue = this.batchQueue;
-      for (let i = 0; i < size; i++) {
-        const job = queue[i];
-        if (job && job._nextEpoch !== this._epoch) {
-          job._nextEpoch = this._epoch;
-          this._activeQueues[0][this._sizes[0]!++] = job;
-        }
+    if (size === 0) return;
+
+    const epoch = ++this._epoch;
+    const queue = this.batchQueue;
+    const targetQueue = this._activeQueues[0];
+    let targetSize = this._sizes[0]!;
+
+    for (let i = 0; i < size; i++) {
+      const job = queue[i]!;
+      if (job._nextEpoch !== epoch) {
+        job._nextEpoch = epoch;
+        targetQueue[targetSize++] = job;
       }
-      this.batchQueueSize = 0;
     }
+
+    this._sizes[0] = targetSize;
+    this.batchQueueSize = 0;
+    if (queue.length > 1000) queue.length = 0;
   }
 
   private _drainQueue(): void {
     let iterations = 0;
+    const maxIterations = this.maxFlushIterations;
 
     while (this._sizes[1]! > 0 || this._sizes[0]! > 0) {
-      if (++iterations > this.maxFlushIterations) {
+      if (++iterations > maxIterations) {
         this._handleFlushOverflow();
         return;
       }
@@ -216,12 +225,15 @@ class Scheduler {
   }
 
   private _processQueue(type: 0 | 1): void {
-    const jobs = this._activeQueues[type];
+    const buffers = this._queueBuffers[type];
+    const index = this._bufferIndices[type]!;
+    const jobs = buffers[index]!;
     const count = this._sizes[type]!;
 
     // Swap to other buffer branchlessly
-    this._bufferIndices[type]! ^= 1;
-    this._activeQueues[type] = this._queueBuffers[type][this._bufferIndices[type]!]!;
+    const nextIndex = index ^ 1;
+    this._bufferIndices[type] = nextIndex;
+    this._activeQueues[type] = buffers[nextIndex]!;
     this._sizes[type] = 0;
     this._epoch++;
 
@@ -241,21 +253,15 @@ class Scheduler {
     this.batchQueueSize = 0;
   }
 
-  /**
-   * Low-level job executor. Processes a fixed number of jobs from an array
-   * and then clears the array's length to assist Garbage Collection.
-   */
   private _processJobs(jobs: SchedulerJob[], count: number): void {
     for (let i = 0; i < count; i++) {
-      const job = jobs[i];
-      if (job) {
-        try {
-          job();
-        } catch (error) {
-          console.error(
-            new SchedulerError('Error occurred during scheduler execution', error as Error)
-          );
-        }
+      try {
+        // Density guaranteed by schedule mechanism, avoiding redundant if(job)
+        jobs[i]!();
+      } catch (error) {
+        console.error(
+          new SchedulerError('Error occurred during scheduler execution', error as Error)
+        );
       }
     }
     // O(1) clear of the array to release references without re-allocating
