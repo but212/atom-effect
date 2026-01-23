@@ -13,9 +13,15 @@
 
 - **Internal Cleanup**: Simplified property access and synchronized state flags to improve code clarity and maintainability.
 
+### jQuery
+
+#### Refactor - jQuery
+
+- **Automatic Batching**: Wrapped jQuery event handlers in `batch()` to ensure synchronous DOM updates and state consistency within handlers.
+
 ## [0.13.1]
 
-### jQuery
+### jQuery - 0.13.1
 
 #### Fixed - jQuery
 

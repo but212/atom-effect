@@ -135,6 +135,40 @@ $('#app').atomMount(Counter, { start: 10 });
 - **Fine-grained Updates**: Only the specific element property/attribute changes, preventing full list re-renders.
 - **Reparenting-Safe**: Elements can be moved within the DOM without losing their reactive bindings.
 
+## Automatic Batching
+
+When `enablejQueryOverrides()` is called, all event handlers registered via jQuery (`.on()`, etc.) are automatically wrapped in `batch()`. This ensures:
+
+1. **Synchronous Reflection**: Any atom updates within the handler are flushed to the DOM immediately after the handler finishes execution, but before the browser repaints.
+2. **Atomic Updates**: Multiple atom updates are grouped into a single DOM update. This prevents redundant renders and ensures that the DOM never reflects a partial state.
+
+> **Note**: Reading DOM properties (like `text()`) immediately after an atom update **inside the same synchronous handler** will still return the old value. The DOM is synchronized only when the handler returns and the batch block completes.
+
+### The "Async Trap"
+
+Automatic batching only covers the **synchronous** execution of the handler. If you use `async/await`, updates occurring after an `await` are no longer inside the `batch()` scope.
+
+```javascript
+$('#btn').on('click', async () => {
+  count.value++; // Batched (synchronous)
+  
+  await fetchData();
+  
+  // No longer in batch scope! 
+  // Updates will be batched via microtasks (asynchronous reflection)
+  count.value++; 
+});
+```
+
+If you need synchronous reflection after an `await`, wrap the updates manually:
+
+```javascript
+await fetchData();
+$.batch(() => {
+  count.value++;
+});
+```
+
 ## Debug Mode
 
 Enable internal logging and dependency tracing:
