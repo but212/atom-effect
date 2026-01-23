@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Async Computed + jQuery | atom-effect-jquery</title>
+    <title>Async Computed + Vanilla DOM | atom-effect</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -14,6 +14,7 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap"
       rel="stylesheet"
     />
+    <script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect@latest"></script>
     <style>
       :root {
         --primary-red: #e63946;
@@ -23,6 +24,10 @@
         --white: #ffffff;
         --font-main: "Inter", sans-serif;
         --font-mono: "IBM Plex Mono", monospace;
+        --status-idle: #666;
+        --status-pending: var(--primary-yellow);
+        --status-resolved: #22c55e;
+        --status-rejected: var(--primary-red);
       }
 
       * {
@@ -46,10 +51,6 @@
         max-width: 1400px;
         margin: 0 auto;
         padding: 40px;
-      }
-
-      main {
-        display: contents;
       }
 
       /* Header */
@@ -295,7 +296,7 @@
         grid-column: 8 / 13;
       }
 
-      /* Technical Overview */
+      /* Info Section Style */
       .info-section {
         grid-column: 1 / -1;
         margin-top: 60px;
@@ -379,131 +380,130 @@
     </style>
   </head>
   <body>
-    <div class="container">
+    <main class="container">
       <header>
-        <div class="logo">JQUERY<br />ASYNC<span>.</span></div>
-        <div class="badge">atom-effect-jquery</div>
+        <div class="logo">ASYNC<br />STREAMS<span>.</span></div>
+        <div class="badge">Atom Effect</div>
       </header>
 
-      <main>
-        <!-- Main Interaction Area -->
-        <section class="grid-main">
-          <div class="card card-blue">
-            <h2 class="card-title">Search Engine</h2>
-            <input
-              type="text"
-              id="search-input"
-              class="search-input"
-              placeholder="TYPE USERNAME..."
-            />
-            <div style="margin-top: 20px">
-              <div id="status-indicator" class="status status-idle">IDLE</div>
+      <!-- Main Interaction Area -->
+      <section class="grid-main">
+        <div class="card card-blue">
+          <h2 class="card-title">Search Engine</h2>
+          <input
+            type="text"
+            id="searchInput"
+            class="search-input"
+            placeholder="TYPE USERNAME..."
+          />
+          <div style="margin-top: 20px">
+            <div id="statusIndicator" class="status status-idle">IDLE</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2 class="card-title">Results Stream</h2>
+          <div id="resultsContainer">
+            <div class="empty-state">SEARCH KEYWORD REQUIRED</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Sidebar / Live Data -->
+      <section class="grid-side">
+        <div class="card card-yellow">
+          <h2 class="card-title">System Live</h2>
+          <div class="stats-grid">
+            <div class="stat-item">
+              <div id="searchCount" class="stat-value">0</div>
+              <div class="stat-label">Queries</div>
+            </div>
+            <div class="stat-item">
+              <div id="currentState" class="stat-value">IDLE</div>
+              <div class="stat-label">State</div>
+            </div>
+            <div class="stat-item">
+              <div id="resultCount" class="stat-value">0</div>
+              <div class="stat-label">Items</div>
+            </div>
+            <div class="stat-item">
+              <div id="lastUpdate" class="stat-value">--:--</div>
+              <div class="stat-label">Pulse</div>
             </div>
           </div>
+        </div>
+      </section>
 
-          <div class="card">
-            <h2 class="card-title">Results Stream</h2>
-            <div id="results-container">
-              <div class="empty-state">SEARCH KEYWORD REQUIRED</div>
-            </div>
-          </div>
-        </section>
+      <!-- Technical Overview -->
+      <section class="info-section">
+        <div class="info-card">
+          <div class="info-tag tag-red"></div>
+          <h2 class="info-title">The Logic</h2>
+          <pre
+            class="code-block"
+          ><span class="code-comment">// 1. SOURCE ATOM</span>
+<span class="code-keyword">const</span> query = <span class="code-function">atom</span>(<span class="code-string">''</span>);
 
-        <!-- Sidebar / Live Data -->
-        <section class="grid-side">
-          <div class="card card-yellow">
-            <h2 class="card-title">System Live</h2>
-            <div class="stats-grid">
-              <div class="stat-item">
-                <div id="search-count" class="stat-value">0</div>
-                <div class="stat-label">Queries</div>
-              </div>
-              <div class="stat-item">
-                <div id="current-state" class="stat-value">IDLE</div>
-                <div class="stat-label">State</div>
-              </div>
-              <div class="stat-item">
-                <div id="result-count" class="stat-value">0</div>
-                <div class="stat-label">Items</div>
-              </div>
-              <div id="last-update-wrapper" class="stat-item">
-                <div id="last-update" class="stat-value">--:--</div>
-                <div class="stat-label">Pulse</div>
-              </div>
-            </div>
-          </div>
-        </section>
+<span class="code-comment">// 2. ASYNC COMPUTED PIPE</span>
+<span class="code-keyword">const</span> data = <span class="code-function">computed</span>(<span class="code-keyword">async</span> () => {
+  <span class="code-keyword">if</span> (!query.value) <span class="code-keyword">return</span> [];
+  <span class="code-keyword">return await</span> <span class="code-function">api</span>(query.value);
+}, { defaultValue: [] });
 
-        <!-- Technical Overview -->
-        <section class="info-section">
-          <div class="info-card">
-            <div class="info-tag tag-red"></div>
-            <h2 class="info-title">The Bindings</h2>
-            <pre
-              class="code-block"
-            ><span class="code-comment">// 1. JQUERY CHAINING</span>
-$(<span class="code-string">'#input'</span>).<span class="code-function">atomVal</span>(query);
-
-<span class="code-comment">// 2. AUTOMATIC SYNC</span>
-$(<span class="code-string">'#text'</span>).<span class="code-function">atomText</span>(data);
-
-<span class="code-comment">// 3. LIST RENDERING</span>
-$(<span class="code-string">'#list'</span>).<span class="code-function">atomList</span>(data, {
-  render: u => <span class="code-string">`&lt;li&gt;${u.name}&lt;/li&gt;`</span>
+<span class="code-comment">// 3. REACTIVE SYNC</span>
+<span class="code-function">effect</span>(() => {
+  <span class="code-keyword">if</span> (data.isPending) <span class="code-function">load</span>();
+  <span class="code-keyword">else</span> <span class="code-function">render</span>(data.value);
 });</pre>
-          </div>
+        </div>
 
-          <div class="info-card">
-            <div class="info-tag tag-yellow"></div>
-            <h2 class="info-title">Why jQuery?</h2>
-            <div style="font-weight: 700; line-height: 1.4">
-              <p style="margin-bottom: 20px">
-                atom-effect-jquery brings modern reactivity to the most
-                battle-tested DOM library. Benefit from jQuery's ecosystem while
-                enjoying fine-grained, declarative state management.
-              </p>
-              <ul style="list-style: square; padding-left: 20px">
-                <li>Chainable API Design</li>
-                <li>Auto DOM Cleanup</li>
-                <li>Minimal Memory Footprint</li>
-                <li>Legacy Project Friendly</li>
-              </ul>
-            </div>
+        <div class="info-card">
+          <div class="info-tag tag-yellow"></div>
+          <h2 class="info-title">Atomic Async</h2>
+          <div style="font-weight: 700; line-height: 1.4">
+            <p style="margin-bottom: 20px">
+              Atom Effect treats asynchronous operations as first-class
+              citizens. Automatic state tracking (Idle, Pending, Resolved,
+              Rejected) and race condition prevention are built into the core.
+            </p>
+            <ul style="list-style: square; padding-left: 20px">
+              <li>Auto Race-Condition Handling</li>
+              <li>Reactive State Properties</li>
+              <li>Deep Dependency Tracking</li>
+              <li>Built-in Error Propagation</li>
+            </ul>
           </div>
-        </section>
-      </main>
+        </div>
+      </section>
 
       <footer>
-        <div>ATOM EFFECT / JQUERY EDITION</div>
+        <div>ATOM EFFECT / VANILLA DOM</div>
         <address style="font-style: normal">
-          DECLARATIVE BRIDGE ENGINE<br />
+          PURE PERFORMANCE ENGINE<br />
           © 2026 Jeong Il Suk
         </address>
       </footer>
-    </div>
+    </main>
 
-    <!-- Dependencies -->
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@latest"></script>
-
+    <script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect@latest"></script>
     <script>
-      // ============================================================
-      // State Definition
-      // ============================================================
-      const searchCount = $.atom(0);
-      const debouncedQuery = $.atom("");
+      const { atom, computed, effect, untracked, AsyncState } = AtomEffect;
+
+      // State
+      const searchCount = atom(0);
+      const debouncedQuery = atom("");
       let debounceTimer = null;
 
-      // ============================================================
-      // Async Computed - Handles race conditions automatically
-      // ============================================================
-      const searchResults = $.computed(
+      // Async Computed
+      const searchResults = computed(
         async () => {
           const query = debouncedQuery.value;
           if (!query || query.trim().length < 2) return [];
 
           const response = await fetch(
-            `https://api.github.com/search/users?q=${encodeURIComponent(query)}&per_page=5`,
+            `https://api.github.com/search/users?q=${encodeURIComponent(
+              query,
+            )}&per_page=5`,
           );
 
           if (!response.ok) throw new Error(`API Error: ${response.status}`);
@@ -511,180 +511,181 @@ $(<span class="code-string">'#list'</span>).<span class="code-function">atomList
           const data = await response.json();
           return data.items || [];
         },
-        { defaultValue: [] },
+        {
+          defaultValue: [],
+          onError: (error) => console.error("Search failed:", error),
+        },
       );
 
-      // ============================================================
       // Derived State
-      // ============================================================
-      const resultCount = $.computed(() => searchResults.value.length);
+      const resultCount = computed(() => searchResults.value.length);
 
-      const statusInfo = $.computed(() => {
+      const statusMessage = computed(() => {
         const state = searchResults.state;
         const query = debouncedQuery.value;
 
         switch (state) {
-          case "idle":
-            return { text: "IDLE", class: "status-idle", showSpinner: false };
-          case "pending":
+          case AsyncState.IDLE:
+            return { text: "IDLE", class: "status-idle" };
+          case AsyncState.PENDING:
             return {
-              text: `SEARCHING...`,
+              text: "SEARCHING...",
               class: "status-pending",
               showSpinner: true,
             };
-          case "resolved": {
+          case AsyncState.RESOLVED: {
             const count = searchResults.value.length;
             return {
               text: count > 0 ? `${count} ITEMS FOUND` : "NO RESULTS",
               class: "status-resolved",
-              showSpinner: false,
             };
           }
-          case "rejected":
-            return {
-              text: "SYSTEM ERROR",
-              class: "status-rejected",
-              showSpinner: false,
-            };
+          case AsyncState.REJECTED:
+            return { text: "ERROR OCCURRED", class: "status-rejected" };
           default:
-            return {
-              text: "UNKNOWN",
-              class: "status-idle",
-              showSpinner: false,
-            };
+            return { text: "UNKNOWN", class: "status-idle" };
         }
       });
 
-      // ============================================================
-      // DOM Bindings
-      // ============================================================
+      // DOM Elements
+      const elements = {
+        searchInput: document.getElementById("searchInput"),
+        statusIndicator: document.getElementById("statusIndicator"),
+        resultsContainer: document.getElementById("resultsContainer"),
+        searchCount: document.getElementById("searchCount"),
+        currentState: document.getElementById("currentState"),
+        resultCount: document.getElementById("resultCount"),
+        lastUpdate: document.getElementById("lastUpdate"),
+      };
 
-      // Debug panel bindings
-      $("#search-count").atomText(searchCount);
-      $("#current-state").atomText(
-        $.computed(() => searchResults.state.toUpperCase()),
-      );
-      $("#result-count").atomText(resultCount);
+      // Effects
+      effect(() => {
+        const status = statusMessage.value;
+        const el = elements.statusIndicator;
 
-      // Status indicator - Complex DOM manipulation with effect
-      $.effect(() => {
-        const status = statusInfo.value;
-        const $el = $("#status-indicator");
-
-        $el.attr("class", `status ${status.class}`);
+        el.className = `status ${status.class}`;
+        el.textContent = "";
 
         if (status.showSpinner) {
-          $el.html('<div class="spinner"></div> ' + status.text);
-        } else {
-          $el.text(status.text);
+          const spinner = document.createElement("div");
+          spinner.className = "spinner";
+          el.appendChild(spinner);
         }
+
+        el.appendChild(document.createTextNode(status.text));
       });
 
-      // Results container
-      $.effect(() => {
+      effect(() => {
         const results = searchResults.value;
         const state = searchResults.state;
         const query = debouncedQuery.value;
-        const $container = $("#results-container");
+        const container = elements.resultsContainer;
 
-        // Adjust opacity only during pending state
-        if (state === "pending" && results.length > 0) {
-          $container.css("opacity", "0.5");
+        if (state === AsyncState.PENDING && results.length > 0) {
+          container.style.opacity = "0.5";
           return;
         }
 
-        $container.css("opacity", "1");
+        container.style.opacity = "1";
 
-        // Empty state
         if (!query || query.length < 2) {
-          $container.html(
-            `<div class="empty-state">SEARCH KEYWORD REQUIRED</div>`,
-          );
+          container.innerHTML = `<div class="empty-state">SEARCH KEYWORD REQUIRED</div>`;
           return;
         }
 
-        // Error state
         if (searchResults.hasError) {
-          const error = searchResults.lastError;
-          const isRateLimit = error?.message.includes("403");
-          $container.html(`
-            <div class="error-message">
-              ${
-                isRateLimit
-                  ? "OVERLOAD: GITHUB API RATE LIMIT EXCEEDED."
-                  : `FAILURE: ${error?.message || "UNKNOWN"}`
-              }
-            </div>
-          `);
+          container.innerHTML = `
+          <div class="error-message">
+            SYSTEM FAILURE: ${searchResults.lastError?.message || "UNKNOWN"}
+          </div>`;
           return;
         }
 
-        // No results
-        if (results.length === 0 && state === "resolved") {
-          $container.html(
-            `<div class="empty-state">NO MATCHES FOUND FOR "${query.toUpperCase()}"</div>`,
-          );
+        if (results.length === 0 && state === AsyncState.RESOLVED) {
+          container.innerHTML = `<div class="empty-state">NO MATCHES FOUND FOR "${query.toUpperCase()}"</div>`;
           return;
         }
 
-        // Render results
-        const html = `
-          <div class="user-list">
-            ${results
-              .map(
-                (user) => `
-              <div class="user-item">
-                <div class="user-avatar">
-                  <img src="${user.avatar_url}" alt="${user.login}" 
-                       onerror="this.style.display='none'; this.parentNode.textContent='${user.login[0].toUpperCase()}'">
-                </div>
-                <div class="user-info">
-                  <div class="user-name">${user.login}</div>
-                  <div class="user-email">
-                    <a href="${user.html_url}" target="_blank">
-                      ${new URL(user.html_url).hostname}${new URL(user.html_url).pathname}
-                    </a>
-                  </div>
-                </div>
-              </div>
-            `,
-              )
-              .join("")}
-          </div>
-        `;
-        $container.html(html);
+        container.textContent = "";
+        const userList = document.createElement("div");
+        userList.className = "user-list";
+
+        results.forEach((user) => {
+          const item = document.createElement("div");
+          item.className = "user-item";
+
+          const avatarDiv = document.createElement("div");
+          avatarDiv.className = "user-avatar";
+
+          const img = document.createElement("img");
+          img.src = user.avatar_url;
+          img.alt = user.login;
+          img.onerror = () => {
+            img.style.display = "none";
+            avatarDiv.textContent = (user.login[0] || "?").toUpperCase();
+          };
+          avatarDiv.appendChild(img);
+          item.appendChild(avatarDiv);
+
+          const infoDiv = document.createElement("div");
+          infoDiv.className = "user-info";
+
+          const nameDiv = document.createElement("div");
+          nameDiv.className = "user-name";
+          nameDiv.textContent = user.login;
+          infoDiv.appendChild(nameDiv);
+
+          const emailDiv = document.createElement("div");
+          emailDiv.className = "user-email";
+          const link = document.createElement("a");
+          link.href = user.html_url;
+          link.target = "_blank";
+          link.textContent = user.html_url.replace("https://", "");
+          emailDiv.appendChild(link);
+          infoDiv.appendChild(emailDiv);
+
+          item.appendChild(infoDiv);
+          userList.appendChild(item);
+        });
+
+        container.appendChild(userList);
       });
 
-      // Last update time
-      $.effect(() => {
-        if (searchResults.state === "resolved") {
-          $("#last-update").text(
-            new Date().toLocaleTimeString([], {
-              hour12: false,
-              hour: "2-digit",
-              minute: "2-digit",
-            }),
-          );
+      effect(() => {
+        elements.searchCount.textContent = searchCount.value;
+      });
+
+      effect(() => {
+        elements.currentState.textContent = searchResults.state.toUpperCase();
+      });
+
+      effect(() => {
+        elements.resultCount.textContent = resultCount.value;
+      });
+
+      effect(() => {
+        if (searchResults.isResolved) {
+          const now = new Date();
+          elements.lastUpdate.textContent = now.toLocaleTimeString([], {
+            hour12: false,
+            hour: "2-digit",
+            minute: "2-digit",
+          });
         }
       });
 
-      // ============================================================
-      // Event Handling - debounce
-      // ============================================================
-      $("#search-input").on("input", function () {
-        const value = $(this).val();
+      // Events
+      elements.searchInput.addEventListener("input", (e) => {
+        const value = e.target.value;
 
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
-          if (value.trim().length >= 2) {
-            searchCount.value++;
-          }
+          if (value.trim().length >= 2) searchCount.value++;
           debouncedQuery.value = value;
-        }, 500);
+        }, 300);
       });
 
-      // Focus on load
-      $("#search-input").focus();
+      elements.searchInput.focus();
     </script>
   </body>
 </html>

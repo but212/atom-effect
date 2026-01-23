@@ -1,561 +1,514 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Async Propagation | No More Callback Hell</title>
-    <script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect@0.7.0"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect@latest"></script>
     <style>
       :root {
-        --bg-body: #0a0a0f;
-        --bg-card: #12121a;
-        --bg-code: #0d0d12;
-        --bg-input: #0f0f14;
-        
-        --border-subtle: #1f1f2e;
-        --border-focus: #6366f1;
-        
-        --text-primary: #f0f0f5;
-        --text-secondary: #8b8b9e;
-        --text-tertiary: #5c5c70;
-        
-        --accent-primary: #6366f1;
-        --accent-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-        
-        --status-idle: #5c5c70;
-        --status-pending: #eab308;
-        --status-resolved: #22c55e;
-        --status-rejected: #ef4444;
-        
-        --callback-hell: #ef4444;
-        --declarative: #22c55e;
+        --primary-red: #e63946;
+        --primary-blue: #2a52be;
+        --primary-yellow: #ffd60a;
+        --black: #000000;
+        --white: #ffffff;
+        --font-main: "Inter", sans-serif;
+        --font-mono: "IBM Plex Mono", monospace;
 
-        --font-base: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+        --status-idle: #666;
+        --status-pending: var(--primary-yellow);
+        --status-resolved: #22c55e;
+        --status-rejected: var(--primary-red);
       }
 
-      * { margin: 0; padding: 0; box-sizing: border-box; }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
 
       body {
-        font-family: var(--font-base);
-        background: var(--bg-body);
-        color: var(--text-primary);
-        min-height: 100vh;
-        padding: 3rem 1.5rem;
-        line-height: 1.6;
+        font-family: var(--font-main);
+        background-color: var(--white);
+        color: var(--black);
+        line-height: 1.2;
+        overflow-x: hidden;
       }
 
-      .container { max-width: 1100px; margin: 0 auto; }
+      .container {
+        display: grid;
+        grid-template-columns: repeat(12, 1fr);
+        gap: 30px;
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 40px;
+      }
+
+      main {
+        display: contents;
+      }
 
       /* Header */
-      header { 
-        text-align: center; 
-        margin-bottom: 3rem;
-        padding-bottom: 2rem;
-        border-bottom: 1px solid var(--border-subtle);
+      header {
+        grid-column: 1 / -1;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 60px;
       }
-      
+
+      .logo {
+        font-weight: 900;
+        font-size: 2.5rem;
+        letter-spacing: -2px;
+        line-height: 0.9;
+        text-transform: uppercase;
+        cursor: default;
+      }
+
+      .logo span {
+        color: var(--primary-red);
+        font-size: 1.2em;
+      }
+
       .badge {
         display: inline-block;
-        background: var(--accent-gradient);
-        color: white;
+        background-color: var(--black);
+        color: var(--white);
+        padding: 4px 12px;
+        font-weight: 900;
         font-size: 0.75rem;
-        font-weight: 600;
-        padding: 0.25rem 0.75rem;
-        border-radius: 999px;
-        margin-bottom: 1rem;
         text-transform: uppercase;
-        letter-spacing: 0.05em;
-      }
-      
-      h1 { 
-        font-size: 2.5rem; 
-        font-weight: 800; 
-        margin-bottom: 0.75rem; 
-        letter-spacing: -0.03em;
-        background: linear-gradient(to right, #f0f0f5, #8b8b9e);
-        background-clip: text;
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-      }
-      
-      .subtitle { 
-        color: var(--text-secondary); 
-        font-size: 1.125rem;
-        max-width: 600px; 
-        margin: 0 auto; 
+        letter-spacing: 1px;
       }
 
       /* Section */
       .section {
-        margin-bottom: 3rem;
-      }
-      
-      .section-title {
-        font-size: 1.25rem;
-        font-weight: 700;
-        margin-bottom: 1.5rem;
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-      }
-      
-      .section-title .icon {
-        font-size: 1.5rem;
+        grid-column: 1 / -1;
+        margin-bottom: 60px;
       }
 
-      /* Code Comparison */
+      .section-title {
+        font-size: 2rem;
+        font-weight: 900;
+        text-transform: uppercase;
+        margin-bottom: 30px;
+        letter-spacing: -1px;
+        display: flex;
+        align-items: center;
+        gap: 15px;
+      }
+
+      /* Comparison Grid */
       .comparison-grid {
         display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 1.5rem;
-      }
-      
-      @media (max-width: 900px) {
-        .comparison-grid { grid-template-columns: 1fr; }
+        grid-template-columns: repeat(2, 1fr);
+        gap: 30px;
       }
 
-      .code-card {
-        background: var(--bg-card);
-        border-radius: 16px;
-        overflow: hidden;
-        border: 1px solid var(--border-subtle);
-      }
-      
-      .code-header {
-        padding: 1rem 1.25rem;
+      .card {
+        background: var(--white);
+        border: 3px solid var(--black);
+        padding: 30px;
+        box-shadow: 12px 12px 0px var(--black);
+        position: relative;
         display: flex;
-        align-items: center;
+        flex-direction: column;
+      }
+
+      .card-red {
+        box-shadow: 12px 12px 0px var(--primary-red);
+      }
+      .card-blue {
+        box-shadow: 12px 12px 0px var(--primary-blue);
+      }
+      .card-yellow {
+        box-shadow: 12px 12px 0px var(--primary-yellow);
+      }
+
+      .card-header {
+        display: flex;
         justify-content: space-between;
-        border-bottom: 1px solid var(--border-subtle);
+        align-items: center;
+        margin-bottom: 20px;
       }
-      
-      .code-header h3 {
-        font-size: 0.9375rem;
-        font-weight: 600;
+
+      .card-header h3 {
+        font-weight: 900;
+        text-transform: uppercase;
+        font-size: 1rem;
       }
-      
+
       .code-tag {
-        font-size: 0.6875rem;
-        padding: 0.25rem 0.5rem;
-        border-radius: 4px;
-        font-weight: 600;
+        font-size: 0.75rem;
+        font-weight: 900;
+        padding: 4px 10px;
+        border: 2px solid var(--black);
         text-transform: uppercase;
       }
-      
+
       .code-tag.bad {
-        background: rgba(239, 68, 68, 0.15);
-        color: var(--callback-hell);
+        background: var(--primary-red);
+        color: var(--white);
       }
-      
       .code-tag.good {
-        background: rgba(34, 197, 94, 0.15);
-        color: var(--declarative);
+        background: #22c55e;
+        color: var(--white);
       }
 
-      .code-body {
-        padding: 1.25rem;
+      .code-block {
+        background: #f8f8f8;
+        border: 3px solid var(--black);
+        padding: 24px;
         font-family: var(--font-mono);
-        font-size: 0.8125rem;
-        line-height: 1.7;
+        font-size: 0.85rem;
+        line-height: 1.5;
         overflow-x: auto;
-        background: var(--bg-code);
-      }
-      
-      .code-body pre {
-        margin: 0;
-        white-space: pre;
+        margin-bottom: 20px;
       }
 
-      /* Syntax Highlighting */
-      .code-keyword { color: #c084fc; }
-      .code-fn { color: #60a5fa; }
-      .code-comment { color: #4a4a5e; font-style: italic; }
-      .code-str { color: #4ade80; }
-      .code-err { color: #f87171; }
-      .code-num { color: #fbbf24; }
-      .code-prop { color: #67e8f9; }
-      .indent { display: inline-block; }
-
-      /* Problems List */
-      .problems-list {
-        margin-top: 1rem;
-        padding: 1rem 1.25rem;
-        background: rgba(239, 68, 68, 0.05);
-        border-top: 1px solid rgba(239, 68, 68, 0.2);
+      .code-keyword {
+        color: var(--primary-red);
+        font-weight: 700;
       }
-      
-      .problems-list li {
-        color: var(--text-secondary);
-        font-size: 0.8125rem;
-        margin-bottom: 0.5rem;
+      .code-function {
+        color: var(--primary-blue);
+        font-weight: 700;
+      }
+      .code-string {
+        color: #22c55e;
+      }
+      .code-comment {
+        color: #999;
+        font-style: italic;
+      }
+
+      .list-style {
         list-style: none;
-        display: flex;
-        align-items: flex-start;
-        gap: 0.5rem;
       }
-      
+
+      .list-style li {
+        position: relative;
+        padding-left: 25px;
+        margin-bottom: 10px;
+        font-size: 0.9rem;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
       .problems-list li::before {
-        content: '✗';
-        color: var(--callback-hell);
-        font-weight: bold;
+        content: "×";
+        position: absolute;
+        left: 0;
+        color: var(--primary-red);
+        font-weight: 900;
+        font-size: 1.2rem;
       }
 
-      /* Benefits List */
-      .benefits-list {
-        margin-top: 1rem;
-        padding: 1rem 1.25rem;
-        background: rgba(34, 197, 94, 0.05);
-        border-top: 1px solid rgba(34, 197, 94, 0.2);
-      }
-      
-      .benefits-list li {
-        color: var(--text-secondary);
-        font-size: 0.8125rem;
-        margin-bottom: 0.5rem;
-        list-style: none;
-        display: flex;
-        align-items: flex-start;
-        gap: 0.5rem;
-      }
-      
       .benefits-list li::before {
-        content: '✓';
-        color: var(--declarative);
-        font-weight: bold;
-      }
-
-      /* Live Demo Card */
-      .demo-card {
-        background: var(--bg-card);
-        border-radius: 16px;
-        border: 1px solid var(--border-subtle);
-        overflow: hidden;
-      }
-      
-      .demo-header {
-        padding: 1.25rem 1.5rem;
-        border-bottom: 1px solid var(--border-subtle);
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-      }
-      
-      .demo-header h3 {
-        font-size: 1rem;
-        font-weight: 600;
-      }
-      
-      .demo-controls {
-        display: flex;
-        gap: 0.75rem;
-      }
-
-      .btn {
-        padding: 0.5rem 1rem;
-        border-radius: 8px;
-        font-weight: 600;
-        font-size: 0.8125rem;
-        cursor: pointer;
-        transition: all 0.2s;
-        border: 1px solid transparent;
-        font-family: inherit;
-      }
-
-      .btn-success {
-        background: rgba(34, 197, 94, 0.1);
-        color: #4ade80;
-        border-color: rgba(34, 197, 94, 0.3);
-      }
-      .btn-success:hover { 
-        background: rgba(34, 197, 94, 0.2); 
-        transform: translateY(-1px); 
-      }
-
-      .btn-fail {
-        background: rgba(239, 68, 68, 0.1);
-        color: #f87171;
-        border-color: rgba(239, 68, 68, 0.3);
-      }
-      .btn-fail:hover { 
-        background: rgba(239, 68, 68, 0.2); 
-        transform: translateY(-1px); 
+        content: "✓";
+        position: absolute;
+        left: 0;
+        color: #22c55e;
+        font-weight: 900;
+        font-size: 1.2rem;
       }
 
       /* Pipeline Visualization */
+      .demo-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 30px;
+      }
+
+      .demo-controls {
+        display: flex;
+        gap: 15px;
+      }
+
+      .btn {
+        padding: 15px 30px;
+        border: 3px solid var(--black);
+        font-weight: 900;
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition: transform 0.2s;
+        letter-spacing: 1px;
+      }
+
+      .btn-success {
+        background: var(--primary-blue);
+        color: var(--white);
+        box-shadow: 6px 6px 0px var(--black);
+      }
+      .btn-fail {
+        background: var(--primary-red);
+        color: var(--white);
+        box-shadow: 6px 6px 0px var(--black);
+      }
+
+      .btn:hover {
+        transform: translate(-2px, -2px);
+        box-shadow: 8px 8px 0px var(--black);
+      }
+      .btn:active {
+        transform: translate(2px, 2px);
+        box-shadow: 2px 2px 0px var(--black);
+      }
+
       .pipeline {
-        padding: 2rem 1.5rem;
-        display: flex;
-        align-items: stretch;
-        gap: 0;
-        position: relative;
-        background: var(--bg-code);
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 30px;
+        margin-bottom: 30px;
       }
-      
-      .pipeline-stage {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        position: relative;
-      }
-      
-      .pipeline-stage:not(:last-child)::after {
-        content: '→';
-        position: absolute;
-        right: -0.75rem;
-        top: 2.5rem;
-        font-size: 1.25rem;
-        color: var(--border-subtle);
-        z-index: 2;
-      }
-      
-      .pipeline-stage.active::after { color: var(--status-pending); }
-      .pipeline-stage.resolved::after { color: var(--status-resolved); }
-      .pipeline-stage.rejected::after { color: var(--status-rejected); }
 
       .stage-card {
-        background: var(--bg-card);
-        border: 1px solid var(--border-subtle);
-        border-radius: 12px;
-        padding: 1rem;
-        margin: 0 0.5rem;
-        transition: all 0.3s ease;
-        flex: 1;
+        border: 3px solid var(--black);
+        padding: 20px;
+        background: var(--white);
         display: flex;
         flex-direction: column;
+        transition: transform 0.3s;
       }
-      
-      .stage-card.active { 
-        border-color: var(--status-pending); 
-        box-shadow: 0 0 20px rgba(234, 179, 8, 0.1);
+
+      .stage-card.active {
+        border-color: var(--primary-yellow);
+        transform: translateY(-10px);
+        box-shadow: 0 20px 0 var(--primary-yellow);
       }
-      
-      .stage-card.resolved { 
-        border-color: var(--status-resolved);
+      .stage-card.resolved {
+        border-color: #22c55e;
       }
-      
-      .stage-card.rejected { 
-        border-color: var(--status-rejected);
-        background: rgba(239, 68, 68, 0.05);
+      .stage-card.rejected {
+        border-color: var(--primary-red);
+        background: rgba(230, 57, 70, 0.05);
       }
 
       .stage-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: 0.75rem;
+        margin-bottom: 15px;
       }
-      
+
       .stage-name {
-        font-weight: 600;
-        font-size: 0.875rem;
-        color: var(--text-primary);
-      }
-      
-      .stage-badge {
-        font-size: 0.625rem;
-        padding: 0.125rem 0.375rem;
-        border-radius: 4px;
-        font-weight: 600;
+        font-weight: 900;
         text-transform: uppercase;
-        letter-spacing: 0.03em;
+        font-size: 0.85rem;
       }
-      
-      .stage-badge.idle { background: var(--bg-body); color: var(--status-idle); }
-      .stage-badge.pending { background: rgba(234, 179, 8, 0.15); color: var(--status-pending); }
-      .stage-badge.resolved { background: rgba(34, 197, 94, 0.15); color: var(--status-resolved); }
-      .stage-badge.rejected { background: rgba(239, 68, 68, 0.15); color: var(--status-rejected); }
+
+      .stage-badge {
+        font-size: 0.7rem;
+        font-weight: 900;
+        padding: 2px 8px;
+        border: 2px solid var(--black);
+        text-transform: uppercase;
+      }
+
+      .stage-badge.idle {
+        background: var(--white);
+      }
+      .stage-badge.pending {
+        background: var(--primary-yellow);
+      }
+      .stage-badge.resolved {
+        background: #22c55e;
+        color: var(--white);
+      }
+      .stage-badge.rejected {
+        background: var(--primary-red);
+        color: var(--white);
+      }
 
       .stage-desc {
         font-size: 0.75rem;
-        color: var(--text-tertiary);
-        margin-bottom: 0.75rem;
+        font-weight: 700;
+        color: #666;
+        margin-bottom: 15px;
+        text-transform: uppercase;
       }
 
       .stage-output {
         margin-top: auto;
         font-family: var(--font-mono);
         font-size: 0.75rem;
-        padding: 0.625rem;
-        background: var(--bg-body);
-        border-radius: 6px;
-        color: var(--text-secondary);
-        min-height: 2.5rem;
+        padding: 12px;
+        background: #f8f8f8;
+        border: 2px solid var(--black);
+        color: var(--black);
+        min-height: 50px;
         display: flex;
         align-items: center;
         word-break: break-all;
+        font-weight: 700;
       }
-      
+
       .stage-output.error {
-        color: var(--status-rejected);
+        color: var(--primary-red);
       }
 
       .spinner {
-        width: 10px; height: 10px;
-        border: 2px solid currentColor; 
+        width: 14px;
+        height: 14px;
+        border: 2px solid var(--black);
         border-top-color: transparent;
-        border-radius: 50%; 
-        animation: spin 0.7s linear infinite;
-        margin-right: 0.5rem;
+        border-radius: 50%;
+        animation: spin 0.6s linear infinite;
+        margin-right: 10px;
         display: inline-block;
       }
-      
-      @keyframes spin { to { transform: rotate(360deg); } }
 
-      /* Key Insight */
-      .insight-box {
-        margin-top: 1.5rem;
-        padding: 1.25rem 1.5rem;
-        background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
-        border: 1px solid rgba(99, 102, 241, 0.2);
-        border-radius: 12px;
+      /* Insight Box */
+      .insight-section {
+        grid-column: 1 / -1;
+        margin-top: 40px;
+        display: grid;
+        grid-template-columns: repeat(12, 1fr);
+        gap: 30px;
       }
-      
-      .insight-title {
-        font-size: 0.875rem;
+
+      .info-card {
+        grid-column: span 6;
+      }
+      .info-tag {
+        width: 32px;
+        height: 32px;
+        margin-bottom: 24px;
+      }
+      .tag-red {
+        background-color: var(--primary-red);
+      }
+      .tag-yellow {
+        background-color: var(--primary-yellow);
+        clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+      }
+      .tag-circle {
+        border-radius: 50%;
+        background: var(--primary-blue);
+      }
+
+      .info-title {
+        font-size: 2rem;
+        font-weight: 900;
+        text-transform: uppercase;
+        margin-bottom: 20px;
+        letter-spacing: -1px;
+      }
+      .info-content {
         font-weight: 700;
-        color: var(--accent-primary);
-        margin-bottom: 0.5rem;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-      }
-      
-      .insight-text {
-        font-size: 0.875rem;
-        color: var(--text-secondary);
-        line-height: 1.6;
-      }
-      
-      .insight-text code {
-        background: rgba(0,0,0,0.3);
-        padding: 0.125rem 0.375rem;
-        border-radius: 4px;
-        font-family: var(--font-mono);
-        font-size: 0.8125rem;
-        color: var(--text-primary);
+        line-height: 1.4;
+        color: var(--black);
       }
 
-      /* Footer */
       footer {
-        margin-top: 3rem;
-        padding-top: 2rem;
-        border-top: 1px solid var(--border-subtle);
-        text-align: center;
-        color: var(--text-tertiary);
-        font-size: 0.875rem;
+        grid-column: 1 / -1;
+        margin-top: 100px;
+        padding: 40px 0;
+        border-top: 3px solid var(--black);
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        font-weight: 900;
+        text-transform: uppercase;
+        font-size: 0.85rem;
       }
-      
-      footer a {
-        color: var(--accent-primary);
-        text-decoration: none;
+
+      @media (max-width: 900px) {
+        .comparison-grid,
+        .pipeline,
+        .info-card {
+          grid-column: 1 / -1;
+          display: flex;
+          flex-direction: column;
+        }
       }
-      
-      footer a:hover { text-decoration: underline; }
     </style>
   </head>
   <body>
     <div class="container">
       <header>
-        <span class="badge">Paradigm Shift</span>
-        <h1>No More Callback Hell</h1>
-        <p class="subtitle">See how declarative async chains eliminate nested callbacks and manual error handling</p>
+        <div class="logo">ASYNC<br />PIPELINE<span>.</span></div>
+        <div class="badge">Async Propagation</div>
       </header>
 
-      <!-- Before/After Comparison -->
-      <section class="section">
-        <h2 class="section-title">
-          <span class="icon">⚡</span>
-          The Problem vs The Solution
-        </h2>
-        
-        <div class="comparison-grid">
-          <!-- BEFORE: Callback Hell -->
-          <div class="code-card">
-            <div class="code-header">
-              <h3>Traditional Approach</h3>
-              <span class="code-tag bad">Callback Hell</span>
-            </div>
-            <div class="code-body">
-<pre><span class="code-fn">fetchUser</span>(userId, (err, user) => {
-  <span class="code-keyword">if</span> (err) {
-    <span class="code-fn">showError</span>(<span class="code-str">"User fetch failed"</span>);
-    <span class="code-keyword">return</span>;
-  }
-  
-  <span class="code-fn">fetchRepos</span>(user.login, (err, repos) => {
-    <span class="code-keyword">if</span> (err) {
-      <span class="code-fn">showError</span>(<span class="code-str">"Repos fetch failed"</span>);
-      <span class="code-keyword">return</span>;
-    }
-    
-    <span class="code-fn">calculateStats</span>(repos, (err, stats) => {
-      <span class="code-keyword">if</span> (err) {
-        <span class="code-fn">showError</span>(<span class="code-str">"Stats calc failed"</span>);
-        <span class="code-keyword">return</span>;
-      }
-      
-      <span class="code-fn">renderDashboard</span>(user, stats);
+      <main>
+        <!-- Before/After -->
+        <section class="section">
+          <h2 class="section-title">01 / THE EVOLUTION</h2>
+          <div class="comparison-grid">
+            <div class="card card-red">
+              <div class="card-header">
+                <h3>Traditional Complexity</h3>
+                <span class="code-tag bad">Callback Hell</span>
+              </div>
+              <pre
+                class="code-block"
+              ><span class="code-fn">fetchUser</span>(id, (err, user) => {
+  <span class="code-keyword">if</span> (err) <span class="code-keyword">return</span> <span class="code-fn">error</span>();
+  <span class="code-fn">fetchRepos</span>(user.id, (err, repos) => {
+    <span class="code-keyword">if</span> (err) <span class="code-keyword">return</span> <span class="code-fn">error</span>();
+    <span class="code-fn">getStats</span>(repos, (err, stats) => {
+      <span class="code-fn">render</span>(stats);
     });
   });
 });</pre>
+              <ul class="list-style problems-list">
+                <li>Pyramid of Doom</li>
+                <li>Manual Error Handling</li>
+                <li>Fragile Control Flow</li>
+              </ul>
             </div>
-            <ul class="problems-list">
-              <li>Deeply nested callbacks ("pyramid of doom")</li>
-              <li>Error handling repeated at every level</li>
-              <li>Hard to understand control flow</li>
-              <li>Re-running the chain requires rewriting logic</li>
-            </ul>
+
+            <div class="card card-blue">
+              <div class="card-header">
+                <h3>Atomic Declarative</h3>
+                <span class="code-tag good">Declarative</span>
+              </div>
+              <pre
+                class="code-block"
+              ><span class="code-keyword">const</span> user = <span class="code-function">computed</span>(<span class="code-keyword">async</span> () => {
+  <span class="code-keyword">return await</span> <span class="code-fn">fetchUser</span>(id.value);
+});
+
+<span class="code-keyword">const</span> repos = <span class="code-function">computed</span>(<span class="code-keyword">async</span> () => {
+  <span class="code-keyword">return await</span> <span class="code-fn">fetchRepos</span>(user.value);
+});
+
+<span class="code-comment">// Errors propagate automatically!</span></pre>
+              <ul class="list-style benefits-list">
+                <li>Flat Architecture</li>
+                <li>Auto Dependency Tracking</li>
+                <li>Built-in Propagation</li>
+              </ul>
+            </div>
           </div>
+        </section>
 
-          <!-- AFTER: Declarative -->
-          <div class="code-card">
-            <div class="code-header">
-              <h3>atom-effect Approach</h3>
-              <span class="code-tag good">Declarative</span>
-            </div>
-            <div class="code-body">
-<pre><span class="code-keyword">const</span> user = <span class="code-fn">computed</span>(<span class="code-keyword">async</span> () => {
-  <span class="code-keyword">return await</span> <span class="code-fn">fetchUser</span>(userId.value);
-}, { defaultValue: <span class="code-keyword">null</span> });
-
-<span class="code-keyword">const</span> repos = <span class="code-fn">computed</span>(<span class="code-keyword">async</span> () => {
-  <span class="code-keyword">return await</span> <span class="code-fn">fetchRepos</span>(user.value.login);
-}, { defaultValue: [] });
-
-<span class="code-keyword">const</span> stats = <span class="code-fn">computed</span>(<span class="code-keyword">async</span> () => {
-  <span class="code-keyword">return</span> <span class="code-fn">calculateStats</span>(repos.value);
-}, { defaultValue: <span class="code-keyword">null</span> });
-
-<span class="code-comment">// stats.hasError → true if any upstream failed</span>
-<span class="code-comment">// Errors propagate via dependency chain!</span></pre>
-            </div>
-            <ul class="benefits-list">
-              <li>Flat, readable structure</li>
-              <li>Error awareness via <code>hasError</code></li>
-              <li>Automatic dependency tracking</li>
-              <li>Built-in loading states (<code>state</code>, <code>isPending</code>)</li>
-            </ul>
-          </div>
-        </div>
-      </section>
-
-      <!-- Live Demo -->
-      <section class="section">
-        <h2 class="section-title">
-          <span class="icon">🎮</span>
-          Live Demo: GitHub Stats Pipeline
-        </h2>
-        
-        <div class="demo-card">
+        <!-- Live Pipeline -->
+        <section class="section">
           <div class="demo-header">
-            <h3>Async Pipeline Visualization</h3>
+            <h2 class="section-title">02 / LIVE EXECUTION</h2>
             <div class="demo-controls">
-              <button id="btnSuccess" class="btn btn-success">▶ Run Pipeline</button>
-              <button id="btnFail" class="btn btn-fail">💥 Simulate API Error</button>
+              <button id="btnSuccess" class="btn btn-success">
+                RUN STREAM
+              </button>
+              <button id="btnFail" class="btn btn-fail">TRIGGER FAILURE</button>
             </div>
           </div>
-          
+
           <div class="pipeline">
             <div id="stage1" class="pipeline-stage">
               <div class="stage-card">
@@ -563,197 +516,209 @@
                   <span class="stage-name">1. Fetch User</span>
                   <span id="badge1" class="stage-badge idle">Idle</span>
                 </div>
-                <div class="stage-desc">GET /users/:username</div>
+                <div class="stage-desc">REST /users/:id</div>
                 <div id="output1" class="stage-output">—</div>
               </div>
             </div>
-            
+
             <div id="stage2" class="pipeline-stage">
               <div class="stage-card">
                 <div class="stage-header">
                   <span class="stage-name">2. Fetch Repos</span>
                   <span id="badge2" class="stage-badge idle">Idle</span>
                 </div>
-                <div class="stage-desc">GET /users/:login/repos</div>
+                <div class="stage-desc">REST /repos/:id</div>
                 <div id="output2" class="stage-output">—</div>
               </div>
             </div>
-            
+
             <div id="stage3" class="pipeline-stage">
               <div class="stage-card">
                 <div class="stage-header">
-                  <span class="stage-name">3. Calculate Stats</span>
+                  <span class="stage-name">3. Compute Stats</span>
                   <span id="badge3" class="stage-badge idle">Idle</span>
                 </div>
-                <div class="stage-desc">Aggregate star count</div>
+                <div class="stage-desc">AGGREGATE BY STAR</div>
                 <div id="output3" class="stage-output">—</div>
               </div>
             </div>
           </div>
-          
-          <div class="insight-box">
-            <div class="insight-title">
-              💡 Key Insight: Error Awareness Through hasError
+        </section>
+
+        <!-- Insights -->
+        <section class="insight-section">
+          <div class="info-card">
+            <div class="info-tag tag-circle"></div>
+            <h2 class="info-title">Error Awareness</h2>
+            <div class="info-content">
+              <p style="margin-bottom: 20px">
+                When Stage 2 fails, Stage 3 detects it instantly via the
+                <code>hasError</code> property. The error state flows through
+                the recovery chain, allowing downstream consumers to enter
+                "Blocked" or "Error" states gracefully without manual
+                <code>try-catch</code> everywhere.
+              </p>
             </div>
-            <p class="insight-text">
-              When <strong>Stage 2</strong> fails, <strong>Stage 3 detects it via <code>hasError</code></strong>.<br><br>
-              The <code>hasError</code> property propagates through the dependency chain, allowing 
-              downstream computeds to know if any upstream has failed.<br><br>
-              <strong>No re-throwing needed — just check <code>hasError</code> to detect blocked states.</strong>
-            </p>
           </div>
-        </div>
-      </section>
+
+          <div class="info-card">
+            <div class="info-tag tag-yellow"></div>
+            <h2 class="info-title">The Benefit</h2>
+            <div class="info-content">
+              <ul style="list-style: square; padding-left: 20px">
+                <li>No more nested error handling logic</li>
+                <li>Uniform async state tracking across the app</li>
+                <li>Clear visualization of state dependency</li>
+                <li>Surgical updates based on async resolution</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+      </main>
 
       <footer>
-        <p>
-          Built with <a href="https://github.com/but212/atom-effect">atom-effect</a> — 
-          Fine-grained reactivity for async-first applications
-        </p>
+        <div>ATOM EFFECT / CORE PROPAGATION</div>
+        <address style="font-style: normal">
+          PURE REACTIVE ENGINE<br />
+          © 2026 Jeong Il Suk
+        </address>
       </footer>
     </div>
 
     <script>
       const { atom, computed, effect, untracked, AsyncState } = AtomEffect;
 
-      // --- Helpers ---
-      const delay = (ms) => new Promise(r => setTimeout(r, ms));
-      
-      // Simulated API responses
-      const mockUser = { login: 'octocat', name: 'The Octocat', id: 583231 };
+      const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+
+      const mockUser = { login: "octocat", name: "The Octocat", id: 583231 };
       const mockRepos = [
-        { name: 'Hello-World', stargazers_count: 2500 },
-        { name: 'Spoon-Knife', stargazers_count: 12000 },
-        { name: 'octocat.github.io', stargazers_count: 340 }
+        { name: "Hello-World", stargazers_count: 2500 },
+        { name: "Spoon-Knife", stargazers_count: 12000 },
+        { name: "octocat.github.io", stargazers_count: 340 },
       ];
 
-      // --- Reactive State ---
       const runId = atom(0);
       const shouldFail = atom(false);
 
-      // --- Async Pipeline (Pure Declarative!) ---
-      
-      // Stage 1: Fetch User
-      const user = computed(async () => {
-        const id = runId.value;
-        if (id === 0) return null;
-        
-        await delay(800); // Simulate network latency
-        return mockUser;
-      }, { defaultValue: null });
+      const user = computed(
+        async () => {
+          const id = runId.value;
+          if (id === 0) return null;
+          await delay(800);
+          return mockUser;
+        },
+        { defaultValue: null },
+      );
 
-      // Stage 2: Fetch Repos (depends on user, may fail)
-      const repos = computed(async () => {
-        const userData = user.value;
-        if (!userData) return null;
-        
-        await delay(800);
-        
-        // Simulate API failure
-        if (shouldFail.value) {
-          throw new Error('API Rate Limit Exceeded');
-        }
-        
-        return mockRepos;
-      }, { defaultValue: null });
+      const repos = computed(
+        async () => {
+          const userData = user.value;
+          if (!userData) return null;
+          await delay(800);
+          if (shouldFail.value) throw new Error("API RATE LIMIT EXCEEDED");
+          return mockRepos;
+        },
+        { defaultValue: null },
+      );
 
-      const stats = computed(async () => {
-        const repoList = repos.value;
-        if (!repoList) return null;
-        
-        await delay(600);
-        
-        const totalStars = repoList.reduce((sum, r) => sum + r.stargazers_count, 0);
-        const avgStars = Math.round(totalStars / repoList.length);
-        
-        return { totalStars, avgStars, repoCount: repoList.length };
-      }, { defaultValue: null });
+      const stats = computed(
+        async () => {
+          const repoList = repos.value;
+          if (!repoList) return null;
+          await delay(600);
+          const totalStars = repoList.reduce(
+            (sum, r) => sum + r.stargazers_count,
+            0,
+          );
+          return { totalStars, repoCount: repoList.length };
+        },
+        { defaultValue: null },
+      );
 
-
-      // --- UI Bindings ---
       const stages = [
-        { computed: user,  id: '1', format: (v) => v ? `${v.name} (@${v.login})` : '—' },
-        { computed: repos, id: '2', format: (v) => v ? `${v.length} repositories loaded` : '—' },
-        { computed: stats, id: '3', format: (v) => v ? `⭐ ${v.totalStars.toLocaleString()} total (${v.repoCount} repos)` : '—' }
+        {
+          computed: user,
+          id: "1",
+          format: (v) => (v ? `${v.name} (@${v.login})` : "—"),
+        },
+        {
+          computed: repos,
+          id: "2",
+          format: (v) => (v ? `${v.length} REPOSITORY DATA` : "—"),
+        },
+        {
+          computed: stats,
+          id: "3",
+          format: (v) =>
+            v ? `⭐ ${v.totalStars.toLocaleString()} STARS` : "—",
+        },
       ];
 
       stages.forEach(({ computed: c, id, format }) => {
         const stageEl = document.getElementById(`stage${id}`);
-        const cardEl = stageEl.querySelector('.stage-card');
+        const cardEl = stageEl.querySelector(".stage-card");
         const badgeEl = document.getElementById(`badge${id}`);
         const outputEl = document.getElementById(`output${id}`);
 
         effect(() => {
           const state = c.state;
           const error = c.lastError;
-          const hasError = c.hasError; // Check dependency errors too
-          
-          let value = null;
-          try { value = c.value; } catch {}
+          const hasError = c.hasError;
 
-          stageEl.className = 'pipeline-stage';
-          cardEl.className = 'stage-card';
-          badgeEl.className = 'stage-badge';
-          outputEl.classList.remove('error');
+          let value = null;
+          try {
+            value = c.value;
+          } catch {}
+
+          stageEl.className = "pipeline-stage";
+          cardEl.className = "stage-card";
+          badgeEl.className = "stage-badge";
+          outputEl.classList.remove("error");
 
           switch (state) {
             case AsyncState.IDLE:
-              badgeEl.classList.add('idle');
-              badgeEl.textContent = 'Idle';
-              outputEl.textContent = '—';
+              badgeEl.className = "stage-badge idle";
+              badgeEl.textContent = "IDLE";
+              outputEl.textContent = "—";
               break;
-              
             case AsyncState.PENDING:
-              stageEl.classList.add('active');
-              cardEl.classList.add('active');
-              badgeEl.classList.add('pending');
-              badgeEl.textContent = 'Loading';
-              outputEl.innerHTML = '<span class="spinner"></span>Fetching...';
+              cardEl.classList.add("active");
+              badgeEl.className = "stage-badge pending";
+              badgeEl.textContent = "LOADING";
+              outputEl.innerHTML = '<span class="spinner"></span>FETCHING...';
               break;
-              
             case AsyncState.RESOLVED:
-              // Check if upstream has error (dependency error propagation)
               if (hasError && !error) {
-                stageEl.classList.add('rejected');
-                cardEl.classList.add('rejected');
-                badgeEl.classList.add('rejected');
-                badgeEl.textContent = 'Blocked';
-                outputEl.classList.add('error');
-                outputEl.textContent = '⛔ Upstream failed';
+                cardEl.classList.add("rejected");
+                badgeEl.className = "stage-badge rejected";
+                badgeEl.textContent = "BLOCKED";
+                outputEl.classList.add("error");
+                outputEl.textContent = "⛔ UPSTREAM FAILURE";
               } else {
-                stageEl.classList.add('resolved');
-                cardEl.classList.add('resolved');
-                badgeEl.classList.add('resolved');
-                badgeEl.textContent = 'Done';
-                
-                // Use untracked when calling the formatter to avoid accidental sub-dependencies
-                outputEl.textContent = untracked(() => format(value));
-                
-                // Log run info without subscribing to runId
-                const rid = untracked(() => runId.value);
-                console.log(`[Run ${rid}] Stage ${id} resolved`);
+                cardEl.classList.add("resolved");
+                badgeEl.className = "stage-badge resolved";
+                badgeEl.textContent = "DONE";
+                outputEl.textContent = untracked(() =>
+                  format(value).toUpperCase(),
+                );
               }
               break;
-              
             case AsyncState.REJECTED:
-              stageEl.classList.add('rejected');
-              cardEl.classList.add('rejected');
-              badgeEl.classList.add('rejected');
-              badgeEl.textContent = 'Failed';
-              outputEl.classList.add('error');
-              outputEl.textContent = `⛔ ${error?.message || 'Upstream failed'}`;
+              cardEl.classList.add("rejected");
+              badgeEl.className = "stage-badge rejected";
+              badgeEl.textContent = "FAILED";
+              outputEl.classList.add("error");
+              outputEl.textContent = `⛔ ${error?.message.toUpperCase() || "UNKNOWN"}`;
               break;
           }
         });
       });
 
-      // --- Controls ---
-      document.getElementById('btnSuccess').onclick = () => {
+      document.getElementById("btnSuccess").onclick = () => {
         shouldFail.value = false;
         runId.value++;
       };
-
-      document.getElementById('btnFail').onclick = () => {
+      document.getElementById("btnFail").onclick = () => {
         shouldFail.value = true;
         runId.value++;
       };
