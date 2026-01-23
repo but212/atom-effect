@@ -8,37 +8,34 @@ import { generateId } from '@/utils/debug';
  * Base class for all reactive nodes (Atoms, Computed, Effects).
  */
 export class ReactiveNode {
+  /** Bit flags representing the node's state */
   flags: number;
+  /** Current version of the node's value */
   version: number;
+  /** Last epoch this node was observed by the system */
   _lastSeenEpoch: number;
+  /** Epoch when this node was last modified */
+  _modifiedAtEpoch: number;
+  /** Epoch used for circular dependency detection and graph traversal */
+  _visitedEpoch: number;
+  /** Unique numeric identifier within SMI range */
   readonly id: DependencyId;
 
-  /** @internal */
+  /** @internal Temporary unsubscription function used during sync/propagation */
   _tempUnsub: (() => void) | undefined;
-  /** @internal */
-  _modifiedAtEpoch: number;
-  /** @internal */
-  _visitedEpoch: number;
 
   constructor() {
+    // Group numeric field initializations to establish a stable Hidden Class (Shape) for V8
     this.flags = 0;
     this.version = 0;
     this._lastSeenEpoch = -1;
-    this.id = (generateId() & SMI_MAX) as DependencyId;
-
-    // Initialize tracking fields to establish a stable Hidden Class (Shape) for V8
-    this._tempUnsub = undefined;
     this._modifiedAtEpoch = -1;
     this._visitedEpoch = -1;
+    this.id = (generateId() & SMI_MAX) as DependencyId;
+
+    this._tempUnsub = undefined;
   }
 
-  /**
-   * Rotates the phase by 1, automatically incrementing cycle on overflow.
-   */
-  protected rotatePhase(): number {
-    this.version = (this.version + 1) & SMI_MAX;
-    return this.version;
-  }
 
   /**
    * Calculates the logical distance (shift) between current and cached version.
@@ -59,20 +56,21 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
    * Subscribes a listener function or Subscriber object to value changes.
    */
   subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
-    const isObject = typeof listener === 'object' && listener !== null && 'execute' in listener;
+    // Optimization: Prioritize function listeners as they are the most common case
+    if (typeof listener === 'function') {
+      return this._addSubscriber(
+        this._fnSubs,
+        listener as (newValue?: T, oldValue?: T) => void,
+        NODE_FLAGS.HAS_FN_SUBS
+      );
+    }
 
-    if (isObject) {
+    // Guard: Ensure listener is a valid non-null object before checking 'execute' property
+    if (listener !== null && typeof listener === 'object' && 'execute' in listener) {
       return this._addSubscriber(this._objSubs, listener as Subscriber, NODE_FLAGS.HAS_OBJ_SUBS);
     }
 
-    if (typeof listener !== 'function') {
-      throw new AtomError(ERROR_MESSAGES.ATOM_SUBSCRIBER_MUST_BE_FUNCTION);
-    }
-    return this._addSubscriber(
-      this._fnSubs,
-      listener as (newValue?: T, oldValue?: T) => void,
-      NODE_FLAGS.HAS_FN_SUBS
-    );
+    throw new AtomError(ERROR_MESSAGES.ATOM_SUBSCRIBER_MUST_BE_FUNCTION);
   }
 
   /**
@@ -82,22 +80,28 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
     return this._fnSubs.length + this._objSubs.length;
   }
 
+  /**
+   * Adds a subscriber to the specified subscription list and returns an unsubscribe function.
+   * Uses swap-and-pop for efficient removals.
+   */
   private _addSubscriber<S>(subs: S[], subscriber: S, flag: number): () => void {
     const idx = subs.indexOf(subscriber);
-    if (~idx) return () => {};
+    if (idx !== -1) return () => {};
 
     subs.push(subscriber);
     this.flags |= flag;
 
-    let unsubscribedMask = 0;
+    let unsubscribed = false;
     return () => {
-      if (unsubscribedMask) return;
-      unsubscribedMask = 1;
+      if (unsubscribed) return;
+      unsubscribed = true;
 
       const currentIdx = subs.indexOf(subscriber);
-      if (~currentIdx) {
-        subs[currentIdx] = subs[subs.length - 1]!;
-        subs.pop();
+      if (currentIdx !== -1) {
+        const last = subs.pop()!;
+        if (currentIdx < subs.length) {
+          subs[currentIdx] = last;
+        }
         this.flags &= ~(subs.length === 0 ? flag : 0);
       }
     };
@@ -107,28 +111,39 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
    * Notifies all subscribers of a change.
    */
   protected _notifySubscribers(newValue: T | undefined, oldValue: T | undefined): void {
-    if (this.flags & (NODE_FLAGS.HAS_FN_SUBS | NODE_FLAGS.HAS_OBJ_SUBS)) {
-      const fnSubs = this._fnSubs;
-      const fnLen = fnSubs.length;
-      for (let i = 0; i < fnLen; i++) {
-        try {
-          fnSubs[i]!(newValue, oldValue);
-        } catch (err) {
-          console.error(
-            new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, err as Error)
-          );
+    const flags = this.flags;
+    const subMask = NODE_FLAGS.HAS_FN_SUBS | NODE_FLAGS.HAS_OBJ_SUBS;
+
+    if (!(flags & subMask)) return;
+
+    if (flags & NODE_FLAGS.HAS_FN_SUBS) {
+      const subs = this._fnSubs;
+      for (let i = 0, len = subs.length; i < len; i++) {
+        const sub = subs[i];
+        if (sub) {
+          try {
+            sub(newValue, oldValue);
+          } catch (err) {
+            console.error(
+              new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, err as Error)
+            );
+          }
         }
       }
+    }
 
-      const objSubs = this._objSubs;
-      const objLen = objSubs.length;
-      for (let i = 0; i < objLen; i++) {
-        try {
-          objSubs[i]!.execute();
-        } catch (err) {
-          console.error(
-            new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, err as Error)
-          );
+    if (flags & NODE_FLAGS.HAS_OBJ_SUBS) {
+      const subs = this._objSubs;
+      for (let i = 0, len = subs.length; i < len; i++) {
+        const sub = subs[i];
+        if (sub) {
+          try {
+            sub.execute();
+          } catch (err) {
+            console.error(
+              new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, err as Error)
+            );
+          }
         }
       }
     }

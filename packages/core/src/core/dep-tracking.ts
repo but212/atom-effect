@@ -2,35 +2,27 @@ import { NODE_FLAGS } from '@/constants';
 import { EMPTY_DEPS, EMPTY_UNSUBS, unsubArrayPool } from '@/internal/pool';
 import type { Dependency, Subscriber } from '@/types';
 import { debug } from '@/utils/debug';
-import { hasDependencyMethod, hasExecuteMethod, isPlainListener } from '@/utils/type-guards';
 
-/**
- * Registers a dependency with the current listener (if any).
- *
- * @param dependency - The reactive node to be tracked (Atom or Computed)
- * @param current - The current listener from the tracking context
- * @param functionSubscribers - Manager for function-based subscribers
- * @param objectSubscribers - Manager for object-based subscribers
- */
 export function trackDependency<T>(
   dependency: Dependency,
   current: unknown,
   functionSubscribers: ((newValue?: T, oldValue?: T) => void)[],
   objectSubscribers: Subscriber[]
 ): void {
-  if (!current) return;
+  if (current === null || current === undefined) return;
 
-  // Priority 1: TrackableListener pattern (addDependency method)
-  // Used by Computed atoms to collect dependencies
-  if (hasDependencyMethod(current)) {
-    current.addDependency(dependency);
+  // Inlined from hasDependencyMethod to avoid call overhead
+  if (
+    (typeof current === 'object' || typeof current === 'function') &&
+    typeof (current as any).addDependency === 'function'
+  ) {
+    (current as any).addDependency(dependency);
     return;
   }
 
-  // Priority 2: Plain function callback
-  // Used by simple effects or manual tracking
-  if (isPlainListener(current)) {
+  if (typeof current === 'function') {
     const subscriber = current as (newValue?: T, oldValue?: T) => void;
+    // O(N) check - typically small N
     if (functionSubscribers.indexOf(subscriber) === -1) {
       functionSubscribers.push(subscriber);
       dependency.flags |= NODE_FLAGS.HAS_FN_SUBS;
@@ -38,27 +30,17 @@ export function trackDependency<T>(
     return;
   }
 
-  // Priority 3: Subscriber pattern (execute method)
-  // Used by Effect objects or other subscribers
-  if (hasExecuteMethod(current)) {
-    if (objectSubscribers.indexOf(current) === -1) {
-      objectSubscribers.push(current);
+  // Inlined from hasExecuteMethod
+  if (typeof current === 'object' && typeof (current as any).execute === 'function') {
+    if (objectSubscribers.indexOf(current as Subscriber) === -1) {
+      objectSubscribers.push(current as Subscriber);
       dependency.flags |= NODE_FLAGS.HAS_OBJ_SUBS;
     }
   }
 }
 
 /**
- * Synchronizes subscriptions based on dependency changes using O(N) strategy.
- * Maps unsubs 1:1 with dependencies array.
- *
- * Shared logic for Computed and Effect to manage their dependencies.
- *
- * @param nextDeps - The new list of dependencies collected
- * @param prevDeps - The previous list of dependencies
- * @param prevUnsubs - The previous list of unsubscribe functions
- * @param tracker - The object tracking these dependencies (Computed or Effect)
- * @returns The new list of unsubscribe functions
+ * Synchronizes subscriptions using an O(N) strategy optimized for cache locality.
  */
 export function syncDependencies(
   nextDeps: Dependency[],
@@ -66,19 +48,23 @@ export function syncDependencies(
   prevUnsubs: (() => void)[],
   tracker: Subscriber
 ): (() => void)[] {
-  // 1. Map existing subscriptions: dense iteration
-  if (prevDeps !== EMPTY_DEPS) {
-    for (let i = 0; i < prevDeps.length; i++) {
+  const nextLen = nextDeps.length;
+  const prevLen = prevDeps.length;
+  const hasPrev = prevDeps !== EMPTY_DEPS && prevLen > 0;
+
+  // 1. Initial dense pass: map existing unsubs to dependencies
+  if (hasPrev) {
+    for (let i = 0; i < prevLen; i++) {
       const dep = prevDeps[i];
       if (dep) dep._tempUnsub = prevUnsubs[i];
     }
   }
 
-  // 2. Build new unsubscribe array
+  // 2. Build new unsubs array: reuse or subscribe
   const nextUnsubs = unsubArrayPool.acquire();
-  nextUnsubs.length = nextDeps.length;
+  nextUnsubs.length = nextLen;
 
-  for (let i = 0; i < nextDeps.length; i++) {
+  for (let i = 0; i < nextLen; i++) {
     const dep = nextDeps[i];
     if (!dep) continue;
 
@@ -87,24 +73,26 @@ export function syncDependencies(
       nextUnsubs[i] = reuse;
       dep._tempUnsub = undefined;
     } else {
+      // Keep checkCircular outside debug.enabled guard if tests rely on global spying
       debug.checkCircular(dep, tracker);
       nextUnsubs[i] = dep.subscribe(tracker);
     }
   }
 
-  // 3. Cleanup unused subscriptions
-  if (prevDeps !== EMPTY_DEPS) {
-    for (let i = 0; i < prevDeps.length; i++) {
-      const dep = prevDeps[i]!;
-      const staleUnsub = dep._tempUnsub;
-      if (staleUnsub) {
-        staleUnsub();
-        dep._tempUnsub = undefined;
+  // 3. Final cleanup pass: unsubscribe stale dependencies
+  if (hasPrev) {
+    for (let i = 0; i < prevLen; i++) {
+      const dep = prevDeps[i];
+      if (dep) {
+        const unsub = dep._tempUnsub;
+        if (unsub) {
+          unsub();
+          dep._tempUnsub = undefined;
+        }
       }
     }
   }
 
-  // 4. Release old unsub array
   if (prevUnsubs !== EMPTY_UNSUBS) {
     unsubArrayPool.release(prevUnsubs);
   }
