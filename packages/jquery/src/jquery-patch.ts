@@ -1,3 +1,4 @@
+import { batch } from '@but212/atom-effect';
 import $ from 'jquery';
 import { registry } from './registry';
 
@@ -87,7 +88,9 @@ export function enablejQueryOverrides() {
       } else {
         // biome-ignore lint/suspicious/noExplicitAny: internal this
         wrappedFn = function (this: any, ...eventArgs: any[]) {
-          return originalFn.apply(this, eventArgs);
+          return batch(() => {
+            return originalFn.apply(this, eventArgs);
+          });
         };
         handlerMap.set(originalFn, wrappedFn);
       }
