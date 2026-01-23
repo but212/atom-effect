@@ -97,6 +97,9 @@ export const SCHEDULER_CONFIG = {
 
   /** Minimum allowed value for max flush iterations */
   MIN_FLUSH_ITERATIONS: 10,
+
+  /** Threshold for shrinking the batch queue to assist GC */
+  BATCH_QUEUE_SHRINK_THRESHOLD: 1000,
 } as const;
 
 /**
