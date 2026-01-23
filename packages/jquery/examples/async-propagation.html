@@ -539,7 +539,7 @@
               <span class="code-tag bad">Callback Hell</span>
             </div>
             <div class="code-body">
-<pre><span class="code-fn">fetchUser</span>(userId, (err, user) => {
+              <pre><span class="code-fn">fetchUser</span>(userId, (err, user) => {
   <span class="code-keyword">if</span> (err) {
     <span class="code-fn">showError</span>(<span class="code-str">"User fetch failed"</span>);
     <span class="code-keyword">return</span>;
@@ -577,7 +577,7 @@
               <span class="code-tag good">Declarative</span>
             </div>
             <div class="code-body">
-<pre><span class="code-comment">// 1. Define Async Computed</span>
+              <pre><span class="code-comment">// 1. Define Async Computed</span>
 <span class="code-keyword">const</span> user = <span class="code-fn">$.computed</span>(<span class="code-keyword">async</span> () => {
   <span class="code-keyword">return await</span> <span class="code-fn">fetchUser</span>(userId.value);
 });
@@ -847,7 +847,7 @@
                 try {
                   // Use $.untracked when calling the formatter to avoid accidental sub-dependencies
                   $output.text($.untracked(() => format(value)));
-                  
+
                   // Log run info without subscribing to runId
                   const rid = $.untracked(() => runId.value);
                   console.log(`[Run ${rid}] Stage ${id} resolved`);
