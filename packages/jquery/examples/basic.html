@@ -3,101 +3,361 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Atom Effect jQuery - Counter Example</title>
-    <!-- Load jQuery from CDN -->
+    <title>Basic Counter | atom-effect-jquery</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap"
+      rel="stylesheet"
+    />
+    <!-- jQuery First -->
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-    <!-- Load atom-effect-jquery -->
+    <!-- atom-effect-jquery -->
     <script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@latest"></script>
     <style>
+      :root {
+        --primary-red: #e63946;
+        --primary-blue: #2a52be;
+        --primary-yellow: #ffd60a;
+        --black: #000000;
+        --white: #ffffff;
+        --font-main: "Inter", sans-serif;
+        --font-mono: "IBM Plex Mono", monospace;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
       body {
-        font-family:
-          system-ui,
-          -apple-system,
-          sans-serif;
-        max-width: 600px;
-        margin: 2rem auto;
-        padding: 0 1rem;
+        font-family: var(--font-main);
+        background-color: var(--white);
+        color: var(--black);
+        line-height: 1.2;
+        overflow-x: hidden;
+      }
+
+      .container {
+        display: grid;
+        grid-template-columns: repeat(12, 1fr);
+        gap: 30px;
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 40px;
+      }
+
+      /* Header */
+      header {
+        grid-column: 1 / -1;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 60px;
+      }
+
+      .logo {
+        font-weight: 900;
+        font-size: 2.5rem;
+        letter-spacing: -2px;
+        line-height: 0.9;
+        text-transform: uppercase;
+        cursor: default;
+      }
+
+      .logo span {
+        color: var(--primary-red);
+        font-size: 1.2em;
+      }
+
+      .badge {
+        display: inline-block;
+        background-color: var(--black);
+        color: var(--white);
+        padding: 4px 12px;
+        font-weight: 900;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+
+      /* Counter Card */
+      .grid-main {
+        grid-column: 1 / 7;
+      }
+      .grid-side {
+        grid-column: 7 / 13;
+      }
+
+      .card {
+        background: var(--white);
+        border: 3px solid var(--black);
+        padding: 40px;
+        box-shadow: 12px 12px 0px var(--black);
+        position: relative;
         text-align: center;
       }
-      .counter-card {
-        border: 1px solid #ddd;
-        border-radius: 8px;
-        padding: 2rem;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+
+      .card-blue {
+        box-shadow: 12px 12px 0px var(--primary-blue);
       }
-      h1 {
-        margin-bottom: 2rem;
+      .card-yellow {
+        box-shadow: 12px 12px 0px var(--primary-yellow);
       }
-      .count-display {
-        font-size: 4rem;
-        font-weight: bold;
-        color: #333;
-        margin: 1rem 0;
+
+      .display-value {
+        font-size: 8rem;
+        font-weight: 900;
+        letter-spacing: -5px;
+        margin: 20px 0;
       }
+
       .controls {
         display: flex;
-        gap: 1rem;
+        gap: 20px;
         justify-content: center;
       }
-      button {
-        font-size: 1.2rem;
-        padding: 0.5rem 1.5rem;
+
+      .btn {
+        flex: 1;
+        padding: 20px;
+        border: 3px solid var(--black);
+        font-weight: 900;
+        font-size: 1.5rem;
         cursor: pointer;
-        background-color: #f0f0f0;
-        border: 1px solid #ccc;
-        border-radius: 4px;
-        transition: background 0.2s;
+        transition:
+          transform 0.1s,
+          box-shadow 0.1s;
+        background: var(--white);
+        box-shadow: 6px 6px 0px var(--black);
       }
-      button:hover {
-        background-color: #e0e0e0;
+
+      .btn:hover {
+        transform: translate(-2px, -2px);
+        box-shadow: 8px 8px 0px var(--black);
       }
-      button:active {
-        background-color: #d0d0d0;
+
+      .btn:active {
+        transform: translate(2px, 2px);
+        box-shadow: 2px 2px 0px var(--black);
       }
-      .status {
-        margin-top: 1.5rem;
+
+      .btn-decrement {
+        color: var(--primary-red);
+      }
+      .btn-increment {
+        color: var(--primary-blue);
+      }
+
+      /* Side Stats */
+      .stat-item {
+        margin-bottom: 30px;
+      }
+
+      .stat-label {
+        font-weight: 900;
+        text-transform: uppercase;
+        font-size: 0.85rem;
+        letter-spacing: 1px;
         color: #666;
+        margin-bottom: 10px;
       }
-      .doubled {
-        font-weight: bold;
-        color: #007bff;
+
+      .stat-value {
+        font-size: 3rem;
+        font-weight: 900;
+        color: var(--black);
+      }
+
+      /* Technical Section */
+      .info-section {
+        grid-column: 1 / -1;
+        margin-top: 60px;
+        display: grid;
+        grid-template-columns: repeat(12, 1fr);
+        gap: 30px;
+      }
+
+      .info-card {
+        grid-column: span 6;
+      }
+      .info-tag {
+        width: 32px;
+        height: 32px;
+        margin-bottom: 24px;
+      }
+      .tag-red {
+        background: var(--primary-red);
+      }
+      .tag-blue {
+        background: var(--primary-blue);
+        border-radius: 50%;
+      }
+
+      .info-title {
+        font-size: 2rem;
+        font-weight: 900;
+        text-transform: uppercase;
+        margin-bottom: 20px;
+        letter-spacing: -1px;
+      }
+
+      .code-block {
+        background: #f8f8f8;
+        border: 3px solid var(--black);
+        padding: 24px;
+        font-family: var(--font-mono);
+        font-size: 0.85rem;
+        line-height: 1.5;
+        overflow-x: auto;
+      }
+
+      .code-keyword {
+        color: var(--primary-red);
+        font-weight: 700;
+      }
+      .code-function {
+        color: var(--primary-blue);
+        font-weight: 700;
+      }
+      .code-string {
+        color: #22c55e;
+      }
+      .code-comment {
+        color: #999;
+        font-style: italic;
+      }
+
+      footer {
+        grid-column: 1 / -1;
+        margin-top: 100px;
+        padding: 40px 0;
+        border-top: 3px solid var(--black);
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        font-weight: 900;
+        text-transform: uppercase;
+        font-size: 0.85rem;
+      }
+
+      @media (max-width: 900px) {
+        .display-value {
+          font-size: 5rem;
+        }
+        .grid-main,
+        .grid-side,
+        .info-card {
+          grid-column: 1 / -1;
+        }
       }
     </style>
   </head>
   <body>
-    <h1>atom-effect-jquery</h1>
+    <main class="container">
+      <header>
+        <div class="logo">BASIC<br />COUNTER<span>.</span></div>
+        <div class="badge">atom-effect-jquery</div>
+      </header>
 
-    <div class="counter-card">
-      <div id="count" class="count-display">0</div>
+      <!-- Main Counter -->
+      <section class="grid-main">
+        <div class="card card-blue">
+          <div id="count" class="display-value">0</div>
+          <div class="controls">
+            <button id="decrement" class="btn btn-decrement">−</button>
+            <button id="increment" class="btn btn-increment">+</button>
+          </div>
+        </div>
+      </section>
 
-      <div class="controls">
-        <button id="decrement">-</button>
-        <button id="increment">+</button>
-      </div>
+      <!-- Derived Data -->
+      <section class="grid-side">
+        <div class="card card-yellow" style="text-align: left">
+          <div class="stat-item">
+            <div class="stat-label">01 / DOUBLED VALUE</div>
+            <div id="doubled" class="stat-value">0</div>
+          </div>
+          <div class="stat-item" style="margin-bottom: 0">
+            <div class="stat-label">02 / PARITY STATE</div>
+            <div id="parity" class="stat-value">EVEN</div>
+          </div>
+        </div>
+      </section>
 
-      <div class="status">
-        Doubled: <span id="doubled" class="doubled">0</span>
-      </div>
-    </div>
+      <!-- Logic Overview -->
+      <section class="info-section">
+        <div class="info-card">
+          <div class="info-tag tag-red"></div>
+          <h2 class="info-title">Atomic State</h2>
+          <pre
+            class="code-block"
+          ><span class="code-comment">// 1. SOURCE ATOM</span>
+<span class="code-keyword">const</span> count = $.<span class="code-function">atom</span>(<span class="code-num">0</span>);
+
+<span class="code-comment">// 2. DERIVED COMPUTED</span>
+<span class="code-keyword">const</span> doubled = $.<span class="code-function">computed</span>(() => 
+  count.value * <span class="code-num">2</span>
+);
+
+<span class="code-comment">// 3. JQUERY BINDING</span>
+$(<span class="code-string">'#count'</span>).<span class="code-function">atomText</span>(count);</pre>
+        </div>
+
+        <div class="info-card">
+          <div class="info-tag tag-blue"></div>
+          <h2 class="info-title">jQuery Sync</h2>
+          <div style="font-weight: 700; line-height: 1.4">
+            <p style="margin-bottom: 20px">
+              atom-effect-jquery bridges the gap between atomic state and
+              jQuery's chainable API. Updates are fine-grained and automatic.
+            </p>
+            <ul style="list-style: square; padding-left: 20px">
+              <li>Direct <code>atomText()</code> Integration</li>
+              <li>Auto-cleanup on DOM removal</li>
+              <li>No manual <code>text()</code> updates needed</li>
+              <li>Minimalistic Boilerplate</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <footer>
+        <div class="footer-brand">
+          <div>ATOM EFFECT / JQUERY BASIC</div>
+        </div>
+        <address style="font-style: normal">
+          CORE REACTIVE ENGINE<br />
+          © 2026 Jeong Il Suk
+        </address>
+      </footer>
+    </main>
 
     <script>
       // 1. Create State
       const count = $.atom(0);
       const doubled = $.computed(() => count.value * 2);
+      const parity = $.computed(() => (count.value % 2 === 0 ? "EVEN" : "ODD"));
 
-      // 2. Bind to DOM
+      // 2. Bind to DOM using jQuery Extensions
       $("#count").atomText(count);
       $("#doubled").atomText(doubled);
+      $("#parity").atomText(parity);
 
       // 3. Update State via Events
-      // Note: Standard jQuery event handlers automatically trigger updates
-      // if enablejQueryBatching() is used, but here we just update the atom directly.
       $("#increment").on("click", () => count.value++);
       $("#decrement").on("click", () => count.value--);
 
-      // Example: Direct subscription if needed
+      // 4. Manual subscription example
       $.effect(() => {
-        console.log(`Current count is: ${count.value}`);
+        if (count.value !== 0) {
+          console.log(`[STATE] COUNT UPDATED TO: ${count.value}`);
+        }
       });
     </script>
   </body>

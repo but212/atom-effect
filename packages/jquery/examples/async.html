@@ -4,24 +4,25 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Async Computed + jQuery | atom-effect-jquery</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap"
+      rel="stylesheet"
+    />
     <style>
       :root {
-        --bg-body: #0f172a;
-        --bg-card: #1e293b;
-        --bg-input: #0f172a;
-        --border-subtle: #334155;
-        --border-focus: #3b82f6;
-        --text-primary: #f8fafc;
-        --text-secondary: #94a3b8;
-        --text-tertiary: #64748b;
-        --accent-primary: #3b82f6;
-        --status-idle: #64748b;
-        --status-pending: #f59e0b;
-        --status-resolved: #10b981;
-        --status-rejected: #ef4444;
-        --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        --font-base: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
-        --font-mono: "JetBrains Mono", "Fira Code", monospace;
+        --primary-red: #e63946;
+        --primary-blue: #2a52be;
+        --primary-yellow: #ffd60a;
+        --black: #000000;
+        --white: #ffffff;
+        --font-main: "Inter", sans-serif;
+        --font-mono: "IBM Plex Mono", monospace;
       }
 
       * {
@@ -31,138 +32,140 @@
       }
 
       body {
-        font-family: var(--font-base);
-        background: var(--bg-body);
-        color: var(--text-primary);
-        min-height: 100vh;
-        padding: 4rem 2rem;
-        line-height: 1.5;
+        font-family: var(--font-main);
+        background-color: var(--white);
+        color: var(--black);
+        line-height: 1.2;
+        overflow-x: hidden;
       }
 
       .container {
-        max-width: 800px;
+        display: grid;
+        grid-template-columns: repeat(12, 1fr);
+        gap: 30px;
+        max-width: 1400px;
         margin: 0 auto;
+        padding: 40px;
       }
 
+      /* Header */
       header {
-        margin-bottom: 4rem;
-        text-align: center;
+        grid-column: 1 / -1;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 60px;
       }
 
-      h1 {
-        font-size: 2.25rem;
-        font-weight: 800;
-        letter-spacing: -0.025em;
-        margin-bottom: 0.75rem;
+      .logo {
+        font-weight: 900;
+        font-size: 2.5rem;
+        letter-spacing: -2px;
+        line-height: 0.9;
+        text-transform: uppercase;
+        cursor: default;
       }
 
-      .subtitle {
-        color: var(--text-secondary);
-        font-size: 1.125rem;
-        max-width: 600px;
-        margin: 0 auto;
+      .logo span {
+        color: var(--primary-red);
+        font-size: 1.2em;
       }
 
       .badge {
-        display: inline-flex;
-        padding: 0.375rem 0.75rem;
-        border-radius: 9999px;
+        display: inline-block;
+        background-color: var(--black);
+        color: var(--white);
+        padding: 4px 12px;
+        font-weight: 900;
         font-size: 0.75rem;
-        font-weight: 600;
         text-transform: uppercase;
-        margin-top: 1.5rem;
-        background: rgba(59, 130, 246, 0.1);
-        color: var(--accent-primary);
-        border: 1px solid rgba(59, 130, 246, 0.2);
+        letter-spacing: 1px;
       }
 
+      /* Card Style */
       .card {
-        background: var(--bg-card);
-        border-radius: 12px;
-        padding: 2rem;
-        margin-bottom: 2rem;
-        border: 1px solid var(--border-subtle);
-        box-shadow: var(--shadow-card);
+        background: var(--white);
+        border: 3px solid var(--black);
+        padding: 30px;
+        margin-bottom: 30px;
+        box-shadow: 12px 12px 0px var(--black);
+        position: relative;
+      }
+
+      .card-blue {
+        box-shadow: 12px 12px 0px var(--primary-blue);
+      }
+      .card-yellow {
+        box-shadow: 12px 12px 0px var(--primary-yellow);
       }
 
       .card-title {
-        font-size: 1.125rem;
-        font-weight: 600;
-        margin-bottom: 1.25rem;
+        font-size: 1.5rem;
+        font-weight: 900;
+        text-transform: uppercase;
+        margin-bottom: 24px;
+        letter-spacing: -1px;
         display: flex;
         justify-content: space-between;
         align-items: center;
       }
 
+      /* Search Section */
       .search-input {
         width: 100%;
-        padding: 0.875rem 1rem;
-        border: 1px solid var(--border-subtle);
-        border-radius: 8px;
-        background: var(--bg-input);
-        color: var(--text-primary);
-        font-size: 1rem;
+        padding: 16px;
+        border: 3px solid var(--black);
         font-family: inherit;
-        transition: all 0.2s ease;
-        margin-bottom: 1.5rem;
+        font-size: 1.25rem;
+        font-weight: 700;
+        outline: none;
+        transition: transform 0.2s;
       }
 
       .search-input:focus {
-        outline: none;
-        border-color: var(--accent-primary);
-        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        transform: translate(-4px, -4px);
+        box-shadow: 4px 4px 0px var(--primary-blue);
       }
 
-      .search-input::placeholder {
-        color: var(--text-tertiary);
-      }
-
-      /* Status */
+      /* Status Indicators */
       .status {
         display: inline-flex;
         align-items: center;
-        gap: 0.5rem;
-        font-size: 0.875rem;
-        font-weight: 500;
+        gap: 10px;
+        font-weight: 900;
+        text-transform: uppercase;
+        font-size: 0.85rem;
+        letter-spacing: 1px;
       }
 
       .status::before {
         content: "";
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
+        width: 12px;
+        height: 12px;
+        border: 2px solid var(--black);
       }
 
-      .status-idle {
-        color: var(--status-idle);
-      }
       .status-idle::before {
-        background: var(--status-idle);
+        background: var(--white);
       }
       .status-pending {
-        color: var(--status-pending);
+        color: var(--black);
       }
       .status-pending::before {
-        background: var(--status-pending);
-      }
-      .status-resolved {
-        color: var(--status-resolved);
+        background: var(--primary-yellow);
       }
       .status-resolved::before {
-        background: var(--status-resolved);
-      }
-      .status-rejected {
-        color: var(--status-rejected);
+        background: #22c55e;
       }
       .status-rejected::before {
-        background: var(--status-rejected);
+        background: var(--primary-red);
       }
 
       .spinner {
-        width: 16px;
-        height: 16px;
-        border: 2px solid rgba(0, 0, 0, 0.1);
-        border-top-color: currentColor;
+        width: 14px;
+        height: 14px;
+        border: 2px solid var(--black);
+        border-top-color: transparent;
         border-radius: 50%;
         animation: spin 0.6s linear infinite;
         display: inline-block;
@@ -175,38 +178,36 @@
       }
 
       /* Results */
-      .results-container {
-        min-height: 120px;
-      }
-
       .user-list {
         display: grid;
-        gap: 0.75rem;
+        gap: 15px;
       }
 
       .user-item {
         display: flex;
         align-items: center;
-        gap: 1rem;
-        padding: 0.75rem;
-        background: rgba(15, 23, 42, 0.5);
-        border-radius: 8px;
-        border: 1px solid transparent;
-        transition: all 0.2s;
+        gap: 20px;
+        padding: 15px;
+        border: 2px solid var(--black);
+        transition: background 0.2s;
       }
 
       .user-item:hover {
-        border-color: var(--border-subtle);
-        background: var(--bg-input);
+        background: rgba(0, 0, 0, 0.05);
       }
 
       .user-avatar {
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        background: var(--border-subtle);
-        overflow: hidden;
+        width: 48px;
+        height: 48px;
+        background: var(--black);
+        border: 2px solid var(--black);
         flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--white);
+        font-weight: 900;
+        font-size: 1.25rem;
       }
 
       .user-avatar img {
@@ -221,269 +222,259 @@
       }
 
       .user-name {
-        font-weight: 500;
-        color: var(--text-primary);
-        font-size: 0.9375rem;
+        font-weight: 900;
+        text-transform: uppercase;
+        font-size: 1rem;
       }
 
       .user-email a {
-        font-size: 0.8125rem;
-        color: var(--text-tertiary);
+        font-size: 0.85rem;
+        color: #666;
         text-decoration: none;
-        transition: color 0.2s;
+        font-weight: 700;
       }
 
       .user-email a:hover {
-        color: var(--accent-primary);
+        color: var(--primary-blue);
       }
 
       .empty-state {
         text-align: center;
-        padding: 2.5rem 1rem;
-        color: var(--text-tertiary);
-      }
-
-      .empty-state-icon {
-        font-size: 2rem;
-        margin-bottom: 0.75rem;
+        padding: 40px;
+        border: 2px dashed var(--black);
+        font-weight: 700;
+        text-transform: uppercase;
+        color: #666;
       }
 
       .error-message {
-        padding: 1rem;
-        background: rgba(239, 68, 68, 0.1);
-        border: 1px solid rgba(239, 68, 68, 0.2);
-        border-radius: 8px;
-        color: var(--status-rejected);
+        padding: 20px;
+        background: var(--primary-red);
+        color: var(--white);
+        font-weight: 900;
+        text-transform: uppercase;
+        border: 3px solid var(--black);
       }
 
-      /* Debug Panel */
-      .debug-grid {
+      /* Stats */
+      .stats-grid {
         display: grid;
         grid-template-columns: repeat(2, 1fr);
-        gap: 1rem;
+        gap: 20px;
       }
 
-      .debug-item {
-        padding: 1rem;
-        background: rgba(15, 23, 42, 0.5);
-        border-radius: 8px;
+      .stat-item {
+        padding: 15px;
+        border: 2px solid var(--black);
+        text-align: center;
       }
 
-      .debug-label {
+      .stat-value {
+        font-size: 2rem;
+        font-weight: 900;
+        margin-bottom: 5px;
+      }
+
+      .stat-label {
         font-size: 0.75rem;
-        color: var(--text-tertiary);
+        font-weight: 900;
         text-transform: uppercase;
-        letter-spacing: 0.05em;
-        margin-bottom: 0.25rem;
+        letter-spacing: 1px;
+        color: #666;
       }
 
-      .debug-value {
-        font-family: var(--font-mono);
-        font-size: 1.25rem;
-        color: var(--text-primary);
+      /* Layout Grid Columns */
+      .grid-main {
+        grid-column: 1 / 8;
+      }
+      .grid-side {
+        grid-column: 8 / 13;
       }
 
-      /* Code Block */
+      /* Technical Overview */
+      .info-section {
+        grid-column: 1 / -1;
+        margin-top: 60px;
+        display: grid;
+        grid-template-columns: repeat(12, 1fr);
+        gap: 30px;
+      }
+
+      .info-card {
+        grid-column: span 6;
+      }
+
+      .info-tag {
+        width: 32px;
+        height: 32px;
+        margin-bottom: 24px;
+      }
+
+      .tag-red {
+        background-color: var(--primary-red);
+      }
+      .tag-yellow {
+        background-color: var(--primary-yellow);
+        clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+      }
+
+      .info-title {
+        font-size: 2rem;
+        font-weight: 900;
+        text-transform: uppercase;
+        margin-bottom: 20px;
+        letter-spacing: -1px;
+      }
+
       .code-block {
-        background: var(--bg-input);
-        border-radius: 8px;
-        padding: 1.5rem;
+        background: #f8f8f8;
+        border: 3px solid var(--black);
+        padding: 24px;
         font-family: var(--font-mono);
-        font-size: 0.875rem;
-        line-height: 1.7;
+        font-size: 0.85rem;
+        line-height: 1.5;
         overflow-x: auto;
-        margin-bottom: 1.5rem;
       }
 
-      .code-comment {
-        color: var(--text-tertiary);
-      }
       .code-keyword {
-        color: #c792ea;
+        color: var(--primary-red);
+        font-weight: 700;
       }
       .code-function {
-        color: #82aaff;
+        color: var(--primary-blue);
+        font-weight: 700;
       }
       .code-string {
-        color: #c3e88d;
+        color: #22c55e;
       }
-      .code-method {
-        color: #ffcb6b;
-      }
-
-      .info-box {
-        padding: 1.25rem;
-        background: rgba(59, 130, 246, 0.05);
-        border: 1px solid rgba(59, 130, 246, 0.1);
-        border-radius: 8px;
-      }
-
-      .info-box-title {
-        font-weight: 600;
-        margin-bottom: 0.75rem;
-        color: var(--text-primary);
-      }
-
-      .info-box ul {
-        list-style: none;
-        display: grid;
-        gap: 0.5rem;
-      }
-
-      .info-box li {
-        padding-left: 1.5rem;
-        position: relative;
-        color: var(--text-secondary);
-        font-size: 0.9375rem;
-      }
-
-      .info-box li::before {
-        content: "→";
-        position: absolute;
-        left: 0;
-        color: var(--accent-primary);
-      }
-
-      .info-box code {
-        background: rgba(0, 0, 0, 0.2);
-        padding: 0.125rem 0.375rem;
-        border-radius: 4px;
-        font-size: 0.8125rem;
+      .code-comment {
+        color: #999;
+        font-style: italic;
       }
 
       footer {
-        text-align: center;
-        margin-top: 4rem;
-        padding-top: 2rem;
-        border-top: 1px solid var(--border-subtle);
-        color: var(--text-tertiary);
+        grid-column: 1 / -1;
+        margin-top: 100px;
+        padding: 40px 0;
+        border-top: 3px solid var(--black);
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        font-weight: 900;
+        text-transform: uppercase;
+        font-size: 0.85rem;
       }
 
-      footer a {
-        color: var(--accent-primary);
-        text-decoration: none;
+      @media (max-width: 900px) {
+        .grid-main,
+        .grid-side,
+        .info-card {
+          grid-column: 1 / -1;
+        }
       }
     </style>
   </head>
   <body>
-    <div class="container">
+    <main class="container">
       <header>
-        <h1>Async Computed + jQuery</h1>
-        <p class="subtitle">
-          GitHub User Search powered by <code>atom-effect-jquery</code> — async
-          computed with automatic state tracking, race condition handling
-        </p>
-        <span class="badge">atom-effect-jquery</span>
+        <div class="logo">JQUERY<br />ASYNC<span>.</span></div>
+        <div class="badge">atom-effect-jquery</div>
       </header>
 
-      <!-- Search Card -->
-      <div class="card">
-        <div class="card-title">
-          <span>🔍 GitHub User Search</span>
-          <span id="status-indicator" class="status status-idle">Idle</span>
-        </div>
-
-        <input
-          type="text"
-          id="search-input"
-          class="search-input"
-          placeholder="Search GitHub users... (min 2 characters)"
-        />
-
-        <div id="results-container" class="results-container">
-          <div class="empty-state">
-            <div class="empty-state-icon">🔍</div>
-            <p>Enter a search term to see results</p>
+      <!-- Main Interaction Area -->
+      <section class="grid-main">
+        <div class="card card-blue">
+          <h2 class="card-title">Search Engine</h2>
+          <input
+            type="text"
+            id="search-input"
+            class="search-input"
+            placeholder="TYPE USERNAME..."
+          />
+          <div style="margin-top: 20px">
+            <div id="status-indicator" class="status status-idle">IDLE</div>
           </div>
         </div>
-      </div>
 
-      <!-- Debug Panel -->
-      <div class="card">
-        <div class="card-title">📊 Reactive State Debug</div>
-        <div class="debug-grid">
-          <div class="debug-item">
-            <div class="debug-label">Search Count</div>
-            <div id="search-count" class="debug-value">0</div>
-          </div>
-          <div class="debug-item">
-            <div class="debug-label">Current State</div>
-            <div id="current-state" class="debug-value">idle</div>
-          </div>
-          <div class="debug-item">
-            <div class="debug-label">Result Count</div>
-            <div id="result-count" class="debug-value">0</div>
-          </div>
-          <div class="debug-item">
-            <div class="debug-label">Last Update</div>
-            <div id="last-update" class="debug-value">-</div>
+        <div class="card">
+          <h2 class="card-title">Results Stream</h2>
+          <div id="results-container">
+            <div class="empty-state">SEARCH KEYWORD REQUIRED</div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <!-- Code Example -->
-      <div class="card">
-        <div class="card-title">💡 How It Works (atom-effect-jquery)</div>
+      <!-- Sidebar / Live Data -->
+      <section class="grid-side">
+        <div class="card card-yellow">
+          <h2 class="card-title">System Live</h2>
+          <div class="stats-grid">
+            <div class="stat-item">
+              <div id="search-count" class="stat-value">0</div>
+              <div class="stat-label">Queries</div>
+            </div>
+            <div class="stat-item">
+              <div id="current-state" class="stat-value">IDLE</div>
+              <div class="stat-label">State</div>
+            </div>
+            <div class="stat-item">
+              <div id="result-count" class="stat-value">0</div>
+              <div class="stat-label">Items</div>
+            </div>
+            <div id="last-update-wrapper" class="stat-item">
+              <div id="last-update" class="stat-value">--:--</div>
+              <div class="stat-label">Pulse</div>
+            </div>
+          </div>
+        </div>
+      </section>
 
-        <pre class="code-block"><span class="code-comment">// State</span>
-<span class="code-keyword">const</span> query = $.<span class="code-function">atom</span>(<span class="code-string">''</span>);
-<span class="code-keyword">const</span> searchCount = $.<span class="code-function">atom</span>(<span class="code-string">0</span>);
+      <!-- Technical Overview -->
+      <section class="info-section">
+        <div class="info-card">
+          <div class="info-tag tag-red"></div>
+          <h2 class="info-title">The Bindings</h2>
+          <pre
+            class="code-block"
+          ><span class="code-comment">// 1. JQUERY CHAINING</span>
+$(<span class="code-string">'#input'</span>).<span class="code-function">atomVal</span>(query);
 
-<span class="code-comment">// Async Computed</span>
-<span class="code-keyword">const</span> results = $.<span class="code-function">computed</span>(<span class="code-keyword">async</span> () => {
-  <span class="code-keyword">if</span> (query.value.length < 2) <span class="code-keyword">return</span> [];
-  <span class="code-keyword">const</span> res = <span class="code-keyword">await</span> <span class="code-function">fetch</span>(<span class="code-string">`https://api.github.com/search/users?q=${encodeURIComponent(query.value)}`</span>);
-  <span class="code-keyword">return</span> res.<span class="code-function">json</span>();
-}, { defaultValue: [] });
+<span class="code-comment">// 2. AUTOMATIC SYNC</span>
+$(<span class="code-string">'#text'</span>).<span class="code-function">atomText</span>(data);
 
-<span class="code-comment">// DOM Bindings</span>
-$(<span class="code-string">'#search-input'</span>).<span class="code-method">atomVal</span>(query, { debounce: 300 });
-$(<span class="code-string">'#search-count'</span>).<span class="code-method">atomText</span>(searchCount);
-
-<span class="code-comment">// List Rendering</span>
-$(<span class="code-string">'#results'</span>).<span class="code-method">atomList</span>(results, {
-  key: u => u.id,
-  render: u => <span class="code-string">`&lt;div&gt;${u.login}&lt;/div&gt;`</span>
+<span class="code-comment">// 3. LIST RENDERING</span>
+$(<span class="code-string">'#list'</span>).<span class="code-function">atomList</span>(data, {
+  render: u => <span class="code-string">`&lt;li&gt;${u.name}&lt;/li&gt;`</span>
 });</pre>
-
-        <div class="info-box">
-          <div class="info-box-title">🎯 atom-effect-jquery Features</div>
-          <ul>
-            <li>
-              <strong>jQuery Chaining</strong> — <code>.atomText()</code>,
-              <code>.atomVal()</code>, <code>.atomList()</code>
-            </li>
-            <li>
-              <strong>Automatic Cleanup</strong> — Effects automatically
-              disposed when DOM is removed (prevents memory leaks)
-            </li>
-            <li>
-              <strong>Two-way Binding</strong> — Done in one line with
-              <code>.atomVal(atom)</code>
-            </li>
-            <li>
-              <strong>Zero Build</strong> — Ready to use immediately with just 2
-              CDN lines
-            </li>
-            <li>
-              <strong>Async Computed</strong> — Automatic Promise handling +
-              race condition prevention
-            </li>
-          </ul>
         </div>
-      </div>
+
+        <div class="info-card">
+          <div class="info-tag tag-yellow"></div>
+          <h2 class="info-title">Why jQuery?</h2>
+          <div style="font-weight: 700; line-height: 1.4">
+            <p style="margin-bottom: 20px">
+              atom-effect-jquery brings modern reactivity to the most
+              battle-tested DOM library. Benefit from jQuery's ecosystem while
+              enjoying fine-grained, declarative state management.
+            </p>
+            <ul style="list-style: square; padding-left: 20px">
+              <li>Chainable API Design</li>
+              <li>Auto DOM Cleanup</li>
+              <li>Minimal Memory Footprint</li>
+              <li>Legacy Project Friendly</li>
+            </ul>
+          </div>
+        </div>
+      </section>
 
       <footer>
-        <p>
-          Built with
-          <a
-            href="https://github.com/but212/atom-effect/tree/main/packages/jquery"
-            target="_blank"
-            >atom-effect-jquery</a
-          >
-        </p>
+        <div>ATOM EFFECT / JQUERY EDITION</div>
+        <address style="font-style: normal">
+          DECLARATIVE BRIDGE ENGINE<br />
+          © 2026 Jeong Il Suk
+        </address>
       </footer>
-    </div>
+    </main>
 
     <!-- Dependencies -->
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
@@ -528,30 +519,30 @@ $(<span class="code-string">'#results'</span>).<span class="code-method">atomLis
 
         switch (state) {
           case "idle":
-            return { text: "Idle", class: "status-idle", showSpinner: false };
+            return { text: "IDLE", class: "status-idle", showSpinner: false };
           case "pending":
             return {
-              text: `Searching "${query}"...`,
+              text: `SEARCHING...`,
               class: "status-pending",
               showSpinner: true,
             };
           case "resolved": {
             const count = searchResults.value.length;
             return {
-              text: count > 0 ? `${count} results found` : "No results",
+              text: count > 0 ? `${count} ITEMS FOUND` : "NO RESULTS",
               class: "status-resolved",
               showSpinner: false,
             };
           }
           case "rejected":
             return {
-              text: "Error occurred",
+              text: "SYSTEM ERROR",
               class: "status-rejected",
               showSpinner: false,
             };
           default:
             return {
-              text: "Unknown",
+              text: "UNKNOWN",
               class: "status-idle",
               showSpinner: false,
             };
@@ -564,7 +555,9 @@ $(<span class="code-string">'#results'</span>).<span class="code-method">atomLis
 
       // Debug panel bindings
       $("#search-count").atomText(searchCount);
-      $("#current-state").atomText($.computed(() => searchResults.state));
+      $("#current-state").atomText(
+        $.computed(() => searchResults.state.toUpperCase()),
+      );
       $("#result-count").atomText(resultCount);
 
       // Status indicator - Complex DOM manipulation with effect
@@ -590,7 +583,7 @@ $(<span class="code-string">'#results'</span>).<span class="code-method">atomLis
 
         // Adjust opacity only during pending state
         if (state === "pending" && results.length > 0) {
-          $container.css("opacity", "0.6");
+          $container.css("opacity", "0.5");
           return;
         }
 
@@ -598,20 +591,23 @@ $(<span class="code-string">'#results'</span>).<span class="code-method">atomLis
 
         // Empty state
         if (!query || query.length < 2) {
-          $container.html(`
-            <div class="empty-state">
-              <div class="empty-state-icon">🔍</div>
-              <p>Enter a search term to see results</p>
-            </div>
-          `);
+          $container.html(
+            `<div class="empty-state">SEARCH KEYWORD REQUIRED</div>`,
+          );
           return;
         }
 
         // Error state
         if (searchResults.hasError) {
+          const error = searchResults.lastError;
+          const isRateLimit = error?.message.includes("403");
           $container.html(`
             <div class="error-message">
-              ⚠️ ${searchResults.lastError?.message || "Unknown error"}
+              ${
+                isRateLimit
+                  ? "OVERLOAD: GITHUB API RATE LIMIT EXCEEDED."
+                  : `FAILURE: ${error?.message || "UNKNOWN"}`
+              }
             </div>
           `);
           return;
@@ -619,12 +615,9 @@ $(<span class="code-string">'#results'</span>).<span class="code-method">atomLis
 
         // No results
         if (results.length === 0 && state === "resolved") {
-          $container.html(`
-            <div class="empty-state">
-              <div class="empty-state-icon">🤷</div>
-              <p>No results for "${query}"</p>
-            </div>
-          `);
+          $container.html(
+            `<div class="empty-state">NO MATCHES FOUND FOR "${query.toUpperCase()}"</div>`,
+          );
           return;
         }
 
@@ -642,7 +635,7 @@ $(<span class="code-string">'#results'</span>).<span class="code-method">atomLis
                 <div class="user-info">
                   <div class="user-name">${user.login}</div>
                   <div class="user-email">
-                    <a href="${user.html_url}" target="_blank">${user.html_url}</a>
+                    <a href="${user.html_url}" target="_blank">${user.html_url.replace("https://", "")}</a>
                   </div>
                 </div>
               </div>
@@ -657,11 +650,13 @@ $(<span class="code-string">'#results'</span>).<span class="code-method">atomLis
       // Last update time
       $.effect(() => {
         if (searchResults.state === "resolved") {
-          const q = $.untracked(() => debouncedQuery.value);
-          console.log(
-            `[Search] Query "${q}" completed with ${searchResults.value.length} results`,
+          $("#last-update").text(
+            new Date().toLocaleTimeString([], {
+              hour12: false,
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
           );
-          $("#last-update").text(new Date().toLocaleTimeString());
         }
       });
 
@@ -677,7 +672,7 @@ $(<span class="code-string">'#results'</span>).<span class="code-method">atomLis
             searchCount.value++;
           }
           debouncedQuery.value = value;
-        }, 300);
+        }, 500);
       });
 
       // Focus on load
