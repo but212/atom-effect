@@ -22,11 +22,7 @@ describe('jQuery Batching Documentation Verification', () => {
 
     $btn.trigger('click');
 
-    // If batch() wraps the handler, domValueInside should be '0' (not yet flushed)
-    // because flushSync happens AFTER the handler returns.
-    console.log('DOM Value Inside Handler:', domValueInside);
-
     expect(domValueInside).toBe('0');
-    expect($('#count').text()).toBe('1'); // Updated AFTER handler
+    expect($('#count').text()).toBe('1');
   });
 });
