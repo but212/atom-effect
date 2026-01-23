@@ -397,18 +397,15 @@
         linkRadius.value = parseInt(e.target.value, 10);
       });
 
-      // Atom -> DOM Effects
       effect(() => {
-        elParticleCount.value = atomCount.value;
+        const count = atomCount.value;
+        elParticleCount.value = count;
+        elCountText.textContent = count;
       });
       effect(() => {
-        elLinkRadius.value = linkRadius.value;
-      });
-      effect(() => {
-        elCountText.textContent = atomCount.value;
-      });
-      effect(() => {
-        elRadiusText.textContent = linkRadius.value;
+        const radius = linkRadius.value;
+        elLinkRadius.value = radius;
+        elRadiusText.textContent = radius;
       });
 
       let particles = [];
@@ -459,6 +456,7 @@
         const rect = canvas.parentElement.getBoundingClientRect();
         canvas.width = rect.width;
         canvas.height = rect.height;
+        particles.forEach((p) => p.init());
       }
 
       window.addEventListener("resize", resize);

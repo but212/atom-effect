@@ -436,6 +436,7 @@
         const rect = canvas.parentElement.getBoundingClientRect();
         canvas.width = rect.width;
         canvas.height = rect.height;
+        particles.forEach((p) => p.init());
       }
 
       window.addEventListener("resize", resize);
