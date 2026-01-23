@@ -118,14 +118,14 @@ export const SMI_MAX = 0x3fffffff;
 /**
  * Phase-Shift Versioning Constants
  *
- * Implements discrete phase rotation for branchless version management.
+ * Implements discrete phase rotation for version management.
  * Inspired by imaginary number rotation (e^iθ) for cyclic state tracking.
  *
  * Version Structure (30 bits total, fits in V8 Smi):
  * - Cycle (upper 10 bits): Complete rotation count (0-1023)
  * - Phase (lower 20 bits): Current angle in discrete steps (0-1,048,575)
  *
- * Branchless Operations:
+ * Operations:
  * - rotatePhase: (version + 1) & 0x3fffffff
  * - getShift: (current - cached) & 0x3fffffff
  * - urgentPriority: ((PHASE_THRESHOLD - 1 - shift) >>> 31) & 1

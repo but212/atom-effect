@@ -1,4 +1,4 @@
-import { ATOM_STATE_FLAGS } from '@/constants';
+import { ATOM_STATE_FLAGS, SMI_MAX } from '@/constants';
 import { ReactiveDependency } from '@/core/base';
 import { trackDependency } from '@/core/dep-tracking';
 import { scheduler } from '@/internal/scheduler';
@@ -15,16 +15,20 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
   private _pendingOldValue: T | undefined;
   private _notifyTask: (() => void) | undefined;
 
-  protected _fnSubs: ((newValue?: T, oldValue?: T) => void)[] = [];
-  protected _objSubs: Subscriber[] = [];
+  protected _fnSubs: ((newValue?: T, oldValue?: T) => void)[];
+  protected _objSubs: Subscriber[];
 
   constructor(initialValue: T, sync: boolean) {
     super();
     this._value = initialValue;
     this._pendingOldValue = undefined;
     this._notifyTask = undefined;
+    this._fnSubs = [];
+    this._objSubs = [];
 
-    if (sync) this.flags |= ATOM_STATE_FLAGS.SYNC;
+    if (sync) {
+      this.flags |= ATOM_STATE_FLAGS.SYNC;
+    }
 
     // Attach debug info in dev mode
     debug.attachDebugInfo(this, 'atom', this.id);
@@ -35,7 +39,9 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
    */
   get value(): T {
     const current = trackingContext.current;
-    if (current) trackDependency(this, current, this._fnSubs, this._objSubs);
+    if (current) {
+      trackDependency(this, current, this._fnSubs, this._objSubs);
+    }
     return this._value;
   }
 
@@ -43,17 +49,15 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
    * Sets a new value and schedules notifications if the value has changed.
    */
   set value(newValue: T) {
-    if (Object.is(this._value, newValue)) return;
-
     const oldValue = this._value;
+    if (Object.is(oldValue, newValue)) return;
+
     this._value = newValue;
+    this.version = (this.version + 1) & SMI_MAX;
 
-    // Branchless phase rotation: automatically handles cycle overflow
-    this.rotatePhase();
-
-    // Check for subscribers: O(1) before scheduling
-    // Use NODE_FLAGS for faster check
-    if (this.flags & (ATOM_STATE_FLAGS.HAS_FN_SUBS | ATOM_STATE_FLAGS.HAS_OBJ_SUBS)) {
+    const flags = this.flags;
+    const subMask = ATOM_STATE_FLAGS.HAS_FN_SUBS | ATOM_STATE_FLAGS.HAS_OBJ_SUBS;
+    if (flags & subMask) {
       this._scheduleNotification(oldValue);
     }
   }
@@ -62,25 +66,32 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
    * Schedules or flushes notifications based on sync mode and batching state.
    */
   private _scheduleNotification(oldValue: T): void {
-    if (!(this.flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED)) {
+    let flags = this.flags;
+
+    if (!(flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED)) {
       this._pendingOldValue = oldValue;
-      this.flags |= ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
+      this.flags = flags |= ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
     }
 
-    // Flush immediately if sync and not batching
-    if (this.flags & ATOM_STATE_FLAGS.SYNC && !scheduler.isBatching) {
+    if (flags & ATOM_STATE_FLAGS.SYNC && !scheduler.isBatching) {
       this._flushNotifications();
       return;
     }
 
-    if (!this._notifyTask) {
-      this._notifyTask = () => this._flushNotifications();
+    let task = this._notifyTask;
+    if (!task) {
+      task = this._notifyTask = () => this._flushNotifications();
     }
-    scheduler.schedule(this._notifyTask);
+    scheduler.schedule(task);
   }
 
+  /**
+   * Flushes scheduled notifications and resets state for the next cycle.
+   */
   private _flushNotifications(): void {
-    if (!(this.flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED)) return;
+    if (!(this.flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED)) {
+      return;
+    }
 
     const oldValue = this._pendingOldValue as T;
     const newValue = this._value;
@@ -91,15 +102,26 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
     this._notifySubscribers(newValue, oldValue);
   }
 
+  /**
+   * Returns the current value without registering it as a dependency.
+   */
   peek(): T {
     return this._value;
   }
 
+  /**
+   * Disposes of the atom and releases all subscribers and tasks.
+   */
   dispose(): void {
+    if (this.flags & ATOM_STATE_FLAGS.DISPOSED) {
+      return;
+    }
+
     this._fnSubs = [];
     this._objSubs = [];
     this.flags |= ATOM_STATE_FLAGS.DISPOSED;
     this._value = undefined as T;
+    this._pendingOldValue = undefined;
     this._notifyTask = undefined;
   }
 }
