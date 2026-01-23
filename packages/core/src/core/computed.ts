@@ -466,6 +466,8 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       .then((resolvedValue) => {
         if (promiseId !== this._promiseId) return;
 
+        // Drift detection: Compare aggregate dependency versions to detect changes during async.
+        // High drift indicates dependencies changed while awaiting; re-computation may be needed.
         const currentAggregate = this._captureVersionSnapshot();
         const drift = (currentAggregate - this._asyncStartAggregateVersion) & SMI_MAX;
         const isStale = ((PHASE_THRESHOLD - 1 - drift) >>> 31) & 1;

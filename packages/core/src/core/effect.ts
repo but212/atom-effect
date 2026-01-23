@@ -171,6 +171,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 
   public execute(force = false): void {
     const flags = this.flags;
+    // Guard: Prevent re-entrant execution (infinite recursion) and post-disposal execution
     if (flags & (EFFECT_STATE_FLAGS.DISPOSED | EFFECT_STATE_FLAGS.EXECUTING)) return;
     if (!force && !this._shouldExecute()) return;
 

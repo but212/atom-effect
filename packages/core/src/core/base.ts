@@ -25,7 +25,8 @@ export class ReactiveNode {
   _tempUnsub: (() => void) | undefined;
 
   constructor() {
-    // Group numeric field initializations to establish a stable Hidden Class (Shape) for V8
+    // Group numeric field initializations to establish a stable Hidden Class (Shape) for V8.
+    // Consistent initialization order prevents shape transitions, optimizing property access.
     this.flags = 0;
     this.version = 0;
     this._lastSeenEpoch = -1;

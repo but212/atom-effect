@@ -1,6 +1,6 @@
 import { NODE_FLAGS } from '@/constants';
 import { EMPTY_DEPS, EMPTY_UNSUBS, unsubArrayPool } from '@/internal/pool';
-import { type DependencySubscriber } from '@/tracking/tracking.types';
+import type { DependencySubscriber } from '@/tracking/tracking.types';
 import type { Dependency, Subscriber } from '@/types';
 import { debug } from '@/utils/debug';
 
