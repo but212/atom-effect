@@ -134,7 +134,6 @@ export const SMI_MAX = 0x3fffffff;
  * - urgentPriority: ((PHASE_THRESHOLD - 1 - shift) >>> 31) & 1
  */
 export const PHASE_BITS = 20;
-export const PHASE_MASK = (1 << PHASE_BITS) - 1; // 0x000fffff (1,048,575)
 
 /**
  * Phase threshold for urgent scheduling (equivalent to 180° rotation)

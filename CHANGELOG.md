@@ -4,33 +4,37 @@
 
 ### Core
 
-#### Fixed
+#### Fixed - Core
 
 - **Circular Dependencies**: Throws `ComputedError` instead of returning undefined.
 - **Effect Errors**: Correctly throws `EFFECT_DISPOSED` and fixed rate limit execution flow.
 
-#### Changed
+#### Changed - Core
 
 - **DEV Guards**: Added warnings for duplicate subscriptions and mismatched batching; optimized production checks.
 - **Internal Logic**: Improved object pool resetting, epoch overflow prevention, and type guard simplification.
 
-#### Removed
+#### Removed - Core
 
 - Cleaned up unused private methods, redundant state resets, and duplicate JSDoc.
+- **Priority System**: Simplified the `Scheduler` by removing the unused urgent queue system and priority calculation logic.
+- **Unused Methods**: Removed `isUrgent()` and `_getAggregateShift()` from `ComputedAtomImpl` (not part of the public API).
+- **Constants**: Removed the unused `PHASE_MASK` constant.
 
 ### jQuery
 
-#### Fixed
+#### Fixed - jQuery
 
 - Improved cleanup error logging and registry management for detached nodes.
 
-#### Changed
+#### Changed - jQuery
 
 - **Bindings**: Added custom equality support and unified phase state logic.
 - **Types**: Enhanced event handler and binding map type safety, replacing `any` with strong types.
 - **Consistency**: Ensured static values trigger DOM debug events.
+- **atomList**: Added duplicate key warnings in development mode (when `debug.enabled` is true) to improve robustness and debuggability.
 
-#### Removed
+#### Removed - jQuery
 
 - Removed unused `effects` context field and redundant variables.
 
@@ -90,7 +94,7 @@
 
 ### jQuery - 0.13.0
 
-#### Fixed
+#### Fixed - jQuery 0.13.0
 
 - **Double Cleanup**: Prevented duplicate cleanup execution on node removal.
   - `$.fn.remove` now marks elements as "ignored" before removal, preventing `MutationObserver` from triggering a second cleanup pass.
