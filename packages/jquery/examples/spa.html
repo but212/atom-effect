@@ -610,6 +610,20 @@
       });
       $("#page-title").atomText(pageTitleText);
 
+      /**
+       * Safely updates task element UI based on task state.
+       * Used by both render and update to ensure consistency.
+       */
+      const updateTaskElement = ($el, task) => {
+        $el.toggleClass("completed", task.completed);
+        $el
+          .find(".checkbox-rect")
+          .toggleClass("checked", task.completed)
+          .attr("aria-checked", task.completed);
+        $el.find(".task-title").text(task.title);
+        $el.find(".task-tag").text(task.tag);
+      };
+
       // --- Routing ---
       $.effect(() => {
         const route = currentRoute.value;
@@ -629,30 +643,16 @@
               key: "id",
               render: (task) => {
                 const $el = $(`
-                            <div class="task-item" data-id="${task.id}">
+                            <div class="task-item">
                                 <div class="checkbox-rect" role="checkbox" tabindex="0"></div>
                                 <div class="task-title"></div>
                                 <div class="task-tag"></div>
                             </div>
-                        `);
-                $el.toggleClass("completed", task.completed);
-                $el
-                  .find(".checkbox-rect")
-                  .toggleClass("checked", task.completed)
-                  .attr("aria-checked", task.completed);
-                $el.find(".task-title").text(task.title);
-                $el.find(".task-tag").text(task.tag);
+                        `).attr("data-id", task.id);
+                updateTaskElement($el, task);
                 return $el;
               },
-              update: ($el, task) => {
-                $el.toggleClass("completed", task.completed);
-                $el
-                  .find(".checkbox-rect")
-                  .toggleClass("checked", task.completed)
-                  .attr("aria-checked", task.completed);
-                $el.find(".task-title").text(task.title);
-                $el.find(".task-tag").text(task.tag);
-              },
+              update: updateTaskElement,
               bind: ($el, task) => {
                 const toggle = () => {
                   tasks.value = tasks.value.map((t) =>
