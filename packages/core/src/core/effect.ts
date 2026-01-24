@@ -212,9 +212,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
                 try {
                   asyncCleanup();
                 } catch (error) {
-                  console.error(
-                    wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_CLEANUP_FAILED)
-                  );
+                  this._handleExecutionError(error, ERROR_MESSAGES.EFFECT_CLEANUP_FAILED);
                 }
               }
               return;
@@ -359,7 +357,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       try {
         cleanup();
       } catch (error) {
-        console.error(wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_CLEANUP_FAILED));
+        this._handleExecutionError(error, ERROR_MESSAGES.EFFECT_CLEANUP_FAILED);
       }
       this._cleanup = null;
     }
@@ -443,11 +441,24 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     return false;
   }
 
-  private _handleExecutionError(error: unknown): void {
-    const errorObj = wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_EXECUTION_FAILED);
+  private _handleExecutionError(
+    error: unknown,
+    message: string = ERROR_MESSAGES.EFFECT_EXECUTION_FAILED
+  ): void {
+    const errorObj = wrapError(error, EffectError, message);
     console.error(errorObj);
+
     const onError = this._onError;
-    if (onError) onError(errorObj);
+    if (onError) {
+      try {
+        onError(errorObj);
+      } catch (e) {
+        // Avoid cascading failures if the onError handler itself throws
+        console.error(
+          wrapError(e, EffectError, ERROR_MESSAGES.CALLBACK_ERROR_IN_ERROR_HANDLER)
+        );
+      }
+    }
   }
 
   private _checkLoopWarnings(): void {
