@@ -8,11 +8,14 @@
 
 - **Circular Dependencies**: Throws `ComputedError` instead of returning undefined.
 - **Effect Errors**: Correctly throws `EFFECT_DISPOSED` and fixed rate limit execution flow.
+- **Atom Notifications**: Fixed a race condition where notifications were flushed after disposal, preventing `undefined` values from reaching subscribers.
+- **Async Effect Cleanup**: Fixed a memory leak where stale async cleanup functions could clobber newer ones; implemented execution ID tracking to ensure only the latest cleanup is kept and stale ones are disposed of.
 
 #### Changed - Core
 
 - **DEV Guards**: Added warnings for duplicate subscriptions and mismatched batching; optimized production checks.
 - **Internal Logic**: Improved object pool resetting, epoch overflow prevention, and type guard simplification.
+- **Drift Detection**: Enhanced async drift detection in computed atoms by using DJB2-style bitwise hash mixing for snapshots and increasing sensitivity to detect any change.
 
 #### Removed - Core
 

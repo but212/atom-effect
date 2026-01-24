@@ -60,6 +60,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   private _executionCount: number;
   private _historyPtr: number;
   private readonly _historyCapacity: number;
+  private _execId: number;
 
   constructor(fn: EffectFunction, options: EffectOptions = {}) {
     super();
@@ -98,6 +99,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 
     // Pre-allocate history buffer only if rate limiting is active and in Dev/Prod as configured
     this._history = IS_DEV && isFiniteLimit && capacity > 0 ? new Array(capacity).fill(0) : null;
+    this._execId = 0;
 
     debug.attachDebugInfo(this, 'effect', this.id);
   }
@@ -197,14 +199,36 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 
       this._checkLoopWarnings();
 
+      const execId = ++this._execId;
+
       if (isPromise(result)) {
         result
           .then((asyncCleanup) => {
-            if (!(this.flags & EFFECT_STATE_FLAGS.DISPOSED) && typeof asyncCleanup === 'function') {
+            const isStale = execId !== this._execId;
+            const isDisposed = this.flags & EFFECT_STATE_FLAGS.DISPOSED;
+
+            if (isStale || isDisposed) {
+              if (typeof asyncCleanup === 'function') {
+                try {
+                  asyncCleanup();
+                } catch (error) {
+                  console.error(
+                    wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_CLEANUP_FAILED)
+                  );
+                }
+              }
+              return;
+            }
+
+            if (typeof asyncCleanup === 'function') {
               this._cleanup = asyncCleanup;
             }
           })
-          .catch((error) => this._handleExecutionError(error));
+          .catch((error) => {
+            if (execId === this._execId) {
+              this._handleExecutionError(error);
+            }
+          });
       } else {
         this._cleanup = typeof result === 'function' ? result : null;
       }
