@@ -1,4 +1,4 @@
-import { IS_DEV, PHASE_THRESHOLD, SCHEDULER_CONFIG } from '@/constants';
+import { IS_DEV, SCHEDULER_CONFIG } from '@/constants';
 import { SchedulerError } from '@/errors/errors';
 import { endFlush, startFlush } from '@/internal/epoch';
 
@@ -15,31 +15,21 @@ export enum SchedulerPhase {
 }
 
 /**
- * Scheduler job interface with phase-shift tracking support.
+ * Scheduler job interface.
  */
 export interface SchedulerJob {
   (): void;
   /** Epoch for deduplication */
   _nextEpoch?: number;
-  /** Cached version for phase-shift priority calculation */
-  _cachedVersion?: number;
 }
 
 /**
- * Interface for nodes that support phase-shift priority calculation.
- */
-interface PhaseShiftNode {
-  getShift(cachedVersion: number): number;
-}
-
-/**
- * Scheduler for reactive updates with double-buffered priority queues.
+ * Simplified scheduler for reactive updates with double-buffered queue.
  */
 class Scheduler {
-  private _queueBuffers: [[SchedulerJob[], SchedulerJob[]], [SchedulerJob[], SchedulerJob[]]];
-  private _bufferIndices: Uint8Array;
-  private _sizes: Uint32Array;
-  private _activeQueues: [SchedulerJob[], SchedulerJob[]];
+  private _queueBuffer: [SchedulerJob[], SchedulerJob[]];
+  private _bufferIndex: number;
+  private _size: number;
   private _epoch: number;
   private isProcessing: boolean;
   public isBatching: boolean;
@@ -50,13 +40,9 @@ class Scheduler {
   private maxFlushIterations: number;
 
   constructor() {
-    this._queueBuffers = [
-      [[], []], // Normal [0][0], [0][1]
-      [[], []], // Urgent [1][0], [1][1]
-    ];
-    this._bufferIndices = new Uint8Array(2);
-    this._sizes = new Uint32Array(2);
-    this._activeQueues = [this._queueBuffers[0][0], this._queueBuffers[1][0]];
+    this._queueBuffer = [[], []];
+    this._bufferIndex = 0;
+    this._size = 0;
     this._epoch = 0;
     this.isProcessing = false;
     this.isBatching = false;
@@ -80,20 +66,15 @@ class Scheduler {
     return SchedulerPhase.IDLE;
   }
 
-  /** Current number of pending normal jobs. */
+  /** Current number of pending jobs. */
   get queueSize(): number {
-    return this._sizes[0]!;
-  }
-
-  /** Current number of pending urgent jobs. */
-  get urgentQueueSize(): number {
-    return this._sizes[1]!;
+    return this._size;
   }
 
   /**
-   * Schedules a task for execution with optional priority based on phase shift.
+   * Schedules a task for execution.
    */
-  schedule(callback: SchedulerJob, sourceNode?: PhaseShiftNode): void {
+  schedule(callback: SchedulerJob): void {
     if (IS_DEV && typeof callback !== 'function') {
       throw new SchedulerError('Scheduler callback must be a function');
     }
@@ -107,9 +88,7 @@ class Scheduler {
       return;
     }
 
-    // Branchless routing: 0 -> normal, 1 -> urgent
-    const urgent = this._calculateUrgency(callback, sourceNode);
-    this._activeQueues[urgent][this._sizes[urgent]!++] = callback;
+    this._queueBuffer[this._bufferIndex]![this._size++] = callback;
 
     if (!this.isProcessing) {
       this.flush();
@@ -117,38 +96,17 @@ class Scheduler {
   }
 
   /**
-   * Calculates urgency flag using branchless bit manipulation.
-   *
-   * Logic:
-   * 1. Calculate the 'shift' (rotation distance) from the cached version.
-   * 2. Compare against PHASE_THRESHOLD (180° rotation equivalent).
-   * 3. Use (N >>> 31) to extract the sign bit in O(1) time.
-   *
-   * @returns 1 if urgent (shift >= PHASE_THRESHOLD), 0 otherwise.
-   */
-  private _calculateUrgency(callback: SchedulerJob, sourceNode?: PhaseShiftNode): 0 | 1 {
-    if (!sourceNode || callback._cachedVersion === undefined) {
-      return 0;
-    }
-    const shift = sourceNode.getShift(callback._cachedVersion);
-    // Formula: ((THRESHOLD - 1 - shift) >>> 31) & 1
-    // If shift >= THRESHOLD: (negative >>> 31) = 1
-    // If shift < THRESHOLD: (positive >>> 31) = 0
-    return (((PHASE_THRESHOLD - 1 - shift) >>> 31) & 1) as 0 | 1;
-  }
-
-  /**
-   * Schedules a microtask-based flush of the queues.
+   * Schedules a microtask-based flush of the queue.
    * Coalesces multiple schedule calls into a single microtask execution.
    */
   private flush(): void {
-    if (this.isProcessing || (this._sizes[0]! === 0 && this._sizes[1]! === 0)) return;
+    if (this.isProcessing || this._size === 0) return;
 
     this.isProcessing = true;
 
     queueMicrotask(() => {
       try {
-        if (this._sizes[0]! === 0 && this._sizes[1]! === 0) return;
+        if (this._size === 0) return;
 
         const flushStarted = startFlush();
         this._drainQueue();
@@ -157,7 +115,7 @@ class Scheduler {
         this.isProcessing = false;
 
         // Recursively trigger next flush if new jobs were added during drainage
-        if ((this._sizes[0]! > 0 || this._sizes[1]! > 0) && !this.isBatching) {
+        if (this._size > 0 && !this.isBatching) {
           this.flush();
         }
       }
@@ -182,8 +140,8 @@ class Scheduler {
   }
 
   /**
-   * Merges jobs from the batching queue into the primary normal queue.
-   * Increments the epoch/uses provided epoch to ensure deduplication.
+   * Merges jobs from the batching queue into the primary queue.
+   * Increments the epoch to ensure deduplication.
    */
   private _mergeBatchQueue(): void {
     const size = this.batchQueueSize;
@@ -191,18 +149,18 @@ class Scheduler {
 
     const epoch = ++this._epoch;
     const queue = this.batchQueue;
-    const targetQueue = this._activeQueues[0];
-    let targetSize = this._sizes[0]!;
+    const targetQueue = this._queueBuffer[this._bufferIndex];
+    let targetSize = this._size;
 
     for (let i = 0; i < size; i++) {
       const job = queue[i]!;
       if (job._nextEpoch !== epoch) {
         job._nextEpoch = epoch;
-        targetQueue[targetSize++] = job;
+        targetQueue![targetSize++] = job;
       }
     }
 
-    this._sizes[0] = targetSize;
+    this._size = targetSize;
     this.batchQueueSize = 0;
     if (queue.length > SCHEDULER_CONFIG.BATCH_QUEUE_SHRINK_THRESHOLD) queue.length = 0;
   }
@@ -211,33 +169,29 @@ class Scheduler {
     let iterations = 0;
     const maxIterations = this.maxFlushIterations;
 
-    while (this._sizes[1]! > 0 || this._sizes[0]! > 0) {
+    while (this._size > 0) {
       if (++iterations > maxIterations) {
         this._handleFlushOverflow();
         return;
       }
 
-      if (this._sizes[1]! > 0) this._processQueue(1);
-      if (this._sizes[0]! > 0) this._processQueue(0);
-
+      this._processQueue();
       this._mergeBatchQueue();
     }
   }
 
-  private _processQueue(type: 0 | 1): void {
-    const buffers = this._queueBuffers[type];
-    const index = this._bufferIndices[type]!;
-    const jobs = buffers[index]!;
-    const count = this._sizes[type]!;
+  private _processQueue(): void {
+    const index = this._bufferIndex;
+    const jobs = this._queueBuffer[index];
+    const count = this._size;
 
-    // Swap to other buffer branchlessly
+    // Swap to other buffer
     const nextIndex = index ^ 1;
-    this._bufferIndices[type] = nextIndex;
-    this._activeQueues[type] = buffers[nextIndex]!;
-    this._sizes[type] = 0;
+    this._bufferIndex = nextIndex;
+    this._size = 0;
     this._epoch++;
 
-    this._processJobs(jobs, count);
+    this._processJobs(jobs!, count);
   }
 
   private _handleFlushOverflow(): void {
@@ -246,17 +200,14 @@ class Scheduler {
         `Maximum flush iterations (${this.maxFlushIterations}) exceeded. Possible infinite loop.`
       )
     );
-    this._sizes[0] = 0;
-    this._activeQueues[0].length = 0;
-    this._sizes[1] = 0;
-    this._activeQueues[1].length = 0;
+    this._size = 0;
+    this._queueBuffer[this._bufferIndex]!.length = 0;
     this.batchQueueSize = 0;
   }
 
   private _processJobs(jobs: SchedulerJob[], count: number): void {
     for (let i = 0; i < count; i++) {
       try {
-        // Density guaranteed by schedule mechanism, avoiding redundant if(job)
         jobs[i]!();
       } catch (error) {
         console.error(

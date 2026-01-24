@@ -56,6 +56,15 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
       for (let i = 0; i < itemCount; i++) {
         const item = items[i] as T; // Type assertion for generic T
         const k = getKey(item, i);
+
+        // DEV: Warn about duplicate keys
+        if (debug.enabled && newKeySet.has(k)) {
+          console.warn(
+            `[atomList] Duplicate key "${k}" at index ${i}. ` +
+              `Items with duplicate keys may cause unexpected behavior.`
+          );
+        }
+
         newKeys[i] = k;
         newKeySet.add(k);
       }

@@ -436,26 +436,6 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     }
   }
 
-  private _getAggregateShift(): number {
-    let totalShift = 0;
-    const deps = this._dependencies;
-    const versions = this._dependencyVersions;
-
-    for (let i = 0, len = deps.length; i < len; i++) {
-      const dep = deps[i];
-      const version = versions[i];
-      if (dep && version !== undefined) {
-        totalShift = (totalShift + dep.getShift(version)) & SMI_MAX;
-      }
-    }
-
-    return totalShift;
-  }
-
-  isUrgent(): boolean {
-    return this._getAggregateShift() >= PHASE_THRESHOLD;
-  }
-
   private _handleAsyncComputation(promise: Promise<T>): void {
     this._setPending();
     this._clearDirty();
