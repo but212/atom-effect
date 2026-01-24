@@ -22,7 +22,7 @@
 - Cleaned up unused private methods, redundant state resets, and duplicate JSDoc.
 - **Priority System**: Simplified the `Scheduler` by removing the unused urgent queue system and priority calculation logic.
 - **Unused Methods**: Removed `isUrgent()` and `_getAggregateShift()` from `ComputedAtomImpl` (not part of the public API).
-- **Constants**: Removed the unused `PHASE_MASK` constant.
+- **Constants**: Removed obsolete phase-shift constants (`PHASE_BITS`, `PHASE_THRESHOLD`, `PHASE_MASK`) as the priority system has been decommissioned.
 
 ### jQuery
 
