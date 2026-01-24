@@ -178,7 +178,7 @@ Benchmark results show:
 | Create 10 Effects | 31,212 | 0.0320 | 0.0533 |
 | Execution (Dep Change) | 2,563,536 | 0.0004 | 0.0006 |
 | Execution (Multiple) | 1,676,713 | 0.0006 | 0.0009 |
-| With Computed | 2,442,232 | 0.0004 | 0.0007 |
+| With Computed Dep | 2,442,232 | 0.0004 | 0.0007 |
 | Re-runs (10 times) | 685,387 | 0.0015 | 0.0018 |
 | Multiple on Same Dep | 2,515,233 | 0.0004 | 0.0007 |
 | With Cleanup | 262,924 | 0.0038 | 0.0050 |
