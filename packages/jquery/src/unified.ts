@@ -1,4 +1,4 @@
-import { effect } from '@but212/atom-effect';
+import { batch, effect } from '@but212/atom-effect';
 import $ from 'jquery';
 import { debug } from './debug';
 import { registerReactiveEffect } from './effect-factory';
@@ -205,7 +205,7 @@ function bindEvents(ctx: BindingContext, eventMap: EventBindingMap): void {
     const listener = (e: Event) => {
       // Wrap native Event into jQuery.Event with originalEvent preserved
       const jqEvent = $.Event(e.type, { originalEvent: e }) as JQuery.TriggeredEvent<HTMLElement>;
-      typedHandler.call(el, jqEvent);
+      batch(() => typedHandler.call(el, jqEvent));
     };
     el.addEventListener(eventName, listener);
     ctx.trackCleanup(() => el.removeEventListener(eventName, listener));
