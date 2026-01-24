@@ -88,7 +88,11 @@ export function enablejQueryOverrides() {
       if (handlerMap.has(originalFn)) {
         wrappedFn = handlerMap.get(originalFn);
       } else {
-        wrappedFn = function (this: unknown, event: JQuery.TriggeredEvent, ...eventArgs: unknown[]) {
+        wrappedFn = function (
+          this: unknown,
+          event: JQuery.TriggeredEvent,
+          ...eventArgs: unknown[]
+        ) {
           return batch(() => originalFn.call(this, event, ...eventArgs));
         };
         handlerMap.set(originalFn, wrappedFn);

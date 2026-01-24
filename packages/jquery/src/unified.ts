@@ -193,10 +193,7 @@ type EventBindingMap = {
     | JQuery.TypeEventHandler<HTMLElement, undefined, HTMLElement, HTMLElement, K>
     | false;
 } & {
-  [eventName: string]:
-    | JQuery.EventHandler<HTMLElement, undefined>
-    | false
-    | undefined;
+  [eventName: string]: JQuery.EventHandler<HTMLElement, undefined> | false | undefined;
 };
 
 function bindEvents(ctx: BindingContext, eventMap: EventBindingMap): void {
