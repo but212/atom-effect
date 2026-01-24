@@ -1,0 +1,686 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AEJ / BAUHAUS EDITION</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&family=Inter:ital,wght@0,100..900;1,100..900&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@latest"></script>
+    <style>
+      :root {
+        --primary-red: #e63946;
+        --primary-blue: #2a52be;
+        --primary-yellow: #ffd60a;
+        --black: #000000;
+        --white: #ffffff;
+        --grey: #f0f0f0;
+
+        --border-width: 3px;
+        --hard-shadow: 8px 8px 0px var(--black);
+        --font-main: "Inter", sans-serif;
+        --font-mono: "IBM Plex Mono", monospace;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: var(--font-main);
+        background-color: var(--white);
+        color: var(--black);
+        height: 100vh;
+        overflow: hidden;
+        display: flex;
+      }
+
+      /* --- Sidebar (Bauhaus Grid) --- */
+      .sidebar {
+        width: 320px;
+        border-right: var(--border-width) solid var(--black);
+        display: flex;
+        flex-direction: column;
+        background: var(--white);
+        z-index: 100;
+        transition: width 0.3s cubic-bezier(0.19, 1, 0.22, 1);
+        overflow: hidden;
+      }
+
+      .sidebar.collapsed {
+        width: 80px;
+      }
+
+      .sidebar-header {
+        padding: 40px 24px;
+        border-bottom: var(--border-width) solid var(--black);
+        background: var(--primary-red);
+        color: var(--white);
+      }
+
+      .logo-text {
+        font-size: 2rem;
+        font-weight: 900;
+        letter-spacing: -2px;
+        line-height: 0.8;
+        text-transform: uppercase;
+      }
+
+      .logo-text .short {
+        display: none;
+      }
+
+      .sidebar.collapsed .logo-text .full {
+        display: none;
+      }
+
+      .sidebar.collapsed .logo-text .short {
+        display: block;
+        font-size: 3rem;
+        line-height: 1;
+      }
+
+      .sidebar.collapsed .sidebar-header {
+        padding: 20px 10px;
+        text-align: center;
+      }
+
+      .nav-list {
+        list-style: none;
+        flex: 1;
+      }
+
+      .nav-item {
+        border-bottom: var(--border-width) solid var(--black);
+      }
+
+      .nav-link {
+        display: flex;
+        align-items: center;
+        padding: 24px;
+        text-decoration: none;
+        color: var(--black);
+        font-weight: 900;
+        text-transform: uppercase;
+        font-size: 1.1rem;
+        letter-spacing: -0.5px;
+        cursor: pointer;
+        transition: background 0.1s;
+        white-space: nowrap;
+      }
+
+      .nav-link:hover {
+        background: var(--grey);
+      }
+
+      .nav-link.active {
+        background: var(--primary-blue);
+        color: var(--white);
+      }
+
+      .sidebar.collapsed .nav-link {
+        justify-content: center;
+        padding: 24px 0;
+      }
+
+      .sidebar.collapsed .nav-link span {
+        display: none;
+      }
+
+      .sidebar.collapsed .nav-link::after {
+        content: attr(data-short);
+        font-size: 2rem;
+      }
+
+      .sidebar-footer {
+        padding: 24px;
+        border-top: var(--border-width) solid var(--black);
+        background: var(--primary-yellow);
+        font-weight: 900;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        transition: all 0.3s;
+      }
+
+      .sidebar-footer .short {
+        display: none;
+      }
+
+      .sidebar.collapsed .sidebar-footer .full {
+        display: none;
+      }
+
+      .sidebar.collapsed .sidebar-footer .short {
+        display: block;
+      }
+
+      .sidebar.collapsed .sidebar-footer {
+        padding: 10px 5px;
+        font-size: 0.6rem;
+        word-break: break-all;
+        text-align: center;
+      }
+
+      /* --- Main Content --- */
+      .main-container {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      header {
+        height: 110px;
+        padding: 0 40px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: var(--border-width) solid var(--black);
+      }
+
+      #page-title {
+        font-size: 3.5rem;
+        font-weight: 900;
+        letter-spacing: -4px;
+        text-transform: uppercase;
+        line-height: 1;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+
+      .view-content {
+        flex: 1;
+        padding: 40px;
+        overflow-y: auto;
+        background:
+          linear-gradient(90deg, var(--black) 1px, transparent 1px) 0 0 / 100px
+            100%,
+          linear-gradient(var(--black) 1px, transparent 1px) 0 0 / 100% 100px;
+        background-color: var(--white);
+      }
+
+      /* --- Cards & Components --- */
+      .card {
+        background: var(--white);
+        border: var(--border-width) solid var(--black);
+        padding: 30px;
+        margin-bottom: 40px;
+        box-shadow: var(--hard-shadow);
+        position: relative;
+      }
+
+      .card-blue {
+        background: var(--primary-blue);
+        color: white;
+      }
+      .card-red {
+        background: var(--primary-red);
+        color: white;
+      }
+      .card-yellow {
+        background: var(--primary-yellow);
+      }
+
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 40px;
+        margin-bottom: 60px;
+      }
+
+      .stat-card {
+        border: var(--border-width) solid var(--black);
+        padding: 32px;
+        background: var(--white);
+        box-shadow: var(--hard-shadow);
+      }
+
+      .stat-value {
+        font-size: 4rem;
+        font-weight: 900;
+        letter-spacing: -3px;
+        line-height: 1;
+        margin-bottom: 8px;
+      }
+
+      .stat-label {
+        font-weight: 900;
+        text-transform: uppercase;
+        font-size: 0.85rem;
+        background: var(--black);
+        color: var(--white);
+        display: inline-block;
+        padding: 2px 8px;
+      }
+
+      /* --- Tasks SPA Specifics --- */
+      .search-input {
+        width: 100%;
+        border: var(--border-width) solid var(--black);
+        padding: 20px;
+        font-family: var(--font-mono);
+        font-size: 1.25rem;
+        font-weight: 700;
+        outline: none;
+        margin-bottom: 40px;
+        box-shadow: 4px 4px 0px var(--primary-blue);
+      }
+
+      .task-list {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+
+      .task-item {
+        border: var(--border-width) solid var(--black);
+        padding: 20px;
+        display: flex;
+        align-items: center;
+        gap: 24px;
+        background: var(--white);
+        transition: transform 0.1s;
+      }
+
+      .task-item:hover {
+        transform: translate(-4px, -4px);
+        box-shadow: 4px 4px 0px var(--black);
+      }
+
+      .checkbox-rect {
+        width: 32px;
+        height: 32px;
+        border: var(--border-width) solid var(--black);
+        cursor: pointer;
+        position: relative;
+      }
+
+      .checkbox-rect.checked::after {
+        content: "";
+        position: absolute;
+        top: 4px;
+        left: 4px;
+        right: 4px;
+        bottom: 4px;
+        background: var(--primary-red);
+      }
+
+      .task-title {
+        flex: 1;
+        font-weight: 900;
+        font-size: 1.2rem;
+        text-transform: uppercase;
+      }
+
+      .task-item.completed .task-title {
+        color: #ccc;
+        text-decoration: line-through;
+      }
+
+      .task-tag {
+        font-family: var(--font-mono);
+        font-weight: 700;
+        font-size: 0.8rem;
+        padding: 4px 12px;
+        border: 2px solid var(--black);
+      }
+
+      .btn-black {
+        background: var(--black);
+        color: var(--white);
+        border: none;
+        padding: 12px 24px;
+        font-weight: 900;
+        text-transform: uppercase;
+        cursor: pointer;
+        box-shadow: 4px 4px 0px var(--primary-blue);
+      }
+
+      .btn-black:active {
+        transform: translate(2px, 2px);
+        box-shadow: 2px 2px 0px var(--black);
+      }
+
+      .fab-add {
+        position: fixed;
+        bottom: 40px;
+        right: 40px;
+        width: 80px;
+        height: 80px;
+        background: var(--primary-red);
+        color: var(--white);
+        border: var(--border-width) solid var(--black);
+        font-size: 3rem;
+        font-weight: 900;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 10px 10px 0px var(--black);
+        z-index: 1000;
+      }
+
+      .fab-add:hover {
+        transform: translate(-4px, -4px);
+        box-shadow: 14px 14px 0px var(--black);
+      }
+
+      /* Utils */
+      .mb-2 {
+        margin-bottom: 20px;
+      }
+      .text-white {
+        color: white;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="logo-text">
+          <span class="full">AEJ<br />SYSTEM</span>
+          <span class="short">A</span>
+        </div>
+      </div>
+
+      <nav class="nav-list">
+        <div class="nav-item">
+          <a class="nav-link" data-route="dashboard" data-short="D">
+            <span>Dashboard</span>
+          </a>
+        </div>
+        <div class="nav-item">
+          <a class="nav-link" data-route="tasks" data-short="T">
+            <span>Tasks</span>
+          </a>
+        </div>
+        <div class="nav-item">
+          <a class="nav-link" data-route="log" data-short="L">
+            <span>Log</span>
+          </a>
+        </div>
+        <div class="nav-item">
+          <a class="nav-link" data-route="config" data-short="C">
+            <span>Config</span>
+          </a>
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <span class="full">VER 0.15.0 / CORE RELIABLE</span>
+        <span class="short">V0.15</span>
+      </div>
+    </div>
+
+    <main class="main-container">
+      <header>
+        <h1 id="page-title">DASHBOARD</h1>
+        <button class="btn-black" id="toggle-sidebar">UI/COLLAPSE</button>
+      </header>
+
+      <div class="view-content" id="router-view">
+        <!-- INJECTED -->
+      </div>
+    </main>
+
+    <button class="fab-add" id="add-task-btn" style="display: none">+</button>
+
+    <!-- Templates -->
+    <template id="tmpl-dashboard">
+      <div>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-value">99.9</div>
+            <div class="stat-label">UPTIME / PERF</div>
+          </div>
+          <div class="stat-card" style="border-color: var(--primary-blue)">
+            <div class="stat-value" id="dashboard-total-tasks">0</div>
+            <div class="stat-label">TOTAL / LOAD</div>
+          </div>
+          <div class="stat-card" style="border-color: var(--primary-red)">
+            <div class="stat-value" id="dashboard-completed-tasks">0</div>
+            <div class="stat-label">DONE / SYNC</div>
+          </div>
+        </div>
+
+        <div class="card card-yellow">
+          <h2
+            style="
+              font-weight: 900;
+              text-transform: uppercase;
+              margin-bottom: 20px;
+            "
+          >
+            Fundamental Reactivity
+          </h2>
+          <p
+            style="
+              font-family: var(--font-mono);
+              font-weight: 700;
+              line-height: 1.6;
+              max-width: 800px;
+            "
+          >
+            ATOM-EFFECT-JQUERY IS NOT A FRAMEWORK. IT IS A BRIDGE. BY ADHERING
+            TO SWISS DESIGN PRINCIPLES—GRID, TYPOGRAPHY, AND FUNCTION—WE
+            MANIFEST THE UNDERLYING STRUCTURE OF STATE RECONCILIATION.
+          </p>
+        </div>
+      </div>
+    </template>
+
+    <template id="tmpl-tasks">
+      <div style="max-width: 900px; margin: 0 auto">
+        <input
+          type="text"
+          class="search-input"
+          id="task-search"
+          placeholder="QUERY_STRING..."
+        />
+
+        <div class="task-list" id="task-list-container"></div>
+
+        <div
+          id="tasks-empty"
+          style="
+            display: none;
+            padding: 100px;
+            text-align: center;
+            font-weight: 900;
+            text-transform: uppercase;
+          "
+        >
+          NULL_DATA_SET
+        </div>
+      </div>
+    </template>
+
+    <template id="tmpl-log">
+      <div class="card card-blue">
+        <h2
+          style="
+            font-weight: 900;
+            text-transform: uppercase;
+            margin-bottom: 20px;
+          "
+        >
+          System Event Log
+        </h2>
+        <div style="font-family: var(--font-mono); font-size: 0.9rem">
+          <div>[02:41:40] ROUTE_CHANGE: DASHBOARD -> LOG</div>
+          <div>[02:41:35] ATOM_SYNC: TASKS_COUNT_UPDATED</div>
+          <div>[02:41:30] KERNEL_BOOT: AEJ_LOADED_OK</div>
+        </div>
+      </div>
+    </template>
+
+    <template id="tmpl-config">
+      <div class="card card-red">
+        <h2
+          style="
+            font-weight: 900;
+            text-transform: uppercase;
+            margin-bottom: 20px;
+          "
+        >
+          System Preferences
+        </h2>
+        <div style="display: flex; flex-direction: column; gap: 20px">
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              border-bottom: 2px solid white;
+              padding-bottom: 10px;
+            "
+          >
+            <div style="font-weight: 700">STRICT_MODE</div>
+            <div style="font-family: var(--font-mono); font-weight: 700">
+              ENABLED
+            </div>
+          </div>
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              border-bottom: 2px solid white;
+              padding-bottom: 10px;
+            "
+          >
+            <div style="font-weight: 700">RECONCILIATION_SPEED</div>
+            <div style="font-family: var(--font-mono); font-weight: 700">
+              OPTIMAL
+            </div>
+          </div>
+          <p style="margin-top: 20px; font-size: 0.8rem; font-style: italic">
+            ALL SETTINGS ARE STORED IN ATOMIC MEMORY.
+          </p>
+        </div>
+      </div>
+    </template>
+
+    <script shadow-script>
+      // --- State ---
+      const currentRoute = $.atom("dashboard");
+      const isSidebarCollapsed = $.atom(false);
+      const searchQuery = $.atom("");
+      const tasks = $.atom([
+        { id: 1, title: "Define Atomic Schema", completed: true, tag: "CORE" },
+        {
+          id: 2,
+          title: "Refactor List Reconciliation",
+          completed: true,
+          tag: "DIFF",
+        },
+        { id: 3, title: "Implement Bauhaus Grid", completed: false, tag: "UI" },
+        {
+          id: 4,
+          title: "Propagate Global Signals",
+          completed: false,
+          tag: "ASYNC",
+        },
+      ]);
+
+      // --- Computed ---
+      const filteredTasks = $.computed(() => {
+        const query = searchQuery.value.toLowerCase();
+        return tasks.value.filter((t) => t.title.toLowerCase().includes(query));
+      });
+      const totalTaskCount = $.computed(() => tasks.value.length);
+      const completedTaskCount = $.computed(
+        () => tasks.value.filter((t) => t.completed).length,
+      );
+      const pageTitleText = $.computed(() => currentRoute.value.toUpperCase());
+
+      // --- Bindings ---
+      $(".nav-link").each(function () {
+        const $link = $(this);
+        const route = $link.data("route");
+        $link.atomBind({
+          class: { active: $.computed(() => currentRoute.value === route) },
+          on: {
+            click: () => {
+              currentRoute.value = route;
+            },
+          },
+        });
+      });
+
+      $("#sidebar").atomBind({ class: { collapsed: isSidebarCollapsed } });
+      $("#toggle-sidebar").on("click", () => {
+        isSidebarCollapsed.value = !isSidebarCollapsed.value;
+      });
+      $("#page-title").atomText(pageTitleText);
+
+      // --- Routing ---
+      $.effect(() => {
+        const route = currentRoute.value;
+        const $view = $("#router-view");
+        const template = document.getElementById(`tmpl-${route}`);
+
+        $view.html("");
+        if (template) {
+          $view.append(template.content.cloneNode(true));
+
+          if (route === "dashboard") {
+            $("#dashboard-total-tasks").atomText(totalTaskCount);
+            $("#dashboard-completed-tasks").atomText(completedTaskCount);
+          } else if (route === "tasks") {
+            $("#task-search").atomVal(searchQuery);
+            $("#task-list-container").atomList(filteredTasks, {
+              key: "id",
+              render: (task) => `
+                            <div class="task-item ${task.completed ? "completed" : ""}" data-id="${task.id}">
+                                <div class="checkbox-rect ${task.completed ? "checked" : ""}"></div>
+                                <div class="task-title">${task.title}</div>
+                                <div class="task-tag">${task.tag}</div>
+                            </div>
+                        `,
+              update: ($el, task) => {
+                // Update specific elements when the task object changes but the key is the same
+                $el.toggleClass("completed", task.completed);
+                $el
+                  .find(".checkbox-rect")
+                  .toggleClass("checked", task.completed);
+                $el.find(".task-title").text(task.title);
+                $el.find(".task-tag").text(task.tag);
+              },
+              bind: ($el, task) => {
+                $el.find(".checkbox-rect").on("click", () => {
+                  tasks.value = tasks.value.map((t) =>
+                    t.id === task.id ? { ...t, completed: !t.completed } : t,
+                  );
+                });
+              },
+              empty: "#tasks-empty",
+            });
+          }
+        }
+      });
+
+      // --- FAB ---
+      $.effect(() => {
+        $("#add-task-btn").toggle(currentRoute.value === "tasks");
+      });
+      $("#add-task-btn").on("click", () => {
+        const title = prompt("NEW_TASK:");
+        if (title) {
+          const id = Date.now();
+          tasks.value = [
+            ...tasks.value,
+            { id, title, completed: false, tag: "USER" },
+          ];
+        }
+      });
+    </script>
+  </body>
+</html>
