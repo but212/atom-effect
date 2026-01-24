@@ -1,5 +1,23 @@
 # Changelog
 
+## [Unreleased]
+
+### jQuery
+
+#### Changed
+
+- **Event Handler Type Improvements** (`jquery-patch.ts`, `unified.ts`):
+  - Added `EventHandler` type alias using `JQuery.EventHandlerBase` instead of generic `Function`
+  - Updated `handlerMap` WeakMap to use strongly-typed `EventHandler`
+  - Replaced `any` with `unknown` in `.on()`/`.off()` patch argument types
+  - Used jQuery types for `this` context and event parameters
+  - Removed `biome-ignore` comments for `noExplicitAny`
+
+- **Event Binding Map Type** (`unified.ts`):
+  - Added `EventBindingMap` type for `atomBind({ on: ... })` using jQuery's `TypeToTriggeredEventMap` and `TypeEventHandler`
+  - Improved native Event → jQuery.Event wrapping with `originalEvent` preserved
+  - Removed `biome-ignore` comment for `$.Event()` cast
+
 ## [0.14.0]
 
 ### Core
@@ -13,7 +31,7 @@
 
 - **Internal Cleanup**: Simplified property access and synchronized state flags to improve code clarity and maintainability.
 
-### jQuery
+### jQuery - 0.14.0
 
 #### Refactor - jQuery
 
@@ -38,7 +56,7 @@
   - **Consolidation**: Merged redundant micro-benchmarks (e.g., `untracked.bench.ts`) into core suites to reduce suite fragmentation.
   - **Statistical Rigidity**: Increased iterations and warmup periods in `utils/setup.ts` to ensure consistent results (< 5% CV).
 
-### Refactor
+### Refactor - 0.13.0
 
 - **Core Architecture Refactoring**: Flattened source structure and consolidated types for better maintainability.
   - Flattened `core/` directory: Moved `atom.ts`, `computed.ts`, `effect.ts`, and `dep-tracking.ts` directly into `src/core/`.
@@ -61,7 +79,7 @@
 - **Double Cleanup**: Prevented duplicate cleanup execution on node removal.
   - `$.fn.remove` now marks elements as "ignored" before removal, preventing `MutationObserver` from triggering a second cleanup pass.
 
-#### Refactor - jQuery
+#### Refactor - jQuery 0.13.0
 
 - **Marker-based Tree Traversal**: Optimized `cleanupTree` (used in `.empty()`, `.remove()`) to be $O(M)$ where M is the number of bound elements, instead of $O(N)$ (all descendants).
   - Introduced `AES_BOUND` class marker to instantly locate bound descendants using `querySelectorAll` (`.aes-bound`).
@@ -113,7 +131,7 @@
 
 ## [0.11.0]
 
-### Core
+### Core - 0.11.0
 
 #### Added - Discrete Phase-Shift Versioning
 
