@@ -44,7 +44,9 @@ $.fn.atomMount = function <P>(component: ComponentFn<P>, props: P = {} as P): JQ
       if (typeof userCleanup === 'function') {
         try {
           userCleanup();
-        } catch {}
+        } catch (e) {
+          console.error('[atom-effect-jquery] Cleanup error:', e);
+        }
       }
       registry.cleanupTree(this);
       mountedComponents.delete(this);

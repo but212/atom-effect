@@ -70,6 +70,8 @@ class BindingRegistry {
 
   cleanup(el: Element): void {
     if (!this.boundElements.delete(el)) return;
+    this.preservedNodes.delete(el);
+    this.ignoredNodes.delete(el);
     el.classList.remove(AES_BOUND);
 
     debug.cleanup(getSelector(el));

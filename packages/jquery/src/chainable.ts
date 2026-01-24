@@ -5,6 +5,7 @@ import { registerReactiveEffect } from './effect-factory';
 import { applyInputBinding } from './input-binding';
 import { registry } from './registry';
 import type { ReactiveValue, ValOptions, WritableAtom } from './types';
+import { createInputBindingState } from './types';
 
 /**
  * Updates element text content.
@@ -139,13 +140,12 @@ $.fn.atomVal = function <T>(atom: WritableAtom<T>, options: ValOptions<T> = {}):
 $.fn.atomChecked = function (atom: WritableAtom<boolean>): JQuery {
   return this.each(function () {
     const $el = $(this);
-    let isUpdatingFromAtom = false;
+    const state = createInputBindingState();
 
     // DOM → Atom
     const handler = () => {
-      if (!isUpdatingFromAtom) {
-        atom.value = !!$el.prop('checked');
-      }
+      if (state.phase !== 'idle') return;
+      atom.value = !!$el.prop('checked');
     };
 
     $el.on('change', handler);
@@ -153,11 +153,11 @@ $.fn.atomChecked = function (atom: WritableAtom<boolean>): JQuery {
 
     // Atom → DOM
     const fx = effect(() => {
-      isUpdatingFromAtom = true;
+      state.phase = 'syncing-to-dom';
       const val = !!atom.value;
       $el.prop('checked', val);
       debug.domUpdated($el, 'checked', val);
-      isUpdatingFromAtom = false;
+      state.phase = 'idle';
     });
     registry.trackEffect(this, fx);
   });

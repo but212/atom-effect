@@ -2,38 +2,54 @@
 
 ## [Unreleased]
 
-### jQuery
+### Core
+
+#### Fixed
+
+- **Circular Dependencies**: Throws `ComputedError` instead of returning undefined.
+- **Effect Errors**: Correctly throws `EFFECT_DISPOSED` and fixed rate limit execution flow.
 
 #### Changed
 
-- **Event Handler Type Improvements** (`jquery-patch.ts`, `unified.ts`):
-  - Added `EventHandler` type alias using `JQuery.EventHandlerBase` instead of generic `Function`
-  - Updated `handlerMap` WeakMap to use strongly-typed `EventHandler`
-  - Replaced `any` with `unknown` in `.on()`/`.off()` patch argument types
-  - Used jQuery types for `this` context and event parameters
-  - Removed `biome-ignore` comments for `noExplicitAny`
+- **DEV Guards**: Added warnings for duplicate subscriptions and mismatched batching; optimized production checks.
+- **Internal Logic**: Improved object pool resetting, epoch overflow prevention, and type guard simplification.
 
-- **Event Binding Map Type** (`unified.ts`):
-  - Added `EventBindingMap` type for `atomBind({ on: ... })` using jQuery's `TypeToTriggeredEventMap` and `TypeEventHandler`
-  - Improved native Event → jQuery.Event wrapping with `originalEvent` preserved
-  - Removed `biome-ignore` comment for `$.Event()` cast
+#### Removed
+
+- Cleaned up unused private methods, redundant state resets, and duplicate JSDoc.
+
+### jQuery
+
+#### Fixed
+
+- Improved cleanup error logging and registry management for detached nodes.
+
+#### Changed
+
+- **Bindings**: Added custom equality support and unified phase state logic.
+- **Types**: Enhanced event handler and binding map type safety, replacing `any` with strong types.
+- **Consistency**: Ensured static values trigger DOM debug events.
+
+#### Removed
+
+- Removed unused `effects` context field and redundant variables.
 
 ## [0.14.0]
 
-### Core
+### Core - 0.14.0
 
-#### Performance
+#### Performance - Core 0.14.0
 
 - **Subscriber Management**: Refined internal storage and notification paths using bitwise flags and pre-initialized arrays.
 - **State Logic**: Improved state transition logic and dependency checks for more consistent performance.
 
-#### Refactor
+#### Refactor - Core 0.14.0
 
 - **Internal Cleanup**: Simplified property access and synchronized state flags to improve code clarity and maintainability.
 
 ### jQuery - 0.14.0
 
-#### Refactor - jQuery
+#### Refactor - jQuery 0.14.0
 
 - **Automatic Batching**: Wrapped jQuery event handlers in `batch()` to ensure synchronous DOM updates and state consistency within handlers.
 

@@ -233,7 +233,6 @@ $.fn.atomBind = function <T extends string | number | boolean | null | undefined
     const ctx: BindingContext = {
       $el,
       el: this,
-      effects: [],
       trackCleanup: (fn) => registry.trackCleanup(this, fn),
     };
 

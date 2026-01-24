@@ -1,4 +1,4 @@
-import { PHASE_THRESHOLD, SCHEDULER_CONFIG } from '@/constants';
+import { IS_DEV, PHASE_THRESHOLD, SCHEDULER_CONFIG } from '@/constants';
 import { SchedulerError } from '@/errors/errors';
 import { endFlush, startFlush } from '@/internal/epoch';
 
@@ -94,7 +94,7 @@ class Scheduler {
    * Schedules a task for execution with optional priority based on phase shift.
    */
   schedule(callback: SchedulerJob, sourceNode?: PhaseShiftNode): void {
-    if (typeof callback !== 'function') {
+    if (IS_DEV && typeof callback !== 'function') {
       throw new SchedulerError('Scheduler callback must be a function');
     }
 
@@ -274,7 +274,13 @@ class Scheduler {
   }
 
   endBatch(): void {
-    this.batchDepth = Math.max(0, this.batchDepth - 1);
+    if (this.batchDepth === 0) {
+      if (IS_DEV) {
+        console.warn('endBatch() called without matching startBatch(). Ignoring.');
+      }
+      return;
+    }
+    this.batchDepth--;
 
     if (this.batchDepth === 0) {
       this.flushSync();

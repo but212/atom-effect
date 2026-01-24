@@ -35,8 +35,8 @@ class ObjectPool<T extends Poolable> {
 
   /** Returns object to pool (calls reset) */
   release(obj: T): void {
+    obj.reset();
     if (this.poolSize < this.maxPoolSize) {
-      obj.reset();
       this.pool[this.poolSize++] = obj;
     }
   }

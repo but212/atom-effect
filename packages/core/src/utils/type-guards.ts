@@ -19,7 +19,7 @@ export function isAtom(obj: unknown): obj is ReadonlyAtom {
 
 /** Checks if the given object is a ComputedAtom. */
 export function isComputed(obj: unknown): obj is ComputedAtom {
-  if (debug.enabled && (obj === null || obj === undefined || typeof obj === 'object')) {
+  if (debug.enabled && obj != null && typeof obj === 'object') {
     const debugType = debug.getDebugType(obj);
     if (debugType) {
       return debugType === 'computed';

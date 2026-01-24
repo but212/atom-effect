@@ -21,7 +21,6 @@ export function registerReactiveEffect<T>(
   debugType: string
 ): void {
   const $el = $(el);
-  const domEl = el;
 
   if (isReactive(source)) {
     const fx = effect(() => {
@@ -29,8 +28,9 @@ export function registerReactiveEffect<T>(
       updater(value);
       debug.domUpdated($el, debugType, value);
     });
-    registry.trackEffect(domEl, fx);
+    registry.trackEffect(el, fx);
   } else {
     updater(source);
+    debug.domUpdated($el, debugType, source);
   }
 }

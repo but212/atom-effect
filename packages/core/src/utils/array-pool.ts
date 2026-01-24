@@ -1,11 +1,6 @@
 import { IS_DEV } from '@/constants';
 import type { PoolStats } from '@/types';
 
-/**
- * Generic Array Pool.
- * Provides type-safe pooling for different array types to reduce GC pressure.
- * Supports capacity limits and stats tracking in development mode.
- */
 /** @internal */
 class PoolStatsCollector {
   acquired = 0;

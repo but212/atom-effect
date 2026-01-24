@@ -184,7 +184,12 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     if (current) trackDependency(this, current, this._fnSubs, this._objSubs);
 
     const flags = this.flags;
-    if (flags & COMPUTED_STATE_FLAGS.RECOMPUTING) return this._value;
+    if (flags & COMPUTED_STATE_FLAGS.RECOMPUTING) {
+      // Circular dependency detected: computation is accessing itself during recompute.
+      // Return default value if available, otherwise throw.
+      if (this._hasDefaultValue) return this._defaultValue;
+      throw new ComputedError(ERROR_MESSAGES.COMPUTED_CIRCULAR_DEPENDENCY);
+    }
     if (flags & (COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE)) this._recompute();
 
     const currentFlags = this.flags;
@@ -516,7 +521,8 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._error = error;
     this._setRejected();
     this._clearDirty();
-    this._setRecomputing(false);
+    // Note: _recomputing is already false at this point.
+    // Promise resolves/rejects after _recompute's finally block has executed.
 
     const onError = this._onError;
     if (onError) {
