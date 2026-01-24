@@ -52,6 +52,11 @@ export const ERROR_MESSAGES = {
   COMPUTED_ASYNC_COMPUTATION_FAILED: 'Async computed computation failed',
 
   /**
+   * Error thrown when a circular dependency is detected during computation.
+   */
+  COMPUTED_CIRCULAR_DEPENDENCY: 'Circular dependency detected during computation',
+
+  /**
    * Error thrown when subscribing to a dependency fails.
    */
   COMPUTED_DEPENDENCY_SUBSCRIPTION_FAILED: 'Failed to subscribe to dependency',
@@ -94,6 +99,11 @@ export const ERROR_MESSAGES = {
    * Error thrown when an effect's cleanup function fails.
    */
   EFFECT_CLEANUP_FAILED: 'Effect cleanup function execution failed',
+
+  /**
+   * Error thrown when attempting to run a disposed effect.
+   */
+  EFFECT_DISPOSED: 'Cannot run a disposed effect',
 
   // ─────────────────────────────────────────────────────────────────
   // Debug warnings

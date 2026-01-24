@@ -104,7 +104,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 
   public run(): void {
     if (this.flags & EFFECT_STATE_FLAGS.DISPOSED) {
-      throw new EffectError(ERROR_MESSAGES.EFFECT_MUST_BE_FUNCTION);
+      throw new EffectError(ERROR_MESSAGES.EFFECT_DISPOSED);
     }
     // Force execution regardless of dependency versions
     this.execute(true);
@@ -209,7 +209,8 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
         this._cleanup = typeof result === 'function' ? result : null;
       }
     } catch (error) {
-      committed = true; // Still commit what we tracked before the error if possible
+      // Dependencies were already committed before the callback threw
+      committed = true;
       this._handleExecutionError(error);
       this._cleanup = null;
     } finally {
@@ -323,10 +324,6 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     return (this.flags & EFFECT_STATE_FLAGS.EXECUTING) !== 0;
   }
 
-  private _setDisposed(): void {
-    this.flags |= EFFECT_STATE_FLAGS.DISPOSED;
-  }
-
   private _setExecuting(value: boolean): void {
     const mask = EFFECT_STATE_FLAGS.EXECUTING;
     this.flags = (this.flags & ~mask) | ((value ? -1 : 0) & mask);
@@ -380,7 +377,9 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
         this.dispose();
         console.error(error);
         if (this._onError) this._onError(error);
+        // Always halt execution after disposing, throw only in DEV for debugging
         if (IS_DEV) throw error;
+        return;
       }
     }
   }

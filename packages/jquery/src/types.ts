@@ -71,6 +71,8 @@ export interface ValOptions<T> {
   event?: string;
   parse?: (v: string) => T;
   format?: (v: T) => string;
+  /** Custom equality check for comparing parsed values. Defaults to Object.is. */
+  equal?: (a: T, b: T) => boolean;
 }
 
 /**
@@ -159,7 +161,6 @@ declare global {
 export interface BindingContext {
   readonly $el: JQuery;
   readonly el: HTMLElement;
-  readonly effects: Array<() => void>;
   readonly trackCleanup: (fn: () => void) => void;
 }
 

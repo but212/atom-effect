@@ -1,4 +1,4 @@
-import { effect } from '@but212/atom-effect';
+import { batch, effect } from '@but212/atom-effect';
 import $ from 'jquery';
 import { debug } from './debug';
 import { registerReactiveEffect } from './effect-factory';
@@ -187,16 +187,26 @@ function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): void {
 // Event Binding Handler
 // ============================================================================
 
-function bindEvents(
-  ctx: BindingContext,
-  eventMap: Record<string, (e: JQuery.Event) => void>
-): void {
+/** Event handler map type for atomBind({ on: ... }) using jQuery's event handler signature */
+type EventBindingMap = {
+  [K in keyof JQuery.TypeToTriggeredEventMap<HTMLElement, undefined, HTMLElement, HTMLElement>]?:
+    | JQuery.TypeEventHandler<HTMLElement, undefined, HTMLElement, HTMLElement, K>
+    | false;
+} & {
+  [eventName: string]: JQuery.EventHandler<HTMLElement, undefined> | false | undefined;
+};
+
+function bindEvents(ctx: BindingContext, eventMap: EventBindingMap): void {
   const el = ctx.el;
   for (const eventName in eventMap) {
     const handler = eventMap[eventName];
     if (typeof handler !== 'function') continue;
-    // biome-ignore lint/suspicious/noExplicitAny: JQuery.Event constructor overload requires any or complex cast to wrap native Event correctly
-    const listener = (e: Event) => handler.call(el, $.Event(e as any));
+    const typedHandler = handler as JQuery.EventHandler<HTMLElement, undefined>;
+    const listener = (e: Event) => {
+      // Wrap native Event into jQuery.Event with originalEvent preserved
+      const jqEvent = $.Event(e.type, { originalEvent: e }) as JQuery.TriggeredEvent<HTMLElement>;
+      batch(() => typedHandler.call(el, jqEvent));
+    };
     el.addEventListener(eventName, listener);
     ctx.trackCleanup(() => el.removeEventListener(eventName, listener));
   }
@@ -223,7 +233,6 @@ $.fn.atomBind = function <T extends string | number | boolean | null | undefined
     const ctx: BindingContext = {
       $el,
       el: this,
-      effects: [],
       trackCleanup: (fn) => registry.trackCleanup(this, fn),
     };
 

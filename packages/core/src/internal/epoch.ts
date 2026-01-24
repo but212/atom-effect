@@ -38,7 +38,7 @@ export function startFlush(): boolean {
   }
 
   isFlushing = true;
-  flushEpoch = (flushEpoch + 1) & SMI_MAX;
+  flushEpoch = (flushEpoch + 1) & SMI_MAX || 1;
   flushExecutionCount = 0;
   return true;
 }

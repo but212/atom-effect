@@ -1,4 +1,4 @@
-import { NODE_FLAGS, SMI_MAX } from '@/constants';
+import { IS_DEV, NODE_FLAGS, SMI_MAX } from '@/constants';
 import { AtomError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
 import type { DependencyId, Subscriber } from '@/types';
@@ -86,7 +86,14 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
    */
   private _addSubscriber<S>(subs: S[], subscriber: S, flag: number): () => void {
     const idx = subs.indexOf(subscriber);
-    if (idx !== -1) return () => {};
+    if (idx !== -1) {
+      if (IS_DEV) {
+        console.warn(
+          'Attempted to subscribe the same listener twice. Ignoring duplicate subscription.'
+        );
+      }
+      return () => {};
+    }
 
     subs.push(subscriber);
     this.flags |= flag;

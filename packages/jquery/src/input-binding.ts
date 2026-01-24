@@ -21,6 +21,7 @@ export function applyInputBinding<T>(
     event = 'input',
     parse = (v: string) => v as unknown as T,
     format = (v: T) => String(v ?? ''),
+    equal = Object.is,
   } = options;
 
   const state: InputBindingState = createInputBindingState();
@@ -98,7 +99,7 @@ export function applyInputBinding<T>(
     // Update only if value differs
     if (currentVal !== formatted) {
       // Don't interrupt user input if parsed value matches
-      if (state.hasFocus && parse(currentVal) === atom.value) {
+      if (state.hasFocus && equal(parse(currentVal), atom.value)) {
         return;
       }
 

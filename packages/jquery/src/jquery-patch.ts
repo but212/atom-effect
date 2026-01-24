@@ -2,11 +2,14 @@ import { batch } from '@but212/atom-effect';
 import $ from 'jquery';
 import { registry } from './registry';
 
+/** Generic event handler type matching jQuery's internal handler signature */
+type EventHandler = JQuery.EventHandlerBase<unknown, JQuery.TriggeredEvent>;
+
 /**
  * WeakMap to store strict association between original handlers and batched wrappers.
  * This ensures that .off() works correctly when passing the original handler.
  */
-const handlerMap = new WeakMap<Function, Function>();
+const handlerMap = new WeakMap<EventHandler, EventHandler>();
 
 let isjQueryOverridesEnabled = false;
 
@@ -69,8 +72,7 @@ export function enablejQueryOverrides() {
   // ========== Event Overrides ==========
 
   // Patch .on()
-  // biome-ignore lint/suspicious/noExplicitAny: jQuery dynamic args
-  $.fn.on = function (this: any, ...args: any[]) {
+  $.fn.on = function (this: JQuery, ...args: unknown[]) {
     let fnIndex = -1;
     for (let i = args.length - 1; i >= 0; i--) {
       if (typeof args[i] === 'function') {
@@ -80,17 +82,18 @@ export function enablejQueryOverrides() {
     }
 
     if (fnIndex !== -1) {
-      const originalFn = args[fnIndex];
+      const originalFn = args[fnIndex] as EventHandler;
 
-      let wrappedFn: Function | undefined;
+      let wrappedFn: EventHandler | undefined;
       if (handlerMap.has(originalFn)) {
         wrappedFn = handlerMap.get(originalFn);
       } else {
-        // biome-ignore lint/suspicious/noExplicitAny: internal this
-        wrappedFn = function (this: any, ...eventArgs: any[]) {
-          return batch(() => {
-            return originalFn.apply(this, eventArgs);
-          });
+        wrappedFn = function (
+          this: unknown,
+          event: JQuery.TriggeredEvent,
+          ...eventArgs: unknown[]
+        ) {
+          return batch(() => originalFn.call(this, event, ...eventArgs));
         };
         handlerMap.set(originalFn, wrappedFn);
       }
@@ -98,13 +101,11 @@ export function enablejQueryOverrides() {
       args[fnIndex] = wrappedFn;
     }
 
-    // biome-ignore lint/suspicious/noExplicitAny: dynamic args
-    return originalOn.apply(this, args as any);
+    return originalOn.apply(this, args as Parameters<typeof originalOn>);
   };
 
   // Patch .off()
-  // biome-ignore lint/suspicious/noExplicitAny: jQuery dynamic args
-  $.fn.off = function (this: any, ...args: any[]) {
+  $.fn.off = function (this: JQuery, ...args: unknown[]) {
     let fnIndex = -1;
     for (let i = args.length - 1; i >= 0; i--) {
       if (typeof args[i] === 'function') {
@@ -114,14 +115,13 @@ export function enablejQueryOverrides() {
     }
 
     if (fnIndex !== -1) {
-      const originalFn = args[fnIndex];
+      const originalFn = args[fnIndex] as EventHandler;
       if (handlerMap.has(originalFn)) {
         args[fnIndex] = handlerMap.get(originalFn);
       }
     }
 
-    // biome-ignore lint/suspicious/noExplicitAny: dynamic args
-    return originalOff.apply(this, args as any);
+    return originalOff.apply(this, args as Parameters<typeof originalOff>);
   };
 }
 

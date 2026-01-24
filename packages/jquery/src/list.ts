@@ -126,7 +126,8 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
           const isStable = lisIdx >= 0 && lisArr[lisIdx] === i;
           if (isStable) {
             lisIdx--;
-            // Even if stable in LIS, check if the relative order with nextNode is correct
+            // LIS stable: in theory doesn't need move, but async onRemove may have
+            // left DOM in inconsistent state with logical order, so verify actual position.
             const currentNext = el.nextSibling;
             if (currentNext !== nextNode) {
               if (nextNode) entry.$el.insertBefore(nextNode);
