@@ -454,9 +454,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
         onError(errorObj);
       } catch (e) {
         // Avoid cascading failures if the onError handler itself throws
-        console.error(
-          wrapError(e, EffectError, ERROR_MESSAGES.CALLBACK_ERROR_IN_ERROR_HANDLER)
-        );
+        console.error(wrapError(e, EffectError, ERROR_MESSAGES.CALLBACK_ERROR_IN_ERROR_HANDLER));
       }
     }
   }
