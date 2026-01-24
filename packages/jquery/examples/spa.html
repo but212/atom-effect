@@ -379,6 +379,33 @@
       .text-white {
         color: white;
       }
+
+      /* Refactored Classes */
+      .card-title {
+        font-weight: 900;
+        text-transform: uppercase;
+        margin-bottom: 20px;
+      }
+
+      .card-body-mono {
+        font-family: var(--font-mono);
+        font-weight: 700;
+        line-height: 1.6;
+        max-width: 800px;
+      }
+
+      .checkbox-rect:focus {
+        outline: 3px solid var(--primary-blue);
+        outline-offset: 4px;
+      }
+
+      .empty-tasks-placeholder {
+        display: none;
+        padding: 100px;
+        text-align: center;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
     </style>
   </head>
   <body>
@@ -392,22 +419,22 @@
 
       <nav class="nav-list">
         <div class="nav-item">
-          <a class="nav-link" data-route="dashboard" data-short="D">
+          <a class="nav-link" href="#" data-route="dashboard" data-short="D">
             <span>Dashboard</span>
           </a>
         </div>
         <div class="nav-item">
-          <a class="nav-link" data-route="tasks" data-short="T">
+          <a class="nav-link" href="#" data-route="tasks" data-short="T">
             <span>Tasks</span>
           </a>
         </div>
         <div class="nav-item">
-          <a class="nav-link" data-route="log" data-short="L">
+          <a class="nav-link" href="#" data-route="log" data-short="L">
             <span>Log</span>
           </a>
         </div>
         <div class="nav-item">
-          <a class="nav-link" data-route="config" data-short="C">
+          <a class="nav-link" href="#" data-route="config" data-short="C">
             <span>Config</span>
           </a>
         </div>
@@ -451,23 +478,8 @@
         </div>
 
         <div class="card card-yellow">
-          <h2
-            style="
-              font-weight: 900;
-              text-transform: uppercase;
-              margin-bottom: 20px;
-            "
-          >
-            Fundamental Reactivity
-          </h2>
-          <p
-            style="
-              font-family: var(--font-mono);
-              font-weight: 700;
-              line-height: 1.6;
-              max-width: 800px;
-            "
-          >
+          <h2 class="card-title">Fundamental Reactivity</h2>
+          <p class="card-body-mono">
             ATOM-EFFECT-JQUERY IS NOT A FRAMEWORK. IT IS A BRIDGE. BY ADHERING
             TO SWISS DESIGN PRINCIPLES—GRID, TYPOGRAPHY, AND FUNCTION—WE
             MANIFEST THE UNDERLYING STRUCTURE OF STATE RECONCILIATION.
@@ -483,20 +495,12 @@
           class="search-input"
           id="task-search"
           placeholder="QUERY_STRING..."
+          aria-label="Search tasks"
         />
 
         <div class="task-list" id="task-list-container"></div>
 
-        <div
-          id="tasks-empty"
-          style="
-            display: none;
-            padding: 100px;
-            text-align: center;
-            font-weight: 900;
-            text-transform: uppercase;
-          "
-        >
+        <div id="tasks-empty" class="empty-tasks-placeholder">
           NULL_DATA_SET
         </div>
       </div>
@@ -504,15 +508,7 @@
 
     <template id="tmpl-log">
       <div class="card card-blue">
-        <h2
-          style="
-            font-weight: 900;
-            text-transform: uppercase;
-            margin-bottom: 20px;
-          "
-        >
-          System Event Log
-        </h2>
+        <h2 class="card-title">System Event Log</h2>
         <div style="font-family: var(--font-mono); font-size: 0.9rem">
           <div>[02:41:40] ROUTE_CHANGE: DASHBOARD -> LOG</div>
           <div>[02:41:35] ATOM_SYNC: TASKS_COUNT_UPDATED</div>
@@ -523,15 +519,7 @@
 
     <template id="tmpl-config">
       <div class="card card-red">
-        <h2
-          style="
-            font-weight: 900;
-            text-transform: uppercase;
-            margin-bottom: 20px;
-          "
-        >
-          System Preferences
-        </h2>
+        <h2 class="card-title">System Preferences</h2>
         <div style="display: flex; flex-direction: column; gap: 20px">
           <div
             style="
@@ -568,7 +556,7 @@
       </div>
     </template>
 
-    <script shadow-script>
+    <script>
       // --- State ---
       const currentRoute = $.atom("dashboard");
       const isSidebarCollapsed = $.atom(false);
@@ -608,7 +596,8 @@
         $link.atomBind({
           class: { active: $.computed(() => currentRoute.value === route) },
           on: {
-            click: () => {
+            click: (e) => {
+              e.preventDefault();
               currentRoute.value = route;
             },
           },
@@ -638,27 +627,44 @@
             $("#task-search").atomVal(searchQuery);
             $("#task-list-container").atomList(filteredTasks, {
               key: "id",
-              render: (task) => `
-                            <div class="task-item ${task.completed ? "completed" : ""}" data-id="${task.id}">
-                                <div class="checkbox-rect ${task.completed ? "checked" : ""}"></div>
-                                <div class="task-title">${task.title}</div>
-                                <div class="task-tag">${task.tag}</div>
+              render: (task) => {
+                const $el = $(`
+                            <div class="task-item" data-id="${task.id}">
+                                <div class="checkbox-rect" role="checkbox" tabindex="0"></div>
+                                <div class="task-title"></div>
+                                <div class="task-tag"></div>
                             </div>
-                        `,
-              update: ($el, task) => {
-                // Update specific elements when the task object changes but the key is the same
+                        `);
                 $el.toggleClass("completed", task.completed);
                 $el
                   .find(".checkbox-rect")
-                  .toggleClass("checked", task.completed);
+                  .toggleClass("checked", task.completed)
+                  .attr("aria-checked", task.completed);
+                $el.find(".task-title").text(task.title);
+                $el.find(".task-tag").text(task.tag);
+                return $el;
+              },
+              update: ($el, task) => {
+                $el.toggleClass("completed", task.completed);
+                $el
+                  .find(".checkbox-rect")
+                  .toggleClass("checked", task.completed)
+                  .attr("aria-checked", task.completed);
                 $el.find(".task-title").text(task.title);
                 $el.find(".task-tag").text(task.tag);
               },
               bind: ($el, task) => {
-                $el.find(".checkbox-rect").on("click", () => {
+                const toggle = () => {
                   tasks.value = tasks.value.map((t) =>
                     t.id === task.id ? { ...t, completed: !t.completed } : t,
                   );
+                };
+                $el.find(".checkbox-rect").on("click", toggle);
+                $el.find(".checkbox-rect").on("keydown", (e) => {
+                  if (e.key === " " || e.key === "Enter") {
+                    e.preventDefault();
+                    toggle();
+                  }
                 });
               },
               empty: "#tasks-empty",
