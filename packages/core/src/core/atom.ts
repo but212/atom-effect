@@ -89,7 +89,8 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
    * Flushes scheduled notifications and resets state for the next cycle.
    */
   private _flushNotifications(): void {
-    if (!(this.flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED)) {
+    const flags = this.flags;
+    if (!(flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED) || flags & ATOM_STATE_FLAGS.DISPOSED) {
       return;
     }
 

@@ -1,10 +1,4 @@
-import {
-  AsyncState,
-  COMPUTED_STATE_FLAGS,
-  EMPTY_ERROR_ARRAY,
-  PHASE_THRESHOLD,
-  SMI_MAX,
-} from '@/constants';
+import { AsyncState, COMPUTED_STATE_FLAGS, EMPTY_ERROR_ARRAY, SMI_MAX } from '@/constants';
 import { ReactiveDependency } from '@/core/base';
 import { syncDependencies, trackDependency } from '@/core/dep-tracking';
 import type { AtomError } from '@/errors/errors';
@@ -454,8 +448,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
         // Drift detection: Compare aggregate dependency versions to detect changes during async.
         // High drift indicates dependencies changed while awaiting; re-computation may be needed.
         const currentAggregate = this._captureVersionSnapshot();
-        const drift = (currentAggregate - this._asyncStartAggregateVersion) & SMI_MAX;
-        const isStale = ((PHASE_THRESHOLD - 1 - drift) >>> 31) & 1;
+        const isStale = currentAggregate !== this._asyncStartAggregateVersion;
 
         if (isStale) {
           if (this._asyncRetryCount < this.MAX_ASYNC_RETRIES) {
@@ -485,7 +478,10 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     for (let i = 0, len = deps.length; i < len; i++) {
       const dep = deps[i];
       if (dep) {
-        aggregate = (aggregate + dep.version) & SMI_MAX;
+        const v = dep.version;
+        // Use a simple mixing to reduce collisions: (hash << 5) - hash + v
+        // This is more robust than simple addition or XOR alone.
+        aggregate = ((((aggregate << 5) - aggregate) | 0) + v) & SMI_MAX;
       }
     }
     return aggregate;
