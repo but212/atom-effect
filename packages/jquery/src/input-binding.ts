@@ -49,8 +49,11 @@ export function applyInputBinding<T>(
     if (state.phase !== 'idle') return;
 
     state.phase = 'syncing-to-atom';
-    atom.value = parse($el.val() as string);
-    state.phase = 'idle';
+    try {
+      atom.value = parse($el.val() as string);
+    } finally {
+      state.phase = 'idle';
+    }
   };
 
   const onBlur = () => {
@@ -111,22 +114,27 @@ export function applyInputBinding<T>(
       }
 
       state.phase = 'syncing-to-dom';
+      try {
+        // [Fix] Preserve cursor position when focused (external update scenario)
+        if (state.hasFocus) {
+          const input = $el[0] as HTMLInputElement | HTMLTextAreaElement;
+          const start = input.selectionStart;
+          const end = input.selectionEnd;
+          $el.val(formatted);
+          // Clamp cursor position to new value length
+          const maxPos = formatted.length;
+          input.setSelectionRange(
+            Math.min(start ?? maxPos, maxPos),
+            Math.min(end ?? maxPos, maxPos)
+          );
+        } else {
+          $el.val(formatted);
+        }
 
-      // [Fix] Preserve cursor position when focused (external update scenario)
-      if (state.hasFocus) {
-        const input = $el[0] as HTMLInputElement | HTMLTextAreaElement;
-        const start = input.selectionStart;
-        const end = input.selectionEnd;
-        $el.val(formatted);
-        // Clamp cursor position to new value length
-        const maxPos = formatted.length;
-        input.setSelectionRange(Math.min(start ?? maxPos, maxPos), Math.min(end ?? maxPos, maxPos));
-      } else {
-        $el.val(formatted);
+        debug.domUpdated($el, 'val', formatted);
+      } finally {
+        state.phase = 'idle';
       }
-
-      debug.domUpdated($el, 'val', formatted);
-      state.phase = 'idle';
     }
   };
 
