@@ -22,7 +22,7 @@
         --font-main: "Inter", sans-serif;
       }
 
-      .sr-only {
+      .visually-hidden {
         position: absolute;
         width: 1px;
         height: 1px;
@@ -283,8 +283,8 @@
   </head>
   <body>
     <main class="container">
-      <header role="banner">
-        <div class="logo" aria-label="Atom Effect Logo">
+      <header>
+        <div class="logo" role="img" aria-label="Atom Effect Logo">
           ATOM<br />EFFECT<span>.</span>
         </div>
         <nav aria-label="Main Navigation">
@@ -310,7 +310,7 @@
       </section>
 
       <section class="hero-visual" aria-labelledby="visual-title">
-        <h2 id="visual-title" class="sr-only">
+        <h2 id="visual-title" class="visually-hidden">
           Interactive Atom Dependency Visualizer
         </h2>
         <canvas

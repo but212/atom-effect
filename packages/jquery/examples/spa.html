@@ -95,6 +95,8 @@
       .nav-list {
         list-style: none;
         flex: 1;
+        padding: 0;
+        margin: 0;
       }
 
       .nav-item {
@@ -166,6 +168,24 @@
         font-size: 0.6rem;
         word-break: break-all;
         text-align: center;
+      }
+
+      /* --- Skip Link --- */
+      .skip-link {
+        position: absolute;
+        top: -100px;
+        left: 0;
+        background: var(--black);
+        color: var(--white);
+        padding: 12px 24px;
+        z-index: 9999;
+        font-weight: 900;
+        text-transform: uppercase;
+        text-decoration: none;
+      }
+
+      .skip-link:focus {
+        top: 0;
       }
 
       /* --- Main Content --- */
@@ -406,121 +426,211 @@
         font-weight: 900;
         text-transform: uppercase;
       }
+
+      /* Accessibility */
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
     </style>
   </head>
   <body>
-    <div class="sidebar" id="sidebar">
+    <a href="#router-view" class="skip-link">Skip to main content</a>
+
+    <aside class="sidebar" id="sidebar" aria-label="Main navigation">
       <div class="sidebar-header">
-        <div class="logo-text">
+        <div class="logo-text" aria-hidden="true">
           <span class="full">AEJ<br />SYSTEM</span>
           <span class="short">A</span>
         </div>
       </div>
 
-      <nav class="nav-list">
-        <div class="nav-item">
-          <a class="nav-link" href="#" data-route="dashboard" data-short="D">
-            <span>Dashboard</span>
-          </a>
-        </div>
-        <div class="nav-item">
-          <a class="nav-link" href="#" data-route="tasks" data-short="T">
-            <span>Tasks</span>
-          </a>
-        </div>
-        <div class="nav-item">
-          <a class="nav-link" href="#" data-route="log" data-short="L">
-            <span>Log</span>
-          </a>
-        </div>
-        <div class="nav-item">
-          <a class="nav-link" href="#" data-route="config" data-short="C">
-            <span>Config</span>
-          </a>
-        </div>
+      <nav class="nav-list" aria-label="Primary">
+        <ul>
+          <li class="nav-item">
+            <a
+              class="nav-link"
+              href="#dashboard"
+              data-route="dashboard"
+              data-short="D"
+            >
+              <span>Dashboard</span>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="#tasks" data-route="tasks" data-short="T">
+              <span>Tasks</span>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="#log" data-route="log" data-short="L">
+              <span>Log</span>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a
+              class="nav-link"
+              href="#config"
+              data-route="config"
+              data-short="C"
+            >
+              <span>Config</span>
+            </a>
+          </li>
+        </ul>
       </nav>
 
       <div class="sidebar-footer">
-        <span class="full">VER 0.15.0 / CORE RELIABLE</span>
+        <span class="full">VER 0.15.1 / CORE RELIABLE</span>
         <span class="short">V0.15</span>
       </div>
-    </div>
+    </aside>
 
-    <main class="main-container">
+    <div class="main-container">
       <header>
         <h1 id="page-title">DASHBOARD</h1>
-        <button class="btn-black" id="toggle-sidebar">UI/COLLAPSE</button>
+        <button
+          class="btn-black"
+          id="toggle-sidebar"
+          aria-expanded="false"
+          aria-controls="sidebar"
+          aria-label="Toggle sidebar navigation"
+        >
+          UI/COLLAPSE
+        </button>
       </header>
 
-      <div class="view-content" id="router-view">
+      <main id="router-view" class="view-content" aria-live="polite">
         <!-- INJECTED -->
-      </div>
-    </main>
+      </main>
+    </div>
 
-    <button class="fab-add" id="add-task-btn" style="display: none">+</button>
+    <button
+      class="fab-add"
+      id="add-task-btn"
+      style="display: none"
+      aria-label="Add new task"
+    >
+      +
+    </button>
 
     <!-- Templates -->
     <template id="tmpl-dashboard">
-      <div>
-        <div class="stats-grid">
-          <div class="stat-card">
-            <div class="stat-value">99.9</div>
-            <div class="stat-label">UPTIME / PERF</div>
-          </div>
-          <div class="stat-card" style="border-color: var(--primary-blue)">
-            <div class="stat-value" id="dashboard-total-tasks">0</div>
-            <div class="stat-label">TOTAL / LOAD</div>
-          </div>
-          <div class="stat-card" style="border-color: var(--primary-red)">
-            <div class="stat-value" id="dashboard-completed-tasks">0</div>
-            <div class="stat-label">DONE / SYNC</div>
-          </div>
+      <section aria-labelledby="dashboard-heading">
+        <h2 id="dashboard-heading" class="visually-hidden">
+          Dashboard Statistics
+        </h2>
+        <div class="stats-grid" role="region" aria-label="System statistics">
+          <article class="stat-card" aria-labelledby="stat-uptime-label">
+            <div class="stat-value" aria-describedby="stat-uptime-label">
+              99.9
+            </div>
+            <div class="stat-label" id="stat-uptime-label">UPTIME / PERF</div>
+          </article>
+          <article
+            class="stat-card"
+            style="border-color: var(--primary-blue)"
+            aria-labelledby="stat-total-label"
+          >
+            <div
+              class="stat-value"
+              id="dashboard-total-tasks"
+              role="status"
+              aria-describedby="stat-total-label"
+            >
+              0
+            </div>
+            <div class="stat-label" id="stat-total-label">TOTAL / LOAD</div>
+          </article>
+          <article
+            class="stat-card"
+            style="border-color: var(--primary-red)"
+            aria-labelledby="stat-done-label"
+          >
+            <div
+              class="stat-value"
+              id="dashboard-completed-tasks"
+              role="status"
+              aria-describedby="stat-done-label"
+            >
+              0
+            </div>
+            <div class="stat-label" id="stat-done-label">DONE / SYNC</div>
+          </article>
         </div>
 
-        <div class="card card-yellow">
+        <article class="card card-yellow">
           <h2 class="card-title">Fundamental Reactivity</h2>
           <p class="card-body-mono">
             ATOM-EFFECT-JQUERY IS NOT A FRAMEWORK. IT IS A BRIDGE. BY ADHERING
             TO SWISS DESIGN PRINCIPLES—GRID, TYPOGRAPHY, AND FUNCTION—WE
             MANIFEST THE UNDERLYING STRUCTURE OF STATE RECONCILIATION.
           </p>
-        </div>
-      </div>
+        </article>
+      </section>
     </template>
 
     <template id="tmpl-tasks">
-      <div style="max-width: 900px; margin: 0 auto">
-        <input
-          type="text"
-          class="search-input"
-          id="task-search"
-          placeholder="QUERY_STRING..."
-          aria-label="Search tasks"
-        />
-
-        <div class="task-list" id="task-list-container"></div>
-
-        <div id="tasks-empty" class="empty-tasks-placeholder">
-          NULL_DATA_SET
+      <section
+        style="max-width: 900px; margin: 0 auto"
+        aria-labelledby="tasks-heading"
+      >
+        <h2 id="tasks-heading" class="visually-hidden">Task Management</h2>
+        <div role="search">
+          <label for="task-search" class="visually-hidden">Search tasks</label>
+          <input
+            type="search"
+            class="search-input"
+            id="task-search"
+            placeholder="QUERY_STRING..."
+          />
         </div>
-      </div>
+
+        <ul
+          class="task-list"
+          id="task-list-container"
+          role="list"
+          aria-label="Tasks"
+        ></ul>
+
+        <p id="tasks-empty" class="empty-tasks-placeholder" role="status">
+          NULL_DATA_SET
+        </p>
+      </section>
     </template>
 
     <template id="tmpl-log">
-      <div class="card card-blue">
-        <h2 class="card-title">System Event Log</h2>
-        <div style="font-family: var(--font-mono); font-size: 0.9rem">
-          <div>[02:41:40] ROUTE_CHANGE: DASHBOARD -> LOG</div>
-          <div>[02:41:35] ATOM_SYNC: TASKS_COUNT_UPDATED</div>
-          <div>[02:41:30] KERNEL_BOOT: AEJ_LOADED_OK</div>
-        </div>
-      </div>
+      <section class="card card-blue" aria-labelledby="log-heading">
+        <h2 id="log-heading" class="card-title">System Event Log</h2>
+        <ul
+          role="log"
+          aria-live="polite"
+          aria-label="Recent system events"
+          style="
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+            list-style: none;
+            padding: 0;
+          "
+        >
+          <li>[02:41:40] ROUTE_CHANGE: DASHBOARD -> LOG</li>
+          <li>[02:41:35] ATOM_SYNC: TASKS_COUNT_UPDATED</li>
+          <li>[02:41:30] KERNEL_BOOT: AEJ_LOADED_OK</li>
+        </ul>
+      </section>
     </template>
 
     <template id="tmpl-config">
-      <div class="card card-red">
-        <h2 class="card-title">System Preferences</h2>
-        <div style="display: flex; flex-direction: column; gap: 20px">
+      <section class="card card-red" aria-labelledby="config-heading">
+        <h2 id="config-heading" class="card-title">System Preferences</h2>
+        <dl style="display: flex; flex-direction: column; gap: 20px">
           <div
             style="
               display: flex;
@@ -530,10 +640,12 @@
               padding-bottom: 10px;
             "
           >
-            <div style="font-weight: 700">STRICT_MODE</div>
-            <div style="font-family: var(--font-mono); font-weight: 700">
+            <dt style="font-weight: 700">STRICT_MODE</dt>
+            <dd
+              style="font-family: var(--font-mono); font-weight: 700; margin: 0"
+            >
               ENABLED
-            </div>
+            </dd>
           </div>
           <div
             style="
@@ -544,16 +656,18 @@
               padding-bottom: 10px;
             "
           >
-            <div style="font-weight: 700">RECONCILIATION_SPEED</div>
-            <div style="font-family: var(--font-mono); font-weight: 700">
+            <dt style="font-weight: 700">RECONCILIATION_SPEED</dt>
+            <dd
+              style="font-family: var(--font-mono); font-weight: 700; margin: 0"
+            >
               OPTIMAL
-            </div>
+            </dd>
           </div>
-          <p style="margin-top: 20px; font-size: 0.8rem; font-style: italic">
-            ALL SETTINGS ARE STORED IN ATOMIC MEMORY.
-          </p>
-        </div>
-      </div>
+        </dl>
+        <p style="margin-top: 20px; font-size: 0.8rem; font-style: italic">
+          ALL SETTINGS ARE STORED IN ATOMIC MEMORY.
+        </p>
+      </section>
     </template>
 
     <script>
@@ -593,8 +707,12 @@
       $(".nav-link").each(function () {
         const $link = $(this);
         const route = $link.data("route");
+        const isActive = $.computed(() => currentRoute.value === route);
         $link.atomBind({
-          class: { active: $.computed(() => currentRoute.value === route) },
+          class: { active: isActive },
+          attr: {
+            "aria-current": $.computed(() => (isActive.value ? "page" : null)),
+          },
           on: {
             click: (e) => {
               e.preventDefault();
@@ -605,8 +723,13 @@
       });
 
       $("#sidebar").atomBind({ class: { collapsed: isSidebarCollapsed } });
-      $("#toggle-sidebar").on("click", () => {
-        isSidebarCollapsed.value = !isSidebarCollapsed.value;
+      $("#toggle-sidebar").atomBind({
+        attr: { "aria-expanded": $.computed(() => !isSidebarCollapsed.value) },
+        on: {
+          click: () => {
+            isSidebarCollapsed.value = !isSidebarCollapsed.value;
+          },
+        },
       });
       $("#page-title").atomText(pageTitleText);
 
@@ -619,7 +742,11 @@
         $el
           .find(".checkbox-rect")
           .toggleClass("checked", task.completed)
-          .attr("aria-checked", task.completed);
+          .attr("aria-checked", task.completed)
+          .attr(
+            "aria-label",
+            `Mark "${task.title}" as ${task.completed ? "incomplete" : "complete"}`,
+          );
         $el.find(".task-title").text(task.title);
         $el.find(".task-tag").text(task.tag);
       };
@@ -643,11 +770,11 @@
               key: "id",
               render: (task) => {
                 const $el = $(`
-                            <div class="task-item">
+                            <li class="task-item">
                                 <div class="checkbox-rect" role="checkbox" tabindex="0"></div>
-                                <div class="task-title"></div>
-                                <div class="task-tag"></div>
-                            </div>
+                                <span class="task-title"></span>
+                                <span class="task-tag"></span>
+                            </li>
                         `).attr("data-id", task.id);
                 updateTaskElement($el, task);
                 return $el;
