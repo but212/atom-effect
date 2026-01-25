@@ -44,9 +44,28 @@ export function applyInputBinding<T>(
     state.hasFocus = true;
   };
 
+  // Core sync: DOM → Atom (defined early for blur flush)
+  const syncAtomFromDom = () => {
+    if (state.phase !== 'idle') return;
+
+    state.phase = 'syncing-to-atom';
+    try {
+      atom.value = parse($el.val() as string);
+    } finally {
+      state.phase = 'idle';
+    }
+  };
+
   const onBlur = () => {
+    // [Fix] Flush pending debounce before formatting to prevent data loss
+    if (state.timeoutId) {
+      clearTimeout(state.timeoutId);
+      state.timeoutId = null;
+      syncAtomFromDom();
+    }
+
     state.hasFocus = false;
-    // Force formatting on blur to ensure clean display
+    // Force formatting on blur to ensure clean display (now with latest value)
     const formatted = format(atom.value);
     if ($el.val() !== formatted) {
       $el.val(formatted);
@@ -55,15 +74,6 @@ export function applyInputBinding<T>(
 
   $el.on('focus', onFocus);
   $el.on('blur', onBlur);
-
-  // Core sync: DOM → Atom
-  const syncAtomFromDom = () => {
-    if (state.phase !== 'idle') return;
-
-    state.phase = 'syncing-to-atom';
-    atom.value = parse($el.val() as string);
-    state.phase = 'idle';
-  };
 
   // Input handler with optional debounce
   const onInput = () => {
@@ -104,9 +114,27 @@ export function applyInputBinding<T>(
       }
 
       state.phase = 'syncing-to-dom';
-      $el.val(formatted);
-      debug.domUpdated($el, 'val', formatted);
-      state.phase = 'idle';
+      try {
+        // [Fix] Preserve cursor position when focused (external update scenario)
+        if (state.hasFocus) {
+          const input = $el[0] as HTMLInputElement | HTMLTextAreaElement;
+          const start = input.selectionStart;
+          const end = input.selectionEnd;
+          $el.val(formatted);
+          // Clamp cursor position to new value length
+          const maxPos = formatted.length;
+          input.setSelectionRange(
+            Math.min(start ?? maxPos, maxPos),
+            Math.min(end ?? maxPos, maxPos)
+          );
+        } else {
+          $el.val(formatted);
+        }
+
+        debug.domUpdated($el, 'val', formatted);
+      } finally {
+        state.phase = 'idle';
+      }
     }
   };
 
