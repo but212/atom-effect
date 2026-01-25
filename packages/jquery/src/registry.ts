@@ -114,9 +114,15 @@ class BindingRegistry {
     const children = el.querySelectorAll(`.${AES_BOUND}`);
     for (let i = 0, len = children.length; i < len; i++) {
       const child = children[i] as Element;
-      // Double-check bound reference
-      if (child && this.boundElements.has(child)) {
+      if (!child) continue;
+
+      if (this.boundElements.has(child)) {
+        // Actual bound element: cleanup properly
         this.cleanup(child);
+      } else {
+        // [Fix] Zombie binding: cloned element with class but no WeakMap data
+        // Remove orphaned marker class to prevent future false positives
+        child.classList.remove(AES_BOUND);
       }
     }
   }

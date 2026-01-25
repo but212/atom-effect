@@ -51,11 +51,19 @@ describe('Input Bindings (Two-way)', () => {
     await new Promise((r) => setTimeout(r, 30));
     expect(val.value).toBe(20);
 
-    // Blur formatting
     $el.trigger('focus');
-    $el.val('user editing');
+    $el.val('30').trigger('input'); // Start debounce timer
+    $el.trigger('blur'); // Blur should flush pending sync
+    expect(val.value).toBe(30); // Atom updated with flushed value
+    expect($el.val()).toBe('V:30'); // Then formatted
+
+    // Blur formatting (no pending debounce): format with current atom value
+    await new Promise((r) => setTimeout(r, 30)); // Ensure no pending timers
+    $el.trigger('focus');
+    $el.val('invalid text'); // No input event = no pending debounce
     $el.trigger('blur');
-    expect($el.val()).toBe('V:20');
+    expect(val.value).toBe(30); // Atom unchanged (no sync happened)
+    expect($el.val()).toBe('V:30'); // Formatted with current atom value
 
     $el.remove();
   });

@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### jQuery
+
+#### Fixed - jQuery
+
+- **Debounce Blur Data Loss**: Fixed a critical bug where user input was lost when blurring an input field with a pending debounce timer. The `onBlur` handler now flushes pending sync operations before formatting.
+- **Zombie Binding Cleanup**: Fixed orphaned `_aes-bound` class markers on cloned elements. `cleanupDescendants` now removes the marker class from elements that have no WeakMap binding data.
+- **Cursor Jumping on External Update**: Improved UX by preserving cursor position when an input's atom value is updated externally while focused.
+
 ## [0.15.0]
 
 ### Core
