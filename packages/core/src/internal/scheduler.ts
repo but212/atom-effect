@@ -1,4 +1,4 @@
-import { IS_DEV, SCHEDULER_CONFIG, SCHEDULER_STATE_FLAGS } from '@/constants';
+import { IS_DEV, SCHEDULER_CONFIG } from '@/constants';
 import { SchedulerError } from '@/errors/errors';
 import { endFlush, startFlush } from '@/internal/epoch';
 
@@ -31,10 +31,12 @@ class Scheduler {
   private _bufferIndex: number;
   private _size: number;
   private _epoch: number;
-  private _flags: number;
+  private isProcessing: boolean;
+  public isBatching: boolean;
   private batchDepth: number;
   private batchQueue: SchedulerJob[];
   private batchQueueSize: number;
+  private isFlushingSync: boolean;
   private maxFlushIterations: number;
 
   constructor() {
@@ -42,10 +44,12 @@ class Scheduler {
     this._bufferIndex = 0;
     this._size = 0;
     this._epoch = 0;
-    this._flags = 0;
+    this.isProcessing = false;
+    this.isBatching = false;
     this.batchDepth = 0;
     this.batchQueue = [];
     this.batchQueueSize = 0;
+    this.isFlushingSync = false;
     this.maxFlushIterations = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
   }
 
@@ -53,18 +57,13 @@ class Scheduler {
    * Returns the current operational phase of the scheduler.
    */
   get phase(): SchedulerPhase {
-    const flags = this._flags;
-    if (flags & (SCHEDULER_STATE_FLAGS.PROCESSING | SCHEDULER_STATE_FLAGS.FLUSHING_SYNC)) {
+    if (this.isProcessing || this.isFlushingSync) {
       return SchedulerPhase.FLUSHING;
     }
-    if (flags & SCHEDULER_STATE_FLAGS.BATCHING) {
+    if (this.isBatching) {
       return SchedulerPhase.BATCHING;
     }
     return SchedulerPhase.IDLE;
-  }
-
-  get isBatching(): boolean {
-    return (this._flags & SCHEDULER_STATE_FLAGS.BATCHING) !== 0;
   }
 
   /** Current number of pending jobs. */
@@ -84,14 +83,14 @@ class Scheduler {
     if (callback._nextEpoch === epoch) return;
     callback._nextEpoch = epoch;
 
-    if (this._flags & (SCHEDULER_STATE_FLAGS.BATCHING | SCHEDULER_STATE_FLAGS.FLUSHING_SYNC)) {
+    if (this.isBatching || this.isFlushingSync) {
       this.batchQueue[this.batchQueueSize++] = callback;
       return;
     }
 
     this._queueBuffer[this._bufferIndex]![this._size++] = callback;
 
-    if (!(this._flags & SCHEDULER_STATE_FLAGS.PROCESSING)) {
+    if (!this.isProcessing) {
       this.flush();
     }
   }
@@ -101,9 +100,9 @@ class Scheduler {
    * Coalesces multiple schedule calls into a single microtask execution.
    */
   private flush(): void {
-    if (this._flags & SCHEDULER_STATE_FLAGS.PROCESSING || this._size === 0) return;
+    if (this.isProcessing || this._size === 0) return;
 
-    this._flags |= SCHEDULER_STATE_FLAGS.PROCESSING;
+    this.isProcessing = true;
 
     queueMicrotask(() => {
       try {
@@ -113,10 +112,10 @@ class Scheduler {
         this._drainQueue();
         if (flushStarted) endFlush();
       } finally {
-        this._flags &= ~SCHEDULER_STATE_FLAGS.PROCESSING;
+        this.isProcessing = false;
 
         // Recursively trigger next flush if new jobs were added during drainage
-        if (this._size > 0 && !(this._flags & SCHEDULER_STATE_FLAGS.BATCHING)) {
+        if (this._size > 0 && !this.isBatching) {
           this.flush();
         }
       }
@@ -128,14 +127,14 @@ class Scheduler {
    * Used at the end of a batch block or when immediate reflection is required.
    */
   private flushSync(): void {
-    this._flags |= SCHEDULER_STATE_FLAGS.FLUSHING_SYNC;
+    this.isFlushingSync = true;
     const flushStarted = startFlush();
 
     try {
       this._mergeBatchQueue();
       this._drainQueue();
     } finally {
-      this._flags &= ~SCHEDULER_STATE_FLAGS.FLUSHING_SYNC;
+      this.isFlushingSync = false;
       if (flushStarted) endFlush();
     }
   }
@@ -222,7 +221,7 @@ class Scheduler {
 
   startBatch(): void {
     this.batchDepth++;
-    this._flags |= SCHEDULER_STATE_FLAGS.BATCHING;
+    this.isBatching = true;
   }
 
   endBatch(): void {
@@ -236,7 +235,7 @@ class Scheduler {
 
     if (this.batchDepth === 0) {
       this.flushSync();
-      this._flags &= ~SCHEDULER_STATE_FLAGS.BATCHING;
+      this.isBatching = false;
     }
   }
 

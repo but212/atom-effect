@@ -51,8 +51,10 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   private _executionsInEpoch: number;
 
   private readonly _fn: EffectFunction;
+  private readonly _sync: boolean;
   private readonly _maxExecutions: number;
   private readonly _maxExecutionsPerFlush: number;
+  private readonly _trackModifications: boolean;
 
   private _history: number[] | null;
   private _executionCount: number;
@@ -79,16 +81,12 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     this._executionsInEpoch = 0;
 
     this._fn = fn;
-    if (options.sync) {
-      this.flags |= EFFECT_STATE_FLAGS.SYNC;
-    }
+    this._sync = options.sync ?? false;
     this._maxExecutions =
       options.maxExecutionsPerSecond ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_SECOND;
     this._maxExecutionsPerFlush =
       options.maxExecutionsPerFlush ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_EFFECT;
-    if (options.trackModifications) {
-      this.flags |= EFFECT_STATE_FLAGS.TRACK_MODIFICATIONS;
-    }
+    this._trackModifications = options.trackModifications ?? false;
 
     this._executionCount = 0;
     this._historyPtr = 0;
@@ -308,14 +306,11 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   private _subscribeTo(dep: Dependency): void {
     try {
       const unsubscribe = dep.subscribe(() => {
-        if (
-          this.flags & EFFECT_STATE_FLAGS.TRACK_MODIFICATIONS &&
-          this.flags & EFFECT_STATE_FLAGS.EXECUTING
-        ) {
+        if (this._trackModifications && this.flags & EFFECT_STATE_FLAGS.EXECUTING) {
           dep._modifiedAtEpoch = this._currentEpoch;
         }
 
-        if (this.flags & EFFECT_STATE_FLAGS.SYNC) {
+        if (this._sync) {
           this.execute();
           return;
         }
@@ -465,7 +460,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   }
 
   private _checkLoopWarnings(): void {
-    if (this.flags & EFFECT_STATE_FLAGS.TRACK_MODIFICATIONS && debug.enabled) {
+    if (this._trackModifications && debug.enabled) {
       const deps = this._dependencies;
       const epoch = this._currentEpoch;
       for (let i = 0, len = deps.length; i < len; i++) {
