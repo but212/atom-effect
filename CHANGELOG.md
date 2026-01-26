@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Internal - Unreleased
+
+- **Code Cleanup**:
+  - Removed unused object pools (`notificationPool`, `schedulerCallbackPool`, `ObjectPool`).
+  - Removed unused type guards (`isTrackableFunction`, `isPlainListener`, `hasExecuteMethod`, `hasDependencyMethod`).
+  - Removed unused error messages in `packages/core/src/errors/messages.ts`.
+  - Removed unused private methods in `ComputedAtomImpl` (`_isResolved`, `_isRejected`).
+
 ## [0.15.4]
 
 ### Core
@@ -354,16 +364,6 @@
 - Updated `publish.yml` to deploy both packages with unified version validation.
 - Updated GitHub workflows (`ci.yml`, `benchmark.yml`) for monorepo paths.
 - Added `.turbo` to `.gitignore`.
-
-## [Unreleased]
-
-### Internal - Unreleased
-
-- **Code Cleanup**:
-  - Removed unused object pools (`notificationPool`, `schedulerCallbackPool`, `ObjectPool`).
-  - Removed unused type guards (`isTrackableFunction`, `isPlainListener`, `hasExecuteMethod`, `hasDependencyMethod`).
-  - Removed unused error messages in `packages/core/src/errors/messages.ts`.
-  - Removed unused private methods in `ComputedAtomImpl` (`_isResolved`, `_isRejected`).
 
 ## [0.7.0]
 
