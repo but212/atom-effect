@@ -6,11 +6,8 @@ import { endFlush, startFlush } from '@/internal/epoch';
  * Current state of the scheduler.
  */
 export enum SchedulerPhase {
-  /** No pending jobs, not currently flushing. */
   IDLE = 0,
-  /** Currently within a batch() block. */
   BATCHING = 1,
-  /** Currently executing queued jobs. */
   FLUSHING = 2,
 }
 
@@ -19,87 +16,81 @@ export enum SchedulerPhase {
  */
 export interface SchedulerJob {
   (): void;
-  /** Epoch for deduplication */
   _nextEpoch?: number;
 }
 
 /**
- * Simplified scheduler for reactive updates with double-buffered queue.
+ * Simplified scheduler optimized for batching and cache locality.
  */
 class Scheduler {
-  private _queueBuffer: [SchedulerJob[], SchedulerJob[]];
+  private _activeQueue: SchedulerJob[];
+  private _secondaryQueue: SchedulerJob[];
+  private _batchQueue: SchedulerJob[];
+
   private _bufferIndex: number;
   private _size: number;
   private _epoch: number;
   private _flags: number;
-  private batchDepth: number;
-  private batchQueue: SchedulerJob[];
-  private batchQueueSize: number;
-  private maxFlushIterations: number;
+  private _batchDepth: number;
+  private _batchQueueSize: number;
+  private _maxIterations: number;
 
   constructor() {
-    this._queueBuffer = [[], []];
+    // Hidden Class Stability: Initialize properties in fixed order
+    this._activeQueue = [];
+    this._secondaryQueue = [];
+    this._batchQueue = [];
+
     this._bufferIndex = 0;
     this._size = 0;
     this._epoch = 0;
     this._flags = 0;
-    this.batchDepth = 0;
-    this.batchQueue = [];
-    this.batchQueueSize = 0;
-    this.maxFlushIterations = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
+    this._batchDepth = 0;
+    this._batchQueueSize = 0;
+    this._maxIterations = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
   }
 
-  /**
-   * Returns the current operational phase of the scheduler.
-   */
   get phase(): SchedulerPhase {
     const flags = this._flags;
-    if (flags & (SCHEDULER_STATE_FLAGS.PROCESSING | SCHEDULER_STATE_FLAGS.FLUSHING_SYNC)) {
+    if (flags & (SCHEDULER_STATE_FLAGS.PROCESSING | SCHEDULER_STATE_FLAGS.FLUSHING_SYNC))
       return SchedulerPhase.FLUSHING;
-    }
-    if (flags & SCHEDULER_STATE_FLAGS.BATCHING) {
-      return SchedulerPhase.BATCHING;
-    }
+    if (flags & SCHEDULER_STATE_FLAGS.BATCHING) return SchedulerPhase.BATCHING;
     return SchedulerPhase.IDLE;
   }
 
   get isBatching(): boolean {
     return (this._flags & SCHEDULER_STATE_FLAGS.BATCHING) !== 0;
   }
-
-  /** Current number of pending jobs. */
   get queueSize(): number {
     return this._size;
   }
 
   /**
-   * Schedules a task for execution.
+   * Schedules a task for execution with O(1) deduplication.
    */
   schedule(callback: SchedulerJob): void {
-    if (IS_DEV && typeof callback !== 'function') {
-      throw new SchedulerError('Scheduler callback must be a function');
-    }
+    if (IS_DEV && typeof callback !== 'function')
+      throw new SchedulerError('Callback must be a function');
 
     const epoch = this._epoch;
     if (callback._nextEpoch === epoch) return;
     callback._nextEpoch = epoch;
 
-    if (this._flags & (SCHEDULER_STATE_FLAGS.BATCHING | SCHEDULER_STATE_FLAGS.FLUSHING_SYNC)) {
-      this.batchQueue[this.batchQueueSize++] = callback;
+    const flags = this._flags;
+    if (flags & (SCHEDULER_STATE_FLAGS.BATCHING | SCHEDULER_STATE_FLAGS.FLUSHING_SYNC)) {
+      this._batchQueue[this._batchQueueSize++] = callback;
       return;
     }
 
-    this._queueBuffer[this._bufferIndex]![this._size++] = callback;
+    // Direct access to active queue for better locality
+    const queue = this._bufferIndex === 0 ? this._activeQueue : this._secondaryQueue;
+    queue[this._size++] = callback;
 
-    if (!(this._flags & SCHEDULER_STATE_FLAGS.PROCESSING)) {
+    if (!(flags & SCHEDULER_STATE_FLAGS.PROCESSING)) {
       this.flush();
     }
   }
 
-  /**
-   * Schedules a microtask-based flush of the queue.
-   * Coalesces multiple schedule calls into a single microtask execution.
-   */
   private flush(): void {
     if (this._flags & SCHEDULER_STATE_FLAGS.PROCESSING || this._size === 0) return;
 
@@ -108,29 +99,20 @@ class Scheduler {
     queueMicrotask(() => {
       try {
         if (this._size === 0) return;
-
         const flushStarted = startFlush();
         this._drainQueue();
         if (flushStarted) endFlush();
       } finally {
         this._flags &= ~SCHEDULER_STATE_FLAGS.PROCESSING;
-
-        // Recursively trigger next flush if new jobs were added during drainage
-        if (this._size > 0 && !(this._flags & SCHEDULER_STATE_FLAGS.BATCHING)) {
-          this.flush();
-        }
+        // Recursive flush if new jobs appeared outside of batching
+        if (this._size > 0 && !(this._flags & SCHEDULER_STATE_FLAGS.BATCHING)) this.flush();
       }
     });
   }
 
-  /**
-   * Immediately flushes all queues synchronously.
-   * Used at the end of a batch block or when immediate reflection is required.
-   */
   private flushSync(): void {
     this._flags |= SCHEDULER_STATE_FLAGS.FLUSHING_SYNC;
     const flushStarted = startFlush();
-
     try {
       this._mergeBatchQueue();
       this._drainQueue();
@@ -140,42 +122,37 @@ class Scheduler {
     }
   }
 
-  /**
-   * Merges jobs from the batching queue into the primary queue.
-   * Increments the epoch to ensure deduplication.
-   */
   private _mergeBatchQueue(): void {
-    const size = this.batchQueueSize;
+    const size = this._batchQueueSize;
     if (size === 0) return;
 
     const epoch = ++this._epoch;
-    const queue = this.batchQueue;
-    const targetQueue = this._queueBuffer[this._bufferIndex];
-    let targetSize = this._size;
+    const bQueue = this._batchQueue;
+    const target = this._bufferIndex === 0 ? this._activeQueue : this._secondaryQueue;
+    let tSize = this._size;
 
     for (let i = 0; i < size; i++) {
-      const job = queue[i]!;
-      if (job._nextEpoch !== epoch) {
+      const job = bQueue[i];
+      if (job && job._nextEpoch !== epoch) {
         job._nextEpoch = epoch;
-        targetQueue![targetSize++] = job;
+        target[tSize++] = job;
       }
     }
 
-    this._size = targetSize;
-    this.batchQueueSize = 0;
-    if (queue.length > SCHEDULER_CONFIG.BATCH_QUEUE_SHRINK_THRESHOLD) queue.length = 0;
+    this._size = tSize;
+    this._batchQueueSize = 0;
+    // Fast clear to allow GC to reclaim elements while keeping array capacity
+    if (bQueue.length > SCHEDULER_CONFIG.BATCH_QUEUE_SHRINK_THRESHOLD) bQueue.length = 0;
   }
 
   private _drainQueue(): void {
     let iterations = 0;
-    const maxIterations = this.maxFlushIterations;
-
+    const max = this._maxIterations;
     while (this._size > 0) {
-      if (++iterations > maxIterations) {
+      if (++iterations > max) {
         this._handleFlushOverflow();
         return;
       }
-
       this._processQueue();
       this._mergeBatchQueue();
     }
@@ -183,70 +160,55 @@ class Scheduler {
 
   private _processQueue(): void {
     const index = this._bufferIndex;
-    const jobs = this._queueBuffer[index];
+    const jobs = index === 0 ? this._activeQueue : this._secondaryQueue;
     const count = this._size;
 
-    // Swap to other buffer
-    const nextIndex = index ^ 1;
-    this._bufferIndex = nextIndex;
+    // Buffer Swap & Epoch bump
+    this._bufferIndex = index ^ 1;
     this._size = 0;
     this._epoch++;
 
-    this._processJobs(jobs!, count);
-  }
-
-  private _handleFlushOverflow(): void {
-    console.error(
-      new SchedulerError(
-        `Maximum flush iterations (${this.maxFlushIterations}) exceeded. Possible infinite loop.`
-      )
-    );
-    this._size = 0;
-    this._queueBuffer[this._bufferIndex]!.length = 0;
-    this.batchQueueSize = 0;
-  }
-
-  private _processJobs(jobs: SchedulerJob[], count: number): void {
     for (let i = 0; i < count; i++) {
       try {
-        jobs[i]!();
+        jobs[i]?.();
       } catch (error) {
         console.error(
           new SchedulerError('Error occurred during scheduler execution', error as Error)
         );
       }
     }
-    // O(1) clear of the array to release references without re-allocating
+    // Release references immediately for memory efficiency
     jobs.length = 0;
   }
 
+  private _handleFlushOverflow(): void {
+    console.error(new SchedulerError(`Maximum flush iterations exceeded.`));
+    this._size = 0;
+    this._activeQueue.length = 0;
+    this._secondaryQueue.length = 0;
+    this._batchQueueSize = 0;
+  }
+
   startBatch(): void {
-    this.batchDepth++;
+    this._batchDepth++;
     this._flags |= SCHEDULER_STATE_FLAGS.BATCHING;
   }
 
   endBatch(): void {
-    if (this.batchDepth === 0) {
-      if (IS_DEV) {
-        console.warn('endBatch() called without matching startBatch(). Ignoring.');
-      }
+    if (this._batchDepth === 0) {
+      if (IS_DEV) console.warn('endBatch() called without startBatch()');
       return;
     }
-    this.batchDepth--;
-
-    if (this.batchDepth === 0) {
+    if (--this._batchDepth === 0) {
       this.flushSync();
       this._flags &= ~SCHEDULER_STATE_FLAGS.BATCHING;
     }
   }
 
   setMaxFlushIterations(max: number): void {
-    if (max < SCHEDULER_CONFIG.MIN_FLUSH_ITERATIONS) {
-      throw new SchedulerError(
-        `Max flush iterations must be at least ${SCHEDULER_CONFIG.MIN_FLUSH_ITERATIONS}`
-      );
-    }
-    this.maxFlushIterations = max;
+    if (max < SCHEDULER_CONFIG.MIN_FLUSH_ITERATIONS)
+      throw new SchedulerError('Invalid iteration limit');
+    this._maxIterations = max;
   }
 }
 

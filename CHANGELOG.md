@@ -4,28 +4,14 @@
 
 ### Core
 
-#### Performance - Core
-
-- **Node Identification**: Added bitwise flags (`IS_ATOM`, `IS_COMPUTED`, etc.) to `NODE_FLAGS` for O(1) type identification, replacing slower `in` operator and `typeof` checks in hot paths.
-- **SMI Range Optimization**: Relocated bit flags to bits 10-13 to ensure all flag operations remain within V8's Small Integer (SMI) range, preventing `HeapNumber` allocations and improving bitwise operation performance.
-- **Fast-Path Subscription**: Optimized `ReactiveDependency.subscribe` with a fast-path for internal subscribers using the new bitwise flags.
-- **Tracker Optimization**: Refactored `trackDependency` to use bitwise flags for instant identification of structured trackers (Effect, ComputedTrackable).
-
 #### Refactor - Core
 
-- **Notification Efficiency**: Optimized `ReactiveDependency` by splitting subscriber notification into specialized methods (`_notifyFnSubscribers`, `_notifyObjSubscribers`), reducing branching overhead and improving V8 inlining potential.
-- **Dependency Syncing**: Added a fast-path to `syncDependencies` that returns early if next and previous dependencies are identical, bypassing $O(N)$ unsubscription/re-subscription logic.
-- **Error Status Caching**: Implemented epoch-based caching for `ComputedAtom.hasError` to eliminate redundant $O(N)$ dependency tree traversals during status checks.
-- **Smart Re-execution**: Optimized `Effect` re-execution logic to only trigger recomputations for dirty computed dependencies, significantly reducing unnecessary work in stable graphs.
-- **Vectorized Accumulation**: Refactored version snapshotting in computed atoms to use standard `for` loops with pre-cached lengths for better data locality.
+- **Node Identification**: Added bitwise flags (`IS_ATOM`, `IS_COMPUTED`, etc.) to `NODE_FLAGS` for O(1) type identification, replacing slower `in` operator and `typeof` checks in hot paths.
+- **SMI Range Optimization**: Relocated bit flags to bits 10-13 to ensure all flag operations remain within V8's Small Integer (SMI) range.
+- **Hidden Class Stability**: Standardized initialization order and grouped property/flag initializations across all core reactive primitives (`AtomImpl`, `ComputedAtomImpl`, `EffectImpl`, `Scheduler`) to ensure stable V8 Hidden Classes and prevent shape transitions.
+- **GC Reduction**: Merged internal tracker logic into
 
 ### jQuery
-
-#### Performance - jQuery
-
-- **Registry Refactoring**: Optimized `BindingRegistry` to use a single `WeakMap` with bitwise flags instead of multiple `WeakMaps` and `WeakSets`, improving cache locality and reducing lookup overhead.
-- **List Reconciliation**: Optimized `atomList` by implementing local pools for `Set` and `Map` instances, significantly reducing GC pressure during high-frequency list updates.
-- **Binding Updaters**: Refactored all reactive bindings to pass the cached jQuery object to updaters, eliminating redundant `$()` wrapper allocations.
 
 #### Fixed - jQuery
 
@@ -34,11 +20,10 @@
 
 #### Refactor - jQuery
 
-- **Element Wrapping Optimization**: Enhanced `registerReactiveEffect` to support optional pre-wrapped jQuery objects, eliminating redundant `$()` allocations in unified bindings.
-- **Native Input Bridge**: Optimized two-way input bindings to use native `HTMLInputElement` properties (`value`, `selectionStart`) instead of jQuery abstractions, bypassing significant abstraction overhead.
-- **Atomic Event Batching**: Wrapped all input and lifecycle event handlers in `batch()` to ensure atomic state updates and prevent intermediate "glitch" frames.
-- **Property Name Caching**: Added a cached `toCamelCase` utility for CSS bindings, reducing string manipulation cost in reactive update cycles.
-- **Registry & Observer Refinement**: Optimized `BindingRegistry` and `MutationObserver` by streamlining flag lookups and early-exit guards during DOM tree cleanup.
+- **Binding Registry Refactor**: Consolidated `BindingRegistry` into a single `WeakMap` with bitwise flags and streamlined `MutationObserver` lookups to improve cache locality and memory overhead.
+- **jQuery Wrapper Optimization**: Enhanced `registerReactiveEffect` and binding updaters to reuse pre-wrapped jQuery objects, eliminating redundant `$()` allocations.
+- **Native Input & Event Batching**: Migrated two-way bindings to native `HTMLInputElement` properties and wrapped handlers in `batch()` for atomic state updates.
+- **Resource & GC Management**: Implemented local `Set`/`Map` pools in `atomList` and cached `toCamelCase` utilities to minimize GC pressure and string manipulation costs.
 
 ## [0.15.1]
 

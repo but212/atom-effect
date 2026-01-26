@@ -26,10 +26,12 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
     this._fnSubs = [];
     this._objSubs = [];
 
+    // Group numeric flag initializations for stable hidden class transitions
+    let flags = ATOM_STATE_FLAGS.IS_ATOM;
     if (sync) {
-      this.flags |= ATOM_STATE_FLAGS.SYNC;
+      flags |= ATOM_STATE_FLAGS.SYNC;
     }
-    this.flags |= ATOM_STATE_FLAGS.IS_ATOM;
+    this.flags = flags;
 
     // Attach debug info in dev mode
     debug.attachDebugInfo(this, 'atom', this.id);
@@ -51,6 +53,7 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
    */
   set value(newValue: T) {
     const oldValue = this._value;
+    // Accuracy prioritized: Object.is handles NaN and +0/-0 correctly
     if (Object.is(oldValue, newValue)) return;
 
     this._value = newValue;
@@ -59,26 +62,30 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
     const flags = this.flags;
     const subMask = ATOM_STATE_FLAGS.HAS_FN_SUBS | ATOM_STATE_FLAGS.HAS_OBJ_SUBS;
     if (flags & subMask) {
-      this._scheduleNotification(oldValue);
+      this._scheduleNotification(oldValue, flags);
     }
   }
 
   /**
    * Schedules or flushes notifications based on sync mode and batching state.
    */
-  private _scheduleNotification(oldValue: T): void {
-    let flags = this.flags;
-
-    if (!(flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED)) {
-      this._pendingOldValue = oldValue;
-      this.flags = flags |= ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
+  private _scheduleNotification(oldValue: T, flags: number): void {
+    // Optimization: If already scheduled, avoid redundant state updates and task scheduling.
+    // This is critical for performance during multiple updates within a single batch.
+    if (flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED) {
+      return;
     }
 
+    this._pendingOldValue = oldValue;
+    this.flags = flags |= ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
+
+    // Fast path for synchronous notification outside of explicit batches
     if (flags & ATOM_STATE_FLAGS.SYNC && !scheduler.isBatching) {
       this._flushNotifications();
       return;
     }
 
+    // Lazy task creation to minimize memory overhead for idle atoms
     let task = this._notifyTask;
     if (!task) {
       task = this._notifyTask = () => this._flushNotifications();
@@ -91,6 +98,7 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
    */
   private _flushNotifications(): void {
     const flags = this.flags;
+    // Guard clause: Early exit if not scheduled or disposed to reduce nesting
     if (!(flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED) || flags & ATOM_STATE_FLAGS.DISPOSED) {
       return;
     }
@@ -98,6 +106,7 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
     const oldValue = this._pendingOldValue as T;
     const newValue = this._value;
 
+    // Reset scheduled state before notification to ensure consistency if callbacks trigger updates
     this._pendingOldValue = undefined;
     this.flags &= ~ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
 
@@ -115,13 +124,11 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
    * Disposes of the atom and releases all subscribers and tasks.
    */
   dispose(): void {
-    if (this.flags & ATOM_STATE_FLAGS.DISPOSED) {
-      return;
-    }
+    if (this.flags & ATOM_STATE_FLAGS.DISPOSED) return;
 
+    this.flags |= ATOM_STATE_FLAGS.DISPOSED;
     this._fnSubs = [];
     this._objSubs = [];
-    this.flags |= ATOM_STATE_FLAGS.DISPOSED;
     this._value = undefined as T;
     this._pendingOldValue = undefined;
     this._notifyTask = undefined;

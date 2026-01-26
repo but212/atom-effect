@@ -10,38 +10,42 @@ export function trackDependency<T>(
   functionSubscribers: ((newValue?: T, oldValue?: T) => void)[],
   objectSubscribers: Subscriber[]
 ): void {
-  if (current === null || current === undefined) return;
+  // Guard: No context means no tracking
+  if (!current) return;
 
-  // Optimize for structured trackers (Effect, ComputedTrackable)
-  if (
-    (typeof current === 'object' || typeof current === 'function') &&
-    (current as unknown as HasFlags).flags & NODE_FLAGS.IS_TRACKER
-  ) {
-    (current as DependencySubscriber).addDependency(dependency);
-    return;
-  }
-
-  if (typeof current === 'function') {
-    const subscriber = current as (newValue?: T, oldValue?: T) => void;
-    // O(N) check - typically small N
-    if (functionSubscribers.indexOf(subscriber) === -1) {
-      functionSubscribers.push(subscriber);
-      dependency.flags |= NODE_FLAGS.HAS_FN_SUBS;
+  // Most frequent path: Structured trackers (Effect, Computed)
+  if (typeof current === 'object' || typeof current === 'function') {
+    const trackable = current as HasFlags;
+    if (trackable.flags !== undefined && trackable.flags & NODE_FLAGS.IS_TRACKER) {
+      (trackable as unknown as DependencySubscriber).addDependency(dependency);
+      return;
     }
-    return;
-  }
 
-  // Inlined from hasExecuteMethod
-  if (typeof current === 'object' && typeof (current as Subscriber).execute === 'function') {
-    if (objectSubscribers.indexOf(current as Subscriber) === -1) {
-      objectSubscribers.push(current as Subscriber);
-      dependency.flags |= NODE_FLAGS.HAS_OBJ_SUBS;
+    // Manual functional subscribers
+    if (typeof current === 'function') {
+      const fn = current as (newValue?: T, oldValue?: T) => void;
+      // O(N) check - typically very small N for manual subscribers
+      if (functionSubscribers.indexOf(fn) === -1) {
+        functionSubscribers.push(fn);
+        dependency.flags |= NODE_FLAGS.HAS_FN_SUBS;
+      }
+      return;
+    }
+
+    // Manual object subscribers with execute method
+    const sub = current as Subscriber;
+    if (typeof sub.execute === 'function') {
+      if (objectSubscribers.indexOf(sub) === -1) {
+        objectSubscribers.push(sub);
+        dependency.flags |= NODE_FLAGS.HAS_OBJ_SUBS;
+      }
     }
   }
 }
 
 /**
  * Synchronizes subscriptions using an O(N) strategy optimized for cache locality.
+ * Avoids O(N^2) Map/Set lookup overhead for dependency reconciliation.
  */
 export function syncDependencies(
   nextDeps: Dependency[],
@@ -51,9 +55,23 @@ export function syncDependencies(
 ): (() => void)[] {
   const nextLen = nextDeps.length;
   const prevLen = prevDeps.length;
+
+  // Fast path: Immediate cleanup if no new dependencies
+  if (nextLen === 0) {
+    if (prevDeps !== EMPTY_DEPS) {
+      for (let i = 0; i < prevLen; i++) {
+        const unsub = prevUnsubs[i];
+        if (unsub) unsub();
+      }
+      if (prevUnsubs !== EMPTY_UNSUBS) unsubArrayPool.release(prevUnsubs);
+    }
+    return EMPTY_UNSUBS;
+  }
+
   const hasPrev = prevDeps !== EMPTY_DEPS && prevLen > 0;
 
-  if (nextLen === prevLen && hasPrev) {
+  // Optimization: Identity check for unchanged graphs (Fastest path for re-evaluations)
+  if (hasPrev && nextLen === prevLen) {
     let identical = true;
     for (let i = 0; i < nextLen; i++) {
       if (nextDeps[i] !== prevDeps[i]) {
@@ -61,13 +79,12 @@ export function syncDependencies(
         break;
       }
     }
-    if (identical) {
-      return prevUnsubs;
-    }
+    if (identical) return prevUnsubs;
   }
 
+  // Mapping stage: Tag existing dependencies with their unsubscribe functions
   if (hasPrev) {
-    for (let i = 0, len = prevDeps.length; i < len; i++) {
+    for (let i = 0; i < prevLen; i++) {
       const dep = prevDeps[i];
       if (dep) dep._tempUnsub = prevUnsubs[i];
     }
@@ -76,6 +93,7 @@ export function syncDependencies(
   const nextUnsubs = unsubArrayPool.acquire();
   nextUnsubs.length = nextLen;
 
+  // Reconciliation stage: Reuse existing unsubs or create new ones
   for (let i = 0; i < nextLen; i++) {
     const dep = nextDeps[i];
     if (!dep) continue;
@@ -83,15 +101,17 @@ export function syncDependencies(
     const reuse = dep._tempUnsub;
     if (reuse) {
       nextUnsubs[i] = reuse;
-      dep._tempUnsub = undefined;
+      dep._tempUnsub = undefined; // Consumed
     } else {
+      // Circular check only needed for truly new subscriptions
       debug.checkCircular(dep, tracker);
       nextUnsubs[i] = dep.subscribe(tracker);
     }
   }
 
+  // Cleanup stage: Finalize unsubscriptions for removed dependencies
   if (hasPrev) {
-    for (let i = 0, len = prevDeps.length; i < len; i++) {
+    for (let i = 0; i < prevLen; i++) {
       const dep = prevDeps[i];
       if (dep) {
         const unsub = dep._tempUnsub;
@@ -101,10 +121,9 @@ export function syncDependencies(
         }
       }
     }
-  }
-
-  if (prevUnsubs !== EMPTY_UNSUBS) {
-    unsubArrayPool.release(prevUnsubs);
+    if (prevUnsubs !== EMPTY_UNSUBS) {
+      unsubArrayPool.release(prevUnsubs);
+    }
   }
 
   return nextUnsubs;

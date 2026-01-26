@@ -36,90 +36,62 @@ import { debug } from '@/utils/debug';
 import { wrapError } from '@/utils/error';
 import { isPromise } from '@/utils/type-guards';
 
-/**
- * Internal effect implementation with dependency tracking and infinite loop detection.
- * Extends {@link ReactiveNode} and implements {@link EffectObject} and {@link DependencyTracker}.
- */
-
 class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker {
-  private _cleanup: (() => void) | null;
-  private _dependencies: Dependency[];
-  private _dependencyVersions: number[];
-  private _unsubscribes: (() => void)[];
-  private _nextDeps: Dependency[] | null;
-  private _nextVersions: number[] | null;
-  private _nextUnsubs: (() => void)[] | null;
+  private _cleanup: (() => void) | null = null;
+  private _dependencies: Dependency[] = EMPTY_DEPS;
+  private _dependencyVersions: number[] = EMPTY_VERSIONS;
+  private _unsubscribes: (() => void)[] = EMPTY_UNSUBS;
+
+  private _nextDeps: Dependency[] | null = null;
+  private _nextVersions: number[] | null = null;
+  private _nextUnsubs: (() => void)[] | null = null;
   private _executeTask: (() => void) | undefined;
 
   private readonly _onError: ((error: unknown) => void) | null;
-
-  private _currentEpoch: number;
-  private _lastFlushEpoch: number;
-  private _executionsInEpoch: number;
+  private _currentEpoch = -1;
+  private _lastFlushEpoch = -1;
+  private _executionsInEpoch = 0;
 
   private readonly _fn: EffectFunction;
   private readonly _maxExecutions: number;
   private readonly _maxExecutionsPerFlush: number;
 
   private _history: number[] | null;
-  private _executionCount: number;
-  private _historyPtr: number;
+  private _executionCount = 0;
+  private _historyPtr = 0;
   private readonly _historyCapacity: number;
-  private _execId: number;
+  private _execId = 0;
 
   constructor(fn: EffectFunction, options: EffectOptions = {}) {
     super();
 
-    // V8 Hidden Class Stability: Group property initializations
-    this._cleanup = null;
-    this._dependencies = EMPTY_DEPS;
-    this._dependencyVersions = EMPTY_VERSIONS;
-    this._unsubscribes = EMPTY_UNSUBS;
-    this._nextDeps = null;
-    this._nextVersions = null;
-    this._nextUnsubs = null;
-    this._executeTask = undefined;
+    // V8 Hidden Class Stability
     this._onError = options.onError ?? null;
-
-    this._currentEpoch = -1;
-    this._lastFlushEpoch = -1;
-    this._executionsInEpoch = 0;
-
     this._fn = fn;
-    if (options.sync) {
-      this.flags |= EFFECT_STATE_FLAGS.SYNC;
-    }
+
+    let flags = EFFECT_STATE_FLAGS.IS_EFFECT | EFFECT_STATE_FLAGS.IS_TRACKER;
+    if (options.sync) flags |= EFFECT_STATE_FLAGS.SYNC;
+    if (options.trackModifications) flags |= EFFECT_STATE_FLAGS.TRACK_MODIFICATIONS;
+    this.flags = flags;
+
     this._maxExecutions =
       options.maxExecutionsPerSecond ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_SECOND;
     this._maxExecutionsPerFlush =
       options.maxExecutionsPerFlush ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_EFFECT;
-    if (options.trackModifications) {
-      this.flags |= EFFECT_STATE_FLAGS.TRACK_MODIFICATIONS;
-    }
-
-    this._executionCount = 0;
-    this._historyPtr = 0;
 
     const isFiniteLimit = Number.isFinite(this._maxExecutions);
     const capacity = isFiniteLimit
       ? Math.min(this._maxExecutions + 1, SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_SECOND + 1)
       : 0;
     this._historyCapacity = capacity;
-
-    // Pre-allocate history buffer only if rate limiting is active and in Dev/Prod as configured
     this._history = IS_DEV && isFiniteLimit && capacity > 0 ? new Array(capacity).fill(0) : null;
-    this._execId = 0;
-
-    this.flags |= EFFECT_STATE_FLAGS.IS_EFFECT | EFFECT_STATE_FLAGS.IS_TRACKER;
 
     debug.attachDebugInfo(this, 'effect', this.id);
   }
 
   public run(): void {
-    if (this.flags & EFFECT_STATE_FLAGS.DISPOSED) {
+    if (this.flags & EFFECT_STATE_FLAGS.DISPOSED)
       throw new EffectError(ERROR_MESSAGES.EFFECT_DISPOSED);
-    }
-    // Force execution regardless of dependency versions
     this.execute(true);
   }
 
@@ -130,25 +102,20 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     this.flags = flags | EFFECT_STATE_FLAGS.DISPOSED;
     this._safeCleanup();
 
-    const unsubs = this._unsubscribes;
-    if (unsubs !== EMPTY_UNSUBS) {
-      for (let i = 0, len = unsubs.length; i < len; i++) {
-        const unsub = unsubs[i];
-        if (unsub) unsub();
-      }
-      unsubArrayPool.release(unsubs);
+    if (this._unsubscribes !== EMPTY_UNSUBS) {
+      const subs = this._unsubscribes;
+      for (let i = 0, len = subs.length; i < len; i++) subs[i]?.();
+      unsubArrayPool.release(subs);
       this._unsubscribes = EMPTY_UNSUBS;
     }
 
-    const deps = this._dependencies;
-    if (deps !== EMPTY_DEPS) {
-      depArrayPool.release(deps);
+    if (this._dependencies !== EMPTY_DEPS) {
+      depArrayPool.release(this._dependencies);
       this._dependencies = EMPTY_DEPS;
     }
 
-    const versions = this._dependencyVersions;
-    if (versions !== EMPTY_VERSIONS) {
-      versionArrayPool.release(versions);
+    if (this._dependencyVersions !== EMPTY_VERSIONS) {
+      versionArrayPool.release(this._dependencyVersions);
       this._dependencyVersions = EMPTY_VERSIONS;
     }
 
@@ -156,26 +123,25 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   }
 
   public addDependency(dep: Dependency): void {
-    const flags = this.flags;
-    // Guard: Only track if currently executing
-    if (!(flags & EFFECT_STATE_FLAGS.EXECUTING)) return;
+    const {
+      flags,
+      _currentEpoch: epoch,
+      _nextDeps: nDeps,
+      _nextVersions: nVers,
+      _nextUnsubs: nUnsubs,
+    } = this;
 
-    const epoch = this._currentEpoch;
-    if (dep._lastSeenEpoch === epoch) return;
+    if (!(flags & EFFECT_STATE_FLAGS.EXECUTING) || dep._lastSeenEpoch === epoch) return;
     dep._lastSeenEpoch = epoch;
 
-    const nextDeps = this._nextDeps;
-    const nextVersions = this._nextVersions;
-    const nextUnsubs = this._nextUnsubs;
+    if (!nDeps || !nVers || !nUnsubs) return;
 
-    if (!nextDeps || !nextVersions || !nextUnsubs) return;
-
-    nextDeps.push(dep);
-    nextVersions.push(dep.version);
+    nDeps.push(dep);
+    nVers.push(dep.version);
 
     const temp = dep._tempUnsub;
     if (temp) {
-      nextUnsubs.push(temp);
+      nUnsubs.push(temp);
       dep._tempUnsub = undefined;
     } else {
       this._subscribeTo(dep);
@@ -184,112 +150,102 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 
   public execute(force = false): void {
     const flags = this.flags;
-    // Guard: Prevent re-entrant execution (infinite recursion) and post-disposal execution
-    if (flags & (EFFECT_STATE_FLAGS.DISPOSED | EFFECT_STATE_FLAGS.EXECUTING)) return;
-    if (!force && !this._shouldExecute()) return;
+    if (
+      flags & (EFFECT_STATE_FLAGS.DISPOSED | EFFECT_STATE_FLAGS.EXECUTING) ||
+      (!force && !this._shouldExecute())
+    )
+      return;
 
     this._checkInfiniteLoop();
-    this._setExecuting(true);
+    this.flags |= EFFECT_STATE_FLAGS.EXECUTING;
     this._safeCleanup();
 
-    const context = this._prepareEffectExecutionContext();
+    const ctx = this._prepareEffectExecutionContext();
     let committed = false;
 
     try {
       const result = trackingContext.run(this, this._fn);
 
-      // Commit Effect
-      const trackedCount = context.nextDeps.length;
-      context.nextDeps.length = trackedCount;
-      context.nextVersions.length = trackedCount;
+      const trackedCount = ctx.nextDeps.length;
+      ctx.nextDeps.length = trackedCount;
+      ctx.nextVersions.length = trackedCount;
 
-      this._dependencies = context.nextDeps;
-      this._dependencyVersions = context.nextVersions;
-      this._unsubscribes = context.nextUnsubs;
+      this._dependencies = ctx.nextDeps;
+      this._dependencyVersions = ctx.nextVersions;
+      this._unsubscribes = ctx.nextUnsubs;
       committed = true;
 
-      this._checkLoopWarnings();
+      if (flags & EFFECT_STATE_FLAGS.TRACK_MODIFICATIONS) this._checkLoopWarnings();
 
       const execId = ++this._execId;
-
       if (isPromise(result)) {
         result
           .then((asyncCleanup) => {
-            const isStale = execId !== this._execId;
-            const isDisposed = this.flags & EFFECT_STATE_FLAGS.DISPOSED;
-
-            if (isStale || isDisposed) {
-              if (typeof asyncCleanup === 'function') {
-                try {
-                  asyncCleanup();
-                } catch (error) {
-                  this._handleExecutionError(error, ERROR_MESSAGES.EFFECT_CLEANUP_FAILED);
-                }
-              }
+            if (execId !== this._execId || this.flags & EFFECT_STATE_FLAGS.DISPOSED) {
+              if (typeof asyncCleanup === 'function') asyncCleanup();
               return;
             }
-
-            if (typeof asyncCleanup === 'function') {
-              this._cleanup = asyncCleanup;
-            }
+            if (typeof asyncCleanup === 'function') this._cleanup = asyncCleanup;
           })
-          .catch((error) => {
-            if (execId === this._execId) {
-              this._handleExecutionError(error);
-            }
+          .catch((err) => {
+            if (execId === this._execId) this._handleExecutionError(err);
           });
       } else {
         this._cleanup = typeof result === 'function' ? result : null;
       }
     } catch (error) {
-      // Dependencies were already committed before the callback threw
       committed = true;
       this._handleExecutionError(error);
       this._cleanup = null;
     } finally {
-      this._cleanupEffect(context, committed);
-      this._setExecuting(false);
+      this._cleanupEffect(ctx, committed);
+      this.flags &= ~EFFECT_STATE_FLAGS.EXECUTING;
     }
   }
 
   private _prepareEffectExecutionContext(): EffectExecutionContext {
-    const prevDeps = this._dependencies;
-    const prevVersions = this._dependencyVersions;
-    const prevUnsubs = this._unsubscribes;
-    const nextDeps = depArrayPool.acquire();
-    const nextVersions = versionArrayPool.acquire();
-    const nextUnsubs = unsubArrayPool.acquire();
+    const { _dependencies: pDeps, _unsubscribes: pUnsubs } = this;
+    const nDeps = depArrayPool.acquire();
+    const nVers = versionArrayPool.acquire();
+    const nUnsubs = unsubArrayPool.acquire();
     const epoch = nextEpoch();
 
-    if (prevDeps !== EMPTY_DEPS) {
-      for (let i = 0, len = prevDeps.length; i < len; i++) {
-        const dep = prevDeps[i];
-        if (dep) dep._tempUnsub = prevUnsubs[i];
+    if (pDeps !== EMPTY_DEPS) {
+      for (let i = 0, len = pDeps.length; i < len; i++) {
+        const dep = pDeps[i];
+        if (dep) dep._tempUnsub = pUnsubs[i];
       }
     }
 
-    this._nextDeps = nextDeps;
-    this._nextVersions = nextVersions;
-    this._nextUnsubs = nextUnsubs;
+    this._nextDeps = nDeps;
+    this._nextVersions = nVers;
+    this._nextUnsubs = nUnsubs;
     this._currentEpoch = epoch;
 
-    return { prevDeps, prevVersions, prevUnsubs, nextDeps, nextVersions, nextUnsubs };
+    return {
+      prevDeps: pDeps,
+      prevVersions: this._dependencyVersions,
+      prevUnsubs: pUnsubs,
+      nextDeps: nDeps,
+      nextVersions: nVers,
+      nextUnsubs: nUnsubs,
+    };
   }
 
   private _cleanupEffect(ctx: EffectExecutionContext, committed: boolean): void {
-    this._nextDeps = null;
-    this._nextVersions = null;
-    this._nextUnsubs = null;
+    this._nextDeps = this._nextVersions = this._nextUnsubs = null;
 
-    const prevDeps = ctx.prevDeps;
     if (committed) {
+      const { prevDeps } = ctx;
       if (prevDeps !== EMPTY_DEPS) {
         for (let i = 0, len = prevDeps.length; i < len; i++) {
           const dep = prevDeps[i];
-          const unsub = dep ? dep._tempUnsub : undefined;
-          if (unsub) {
-            unsub();
-            if (dep) dep._tempUnsub = undefined;
+          if (dep) {
+            const unsub = dep._tempUnsub;
+            if (unsub) {
+              unsub();
+              dep._tempUnsub = undefined;
+            }
           }
         }
         depArrayPool.release(prevDeps);
@@ -300,11 +256,12 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       depArrayPool.release(ctx.nextDeps);
       versionArrayPool.release(ctx.nextVersions);
       const nextUnsubs = ctx.nextUnsubs;
-      for (let i = 0, len = nextUnsubs.length; i < len; i++) {
-        nextUnsubs[i]?.();
+      if (nextUnsubs) {
+        for (let i = 0, len = nextUnsubs.length; i < len; i++) nextUnsubs[i]?.();
+        unsubArrayPool.release(nextUnsubs);
       }
-      unsubArrayPool.release(nextUnsubs);
 
+      const { prevDeps } = ctx;
       if (prevDeps !== EMPTY_DEPS) {
         for (let i = 0, len = prevDeps.length; i < len; i++) {
           const dep = prevDeps[i];
@@ -316,53 +273,25 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 
   private _subscribeTo(dep: Dependency): void {
     try {
-      const unsubscribe = dep.subscribe(() => {
+      const unsub = dep.subscribe(() => {
         if (
           this.flags & EFFECT_STATE_FLAGS.TRACK_MODIFICATIONS &&
           this.flags & EFFECT_STATE_FLAGS.EXECUTING
         ) {
           dep._modifiedAtEpoch = this._currentEpoch;
         }
-
-        if (this.flags & EFFECT_STATE_FLAGS.SYNC) {
-          this.execute();
-          return;
-        }
-
+        if (this.flags & EFFECT_STATE_FLAGS.SYNC) return this.execute();
         let task = this._executeTask;
         if (!task) {
           task = this._executeTask = () => this.execute();
         }
         scheduler.schedule(task);
       });
-      const nextUnsubs = this._nextUnsubs;
-      if (nextUnsubs) {
-        nextUnsubs.push(unsubscribe);
-      }
+      this._nextUnsubs?.push(unsub);
     } catch (error) {
-      console.error(wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_EXECUTION_FAILED));
-      const nextUnsubs = this._nextUnsubs;
-      if (nextUnsubs) {
-        nextUnsubs.push(() => {});
-      }
+      this._handleExecutionError(error);
+      this._nextUnsubs?.push(() => {});
     }
-  }
-
-  get isDisposed(): boolean {
-    return (this.flags & EFFECT_STATE_FLAGS.DISPOSED) !== 0;
-  }
-
-  get executionCount(): number {
-    return this._executionCount;
-  }
-
-  get isExecuting(): boolean {
-    return (this.flags & EFFECT_STATE_FLAGS.EXECUTING) !== 0;
-  }
-
-  private _setExecuting(value: boolean): void {
-    const mask = EFFECT_STATE_FLAGS.EXECUTING;
-    this.flags = (this.flags & ~mask) | ((value ? -1 : 0) & mask);
   }
 
   private _safeCleanup(): void {
@@ -370,8 +299,8 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     if (cleanup) {
       try {
         cleanup();
-      } catch (error) {
-        this._handleExecutionError(error, ERROR_MESSAGES.EFFECT_CLEANUP_FAILED);
+      } catch (e) {
+        this._handleExecutionError(e, ERROR_MESSAGES.EFFECT_CLEANUP_FAILED);
       }
       this._cleanup = null;
     }
@@ -384,47 +313,34 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       this._executionsInEpoch = 0;
     }
 
-    const count = ++this._executionsInEpoch;
-    if (count > this._maxExecutionsPerFlush) {
+    if (++this._executionsInEpoch > this._maxExecutionsPerFlush)
       this._throwInfiniteLoopError('per-effect');
-    }
-
-    if (incrementFlushExecutionCount() > SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH) {
+    if (incrementFlushExecutionCount() > SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH)
       this._throwInfiniteLoopError('global');
-    }
 
     this._executionCount++;
-
-    const history = this._history;
-    if (history) {
+    if (this._history) {
       const now = Date.now();
       const ptr = this._historyPtr;
-      const capacity = this._historyCapacity;
-
-      history[ptr] = now;
-      const nextPtr = (ptr + 1) % capacity;
-      this._historyPtr = nextPtr;
-
-      const oldestTime = history[nextPtr] ?? 0;
-      if (oldestTime > 0 && now - oldestTime < TIME_CONSTANTS.ONE_SECOND_MS) {
+      this._history[ptr] = now;
+      this._historyPtr = (ptr + 1) % this._historyCapacity;
+      const oldest = this._history[this._historyPtr] ?? 0;
+      if (oldest > 0 && now - oldest < TIME_CONSTANTS.ONE_SECOND_MS) {
         const error = new EffectError(
-          `Effect executed ${capacity} times within 1 second. Infinite loop suspected`
+          `Effect executed ${this._historyCapacity} times within 1 second.`
         );
         this.dispose();
-        console.error(error);
         if (this._onError) this._onError(error);
-        // Always halt execution after disposing, throw only in DEV for debugging
         if (IS_DEV) throw error;
-        return;
       }
     }
   }
 
-  private _throwInfiniteLoopError(type: 'per-effect' | 'global'): never {
+  private _throwInfiniteLoopError(type: string): never {
     const error = new EffectError(
-      `Infinite loop detected (${type}): ` +
-        `effect executed ${this._executionsInEpoch} times in current flush. ` +
-        `Total executions in flush: ${flushExecutionCount}`
+      `Infinite loop detected (${type}): ${this._executionsInEpoch} iterations. ` +
+        'Total executions in flush: ' +
+        flushExecutionCount
     );
     this.dispose();
     console.error(error);
@@ -432,101 +348,85 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   }
 
   private _shouldExecute(): boolean {
-    const deps = this._dependencies;
+    const { _dependencies: deps, _dependencyVersions: vers } = this;
     const len = deps.length;
     if (len === 0) return true;
 
-    const versions = this._dependencyVersions;
     for (let i = 0; i < len; i++) {
       const dep = deps[i];
       if (!dep) continue;
-
-      if (dep.version !== versions[i]) return true;
-
-      const flags = dep.flags;
-      const isDirtyComputed =
-        (flags & NODE_FLAGS.IS_COMPUTED) !== 0 && (flags & COMPUTED_STATE_FLAGS.DIRTY) !== 0;
-
-      if (isDirtyComputed) {
+      if (dep.version !== vers[i]) return true;
+      if (
+        (dep.flags & (NODE_FLAGS.IS_COMPUTED | COMPUTED_STATE_FLAGS.DIRTY)) ===
+        (NODE_FLAGS.IS_COMPUTED | COMPUTED_STATE_FLAGS.DIRTY)
+      ) {
         try {
-          untracked(() => (dep as { value: unknown }).value);
-          if (dep.version !== versions[i]) return true;
+          untracked(() => (dep as unknown as { value: unknown }).value);
+          if (dep.version !== vers[i]) return true;
         } catch {
           return true;
         }
       }
     }
-
     return false;
   }
 
   private _handleExecutionError(
-    error: unknown,
-    message: string = ERROR_MESSAGES.EFFECT_EXECUTION_FAILED
+    e: unknown,
+    msg: string = ERROR_MESSAGES.EFFECT_EXECUTION_FAILED
   ): void {
-    const errorObj = wrapError(error, EffectError, message);
-    console.error(errorObj);
-
-    const onError = this._onError;
-    if (onError) {
+    const err = wrapError(e, EffectError, msg);
+    console.error(err);
+    if (this._onError) {
       try {
-        onError(errorObj);
-      } catch (e) {
-        // Avoid cascading failures if the onError handler itself throws
-        console.error(wrapError(e, EffectError, ERROR_MESSAGES.CALLBACK_ERROR_IN_ERROR_HANDLER));
+        this._onError(err);
+      } catch (cbErr) {
+        console.error(
+          wrapError(cbErr, EffectError, ERROR_MESSAGES.CALLBACK_ERROR_IN_ERROR_HANDLER)
+        );
       }
     }
   }
 
   private _checkLoopWarnings(): void {
-    if (this.flags & EFFECT_STATE_FLAGS.TRACK_MODIFICATIONS && debug.enabled) {
-      const deps = this._dependencies;
-      const epoch = this._currentEpoch;
-      for (let i = 0, len = deps.length; i < len; i++) {
-        const dep = deps[i];
-        if (dep && dep._modifiedAtEpoch === epoch) {
-          debug.warn(
-            true,
-            `Effect is reading a dependency (${
-              debug.getDebugName(dep) || 'unknown'
-            }) that it just modified. Infinite loop may occur`
-          );
-        }
+    const { _dependencies: deps, _currentEpoch: epoch } = this;
+    for (let i = 0, len = deps.length; i < len; i++) {
+      const dep = deps[i];
+      if (dep && dep._modifiedAtEpoch === epoch) {
+        debug.warn(
+          true,
+          `Effect is reading a dependency (${
+            debug.getDebugName(dep) || 'unknown'
+          }) that it just modified. Infinite loop may occur`
+        );
       }
     }
+  }
+
+  get isDisposed() {
+    return (this.flags & EFFECT_STATE_FLAGS.DISPOSED) !== 0;
+  }
+  get executionCount() {
+    return this._executionCount;
+  }
+  get isExecuting() {
+    return (this.flags & EFFECT_STATE_FLAGS.EXECUTING) !== 0;
   }
 }
 
 /**
- * Creates a reactive effect that re-executes when its dependencies change.
+ * Creates and immediately executes a reactive effect.
+ * The effect tracks its dependencies during execution and re-runs automatically
+ * when any of those dependencies change.
  *
- * An effect automatically tracks any reactive state (atoms, computed) accessed during its execution.
- * When those dependencies change, the effect is scheduled for re-execution.
- *
- * @param fn - The effect function to execute. Can return a cleanup function or a Promise that resolves to one.
- * @param options - Configuration options for the effect.
- * @param options.sync - If true, the effect runs synchronously when dependencies change. Defaults to false (scheduled).
- * @param options.maxExecutionsPerSecond - Rate limiting for the effect.
- * @param options.trackModifications - If true, warns when an effect modifies its own dependencies.
- * @returns An object representing the effect with `run()` and `dispose()` methods.
- * @throws {EffectError} If `fn` is not a function.
- *
- * @example
- * ```ts
- * const count = atom(0);
- * const stop = effect(() => {
- *   console.log('Count changed:', count.value);
- *   return () => console.log('Cleaning up...');
- * });
- * ```
+ * @param fn - The function to be executed as an effect.
+ * @param options - Configuration options for the effect instance.
+ * @returns An object representing the created effect, allowing for manual disposal.
+ * @throws {EffectError} If the provided `fn` is not a valid function.
  */
 export function effect(fn: EffectFunction, options: EffectOptions = {}): EffectObject {
-  if (typeof fn !== 'function') {
-    throw new EffectError(ERROR_MESSAGES.EFFECT_MUST_BE_FUNCTION);
-  }
-
-  const effectInstance = new EffectImpl(fn, options);
-  effectInstance.execute();
-
-  return effectInstance;
+  if (typeof fn !== 'function') throw new EffectError(ERROR_MESSAGES.EFFECT_MUST_BE_FUNCTION);
+  const inst = new EffectImpl(fn, options);
+  inst.execute();
+  return inst;
 }

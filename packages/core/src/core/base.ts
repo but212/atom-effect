@@ -33,7 +33,6 @@ export class ReactiveNode implements HasFlags {
     this._modifiedAtEpoch = -1;
     this._visitedEpoch = -1;
     this.id = (generateId() & SMI_MAX) as DependencyId;
-
     this._tempUnsub = undefined;
   }
 
@@ -83,8 +82,7 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
    * Uses swap-and-pop for efficient removals.
    */
   private _addSubscriber<S>(subs: S[], subscriber: S, flag: number): () => void {
-    const idx = subs.indexOf(subscriber);
-    if (idx !== -1) {
+    if (subs.indexOf(subscriber) !== -1) {
       if (IS_DEV) {
         console.warn(
           'Attempted to subscribe the same listener twice. Ignoring duplicate subscription.'
@@ -118,46 +116,40 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
    * Notifies all subscribers of a change.
    */
   protected _notifySubscribers(newValue: T | undefined, oldValue: T | undefined): void {
-    const flags = this.flags;
+    const { flags } = this;
     const subMask = NODE_FLAGS.HAS_FN_SUBS | NODE_FLAGS.HAS_OBJ_SUBS;
 
     if (!(flags & subMask)) return;
 
     if (flags & NODE_FLAGS.HAS_FN_SUBS) {
-      this._notifyFnSubscribers(newValue, oldValue);
+      const subs = this._fnSubs;
+      for (let i = 0, len = subs.length; i < len; i++) {
+        const sub = subs[i];
+        if (sub) {
+          try {
+            sub(newValue, oldValue);
+          } catch (err) {
+            console.error(
+              new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, err as Error)
+            );
+          }
+        }
+      }
     }
 
     if (flags & NODE_FLAGS.HAS_OBJ_SUBS) {
-      this._notifyObjSubscribers();
-    }
-  }
-
-  private _notifyFnSubscribers(newValue: T | undefined, oldValue: T | undefined): void {
-    const subs = this._fnSubs;
-    for (let i = 0, len = subs.length; i < len; i++) {
-      const sub = subs[i];
-      if (sub === undefined) continue;
-      try {
-        sub(newValue, oldValue);
-      } catch (err) {
-        console.error(
-          new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, err as Error)
-        );
-      }
-    }
-  }
-
-  private _notifyObjSubscribers(): void {
-    const subs = this._objSubs;
-    for (let i = 0, len = subs.length; i < len; i++) {
-      const sub = subs[i];
-      if (sub === undefined) continue;
-      try {
-        sub.execute();
-      } catch (err) {
-        console.error(
-          new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, err as Error)
-        );
+      const subs = this._objSubs;
+      for (let i = 0, len = subs.length; i < len; i++) {
+        const sub = subs[i];
+        if (sub) {
+          try {
+            sub.execute();
+          } catch (err) {
+            console.error(
+              new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, err as Error)
+            );
+          }
+        }
       }
     }
   }
