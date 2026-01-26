@@ -109,7 +109,7 @@ export function applyInputBinding<T>(
     // Update only if value differs
     if (currentVal !== formatted) {
       // Don't interrupt user input if parsed value matches
-      if ((state.flags & BindingFlags.Focused) && equal(parse(currentVal), atom.value)) {
+      if (state.flags & BindingFlags.Focused && equal(parse(currentVal), atom.value)) {
         return;
       }
 

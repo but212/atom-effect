@@ -84,7 +84,7 @@ export interface ValOptions<T> {
  * Bit flags for input binding state management.
  * Consolidates mutually exclusive phases and orthogonal states (focus) into a single integer.
  */
-export const enum BindingFlags {
+export enum BindingFlags {
   None = 0,
   Focused = 1 << 0,
   Composing = 1 << 1,
