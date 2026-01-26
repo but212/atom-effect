@@ -51,10 +51,9 @@ export function syncDependencies(
 ): (() => void)[] {
   const nextLen = nextDeps.length;
   const prevLen = prevDeps.length;
-  const hasPrev = prevDeps !== EMPTY_DEPS && prevLen > 0;
 
   // 1. Initial dense pass: map existing unsubs to dependencies
-  if (hasPrev) {
+  if (prevLen > 0) {
     for (let i = 0; i < prevLen; i++) {
       const dep = prevDeps[i];
       if (dep) dep._tempUnsub = prevUnsubs[i];
@@ -69,9 +68,8 @@ export function syncDependencies(
     const dep = nextDeps[i];
     if (!dep) continue;
 
-    const reuse = dep._tempUnsub;
-    if (reuse) {
-      nextUnsubs[i] = reuse;
+    if (dep._tempUnsub) {
+      nextUnsubs[i] = dep._tempUnsub;
       dep._tempUnsub = undefined;
     } else {
       // Keep checkCircular outside debug.enabled guard if tests rely on global spying
@@ -81,15 +79,12 @@ export function syncDependencies(
   }
 
   // 3. Final cleanup pass: unsubscribe stale dependencies
-  if (hasPrev) {
+  if (prevLen > 0) {
     for (let i = 0; i < prevLen; i++) {
       const dep = prevDeps[i];
-      if (dep) {
-        const unsub = dep._tempUnsub;
-        if (unsub) {
-          unsub();
-          dep._tempUnsub = undefined;
-        }
+      if (dep && dep._tempUnsub) {
+        dep._tempUnsub();
+        dep._tempUnsub = undefined;
       }
     }
   }

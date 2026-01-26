@@ -85,8 +85,7 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
    * Uses swap-and-pop for efficient removals.
    */
   private _addSubscriber<S>(subs: S[], subscriber: S, flag: number): () => void {
-    const idx = subs.indexOf(subscriber);
-    if (idx !== -1) {
+    if (subs.indexOf(subscriber) !== -1) {
       if (IS_DEV) {
         console.warn(
           'Attempted to subscribe the same listener twice. Ignoring duplicate subscription.'
@@ -119,22 +118,18 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
    */
   protected _notifySubscribers(newValue: T | undefined, oldValue: T | undefined): void {
     const flags = this.flags;
-    const subMask = NODE_FLAGS.HAS_FN_SUBS | NODE_FLAGS.HAS_OBJ_SUBS;
 
-    if (!(flags & subMask)) return;
+    if (!(flags & (NODE_FLAGS.HAS_FN_SUBS | NODE_FLAGS.HAS_OBJ_SUBS))) return;
 
     if (flags & NODE_FLAGS.HAS_FN_SUBS) {
       const subs = this._fnSubs;
       for (let i = 0, len = subs.length; i < len; i++) {
-        const sub = subs[i];
-        if (sub) {
-          try {
-            sub(newValue, oldValue);
-          } catch (err) {
-            console.error(
-              new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, err as Error)
-            );
-          }
+        try {
+          subs[i]!(newValue, oldValue);
+        } catch (err) {
+          console.error(
+            new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, err as Error)
+          );
         }
       }
     }
@@ -142,15 +137,12 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
     if (flags & NODE_FLAGS.HAS_OBJ_SUBS) {
       const subs = this._objSubs;
       for (let i = 0, len = subs.length; i < len; i++) {
-        const sub = subs[i];
-        if (sub) {
-          try {
-            sub.execute();
-          } catch (err) {
-            console.error(
-              new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, err as Error)
-            );
-          }
+        try {
+          subs[i]!.execute();
+        } catch (err) {
+          console.error(
+            new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, err as Error)
+          );
         }
       }
     }

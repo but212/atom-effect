@@ -204,10 +204,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       if (isPromise(result)) {
         result
           .then((asyncCleanup) => {
-            const isStale = execId !== this._execId;
-            const isDisposed = this.flags & EFFECT_STATE_FLAGS.DISPOSED;
-
-            if (isStale || isDisposed) {
+            if (execId !== this._execId || this.flags & EFFECT_STATE_FLAGS.DISPOSED) {
               if (typeof asyncCleanup === 'function') {
                 try {
                   asyncCleanup();
@@ -248,7 +245,6 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     const nextDeps = depArrayPool.acquire();
     const nextVersions = versionArrayPool.acquire();
     const nextUnsubs = unsubArrayPool.acquire();
-    const epoch = nextEpoch();
 
     if (prevDeps !== EMPTY_DEPS) {
       for (let i = 0, len = prevDeps.length; i < len; i++) {
@@ -260,7 +256,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     this._nextDeps = nextDeps;
     this._nextVersions = nextVersions;
     this._nextUnsubs = nextUnsubs;
-    this._currentEpoch = epoch;
+    this._currentEpoch = nextEpoch();
 
     return { prevDeps, prevVersions, prevUnsubs, nextDeps, nextVersions, nextUnsubs };
   }
@@ -315,11 +311,9 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
           return;
         }
 
-        let task = this._executeTask;
-        if (!task) {
-          task = this._executeTask = () => this.execute();
-        }
-        scheduler.schedule(task);
+        scheduler.schedule(
+          this._executeTask || (this._executeTask = () => this.execute())
+        );
       });
       const nextUnsubs = this._nextUnsubs;
       if (nextUnsubs) {
@@ -347,8 +341,9 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   }
 
   private _setExecuting(value: boolean): void {
-    const mask = EFFECT_STATE_FLAGS.EXECUTING;
-    this.flags = (this.flags & ~mask) | ((value ? -1 : 0) & mask);
+    this.flags =
+      (this.flags & ~EFFECT_STATE_FLAGS.EXECUTING) |
+      ((value ? -1 : 0) & EFFECT_STATE_FLAGS.EXECUTING);
   }
 
   private _safeCleanup(): void {
@@ -370,8 +365,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       this._executionsInEpoch = 0;
     }
 
-    const count = ++this._executionsInEpoch;
-    if (count > this._maxExecutionsPerFlush) {
+    if (++this._executionsInEpoch > this._maxExecutionsPerFlush) {
       this._throwInfiniteLoopError('per-effect');
     }
 

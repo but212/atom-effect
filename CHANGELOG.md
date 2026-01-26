@@ -2,8 +2,14 @@
 
 ## [Unreleased]
 
-### Internal - Unreleased
+### Core
 
+#### Changed
+
+- **Memory Optimization**:
+  - **Removed ComputedTrackable**: Inlined dependency tracking logic into `ComputedAtomImpl`, eliminating the overhead of an auxiliary hidden class and reducing memory allocations per computed atom.
+  - **Optimized Flag Checks**: Simplified bitwise operations and removed redundant variable assignments in `Atom`, `Computed`, and `Effect` hot paths.
+  - **Loop Optimization**: Micro-optimized subscriber notification loops in `base.ts` and `syncDependencies` in `dep-tracking.ts` to reduce overhead.
 - **Code Cleanup**:
   - Removed unused object pools (`notificationPool`, `schedulerCallbackPool`, `ObjectPool`).
   - Removed unused type guards (`isTrackableFunction`, `isPlainListener`, `hasExecuteMethod`, `hasDependencyMethod`).
@@ -12,9 +18,9 @@
 
 ## [0.15.4]
 
-### Core
+### Core - 0.15.4
 
-#### Fixed
+#### Fixed - Core 0.15.4
 
 - **Lazy Computed Sensitivity**: Fixed a bug where `Effect` would incorrectly skip execution if a dependency was a stale `computed` atom. The execution check now forces a re-evaluation of computed dependencies and re-checks their version to guarantee UI consistency in complex dependency graphs.
 

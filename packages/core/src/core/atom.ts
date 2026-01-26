@@ -56,8 +56,7 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
     this.version = (this.version + 1) & SMI_MAX;
 
     const flags = this.flags;
-    const subMask = ATOM_STATE_FLAGS.HAS_FN_SUBS | ATOM_STATE_FLAGS.HAS_OBJ_SUBS;
-    if (flags & subMask) {
+    if (flags & (ATOM_STATE_FLAGS.HAS_FN_SUBS | ATOM_STATE_FLAGS.HAS_OBJ_SUBS)) {
       this._scheduleNotification(oldValue);
     }
   }
@@ -70,7 +69,7 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
 
     if (!(flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED)) {
       this._pendingOldValue = oldValue;
-      this.flags = flags |= ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
+      this.flags |= ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
     }
 
     if (flags & ATOM_STATE_FLAGS.SYNC && !scheduler.isBatching) {
@@ -78,11 +77,9 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
       return;
     }
 
-    let task = this._notifyTask;
-    if (!task) {
-      task = this._notifyTask = () => this._flushNotifications();
-    }
-    scheduler.schedule(task);
+    scheduler.schedule(
+      this._notifyTask || (this._notifyTask = () => this._flushNotifications())
+    );
   }
 
   /**
@@ -95,12 +92,11 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
     }
 
     const oldValue = this._pendingOldValue as T;
-    const newValue = this._value;
 
     this._pendingOldValue = undefined;
     this.flags &= ~ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
 
-    this._notifySubscribers(newValue, oldValue);
+    this._notifySubscribers(this._value, oldValue);
   }
 
   /**
