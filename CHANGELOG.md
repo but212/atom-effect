@@ -7,6 +7,7 @@
 #### Performance - Core
 
 - **Node Identification**: Added bitwise flags (`IS_ATOM`, `IS_COMPUTED`, etc.) to `NODE_FLAGS` for O(1) type identification, replacing slower `in` operator and `typeof` checks in hot paths.
+- **SMI Range Optimization**: Relocated bit flags to bits 10-13 to ensure all flag operations remain within V8's Small Integer (SMI) range, preventing `HeapNumber` allocations and improving bitwise operation performance.
 - **Fast-Path Subscription**: Optimized `ReactiveDependency.subscribe` with a fast-path for internal subscribers using the new bitwise flags.
 - **Tracker Optimization**: Refactored `trackDependency` to use bitwise flags for instant identification of structured trackers (Effect, ComputedTrackable).
 
