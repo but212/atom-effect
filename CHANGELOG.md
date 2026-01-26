@@ -1,16 +1,24 @@
 # Changelog
 
-## [0.15.3]
+## [0.15.4]
 
 ### Core
 
-#### Added
+#### Fixed
+
+- **Lazy Computed Sensitivity**: Fixed a bug where `Effect` would incorrectly skip execution if a dependency was a stale `computed` atom. The execution check now forces a re-evaluation of computed dependencies and re-checks their version to guarantee UI consistency in complex dependency graphs.
+
+## [0.15.3]
+
+### Core - 0.15.3
+
+#### Added - Core 0.15.3
 
 - **Edge Cases**: Added test for circular dependencies in effects.
 
-### jQuery
+### jQuery - 0.15.3
 
-#### Fixed
+#### Fixed - jQuery 0.15.3
 
 - **atomList Edge Cases**:
   - **DOM Cleanup Race Condition**: Fixed a race condition where async `onRemove` callbacks could leave "ghost" elements in the DOM if re-added synchronously. Added `isConnected` checks during reconciliation to correctly handle detached nodes.
