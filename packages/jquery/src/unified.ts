@@ -22,7 +22,7 @@ function bindText<T>(ctx: BindingContext, value: ReactiveValue<T>): void {
   registerReactiveEffect(
     ctx.el,
     value,
-    (val) => {
+    (_, val) => {
       ctx.el.textContent = String(val ?? '');
     },
     'text'
@@ -33,7 +33,7 @@ function bindHtml(ctx: BindingContext, value: ReactiveValue<string>): void {
   registerReactiveEffect(
     ctx.el,
     value,
-    (val) => {
+    (_, val) => {
       ctx.el.innerHTML = String(val ?? '');
     },
     'html'
@@ -45,7 +45,7 @@ function bindClass(ctx: BindingContext, classMap: Record<string, ReactiveValue<b
     registerReactiveEffect(
       ctx.el,
       classMap[className],
-      (val) => {
+      (_, val) => {
         ctx.el.classList.toggle(className, !!val);
       },
       `class.${className}`
@@ -66,7 +66,7 @@ function bindCss(ctx: BindingContext, cssMap: Record<string, CssValue>): void {
       registerReactiveEffect(
         ctx.el,
         source,
-        (val) => {
+        (_, val) => {
           style[camelProp] = `${val}${unit}`;
         },
         `css.${prop}`
@@ -75,7 +75,7 @@ function bindCss(ctx: BindingContext, cssMap: Record<string, CssValue>): void {
       registerReactiveEffect(
         ctx.el,
         value,
-        (val) => {
+        (_, val) => {
           style[camelProp] = val as string;
         },
         `css.${prop}`
@@ -94,7 +94,7 @@ function bindAttr(
     registerReactiveEffect(
       el,
       value,
-      (v) => {
+      (_, v) => {
         if (v === null || v === undefined || v === false) {
           el.removeAttribute(name);
           return;
@@ -112,7 +112,7 @@ function bindProp(ctx: BindingContext, propMap: Record<string, ReactiveValue<unk
     registerReactiveEffect(
       el,
       propMap[name],
-      (val) => {
+      (_, val) => {
         (el as unknown as Record<string, unknown>)[name] = val;
       },
       `prop.${name}`
@@ -124,8 +124,8 @@ function bindShow(ctx: BindingContext, condition: ReactiveValue<boolean>): void 
   registerReactiveEffect(
     ctx.el,
     condition,
-    (val) => {
-      ctx.$el.toggle(!!val);
+    ($el, val) => {
+      $el.toggle(!!val);
     },
     'show'
   );
@@ -135,8 +135,8 @@ function bindHide(ctx: BindingContext, condition: ReactiveValue<boolean>): void 
   registerReactiveEffect(
     ctx.el,
     condition,
-    (val) => {
-      ctx.$el.toggle(!val);
+    ($el, val) => {
+      $el.toggle(!val);
     },
     'hide'
   );

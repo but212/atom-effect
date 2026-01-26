@@ -43,12 +43,14 @@ class ComputedTrackable<T> implements Subscriber {
   _nextDeps: Dependency[];
   _nextVersions: number[];
   _depCount: number;
+  flags: number;
 
   constructor(private readonly _owner: ComputedAtomImpl<T>) {
     this._epoch = -1;
     this._nextDeps = EMPTY_DEPS;
     this._nextVersions = EMPTY_VERSIONS;
     this._depCount = 0;
+    this.flags = COMPUTED_STATE_FLAGS.IS_TRACKER;
   }
 
   execute(): void {
@@ -126,7 +128,8 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
 
     // V8 Hidden Class Stability: Group property initializations
     this._value = undefined as T;
-    this.flags = COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE;
+    this.flags =
+      COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE | COMPUTED_STATE_FLAGS.IS_COMPUTED;
     this._error = null;
     this._promiseId = 0;
     this._equal = options.equal ?? Object.is;
@@ -239,7 +242,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     const deps = this._dependencies;
     for (let i = 0, len = deps.length; i < len; i++) {
       const dep = deps[i];
-      if (dep && 'errors' in dep) {
+      if (dep && dep.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) {
         const depErrors = (dep as unknown as ComputedAtom<unknown>).errors;
         for (let j = 0, jLen = depErrors.length; j < jLen; j++) {
           const err = depErrors[j];

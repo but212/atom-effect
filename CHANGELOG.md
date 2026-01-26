@@ -1,10 +1,32 @@
 # Changelog
 
-## [0.15.1]
+## [Unreleased]
+
+### Core
+
+#### Performance - Core
+
+- **Node Identification**: Added bitwise flags (`IS_ATOM`, `IS_COMPUTED`, etc.) to `NODE_FLAGS` for O(1) type identification, replacing slower `in` operator and `typeof` checks in hot paths.
+- **Fast-Path Subscription**: Optimized `ReactiveDependency.subscribe` with a fast-path for internal subscribers using the new bitwise flags.
+- **Tracker Optimization**: Refactored `trackDependency` to use bitwise flags for instant identification of structured trackers (Effect, ComputedTrackable).
 
 ### jQuery
 
+#### Performance - jQuery
+
+- **Registry Refactoring**: Optimized `BindingRegistry` to use a single `WeakMap` with bitwise flags instead of multiple `WeakMaps` and `WeakSets`, improving cache locality and reducing lookup overhead.
+- **List Reconciliation**: Optimized `atomList` by implementing local pools for `Set` and `Map` instances, significantly reducing GC pressure during high-frequency list updates.
+- **Binding Updaters**: Refactored all reactive bindings to pass the cached jQuery object to updaters, eliminating redundant `$()` wrapper allocations.
+
 #### Fixed - jQuery
+
+- **Boolean Attributes**: Improved `atomAttr` to correctly set boolean attribute values (e.g., `checked="checked"`).
+
+## [0.15.1]
+
+### jQuery - 0.15.1
+
+#### Fixed - jQuery 0.15.1
 
 - **Debounce Blur Data Loss**: Fixed a critical bug where user input was lost when blurring an input field with a pending debounce timer. The `onBlur` handler now flushes pending sync operations before formatting.
 - **Zombie Binding Cleanup**: Fixed orphaned `_aes-bound` class markers on cloned elements. `cleanupDescendants` now removes the marker class from elements that have no WeakMap binding data.
@@ -13,42 +35,42 @@
 
 ## [0.15.0]
 
-### Core
+### Core - 0.15.0
 
-#### Fixed - Core
+#### Fixed - Core 0.15.0
 
 - **Circular Dependencies**: Throws `ComputedError` instead of returning undefined.
 - **Effect Errors**: Correctly throws `EFFECT_DISPOSED` and fixed rate limit execution flow.
 - **Atom Notifications**: Fixed a race condition where notifications were flushed after disposal, preventing `undefined` values from reaching subscribers.
 - **Async Effect Cleanup**: Fixed a memory leak where stale async cleanup functions could clobber newer ones; implemented execution ID tracking to ensure only the latest cleanup is kept and stale ones are disposed of.
 
-#### Changed - Core
+#### Changed - Core 0.15.0
 
 - **DEV Guards**: Added warnings for duplicate subscriptions and mismatched batching; optimized production checks.
 - **Internal Logic**: Improved object pool resetting, epoch overflow prevention, and type guard simplification.
 - **Drift Detection**: Enhanced async drift detection in computed atoms by using DJB2-style bitwise hash mixing for snapshots and increasing sensitivity to detect any change.
 
-#### Removed - Core
+#### Removed - Core 0.15.0
 
 - Cleaned up unused private methods, redundant state resets, and duplicate JSDoc.
 - **Priority System**: Simplified the `Scheduler` by removing the unused urgent queue system and priority calculation logic.
 - **Unused Methods**: Removed `isUrgent()` and `_getAggregateShift()` from `ComputedAtomImpl` (not part of the public API).
 - **Constants**: Removed obsolete phase-shift constants (`PHASE_BITS`, `PHASE_THRESHOLD`, `PHASE_MASK`) as the priority system has been decommissioned.
 
-### jQuery
+### jQuery - 0.15.0
 
-#### Fixed - jQuery
+#### Fixed - jQuery 0.15.0
 
 - Improved cleanup error logging and registry management for detached nodes.
 
-#### Changed - jQuery
+#### Changed - jQuery 0.15.0
 
 - **Bindings**: Added custom equality support and unified phase state logic.
 - **Types**: Enhanced event handler and binding map type safety, replacing `any` with strong types.
 - **Consistency**: Ensured static values trigger DOM debug events.
 - **atomList**: Added duplicate key warnings in development mode (when `debug.enabled` is true) to improve robustness and debuggability.
 
-#### Removed - jQuery
+#### Removed - jQuery 0.15.0
 
 - Removed unused `effects` context field and redundant variables.
 
@@ -75,13 +97,13 @@
 
 ### jQuery - 0.13.1
 
-#### Fixed - jQuery
+#### Fixed - jQuery 0.13.1
 
 - **Marker Class**: Changed `aes-bound` to `_aes-bound` to avoid potential conflicts with other libraries.
 
 ## [0.13.0]
 
-### Benchmarks
+### Benchmarks - 0.13.0
 
 - **Benchmark Suite Overhaul**: Refactored the benchmark suite to prioritize statistical significance and eliminate measurement noise.
   - **Batch Operations**: Migrated micro-benchmarks (creation, read, write) to batch operations (x1000) to ensure the signal-to-noise ratio is high enough to overcome JIT and measurement overhead.
@@ -90,7 +112,7 @@
   - **Consolidation**: Merged redundant micro-benchmarks (e.g., `untracked.bench.ts`) into core suites to reduce suite fragmentation.
   - **Statistical Rigidity**: Increased iterations and warmup periods in `utils/setup.ts` to ensure consistent results (< 5% CV).
 
-### Refactor - 0.13.0
+### Refactor - Core 0.13.0
 
 - **Core Architecture Refactoring**: Flattened source structure and consolidated types for better maintainability.
   - Flattened `core/` directory: Moved `atom.ts`, `computed.ts`, `effect.ts`, and `dep-tracking.ts` directly into `src/core/`.

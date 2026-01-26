@@ -1,13 +1,13 @@
 import { IS_DEV, NODE_FLAGS, SMI_MAX } from '@/constants';
 import { AtomError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
-import type { DependencyId, Subscriber } from '@/types';
+import type { DependencyId, HasFlags, Subscriber } from '@/types';
 import { generateId } from '@/utils/debug';
 
 /**
  * Base class for all reactive nodes (Atoms, Computed, Effects).
  */
-export class ReactiveNode {
+export class ReactiveNode implements HasFlags {
   /** Bit flags representing the node's state */
   flags: number;
   /** Current version of the node's value */
@@ -65,9 +65,15 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
       );
     }
 
-    // Guard: Ensure listener is a valid non-null object before checking 'execute' property
-    if (listener !== null && typeof listener === 'object' && 'execute' in listener) {
-      return this._addSubscriber(this._objSubs, listener as Subscriber, NODE_FLAGS.HAS_OBJ_SUBS);
+    // Guard: Ensure listener is a valid non-null object
+    if (listener !== null && typeof listener === 'object') {
+      // Fast check for internal subscribers
+      if (
+        (listener as Partial<HasFlags>).flags !== undefined ||
+        'execute' in (listener as Subscriber)
+      ) {
+        return this._addSubscriber(this._objSubs, listener as Subscriber, NODE_FLAGS.HAS_OBJ_SUBS);
+      }
     }
 
     throw new AtomError(ERROR_MESSAGES.ATOM_SUBSCRIBER_MUST_BE_FUNCTION);

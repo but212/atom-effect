@@ -103,6 +103,8 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     this._history = IS_DEV && isFiniteLimit && capacity > 0 ? new Array(capacity).fill(0) : null;
     this._execId = 0;
 
+    this.flags |= EFFECT_STATE_FLAGS.IS_EFFECT | EFFECT_STATE_FLAGS.IS_TRACKER;
+
     debug.attachDebugInfo(this, 'effect', this.id);
   }
 
@@ -434,7 +436,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       if (dep.version !== versions[i]) return true;
 
       // Accuracy check for computed dependencies
-      if ('value' in dep) {
+      if (dep.flags & EFFECT_STATE_FLAGS.IS_COMPUTED) {
         try {
           untracked(() => (dep as { value: unknown }).value);
         } catch {

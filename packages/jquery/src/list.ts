@@ -27,6 +27,10 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
     let oldKeys: (string | number)[] = [];
     let $emptyEl: JQuery | null = null;
 
+    // Local pools to minimize GC pressure during updates
+    const newKeySet = new Set<string | number>();
+    const oldIndexMap = new Map<string | number, number>();
+
     const fx = effect(() => {
       const items = source.value;
       const itemCount = items.length;
@@ -49,27 +53,22 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
 
       debug.log('list', `${containerSelector} updating with ${itemCount} items`);
 
-      // 2. Prepare keys and identify removals (O(N) with cache-friendly loop)
+      // 2. Prepare keys (O(N) with reused Set)
+      newKeySet.clear();
       const newKeys: (string | number)[] = new Array(itemCount);
-      const newKeySet = new Set<string | number>();
 
       for (let i = 0; i < itemCount; i++) {
-        const item = items[i] as T; // Type assertion for generic T
-        const k = getKey(item, i);
+        const k = getKey(items[i] as T, i);
 
-        // DEV: Warn about duplicate keys
         if (debug.enabled && newKeySet.has(k)) {
-          console.warn(
-            `[atomList] Duplicate key "${k}" at index ${i}. ` +
-              `Items with duplicate keys may cause unexpected behavior.`
-          );
+          console.warn(`[atomList] Duplicate key "${k}" at index ${i}.`);
         }
 
         newKeys[i] = k;
         newKeySet.add(k);
       }
 
-      // 3. Remove vanished items (O(M)) - Respects onRemove callback
+      // 3. Remove vanished items (O(M))
       for (const [k, entry] of itemMap) {
         if (newKeySet.has(k) || removingKeys.has(k)) continue;
 
@@ -78,7 +77,6 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
           const el = entry.$el[0];
           if (el) registry.cleanup(el);
           removingKeys.delete(k);
-          debug.log('list', `${containerSelector} removed item:`, k);
         };
 
         itemMap.delete(k);
@@ -93,21 +91,18 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
         }
       }
 
-      // If we adjusted from non-empty to empty, we can stop here after removal
       if (itemCount === 0) {
         oldKeys = [];
         return;
       }
 
-      // 4. LIS Reconciliation (O(N log N))
-      // Map keys to their OLD index for LIS input
-      const oldIndexMap = new Map<string | number, number>();
-      for (let i = 0; i < oldKeys.length; i++) {
+      // 4. LIS Reconciliation
+      oldIndexMap.clear();
+      for (let i = 0, len = oldKeys.length; i < len; i++) {
         const k = oldKeys[i];
         if (k !== undefined) oldIndexMap.set(k, i);
       }
 
-      // Input for LIS: where each new item came from in the old list
       const newIndices = new Int32Array(itemCount);
       for (let i = 0; i < itemCount; i++) {
         const k = newKeys[i];
@@ -117,7 +112,7 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
       const lisArr = getLIS(newIndices);
       let lisIdx = lisArr.length - 1;
 
-      // 5. Update and Reorder (Backwards iteration for insertBefore efficiency)
+      // 5. Update and Reorder (Backwards iteration)
       let nextNode: Node | null = null;
       for (let i = itemCount - 1; i >= 0; i--) {
         const k = newKeys[i]!;
@@ -125,7 +120,6 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
         const entry = itemMap.get(k);
 
         if (entry) {
-          // Existing Item: Update then potentially MOVE
           entry.item = item;
           const el = entry.$el[0];
           if (!el) continue;
@@ -135,10 +129,7 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
           const isStable = lisIdx >= 0 && lisArr[lisIdx] === i;
           if (isStable) {
             lisIdx--;
-            // LIS stable: in theory doesn't need move, but async onRemove may have
-            // left DOM in inconsistent state with logical order, so verify actual position.
-            const currentNext = el.nextSibling;
-            if (currentNext !== nextNode) {
+            if (el.nextSibling !== nextNode) {
               if (nextNode) entry.$el.insertBefore(nextNode);
               else entry.$el.appendTo($container);
             }
@@ -149,11 +140,8 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
           }
           nextNode = el;
         } else {
-          // New Item: Render and INSERT
           const rendered = render(item, i);
-          const $el: JQuery = (
-            rendered instanceof Element ? $(rendered) : $(rendered as string)
-          ) as JQuery;
+          const $el = (rendered instanceof Element ? $(rendered) : $(rendered as string)) as JQuery;
           itemMap.set(k, { $el, item });
 
           if (nextNode) $el.insertBefore(nextNode);
@@ -161,8 +149,6 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
 
           if (bind) bind($el, item, i);
           if (onAdd) onAdd($el);
-
-          debug.log('list', `${containerSelector} added item:`, k);
           nextNode = $el[0] || null;
         }
       }
@@ -174,6 +160,8 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
     registry.trackCleanup(this, () => {
       itemMap.clear();
       removingKeys.clear();
+      newKeySet.clear();
+      oldIndexMap.clear();
       oldKeys = [];
       $emptyEl?.remove();
     });

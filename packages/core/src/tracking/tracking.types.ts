@@ -1,7 +1,7 @@
-import type { Dependency } from '@/types';
+import type { Dependency, HasFlags } from '@/types';
 
 /** Subscriber capable of tracking dependencies. */
-export interface DependencySubscriber {
+export interface DependencySubscriber extends HasFlags {
   /** Registers a dependency. */
   addDependency: (dep: Dependency) => void;
 }
@@ -13,7 +13,7 @@ export interface ExecutableSubscriber {
 }
 
 /** Combined interface for tracking and execution. */
-export interface DependencyTracker {
+export interface DependencyTracker extends Partial<HasFlags> {
   addDependency?: (dep: Dependency) => void;
   execute?: () => void;
 }

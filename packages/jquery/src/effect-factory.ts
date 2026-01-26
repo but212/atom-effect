@@ -14,10 +14,19 @@ import { isReactive } from './utils';
  * @param updater - Function to apply the value to the DOM.
  * @param debugType - Type label for debug logging.
  */
+/**
+ * Utility to register a reactive effect or apply a static update.
+ * Centralizes the boilerplate for atomic bindings and caches JQuery objects for performance.
+ *
+ * @param el - The DOM element to associate with the effect.
+ * @param source - The reactive or static value source.
+ * @param updater - Function to apply the value to the DOM.
+ * @param debugType - Type label for debug logging.
+ */
 export function registerReactiveEffect<T>(
   el: HTMLElement,
   source: ReactiveValue<T>,
-  updater: (value: T) => void,
+  updater: ($el: JQuery, value: T) => void,
   debugType: string
 ): void {
   const $el = $(el);
@@ -25,12 +34,12 @@ export function registerReactiveEffect<T>(
   if (isReactive(source)) {
     const fx = effect(() => {
       const value = source.value;
-      updater(value);
+      updater($el, value);
       debug.domUpdated($el, debugType, value);
     });
     registry.trackEffect(el, fx);
   } else {
-    updater(source);
+    updater($el, source);
     debug.domUpdated($el, debugType, source);
   }
 }

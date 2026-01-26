@@ -41,6 +41,13 @@ export type Branded<T, Brand> = T & { readonly __brand: Brand };
 export type DependencyId = Branded<number, 'DependencyId'>;
 
 /**
+ * @internal Interface for objects that have bit flags.
+ */
+export interface HasFlags {
+  flags: number;
+}
+
+/**
  * Interface for poolable objects
  */
 export interface Poolable {
@@ -50,17 +57,16 @@ export interface Poolable {
 /**
  * Subscriber interface for dependency notifications
  */
-export interface Subscriber {
+export interface Subscriber extends HasFlags {
   execute(): void;
 }
 
 /**
  * Interface for subscribable dependencies
  */
-export interface Dependency {
+export interface Dependency extends HasFlags {
   readonly id: DependencyId;
   version: number;
-  flags: number;
   /**
    * Last epoch seen by this dependency (used for invalidation)
    */

@@ -1,7 +1,7 @@
 import { NODE_FLAGS } from '@/constants';
 import { EMPTY_DEPS, EMPTY_UNSUBS, unsubArrayPool } from '@/internal/pool';
 import type { DependencySubscriber } from '@/tracking/tracking.types';
-import type { Dependency, Subscriber } from '@/types';
+import type { Dependency, HasFlags, Subscriber } from '@/types';
 import { debug } from '@/utils/debug';
 
 export function trackDependency<T>(
@@ -12,10 +12,10 @@ export function trackDependency<T>(
 ): void {
   if (current === null || current === undefined) return;
 
-  // Inlined from hasDependencyMethod to avoid call overhead
+  // Optimize for structured trackers (Effect, ComputedTrackable)
   if (
     (typeof current === 'object' || typeof current === 'function') &&
-    typeof (current as DependencySubscriber).addDependency === 'function'
+    (current as unknown as HasFlags).flags & NODE_FLAGS.IS_TRACKER
   ) {
     (current as DependencySubscriber).addDependency(dependency);
     return;

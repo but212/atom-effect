@@ -15,9 +15,8 @@ $.fn.atomText = function <T>(source: ReactiveValue<T>, formatter?: (v: T) => str
     registerReactiveEffect(
       this,
       source,
-      (val) => {
-        const text = formatter ? formatter(val) : String(val ?? '');
-        $(this).text(text);
+      ($el, val) => {
+        $el.text(formatter ? formatter(val) : String(val ?? ''));
       },
       'text'
     );
@@ -29,7 +28,7 @@ $.fn.atomText = function <T>(source: ReactiveValue<T>, formatter?: (v: T) => str
  */
 $.fn.atomHtml = function (source: ReactiveValue<string>): JQuery {
   return this.each(function () {
-    registerReactiveEffect(this, source, (val) => $(this).html(String(val ?? '')), 'html');
+    registerReactiveEffect(this, source, ($el, val) => $el.html(String(val ?? '')), 'html');
   });
 };
 
@@ -41,7 +40,7 @@ $.fn.atomClass = function (className: string, condition: ReactiveValue<boolean>)
     registerReactiveEffect(
       this,
       condition,
-      (val) => $(this).toggleClass(className, Boolean(val)),
+      ($el, val) => $el.toggleClass(className, Boolean(val)),
       `class.${className}`
     );
   });
@@ -59,9 +58,8 @@ $.fn.atomCss = function (
     registerReactiveEffect(
       this,
       source,
-      (val) => {
-        const cssValue = unit ? `${val}${unit}` : val;
-        $(this).css(prop, cssValue as string | number);
+      ($el, val) => {
+        $el.css(prop, (unit ? `${val}${unit}` : val) as string | number);
       },
       `css.${prop}`
     );
@@ -76,14 +74,11 @@ $.fn.atomAttr = function (name: string, source: ReactiveValue<string | boolean |
     registerReactiveEffect(
       this,
       source,
-      (val) => {
-        const $el = $(this);
+      ($el, val) => {
         if (val === null || val === undefined || val === false) {
           $el.removeAttr(name);
-        } else if (val === true) {
-          $el.attr(name, name);
         } else {
-          $el.attr(name, String(val));
+          $el.attr(name, val === true ? name : String(val));
         }
       },
       `attr.${name}`
@@ -99,7 +94,7 @@ $.fn.atomProp = function <T extends string | number | boolean | null | undefined
   source: ReactiveValue<T>
 ): JQuery {
   return this.each(function () {
-    registerReactiveEffect(this, source, (val) => $(this).prop(name, val), `prop.${name}`);
+    registerReactiveEffect(this, source, ($el, val) => $el.prop(name, val), `prop.${name}`);
   });
 };
 
@@ -108,7 +103,7 @@ $.fn.atomProp = function <T extends string | number | boolean | null | undefined
  */
 $.fn.atomShow = function (condition: ReactiveValue<boolean>): JQuery {
   return this.each(function () {
-    registerReactiveEffect(this, condition, (val) => $(this).toggle(Boolean(val)), 'show');
+    registerReactiveEffect(this, condition, ($el, val) => $el.toggle(Boolean(val)), 'show');
   });
 };
 
@@ -117,7 +112,7 @@ $.fn.atomShow = function (condition: ReactiveValue<boolean>): JQuery {
  */
 $.fn.atomHide = function (condition: ReactiveValue<boolean>): JQuery {
   return this.each(function () {
-    registerReactiveEffect(this, condition, (val) => $(this).toggle(!val), 'hide');
+    registerReactiveEffect(this, condition, ($el, val) => $el.toggle(!val), 'hide');
   });
 };
 

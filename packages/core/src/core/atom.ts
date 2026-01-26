@@ -29,6 +29,7 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
     if (sync) {
       this.flags |= ATOM_STATE_FLAGS.SYNC;
     }
+    this.flags |= ATOM_STATE_FLAGS.IS_ATOM;
 
     // Attach debug info in dev mode
     debug.attachDebugInfo(this, 'atom', this.id);

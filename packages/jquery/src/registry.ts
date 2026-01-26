@@ -15,113 +15,134 @@ const AES_BOUND = '_aes-bound';
  * - Minimal allocations in the tracking path.
  * - Efficient tree traversal for cleanup.
  */
+/**
+ * Internal metadata for an element to improve cache locality.
+ */
+interface NodeMetadata {
+  effects?: EffectObject[] | undefined;
+  cleanups?: Array<() => void> | undefined;
+  flags: number;
+}
+
+const FLAG_BOUND = 1 << 0;
+const FLAG_PRESERVED = 1 << 1;
+const FLAG_IGNORED = 1 << 2;
+
+/**
+ * Binding Registry
+ *
+ * Highly optimized for performance:
+ * - Uses a single WeakMap to maximize cache hits and minimize lookups.
+ * - Bitwise flags for various node states (bound, preserved, ignored).
+ */
 class BindingRegistry {
-  private effects = new WeakMap<Element, EffectObject[]>();
-  private cleanups = new WeakMap<Element, Array<() => void>>();
-  private boundElements = new WeakSet<Element>();
-  private preservedNodes = new WeakSet<Node>();
-  private ignoredNodes = new WeakSet<Node>(); // Prevent redundant cleanup
+  private metadata = new WeakMap<Node, NodeMetadata>();
+
+  private getOrInit(node: Node): NodeMetadata {
+    let data = this.metadata.get(node);
+    if (!data) {
+      data = { flags: 0 };
+      this.metadata.set(node, data);
+    }
+    return data;
+  }
 
   keep(node: Node): void {
-    this.preservedNodes.add(node);
+    const data = this.getOrInit(node);
+    data.flags |= FLAG_PRESERVED;
   }
 
   isKept(node: Node): boolean {
-    return this.preservedNodes.has(node);
+    return !!((this.metadata.get(node)?.flags ?? 0) & FLAG_PRESERVED);
   }
 
   markIgnored(node: Node): void {
-    this.ignoredNodes.add(node);
+    const data = this.getOrInit(node);
+    data.flags |= FLAG_IGNORED;
   }
 
   isIgnored(node: Node): boolean {
-    return this.ignoredNodes.has(node);
+    return !!((this.metadata.get(node)?.flags ?? 0) & FLAG_IGNORED);
   }
 
   trackEffect(el: Element, fx: EffectObject): void {
-    let list = this.effects.get(el);
-    if (!list) {
-      list = [];
-      this.effects.set(el, list);
-      if (!this.boundElements.has(el)) {
-        this.boundElements.add(el);
-        el.classList.add(AES_BOUND);
-      }
+    const data = this.getOrInit(el);
+    if (!data.effects) data.effects = [];
+
+    if (!(data.flags & FLAG_BOUND)) {
+      data.flags |= FLAG_BOUND;
+      el.classList.add(AES_BOUND);
     }
-    list.push(fx);
+    data.effects.push(fx);
   }
 
   trackCleanup(el: Element, fn: () => void): void {
-    let list = this.cleanups.get(el);
-    if (!list) {
-      list = [];
-      this.cleanups.set(el, list);
-      if (!this.boundElements.has(el)) {
-        this.boundElements.add(el);
-        el.classList.add(AES_BOUND);
-      }
+    const data = this.getOrInit(el);
+    if (!data.cleanups) data.cleanups = [];
+
+    if (!(data.flags & FLAG_BOUND)) {
+      data.flags |= FLAG_BOUND;
+      el.classList.add(AES_BOUND);
     }
-    list.push(fn);
+    data.cleanups.push(fn);
   }
 
   hasBind(el: Element): boolean {
-    return this.boundElements.has(el);
+    return !!((this.metadata.get(el)?.flags ?? 0) & FLAG_BOUND);
   }
 
   cleanup(el: Element): void {
-    if (!this.boundElements.delete(el)) return;
-    this.preservedNodes.delete(el);
-    this.ignoredNodes.delete(el);
+    const data = this.metadata.get(el);
+    if (!data || !(data.flags & FLAG_BOUND)) return;
+
+    // Reset flags and markers
+    data.flags &= ~(FLAG_BOUND | FLAG_PRESERVED | FLAG_IGNORED);
     el.classList.remove(AES_BOUND);
 
     debug.cleanup(getSelector(el));
 
-    // 1. Dispose Effects (Atom -> Subscription severed)
-    const effects = this.effects.get(el);
-    if (effects) {
-      this.effects.delete(el);
+    // 1. Dispose Effects
+    if (data.effects) {
+      const effects = data.effects;
       for (let i = 0, len = effects.length; i < len; i++) {
-        const fx = effects[i];
-        if (fx) {
-          try {
-            fx.dispose();
-          } catch (e) {
-            debug.warn('Effect dispose error:', e);
-          }
+        try {
+          effects[i]?.dispose();
+        } catch (e) {
+          debug.warn('Effect dispose error:', e);
         }
       }
+      data.effects = undefined;
     }
 
     // 2. Execute custom cleanups
-    const cleanups = this.cleanups.get(el);
-    if (cleanups) {
-      this.cleanups.delete(el);
+    if (data.cleanups) {
+      const cleanups = data.cleanups;
       for (let i = 0, len = cleanups.length; i < len; i++) {
-        const fn = cleanups[i];
-        if (fn) {
-          try {
-            fn();
-          } catch (e) {
-            debug.warn('Cleanup error:', e);
-          }
+        try {
+          cleanups[i]?.();
+        } catch (e) {
+          debug.warn('Cleanup error:', e);
         }
       }
+      data.cleanups = undefined;
+    }
+
+    // Fully remove from WeakMap if no flags remain
+    if (data.flags === 0) {
+      this.metadata.delete(el);
     }
   }
 
   cleanupDescendants(el: Element): void {
-    // Traverse descendants (Hot Path: only visit bound nodes)
     const children = el.querySelectorAll(`.${AES_BOUND}`);
     for (let i = 0, len = children.length; i < len; i++) {
       const child = children[i] as Element;
       if (!child) continue;
 
-      if (this.boundElements.has(child)) {
-        // Actual bound element: cleanup properly
+      const data = this.metadata.get(child);
+      if (data && data.flags & FLAG_BOUND) {
         this.cleanup(child);
       } else {
-        // [Fix] Zombie binding: cloned element with class but no WeakMap data
-        // Remove orphaned marker class to prevent future false positives
         child.classList.remove(AES_BOUND);
       }
     }

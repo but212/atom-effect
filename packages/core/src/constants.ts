@@ -24,6 +24,10 @@ export const NODE_FLAGS = {
   DISPOSED: 1 << 0,
   HAS_FN_SUBS: 1 << 1,
   HAS_OBJ_SUBS: 1 << 2,
+  IS_ATOM: 1 << 27,
+  IS_COMPUTED: 1 << 28,
+  IS_EFFECT: 1 << 29,
+  IS_TRACKER: 1 << 30,
 } as const;
 
 /**
