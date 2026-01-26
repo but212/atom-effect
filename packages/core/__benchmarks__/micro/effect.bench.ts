@@ -7,6 +7,8 @@ import { bench, describe } from 'vitest';
 import { atom, computed, effect } from '../../src/index.js';
 import { benchEffectOptions, microBenchOptions } from '../utils/setup.js';
 
+const REPEATS = 1000;
+
 describe('Effect Creation', () => {
   bench(
     'create effect (single dependency)',
@@ -75,9 +77,9 @@ describe('Effect Execution', () => {
   }, benchEffectOptions);
 
   bench(
-    'effect runs on dependency change (x1000)',
+    `effect runs on dependency change (x${REPEATS})`,
     () => {
-      for (let i = 0; i < 1000; i++) {
+      for (let i = 0; i < REPEATS; i++) {
         a.value += 1;
       }
     },
@@ -85,9 +87,9 @@ describe('Effect Execution', () => {
   );
 
   bench(
-    'effect runs on multiple dependency changes (x1000)',
+    `effect runs on multiple dependency changes (x${REPEATS})`,
     () => {
-      for (let i = 0; i < 1000; i++) {
+      for (let i = 0; i < REPEATS; i++) {
         aMulti.value += 1;
         bMulti.value += 1;
       }
@@ -96,9 +98,9 @@ describe('Effect Execution', () => {
   );
 
   bench(
-    'effect with computed dependency (x1000)',
+    `effect with computed dependency (x${REPEATS})`,
     () => {
-      for (let i = 0; i < 1000; i++) {
+      for (let i = 0; i < REPEATS; i++) {
         aComp.value += 1;
       }
     },
@@ -138,9 +140,9 @@ describe('Effect Re-execution', () => {
   );
 
   bench(
-    'multiple effects on same dependency (x1000)',
+    `multiple effects on same dependency (x${REPEATS})`,
     () => {
-      for (let i = 0; i < 1000; i++) {
+      for (let i = 0; i < REPEATS; i++) {
         aMultiEff.value += 1;
       }
     },
@@ -180,9 +182,9 @@ describe('Effect Cleanup', () => {
   );
 
   bench(
-    'effect cleanup on dependency change (x1000)',
+    `effect cleanup on dependency change (x${REPEATS})`,
     () => {
-      for (let i = 0; i < 1000; i++) {
+      for (let i = 0; i < REPEATS; i++) {
         aCleanup.value += 1;
       }
     },

@@ -7,11 +7,13 @@ import { bench, describe } from 'vitest';
 import { atom, computed } from '../../src/index.js';
 import { microBenchOptions } from '../utils/setup.js';
 
+const REPEATS = 1000;
+
 describe('Computed Creation', () => {
   bench(
-    'create computed (single dependency) (x1000)',
+    `create computed (single dependency) (x${REPEATS})`,
     () => {
-      for (let i = 0; i < 1000; i++) {
+      for (let i = 0; i < REPEATS; i++) {
         const a = atom(0);
         void computed(() => a.value * 2);
       }
@@ -20,9 +22,9 @@ describe('Computed Creation', () => {
   );
 
   bench(
-    'create computed (3 dependencies) (x1000)',
+    `create computed (3 dependencies) (x${REPEATS})`,
     () => {
-      for (let i = 0; i < 1000; i++) {
+      for (let i = 0; i < REPEATS; i++) {
         const a = atom(1);
         const b = atom(2);
         const c = atom(3);
@@ -61,9 +63,9 @@ describe('Computed Dependency Tracking', () => {
   const cQuadrupled = computed(() => cDoubled.value * 2);
 
   bench(
-    'computed reads single dependency (x1000)',
+    `computed reads single dependency (x${REPEATS})`,
     () => {
-      for (let i = 0; i < 1000; i++) {
+      for (let i = 0; i < REPEATS; i++) {
         void cSingle.value;
       }
     },
@@ -71,9 +73,9 @@ describe('Computed Dependency Tracking', () => {
   );
 
   bench(
-    'computed reads multiple dependencies (x1000)',
+    `computed reads multiple dependencies (x${REPEATS})`,
     () => {
-      for (let i = 0; i < 1000; i++) {
+      for (let i = 0; i < REPEATS; i++) {
         void cMultiple.value;
       }
     },
@@ -81,9 +83,9 @@ describe('Computed Dependency Tracking', () => {
   );
 
   bench(
-    'computed with nested computations (x1000)',
+    `computed with nested computations (x${REPEATS})`,
     () => {
-      for (let i = 0; i < 1000; i++) {
+      for (let i = 0; i < REPEATS; i++) {
         void cQuadrupled.value;
       }
     },
@@ -126,9 +128,9 @@ describe('Computed Recomputation', () => {
   );
 
   bench(
-    'no recomputation when value unchanged (x1000)',
+    `no recomputation when value unchanged (x${REPEATS})`,
     () => {
-      for (let i = 0; i < 1000; i++) {
+      for (let i = 0; i < REPEATS; i++) {
         aNoChange.value = 42;
         void cNoChange.value;
       }
@@ -148,9 +150,9 @@ describe('Computed Lazy Evaluation', () => {
   // Actually, standard benchmarks for "lazy" usually mean "how fast is creating it vs creating + calculating".
 
   bench(
-    'lazy computed (not accessed) (x1000)',
+    `lazy computed (not accessed) (x${REPEATS})`,
     () => {
-      for (let i = 0; i < 1000; i++) {
+      for (let i = 0; i < REPEATS; i++) {
         const a = atom(0);
         void computed(() => a.value * 2, { lazy: true });
       }
@@ -213,9 +215,9 @@ describe('Computed Cache Invalidation', () => {
 describe('Computed Disposal', () => {
   // Keep disposal benchmarks as is (create + dispose) to measure cleanup cost
   bench(
-    'dispose computed (x1000)',
+    `dispose computed (x${REPEATS})`,
     () => {
-      for (let i = 0; i < 1000; i++) {
+      for (let i = 0; i < REPEATS; i++) {
         const a = atom(0);
         const c = computed(() => a.value * 2);
         c.dispose();
