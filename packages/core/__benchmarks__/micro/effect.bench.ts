@@ -75,26 +75,32 @@ describe('Effect Execution', () => {
   }, benchEffectOptions);
 
   bench(
-    'effect runs on dependency change',
+    'effect runs on dependency change (x1000)',
     () => {
-      a.value += 1;
+      for (let i = 0; i < 1000; i++) {
+        a.value += 1;
+      }
     },
     microBenchOptions
   );
 
   bench(
-    'effect runs on multiple dependency changes',
+    'effect runs on multiple dependency changes (x1000)',
     () => {
-      aMulti.value += 1;
-      bMulti.value += 1;
+      for (let i = 0; i < 1000; i++) {
+        aMulti.value += 1;
+        bMulti.value += 1;
+      }
     },
     microBenchOptions
   );
 
   bench(
-    'effect with computed dependency',
+    'effect with computed dependency (x1000)',
     () => {
-      aComp.value += 1;
+      for (let i = 0; i < 1000; i++) {
+        aComp.value += 1;
+      }
     },
     microBenchOptions
   );
@@ -132,9 +138,11 @@ describe('Effect Re-execution', () => {
   );
 
   bench(
-    'multiple effects on same dependency',
+    'multiple effects on same dependency (x1000)',
     () => {
-      aMultiEff.value += 1;
+      for (let i = 0; i < 1000; i++) {
+        aMultiEff.value += 1;
+      }
     },
     microBenchOptions
   );
@@ -172,9 +180,11 @@ describe('Effect Cleanup', () => {
   );
 
   bench(
-    'effect cleanup on dependency change',
+    'effect cleanup on dependency change (x1000)',
     () => {
-      aCleanup.value += 1;
+      for (let i = 0; i < 1000; i++) {
+        aCleanup.value += 1;
+      }
     },
     microBenchOptions
   );
