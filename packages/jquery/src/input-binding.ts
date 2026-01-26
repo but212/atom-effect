@@ -26,25 +26,7 @@ export function applyInputBinding<T>(
 
   const state: InputBindingState = createInputBindingState();
 
-  // IME composition support (CJK input)
-  const onCompositionStart = () => {
-    state.flags |= BindingFlags.Composing;
-  };
-
-  const onCompositionEnd = () => {
-    state.flags &= ~BindingFlags.Composing;
-    syncAtomFromDom();
-  };
-
-  $el.on('compositionstart', onCompositionStart);
-  $el.on('compositionend', onCompositionEnd);
-
-  // Focus tracking for smart formatting
-  const onFocus = () => {
-    state.flags |= BindingFlags.Focused;
-  };
-
-  // Core sync: DOM → Atom (defined early for blur flush)
+  // Core sync: DOM → Atom (defined early for handlers)
   const syncAtomFromDom = () => {
     if (state.flags & BindingFlags.Busy) return;
 
@@ -72,9 +54,6 @@ export function applyInputBinding<T>(
     }
   };
 
-  $el.on('focus', onFocus);
-  $el.on('blur', onBlur);
-
   // Input handler with optional debounce
   const onInput = () => {
     if (state.flags & BindingFlags.Busy) return;
@@ -87,17 +66,27 @@ export function applyInputBinding<T>(
     }
   };
 
-  $el.on(event, onInput);
-  $el.on('change', onInput);
+  const handlers = {
+    compositionstart: () => {
+      state.flags |= BindingFlags.Composing;
+    },
+    compositionend: () => {
+      state.flags &= ~BindingFlags.Composing;
+      syncAtomFromDom();
+    },
+    focus: () => {
+      state.flags |= BindingFlags.Focused;
+    },
+    blur: onBlur,
+    [event]: onInput,
+    change: onInput,
+  };
+
+  $el.on(handlers);
 
   // Cleanup handler
   const cleanup = () => {
-    $el.off(event, onInput);
-    $el.off('change', onInput);
-    $el.off('compositionstart', onCompositionStart);
-    $el.off('compositionend', onCompositionEnd);
-    $el.off('focus', onFocus);
-    $el.off('blur', onBlur);
+    $el.off(handlers);
     if (state.timeoutId) clearTimeout(state.timeoutId);
   };
 
@@ -118,14 +107,12 @@ export function applyInputBinding<T>(
         // [Fix] Preserve cursor position when focused (external update scenario)
         if (state.flags & BindingFlags.Focused) {
           const input = $el[0] as HTMLInputElement | HTMLTextAreaElement;
-          const start = input.selectionStart;
-          const end = input.selectionEnd;
+          const { selectionStart: start, selectionEnd: end } = input;
           $el.val(formatted);
           // Clamp cursor position to new value length
-          const maxPos = formatted.length;
           input.setSelectionRange(
-            Math.min(start ?? maxPos, maxPos),
-            Math.min(end ?? maxPos, maxPos)
+            Math.min(start ?? formatted.length, formatted.length),
+            Math.min(end ?? formatted.length, formatted.length)
           );
         } else {
           $el.val(formatted);

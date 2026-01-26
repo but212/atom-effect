@@ -2,27 +2,12 @@ import { AtomError } from '@/errors/errors';
 import { trackingContext } from './context';
 
 /**
- * Executes a function without tracking any reactive dependencies.
+ * Executes a function without tracking any reactive dependencies accessed during its execution.
+ * This prevents the calling context from subscribing to any atoms read within the callback.
  *
- * This utility allows reading atom values without establishing
- * a dependency relationship, useful for accessing values that
- * shouldn't trigger recomputation when they change.
- *
- * @template T - The return type of the function
- * @param fn - The function to execute without tracking
- * @returns The result of the executed function
- * @throws {AtomError} If the callback is not a function
- * @throws Propagates any error thrown by the callback function
- *
- * @example
- * ```typescript
- * const count = atom(0);
- * const doubled = computed(() => {
- *   // This read will NOT be tracked as a dependency
- *   const untrackedValue = untracked(() => count.value);
- *   return untrackedValue * 2;
- * });
- * ```
+ * @param fn - The function to execute in an untracked context.
+ * @returns The value returned by the provided function.
+ * @throws {AtomError} If the provided argument is not a function.
  */
 export function untracked<T>(fn: () => T): T {
   if (typeof fn !== 'function') {

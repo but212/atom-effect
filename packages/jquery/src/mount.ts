@@ -12,14 +12,12 @@ const mountedComponents = new WeakMap<Element, () => void>();
  */
 $.fn.atomMount = function <P>(component: ComponentFn<P>, props: P = {} as P): JQuery {
   return this.each(function () {
-    const $el = $(this);
     const selector = getSelector(this);
 
     // Unmount existing component
-    const existing = mountedComponents.get(this);
-    if (existing) {
+    if (mountedComponents.has(this)) {
       debug.log('mount', `${selector} unmounting existing component`);
-      existing();
+      mountedComponents.get(this)!();
     }
 
     debug.log('mount', `${selector} mounting component`);
@@ -27,17 +25,16 @@ $.fn.atomMount = function <P>(component: ComponentFn<P>, props: P = {} as P): JQ
     // Mount
     let userCleanup: undefined | (() => void);
     try {
-      userCleanup = component($el, props);
+      userCleanup = component($(this), props);
     } catch (e) {
       console.error('[atom-effect-jquery] Mount error:', e);
       return;
     }
 
     // cleanup
-    let isUnmounted = false;
     const fullCleanup = () => {
-      if (isUnmounted) return;
-      isUnmounted = true;
+      if (!mountedComponents.has(this)) return;
+      mountedComponents.delete(this);
 
       debug.log('mount', `${selector} full cleanup`);
 
@@ -49,7 +46,6 @@ $.fn.atomMount = function <P>(component: ComponentFn<P>, props: P = {} as P): JQ
         }
       }
       registry.cleanupTree(this);
-      mountedComponents.delete(this);
     };
 
     mountedComponents.set(this, fullCleanup);

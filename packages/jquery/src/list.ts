@@ -76,8 +76,7 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
 
         const cleanupItem = () => {
           entry.$el.remove();
-          const el = entry.$el[0];
-          if (el) registry.cleanup(el);
+          if (entry.$el[0]) registry.cleanup(entry.$el[0]);
           removingKeys.delete(k);
           debug.log('list', `${containerSelector} removed item:`, k);
         };
@@ -103,16 +102,14 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
       // 4. LIS Reconciliation (O(N log N))
       // Map keys to their OLD index for LIS input
       const oldIndexMap = new Map<string | number, number>();
-      for (let i = 0; i < oldKeys.length; i++) {
-        const k = oldKeys[i];
-        if (k !== undefined) oldIndexMap.set(k, i);
+      for (let i = 0, len = oldKeys.length; i < len; i++) {
+        oldIndexMap.set(oldKeys[i]!, i);
       }
 
       // Input for LIS: where each new item came from in the old list
       const newIndices = new Int32Array(itemCount);
       for (let i = 0; i < itemCount; i++) {
-        const k = newKeys[i];
-        newIndices[i] = k !== undefined ? (oldIndexMap.get(k) ?? -1) : -1;
+        newIndices[i] = oldIndexMap.get(newKeys[i]!) ?? -1;
       }
 
       const lisArr = getLIS(newIndices);
@@ -131,8 +128,6 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
           entry.item = item;
           const el = entry.$el[0];
           if (!el) continue;
-
-          let _replaced = false;
 
           if (update) {
             update(entry.$el, item, i);
@@ -162,19 +157,17 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
 
             if (isChanged) {
               // Fallback: Data changed and no update function -> Re-render
-              const rendered = render(item, i);
               // biome-ignore lint/suspicious/noExplicitAny: temporary typing
-              const $newEl = $(rendered as any);
-              const isNextNodeSelf = nextNode === el;
+              const $newEl = $(render(item, i) as any);
+              const needsNextNodeUpdate = nextNode === el;
 
               entry.$el.replaceWith($newEl);
               entry.$el = $newEl;
               if (bind) bind($newEl, item, i);
 
               debug.domUpdated($newEl, 'list.render', item);
-              _replaced = true;
 
-              if (isNextNodeSelf) {
+              if (needsNextNodeUpdate) {
                 nextNode = $newEl[0] || null;
               }
             }

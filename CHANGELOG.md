@@ -1,14 +1,30 @@
 # Changelog
 
-## [0.16.0]
+## [0.16.0] - 2026-01-27
 
 ### Core
 
-#### Changed
+#### Changed - Core
 
 - **Reactive Engine Optimization**: Reduced memory footprint and execution overhead by inlining internal logic, removing redundant instance properties (e.g., `_visitedEpoch`, `_hasDefaultValue`), and eliminating auxiliary classes like `ComputedTrackable`.
 - **Hot Path Performance**: Micro-optimized subscriber notification loops and dependency tracking to reduce overhead and stack depth.
 - **Codebase Cleanup**: Removed unused object pools, type guards, and internal utilities to simplify the core architecture.
+- **Micro-optimizations**: Widespread reduction of heap allocations and intermediate variable overhead by inlining single-use values and property access (e.g., `this.flags`).
+- **Improved Type Guards**: Streamlined `isAtom`, `isComputed`, and `isEffect` with cleaner duck-typing and reduced casting.
+- **Logic Simplification**: Refactored `ComputedAtomImpl` error propagation and `Scheduler` buffer management for better performance and readability.
+- **Subscriber Management**: Optimized notification paths in `Atom` and `ReactiveDependency` to minimize branch mispredictions.
+- **ArrayPool Enhancement**: Simplified stat tracking and rejection logic in `ArrayPool` for faster resource reuse.
+
+### jQuery
+
+#### Changed - jQuery
+
+- **Binding Logic Consolidation**: Unified input handler management in `applyInputBinding` using an event object map, reducing event listener overhead.
+- **Performance**: Inlined DOM updates in chainable methods (`atomText`, `atomCss`, `atomAttr`) to reduce closure nesting and stack depth.
+- **Registry Optimization**: Simplified `trackEffect` and `trackCleanup` logic using a centralized list management helper.
+- **List Reconciliation**: Streamlined key mapping and LIS (Longest Increasing Subsequence) input preparation in `atomList`.
+- **Debug Experience**: Refactored `highlightElement` and `domUpdated` for better performance while preserving visual feedback.
+- **Lifecycle Safety**: Enhanced unmounting and cleanup logic in `atomMount` and `BindingRegistry` to prevent memory leaks and zombie effects.
 
 ## [0.15.4]
 

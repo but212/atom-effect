@@ -20,17 +20,17 @@ export function registerReactiveEffect<T>(
   updater: (value: T) => void,
   debugType: string
 ): void {
-  const $el = $(el);
-
   if (isReactive(source)) {
-    const fx = effect(() => {
-      const value = source.value;
-      updater(value);
-      debug.domUpdated($el, debugType, value);
-    });
-    registry.trackEffect(el, fx);
+    registry.trackEffect(
+      el,
+      effect(() => {
+        const value = source.value;
+        updater(value);
+        debug.domUpdated($(el), debugType, value);
+      })
+    );
   } else {
     updater(source);
-    debug.domUpdated($el, debugType, source);
+    debug.domUpdated($(el), debugType, source);
   }
 }

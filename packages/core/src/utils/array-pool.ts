@@ -35,8 +35,7 @@ export class ArrayPool<T> {
 
   /** Acquires an array from the pool or creates a new one if the pool is empty. */
   acquire(): T[] {
-    const stats = this.stats;
-    if (IS_DEV && stats) stats.acquired++;
+    if (this.stats) this.stats.acquired++;
     return this.pool.pop() ?? [];
   }
 
@@ -47,38 +46,29 @@ export class ArrayPool<T> {
   release(arr: T[], emptyConst?: readonly T[]): void {
     // 1. Skip if empty constant or frozen (expensive check)
     if ((emptyConst && arr === emptyConst) || Object.isFrozen(arr)) {
-      const stats = this.stats;
-      if (IS_DEV && stats && arr !== emptyConst) stats.rejected.frozen++;
+      if (this.stats && arr !== emptyConst) this.stats.rejected.frozen++;
       return;
     }
 
     // 2. Reject based on capacity or pool size
-    const len = arr.length;
-    const pool = this.pool;
-    const poolLen = pool.length;
-
-    if (len > this.maxReusableCapacity || poolLen >= this.maxPoolSize) {
-      const stats = this.stats;
-      if (IS_DEV && stats) {
-        if (len > this.maxReusableCapacity) stats.rejected.tooLarge++;
-        else stats.rejected.poolFull++;
+    if (arr.length > this.maxReusableCapacity || this.pool.length >= this.maxPoolSize) {
+      if (this.stats) {
+        if (arr.length > this.maxReusableCapacity) this.stats.rejected.tooLarge++;
+        else this.stats.rejected.poolFull++;
       }
       return;
     }
 
     // 3. Clear and store
     arr.length = 0;
-    pool.push(arr);
-    const stats = this.stats;
-    if (IS_DEV && stats) stats.released++;
+    this.pool.push(arr);
+    if (this.stats) this.stats.released++;
   }
 
   /** Returns current stats for the pool (dev mode only). */
   getStats(): PoolStats | null {
-    const stats = this.stats;
-    if (!IS_DEV || !stats) return null;
-    const { acquired, released, rejected } = stats;
-    const totalRejected = rejected.frozen + rejected.tooLarge + rejected.poolFull;
+    if (!this.stats) return null;
+    const { acquired, released, rejected } = this.stats;
     return {
       acquired,
       released,
@@ -87,7 +77,7 @@ export class ArrayPool<T> {
         tooLarge: rejected.tooLarge,
         poolFull: rejected.poolFull,
       },
-      leaked: acquired - released - totalRejected,
+      leaked: acquired - released - (rejected.frozen + rejected.tooLarge + rejected.poolFull),
       poolSize: this.pool.length,
     };
   }
@@ -95,13 +85,12 @@ export class ArrayPool<T> {
   /** Resets the pool and its stats. */
   reset(): void {
     this.pool.length = 0;
-    const stats = this.stats;
-    if (IS_DEV && stats) {
-      stats.acquired = 0;
-      stats.released = 0;
-      stats.rejected.frozen = 0;
-      stats.rejected.tooLarge = 0;
-      stats.rejected.poolFull = 0;
+    if (this.stats) {
+      this.stats.acquired = 0;
+      this.stats.released = 0;
+      this.stats.rejected.frozen = 0;
+      this.stats.rejected.tooLarge = 0;
+      this.stats.rejected.poolFull = 0;
     }
   }
 }

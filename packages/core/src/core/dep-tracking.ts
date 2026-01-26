@@ -22,10 +22,9 @@ export function trackDependency<T>(
   }
 
   if (typeof current === 'function') {
-    const subscriber = current as (newValue?: T, oldValue?: T) => void;
     // O(N) check - typically small N
-    if (functionSubscribers.indexOf(subscriber) === -1) {
-      functionSubscribers.push(subscriber);
+    if (functionSubscribers.indexOf(current as (newValue?: T, oldValue?: T) => void) === -1) {
+      functionSubscribers.push(current as (newValue?: T, oldValue?: T) => void);
       dependency.flags |= NODE_FLAGS.HAS_FN_SUBS;
     }
     return;
@@ -49,7 +48,6 @@ export function syncDependencies(
   prevUnsubs: (() => void)[],
   tracker: Subscriber
 ): (() => void)[] {
-  const nextLen = nextDeps.length;
   const prevLen = prevDeps.length;
 
   // 1. Initial dense pass: map existing unsubs to dependencies
@@ -62,9 +60,9 @@ export function syncDependencies(
 
   // 2. Build new unsubs array: reuse or subscribe
   const nextUnsubs = unsubArrayPool.acquire();
-  nextUnsubs.length = nextLen;
+  nextUnsubs.length = nextDeps.length;
 
-  for (let i = 0; i < nextLen; i++) {
+  for (let i = 0, len = nextDeps.length; i < len; i++) {
     const dep = nextDeps[i];
     if (!dep) continue;
 

@@ -38,9 +38,8 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
    * Returns the current value and registers the atom as a dependency if in a tracking context.
    */
   get value(): T {
-    const current = trackingContext.current;
-    if (current) {
-      trackDependency(this, current, this._fnSubs, this._objSubs);
+    if (trackingContext.current) {
+      trackDependency(this, trackingContext.current, this._fnSubs, this._objSubs);
     }
     return this._value;
   }
@@ -55,8 +54,7 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
     this._value = newValue;
     this.version = (this.version + 1) & SMI_MAX;
 
-    const flags = this.flags;
-    if (flags & (ATOM_STATE_FLAGS.HAS_FN_SUBS | ATOM_STATE_FLAGS.HAS_OBJ_SUBS)) {
+    if (this.flags & (ATOM_STATE_FLAGS.HAS_FN_SUBS | ATOM_STATE_FLAGS.HAS_OBJ_SUBS)) {
       this._scheduleNotification(oldValue);
     }
   }
@@ -65,14 +63,12 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
    * Schedules or flushes notifications based on sync mode and batching state.
    */
   private _scheduleNotification(oldValue: T): void {
-    const flags = this.flags;
-
-    if (!(flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED)) {
+    if (!(this.flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED)) {
       this._pendingOldValue = oldValue;
       this.flags |= ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
     }
 
-    if (flags & ATOM_STATE_FLAGS.SYNC && !scheduler.isBatching) {
+    if (this.flags & ATOM_STATE_FLAGS.SYNC && !scheduler.isBatching) {
       this._flushNotifications();
       return;
     }
@@ -88,8 +84,10 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
    * Flushes scheduled notifications and resets state for the next cycle.
    */
   private _flushNotifications(): void {
-    const flags = this.flags;
-    if (!(flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED) || flags & ATOM_STATE_FLAGS.DISPOSED) {
+    if (
+      !(this.flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED) ||
+      this.flags & ATOM_STATE_FLAGS.DISPOSED
+    ) {
       return;
     }
 
