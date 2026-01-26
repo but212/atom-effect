@@ -34,7 +34,8 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
       // 1. Handle Empty Template Logic
       if (itemCount === 0) {
         if (empty && !$emptyEl) {
-          $emptyEl = $(empty as string).appendTo($container);
+          // @ts-expect-error
+          $emptyEl = $(empty).appendTo($container);
         }
       } else if ($emptyEl) {
         $emptyEl.remove();
@@ -151,12 +152,8 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
         } else {
           // New Item: Render and INSERT
           const rendered = render(item, i);
-          let $el: JQuery;
-          if (typeof rendered === 'object' && rendered !== null && 'jquery' in rendered) {
-            $el = rendered as JQuery;
-          } else {
-            $el = $(rendered as string);
-          }
+          // biome-ignore lint/suspicious/noExplicitAny: temporary typing
+          const $el = $(rendered as any);
           itemMap.set(k, { $el, item });
 
           if (nextNode) $el.insertBefore(nextNode);

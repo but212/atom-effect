@@ -92,11 +92,11 @@
         text-align: center;
       }
 
-      .nav-list {
+      .sidebar nav {
         flex: 1;
       }
 
-      .nav-list ul {
+      .nav-list {
         list-style: none;
         padding: 0;
         margin: 0;
@@ -455,8 +455,8 @@
         </div>
       </div>
 
-      <nav class="nav-list" aria-label="Primary">
-        <ul>
+      <nav aria-label="Primary">
+        <ul class="nav-list">
           <li class="nav-item">
             <a
               class="nav-link"
@@ -510,9 +510,11 @@
         </button>
       </header>
 
-      <main id="router-view" class="view-content" aria-live="polite">
-        <!-- INJECTED -->
-      </main>
+      <div class="view-content">
+        <main id="router-view" aria-live="polite">
+          <!-- INJECTED -->
+        </main>
+      </div>
     </div>
 
     <button
