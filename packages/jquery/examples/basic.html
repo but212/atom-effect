@@ -271,7 +271,7 @@
 
       <main>
         <!-- Main Counter -->
-        <section class="grid-main">
+        <div class="grid-main">
           <div class="card card-blue">
             <div id="count" class="display-value">0</div>
             <div class="controls">
@@ -279,10 +279,10 @@
               <button id="increment" class="btn btn-increment">+</button>
             </div>
           </div>
-        </section>
+        </div>
 
         <!-- Derived Data -->
-        <section class="grid-side">
+        <div class="grid-side">
           <div class="card card-yellow" style="text-align: left">
             <div class="stat-item">
               <div class="stat-label">01 / DOUBLED VALUE</div>
@@ -293,7 +293,7 @@
               <div id="parity" class="stat-value">EVEN</div>
             </div>
           </div>
-        </section>
+        </div>
 
         <!-- Logic Overview -->
         <section class="info-section">
@@ -361,9 +361,7 @@ $(<span class="code-string">'#count'</span>).<span class="code-function">atomTex
 
       // 4. Manual subscription example
       $.effect(() => {
-        if (count.value !== 0) {
-          console.log(`[STATE] COUNT UPDATED TO: ${count.value}`);
-        }
+        console.log(`[STATE] COUNT UPDATED TO: ${count.value}`);
       });
     </script>
   </body>

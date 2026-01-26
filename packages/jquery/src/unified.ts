@@ -12,7 +12,7 @@ import type {
   ValOptions,
   WritableAtom,
 } from './types';
-import { createInputBindingState } from './types';
+import { BindingFlags, createInputBindingState } from './types';
 
 // ============================================================================
 // One-Way Binding Handlers (Atom → DOM)
@@ -165,7 +165,7 @@ function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): void {
 
   // DOM → Atom
   const handler = () => {
-    if (state.phase !== 'idle') return;
+    if (state.flags & BindingFlags.Busy) return;
     atom.value = ctx.$el.prop('checked');
   };
 
@@ -174,11 +174,11 @@ function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): void {
 
   // Atom → DOM
   const fx = effect(() => {
-    state.phase = 'syncing-to-dom';
+    state.flags |= BindingFlags.SyncingToDom;
     const val = !!atom.value;
     ctx.$el.prop('checked', val);
     debug.domUpdated(ctx.$el, 'checked', val);
-    state.phase = 'idle';
+    state.flags &= ~BindingFlags.SyncingToDom;
   });
   registry.trackEffect(ctx.el, fx);
 }

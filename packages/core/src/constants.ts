@@ -33,6 +33,8 @@ export const NODE_FLAGS = {
 export const EFFECT_STATE_FLAGS = {
   ...NODE_FLAGS,
   EXECUTING: 1 << 3,
+  SYNC: 1 << 4,
+  TRACK_MODIFICATIONS: 1 << 5,
 } as const;
 
 /**
@@ -57,6 +59,15 @@ export const ATOM_STATE_FLAGS = {
   ...NODE_FLAGS,
   SYNC: 1 << 3,
   NOTIFICATION_SCHEDULED: 1 << 4,
+} as const;
+
+/**
+ * Bit flags for scheduler state management
+ */
+export const SCHEDULER_STATE_FLAGS = {
+  PROCESSING: 1 << 0,
+  BATCHING: 1 << 1,
+  FLUSHING_SYNC: 1 << 2,
 } as const;
 
 /**

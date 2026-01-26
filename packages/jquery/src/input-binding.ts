@@ -1,6 +1,6 @@
 import { debug } from './debug';
 import type { InputBindingState, ValOptions, WritableAtom } from './types';
-import { createInputBindingState } from './types';
+import { BindingFlags, createInputBindingState } from './types';
 
 /**
  * Applies two-way data binding configuration to an input element.
@@ -28,11 +28,11 @@ export function applyInputBinding<T>(
 
   // IME composition support (CJK input)
   const onCompositionStart = () => {
-    state.phase = 'composing';
+    state.flags |= BindingFlags.Composing;
   };
 
   const onCompositionEnd = () => {
-    state.phase = 'idle';
+    state.flags &= ~BindingFlags.Composing;
     syncAtomFromDom();
   };
 
@@ -41,18 +41,18 @@ export function applyInputBinding<T>(
 
   // Focus tracking for smart formatting
   const onFocus = () => {
-    state.hasFocus = true;
+    state.flags |= BindingFlags.Focused;
   };
 
   // Core sync: DOM → Atom (defined early for blur flush)
   const syncAtomFromDom = () => {
-    if (state.phase !== 'idle') return;
+    if (state.flags & BindingFlags.Busy) return;
 
-    state.phase = 'syncing-to-atom';
+    state.flags |= BindingFlags.SyncingToAtom;
     try {
       atom.value = parse($el.val() as string);
     } finally {
-      state.phase = 'idle';
+      state.flags &= ~BindingFlags.SyncingToAtom;
     }
   };
 
@@ -64,7 +64,7 @@ export function applyInputBinding<T>(
       syncAtomFromDom();
     }
 
-    state.hasFocus = false;
+    state.flags &= ~BindingFlags.Focused;
     // Force formatting on blur to ensure clean display (now with latest value)
     const formatted = format(atom.value);
     if ($el.val() !== formatted) {
@@ -77,7 +77,7 @@ export function applyInputBinding<T>(
 
   // Input handler with optional debounce
   const onInput = () => {
-    if (state.phase !== 'idle') return;
+    if (state.flags & BindingFlags.Busy) return;
 
     if (debounceMs) {
       if (state.timeoutId) clearTimeout(state.timeoutId);
@@ -109,14 +109,14 @@ export function applyInputBinding<T>(
     // Update only if value differs
     if (currentVal !== formatted) {
       // Don't interrupt user input if parsed value matches
-      if (state.hasFocus && equal(parse(currentVal), atom.value)) {
+      if (state.flags & BindingFlags.Focused && equal(parse(currentVal), atom.value)) {
         return;
       }
 
-      state.phase = 'syncing-to-dom';
+      state.flags |= BindingFlags.SyncingToDom;
       try {
         // [Fix] Preserve cursor position when focused (external update scenario)
-        if (state.hasFocus) {
+        if (state.flags & BindingFlags.Focused) {
           const input = $el[0] as HTMLInputElement | HTMLTextAreaElement;
           const start = input.selectionStart;
           const end = input.selectionEnd;
@@ -133,7 +133,7 @@ export function applyInputBinding<T>(
 
         debug.domUpdated($el, 'val', formatted);
       } finally {
-        state.phase = 'idle';
+        state.flags &= ~BindingFlags.SyncingToDom;
       }
     }
   };
