@@ -31,12 +31,6 @@ export const ERROR_MESSAGES = {
   COMPUTED_MUST_BE_FUNCTION: 'Computed function must be a function',
 
   /**
-   * Error thrown when subscribe() receives an invalid listener.
-   */
-  COMPUTED_SUBSCRIBER_MUST_BE_FUNCTION:
-    'Subscriber listener must be a function or Subscriber object',
-
-  /**
    * Error thrown when accessing a pending async computed without a default value.
    */
   COMPUTED_ASYNC_PENDING_NO_DEFAULT: 'Async computation is pending. No default value provided',
@@ -57,11 +51,6 @@ export const ERROR_MESSAGES = {
   COMPUTED_CIRCULAR_DEPENDENCY: 'Circular dependency detected during computation',
 
   /**
-   * Error thrown when subscribing to a dependency fails.
-   */
-  COMPUTED_DEPENDENCY_SUBSCRIPTION_FAILED: 'Failed to subscribe to dependency',
-
-  /**
    * Error thrown when accessing a disposed computed value.
    */
   COMPUTED_DISPOSED: 'Cannot access a disposed computed',
@@ -74,11 +63,6 @@ export const ERROR_MESSAGES = {
    * Error thrown when atom.subscribe() receives an invalid listener.
    */
   ATOM_SUBSCRIBER_MUST_BE_FUNCTION: 'Subscription listener must be a function or Subscriber object',
-
-  /**
-   * Error thrown when the atom subscriber notification process fails.
-   */
-  ATOM_SUBSCRIBER_EXECUTION_FAILED: 'Error occurred while executing atom subscribers',
 
   /**
    * Error logged when an individual subscriber throws during notification.
@@ -128,11 +112,6 @@ export const ERROR_MESSAGES = {
    */
   LARGE_DEPENDENCY_GRAPH: (count: number): string =>
     `Large dependency graph detected: ${count} dependencies`,
-
-  /**
-   * Warning logged when attempting to unsubscribe a non-existent listener.
-   */
-  UNSUBSCRIBE_NON_EXISTENT: 'Attempted to unsubscribe a non-existent listener',
 
   /**
    * Error logged when the onError callback itself throws an error.
