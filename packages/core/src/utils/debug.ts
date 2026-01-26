@@ -19,14 +19,12 @@ function hasDependencies(obj: Dependency): obj is Dependency & { dependencies: D
   return 'dependencies' in obj && Array.isArray((obj as { dependencies: unknown }).dependencies);
 }
 
-let globalCheckEpoch = 0;
-
 /** Internal recursive checker for circular dependency detection */
-function checkCircularInternal(dep: Dependency, current: object, epoch: number): void {
-  if (dep._visitedEpoch === epoch) {
+function checkCircularInternal(dep: Dependency, current: object, visited: Set<number>): void {
+  if (visited.has(dep.id)) {
     return;
   }
-  dep._visitedEpoch = epoch;
+  visited.add(dep.id);
 
   if (dep === current) {
     throw new ComputedError('Indirect circular dependency detected');
@@ -36,7 +34,7 @@ function checkCircularInternal(dep: Dependency, current: object, epoch: number):
     const deps = dep.dependencies;
     for (let i = 0; i < deps.length; i++) {
       const child = deps[i];
-      if (child) checkCircularInternal(child, current, epoch);
+      if (child) checkCircularInternal(child, current, visited);
     }
   }
 }
@@ -73,8 +71,7 @@ export const debug: DebugConfig = {
       return;
     }
 
-    globalCheckEpoch++;
-    checkCircularInternal(dep, current, globalCheckEpoch);
+    checkCircularInternal(dep, current, new Set<number>());
   },
 
   attachDebugInfo(obj: object, type: string, id: DependencyId): void {

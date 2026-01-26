@@ -1,10 +1,20 @@
 # Changelog
 
-## [0.15.4]
+## [0.16.0]
 
 ### Core
 
-#### Fixed
+#### Changed
+
+- **Reactive Engine Optimization**: Reduced memory footprint and execution overhead by inlining internal logic, removing redundant instance properties (e.g., `_visitedEpoch`, `_hasDefaultValue`), and eliminating auxiliary classes like `ComputedTrackable`.
+- **Hot Path Performance**: Micro-optimized subscriber notification loops and dependency tracking to reduce overhead and stack depth.
+- **Codebase Cleanup**: Removed unused object pools, type guards, and internal utilities to simplify the core architecture.
+
+## [0.15.4]
+
+### Core - 0.15.4
+
+#### Fixed - Core 0.15.4
 
 - **Lazy Computed Sensitivity**: Fixed a bug where `Effect` would incorrectly skip execution if a dependency was a stale `computed` atom. The execution check now forces a re-evaluation of computed dependencies and re-checks their version to guarantee UI consistency in complex dependency graphs.
 

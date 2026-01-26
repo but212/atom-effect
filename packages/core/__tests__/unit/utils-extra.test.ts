@@ -3,8 +3,7 @@ import { syncDependencies } from '@/core/dep-tracking';
 import type { Dependency, Subscriber } from '@/types';
 import { ArrayPool } from '@/utils/array-pool';
 import { debug } from '@/utils/debug';
-import { ObjectPool, type Poolable } from '@/utils/object-pool';
-import { isComputed, isTrackableFunction } from '@/utils/type-guards';
+import { isComputed } from '@/utils/type-guards';
 
 describe('Utils & Handlers - Extra Coverage', () => {
   describe('DepTracking - syncDependencies', () => {
@@ -76,24 +75,6 @@ describe('Utils & Handlers - Extra Coverage', () => {
     });
   });
 
-  describe('ObjectPool', () => {
-    class TestObj implements Poolable {
-      reset() {}
-    }
-
-    it('warmup adds to existing pool size', () => {
-      const pool = new ObjectPool(() => new TestObj(), 10);
-      pool.warmup(2);
-      expect((pool as unknown as { poolSize: number }).poolSize).toBe(2);
-
-      pool.warmup(5); // Should add 3 more to reach 5, but logic is loop from size to target
-      // code: for (let i = this.poolSize; i < targetSize; i++)
-      // targetSize = Math.min(count, maxPoolSize)
-      // so warmup(5) sets target to 5. i goes 2->5.
-      expect((pool as unknown as { poolSize: number }).poolSize).toBe(5);
-    });
-  });
-
   describe('DepTracking - trackDependency', () => {
     it('syncDependencies reuses existing subscriptions', () => {
       const dep = {
@@ -111,13 +92,6 @@ describe('Utils & Handlers - Extra Coverage', () => {
   });
 
   describe('Type Guards', () => {
-    it('isTrackableFunction identifies functions with addDependency', () => {
-      const fn = () => {};
-      (fn as unknown as { addDependency: () => void }).addDependency = () => {};
-      expect(isTrackableFunction(fn)).toBe(true);
-      expect(isTrackableFunction(() => {})).toBe(false);
-    });
-
     it('isComputed checks debug type if enabled', () => {
       const wasEnabled = debug.enabled;
       debug.enabled = true;
@@ -144,11 +118,10 @@ describe('Utils & Handlers - Extra Coverage', () => {
 
       interface MockDep {
         id: number;
-        _visitedEpoch: number;
         dependencies?: MockDep[];
       }
-      const dep1: MockDep = { id: 1, _visitedEpoch: -1 };
-      const dep2: MockDep = { id: 2, _visitedEpoch: -1, dependencies: [dep1] };
+      const dep1: MockDep = { id: 1 };
+      const dep2: MockDep = { id: 2, dependencies: [dep1] };
 
       // Case 1: Indirect circular
       dep1.dependencies = [dep2];
@@ -159,16 +132,15 @@ describe('Utils & Handlers - Extra Coverage', () => {
 
       // Case 2: Diamond dependency (hits visited branch)
       // dep1 -> dep2, dep1 -> dep3, dep2 -> dep4, dep3 -> dep4
-      const d4: MockDep = { id: 4, _visitedEpoch: -1 };
-      const d2: MockDep = { id: 2, _visitedEpoch: -1, dependencies: [d4] };
-      const d3: MockDep = { id: 3, _visitedEpoch: -1, dependencies: [d4] };
-      const d1: MockDep = { id: 1, _visitedEpoch: -1, dependencies: [d2, d3] };
+      const d4: MockDep = { id: 4 };
+      const d2: MockDep = { id: 2, dependencies: [d4] };
+      const d3: MockDep = { id: 3, dependencies: [d4] };
+      const d1: MockDep = { id: 1, dependencies: [d2, d3] };
 
       expect(() => debug.checkCircular(d1 as unknown as Dependency, {})).not.toThrow();
-      expect(d4._visitedEpoch).toBeGreaterThan(0); // This confirms line 39 in debug.ts was hit
 
       // Case 3: Dep without dependencies array
-      const emptyDep: MockDep = { id: 3, _visitedEpoch: -1 };
+      const emptyDep: MockDep = { id: 3 };
       expect(() => debug.checkCircular(emptyDep as unknown as Dependency, {})).not.toThrow();
 
       debug.enabled = wasEnabled;
