@@ -36,16 +36,15 @@ export function getValue<T>(source: ReactiveValue<T>): T {
  */
 export function getSelector(el: Element | JQuery): string {
   if (!el) return 'unknown';
-  // Handle JQuery objects by extracting the first DOM element
-  const domEl = 'jquery' in el ? (el as JQuery)[0] : (el as Element);
-  if (!domEl) return 'unknown';
+  const dom = 'jquery' in el ? (el as JQuery)[0] : (el as Element);
+  if (!dom) return 'unknown';
 
-  if (domEl.id) return `#${domEl.id}`;
-  if (domEl.className) {
-    const classes = String(domEl.className).split(/\s+/).filter(Boolean).join('.');
-    return classes ? `${domEl.tagName.toLowerCase()}.${classes}` : domEl.tagName.toLowerCase();
+  if (dom.id) return `#${dom.id}`;
+  if (dom.className) {
+    const cls = String(dom.className).trim().split(/\s+/).filter(Boolean).join('.');
+    return cls ? `${dom.tagName.toLowerCase()}.${cls}` : dom.tagName.toLowerCase();
   }
-  return domEl.tagName.toLowerCase();
+  return dom.tagName.toLowerCase();
 }
 
 /**
@@ -64,10 +63,9 @@ export function getLIS(arr: Int32Array | number[]): Int32Array {
   let resultLen = 0;
 
   for (let i = 0; i < len; i++) {
-    const val = arr[i]!;
-    if (val === -1) continue;
+    if (arr[i] === -1) continue;
 
-    if (resultLen === 0 || arr[result[resultLen - 1]!]! < val) {
+    if (resultLen === 0 || arr[result[resultLen - 1]!]! < arr[i]!) {
       predecessors[i] = resultLen > 0 ? result[resultLen - 1]! : -1;
       result[resultLen++] = i;
       continue;
@@ -78,11 +76,11 @@ export function getLIS(arr: Int32Array | number[]): Int32Array {
       right = resultLen - 1;
     while (left < right) {
       const mid = (left + right) >>> 1;
-      if (arr[result[mid]!]! < val) left = mid + 1;
+      if (arr[result[mid]!]! < arr[i]!) left = mid + 1;
       else right = mid;
     }
 
-    if (val < arr[result[left]!]!) {
+    if (arr[i]! < arr[result[left]!]!) {
       if (left > 0) predecessors[i] = result[left - 1]!;
       result[left] = i;
     }
@@ -90,9 +88,9 @@ export function getLIS(arr: Int32Array | number[]): Int32Array {
 
   // Backtracking to reconstruct the LIS in the correct order
   const lis = new Int32Array(resultLen);
-  for (let i = resultLen - 1, v = result[resultLen - 1]!; i >= 0; i--) {
-    lis[i] = v;
-    v = predecessors[v]!;
+  for (let i = resultLen - 1, curr = result[resultLen - 1]; i >= 0; i--) {
+    lis[i] = curr!;
+    curr = predecessors[curr!];
   }
 
   return lis;

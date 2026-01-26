@@ -27,15 +27,6 @@ function atom<T>(initialValue: T, options: AtomOptions = {}): WritableAtom<T> {
     atomMetadata.set(instance, { name: options.name });
   }
 
-  // Debug mode: Value change detection
-  // Note: Wrapper logic removed due to interference with atom-effect internals (computed reactivity)
-  // Revisit if safer interception method is found.
-  /*
-  if (debug.enabled || options.name) {
-    // ... removed ...
-  }
-  */
-
   return instance;
 }
 

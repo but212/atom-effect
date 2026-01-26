@@ -183,8 +183,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   }
 
   public execute(force = false): void {
-    const flags = this.flags;
-    if (flags & (EFFECT_STATE_FLAGS.DISPOSED | EFFECT_STATE_FLAGS.EXECUTING)) return;
+    if (this.flags & (EFFECT_STATE_FLAGS.DISPOSED | EFFECT_STATE_FLAGS.EXECUTING)) return;
 
     // Check if execution is needed
     if (!force) {
@@ -292,10 +291,6 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       const result = trackingContext.run(this, this._fn);
 
       // Commit
-      const trackedCount = nextDeps.length;
-      nextDeps.length = trackedCount;
-      nextVersions.length = trackedCount;
-
       this._dependencies = nextDeps;
       this._dependencyVersions = nextVersions;
       this._unsubscribes = nextUnsubs;
@@ -363,10 +358,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
         // Wait, 'prevVersions' local variable holds the old array.
         // The 'this._dependencyVersions' has been updated to 'nextVersions'.
         // So I need to release 'prevVersions'. Note: I didn't verify if I need to capture it in a local variable before overwriting strictly, but I did: `const prevVersions = this._dependencyVersions;` at start.
-        if (this._dependencyVersions !== prevVersions && prevVersions !== EMPTY_VERSIONS) {
-          // Redundant check but safe
-          versionArrayPool.release(prevVersions);
-        } else if (prevVersions !== EMPTY_VERSIONS && committed) {
+        if (prevVersions !== EMPTY_VERSIONS) {
           versionArrayPool.release(prevVersions);
         }
       } else {

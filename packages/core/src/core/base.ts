@@ -48,7 +48,7 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
   subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
     if (typeof listener === 'function') {
       const subs = this._fnSubs;
-      // Optimization: Skip duplicates in DEV (and PROD for safety)
+      // Optimization: Skip duplicates
       if (subs.indexOf(listener) !== -1) {
         if (IS_DEV) {
           console.warn(
@@ -65,12 +65,8 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
         const idx = subs.indexOf(listener);
         if (idx !== -1) {
           const last = subs.pop()!;
-          if (idx < subs.length) {
-            subs[idx] = last;
-          }
-          if (subs.length === 0) {
-            this.flags &= ~NODE_FLAGS.HAS_FN_SUBS;
-          }
+          if (idx < subs.length) subs[idx] = last;
+          if (subs.length === 0) this.flags &= ~NODE_FLAGS.HAS_FN_SUBS;
         }
       };
     }
@@ -93,12 +89,8 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
         const idx = subs.indexOf(listener);
         if (idx !== -1) {
           const last = subs.pop()!;
-          if (idx < subs.length) {
-            subs[idx] = last;
-          }
-          if (subs.length === 0) {
-            this.flags &= ~NODE_FLAGS.HAS_OBJ_SUBS;
-          }
+          if (idx < subs.length) subs[idx] = last;
+          if (subs.length === 0) this.flags &= ~NODE_FLAGS.HAS_OBJ_SUBS;
         }
       };
     }
@@ -117,11 +109,9 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
    * Notifies all subscribers of a change.
    */
   protected _notifySubscribers(newValue: T | undefined, oldValue: T | undefined): void {
-    const flags = this.flags;
+    if (!(this.flags & (NODE_FLAGS.HAS_FN_SUBS | NODE_FLAGS.HAS_OBJ_SUBS))) return;
 
-    if (!(flags & (NODE_FLAGS.HAS_FN_SUBS | NODE_FLAGS.HAS_OBJ_SUBS))) return;
-
-    if (flags & NODE_FLAGS.HAS_FN_SUBS) {
+    if (this.flags & NODE_FLAGS.HAS_FN_SUBS) {
       const subs = this._fnSubs;
       for (let i = 0, len = subs.length; i < len; i++) {
         try {
@@ -134,7 +124,7 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
       }
     }
 
-    if (flags & NODE_FLAGS.HAS_OBJ_SUBS) {
+    if (this.flags & NODE_FLAGS.HAS_OBJ_SUBS) {
       const subs = this._objSubs;
       for (let i = 0, len = subs.length; i < len; i++) {
         try {

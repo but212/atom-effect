@@ -16,8 +16,6 @@ export function currentEpoch(): number {
   return collectorEpoch;
 }
 
-// === Infinite Loop Detection State ===
-
 export let flushEpoch = 0;
 export let flushExecutionCount = 0;
 let isFlushing = false;

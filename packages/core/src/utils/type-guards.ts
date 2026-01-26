@@ -7,24 +7,16 @@ export function isAtom(obj: unknown): obj is ReadonlyAtom {
     obj !== null &&
     typeof obj === 'object' &&
     'value' in obj &&
-    'subscribe' in obj &&
-    typeof (obj as Record<string, unknown>).subscribe === 'function'
+    typeof (obj as { subscribe?: unknown }).subscribe === 'function'
   );
 }
 
 /** Checks if the given object is a ComputedAtom. */
 export function isComputed(obj: unknown): obj is ComputedAtom {
   if (debug.enabled && obj != null && typeof obj === 'object') {
-    const debugType = debug.getDebugType(obj);
-    if (debugType) {
-      return debugType === 'computed';
-    }
+    if (debug.getDebugType(obj) === 'computed') return true;
   }
-  return (
-    isAtom(obj) &&
-    'invalidate' in obj &&
-    typeof (obj as Record<string, unknown>).invalidate === 'function'
-  );
+  return isAtom(obj) && typeof (obj as { invalidate?: unknown }).invalidate === 'function';
 }
 
 /** Checks if the given object is an EffectObject. */
@@ -32,22 +24,13 @@ export function isEffect(obj: unknown): obj is EffectObject {
   return (
     obj !== null &&
     typeof obj === 'object' &&
-    'dispose' in obj &&
-    'run' in obj &&
-    typeof (obj as Record<string, unknown>).dispose === 'function' &&
-    typeof (obj as Record<string, unknown>).run === 'function'
+    typeof (obj as { dispose?: unknown }).dispose === 'function' &&
+    typeof (obj as { run?: unknown }).run === 'function'
   );
 }
 
 /**
  * Type guard to check if a value is a Promise
- *
- * Uses duck-typing to detect Promise-like objects by checking for
- * the presence of a `then` method.
- *
- * @template T - The type the Promise resolves to
- * @param value - Value to check
- * @returns True if value has a `then` method (is Promise-like)
  */
 export function isPromise<T>(value: unknown): value is Promise<T> {
   return value != null && typeof (value as { then?: unknown }).then === 'function';

@@ -17,26 +17,17 @@ import { getSelector } from './utils';
  * Priority: window.__ATOM_DEBUG__ > NODE_ENV === 'development'
  */
 function getInitialDebugState(): boolean {
-  // Browser: check global flag
   if (typeof window !== 'undefined') {
-    const globalFlag = (window as Window & { __ATOM_DEBUG__?: boolean }).__ATOM_DEBUG__;
-    if (typeof globalFlag === 'boolean') {
-      return globalFlag;
-    }
+    const flag = (window as Window & { __ATOM_DEBUG__?: boolean }).__ATOM_DEBUG__;
+    if (typeof flag === 'boolean') return flag;
   }
 
-  // Vite support
-  if (import.meta.env?.DEV && import.meta.env.MODE !== 'test') {
-    return true;
-  }
+  if (import.meta.env?.DEV && import.meta.env.MODE !== 'test') return true;
 
-  // Node/Bundler check
   try {
     // @ts-expect-error
-    if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'development') {
-      return true;
-    }
-  } catch (_e) {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'development') return true;
+  } catch {
     // ignore
   }
 
@@ -61,8 +52,12 @@ export const debug = {
 
   atomChanged<T>(name: string | undefined, oldVal: T, newVal: T) {
     if (debugEnabled) {
-      const label = name || 'anonymous';
-      console.log(`[atom-effect-jquery] Atom "${label}" changed:`, oldVal, '→', newVal);
+      console.log(
+        `[atom-effect-jquery] Atom "${name ?? 'anonymous'}" changed:`,
+        oldVal,
+        '→',
+        newVal
+      );
     }
   },
 
@@ -71,12 +66,7 @@ export const debug = {
    */
   domUpdated<T>($el: JQuery, type: string, value: T) {
     if (!debugEnabled) return;
-
-    // Console logging
-    const selector = getSelector($el);
-    console.log(`[atom-effect-jquery] DOM updated: ${selector}.${type} =`, value);
-
-    // Visual highlight (red border flash)
+    console.log(`[atom-effect-jquery] DOM updated: ${getSelector($el)}.${type} =`, value);
     highlightElement($el);
   },
 
@@ -130,31 +120,33 @@ function highlightElement($el: JQuery): void {
   });
 
   // 4. Set timer to restore
-  const timerId = setTimeout(() => {
-    // Restore original styles
-    const originalStyles = $el.data(ORG_STYLE_KEY);
+  $el.data(
+    TIMER_KEY,
+    setTimeout(() => {
+      // Restore original styles
+      const originalStyles = $el.data(ORG_STYLE_KEY);
 
-    // We add a transition for the fade out
-    $el.css('transition', 'outline 0.5s ease-out');
+      // We add a transition for the fade out
+      $el.css('transition', 'outline 0.5s ease-out');
 
-    // Defer the actual style restoration to allow transition to take effect
-    requestAnimationFrame(() => {
-      $el.css({
-        outline: originalStyles?.outline || '',
-        'outline-offset': originalStyles?.outlineOffset || '',
+      // Defer the actual style restoration to allow transition to take effect
+      requestAnimationFrame(() => {
+        $el.css({
+          outline: originalStyles?.outline || '',
+          'outline-offset': originalStyles?.outlineOffset || '',
+        });
+
+        // 5. Cleanup data after fade out
+        $el.data(
+          CLEANUP_TIMER_KEY,
+          setTimeout(() => {
+            $el.css('transition', originalStyles?.transition || '');
+            $el.removeData(TIMER_KEY);
+            $el.removeData(CLEANUP_TIMER_KEY);
+            $el.removeData(ORG_STYLE_KEY);
+          }, 500)
+        );
       });
-
-      // 5. Cleanup data after fade out
-      // Wait for transition to finish (500ms)
-      const cleanupTimerId = setTimeout(() => {
-        $el.css('transition', originalStyles?.transition || '');
-        $el.removeData(TIMER_KEY);
-        $el.removeData(CLEANUP_TIMER_KEY);
-        $el.removeData(ORG_STYLE_KEY);
-      }, 500);
-      $el.data(CLEANUP_TIMER_KEY, cleanupTimerId);
-    });
-  }, 100); // Flash duration
-
-  $el.data(TIMER_KEY, timerId);
+    }, 100)
+  );
 }

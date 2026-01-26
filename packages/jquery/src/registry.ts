@@ -38,30 +38,25 @@ class BindingRegistry {
     return this.ignoredNodes.has(node);
   }
 
-  trackEffect(el: Element, fx: EffectObject): void {
-    let list = this.effects.get(el);
+  private _getOrCreateList<V>(el: Element, map: WeakMap<Element, V[]>): V[] {
+    let list = map.get(el);
     if (!list) {
       list = [];
-      this.effects.set(el, list);
+      map.set(el, list);
       if (!this.boundElements.has(el)) {
         this.boundElements.add(el);
         el.classList.add(AES_BOUND);
       }
     }
-    list.push(fx);
+    return list;
+  }
+
+  trackEffect(el: Element, fx: EffectObject): void {
+    this._getOrCreateList(el, this.effects).push(fx);
   }
 
   trackCleanup(el: Element, fn: () => void): void {
-    let list = this.cleanups.get(el);
-    if (!list) {
-      list = [];
-      this.cleanups.set(el, list);
-      if (!this.boundElements.has(el)) {
-        this.boundElements.add(el);
-        el.classList.add(AES_BOUND);
-      }
-    }
-    list.push(fn);
+    this._getOrCreateList(el, this.cleanups).push(fn);
   }
 
   hasBind(el: Element): boolean {
@@ -81,13 +76,10 @@ class BindingRegistry {
     if (effects) {
       this.effects.delete(el);
       for (let i = 0, len = effects.length; i < len; i++) {
-        const fx = effects[i];
-        if (fx) {
-          try {
-            fx.dispose();
-          } catch (e) {
-            debug.warn('Effect dispose error:', e);
-          }
+        try {
+          effects[i]?.dispose();
+        } catch (e) {
+          debug.warn('Effect dispose error:', e);
         }
       }
     }
@@ -97,31 +89,22 @@ class BindingRegistry {
     if (cleanups) {
       this.cleanups.delete(el);
       for (let i = 0, len = cleanups.length; i < len; i++) {
-        const fn = cleanups[i];
-        if (fn) {
-          try {
-            fn();
-          } catch (e) {
-            debug.warn('Cleanup error:', e);
-          }
+        try {
+          cleanups[i]?.();
+        } catch (e) {
+          debug.warn('Cleanup error:', e);
         }
       }
     }
   }
 
   cleanupDescendants(el: Element): void {
-    // Traverse descendants (Hot Path: only visit bound nodes)
     const children = el.querySelectorAll(`.${AES_BOUND}`);
     for (let i = 0, len = children.length; i < len; i++) {
       const child = children[i] as Element;
-      if (!child) continue;
-
-      if (this.boundElements.has(child)) {
-        // Actual bound element: cleanup properly
+      if (child && this.boundElements.has(child)) {
         this.cleanup(child);
-      } else {
-        // [Fix] Zombie binding: cloned element with class but no WeakMap data
-        // Remove orphaned marker class to prevent future false positives
+      } else if (child) {
         child.classList.remove(AES_BOUND);
       }
     }
@@ -142,18 +125,15 @@ export function enableAutoCleanup(root: Element = document.body): void {
 
   observer = new MutationObserver((mutations) => {
     for (let i = 0, len = mutations.length; i < len; i++) {
-      const mutation = mutations[i];
-      if (!mutation) continue;
-      const removed = mutation.removedNodes;
-      for (let j = 0, rLen = removed.length; j < rLen; j++) {
-        const node = removed[j];
-        if (!node) continue;
+      const removed = mutations[i]?.removedNodes;
+      if (!removed) continue;
 
+      for (let j = 0, rLen = removed.length; j < rLen; j++) {
+        const node = removed[j]!;
         // Skip if kept (detached), explicitly ignored, or still connected
         if (registry.isKept(node) || registry.isIgnored(node) || node.isConnected) continue;
 
         if (node.nodeType === 1) {
-          // Node.ELEMENT_NODE
           registry.cleanupTree(node as Element);
         }
       }

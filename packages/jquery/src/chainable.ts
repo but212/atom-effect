@@ -15,10 +15,7 @@ $.fn.atomText = function <T>(source: ReactiveValue<T>, formatter?: (v: T) => str
     registerReactiveEffect(
       this,
       source,
-      (val) => {
-        const text = formatter ? formatter(val) : String(val ?? '');
-        $(this).text(text);
-      },
+      (val) => $(this).text(formatter ? formatter(val) : String(val ?? '')),
       'text'
     );
   });
@@ -59,10 +56,7 @@ $.fn.atomCss = function (
     registerReactiveEffect(
       this,
       source,
-      (val) => {
-        const cssValue = unit ? `${val}${unit}` : val;
-        $(this).css(prop, cssValue as string | number);
-      },
+      (val) => $(this).css(prop, unit ? `${val}${unit}` : (val as string | number)),
       `css.${prop}`
     );
   });
@@ -77,13 +71,10 @@ $.fn.atomAttr = function (name: string, source: ReactiveValue<string | boolean |
       this,
       source,
       (val) => {
-        const $el = $(this);
         if (val === null || val === undefined || val === false) {
-          $el.removeAttr(name);
-        } else if (val === true) {
-          $el.attr(name, name);
+          $(this).removeAttr(name);
         } else {
-          $el.attr(name, String(val));
+          $(this).attr(name, val === true ? name : String(val));
         }
       },
       `attr.${name}`
@@ -126,10 +117,8 @@ $.fn.atomHide = function (condition: ReactiveValue<boolean>): JQuery {
  */
 $.fn.atomVal = function <T>(atom: WritableAtom<T>, options: ValOptions<T> = {}): JQuery {
   return this.each(function () {
-    const $el = $(this);
-    const { effect: fxFn, cleanup } = applyInputBinding($el, atom, options);
-    const fx = effect(fxFn);
-    registry.trackEffect(this, fx);
+    const { effect: fxFn, cleanup } = applyInputBinding($(this), atom, options);
+    registry.trackEffect(this, effect(fxFn));
     registry.trackCleanup(this, cleanup);
   });
 };

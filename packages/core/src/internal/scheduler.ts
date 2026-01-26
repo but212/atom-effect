@@ -86,9 +86,8 @@ class Scheduler {
       throw new SchedulerError('Scheduler callback must be a function');
     }
 
-    const epoch = this._epoch;
-    if (callback._nextEpoch === epoch) return;
-    callback._nextEpoch = epoch;
+    if (callback._nextEpoch === this._epoch) return;
+    callback._nextEpoch = this._epoch;
 
     if (this._isBatching || this.isFlushingSync) {
       this.batchQueue[this.batchQueueSize++] = callback;
@@ -156,14 +155,13 @@ class Scheduler {
 
     const epoch = ++this._epoch;
     const queue = this.batchQueue;
-    const targetQueue = this._queueBuffer[this._bufferIndex];
     let targetSize = this._size;
 
     for (let i = 0; i < size; i++) {
       const job = queue[i]!;
       if (job._nextEpoch !== epoch) {
         job._nextEpoch = epoch;
-        targetQueue![targetSize++] = job;
+        this._queueBuffer[this._bufferIndex]![targetSize++] = job;
       }
     }
 
@@ -174,10 +172,9 @@ class Scheduler {
 
   private _drainQueue(): void {
     let iterations = 0;
-    const maxIterations = this.maxFlushIterations;
 
     while (this._size > 0) {
-      if (++iterations > maxIterations) {
+      if (++iterations > this.maxFlushIterations) {
         this._handleFlushOverflow();
         return;
       }
@@ -193,8 +190,7 @@ class Scheduler {
     const count = this._size;
 
     // Swap to other buffer
-    const nextIndex = index ^ 1;
-    this._bufferIndex = nextIndex;
+    this._bufferIndex = index ^ 1;
     this._size = 0;
     this._epoch++;
 

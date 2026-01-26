@@ -56,27 +56,26 @@ function bindClass(ctx: BindingContext, classMap: Record<string, ReactiveValue<b
 function bindCss(ctx: BindingContext, cssMap: Record<string, CssValue>): void {
   const style = ctx.el.style as unknown as Record<string, string>;
   for (const prop in cssMap) {
-    const value = cssMap[prop];
-    if (value === undefined) continue;
-    const camelProp = prop.includes('-')
-      ? prop.replace(/-./g, (match) => match.charAt(1).toUpperCase())
-      : prop;
-    if (Array.isArray(value)) {
-      const [source, unit] = value;
+    const val = cssMap[prop];
+    if (val === undefined) continue;
+
+    const camel = prop.includes('-') ? prop.replace(/-./g, (m) => m[1]!.toUpperCase()) : prop;
+
+    if (Array.isArray(val)) {
       registerReactiveEffect(
         ctx.el,
-        source,
-        (val) => {
-          style[camelProp] = `${val}${unit}`;
+        val[0],
+        (v) => {
+          style[camel] = `${v}${val[1]}`;
         },
         `css.${prop}`
       );
     } else {
       registerReactiveEffect(
         ctx.el,
-        value,
-        (val) => {
-          style[camelProp] = val as string;
+        val,
+        (v) => {
+          style[camel] = v as string;
         },
         `css.${prop}`
       );
@@ -88,18 +87,16 @@ function bindAttr(
   ctx: BindingContext,
   attrMap: Record<string, ReactiveValue<string | boolean | null>>
 ): void {
-  const el = ctx.el;
   for (const name in attrMap) {
-    const value = attrMap[name];
     registerReactiveEffect(
-      el,
-      value,
+      ctx.el,
+      attrMap[name],
       (v) => {
         if (v === null || v === undefined || v === false) {
-          el.removeAttribute(name);
-          return;
+          ctx.el.removeAttribute(name);
+        } else {
+          ctx.el.setAttribute(name, v === true ? name : String(v));
         }
-        el.setAttribute(name, v === true ? name : String(v));
       },
       `attr.${name}`
     );
@@ -148,15 +145,16 @@ function bindHide(ctx: BindingContext, condition: ReactiveValue<boolean>): void 
  */
 function bindVal<T>(
   ctx: BindingContext,
-  valConfig: WritableAtom<T> | [atom: WritableAtom<T>, options: ValOptions<T>]
+  cfg: WritableAtom<T> | [atom: WritableAtom<T>, options: ValOptions<T>]
 ): void {
-  const atom = Array.isArray(valConfig) ? valConfig[0] : valConfig;
-  const options = Array.isArray(valConfig) ? valConfig[1] : {};
+  const isArr = Array.isArray(cfg);
+  const { effect: fxFn, cleanup } = applyInputBinding(
+    ctx.$el,
+    isArr ? cfg[0] : cfg,
+    isArr ? cfg[1] : {}
+  );
 
-  const { effect: fxFn, cleanup } = applyInputBinding(ctx.$el, atom, options);
-  const fx = effect(fxFn);
-
-  registry.trackEffect(ctx.el, fx);
+  registry.trackEffect(ctx.el, effect(fxFn));
   ctx.trackCleanup(cleanup);
 }
 
@@ -197,18 +195,19 @@ type EventBindingMap = {
 };
 
 function bindEvents(ctx: BindingContext, eventMap: EventBindingMap): void {
-  const el = ctx.el;
-  for (const eventName in eventMap) {
-    const handler = eventMap[eventName];
+  for (const name in eventMap) {
+    const handler = eventMap[name];
     if (typeof handler !== 'function') continue;
-    const typedHandler = handler as JQuery.EventHandler<HTMLElement, undefined>;
     const listener = (e: Event) => {
-      // Wrap native Event into jQuery.Event with originalEvent preserved
-      const jqEvent = $.Event(e.type, { originalEvent: e }) as JQuery.TriggeredEvent<HTMLElement>;
-      batch(() => typedHandler.call(el, jqEvent));
+      batch(() =>
+        (handler as JQuery.EventHandler<HTMLElement, undefined>).call(
+          ctx.el,
+          $.Event(e.type, { originalEvent: e }) as JQuery.TriggeredEvent<HTMLElement>
+        )
+      );
     };
-    el.addEventListener(eventName, listener);
-    ctx.trackCleanup(() => el.removeEventListener(eventName, listener));
+    ctx.el.addEventListener(name, listener);
+    ctx.trackCleanup(() => ctx.el.removeEventListener(name, listener));
   }
 }
 

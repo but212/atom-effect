@@ -37,10 +37,7 @@ export function enablejQueryOverrides() {
 
   // .remove() - Delete element + Unsubscribe
   $.fn.remove = function (selector?: string) {
-    // Filter elements if selector is provided, as per jQuery docs
-    const $target = selector ? this.filter(selector) : this;
-
-    $target.each(function () {
+    (selector ? this.filter(selector) : this).each(function () {
       registry.cleanupTree(this);
       registry.markIgnored(this); // Prevent double-cleanup by observer
     });
@@ -60,9 +57,7 @@ export function enablejQueryOverrides() {
 
   // .detach() - Remove from DOM + Keep Subscription (Marking)
   $.fn.detach = function (selector?: string) {
-    const $target = selector ? this.filter(selector) : this;
-
-    $target.each(function () {
+    (selector ? this.filter(selector) : this).each(function () {
       registry.keep(this);
     });
 
@@ -83,11 +78,9 @@ export function enablejQueryOverrides() {
 
     if (fnIndex !== -1) {
       const originalFn = args[fnIndex] as EventHandler;
+      let wrappedFn = handlerMap.get(originalFn);
 
-      let wrappedFn: EventHandler | undefined;
-      if (handlerMap.has(originalFn)) {
-        wrappedFn = handlerMap.get(originalFn);
-      } else {
+      if (!wrappedFn) {
         wrappedFn = function (
           this: unknown,
           event: JQuery.TriggeredEvent,
@@ -115,10 +108,7 @@ export function enablejQueryOverrides() {
     }
 
     if (fnIndex !== -1) {
-      const originalFn = args[fnIndex] as EventHandler;
-      if (handlerMap.has(originalFn)) {
-        args[fnIndex] = handlerMap.get(originalFn);
-      }
+      args[fnIndex] = handlerMap.get(args[fnIndex] as EventHandler) ?? args[fnIndex];
     }
 
     return originalOff.apply(this, args as Parameters<typeof originalOff>);
