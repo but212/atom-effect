@@ -2,7 +2,13 @@
 
 ## [0.15.3]
 
-### jQuery
+### Core - 0.15.3
+
+#### Added - Core 0.15.3
+
+- **Edge Cases**: Added test for circular dependencies in effects.
+
+### jQuery - 0.15.3
 
 #### Fixed - jQuery 0.15.3
 

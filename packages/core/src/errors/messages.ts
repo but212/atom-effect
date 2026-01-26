@@ -61,6 +61,11 @@ export const ERROR_MESSAGES = {
    */
   COMPUTED_DEPENDENCY_SUBSCRIPTION_FAILED: 'Failed to subscribe to dependency',
 
+  /**
+   * Error thrown when accessing a disposed computed value.
+   */
+  COMPUTED_DISPOSED: 'Cannot access a disposed computed',
+
   // ─────────────────────────────────────────────────────────────────
   // Atom errors
   // ─────────────────────────────────────────────────────────────────
