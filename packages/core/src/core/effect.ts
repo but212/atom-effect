@@ -432,6 +432,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       if ('value' in dep) {
         try {
           untracked(() => (dep as { value: unknown }).value);
+          if (dep.version !== versions[i]) return true;
         } catch {
           return true;
         }
