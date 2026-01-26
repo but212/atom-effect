@@ -7,33 +7,39 @@ import { bench, describe } from 'vitest';
 import { atom, batch, computed, effect } from '../../src/index.js';
 import { benchEffectOptions, microBenchOptions } from '../utils/setup.js';
 
+const REPEATS = 1000;
+
 describe('Batch Operations', () => {
   const a = atom(0);
   const b = atom(0);
 
   bench(
-    'batch update 2 atoms',
+    `batch update 2 atoms (x${REPEATS})`,
     () => {
-      // Toggle values
-      const val = a.value === 0 ? 1 : 0;
-      batch(() => {
-        a.value = val;
-        b.value = val;
-      });
+      for (let i = 0; i < REPEATS; i++) {
+        // Toggle values
+        const val = a.value === 0 ? 1 : 0;
+        batch(() => {
+          a.value = val;
+          b.value = val;
+        });
+      }
     },
     microBenchOptions
   );
 
   const atoms10 = Array.from({ length: 10 }, () => atom(0));
   bench(
-    'batch update 10 atoms',
+    `batch update 10 atoms (x${REPEATS})`,
     () => {
-      const val = atoms10[0].value === 0 ? 1 : 0;
-      batch(() => {
-        for (let i = 0; i < 10; i++) {
-          atoms10[i].value = val;
-        }
-      });
+      for (let j = 0; j < REPEATS; j++) {
+        const val = atoms10[0].value === 0 ? 1 : 0;
+        batch(() => {
+          for (let i = 0; i < 10; i++) {
+            atoms10[i].value = val;
+          }
+        });
+      }
     },
     microBenchOptions
   );
@@ -100,15 +106,17 @@ describe('Nested Batches', () => {
   const b = atom(0);
 
   bench(
-    'nested batch (2 levels)',
+    `nested batch (2 levels) (x${REPEATS})`,
     () => {
-      const val = a.value === 0 ? 1 : 0;
-      batch(() => {
-        a.value = val;
+      for (let i = 0; i < REPEATS; i++) {
+        const val = a.value === 0 ? 1 : 0;
         batch(() => {
-          b.value = val;
+          a.value = val;
+          batch(() => {
+            b.value = val;
+          });
         });
-      });
+      }
     },
     microBenchOptions
   );
@@ -116,24 +124,26 @@ describe('Nested Batches', () => {
   const atomsNested = Array.from({ length: 5 }, () => atom(0));
 
   bench(
-    'nested batch (5 levels)',
+    `nested batch (5 levels) (x${REPEATS})`,
     () => {
-      const val = atomsNested[0].value === 0 ? 1 : 0;
-      batch(() => {
-        atomsNested[0].value = val;
+      for (let j = 0; j < REPEATS; j++) {
+        const val = atomsNested[0].value === 0 ? 1 : 0;
         batch(() => {
-          atomsNested[1].value = val;
+          atomsNested[0].value = val;
           batch(() => {
-            atomsNested[2].value = val;
+            atomsNested[1].value = val;
             batch(() => {
-              atomsNested[3].value = val;
+              atomsNested[2].value = val;
               batch(() => {
-                atomsNested[4].value = val;
+                atomsNested[3].value = val;
+                batch(() => {
+                  atomsNested[4].value = val;
+                });
               });
             });
           });
         });
-      });
+      }
     },
     microBenchOptions
   );
