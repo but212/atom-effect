@@ -330,10 +330,6 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       ~(COMPUTED_STATE_FLAGS.IDLE | COMPUTED_STATE_FLAGS.RESOLVED | COMPUTED_STATE_FLAGS.REJECTED);
   }
 
-  private _isResolved(): boolean {
-    return (this.flags & COMPUTED_STATE_FLAGS.RESOLVED) !== 0;
-  }
-
   private _setResolved(): void {
     this.flags =
       (this.flags | COMPUTED_STATE_FLAGS.RESOLVED) &
@@ -343,10 +339,6 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
         COMPUTED_STATE_FLAGS.REJECTED |
         COMPUTED_STATE_FLAGS.HAS_ERROR
       );
-  }
-
-  private _isRejected(): boolean {
-    return (this.flags & COMPUTED_STATE_FLAGS.REJECTED) !== 0;
   }
 
   private _setRejected(): void {

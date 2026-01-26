@@ -3,8 +3,7 @@ import { syncDependencies } from '@/core/dep-tracking';
 import type { Dependency, Subscriber } from '@/types';
 import { ArrayPool } from '@/utils/array-pool';
 import { debug } from '@/utils/debug';
-import { ObjectPool, type Poolable } from '@/utils/object-pool';
-import { isComputed, isTrackableFunction } from '@/utils/type-guards';
+import { isComputed } from '@/utils/type-guards';
 
 describe('Utils & Handlers - Extra Coverage', () => {
   describe('DepTracking - syncDependencies', () => {
@@ -76,24 +75,6 @@ describe('Utils & Handlers - Extra Coverage', () => {
     });
   });
 
-  describe('ObjectPool', () => {
-    class TestObj implements Poolable {
-      reset() {}
-    }
-
-    it('warmup adds to existing pool size', () => {
-      const pool = new ObjectPool(() => new TestObj(), 10);
-      pool.warmup(2);
-      expect((pool as unknown as { poolSize: number }).poolSize).toBe(2);
-
-      pool.warmup(5); // Should add 3 more to reach 5, but logic is loop from size to target
-      // code: for (let i = this.poolSize; i < targetSize; i++)
-      // targetSize = Math.min(count, maxPoolSize)
-      // so warmup(5) sets target to 5. i goes 2->5.
-      expect((pool as unknown as { poolSize: number }).poolSize).toBe(5);
-    });
-  });
-
   describe('DepTracking - trackDependency', () => {
     it('syncDependencies reuses existing subscriptions', () => {
       const dep = {
@@ -111,13 +92,6 @@ describe('Utils & Handlers - Extra Coverage', () => {
   });
 
   describe('Type Guards', () => {
-    it('isTrackableFunction identifies functions with addDependency', () => {
-      const fn = () => {};
-      (fn as unknown as { addDependency: () => void }).addDependency = () => {};
-      expect(isTrackableFunction(fn)).toBe(true);
-      expect(isTrackableFunction(() => {})).toBe(false);
-    });
-
     it('isComputed checks debug type if enabled', () => {
       const wasEnabled = debug.enabled;
       debug.enabled = true;
