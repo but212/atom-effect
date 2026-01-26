@@ -15,7 +15,7 @@ describe('Scheduler - Extra Coverage', () => {
     scheduler.schedule(job);
 
     // Temporarily set a low limit for testing
-    const originalMax = (scheduler as unknown as { maxFlushIterations: number }).maxFlushIterations;
+    const originalMax = (scheduler as unknown as { _maxIterations: number })._maxIterations;
     scheduler.setMaxFlushIterations(10);
 
     scheduler.endBatch(); // This should trigger the iteration limit
