@@ -80,20 +80,37 @@ export interface ValOptions<T> {
  * Consolidates scattered state flags into a single, traceable object.
  * This is the "bone structure" for input binding lifecycle management.
  */
+/**
+ * Bit flags for input binding state management.
+ * Consolidates mutually exclusive phases and orthogonal states (focus) into a single integer.
+ */
+export const enum BindingFlags {
+  None = 0,
+  Focused = 1 << 0,
+  Composing = 1 << 1,
+  SyncingToAtom = 1 << 2,
+  SyncingToDom = 1 << 3,
+  // Mask for any active processing phase (excluding simple focus)
+  Busy = Composing | SyncingToAtom | SyncingToDom,
+}
+
+/**
+ * State context for two-way input bindings.
+ * Consolidates scattered state flags into a single, traceable object.
+ * This is the "bone structure" for input binding lifecycle management.
+ */
 export interface InputBindingState {
   /** Timeout ID for debounced updates */
   timeoutId: number | null;
-  /** Current binding phase - makes state transitions explicit and traceable */
-  phase: 'idle' | 'composing' | 'syncing-to-atom' | 'syncing-to-dom';
-  /** Whether the input currently has focus */
-  hasFocus: boolean;
+  /** Bitmask of current state flags */
+  flags: number;
 }
 
 /**
  * Creates a fresh InputBindingState with default values.
  */
 export function createInputBindingState(): InputBindingState {
-  return { timeoutId: null, phase: 'idle', hasFocus: false };
+  return { timeoutId: null, flags: BindingFlags.None };
 }
 
 /**
