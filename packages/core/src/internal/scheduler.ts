@@ -32,7 +32,7 @@ class Scheduler {
   private _size: number;
   private _epoch: number;
   private isProcessing: boolean;
-  public isBatching: boolean;
+  private _isBatching: boolean;
   private batchDepth: number;
   private batchQueue: SchedulerJob[];
   private batchQueueSize: number;
@@ -45,7 +45,7 @@ class Scheduler {
     this._size = 0;
     this._epoch = 0;
     this.isProcessing = false;
-    this.isBatching = false;
+    this._isBatching = false;
     this.batchDepth = 0;
     this.batchQueue = [];
     this.batchQueueSize = 0;
@@ -60,7 +60,7 @@ class Scheduler {
     if (this.isProcessing || this.isFlushingSync) {
       return SchedulerPhase.FLUSHING;
     }
-    if (this.isBatching) {
+    if (this._isBatching) {
       return SchedulerPhase.BATCHING;
     }
     return SchedulerPhase.IDLE;
@@ -69,6 +69,13 @@ class Scheduler {
   /** Current number of pending jobs. */
   get queueSize(): number {
     return this._size;
+  }
+
+  /**
+   * Returns whether the scheduler is currently batching updates.
+   */
+  get isBatching(): boolean {
+    return this._isBatching;
   }
 
   /**
@@ -83,7 +90,7 @@ class Scheduler {
     if (callback._nextEpoch === epoch) return;
     callback._nextEpoch = epoch;
 
-    if (this.isBatching || this.isFlushingSync) {
+    if (this._isBatching || this.isFlushingSync) {
       this.batchQueue[this.batchQueueSize++] = callback;
       return;
     }
@@ -115,7 +122,7 @@ class Scheduler {
         this.isProcessing = false;
 
         // Recursively trigger next flush if new jobs were added during drainage
-        if (this._size > 0 && !this.isBatching) {
+        if (this._size > 0 && !this._isBatching) {
           this.flush();
         }
       }
@@ -221,7 +228,7 @@ class Scheduler {
 
   startBatch(): void {
     this.batchDepth++;
-    this.isBatching = true;
+    this._isBatching = true;
   }
 
   endBatch(): void {
@@ -235,7 +242,7 @@ class Scheduler {
 
     if (this.batchDepth === 0) {
       this.flushSync();
-      this.isBatching = false;
+      this._isBatching = false;
     }
   }
 
