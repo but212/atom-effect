@@ -9,7 +9,8 @@
 - **Node Identification**: Added bitwise flags (`IS_ATOM`, `IS_COMPUTED`, etc.) to `NODE_FLAGS` for O(1) type identification, replacing slower `in` operator and `typeof` checks in hot paths.
 - **SMI Range Optimization**: Relocated bit flags to bits 10-13 to ensure all flag operations remain within V8's Small Integer (SMI) range.
 - **Hidden Class Stability**: Standardized initialization order and grouped property/flag initializations across all core reactive primitives (`AtomImpl`, `ComputedAtomImpl`, `EffectImpl`, `Scheduler`) to ensure stable V8 Hidden Classes and prevent shape transitions.
-- **GC Reduction**: Merged internal tracker logic into
+- **GC Reduction**: Merged internal tracker logic into `ComputedAtomImpl` and optimized error collection to minimize heap pressure and redundant allocations.
+- **Cache Locality & Scheduling**: Optimized `Scheduler` with double-buffered queues and identity-check fast paths for cleaner and more efficient reactive updates.
 
 ### jQuery
 
