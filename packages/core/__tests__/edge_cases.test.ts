@@ -279,9 +279,8 @@ describe('Reactive Core - Edge Cases', () => {
       derived.dispose();
 
       count.value = 10;
-      try {
-        const _val = derived.value;
-      } catch (_e) {}
+      // Accessing a disposed computed should throw an error.
+      expect(() => derived.value).toThrow();
     });
   });
 
