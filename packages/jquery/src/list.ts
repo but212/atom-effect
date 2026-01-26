@@ -136,6 +136,7 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
 
           if (update) {
             update(entry.$el, item, i);
+            debug.domUpdated(entry.$el, 'list.update', item);
           } else if (oldItem !== item) {
             // Check for shallow equality to avoid unnecessary re-renders (preserves focus)
             let isChanged = true;
@@ -170,6 +171,7 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
               entry.$el = $newEl;
               if (bind) bind($newEl, item, i);
 
+              debug.domUpdated($newEl, 'list.render', item);
               _replaced = true;
 
               if (isNextNodeSelf) {
@@ -207,6 +209,7 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
           if (bind) bind($el, item, i);
           if (onAdd) onAdd($el);
 
+          debug.domUpdated($el, 'list.add', item);
           debug.log('list', `${containerSelector} added item:`, k);
           nextNode = $el[0] || null;
         }
