@@ -21,9 +21,12 @@ export const AsyncState = {
  * Reserved lower bits for base class state
  */
 export const NODE_FLAGS = {
+  // Base node state and subscription markers (bits 0-2)
   DISPOSED: 1 << 0,
   HAS_FN_SUBS: 1 << 1,
   HAS_OBJ_SUBS: 1 << 2,
+
+  // Node type identification flags (bits 10-13)
   IS_ATOM: 1 << 10,
   IS_COMPUTED: 1 << 11,
   IS_EFFECT: 1 << 12,
