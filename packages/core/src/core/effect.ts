@@ -1,4 +1,11 @@
-import { EFFECT_STATE_FLAGS, IS_DEV, SCHEDULER_CONFIG, TIME_CONSTANTS } from '@/constants';
+import {
+  COMPUTED_STATE_FLAGS,
+  EFFECT_STATE_FLAGS,
+  IS_DEV,
+  NODE_FLAGS,
+  SCHEDULER_CONFIG,
+  TIME_CONSTANTS,
+} from '@/constants';
 import { ReactiveNode } from '@/core/base';
 import { EffectError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
@@ -426,19 +433,24 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 
   private _shouldExecute(): boolean {
     const deps = this._dependencies;
-    if (deps.length === 0) return true;
+    const len = deps.length;
+    if (len === 0) return true;
 
     const versions = this._dependencyVersions;
-    for (let i = 0, len = deps.length; i < len; i++) {
+    for (let i = 0; i < len; i++) {
       const dep = deps[i];
       if (!dep) continue;
 
       if (dep.version !== versions[i]) return true;
 
-      // Accuracy check for computed dependencies
-      if (dep.flags & EFFECT_STATE_FLAGS.IS_COMPUTED) {
+      const flags = dep.flags;
+      const isDirtyComputed =
+        (flags & NODE_FLAGS.IS_COMPUTED) !== 0 && (flags & COMPUTED_STATE_FLAGS.DIRTY) !== 0;
+
+      if (isDirtyComputed) {
         try {
           untracked(() => (dep as { value: unknown }).value);
+          if (dep.version !== versions[i]) return true;
         } catch {
           return true;
         }

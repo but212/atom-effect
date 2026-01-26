@@ -91,6 +91,10 @@ class BindingRegistry {
     return !!((this.metadata.get(el)?.flags ?? 0) & FLAG_BOUND);
   }
 
+  getFlags(node: Node): number {
+    return this.metadata.get(node)?.flags ?? 0;
+  }
+
   cleanup(el: Element): void {
     const data = this.metadata.get(el);
     if (!data || !(data.flags & FLAG_BOUND)) return;
@@ -162,21 +166,24 @@ export function enableAutoCleanup(root: Element = document.body): void {
   if (observer) return;
 
   observer = new MutationObserver((mutations) => {
+    const reg = registry;
     for (let i = 0, len = mutations.length; i < len; i++) {
       const mutation = mutations[i];
       if (!mutation) continue;
       const removed = mutation.removedNodes;
-      for (let j = 0, rLen = removed.length; j < rLen; j++) {
+      const rLen = removed.length;
+      if (rLen === 0) continue;
+
+      for (let j = 0; j < rLen; j++) {
         const node = removed[j];
-        if (!node) continue;
+        if (!node || node.nodeType !== 1) continue; // Not an Element
 
-        // Skip if kept (detached), explicitly ignored, or still connected
-        if (registry.isKept(node) || registry.isIgnored(node) || node.isConnected) continue;
+        const el = node as Element;
+        const flags = reg.getFlags(el);
+        // Skip if still connected (reparenting), preserved, or ignored
+        if (el.isConnected || flags & (FLAG_PRESERVED | FLAG_IGNORED)) continue;
 
-        if (node.nodeType === 1) {
-          // Node.ELEMENT_NODE
-          registry.cleanupTree(node as Element);
-        }
+        reg.cleanupTree(el);
       }
     }
   });

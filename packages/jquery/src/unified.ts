@@ -13,6 +13,7 @@ import type {
   WritableAtom,
 } from './types';
 import { BindingFlags, createInputBindingState } from './types';
+import { toCamelCase } from './utils';
 
 // ============================================================================
 // One-Way Binding Handlers (Atom → DOM)
@@ -25,7 +26,8 @@ function bindText<T>(ctx: BindingContext, value: ReactiveValue<T>): void {
     (_, val) => {
       ctx.el.textContent = String(val ?? '');
     },
-    'text'
+    'text',
+    ctx.$el
   );
 }
 
@@ -36,49 +38,54 @@ function bindHtml(ctx: BindingContext, value: ReactiveValue<string>): void {
     (_, val) => {
       ctx.el.innerHTML = String(val ?? '');
     },
-    'html'
+    'html',
+    ctx.$el
   );
 }
 
 function bindClass(ctx: BindingContext, classMap: Record<string, ReactiveValue<boolean>>): void {
+  const el = ctx.el;
   for (const className in classMap) {
     registerReactiveEffect(
-      ctx.el,
+      el,
       classMap[className],
       (_, val) => {
-        ctx.el.classList.toggle(className, !!val);
+        el.classList.toggle(className, !!val);
       },
-      `class.${className}`
+      `class.${className}`,
+      ctx.$el
     );
   }
 }
 
 function bindCss(ctx: BindingContext, cssMap: Record<string, CssValue>): void {
-  const style = ctx.el.style as unknown as Record<string, string>;
+  const el = ctx.el;
+  const style = el.style as unknown as Record<string, string>;
   for (const prop in cssMap) {
     const value = cssMap[prop];
     if (value === undefined) continue;
-    const camelProp = prop.includes('-')
-      ? prop.replace(/-./g, (match) => match.charAt(1).toUpperCase())
-      : prop;
+
+    const camelProp = toCamelCase(prop);
     if (Array.isArray(value)) {
       const [source, unit] = value;
       registerReactiveEffect(
-        ctx.el,
+        el,
         source,
         (_, val) => {
           style[camelProp] = `${val}${unit}`;
         },
-        `css.${prop}`
+        `css.${prop}`,
+        ctx.$el
       );
     } else {
       registerReactiveEffect(
-        ctx.el,
+        el,
         value,
         (_, val) => {
           style[camelProp] = val as string;
         },
-        `css.${prop}`
+        `css.${prop}`,
+        ctx.$el
       );
     }
   }
@@ -101,7 +108,8 @@ function bindAttr(
         }
         el.setAttribute(name, v === true ? name : String(v));
       },
-      `attr.${name}`
+      `attr.${name}`,
+      ctx.$el
     );
   }
 }
@@ -115,7 +123,8 @@ function bindProp(ctx: BindingContext, propMap: Record<string, ReactiveValue<unk
       (_, val) => {
         (el as unknown as Record<string, unknown>)[name] = val;
       },
-      `prop.${name}`
+      `prop.${name}`,
+      ctx.$el
     );
   }
 }
@@ -127,7 +136,8 @@ function bindShow(ctx: BindingContext, condition: ReactiveValue<boolean>): void 
     ($el, val) => {
       $el.toggle(!!val);
     },
-    'show'
+    'show',
+    ctx.$el
   );
 }
 
@@ -138,7 +148,8 @@ function bindHide(ctx: BindingContext, condition: ReactiveValue<boolean>): void 
     ($el, val) => {
       $el.toggle(!val);
     },
-    'hide'
+    'hide',
+    ctx.$el
   );
 }
 

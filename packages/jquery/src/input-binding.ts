@@ -1,3 +1,4 @@
+import { batch } from '@but212/atom-effect';
 import { debug } from './debug';
 import type { InputBindingState, ValOptions, WritableAtom } from './types';
 import { BindingFlags, createInputBindingState } from './types';
@@ -67,8 +68,9 @@ export function applyInputBinding<T>(
     state.flags &= ~BindingFlags.Focused;
     // Force formatting on blur to ensure clean display (now with latest value)
     const formatted = format(atom.value);
-    if ($el.val() !== formatted) {
-      $el.val(formatted);
+    const input = $el[0] as HTMLInputElement | HTMLTextAreaElement;
+    if (input && input.value !== formatted) {
+      input.value = formatted;
     }
   };
 
@@ -87,17 +89,28 @@ export function applyInputBinding<T>(
     }
   };
 
-  $el.on(event, onInput);
-  $el.on('change', onInput);
+  // Wrap event handlers with batch for optimization
+  const batchedOnInput = () => batch(onInput);
+  const batchedOnCompositionEnd = () => batch(onCompositionEnd);
+  const batchedOnBlur = () => batch(onBlur);
+  const batchedOnFocus = () => batch(onFocus);
+  const batchedOnCompositionStart = () => batch(onCompositionStart);
+
+  $el.on(event, batchedOnInput);
+  $el.on('change', batchedOnInput);
+  $el.on('compositionstart', batchedOnCompositionStart);
+  $el.on('compositionend', batchedOnCompositionEnd);
+  $el.on('focus', batchedOnFocus);
+  $el.on('blur', batchedOnBlur);
 
   // Cleanup handler
   const cleanup = () => {
-    $el.off(event, onInput);
-    $el.off('change', onInput);
-    $el.off('compositionstart', onCompositionStart);
-    $el.off('compositionend', onCompositionEnd);
-    $el.off('focus', onFocus);
-    $el.off('blur', onBlur);
+    $el.off(event, batchedOnInput);
+    $el.off('change', batchedOnInput);
+    $el.off('compositionstart', batchedOnCompositionStart);
+    $el.off('compositionend', batchedOnCompositionEnd);
+    $el.off('focus', batchedOnFocus);
+    $el.off('blur', batchedOnBlur);
     if (state.timeoutId) clearTimeout(state.timeoutId);
   };
 

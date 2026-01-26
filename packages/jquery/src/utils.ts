@@ -97,3 +97,22 @@ export function getLIS(arr: Int32Array | number[]): Int32Array {
 
   return lis;
 }
+
+const camelCache: Record<string, string> = Object.create(null);
+
+/**
+ * Converts a dash-case string to camelCase with caching for performance.
+ * Used for CSS property conversions during reactive binding.
+ */
+export function toCamelCase(str: string): string {
+  if (str in camelCache) return camelCache[str]!;
+
+  if (!str.includes('-')) {
+    camelCache[str] = str;
+    return str;
+  }
+
+  const camel = str.replace(/-./g, (match) => match.charAt(1).toUpperCase());
+  camelCache[str] = camel;
+  return camel;
+}

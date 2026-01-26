@@ -84,10 +84,8 @@ export function enablejQueryOverrides() {
     if (fnIndex !== -1) {
       const originalFn = args[fnIndex] as EventHandler;
 
-      let wrappedFn: EventHandler | undefined;
-      if (handlerMap.has(originalFn)) {
-        wrappedFn = handlerMap.get(originalFn);
-      } else {
+      let wrappedFn = handlerMap.get(originalFn);
+      if (!wrappedFn) {
         wrappedFn = function (
           this: unknown,
           event: JQuery.TriggeredEvent,
@@ -116,8 +114,9 @@ export function enablejQueryOverrides() {
 
     if (fnIndex !== -1) {
       const originalFn = args[fnIndex] as EventHandler;
-      if (handlerMap.has(originalFn)) {
-        args[fnIndex] = handlerMap.get(originalFn);
+      const wrapped = handlerMap.get(originalFn);
+      if (wrapped) {
+        args[fnIndex] = wrapped;
       }
     }
 

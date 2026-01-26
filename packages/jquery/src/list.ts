@@ -121,27 +121,31 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
 
         if (entry) {
           entry.item = item;
-          const el = entry.$el[0];
+          const $el = entry.$el;
+          const el = $el[0];
           if (!el) continue;
 
-          if (update) update(entry.$el, item, i);
+          if (update) update($el, item, i);
 
           const isStable = lisIdx >= 0 && lisArr[lisIdx] === i;
           if (isStable) {
             lisIdx--;
             if (el.nextSibling !== nextNode) {
-              if (nextNode) entry.$el.insertBefore(nextNode);
-              else entry.$el.appendTo($container);
+              if (nextNode) $el.insertBefore(nextNode);
+              else $el.appendTo($container);
             }
           } else if (nextNode) {
-            entry.$el.insertBefore(nextNode);
+            $el.insertBefore(nextNode);
           } else {
-            entry.$el.appendTo($container);
+            $el.appendTo($container);
           }
           nextNode = el;
         } else {
           const rendered = render(item, i);
-          const $el = (rendered instanceof Element ? $(rendered) : $(rendered as string)) as JQuery;
+          // Optimization: Direct wrap if already an Element
+          const $el = (
+            rendered instanceof Element ? $(rendered) : $(rendered)
+          ) as JQuery<HTMLElement>;
           itemMap.set(k, { $el, item });
 
           if (nextNode) $el.insertBefore(nextNode);

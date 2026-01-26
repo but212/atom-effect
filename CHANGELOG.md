@@ -11,6 +11,14 @@
 - **Fast-Path Subscription**: Optimized `ReactiveDependency.subscribe` with a fast-path for internal subscribers using the new bitwise flags.
 - **Tracker Optimization**: Refactored `trackDependency` to use bitwise flags for instant identification of structured trackers (Effect, ComputedTrackable).
 
+#### Refactor - Core
+
+- **Notification Efficiency**: Optimized `ReactiveDependency` by splitting subscriber notification into specialized methods (`_notifyFnSubscribers`, `_notifyObjSubscribers`), reducing branching overhead and improving V8 inlining potential.
+- **Dependency Syncing**: Added a fast-path to `syncDependencies` that returns early if next and previous dependencies are identical, bypassing $O(N)$ unsubscription/re-subscription logic.
+- **Error Status Caching**: Implemented epoch-based caching for `ComputedAtom.hasError` to eliminate redundant $O(N)$ dependency tree traversals during status checks.
+- **Smart Re-execution**: Optimized `Effect` re-execution logic to only trigger recomputations for dirty computed dependencies, significantly reducing unnecessary work in stable graphs.
+- **Vectorized Accumulation**: Refactored version snapshotting in computed atoms to use standard `for` loops with pre-cached lengths for better data locality.
+
 ### jQuery
 
 #### Performance - jQuery
@@ -22,6 +30,15 @@
 #### Fixed - jQuery
 
 - **Boolean Attributes**: Improved `atomAttr` to correctly set boolean attribute values (e.g., `checked="checked"`).
+- **List Reconciliation**: Fixed JQuery type compatibility issues in `atomList` and optimized rendering paths for direct element wrapping.
+
+#### Refactor - jQuery
+
+- **Element Wrapping Optimization**: Enhanced `registerReactiveEffect` to support optional pre-wrapped jQuery objects, eliminating redundant `$()` allocations in unified bindings.
+- **Native Input Bridge**: Optimized two-way input bindings to use native `HTMLInputElement` properties (`value`, `selectionStart`) instead of jQuery abstractions, bypassing significant abstraction overhead.
+- **Atomic Event Batching**: Wrapped all input and lifecycle event handlers in `batch()` to ensure atomic state updates and prevent intermediate "glitch" frames.
+- **Property Name Caching**: Added a cached `toCamelCase` utility for CSS bindings, reducing string manipulation cost in reactive update cycles.
+- **Registry & Observer Refinement**: Optimized `BindingRegistry` and `MutationObserver` by streamlining flag lookups and early-exit guards during DOM tree cleanup.
 
 ## [0.15.1]
 

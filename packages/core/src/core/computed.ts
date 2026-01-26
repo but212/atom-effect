@@ -110,6 +110,8 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   // Error propagation fields
   private _cachedErrors: readonly Error[] | null;
   private _errorCacheEpoch: number;
+  private _cachedHasError: boolean;
+  private _hasErrorCacheEpoch: number;
 
   // Async phase drift validation fields
   private _asyncStartAggregateVersion: number;
@@ -147,6 +149,8 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
 
     this._cachedErrors = null;
     this._errorCacheEpoch = -1;
+    this._cachedHasError = false;
+    this._hasErrorCacheEpoch = -1;
     this._asyncStartAggregateVersion = 0;
     this._asyncRetryCount = 0;
 
@@ -213,12 +217,22 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     const flags = this.flags;
     if (flags & (COMPUTED_STATE_FLAGS.REJECTED | COMPUTED_STATE_FLAGS.HAS_ERROR)) return true;
 
+    const epoch = currentEpoch();
+    if (this._hasErrorCacheEpoch === epoch) return this._cachedHasError;
+
+    let hasError = false;
     const deps = this._dependencies;
     for (let i = 0, len = deps.length; i < len; i++) {
       const dep = deps[i];
-      if (dep && dep.flags & COMPUTED_STATE_FLAGS.HAS_ERROR) return true;
+      if (dep && (dep.flags & COMPUTED_STATE_FLAGS.HAS_ERROR) !== 0) {
+        hasError = true;
+        break;
+      }
     }
-    return false;
+
+    this._cachedHasError = hasError;
+    this._hasErrorCacheEpoch = epoch;
+    return hasError;
   }
 
   get isValid(): boolean {
@@ -284,6 +298,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     }
     this._errorCacheEpoch = -1;
     this._cachedErrors = null;
+    this._hasErrorCacheEpoch = -1;
   }
 
   dispose(): void {
@@ -318,6 +333,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._promiseId = (this._promiseId + 1) % this.MAX_PROMISE_ID;
     this._cachedErrors = null;
     this._errorCacheEpoch = -1;
+    this._hasErrorCacheEpoch = -1;
   }
 
   private _clearDirty(): void {
@@ -478,12 +494,12 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   private _captureVersionSnapshot(): number {
     let aggregate = 0;
     const deps = this._dependencies;
-    for (let i = 0, len = deps.length; i < len; i++) {
+    const len = deps.length;
+    for (let i = 0; i < len; i++) {
       const dep = deps[i];
       if (dep) {
         const v = dep.version;
-        // Use a simple mixing to reduce collisions: (hash << 5) - hash + v
-        // This is more robust than simple addition or XOR alone.
+        // Faster mixing for aggregation
         aggregate = ((((aggregate << 5) - aggregate) | 0) + v) & SMI_MAX;
       }
     }
@@ -577,6 +593,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     if (flags & (COMPUTED_STATE_FLAGS.RECOMPUTING | COMPUTED_STATE_FLAGS.DIRTY)) return;
 
     this.flags = flags | COMPUTED_STATE_FLAGS.DIRTY;
+    this._hasErrorCacheEpoch = -1; // Invalidate cache
     this._notifySubscribers(undefined, undefined);
   }
 }

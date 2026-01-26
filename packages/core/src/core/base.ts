@@ -56,7 +56,6 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
    * Subscribes a listener function or Subscriber object to value changes.
    */
   subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
-    // Optimization: Prioritize function listeners as they are the most common case
     if (typeof listener === 'function') {
       return this._addSubscriber(
         this._fnSubs,
@@ -65,15 +64,8 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
       );
     }
 
-    // Guard: Ensure listener is a valid non-null object
-    if (listener !== null && typeof listener === 'object') {
-      // Fast check for internal subscribers
-      if (
-        (listener as Partial<HasFlags>).flags !== undefined ||
-        'execute' in (listener as Subscriber)
-      ) {
-        return this._addSubscriber(this._objSubs, listener as Subscriber, NODE_FLAGS.HAS_OBJ_SUBS);
-      }
+    if (listener && typeof (listener as Subscriber).execute === 'function') {
+      return this._addSubscriber(this._objSubs, listener as Subscriber, NODE_FLAGS.HAS_OBJ_SUBS);
     }
 
     throw new AtomError(ERROR_MESSAGES.ATOM_SUBSCRIBER_MUST_BE_FUNCTION);
@@ -110,12 +102,14 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
       unsubscribed = true;
 
       const currentIdx = subs.indexOf(subscriber);
-      if (currentIdx !== -1) {
-        const last = subs.pop()!;
-        if (currentIdx < subs.length) {
-          subs[currentIdx] = last;
-        }
-        this.flags &= ~(subs.length === 0 ? flag : 0);
+      if (currentIdx === -1) return;
+
+      const last = subs.pop()!;
+      if (currentIdx < subs.length) {
+        subs[currentIdx] = last;
+      }
+      if (subs.length === 0) {
+        this.flags &= ~flag;
       }
     };
   }
@@ -130,34 +124,40 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
     if (!(flags & subMask)) return;
 
     if (flags & NODE_FLAGS.HAS_FN_SUBS) {
-      const subs = this._fnSubs;
-      for (let i = 0, len = subs.length; i < len; i++) {
-        const sub = subs[i];
-        if (sub) {
-          try {
-            sub(newValue, oldValue);
-          } catch (err) {
-            console.error(
-              new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, err as Error)
-            );
-          }
-        }
-      }
+      this._notifyFnSubscribers(newValue, oldValue);
     }
 
     if (flags & NODE_FLAGS.HAS_OBJ_SUBS) {
-      const subs = this._objSubs;
-      for (let i = 0, len = subs.length; i < len; i++) {
-        const sub = subs[i];
-        if (sub) {
-          try {
-            sub.execute();
-          } catch (err) {
-            console.error(
-              new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, err as Error)
-            );
-          }
-        }
+      this._notifyObjSubscribers();
+    }
+  }
+
+  private _notifyFnSubscribers(newValue: T | undefined, oldValue: T | undefined): void {
+    const subs = this._fnSubs;
+    for (let i = 0, len = subs.length; i < len; i++) {
+      const sub = subs[i];
+      if (sub === undefined) continue;
+      try {
+        sub(newValue, oldValue);
+      } catch (err) {
+        console.error(
+          new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, err as Error)
+        );
+      }
+    }
+  }
+
+  private _notifyObjSubscribers(): void {
+    const subs = this._objSubs;
+    for (let i = 0, len = subs.length; i < len; i++) {
+      const sub = subs[i];
+      if (sub === undefined) continue;
+      try {
+        sub.execute();
+      } catch (err) {
+        console.error(
+          new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, err as Error)
+        );
       }
     }
   }

@@ -27,9 +27,10 @@ export function registerReactiveEffect<T>(
   el: HTMLElement,
   source: ReactiveValue<T>,
   updater: ($el: JQuery, value: T) => void,
-  debugType: string
+  debugType: string,
+  $elArg?: JQuery
 ): void {
-  const $el = $(el);
+  const $el = $elArg ?? $(el);
 
   if (isReactive(source)) {
     const fx = effect(() => {

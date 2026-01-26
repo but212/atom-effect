@@ -53,15 +53,26 @@ export function syncDependencies(
   const prevLen = prevDeps.length;
   const hasPrev = prevDeps !== EMPTY_DEPS && prevLen > 0;
 
-  // 1. Initial dense pass: map existing unsubs to dependencies
+  if (nextLen === prevLen && hasPrev) {
+    let identical = true;
+    for (let i = 0; i < nextLen; i++) {
+      if (nextDeps[i] !== prevDeps[i]) {
+        identical = false;
+        break;
+      }
+    }
+    if (identical) {
+      return prevUnsubs;
+    }
+  }
+
   if (hasPrev) {
-    for (let i = 0; i < prevLen; i++) {
+    for (let i = 0, len = prevDeps.length; i < len; i++) {
       const dep = prevDeps[i];
       if (dep) dep._tempUnsub = prevUnsubs[i];
     }
   }
 
-  // 2. Build new unsubs array: reuse or subscribe
   const nextUnsubs = unsubArrayPool.acquire();
   nextUnsubs.length = nextLen;
 
@@ -74,15 +85,13 @@ export function syncDependencies(
       nextUnsubs[i] = reuse;
       dep._tempUnsub = undefined;
     } else {
-      // Keep checkCircular outside debug.enabled guard if tests rely on global spying
       debug.checkCircular(dep, tracker);
       nextUnsubs[i] = dep.subscribe(tracker);
     }
   }
 
-  // 3. Final cleanup pass: unsubscribe stale dependencies
   if (hasPrev) {
-    for (let i = 0; i < prevLen; i++) {
+    for (let i = 0, len = prevDeps.length; i < len; i++) {
       const dep = prevDeps[i];
       if (dep) {
         const unsub = dep._tempUnsub;
