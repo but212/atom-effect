@@ -642,8 +642,17 @@
     </template>
 
     <script>
-      // --- State ---
-      const currentRoute = $.atom("dashboard");
+      const getHashRoute = () =>
+        window.location.hash.substring(1) || "dashboard";
+      const currentRoute = $.atom(getHashRoute());
+
+      $(window).on("hashchange", () => {
+        const newRoute = getHashRoute();
+        if (currentRoute.value !== newRoute) {
+          currentRoute.value = newRoute;
+        }
+      });
+
       const isSidebarCollapsed = $.atom(false);
       const searchQuery = $.atom("");
       const tasks = $.atom([
@@ -674,8 +683,7 @@
       );
       const pageTitleText = $.computed(() => currentRoute.value.toUpperCase());
 
-      // --- Bindings ---
-      $(".nav-link").each(function () {
+      $("#sidebar .nav-link").each(function () {
         const $link = $(this);
         const route = $link.data("route");
         const isActive = $.computed(() => currentRoute.value === route);
@@ -687,7 +695,7 @@
           on: {
             click: (e) => {
               e.preventDefault();
-              currentRoute.value = route;
+              window.location.hash = route;
             },
           },
         });
