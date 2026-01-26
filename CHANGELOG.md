@@ -1,10 +1,18 @@
 # Changelog
 
-## [0.15.1]
+## [0.15.2]
 
 ### jQuery
 
-#### Fixed - jQuery
+#### Changed - jQuery
+
+- **atomList**: Enhanced `render` and `empty` options to support `DocumentFragment` and `JQuery` objects, providing more flexibility in template rendering.
+
+## [0.15.1]
+
+### jQuery - 0.15.1
+
+#### Fixed - jQuery 0.15.1
 
 - **Debounce Blur Data Loss**: Fixed a critical bug where user input was lost when blurring an input field with a pending debounce timer. The `onBlur` handler now flushes pending sync operations before formatting.
 - **Zombie Binding Cleanup**: Fixed orphaned `_aes-bound` class markers on cloned elements. `cleanupDescendants` now removes the marker class from elements that have no WeakMap binding data.
@@ -13,42 +21,42 @@
 
 ## [0.15.0]
 
-### Core
+### Core - 0.15.0
 
-#### Fixed - Core
+#### Fixed - Core 0.15.0
 
 - **Circular Dependencies**: Throws `ComputedError` instead of returning undefined.
 - **Effect Errors**: Correctly throws `EFFECT_DISPOSED` and fixed rate limit execution flow.
 - **Atom Notifications**: Fixed a race condition where notifications were flushed after disposal, preventing `undefined` values from reaching subscribers.
 - **Async Effect Cleanup**: Fixed a memory leak where stale async cleanup functions could clobber newer ones; implemented execution ID tracking to ensure only the latest cleanup is kept and stale ones are disposed of.
 
-#### Changed - Core
+#### Changed - Core 0.15.0
 
 - **DEV Guards**: Added warnings for duplicate subscriptions and mismatched batching; optimized production checks.
 - **Internal Logic**: Improved object pool resetting, epoch overflow prevention, and type guard simplification.
 - **Drift Detection**: Enhanced async drift detection in computed atoms by using DJB2-style bitwise hash mixing for snapshots and increasing sensitivity to detect any change.
 
-#### Removed - Core
+#### Removed - Core 0.15.0
 
 - Cleaned up unused private methods, redundant state resets, and duplicate JSDoc.
 - **Priority System**: Simplified the `Scheduler` by removing the unused urgent queue system and priority calculation logic.
 - **Unused Methods**: Removed `isUrgent()` and `_getAggregateShift()` from `ComputedAtomImpl` (not part of the public API).
 - **Constants**: Removed obsolete phase-shift constants (`PHASE_BITS`, `PHASE_THRESHOLD`, `PHASE_MASK`) as the priority system has been decommissioned.
 
-### jQuery
+### jQuery - 0.15.0
 
-#### Fixed - jQuery
+#### Fixed - jQuery 0.15.0
 
 - Improved cleanup error logging and registry management for detached nodes.
 
-#### Changed - jQuery
+#### Changed - jQuery 0.15.0
 
 - **Bindings**: Added custom equality support and unified phase state logic.
 - **Types**: Enhanced event handler and binding map type safety, replacing `any` with strong types.
 - **Consistency**: Ensured static values trigger DOM debug events.
 - **atomList**: Added duplicate key warnings in development mode (when `debug.enabled` is true) to improve robustness and debuggability.
 
-#### Removed - jQuery
+#### Removed - jQuery 0.15.0
 
 - Removed unused `effects` context field and redundant variables.
 
@@ -75,13 +83,13 @@
 
 ### jQuery - 0.13.1
 
-#### Fixed - jQuery
+#### Fixed - jQuery 0.13.1
 
 - **Marker Class**: Changed `aes-bound` to `_aes-bound` to avoid potential conflicts with other libraries.
 
 ## [0.13.0]
 
-### Benchmarks
+### Benchmarks - 0.13.0
 
 - **Benchmark Suite Overhaul**: Refactored the benchmark suite to prioritize statistical significance and eliminate measurement noise.
   - **Batch Operations**: Migrated micro-benchmarks (creation, read, write) to batch operations (x1000) to ensure the signal-to-noise ratio is high enough to overcome JIT and measurement overhead.

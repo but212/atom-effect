@@ -55,12 +55,12 @@ export interface BindingOptions<T> {
  */
 export interface ListOptions<T> {
   key: keyof T | ((item: T, index: number) => string | number);
-  render: (item: T, index: number) => string | Element;
+  render: (item: T, index: number) => string | Element | DocumentFragment | JQuery;
   bind?: ($el: JQuery, item: T, index: number) => void;
   update?: ($el: JQuery, item: T, index: number) => void;
   onAdd?: ($el: JQuery) => void;
   onRemove?: ($el: JQuery) => Promise<void> | void;
-  empty?: string;
+  empty?: string | Element | DocumentFragment | JQuery;
 }
 
 /**
