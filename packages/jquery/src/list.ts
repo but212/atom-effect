@@ -34,8 +34,8 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
       // 1. Handle Empty Template Logic
       if (itemCount === 0) {
         if (empty && !$emptyEl) {
-          // @ts-expect-error
-          $emptyEl = $(empty).appendTo($container);
+          // biome-ignore lint/suspicious/noExplicitAny: temporary typing
+          $emptyEl = $(empty as any).appendTo($container);
         }
       } else if ($emptyEl) {
         $emptyEl.remove();
@@ -127,28 +127,73 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
 
         if (entry) {
           // Existing Item: Update then potentially MOVE
+          const oldItem = entry.item;
           entry.item = item;
           const el = entry.$el[0];
           if (!el) continue;
 
-          if (update) update(entry.$el, item, i);
+          let _replaced = false;
+
+          if (update) {
+            update(entry.$el, item, i);
+          } else if (oldItem !== item) {
+            // Check for shallow equality to avoid unnecessary re-renders (preserves focus)
+            let isChanged = true;
+            if (
+              typeof oldItem === 'object' &&
+              oldItem !== null &&
+              typeof item === 'object' &&
+              item !== null
+            ) {
+              const keysA = Object.keys(oldItem as object);
+              const keysB = Object.keys(item as object);
+              if (keysA.length === keysB.length) {
+                isChanged = false;
+                for (const k of keysA) {
+                  // biome-ignore lint/suspicious/noExplicitAny: temporary typing
+                  if ((oldItem as any)[k] !== (item as any)[k]) {
+                    isChanged = true;
+                    break;
+                  }
+                }
+              }
+            }
+
+            if (isChanged) {
+              // Fallback: Data changed and no update function -> Re-render
+              const rendered = render(item, i);
+              // biome-ignore lint/suspicious/noExplicitAny: temporary typing
+              const $newEl = $(rendered as any);
+              const isNextNodeSelf = nextNode === el;
+
+              entry.$el.replaceWith($newEl);
+              entry.$el = $newEl;
+              if (bind) bind($newEl, item, i);
+
+              _replaced = true;
+
+              if (isNextNodeSelf) {
+                nextNode = $newEl[0] || null;
+              }
+            }
+          }
 
           const isStable = lisIdx >= 0 && lisArr[lisIdx] === i;
           if (isStable) {
             lisIdx--;
-            // LIS stable: in theory doesn't need move, but async onRemove may have
-            // left DOM in inconsistent state with logical order, so verify actual position.
-            const currentNext = el.nextSibling;
-            if (currentNext !== nextNode) {
-              if (nextNode) entry.$el.insertBefore(nextNode);
-              else entry.$el.appendTo($container);
-            }
           } else if (nextNode) {
-            entry.$el.insertBefore(nextNode);
+            // Check if nextNode is still in DOM (sanity check for duplicates/replacements)
+            if (nextNode.isConnected && nextNode !== entry.$el[0]) {
+              entry.$el.insertBefore(nextNode);
+            } else if (!nextNode.isConnected) {
+              // Fallback if nextNode somehow got detached (shouldn't happen with patch)
+              entry.$el.appendTo($container);
+            }
+            // If nextNode === entry.$el[0], do nothing (already there/reordered virtually)
           } else {
             entry.$el.appendTo($container);
           }
-          nextNode = el;
+          nextNode = entry.$el[0] || null;
         } else {
           // New Item: Render and INSERT
           const rendered = render(item, i);
@@ -156,7 +201,7 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
           const $el = $(rendered as any);
           itemMap.set(k, { $el, item });
 
-          if (nextNode) $el.insertBefore(nextNode);
+          if (nextNode?.isConnected) $el.insertBefore(nextNode);
           else $el.appendTo($container);
 
           if (bind) bind($el, item, i);

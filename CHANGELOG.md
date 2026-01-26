@@ -1,10 +1,22 @@
 # Changelog
 
-## [0.15.2]
+## [0.15.3]
 
 ### jQuery
 
-#### Changed - jQuery
+#### Fixed - jQuery 0.15.3
+
+- **atomList Edge Cases**:
+  - **DOM Cleanup Race Condition**: Fixed a race condition where async `onRemove` callbacks could leave "ghost" elements in the DOM if re-added synchronously. Added `isConnected` checks during reconciliation to correctly handle detached nodes.
+  - **Focus Loss on Update**: Implemented shallow equality check for item updates. Prevents unnecessary DOM replacement when the object reference changes but content is identical, preserving input focus during reordering or immutable updates.
+  - **Duplicate Key Robustness**: Added warnings for duplicate keys in debug mode and improved reconciliation logic to recover gracefully from key collisions.
+  - **Empty Template Typing**: Fixed TS error in empty template logic.
+
+## [0.15.2]
+
+### jQuery - 0.15.2
+
+#### Changed - jQuery 0.15.2
 
 - **atomList**: Enhanced `render` and `empty` options to support `DocumentFragment` and `JQuery` objects, providing more flexibility in template rendering.
 
