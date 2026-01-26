@@ -2,15 +2,15 @@
 
 ## [0.15.3]
 
-### Core - 0.15.3
+### Core
 
-#### Added - Core 0.15.3
+#### Added
 
 - **Edge Cases**: Added test for circular dependencies in effects.
 
-### jQuery - 0.15.3
+### jQuery
 
-#### Fixed - jQuery 0.15.3
+#### Fixed
 
 - **atomList Edge Cases**:
   - **DOM Cleanup Race Condition**: Fixed a race condition where async `onRemove` callbacks could leave "ghost" elements in the DOM if re-added synchronously. Added `isConnected` checks during reconciliation to correctly handle detached nodes.
