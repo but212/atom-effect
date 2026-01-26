@@ -33,8 +33,7 @@ describe('Reactive Core - Edge Cases', () => {
       // Create effect that triggers itself
       effect(
         () => {
-          count.value;
-          count.value = count.value + 1;
+          count.value++;
         },
         {
           onError,
