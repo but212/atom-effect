@@ -83,9 +83,9 @@ describe('debug.checkCircular', () => {
     const originalEnabled = debug.enabled;
     debug.enabled = true;
 
-    const nodeA = { dependencies: [] } as unknown as Dependency;
-    const nodeB = { dependencies: [nodeA] } as unknown as Dependency;
-    const nodeC = { dependencies: [nodeB] } as unknown as Dependency;
+    const nodeA = { id: 1, dependencies: [] } as unknown as Dependency;
+    const nodeB = { id: 2, dependencies: [nodeA] } as unknown as Dependency;
+    const nodeC = { id: 3, dependencies: [nodeB] } as unknown as Dependency;
     (nodeA as unknown as { dependencies: unknown[] }).dependencies.push(nodeC); // A → C → B → A
 
     expect(() => {

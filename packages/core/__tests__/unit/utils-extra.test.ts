@@ -118,11 +118,10 @@ describe('Utils & Handlers - Extra Coverage', () => {
 
       interface MockDep {
         id: number;
-        _visitedEpoch: number;
         dependencies?: MockDep[];
       }
-      const dep1: MockDep = { id: 1, _visitedEpoch: -1 };
-      const dep2: MockDep = { id: 2, _visitedEpoch: -1, dependencies: [dep1] };
+      const dep1: MockDep = { id: 1 };
+      const dep2: MockDep = { id: 2, dependencies: [dep1] };
 
       // Case 1: Indirect circular
       dep1.dependencies = [dep2];
@@ -133,16 +132,15 @@ describe('Utils & Handlers - Extra Coverage', () => {
 
       // Case 2: Diamond dependency (hits visited branch)
       // dep1 -> dep2, dep1 -> dep3, dep2 -> dep4, dep3 -> dep4
-      const d4: MockDep = { id: 4, _visitedEpoch: -1 };
-      const d2: MockDep = { id: 2, _visitedEpoch: -1, dependencies: [d4] };
-      const d3: MockDep = { id: 3, _visitedEpoch: -1, dependencies: [d4] };
-      const d1: MockDep = { id: 1, _visitedEpoch: -1, dependencies: [d2, d3] };
+      const d4: MockDep = { id: 4 };
+      const d2: MockDep = { id: 2, dependencies: [d4] };
+      const d3: MockDep = { id: 3, dependencies: [d4] };
+      const d1: MockDep = { id: 1, dependencies: [d2, d3] };
 
       expect(() => debug.checkCircular(d1 as unknown as Dependency, {})).not.toThrow();
-      expect(d4._visitedEpoch).toBeGreaterThan(0); // This confirms line 39 in debug.ts was hit
 
       // Case 3: Dep without dependencies array
-      const emptyDep: MockDep = { id: 3, _visitedEpoch: -1 };
+      const emptyDep: MockDep = { id: 3 };
       expect(() => debug.checkCircular(emptyDep as unknown as Dependency, {})).not.toThrow();
 
       debug.enabled = wasEnabled;

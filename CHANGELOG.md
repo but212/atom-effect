@@ -1,20 +1,14 @@
 # Changelog
 
-## [Unreleased]
+## [0.16.0]
 
 ### Core
 
 #### Changed
 
-- **Memory Optimization**:
-  - **Removed ComputedTrackable**: Inlined dependency tracking logic into `ComputedAtomImpl`, eliminating the overhead of an auxiliary hidden class and reducing memory allocations per computed atom.
-  - **Optimized Flag Checks**: Simplified bitwise operations and removed redundant variable assignments in `Atom`, `Computed`, and `Effect` hot paths.
-  - **Loop Optimization**: Micro-optimized subscriber notification loops in `base.ts` and `syncDependencies` in `dep-tracking.ts` to reduce overhead.
-- **Code Cleanup**:
-  - Removed unused object pools (`notificationPool`, `schedulerCallbackPool`, `ObjectPool`).
-  - Removed unused type guards (`isTrackableFunction`, `isPlainListener`, `hasExecuteMethod`, `hasDependencyMethod`).
-  - Removed unused error messages in `packages/core/src/errors/messages.ts`.
-  - Removed unused private methods in `ComputedAtomImpl` (`_isResolved`, `_isRejected`).
+- **Reactive Engine Optimization**: Reduced memory footprint and execution overhead by inlining internal logic, removing redundant instance properties (e.g., `_visitedEpoch`, `_hasDefaultValue`), and eliminating auxiliary classes like `ComputedTrackable`.
+- **Hot Path Performance**: Micro-optimized subscriber notification loops and dependency tracking to reduce overhead and stack depth.
+- **Codebase Cleanup**: Removed unused object pools, type guards, and internal utilities to simplify the core architecture.
 
 ## [0.15.4]
 

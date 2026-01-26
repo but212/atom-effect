@@ -16,8 +16,6 @@ export class ReactiveNode {
   _lastSeenEpoch: number;
   /** Epoch when this node was last modified */
   _modifiedAtEpoch: number;
-  /** Epoch used for circular dependency detection and graph traversal */
-  _visitedEpoch: number;
   /** Unique numeric identifier within SMI range */
   readonly id: DependencyId;
 
@@ -31,17 +29,9 @@ export class ReactiveNode {
     this.version = 0;
     this._lastSeenEpoch = -1;
     this._modifiedAtEpoch = -1;
-    this._visitedEpoch = -1;
     this.id = (generateId() & SMI_MAX) as DependencyId;
 
     this._tempUnsub = undefined;
-  }
-
-  /**
-   * Calculates the logical distance (shift) between current and cached version.
-   */
-  getShift(cachedVersion: number): number {
-    return (this.version - cachedVersion) & SMI_MAX;
   }
 }
 
@@ -56,18 +46,61 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
    * Subscribes a listener function or Subscriber object to value changes.
    */
   subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
-    // Optimization: Prioritize function listeners as they are the most common case
     if (typeof listener === 'function') {
-      return this._addSubscriber(
-        this._fnSubs,
-        listener as (newValue?: T, oldValue?: T) => void,
-        NODE_FLAGS.HAS_FN_SUBS
-      );
+      const subs = this._fnSubs;
+      // Optimization: Skip duplicates in DEV (and PROD for safety)
+      if (subs.indexOf(listener) !== -1) {
+        if (IS_DEV) {
+          console.warn(
+            'Attempted to subscribe the same listener twice. Ignoring duplicate subscription.'
+          );
+        }
+        return () => {};
+      }
+
+      subs.push(listener);
+      this.flags |= NODE_FLAGS.HAS_FN_SUBS;
+
+      return () => {
+        const idx = subs.indexOf(listener);
+        if (idx !== -1) {
+          const last = subs.pop()!;
+          if (idx < subs.length) {
+            subs[idx] = last;
+          }
+          if (subs.length === 0) {
+            this.flags &= ~NODE_FLAGS.HAS_FN_SUBS;
+          }
+        }
+      };
     }
 
-    // Guard: Ensure listener is a valid non-null object before checking 'execute' property
     if (listener !== null && typeof listener === 'object' && 'execute' in listener) {
-      return this._addSubscriber(this._objSubs, listener as Subscriber, NODE_FLAGS.HAS_OBJ_SUBS);
+      const subs = this._objSubs;
+      if (subs.indexOf(listener) !== -1) {
+        if (IS_DEV) {
+          console.warn(
+            'Attempted to subscribe the same listener twice. Ignoring duplicate subscription.'
+          );
+        }
+        return () => {};
+      }
+
+      subs.push(listener);
+      this.flags |= NODE_FLAGS.HAS_OBJ_SUBS;
+
+      return () => {
+        const idx = subs.indexOf(listener);
+        if (idx !== -1) {
+          const last = subs.pop()!;
+          if (idx < subs.length) {
+            subs[idx] = last;
+          }
+          if (subs.length === 0) {
+            this.flags &= ~NODE_FLAGS.HAS_OBJ_SUBS;
+          }
+        }
+      };
     }
 
     throw new AtomError(ERROR_MESSAGES.ATOM_SUBSCRIBER_MUST_BE_FUNCTION);
@@ -78,39 +111,6 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
    */
   subscriberCount(): number {
     return this._fnSubs.length + this._objSubs.length;
-  }
-
-  /**
-   * Adds a subscriber to the specified subscription list and returns an unsubscribe function.
-   * Uses swap-and-pop for efficient removals.
-   */
-  private _addSubscriber<S>(subs: S[], subscriber: S, flag: number): () => void {
-    if (subs.indexOf(subscriber) !== -1) {
-      if (IS_DEV) {
-        console.warn(
-          'Attempted to subscribe the same listener twice. Ignoring duplicate subscription.'
-        );
-      }
-      return () => {};
-    }
-
-    subs.push(subscriber);
-    this.flags |= flag;
-
-    let unsubscribed = false;
-    return () => {
-      if (unsubscribed) return;
-      unsubscribed = true;
-
-      const currentIdx = subs.indexOf(subscriber);
-      if (currentIdx !== -1) {
-        const last = subs.pop()!;
-        if (currentIdx < subs.length) {
-          subs[currentIdx] = last;
-        }
-        this.flags &= ~(subs.length === 0 ? flag : 0);
-      }
-    };
   }
 
   /**

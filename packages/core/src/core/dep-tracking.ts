@@ -1,5 +1,5 @@
 import { NODE_FLAGS } from '@/constants';
-import { EMPTY_DEPS, EMPTY_UNSUBS, unsubArrayPool } from '@/internal/pool';
+import { EMPTY_UNSUBS, unsubArrayPool } from '@/internal/pool';
 import type { DependencySubscriber } from '@/tracking/tracking.types';
 import type { Dependency, Subscriber } from '@/types';
 import { debug } from '@/utils/debug';
@@ -82,7 +82,7 @@ export function syncDependencies(
   if (prevLen > 0) {
     for (let i = 0; i < prevLen; i++) {
       const dep = prevDeps[i];
-      if (dep && dep._tempUnsub) {
+      if (dep?._tempUnsub) {
         dep._tempUnsub();
         dep._tempUnsub = undefined;
       }

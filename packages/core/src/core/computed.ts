@@ -49,7 +49,6 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
 
   private readonly _fn: () => T | Promise<T>;
   private readonly _defaultValue: T;
-  private readonly _hasDefaultValue: boolean;
   private readonly _onError: ((error: Error) => void) | null;
 
   protected _fnSubs: ((newValue?: T, oldValue?: T) => void)[];
@@ -88,7 +87,6 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._equal = options.equal ?? Object.is;
     this._fn = fn;
     this._defaultValue = 'defaultValue' in options ? options.defaultValue : (NO_DEFAULT_VALUE as T);
-    this._hasDefaultValue = this._defaultValue !== (NO_DEFAULT_VALUE as T);
     this._onError = options.onError ?? null;
 
     this._fnSubs = [];
@@ -140,16 +138,24 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       throw new ComputedError(ERROR_MESSAGES.COMPUTED_DISPOSED);
     }
     if (flags & COMPUTED_STATE_FLAGS.RECOMPUTING) {
-      // Circular dependency detected: computation is accessing itself during recompute.
-      // Return default value if available, otherwise throw.
-      if (this._hasDefaultValue) return this._defaultValue;
+      // Circular dependency detected
+      if (this._defaultValue !== (NO_DEFAULT_VALUE as T)) return this._defaultValue;
       throw new ComputedError(ERROR_MESSAGES.COMPUTED_CIRCULAR_DEPENDENCY);
     }
     if (flags & (COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE)) this._recompute();
 
     const currentFlags = this.flags;
-    if (currentFlags & COMPUTED_STATE_FLAGS.PENDING) return this._handlePending();
-    if (currentFlags & COMPUTED_STATE_FLAGS.REJECTED) return this._handleRejected();
+    if (currentFlags & COMPUTED_STATE_FLAGS.PENDING) {
+      if (this._defaultValue !== (NO_DEFAULT_VALUE as T)) return this._defaultValue;
+      throw new ComputedError(ERROR_MESSAGES.COMPUTED_ASYNC_PENDING_NO_DEFAULT);
+    }
+    if (currentFlags & COMPUTED_STATE_FLAGS.REJECTED) {
+      const error = this._error;
+      if (error?.recoverable && this._defaultValue !== (NO_DEFAULT_VALUE as T)) {
+        return this._defaultValue;
+      }
+      throw error;
+    }
 
     return this._value;
   }
@@ -278,43 +284,6 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._errorCacheEpoch = -1;
   }
 
-  private _clearDirty(): void {
-    this.flags &= ~COMPUTED_STATE_FLAGS.DIRTY;
-  }
-
-  private _setPending(): void {
-    this.flags =
-      (this.flags | COMPUTED_STATE_FLAGS.PENDING) &
-      ~(COMPUTED_STATE_FLAGS.IDLE | COMPUTED_STATE_FLAGS.RESOLVED | COMPUTED_STATE_FLAGS.REJECTED);
-  }
-
-  private _setResolved(): void {
-    this.flags =
-      (this.flags | COMPUTED_STATE_FLAGS.RESOLVED) &
-      ~(
-        COMPUTED_STATE_FLAGS.IDLE |
-        COMPUTED_STATE_FLAGS.PENDING |
-        COMPUTED_STATE_FLAGS.REJECTED |
-        COMPUTED_STATE_FLAGS.HAS_ERROR
-      );
-  }
-
-  private _setRejected(): void {
-    this.flags =
-      (this.flags &
-        ~(
-          COMPUTED_STATE_FLAGS.IDLE |
-          COMPUTED_STATE_FLAGS.PENDING |
-          COMPUTED_STATE_FLAGS.RESOLVED
-        )) |
-      (COMPUTED_STATE_FLAGS.REJECTED | COMPUTED_STATE_FLAGS.HAS_ERROR);
-  }
-
-  private _setRecomputing(value: boolean): void {
-    const mask = COMPUTED_STATE_FLAGS.RECOMPUTING;
-    this.flags = (this.flags & ~mask) | ((value ? -1 : 0) & mask);
-  }
-
   addDependency(dep: Dependency): void {
     if (dep._lastSeenEpoch === this._trackEpoch) {
       return;
@@ -353,7 +322,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       return;
     }
 
-    this._setRecomputing(true);
+    this.flags |= COMPUTED_STATE_FLAGS.RECOMPUTING;
 
     const prevDeps = this._dependencies;
     const prevVersions = this._dependencyVersions;
@@ -403,13 +372,21 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       this._trackVersions = EMPTY_VERSIONS;
       this._trackCount = 0;
 
-      this._setRecomputing(false);
+      this.flags &= ~COMPUTED_STATE_FLAGS.RECOMPUTING;
     }
   }
 
   private _handleAsyncComputation(promise: Promise<T>): void {
-    this._setPending();
-    this._clearDirty();
+    // _setPending & _clearDirty
+    this.flags =
+      (this.flags | COMPUTED_STATE_FLAGS.PENDING) &
+      ~(
+        COMPUTED_STATE_FLAGS.IDLE |
+        COMPUTED_STATE_FLAGS.DIRTY |
+        COMPUTED_STATE_FLAGS.RESOLVED |
+        COMPUTED_STATE_FLAGS.REJECTED
+      );
+
     this._notifySubscribers(undefined, undefined);
 
     this._asyncStartAggregateVersion = this._captureVersionSnapshot();
@@ -422,8 +399,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       .then((resolvedValue) => {
         if (promiseId !== this._promiseId) return;
 
-        // Drift detection: Compare aggregate dependency versions to detect changes during async.
-        // High drift indicates dependencies changed while awaiting; re-computation may be needed.
+        // Drift detection
         const currentAggregate = this._captureVersionSnapshot();
 
         if (currentAggregate !== this._asyncStartAggregateVersion) {
@@ -456,7 +432,6 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       if (dep) {
         const v = dep.version;
         // Use a simple mixing to reduce collisions: (hash << 5) - hash + v
-        // This is more robust than simple addition or XOR alone.
         aggregate = ((((aggregate << 5) - aggregate) | 0) + v) & SMI_MAX;
       }
     }
@@ -471,8 +446,17 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     }
 
     this._error = error;
-    this._setRejected();
-    this._clearDirty();
+
+    // _setRejected & _clearDirty
+    this.flags =
+      (this.flags &
+        ~(
+          COMPUTED_STATE_FLAGS.IDLE |
+          COMPUTED_STATE_FLAGS.DIRTY |
+          COMPUTED_STATE_FLAGS.PENDING |
+          COMPUTED_STATE_FLAGS.RESOLVED
+        )) |
+      (COMPUTED_STATE_FLAGS.REJECTED | COMPUTED_STATE_FLAGS.HAS_ERROR);
 
     const onError = this._onError;
     if (onError) {
@@ -495,10 +479,19 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     }
 
     this._value = value;
-    this._clearDirty();
-    this._setResolved();
     this._error = null;
-    // _setRecomputing(false) is handled by the finally block in _recompute or irrelevant for async
+
+    // _setResolved & _clearDirty
+    this.flags =
+      (this.flags | COMPUTED_STATE_FLAGS.RESOLVED) &
+      ~(
+        COMPUTED_STATE_FLAGS.IDLE |
+        COMPUTED_STATE_FLAGS.DIRTY |
+        COMPUTED_STATE_FLAGS.PENDING |
+        COMPUTED_STATE_FLAGS.REJECTED |
+        COMPUTED_STATE_FLAGS.HAS_ERROR
+      );
+
     this._cachedErrors = null;
     this._errorCacheEpoch = -1;
   }
@@ -507,9 +500,17 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     const error = wrapError(err, ComputedError, ERROR_MESSAGES.COMPUTED_COMPUTATION_FAILED);
 
     this._error = error;
-    this._setRejected();
-    this._clearDirty();
-    // _setRecomputing(false) is handled by the finally block in _recompute
+
+    // _setRejected & _clearDirty
+    this.flags =
+      (this.flags &
+        ~(
+          COMPUTED_STATE_FLAGS.IDLE |
+          COMPUTED_STATE_FLAGS.DIRTY |
+          COMPUTED_STATE_FLAGS.PENDING |
+          COMPUTED_STATE_FLAGS.RESOLVED
+        )) |
+      (COMPUTED_STATE_FLAGS.REJECTED | COMPUTED_STATE_FLAGS.HAS_ERROR);
 
     const onError = this._onError;
     if (onError) {
@@ -520,21 +521,6 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       }
     }
 
-    throw error;
-  }
-
-  private _handlePending(): T {
-    if (this._hasDefaultValue) {
-      return this._defaultValue;
-    }
-    throw new ComputedError(ERROR_MESSAGES.COMPUTED_ASYNC_PENDING_NO_DEFAULT);
-  }
-
-  private _handleRejected(): T {
-    const error = this._error;
-    if (error?.recoverable && this._hasDefaultValue) {
-      return this._defaultValue;
-    }
     throw error;
   }
 

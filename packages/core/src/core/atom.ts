@@ -65,7 +65,7 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
    * Schedules or flushes notifications based on sync mode and batching state.
    */
   private _scheduleNotification(oldValue: T): void {
-    let flags = this.flags;
+    const flags = this.flags;
 
     if (!(flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED)) {
       this._pendingOldValue = oldValue;
@@ -77,9 +77,11 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
       return;
     }
 
-    scheduler.schedule(
-      this._notifyTask || (this._notifyTask = () => this._flushNotifications())
-    );
+    if (!this._notifyTask) {
+      this._notifyTask = () => this._flushNotifications();
+    }
+
+    scheduler.schedule(this._notifyTask);
   }
 
   /**

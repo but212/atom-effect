@@ -18,13 +18,7 @@ import {
 } from '@/internal/pool';
 import { scheduler } from '@/internal/scheduler';
 import { type DependencyTracker, trackingContext, untracked } from '@/tracking';
-import type {
-  Dependency,
-  EffectExecutionContext,
-  EffectFunction,
-  EffectObject,
-  EffectOptions,
-} from '@/types';
+import type { Dependency, EffectFunction, EffectObject, EffectOptions } from '@/types';
 import { debug } from '@/utils/debug';
 import { wrapError } from '@/utils/error';
 import { isPromise } from '@/utils/type-guards';
@@ -65,7 +59,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   constructor(fn: EffectFunction, options: EffectOptions = {}) {
     super();
 
-    // V8 Hidden Class Stability: Group property initializations
+    // V8 Hidden Class Stability
     this._cleanup = null;
     this._dependencies = EMPTY_DEPS;
     this._dependencyVersions = EMPTY_VERSIONS;
@@ -96,8 +90,6 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       ? Math.min(this._maxExecutions + 1, SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_SECOND + 1)
       : 0;
     this._historyCapacity = capacity;
-
-    // Pre-allocate history buffer only if rate limiting is active and in Dev/Prod as configured
     this._history = IS_DEV && isFiniteLimit && capacity > 0 ? new Array(capacity).fill(0) : null;
     this._execId = 0;
 
@@ -108,22 +100,27 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     if (this.flags & EFFECT_STATE_FLAGS.DISPOSED) {
       throw new EffectError(ERROR_MESSAGES.EFFECT_DISPOSED);
     }
-    // Force execution regardless of dependency versions
     this.execute(true);
   }
 
   public dispose(): void {
-    const flags = this.flags;
-    if (flags & EFFECT_STATE_FLAGS.DISPOSED) return;
+    if (this.flags & EFFECT_STATE_FLAGS.DISPOSED) return;
 
-    this.flags = flags | EFFECT_STATE_FLAGS.DISPOSED;
-    this._safeCleanup();
+    this.flags |= EFFECT_STATE_FLAGS.DISPOSED;
+
+    if (this._cleanup) {
+      try {
+        this._cleanup();
+      } catch (error) {
+        this._handleExecutionError(error, ERROR_MESSAGES.EFFECT_CLEANUP_FAILED);
+      }
+      this._cleanup = null;
+    }
 
     const unsubs = this._unsubscribes;
     if (unsubs !== EMPTY_UNSUBS) {
       for (let i = 0, len = unsubs.length; i < len; i++) {
-        const unsub = unsubs[i];
-        if (unsub) unsub();
+        unsubs[i]!();
       }
       unsubArrayPool.release(unsubs);
       this._unsubscribes = EMPTY_UNSUBS;
@@ -145,56 +142,163 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   }
 
   public addDependency(dep: Dependency): void {
-    const flags = this.flags;
-    // Guard: Only track if currently executing
-    if (!(flags & EFFECT_STATE_FLAGS.EXECUTING)) return;
+    if (!(this.flags & EFFECT_STATE_FLAGS.EXECUTING)) return;
 
     const epoch = this._currentEpoch;
     if (dep._lastSeenEpoch === epoch) return;
     dep._lastSeenEpoch = epoch;
 
-    const nextDeps = this._nextDeps;
-    const nextVersions = this._nextVersions;
-    const nextUnsubs = this._nextUnsubs;
-
-    if (!nextDeps || !nextVersions || !nextUnsubs) return;
+    const nextDeps = this._nextDeps!;
+    const nextVersions = this._nextVersions!;
+    const nextUnsubs = this._nextUnsubs!;
 
     nextDeps.push(dep);
     nextVersions.push(dep.version);
 
-    const temp = dep._tempUnsub;
-    if (temp) {
-      nextUnsubs.push(temp);
+    if (dep._tempUnsub) {
+      nextUnsubs.push(dep._tempUnsub);
       dep._tempUnsub = undefined;
     } else {
-      this._subscribeTo(dep);
+      try {
+        const unsubscribe = dep.subscribe(() => {
+          if (this._trackModifications && this.flags & EFFECT_STATE_FLAGS.EXECUTING) {
+            dep._modifiedAtEpoch = this._currentEpoch;
+          }
+
+          if (this._sync) {
+            this.execute();
+          } else {
+            if (!this._executeTask) {
+              this._executeTask = () => this.execute();
+            }
+            scheduler.schedule(this._executeTask);
+          }
+        });
+        nextUnsubs.push(unsubscribe);
+      } catch (error) {
+        console.error(wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_EXECUTION_FAILED));
+        nextUnsubs.push(() => {});
+      }
     }
   }
 
   public execute(force = false): void {
     const flags = this.flags;
-    // Guard: Prevent re-entrant execution (infinite recursion) and post-disposal execution
     if (flags & (EFFECT_STATE_FLAGS.DISPOSED | EFFECT_STATE_FLAGS.EXECUTING)) return;
-    if (!force && !this._shouldExecute()) return;
 
-    this._checkInfiniteLoop();
-    this._setExecuting(true);
-    this._safeCleanup();
+    // Check if execution is needed
+    if (!force) {
+      const deps = this._dependencies;
+      const len = deps.length;
+      if (len > 0) {
+        const versions = this._dependencyVersions;
+        let dirty = false;
+        for (let i = 0; i < len; i++) {
+          const dep = deps[i];
+          if (!dep) continue;
+          if (dep.version !== versions[i]) {
+            dirty = true;
+            break;
+          }
+          if ('value' in dep) {
+            try {
+              untracked(() => (dep as { value: unknown }).value);
+              if (dep.version !== versions[i]) {
+                dirty = true;
+                break;
+              }
+            } catch {
+              dirty = true;
+              break;
+            }
+          }
+        }
+        if (!dirty) return;
+      }
+    }
 
-    const context = this._prepareEffectExecutionContext();
+    // Infinite Loop & Rate Limit Check
+    const epoch = flushEpoch;
+    if (this._lastFlushEpoch !== epoch) {
+      this._lastFlushEpoch = epoch;
+      this._executionsInEpoch = 0;
+    }
+
+    if (++this._executionsInEpoch > this._maxExecutionsPerFlush) {
+      this._throwInfiniteLoopError('per-effect');
+    }
+
+    if (incrementFlushExecutionCount() > SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH) {
+      this._throwInfiniteLoopError('global');
+    }
+
+    this._executionCount++;
+
+    if (this._history) {
+      const now = Date.now();
+      const ptr = this._historyPtr;
+      this._history[ptr] = now;
+      this._historyPtr = (ptr + 1) % this._historyCapacity;
+
+      const oldestTime = this._history[this._historyPtr] ?? 0;
+      if (oldestTime > 0 && now - oldestTime < TIME_CONSTANTS.ONE_SECOND_MS) {
+        const error = new EffectError(
+          `Effect executed ${this._historyCapacity} times within 1 second. Infinite loop suspected`
+        );
+        this.dispose();
+        console.error(error);
+        if (this._onError) this._onError(error);
+        if (IS_DEV) throw error;
+        return;
+      }
+    }
+
+    this.flags |= EFFECT_STATE_FLAGS.EXECUTING;
+
+    if (this._cleanup) {
+      try {
+        this._cleanup();
+      } catch (error) {
+        this._handleExecutionError(error, ERROR_MESSAGES.EFFECT_CLEANUP_FAILED);
+      }
+      this._cleanup = null;
+    }
+
+    // Prepare Execution Context
+    const prevDeps = this._dependencies;
+    const prevVersions = this._dependencyVersions;
+    const prevUnsubs = this._unsubscribes;
+
+    // reuse tempUnsub mechanism
+    if (prevDeps !== EMPTY_DEPS) {
+      for (let i = 0, len = prevDeps.length; i < len; i++) {
+        const dep = prevDeps[i];
+        if (dep) dep._tempUnsub = prevUnsubs[i];
+      }
+    }
+
+    const nextDeps = depArrayPool.acquire();
+    const nextVersions = versionArrayPool.acquire();
+    const nextUnsubs = unsubArrayPool.acquire();
+
+    this._nextDeps = nextDeps;
+    this._nextVersions = nextVersions;
+    this._nextUnsubs = nextUnsubs;
+    this._currentEpoch = nextEpoch();
+
     let committed = false;
 
     try {
       const result = trackingContext.run(this, this._fn);
 
-      // Commit Effect
-      const trackedCount = context.nextDeps.length;
-      context.nextDeps.length = trackedCount;
-      context.nextVersions.length = trackedCount;
+      // Commit
+      const trackedCount = nextDeps.length;
+      nextDeps.length = trackedCount;
+      nextVersions.length = trackedCount;
 
-      this._dependencies = context.nextDeps;
-      this._dependencyVersions = context.nextVersions;
-      this._unsubscribes = context.nextUnsubs;
+      this._dependencies = nextDeps;
+      this._dependencyVersions = nextVersions;
+      this._unsubscribes = nextUnsubs;
       committed = true;
 
       this._checkLoopWarnings();
@@ -214,7 +318,6 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
               }
               return;
             }
-
             if (typeof asyncCleanup === 'function') {
               this._cleanup = asyncCleanup;
             }
@@ -228,103 +331,65 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
         this._cleanup = typeof result === 'function' ? result : null;
       }
     } catch (error) {
-      // Dependencies were already committed before the callback threw
-      committed = true;
+      committed = true; // Dependencies are valid even if fn threw
       this._handleExecutionError(error);
       this._cleanup = null;
     } finally {
-      this._cleanupEffect(context, committed);
-      this._setExecuting(false);
-    }
-  }
+      // Cleanup effect context / rollbacks
+      this._nextDeps = null;
+      this._nextVersions = null;
+      this._nextUnsubs = null;
 
-  private _prepareEffectExecutionContext(): EffectExecutionContext {
-    const prevDeps = this._dependencies;
-    const prevVersions = this._dependencyVersions;
-    const prevUnsubs = this._unsubscribes;
-    const nextDeps = depArrayPool.acquire();
-    const nextVersions = versionArrayPool.acquire();
-    const nextUnsubs = unsubArrayPool.acquire();
+      if (committed) {
+        // Release previous deps/unsubs
+        if (prevDeps !== EMPTY_DEPS) {
+          // Cleanup unused unsubs
+          for (let i = 0, len = prevDeps.length; i < len; i++) {
+            const dep = prevDeps[i];
+            const unsub = dep ? dep._tempUnsub : undefined;
+            if (unsub) {
+              unsub(); // unsubscribe stale dependency
+              if (dep) dep._tempUnsub = undefined;
+            }
+          }
+          depArrayPool.release(prevDeps);
+        }
+        if (prevUnsubs !== EMPTY_UNSUBS) unsubArrayPool.release(prevUnsubs);
+        // prevVersions are missing from the release list in original _cleanupEffect ???
+        // Wait, original _cleanupEffect was:
+        // if (ctx.prevVersions !== EMPTY_VERSIONS) versionArrayPool.release(ctx.prevVersions);
+        // My code below uses 'this._dependencyVersions' which is now 'nextVersions'.
+        // We need to release the OLD versions array.
+        // Wait, 'prevVersions' local variable holds the old array.
+        // The 'this._dependencyVersions' has been updated to 'nextVersions'.
+        // So I need to release 'prevVersions'. Note: I didn't verify if I need to capture it in a local variable before overwriting strictly, but I did: `const prevVersions = this._dependencyVersions;` at start.
+        if (this._dependencyVersions !== prevVersions && prevVersions !== EMPTY_VERSIONS) {
+          // Redundant check but safe
+          versionArrayPool.release(prevVersions);
+        } else if (prevVersions !== EMPTY_VERSIONS && committed) {
+          versionArrayPool.release(prevVersions);
+        }
+      } else {
+        // Rollback
+        depArrayPool.release(nextDeps);
+        versionArrayPool.release(nextVersions);
 
-    if (prevDeps !== EMPTY_DEPS) {
-      for (let i = 0, len = prevDeps.length; i < len; i++) {
-        const dep = prevDeps[i];
-        if (dep) dep._tempUnsub = prevUnsubs[i];
-      }
-    }
+        // unsubscribe new subscriptions
+        for (let i = 0, len = nextUnsubs.length; i < len; i++) {
+          nextUnsubs[i]?.();
+        }
+        unsubArrayPool.release(nextUnsubs);
 
-    this._nextDeps = nextDeps;
-    this._nextVersions = nextVersions;
-    this._nextUnsubs = nextUnsubs;
-    this._currentEpoch = nextEpoch();
-
-    return { prevDeps, prevVersions, prevUnsubs, nextDeps, nextVersions, nextUnsubs };
-  }
-
-  private _cleanupEffect(ctx: EffectExecutionContext, committed: boolean): void {
-    this._nextDeps = null;
-    this._nextVersions = null;
-    this._nextUnsubs = null;
-
-    const prevDeps = ctx.prevDeps;
-    if (committed) {
-      if (prevDeps !== EMPTY_DEPS) {
-        for (let i = 0, len = prevDeps.length; i < len; i++) {
-          const dep = prevDeps[i];
-          const unsub = dep ? dep._tempUnsub : undefined;
-          if (unsub) {
-            unsub();
+        // Clear temp unsubs from prev deps to avoid leak or bad state
+        if (prevDeps !== EMPTY_DEPS) {
+          for (let i = 0, len = prevDeps.length; i < len; i++) {
+            const dep = prevDeps[i];
             if (dep) dep._tempUnsub = undefined;
           }
         }
-        depArrayPool.release(prevDeps);
       }
-      if (ctx.prevUnsubs !== EMPTY_UNSUBS) unsubArrayPool.release(ctx.prevUnsubs);
-      if (ctx.prevVersions !== EMPTY_VERSIONS) versionArrayPool.release(ctx.prevVersions);
-    } else {
-      depArrayPool.release(ctx.nextDeps);
-      versionArrayPool.release(ctx.nextVersions);
-      const nextUnsubs = ctx.nextUnsubs;
-      for (let i = 0, len = nextUnsubs.length; i < len; i++) {
-        nextUnsubs[i]?.();
-      }
-      unsubArrayPool.release(nextUnsubs);
 
-      if (prevDeps !== EMPTY_DEPS) {
-        for (let i = 0, len = prevDeps.length; i < len; i++) {
-          const dep = prevDeps[i];
-          if (dep) dep._tempUnsub = undefined;
-        }
-      }
-    }
-  }
-
-  private _subscribeTo(dep: Dependency): void {
-    try {
-      const unsubscribe = dep.subscribe(() => {
-        if (this._trackModifications && this.flags & EFFECT_STATE_FLAGS.EXECUTING) {
-          dep._modifiedAtEpoch = this._currentEpoch;
-        }
-
-        if (this._sync) {
-          this.execute();
-          return;
-        }
-
-        scheduler.schedule(
-          this._executeTask || (this._executeTask = () => this.execute())
-        );
-      });
-      const nextUnsubs = this._nextUnsubs;
-      if (nextUnsubs) {
-        nextUnsubs.push(unsubscribe);
-      }
-    } catch (error) {
-      console.error(wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_EXECUTION_FAILED));
-      const nextUnsubs = this._nextUnsubs;
-      if (nextUnsubs) {
-        nextUnsubs.push(() => {});
-      }
+      this.flags &= ~EFFECT_STATE_FLAGS.EXECUTING;
     }
   }
 
@@ -340,66 +405,6 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     return (this.flags & EFFECT_STATE_FLAGS.EXECUTING) !== 0;
   }
 
-  private _setExecuting(value: boolean): void {
-    this.flags =
-      (this.flags & ~EFFECT_STATE_FLAGS.EXECUTING) |
-      ((value ? -1 : 0) & EFFECT_STATE_FLAGS.EXECUTING);
-  }
-
-  private _safeCleanup(): void {
-    const cleanup = this._cleanup;
-    if (cleanup) {
-      try {
-        cleanup();
-      } catch (error) {
-        this._handleExecutionError(error, ERROR_MESSAGES.EFFECT_CLEANUP_FAILED);
-      }
-      this._cleanup = null;
-    }
-  }
-
-  private _checkInfiniteLoop(): void {
-    const epoch = flushEpoch;
-    if (this._lastFlushEpoch !== epoch) {
-      this._lastFlushEpoch = epoch;
-      this._executionsInEpoch = 0;
-    }
-
-    if (++this._executionsInEpoch > this._maxExecutionsPerFlush) {
-      this._throwInfiniteLoopError('per-effect');
-    }
-
-    if (incrementFlushExecutionCount() > SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH) {
-      this._throwInfiniteLoopError('global');
-    }
-
-    this._executionCount++;
-
-    const history = this._history;
-    if (history) {
-      const now = Date.now();
-      const ptr = this._historyPtr;
-      const capacity = this._historyCapacity;
-
-      history[ptr] = now;
-      const nextPtr = (ptr + 1) % capacity;
-      this._historyPtr = nextPtr;
-
-      const oldestTime = history[nextPtr] ?? 0;
-      if (oldestTime > 0 && now - oldestTime < TIME_CONSTANTS.ONE_SECOND_MS) {
-        const error = new EffectError(
-          `Effect executed ${capacity} times within 1 second. Infinite loop suspected`
-        );
-        this.dispose();
-        console.error(error);
-        if (this._onError) this._onError(error);
-        // Always halt execution after disposing, throw only in DEV for debugging
-        if (IS_DEV) throw error;
-        return;
-      }
-    }
-  }
-
   private _throwInfiniteLoopError(type: 'per-effect' | 'global'): never {
     const error = new EffectError(
       `Infinite loop detected (${type}): ` +
@@ -409,31 +414,6 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     this.dispose();
     console.error(error);
     throw error;
-  }
-
-  private _shouldExecute(): boolean {
-    const deps = this._dependencies;
-    if (deps.length === 0) return true;
-
-    const versions = this._dependencyVersions;
-    for (let i = 0, len = deps.length; i < len; i++) {
-      const dep = deps[i];
-      if (!dep) continue;
-
-      if (dep.version !== versions[i]) return true;
-
-      // Accuracy check for computed dependencies
-      if ('value' in dep) {
-        try {
-          untracked(() => (dep as { value: unknown }).value);
-          if (dep.version !== versions[i]) return true;
-        } catch {
-          return true;
-        }
-      }
-    }
-
-    return false;
   }
 
   private _handleExecutionError(
@@ -448,7 +428,6 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       try {
         onError(errorObj);
       } catch (e) {
-        // Avoid cascading failures if the onError handler itself throws
         console.error(wrapError(e, EffectError, ERROR_MESSAGES.CALLBACK_ERROR_IN_ERROR_HANDLER));
       }
     }
@@ -474,27 +453,14 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 }
 
 /**
- * Creates a reactive effect that re-executes when its dependencies change.
+ * Creates and starts a reactive effect that automatically tracks dependencies.
+ * The effect function is executed immediately and re-scheduled whenever its
+ * reactive dependencies change.
  *
- * An effect automatically tracks any reactive state (atoms, computed) accessed during its execution.
- * When those dependencies change, the effect is scheduled for re-execution.
- *
- * @param fn - The effect function to execute. Can return a cleanup function or a Promise that resolves to one.
- * @param options - Configuration options for the effect.
- * @param options.sync - If true, the effect runs synchronously when dependencies change. Defaults to false (scheduled).
- * @param options.maxExecutionsPerSecond - Rate limiting for the effect.
- * @param options.trackModifications - If true, warns when an effect modifies its own dependencies.
- * @returns An object representing the effect with `run()` and `dispose()` methods.
- * @throws {EffectError} If `fn` is not a function.
- *
- * @example
- * ```ts
- * const count = atom(0);
- * const stop = effect(() => {
- *   console.log('Count changed:', count.value);
- *   return () => console.log('Cleaning up...');
- * });
- * ```
+ * @param fn - The function to be executed as a reactive effect.
+ * @param options - Configuration options to customize effect behavior (e.g., scheduling, error handling).
+ * @returns An effect instance providing control over the effect's lifecycle.
+ * @throws {EffectError} If the provided `fn` is not a function.
  */
 export function effect(fn: EffectFunction, options: EffectOptions = {}): EffectObject {
   if (typeof fn !== 'function') {
