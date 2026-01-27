@@ -11,21 +11,18 @@ export function trackDependency<T>(
   current: unknown,
   subscribers: SubscriberLink<T>[]
 ): void {
-  if (current === undefined || current === null) return;
+  if (!current) return;
 
-  // 1. DependencySubscriber path (Computed, Effect) - Most common case
-  const depSub = current as DependencySubscriber;
-  if (typeof depSub.addDependency === 'function') {
-    depSub.addDependency(dependency);
+  // 1. DependencySubscriber path (Computed, Effect)
+  if ('addDependency' in (current as DependencySubscriber)) {
+    (current as DependencySubscriber).addDependency(dependency);
     return;
   }
 
   // 2. Manual function listeners
   if (typeof current === 'function') {
     const fn = current as (newValue?: T, oldValue?: T) => void;
-    // Optimization: Hoist length to avoid repeated access
-    const len = subscribers.length;
-    for (let i = 0; i < len; i++) {
+    for (let i = 0, len = subscribers.length; i < len; i++) {
       if (subscribers[i]!.fn === fn) return;
     }
     subscribers.push(new SubscriberLink(fn));
@@ -35,9 +32,8 @@ export function trackDependency<T>(
 
   // 3. Subscriber objects with 'execute' method
   const sub = current as Subscriber;
-  if (typeof sub.execute === 'function') {
-    const len = subscribers.length;
-    for (let i = 0; i < len; i++) {
+  if ('execute' in sub) {
+    for (let i = 0, len = subscribers.length; i < len; i++) {
       if (subscribers[i]!.sub === sub) return;
     }
     subscribers.push(new SubscriberLink(undefined, sub));
@@ -54,92 +50,57 @@ export function syncDependencies(
   prevLinks: DependencyLink[],
   tracker: Subscriber
 ): void {
-  const prevLen = prevLinks.length;
-  const nextLen = nextLinks.length;
-
   // 1. Mark existing dependencies
-  // Optimization: Unrolled simplified loop for setup
-  if (prevLen > 0) {
-    for (let i = 0; i < prevLen; i++) {
-      const link = prevLinks[i];
-      if (link) {
-        link.node._tempUnsub = link.unsub;
-      }
-    }
+  for (let i = 0, len = prevLinks.length; i < len; i++) {
+    const link = prevLinks[i];
+    if (link) link.node._tempUnsub = link.unsub;
   }
 
   // 2. Process new dependencies (Sweep/Reuse)
-  for (let i = 0; i < nextLen; i++) {
+  for (let i = 0, len = nextLinks.length; i < len; i++) {
     const link = nextLinks[i];
     if (!link) continue;
-
-    // cache node access
     const node = link.node;
-    const existingUnsub = node._tempUnsub;
-
-    if (existingUnsub !== undefined) {
-      link.unsub = existingUnsub;
+    if (node._tempUnsub !== undefined) {
+      link.unsub = node._tempUnsub;
       node._tempUnsub = undefined;
     } else {
-      // New dependency found
       debug.checkCircular(node, tracker);
       link.unsub = node.subscribe(tracker);
     }
   }
 
   // 3. Cleanup removed dependencies
-  if (prevLen > 0) {
-    for (let i = 0; i < prevLen; i++) {
-      const link = prevLinks[i];
-      if (link) {
-        // optimization: use cached node ref if possible, but here we access link.node
-        const node = link.node;
-        const remainingUnsub = node._tempUnsub;
-        if (remainingUnsub !== undefined) {
-          remainingUnsub();
-          node._tempUnsub = undefined;
-        }
-        // Link objects should be ideally cleaned up or returned to a pool
-        link.unsub = undefined;
+  for (let i = 0, len = prevLinks.length; i < len; i++) {
+    const link = prevLinks[i];
+    if (link) {
+      const node = link.node;
+      if (node._tempUnsub !== undefined) {
+        node._tempUnsub();
+        node._tempUnsub = undefined;
       }
+      link.unsub = undefined;
     }
   }
 }
 
 /**
  * Encapsulates a link to a dependency with its version and subscription.
- * Part of the AOS (Array of Structs) refactoring to improve data cohesion.
  */
 export class DependencyLink {
-  /** The dependency node being tracked */
-  node: Dependency;
-  /** The version of the dependency at the time of tracking */
-  version: number;
-  /** The unsubscription function for the dependency */
-  unsub: (() => void) | undefined;
-
-  constructor(node: Dependency, version: number, unsub: (() => void) | undefined = undefined) {
-    this.node = node;
-    this.version = version;
-    this.unsub = unsub;
-  }
+  constructor(
+    public node: Dependency,
+    public version: number,
+    public unsub: (() => void) | undefined = undefined
+  ) {}
 }
 
 /**
  * Encapsulates a link to a subscriber (either function or object).
- * Part of the AOS refactoring to unify subscriber management.
  */
 export class SubscriberLink<T> {
-  /** Function listener (if any) */
-  fn: ((newValue?: T, oldValue?: T) => void) | undefined;
-  /** Subscriber object (if any) */
-  sub: Subscriber | undefined;
-
   constructor(
-    fn?: ((newValue?: T, oldValue?: T) => void) | undefined,
-    sub?: Subscriber | undefined
-  ) {
-    this.fn = fn;
-    this.sub = sub;
-  }
+    public fn: ((newValue?: T, oldValue?: T) => void) | undefined = undefined,
+    public sub: Subscriber | undefined = undefined
+  ) {}
 }

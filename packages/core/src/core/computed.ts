@@ -40,57 +40,36 @@ const MAX_PROMISE_ID = Number.MAX_SAFE_INTEGER - 1;
  */
 class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<T>, Subscriber {
   private _value: T;
-  private _error: AtomError | null;
-  private _promiseId: number;
+  private _error: AtomError | null = null;
+  private _promiseId = 0;
   private readonly _equal: (a: T, b: T) => boolean;
-
   private readonly _fn: () => T | Promise<T>;
   private readonly _defaultValue: T;
   private readonly _onError: ((error: Error) => void) | null;
 
-  protected _subscribers: SubscriberLink<T>[];
+  protected _subscribers: SubscriberLink<T>[] = [];
+  private _links: DependencyLink[] = EMPTY_LINKS;
 
-  private _links: DependencyLink[];
+  private _cachedErrors: readonly Error[] | null = null;
+  private _errorCacheEpoch = -1;
 
-  // Error propagation fields
-  private _cachedErrors: readonly Error[] | null;
-  private _errorCacheEpoch: number;
+  private _asyncStartAggregateVersion = 0;
+  private _asyncRetryCount = 0;
 
-  // Async phase drift validation fields
-  private _asyncStartAggregateVersion: number;
-  private _asyncRetryCount: number;
-
-  // Dependency tracking state
-  private _trackEpoch: number;
-  private _trackLinks: DependencyLink[];
-  private _trackCount: number;
+  private _trackEpoch = -1;
+  private _trackLinks: DependencyLink[] = EMPTY_LINKS;
+  private _trackCount = 0;
 
   constructor(fn: () => T | Promise<T>, options: ComputedOptions<T> = {}) {
-    if (typeof fn !== 'function') {
-      throw new ComputedError(ERROR_MESSAGES.COMPUTED_MUST_BE_FUNCTION);
-    }
-
+    if (typeof fn !== 'function') throw new ComputedError(ERROR_MESSAGES.COMPUTED_MUST_BE_FUNCTION);
     super();
 
     this._value = undefined as T;
     this.flags = COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE;
-    this._error = null;
-    this._promiseId = 0;
     this._equal = options.equal ?? Object.is;
     this._fn = fn;
     this._defaultValue = 'defaultValue' in options ? options.defaultValue : (NO_DEFAULT_VALUE as T);
     this._onError = options.onError ?? null;
-
-    this._subscribers = [];
-    this._links = EMPTY_LINKS;
-    this._cachedErrors = null;
-    this._errorCacheEpoch = -1;
-    this._asyncStartAggregateVersion = 0;
-    this._asyncRetryCount = 0;
-
-    this._trackEpoch = -1;
-    this._trackLinks = EMPTY_LINKS;
-    this._trackCount = 0;
 
     debug.attachDebugInfo(this, 'computed', this.id);
 
@@ -101,22 +80,21 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       debugObj.links = this._links;
     }
 
-    if (options.lazy === false) {
+    if (options.lazy === false)
       try {
         this._recompute();
-      } catch {
-        // Initial computation failure suppressed
-      }
-    }
+      } catch {}
+  }
+
+  private _track(): void {
+    const current = trackingContext.current;
+    if (current) trackDependency(this, current, this._subscribers);
   }
 
   get value(): T {
-    const current = trackingContext.current;
-    if (current) trackDependency(this, current, this._subscribers);
+    this._track();
 
     let flags = this.flags;
-
-    // Fast path: Already resolved and not invalidated
     if (
       (flags &
         (COMPUTED_STATE_FLAGS.RESOLVED |
@@ -127,13 +105,11 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       return this._value;
     }
 
-    if (flags & COMPUTED_STATE_FLAGS.DISPOSED) {
+    if (flags & COMPUTED_STATE_FLAGS.DISPOSED)
       throw new ComputedError(ERROR_MESSAGES.COMPUTED_DISPOSED);
-    }
 
     if (flags & COMPUTED_STATE_FLAGS.RECOMPUTING) {
-      const defValue = this._defaultValue;
-      if (defValue !== (NO_DEFAULT_VALUE as T)) return defValue;
+      if (this._defaultValue !== (NO_DEFAULT_VALUE as T)) return this._defaultValue;
       throw new ComputedError(ERROR_MESSAGES.COMPUTED_CIRCULAR_DEPENDENCY);
     }
 
@@ -142,22 +118,19 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       flags = this.flags;
     }
 
-    if (flags & COMPUTED_STATE_FLAGS.RESOLVED) {
-      return this._value;
-    }
+    if (flags & COMPUTED_STATE_FLAGS.RESOLVED) return this._value;
 
-    const defaultValue = this._defaultValue;
-    const hasDefault = defaultValue !== (NO_DEFAULT_VALUE as T);
+    const def = this._defaultValue;
+    const hasDef = def !== (NO_DEFAULT_VALUE as T);
 
     if (flags & COMPUTED_STATE_FLAGS.PENDING) {
-      if (hasDefault) return defaultValue;
+      if (hasDef) return def;
       throw new ComputedError(ERROR_MESSAGES.COMPUTED_ASYNC_PENDING_NO_DEFAULT);
     }
 
     if (flags & COMPUTED_STATE_FLAGS.REJECTED) {
-      const error = this._error;
-      if (error?.recoverable && hasDefault) return defaultValue;
-      throw error;
+      if (this._error?.recoverable && hasDef) return def;
+      throw this._error;
     }
 
     return this._value;
@@ -168,22 +141,16 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   }
 
   get state(): AsyncStateType {
-    const current = trackingContext.current;
-    if (current) trackDependency(this, current, this._subscribers);
+    this._track();
     return ASYNC_STATE_LOOKUP[this.flags & ASYNC_STATE_MASK];
   }
 
   get hasError(): boolean {
-    const current = trackingContext.current;
-    if (current) trackDependency(this, current, this._subscribers);
-
-    const flags = this.flags;
-    if (flags & (COMPUTED_STATE_FLAGS.REJECTED | COMPUTED_STATE_FLAGS.HAS_ERROR)) return true;
-
+    this._track();
+    if (this.flags & (COMPUTED_STATE_FLAGS.REJECTED | COMPUTED_STATE_FLAGS.HAS_ERROR)) return true;
     const links = this._links;
     for (let i = 0, len = links.length; i < len; i++) {
-      const link = links[i]!;
-      if (link.node.flags & COMPUTED_STATE_FLAGS.HAS_ERROR) return true;
+      if (links[i]!.node.flags & COMPUTED_STATE_FLAGS.HAS_ERROR) return true;
     }
     return false;
   }
@@ -193,19 +160,14 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   }
 
   get errors(): readonly Error[] {
-    const current = trackingContext.current;
-    if (current) trackDependency(this, current, this._subscribers);
-
+    this._track();
     if (!this.hasError) return EMPTY_ERROR_ARRAY;
 
     const epoch = currentEpoch();
-    if (this._errorCacheEpoch === epoch && this._cachedErrors !== null) {
-      return this._cachedErrors;
-    }
+    if (this._errorCacheEpoch === epoch && this._cachedErrors) return this._cachedErrors;
 
     const errorSet = new Set<Error>();
-    const localError = this._error;
-    if (localError) errorSet.add(localError);
+    if (this._error) errorSet.add(this._error);
 
     const links = this._links;
     for (let i = 0, len = links.length; i < len; i++) {
@@ -213,7 +175,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       if (dep.flags & COMPUTED_STATE_FLAGS.HAS_ERROR) {
         const depErrors = (dep as unknown as ComputedAtom<unknown>).errors;
         if (depErrors) {
-          for (let j = 0, jLen = depErrors.length; j < jLen; j++) {
+          for (let j = 0, len2 = depErrors.length; j < len2; j++) {
             const err = depErrors[j];
             if (err) errorSet.add(err);
           }
@@ -228,20 +190,17 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   }
 
   get lastError(): Error | null {
-    const current = trackingContext.current;
-    if (current) trackDependency(this, current, this._subscribers);
+    this._track();
     return this._error;
   }
 
   get isPending(): boolean {
-    const current = trackingContext.current;
-    if (current) trackDependency(this, current, this._subscribers);
+    this._track();
     return (this.flags & COMPUTED_STATE_FLAGS.PENDING) !== 0;
   }
 
   get isResolved(): boolean {
-    const current = trackingContext.current;
-    if (current) trackDependency(this, current, this._subscribers);
+    this._track();
     return (this.flags & COMPUTED_STATE_FLAGS.RESOLVED) !== 0;
   }
 
@@ -252,14 +211,12 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   }
 
   dispose(): void {
-    const flags = this.flags;
-    if (flags & COMPUTED_STATE_FLAGS.DISPOSED) return;
+    if (this.flags & COMPUTED_STATE_FLAGS.DISPOSED) return;
 
     const links = this._links;
     if (links !== EMPTY_LINKS) {
       for (let i = 0, len = links.length; i < len; i++) {
-        const link = links[i];
-        if (link?.unsub) link.unsub();
+        links[i]!.unsub?.();
       }
       linksArrayPool.release(links);
       this._links = EMPTY_LINKS;
@@ -276,79 +233,56 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   }
 
   addDependency(dep: Dependency): void {
-    const epoch = this._trackEpoch;
-    if (dep._lastSeenEpoch === epoch) return;
-    dep._lastSeenEpoch = epoch;
+    if (dep._lastSeenEpoch === this._trackEpoch) return;
+    dep._lastSeenEpoch = this._trackEpoch;
 
-    const count = this._trackCount;
-    const links = this._trackLinks;
-
-    if (count < links.length) {
-      const link = links[count]!;
+    if (this._trackCount < this._trackLinks.length) {
+      const link = this._trackLinks[this._trackCount]!;
       link.node = dep;
       link.version = dep.version;
     } else {
-      links.push(new DependencyLink(dep, dep.version));
+      this._trackLinks.push(new DependencyLink(dep, dep.version));
     }
-    this._trackCount = count + 1;
+    this._trackCount++;
   }
 
   private _commitDeps(prevLinks: DependencyLink[]): void {
-    const nextLinks = this._trackLinks;
-    const depCount = this._trackCount;
-
-    nextLinks.length = depCount;
-
-    syncDependencies(nextLinks, prevLinks, this);
-    this._links = nextLinks;
+    this._trackLinks.length = this._trackCount;
+    syncDependencies(this._trackLinks, prevLinks, this);
+    this._links = this._trackLinks;
   }
 
   private _recompute(): void {
     if (this.flags & COMPUTED_STATE_FLAGS.RECOMPUTING) return;
-
     this.flags |= COMPUTED_STATE_FLAGS.RECOMPUTING;
 
     const prevLinks = this._links;
-
     this._trackEpoch = nextEpoch();
     this._trackLinks = linksArrayPool.acquire();
     this._trackCount = 0;
 
     let committed = false;
-
     try {
       const result = trackingContext.run(this, this._fn);
-
-      // Commit Dependencies
       this._commitDeps(prevLinks);
       committed = true;
 
-      if (isPromise(result)) {
-        this._handleAsyncComputation(result);
-      } else {
-        this._finalizeResolution(result);
-      }
+      isPromise(result) ? this._handleAsyncComputation(result) : this._finalizeResolution(result);
     } catch (e) {
-      let err = e as Error;
       if (!committed) {
         try {
           this._commitDeps(prevLinks);
           committed = true;
-        } catch (commitErr) {
-          err = commitErr as Error;
-        }
+        } catch {}
       }
-      this._handleComputationError(err);
+      this._handleError(e as Error, ERROR_MESSAGES.COMPUTED_COMPUTATION_FAILED, true);
     } finally {
-      if (committed) {
-        if (prevLinks !== EMPTY_LINKS) linksArrayPool.release(prevLinks);
-      } else {
-        linksArrayPool.release(this._trackLinks);
-      }
+      if (committed && prevLinks !== EMPTY_LINKS) linksArrayPool.release(prevLinks);
+      else if (!committed) linksArrayPool.release(this._trackLinks);
+
       this._trackEpoch = -1;
       this._trackLinks = EMPTY_LINKS;
       this._trackCount = 0;
-
       this.flags &= ~COMPUTED_STATE_FLAGS.RECOMPUTING;
     }
   }
@@ -362,55 +296,45 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
         COMPUTED_STATE_FLAGS.RESOLVED |
         COMPUTED_STATE_FLAGS.REJECTED
       );
-
     this._notifySubscribers(undefined, undefined);
 
     this._asyncStartAggregateVersion = this._captureVersionSnapshot();
     this._asyncRetryCount = 0;
-
     this._promiseId = (this._promiseId + 1) % MAX_PROMISE_ID;
     const promiseId = this._promiseId;
 
-    promise
-      .then((resolvedValue) => {
+    promise.then(
+      (res) => {
         if (promiseId !== this._promiseId) return;
-
-        // Drift detection
         if (this._captureVersionSnapshot() !== this._asyncStartAggregateVersion) {
-          if (this._asyncRetryCount < MAX_ASYNC_RETRIES) {
-            this._asyncRetryCount++;
-            this._markDirty();
-            return;
-          }
-          this._handleAsyncRejection(
-            new ComputedError(`Async drift threshold exceeded after ${MAX_ASYNC_RETRIES} retries.`)
+          if (this._asyncRetryCount++ < MAX_ASYNC_RETRIES) return this._markDirty();
+          return this._handleError(
+            new ComputedError(`Async drift threshold exceeded after ${MAX_ASYNC_RETRIES} retries.`),
+            ERROR_MESSAGES.COMPUTED_ASYNC_COMPUTATION_FAILED
           );
-          return;
         }
-
-        this._finalizeResolution(resolvedValue);
-        this._notifySubscribers(resolvedValue, undefined);
-      })
-      .catch((err) => {
-        if (promiseId !== this._promiseId) return;
-        this._handleAsyncRejection(err);
-      });
+        this._finalizeResolution(res);
+        this._notifySubscribers(res, undefined);
+      },
+      (err) =>
+        promiseId === this._promiseId &&
+        this._handleError(err, ERROR_MESSAGES.COMPUTED_ASYNC_COMPUTATION_FAILED)
+    );
   }
 
   private _captureVersionSnapshot(): number {
     let aggregate = 0;
     const links = this._links;
     for (let i = 0, len = links.length; i < len; i++) {
-      const v = links[i]!.node.version;
-      aggregate = ((((aggregate << 5) - aggregate) | 0) + v) & SMI_MAX;
+      aggregate = ((((aggregate << 5) - aggregate) | 0) + links[i]!.node.version) & SMI_MAX;
     }
     return aggregate;
   }
 
-  private _handleAsyncRejection(err: unknown): void {
-    const error = wrapError(err, ComputedError, ERROR_MESSAGES.COMPUTED_ASYNC_COMPUTATION_FAILED);
+  private _handleError(err: unknown, msg: string, throwErr = false): void {
+    const error = wrapError(err, ComputedError, msg);
 
-    if (!(this.flags & COMPUTED_STATE_FLAGS.REJECTED)) {
+    if (!throwErr && !(this.flags & COMPUTED_STATE_FLAGS.REJECTED)) {
       this.version = (this.version + 1) & SMI_MAX;
     }
 
@@ -425,15 +349,14 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
         )) |
       (COMPUTED_STATE_FLAGS.REJECTED | COMPUTED_STATE_FLAGS.HAS_ERROR);
 
-    const onError = this._onError;
-    if (onError) {
+    if (this._onError)
       try {
-        onError(error);
-      } catch (callbackError) {
-        console.error(ERROR_MESSAGES.CALLBACK_ERROR_IN_ERROR_HANDLER, callbackError);
+        this._onError(error);
+      } catch (e) {
+        console.error(ERROR_MESSAGES.CALLBACK_ERROR_IN_ERROR_HANDLER, e);
       }
-    }
 
+    if (throwErr) throw error;
     this._notifySubscribers(undefined, undefined);
   }
 
@@ -458,42 +381,14 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._errorCacheEpoch = -1;
   }
 
-  private _handleComputationError(err: unknown): never {
-    const error = wrapError(err, ComputedError, ERROR_MESSAGES.COMPUTED_COMPUTATION_FAILED);
-
-    this._error = error;
-    this.flags =
-      (this.flags &
-        ~(
-          COMPUTED_STATE_FLAGS.IDLE |
-          COMPUTED_STATE_FLAGS.DIRTY |
-          COMPUTED_STATE_FLAGS.PENDING |
-          COMPUTED_STATE_FLAGS.RESOLVED
-        )) |
-      (COMPUTED_STATE_FLAGS.REJECTED | COMPUTED_STATE_FLAGS.HAS_ERROR);
-
-    const onError = this._onError;
-    if (onError) {
-      try {
-        onError(error);
-      } catch (callbackError) {
-        console.error(ERROR_MESSAGES.CALLBACK_ERROR_IN_ERROR_HANDLER, callbackError);
-      }
-    }
-
-    throw error;
-  }
-
   execute(): void {
     this._markDirty();
   }
 
   /** @internal */
   _markDirty(): void {
-    const flags = this.flags;
-    if (flags & (COMPUTED_STATE_FLAGS.RECOMPUTING | COMPUTED_STATE_FLAGS.DIRTY)) return;
-
-    this.flags = flags | COMPUTED_STATE_FLAGS.DIRTY;
+    if (this.flags & (COMPUTED_STATE_FLAGS.RECOMPUTING | COMPUTED_STATE_FLAGS.DIRTY)) return;
+    this.flags |= COMPUTED_STATE_FLAGS.DIRTY;
     this._notifySubscribers(undefined, undefined);
   }
 }

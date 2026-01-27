@@ -4,6 +4,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { atom } from '@/core/atom';
+import { computed } from '@/core/computed';
 import { effect } from '@/core/effect';
 import { EffectError } from '@/errors/errors';
 import { debug } from '@/utils/debug';
@@ -430,6 +431,148 @@ describe('Effect - Error Handling and Edge Cases', () => {
       expect((b as unknown as { subscriberCount: () => number }).subscriberCount()).toBe(0);
 
       consoleError.mockRestore();
+    });
+    describe('Coverage Improvements', () => {
+      it('handles error in cleanup during dispose', () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const e = effect(() => {
+          return () => {
+            throw new Error('Cleanup failed');
+          };
+        });
+        e.dispose();
+        expect(consoleError).toHaveBeenCalled();
+        consoleError.mockRestore();
+      });
+
+      it('detects dirty computed dependency via value check (lazy evaluation)', async () => {
+        const a = atom(0);
+        const c = computed(() => a.value + 1); // Lazy by default
+        let runs = 0;
+
+        const e = effect(() => {
+          runs++;
+          c.value;
+        });
+
+        await vi.runAllTimersAsync();
+        expect(runs).toBe(1);
+
+        // Update atom. Computed becomes dirty but version unchanged (lazy).
+        a.value = 1;
+
+        // Trigger effect execution.
+        // Fast path check: c.version vs link.version (match).
+        // 'value' in dep check -> reads c.value -> recomputes -> version bumps.
+        // logic detects change -> isDirty=true -> execute().
+        await vi.runAllTimersAsync();
+
+        expect(runs).toBe(2);
+        expect(c.value).toBe(2);
+        e.dispose();
+      });
+
+      it('considers dependency dirty if value access throws during check', async () => {
+        const a = atom(0);
+        const c = computed(() => {
+          if (a.value === 1) throw new Error('Computed error');
+          return a.value;
+        });
+
+        let runs = 0;
+        effect(() => {
+          runs++;
+          try {
+            c.value;
+          } catch {
+            // ignore
+          }
+        });
+
+        expect(runs).toBe(1);
+
+        a.value = 1; // trigger dirty
+        // Effect check: read c.value -> throws -> catch -> isDirty=true -> execute
+
+        await vi.runAllTimersAsync();
+
+        expect(runs).toBe(2);
+      });
+
+      it('reports isExecuting correctly', () => {
+        let capturedIsExecuting = false;
+        let runCount = 0;
+        const a = atom(0, { sync: true });
+        // biome-ignore lint/suspicious/noExplicitAny: test
+        let eRef: any;
+
+        const e = effect(
+          () => {
+            runCount++;
+            a.value;
+            if (eRef) {
+              capturedIsExecuting = eRef.isExecuting;
+            }
+          },
+          { sync: true }
+        );
+        eRef = e;
+
+        a.value = 1; // triggers re-run synchronously
+
+        expect(runCount).toBe(2); // 1 initial + 1 update
+        expect(capturedIsExecuting).toBe(true);
+        e.dispose();
+      });
+
+      it('throws infinite loop error on excessive sync updates', () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const a = atom(0, { sync: true });
+
+        const e = effect(
+          () => {
+            a.value;
+          },
+          {
+            sync: true,
+            maxExecutionsPerFlush: 10,
+          }
+        );
+
+        // Does not throw because atom notification swallows subscriber errors
+        for (let i = 0; i < 20; i++) {
+          a.value = i;
+        }
+
+        // Instead, verify that the effect disposed itself and logged an error
+        expect(e.isDisposed).toBe(true);
+        expect(consoleError).toHaveBeenCalledWith(
+          expect.objectContaining({
+            message: expect.stringMatching(/Infinite loop detected/),
+          })
+        );
+
+        consoleError.mockRestore();
+      });
+
+      it('callbacks error if onError handler throws', () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        effect(
+          () => {
+            throw new Error('Initial error');
+          },
+          {
+            onError: () => {
+              throw new Error('Handler error');
+            },
+          }
+        );
+
+        // Should log Initial Error, then Handler Error wrapped
+        expect(consoleError).toHaveBeenCalledTimes(2);
+        consoleError.mockRestore();
+      });
     });
   });
 });
