@@ -15,9 +15,9 @@ npm i @but212/atom-effect
 ### CDN
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect@latest"></script>
+<script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect@0.16.0"></script>
 <!-- or -->
-<script src="https://unpkg.com/@but212/atom-effect@latest"></script>
+<script src="https://unpkg.com/@but212/atom-effect@0.16.0"></script>
 ```
 
 ## Core API
