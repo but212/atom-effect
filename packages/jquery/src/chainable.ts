@@ -12,12 +12,12 @@ import { BindingFlags, createInputBindingState } from './types';
  */
 $.fn.atomText = function <T>(source: ReactiveValue<T>, formatter?: (v: T) => string): JQuery {
   return this.each(function () {
-    registerReactiveEffect(
-      this,
-      source,
-      (val) => $(this).text(formatter ? formatter(val) : String(val ?? '')),
-      'text'
-    );
+    const $el = $(this);
+    const update = formatter
+      ? (val: T) => $el.text(formatter(val))
+      : (val: T) => $el.text(String(val ?? ''));
+
+    registerReactiveEffect(this, source, update, 'text');
   });
 };
 
@@ -26,7 +26,8 @@ $.fn.atomText = function <T>(source: ReactiveValue<T>, formatter?: (v: T) => str
  */
 $.fn.atomHtml = function (source: ReactiveValue<string>): JQuery {
   return this.each(function () {
-    registerReactiveEffect(this, source, (val) => $(this).html(String(val ?? '')), 'html');
+    const $el = $(this);
+    registerReactiveEffect(this, source, (val) => $el.html(String(val ?? '')), 'html');
   });
 };
 
@@ -35,10 +36,11 @@ $.fn.atomHtml = function (source: ReactiveValue<string>): JQuery {
  */
 $.fn.atomClass = function (className: string, condition: ReactiveValue<boolean>): JQuery {
   return this.each(function () {
+    const $el = $(this);
     registerReactiveEffect(
       this,
       condition,
-      (val) => $(this).toggleClass(className, Boolean(val)),
+      (val) => $el.toggleClass(className, Boolean(val)),
       `class.${className}`
     );
   });
@@ -53,12 +55,12 @@ $.fn.atomCss = function (
   unit?: string
 ): JQuery {
   return this.each(function () {
-    registerReactiveEffect(
-      this,
-      source,
-      (val) => $(this).css(prop, unit ? `${val}${unit}` : (val as string | number)),
-      `css.${prop}`
-    );
+    const $el = $(this);
+    const update = unit
+      ? (val: string | number) => $el.css(prop, `${val}${unit}`)
+      : (val: string | number) => $el.css(prop, val);
+
+    registerReactiveEffect(this, source, update, `css.${prop}`);
   });
 };
 
@@ -67,15 +69,16 @@ $.fn.atomCss = function (
  */
 $.fn.atomAttr = function (name: string, source: ReactiveValue<string | boolean | null>): JQuery {
   return this.each(function () {
+    const $el = $(this);
     registerReactiveEffect(
       this,
       source,
       (val) => {
-        if (val === null || val === undefined || val === false) {
-          $(this).removeAttr(name);
-        } else {
-          $(this).attr(name, val === true ? name : String(val));
+        if (val == null || val === false) {
+          $el.removeAttr(name);
+          return;
         }
+        $el.attr(name, val === true ? name : String(val));
       },
       `attr.${name}`
     );
@@ -90,7 +93,8 @@ $.fn.atomProp = function <T extends string | number | boolean | null | undefined
   source: ReactiveValue<T>
 ): JQuery {
   return this.each(function () {
-    registerReactiveEffect(this, source, (val) => $(this).prop(name, val), `prop.${name}`);
+    const $el = $(this);
+    registerReactiveEffect(this, source, (val) => $el.prop(name, val), `prop.${name}`);
   });
 };
 
@@ -99,7 +103,8 @@ $.fn.atomProp = function <T extends string | number | boolean | null | undefined
  */
 $.fn.atomShow = function (condition: ReactiveValue<boolean>): JQuery {
   return this.each(function () {
-    registerReactiveEffect(this, condition, (val) => $(this).toggle(Boolean(val)), 'show');
+    const $el = $(this);
+    registerReactiveEffect(this, condition, (val) => $el.toggle(Boolean(val)), 'show');
   });
 };
 
@@ -108,7 +113,8 @@ $.fn.atomShow = function (condition: ReactiveValue<boolean>): JQuery {
  */
 $.fn.atomHide = function (condition: ReactiveValue<boolean>): JQuery {
   return this.each(function () {
-    registerReactiveEffect(this, condition, (val) => $(this).toggle(!val), 'hide');
+    const $el = $(this);
+    registerReactiveEffect(this, condition, (val) => $el.toggle(!val), 'hide');
   });
 };
 
@@ -129,12 +135,16 @@ $.fn.atomVal = function <T>(atom: WritableAtom<T>, options: ValOptions<T> = {}):
 $.fn.atomChecked = function (atom: WritableAtom<boolean>): JQuery {
   return this.each(function () {
     const $el = $(this);
+    const element = this as HTMLInputElement;
     const state = createInputBindingState();
 
     // DOM → Atom
     const handler = () => {
       if (state.flags & BindingFlags.Busy) return;
-      atom.value = !!$el.prop('checked');
+      const checked = element.checked;
+      if (atom.value !== checked) {
+        atom.value = checked;
+      }
     };
 
     $el.on('change', handler);
@@ -144,8 +154,10 @@ $.fn.atomChecked = function (atom: WritableAtom<boolean>): JQuery {
     const fx = effect(() => {
       state.flags |= BindingFlags.SyncingToDom;
       const val = !!atom.value;
-      $el.prop('checked', val);
-      debug.domUpdated($el, 'checked', val);
+      if (element.checked !== val) {
+        element.checked = val;
+        debug.domUpdated($el, 'checked', val);
+      }
       state.flags &= ~BindingFlags.SyncingToDom;
     });
     registry.trackEffect(this, fx);

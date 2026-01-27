@@ -2,10 +2,7 @@ import type { ComputedAtom, ReactiveValue, ReadonlyAtom } from './types';
 
 /**
  * Checks if a given value is a reactive object (Atom or Computed).
- * A reactive object is expected to have a 'value' property and a 'subscribe' method.
- *
- * @param value - The value to check.
- * @returns True if the value is reactive, false otherwise.
+ * Robust check for correctness: must have both 'value' property and 'subscribe' method.
  */
 export function isReactive(value: unknown): value is ReadonlyAtom<unknown> | ComputedAtom<unknown> {
   return value !== null && typeof value === 'object' && 'value' in value && 'subscribe' in value;
@@ -13,14 +10,15 @@ export function isReactive(value: unknown): value is ReadonlyAtom<unknown> | Com
 
 /**
  * Extracts the underlying raw value from a ReactiveValue.
- * If the source is reactive, it returns its current value; otherwise, it returns the source itself.
- *
- * @template T - The type of the value.
- * @param source - The reactive value or raw value to extract from.
- * @returns The extracted raw value.
+ * Optimized for hot path by inlining the reactive check with high correctness.
  */
 export function getValue<T>(source: ReactiveValue<T>): T {
-  if (isReactive(source)) {
+  if (
+    source !== null &&
+    typeof source === 'object' &&
+    'value' in source &&
+    'subscribe' in source
+  ) {
     return (source as ReadonlyAtom<T>).value;
   }
   return source as T;
@@ -28,69 +26,83 @@ export function getValue<T>(source: ReactiveValue<T>): T {
 
 /**
  * Generates a CSS selector string for a DOM element.
- * Accepts both raw Element and JQuery objects for flexibility.
- * This is primarily used for debugging and logging purposes to identify elements.
- *
- * @param el - The DOM element or JQuery object to generate a selector for.
- * @returns A string representing the element's ID, classes, or tag name.
+ * Optimized for zero-allocation parsing using native classList.
  */
 export function getSelector(el: Element | JQuery): string {
   if (!el) return 'unknown';
   const dom = 'jquery' in el ? (el as JQuery)[0] : (el as Element);
   if (!dom) return 'unknown';
 
-  if (dom.id) return `#${dom.id}`;
-  if (dom.className) {
-    const cls = String(dom.className).trim().split(/\s+/).filter(Boolean).join('.');
-    return cls ? `${dom.tagName.toLowerCase()}.${cls}` : dom.tagName.toLowerCase();
+  const id = dom.id;
+  if (id && typeof id === 'string') return `#${id}`;
+
+  const tagName = dom.tagName.toLowerCase();
+  const classes = dom.classList;
+
+  if (classes && classes.length > 0) {
+    let res = tagName;
+    for (let i = 0, len = classes.length; i < len; i++) {
+      const cls = classes[i];
+      if (cls) res += '.' + cls;
+    }
+    return res;
   }
-  return dom.tagName.toLowerCase();
+  return tagName;
 }
 
 /**
  * Longest Increasing Subsequence (LIS)
- * Optimized for hardware: Uses Int32Array for memory locality and cache hits.
- * Time Complexity: O(N log N), Space Complexity: O(N) but contiguous.
+ * Optimized for hardware and TypeScript strict null checks.
+ * Time Complexity: O(N log N), Space Complexity: $O(N)$.
  */
 export function getLIS(arr: Int32Array | number[]): Int32Array {
   const len = arr.length;
   if (len === 0) return new Int32Array(0);
 
-  // predecessors: pointer to previous index in LIS for backtracking (N indices)
   const predecessors = new Int32Array(len);
-  // result: indices of the currently found longest increasing subsequence
   const result = new Int32Array(len);
   let resultLen = 0;
 
   for (let i = 0; i < len; i++) {
-    if (arr[i] === -1) continue;
+    const val = arr[i];
+    if (val === undefined || val === -1) continue;
 
-    if (resultLen === 0 || arr[result[resultLen - 1]!]! < arr[i]!) {
-      predecessors[i] = resultLen > 0 ? result[resultLen - 1]! : -1;
+    const lastIdx = resultLen > 0 ? result[resultLen - 1] : undefined;
+    if (resultLen === 0 || (lastIdx !== undefined && (arr[lastIdx] ?? -1) < val)) {
+      predecessors[i] = lastIdx ?? -1;
       result[resultLen++] = i;
       continue;
     }
 
     // Binary search for insertion point
-    let left = 0,
-      right = resultLen - 1;
+    let left = 0;
+    let right = resultLen - 1;
     while (left < right) {
       const mid = (left + right) >>> 1;
-      if (arr[result[mid]!]! < arr[i]!) left = mid + 1;
-      else right = mid;
+      const midIdx = result[mid];
+      if (midIdx !== undefined && (arr[midIdx] ?? -1) < val) {
+        left = mid + 1;
+      } else {
+        right = mid;
+      }
     }
 
-    if (arr[i]! < arr[result[left]!]!) {
-      if (left > 0) predecessors[i] = result[left - 1]!;
+    const leftIdx = result[left];
+    if (leftIdx !== undefined && val < (arr[leftIdx] ?? Number.MAX_SAFE_INTEGER)) {
+      if (left > 0) {
+        predecessors[i] = result[left - 1] ?? -1;
+      }
       result[left] = i;
     }
   }
 
-  // Backtracking to reconstruct the LIS in the correct order
   const lis = new Int32Array(resultLen);
-  for (let i = resultLen - 1, curr = result[resultLen - 1]; i >= 0; i--) {
-    lis[i] = curr!;
-    curr = predecessors[curr!];
+  if (resultLen > 0) {
+    let curr: number | undefined = result[resultLen - 1];
+    for (let i = resultLen - 1; i >= 0 && curr !== undefined && curr !== -1; i--) {
+      lis[i] = curr;
+      curr = predecessors[curr];
+    }
   }
 
   return lis;

@@ -12,31 +12,34 @@ const mountedComponents = new WeakMap<Element, () => void>();
  */
 $.fn.atomMount = function <P>(component: ComponentFn<P>, props: P = {} as P): JQuery {
   return this.each(function () {
-    const selector = getSelector(this);
+    const el = this;
+    const isDebug = debug.enabled;
+    const selector = isDebug ? getSelector(el) : '';
 
-    // Unmount existing component
-    if (mountedComponents.has(this)) {
-      debug.log('mount', `${selector} unmounting existing component`);
-      mountedComponents.get(this)!();
+    // 1. Unmount existing component (Consolidated O(1) lookup)
+    const existingUnmount = mountedComponents.get(el);
+    if (existingUnmount) {
+      if (isDebug) debug.log('mount', `${selector} unmounting existing component`);
+      existingUnmount();
     }
 
-    debug.log('mount', `${selector} mounting component`);
+    if (isDebug) debug.log('mount', `${selector} mounting component`);
 
-    // Mount
+    // 2. Mount
     let userCleanup: undefined | (() => void);
     try {
-      userCleanup = component($(this), props);
+      userCleanup = component($(el), props);
     } catch (e) {
       console.error('[atom-effect-jquery] Mount error:', e);
       return;
     }
 
-    // cleanup
+    // 3. Optimized cleanup
     const fullCleanup = () => {
-      if (!mountedComponents.has(this)) return;
-      mountedComponents.delete(this);
+      // Atomic delete() acts as a high-performance guard against double-cleanup
+      if (!mountedComponents.delete(el)) return;
 
-      debug.log('mount', `${selector} full cleanup`);
+      if (isDebug) debug.log('mount', `${selector} full cleanup`);
 
       if (typeof userCleanup === 'function') {
         try {
@@ -45,11 +48,11 @@ $.fn.atomMount = function <P>(component: ComponentFn<P>, props: P = {} as P): JQ
           console.error('[atom-effect-jquery] Cleanup error:', e);
         }
       }
-      registry.cleanupTree(this);
+      registry.cleanupTree(el);
     };
 
-    mountedComponents.set(this, fullCleanup);
-    registry.trackCleanup(this, fullCleanup);
+    mountedComponents.set(el, fullCleanup);
+    registry.trackCleanup(el, fullCleanup);
   });
 };
 
@@ -58,6 +61,7 @@ $.fn.atomMount = function <P>(component: ComponentFn<P>, props: P = {} as P): JQ
  */
 $.fn.atomUnmount = function (): JQuery {
   return this.each(function () {
-    mountedComponents.get(this)?.();
+    const unmount = mountedComponents.get(this);
+    if (unmount) unmount();
   });
 };

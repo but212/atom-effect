@@ -14,27 +14,46 @@ import type {
 } from './types';
 import { BindingFlags, createInputBindingState } from './types';
 
+// Cache for CSS property camelization to avoid repeated regex and check overhead
+const camelCache: Record<string, string> = Object.create(null);
+function getCamelCase(prop: string): string {
+  return (
+    camelCache[prop] ||
+    (camelCache[prop] = prop.includes('-') ? prop.replace(/-./g, (m) => m[1]!.toUpperCase()) : prop)
+  );
+}
+
 // ============================================================================
 // One-Way Binding Handlers (Atom → DOM)
 // ============================================================================
 
 function bindText<T>(ctx: BindingContext, value: ReactiveValue<T>): void {
+  const el = ctx.el;
   registerReactiveEffect(
-    ctx.el,
+    el,
     value,
     (val) => {
-      ctx.el.textContent = String(val ?? '');
+      const newVal = typeof val === 'string' ? val : String(val ?? '');
+      // Guard against redundant DOM writes
+      if (el.textContent !== newVal) {
+        el.textContent = newVal;
+      }
     },
     'text'
   );
 }
 
 function bindHtml(ctx: BindingContext, value: ReactiveValue<string>): void {
+  const el = ctx.el;
   registerReactiveEffect(
-    ctx.el,
+    el,
     value,
     (val) => {
-      ctx.el.innerHTML = String(val ?? '');
+      const newVal = String(val ?? '');
+      // Guard against redundant DOM writes which destroy/recreate subtrees
+      if (el.innerHTML !== newVal) {
+        el.innerHTML = newVal;
+      }
     },
     'html'
   );
@@ -54,16 +73,17 @@ function bindClass(ctx: BindingContext, classMap: Record<string, ReactiveValue<b
 }
 
 function bindCss(ctx: BindingContext, cssMap: Record<string, CssValue>): void {
-  const style = ctx.el.style as unknown as Record<string, string>;
+  const el = ctx.el;
+  const style = el.style as unknown as Record<string, string>;
   for (const prop in cssMap) {
     const val = cssMap[prop];
     if (val === undefined) continue;
 
-    const camel = prop.includes('-') ? prop.replace(/-./g, (m) => m[1]!.toUpperCase()) : prop;
+    const camel = getCamelCase(prop);
 
     if (Array.isArray(val)) {
       registerReactiveEffect(
-        ctx.el,
+        el,
         val[0],
         (v) => {
           style[camel] = `${v}${val[1]}`;
@@ -72,7 +92,7 @@ function bindCss(ctx: BindingContext, cssMap: Record<string, CssValue>): void {
       );
     } else {
       registerReactiveEffect(
-        ctx.el,
+        el,
         val,
         (v) => {
           style[camel] = v as string;
@@ -87,15 +107,20 @@ function bindAttr(
   ctx: BindingContext,
   attrMap: Record<string, ReactiveValue<string | boolean | null>>
 ): void {
+  const el = ctx.el;
   for (const name in attrMap) {
     registerReactiveEffect(
-      ctx.el,
+      el,
       attrMap[name],
       (v) => {
         if (v === null || v === undefined || v === false) {
-          ctx.el.removeAttribute(name);
-        } else {
-          ctx.el.setAttribute(name, v === true ? name : String(v));
+          el.removeAttribute(name);
+          return;
+        }
+        const newVal = v === true ? name : String(v);
+        // Attribute write guard
+        if (el.getAttribute(name) !== newVal) {
+          el.setAttribute(name, newVal);
         }
       },
       `attr.${name}`
@@ -104,13 +129,16 @@ function bindAttr(
 }
 
 function bindProp(ctx: BindingContext, propMap: Record<string, ReactiveValue<unknown>>): void {
-  const el = ctx.el;
+  const el = ctx.el as unknown as Record<string, unknown>;
   for (const name in propMap) {
     registerReactiveEffect(
-      el,
+      ctx.el,
       propMap[name],
       (val) => {
-        (el as unknown as Record<string, unknown>)[name] = val;
+        // Redundancy check for DOM properties (e.g. className, title)
+        if (el[name] !== val) {
+          el[name] = val;
+        }
       },
       `prop.${name}`
     );
@@ -118,22 +146,28 @@ function bindProp(ctx: BindingContext, propMap: Record<string, ReactiveValue<unk
 }
 
 function bindShow(ctx: BindingContext, condition: ReactiveValue<boolean>): void {
+  const el = ctx.el;
   registerReactiveEffect(
-    ctx.el,
+    el,
     condition,
     (val) => {
-      ctx.$el.toggle(!!val);
+      // Direct style access is faster than $el.toggle()
+      el.style.display = val ? '' : 'none';
+      if (debug.enabled) debug.domUpdated(el, 'show', val);
     },
     'show'
   );
 }
 
 function bindHide(ctx: BindingContext, condition: ReactiveValue<boolean>): void {
+  const el = ctx.el;
   registerReactiveEffect(
-    ctx.el,
+    el,
     condition,
     (val) => {
-      ctx.$el.toggle(!val);
+      // Direct style access is faster than $el.toggle()
+      el.style.display = val ? 'none' : '';
+      if (debug.enabled) debug.domUpdated(el, 'hide', val);
     },
     'hide'
   );
@@ -159,26 +193,32 @@ function bindVal<T>(
 }
 
 function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): void {
+  const el = ctx.el as HTMLInputElement;
   const state = createInputBindingState();
 
   // DOM → Atom
   const handler = () => {
     if (state.flags & BindingFlags.Busy) return;
-    atom.value = ctx.$el.prop('checked');
+    const current = el.checked;
+    if (atom.value !== current) {
+      atom.value = current;
+    }
   };
 
-  ctx.$el.on('change', handler);
-  ctx.trackCleanup(() => ctx.$el.off('change', handler));
+  el.addEventListener('change', handler);
+  ctx.trackCleanup(() => el.removeEventListener('change', handler));
 
   // Atom → DOM
   const fx = effect(() => {
     state.flags |= BindingFlags.SyncingToDom;
     const val = !!atom.value;
-    ctx.$el.prop('checked', val);
-    debug.domUpdated(ctx.$el, 'checked', val);
+    if (el.checked !== val) {
+      el.checked = val;
+      if (debug.enabled) debug.domUpdated(el, 'checked', val);
+    }
     state.flags &= ~BindingFlags.SyncingToDom;
   });
-  registry.trackEffect(ctx.el, fx);
+  registry.trackEffect(el, fx);
 }
 
 // ============================================================================
@@ -225,14 +265,16 @@ $.fn.atomBind = function <T extends string | number | boolean | null | undefined
   options: BindingOptions<T>
 ): JQuery {
   return this.each(function () {
-    // Lazy element wrapping: only wrap if needed by legacy handlers (like bindVal/applyInputBinding)
-    const $el = $(this);
+    const el = this;
+    let _$el: JQuery | null = null;
 
-    // Build binding context
+    // Build binding context with a lazy JQuery wrapper
     const ctx: BindingContext = {
-      $el,
-      el: this,
-      trackCleanup: (fn) => registry.trackCleanup(this, fn),
+      get $el() {
+        return (_$el ||= $(el));
+      },
+      el,
+      trackCleanup: (fn) => registry.trackCleanup(el, fn),
     };
 
     // Apply bindings through focused handlers

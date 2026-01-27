@@ -137,7 +137,7 @@ effect(() => {
 
 ## Documentation Links
 
-- **[Architecture & Design](./ARCHITECTURE.md)**: Internal design decisions and V8 considerations.
+- **[Architecture & Design](./ARCHITECTURE.md)**: Internal design decisions.
 - **[Contributing Guide](./CONTRIBUTING.md)**: How to set up, test, and contribute.
 - **[Migration Guide](./MIGRATION.md)**: Upgrading from previous versions.
 - **[Changelog](./CHANGELOG.md)**: Release notes.

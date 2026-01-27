@@ -64,7 +64,7 @@ export const debug = {
   /**
    * Logs DOM updates and triggers visual highlight.
    */
-  domUpdated<T>($el: JQuery, type: string, value: T) {
+  domUpdated<T>($el: JQuery | Element, type: string, value: T) {
     if (!debugEnabled) return;
     console.log(`[atom-effect-jquery] DOM updated: ${getSelector($el)}.${type} =`, value);
     highlightElement($el);
@@ -85,68 +85,74 @@ export const debug = {
 
 /**
  * Visual highlight - flashes a red border.
- * Inspired by React DevTools "Highlight updates".
- *
- * Uses data attributes to manage state and prevent style pollution
- * when updates happen rapidly.
+ * Optimized with WeakMap and direct style access to minimize GC and reflows in debug mode.
  */
-function highlightElement($el: JQuery): void {
-  const el = $el[0];
-  if (!el || !document.contains(el)) return;
+interface HighlightState {
+  timer?: ReturnType<typeof setTimeout>;
+  cleanupTimer?: ReturnType<typeof setTimeout>;
+  orgStyle?: {
+    outline: string;
+    outlineOffset: string;
+    transition: string;
+  };
+}
 
-  const TIMER_KEY = 'atom_debug_timer';
-  const CLEANUP_TIMER_KEY = 'atom_debug_cleanup_timer';
-  const ORG_STYLE_KEY = 'atom_debug_org_style';
+const highlightStateMap = new WeakMap<HTMLElement, HighlightState>();
 
-  // 1. Clear existing timers for both restoration and cleanup
-  clearTimeout($el.data(TIMER_KEY));
-  clearTimeout($el.data(CLEANUP_TIMER_KEY));
+function highlightElement($el: JQuery | Element): void {
+  const el = ('jquery' in $el ? $el[0] : $el) as HTMLElement | undefined;
+  if (!el || !el.isConnected) return; // O(1) check instead of O(N) document.contains
 
-  // 2. Save original style only if not already actively highlighting
-  // (meaning this is the start of a highlight sequence)
-  if (!$el.data(ORG_STYLE_KEY)) {
-    $el.data(ORG_STYLE_KEY, {
-      outline: $el.css('outline'),
-      outlineOffset: $el.css('outline-offset'),
-      transition: $el.css('transition'),
-    });
+  let state = highlightStateMap.get(el);
+  if (!state) {
+    state = {};
+    highlightStateMap.set(el, state);
   }
 
-  // 3. Apply highlight style
-  $el.css({
-    outline: '2px solid rgba(255, 68, 68, 0.8)',
-    'outline-offset': '1px',
-    transition: 'none', // Remove transition for instant feedback on update
-  });
+  // 1. Clear existing timers
+  if (state.timer) clearTimeout(state.timer);
+  if (state.cleanupTimer) clearTimeout(state.cleanupTimer);
+
+  // 2. Save original style (inline only for performance & correctness)
+  if (!state.orgStyle) {
+    const style = el.style;
+    state.orgStyle = {
+      outline: style.outline,
+      outlineOffset: style.outlineOffset,
+      transition: style.transition,
+    };
+  }
+
+  // 3. Apply highlight style via direct DOM properties
+  const style = el.style;
+  style.outline = '2px solid rgba(255, 68, 68, 0.8)';
+  style.outlineOffset = '1px';
+  style.transition = 'none';
 
   // 4. Set timer to restore
-  $el.data(
-    TIMER_KEY,
-    setTimeout(() => {
-      // Restore original styles
-      const originalStyles = $el.data(ORG_STYLE_KEY);
+  state.timer = setTimeout(() => {
+    if (!el.isConnected) return;
 
-      // We add a transition for the fade out
-      $el.css('transition', 'outline 0.5s ease-out');
+    // We add a transition for the fade out
+    style.transition = 'outline 0.5s ease-out';
 
-      // Defer the actual style restoration to allow transition to take effect
-      requestAnimationFrame(() => {
-        $el.css({
-          outline: originalStyles?.outline || '',
-          'outline-offset': originalStyles?.outlineOffset || '',
-        });
+    // Defer the actual style restoration to allow transition to take effect
+    requestAnimationFrame(() => {
+      if (!el.isConnected) return;
 
-        // 5. Cleanup data after fade out
-        $el.data(
-          CLEANUP_TIMER_KEY,
-          setTimeout(() => {
-            $el.css('transition', originalStyles?.transition || '');
-            $el.removeData(TIMER_KEY);
-            $el.removeData(CLEANUP_TIMER_KEY);
-            $el.removeData(ORG_STYLE_KEY);
-          }, 500)
-        );
-      });
-    }, 100)
-  );
+      const org = state?.orgStyle;
+      if (org) {
+        style.outline = org.outline;
+        style.outlineOffset = org.outlineOffset;
+      }
+
+      // 5. Cleanup data after fade out
+      state!.cleanupTimer = setTimeout(() => {
+        if (el.isConnected && state?.orgStyle) {
+          style.transition = state.orgStyle.transition;
+        }
+        highlightStateMap.delete(el);
+      }, 500);
+    });
+  }, 100);
 }

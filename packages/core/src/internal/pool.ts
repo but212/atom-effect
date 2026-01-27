@@ -8,7 +8,6 @@ export const EMPTY_UNSUBS = Object.freeze([]) as unknown as (() => void)[];
 
 export const EMPTY_VERSIONS = Object.freeze([]) as unknown as number[];
 
-// Per-type Pool Instances (V8 Shape Optimization)
 export const depArrayPool = new ArrayPool<Dependency>();
 export const subArrayPool = new ArrayPool<Subscriber>();
 export const unsubArrayPool = new ArrayPool<() => void>();

@@ -6,25 +6,22 @@
 
 #### Changed - Core
 
-- **Reactive Engine Optimization**: Reduced memory footprint and execution overhead by inlining internal logic, removing redundant instance properties (e.g., `_visitedEpoch`, `_hasDefaultValue`), and eliminating auxiliary classes like `ComputedTrackable`.
-- **Hot Path Performance**: Micro-optimized subscriber notification loops and dependency tracking to reduce overhead and stack depth.
-- **Codebase Cleanup**: Removed unused object pools, type guards, and internal utilities to simplify the core architecture.
-- **Micro-optimizations**: Widespread reduction of heap allocations and intermediate variable overhead by inlining single-use values and property access (e.g., `this.flags`).
-- **Improved Type Guards**: Streamlined `isAtom`, `isComputed`, and `isEffect` with cleaner duck-typing and reduced casting.
-- **Logic Simplification**: Refactored `ComputedAtomImpl` error propagation and `Scheduler` buffer management for better performance and readability.
-- **Subscriber Management**: Optimized notification paths in `Atom` and `ReactiveDependency` to minimize branch mispredictions.
-- **ArrayPool Enhancement**: Simplified stat tracking and rejection logic in `ArrayPool` for faster resource reuse.
+- **Reactive Engine Optimization**: Achieved massive performance gains through V8 hidden class stabilization (monomorphism), property access reduction, and bitwise flag consolidation.
+- **Hot Path Performance**: Micro-optimized tracking and notification loops to minimize call stack depth and branch mispredictions.
+- **Memory Efficiency**: Implemented zero-allocation array reuse (`arr.length = 0`) across `Atom`, `Computed`, and `Effect` to reduce GC pressure.
+- **Scheduler Advancement**: Refactored buffer management and drain cycles for better cache locality and microtask efficiency.
+- **Logical Simplification**: Hoisted error handlers and internal helpers (e.g., `_addSubscriber`) to improve JIT inlining and code reuse.
 
 ### jQuery
 
 #### Changed - jQuery
 
-- **Binding Logic Consolidation**: Unified input handler management in `applyInputBinding` using an event object map, reducing event listener overhead.
-- **Performance**: Inlined DOM updates in chainable methods (`atomText`, `atomCss`, `atomAttr`) to reduce closure nesting and stack depth.
-- **Registry Optimization**: Simplified `trackEffect` and `trackCleanup` logic using a centralized list management helper.
-- **List Reconciliation**: Streamlined key mapping and LIS (Longest Increasing Subsequence) input preparation in `atomList`.
-- **Debug Experience**: Refactored `highlightElement` and `domUpdated` for better performance while preserving visual feedback.
-- **Lifecycle Safety**: Enhanced unmounting and cleanup logic in `atomMount` and `BindingRegistry` to prevent memory leaks and zombie effects.
+- **DOM Rendering Performance**: Implemented redundant write guards (`el.textContent !== newVal`) and direct property access to minimize expensive layout reflows.
+- **Memory & Lifecycle**: Migrated from jQuery's `$.data()` to `WeakMap`-based binding records and debug states, ensuring zero memory leaks and faster lookup.
+- **Binding Engine Consolidation**: Unified declarative and chainable binding handlers into a shared context, reducing closure nesting.
+- **CSS Optimization**: Introduced a camel-case property cache to eliminate repeated regex overhead during style updates.
+- **List Reconciliation**: Optimized shallow equality and path preparation in `atomList` for hardware-friendly propagation.
+- **Debug Refinement**: Refactored visual highlighting using `requestAnimationFrame` and direct style manipulation for minimal overhead in development.
 
 ## [0.15.4]
 

@@ -149,7 +149,7 @@ describe('Scheduler', () => {
     scheduler.endBatch();
 
     // Stays at 0, does not go negative
-    expect((scheduler as unknown as { batchDepth: number }).batchDepth).toBe(0);
+    expect((scheduler as unknown as { _batchDepth: number })._batchDepth).toBe(0);
   });
 
   it('does not flush when queue is empty', async () => {

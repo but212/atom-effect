@@ -16,7 +16,7 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
   const getKey =
     typeof key === 'function'
       ? key
-      : (item: T) => item[key as keyof T] as unknown as string | number;
+      : (item: T, _index: number) => item[key as keyof T] as unknown as string | number;
 
   return this.each(function () {
     const $container = $(this);
@@ -34,8 +34,8 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
       // 1. Handle Empty Template Logic
       if (itemCount === 0) {
         if (empty && !$emptyEl) {
-          // biome-ignore lint/suspicious/noExplicitAny: temporary typing
-          $emptyEl = $(empty as any).appendTo($container);
+          // Use type assertion to avoid overload ambiguity while maintaining JQuery return type
+          $emptyEl = ($(empty as string) as JQuery).appendTo($container);
         }
       } else if ($emptyEl) {
         $emptyEl.remove();
@@ -50,72 +50,67 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
 
       debug.log('list', `${containerSelector} updating with ${itemCount} items`);
 
-      // 2. Prepare keys and identify removals (O(N) with cache-friendly loop)
+      // 2. Build Old Index Map (O(M))
+      const oldIndexMap = new Map<string | number, number>();
+      const oldLen = oldKeys.length;
+      for (let i = 0; i < oldLen; i++) {
+        oldIndexMap.set(oldKeys[i]!, i);
+      }
+
+      // 3. Prepare keys and LIS indices in a single pass (O(N))
       const newKeys: (string | number)[] = new Array(itemCount);
       const newKeySet = new Set<string | number>();
+      const newIndices = new Int32Array(itemCount);
 
       for (let i = 0; i < itemCount; i++) {
-        const item = items[i] as T; // Type assertion for generic T
+        const item = items[i] as T;
         const k = getKey(item, i);
 
-        // DEV: Warn about duplicate keys
         if (debug.enabled && newKeySet.has(k)) {
-          console.warn(
-            `[atomList] Duplicate key "${k}" at index ${i}. ` +
-              `Items with duplicate keys may cause unexpected behavior.`
-          );
+          console.warn(`[atomList] Duplicate key "${k}" at index ${i}.`);
         }
 
         newKeys[i] = k;
         newKeySet.add(k);
+        newIndices[i] = oldIndexMap.get(k) ?? -1;
       }
 
-      // 3. Remove vanished items (O(M)) - Respects onRemove callback
-      for (const [k, entry] of itemMap) {
-        if (newKeySet.has(k) || removingKeys.has(k)) continue;
+      // 4. Remove vanished items (O(M))
+      if (itemMap.size > 0) {
+        for (const [k, entry] of itemMap) {
+          if (newKeySet.has(k) || removingKeys.has(k)) continue;
 
-        const cleanupItem = () => {
-          entry.$el.remove();
-          if (entry.$el[0]) registry.cleanup(entry.$el[0]);
-          removingKeys.delete(k);
-          debug.log('list', `${containerSelector} removed item:`, k);
-        };
+          const cleanupItem = () => {
+            entry.$el.remove();
+            if (entry.$el[0]) registry.cleanup(entry.$el[0]);
+            removingKeys.delete(k);
+            debug.log('list', `${containerSelector} removed item:`, k);
+          };
 
-        itemMap.delete(k);
-        removingKeys.add(k);
+          itemMap.delete(k);
+          removingKeys.add(k);
 
-        if (onRemove) {
-          const result = onRemove(entry.$el);
-          if (result instanceof Promise) result.then(cleanupItem);
-          else cleanupItem();
-        } else {
-          cleanupItem();
+          if (onRemove) {
+            const result = onRemove(entry.$el);
+            if (result instanceof Promise) result.then(cleanupItem);
+            else cleanupItem();
+          } else {
+            cleanupItem();
+          }
         }
       }
 
-      // If we adjusted from non-empty to empty, we can stop here after removal
+      // After removals, check if we can skip the rest
       if (itemCount === 0) {
         oldKeys = [];
         return;
       }
 
-      // 4. LIS Reconciliation (O(N log N))
-      // Map keys to their OLD index for LIS input
-      const oldIndexMap = new Map<string | number, number>();
-      for (let i = 0, len = oldKeys.length; i < len; i++) {
-        oldIndexMap.set(oldKeys[i]!, i);
-      }
-
-      // Input for LIS: where each new item came from in the old list
-      const newIndices = new Int32Array(itemCount);
-      for (let i = 0; i < itemCount; i++) {
-        newIndices[i] = oldIndexMap.get(newKeys[i]!) ?? -1;
-      }
-
+      // 5. Get LIS (O(N log N))
       const lisArr = getLIS(newIndices);
       let lisIdx = lisArr.length - 1;
 
-      // 5. Update and Reorder (Backwards iteration for insertBefore efficiency)
+      // 6. Update and Reorder (Backwards iteration for insertBefore efficiency)
       let nextNode: Node | null = null;
       for (let i = itemCount - 1; i >= 0; i--) {
         const k = newKeys[i]!;
@@ -123,7 +118,7 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
         const entry = itemMap.get(k);
 
         if (entry) {
-          // Existing Item: Update then potentially MOVE
+          // Existing Item Path
           const oldItem = entry.item;
           entry.item = item;
           const el = entry.$el[0];
@@ -133,7 +128,7 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
             update(entry.$el, item, i);
             debug.domUpdated(entry.$el, 'list.update', item);
           } else if (oldItem !== item) {
-            // Check for shallow equality to avoid unnecessary re-renders (preserves focus)
+            // Optimized shallow equal (O(K) without Object.keys allocations)
             let isChanged = true;
             if (
               typeof oldItem === 'object' &&
@@ -141,59 +136,57 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
               typeof item === 'object' &&
               item !== null
             ) {
-              const keysA = Object.keys(oldItem as object);
-              const keysB = Object.keys(item as object);
-              if (keysA.length === keysB.length) {
-                isChanged = false;
-                for (const k of keysA) {
-                  // biome-ignore lint/suspicious/noExplicitAny: temporary typing
-                  if ((oldItem as any)[k] !== (item as any)[k]) {
+              isChanged = false;
+              let countA = 0;
+              const objA = oldItem as Record<string, unknown>;
+              const objB = item as Record<string, unknown>;
+              for (const prop in objA) {
+                if (objA[prop] !== objB[prop]) {
+                  isChanged = true;
+                  break;
+                }
+                countA++;
+              }
+              if (!isChanged) {
+                let countB = 0;
+                for (const _prop in objB) {
+                  countB++;
+                  if (countB > countA) {
                     isChanged = true;
                     break;
                   }
                 }
+                if (countA !== countB) isChanged = true;
               }
             }
 
             if (isChanged) {
-              // Fallback: Data changed and no update function -> Re-render
-              // biome-ignore lint/suspicious/noExplicitAny: temporary typing
-              const $newEl = $(render(item, i) as any);
+              const $newEl = $(render(item, i) as string) as JQuery;
               const needsNextNodeUpdate = nextNode === el;
-
               entry.$el.replaceWith($newEl);
               entry.$el = $newEl;
               if (bind) bind($newEl, item, i);
-
               debug.domUpdated($newEl, 'list.render', item);
-
-              if (needsNextNodeUpdate) {
-                nextNode = $newEl[0] || null;
-              }
+              if (needsNextNodeUpdate) nextNode = $newEl[0] || null;
             }
           }
 
-          const isStable = lisIdx >= 0 && lisArr[lisIdx] === i;
-          if (isStable) {
+          // Move if not in LIS
+          if (lisIdx >= 0 && lisArr[lisIdx] === i) {
             lisIdx--;
-          } else if (nextNode) {
-            // Check if nextNode is still in DOM (sanity check for duplicates/replacements)
-            if (nextNode.isConnected && nextNode !== entry.$el[0]) {
-              entry.$el.insertBefore(nextNode);
-            } else if (!nextNode.isConnected) {
-              // Fallback if nextNode somehow got detached (shouldn't happen with patch)
+          } else {
+            const currentEl = entry.$el[0]!;
+            if (nextNode?.isConnected) {
+              if (nextNode !== currentEl) entry.$el.insertBefore(nextNode);
+            } else {
               entry.$el.appendTo($container);
             }
-            // If nextNode === entry.$el[0], do nothing (already there/reordered virtually)
-          } else {
-            entry.$el.appendTo($container);
           }
           nextNode = entry.$el[0] || null;
         } else {
-          // New Item: Render and INSERT
+          // New Item Path
           const rendered = render(item, i);
-          // biome-ignore lint/suspicious/noExplicitAny: temporary typing
-          const $el = $(rendered as any);
+          const $el = $(rendered as string) as JQuery;
           itemMap.set(k, { $el, item });
 
           if (nextNode?.isConnected) $el.insertBefore(nextNode);
@@ -203,7 +196,6 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
           if (onAdd) onAdd($el);
 
           debug.domUpdated($el, 'list.add', item);
-          debug.log('list', `${containerSelector} added item:`, k);
           nextNode = $el[0] || null;
         }
       }

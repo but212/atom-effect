@@ -7,6 +7,11 @@ import { getSelector } from './utils';
  */
 const AES_BOUND = '_aes-bound';
 
+interface BindingRecord {
+  effects?: EffectObject[];
+  cleanups?: Array<() => void>;
+}
+
 /**
  * Binding Registry
  *
@@ -16,8 +21,7 @@ const AES_BOUND = '_aes-bound';
  * - Efficient tree traversal for cleanup.
  */
 class BindingRegistry {
-  private effects = new WeakMap<Element, EffectObject[]>();
-  private cleanups = new WeakMap<Element, Array<() => void>>();
+  private records = new WeakMap<Element, BindingRecord>();
   private boundElements = new WeakSet<Element>();
   private preservedNodes = new WeakSet<Node>();
   private ignoredNodes = new WeakSet<Node>(); // Prevent redundant cleanup
@@ -38,25 +42,30 @@ class BindingRegistry {
     return this.ignoredNodes.has(node);
   }
 
-  private _getOrCreateList<V>(el: Element, map: WeakMap<Element, V[]>): V[] {
-    let list = map.get(el);
-    if (!list) {
-      list = [];
-      map.set(el, list);
+  private _getOrCreateRecord(el: Element): BindingRecord {
+    let res = this.records.get(el);
+    if (!res) {
+      res = {};
+      this.records.set(el, res);
+      // Mark as bound and add class for faster querySelector lookup
       if (!this.boundElements.has(el)) {
         this.boundElements.add(el);
         el.classList.add(AES_BOUND);
       }
     }
-    return list;
+    return res;
   }
 
   trackEffect(el: Element, fx: EffectObject): void {
-    this._getOrCreateList(el, this.effects).push(fx);
+    const record = this._getOrCreateRecord(el);
+    if (!record.effects) record.effects = [];
+    record.effects.push(fx);
   }
 
   trackCleanup(el: Element, fn: () => void): void {
-    this._getOrCreateList(el, this.cleanups).push(fn);
+    const record = this._getOrCreateRecord(el);
+    if (!record.cleanups) record.cleanups = [];
+    record.cleanups.push(fn);
   }
 
   hasBind(el: Element): boolean {
@@ -64,17 +73,26 @@ class BindingRegistry {
   }
 
   cleanup(el: Element): void {
+    // Atomic delete return value used as a high-performance guard
     if (!this.boundElements.delete(el)) return;
+
+    const record = this.records.get(el);
+    if (!record) return;
+
+    // Fast cleanup of metadata
+    this.records.delete(el);
     this.preservedNodes.delete(el);
     this.ignoredNodes.delete(el);
     el.classList.remove(AES_BOUND);
 
-    debug.cleanup(getSelector(el));
+    // Hoist costly selector string generation to debug-only block
+    if (debug.enabled) {
+      debug.cleanup(getSelector(el));
+    }
 
     // 1. Dispose Effects (Atom -> Subscription severed)
-    const effects = this.effects.get(el);
+    const effects = record.effects;
     if (effects) {
-      this.effects.delete(el);
       for (let i = 0, len = effects.length; i < len; i++) {
         try {
           effects[i]?.dispose();
@@ -85,9 +103,8 @@ class BindingRegistry {
     }
 
     // 2. Execute custom cleanups
-    const cleanups = this.cleanups.get(el);
+    const cleanups = record.cleanups;
     if (cleanups) {
-      this.cleanups.delete(el);
       for (let i = 0, len = cleanups.length; i < len; i++) {
         try {
           cleanups[i]?.();
@@ -102,6 +119,7 @@ class BindingRegistry {
     const children = el.querySelectorAll(`.${AES_BOUND}`);
     for (let i = 0, len = children.length; i < len; i++) {
       const child = children[i] as Element;
+      // Double check because querySelectorAll might return disconnected leftovers
       if (child && this.boundElements.has(child)) {
         this.cleanup(child);
       } else if (child) {
@@ -125,17 +143,22 @@ export function enableAutoCleanup(root: Element = document.body): void {
 
   observer = new MutationObserver((mutations) => {
     for (let i = 0, len = mutations.length; i < len; i++) {
-      const removed = mutations[i]?.removedNodes;
-      if (!removed) continue;
+      const removedNodes = mutations[i]?.removedNodes;
+      if (!removedNodes) continue;
+      const rLen = removedNodes.length;
+      if (rLen === 0) continue;
 
-      for (let j = 0, rLen = removed.length; j < rLen; j++) {
-        const node = removed[j]!;
-        // Skip if kept (detached), explicitly ignored, or still connected
-        if (registry.isKept(node) || registry.isIgnored(node) || node.isConnected) continue;
+      for (let j = 0; j < rLen; j++) {
+        const node = removedNodes[j]!;
+        // Early exit: only elements can have AES_BOUND bindings
+        if (node.nodeType !== 1) continue;
 
-        if (node.nodeType === 1) {
-          registry.cleanupTree(node as Element);
+        // Skip if kept (detached for moves), explicitly ignored, or still connected
+        if (node.isConnected || registry.isKept(node) || registry.isIgnored(node)) {
+          continue;
         }
+
+        registry.cleanupTree(node as Element);
       }
     }
   });

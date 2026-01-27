@@ -4,36 +4,38 @@ import type { DependencySubscriber } from '@/tracking/tracking.types';
 import type { Dependency, Subscriber } from '@/types';
 import { debug } from '@/utils/debug';
 
+/**
+ * Tracks a dependency for the current reactive context.
+ */
 export function trackDependency<T>(
   dependency: Dependency,
   current: unknown,
   functionSubscribers: ((newValue?: T, oldValue?: T) => void)[],
   objectSubscribers: Subscriber[]
 ): void {
-  if (current === null || current === undefined) return;
+  if (current == null) return;
 
-  // Inlined from hasDependencyMethod to avoid call overhead
-  if (
-    (typeof current === 'object' || typeof current === 'function') &&
-    typeof (current as DependencySubscriber).addDependency === 'function'
-  ) {
+  // 1. DependencySubscriber path (Computed, Effect)
+  if (typeof (current as DependencySubscriber).addDependency === 'function') {
     (current as DependencySubscriber).addDependency(dependency);
     return;
   }
 
+  // 2. Manual function listeners
   if (typeof current === 'function') {
-    // O(N) check - typically small N
-    if (functionSubscribers.indexOf(current as (newValue?: T, oldValue?: T) => void) === -1) {
-      functionSubscribers.push(current as (newValue?: T, oldValue?: T) => void);
+    const fn = current as (newValue?: T, oldValue?: T) => void;
+    if (functionSubscribers.indexOf(fn) === -1) {
+      functionSubscribers.push(fn);
       dependency.flags |= NODE_FLAGS.HAS_FN_SUBS;
     }
     return;
   }
 
-  // Inlined from hasExecuteMethod
-  if (typeof current === 'object' && typeof (current as Subscriber).execute === 'function') {
-    if (objectSubscribers.indexOf(current as Subscriber) === -1) {
-      objectSubscribers.push(current as Subscriber);
+  // 3. Subscriber objects with 'execute' method
+  if (typeof (current as Subscriber).execute === 'function') {
+    const sub = current as Subscriber;
+    if (objectSubscribers.indexOf(sub) === -1) {
+      objectSubscribers.push(sub);
       dependency.flags |= NODE_FLAGS.HAS_OBJ_SUBS;
     }
   }
@@ -50,43 +52,48 @@ export function syncDependencies(
 ): (() => void)[] {
   const prevLen = prevDeps.length;
 
-  // 1. Initial dense pass: map existing unsubs to dependencies
   if (prevLen > 0) {
     for (let i = 0; i < prevLen; i++) {
       const dep = prevDeps[i];
-      if (dep) dep._tempUnsub = prevUnsubs[i];
+      if (dep) {
+        dep._tempUnsub = prevUnsubs[i];
+      }
     }
   }
 
-  // 2. Build new unsubs array: reuse or subscribe
+  const nextLen = nextDeps.length;
   const nextUnsubs = unsubArrayPool.acquire();
-  nextUnsubs.length = nextDeps.length;
+  nextUnsubs.length = nextLen;
 
-  for (let i = 0, len = nextDeps.length; i < len; i++) {
+  for (let i = 0; i < nextLen; i++) {
     const dep = nextDeps[i];
     if (!dep) continue;
 
-    if (dep._tempUnsub) {
-      nextUnsubs[i] = dep._tempUnsub;
+    const existingUnsub = dep._tempUnsub;
+    if (existingUnsub) {
+      nextUnsubs[i] = existingUnsub;
       dep._tempUnsub = undefined;
     } else {
-      // Keep checkCircular outside debug.enabled guard if tests rely on global spying
+      // New dependency found
       debug.checkCircular(dep, tracker);
       nextUnsubs[i] = dep.subscribe(tracker);
     }
   }
 
-  // 3. Final cleanup pass: unsubscribe stale dependencies
   if (prevLen > 0) {
     for (let i = 0; i < prevLen; i++) {
       const dep = prevDeps[i];
-      if (dep?._tempUnsub) {
-        dep._tempUnsub();
-        dep._tempUnsub = undefined;
+      if (dep) {
+        const remainingUnsub = dep._tempUnsub;
+        if (remainingUnsub) {
+          remainingUnsub();
+          dep._tempUnsub = undefined;
+        }
       }
     }
   }
 
+  // Release old array to pool
   if (prevUnsubs !== EMPTY_UNSUBS) {
     unsubArrayPool.release(prevUnsubs);
   }
