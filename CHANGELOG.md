@@ -1,10 +1,10 @@
 # Changelog
 
-## [Unreleased]
+## [0.16.1] - 2026-01-27
 
 ### Core
 
-#### Refactor - Core
+#### Changed - Core
 
 - **AOS Refactoring**: Replaced parallel arrays with `Link` objects (`DependencyLink`, `SubscriberLink`) to improve data cohesion and cache locality.
 
