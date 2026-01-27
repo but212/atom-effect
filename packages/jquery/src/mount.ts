@@ -12,12 +12,11 @@ const mountedComponents = new WeakMap<Element, () => void>();
  */
 $.fn.atomMount = function <P>(component: ComponentFn<P>, props: P = {} as P): JQuery {
   return this.each(function () {
-    const el = this;
     const isDebug = debug.enabled;
-    const selector = isDebug ? getSelector(el) : '';
+    const selector = isDebug ? getSelector(this) : '';
 
     // 1. Unmount existing component (Consolidated O(1) lookup)
-    const existingUnmount = mountedComponents.get(el);
+    const existingUnmount = mountedComponents.get(this);
     if (existingUnmount) {
       if (isDebug) debug.log('mount', `${selector} unmounting existing component`);
       existingUnmount();
@@ -28,7 +27,7 @@ $.fn.atomMount = function <P>(component: ComponentFn<P>, props: P = {} as P): JQ
     // 2. Mount
     let userCleanup: undefined | (() => void);
     try {
-      userCleanup = component($(el), props);
+      userCleanup = component($(this), props);
     } catch (e) {
       console.error('[atom-effect-jquery] Mount error:', e);
       return;
@@ -37,7 +36,7 @@ $.fn.atomMount = function <P>(component: ComponentFn<P>, props: P = {} as P): JQ
     // 3. Optimized cleanup
     const fullCleanup = () => {
       // Atomic delete() acts as a high-performance guard against double-cleanup
-      if (!mountedComponents.delete(el)) return;
+      if (!mountedComponents.delete(this)) return;
 
       if (isDebug) debug.log('mount', `${selector} full cleanup`);
 
@@ -48,11 +47,11 @@ $.fn.atomMount = function <P>(component: ComponentFn<P>, props: P = {} as P): JQ
           console.error('[atom-effect-jquery] Cleanup error:', e);
         }
       }
-      registry.cleanupTree(el);
+      registry.cleanupTree(this);
     };
 
-    mountedComponents.set(el, fullCleanup);
-    registry.trackCleanup(el, fullCleanup);
+    mountedComponents.set(this, fullCleanup);
+    registry.trackCleanup(this, fullCleanup);
   });
 };
 

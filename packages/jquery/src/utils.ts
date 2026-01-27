@@ -13,12 +13,7 @@ export function isReactive(value: unknown): value is ReadonlyAtom<unknown> | Com
  * Optimized for hot path by inlining the reactive check with high correctness.
  */
 export function getValue<T>(source: ReactiveValue<T>): T {
-  if (
-    source !== null &&
-    typeof source === 'object' &&
-    'value' in source &&
-    'subscribe' in source
-  ) {
+  if (source !== null && typeof source === 'object' && 'value' in source && 'subscribe' in source) {
     return (source as ReadonlyAtom<T>).value;
   }
   return source as T;
@@ -43,7 +38,7 @@ export function getSelector(el: Element | JQuery): string {
     let res = tagName;
     for (let i = 0, len = classes.length; i < len; i++) {
       const cls = classes[i];
-      if (cls) res += '.' + cls;
+      if (cls) res += `.${cls}`;
     }
     return res;
   }

@@ -17,10 +17,12 @@ import { BindingFlags, createInputBindingState } from './types';
 // Cache for CSS property camelization to avoid repeated regex and check overhead
 const camelCache: Record<string, string> = Object.create(null);
 function getCamelCase(prop: string): string {
-  return (
-    camelCache[prop] ||
-    (camelCache[prop] = prop.includes('-') ? prop.replace(/-./g, (m) => m[1]!.toUpperCase()) : prop)
-  );
+  let cached = camelCache[prop];
+  if (cached) return cached;
+
+  cached = prop.includes('-') ? prop.replace(/-./g, (m) => m[1]!.toUpperCase()) : prop;
+  camelCache[prop] = cached;
+  return cached;
 }
 
 // ============================================================================
@@ -271,7 +273,10 @@ $.fn.atomBind = function <T extends string | number | boolean | null | undefined
     // Build binding context with a lazy JQuery wrapper
     const ctx: BindingContext = {
       get $el() {
-        return (_$el ||= $(el));
+        if (!_$el) {
+          _$el = $(el);
+        }
+        return _$el;
       },
       el,
       trackCleanup: (fn) => registry.trackCleanup(el, fn),
