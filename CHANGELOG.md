@@ -1,10 +1,18 @@
 # Changelog
 
-## [0.16.0] - 2026-01-27
+## [Unreleased]
 
 ### Core
 
-#### Changed - Core
+#### Refactor - Core
+
+- **AOS Refactoring**: Replaced parallel arrays with `Link` objects (`DependencyLink`, `SubscriberLink`) to improve data cohesion and cache locality.
+
+## [0.16.0] - 2026-01-27
+
+### Core - 0.16.0
+
+#### Changed - Core 0.16.0
 
 - **Reactive Engine Optimization**: Achieved massive performance gains through V8 hidden class stabilization (monomorphism), property access reduction, and bitwise flag consolidation.
 - **Hot Path Performance**: Micro-optimized tracking and notification loops to minimize call stack depth and branch mispredictions.
@@ -12,9 +20,9 @@
 - **Scheduler Advancement**: Refactored buffer management and drain cycles for better cache locality and microtask efficiency.
 - **Logical Simplification**: Hoisted error handlers and internal helpers (e.g., `_addSubscriber`) to improve JIT inlining and code reuse.
 
-### jQuery
+### jQuery - 0.16.0
 
-#### Changed - jQuery
+#### Changed - jQuery 0.16.0
 
 - **DOM Rendering Performance**: Implemented redundant write guards (`el.textContent !== newVal`) and direct property access to minimize expensive layout reflows.
 - **Memory & Lifecycle**: Migrated from jQuery's `$.data()` to `WeakMap`-based binding records and debug states, ensuring zero memory leaks and faster lookup.

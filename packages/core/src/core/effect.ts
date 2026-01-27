@@ -1,5 +1,6 @@
 import { EFFECT_STATE_FLAGS, IS_DEV, SCHEDULER_CONFIG, TIME_CONSTANTS } from '@/constants';
 import { ReactiveNode } from '@/core/base';
+import { DependencyLink } from '@/core/dep-tracking';
 import { EffectError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
 import {
@@ -8,14 +9,7 @@ import {
   incrementFlushExecutionCount,
   nextEpoch,
 } from '@/internal/epoch';
-import {
-  depArrayPool,
-  EMPTY_DEPS,
-  EMPTY_UNSUBS,
-  EMPTY_VERSIONS,
-  unsubArrayPool,
-  versionArrayPool,
-} from '@/internal/pool';
+import { EMPTY_LINKS, linksArrayPool } from '@/internal/pool';
 import { scheduler } from '@/internal/scheduler';
 import { type DependencyTracker, trackingContext, untracked } from '@/tracking';
 import type { Dependency, EffectFunction, EffectObject, EffectOptions } from '@/types';
@@ -29,12 +23,8 @@ import { isPromise } from '@/utils/type-guards';
  */
 class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker {
   private _cleanup: (() => void) | null;
-  private _dependencies: Dependency[];
-  private _dependencyVersions: number[];
-  private _unsubscribes: (() => void)[];
-  private _nextDeps: Dependency[] | null;
-  private _nextVersions: number[] | null;
-  private _nextUnsubs: (() => void)[] | null;
+  private _links: DependencyLink[];
+  private _nextLinks: DependencyLink[] | null;
   private _executeTask: (() => void) | undefined;
 
   private readonly _onError: ((error: unknown) => void) | null;
@@ -59,12 +49,8 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     super();
 
     this._cleanup = null;
-    this._dependencies = EMPTY_DEPS;
-    this._dependencyVersions = EMPTY_VERSIONS;
-    this._unsubscribes = EMPTY_UNSUBS;
-    this._nextDeps = null;
-    this._nextVersions = null;
-    this._nextUnsubs = null;
+    this._links = EMPTY_LINKS;
+    this._nextLinks = null;
     this._executeTask = undefined;
     this._onError = options.onError ?? null;
 
@@ -116,26 +102,14 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       this._cleanup = null;
     }
 
-    const unsubs = this._unsubscribes;
-    if (unsubs !== EMPTY_UNSUBS) {
-      for (let i = 0, len = unsubs.length; i < len; i++) {
-        const unsub = unsubs[i];
-        if (unsub) unsub();
+    const links = this._links;
+    if (links !== EMPTY_LINKS) {
+      for (let i = 0, len = links.length; i < len; i++) {
+        const link = links[i];
+        if (link?.unsub) link.unsub();
       }
-      unsubArrayPool.release(unsubs);
-      this._unsubscribes = EMPTY_UNSUBS;
-    }
-
-    const deps = this._dependencies;
-    if (deps !== EMPTY_DEPS) {
-      depArrayPool.release(deps);
-      this._dependencies = EMPTY_DEPS;
-    }
-
-    const versions = this._dependencyVersions;
-    if (versions !== EMPTY_VERSIONS) {
-      versionArrayPool.release(versions);
-      this._dependencyVersions = EMPTY_VERSIONS;
+      linksArrayPool.release(links);
+      this._links = EMPTY_LINKS;
     }
 
     this._executeTask = undefined;
@@ -149,16 +123,11 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     if (dep._lastSeenEpoch === epoch) return;
     dep._lastSeenEpoch = epoch;
 
-    const nextDeps = this._nextDeps!;
-    const nextVersions = this._nextVersions!;
-    const nextUnsubs = this._nextUnsubs!;
-
-    nextDeps.push(dep);
-    nextVersions.push(dep.version);
+    const nextLinks = this._nextLinks!;
 
     const tempUnsub = dep._tempUnsub;
     if (tempUnsub) {
-      nextUnsubs.push(tempUnsub);
+      nextLinks.push(new DependencyLink(dep, dep.version, tempUnsub));
       dep._tempUnsub = undefined;
       return;
     }
@@ -183,10 +152,9 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
         const task = this._executeTask;
         scheduler.schedule(task);
       });
-      nextUnsubs.push(unsubscribe);
+      nextLinks.push(new DependencyLink(dep, dep.version, unsubscribe));
     } catch (error) {
       console.error(wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_EXECUTION_FAILED));
-      nextUnsubs.push(() => {});
     }
   }
 
@@ -196,21 +164,21 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 
     // 1. Dependency Dirty Check (Fast Path)
     if (!force) {
-      const deps = this._dependencies;
-      const dLen = deps.length;
+      const links = this._links;
+      const dLen = links.length;
       if (dLen > 0) {
-        const versions = this._dependencyVersions;
         let isDirty = false;
         for (let i = 0; i < dLen; i++) {
-          const dep = deps[i]!;
-          if (dep.version !== versions[i]) {
+          const link = links[i]!;
+          const dep = link.node;
+          if (dep.version !== link.version) {
             isDirty = true;
             break;
           }
           if ('value' in (dep as unknown as Record<string, unknown>)) {
             try {
               untracked(() => (dep as unknown as { value: unknown }).value);
-              if (dep.version !== versions[i]) {
+              if (dep.version !== link.version) {
                 isDirty = true;
                 break;
               }
@@ -273,24 +241,18 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       this._cleanup = null;
     }
 
-    const prevDeps = this._dependencies;
-    const prevVersions = this._dependencyVersions;
-    const prevUnsubs = this._unsubscribes;
+    const prevLinks = this._links;
 
-    if (prevDeps !== EMPTY_DEPS) {
-      for (let i = 0, len = prevDeps.length; i < len; i++) {
-        const dep = prevDeps[i];
-        if (dep) dep._tempUnsub = prevUnsubs[i];
+    if (prevLinks !== EMPTY_LINKS) {
+      for (let i = 0, len = prevLinks.length; i < len; i++) {
+        const link = prevLinks[i];
+        if (link) link.node._tempUnsub = link.unsub;
       }
     }
 
-    const nextDeps = depArrayPool.acquire();
-    const nextVersions = versionArrayPool.acquire();
-    const nextUnsubs = unsubArrayPool.acquire();
+    const nextLinks = linksArrayPool.acquire();
 
-    this._nextDeps = nextDeps;
-    this._nextVersions = nextVersions;
-    this._nextUnsubs = nextUnsubs;
+    this._nextLinks = nextLinks;
     this._currentEpoch = nextEpoch();
 
     let committed = false;
@@ -299,9 +261,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       const result = trackingContext.run(this, this._fn);
 
       // Commit
-      this._dependencies = nextDeps;
-      this._dependencyVersions = nextVersions;
-      this._unsubscribes = nextUnsubs;
+      this._links = nextLinks;
       committed = true;
 
       this._checkLoopWarnings();
@@ -338,38 +298,32 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       this._handleExecutionError(error);
       this._cleanup = null;
     } finally {
-      this._nextDeps = null;
-      this._nextVersions = null;
-      this._nextUnsubs = null;
+      this._nextLinks = null;
 
       if (committed) {
-        if (prevDeps !== EMPTY_DEPS) {
-          for (let i = 0, len = prevDeps.length; i < len; i++) {
-            const dep = prevDeps[i];
-            const unsub = dep ? dep._tempUnsub : undefined;
+        if (prevLinks !== EMPTY_LINKS) {
+          for (let i = 0, len = prevLinks.length; i < len; i++) {
+            const link = prevLinks[i];
+            const unsub = link ? link.node._tempUnsub : undefined;
             if (unsub) {
               unsub();
-              if (dep) dep._tempUnsub = undefined;
+              if (link) link.node._tempUnsub = undefined;
             }
           }
-          depArrayPool.release(prevDeps);
+          linksArrayPool.release(prevLinks);
         }
-        if (prevVersions !== EMPTY_VERSIONS) versionArrayPool.release(prevVersions);
-        if (prevUnsubs !== EMPTY_UNSUBS) unsubArrayPool.release(prevUnsubs);
       } else {
         // Rollback
-        depArrayPool.release(nextDeps);
-        versionArrayPool.release(nextVersions);
-        for (let i = 0, len = nextUnsubs.length; i < len; i++) {
-          const unsub = nextUnsubs[i];
-          if (unsub) unsub();
+        for (let i = 0, len = nextLinks.length; i < len; i++) {
+          const link = nextLinks[i];
+          if (link?.unsub) link.unsub();
         }
-        unsubArrayPool.release(nextUnsubs);
+        linksArrayPool.release(nextLinks);
 
-        if (prevDeps !== EMPTY_DEPS) {
-          for (let i = 0, len = prevDeps.length; i < len; i++) {
-            const dep = prevDeps[i];
-            if (dep) dep._tempUnsub = undefined;
+        if (prevLinks !== EMPTY_LINKS) {
+          for (let i = 0, len = prevLinks.length; i < len; i++) {
+            const link = prevLinks[i];
+            if (link) link.node._tempUnsub = undefined;
           }
         }
       }
@@ -420,10 +374,11 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 
   private _checkLoopWarnings(): void {
     if (this._trackModifications && debug.enabled) {
-      const deps = this._dependencies;
+      const links = this._links;
       const epoch = this._currentEpoch;
-      for (let i = 0, len = deps.length; i < len; i++) {
-        const dep = deps[i];
+      for (let i = 0, len = links.length; i < len; i++) {
+        const link = links[i]!;
+        const dep = link.node;
         if (dep && dep._modifiedAtEpoch === epoch) {
           debug.warn(
             true,

@@ -1,9 +1,9 @@
 import { ATOM_STATE_FLAGS, SMI_MAX } from '@/constants';
 import { ReactiveDependency } from '@/core/base';
-import { trackDependency } from '@/core/dep-tracking';
+import { type SubscriberLink, trackDependency } from '@/core/dep-tracking';
 import { scheduler } from '@/internal/scheduler';
 import { trackingContext } from '@/tracking';
-import type { AtomOptions, Subscriber, WritableAtom } from '@/types';
+import type { AtomOptions, WritableAtom } from '@/types';
 import { debug } from '@/utils/debug';
 
 /**
@@ -15,8 +15,7 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
   private _pendingOldValue: T | undefined;
   private _notifyTask: (() => void) | undefined;
 
-  protected _fnSubs: ((newValue?: T, oldValue?: T) => void)[];
-  protected _objSubs: Subscriber[];
+  protected _subscribers: SubscriberLink<T>[];
 
   constructor(initialValue: T, sync: boolean) {
     super();
@@ -24,8 +23,7 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
     this._value = initialValue;
     this._pendingOldValue = undefined;
     this._notifyTask = undefined;
-    this._fnSubs = [];
-    this._objSubs = [];
+    this._subscribers = [];
 
     if (sync) {
       this.flags |= ATOM_STATE_FLAGS.SYNC;
@@ -41,7 +39,7 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
   get value(): T {
     const current = trackingContext.current;
     if (current) {
-      trackDependency(this, current, this._fnSubs, this._objSubs);
+      trackDependency(this, current, this._subscribers);
     }
     return this._value;
   }
@@ -57,35 +55,28 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
     this._value = newValue;
     this.version = (this.version + 1) & SMI_MAX;
 
-    const flags = this.flags;
+    let flags = this.flags;
     // Combined bitwise check to reduce property access overhead
     if (flags & (ATOM_STATE_FLAGS.HAS_FN_SUBS | ATOM_STATE_FLAGS.HAS_OBJ_SUBS)) {
-      this._scheduleNotification(oldValue);
-    }
-  }
+      if (flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED) {
+        return;
+      }
 
-  /**
-   * Schedules or flushes notifications based on sync mode and batching state.
-   */
-  private _scheduleNotification(oldValue: T): void {
-    let flags = this.flags;
-    if (!(flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED)) {
       this._pendingOldValue = oldValue;
       flags |= ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
       this.flags = flags;
-    }
 
-    // Bypass scheduler if in SYNC mode and not currently batching
-    if (flags & ATOM_STATE_FLAGS.SYNC && !scheduler.isBatching) {
-      this._flushNotifications();
-      return;
-    }
+      // Bypass scheduler if in SYNC mode and not currently batching
+      if (flags & ATOM_STATE_FLAGS.SYNC && !scheduler.isBatching) {
+        this._flushNotifications();
+        return;
+      }
 
-    if (!this._notifyTask) {
-      this._notifyTask = () => this._flushNotifications();
+      if (!this._notifyTask) {
+        this._notifyTask = () => this._flushNotifications();
+      }
+      scheduler.schedule(this._notifyTask);
     }
-    const task = this._notifyTask;
-    scheduler.schedule(task);
   }
 
   /**
@@ -122,8 +113,7 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
     }
 
     // Reuse arrays by clearing length to avoid new allocations if resubscribed/later pooled
-    this._fnSubs.length = 0;
-    this._objSubs.length = 0;
+    this._subscribers.length = 0;
 
     this.flags = flags | ATOM_STATE_FLAGS.DISPOSED;
     this._value = undefined as T;

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { syncDependencies } from '@/core/dep-tracking';
+import { DependencyLink, syncDependencies } from '@/core/dep-tracking';
 import type { Dependency, Subscriber } from '@/types';
 import { ArrayPool } from '@/utils/array-pool';
 import { debug } from '@/utils/debug';
@@ -8,13 +8,12 @@ import { isComputed } from '@/utils/type-guards';
 describe('Utils & Handlers - Extra Coverage', () => {
   describe('DepTracking - syncDependencies', () => {
     it('skips null/undefined dependencies in nextDeps', () => {
-      const nextDeps = [null, undefined] as unknown as Dependency[];
+      const nextLinks = [null, undefined] as unknown as DependencyLink[];
       // Should not crash and continue
-      const unsubs = syncDependencies(nextDeps, [], [], {} as unknown as Subscriber);
-      // length is preserved as nextDeps.length
-      expect(unsubs.length).toBe(2);
-      // But slots are empty
-      expect(unsubs[0]).toBeUndefined();
+      syncDependencies(nextLinks, [], {} as unknown as Subscriber);
+
+      expect(nextLinks.length).toBe(2);
+      expect(nextLinks[0]).toBeNull();
     });
   });
 
@@ -78,15 +77,18 @@ describe('Utils & Handlers - Extra Coverage', () => {
   describe('DepTracking - trackDependency', () => {
     it('syncDependencies reuses existing subscriptions', () => {
       const dep = {
+        version: 1,
         subscribe: vi.fn(() => () => {}),
         _tempUnsub: undefined,
       } as unknown as Dependency;
-      const unsub = () => {};
-      const prevUnsubs = [unsub];
+      const unsub = vi.fn();
 
-      const nextUnsubs = syncDependencies([dep], [dep], prevUnsubs, {} as unknown as Subscriber);
+      const prevLink = new DependencyLink(dep, 1, unsub);
+      const nextLink = new DependencyLink(dep, 1);
 
-      expect(nextUnsubs[0]).toBe(unsub);
+      syncDependencies([nextLink], [prevLink], {} as unknown as Subscriber);
+
+      expect(nextLink.unsub).toBe(unsub);
       expect(dep.subscribe).not.toHaveBeenCalled();
     });
   });

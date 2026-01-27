@@ -1,4 +1,5 @@
 import type { AsyncState } from '@/constants';
+import type { DependencyLink } from '@/core/dep-tracking';
 
 /** Configuration options for creating an atom. */
 export interface AtomOptions {
@@ -128,12 +129,7 @@ export type TransformFunction<T, U> = (value: T) => U;
  * Context tracked during the computation phase of a reactive node.
  */
 export interface ComputationContext {
-  prevDeps: Dependency[];
-  prevVersions: number[];
-  nextDeps: Dependency[];
-  nextVersions: number[];
-  originalAdd: (dep: Dependency) => void;
-  state: { depCount: number };
+  links: DependencyLink[];
 }
 
 /** Type derived from AsyncState constant values */
@@ -178,12 +174,8 @@ export interface ComputedAtom<T = unknown> extends ReadonlyAtom<T> {
  * Bundles prev/next state for atomic lifecycle transitions.
  */
 export interface EffectExecutionContext {
-  prevDeps: Dependency[];
-  prevVersions: number[];
-  prevUnsubs: (() => void)[];
-  nextDeps: Dependency[];
-  nextVersions: number[];
-  nextUnsubs: (() => void)[];
+  prevLinks: DependencyLink[];
+  nextLinks: DependencyLink[];
 }
 
 /** Configuration options for creating an effect. */
