@@ -126,7 +126,7 @@ Benchmark results show:
 - **Margin of error**: Statistical variance
 - **Percentiles (p75, p95, p99)**: Distribution of execution times
 
-## Latest Results (v0.13.0)
+## Latest Results (v0.16.0)
 
 **Date**: 2026-01-27  
 **Environment**: GitHub Actions, Node.js 20.x, V8 Engine  
@@ -152,21 +152,21 @@ Benchmark results show:
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Create (Single Dep) | 3,224,160 | 0.0003 | 0.0004 |
-| Create (3 Deps) | 1,933,750 | 0.0005 | 0.0006 |
+| Create (Single Dep) (x1000) | 3,224 | 0.3102 | 0.4212 |
+| Create (3 Deps) (x1000) | 1,934 | 0.5171 | 0.6333 |
 | Create Chain (100) | 9,219 | 0.1085 | 0.2245 |
-| Read (Single Dep) | 13,491,270 | 0.0001 | 0.0001 |
-| Read (Multiple) | 13,656,150 | 0.0001 | 0.0001 |
-| Nested Computation | 13,732,820 | 0.0001 | 0.0001 |
+| Read (Single Dep) (x1000) | 13,491 | 0.0741 | 0.1443 |
+| Read (Multiple) (x1000) | 13,656 | 0.0732 | 0.1004 |
+| Nested Computation (x1000) | 13,733 | 0.0728 | 0.0814 |
 | Recompute (Single Dep) | 600,241 | 0.0017 | 0.0021 |
 | Recompute (Chain of 10) | 94,273 | 0.0106 | 0.0191 |
-| No Recompute (Unchanged) | 13,541,060 | 0.0001 | 0.0001 |
-| Lazy (Not Accessed) | 3,146,620 | 0.0003 | 0.0004 |
+| No Recompute (Unchanged) (x1000) | 13,541 | 0.0738 | 0.0830 |
+| Lazy (Not Accessed) (x1000) | 3,147 | 0.3178 | 0.4321 |
 | Lazy (Accessed Once) | 611,749 | 0.0016 | 0.0029 |
 | Lazy (Multiple Access) | 573,338 | 0.0017 | 0.0022 |
 | Cache Invalidation | 585,640 | 0.0017 | 0.0029 |
 | Diamond Invalidation | 256,767 | 0.0039 | 0.0046 |
-| Dispose | 1,978,850 | 0.0005 | 0.0006 |
+| Dispose (x1000) | 1,979 | 0.5053 | 0.6253 |
 | Dispose Chain | 241,850 | 0.0041 | 0.0074 |
 
 #### Effect - Micro
@@ -176,13 +176,13 @@ Benchmark results show:
 | Create (Single Dep) | 318,022 | 0.0031 | 0.0055 |
 | Create (Multiple Deps) | 270,778 | 0.0037 | 0.0045 |
 | Create 10 Effects | 33,693 | 0.0297 | 0.0432 |
-| Execution (Dep Change) | 9,391,010 | 0.0001 | 0.0001 |
-| Execution (Multiple) | 4,269,310 | 0.0002 | 0.0003 |
-| With Computed Dep | 9,323,040 | 0.0001 | 0.0001 |
+| Execution (Dep Change) (x1000) | 9,391 | 0.1065 | 0.1278 |
+| Execution (Multiple) (x1000) | 4,269 | 0.2342 | 0.2633 |
+| With Computed Dep (x1000) | 9,323 | 0.1073 | 0.1473 |
 | Re-runs (10 times) | 681,312 | 0.0015 | 0.0018 |
-| Multiple on Same Dep | 9,447,950 | 0.0001 | 0.0001 |
+| Multiple on Same Dep (x1000) | 9,448 | 0.1058 | 0.1215 |
 | With Cleanup | 279,791 | 0.0036 | 0.0042 |
-| Cleanup on Dep Change | 9,471,060 | 0.0001 | 0.0001 |
+| Cleanup on Dep Change (x1000) | 9,471 | 0.1056 | 0.1179 |
 | Dispose | 309,710 | 0.0032 | 0.0042 |
 | Dispose (with Cleanup) | 304,414 | 0.0033 | 0.0056 |
 | Dispose 10 Effects | 32,985 | 0.0303 | 0.0540 |
@@ -191,13 +191,13 @@ Benchmark results show:
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Batch Update (2) | 4,886,660 | 0.0002 | 0.0003 |
-| Batch Update (10) | 2,028,440 | 0.0005 | 0.0006 |
+| Batch Update (2) (x1000) | 4,887 | 0.2046 | 0.2796 |
+| Batch Update (10) (x1000) | 2,028 | 0.4930 | 0.5896 |
 | Batch Update (100) | 262,209 | 0.0038 | 0.0042 |
 | Without Batch (10) | 742,183 | 0.0013 | 0.0018 |
 | With Batch (10) | 178,281 | 0.0056 | 0.0071 |
-| Nested Batch (2 levels) | 3,460,060 | 0.0003 | 0.0004 |
-| Nested Batch (5 levels) | 1,701,120 | 0.0006 | 0.0008 |
+| Nested Batch (2 levels) (x1000) | 3,460 | 0.2890 | 0.3941 |
+| Nested Batch (5 levels) (x1000) | 1,701 | 0.5878 | 0.7558 |
 | Batch with Computed | 245,004 | 0.0041 | 0.0049 |
 | Batch with Diamond | 220,245 | 0.0045 | 0.0053 |
 
