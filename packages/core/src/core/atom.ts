@@ -20,6 +20,7 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
 
   constructor(initialValue: T, sync: boolean) {
     super();
+
     this._value = initialValue;
     this._pendingOldValue = undefined;
     this._notifyTask = undefined;
@@ -38,8 +39,9 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
    * Returns the current value and registers the atom as a dependency if in a tracking context.
    */
   get value(): T {
-    if (trackingContext.current) {
-      trackDependency(this, trackingContext.current, this._fnSubs, this._objSubs);
+    const current = trackingContext.current;
+    if (current) {
+      trackDependency(this, current, this._fnSubs, this._objSubs);
     }
     return this._value;
   }
@@ -49,12 +51,15 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
    */
   set value(newValue: T) {
     const oldValue = this._value;
-    if (Object.is(oldValue, newValue)) return;
+    // Optimization: Identity check is significantly faster than Object.is for common cases.
+    if (oldValue === newValue || Object.is(oldValue, newValue)) return;
 
     this._value = newValue;
     this.version = (this.version + 1) & SMI_MAX;
 
-    if (this.flags & (ATOM_STATE_FLAGS.HAS_FN_SUBS | ATOM_STATE_FLAGS.HAS_OBJ_SUBS)) {
+    const flags = this.flags;
+    // Combined bitwise check to reduce property access overhead
+    if (flags & (ATOM_STATE_FLAGS.HAS_FN_SUBS | ATOM_STATE_FLAGS.HAS_OBJ_SUBS)) {
       this._scheduleNotification(oldValue);
     }
   }
@@ -63,12 +68,15 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
    * Schedules or flushes notifications based on sync mode and batching state.
    */
   private _scheduleNotification(oldValue: T): void {
-    if (!(this.flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED)) {
+    let flags = this.flags;
+    if (!(flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED)) {
       this._pendingOldValue = oldValue;
-      this.flags |= ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
+      flags |= ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
+      this.flags = flags;
     }
 
-    if (this.flags & ATOM_STATE_FLAGS.SYNC && !scheduler.isBatching) {
+    // Bypass scheduler if in SYNC mode and not currently batching
+    if (flags & ATOM_STATE_FLAGS.SYNC && !scheduler.isBatching) {
       this._flushNotifications();
       return;
     }
@@ -76,25 +84,23 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
     if (!this._notifyTask) {
       this._notifyTask = () => this._flushNotifications();
     }
-
-    scheduler.schedule(this._notifyTask);
+    const task = this._notifyTask;
+    scheduler.schedule(task);
   }
 
   /**
    * Flushes scheduled notifications and resets state for the next cycle.
    */
   private _flushNotifications(): void {
-    if (
-      !(this.flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED) ||
-      this.flags & ATOM_STATE_FLAGS.DISPOSED
-    ) {
+    const flags = this.flags;
+    // Combined guard clause for disposal and redundant flush cycles
+    if (!(flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED) || flags & ATOM_STATE_FLAGS.DISPOSED) {
       return;
     }
 
     const oldValue = this._pendingOldValue as T;
-
     this._pendingOldValue = undefined;
-    this.flags &= ~ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
+    this.flags = flags & ~ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
 
     this._notifySubscribers(this._value, oldValue);
   }
@@ -110,13 +116,16 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
    * Disposes of the atom and releases all subscribers and tasks.
    */
   dispose(): void {
-    if (this.flags & ATOM_STATE_FLAGS.DISPOSED) {
+    const flags = this.flags;
+    if (flags & ATOM_STATE_FLAGS.DISPOSED) {
       return;
     }
 
-    this._fnSubs = [];
-    this._objSubs = [];
-    this.flags |= ATOM_STATE_FLAGS.DISPOSED;
+    // Reuse arrays by clearing length to avoid new allocations if resubscribed/later pooled
+    this._fnSubs.length = 0;
+    this._objSubs.length = 0;
+
+    this.flags = flags | ATOM_STATE_FLAGS.DISPOSED;
     this._value = undefined as T;
     this._pendingOldValue = undefined;
     this._notifyTask = undefined;

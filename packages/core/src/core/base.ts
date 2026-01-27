@@ -23,8 +23,6 @@ export class ReactiveNode {
   _tempUnsub: (() => void) | undefined;
 
   constructor() {
-    // Group numeric field initializations to establish a stable Hidden Class (Shape) for V8.
-    // Consistent initialization order prevents shape transitions, optimizing property access.
     this.flags = 0;
     this.version = 0;
     this._lastSeenEpoch = -1;
@@ -46,56 +44,54 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
    * Subscribes a listener function or Subscriber object to value changes.
    */
   subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
+    // 1. Function listener
     if (typeof listener === 'function') {
-      const subs = this._fnSubs;
-      // Optimization: Skip duplicates
-      if (subs.indexOf(listener) !== -1) {
-        if (IS_DEV) {
-          console.warn(
-            'Attempted to subscribe the same listener twice. Ignoring duplicate subscription.'
-          );
-        }
-        return () => {};
-      }
-
-      subs.push(listener);
-      this.flags |= NODE_FLAGS.HAS_FN_SUBS;
-
-      return () => {
-        const idx = subs.indexOf(listener);
-        if (idx !== -1) {
-          const last = subs.pop()!;
-          if (idx < subs.length) subs[idx] = last;
-          if (subs.length === 0) this.flags &= ~NODE_FLAGS.HAS_FN_SUBS;
-        }
-      };
+      return this._addSubscriber(this._fnSubs, listener, NODE_FLAGS.HAS_FN_SUBS);
     }
 
-    if (listener !== null && typeof listener === 'object' && 'execute' in listener) {
-      const subs = this._objSubs;
-      if (subs.indexOf(listener) !== -1) {
-        if (IS_DEV) {
-          console.warn(
-            'Attempted to subscribe the same listener twice. Ignoring duplicate subscription.'
-          );
-        }
-        return () => {};
-      }
-
-      subs.push(listener);
-      this.flags |= NODE_FLAGS.HAS_OBJ_SUBS;
-
-      return () => {
-        const idx = subs.indexOf(listener);
-        if (idx !== -1) {
-          const last = subs.pop()!;
-          if (idx < subs.length) subs[idx] = last;
-          if (subs.length === 0) this.flags &= ~NODE_FLAGS.HAS_OBJ_SUBS;
-        }
-      };
+    // 2. Object listener (Subscriber)
+    if (
+      listener !== null &&
+      typeof listener === 'object' &&
+      'execute' in (listener as Subscriber)
+    ) {
+      return this._addSubscriber(this._objSubs, listener as Subscriber, NODE_FLAGS.HAS_OBJ_SUBS);
     }
 
     throw new AtomError(ERROR_MESSAGES.ATOM_SUBSCRIBER_MUST_BE_FUNCTION);
+  }
+
+  /**
+   * Internal helper for subscription logic to reduce code duplication and branching.
+   */
+  private _addSubscriber<S>(subs: S[], listener: S, flag: number): () => void {
+    // Optimization: Skip duplicates (O(N) search is cache-friendly for typically small N)
+    if (subs.indexOf(listener) !== -1) {
+      if (IS_DEV) {
+        console.warn(
+          'Attempted to subscribe the same listener twice. Ignoring duplicate subscription.'
+        );
+      }
+      return () => {};
+    }
+
+    subs.push(listener);
+    this.flags |= flag;
+
+    return () => {
+      const idx = subs.indexOf(listener);
+      if (idx === -1) return;
+
+      const last = subs.pop()!;
+      // Move the last element to current index to keep array dense (O(1) remove)
+      if (idx < subs.length) {
+        subs[idx] = last;
+      }
+
+      if (subs.length === 0) {
+        this.flags &= ~flag;
+      }
+    };
   }
 
   /**
@@ -109,32 +105,38 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
    * Notifies all subscribers of a change.
    */
   protected _notifySubscribers(newValue: T | undefined, oldValue: T | undefined): void {
-    if (!(this.flags & (NODE_FLAGS.HAS_FN_SUBS | NODE_FLAGS.HAS_OBJ_SUBS))) return;
+    const flags = this.flags;
+    // Early exit if no subscribers exist
+    if (!(flags & (NODE_FLAGS.HAS_FN_SUBS | NODE_FLAGS.HAS_OBJ_SUBS))) return;
 
-    if (this.flags & NODE_FLAGS.HAS_FN_SUBS) {
+    if (flags & NODE_FLAGS.HAS_FN_SUBS) {
       const subs = this._fnSubs;
-      for (let i = 0, len = subs.length; i < len; i++) {
+      // Use dynamic length check (i < subs.length) to safely handle self-unsubscribing listeners
+      for (let i = 0; i < subs.length; i++) {
         try {
           subs[i]!(newValue, oldValue);
         } catch (err) {
-          console.error(
-            new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, err as Error)
-          );
+          this._handleNotifyError(err);
         }
       }
     }
 
-    if (this.flags & NODE_FLAGS.HAS_OBJ_SUBS) {
+    if (flags & NODE_FLAGS.HAS_OBJ_SUBS) {
       const subs = this._objSubs;
-      for (let i = 0, len = subs.length; i < len; i++) {
+      for (let i = 0; i < subs.length; i++) {
         try {
           subs[i]!.execute();
         } catch (err) {
-          console.error(
-            new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, err as Error)
-          );
+          this._handleNotifyError(err);
         }
       }
     }
+  }
+
+  /**
+   * Hoisted error reporter to keep notification loops lean and aid JIT inlining.
+   */
+  private _handleNotifyError(err: unknown): void {
+    console.error(new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, err as Error));
   }
 }

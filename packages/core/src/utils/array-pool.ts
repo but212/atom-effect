@@ -2,17 +2,29 @@ import { IS_DEV } from '@/constants';
 import type { PoolStats } from '@/types';
 
 /** @internal */
-class PoolStatsCollector {
-  acquired = 0;
-  released = 0;
-  rejected = new PoolStatsRejected();
+class PoolStatsRejected {
+  frozen: number;
+  tooLarge: number;
+  poolFull: number;
+
+  constructor() {
+    this.frozen = 0;
+    this.tooLarge = 0;
+    this.poolFull = 0;
+  }
 }
 
 /** @internal */
-class PoolStatsRejected {
-  frozen = 0;
-  tooLarge = 0;
-  poolFull = 0;
+class PoolStatsCollector {
+  acquired: number;
+  released: number;
+  rejected: PoolStatsRejected;
+
+  constructor() {
+    this.acquired = 0;
+    this.released = 0;
+    this.rejected = new PoolStatsRejected();
+  }
 }
 
 /**
@@ -35,7 +47,8 @@ export class ArrayPool<T> {
 
   /** Acquires an array from the pool or creates a new one if the pool is empty. */
   acquire(): T[] {
-    if (this.stats) this.stats.acquired++;
+    const stats = this.stats;
+    if (stats) stats.acquired++;
     return this.pool.pop() ?? [];
   }
 
@@ -44,40 +57,53 @@ export class ArrayPool<T> {
    * Clears the array before storing it.
    */
   release(arr: T[], emptyConst?: readonly T[]): void {
-    // 1. Skip if empty constant or frozen (expensive check)
-    if ((emptyConst && arr === emptyConst) || Object.isFrozen(arr)) {
-      if (this.stats && arr !== emptyConst) this.stats.rejected.frozen++;
+    const stats = this.stats;
+
+    // 1. Skip if empty constant (identity check is very fast)
+    if (emptyConst && arr === emptyConst) return;
+
+    // 2. Accuracy check: Skip frozen arrays (prevent length manipulation errors)
+    // Object.isFrozen is expensive, so it should be checked after ID checks
+    if (Object.isFrozen(arr)) {
+      if (stats) stats.rejected.frozen++;
       return;
     }
 
-    // 2. Reject based on capacity or pool size
-    if (arr.length > this.maxReusableCapacity || this.pool.length >= this.maxPoolSize) {
-      if (this.stats) {
-        if (arr.length > this.maxReusableCapacity) this.stats.rejected.tooLarge++;
-        else this.stats.rejected.poolFull++;
-      }
+    // 3. Reject based on capacity or pool size
+    if (arr.length > this.maxReusableCapacity) {
+      if (stats) stats.rejected.tooLarge++;
       return;
     }
 
-    // 3. Clear and store
+    const pool = this.pool;
+    if (pool.length >= this.maxPoolSize) {
+      if (stats) stats.rejected.poolFull++;
+      return;
+    }
+
+    // 4. Clear and store
     arr.length = 0;
-    this.pool.push(arr);
-    if (this.stats) this.stats.released++;
+    pool.push(arr);
+    if (stats) stats.released++;
   }
 
   /** Returns current stats for the pool (dev mode only). */
   getStats(): PoolStats | null {
-    if (!this.stats) return null;
-    const { acquired, released, rejected } = this.stats;
+    const stats = this.stats;
+    if (!stats) return null;
+
+    const { acquired, released, rejected } = stats;
+    const { frozen, tooLarge, poolFull } = rejected;
+
     return {
       acquired,
       released,
       rejected: {
-        frozen: rejected.frozen,
-        tooLarge: rejected.tooLarge,
-        poolFull: rejected.poolFull,
+        frozen,
+        tooLarge,
+        poolFull,
       },
-      leaked: acquired - released - (rejected.frozen + rejected.tooLarge + rejected.poolFull),
+      leaked: acquired - released - (frozen + tooLarge + poolFull),
       poolSize: this.pool.length,
     };
   }
@@ -85,12 +111,13 @@ export class ArrayPool<T> {
   /** Resets the pool and its stats. */
   reset(): void {
     this.pool.length = 0;
-    if (this.stats) {
-      this.stats.acquired = 0;
-      this.stats.released = 0;
-      this.stats.rejected.frozen = 0;
-      this.stats.rejected.tooLarge = 0;
-      this.stats.rejected.poolFull = 0;
+    const stats = this.stats;
+    if (stats) {
+      stats.acquired = 0;
+      stats.released = 0;
+      stats.rejected.frozen = 0;
+      stats.rejected.tooLarge = 0;
+      stats.rejected.poolFull = 0;
     }
   }
 }

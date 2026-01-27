@@ -25,21 +25,27 @@ export function applyInputBinding<T>(
   } = options;
 
   const state: InputBindingState = createInputBindingState();
+  const el = $el[0] as HTMLInputElement | HTMLTextAreaElement;
 
-  // Core sync: DOM → Atom (defined early for handlers)
+  // Core sync: DOM → Atom
   const syncAtomFromDom = () => {
     if (state.flags & BindingFlags.Busy) return;
 
     state.flags |= BindingFlags.SyncingToAtom;
     try {
-      atom.value = parse($el.val() as string);
+      const currentRaw = el.value;
+      const parsed = parse(currentRaw);
+      // Avoid redundant atom updates to prevent unnecessary propagation
+      if (!equal(atom.value, parsed)) {
+        atom.value = parsed;
+      }
     } finally {
       state.flags &= ~BindingFlags.SyncingToAtom;
     }
   };
 
   const onBlur = () => {
-    // [Fix] Flush pending debounce before formatting to prevent data loss
+    // Flush pending debounce
     if (state.timeoutId) {
       clearTimeout(state.timeoutId);
       state.timeoutId = null;
@@ -47,10 +53,11 @@ export function applyInputBinding<T>(
     }
 
     state.flags &= ~BindingFlags.Focused;
-    // Force formatting on blur to ensure clean display (now with latest value)
+
+    // Force formatting on blur
     const formatted = format(atom.value);
-    if ($el.val() !== formatted) {
-      $el.val(formatted);
+    if (el.value !== formatted) {
+      el.value = formatted;
     }
   };
 
@@ -60,7 +67,7 @@ export function applyInputBinding<T>(
 
     if (debounceMs) {
       if (state.timeoutId) clearTimeout(state.timeoutId);
-      state.timeoutId = window.setTimeout(syncAtomFromDom, debounceMs);
+      state.timeoutId = setTimeout(syncAtomFromDom, debounceMs);
     } else {
       syncAtomFromDom();
     }
@@ -84,7 +91,6 @@ export function applyInputBinding<T>(
 
   $el.on(handlers);
 
-  // Cleanup handler
   const cleanup = () => {
     $el.off(handlers);
     if (state.timeoutId) clearTimeout(state.timeoutId);
@@ -92,36 +98,33 @@ export function applyInputBinding<T>(
 
   // Core sync: Atom → DOM (Effect body)
   const effect = () => {
-    const formatted = format(atom.value);
-    const currentVal = $el.val() as string;
+    const val = atom.value;
+    const formatted = format(val);
+    const currentVal = el.value;
 
-    // Update only if value differs
-    if (currentVal !== formatted) {
-      // Don't interrupt user input if parsed value matches
-      if (state.flags & BindingFlags.Focused && equal(parse(currentVal), atom.value)) {
-        return;
+    // 1. Skip if already synchronized
+    if (currentVal === formatted) return;
+
+    // 2. Skip if focused and current input parses to same value (don't interrupt user)
+    if (state.flags & BindingFlags.Focused && equal(parse(currentVal), val)) {
+      return;
+    }
+
+    state.flags |= BindingFlags.SyncingToDom;
+    try {
+      if (state.flags & BindingFlags.Focused) {
+        // [Fix] Preserve cursor position when focused
+        const { selectionStart: start, selectionEnd: end } = el;
+        el.value = formatted;
+        const len = formatted.length;
+        el.setSelectionRange(Math.min(start ?? len, len), Math.min(end ?? len, len));
+      } else {
+        el.value = formatted;
       }
 
-      state.flags |= BindingFlags.SyncingToDom;
-      try {
-        // [Fix] Preserve cursor position when focused (external update scenario)
-        if (state.flags & BindingFlags.Focused) {
-          const input = $el[0] as HTMLInputElement | HTMLTextAreaElement;
-          const { selectionStart: start, selectionEnd: end } = input;
-          $el.val(formatted);
-          // Clamp cursor position to new value length
-          input.setSelectionRange(
-            Math.min(start ?? formatted.length, formatted.length),
-            Math.min(end ?? formatted.length, formatted.length)
-          );
-        } else {
-          $el.val(formatted);
-        }
-
-        debug.domUpdated($el, 'val', formatted);
-      } finally {
-        state.flags &= ~BindingFlags.SyncingToDom;
-      }
+      debug.domUpdated($el, 'val', formatted);
+    } finally {
+      state.flags &= ~BindingFlags.SyncingToDom;
     }
   };
 

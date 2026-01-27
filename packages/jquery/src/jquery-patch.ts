@@ -13,15 +13,19 @@ const handlerMap = new WeakMap<EventHandler, EventHandler>();
 
 let isjQueryOverridesEnabled = false;
 
+const getWrappedHandler = (fn: EventHandler): EventHandler => {
+  let wrapped = handlerMap.get(fn);
+  if (!wrapped) {
+    wrapped = function (this: unknown, ...args: unknown[]) {
+      return batch(() => fn.apply(this, args as Parameters<EventHandler>));
+    } as unknown as EventHandler;
+    handlerMap.set(fn, wrapped);
+  }
+  return wrapped;
+};
+
 /**
  * Patches jQuery methods to integrate with the reactive system.
- *
- * 1. Lifecycle Overrides (.remove, .empty, .detach):
- *    - Automatically cleans up effects/bindings when elements are removed.
- *    - Preserves bindings when elements are detached.
- *
- * 2. Event Batching (.on, .off):
- *    - Wraps event handlers in batch() to optimize rendering.
  */
 export function enablejQueryOverrides() {
   if (isjQueryOverridesEnabled) return;
@@ -36,31 +40,34 @@ export function enablejQueryOverrides() {
   // ========== Lifecycle Overrides ==========
 
   // .remove() - Delete element + Unsubscribe
-  $.fn.remove = function (selector?: string) {
-    (selector ? this.filter(selector) : this).each(function () {
-      registry.cleanupTree(this);
-      registry.markIgnored(this); // Prevent double-cleanup by observer
-    });
-
+  $.fn.remove = function (this: JQuery, selector?: string) {
+    const targets = selector ? this.filter(selector) : this;
+    for (let i = 0, len = targets.length; i < len; i++) {
+      const el = targets[i];
+      if (el) {
+        registry.cleanupTree(el);
+        registry.markIgnored(el);
+      }
+    }
     return originalRemove.call(this, selector);
   };
 
   // .empty() - Delete children + Recursive Unsubscribe
-  $.fn.empty = function () {
-    this.each(function () {
-      // Use optimized cleanupDescendants instead of expensive querySelectorAll('*')
-      registry.cleanupDescendants(this);
-    });
-
+  $.fn.empty = function (this: JQuery) {
+    for (let i = 0, len = this.length; i < len; i++) {
+      const el = this[i];
+      if (el) registry.cleanupDescendants(el);
+    }
     return originalEmpty.call(this);
   };
 
-  // .detach() - Remove from DOM + Keep Subscription (Marking)
-  $.fn.detach = function (selector?: string) {
-    (selector ? this.filter(selector) : this).each(function () {
-      registry.keep(this);
-    });
-
+  // .detach() - Remove from DOM + Keep Subscription
+  $.fn.detach = function (this: JQuery, selector?: string) {
+    const targets = selector ? this.filter(selector) : this;
+    for (let i = 0, len = targets.length; i < len; i++) {
+      const el = targets[i];
+      if (el) registry.keep(el);
+    }
     return originalDetach.call(this, selector);
   };
 
@@ -68,30 +75,25 @@ export function enablejQueryOverrides() {
 
   // Patch .on()
   $.fn.on = function (this: JQuery, ...args: unknown[]) {
-    let fnIndex = -1;
-    for (let i = args.length - 1; i >= 0; i--) {
-      if (typeof args[i] === 'function') {
-        fnIndex = i;
-        break;
+    const types = args[0];
+
+    if (types && typeof types === 'object') {
+      const map = types as Record<string, EventHandler>;
+      const newMap: Record<string, EventHandler> = {};
+      for (const key in map) {
+        const handler = map[key];
+        if (handler) {
+          newMap[key] = getWrappedHandler(handler);
+        }
       }
-    }
-
-    if (fnIndex !== -1) {
-      const originalFn = args[fnIndex] as EventHandler;
-      let wrappedFn = handlerMap.get(originalFn);
-
-      if (!wrappedFn) {
-        wrappedFn = function (
-          this: unknown,
-          event: JQuery.TriggeredEvent,
-          ...eventArgs: unknown[]
-        ) {
-          return batch(() => originalFn.call(this, event, ...eventArgs));
-        };
-        handlerMap.set(originalFn, wrappedFn);
+      args[0] = newMap;
+    } else {
+      for (let i = args.length - 1; i >= 0; i--) {
+        if (typeof args[i] === 'function') {
+          args[i] = getWrappedHandler(args[i] as EventHandler);
+          break;
+        }
       }
-
-      args[fnIndex] = wrappedFn;
     }
 
     return originalOn.apply(this, args as Parameters<typeof originalOn>);
@@ -99,16 +101,25 @@ export function enablejQueryOverrides() {
 
   // Patch .off()
   $.fn.off = function (this: JQuery, ...args: unknown[]) {
-    let fnIndex = -1;
-    for (let i = args.length - 1; i >= 0; i--) {
-      if (typeof args[i] === 'function') {
-        fnIndex = i;
-        break;
-      }
-    }
+    const types = args[0];
 
-    if (fnIndex !== -1) {
-      args[fnIndex] = handlerMap.get(args[fnIndex] as EventHandler) ?? args[fnIndex];
+    if (types && typeof types === 'object') {
+      const map = types as Record<string, EventHandler>;
+      const newMap: Record<string, EventHandler> = {};
+      for (const key in map) {
+        const handler = map[key];
+        if (handler) {
+          newMap[key] = handlerMap.get(handler) || handler;
+        }
+      }
+      args[0] = newMap;
+    } else {
+      for (let i = args.length - 1; i >= 0; i--) {
+        if (typeof args[i] === 'function') {
+          args[i] = handlerMap.get(args[i] as EventHandler) || args[i];
+          break;
+        }
+      }
     }
 
     return originalOff.apply(this, args as Parameters<typeof originalOff>);
