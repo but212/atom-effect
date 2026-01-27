@@ -15,9 +15,9 @@ npm i @but212/atom-effect
 ### CDN
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect@0.16.0"></script>
+<script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect@0.16.1"></script>
 <!-- or -->
-<script src="https://unpkg.com/@but212/atom-effect@0.16.0"></script>
+<script src="https://unpkg.com/@but212/atom-effect@0.16.1"></script>
 ```
 
 ## Core API
@@ -143,14 +143,14 @@ pnpm build       # Build production bundle
 
 | Operation | Performance |
 | --- | --- |
-| Atom creation (x1000) | ~10.7K ops/sec |
-| Atom read (x1000) | ~32.8K ops/sec |
-| Atom write (x1000) | ~552K ops/sec |
-| Computed creation (x1000) | ~3.22K ops/sec |
-| Computed recomputation | ~600K ops/sec |
-| Effect execution (x1000) | ~9.39K ops/sec |
-| Batched updates (x2) (x1000) | ~4.89K ops/sec |
-| Deep chain (100 levels) | ~10.0K ops/sec |
+| Atom creation (x1000) | ~13.8K ops/sec |
+| Atom read (x1000) | ~38.4K ops/sec |
+| Atom write (x1000) | ~556K ops/sec |
+| Computed creation (x1000) | ~3.77K ops/sec |
+| Computed recomputation | ~863K ops/sec |
+| Effect execution (x1000) | ~14.3K ops/sec |
+| Batched updates (x2) (x1000) | ~4.73K ops/sec |
+| Deep chain (100 levels) | ~17.5K ops/sec |
 
 ## Contributing
 
