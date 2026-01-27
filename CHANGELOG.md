@@ -1,10 +1,31 @@
 # Changelog
 
-## [0.16.1] - 2026-01-27
+## [Unreleased]
 
 ### Core
 
-#### Changed - Core
+#### Refactor
+
+- **Inline Property Initialization**: Refactored core classes (`AtomImpl`, `ReactiveNode`, `ComputedAtomImpl`, `EffectImpl`, `Scheduler`) to initialize properties inline for improved V8 hidden class stabilization.
+- **Subscriber & Dependency Optimization**:
+  - Converted `SubscriberLink` and `DependencyLink` to strict classes for better memory layout.
+  - Optimized `subscribe` and `_notifySubscribers` loops for reduced overhead.
+  - Simplified flag checks using optimized bitwise masks.
+- **Logic Simplification**: Streamlined `Computed` and `Effect` internals including `value` getters, `execute` logic, and `dispose` cleanup.
+
+#### Added
+
+- **Coverage Improvements**: Added unit tests for edge cases:
+  - Error in `dispose` cleanup.
+  - Lazy computed evaluation robustness.
+  - Handling of throwing dependencies during dirty checks.
+  - Infinite loop detection for synchronous updates.
+
+## [0.16.1] - 2026-01-27
+
+### Core - 0.16.1
+
+#### Changed - Core 0.16.1
 
 - **AOS Refactoring**: Replaced parallel arrays with `Link` objects (`DependencyLink`, `SubscriberLink`) to improve data cohesion and cache locality.
 
