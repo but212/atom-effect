@@ -18,22 +18,15 @@ export function wrapError(
     return error;
   }
 
-  let msg: string;
-  let cause: Error | null = null;
+  const cause = error instanceof Error ? error : null;
+  const msg = error instanceof Error ? error.message : String(error);
 
-  if (error instanceof Error) {
-    msg = error.message;
-    cause = error;
-  } else {
-    msg = String(error);
-  }
-
-  let type = 'Unexpected error';
-  if (error instanceof TypeError) {
-    type = 'Type error';
-  } else if (error instanceof ReferenceError) {
-    type = 'Reference error';
-  }
+  const type =
+    error instanceof TypeError
+      ? 'Type error'
+      : error instanceof ReferenceError
+        ? 'Reference error'
+        : 'Unexpected error';
 
   return new ErrorClass(`${type} (${context}): ${msg}`, cause);
 }
