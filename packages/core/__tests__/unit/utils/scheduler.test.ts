@@ -156,7 +156,7 @@ describe('Scheduler', () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     // Call flush with empty queue
-    (scheduler as unknown as { flush: () => void }).flush();
+    (scheduler as unknown as { _flush: () => void })._flush();
 
     await sleep(10);
 

@@ -1,27 +1,27 @@
 import type { Listener } from './tracking.types';
 
-/** Interface for the tracking context managing dependency collection */
-export interface ITrackingContext {
-  current: Listener | null;
-
-  /** Executes fn within tracking context with given listener */
-  run<T>(listener: Listener, fn: () => T): T;
-
-  getCurrent(): Listener | null;
-}
-
 /**
- * Manages the active tracking context to identify dependencies during execution.
+ * The Global Tracking Context.
+ *
+ * When an Atom is read, it peeks at `trackingContext.current`. If present,
+ * it registers a dependency calculation link.
  */
-export class TrackingContext implements ITrackingContext {
-  current: Listener | null = null;
+export const trackingContext = {
+  /**
+   * The currently active listener (computational sink).
+   * @internal - Direct access is allowed for performance in hot paths (Atoms),
+   * but generally `run` or `untracked` should be used to manage this.
+   */
+  current: null as Listener | null,
 
   /**
-   * Runs the provided function within the context of the given listener.
-   * Restores the previous context after the function completes or throws.
+   * Executes a function within the scope of a specific listener.
+   * This pushes the listener onto the "stack" (via call stack recursion), runs the function,
+   * and then restores the previous listener.
    *
-   * @param listener - The tracking listener to associate with the current execution.
-   * @param fn - The function to execute.
+   * @param listener - The subscriber (Effect or Computed) that will depend on atoms read during `fn`.
+   * @param fn - The logic to execute.
+   * @returns The result of `fn`.
    */
   run<T>(listener: Listener, fn: () => T): T {
     const prev = this.current;
@@ -31,18 +31,11 @@ export class TrackingContext implements ITrackingContext {
     } finally {
       this.current = prev;
     }
-  }
-
-  /**
-   * Retrieves the listener currently associated with the tracking context.
-   */
-  getCurrent(): Listener | null {
-    return this.current;
-  }
-}
+  },
+};
 
 /**
- * Global tracking context for dependency collection.
- * Atoms register as dependencies when accessed within a tracked context.
+ * Type alias for the inferred type of the tracking context,
+ * useful if we ever need to mock it for testing.
  */
-export const trackingContext: TrackingContext = new TrackingContext();
+export type ITrackingContext = typeof trackingContext;

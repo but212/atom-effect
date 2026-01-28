@@ -6,45 +6,53 @@ import type { DependencyId, Subscriber } from '@/types';
 import { generateId } from '@/utils/debug';
 
 /**
- * Base class for all reactive nodes (Atoms, Computed, Effects).
- * Manages unique IDs, state flags, and versioning.
+ * Base class for all reactive nodes.
  */
 export class ReactiveNode {
+  /** Bitfield for state flags (DIRTY, VISITED, etc) */
   flags = 0;
+  /** Monotonic change counter */
   version = 0;
+  /** Epoch of last access/update */
   _lastSeenEpoch = -1;
+  /** Epoch of last modification (for cycle detection) */
   _modifiedAtEpoch = -1;
+  /** Unique ID for heap snapshots/debugging */
   readonly id: DependencyId = (generateId() & SMI_MAX) as DependencyId;
+  /** Transient slot for O(1) unsubscribing during link swaps */
   _tempUnsub: (() => void) | undefined = undefined;
 }
 
 /**
  * Abstract base class for reactive dependencies (Atoms, Computed).
- * Handles subscriber management and notifications.
+ * Handles the "Source" side of the dependency graph (managing subscribers).
  */
 export abstract class ReactiveDependency<T> extends ReactiveNode {
   protected abstract _subscribers: SubscriberLink<T>[];
 
+  /** @internal */
+  public _fnSubCount = 0;
+  /** @internal */
+  public _objSubCount = 0;
+
   /**
-   * Subscribes a listener to changes in this dependency.
-   *
-   * @param listener - Function or Subscriber object to be notified on change.
-   * @returns A function to unsubscribe the listener.
+   * Adds a subscriber (sink) to this dependency (source).
    */
   subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
     const isFn = typeof listener === 'function';
+    // Structural type check for object subscribers
     if (!isFn && (!listener || typeof (listener as Subscriber).execute !== 'function')) {
       throw new AtomError(ERROR_MESSAGES.ATOM_SUBSCRIBER_MUST_BE_FUNCTION);
     }
 
     const subs = this._subscribers;
+
+    // De-duplication check (O(N) - usually N is small)
     for (let i = 0, len = subs.length; i < len; i++) {
-      const sub = subs[i]!;
+      const sub = subs[i];
+      if (!sub) continue;
       if (isFn ? sub.fn === listener : sub.sub === listener) {
-        if (IS_DEV)
-          console.warn(
-            'Attempted to subscribe the same listener twice. Ignoring duplicate subscription.'
-          );
+        if (IS_DEV) console.warn('Duplicate subscription ignored.');
         return () => {};
       }
     }
@@ -55,54 +63,61 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
     );
 
     subs.push(link);
-    this.flags |= isFn ? NODE_FLAGS.HAS_FN_SUBS : NODE_FLAGS.HAS_OBJ_SUBS;
+    if (isFn) {
+      this._fnSubCount++;
+      this.flags |= NODE_FLAGS.HAS_FN_SUBS;
+    } else {
+      this._objSubCount++;
+      this.flags |= NODE_FLAGS.HAS_OBJ_SUBS;
+    }
 
-    return () => {
-      const idx = subs.indexOf(link);
-      if (idx === -1) return;
+    return () => this._unsubscribe(link);
+  }
 
-      const last = subs.pop()!;
-      if (idx < subs.length) subs[idx] = last;
+  private _unsubscribe(link: SubscriberLink<T>): void {
+    const subs = this._subscribers;
+    const idx = subs.indexOf(link);
+    if (idx === -1) return;
 
-      if (subs.length === 0) {
-        this.flags &= ~(NODE_FLAGS.HAS_FN_SUBS | NODE_FLAGS.HAS_OBJ_SUBS);
-      } else if (isFn) {
-        let has = false;
-        for (let i = 0; i < subs.length; i++) {
-          if (subs[i]!.fn) {
-            has = true;
-            break;
-          }
-        }
-        if (!has) this.flags &= ~NODE_FLAGS.HAS_FN_SUBS;
-      } else {
-        let has = false;
-        for (let i = 0; i < subs.length; i++) {
-          if (subs[i]!.sub) {
-            has = true;
-            break;
-          }
-        }
-        if (!has) this.flags &= ~NODE_FLAGS.HAS_OBJ_SUBS;
-      }
-    };
+    // Fast Remove (Swap & Pop) - O(1)
+    const last = subs.pop();
+    if (idx < subs.length && last) {
+      subs[idx] = last;
+    }
+
+    if (link.fn) {
+      this._fnSubCount--;
+    } else {
+      this._objSubCount--;
+    }
+
+    if (subs.length === 0) {
+      this.flags &= ~(NODE_FLAGS.HAS_FN_SUBS | NODE_FLAGS.HAS_OBJ_SUBS);
+      this._fnSubCount = 0;
+      this._objSubCount = 0;
+    } else if (link.fn && this._fnSubCount <= 0) {
+      this.flags &= ~NODE_FLAGS.HAS_FN_SUBS;
+      this._fnSubCount = 0;
+    } else if (!link.fn && this._objSubCount <= 0) {
+      this.flags &= ~NODE_FLAGS.HAS_OBJ_SUBS;
+      this._objSubCount = 0;
+    }
   }
 
   subscriberCount(): number {
     return this._subscribers.length;
   }
 
-  /**
-   * Notifies all subscribed listeners of a value change.
-   * @param newValue - The new value of the dependency.
-   * @param oldValue - The previous value of the dependency.
-   */
   protected _notifySubscribers(newValue: T | undefined, oldValue: T | undefined): void {
     if (!(this.flags & (NODE_FLAGS.HAS_FN_SUBS | NODE_FLAGS.HAS_OBJ_SUBS))) return;
 
     const subs = this._subscribers;
-    for (let i = 0; i < subs.length; i++) {
-      const s = subs[i]!;
+    const len = subs.length;
+
+    for (let i = 0; i < len; i++) {
+      const s = subs[i];
+      if (!s) continue;
+
       try {
         if (s.fn) s.fn(newValue, oldValue);
         else if (s.sub) s.sub.execute();

@@ -129,7 +129,7 @@ describe('Utils & Handlers - Extra Coverage', () => {
       dep1.dependencies = [dep2];
 
       expect(() => debug.checkCircular(dep1 as unknown as Dependency, dep2)).toThrow(
-        /Indirect circular dependency/
+        /Circular dependency detected/
       );
 
       // Case 2: Diamond dependency (hits visited branch)

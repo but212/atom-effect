@@ -5,18 +5,17 @@
 import { describe, expect, it } from 'vitest';
 import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
-import { AtomError } from '@/errors/errors';
 import { batch, isComputed, untracked } from '@/index';
 
 describe('batch - Error Handling', () => {
   it('rejects invalid callback types', () => {
     expect(() => {
       batch('not a function' as unknown as () => void);
-    }).toThrow(AtomError);
+    }).toThrow(TypeError);
 
     expect(() => {
       batch(null as unknown as () => void);
-    }).toThrow(AtomError);
+    }).toThrow(TypeError);
   });
 
   it('propagates errors from callback', () => {
@@ -124,13 +123,15 @@ describe('batch - Synchronous Execution', () => {
 
 describe('untracked - Error Handling', () => {
   it('rejects invalid callback types', () => {
+    // In the optimized version, we let the runtime throw the TypeError naturally
+    // when trying to execute the non-function
     expect(() => {
       untracked('not a function' as unknown as () => void);
-    }).toThrow(AtomError);
+    }).toThrow(TypeError);
 
     expect(() => {
       untracked(null as unknown as () => void);
-    }).toThrow(AtomError);
+    }).toThrow(TypeError);
   });
 
   it('propagates errors from callback', () => {

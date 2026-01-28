@@ -1,5 +1,15 @@
-export const TIME_CONSTANTS = { ONE_SECOND_MS: 1000 } as const;
+/**
+ * Global time constants.
+ * Used for debouncing, throttling, and scheduling.
+ */
+export const TIME_CONSTANTS = {
+  ONE_SECOND_MS: 1000,
+} as const;
 
+/**
+ * Standardized Async Life-cycle States.
+ * Represents the finite state machine of an asynchronous operation.
+ */
 export const AsyncState = {
   IDLE: 'idle',
   PENDING: 'pending',
@@ -7,8 +17,30 @@ export const AsyncState = {
   REJECTED: 'rejected',
 } as const;
 
-export const NODE_FLAGS = { DISPOSED: 1 << 0, HAS_FN_SUBS: 1 << 1, HAS_OBJ_SUBS: 1 << 2 } as const;
-export const EFFECT_STATE_FLAGS = { ...NODE_FLAGS, EXECUTING: 1 << 3 } as const;
+/**
+ * Base Node Flags (3 bits).
+ * Common properties for all reactor nodes (Atoms, Effects, etc).
+ */
+export const NODE_FLAGS = {
+  DISPOSED: 1 << 0,
+  HAS_FN_SUBS: 1 << 1,
+  HAS_OBJ_SUBS: 1 << 2,
+} as const;
+
+/**
+ * Effect-specific Flags.
+ * Extends Node Flags.
+ */
+export const EFFECT_STATE_FLAGS = {
+  ...NODE_FLAGS,
+  EXECUTING: 1 << 3,
+} as const;
+
+/**
+ * Computed Atom Flags.
+ * Extends Node Flags.
+ * Handles dirty checking, caching, and async states efficiently in a single integer.
+ */
 export const COMPUTED_STATE_FLAGS = {
   ...NODE_FLAGS,
   DIRTY: 1 << 3,
@@ -19,27 +51,70 @@ export const COMPUTED_STATE_FLAGS = {
   RECOMPUTING: 1 << 8,
   HAS_ERROR: 1 << 9,
 } as const;
+
+/**
+ * Writable Atom Flags.
+ * Extends Node Flags.
+ */
 export const ATOM_STATE_FLAGS = {
   ...NODE_FLAGS,
   SYNC: 1 << 3,
   NOTIFICATION_SCHEDULED: 1 << 4,
 } as const;
 
-export const POOL_CONFIG = { MAX_SIZE: 1000, WARMUP_SIZE: 100 } as const;
+/**
+ * Array Pool Configuration.
+ * Tuned to balance memory footprint vs allocation churn.
+ */
+export const POOL_CONFIG = {
+  MAX_SIZE: 1000,
+  WARMUP_SIZE: 100,
+} as const;
 
+/**
+ * Scheduler Layout & Backpressure Configuration.
+ * These values determine how the event loop determines "work units".
+ */
 export const SCHEDULER_CONFIG = {
+  // Safety valves for infinite loops
   MAX_EXECUTIONS_PER_SECOND: 1000,
-  CLEANUP_THRESHOLD: 1000,
   MAX_EXECUTIONS_PER_EFFECT: 100,
+
+  // Batch processing limits to prevent blocking the main thread for too long
   MAX_EXECUTIONS_PER_FLUSH: 10000,
   MAX_FLUSH_ITERATIONS: 1000,
   MIN_FLUSH_ITERATIONS: 10,
+
+  // Memory management
+  CLEANUP_THRESHOLD: 1000,
   BATCH_QUEUE_SHRINK_THRESHOLD: 1000,
 } as const;
 
-export const DEBUG_CONFIG = { MAX_DEPENDENCIES: 1000, WARN_INFINITE_LOOP: true } as const;
+/**
+ * Debugging thresholds.
+ */
+export const DEBUG_CONFIG = {
+  MAX_DEPENDENCIES: 1000,
+  WARN_INFINITE_LOOP: true,
+} as const;
 
+/**
+ * V8 Small Integer (SMI) optimization boundary.
+ * Integers smaller than this value are stored directly on the stack/register without boxing.
+ * 31-bit signed integer on 32-bit systems (usually safe assumption for V8 SMI).
+ */
 export const SMI_MAX = 0x3fffffff;
+
+/**
+ * Universal Environment Flag.
+ * Replaced at build-time by bundlers (Vite, Webpack), or detected at runtime as fallback.
+ * Used to strip dev-only code paths in production (Tree Shaking).
+ */
 export const IS_DEV =
-  typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production';
+  (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production') ||
+  (typeof __DEV__ !== 'undefined' && !!__DEV__);
+
+// Fallback declaration for __DEV__ if not present in environment
+declare const __DEV__: boolean;
+
 export const EMPTY_ERROR_ARRAY: readonly Error[] = Object.freeze([]);

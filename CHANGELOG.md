@@ -11,26 +11,16 @@
 
 ### Core
 
-#### Refactor
-
-- **Inline Property Initialization**: Refactored core classes (`AtomImpl`, `ReactiveNode`, `ComputedAtomImpl`, `EffectImpl`, `Scheduler`) to initialize properties inline for improved V8 hidden class stabilization.
-- **Subscriber & Dependency Optimization**:
-  - Converted `SubscriberLink` and `DependencyLink` to strict classes for better memory layout.
-  - Optimized `subscribe` and `_notifySubscribers` loops for reduced overhead.
-  - Simplified flag checks using optimized bitwise masks.
-- **Logic Simplification**: Streamlined `Computed` and `Effect` internals including `value` getters, `execute` logic, and `dispose` cleanup.
-- **Codebase Clean-up & JSDoc**:
-  - **JSDoc Optimization**: Removed verbose JSDoc from internal constants and implementation details (`constants`, `types`, `errors`) while enhancing public API documentation (`Atom`, `Computed`, `Effect`) for better IDE support.
-  - **Source Condensation**: Simplified `ArrayPool`, `debug`, and `Error` classes using arrow functions and concise logic.
-  - **Constant Inlining**: Replaced runtime bit-shift calculations with hardcoded integer literals for flags (`DIRTY: 8`) to improve startup time and code separation.
-
 #### Added
 
-- **Coverage Improvements**: Added unit tests for edge cases:
-  - Error in `dispose` cleanup.
-  - Lazy computed evaluation robustness.
-  - Handling of throwing dependencies during dirty checks.
-  - Infinite loop detection for synchronous updates.
+- **Test Coverage**: Expanded unit tests for edge cases including disposal errors, lazy evaluation, and infinite loop detection.
+
+#### Changed
+
+- **Performance**: Optimized core classes with inline property initialization, bitwise masks, and loop streamlining for improved V8 stability.
+- **Architecture**: Converted internal utilities to singletons and decomposed complex methods to reduce bundle size and cyclomatic complexity.
+- **DX & Maintenance**: Standardized error types, implemented `Symbol`-based debugging, and refined public API documentation.
+- **Code Cleanup**: Streamlined internal constants and utility logic (pools, errors) for better maintainability and smaller footprint.
 
 ## [0.16.1] - 2026-01-27
 
