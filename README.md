@@ -137,9 +137,9 @@ effect(() => {
 
 ## Documentation Links
 
-- **[Architecture & Design](./ARCHITECTURE.md)**: Internal design decisions.
-- **[Contributing Guide](./CONTRIBUTING.md)**: How to set up, test, and contribute.
-- **[Changelog](./CHANGELOG.md)**: Release notes.
+- **[Architecture & Design](./packages/core/docs/ARCHITECTURE.md)**: Internal design decisions.
+- **[Contributing Guide](./packages/core/docs/CONTRIBUTING.md)**: How to set up, test, and contribute.
+- **[Changelog](./packages/core/docs/CHANGELOG.md)**: Release notes.
 
 ## Packages
 
