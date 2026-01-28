@@ -96,8 +96,8 @@ $('ul').atomList(usersAtom, {
   key: u => u.id,
   render: u => `<li class="user-item"></li>`, // Container only
   bind: ($el, user) => {
-    // Bind internal structure here
-    $el.atomText($.computed(() => user.name));
+    // Bind internal structure here. This assumes `user.name` is an atom.
+    $el.atomText(user.name);
     $el.on('click', () => selectUser(user));
   }
 });

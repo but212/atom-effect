@@ -26,7 +26,7 @@ To optimize performance, we don't immediately re-calculate everything.
 1. **Mark / Dirty Phase**: When an atom changes, we notify subscribers "I am dirty".
 2. **Sweep / Evaluation Phase**: When a value is *read*, we re-evaluate only if needed.
 
-If an Effect observes a computed value, it subscribers to it. The computed value in turn subscribes to its dependencies. This creates a **Dynamic Dependency Graph** that updates automatically.
+If an Effect observes a computed value, it subscribes to it. The computed value in turn subscribes to its dependencies. This creates a **Dynamic Dependency Graph** that updates automatically.
 
 ## 3. Async as a First-Class Citizen
 
