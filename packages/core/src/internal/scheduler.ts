@@ -10,32 +10,28 @@ export enum SchedulerPhase {
 
 export interface SchedulerJob {
   (): void;
-  /** Internal: Epoch check to prevent double-scheduling in same cycle */
+  /** Next scheduled epoch */
   _nextEpoch?: number;
 }
 
 /**
- * The scheduler is responsible for managing the execution of reactive updates.
- *
- * - **Batching**: Groups updates to prevent layout thrashing.
- * - **Scheduling**: Uses microtasks (Promises) to yield to the browser paint cycle.
- * - **Loop Detection**: Prevents infinite recursion from runaway effects.
+ * Scheduler implementation.
  */
 export const scheduler = {
-  /** Internal: Double buffered queue [active, pending] */
+  /** Queue buffer */
   _queueBuffer: [[], []] as [SchedulerJob[], SchedulerJob[]],
   _bufferIndex: 0,
   _size: 0,
 
-  /** Monotonic counter for deduping jobs */
+  /** Epoch counter */
   _epoch: 0,
 
-  /** State Flags */
+  /** State flags */
   _isProcessing: false,
   _isBatching: false,
   _isFlushingSync: false,
 
-  /** Batching State */
+  /** Batching state */
   _batchDepth: 0,
   _batchQueue: [] as SchedulerJob[],
   _batchQueueSize: 0,
@@ -58,17 +54,14 @@ export const scheduler = {
   },
 
   /**
-   * Schedules a unit of work.
-   * - If batching: Pushes to batch queue.
-   * - If processing: Pushes to pending buffer.
-   * - If idle: Schedules microtask flush.
+   * Schedules job.
    */
   schedule(callback: SchedulerJob): void {
     if (IS_DEV && typeof callback !== 'function') {
       throw new SchedulerError('Scheduler callback must be a function');
     }
 
-    // De-duplication: If already scheduled for this epoch, skip.
+    // Deduplicate job
     if (callback._nextEpoch === this._epoch) return;
     callback._nextEpoch = this._epoch;
 
@@ -87,7 +80,7 @@ export const scheduler = {
   },
 
   /**
-   * Trigger async processing.
+   * Triggers flush.
    */
   _flush(): void {
     if (this._isProcessing || this._size === 0) return;
@@ -97,8 +90,7 @@ export const scheduler = {
   },
 
   /**
-   * The main event loop for the scheduler.
-   * Bound to `this` via arrow function for microtask safety.
+   * Scheduler loop.
    */
   _runLoop: () => {
     try {
@@ -131,16 +123,16 @@ export const scheduler = {
   _mergeBatchQueue(): void {
     if (this._batchQueueSize === 0) return;
 
-    // Increment epoch to invalidate any "already scheduled" checks from previous ticks
+    // Increment epoch
     const epoch = ++this._epoch;
     const bQueue = this._batchQueue;
     const targetBuffer = this._queueBuffer[this._bufferIndex]!;
     let currentSize = this._size;
 
-    // Transfer batch to main queue
+    // Merge batch
     for (let i = 0; i < this._batchQueueSize; i++) {
       const job = bQueue[i]!;
-      // Re-tag with new epoch so they are processed in this cycle
+      // Retag jobs
       if (job._nextEpoch !== epoch) {
         job._nextEpoch = epoch;
         targetBuffer[currentSize++] = job;
@@ -150,7 +142,7 @@ export const scheduler = {
     this._size = currentSize;
     this._batchQueueSize = 0;
 
-    // Shrink batch queue if needed
+    // Resize batch queue
     if (bQueue.length > SCHEDULER_CONFIG.BATCH_QUEUE_SHRINK_THRESHOLD) {
       bQueue.length = 0;
     }
@@ -158,9 +150,9 @@ export const scheduler = {
 
   _drainQueue(): void {
     let iterations = 0;
-    // Keep processing as long as there are jobs
+    // Process queue
     while (this._size > 0) {
-      // Circuit breaker
+      // Overflow check
       if (++iterations > this._maxFlushIterations) {
         this._handleFlushOverflow();
         return;
@@ -177,7 +169,7 @@ export const scheduler = {
     const jobs = this._queueBuffer[idx]!;
     const count = this._size;
 
-    // Swap buffers (Double Buffering)
+    // Swap buffers
     this._bufferIndex = idx ^ 1;
     this._size = 0;
     this._epoch++;

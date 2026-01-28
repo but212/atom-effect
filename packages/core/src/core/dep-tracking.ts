@@ -3,11 +3,7 @@ import type { DependencySubscriber, Listener } from '@/tracking/tracking.types';
 import type { Dependency, Subscriber } from '@/types';
 import { debug } from '@/utils/debug';
 /**
- * Connects a specific dependency node to the current active listener (sink).
- *
- * @param dependency - The source of the signal (Atom).
- * @param current - The sink consuming the signal (Effect/Computed).
- * @param subscribers - The mutable list of subscribers attached to the dependency.
+ * Tracks dependency.
  */
 export function trackDependency<T>(
   dependency: Dependency,
@@ -47,11 +43,7 @@ export function trackDependency<T>(
 }
 
 /**
- * Reconciles the dependency graph for a reactive node.
- *
- * @param nextLinks - The immutable set of dependencies collected in this epoch.
- * @param prevLinks - The set of dependencies from the previous epoch.
- * @param tracker - The subscriber object (self) creating the links.
+ * Syncs dependencies.
  */
 export function syncDependencies(
   nextLinks: DependencyLink[],
@@ -95,8 +87,7 @@ export function syncDependencies(
 }
 
 /**
- * A unidirectional edge in the dependency graph.
- * Represents "Node X depends on Y at version V".
+ * Dependency graph edge.
  */
 export class DependencyLink {
   constructor(
@@ -107,9 +98,7 @@ export class DependencyLink {
 }
 
 /**
- * A reverse edge for notifying downstream consumers.
- * Can point to a raw function (Effect) or a structured Subscriber (Computed).
- *
+ * Subscriber link.
  */
 export class SubscriberLink<T> {
   constructor(

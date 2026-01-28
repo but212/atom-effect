@@ -18,7 +18,7 @@ import { wrapError } from '@/utils/error';
 import { isPromise } from '@/utils/type-guards';
 
 /**
- * Internal effect implementation with dependency tracking.
+ * Effect implementation.
  */
 class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker {
   private _cleanup: (() => void) | null = null;
@@ -28,7 +28,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 
   private readonly _onError: ((error: unknown) => void) | null;
 
-  // Cycle detection state
+  // Cycle detection
   private _currentEpoch = -1;
   private _lastFlushEpoch = -1;
   private _executionsInEpoch = 0;
@@ -39,7 +39,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   private readonly _maxExecutionsPerFlush: number;
   private readonly _trackModifications: boolean;
 
-  // Dev-only history for frequency detection
+  // Execution history (Dev)
   private _history: number[] | null;
   private _executionCount = 0;
   private _historyPtr = 0;
@@ -57,7 +57,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       options.maxExecutionsPerFlush ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_EFFECT;
     this._trackModifications = options.trackModifications ?? false;
 
-    // Allocate dev history buffer (if enabled)
+    // Initialize history buffer
     const isFiniteLimit = Number.isFinite(this._maxExecutions);
     const capacity = isFiniteLimit
       ? Math.min(this._maxExecutions + 1, SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_SECOND + 1)
@@ -110,7 +110,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 
         if (this._sync) return this.execute();
 
-        // Lazy task creation
+        // Task creation
         if (!this._executeTask) this._executeTask = () => this.execute();
         scheduler.schedule(this._executeTask!);
       });
@@ -121,12 +121,12 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   }
 
   /**
-   * Executes the effect function and tracks its dependencies.
+   * Executes effect with tracking.
    */
   public execute(force = false): void {
     if (this.flags & (EFFECT_STATE_FLAGS.DISPOSED | EFFECT_STATE_FLAGS.EXECUTING)) return;
 
-    // Skip if dependencies haven't changed (unless forced)
+    // Skip if not dirty
     if (!force && this._links.length > 0 && !this._isDirty()) return;
 
     this._checkInfiniteLoops();
@@ -135,7 +135,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     this._execCleanup();
 
     const prevLinks = this._links;
-    // Unmount / Park Subscriptions
+    // Park subscriptions
     if (prevLinks !== EMPTY_LINKS) {
       for (let i = 0, len = prevLinks.length; i < len; i++) {
         const link = prevLinks[i];
@@ -143,7 +143,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       }
     }
 
-    // Prepare new tracking state
+    // Setup tracking
     const nextLinks = linksArrayPool.acquire();
     this._nextLinks = nextLinks;
     this._currentEpoch = nextEpoch();
@@ -156,14 +156,14 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 
       this._checkLoopWarnings();
 
-      // Handle Result (Sync vs Async)
+      // Handle result
       if (isPromise(result)) {
         this._handleAsyncResult(result);
       } else {
         this._cleanup = typeof result === 'function' ? result : null;
       }
     } catch (error) {
-      // On error, commit anyway (to preserve dep graph for retry)
+      // Commit on error
       committed = true;
       this._handleExecutionError(error);
       this._cleanup = null;
@@ -202,7 +202,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     this._nextLinks = null;
 
     if (committed) {
-      // Clean up parked subscriptions that weren't reused
+      // Cleanup unused subscriptions
       if (prevLinks !== EMPTY_LINKS) {
         for (let i = 0, len = prevLinks.length; i < len; i++) {
           const link = prevLinks[i];
@@ -215,7 +215,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
         linksArrayPool.release(prevLinks);
       }
     } else {
-      // Abort: Release new links, restore old state
+      // Abort and restore
       this._releaseLinks(nextLinks);
       linksArrayPool.release(nextLinks);
 
@@ -241,11 +241,10 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     for (let i = 0, len = links.length; i < len; i++) {
       const link = links[i]!;
       const dep = link.node;
-      // Version Check (Fastest)
+      // Version Check
       if (dep.version !== link.version) return true;
 
-      // Deep Check for computed atoms that might be lazy
-      // (This unwraps computed values without recording deps again)
+      // Check computed values
       if ('value' in (dep as object)) {
         try {
           untracked(() => (dep as { value: unknown }).value);
@@ -282,7 +281,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 
     this._executionCount++;
 
-    // Frequency analysis (Dev only)
+    // Frequency check
     if (this._history) {
       const now = Date.now();
       this._history[this._historyPtr] = now;
@@ -352,14 +351,11 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 }
 
 /**
- * Creates and starts a reactive effect that automatically tracks dependencies.
- * The effect function is executed immediately and re-scheduled whenever its
- * reactive dependencies change.
+ * Creates and starts an effect.
  *
- * @param fn - The function to be executed as a reactive effect.
- * @param options - Configuration options to customize effect behavior (e.g., scheduling, error handling).
- * @returns An effect instance providing control over the effect's lifecycle.
- * @throws {EffectError} If the provided `fn` is not a function.
+ * @param fn - Effect function.
+ * @param options - Configuration options.
+ * @returns Effect instance.
  */
 export function effect(fn: EffectFunction, options: EffectOptions = {}): EffectObject {
   if (typeof fn !== 'function') {

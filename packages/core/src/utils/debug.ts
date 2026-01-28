@@ -2,26 +2,20 @@ import { DEBUG_CONFIG, IS_DEV } from '@/constants';
 import { ComputedError } from '@/errors/errors';
 import type { DebugConfig, Dependency, DependencyId } from '@/types';
 
-// Symbols are used to attach metadata to objects without polluting their public enumerable keys.
-// This keeps the runtime clean while allowing our tools to inspect internal state.
+// Debug symbols
 export const DEBUG_NAME = Symbol('AtomEffect.DebugName');
 export const DEBUG_ID = Symbol('AtomEffect.Id');
 export const DEBUG_TYPE = Symbol('AtomEffect.Type');
 export const NO_DEFAULT_VALUE = Symbol('AtomEffect.NoDefaultValue');
 
 /**
- * Type guard to check if a valid dependency object has a list of dependencies.
- * Used for graph traversal.
+ * Dependency type guard.
  */
 const hasDeps = (o: Dependency): o is Dependency & { dependencies: Dependency[] } =>
   'dependencies' in o && Array.isArray((o as { dependencies: unknown }).dependencies);
 
 /**
- * Recursive Depth-First Search (DFS) to detect cycles.
- *
- * @param dep - The dependency to check.
- * @param current - The node currently being evaluated (the potential closer of the loop).
- * @param visited - Set of IDs already visited in this traversal path.
+ * Cycle detection.
  */
 function checkCircularInternal(dep: Dependency, current: object, visited: Set<number>): void {
   // Cycle detected in *this* path
@@ -31,13 +25,13 @@ function checkCircularInternal(dep: Dependency, current: object, visited: Set<nu
     );
   }
 
-  // Already visited this node in the current traversal? Skip to avoid redundant work/infinite recursion
+  // Cycle check
   if (visited.has(dep.id)) return;
   visited.add(dep.id);
 
   if (hasDeps(dep)) {
     const deps = dep.dependencies;
-    // Standard for loop
+    // Check dependencies
     for (let i = 0; i < deps.length; i++) {
       const child = deps[i];
       if (child) {
@@ -48,10 +42,10 @@ function checkCircularInternal(dep: Dependency, current: object, visited: Set<nu
 }
 
 /**
- * Global debug controller.
+ * Debug controller.
  */
 export const debug: DebugConfig = {
-  // In production, build tools will replace IS_DEV with `false`, making this property a constant false.
+  // Dev mode flag
   enabled: IS_DEV,
 
   maxDependencies: DEBUG_CONFIG.MAX_DEPENDENCIES,
@@ -90,12 +84,11 @@ export const debug: DebugConfig = {
 };
 
 /**
- * Monotonically increasing ID counter.
- * Starts at 1 because 0 is often falsy or reserved.
+ * ID counter.
  */
 let nextId = 1;
 
 /**
- * Generates a unique dependency ID.
+ * Generates ID.
  */
 export const generateId = () => nextId++ as DependencyId;

@@ -22,7 +22,7 @@ import { debug, NO_DEFAULT_VALUE } from '@/utils/debug';
 import { wrapError } from '@/utils/error';
 import { isPromise } from '@/utils/type-guards';
 
-// AsyncState mapping
+// Async state map
 const ASYNC_STATE_MASK =
   COMPUTED_STATE_FLAGS.RESOLVED | COMPUTED_STATE_FLAGS.PENDING | COMPUTED_STATE_FLAGS.REJECTED;
 const ASYNC_STATE_LOOKUP = Array(ASYNC_STATE_MASK + 1).fill(AsyncState.IDLE);
@@ -34,12 +34,12 @@ const MAX_ASYNC_RETRIES = 3;
 const MAX_PROMISE_ID = Number.MAX_SAFE_INTEGER - 1;
 
 /**
- * Computed atom with lazy evaluation (async support).
+ * Computed atom implementation.
  */
 class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<T>, Subscriber {
   private _value: T;
   private _error: Error | null = null;
-  /** Async coordination token */
+  /** Promise tracking ID */
   private _promiseId = 0;
 
   private readonly _equal: (a: T, b: T) => boolean;
@@ -50,15 +50,15 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   protected _subscribers: SubscriberLink<T>[] = [];
   private _links: DependencyLink[] = EMPTY_LINKS as unknown as DependencyLink[];
 
-  /** Transient cache for error aggregation */
+  /** Error cache */
   private _cachedErrors: readonly Error[] | null = null;
   private _errorCacheEpoch = -1;
 
-  // Async tracking state
+  // Async state
   private _asyncStartAggregateVersion = 0;
   private _asyncRetryCount = 0;
 
-  // Dependency collection state (transient)
+  // Dependency collection state
   private _trackEpoch = -1;
   private _trackLinks: DependencyLink[] = EMPTY_LINKS as unknown as DependencyLink[];
   private _trackCount = 0;
@@ -77,7 +77,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
 
     debug.attachDebugInfo(this, 'computed', this.id);
 
-    // Initial eager evaluation if lazy is explicitly false
+    // Eager evaluation if not lazy
     if (options.lazy === false) {
       try {
         this._recompute();
@@ -119,7 +119,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       if (this.flags & COMPUTED_STATE_FLAGS.RESOLVED) return this._value;
     }
 
-    // 3. Async/Error Fallbacks
+    // 3. Async/Error handling
     const def = this._defaultValue;
     const hasDef = def !== (NO_DEFAULT_VALUE as T);
 
@@ -149,7 +149,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._track();
     if (this.flags & (COMPUTED_STATE_FLAGS.REJECTED | COMPUTED_STATE_FLAGS.HAS_ERROR)) return true;
 
-    // Recursive check on dependencies
+    // Check dependencies
     const links = this._links;
     for (let i = 0, len = links.length; i < len; i++) {
       const node = links[i]?.node;
@@ -240,11 +240,11 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   }
 
   addDependency(dep: Dependency): void {
-    // Avoid double-adds in same epoch (Set behavior on Array)
+    // Deduplicate dependencies
     if (dep._lastSeenEpoch === this._trackEpoch) return;
     dep._lastSeenEpoch = this._trackEpoch;
 
-    // Grow array if needed (dynamic resizing)
+    // Resize array if needed
     if (this._trackCount < this._trackLinks.length) {
       const link = this._trackLinks[this._trackCount]!;
       link.node = dep;
@@ -256,7 +256,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   }
 
   private _commitDeps(prevLinks: DependencyLink[]): void {
-    // Trim and sync
+    // Sync dependencies
     this._trackLinks.length = this._trackCount;
     syncDependencies(this._trackLinks, prevLinks, this);
     this._links = this._trackLinks;
@@ -273,7 +273,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
 
     let committed = false;
     try {
-      // Run the user's function in a tracking context
+      // Execute function
       const result = trackingContext.run(this, this._fn);
 
       this._commitDeps(prevLinks);
@@ -286,7 +286,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
         this._finalizeResolution(result);
       }
     } catch (e) {
-      // Fallback commit (to ensure we track dependencies even if error occurred, for reactive retry)
+      // Commit dependencies on error
       if (!committed) {
         try {
           this._commitDeps(prevLinks);
@@ -295,7 +295,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       }
       this._handleError(e as Error, ERROR_MESSAGES.COMPUTED_COMPUTATION_FAILED, true);
     } finally {
-      // Cleanup pool
+      // Release pool
       if (committed && prevLinks !== EMPTY_LINKS) {
         linksArrayPool.release(prevLinks);
       } else if (!committed) {
@@ -319,7 +319,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
         COMPUTED_STATE_FLAGS.RESOLVED |
         COMPUTED_STATE_FLAGS.REJECTED
       );
-    // Notify "I am pending"
+    // Notify pending
     this._notifySubscribers(undefined, undefined);
 
     this._asyncStartAggregateVersion = this._captureVersionSnapshot();
@@ -356,7 +356,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     let aggregate = 0;
     const links = this._links;
     for (let i = 0, len = links.length; i < len; i++) {
-      // Simple hash mixing
+      // Hash mixing
       aggregate = ((((aggregate << 5) - aggregate) | 0) + links[i]!.node.version) & SMI_MAX;
     }
     return aggregate;
@@ -366,7 +366,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     const error = wrapError(err, ComputedError, msg);
 
     if (!throwErr && !(this.flags & COMPUTED_STATE_FLAGS.REJECTED)) {
-      // Version bump forces downstream re-eval
+      // Update version
       this.version = (this.version + 1) & SMI_MAX;
     }
 
@@ -416,7 +416,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   }
 
   execute(): void {
-    // Subscriber interface implementation
+    // Subscriber implementation
     this._markDirty();
   }
 
@@ -431,10 +431,9 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
 Object.freeze(ComputedAtomImpl.prototype);
 
 /**
- * Creates a computed value with automatic dependency tracking.
- * Supports sync/async computations with caching and lazy evaluation.
- * @param fn - Computation function (sync or async)
- * @param options - { equal?, defaultValue?, onError?, lazy? }
+ * Creates a computed value.
+ * @param fn - Computation function
+ * @param options - Options object
  */
 export function computed<T>(fn: () => T, options?: ComputedOptions<T>): ComputedAtom<T>;
 export function computed<T>(

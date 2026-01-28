@@ -14,9 +14,9 @@ const SUBS_MASK = ATOM_STATE_FLAGS.HAS_FN_SUBS | ATOM_STATE_FLAGS.HAS_OBJ_SUBS;
  */
 class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
   private _value: T;
-  /** Transient old value for sync notifications */
+  /** Old value for notifications */
   private _pendingOldValue: T | undefined = undefined;
-  /** Cached closure for scheduler to avoid allocation per update */
+  /** Cached notification task */
   private _notifyTask: (() => void) | undefined = undefined;
   protected _subscribers: SubscriberLink<T>[] = [];
 
@@ -50,13 +50,13 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
     this._pendingOldValue = oldValue;
     this.flags = flags | ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
 
-    // Sync mode bypasses scheduler if not already batching
+    // Sync handling
     if (flags & ATOM_STATE_FLAGS.SYNC && !scheduler.isBatching) {
       this._flushNotifications();
       return;
     }
 
-    // Async scheduling (Lazy allocation of callback)
+    // Async scheduling
     if (!this._notifyTask) {
       // Create notification task
       this._notifyTask = () => this._flushNotifications();
@@ -65,7 +65,7 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
   }
 
   /**
-   * Internal logic to actually trigger subscribers.
+   * Triggers subscribers.
    */
   private _flushNotifications(): void {
     const flags = this.flags;

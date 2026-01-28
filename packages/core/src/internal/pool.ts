@@ -4,7 +4,7 @@ import { ArrayPool } from '@/utils/array-pool';
 
 const freeze = <T>(arr: T[]): readonly T[] => Object.freeze(arr);
 
-// Readonly empty constants.
+// Empty constants
 export const EMPTY_DEPS = freeze<Dependency>([]);
 export const EMPTY_SUBS = freeze<Subscriber>([]);
 export const EMPTY_UNSUBS = freeze<() => void>([]);
@@ -12,8 +12,7 @@ export const EMPTY_VERSIONS = freeze<number>([]);
 export const EMPTY_LINKS = freeze<DependencyLink>([]);
 export const EMPTY_SUBSCRIBERS = freeze<SubscriberLink<unknown>>([]);
 
-// Centralized pools for recycling common array types.
-// Used extensively in `dep-tracking.ts` and `core/*.ts`.
+// Array pools
 export const depArrayPool = new ArrayPool<Dependency>();
 export const unsubArrayPool = new ArrayPool<() => void>();
 export const versionArrayPool = new ArrayPool<number>();

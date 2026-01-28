@@ -1,25 +1,16 @@
 import type { Listener } from './tracking.types';
 
 /**
- * The Global Tracking Context.
- *
- * When an Atom is read, it peeks at `trackingContext.current`. If present,
- * it registers a dependency calculation link.
+ * Global tracking context.
  */
 export const trackingContext = {
-  /**
-   * The currently active listener (computational sink).
-   * @internal - Direct access is allowed for performance in hot paths (Atoms),
-   * but generally `run` or `untracked` should be used to manage this.
-   */
+  /** Active listener. */
   current: null as Listener | null,
 
   /**
-   * Executes a function within the scope of a specific listener.
-   * This pushes the listener onto the "stack" (via call stack recursion), runs the function,
-   * and then restores the previous listener.
+   * Executes in context.
    *
-   * @param listener - The subscriber (Effect or Computed) that will depend on atoms read during `fn`.
+   * @param listener - The subscriber.
    * @param fn - The logic to execute.
    * @returns The result of `fn`.
    */
@@ -35,6 +26,6 @@ export const trackingContext = {
 };
 
 /**
- * Type alias for the inferred type of the tracking context.
+ * Tracking context type.
  */
 export type ITrackingContext = typeof trackingContext;

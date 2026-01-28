@@ -1,5 +1,5 @@
 /**
- * Centralized registry of error messages.
+ * Error message registry.
  */
 export const ERROR_MESSAGES = {
   // Computed Errors
@@ -21,7 +21,6 @@ export const ERROR_MESSAGES = {
   EFFECT_DISPOSED: 'Attempted to run disposed effect',
 
   // System / Debug
-  LARGE_DEPENDENCY_GRAPH: (count: number): string =>
-    `Potential performance issue: Large dependency graph (${count} nodes)`,
+  LARGE_DEPENDENCY_GRAPH: (count: number): string => `Large dependency graph (${count} nodes)`,
   CALLBACK_ERROR_IN_ERROR_HANDLER: 'Exception encountered in onError handler',
 } as const;

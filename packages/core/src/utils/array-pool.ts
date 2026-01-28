@@ -2,10 +2,9 @@ import { IS_DEV } from '@/constants';
 import type { PoolStats } from '@/types';
 
 /**
- * A type-safe array pool for recycling array instances.
- * A type-safe array pool for recycling array instances.
+ * Array pool.
  *
- * @template T - The type of elements in the pooled arrays.
+ * @template T - Element type.
  */
 export class ArrayPool<T> {
   private readonly pool: T[][] = [];
@@ -29,7 +28,7 @@ export class ArrayPool<T> {
   ) {}
 
   /**
-   * Acquires an array from the pool or creates a new one.
+   * Acquires array.
    */
   acquire(): T[] {
     if (IS_DEV && this.stats) {
@@ -40,11 +39,10 @@ export class ArrayPool<T> {
   }
 
   /**
-   * Releases an array back to the pool.
-   * Resets length to 0 before storage.
+   * Releases array.
    *
-   * @param arr - The array to release.
-   * @param emptyConst - Optional reference to a global empty iterator/constant to ignore.
+   * @param arr - Array to release.
+   * @param emptyConst - Optional empty constant.
    */
   release(arr: T[], emptyConst?: readonly T[]): void {
     if (emptyConst && arr === emptyConst) return;
@@ -73,8 +71,7 @@ export class ArrayPool<T> {
   }
 
   /**
-   * Returns generic pool statistics.
-   * Always returns null in production.
+   * Pool stats.
    */
   getStats(): PoolStats | null {
     if (!IS_DEV || !this.stats) return null;
@@ -93,8 +90,7 @@ export class ArrayPool<T> {
   }
 
   /**
-   * Hard resets the pool, dropping all references.
-   * Useful for cleanup between tests or large operation phases.
+   * Resets pool.
    */
   reset(): void {
     this.pool.length = 0;

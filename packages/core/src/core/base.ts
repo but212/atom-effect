@@ -10,23 +10,22 @@ import { wrapError } from '@/utils/error';
  * Base class for all reactive nodes.
  */
 export class ReactiveNode {
-  /** Bitfield for state flags (DIRTY, VISITED, etc) */
+  /** State flags */
   flags = 0;
-  /** Monotonic change counter */
+  /** Version counter */
   version = 0;
-  /** Epoch of last access/update */
+  /** Last access epoch */
   _lastSeenEpoch = -1;
-  /** Epoch of last modification (for cycle detection) */
+  /** Modified epoch */
   _modifiedAtEpoch = -1;
-  /** Unique ID for heap snapshots/debugging */
+  /** Debug ID */
   readonly id: DependencyId = (generateId() & SMI_MAX) as DependencyId;
-  /** Transient slot for O(1) unsubscribing during link swaps */
+  /** Temporary unsubscribe slot */
   _tempUnsub: (() => void) | undefined = undefined;
 }
 
 /**
- * Abstract base class for reactive dependencies (Atoms, Computed).
- * Handles the "Source" side of the dependency graph (managing subscribers).
+ * Reactive dependency base class.
  */
 export abstract class ReactiveDependency<T> extends ReactiveNode {
   protected abstract _subscribers: SubscriberLink<T>[];
@@ -37,7 +36,7 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
   public _objSubCount = 0;
 
   /**
-   * Adds a subscriber (sink) to this dependency (source).
+   * Adds subscriber.
    */
   subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
     const isFn = typeof listener === 'function';
