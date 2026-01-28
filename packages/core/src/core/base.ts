@@ -5,6 +5,10 @@ import { ERROR_MESSAGES } from '@/errors/messages';
 import type { DependencyId, Subscriber } from '@/types';
 import { generateId } from '@/utils/debug';
 
+/**
+ * Base class for all reactive nodes (Atoms, Computed, Effects).
+ * Manages unique IDs, state flags, and versioning.
+ */
 export class ReactiveNode {
   flags = 0;
   version = 0;
@@ -14,9 +18,19 @@ export class ReactiveNode {
   _tempUnsub: (() => void) | undefined = undefined;
 }
 
+/**
+ * Abstract base class for reactive dependencies (Atoms, Computed).
+ * Handles subscriber management and notifications.
+ */
 export abstract class ReactiveDependency<T> extends ReactiveNode {
   protected abstract _subscribers: SubscriberLink<T>[];
 
+  /**
+   * Subscribes a listener to changes in this dependency.
+   *
+   * @param listener - Function or Subscriber object to be notified on change.
+   * @returns A function to unsubscribe the listener.
+   */
   subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
     const isFn = typeof listener === 'function';
     if (!isFn && (!listener || typeof (listener as Subscriber).execute !== 'function')) {
@@ -78,6 +92,11 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
     return this._subscribers.length;
   }
 
+  /**
+   * Notifies all subscribed listeners of a value change.
+   * @param newValue - The new value of the dependency.
+   * @param oldValue - The previous value of the dependency.
+   */
   protected _notifySubscribers(newValue: T | undefined, oldValue: T | undefined): void {
     if (!(this.flags & (NODE_FLAGS.HAS_FN_SUBS | NODE_FLAGS.HAS_OBJ_SUBS))) return;
 

@@ -12,6 +12,10 @@
   - Optimized `subscribe` and `_notifySubscribers` loops for reduced overhead.
   - Simplified flag checks using optimized bitwise masks.
 - **Logic Simplification**: Streamlined `Computed` and `Effect` internals including `value` getters, `execute` logic, and `dispose` cleanup.
+- **Codebase Clean-up & JSDoc**:
+  - **JSDoc Optimization**: Removed verbose JSDoc from internal constants and implementation details (`constants`, `types`, `errors`) while enhancing public API documentation (`Atom`, `Computed`, `Effect`) for better IDE support.
+  - **Source Condensation**: Simplified `ArrayPool`, `debug`, and `Error` classes using arrow functions and concise logic.
+  - **Constant Inlining**: Replaced runtime bit-shift calculations with hardcoded integer literals for flags (`DIRTY: 8`) to improve startup time and code separation.
 
 #### Added
 
