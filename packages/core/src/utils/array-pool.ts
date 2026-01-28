@@ -3,9 +3,7 @@ import type { PoolStats } from '@/types';
 
 /**
  * A type-safe array pool for recycling array instances.
- *
- * Reduces GC pressure and improves cache locality using a LIFO strategy.
- * Limits array capacity and pool size to prevent excessive memory usage.
+ * A type-safe array pool for recycling array instances.
  *
  * @template T - The type of elements in the pooled arrays.
  */
@@ -23,7 +21,7 @@ export class ArrayPool<T> {
 
   /**
    * @param limit - Max unique arrays to hold (default: 50). Prevents the pool itself from consuming too much memory.
-   * @param capacity - Max length of an array to accept (default: 256). prevents preventing holding onto massive backing buffers.
+   * @param capacity - Max length of an array to accept (default: 256).
    */
   constructor(
     private readonly limit = 50,

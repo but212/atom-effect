@@ -1,6 +1,6 @@
 import { IS_DEV, SMI_MAX } from '@/constants';
 
-// The heartbeat of the reactivity system.
+// Global epoch counter.
 // Monotonically increasing counter used for dirty checking without deeper comparisons.
 let collectorEpoch = 0;
 

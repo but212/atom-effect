@@ -4,8 +4,7 @@ import { ArrayPool } from '@/utils/array-pool';
 
 const freeze = <T>(arr: T[]): readonly T[] => Object.freeze(arr);
 
-// Global empty constants to avoid allocation for empty states.
-// These are strictly readonly to prevent accidental mutation.
+// Readonly empty constants.
 export const EMPTY_DEPS = freeze<Dependency>([]);
 export const EMPTY_SUBS = freeze<Subscriber>([]);
 export const EMPTY_UNSUBS = freeze<() => void>([]);

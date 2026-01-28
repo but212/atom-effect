@@ -16,7 +16,7 @@ export function trackDependency<T>(
 ): void {
   if (typeof current === 'function') {
     const fn = current as (newValue?: T, oldValue?: T) => void;
-    // Linear scan is faster than Set for small N (< 10 usually)
+    // Check for existing subscription
     for (let i = 0, len = subscribers.length; i < len; i++) {
       const link = subscribers[i];
       if (link && link.fn === fn) return;
@@ -110,7 +110,6 @@ export class DependencyLink {
  * A reverse edge for notifying downstream consumers.
  * Can point to a raw function (Effect) or a structured Subscriber (Computed).
  *
- * Optimized for V8 Hidden Classes by initializing all fields.
  */
 export class SubscriberLink<T> {
   constructor(

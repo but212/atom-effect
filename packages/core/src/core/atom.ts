@@ -6,7 +6,7 @@ import { trackingContext } from '@/tracking';
 import type { AtomOptions, WritableAtom } from '@/types';
 import { debug } from '@/utils/debug';
 
-// Pre-compute mask to avoid repeated bitwise operations during rapid updates
+// Pre-compute subscription mask
 const SUBS_MASK = ATOM_STATE_FLAGS.HAS_FN_SUBS | ATOM_STATE_FLAGS.HAS_OBJ_SUBS;
 
 /**
@@ -58,7 +58,7 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
 
     // Async scheduling (Lazy allocation of callback)
     if (!this._notifyTask) {
-      // Arrow function captures `this` safely
+      // Create notification task
       this._notifyTask = () => this._flushNotifications();
     }
     scheduler.schedule(this._notifyTask);

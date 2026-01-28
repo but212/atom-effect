@@ -150,7 +150,7 @@ export const scheduler = {
     this._size = currentSize;
     this._batchQueueSize = 0;
 
-    // Memory hygiene: Shrink batch queue if it got too huge
+    // Shrink batch queue if needed
     if (bQueue.length > SCHEDULER_CONFIG.BATCH_QUEUE_SHRINK_THRESHOLD) {
       bQueue.length = 0;
     }
@@ -183,7 +183,7 @@ export const scheduler = {
     this._epoch++;
 
     for (let i = 0; i < count; i++) {
-      // Safe execution
+      // Execute job
       try {
         jobs[i]!();
       } catch (e) {

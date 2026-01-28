@@ -37,7 +37,7 @@ function checkCircularInternal(dep: Dependency, current: object, visited: Set<nu
 
   if (hasDeps(dep)) {
     const deps = dep.dependencies;
-    // Standard for loop is faster than for...of or forEach
+    // Standard for loop
     for (let i = 0; i < deps.length; i++) {
       const child = deps[i];
       if (child) {
@@ -49,7 +49,6 @@ function checkCircularInternal(dep: Dependency, current: object, visited: Set<nu
 
 /**
  * Global debug controller.
- * Designed to compile away to almost nothing in production.
  */
 export const debug: DebugConfig = {
   // In production, build tools will replace IS_DEV with `false`, making this property a constant false.
@@ -98,6 +97,5 @@ let nextId = 1;
 
 /**
  * Generates a unique dependency ID.
- * This is a critical hot path, so it's kept extremely simple.
  */
 export const generateId = () => nextId++ as DependencyId;

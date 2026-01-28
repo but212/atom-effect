@@ -35,7 +35,6 @@ export const trackingContext = {
 };
 
 /**
- * Type alias for the inferred type of the tracking context,
- * useful if we ever need to mock it for testing.
+ * Type alias for the inferred type of the tracking context.
  */
 export type ITrackingContext = typeof trackingContext;

@@ -4,6 +4,7 @@ import { AtomError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
 import type { DependencyId, Subscriber } from '@/types';
 import { generateId } from '@/utils/debug';
+import { wrapError } from '@/utils/error';
 
 /**
  * Base class for all reactive nodes.
@@ -40,14 +41,16 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
    */
   subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
     const isFn = typeof listener === 'function';
-    // Structural type check for object subscribers
+    // Validate subscriber
     if (!isFn && (!listener || typeof (listener as Subscriber).execute !== 'function')) {
-      throw new AtomError(ERROR_MESSAGES.ATOM_SUBSCRIBER_MUST_BE_FUNCTION);
+      throw wrapError(
+        new TypeError('Invalid subscriber'),
+        AtomError,
+        ERROR_MESSAGES.ATOM_SUBSCRIBER_MUST_BE_FUNCTION
+      );
     }
 
     const subs = this._subscribers;
-
-    // De-duplication check (O(N) - usually N is small)
     for (let i = 0, len = subs.length; i < len; i++) {
       const sub = subs[i];
       if (!sub) continue;
@@ -79,7 +82,7 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
     const idx = subs.indexOf(link);
     if (idx === -1) return;
 
-    // Fast Remove (Swap & Pop) - O(1)
+    // Remove subscriber
     const last = subs.pop();
     if (idx < subs.length && last) {
       subs[idx] = last;
@@ -128,6 +131,6 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
   }
 
   private _handleNotifyError(err: unknown): void {
-    console.error(new AtomError(ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED, err as Error));
+    console.error(wrapError(err, AtomError, ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED));
   }
 }
