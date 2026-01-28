@@ -1,32 +1,32 @@
 import { AtomError } from '@/errors/errors';
 
 /**
- * Wraps an unknown error into a specific AtomError class with additional context.
- * If the error is already an instance of AtomError, it is returned as-is to preserve its original type and state.
+ * Standardizes unknown thrown values into an `AtomError`.
  *
- * @param error - The error to wrap.
- * @param ErrorClass - The AtomError constructor to instantiate if wrapping is required.
- * @param context - A description of the context or operation where the error occurred.
- * @returns An AtomError instance.
+ * @param error - The raw error (unknown) caught in a try/catch.
+ * @param ErrorClass - The specific AtomError subclass to instantiate.
+ * @param context - Human-readable context for where the error was caught.
  */
 export function wrapError(
   error: unknown,
   ErrorClass: typeof AtomError,
   context: string
 ): AtomError {
+  // Pass-through if already wrapped to prevent double-wrapping
   if (error instanceof AtomError) {
     return error;
   }
 
-  const cause = error instanceof Error ? error : null;
-  const msg = error instanceof Error ? error.message : String(error);
+  const isNativeError = error instanceof Error;
+  const originalMessage = isNativeError ? error.message : String(error);
+  const cause = isNativeError ? error : undefined;
 
-  const type =
-    error instanceof TypeError
-      ? 'Type error'
-      : error instanceof ReferenceError
-        ? 'Reference error'
-        : 'Unexpected error';
+  // Determine error category for clearer logging
+  let type = 'Unexpected error';
+  if (error instanceof TypeError) type = 'Type error';
+  else if (error instanceof ReferenceError) type = 'Reference error';
 
-  return new ErrorClass(`${type} (${context}): ${msg}`, cause);
+  const finalMessage = `${type} (${context}): ${originalMessage}`;
+
+  return new ErrorClass(finalMessage, cause);
 }

@@ -1,9 +1,17 @@
-import { AtomError } from '@/errors/errors';
 import { scheduler } from './scheduler';
 
-/** Groups state updates into a single cycle. */
+/**
+ * Groups multiple state updates into a single re-render cycle.
+ *
+ * @param fn - The function to execute within the batch.
+ * @returns The return value of `fn`.
+ */
 export function batch<T>(fn: () => T): T {
-  if (typeof fn !== 'function') throw new AtomError('Batch callback must be a function');
+  // Safe-guard against non-function inputs in dev/runtime
+  if (typeof fn !== 'function') {
+    throw new TypeError('Batch callback must be a function');
+  }
+
   scheduler.startBatch();
   try {
     return fn();

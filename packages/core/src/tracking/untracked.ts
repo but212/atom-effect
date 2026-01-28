@@ -1,22 +1,18 @@
-import { AtomError } from '@/errors/errors';
 import { trackingContext } from './context';
 
 /**
- * Executes a function without tracking any reactive dependencies accessed during its execution.
- * This prevents the calling context from subscribing to any atoms read within the callback.
+ * Executes a function exactly as is, but without tracking any reactive dependencies.
  *
- * @param fn - The function to execute in an untracked context.
- * @returns The value returned by the provided function.
- * @throws {AtomError} If the provided argument is not a function.
+ * @param fn - The function to execute.
+ * @returns The result of function `fn`.
  */
 export function untracked<T>(fn: () => T): T {
-  if (typeof fn !== 'function') {
-    throw new AtomError('Untracked callback must be a function');
-  }
-
   const prev = trackingContext.current;
-  trackingContext.current = null;
 
+  // Fast path: if already null, just run.
+  if (prev === null) return fn();
+
+  trackingContext.current = null;
   try {
     return fn();
   } finally {

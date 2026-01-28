@@ -1,12 +1,18 @@
 import { IS_DEV } from '@/constants';
 import type { PoolStats } from '@/types';
 
-/** Generic Array Pool with type-safe pooling and dev-mode stats. */
+/**
+ * A type-safe array pool for recycling array instances.
+ *
+ * Reduces GC pressure and improves cache locality using a LIFO strategy.
+ * Limits array capacity and pool size to prevent excessive memory usage.
+ *
+ * @template T - The type of elements in the pooled arrays.
+ */
 export class ArrayPool<T> {
-  private pool: T[][] = [];
-  private readonly limit = 50;
-  private readonly capacity = 256;
+  private readonly pool: T[][] = [];
 
+  // Mutable stats container, null in production
   private stats = IS_DEV
     ? {
         acquired: 0,
@@ -15,50 +21,86 @@ export class ArrayPool<T> {
       }
     : null;
 
+  /**
+   * @param limit - Max unique arrays to hold (default: 50). Prevents the pool itself from consuming too much memory.
+   * @param capacity - Max length of an array to accept (default: 256). prevents preventing holding onto massive backing buffers.
+   */
+  constructor(
+    private readonly limit = 50,
+    private readonly capacity = 256
+  ) {}
+
+  /**
+   * Acquires an array from the pool or creates a new one.
+   */
   acquire(): T[] {
-    if (this.stats) this.stats.acquired++;
+    if (IS_DEV && this.stats) {
+      this.stats.acquired++;
+    }
+    // LIFO reuse for better cache locality
     return this.pool.pop() ?? [];
   }
 
+  /**
+   * Releases an array back to the pool.
+   * Resets length to 0 before storage.
+   *
+   * @param arr - The array to release.
+   * @param emptyConst - Optional reference to a global empty iterator/constant to ignore.
+   */
   release(arr: T[], emptyConst?: readonly T[]): void {
     if (emptyConst && arr === emptyConst) return;
 
-    const stats = this.stats;
-    // Check constraints first (cheaper than isFrozen)
     if (arr.length > this.capacity) {
-      if (stats) stats.rejected.tooLarge++;
+      if (IS_DEV && this.stats) this.stats.rejected.tooLarge++;
       return;
     }
+
     if (this.pool.length >= this.limit) {
-      if (stats) stats.rejected.poolFull++;
+      if (IS_DEV && this.stats) this.stats.rejected.poolFull++;
       return;
     }
-    // Expensive check last
+
     if (Object.isFrozen(arr)) {
-      if (stats) stats.rejected.frozen++;
+      if (IS_DEV && this.stats) this.stats.rejected.frozen++;
       return;
     }
 
     arr.length = 0;
     this.pool.push(arr);
-    if (stats) stats.released++;
+
+    if (IS_DEV && this.stats) {
+      this.stats.released++;
+    }
   }
 
+  /**
+   * Returns generic pool statistics.
+   * Always returns null in production.
+   */
   getStats(): PoolStats | null {
-    if (!this.stats) return null;
+    if (!IS_DEV || !this.stats) return null;
+
     const { acquired, released, rejected } = this.stats;
+    const leakCount =
+      acquired - released - (rejected.frozen + rejected.tooLarge + rejected.poolFull);
+
     return {
       acquired,
       released,
       rejected: { ...rejected },
-      leaked: acquired - released - (rejected.frozen + rejected.tooLarge + rejected.poolFull),
+      leaked: leakCount,
       poolSize: this.pool.length,
     };
   }
 
+  /**
+   * Hard resets the pool, dropping all references.
+   * Useful for cleanup between tests or large operation phases.
+   */
   reset(): void {
     this.pool.length = 0;
-    if (this.stats) {
+    if (IS_DEV && this.stats) {
       this.stats = {
         acquired: 0,
         released: 0,

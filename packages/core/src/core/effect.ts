@@ -22,7 +22,7 @@ import { isPromise } from '@/utils/type-guards';
  */
 class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker {
   private _cleanup: (() => void) | null = null;
-  private _links: DependencyLink[] = EMPTY_LINKS;
+  private _links: DependencyLink[] = EMPTY_LINKS as unknown as DependencyLink[];
   private _nextLinks: DependencyLink[] | null = null;
   private _executeTask: (() => void) | undefined;
 
@@ -57,6 +57,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       options.maxExecutionsPerFlush ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_EFFECT;
     this._trackModifications = options.trackModifications ?? false;
 
+    // Allocate dev history buffer (if enabled)
     const isFiniteLimit = Number.isFinite(this._maxExecutions);
     const capacity = isFiniteLimit
       ? Math.min(this._maxExecutions + 1, SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_SECOND + 1)
@@ -68,8 +69,9 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   }
 
   public run(): void {
-    if (this.flags & EFFECT_STATE_FLAGS.DISPOSED)
+    if (this.flags & EFFECT_STATE_FLAGS.DISPOSED) {
       throw new EffectError(ERROR_MESSAGES.EFFECT_DISPOSED);
+    }
     this.execute(true);
   }
 
@@ -79,16 +81,22 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 
     this._execCleanup();
     this._releaseLinks(this._links);
-    this._links = EMPTY_LINKS;
+
+    // Reset State
+    this._links = EMPTY_LINKS as unknown as DependencyLink[];
     this._executeTask = undefined;
   }
 
   public addDependency(dep: Dependency): void {
+    // Only track if currently executing (double check)
     if (!(this.flags & EFFECT_STATE_FLAGS.EXECUTING)) return;
+
+    // Deduplicate in current epoch
     if (dep._lastSeenEpoch === this._currentEpoch) return;
     dep._lastSeenEpoch = this._currentEpoch;
 
     const nextLinks = this._nextLinks!;
+
     if (dep._tempUnsub) {
       nextLinks.push(new DependencyLink(dep, dep.version, dep._tempUnsub));
       dep._tempUnsub = undefined;
@@ -99,7 +107,10 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       const unsubscribe = dep.subscribe(() => {
         if (this._trackModifications && this.flags & EFFECT_STATE_FLAGS.EXECUTING)
           dep._modifiedAtEpoch = this._currentEpoch;
+
         if (this._sync) return this.execute();
+
+        // Lazy task creation
         if (!this._executeTask) this._executeTask = () => this.execute();
         scheduler.schedule(this._executeTask!);
       });
@@ -114,6 +125,8 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
    */
   public execute(force = false): void {
     if (this.flags & (EFFECT_STATE_FLAGS.DISPOSED | EFFECT_STATE_FLAGS.EXECUTING)) return;
+
+    // Skip if dependencies haven't changed (unless forced)
     if (!force && this._links.length > 0 && !this._isDirty()) return;
 
     this._checkInfiniteLoops();
@@ -122,6 +135,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     this._execCleanup();
 
     const prevLinks = this._links;
+    // Unmount / Park Subscriptions
     if (prevLinks !== EMPTY_LINKS) {
       for (let i = 0, len = prevLinks.length; i < len; i++) {
         const link = prevLinks[i];
@@ -149,6 +163,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
         this._cleanup = typeof result === 'function' ? result : null;
       }
     } catch (error) {
+      // On error, commit anyway (to preserve dep graph for retry)
       committed = true;
       this._handleExecutionError(error);
       this._cleanup = null;
@@ -162,6 +177,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     const execId = ++this._execId;
     promise.then(
       (cleanup) => {
+        // Guard against race conditions (new execution or disposal happened)
         if (execId !== this._execId || this.flags & EFFECT_STATE_FLAGS.DISPOSED) {
           if (typeof cleanup === 'function') {
             try {
@@ -186,6 +202,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     this._nextLinks = null;
 
     if (committed) {
+      // Clean up parked subscriptions that weren't reused
       if (prevLinks !== EMPTY_LINKS) {
         for (let i = 0, len = prevLinks.length; i < len; i++) {
           const link = prevLinks[i];
@@ -198,11 +215,13 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
         linksArrayPool.release(prevLinks);
       }
     } else {
+      // Abort: Release new links, restore old state
       this._releaseLinks(nextLinks);
       linksArrayPool.release(nextLinks);
 
       if (prevLinks !== EMPTY_LINKS) {
         for (let i = 0, len = prevLinks.length; i < len; i++) {
+          // Clear park slots
           if (prevLinks[i]) prevLinks[i]!.node._tempUnsub = undefined;
         }
       }
@@ -222,12 +241,16 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     for (let i = 0, len = links.length; i < len; i++) {
       const link = links[i]!;
       const dep = link.node;
+      // Version Check (Fastest)
       if (dep.version !== link.version) return true;
+
+      // Deep Check for computed atoms that might be lazy
+      // (This unwraps computed values without recording deps again)
       if ('value' in (dep as object)) {
         try {
           untracked(() => (dep as { value: unknown }).value);
         } catch {
-          return true;
+          return true; // Error usually implies dirty/re-eval needed
         }
         if (dep.version !== link.version) return true;
       }
@@ -259,6 +282,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 
     this._executionCount++;
 
+    // Frequency analysis (Dev only)
     if (this._history) {
       const now = Date.now();
       this._history[this._historyPtr] = now;

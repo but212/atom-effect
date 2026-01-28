@@ -1,9 +1,9 @@
-import type { ComputedAtom, EffectObject, ReadonlyAtom } from '@/types';
-import { debug } from './debug';
+import type { ComputedAtom, EffectObject, ReadonlyAtom, WritableAtom } from '@/types';
 
 /**
  * Checks if the given object conforms to the ReadonlyAtom interface.
- * Verifies existence of `value` property and `subscribe` method.
+ *
+ * @param obj - The object to inspect.
  */
 export function isAtom(obj: unknown): obj is ReadonlyAtom {
   return (
@@ -15,13 +15,20 @@ export function isAtom(obj: unknown): obj is ReadonlyAtom {
 }
 
 /**
+ * Checks if the given object is a WritableAtom.
+ * Extends `isAtom` check with `dispose` verification.
+ */
+export function isWritable(obj: unknown): obj is WritableAtom {
+  return isAtom(obj) && typeof (obj as { dispose?: unknown }).dispose === 'function';
+}
+
+/**
  * Checks if the given object is a ComputedAtom.
- * Verifies it tracks dependencies and has an `invalidate` method.
+ * Verifies it has an `invalidate` method in addition to atom properties.
+ *
+ * Note: We avoid relying on internal debug flags here to keep this pure and fast.
  */
 export function isComputed(obj: unknown): obj is ComputedAtom {
-  if (debug.enabled && obj != null && typeof obj === 'object') {
-    if (debug.getDebugType(obj) === 'computed') return true;
-  }
   return isAtom(obj) && typeof (obj as { invalidate?: unknown }).invalidate === 'function';
 }
 
@@ -39,8 +46,13 @@ export function isEffect(obj: unknown): obj is EffectObject {
 }
 
 /**
- * Type guard to check if a value is a Promise
+ * Fast Promise check.
+ * Adheres to Promises/A+ standard (checking for `then` method).
  */
 export function isPromise<T>(value: unknown): value is Promise<T> {
-  return value != null && typeof (value as { then?: unknown }).then === 'function';
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    typeof (value as { then?: unknown }).then === 'function'
+  );
 }

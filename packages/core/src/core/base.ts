@@ -9,29 +9,43 @@ import { generateId } from '@/utils/debug';
  * Base class for all reactive nodes.
  */
 export class ReactiveNode {
+  /** Bitfield for state flags (DIRTY, VISITED, etc) */
   flags = 0;
+  /** Monotonic change counter */
   version = 0;
+  /** Epoch of last access/update */
   _lastSeenEpoch = -1;
+  /** Epoch of last modification (for cycle detection) */
   _modifiedAtEpoch = -1;
+  /** Unique ID for heap snapshots/debugging */
   readonly id: DependencyId = (generateId() & SMI_MAX) as DependencyId;
+  /** Transient slot for O(1) unsubscribing during link swaps */
   _tempUnsub: (() => void) | undefined = undefined;
 }
 
 /**
  * Abstract base class for reactive dependencies (Atoms, Computed).
+ * Handles the "Source" side of the dependency graph (managing subscribers).
  */
 export abstract class ReactiveDependency<T> extends ReactiveNode {
   protected abstract _subscribers: SubscriberLink<T>[];
 
+  /**
+   * Adds a subscriber (sink) to this dependency (source).
+   */
   subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
     const isFn = typeof listener === 'function';
+    // Structural type check for object subscribers
     if (!isFn && (!listener || typeof (listener as Subscriber).execute !== 'function')) {
       throw new AtomError(ERROR_MESSAGES.ATOM_SUBSCRIBER_MUST_BE_FUNCTION);
     }
 
     const subs = this._subscribers;
+
+    // De-duplication check (O(N) - usually N is small)
     for (let i = 0, len = subs.length; i < len; i++) {
-      const sub = subs[i]!;
+      const sub = subs[i];
+      if (!sub) continue;
       if (isFn ? sub.fn === listener : sub.sub === listener) {
         if (IS_DEV) console.warn('Duplicate subscription ignored.');
         return () => {};
@@ -54,12 +68,16 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
     const idx = subs.indexOf(link);
     if (idx === -1) return;
 
-    const last = subs.pop()!;
-    if (idx < subs.length) subs[idx] = last;
+    // Fast Remove (Swap & Pop) - O(1)
+    const last = subs.pop();
+    if (idx < subs.length && last) {
+      subs[idx] = last;
+    }
 
     if (subs.length === 0) {
       this.flags &= ~(NODE_FLAGS.HAS_FN_SUBS | NODE_FLAGS.HAS_OBJ_SUBS);
     } else {
+      // Re-scan flags if needed (rare path)
       this._updateSubscriberFlags(isFn);
     }
   }
@@ -67,14 +85,13 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
   private _updateSubscriberFlags(checkFn: boolean): void {
     const subs = this._subscribers;
     let hasType = false;
-
     for (let i = 0, len = subs.length; i < len; i++) {
-      if (checkFn ? subs[i]!.fn : subs[i]!.sub) {
+      const sub = subs[i];
+      if (sub && (checkFn ? sub.fn : sub.sub)) {
         hasType = true;
         break;
       }
     }
-
     if (!hasType) {
       this.flags &= checkFn ? ~NODE_FLAGS.HAS_FN_SUBS : ~NODE_FLAGS.HAS_OBJ_SUBS;
     }
@@ -88,8 +105,12 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
     if (!(this.flags & (NODE_FLAGS.HAS_FN_SUBS | NODE_FLAGS.HAS_OBJ_SUBS))) return;
 
     const subs = this._subscribers;
-    for (let i = 0; i < subs.length; i++) {
-      const s = subs[i]!;
+    const len = subs.length;
+
+    for (let i = 0; i < len; i++) {
+      const s = subs[i];
+      if (!s) continue;
+
       try {
         if (s.fn) s.fn(newValue, oldValue);
         else if (s.sub) s.sub.execute();

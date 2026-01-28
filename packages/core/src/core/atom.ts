@@ -14,7 +14,9 @@ const SUBS_MASK = ATOM_STATE_FLAGS.HAS_FN_SUBS | ATOM_STATE_FLAGS.HAS_OBJ_SUBS;
  */
 class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
   private _value: T;
+  /** Transient old value for sync notifications */
   private _pendingOldValue: T | undefined = undefined;
+  /** Cached closure for scheduler to avoid allocation per update */
   private _notifyTask: (() => void) | undefined = undefined;
   protected _subscribers: SubscriberLink<T>[] = [];
 
@@ -27,36 +29,50 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
 
   get value(): T {
     const current = trackingContext.current;
-    if (current) trackDependency(this, current, this._subscribers);
+    if (current) {
+      trackDependency(this, current, this._subscribers);
+    }
     return this._value;
   }
 
   set value(newValue: T) {
     const oldValue = this._value;
-    if (oldValue === newValue || Object.is(oldValue, newValue)) return;
+    if (Object.is(oldValue, newValue)) return;
 
     this._value = newValue;
     this.version = (this.version + 1) & SMI_MAX;
 
     const flags = this.flags;
-    if ((flags & SUBS_MASK) === 0 || flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED) return;
+    if ((flags & SUBS_MASK) === 0 || flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED) {
+      return;
+    }
 
     this._pendingOldValue = oldValue;
     this.flags = flags | ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
 
+    // Sync mode bypasses scheduler if not already batching
     if (flags & ATOM_STATE_FLAGS.SYNC && !scheduler.isBatching) {
       this._flushNotifications();
       return;
     }
 
-    if (!this._notifyTask) this._notifyTask = () => this._flushNotifications();
+    // Async scheduling (Lazy allocation of callback)
+    if (!this._notifyTask) {
+      // Arrow function captures `this` safely
+      this._notifyTask = () => this._flushNotifications();
+    }
     scheduler.schedule(this._notifyTask);
   }
 
+  /**
+   * Internal logic to actually trigger subscribers.
+   */
   private _flushNotifications(): void {
     const flags = this.flags;
-    if (!(flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED) || flags & ATOM_STATE_FLAGS.DISPOSED)
+    // Guard: Spurious flush or already disposed
+    if (!(flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED) || flags & ATOM_STATE_FLAGS.DISPOSED) {
       return;
+    }
 
     const oldValue = this._pendingOldValue as T;
     this._pendingOldValue = undefined;
@@ -74,6 +90,7 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
 
     this._subscribers.length = 0;
     this.flags |= ATOM_STATE_FLAGS.DISPOSED;
+    // Release references
     this._value = undefined as T;
     this._pendingOldValue = undefined;
     this._notifyTask = undefined;
