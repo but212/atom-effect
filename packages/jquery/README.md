@@ -11,7 +11,13 @@
 npm install @but212/atom-effect-jquery jquery
 ```
 
-### Usage (The "Aha!" Moment)
+### CDN
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.17.0"></script>
+```
+
+### Usage
 
 Instead of manually updating the DOM in 5 different places, you define the relationship **once**.
 

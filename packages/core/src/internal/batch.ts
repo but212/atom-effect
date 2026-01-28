@@ -1,13 +1,13 @@
 import { scheduler } from './scheduler';
 
 /**
- * Groups multiple state updates into a single re-render cycle.
+ * Batches updates.
  *
- * @param fn - The function to execute within the batch.
- * @returns The return value of `fn`.
+ * @param fn - Batch function.
+ * @returns - Result of `fn`.
  */
 export function batch<T>(fn: () => T): T {
-  // Safe-guard against non-function inputs in dev/runtime
+  // Validate callback
   if (typeof fn !== 'function') {
     throw new TypeError('Batch callback must be a function');
   }

@@ -1,9 +1,9 @@
 import type { ComputedAtom, EffectObject, ReadonlyAtom, WritableAtom } from '@/types';
 
 /**
- * Checks if the given object conforms to the ReadonlyAtom interface.
+ * Readonly atom check.
  *
- * @param obj - The object to inspect.
+ * @param obj - Object to check.
  */
 export function isAtom(obj: unknown): obj is ReadonlyAtom {
   return (
@@ -15,26 +15,21 @@ export function isAtom(obj: unknown): obj is ReadonlyAtom {
 }
 
 /**
- * Checks if the given object is a WritableAtom.
- * Extends `isAtom` check with `dispose` verification.
+ * Writable atom check.
  */
 export function isWritable(obj: unknown): obj is WritableAtom {
   return isAtom(obj) && typeof (obj as { dispose?: unknown }).dispose === 'function';
 }
 
 /**
- * Checks if the given object is a ComputedAtom.
- * Verifies it has an `invalidate` method in addition to atom properties.
- *
- * Note: We avoid relying on internal debug flags here to keep this pure and fast.
+ * Computed atom check.
  */
 export function isComputed(obj: unknown): obj is ComputedAtom {
   return isAtom(obj) && typeof (obj as { invalidate?: unknown }).invalidate === 'function';
 }
 
 /**
- * Checks if the given object is an EffectObject.
- * Verifies existence of `dispose` and `run` methods.
+ * Effect object check.
  */
 export function isEffect(obj: unknown): obj is EffectObject {
   return (
@@ -46,8 +41,7 @@ export function isEffect(obj: unknown): obj is EffectObject {
 }
 
 /**
- * Fast Promise check.
- * Adheres to Promises/A+ standard (checking for `then` method).
+ * Promise check.
  */
 export function isPromise<T>(value: unknown): value is Promise<T> {
   return (

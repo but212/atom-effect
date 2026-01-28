@@ -2,25 +2,22 @@ import type { AsyncState } from '@/constants';
 import type { DependencyLink } from '@/core/dep-tracking';
 
 /**
- * Represents a brand for "Nominal Typing" to prevent accidental type aliasing.
- * @template T - The base type.
- * @template Brand - The unique brand string.
+ * Nominal type brand.
  */
 export type Branded<T, Brand> = T & { readonly __brand: Brand };
 
 /**
- * Unique identifier for dependencies in the reactive graph.
- * Uses nominal typing to prevent mixing up IDs with other numbers.
+ * Dependency ID.
  */
 export type DependencyId = Branded<number, 'DependencyId'>;
 
 /**
- * Represents the async state enum values.
+ * Async state values.
  */
 export type AsyncStateType = (typeof AsyncState)[keyof typeof AsyncState];
 
 /**
- * Common options for defining an Atom.
+ * Atom options.
  */
 export interface AtomOptions {
   /** If true, subscribers are notified synchronously. Default: false (microtask scheduled). */
@@ -28,8 +25,7 @@ export interface AtomOptions {
 }
 
 /**
- * The fundamental unit of state.
- * @template T - The type of value held by the atom.
+ * Readonly atom interface.
  */
 export interface ReadonlyAtom<T = unknown> {
   /** The current value of the atom. */
@@ -43,14 +39,13 @@ export interface ReadonlyAtom<T = unknown> {
   subscribe(listener: (newValue?: T, oldValue?: T) => void): () => void;
 
   /**
-   * Reads the value without registering a dependency (non-reactive read).
+   * Non-reactive read.
    */
   peek(): T;
 }
 
 /**
- * A mutable atom that can be updated.
- * @template T - The type of value held by the atom.
+ * Writable atom interface.
  */
 export interface WritableAtom<T = unknown> extends ReadonlyAtom<T> {
   value: T;
@@ -61,25 +56,24 @@ export interface WritableAtom<T = unknown> extends ReadonlyAtom<T> {
 }
 
 /**
- * Interface for objects that participate in the dependency graph.
- * This is the low-level contract for the reactivity engine.
+ * Dependency interface.
  */
 export interface Dependency {
   readonly id: DependencyId;
 
-  /** Internal version counter for dirty checking. */
+  /** Version counter. */
   version: number;
 
-  /** Bitwise flags for state (DIRTY, PENDING, etc.). */
+  /** State flags. */
   flags: number;
 
-  /** The epoch (global version) when this dependency was last fully validated. */
+  /** Last validated epoch. */
   _lastSeenEpoch: number;
 
-  /** Temporary unsubscribe function used during graph tracking. */
+  /** Temporary unsubscribe. */
   _tempUnsub?: (() => void) | undefined;
 
-  /** The epoch when this dependency was last modified. */
+  /** Last modified epoch. */
   _modifiedAtEpoch?: number;
 
   /**
@@ -88,47 +82,45 @@ export interface Dependency {
    */
   subscribe(listener: (() => void) | Subscriber): () => void;
 
-  /** Optional hook for non-reactive reads. */
+  /** Peek hook. */
   peek?(): unknown;
 
-  /** Raw value accessor. */
+  /** Value accessor. */
   value?: unknown;
 }
 
 /**
- * Represents an entry in a Reactivity Graph.
- * Uses WeakRef to prevent memory leaks in the graph structure.
+ * Graph entry.
  */
 export interface DependencyEntry<T extends object = Dependency> {
-  /** Weak reference to the target dependency. */
+  /** Dependency reference. */
   ref: WeakRef<T>;
   unsubscribe: () => void;
 }
 
 /**
- * Lightweight interface for object pooling.
+ * Poolable interface.
  */
 export interface Poolable {
   reset(): void;
 }
 
 /**
- * Configuration for Computed Atoms.
+ * Computed options.
  */
 export interface ComputedOptions<T = unknown> {
-  /** Custom equality check to prevent unnecessary updates. */
+  /** Equality check. */
   equal?: (a: T, b: T) => boolean;
-  /** Initial value before first computation (mostly for async). */
+  /** Initial value. */
   defaultValue?: T;
-  /** If true, value is not computed until read. Default: false (eager). */
+  /** Lazy evaluation. */
   lazy?: boolean;
-  /** Error handler for computation failures. */
+  /** Error handler. */
   onError?: (error: Error) => void;
 }
 
 /**
- * A Computed Atom (derived state).
- * Can be synchronous or asynchronous.
+ * Computed atom interface.
  */
 export interface ComputedAtom<T = unknown> extends ReadonlyAtom<T> {
   readonly state: AsyncStateType;
@@ -143,14 +135,13 @@ export interface ComputedAtom<T = unknown> extends ReadonlyAtom<T> {
   /** List of errors encountered during computation. */
   readonly errors: readonly Error[];
 
-  /** Forces the computed to re-evaluate on next read. */
+  /** Invalidates atom. */
   invalidate(): void;
   dispose(): void;
 }
 
 /**
- * Context for a computation run.
- * Tracks dependencies accessed during execution.
+ * Computation context.
  */
 export interface ComputationContext {
   links: DependencyLink[];
@@ -168,7 +159,7 @@ export interface IScheduler<T> {
 }
 
 /**
- * Internal interface for atoms within the scheduler.
+ * Scheduler atom interface.
  */
 export interface IAtom {
   readonly id: number;
@@ -178,8 +169,7 @@ export interface IAtom {
 }
 
 /**
- * Return type helper for effects.
- * Supports: void, cleanup function, or Promise (async effects).
+ * Effect return type.
  */
 export type EffectFunction = () => void | (() => void) | Promise<undefined | (() => void)>;
 

@@ -1,19 +1,17 @@
 import { IS_DEV, SMI_MAX } from '@/constants';
 
-// The heartbeat of the reactivity system.
-// Monotonically increasing counter used for dirty checking without deeper comparisons.
+// Global epoch counter.
 let collectorEpoch = 0;
 
 /**
- * Increments and returns the next tracking epoch.
- * Handles integer overflow by wrapping around SMI_MAX, but ensures it never hits 0 (reserved).
+ * Next tracking epoch.
  */
 export const nextEpoch = () => {
   collectorEpoch = (collectorEpoch + 1) & SMI_MAX || 1;
   return collectorEpoch;
 };
 
-/** Returns the current tracking epoch. */
+/** Current tracking epoch. */
 export const currentEpoch = () => collectorEpoch;
 
 export let flushEpoch = 0;
@@ -21,8 +19,7 @@ export let flushExecutionCount = 0;
 let isFlushing = false;
 
 /**
- * Starts a new scheduler flush cycle.
- * Returns true if a new cycle was successfully started (i.e., not already flushing).
+ * Starts flush cycle.
  */
 export function startFlush(): boolean {
   if (isFlushing) {
@@ -36,20 +33,18 @@ export function startFlush(): boolean {
   return true;
 }
 
-/** Ends the current scheduler flush cycle. */
+/** Ends flush cycle. */
 export const endFlush = () => {
   isFlushing = false;
 };
 
 /**
- * Increments the global execution count for loop detection.
- * Used during `Effect` execution to detect runaway cascades.
+ * Increments execution count.
  */
 export const incrementFlushExecutionCount = () => (isFlushing ? ++flushExecutionCount : 0);
 
 /**
- * Hard reset of the flush state.
- * Strictly primarily for testing state isolation.
+ * Resets flush state.
  */
 export function resetFlushState(): void {
   flushEpoch = 0;

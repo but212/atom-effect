@@ -7,8 +7,7 @@ export const TIME_CONSTANTS = {
 } as const;
 
 /**
- * Standardized Async Life-cycle States.
- * Represents the finite state machine of an asynchronous operation.
+ * Async operation states.
  */
 export const AsyncState = {
   IDLE: 'idle',
@@ -18,8 +17,7 @@ export const AsyncState = {
 } as const;
 
 /**
- * Base Node Flags (3 bits).
- * Common properties for all reactor nodes (Atoms, Effects, etc).
+ * Base Node Flags.
  */
 export const NODE_FLAGS = {
   DISPOSED: 1 << 0,
@@ -28,8 +26,7 @@ export const NODE_FLAGS = {
 } as const;
 
 /**
- * Effect-specific Flags.
- * Extends Node Flags.
+ * Effect flags.
  */
 export const EFFECT_STATE_FLAGS = {
   ...NODE_FLAGS,
@@ -37,9 +34,7 @@ export const EFFECT_STATE_FLAGS = {
 } as const;
 
 /**
- * Computed Atom Flags.
- * Extends Node Flags.
- * Handles dirty checking, caching, and async states efficiently in a single integer.
+ * Computed flags.
  */
 export const COMPUTED_STATE_FLAGS = {
   ...NODE_FLAGS,
@@ -54,7 +49,6 @@ export const COMPUTED_STATE_FLAGS = {
 
 /**
  * Writable Atom Flags.
- * Extends Node Flags.
  */
 export const ATOM_STATE_FLAGS = {
   ...NODE_FLAGS,
@@ -63,8 +57,7 @@ export const ATOM_STATE_FLAGS = {
 } as const;
 
 /**
- * Array Pool Configuration.
- * Tuned to balance memory footprint vs allocation churn.
+ * Array pool configuration.
  */
 export const POOL_CONFIG = {
   MAX_SIZE: 1000,
@@ -72,11 +65,10 @@ export const POOL_CONFIG = {
 } as const;
 
 /**
- * Scheduler Layout & Backpressure Configuration.
- * These values determine how the event loop determines "work units".
+ * Scheduler configuration.
  */
 export const SCHEDULER_CONFIG = {
-  // Safety valves for infinite loops
+  // Infinite loop protection
   MAX_EXECUTIONS_PER_SECOND: 1000,
   MAX_EXECUTIONS_PER_EFFECT: 100,
 
@@ -99,16 +91,12 @@ export const DEBUG_CONFIG = {
 } as const;
 
 /**
- * V8 Small Integer (SMI) optimization boundary.
- * Integers smaller than this value are stored directly on the stack/register without boxing.
- * 31-bit signed integer on 32-bit systems (usually safe assumption for V8 SMI).
+ * V8 Small Integer (SMI) max value.
  */
 export const SMI_MAX = 0x3fffffff;
 
 /**
- * Universal Environment Flag.
- * Replaced at build-time by bundlers (Vite, Webpack), or detected at runtime as fallback.
- * Used to strip dev-only code paths in production (Tree Shaking).
+ * Development environment flag.
  */
 export const IS_DEV =
   (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production') ||

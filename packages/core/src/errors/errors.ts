@@ -1,6 +1,5 @@
 /**
- * Base error class for all atom-effect errors.
- * Tracks original cause, recoverability, and timestamp.
+ * Base error class.
  */
 export class AtomError extends Error {
   readonly timestamp = new Date();
@@ -15,7 +14,7 @@ export class AtomError extends Error {
   }
 }
 
-/** Error thrown during computed value computation (recoverable). */
+/** Computed error. */
 export class ComputedError extends AtomError {
   constructor(message: string, cause: Error | null = null) {
     super(message, cause, true);
@@ -23,7 +22,7 @@ export class ComputedError extends AtomError {
   }
 }
 
-/** Error thrown during effect execution (non-recoverable). */
+/** Effect error. */
 export class EffectError extends AtomError {
   constructor(message: string, cause: Error | null = null) {
     super(message, cause, false);
@@ -31,7 +30,7 @@ export class EffectError extends AtomError {
   }
 }
 
-/** Error thrown by the scheduler system (non-recoverable). */
+/** Scheduler error. */
 export class SchedulerError extends AtomError {
   constructor(message: string, cause: Error | null = null) {
     super(message, cause, false);
