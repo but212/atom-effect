@@ -7,22 +7,23 @@ export const AsyncState = {
   REJECTED: 'rejected',
 } as const;
 
-export const NODE_FLAGS = { DISPOSED: 1, HAS_FN_SUBS: 2, HAS_OBJ_SUBS: 4 } as const;
-
-export const EFFECT_STATE_FLAGS = { ...NODE_FLAGS, EXECUTING: 8 } as const;
-
+export const NODE_FLAGS = { DISPOSED: 1 << 0, HAS_FN_SUBS: 1 << 1, HAS_OBJ_SUBS: 1 << 2 } as const;
+export const EFFECT_STATE_FLAGS = { ...NODE_FLAGS, EXECUTING: 1 << 3 } as const;
 export const COMPUTED_STATE_FLAGS = {
   ...NODE_FLAGS,
-  DIRTY: 8,
-  IDLE: 16,
-  PENDING: 32,
-  RESOLVED: 64,
-  REJECTED: 128,
-  RECOMPUTING: 256,
-  HAS_ERROR: 512,
+  DIRTY: 1 << 3,
+  IDLE: 1 << 4,
+  PENDING: 1 << 5,
+  RESOLVED: 1 << 6,
+  REJECTED: 1 << 7,
+  RECOMPUTING: 1 << 8,
+  HAS_ERROR: 1 << 9,
 } as const;
-
-export const ATOM_STATE_FLAGS = { ...NODE_FLAGS, SYNC: 8, NOTIFICATION_SCHEDULED: 16 } as const;
+export const ATOM_STATE_FLAGS = {
+  ...NODE_FLAGS,
+  SYNC: 1 << 3,
+  NOTIFICATION_SCHEDULED: 1 << 4,
+} as const;
 
 export const POOL_CONFIG = { MAX_SIZE: 1000, WARMUP_SIZE: 100 } as const;
 
