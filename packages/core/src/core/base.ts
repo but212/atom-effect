@@ -30,6 +30,11 @@ export class ReactiveNode {
 export abstract class ReactiveDependency<T> extends ReactiveNode {
   protected abstract _subscribers: SubscriberLink<T>[];
 
+  /** @internal */
+  public _fnSubCount = 0;
+  /** @internal */
+  public _objSubCount = 0;
+
   /**
    * Adds a subscriber (sink) to this dependency (source).
    */
@@ -58,12 +63,18 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
     );
 
     subs.push(link);
-    this.flags |= isFn ? NODE_FLAGS.HAS_FN_SUBS : NODE_FLAGS.HAS_OBJ_SUBS;
+    if (isFn) {
+      this._fnSubCount++;
+      this.flags |= NODE_FLAGS.HAS_FN_SUBS;
+    } else {
+      this._objSubCount++;
+      this.flags |= NODE_FLAGS.HAS_OBJ_SUBS;
+    }
 
-    return () => this._unsubscribe(link, isFn);
+    return () => this._unsubscribe(link);
   }
 
-  private _unsubscribe(link: SubscriberLink<T>, isFn: boolean): void {
+  private _unsubscribe(link: SubscriberLink<T>): void {
     const subs = this._subscribers;
     const idx = subs.indexOf(link);
     if (idx === -1) return;
@@ -74,26 +85,22 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
       subs[idx] = last;
     }
 
+    if (link.fn) {
+      this._fnSubCount--;
+    } else {
+      this._objSubCount--;
+    }
+
     if (subs.length === 0) {
       this.flags &= ~(NODE_FLAGS.HAS_FN_SUBS | NODE_FLAGS.HAS_OBJ_SUBS);
-    } else {
-      // Re-scan flags if needed (rare path)
-      this._updateSubscriberFlags(isFn);
-    }
-  }
-
-  private _updateSubscriberFlags(checkFn: boolean): void {
-    const subs = this._subscribers;
-    let hasType = false;
-    for (let i = 0, len = subs.length; i < len; i++) {
-      const sub = subs[i];
-      if (sub && (checkFn ? sub.fn : sub.sub)) {
-        hasType = true;
-        break;
-      }
-    }
-    if (!hasType) {
-      this.flags &= checkFn ? ~NODE_FLAGS.HAS_FN_SUBS : ~NODE_FLAGS.HAS_OBJ_SUBS;
+      this._fnSubCount = 0;
+      this._objSubCount = 0;
+    } else if (link.fn && this._fnSubCount <= 0) {
+      this.flags &= ~NODE_FLAGS.HAS_FN_SUBS;
+      this._fnSubCount = 0;
+    } else if (!link.fn && this._objSubCount <= 0) {
+      this.flags &= ~NODE_FLAGS.HAS_OBJ_SUBS;
+      this._objSubCount = 0;
     }
   }
 
