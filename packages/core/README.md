@@ -1,8 +1,5 @@
 # @but212/atom-effect
 
-> **A glitch-free, async-first reactivity system for modern web applications.**  
-> Small enough to fit in your head, powerful enough to drive complex UIs.
-
 [![npm version](https://img.shields.io/npm/v/@but212/atom-effect.svg)](https://www.npmjs.com/package/@but212/atom-effect)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 

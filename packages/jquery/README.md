@@ -1,8 +1,5 @@
 # @but212/atom-effect-jquery
 
-> **Bring modern, fine-grained reactivity to your legacy jQuery codebase.**  
-> Stop writing spaghetti code `$('#...').val(...)` callbacks. Bind your state once, and let it update the DOM automatically.
-
 [![npm version](https://img.shields.io/npm/v/@but212/atom-effect-jquery.svg)](https://www.npmjs.com/package/@but212/atom-effect-jquery)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
