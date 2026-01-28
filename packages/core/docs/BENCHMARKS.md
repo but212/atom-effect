@@ -129,7 +129,7 @@ Benchmark results show:
 ## Latest Results (v0.17.0)
 
 **Date**: 2026-01-28  
-**Environment**: Local Windows Environment, Node.js, V8 Engine  
+**Environment**: GitHub Actions, Node.js, V8 Engine  
 
 > *Note: These numbers represent pure engine throughput in isolation. Actual app performance often depends on external factors like DOM updates and layout.*
 
