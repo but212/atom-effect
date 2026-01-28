@@ -6,14 +6,6 @@
 [![npm version](https://img.shields.io/npm/v/@but212/atom-effect-jquery.svg)](https://www.npmjs.com/package/@but212/atom-effect-jquery)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## Why this exists
-
-You have a massive jQuery application.
-
-- **Problem**: Syncing state between multiple DOM elements is a nightmare of event handlers and `.text()` calls.
-- **Solution**: Use `atom` for state, and bind it directly to DOM elements. The DOM updates automatically when state changes.
-- **Bonus**: Automatic cleanup when elements are removed (via `$.cleanData`).
-
 ## Quick Start
 
 ### Installation

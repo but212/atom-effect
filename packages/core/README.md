@@ -6,14 +6,6 @@
 [![npm version](https://img.shields.io/npm/v/@but212/atom-effect.svg)](https://www.npmjs.com/package/@but212/atom-effect)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## Why @but212/atom-effect?
-
-Modern reactivity often forces a choice: **Magic vs. Verbosity** or **Sync vs. Async**.
-
-- **State shouldn't be a black box.** We avoid "proxies doing magic" in favor of explicit `atom` and `computed`.
-- **Async shouldn't be an afterthought.** `computed` handles Promises natively, with race-condition protection and correct error propagation.
-- **Glitch-free by design.** Our epoch-based propagation ensures you never see a stale or inconsistent state, even in complex diamond dependencies.
-
 ## Quick Start
 
 ### Installation
