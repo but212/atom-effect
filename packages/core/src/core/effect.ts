@@ -66,6 +66,10 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     debug.attachDebugInfo(this, 'effect', this.id);
   }
 
+  /**
+   * Manually runs the effect.
+   * Throws an error if the effect is already disposed.
+   */
   public run(): void {
     if (this.flags & EFFECT_STATE_FLAGS.DISPOSED)
       throw new EffectError(ERROR_MESSAGES.EFFECT_DISPOSED);
@@ -82,6 +86,10 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     this._cleanup = null;
   }
 
+  /**
+   * Disposes the effect, stopping it from tracking dependencies and running.
+   * Cleans up all subscriptions and internal state.
+   */
   public dispose(): void {
     if (this.flags & EFFECT_STATE_FLAGS.DISPOSED) return;
     this.flags |= EFFECT_STATE_FLAGS.DISPOSED;
@@ -125,6 +133,11 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     }
   }
 
+  /**
+   * Executes the effect function and tracks its dependencies.
+   *
+   * @param force - If true, execution proceeds even if dependencies haven't changed.
+   */
   public execute(force = false): void {
     if (this.flags & (EFFECT_STATE_FLAGS.DISPOSED | EFFECT_STATE_FLAGS.EXECUTING)) return;
     if (!force && this._links.length > 0 && !this._isDirty()) return;

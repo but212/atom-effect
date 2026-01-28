@@ -13,6 +13,10 @@ export interface SchedulerJob {
   _nextEpoch?: number;
 }
 
+/**
+ * Scheduling engine for reactive updates.
+ * Manages task queues, batching, and flushing of effects and notifications.
+ */
 class Scheduler {
   private readonly _queueBuffer: [SchedulerJob[], SchedulerJob[]] = [[], []];
   private _bufferIndex = 0;
@@ -40,6 +44,12 @@ class Scheduler {
     return this._isBatching;
   }
 
+  /**
+   * Schedules a job to be executed.
+   * If batching, adds to the batch queue. Otherwise, schedules a flush.
+   *
+   * @param callback - The function to be executed.
+   */
   schedule(callback: SchedulerJob): void {
     if (IS_DEV && typeof callback !== 'function')
       throw new SchedulerError('Scheduler callback must be a function');
@@ -57,6 +67,10 @@ class Scheduler {
     if (!this._isProcessing) this.flush();
   }
 
+  /**
+   * Triggers the execution of scheduled jobs.
+   * Uses microtasks to ensure async execution.
+   */
   private flush(): void {
     if (this._isProcessing || this._size === 0) return;
     this._isProcessing = true;
@@ -149,11 +163,19 @@ class Scheduler {
     this._batchQueueSize = 0;
   }
 
+  /**
+   * Starts a batching scope.
+   * Updates scheduled within a batch are deferred until the batch ends.
+   */
   startBatch(): void {
     this._batchDepth++;
     this._isBatching = true;
   }
 
+  /**
+   * Ends a batching scope.
+   * If the batch depth reaches zero, pending updates are flushed synchronously.
+   */
   endBatch(): void {
     if (this._batchDepth === 0) {
       if (IS_DEV) console.warn('endBatch() called without matching startBatch(). Ignoring.');

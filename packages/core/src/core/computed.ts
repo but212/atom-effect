@@ -91,6 +91,11 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     if (current) trackDependency(this, current, this._subscribers);
   }
 
+  /**
+   * Retrieves the computed value.
+   * If the value is dirty or computed for the first time, it re-evaluates.
+   * Tracks dependencies if called within a reactive context.
+   */
   get value(): T {
     this._track();
 
@@ -136,10 +141,17 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     return this._value;
   }
 
+  /**
+   * Returns the current value without triggering re-evaluation or dependency tracking.
+   * Note: This may return a stale value if the computed is dirty.
+   */
   peek(): T {
     return this._value;
   }
 
+  /**
+   * Gets the current async state of the computed value (IDLE, PENDING, RESOLVED, REJECTED).
+   */
   get state(): AsyncStateType {
     this._track();
     return ASYNC_STATE_LOOKUP[this.flags & ASYNC_STATE_MASK];
@@ -204,12 +216,18 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     return (this.flags & COMPUTED_STATE_FLAGS.RESOLVED) !== 0;
   }
 
+  /**
+   * Manually invalidates the computed value, forcing it to be re-evaluated on next access.
+   */
   invalidate(): void {
     this._markDirty();
     this._errorCacheEpoch = -1;
     this._cachedErrors = null;
   }
 
+  /**
+   * Disposes the computed atom, stopping dependency tracking and clearing state.
+   */
   dispose(): void {
     if (this.flags & COMPUTED_STATE_FLAGS.DISPOSED) return;
 
