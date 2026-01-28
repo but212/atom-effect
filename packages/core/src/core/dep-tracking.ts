@@ -1,5 +1,5 @@
 import { NODE_FLAGS } from '@/constants';
-import type { DependencySubscriber } from '@/tracking/tracking.types';
+import type { DependencySubscriber, Listener } from '@/tracking/tracking.types';
 import type { Dependency, Subscriber } from '@/types';
 import { debug } from '@/utils/debug';
 
@@ -8,18 +8,15 @@ import { debug } from '@/utils/debug';
  */
 export function trackDependency<T>(
   dependency: Dependency,
-  current: unknown,
+  current: Listener,
   subscribers: SubscriberLink<T>[]
 ): void {
-  if (!current) return;
-
-  // 1. DependencySubscriber path (Computed, Effect)
-  if ('addDependency' in (current as DependencySubscriber)) {
-    (current as DependencySubscriber).addDependency(dependency);
+  const tracker = current as Partial<DependencySubscriber>;
+  if (typeof tracker.addDependency === 'function') {
+    tracker.addDependency(dependency);
     return;
   }
 
-  // 2. Manual function listeners
   if (typeof current === 'function') {
     const fn = current as (newValue?: T, oldValue?: T) => void;
     for (let i = 0, len = subscribers.length; i < len; i++) {
@@ -30,9 +27,8 @@ export function trackDependency<T>(
     return;
   }
 
-  // 3. Subscriber objects with 'execute' method
-  const sub = current as Subscriber;
-  if ('execute' in sub) {
+  if ('execute' in current && typeof current.execute === 'function') {
+    const sub = current as Subscriber;
     for (let i = 0, len = subscribers.length; i < len; i++) {
       if (subscribers[i]!.sub === sub) return;
     }
@@ -50,13 +46,10 @@ export function syncDependencies(
   prevLinks: DependencyLink[],
   tracker: Subscriber
 ): void {
-  // 1. Mark existing dependencies
   for (let i = 0, len = prevLinks.length; i < len; i++) {
     const link = prevLinks[i];
     if (link) link.node._tempUnsub = link.unsub;
   }
-
-  // 2. Process new dependencies (Sweep/Reuse)
   for (let i = 0, len = nextLinks.length; i < len; i++) {
     const link = nextLinks[i];
     if (!link) continue;
@@ -70,7 +63,6 @@ export function syncDependencies(
     }
   }
 
-  // 3. Cleanup removed dependencies
   for (let i = 0, len = prevLinks.length; i < len; i++) {
     const link = prevLinks[i];
     if (link) {
@@ -96,7 +88,8 @@ export class DependencyLink {
 }
 
 /**
- * Encapsulates a link to a subscriber (either function or object).
+ * Encapsulates a link to a subscriber.
+ * Why: Flat object structure optimized for memory usage (V8 hidden classes).
  */
 export class SubscriberLink<T> {
   constructor(

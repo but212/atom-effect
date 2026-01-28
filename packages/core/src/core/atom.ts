@@ -6,11 +6,11 @@ import { trackingContext } from '@/tracking';
 import type { AtomOptions, WritableAtom } from '@/types';
 import { debug } from '@/utils/debug';
 
+// Pre-compute mask to avoid repeated bitwise operations during rapid updates
 const SUBS_MASK = ATOM_STATE_FLAGS.HAS_FN_SUBS | ATOM_STATE_FLAGS.HAS_OBJ_SUBS;
 
 /**
  * Internal {@link WritableAtom} implementation.
- * Extends {@link ReactiveDependency} to provide reactive state that can be observed and updated.
  */
 class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
   private _value: T;
@@ -25,21 +25,12 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
     debug.attachDebugInfo(this, 'atom', this.id);
   }
 
-  /**
-   * Gets the current value of the atom.
-   * If called within a reactive context (e.g., inside an effect or computed),
-   * this atom will be tracked as a dependency.
-   */
   get value(): T {
     const current = trackingContext.current;
     if (current) trackDependency(this, current, this._subscribers);
     return this._value;
   }
 
-  /**
-   * Sets a new value for the atom.
-   * If the value has changed, it will schedule notifications for all dependent subscribers.
-   */
   set value(newValue: T) {
     const oldValue = this._value;
     if (oldValue === newValue || Object.is(oldValue, newValue)) return;
@@ -74,18 +65,10 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
     this._notifySubscribers(this._value, oldValue);
   }
 
-  /**
-   * Returns the current value without tracking it as a dependency.
-   * Useful for reading value inside effects without triggering re-execution.
-   */
   peek(): T {
     return this._value;
   }
 
-  /**
-   * Disposes the atom, releasing all subscribers and clearing internal state.
-   * Once disposed, the atom should not be used.
-   */
   dispose(): void {
     if (this.flags & ATOM_STATE_FLAGS.DISPOSED) return;
 

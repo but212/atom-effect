@@ -23,6 +23,10 @@
   - **JSDoc Optimization**: Removed verbose JSDoc from internal constants and implementation details (`constants`, `types`, `errors`) while enhancing public API documentation (`Atom`, `Computed`, `Effect`) for better IDE support.
   - **Source Condensation**: Simplified `ArrayPool`, `debug`, and `Error` classes using arrow functions and concise logic.
   - **Constant Inlining**: Replaced runtime bit-shift calculations with hardcoded integer literals for flags (`DIRTY: 8`) to improve startup time and code separation.
+- **Internal Refactoring**:
+  - **Method Extraction**: Decomposed `Effect.execute` and `ReactiveDependency.subscribe` into granular helpers (`_unsubscribe`, `_handleAsyncResult`, `_finalizeDependencies`) to reduce cyclomatic complexity.
+  - **Bitwise Optimization**: Pre-computed `SUBS_MASK` in `Atom` to reduce runtime bitwise operations.
+  - **Type Safety**: Strengthened error type checking in `Computed` and optimized `trackDependency` checks.
 
 #### Added
 

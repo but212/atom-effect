@@ -18,8 +18,7 @@ import { wrapError } from '@/utils/error';
 import { isPromise } from '@/utils/type-guards';
 
 /**
- * Internal effect implementation with dependency tracking and infinite loop detection.
- * Extends {@link ReactiveNode} and implements {@link EffectObject} and {@link DependencyTracker}.
+ * Internal effect implementation with dependency tracking.
  */
 class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker {
   private _cleanup: (() => void) | null = null;
@@ -29,6 +28,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 
   private readonly _onError: ((error: unknown) => void) | null;
 
+  // Cycle detection state
   private _currentEpoch = -1;
   private _lastFlushEpoch = -1;
   private _executionsInEpoch = 0;
@@ -39,6 +39,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   private readonly _maxExecutionsPerFlush: number;
   private readonly _trackModifications: boolean;
 
+  // Dev-only history for frequency detection
   private _history: number[] | null;
   private _executionCount = 0;
   private _historyPtr = 0;
@@ -66,44 +67,19 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     debug.attachDebugInfo(this, 'effect', this.id);
   }
 
-  /**
-   * Manually runs the effect.
-   * Throws an error if the effect is already disposed.
-   */
   public run(): void {
     if (this.flags & EFFECT_STATE_FLAGS.DISPOSED)
       throw new EffectError(ERROR_MESSAGES.EFFECT_DISPOSED);
     this.execute(true);
   }
 
-  private _execCleanup(): void {
-    if (!this._cleanup) return;
-    try {
-      this._cleanup();
-    } catch (error) {
-      this._handleExecutionError(error, ERROR_MESSAGES.EFFECT_CLEANUP_FAILED);
-    }
-    this._cleanup = null;
-  }
-
-  /**
-   * Disposes the effect, stopping it from tracking dependencies and running.
-   * Cleans up all subscriptions and internal state.
-   */
   public dispose(): void {
     if (this.flags & EFFECT_STATE_FLAGS.DISPOSED) return;
     this.flags |= EFFECT_STATE_FLAGS.DISPOSED;
 
     this._execCleanup();
-
-    const links = this._links;
-    if (links !== EMPTY_LINKS) {
-      for (let i = 0, len = links.length; i < len; i++) {
-        links[i]!.unsub?.();
-      }
-      linksArrayPool.release(links);
-      this._links = EMPTY_LINKS;
-    }
+    this._releaseLinks(this._links);
+    this._links = EMPTY_LINKS;
     this._executeTask = undefined;
   }
 
@@ -135,8 +111,6 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 
   /**
    * Executes the effect function and tracks its dependencies.
-   *
-   * @param force - If true, execution proceeds even if dependencies haven't changed.
    */
   public execute(force = false): void {
     if (this.flags & (EFFECT_STATE_FLAGS.DISPOSED | EFFECT_STATE_FLAGS.EXECUTING)) return;
@@ -155,6 +129,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       }
     }
 
+    // Prepare new tracking state
     const nextLinks = linksArrayPool.acquire();
     this._nextLinks = nextLinks;
     this._currentEpoch = nextEpoch();
@@ -166,25 +141,10 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       committed = true;
 
       this._checkLoopWarnings();
-      const execId = ++this._execId;
 
+      // Handle Result (Sync vs Async)
       if (isPromise(result)) {
-        result.then(
-          (cleanup) => {
-            if (execId !== this._execId || this.flags & EFFECT_STATE_FLAGS.DISPOSED) {
-              if (typeof cleanup === 'function') {
-                try {
-                  cleanup();
-                } catch (e) {
-                  this._handleExecutionError(e, ERROR_MESSAGES.EFFECT_CLEANUP_FAILED);
-                }
-              }
-              return;
-            }
-            if (typeof cleanup === 'function') this._cleanup = cleanup;
-          },
-          (err) => execId === this._execId && this._handleExecutionError(err)
-        );
+        this._handleAsyncResult(result);
       } else {
         this._cleanup = typeof result === 'function' ? result : null;
       }
@@ -193,31 +153,68 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       this._handleExecutionError(error);
       this._cleanup = null;
     } finally {
-      this._nextLinks = null;
-      if (committed) {
-        if (prevLinks !== EMPTY_LINKS) {
-          for (let i = 0, len = prevLinks.length; i < len; i++) {
-            const link = prevLinks[i];
-            const unsub = link?.node._tempUnsub;
-            if (unsub) {
-              unsub();
-              if (link) link.node._tempUnsub = undefined;
+      this._finalizeDependencies(committed, prevLinks, nextLinks);
+      this.flags &= ~EFFECT_STATE_FLAGS.EXECUTING;
+    }
+  }
+
+  private _handleAsyncResult(promise: Promise<unknown>): void {
+    const execId = ++this._execId;
+    promise.then(
+      (cleanup) => {
+        if (execId !== this._execId || this.flags & EFFECT_STATE_FLAGS.DISPOSED) {
+          if (typeof cleanup === 'function') {
+            try {
+              cleanup();
+            } catch (e) {
+              this._handleExecutionError(e, ERROR_MESSAGES.EFFECT_CLEANUP_FAILED);
             }
           }
-          linksArrayPool.release(prevLinks);
+          return;
         }
-      } else {
-        for (let i = 0, len = nextLinks.length; i < len; i++) nextLinks[i]?.unsub?.();
-        linksArrayPool.release(nextLinks);
-        if (prevLinks !== EMPTY_LINKS) {
-          for (let i = 0, len = prevLinks.length; i < len; i++) {
-            const link = prevLinks[i];
+        if (typeof cleanup === 'function') this._cleanup = cleanup as () => void;
+      },
+      (err) => execId === this._execId && this._handleExecutionError(err)
+    );
+  }
+
+  private _finalizeDependencies(
+    committed: boolean,
+    prevLinks: DependencyLink[],
+    nextLinks: DependencyLink[]
+  ): void {
+    this._nextLinks = null;
+
+    if (committed) {
+      if (prevLinks !== EMPTY_LINKS) {
+        for (let i = 0, len = prevLinks.length; i < len; i++) {
+          const link = prevLinks[i];
+          const unsub = link?.node._tempUnsub;
+          if (unsub) {
+            unsub();
             if (link) link.node._tempUnsub = undefined;
           }
         }
+        linksArrayPool.release(prevLinks);
       }
-      this.flags &= ~EFFECT_STATE_FLAGS.EXECUTING;
+    } else {
+      this._releaseLinks(nextLinks);
+      linksArrayPool.release(nextLinks);
+
+      if (prevLinks !== EMPTY_LINKS) {
+        for (let i = 0, len = prevLinks.length; i < len; i++) {
+          if (prevLinks[i]) prevLinks[i]!.node._tempUnsub = undefined;
+        }
+      }
     }
+  }
+
+  private _releaseLinks(links: DependencyLink[]): void {
+    if (links === EMPTY_LINKS) return;
+    for (let i = 0, len = links.length; i < len; i++) {
+      links[i]?.unsub?.();
+    }
+    linksArrayPool.release(links);
   }
 
   private _isDirty(): boolean {
@@ -236,6 +233,16 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       }
     }
     return false;
+  }
+
+  private _execCleanup(): void {
+    if (!this._cleanup) return;
+    try {
+      this._cleanup();
+    } catch (error) {
+      this._handleExecutionError(error, ERROR_MESSAGES.EFFECT_CLEANUP_FAILED);
+    }
+    this._cleanup = null;
   }
 
   private _checkInfiniteLoops(): void {

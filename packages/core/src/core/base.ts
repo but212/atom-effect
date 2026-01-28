@@ -6,8 +6,7 @@ import type { DependencyId, Subscriber } from '@/types';
 import { generateId } from '@/utils/debug';
 
 /**
- * Base class for all reactive nodes (Atoms, Computed, Effects).
- * Manages unique IDs, state flags, and versioning.
+ * Base class for all reactive nodes.
  */
 export class ReactiveNode {
   flags = 0;
@@ -20,17 +19,10 @@ export class ReactiveNode {
 
 /**
  * Abstract base class for reactive dependencies (Atoms, Computed).
- * Handles subscriber management and notifications.
  */
 export abstract class ReactiveDependency<T> extends ReactiveNode {
   protected abstract _subscribers: SubscriberLink<T>[];
 
-  /**
-   * Subscribes a listener to changes in this dependency.
-   *
-   * @param listener - Function or Subscriber object to be notified on change.
-   * @returns A function to unsubscribe the listener.
-   */
   subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
     const isFn = typeof listener === 'function';
     if (!isFn && (!listener || typeof (listener as Subscriber).execute !== 'function')) {
@@ -41,10 +33,7 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
     for (let i = 0, len = subs.length; i < len; i++) {
       const sub = subs[i]!;
       if (isFn ? sub.fn === listener : sub.sub === listener) {
-        if (IS_DEV)
-          console.warn(
-            'Attempted to subscribe the same listener twice. Ignoring duplicate subscription.'
-          );
+        if (IS_DEV) console.warn('Duplicate subscription ignored.');
         return () => {};
       }
     }
@@ -57,46 +46,44 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
     subs.push(link);
     this.flags |= isFn ? NODE_FLAGS.HAS_FN_SUBS : NODE_FLAGS.HAS_OBJ_SUBS;
 
-    return () => {
-      const idx = subs.indexOf(link);
-      if (idx === -1) return;
+    return () => this._unsubscribe(link, isFn);
+  }
 
-      const last = subs.pop()!;
-      if (idx < subs.length) subs[idx] = last;
+  private _unsubscribe(link: SubscriberLink<T>, isFn: boolean): void {
+    const subs = this._subscribers;
+    const idx = subs.indexOf(link);
+    if (idx === -1) return;
 
-      if (subs.length === 0) {
-        this.flags &= ~(NODE_FLAGS.HAS_FN_SUBS | NODE_FLAGS.HAS_OBJ_SUBS);
-      } else if (isFn) {
-        let has = false;
-        for (let i = 0; i < subs.length; i++) {
-          if (subs[i]!.fn) {
-            has = true;
-            break;
-          }
-        }
-        if (!has) this.flags &= ~NODE_FLAGS.HAS_FN_SUBS;
-      } else {
-        let has = false;
-        for (let i = 0; i < subs.length; i++) {
-          if (subs[i]!.sub) {
-            has = true;
-            break;
-          }
-        }
-        if (!has) this.flags &= ~NODE_FLAGS.HAS_OBJ_SUBS;
+    const last = subs.pop()!;
+    if (idx < subs.length) subs[idx] = last;
+
+    if (subs.length === 0) {
+      this.flags &= ~(NODE_FLAGS.HAS_FN_SUBS | NODE_FLAGS.HAS_OBJ_SUBS);
+    } else {
+      this._updateSubscriberFlags(isFn);
+    }
+  }
+
+  private _updateSubscriberFlags(checkFn: boolean): void {
+    const subs = this._subscribers;
+    let hasType = false;
+
+    for (let i = 0, len = subs.length; i < len; i++) {
+      if (checkFn ? subs[i]!.fn : subs[i]!.sub) {
+        hasType = true;
+        break;
       }
-    };
+    }
+
+    if (!hasType) {
+      this.flags &= checkFn ? ~NODE_FLAGS.HAS_FN_SUBS : ~NODE_FLAGS.HAS_OBJ_SUBS;
+    }
   }
 
   subscriberCount(): number {
     return this._subscribers.length;
   }
 
-  /**
-   * Notifies all subscribed listeners of a value change.
-   * @param newValue - The new value of the dependency.
-   * @param oldValue - The previous value of the dependency.
-   */
   protected _notifySubscribers(newValue: T | undefined, oldValue: T | undefined): void {
     if (!(this.flags & (NODE_FLAGS.HAS_FN_SUBS | NODE_FLAGS.HAS_OBJ_SUBS))) return;
 
