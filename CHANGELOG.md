@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Documentation
+
+- **Restructure**: Major documentation overhaul for improved discoverability and depth.
+  - **Core**: Extracted detailed guides into `docs/API.md`, `docs/ARCHITECTURE.md`, and `docs/ONBOARDING.md`. Refined `README.md` for quick start.
+  - **jQuery**: Added `docs/API.md` and `docs/PATTERNS.md` for comprehensive API reference and common recipes. Refined `README.md`.
+  - **Cleanup**: Removed root `ARCHITECTURE.md` in favor of package-specific documentation.
+
 ### Core
 
 #### Refactor
