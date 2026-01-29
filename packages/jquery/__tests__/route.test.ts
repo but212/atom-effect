@@ -138,9 +138,11 @@ describe('$.route() - SPA Routing', () => {
 
   describe('Custom Rendering & Params', () => {
     it('should support custom render functions with parameters', async () => {
-      const renderSpy = vi.fn((container: HTMLElement, route: string, params: Record<string, string>) => {
-        container.innerHTML = `Route: ${route}, ID: ${params.id}`;
-      });
+      const renderSpy = vi.fn(
+        (container: HTMLElement, route: string, params: Record<string, string>) => {
+          container.innerHTML = `Route: ${route}, ID: ${params.id}`;
+        }
+      );
 
       $.route({
         target: '#app',
@@ -260,7 +262,7 @@ describe('$.route() - SPA Routing', () => {
         <template id="tmpl-home"><h1>Home</h1></template>
       `;
 
-      const router = $.route({
+      const _router = $.route({
         target: '#app',
         default: 'home',
         routes: { home: { template: '#tmpl-home' } },
@@ -268,11 +270,11 @@ describe('$.route() - SPA Routing', () => {
 
       // Spy on destroy mechanism indirectly via event listener removal
       const removeListenerSpy = vi.spyOn(window, 'removeEventListener');
-      
+
       document.getElementById('app')?.remove();
-      
+
       // Wait for MutationObserver (Auto-cleanup is async)
-      await new Promise(r => setTimeout(r, 50));
+      await new Promise((r) => setTimeout(r, 50));
 
       expect(removeListenerSpy).toHaveBeenCalledWith('hashchange', expect.any(Function));
     });
@@ -295,7 +297,7 @@ describe('$.route() - SPA Routing', () => {
       $.effect(() => logSpy(pageTitle.value));
 
       expect(pageTitle.value).toBe('Title: HOME');
-      
+
       router.navigate('about');
       await $.nextTick();
 
@@ -304,7 +306,7 @@ describe('$.route() - SPA Routing', () => {
     });
 
     it('should support multiple router instances', async () => {
-       document.body.innerHTML = `
+      document.body.innerHTML = `
         <div id="main"></div><div id="side"></div>
         <template id="t1">Main</template><template id="t2">Side</template>
       `;

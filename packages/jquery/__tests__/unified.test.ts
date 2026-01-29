@@ -77,4 +77,78 @@ describe('Unified Bind (atomBind)', () => {
 
     $el.remove();
   });
+  it('should support html binding', async () => {
+    const html = $.atom('<span>initial</span>');
+    const $el = $('<div>');
+
+    $el.atomBind({ html });
+
+    await $.nextTick();
+    expect($el.html()).toBe('<span>initial</span>');
+
+    html.value = '<span>updated</span>';
+    await $.nextTick();
+    expect($el.html()).toBe('<span>updated</span>');
+  });
+
+  it('should remove attributes when value is null or false', async () => {
+    const attrVal = $.atom<string | boolean | null>('initial');
+    const $el = $('<div>');
+
+    $el.atomBind({
+      attr: { 'data-test': attrVal },
+    });
+
+    await $.nextTick();
+    expect($el.attr('data-test')).toBe('initial');
+
+    attrVal.value = null;
+    await $.nextTick();
+    expect($el.attr('data-test')).toBeUndefined();
+
+    attrVal.value = 'again';
+    await $.nextTick();
+    expect($el.attr('data-test')).toBe('again');
+
+    attrVal.value = false;
+    await $.nextTick();
+    expect($el.attr('data-test')).toBeUndefined();
+  });
+
+  it('should support hide binding', async () => {
+    const shouldHide = $.atom(false);
+    const $el = $('<div>').appendTo(document.body);
+
+    $el.atomBind({ hide: shouldHide });
+
+    await $.nextTick();
+    expect($el.css('display')).not.toBe('none');
+
+    shouldHide.value = true;
+    await $.nextTick();
+    expect($el.css('display')).toBe('none');
+
+    $el.remove();
+  });
+
+  it('should support two-way checked binding', async () => {
+    const isChecked = $.atom(false);
+    const $el = $('<input type="checkbox">').appendTo(document.body);
+
+    $el.atomBind({ checked: isChecked });
+
+    // Atom -> DOM
+    isChecked.value = true;
+    await $.nextTick();
+    expect($el.prop('checked')).toBe(true);
+
+    // DOM -> Atom
+    $el.prop('checked', false);
+    // Use native event to ensure addEventListener catches it
+    $el[0].dispatchEvent(new Event('change'));
+
+    expect(isChecked.value).toBe(false);
+
+    $el.remove();
+  });
 });
