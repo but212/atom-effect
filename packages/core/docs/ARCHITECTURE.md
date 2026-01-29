@@ -23,8 +23,8 @@ It does this recursively (topological sort via recursion), ensuring you *always*
 
 To optimize performance, we don't immediately re-calculate everything.
 
-1. **Mark / Dirty Phase**: When an atom changes, we notify subscribers "I am dirty".
-2. **Sweep / Evaluation Phase**: When a value is *read*, we re-evaluate only if needed.
+1. **Mark / Dirty Phase**: When an atom changes, we set the `DIRTY` flag and propagate change notifications to subscribers.
+2. **Sweep / Evaluation Phase**: When a value is *read*, we re-evaluate only if the node is dirty.
 
 If an Effect observes a computed value, it subscribes to it. The computed value in turn subscribes to its dependencies. This creates a **Dynamic Dependency Graph** that updates automatically.
 
@@ -44,14 +44,14 @@ When a `computed` returns a Promise:
 We use bitwise flags (integers) for high-performance state tracking:
 
 - `DIRTY`: Needs re-evaluation.
-- `COMPUTING`: Currently running (detects circular deps).
+- `RECOMPUTING`: Currently running (detects circular deps).
 - `RESOLVED` / `REJECTED`: Async states.
 
 ## 4. Memory Management
 
-We use **Subscriber Links** and **Object Pooling** to minimize Garbage Collection pressure.
+We use **Subscriber Links** and **Array Pooling** to minimize Garbage Collection pressure.
 
-- `DependencyLink` objects are pooled.
-- Arrays used for tracking are recycled.
+- Arrays containing `DependencyLink` objects are pooled and recycled.
+- Empty constant arrays are reused via `Object.freeze()`.
 
 This allows the library to handle high-frequency updates (like mouse movements or animations) without causing GC stutter.
