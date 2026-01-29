@@ -37,6 +37,9 @@ Welcome! We appreciate your interest in contributing to `@but212/atom-effect`. T
 This is a monorepo containing:
 
 - `packages/core`: The main reactivity library.
+  - `src/core`: `atom`, `computed`, `effect` implementations.
+  - `src/internal`: Scheduler, epoch management, object pooling.
+  - `src/tracking`: Dependency tracking context.
 - `packages/jquery`: jQuery adapters.
 
 Most contributions will likely be in `packages/core`.
@@ -81,6 +84,17 @@ We use **Biome** for linting and formatting.
 
   ```bash
   pnpm lint:fix
+  ```
+
+### Benchmarks
+
+Performance is critical. If you make a change, please verify there are no regressions.
+
+- Run benchmarks:
+
+  ```bash
+  cd packages/core
+  pnpm bench
   ```
 
 ## Coding Standards

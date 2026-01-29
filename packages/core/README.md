@@ -41,7 +41,6 @@ dispose();
 
 - [**API Reference**](./docs/API.md): Detailed usage of `atom`, `computed`, `effect`.
 - [**Architecture**](./docs/ARCHITECTURE.md): Deep dive into the epoch-based propagation system.
-- [**Onboarding**](./docs/ONBOARDING.md): Guide for contributors and new team members.
 
 ## License
 
