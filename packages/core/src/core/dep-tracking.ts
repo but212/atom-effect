@@ -18,10 +18,6 @@ export function trackDependency<T>(
       if (link && link.fn === fn) return;
     }
     subscribers.push(new SubscriberLink(fn, undefined));
-    dependency.flags |= NODE_FLAGS.HAS_FN_SUBS;
-    if ('_fnSubCount' in dependency) {
-      (dependency as unknown as { _fnSubCount: number })._fnSubCount++;
-    }
     return;
   }
 
@@ -36,10 +32,6 @@ export function trackDependency<T>(
     if (link && link.sub === sub) return;
   }
   subscribers.push(new SubscriberLink(undefined, sub));
-  dependency.flags |= NODE_FLAGS.HAS_OBJ_SUBS;
-  if ('_objSubCount' in dependency) {
-    (dependency as unknown as { _objSubCount: number })._objSubCount++;
-  }
 }
 
 /**

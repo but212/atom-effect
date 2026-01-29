@@ -30,11 +30,6 @@ export class ReactiveNode {
 export abstract class ReactiveDependency<T> extends ReactiveNode {
   protected abstract _subscribers: SubscriberLink<T>[];
 
-  /** @internal */
-  public _fnSubCount = 0;
-  /** @internal */
-  public _objSubCount = 0;
-
   /**
    * Adds subscriber.
    */
@@ -65,13 +60,6 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
     );
 
     subs.push(link);
-    if (isFn) {
-      this._fnSubCount++;
-      this.flags |= NODE_FLAGS.HAS_FN_SUBS;
-    } else {
-      this._objSubCount++;
-      this.flags |= NODE_FLAGS.HAS_OBJ_SUBS;
-    }
 
     return () => this._unsubscribe(link);
   }
@@ -86,24 +74,6 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
     if (idx < subs.length && last) {
       subs[idx] = last;
     }
-
-    if (link.fn) {
-      this._fnSubCount--;
-    } else {
-      this._objSubCount--;
-    }
-
-    if (subs.length === 0) {
-      this.flags &= ~(NODE_FLAGS.HAS_FN_SUBS | NODE_FLAGS.HAS_OBJ_SUBS);
-      this._fnSubCount = 0;
-      this._objSubCount = 0;
-    } else if (link.fn && this._fnSubCount <= 0) {
-      this.flags &= ~NODE_FLAGS.HAS_FN_SUBS;
-      this._fnSubCount = 0;
-    } else if (!link.fn && this._objSubCount <= 0) {
-      this.flags &= ~NODE_FLAGS.HAS_OBJ_SUBS;
-      this._objSubCount = 0;
-    }
   }
 
   subscriberCount(): number {
@@ -111,7 +81,7 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
   }
 
   protected _notifySubscribers(newValue: T | undefined, oldValue: T | undefined): void {
-    if (!(this.flags & (NODE_FLAGS.HAS_FN_SUBS | NODE_FLAGS.HAS_OBJ_SUBS))) return;
+    if (this._subscribers.length === 0) return;
 
     const subs = this._subscribers;
     const len = subs.length;

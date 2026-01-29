@@ -6,9 +6,6 @@ import { trackingContext } from '@/tracking';
 import type { AtomOptions, WritableAtom } from '@/types';
 import { debug } from '@/utils/debug';
 
-// Pre-compute subscription mask
-const SUBS_MASK = ATOM_STATE_FLAGS.HAS_FN_SUBS | ATOM_STATE_FLAGS.HAS_OBJ_SUBS;
-
 /**
  * Internal {@link WritableAtom} implementation.
  */
@@ -43,7 +40,7 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
     this.version = (this.version + 1) & SMI_MAX;
 
     const flags = this.flags;
-    if ((flags & SUBS_MASK) === 0 || flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED) {
+    if (this._subscribers.length === 0 || flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED) {
       return;
     }
 

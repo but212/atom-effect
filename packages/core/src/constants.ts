@@ -21,8 +21,6 @@ export const AsyncState = {
  */
 export const NODE_FLAGS = {
   DISPOSED: 1 << 0,
-  HAS_FN_SUBS: 1 << 1,
-  HAS_OBJ_SUBS: 1 << 2,
 } as const;
 
 /**
