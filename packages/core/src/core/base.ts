@@ -83,13 +83,12 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
   protected _notifySubscribers(newValue: T | undefined, oldValue: T | undefined): void {
     if (this._subscribers.length === 0) return;
 
-    const subs = this._subscribers;
+    const subs = [...this._subscribers];
     const len = subs.length;
 
     for (let i = 0; i < len; i++) {
       const s = subs[i];
       if (!s) continue;
-
       try {
         if (s.fn) s.fn(newValue, oldValue);
         else if (s.sub) s.sub.execute();
