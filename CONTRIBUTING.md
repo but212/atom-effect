@@ -4,7 +4,7 @@ Welcome! We appreciate your interest in contributing to `@but212/atom-effect`. T
 
 ## Prerequisites
 
-- **Node.js**: Ensure you have a recent version installed.
+- **Node.js**: v20.x or higher.
 - **pnpm**: We use `pnpm` for package management. Please do not use `npm` or `yarn`.
 
 ## Getting Started
@@ -37,6 +37,9 @@ Welcome! We appreciate your interest in contributing to `@but212/atom-effect`. T
 This is a monorepo containing:
 
 - `packages/core`: The main reactivity library.
+  - `src/core`: `atom`, `computed`, `effect` implementations.
+  - `src/internal`: Scheduler, epoch management, object pooling.
+  - `src/tracking`: Dependency tracking context.
 - `packages/jquery`: jQuery adapters.
 
 Most contributions will likely be in `packages/core`.
@@ -74,24 +77,32 @@ We use **Biome** for linting and formatting.
 - Check for issues:
 
   ```bash
-  pnpm biome check .
+  pnpm lint
   ```
 
 - Fix issues:
 
   ```bash
-  pnpm biome check --apply .
+  pnpm lint:fix
+  ```
+
+### Benchmarks
+
+Performance is critical. If you make a change, please verify there are no regressions.
+
+- Run benchmarks:
+
+  ```bash
+  cd packages/core
+  pnpm bench
   ```
 
 ## Coding Standards
 
-- **Performance Awareness**: We pay attention to V8 characteristics (hidden classes, Smi packing) in core logic. Please read [ARCHITECTURE.md](./ARCHITECTURE.md) before making structural changes.
+- **Performance Awareness**: We pay attention to V8 characteristics (hidden classes, Smi packing) in core logic. Please read [ARCHITECTURE.md](./packages/core/docs/ARCHITECTURE.md) before making structural changes.
 - **Tests Required**: Every feature or bug fix should include a regression test.
 - **API Stability**: If you change the public API, please discuss it in an issue first.
 
 ## Release Process
 
-(Internal use)
-
-1. Versioning is handled via changesets (if applicable) or manual version bumps.
-2. CI/CD pipelines handle the publishing to npm.
+Releases are automated via GitHub Actions when a version tag (`v*`) is pushed. See `.github/workflows/publish.yml`.

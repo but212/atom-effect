@@ -62,8 +62,8 @@ const userData = computed(async () => {
   return response.json();
 }, { defaultValue: { loading: true } });
 
-// Accessing userData.value returns the Promise result (or defaultValue if pending)
-// It handles race conditions automatically!
+// userData.value returns the resolved value (or defaultValue if pending)
+// Race conditions are handled via promise cancellation (see ARCHITECTURE.md)
 ```
 
 ### Options - computed
@@ -71,6 +71,7 @@ const userData = computed(async () => {
 - `equal`: `(a, b) => boolean`. Custom equality check.
 - `defaultValue`: Initial value while async computation is pending.
 - `lazy`: Boolean (default `true`).
+- `onError`: `(error: Error) => void`. Error handler for computation failures.
 
 ## `effect(fn: () => void | CleanupFn, options?: EffectOptions)`
 
@@ -94,6 +95,9 @@ const dispose = effect(() => {
     console.log(`Cleaning up count ${currentCount}`);
   };
 });
+
+// Later: stop the effect
+dispose();
 ```
 
 ### Options - effect
