@@ -136,6 +136,7 @@ declare global {
     isComputed(v: unknown): boolean;
     isReactive(v: unknown): boolean;
     nextTick(): Promise<void>;
+    route(config: RouteConfig): Router;
   }
 
   interface JQuery {
@@ -179,6 +180,54 @@ export interface BindingContext {
   readonly $el: JQuery;
   readonly el: HTMLElement;
   readonly trackCleanup: (fn: () => void) => void;
+}
+
+/**
+ * Route definition for a single route.
+ */
+export interface RouteDefinition {
+  /** Template selector (e.g., '#tmpl-home') */
+  template?: string;
+  /** Custom render function */
+  render?: (container: HTMLElement, route: string, params: Record<string, string>) => void;
+  /** Called when entering this route. Can return additional params. */
+  onEnter?: (params: Record<string, string>) => Record<string, string> | undefined;
+  /** Called when leaving this route. Return false to prevent navigation. */
+  onLeave?: () => boolean | undefined;
+}
+
+/**
+ * Configuration for $.route()
+ */
+export interface RouteConfig {
+  /** Target element selector for rendering route content */
+  target: string;
+  /** Default route name */
+  default: string;
+  /** Route definitions map */
+  routes: Record<string, RouteDefinition>;
+  /** Route name to use for 404/not found */
+  notFound?: string;
+  /** Automatically bind links with data-route attribute */
+  autoBindLinks?: boolean;
+  /** CSS class to add to active links */
+  activeClass?: string;
+  /** Called before transitioning between routes */
+  beforeTransition?: (from: string, to: string) => void;
+  /** Called after transitioning between routes */
+  afterTransition?: (from: string, to: string) => void;
+}
+
+/**
+ * Router instance returned by $.route()
+ */
+export interface Router {
+  /** Reactive atom containing current route name */
+  currentRoute: WritableAtom<string>;
+  /** Navigate to a different route */
+  navigate: (route: string) => void;
+  /** Cleanup and destroy the router */
+  destroy: () => void;
 }
 
 export type { WritableAtom, ReadonlyAtom, ComputedAtom, EffectObject, ComputedOptions };

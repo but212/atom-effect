@@ -1,21 +1,33 @@
 # Changelog
 
+## [Unreleased]
+
+### jQuery
+
+#### Added
+
+- **Router**: Introduced `$.route()` for lightweight, hash-based SPA routing with full reactivity support.
+  - **Reactive State**: Exposes `currentRoute` as an atom, allowing UI to react instantly to navigation changes.
+  - **Lifecycle Management**: Supports `onEnter` and `onLeave` hooks for data fetching and navigation guards.
+  - **Automatic Binding**: declaratively binds links with `data-route` to handle navigation and `active` class toggling automatically.
+  - **Template Rendering**: Supports both `<template>` refs and custom render functions for flexible view management.
+
 ## [0.17.0]
 
-### Documentation
+### Documentation - 0.17.0
 
 - **Restructure**: Major documentation overhaul for improved discoverability and depth.
   - **Core**: Extracted detailed guides into `docs/API.md`, `docs/ARCHITECTURE.md`, and `docs/ONBOARDING.md`. Refined `README.md` for quick start.
   - **jQuery**: Added `docs/API.md` and `docs/PATTERNS.md` for comprehensive API reference and common recipes. Refined `README.md`.
   - **Cleanup**: Removed root `ARCHITECTURE.md` in favor of package-specific documentation.
 
-### Core
+### Core - 0.17.0
 
-#### Added
+#### Added - Core 0.17.0
 
 - **Test Coverage**: Expanded unit tests for edge cases including disposal errors, lazy evaluation, and infinite loop detection.
 
-#### Changed
+#### Changed - Core 0.17.0
 
 - **Performance**: Optimized core classes with inline property initialization, bitwise masks, and loop streamlining for improved V8 stability.
 - **Architecture**: Converted internal utilities to singletons and decomposed complex methods to reduce bundle size and cyclomatic complexity.

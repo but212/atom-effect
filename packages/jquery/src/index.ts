@@ -17,9 +17,9 @@ import './chainable';
 import './unified';
 import './list';
 import './mount';
+import './route';
 
 import { enablejQueryOverrides } from './jquery-patch';
-// Auto-cleanup (Crucial!)
 import { disableAutoCleanup, enableAutoCleanup, registry } from './registry';
 
 // Auto-enable on DOM ready
@@ -45,6 +45,9 @@ export type {
   ComputedAtom,
   ListOptions,
   ReadonlyAtom,
+  RouteConfig,
+  RouteDefinition,
+  Router,
   WritableAtom,
 } from './types';
 
