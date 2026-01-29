@@ -60,35 +60,51 @@ export function route(config: RouteConfig): Router {
   let previousRoute: string | null = null;
   let previousHash: string = window.location.hash;
   const cleanups: Array<() => void> = [];
-  const boundLinks: HTMLElement[] = []; // Track links for cleanup via registry
+  const boundLinks = new Set<HTMLElement>(); // Track links for cleanup via registry
 
   // DOM references
   const $target = $(target);
 
   /**
    * Extracts route name from current hash.
+   * Optimized to avoid array allocations.
    */
   const getHashRoute = (): string => {
-    const hash = window.location.hash.substring(1);
-    const [routeName] = hash.split('?');
+    const hash = window.location.hash;
+    const qIndex = hash.indexOf('?');
+    const routeName = qIndex === -1 ? hash.substring(1) : hash.substring(1, qIndex);
     return routeName || defaultRoute;
   };
 
   /**
    * Parses query parameters from hash string.
-   * @example parseQueryParams('home?id=123&name=test') // { id: '123', name: 'test' }
+   * Optimized for low allocation (no intermediate arrays).
+   * @example parseQueryParams('#home?id=123&name=test') // { id: '123', name: 'test' }
    */
   const parseQueryParams = (hash: string): Record<string, string> => {
-    const [, queryString] = hash.split('?');
-    if (!queryString) return {};
+    const qIndex = hash.indexOf('?');
+    if (qIndex === -1) return {};
 
     const params: Record<string, string> = {};
-    queryString.split('&').forEach((pair) => {
-      const [key, value] = pair.split('=');
-      if (key) {
-        params[decodeURIComponent(key)] = decodeURIComponent(value || '');
+    const len = hash.length;
+    let start = qIndex + 1;
+
+    while (start < len) {
+      let end = hash.indexOf('&', start);
+      if (end === -1) end = len;
+
+      if (end > start) {
+        const eqIndex = hash.indexOf('=', start);
+        if (eqIndex !== -1 && eqIndex < end) {
+          params[decodeURIComponent(hash.substring(start, eqIndex))] = decodeURIComponent(
+            hash.substring(eqIndex + 1, end)
+          );
+        } else {
+          params[decodeURIComponent(hash.substring(start, end))] = '';
+        }
       }
-    });
+      start = end + 1;
+    }
     return params;
   };
 
@@ -149,7 +165,7 @@ export function route(config: RouteConfig): Router {
     if (!routeConfig) return;
 
     // Parse query parameters
-    const params = parseQueryParams(window.location.hash.substring(1));
+    const params = parseQueryParams(window.location.hash);
 
     // Call beforeTransition hook
     if (beforeTransition) {
@@ -157,7 +173,7 @@ export function route(config: RouteConfig): Router {
     }
 
     // Clear current content
-    $target.html('');
+    $target.empty();
 
     // Call onEnter hook and merge params
     let routeParams = params;
@@ -253,7 +269,7 @@ export function route(config: RouteConfig): Router {
       const routeAttr = $link.data('route') as string;
 
       // Track this link for cleanup
-      boundLinks.push(el);
+      boundLinks.add(el);
 
       // Bind click handler for navigation
       const clickHandler = (e: JQuery.TriggeredEvent) => {
@@ -263,7 +279,10 @@ export function route(config: RouteConfig): Router {
       $link.on('click', clickHandler);
 
       // Register cleanup with registry for auto-cleanup when link is removed from DOM
-      registry.trackCleanup(el, () => $link.off('click', clickHandler));
+      registry.trackCleanup(el, () => {
+        $link.off('click', clickHandler);
+        boundLinks.delete(el); // Prevent memory leak
+      });
 
       // Bind reactive active state tracking
       const activeEffect = effect(() => {
@@ -298,7 +317,7 @@ export function route(config: RouteConfig): Router {
     // Cleanup bound links via registry
     // This handles both click handlers and active state effects
     boundLinks.forEach((el) => registry.cleanup(el));
-    boundLinks.length = 0;
+    boundLinks.clear();
   };
 
   // Set up hash change listener
