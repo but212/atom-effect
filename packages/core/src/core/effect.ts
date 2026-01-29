@@ -11,7 +11,7 @@ import {
 } from '@/internal/epoch';
 import { EMPTY_LINKS, linksArrayPool } from '@/internal/pool';
 import { scheduler } from '@/internal/scheduler';
-import { type DependencyTracker, trackingContext, untracked } from '@/tracking';
+import { type DependencyTracker, trackingContext } from '@/tracking';
 import type { Dependency, EffectFunction, EffectObject, EffectOptions } from '@/types';
 import { debug } from '@/utils/debug';
 import { wrapError } from '@/utils/error';
@@ -238,23 +238,32 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 
   private _isDirty(): boolean {
     const links = this._links;
-    for (let i = 0, len = links.length; i < len; i++) {
-      const link = links[i]!;
-      const dep = link.node;
-      // Version Check
-      if (dep.version !== link.version) return true;
+    // Save tracking context once, restore at end (avoids per-iteration function allocation)
+    const prevContext = trackingContext.current;
+    trackingContext.current = null;
 
-      // Check computed values
-      if ('value' in (dep as object)) {
-        try {
-          untracked(() => (dep as { value: unknown }).value);
-        } catch {
-          return true; // Error usually implies dirty/re-eval needed
-        }
+    try {
+      for (let i = 0, len = links.length; i < len; i++) {
+        const link = links[i]!;
+        const dep = link.node;
+        // Version Check
         if (dep.version !== link.version) return true;
+
+        // Check computed values (read to trigger recomputation if needed)
+        if ('value' in (dep as object)) {
+          try {
+            // Access value directly since we've disabled tracking
+            void (dep as { value: unknown }).value;
+          } catch {
+            return true; // Error usually implies dirty/re-eval needed
+          }
+          if (dep.version !== link.version) return true;
+        }
       }
+      return false;
+    } finally {
+      trackingContext.current = prevContext;
     }
-    return false;
   }
 
   private _execCleanup(): void {

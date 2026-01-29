@@ -2,22 +2,22 @@ import { NODE_FLAGS } from '@/constants';
 import type { DependencySubscriber, Listener } from '@/tracking/tracking.types';
 import type { Dependency, Subscriber } from '@/types';
 import { debug } from '@/utils/debug';
+
 /**
  * Tracks dependency.
  */
 export function trackDependency<T>(
   dependency: Dependency,
   current: Listener,
-  subscribers: SubscriberLink<T>[]
+  fnSubs: ((newValue?: T, oldValue?: T) => void)[],
+  objSubs: Subscriber[]
 ): void {
   if (typeof current === 'function') {
     const fn = current as (newValue?: T, oldValue?: T) => void;
     // Check for existing subscription
-    for (let i = 0, len = subscribers.length; i < len; i++) {
-      const link = subscribers[i];
-      if (link && link.fn === fn) return;
-    }
-    subscribers.push(new SubscriberLink(fn, undefined));
+    if (fnSubs.indexOf(fn) !== -1) return;
+
+    fnSubs.push(fn);
     dependency.flags |= NODE_FLAGS.HAS_FN_SUBS;
     if ('_fnSubCount' in dependency) {
       (dependency as unknown as { _fnSubCount: number })._fnSubCount++;
@@ -31,11 +31,9 @@ export function trackDependency<T>(
   }
 
   const sub = current as Subscriber;
-  for (let i = 0, len = subscribers.length; i < len; i++) {
-    const link = subscribers[i];
-    if (link && link.sub === sub) return;
-  }
-  subscribers.push(new SubscriberLink(undefined, sub));
+  if (objSubs.indexOf(sub) !== -1) return;
+
+  objSubs.push(sub);
   dependency.flags |= NODE_FLAGS.HAS_OBJ_SUBS;
   if ('_objSubCount' in dependency) {
     (dependency as unknown as { _objSubCount: number })._objSubCount++;
@@ -90,19 +88,14 @@ export function syncDependencies(
  * Dependency graph edge.
  */
 export class DependencyLink {
+  public unsub: (() => void) | undefined;
+
   constructor(
     public node: Dependency,
     public version: number,
-    public unsub: (() => void) | undefined = undefined
-  ) {}
-}
-
-/**
- * Subscriber link.
- */
-export class SubscriberLink<T> {
-  constructor(
-    public fn: ((newValue?: T, oldValue?: T) => void) | undefined,
-    public sub: Subscriber | undefined
-  ) {}
+    unsub: (() => void) | undefined = undefined
+  ) {
+    // Always initialize to maintain consistent V8 hidden class
+    this.unsub = unsub;
+  }
 }

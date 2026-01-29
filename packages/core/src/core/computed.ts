@@ -1,11 +1,6 @@
 import { AsyncState, COMPUTED_STATE_FLAGS, EMPTY_ERROR_ARRAY, SMI_MAX } from '@/constants';
 import { ReactiveDependency } from '@/core/base';
-import {
-  DependencyLink,
-  type SubscriberLink,
-  syncDependencies,
-  trackDependency,
-} from '@/core/dep-tracking';
+import { DependencyLink, syncDependencies, trackDependency } from '@/core/dep-tracking';
 import { ComputedError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
 import { currentEpoch, nextEpoch } from '@/internal/epoch';
@@ -47,7 +42,6 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   private readonly _defaultValue: T;
   private readonly _onError: ((error: Error) => void) | null;
 
-  protected _subscribers: SubscriberLink<T>[] = [];
   private _links: DependencyLink[] = EMPTY_LINKS as unknown as DependencyLink[];
 
   /** Error cache */
@@ -87,7 +81,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
 
   private _track(): void {
     const current = trackingContext.current;
-    if (current) trackDependency(this, current, this._subscribers);
+    if (current) trackDependency(this, current, this._fnSubs, this._objSubs);
   }
 
   get value(): T {
@@ -170,8 +164,9 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     const epoch = currentEpoch();
     if (this._errorCacheEpoch === epoch && this._cachedErrors) return this._cachedErrors;
 
-    const errorSet = new Set<Error>();
-    if (this._error) errorSet.add(this._error);
+    // Collect errors directly into array, dedupe via indexOf (avoids Set allocation)
+    const collected: Error[] = [];
+    if (this._error) collected.push(this._error);
 
     const links = this._links;
     for (let i = 0, len = links.length; i < len; i++) {
@@ -182,13 +177,13 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
           const depErrors = computedDep.errors;
           for (let j = 0; j < depErrors.length; j++) {
             const err = depErrors[j];
-            if (err) errorSet.add(err);
+            if (err && collected.indexOf(err) === -1) collected.push(err);
           }
         }
       }
     }
 
-    const errors = Object.freeze(Array.from(errorSet));
+    const errors = Object.freeze(collected);
     this._errorCacheEpoch = epoch;
     this._cachedErrors = errors;
     return errors;
@@ -227,7 +222,8 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       this._links = EMPTY_LINKS as unknown as DependencyLink[];
     }
 
-    this._subscribers.length = 0;
+    this._fnSubs.length = 0;
+    this._objSubs.length = 0;
     this.flags =
       COMPUTED_STATE_FLAGS.DISPOSED | COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE;
 

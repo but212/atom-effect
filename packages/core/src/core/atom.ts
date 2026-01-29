@@ -1,6 +1,6 @@
 import { ATOM_STATE_FLAGS, SMI_MAX } from '@/constants';
 import { ReactiveDependency } from '@/core/base';
-import { type SubscriberLink, trackDependency } from '@/core/dep-tracking';
+import { trackDependency } from '@/core/dep-tracking';
 import { scheduler } from '@/internal/scheduler';
 import { trackingContext } from '@/tracking';
 import type { AtomOptions, WritableAtom } from '@/types';
@@ -18,7 +18,6 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
   private _pendingOldValue: T | undefined = undefined;
   /** Cached notification task */
   private _notifyTask: (() => void) | undefined = undefined;
-  protected _subscribers: SubscriberLink<T>[] = [];
 
   constructor(initialValue: T, sync: boolean) {
     super();
@@ -30,7 +29,7 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
   get value(): T {
     const current = trackingContext.current;
     if (current) {
-      trackDependency(this, current, this._subscribers);
+      trackDependency(this, current, this._fnSubs, this._objSubs);
     }
     return this._value;
   }
@@ -88,7 +87,8 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
   dispose(): void {
     if (this.flags & ATOM_STATE_FLAGS.DISPOSED) return;
 
-    this._subscribers.length = 0;
+    this._fnSubs.length = 0;
+    this._objSubs.length = 0;
     this.flags |= ATOM_STATE_FLAGS.DISPOSED;
     // Release references
     this._value = undefined as T;
