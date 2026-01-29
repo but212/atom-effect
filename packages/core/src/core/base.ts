@@ -1,5 +1,5 @@
 import { IS_DEV, NODE_FLAGS, SMI_MAX } from '@/constants';
-import { SubscriberLink } from '@/core/dep-tracking';
+
 import { AtomError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
 import type { DependencyId, Subscriber } from '@/types';
@@ -28,12 +28,8 @@ export class ReactiveNode {
  * Reactive dependency base class.
  */
 export abstract class ReactiveDependency<T> extends ReactiveNode {
-  protected abstract _subscribers: SubscriberLink<T>[];
-
-  /** @internal */
-  public _fnSubCount = 0;
-  /** @internal */
-  public _objSubCount = 0;
+  public _fnSubs: ((newValue?: T, oldValue?: T) => void)[] = [];
+  public _objSubs: Subscriber[] = [];
 
   /**
    * Adds subscriber.
@@ -49,82 +45,76 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
       );
     }
 
-    const subs = this._subscribers;
-    for (let i = 0, len = subs.length; i < len; i++) {
-      const sub = subs[i];
-      if (!sub) continue;
-      if (isFn ? sub.fn === listener : sub.sub === listener) {
+    if (isFn) {
+      const fn = listener as (newValue?: T, oldValue?: T) => void;
+      if (this._fnSubs.indexOf(fn) !== -1) {
         if (IS_DEV) console.warn('Duplicate subscription ignored.');
         return () => {};
       }
-    }
-
-    const link = new SubscriberLink<T>(
-      isFn ? (listener as (newValue?: T, oldValue?: T) => void) : undefined,
-      !isFn ? (listener as Subscriber) : undefined
-    );
-
-    subs.push(link);
-    if (isFn) {
-      this._fnSubCount++;
+      this._fnSubs.push(fn);
       this.flags |= NODE_FLAGS.HAS_FN_SUBS;
     } else {
-      this._objSubCount++;
+      const sub = listener as Subscriber;
+      if (this._objSubs.indexOf(sub) !== -1) {
+        if (IS_DEV) console.warn('Duplicate subscription ignored.');
+        return () => {};
+      }
+      this._objSubs.push(sub);
       this.flags |= NODE_FLAGS.HAS_OBJ_SUBS;
     }
 
-    return () => this._unsubscribe(link);
+    return () => this._unsubscribe(listener, isFn);
   }
 
-  private _unsubscribe(link: SubscriberLink<T>): void {
-    const subs = this._subscribers;
-    const idx = subs.indexOf(link);
-    if (idx === -1) return;
+  private _unsubscribe(
+    listener: ((newValue?: T, oldValue?: T) => void) | Subscriber,
+    isFn: boolean
+  ): void {
+    if (isFn) {
+      const subs = this._fnSubs;
+      const idx = subs.indexOf(listener as (newValue?: T, oldValue?: T) => void);
+      if (idx === -1) return;
 
-    // Remove subscriber
-    const last = subs.pop();
-    if (idx < subs.length && last) {
-      subs[idx] = last;
-    }
+      const last = subs.pop();
+      if (idx < subs.length && last) {
+        subs[idx] = last;
+      }
 
-    if (link.fn) {
-      this._fnSubCount--;
+      if (subs.length === 0) {
+        this.flags &= ~NODE_FLAGS.HAS_FN_SUBS;
+      }
     } else {
-      this._objSubCount--;
-    }
+      const subs = this._objSubs;
+      const idx = subs.indexOf(listener as Subscriber);
+      if (idx === -1) return;
 
-    if (subs.length === 0) {
-      this.flags &= ~(NODE_FLAGS.HAS_FN_SUBS | NODE_FLAGS.HAS_OBJ_SUBS);
-      this._fnSubCount = 0;
-      this._objSubCount = 0;
-    } else if (link.fn && this._fnSubCount <= 0) {
-      this.flags &= ~NODE_FLAGS.HAS_FN_SUBS;
-      this._fnSubCount = 0;
-    } else if (!link.fn && this._objSubCount <= 0) {
-      this.flags &= ~NODE_FLAGS.HAS_OBJ_SUBS;
-      this._objSubCount = 0;
+      const last = subs.pop();
+      if (idx < subs.length && last) {
+        subs[idx] = last;
+      }
+
+      if (subs.length === 0) {
+        this.flags &= ~NODE_FLAGS.HAS_OBJ_SUBS;
+      }
     }
   }
 
   subscriberCount(): number {
-    return this._fnSubCount + this._objSubCount;
+    return this._fnSubs.length + this._objSubs.length;
   }
 
   protected _notifySubscribers(newValue: T | undefined, oldValue: T | undefined): void {
     const flags = this.flags;
     if (!(flags & (NODE_FLAGS.HAS_FN_SUBS | NODE_FLAGS.HAS_OBJ_SUBS))) return;
 
-    const subs = this._subscribers;
-    const len = subs.length;
-
-    // Separate loops for fn vs obj subscribers to maintain monomorphic call sites
-    // This allows V8 to optimize each loop independently
     if (flags & NODE_FLAGS.HAS_FN_SUBS) {
+      const subs = this._fnSubs;
+      const len = subs.length;
       for (let i = 0; i < len; i++) {
-        const s = subs[i];
-        if (!s || !s.fn) continue;
+        const fn = subs[i];
+        if (!fn) continue;
         try {
-          s.fn(newValue, oldValue);
+          fn(newValue, oldValue);
         } catch (err) {
           this._handleNotifyError(err);
         }
@@ -132,11 +122,13 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
     }
 
     if (flags & NODE_FLAGS.HAS_OBJ_SUBS) {
+      const subs = this._objSubs;
+      const len = subs.length;
       for (let i = 0; i < len; i++) {
-        const s = subs[i];
-        if (!s || !s.sub) continue;
+        const sub = subs[i];
+        if (!sub) continue;
         try {
-          s.sub.execute();
+          sub.execute();
         } catch (err) {
           this._handleNotifyError(err);
         }
