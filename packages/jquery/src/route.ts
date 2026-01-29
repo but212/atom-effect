@@ -56,10 +56,6 @@ export function route(config: RouteConfig): Router {
     afterTransition,
   } = config;
 
-  // ============================================================================
-  // State Management
-  // ============================================================================
-
   let isDestroyed = false;
   let previousRoute: string | null = null;
   let previousHash: string = window.location.hash;
@@ -68,10 +64,6 @@ export function route(config: RouteConfig): Router {
 
   // DOM references
   const $target = $(target);
-
-  // ============================================================================
-  // Utility Functions
-  // ============================================================================
 
   /**
    * Extracts route name from current hash.
@@ -136,15 +128,7 @@ export function route(config: RouteConfig): Router {
     return true;
   };
 
-  // ============================================================================
-  // Reactive State
-  // ============================================================================
-
   const currentRoute: WritableAtom<string> = createAtom(getHashRoute());
-
-  // ============================================================================
-  // Core Routing Functions
-  // ============================================================================
 
   /**
    * Renders the specified route, including lifecycle hooks and content.
@@ -216,9 +200,9 @@ export function route(config: RouteConfig): Router {
       if (canLeave === false) return; // Navigation blocked
     }
 
-    // Update hash and state
-    window.location.hash = `#${routeName}`;
-    previousHash = window.location.hash;
+    // Update hash and state, and pre-set previousHash to prevent double render
+    previousHash = `#${routeName}`;
+    window.location.hash = previousHash;
     currentRoute.value = routeName; // Update immediately for synchronous behavior
   };
 
@@ -229,23 +213,29 @@ export function route(config: RouteConfig): Router {
     if (isDestroyed) return;
 
     const currentHash = window.location.hash;
-    if (currentHash === previousHash) return; // No actual change
+    if (currentHash === previousHash) return; // No actual change, or already handled by navigate()
 
-    previousHash = currentHash;
     const newRoute = getHashRoute();
+    const oldRouteName = currentRoute.value;
 
-    if (currentRoute.value !== newRoute) {
-      // Route name changed, update reactive state (will trigger render)
+    if (oldRouteName !== newRoute) {
+      // Check onLeave guard for user-driven navigation
+      const oldRouteConfig = routes[oldRouteName];
+      if (oldRouteConfig?.onLeave) {
+        if (oldRouteConfig.onLeave() === false) {
+          // Navigation blocked, revert hash
+          window.location.hash = previousHash;
+          return;
+        }
+      }
       currentRoute.value = newRoute;
     } else {
       // Same route but hash changed (e.g., query params), manually re-render
       renderRoute(newRoute);
     }
-  };
 
-  // ============================================================================
-  // Initialization & Setup
-  // ============================================================================
+    previousHash = currentHash;
+  };
 
   /**
    * Sets up automatic binding for navigation links with data-route attribute.
@@ -311,10 +301,6 @@ export function route(config: RouteConfig): Router {
     boundLinks.length = 0;
   };
 
-  // ============================================================================
-  // Router Initialization
-  // ============================================================================
-
   // Set up hash change listener
   window.addEventListener('hashchange', handleHashChange);
   cleanups.push(() => window.removeEventListener('hashchange', handleHashChange));
@@ -332,10 +318,6 @@ export function route(config: RouteConfig): Router {
   if ($target[0]) {
     registry.trackCleanup($target[0], destroy);
   }
-
-  // ============================================================================
-  // Public API
-  // ============================================================================
 
   return {
     currentRoute,
