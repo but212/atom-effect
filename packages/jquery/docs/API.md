@@ -128,3 +128,53 @@ $('#search').atomVal(queryAtom, { debounce: 300 });
 ### `$.atom(val)`, `$.computed(fn)`, `$.effect(fn)`
 
 Aliases to the core functions, exposed for convenience.
+
+---
+
+## Routing
+
+### `$.route(config)`
+
+Creates a lightweight, hash-based SPA router with reactive state management.
+
+**Configuration**:
+
+- `target`: Selector for the container element where routes will be rendered.
+- `default`: Name of the default route to load if the hash is empty.
+- `routes`: Object mapping route names to definitions.
+  - `template`: Selector for a `<template>` element to clone.
+  - `render`: Custom function `(container, route, params) => void`.
+  - `onEnter`: Hook called before rendering. Can return additional params.
+  - `onLeave`: Hook called before navigating away. Return `false` to cancel.
+- `notFound`: (Optional) Route name to use when no match is found.
+- `autoBindLinks`: (Optional) If `true`, automatically handles clicks on `[data-route]` links.
+- `activeClass`: (Optional) CSS class for active links (default: `'active'`).
+- `beforeTransition`: (Optional) Global hook `(from, to) => void`.
+- `afterTransition`: (Optional) Global hook `(from, to) => void`.
+
+**Returns**:
+
+A `Router` object with:
+
+- `currentRoute`: `WritableAtom<string>` containing the active route name.
+- `navigate(route)`: Programmatically change route.
+- `destroy()`: Cleanup listeners and effects.
+
+**Example**:
+
+```javascript
+const router = $.route({
+  target: '#app',
+  default: 'home',
+  autoBindLinks: true,
+  routes: {
+    home: { template: '#tmpl-home' },
+    about: { template: '#tmpl-about' },
+    user: {
+      render: (el, route, params) => {
+        el.innerHTML = `User ID: ${params.id}`;
+      }
+    }
+  }
+});
+```
