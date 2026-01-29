@@ -1,0 +1,30 @@
+name: "Setup pnpm environment"
+description: "Setup pnpm, Node.js, and install dependencies"
+
+inputs:
+  node-version:
+    description: "Node.js version"
+    default: "20.x"
+  registry-url:
+    description: "NPM registry URL for publishing"
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        run_install: false
+
+    - name: Setup Node.js ${{ inputs.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        registry-url: ${{ inputs.registry-url }}
+        cache: "pnpm"
+        cache-dependency-path: pnpm-lock.yaml
+
+    - name: Install dependencies
+      run: pnpm install --frozen-lockfile
+      shell: bash
