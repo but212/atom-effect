@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Core
+
+#### Performance
+
+- **V8 Optimization**: Stabilized hidden classes for critical Link objects (`DependencyLink`, `SubscriberLink`) by enforcing consistent property initialization.
+- **Notification Loop**: Split subscriber notification loops into monomorphic paths (function vs object subscribers) to enable aggressive V8 inlining.
+- **Memory Efficiency**: Replaced `Set` with strict array deduplication for error collection in `ComputedAtom`, and reduced closure allocations in `Effect._isDirty` checks.
+
 ### jQuery
 
 #### Added

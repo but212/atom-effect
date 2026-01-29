@@ -170,8 +170,9 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     const epoch = currentEpoch();
     if (this._errorCacheEpoch === epoch && this._cachedErrors) return this._cachedErrors;
 
-    const errorSet = new Set<Error>();
-    if (this._error) errorSet.add(this._error);
+    // Collect errors directly into array, dedupe via indexOf (avoids Set allocation)
+    const collected: Error[] = [];
+    if (this._error) collected.push(this._error);
 
     const links = this._links;
     for (let i = 0, len = links.length; i < len; i++) {
@@ -182,13 +183,13 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
           const depErrors = computedDep.errors;
           for (let j = 0; j < depErrors.length; j++) {
             const err = depErrors[j];
-            if (err) errorSet.add(err);
+            if (err && collected.indexOf(err) === -1) collected.push(err);
           }
         }
       }
     }
 
-    const errors = Object.freeze(Array.from(errorSet));
+    const errors = Object.freeze(collected);
     this._errorCacheEpoch = epoch;
     this._cachedErrors = errors;
     return errors;

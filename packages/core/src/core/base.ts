@@ -107,24 +107,39 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
   }
 
   subscriberCount(): number {
-    return this._subscribers.length;
+    return this._fnSubCount + this._objSubCount;
   }
 
   protected _notifySubscribers(newValue: T | undefined, oldValue: T | undefined): void {
-    if (!(this.flags & (NODE_FLAGS.HAS_FN_SUBS | NODE_FLAGS.HAS_OBJ_SUBS))) return;
+    const flags = this.flags;
+    if (!(flags & (NODE_FLAGS.HAS_FN_SUBS | NODE_FLAGS.HAS_OBJ_SUBS))) return;
 
     const subs = this._subscribers;
     const len = subs.length;
 
-    for (let i = 0; i < len; i++) {
-      const s = subs[i];
-      if (!s) continue;
+    // Separate loops for fn vs obj subscribers to maintain monomorphic call sites
+    // This allows V8 to optimize each loop independently
+    if (flags & NODE_FLAGS.HAS_FN_SUBS) {
+      for (let i = 0; i < len; i++) {
+        const s = subs[i];
+        if (!s || !s.fn) continue;
+        try {
+          s.fn(newValue, oldValue);
+        } catch (err) {
+          this._handleNotifyError(err);
+        }
+      }
+    }
 
-      try {
-        if (s.fn) s.fn(newValue, oldValue);
-        else if (s.sub) s.sub.execute();
-      } catch (err) {
-        this._handleNotifyError(err);
+    if (flags & NODE_FLAGS.HAS_OBJ_SUBS) {
+      for (let i = 0; i < len; i++) {
+        const s = subs[i];
+        if (!s || !s.sub) continue;
+        try {
+          s.sub.execute();
+        } catch (err) {
+          this._handleNotifyError(err);
+        }
       }
     }
   }

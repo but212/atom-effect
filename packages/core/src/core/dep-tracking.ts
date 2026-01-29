@@ -90,19 +90,28 @@ export function syncDependencies(
  * Dependency graph edge.
  */
 export class DependencyLink {
+  public unsub: (() => void) | undefined;
+
   constructor(
     public node: Dependency,
     public version: number,
-    public unsub: (() => void) | undefined = undefined
-  ) {}
+    unsub: (() => void) | undefined = undefined
+  ) {
+    // Always initialize to maintain consistent V8 hidden class
+    this.unsub = unsub;
+  }
 }
 
 /**
  * Subscriber link.
  */
 export class SubscriberLink<T> {
-  constructor(
-    public fn: ((newValue?: T, oldValue?: T) => void) | undefined,
-    public sub: Subscriber | undefined
-  ) {}
+  public fn: ((newValue?: T, oldValue?: T) => void) | undefined;
+  public sub: Subscriber | undefined;
+
+  constructor(fn: ((newValue?: T, oldValue?: T) => void) | undefined, sub: Subscriber | undefined) {
+    // Always initialize both properties to maintain consistent V8 hidden class
+    this.fn = fn;
+    this.sub = sub;
+  }
 }
