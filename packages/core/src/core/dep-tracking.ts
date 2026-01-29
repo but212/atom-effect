@@ -2,26 +2,22 @@ import { NODE_FLAGS } from '@/constants';
 import type { DependencySubscriber, Listener } from '@/tracking/tracking.types';
 import type { Dependency, Subscriber } from '@/types';
 import { debug } from '@/utils/debug';
-
 /**
  * Tracks dependency.
  */
 export function trackDependency<T>(
   dependency: Dependency,
   current: Listener,
-  fnSubs: ((newValue?: T, oldValue?: T) => void)[],
-  objSubs: Subscriber[]
+  subscribers: SubscriberLink<T>[]
 ): void {
   if (typeof current === 'function') {
     const fn = current as (newValue?: T, oldValue?: T) => void;
     // Check for existing subscription
-    if (fnSubs.indexOf(fn) !== -1) return;
-
-    fnSubs.push(fn);
-    dependency.flags |= NODE_FLAGS.HAS_FN_SUBS;
-    if ('_fnSubCount' in dependency) {
-      (dependency as unknown as { _fnSubCount: number })._fnSubCount++;
+    for (let i = 0, len = subscribers.length; i < len; i++) {
+      const link = subscribers[i];
+      if (link && link.fn === fn) return;
     }
+    subscribers.push(new SubscriberLink(fn, undefined));
     return;
   }
 
@@ -31,13 +27,11 @@ export function trackDependency<T>(
   }
 
   const sub = current as Subscriber;
-  if (objSubs.indexOf(sub) !== -1) return;
-
-  objSubs.push(sub);
-  dependency.flags |= NODE_FLAGS.HAS_OBJ_SUBS;
-  if ('_objSubCount' in dependency) {
-    (dependency as unknown as { _objSubCount: number })._objSubCount++;
+  for (let i = 0, len = subscribers.length; i < len; i++) {
+    const link = subscribers[i];
+    if (link && link.sub === sub) return;
   }
+  subscribers.push(new SubscriberLink(undefined, sub));
 }
 
 /**
@@ -97,5 +91,19 @@ export class DependencyLink {
   ) {
     // Always initialize to maintain consistent V8 hidden class
     this.unsub = unsub;
+  }
+}
+
+/**
+ * Subscriber link.
+ */
+export class SubscriberLink<T> {
+  public fn: ((newValue?: T, oldValue?: T) => void) | undefined;
+  public sub: Subscriber | undefined;
+
+  constructor(fn: ((newValue?: T, oldValue?: T) => void) | undefined, sub: Subscriber | undefined) {
+    // Always initialize both properties to maintain consistent V8 hidden class
+    this.fn = fn;
+    this.sub = sub;
   }
 }
