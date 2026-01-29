@@ -1,6 +1,11 @@
 import { AsyncState, COMPUTED_STATE_FLAGS, EMPTY_ERROR_ARRAY, SMI_MAX } from '@/constants';
 import { ReactiveDependency } from '@/core/base';
-import { DependencyLink, syncDependencies, trackDependency } from '@/core/dep-tracking';
+import {
+  DependencyLink,
+  type SubscriberLink,
+  syncDependencies,
+  trackDependency,
+} from '@/core/dep-tracking';
 import { ComputedError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
 import { currentEpoch, nextEpoch } from '@/internal/epoch';
@@ -42,6 +47,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   private readonly _defaultValue: T;
   private readonly _onError: ((error: Error) => void) | null;
 
+  protected _subscribers: SubscriberLink<T>[] = [];
   private _links: DependencyLink[] = EMPTY_LINKS as unknown as DependencyLink[];
 
   /** Error cache */
@@ -81,7 +87,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
 
   private _track(): void {
     const current = trackingContext.current;
-    if (current) trackDependency(this, current, this._fnSubs, this._objSubs);
+    if (current) trackDependency(this, current, this._subscribers);
   }
 
   get value(): T {
@@ -222,8 +228,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       this._links = EMPTY_LINKS as unknown as DependencyLink[];
     }
 
-    this._fnSubs.length = 0;
-    this._objSubs.length = 0;
+    this._subscribers.length = 0;
     this.flags =
       COMPUTED_STATE_FLAGS.DISPOSED | COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE;
 

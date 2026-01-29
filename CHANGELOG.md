@@ -7,7 +7,6 @@
 #### Changed
 
 - **Memory Efficiency**: Replaced `Set` with strict array deduplication for error collection in `ComputedAtom`, and reduced closure allocations in `Effect._isDirty` checks.
-- **Subscriber Pool**: Removed subscriber pool to reduce memory usage.
 
 ### jQuery
 
