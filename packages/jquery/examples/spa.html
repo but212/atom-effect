@@ -649,7 +649,7 @@
       // --- Skip Link Handler (Prevent Router Conflict) ---
       $(".skip-link").on("click", function (e) {
         const target = $($(this).data("target"));
-        target.attr("tabindex", "-1").focus();
+        target.focus();
       });
 
       // --- Atoms (State) ---
