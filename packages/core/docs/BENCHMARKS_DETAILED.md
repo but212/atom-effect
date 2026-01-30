@@ -1,7 +1,7 @@
 # Benchmark Results - Detailed
 
 **Last Updated**: 2026-01-30  
-**Version**: v0.17.0  
+**Version**: v0.18.0  
 **Environment**:
 
 - **Node.js**: v20.x

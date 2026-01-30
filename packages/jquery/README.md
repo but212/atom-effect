@@ -14,7 +14,7 @@ npm install @but212/atom-effect-jquery jquery
 ### CDN
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.17.0"></script>
+<script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.18.0"></script>
 ```
 
 ### Usage
