@@ -14,7 +14,7 @@ $('.user-card').atomBind({
   class: { 'active': isActive },  // toggle class
   css: { 'color': colorAtom },    // style property
   attr: { 'data-id': idAtom },    // attribute
-  visible: isVisible,             // show/hide
+  show: isVisible,                // show/hide
   on: { click: handleClick }      // event handler
 });
 ```
@@ -88,8 +88,12 @@ Efficiently renders a list of items using keyed diffing.
 **Options**:
 
 - `key`: `(item) => string | number` (Required) - Unique ID for diffing.
-- `render`: `(item) => string` - HTML string for new items.
-- `bind`: `($el, item) => void` - Function to bind events/atoms to the created element.
+- `render`: `(item, index) => string | JQuery` - HTML string or jQuery object for new items.
+- `bind`: `($el, item, index) => void` - Bind events/atoms to the created element.
+- `update`: `($el, item, index) => void` - Manually update existing elements (optimization).
+- `onAdd`: `($el) => void` - Called when an item is added to the DOM.
+- `onRemove`: `($el) => Promise<void> | void` - Called before removal (supports async exit animations).
+- `empty`: `string | JQuery` - Content to show when the list is empty.
 
 ```javascript
 $('ul').atomList(usersAtom, {
@@ -114,8 +118,10 @@ Two-way binding for `<input>`, `<textarea>`, and `<select>`.
 **Options**:
 
 - `debounce`: number (ms) - Delay updates to the atom.
+- `event`: `string` - Input event to listen to (default: `'input'`).
 - `format`: `(val) => string` - Format value on blur.
 - `parse`: `(str) => val` - Parse string input before updating atom.
+- `equal`: `(a, b) => boolean` - Custom equality check to prevent redundant updates.
 
 ```javascript
 $('#search').atomVal(queryAtom, { debounce: 300 });
