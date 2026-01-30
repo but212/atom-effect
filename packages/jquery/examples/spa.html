@@ -156,6 +156,8 @@
         font-weight: 900;
         text-transform: uppercase;
         text-decoration: none;
+        border: none;
+        cursor: pointer;
       }
 
       .skip-link:focus {
@@ -416,7 +418,9 @@
     </style>
   </head>
   <body>
-    <a href="#router-view" class="skip-link">Skip to main content</a>
+    <button type="button" data-target="#router-view" class="skip-link">
+      Skip to main content
+    </button>
 
     <aside class="sidebar" id="sidebar" aria-label="Main navigation">
       <div class="sidebar-header">
@@ -477,7 +481,7 @@
       </header>
 
       <div class="view-content">
-        <main id="router-view" aria-live="polite">
+        <main id="router-view" aria-live="polite" tabindex="-1">
           <!-- INJECTED -->
         </main>
       </div>
@@ -642,6 +646,12 @@
     </template>
 
     <script>
+      // --- Skip Link Handler (Prevent Router Conflict) ---
+      $(".skip-link").on("click", function (e) {
+        const target = $($(this).data("target"));
+        target.focus();
+      });
+
       // --- Atoms (State) ---
       const isSidebarCollapsed = $.atom(false);
       const searchQuery = $.atom("");
