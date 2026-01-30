@@ -11,7 +11,7 @@
       rel="stylesheet"
     />
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.17.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.18.0"></script>
     <style>
       :root {
         --primary-red: #e63946;
@@ -642,17 +642,7 @@
     </template>
 
     <script>
-      const getHashRoute = () =>
-        window.location.hash.substring(1) || "dashboard";
-      const currentRoute = $.atom(getHashRoute());
-
-      $(window).on("hashchange", () => {
-        const newRoute = getHashRoute();
-        if (currentRoute.value !== newRoute) {
-          currentRoute.value = newRoute;
-        }
-      });
-
+      // --- Atoms (State) ---
       const isSidebarCollapsed = $.atom(false);
       const searchQuery = $.atom("");
       const tasks = $.atom([
@@ -681,26 +671,8 @@
       const completedTaskCount = $.computed(
         () => tasks.value.filter((t) => t.completed).length,
       );
-      const pageTitleText = $.computed(() => currentRoute.value.toUpperCase());
 
-      $("#sidebar .nav-link").each(function () {
-        const $link = $(this);
-        const route = $link.data("route");
-        const isActive = $.computed(() => currentRoute.value === route);
-        $link.atomBind({
-          class: { active: isActive },
-          attr: {
-            "aria-current": $.computed(() => (isActive.value ? "page" : null)),
-          },
-          on: {
-            click: (e) => {
-              e.preventDefault();
-              window.location.hash = route;
-            },
-          },
-        });
-      });
-
+      // --- Global UI Bindings ---
       $("#sidebar").atomBind({ class: { collapsed: isSidebarCollapsed } });
       $("#toggle-sidebar").atomBind({
         attr: { "aria-expanded": $.computed(() => !isSidebarCollapsed.value) },
@@ -710,12 +682,8 @@
           },
         },
       });
-      $("#page-title").atomText(pageTitleText);
 
-      /**
-       * Safely updates task element UI based on task state.
-       * Used by both render and update to ensure consistency.
-       */
+      // --- Components ---
       const updateTaskElement = ($el, task) => {
         $el.toggleClass("completed", task.completed);
         $el
@@ -730,58 +698,72 @@
         $el.find(".task-tag").text(task.tag);
       };
 
-      // --- Routing ---
-      $.effect(() => {
-        const route = currentRoute.value;
-        const $view = $("#router-view");
-        const template = document.getElementById(`tmpl-${route}`);
+      // --- Router setup ---
+      const router = $.route({
+        target: "#router-view",
+        default: "dashboard",
+        autoBindLinks: true, // Auto-binds [data-route] links
+        routes: {
+          dashboard: {
+            render: (container) => {
+              const template = document.getElementById("tmpl-dashboard");
+              container.appendChild(template.content.cloneNode(true));
 
-        $view.html("");
-        if (template) {
-          $view.append(template.content.cloneNode(true));
+              $("#dashboard-total-tasks").atomText(totalTaskCount);
+              $("#dashboard-completed-tasks").atomText(completedTaskCount);
+            },
+          },
+          tasks: {
+            render: (container) => {
+              const template = document.getElementById("tmpl-tasks");
+              container.appendChild(template.content.cloneNode(true));
 
-          if (route === "dashboard") {
-            $("#dashboard-total-tasks").atomText(totalTaskCount);
-            $("#dashboard-completed-tasks").atomText(completedTaskCount);
-          } else if (route === "tasks") {
-            $("#task-search").atomVal(searchQuery);
-            $("#task-list-container").atomList(filteredTasks, {
-              key: "id",
-              render: (task) => {
-                const $el = $(`
+              $("#task-search").atomVal(searchQuery);
+              $("#task-list-container").atomList(filteredTasks, {
+                key: "id",
+                render: (task) => {
+                  const $el = $(`
                             <li class="task-item">
                                 <div class="checkbox-rect" role="checkbox" tabindex="0"></div>
                                 <span class="task-title"></span>
                                 <span class="task-tag"></span>
                             </li>
                         `).attr("data-id", task.id);
-                updateTaskElement($el, task);
-                return $el;
-              },
-              update: updateTaskElement,
-              bind: ($el, task) => {
-                const toggle = () => {
-                  tasks.value = tasks.value.map((t) =>
-                    t.id === task.id ? { ...t, completed: !t.completed } : t,
-                  );
-                };
-                $el.find(".checkbox-rect").on("click", toggle);
-                $el.find(".checkbox-rect").on("keydown", (e) => {
-                  if (e.key === " " || e.key === "Enter") {
-                    e.preventDefault();
-                    toggle();
-                  }
-                });
-              },
-              empty: "#tasks-empty",
-            });
-          }
-        }
+                  updateTaskElement($el, task);
+                  return $el;
+                },
+                update: updateTaskElement,
+                bind: ($el, task) => {
+                  const toggle = () => {
+                    tasks.value = tasks.value.map((t) =>
+                      t.id === task.id ? { ...t, completed: !t.completed } : t,
+                    );
+                  };
+                  $el.find(".checkbox-rect").on("click", toggle);
+                  $el.find(".checkbox-rect").on("keydown", (e) => {
+                    if (e.key === " " || e.key === "Enter") {
+                      e.preventDefault();
+                      toggle();
+                    }
+                  });
+                },
+                empty: "#tasks-empty",
+              });
+            },
+          },
+          log: { template: "#tmpl-log" },
+          config: { template: "#tmpl-config" },
+        },
       });
+
+      // Page Title Sync
+      $("#page-title").atomText(
+        $.computed(() => router.currentRoute.value.toUpperCase()),
+      );
 
       // --- FAB ---
       $.effect(() => {
-        $("#add-task-btn").toggle(currentRoute.value === "tasks");
+        $("#add-task-btn").toggle(router.currentRoute.value === "tasks");
       });
       $("#add-task-btn").on("click", () => {
         const title = prompt("NEW_TASK:");
