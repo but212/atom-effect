@@ -183,18 +183,38 @@ export interface BindingContext {
 }
 
 /**
- * Route definition for a single route.
+ * Shared route lifecycle hooks.
  */
-export interface RouteDefinition {
-  /** Template selector (e.g., '#tmpl-home') */
-  template?: string;
-  /** Custom render function */
-  render?: (container: HTMLElement, route: string, params: Record<string, string>) => void;
+interface RouteLifecycle {
   /** Called when entering this route. Can return additional params. */
   onEnter?: (params: Record<string, string>) => Record<string, string> | undefined;
   /** Called when leaving this route. Return false to prevent navigation. */
   onLeave?: () => boolean | undefined;
 }
+
+/**
+ * Route using a template selector.
+ */
+interface TemplateRoute extends RouteLifecycle {
+  /** Template selector (e.g., '#tmpl-home') */
+  template: string;
+  render?: never;
+}
+
+/**
+ * Route using a custom render function.
+ */
+interface RenderRoute extends RouteLifecycle {
+  /** Custom render function */
+  render: (container: HTMLElement, route: string, params: Record<string, string>) => void;
+  template?: never;
+}
+
+/**
+ * Route definition for a single route.
+ * Either template OR render must be provided, but not both.
+ */
+export type RouteDefinition = TemplateRoute | RenderRoute;
 
 /**
  * Configuration for $.route()

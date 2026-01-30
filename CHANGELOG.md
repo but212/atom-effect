@@ -1,17 +1,25 @@
 # Changelog
 
-## [0.18.0]
+## [0.18.1]
 
-### Core
+### jQuery
 
 #### Changed
+
+- **RouteDefinition Type Safety**: Refactored `RouteDefinition` into a discriminated union (`TemplateRoute | RenderRoute`) to enforce mutual exclusivity of `template` and `render` at compile time. Prevents accidental misconfiguration where both are specified.
+
+## [0.18.0]
+
+### Core - 0.18.0
+
+#### Changed - Core 0.18.0
 
 - **Memory Efficiency**: Replaced `Set` with strict array deduplication for error collection in `ComputedAtom`, and reduced closure allocations in `Effect._isDirty` checks.
 - **Refactor**: Removed redundant `_fnSubCount` and `_objSubCount` counters from `ReactiveDependency`, simplifying subscriber tracking to use direct array length checks.
 
-### jQuery
+### jQuery - 0.18.0
 
-#### Added
+#### Added - jQuery 0.18.0
 
 - **Router**: Introduced `$.route()` for lightweight, hash-based SPA routing with full reactivity support.
   - **Reactive State**: Exposes `currentRoute` as an atom, allowing UI to react instantly to navigation changes.
