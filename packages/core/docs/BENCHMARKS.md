@@ -6,11 +6,11 @@ Comprehensive benchmarking suite for `atom-effect` to measure performance and de
 
 | Category | Key Metric | Value | Context |
 | ---------- | ---------- | ----- | ------- |
-| **Atom** | Read (peek) | 661K ops/sec | Near-native array access speed |
-| **Computed** | Recompute (cached) | 782K ops/sec | Cached reads are nearly free |
-| **Effect** | Re-runs | 1.1M ops/sec | Efficient change propagation |
-| **Real-world** | Todo App (100 items) | 720K ops/sec | Production-ready performance |
-| **Frame Budget** | 100 atom updates | 0.018ms | Well under 16ms budget |
+| **Atom** | Read (peek) | 528K ops/sec | Near-native array access speed |
+| **Computed** | Recompute (cached) | 796K ops/sec | Cached reads are nearly free |
+| **Effect** | Re-runs | 955K ops/sec | Efficient change propagation |
+| **Real-world** | Todo App (100 items) | 782K ops/sec | Production-ready performance |
+| **Frame Budget** | 100 atom updates | 0.019ms | Well under 16ms budget |
 
 ## Running Benchmarks
 
@@ -51,6 +51,7 @@ Located in `__benchmarks__/micro/`, these test individual primitive operations:
 - **Effect**: Creation, execution, cleanup, disposal
 - **Batch**: Batched vs non-batched updates, nested batches
 - **Untracked**: Untracked reads, mixed operations
+- **Propagation**: Fan-in, Fan-out, Deep chain propagation
 
 ### Macro-Benchmarks
 
@@ -97,7 +98,7 @@ Production-like scenarios:
 ## Latest Results
 
 **Version**: v0.18.0  
-**Last Updated**: 2026-01-30  
+**Last Updated**: 2026-02-08  
 **Environment**:
 
 - **Node.js**: v20.x
@@ -109,12 +110,12 @@ Production-like scenarios:
 
 | Benchmark | Result | Analysis |
 | ---------- | ------ | -------- |
-| Atom peek (1000x) | 661K ops/sec | Near-native performance |
-| Computed recompute | 782K ops/sec | Cached reads are virtually free |
-| Effect re-runs (10x) | 1.1M ops/sec | Efficient propagation |
-| Todo App workflow | 720K ops/sec | Production-ready |
-| Frame budget (100 atoms) | 0.018ms | Well under 16ms |
-| Data Grid sort (1000 rows) | 0.56ms | Real-time filtering |
+| Atom peek (1000x) | 528K ops/sec | Near-native performance |
+| Computed recompute | 796K ops/sec | Cached reads are virtually free |
+| Effect re-runs (10x) | 955K ops/sec | Efficient propagation |
+| Todo App workflow | 782K ops/sec | Production-ready |
+| Frame Budget (100 atoms) | 0.019ms | Well under 16ms |
+| Data Grid Sort (1000 rows) | 0.55ms | Real-time filtering |
 
 ## Contributing Benchmarks
 
