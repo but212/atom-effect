@@ -33,7 +33,8 @@ $.fn.atomHtml = function (source: ReactiveValue<string>): JQuery {
       (val) => {
         let safeVal = String(val ?? '');
         // Basic XSS mitigation: Remove event handlers from HTML string
-        safeVal = safeVal.replace(/on\w+\s*=/gi, 'data-unsafe-attr=');
+        // Use word boundary to avoid false positives (e.g., "data-information")
+        safeVal = safeVal.replace(/\bon\w+\s*=/gi, 'data-unsafe-attr=');
         if (safeVal !== String(val ?? '')) {
           console.warn('[atomHtml] Unsafe attributes detected and neutralized.');
         }

@@ -335,7 +335,9 @@ describe('$.route() - SPA Routing', () => {
         },
       });
 
-      const errorSpy = vi.spyOn(console, 'error');
+
+
+      const warnSpy = vi.spyOn(console, 'warn');
 
       // Trigger malformed hash
       window.location.hash = '#home?bad=%FF%FE';
@@ -344,10 +346,12 @@ describe('$.route() - SPA Routing', () => {
 
       // Check that target still exists and router is alive
       expect(document.getElementById('app-route-err')).not.toBeNull();
+      // Verify warning was logged
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Malformed URI component'));
 
       router.destroy();
       $target.remove();
-      errorSpy.mockRestore();
+      warnSpy.mockRestore();
     });
   });
 

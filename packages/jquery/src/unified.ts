@@ -54,7 +54,8 @@ function bindHtml(ctx: BindingContext, value: ReactiveValue<string>): void {
       let newVal = String(val ?? '');
 
       // Basic XSS mitigation
-      const sanitized = newVal.replace(/on\w+\s*=/gi, 'data-unsafe-attr=');
+      // Use word boundary to avoid false positives (e.g., "data-information")
+      const sanitized = newVal.replace(/\bon\w+\s*=/gi, 'data-unsafe-attr=');
       if (sanitized !== newVal) {
         console.warn('[atomBind] Unsafe attributes detected and neutralized in html binding.');
         newVal = sanitized;
