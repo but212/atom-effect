@@ -83,10 +83,10 @@ describe('Chainable Methods (Surface)', () => {
     const maliciousHtml = '<img src=x onerror=alert(1)>';
     const htmlAtom = $.atom(maliciousHtml);
     const $el = $('<div>');
-    
+
     $el.atomHtml(htmlAtom);
     await $.nextTick();
-    
+
     // Assert that the 'onerror' attribute has been removed/neutralized
     expect($el.html()).not.toContain('onerror');
   });
@@ -95,7 +95,7 @@ describe('Chainable Methods (Surface)', () => {
     const val = $.atom('test');
     const $div = $('<div>'); // Not an input
     const warnSpy = vi.spyOn(console, 'warn');
-    
+
     $div.atomVal(val);
     await $.nextTick();
 

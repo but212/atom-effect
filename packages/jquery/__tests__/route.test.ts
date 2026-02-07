@@ -322,25 +322,29 @@ describe('$.route() - SPA Routing', () => {
   describe('Safety & Robustness', () => {
     it('should handle malformed URL parameters gracefully', async () => {
       const $target = $('<div id="app-route-err"></div>').appendTo(document.body);
-      
+
       const router = $.route({
         target: '#app-route-err',
         default: 'home',
-        routes: { 
-          home: { render: (el) => { el.innerHTML = '<div>Home</div>'; } } 
+        routes: {
+          home: {
+            render: (el) => {
+              el.innerHTML = '<div>Home</div>';
+            },
+          },
         },
       });
 
       const errorSpy = vi.spyOn(console, 'error');
-      
+
       // Trigger malformed hash
-      window.location.hash = '#home?bad=%FF%FE'; 
+      window.location.hash = '#home?bad=%FF%FE';
       window.dispatchEvent(new window.Event('hashchange'));
       await $.nextTick();
 
       // Check that target still exists and router is alive
       expect(document.getElementById('app-route-err')).not.toBeNull();
-      
+
       router.destroy();
       $target.remove();
       errorSpy.mockRestore();
@@ -350,15 +354,23 @@ describe('$.route() - SPA Routing', () => {
   describe('Dynamic Behavior', () => {
     it('should bind dynamically added [data-route] links', async () => {
       document.body.innerHTML = '<div id="app"></div><div id="links"></div>';
-      
+
       const router = $.route({
         target: '#app',
         default: 'home',
         autoBindLinks: true,
         activeClass: 'active-link',
-        routes: { 
-          home: { render: (el) => { el.innerHTML = 'Home'; } }, 
-          page2: { render: (el) => { el.innerHTML = 'Page2'; } } 
+        routes: {
+          home: {
+            render: (el) => {
+              el.innerHTML = 'Home';
+            },
+          },
+          page2: {
+            render: (el) => {
+              el.innerHTML = 'Page2';
+            },
+          },
         },
       });
 
@@ -366,14 +378,14 @@ describe('$.route() - SPA Routing', () => {
 
       // Add link dynamically AFTER init
       const $newLink = $('<a href="#page2" data-route="page2">Page 2</a>').appendTo('#links');
-      
+
       // Navigate via click (Event Delegation)
       $newLink[0].click();
       await $.nextTick();
 
       expect(router.currentRoute.value).toBe('page2');
       expect($newLink.hasClass('active-link')).toBe(true);
-      
+
       router.destroy();
     });
   });

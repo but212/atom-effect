@@ -192,10 +192,10 @@ describe('Atom List', () => {
     });
 
     await $.nextTick();
-    
+
     // Expect warning about duplicate keys regardless of debug mode
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Duplicate key'));
-    
+
     $ul.remove();
     warnSpy.mockRestore();
   });

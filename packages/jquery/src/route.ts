@@ -81,7 +81,7 @@ export function route(config: RouteConfig): Router {
     const safeDecode = (str: string): string => {
       try {
         return decodeURIComponent(str);
-      } catch (e) {
+      } catch (_e) {
         console.warn(`${LOG_PREFIX} Malformed URI component: ${str}`);
         return str;
       }
@@ -317,12 +317,14 @@ export function route(config: RouteConfig): Router {
             if (node.nodeType === 1) {
               // ELEMENT_NODE
               const el = node as HTMLElement;
-              if (el.matches && el.matches('[data-route]')) {
+              if (el.matches?.('[data-route]')) {
                 bindActiveState(el);
               }
               // Check descendants
               if (el.querySelectorAll) {
-                el.querySelectorAll('[data-route]').forEach((child) => bindActiveState(child as HTMLElement));
+                el.querySelectorAll('[data-route]').forEach((child) =>
+                  bindActiveState(child as HTMLElement)
+                );
               }
             }
           });

@@ -52,12 +52,12 @@ function bindHtml(ctx: BindingContext, value: ReactiveValue<string>): void {
     value,
     (val) => {
       let newVal = String(val ?? '');
-      
+
       // Basic XSS mitigation
       const sanitized = newVal.replace(/on\w+\s*=/gi, 'data-unsafe-attr=');
       if (sanitized !== newVal) {
-         console.warn('[atomBind] Unsafe attributes detected and neutralized in html binding.');
-         newVal = sanitized;
+        console.warn('[atomBind] Unsafe attributes detected and neutralized in html binding.');
+        newVal = sanitized;
       }
 
       // Guard against redundant DOM writes which destroy/recreate subtrees
