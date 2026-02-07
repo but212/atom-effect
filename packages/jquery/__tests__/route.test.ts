@@ -335,8 +335,6 @@ describe('$.route() - SPA Routing', () => {
         },
       });
 
-
-
       const warnSpy = vi.spyOn(console, 'warn');
 
       // Trigger malformed hash
