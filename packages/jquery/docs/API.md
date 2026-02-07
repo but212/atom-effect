@@ -35,7 +35,20 @@ $('#price').atomText(price, p => `$${p.toFixed(2)}`);
 
 ### `.atomHtml(atom)`
 
-Updates `innerHTML`. **Warning**: Ensure content is trusted to avoid XSS.
+Updates `innerHTML`.
+
+> **⚠️ Security Warning**:
+> This method performs **basic sanitization** (removing `<script>` tags, `on*` events, `javascript:` protocols) but is NOT safe against all advanced XSS vectors.
+>
+> **For production:** We strongly recommend using a dedicated sanitizer like [DOMPurify](https://github.com/cure53/DOMPurify) **before** passing values to `atomHtml`.
+>
+> ```javascript
+> import DOMPurify from 'dompurify';
+>
+> // Recommended Pattern
+> const safeContent = $.computed(() => DOMPurify.sanitize(rawHtml.value));
+> $('#container').atomHtml(safeContent);
+> ```
 
 ### `.atomClass(className, booleanAtom)`
 

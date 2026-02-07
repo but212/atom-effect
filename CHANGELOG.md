@@ -1,6 +1,6 @@
 # Changelog
 
-## [unreleased]
+## [0.19.0]
 
 ### Core
 
@@ -49,7 +49,7 @@
 
 #### Changed - jQuery 0.18.0
 
-- **XSS Prevention**: `atomHtml` and `bindHtml` now sanitize HTML string assignment by neutralizing dangerous attributes like `on*` events (Critical).
+- **XSS Prevention**: `atomHtml` now strictly processes HTML using a **minimal sanitization** strategy (removes `<script>` and `on*` events) to prevent accidental XSS, while explicitly recommending `DOMPurify` for production security. This rolls back the experimental heavy-weight sanitizer in favor of a standards-compliant, opt-in approach.
 - **Input Validation**: `atomVal` and `bindVal` now validate that the target element is a valid input (`input`, `select`, `textarea`), logging a warning if used incorrectly on non-input elements.
 - **Route Safety**: Route parameter parsing now safely handles malformed URIs using `try-catch`, preventing application crashes.
 - **List Diagnostics**: `atomList` now warns about duplicate keys in **Production Mode** (previously only debug), alerting developers to potential reconciliation issues.

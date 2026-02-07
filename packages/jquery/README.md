@@ -14,7 +14,7 @@ npm install @but212/atom-effect-jquery jquery
 ### CDN
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.18.0"></script>
+<script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.19.0"></script>
 ```
 
 ### Usage
@@ -35,6 +35,17 @@ $('#btn-increment').on('click', () => count.value++);
 // 3. Conditional UI
 const isBig = $.computed(() => count.value > 10);
 $('#warning-msg').atomShow(isBig);
+```
+
+## Security Note
+
+For rendering HTML content (`atomHtml`), this library includes **minimal** XSS protection.
+For production applications dealing with user-generated content, use **[DOMPurify](https://github.com/cure53/DOMPurify)**.
+
+```javascript
+import DOMPurify from 'dompurify';
+// Always sanitize before binding HTML
+$('#content').atomHtml($.computed(() => DOMPurify.sanitize(rawHTML.value)));
 ```
 
 ## Documentation

@@ -13,6 +13,7 @@ import type {
   WritableAtom,
 } from './types';
 import { BindingFlags, createInputBindingState } from './types';
+import { sanitizeHtml } from './utils';
 
 // Cache for CSS property camelization to avoid repeated regex and check overhead
 const camelCache: Record<string, string> = Object.create(null);
@@ -51,19 +52,19 @@ function bindHtml(ctx: BindingContext, value: ReactiveValue<string>): void {
     el,
     value,
     (val) => {
-      let newVal = String(val ?? '');
+      const newVal = String(val ?? '');
+      const sanitized = sanitizeHtml(newVal);
 
-      // Basic XSS mitigation
-      // Use word boundary to avoid false positives (e.g., "data-information")
-      const sanitized = newVal.replace(/\bon\w+\s*=/gi, 'data-unsafe-attr=');
       if (sanitized !== newVal) {
-        console.warn('[atomBind] Unsafe attributes detected and neutralized in html binding.');
-        newVal = sanitized;
+        console.warn('[atomBind] Unsafe content neutralized during sanitization.');
       }
 
+      const safeVal = sanitized;
+
       // Guard against redundant DOM writes which destroy/recreate subtrees
-      if (el.innerHTML !== newVal) {
-        el.innerHTML = newVal;
+      // Guard against redundant DOM writes which destroy/recreate subtrees
+      if (el.innerHTML !== safeVal) {
+        el.innerHTML = safeVal;
       }
     },
     'html'
