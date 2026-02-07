@@ -77,6 +77,16 @@ export function route(config: RouteConfig): Router {
     const len = hash.length;
     let start = qIndex + 1;
 
+    // Helper for safe decoding
+    const safeDecode = (str: string): string => {
+      try {
+        return decodeURIComponent(str);
+      } catch (e) {
+        console.warn(`${LOG_PREFIX} Malformed URI component: ${str}`);
+        return str;
+      }
+    };
+
     while (start < len) {
       let end = hash.indexOf('&', start);
       if (end === -1) end = len;
@@ -84,11 +94,11 @@ export function route(config: RouteConfig): Router {
       if (end > start) {
         const eqIndex = hash.indexOf('=', start);
         if (eqIndex !== -1 && eqIndex < end) {
-          params[decodeURIComponent(hash.substring(start, eqIndex))] = decodeURIComponent(
+          params[safeDecode(hash.substring(start, eqIndex))] = safeDecode(
             hash.substring(eqIndex + 1, end)
           );
         } else {
-          params[decodeURIComponent(hash.substring(start, end))] = '';
+          params[safeDecode(hash.substring(start, end))] = '';
         }
       }
       start = end + 1;
@@ -243,34 +253,34 @@ export function route(config: RouteConfig): Router {
 
   /**
    * Sets up automatic binding for navigation links with data-route attribute.
-   * Creates reactive effects for active state tracking and click handlers.
-   * Links are registered with the cleanup registry for automatic memory management.
+   * Uses event delegation for clicks handling dynamic elements.
+   * Uses MutationObserver for active state management of dynamic elements.
    */
   const setupAutoBindLinks = (): void => {
     if (!autoBindLinks) return;
 
-    const $links = $('[data-route]');
+    // 1. Event Delegation for Navigation (Handles future elements automatically)
+    const delegateHandler = (e: JQuery.TriggeredEvent) => {
+      e.preventDefault();
+      const routeAttr = $(e.currentTarget).data('route');
+      navigate(routeAttr);
+    };
 
-    $links.each(function () {
-      const el = this as HTMLElement;
+    $(document).on('click', '[data-route]', delegateHandler);
+
+    cleanups.push(() => {
+      $(document).off('click', '[data-route]', delegateHandler);
+    });
+
+    // 2. Active State Management via MutationObserver
+    // We need to attach effects to any [data-route] element that appears in the DOM.
+    const bindActiveState = (el: HTMLElement) => {
+      if (boundLinks.has(el)) return;
+
       const $link = $(el);
       const routeAttr = $link.data('route') as string;
 
-      // Track this link for cleanup
       boundLinks.add(el);
-
-      // Bind click handler for navigation
-      const clickHandler = (e: JQuery.TriggeredEvent) => {
-        e.preventDefault();
-        navigate(routeAttr);
-      };
-      $link.on('click', clickHandler);
-
-      // Register cleanup with registry for auto-cleanup when link is removed from DOM
-      registry.trackCleanup(el, () => {
-        $link.off('click', clickHandler);
-        boundLinks.delete(el); // Prevent memory leak
-      });
 
       // Bind reactive active state tracking
       const activeEffect = effect(() => {
@@ -285,9 +295,43 @@ export function route(config: RouteConfig): Router {
         }
       });
 
-      // Register effect with registry for auto-cleanup when link is removed from DOM
+      // Register effect with registry
       registry.trackEffect(el, activeEffect);
+
+      // Cleanup tracking
+      registry.trackCleanup(el, () => {
+        boundLinks.delete(el);
+      });
+    };
+
+    // Initial bind
+    $('[data-route]').each(function () {
+      bindActiveState(this as HTMLElement);
     });
+
+    // Watch for new elements
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        if (mutation.type === 'childList') {
+          mutation.addedNodes.forEach((node) => {
+            if (node.nodeType === 1) {
+              // ELEMENT_NODE
+              const el = node as HTMLElement;
+              if (el.matches && el.matches('[data-route]')) {
+                bindActiveState(el);
+              }
+              // Check descendants
+              if (el.querySelectorAll) {
+                el.querySelectorAll('[data-route]').forEach((child) => bindActiveState(child as HTMLElement));
+              }
+            }
+          });
+        }
+      }
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+    cleanups.push(() => observer.disconnect());
   };
 
   /**

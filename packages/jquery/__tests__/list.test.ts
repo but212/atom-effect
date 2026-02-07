@@ -1,5 +1,5 @@
 import $ from 'jquery';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import '../src/index';
 
 describe('Atom List', () => {
@@ -180,5 +180,23 @@ describe('Atom List', () => {
     // Marker should be removed after cleanup
     $ul.remove();
     expect($children.eq(0).hasClass('_aes-bound')).toBe(false);
+  });
+  it('should warn about duplicate keys in production mode', async () => {
+    const warnSpy = vi.spyOn(console, 'warn');
+    const items = $.atom([{ id: 1 }, { id: 1 }]); // Duplicate ID
+    const $ul = $('<ul>').appendTo(document.body);
+
+    $ul.atomList(items, {
+      key: (i) => i.id,
+      render: (i) => `<li>${i.id}</li>`,
+    });
+
+    await $.nextTick();
+    
+    // Expect warning about duplicate keys regardless of debug mode
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Duplicate key'));
+    
+    $ul.remove();
+    warnSpy.mockRestore();
   });
 });

@@ -47,6 +47,13 @@
   - **Automatic Binding**: declaratively binds links with `data-route` to handle navigation and `active` class toggling automatically.
   - **Template Rendering**: Supports both `<template>` refs and custom render functions for flexible view management.
 
+#### Changed - jQuery 0.18.0
+
+- **XSS Prevention**: `atomHtml` and `bindHtml` now sanitize HTML string assignment by neutralizing dangerous attributes like `on*` events (Critical).
+- **Input Validation**: `atomVal` and `bindVal` now validate that the target element is a valid input (`input`, `select`, `textarea`), logging a warning if used incorrectly on non-input elements.
+- **Route Safety**: Route parameter parsing now safely handles malformed URIs using `try-catch`, preventing application crashes.
+- **List Diagnostics**: `atomList` now warns about duplicate keys in **Production Mode** (previously only debug), alerting developers to potential reconciliation issues.
+
 ## [0.17.0]
 
 ### Documentation - 0.17.0

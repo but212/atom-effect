@@ -66,7 +66,7 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
         const item = items[i] as T;
         const k = getKey(item, i);
 
-        if (debug.enabled && newKeySet.has(k)) {
+        if (newKeySet.has(k)) {
           console.warn(`[atomList] Duplicate key "${k}" at index ${i}.`);
         }
 
