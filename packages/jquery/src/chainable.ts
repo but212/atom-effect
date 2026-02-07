@@ -4,6 +4,7 @@ import { debug } from './debug';
 import { registerReactiveEffect } from './effect-factory';
 import { applyInputBinding } from './input-binding';
 import { registry } from './registry';
+import { sanitizeHtml } from './utils';
 import type { ReactiveValue, ValOptions, WritableAtom } from './types';
 import { BindingFlags, createInputBindingState } from './types';
 
@@ -31,12 +32,11 @@ $.fn.atomHtml = function (source: ReactiveValue<string>): JQuery {
       this,
       source,
       (val) => {
-        let safeVal = String(val ?? '');
-        // Basic XSS mitigation: Remove event handlers from HTML string
-        // Use word boundary to avoid false positives (e.g., "data-information")
-        safeVal = safeVal.replace(/\bon\w+\s*=/gi, 'data-unsafe-attr=');
-        if (safeVal !== String(val ?? '')) {
-          console.warn('[atomHtml] Unsafe attributes detected and neutralized.');
+        const rawVal = String(val ?? '');
+        const safeVal = sanitizeHtml(rawVal);
+        
+        if (safeVal !== rawVal) {
+          console.warn('[atomHtml] Unsafe content neutralized during sanitization.');
         }
         $el.html(safeVal);
       },

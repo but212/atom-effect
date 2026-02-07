@@ -4,6 +4,7 @@ import { debug } from './debug';
 import { registerReactiveEffect } from './effect-factory';
 import { applyInputBinding } from './input-binding';
 import { registry } from './registry';
+import { sanitizeHtml } from './utils';
 import type {
   BindingContext,
   BindingOptions,
@@ -51,19 +52,19 @@ function bindHtml(ctx: BindingContext, value: ReactiveValue<string>): void {
     el,
     value,
     (val) => {
-      let newVal = String(val ?? '');
+      const newVal = String(val ?? '');
+      const sanitized = sanitizeHtml(newVal);
 
-      // Basic XSS mitigation
-      // Use word boundary to avoid false positives (e.g., "data-information")
-      const sanitized = newVal.replace(/\bon\w+\s*=/gi, 'data-unsafe-attr=');
       if (sanitized !== newVal) {
-        console.warn('[atomBind] Unsafe attributes detected and neutralized in html binding.');
-        newVal = sanitized;
+        console.warn('[atomBind] Unsafe content neutralized during sanitization.');
       }
+      
+      const safeVal = sanitized;
 
       // Guard against redundant DOM writes which destroy/recreate subtrees
-      if (el.innerHTML !== newVal) {
-        el.innerHTML = newVal;
+      // Guard against redundant DOM writes which destroy/recreate subtrees
+      if (el.innerHTML !== safeVal) {
+        el.innerHTML = safeVal;
       }
     },
     'html'

@@ -37,6 +37,17 @@ const isBig = $.computed(() => count.value > 10);
 $('#warning-msg').atomShow(isBig);
 ```
 
+## Security Note
+
+For rendering HTML content (`atomHtml`), this library includes **minimal** XSS protection.
+For production applications dealing with user-generated content, use **[DOMPurify](https://github.com/cure53/DOMPurify)**.
+
+```javascript
+import DOMPurify from 'dompurify';
+// Always sanitize before binding HTML
+$('#content').atomHtml($.computed(() => DOMPurify.sanitize(rawHTML.value)));
+```
+
 ## Documentation
 
 - [**API Reference**](./docs/API.md): Full list of bindings (`atomText`, `atomVal`, `atomBind`...).
