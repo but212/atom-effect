@@ -4,9 +4,9 @@ import { debug } from './debug';
 import { registerReactiveEffect } from './effect-factory';
 import { applyInputBinding } from './input-binding';
 import { registry } from './registry';
-import { sanitizeHtml } from './utils';
 import type { ReactiveValue, ValOptions, WritableAtom } from './types';
 import { BindingFlags, createInputBindingState } from './types';
+import { sanitizeHtml } from './utils';
 
 /**
  * Updates element text content.
@@ -34,7 +34,7 @@ $.fn.atomHtml = function (source: ReactiveValue<string>): JQuery {
       (val) => {
         const rawVal = String(val ?? '');
         const safeVal = sanitizeHtml(rawVal);
-        
+
         if (safeVal !== rawVal) {
           console.warn('[atomHtml] Unsafe content neutralized during sanitization.');
         }

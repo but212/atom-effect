@@ -55,22 +55,31 @@ export function sanitizeHtml(html: string): string {
 
   // 0. Pre-process: Remove null bytes and control characters (bypass vectors)
   // These are often used to bypass regex filters while browsers ignore them
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: Intentionally matching control characters for XSS sanitization
   safe = safe.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
 
   // 1. Remove dangerous tags entirely (content included or tag stripped)
   // Dangerous tags: script, iframe, object, embed, base, meta, form, applet, link, style, template, noscript, title
   // Also remove processing instructions <? ... ?> which can be abused in some contexts
-  safe = safe.replace(/<\?[\s\S]*?\?>/g, "")
-             .replace(/<(script|iframe|object|embed|base|meta|form|applet|link|style|template|noscript|title)\b[^>]*>([\s\S]*?)<\/\1>/gim, "")
-             .replace(/<(script|iframe|object|embed|base|meta|form|applet|link|style|template|noscript|title)\b[^>]*\/?>/gim, "");
-  
+  safe = safe
+    .replace(/<\?[\s\S]*?\?>/g, '')
+    .replace(
+      /<(script|iframe|object|embed|base|meta|form|applet|link|style|template|noscript|title)\b[^>]*>([\s\S]*?)<\/\1>/gim,
+      ''
+    )
+    .replace(
+      /<(script|iframe|object|embed|base|meta|form|applet|link|style|template|noscript|title)\b[^>]*\/?>/gim,
+      ''
+    );
+
   // 2. Neutralize dangerous protocols (javascript:, vbscript:, data:)
-  
+
   // Helper to decode HTML entities for inspection (simple implementation)
   // This allows us to detect obfuscated protocols like "&#106;avascript:" -> "javascript:"
   const decodeEntities = (str: string) => {
-    return str.replace(/&#x([0-9a-f]+);?/gi, (_, code) => String.fromCharCode(parseInt(code, 16)))
-              .replace(/&#([0-9]+);?/gi, (_, code) => String.fromCharCode(parseInt(code, 10)));
+    return str
+      .replace(/&#x([0-9a-f]+);?/gi, (_, code) => String.fromCharCode(parseInt(code, 16)))
+      .replace(/&#([0-9]+);?/gi, (_, code) => String.fromCharCode(parseInt(code, 10)));
   };
 
   const decoded = decodeEntities(safe);
@@ -80,42 +89,48 @@ export function sanitizeHtml(html: string): string {
     // If decoded string contains dangerous protocol, we must sanitize the ORIGINAL string
     // Since we can't easily map back, we aggressively replace potential protocol patterns in the original
     // A robust way: fail safe by removing the protocol from the original if detected in decoded
-    
+
     // Aggressive pattern for the original string dealing with entities
     // Matches "j" or "&#106;" followed by "a" or "&#97;" etc...
-    // This is too complex. 
-    // Easier: Just replace the specific dangerous strings in the original using a broad regex 
+    // This is too complex.
+    // Easier: Just replace the specific dangerous strings in the original using a broad regex
     // that matches the protocol chars OR their entity equivalents.
 
     // Let's use a regex that matches "javascript:" where each char can be an entity
     const buildProtocolRegex = (protocol: string) => {
       return new RegExp(
-        protocol.split('').map(c => {
-          const code = c.charCodeAt(0);
-          // Match the char, or decimal entity, or hex entity (case insensitive)
-          return `(?:${c}|&#0*${code};?|&#x0*${code.toString(16)};?)`;
-        }).join('\\s*') + '\\s*(?::|&colon;|&#x?0*((58)|(3a));?|%3a)',
+        `${protocol
+          .split('')
+          .map((c) => {
+            const code = c.charCodeAt(0);
+            // Match the char, or decimal entity, or hex entity (case insensitive)
+            return `(?:${c}|&#0*${code};?|&#x0*${code.toString(16)};?)`;
+          })
+          .join('\\s*')}\\s*(?::|&colon;|&#x?0*((58)|(3a));?|%3a)`,
         'gi'
       );
     };
 
-    safe = safe.replace(buildProtocolRegex('javascript'), 'data-unsafe-protocol:')
-               .replace(buildProtocolRegex('vbscript'), 'data-unsafe-protocol:')
-               .replace(buildProtocolRegex('data'), 'data-unsafe-protocol:');
+    safe = safe
+      .replace(buildProtocolRegex('javascript'), 'data-unsafe-protocol:')
+      .replace(buildProtocolRegex('vbscript'), 'data-unsafe-protocol:')
+      .replace(buildProtocolRegex('data'), 'data-unsafe-protocol:');
   } else {
-      // Fast path for non-obfuscated protocols
-      const protocolRegex = /((?:j\s*a\s*v\s*a\s*s\s*c\s*r\s*i\s*p\s*t|v\s*b\s*s\s*c\s*r\s*i\s*p\s*t|d\s*a\s*t\s*a)\s*(?::|&colon;|&#x?0*((58)|(3a));?|%3a))/gim;
-      safe = safe.replace(protocolRegex, 'data-unsafe-protocol:');
+    // Fast path for non-obfuscated protocols
+    const protocolRegex =
+      /((?:j\s*a\s*v\s*a\s*s\s*c\s*r\s*i\s*p\s*t|v\s*b\s*s\s*c\s*r\s*i\s*p\s*t|d\s*a\s*t\s*a)\s*(?::|&colon;|&#x?0*((58)|(3a));?|%3a))/gim;
+    safe = safe.replace(protocolRegex, 'data-unsafe-protocol:');
   }
-  
+
   // 3. Neutralize event handlers (on* attributes)
   // Replaces "onclick=" with "data-unsafe-attr="
   safe = safe.replace(/\bon\w+\s*=/gim, 'data-unsafe-attr=');
 
   // 4. Neutralize CSS expressions (IE legacy but dangerous) and behavior
   // expression(...), behavior:url(...)
-  safe = safe.replace(/expression\s*\(/gim, 'data-unsafe-css(')
-             .replace(/behavior\s*:/gim, 'data-unsafe-css:');
+  safe = safe
+    .replace(/expression\s*\(/gim, 'data-unsafe-css(')
+    .replace(/behavior\s*:/gim, 'data-unsafe-css:');
 
   return safe;
 }

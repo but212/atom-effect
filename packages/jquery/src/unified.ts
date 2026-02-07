@@ -4,7 +4,6 @@ import { debug } from './debug';
 import { registerReactiveEffect } from './effect-factory';
 import { applyInputBinding } from './input-binding';
 import { registry } from './registry';
-import { sanitizeHtml } from './utils';
 import type {
   BindingContext,
   BindingOptions,
@@ -14,6 +13,7 @@ import type {
   WritableAtom,
 } from './types';
 import { BindingFlags, createInputBindingState } from './types';
+import { sanitizeHtml } from './utils';
 
 // Cache for CSS property camelization to avoid repeated regex and check overhead
 const camelCache: Record<string, string> = Object.create(null);
@@ -58,7 +58,7 @@ function bindHtml(ctx: BindingContext, value: ReactiveValue<string>): void {
       if (sanitized !== newVal) {
         console.warn('[atomBind] Unsafe content neutralized during sanitization.');
       }
-      
+
       const safeVal = sanitized;
 
       // Guard against redundant DOM writes which destroy/recreate subtrees

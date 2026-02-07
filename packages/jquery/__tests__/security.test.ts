@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import $ from 'jquery';
 import { atom } from '@but212/atom-effect';
+import $ from 'jquery';
+import { describe, expect, it } from 'vitest';
 import '../src/chainable'; // Register plugins
 
 describe('Security Sanitization (Comprehensive XSS)', () => {
@@ -22,10 +22,10 @@ describe('Security Sanitization (Comprehensive XSS)', () => {
       '<img src=x onerror=alert(1)>',
       '<div onmouseover="alert(1)">Hover me</div>',
       '<body onload=alert(1)>',
-      '<input onfocus=alert(1) autofocus>'
+      '<input onfocus=alert(1) autofocus>',
     ];
-    
-    vectors.forEach(malicious => {
+
+    vectors.forEach((malicious) => {
       const a = atom(malicious);
       div.atomHtml(a);
       const html = div.html().toLowerCase();
@@ -43,10 +43,10 @@ describe('Security Sanitization (Comprehensive XSS)', () => {
     const vectors = [
       '<a href="javascript:alert(1)">Click me</a>',
       '<iframe src="javascript:alert(1)"></iframe>',
-      '<form action="javascript:alert(1)"><button>Submit</button></form>'
+      '<form action="javascript:alert(1)"><button>Submit</button></form>',
     ];
 
-    vectors.forEach(malicious => {
+    vectors.forEach((malicious) => {
       const a = atom(malicious);
       div.atomHtml(a);
       const html = div.html().toLowerCase();
@@ -62,10 +62,10 @@ describe('Security Sanitization (Comprehensive XSS)', () => {
     const vectors = [
       '<ScRiPt>alert(1)</sCrIpT>',
       '<script\n>alert(1)</script>',
-      '<script type="text/javascript">alert(1)</script>'
+      '<script type="text/javascript">alert(1)</script>',
     ];
 
-    vectors.forEach(malicious => {
+    vectors.forEach((malicious) => {
       const a = atom(malicious);
       div.atomHtml(a);
       const html = div.html().toLowerCase();
@@ -88,10 +88,10 @@ describe('Security Sanitization (Comprehensive XSS)', () => {
     const vectors = [
       '<iframe src="http://evil.com"></iframe>',
       '<object data="http://evil.com"></object>',
-      '<embed src="http://evil.com">'
+      '<embed src="http://evil.com">',
     ];
 
-    vectors.forEach(malicious => {
+    vectors.forEach((malicious) => {
       const a = atom(malicious);
       div.atomHtml(a);
       const html = div.html().toLowerCase();
@@ -104,7 +104,8 @@ describe('Security Sanitization (Comprehensive XSS)', () => {
   // 7. Base64 / Data URI
   it('should sanitize data: URIs with executable content', () => {
     const div = $('<div>');
-    const malicious = '<a href="data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==">Click</a>';
+    const malicious =
+      '<a href="data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==">Click</a>';
     const a = atom(malicious);
     div.atomHtml(a);
     expect(div.html().toLowerCase()).not.toContain('data:text/html');
@@ -115,12 +116,12 @@ describe('Security Sanitization (Comprehensive XSS)', () => {
     const div = $('<div>');
     const vectors = [
       '<div style="background:url(javascript:alert(1))">',
-      '<div style="behavior:url(malicious.htc)">',  // IE
-      '<div style="expression(alert(1))">',  // IE
-      '<style>@import "http://evil.com/xss.css";</style>'
+      '<div style="behavior:url(malicious.htc)">', // IE
+      '<div style="expression(alert(1))">', // IE
+      '<style>@import "http://evil.com/xss.css";</style>',
     ];
 
-    vectors.forEach(malicious => {
+    vectors.forEach((malicious) => {
       const a = atom(malicious);
       div.atomHtml(a);
       const html = div.html().toLowerCase();
@@ -135,10 +136,10 @@ describe('Security Sanitization (Comprehensive XSS)', () => {
     const div = $('<div>');
     const vectors = [
       '<template><script>alert(1)</script></template>',
-      '<noscript><img src=x onerror=alert(1)></noscript>'
+      '<noscript><img src=x onerror=alert(1)></noscript>',
     ];
 
-    vectors.forEach(malicious => {
+    vectors.forEach((malicious) => {
       const a = atom(malicious);
       div.atomHtml(a);
       const html = div.html().toLowerCase();
@@ -152,10 +153,10 @@ describe('Security Sanitization (Comprehensive XSS)', () => {
     const div = $('<div>');
     const vectors = [
       '<meta http-equiv="refresh" content="0;url=javascript:alert(1)">',
-      '<link rel="import" href="http://evil.com/component.html">'
+      '<link rel="import" href="http://evil.com/component.html">',
     ];
 
-    vectors.forEach(malicious => {
+    vectors.forEach((malicious) => {
       const a = atom(malicious);
       div.atomHtml(a);
       const html = div.html().toLowerCase();
@@ -174,13 +175,13 @@ describe('Security Sanitization (Comprehensive XSS)', () => {
 
     // This is hard to fully sanitise without DOM parsing, but we can check if critical dangerous attributes pass through
     // For now we check if the dangerous values are sanitized/neutralized
-    vectors.forEach(malicious => {
+    vectors.forEach((malicious) => {
       const a = atom(malicious);
       div.atomHtml(a);
       const html = div.html().toLowerCase();
       // Expect dangerous values to be sanitized if they contain protocols
       if (html.includes('javascript:')) {
-         expect(html).not.toContain('javascript:');
+        expect(html).not.toContain('javascript:');
       }
     });
   });
@@ -191,10 +192,10 @@ describe('Security Sanitization (Comprehensive XSS)', () => {
     const vectors = [
       '<scr\x00ipt>alert(1)</script>',
       '<a href="java\u0000script:alert(1)">',
-      '<img src="\u0001javascript:alert(1)">' // Control char
+      '<img src="\u0001javascript:alert(1)">', // Control char
     ];
 
-    vectors.forEach(malicious => {
+    vectors.forEach((malicious) => {
       const a = atom(malicious);
       div.atomHtml(a);
       const html = div.html().toLowerCase();
@@ -218,10 +219,10 @@ describe('Security Sanitization (Comprehensive XSS)', () => {
     const vectors = [
       '<img srcset="javascript:alert(1)">',
       '<video poster="javascript:alert(1)">',
-      '<source src="javascript:alert(1)">'
+      '<source src="javascript:alert(1)">',
     ];
 
-    vectors.forEach(malicious => {
+    vectors.forEach((malicious) => {
       const a = atom(malicious);
       div.atomHtml(a);
       const html = div.html().toLowerCase();
@@ -235,14 +236,14 @@ describe('Security Sanitization (Comprehensive XSS)', () => {
     const vectors = [
       '<a href="javascript&#58;alert(1)">',
       '<a href="javascript%3Aalert(1)">',
-      '<a href="&#106;&#97;&#118;&#97;&#115;&#99;&#114;&#105;&#112;&#116;&#58;alert(1)">'
+      '<a href="&#106;&#97;&#118;&#97;&#115;&#99;&#114;&#105;&#112;&#116;&#58;alert(1)">',
     ];
 
-    vectors.forEach(malicious => {
+    vectors.forEach((malicious) => {
       const a = atom(malicious);
       div.atomHtml(a);
       const html = div.html().toLowerCase();
-      // Browser decodes entities/percent encoding in attributes. 
+      // Browser decodes entities/percent encoding in attributes.
       // Our sanitizer works on string, so it might miss these unless we decode first.
       // This test confirms if current approach fails or succeeds.
       expect(html).not.toContain('javascript:');
