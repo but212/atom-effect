@@ -102,13 +102,22 @@ describe('Security Sanitization (Comprehensive XSS)', () => {
   });
 
   // 7. Base64 / Data URI
-  it('should sanitize data: URIs with executable content', () => {
+  it('should sanitize data: URIs with executable content but preserve safe ones', () => {
     const div = $('<div>');
+
+    // Malicious vector
     const malicious =
       '<a href="data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==">Click</a>';
-    const a = atom(malicious);
-    div.atomHtml(a);
+    const a1 = atom(malicious);
+    div.atomHtml(a1);
     expect(div.html().toLowerCase()).not.toContain('data:text/html');
+
+    // Safe vector
+    const safe =
+      '<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=">';
+    const a2 = atom(safe);
+    div.atomHtml(a2);
+    expect(div.html().toLowerCase()).toContain('data:image/png');
   });
 
   // 9. CSS-based Attacks
@@ -165,25 +174,22 @@ describe('Security Sanitization (Comprehensive XSS)', () => {
     });
   });
 
-  // 12. DOM Clobbering (Basic Check)
-  it('should prevent basic DOM clobbering patterns', () => {
+  // 12. DOM Clobbering (Basic Mitigation)
+  it('should mitigate basic DOM clobbering patterns', () => {
     const div = $('<div>');
-    const vectors = [
-      '<form id="location"><input name="href" value="javascript:alert(1)"></form>',
-      '<img name="createElement">',
-    ];
 
-    // This is hard to fully sanitise without DOM parsing, but we can check if critical dangerous attributes pass through
-    // For now we check if the dangerous values are sanitized/neutralized
-    vectors.forEach((malicious) => {
-      const a = atom(malicious);
-      div.atomHtml(a);
-      const html = div.html().toLowerCase();
-      // Expect dangerous values to be sanitized if they contain protocols
-      if (html.includes('javascript:')) {
-        expect(html).not.toContain('javascript:');
-      }
-    });
+    // Vector 1: form-based clobbering. The sanitizer removes the <form> tag.
+    const formVector = '<form id="location"><input name="href" value="javascript:alert(1)"></form>';
+    const a1 = atom(formVector);
+    div.atomHtml(a1);
+    expect(div.html().toLowerCase()).not.toContain('<form');
+
+    // Vector 2: name-based clobbering. This is a known limitation of regex-based sanitizers
+    // and is not expected to be caught. The test confirms the sanitizer does not act on it.
+    const imgVector = '<img name="createElement">';
+    const a2 = atom(imgVector);
+    div.atomHtml(a2);
+    expect(div.html().toLowerCase()).toContain('<img name="createelement">');
   });
 
   // 13. Null Byte / Unicode Bypass

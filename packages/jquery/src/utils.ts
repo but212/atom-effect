@@ -113,14 +113,21 @@ export function sanitizeHtml(html: string): string {
 
     safe = safe
       .replace(buildProtocolRegex('javascript'), 'data-unsafe-protocol:')
-      .replace(buildProtocolRegex('vbscript'), 'data-unsafe-protocol:')
-      .replace(buildProtocolRegex('data'), 'data-unsafe-protocol:');
+      .replace(buildProtocolRegex('vbscript'), 'data-unsafe-protocol:');
+    // data: is handled separately below to allow images
   } else {
     // Fast path for non-obfuscated protocols
     const protocolRegex =
-      /((?:j\s*a\s*v\s*a\s*s\s*c\s*r\s*i\s*p\s*t|v\s*b\s*s\s*c\s*r\s*i\s*p\s*t|d\s*a\s*t\s*a)\s*(?::|&colon;|&#x?0*((58)|(3a));?|%3a))/gim;
+      /((?:j\s*a\s*v\s*a\s*s\s*c\s*r\s*i\s*p\s*t|v\s*b\s*s\s*c\s*r\s*i\s*p\s*t)\s*(?::|&colon;|&#x?0*((58)|(3a));?|%3a))/gim;
     safe = safe.replace(protocolRegex, 'data-unsafe-protocol:');
   }
+
+  // Separately handle dangerous data URIs (e.g. text/html, base64 encoded scripts)
+  // This allows common inline images (data:image/...) while blocking executable payloads.
+  // Note: Only basic detection.
+  const dangerousDataUriRegex =
+    /data\s*:\s*(?:text\/html|application\/javascript|text\/javascript|text\/vbscript)/gim;
+  safe = safe.replace(dangerousDataUriRegex, 'data-unsafe-protocol:');
 
   // 3. Neutralize event handlers (on* attributes)
   // Replaces "onclick=" with "data-unsafe-attr="
