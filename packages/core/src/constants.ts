@@ -60,6 +60,7 @@ export const ATOM_STATE_FLAGS = {
 export const POOL_CONFIG = {
   MAX_SIZE: 1000,
   WARMUP_SIZE: 100,
+  ENABLE_STATS: false,
 } as const;
 
 /**
@@ -84,7 +85,6 @@ export const SCHEDULER_CONFIG = {
  * Debugging thresholds.
  */
 export const DEBUG_CONFIG = {
-  MAX_DEPENDENCIES: 1000,
   WARN_INFINITE_LOOP: true,
 } as const;
 

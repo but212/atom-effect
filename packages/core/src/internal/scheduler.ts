@@ -1,5 +1,6 @@
 import { IS_DEV, SCHEDULER_CONFIG } from '@/constants';
 import { SchedulerError } from '@/errors/errors';
+import { ERROR_MESSAGES } from '@/errors/messages';
 import { endFlush, startFlush } from '@/internal/epoch';
 
 export enum SchedulerPhase {
@@ -186,15 +187,25 @@ export const scheduler = {
     jobs.length = 0;
   },
 
+  /** Overflow callback */
+  onOverflow: null as ((droppedCount: number) => void) | null,
+
   _handleFlushOverflow(): void {
+    const droppedCount = this._size + this._batchQueueSize;
     console.error(
       new SchedulerError(
-        `Maximum flush iterations (${this._maxFlushIterations}) exceeded. Possible infinite loop.`
+        ERROR_MESSAGES.SCHEDULER_FLUSH_OVERFLOW(this._maxFlushIterations, droppedCount)
       )
     );
     this._size = 0;
     this._queueBuffer[this._bufferIndex]!.length = 0;
     this._batchQueueSize = 0;
+
+    if (this.onOverflow) {
+      try {
+        this.onOverflow(droppedCount);
+      } catch {}
+    }
   },
 
   startBatch(): void {

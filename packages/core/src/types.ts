@@ -117,6 +117,8 @@ export interface ComputedOptions<T = unknown> {
   lazy?: boolean;
   /** Error handler. */
   onError?: (error: Error) => void;
+  /** Maximum number of async retries before giving up (default: 3). */
+  maxAsyncRetries?: number;
 }
 
 /**
@@ -203,7 +205,6 @@ export interface PoolStats {
 
 export interface DebugConfig {
   enabled: boolean;
-  maxDependencies: number;
   warnInfiniteLoop: boolean;
   warn(condition: boolean, message: string): void;
   checkCircular(dep: Dependency, current: object): void;

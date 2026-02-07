@@ -22,7 +22,7 @@ import { isPromise } from '@/utils/type-guards';
  */
 class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker {
   private _cleanup: (() => void) | null = null;
-  private _links: DependencyLink[] = EMPTY_LINKS as unknown as DependencyLink[];
+  private _links: DependencyLink[] = EMPTY_LINKS;
   private _nextLinks: DependencyLink[] | null = null;
   private _executeTask: (() => void) | undefined;
 
@@ -83,7 +83,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     this._releaseLinks(this._links);
 
     // Reset State
-    this._links = EMPTY_LINKS as unknown as DependencyLink[];
+    this._links = EMPTY_LINKS;
     this._executeTask = undefined;
   }
 
@@ -116,7 +116,15 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       });
       nextLinks.push(new DependencyLink(dep, dep.version, unsubscribe));
     } catch (error) {
-      console.error(wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_EXECUTION_FAILED));
+      const wrapped = wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_EXECUTION_FAILED);
+      console.error(wrapped);
+      if (this._onError) {
+        try {
+          this._onError(wrapped);
+        } catch {}
+      }
+      // Add noop link so next execution can attempt re-subscription
+      nextLinks.push(new DependencyLink(dep, dep.version, undefined));
     }
   }
 
@@ -246,8 +254,6 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       for (let i = 0, len = links.length; i < len; i++) {
         const link = links[i]!;
         const dep = link.node;
-        // Version Check
-        if (dep.version !== link.version) return true;
 
         // Check computed values (read to trigger recomputation if needed)
         if ('value' in (dep as object)) {
@@ -255,10 +261,15 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
             // Access value directly since we've disabled tracking
             void (dep as { value: unknown }).value;
           } catch {
+            if (IS_DEV) {
+              console.warn(`[atom-effect] Dependency #${dep.id} threw during dirty check`);
+            }
             return true; // Error usually implies dirty/re-eval needed
           }
-          if (dep.version !== link.version) return true;
         }
+
+        // Version Check
+        if (dep.version !== link.version) return true;
       }
       return false;
     } finally {
@@ -298,9 +309,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       const oldest = this._history[this._historyPtr] || 0;
 
       if (oldest > 0 && now - oldest < TIME_CONSTANTS.ONE_SECOND_MS) {
-        const err = new EffectError(
-          `Effect executed too frequently within 1 second. Suspected infinite loop.`
-        );
+        const err = new EffectError(ERROR_MESSAGES.EFFECT_FREQUENCY_LIMIT_EXCEEDED);
         this.dispose();
         this._handleExecutionError(err);
         if (IS_DEV) throw err;

@@ -13,10 +13,6 @@ describe('debug configuration', () => {
     expect(typeof debug.enabled).toBe('boolean');
   });
 
-  it('maxDependencies default value is set', () => {
-    expect(debug.maxDependencies).toBe(1000);
-  });
-
   it('warnInfiniteLoop default value is true', () => {
     expect(debug.warnInfiniteLoop).toBe(true);
   });

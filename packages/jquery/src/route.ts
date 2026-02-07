@@ -30,18 +30,6 @@ const LOG_PREFIX = '[$.route]';
  *     about: { template: '#tmpl-about' }
  *   }
  * });
- *
- * // Navigate programmatically
- * router.navigate('about');
- *
- * // React to route changes
- * $.effect(() => {
- *   console.log('Current route:', router.currentRoute.value);
- * });
- *
- * // Cleanup when done
- * router.destroy();
- * ```
  */
 export function route(config: RouteConfig): Router {
   // Destructure configuration with defaults

@@ -147,7 +147,7 @@ Creates a lightweight, hash-based SPA router with reactive state management.
 
 - `target`: Selector for the container element where routes will be rendered.
 - `default`: Name of the default route to load if the hash is empty.
-- `routes`: Object mapping route names to definitions.
+- `routes`: Object mapping route names to definitions. Each route must specify **either** `template` **or** `render`, but not both (mutually exclusive).
   - `template`: Selector for a `<template>` element to clone.
   - `render`: Custom function `(container, route, params) => void`.
   - `onEnter`: Hook called before rendering. Can return additional params.

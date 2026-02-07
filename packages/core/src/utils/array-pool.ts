@@ -9,29 +9,38 @@ import type { PoolStats } from '@/types';
 export class ArrayPool<T> {
   private readonly pool: T[][] = [];
 
-  // Mutable stats container, null in production
-  private stats = IS_DEV
-    ? {
-        acquired: 0,
-        released: 0,
-        rejected: { frozen: 0, tooLarge: 0, poolFull: 0 },
-      }
-    : null;
+  // Mutable stats container, null when disabled
+  private stats: {
+    acquired: number;
+    released: number;
+    rejected: { frozen: number; tooLarge: number; poolFull: number };
+  } | null = null;
 
   /**
    * @param limit - Max unique arrays to hold (default: 50). Prevents the pool itself from consuming too much memory.
    * @param capacity - Max length of an array to accept (default: 256).
+   * @param enableStats - Force-enable stats even in production (default: false).
    */
   constructor(
     private readonly limit = 50,
-    private readonly capacity = 256
-  ) {}
+    private readonly capacity = 256,
+    enableStats = false
+  ) {
+    this.stats =
+      IS_DEV || enableStats
+        ? {
+            acquired: 0,
+            released: 0,
+            rejected: { frozen: 0, tooLarge: 0, poolFull: 0 },
+          }
+        : null;
+  }
 
   /**
    * Acquires array.
    */
   acquire(): T[] {
-    if (IS_DEV && this.stats) {
+    if (this.stats) {
       this.stats.acquired++;
     }
     // LIFO reuse for better cache locality
@@ -48,24 +57,24 @@ export class ArrayPool<T> {
     if (emptyConst && arr === emptyConst) return;
 
     if (arr.length > this.capacity) {
-      if (IS_DEV && this.stats) this.stats.rejected.tooLarge++;
+      if (this.stats) this.stats.rejected.tooLarge++;
       return;
     }
 
     if (this.pool.length >= this.limit) {
-      if (IS_DEV && this.stats) this.stats.rejected.poolFull++;
+      if (this.stats) this.stats.rejected.poolFull++;
       return;
     }
 
     if (Object.isFrozen(arr)) {
-      if (IS_DEV && this.stats) this.stats.rejected.frozen++;
+      if (this.stats) this.stats.rejected.frozen++;
       return;
     }
 
     arr.length = 0;
     this.pool.push(arr);
 
-    if (IS_DEV && this.stats) {
+    if (this.stats) {
       this.stats.released++;
     }
   }
@@ -74,7 +83,7 @@ export class ArrayPool<T> {
    * Pool stats.
    */
   getStats(): PoolStats | null {
-    if (!IS_DEV || !this.stats) return null;
+    if (!this.stats) return null;
 
     const { acquired, released, rejected } = this.stats;
     const leakCount =
@@ -94,7 +103,7 @@ export class ArrayPool<T> {
    */
   reset(): void {
     this.pool.length = 0;
-    if (IS_DEV && this.stats) {
+    if (this.stats) {
       this.stats = {
         acquired: 0,
         released: 0,

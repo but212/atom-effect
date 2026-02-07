@@ -48,7 +48,6 @@ export const debug: DebugConfig = {
   // Dev mode flag
   enabled: IS_DEV,
 
-  maxDependencies: DEBUG_CONFIG.MAX_DEPENDENCIES,
   warnInfiniteLoop: DEBUG_CONFIG.WARN_INFINITE_LOOP,
 
   warn(cond, msg) {
