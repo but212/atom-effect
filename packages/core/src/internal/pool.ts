@@ -9,7 +9,7 @@ export const EMPTY_DEPS = freeze<Dependency>([]);
 export const EMPTY_SUBS = freeze<Subscriber>([]);
 export const EMPTY_UNSUBS = freeze<() => void>([]);
 export const EMPTY_VERSIONS = freeze<number>([]);
-export const EMPTY_LINKS = freeze<DependencyLink>([]);
+export const EMPTY_LINKS: DependencyLink[] = freeze<DependencyLink>([]) as DependencyLink[];
 
 // Array pools
 export const depArrayPool = new ArrayPool<Dependency>();

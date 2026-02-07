@@ -2,9 +2,29 @@
 
 ## [unreleased]
 
+### Core
+
+#### Added
+
+- **Configurable Async Retries**: Added `maxAsyncRetries` option to `ComputedOptions`, allowing per-instance control over async drift retry limits (default: 3).
+- **ArrayPool `enableStats`**: Added `enableStats` constructor parameter to force-enable pool statistics even in production builds.
+- **Error Dependency Count**: Added `_errorDepCount` field to `ComputedAtom` for O(1) fast-path `hasError` checks, with live scan fallback for async error propagation.
+
+#### Changed - Core
+
+- **Notification Performance**: Replaced `[...subscribers]` spread with `Array.prototype.slice(0)` in `_notifySubscribers` to avoid iterator protocol overhead.
+- **EMPTY_LINKS Type Safety**: Changed `EMPTY_LINKS` type to `DependencyLink[]`, eliminating 8 `as unknown as DependencyLink[]` double casts across `computed.ts` and `effect.ts`.
+- **Dev Error Logging**: Added `IS_DEV` guarded `console.warn` in `_commitDeps` error recovery catch block for better debugging of dependency commit failures.
+
+#### Refactored - Core
+
+- **Version Arithmetic**: Extracted `nextVersion(v)` utility in `epoch.ts` to replace repeated `(version + 1) & SMI_MAX` pattern across `atom.ts` and `computed.ts`.
+- **Flag Transition Masks**: Extracted pre-computed flag masks (`CLEAR_FOR_PENDING`, `CLEAR_FOR_REJECTED`, `SET_REJECTED`, `CLEAR_FOR_RESOLVED`) in `computed.ts` to simplify state transitions.
+- **Unused Imports**: Removed unused `NODE_FLAGS` imports from `base.ts` and `dep-tracking.ts`.
+
 ### jQuery
 
-#### Changed
+#### Changed - jQuery
 
 - **RouteDefinition Type Safety**: Refactored `RouteDefinition` into a discriminated union (`TemplateRoute | RenderRoute`) to enforce mutual exclusivity of `template` and `render` at compile time. Prevents accidental misconfiguration where both are specified.
 

@@ -14,6 +14,9 @@ export const nextEpoch = () => {
 /** Current tracking epoch. */
 export const currentEpoch = () => collectorEpoch;
 
+/** Increments a version counter within SMI range. */
+export const nextVersion = (v: number) => (v + 1) & SMI_MAX;
+
 export let flushEpoch = 0;
 export let flushExecutionCount = 0;
 let isFlushing = false;

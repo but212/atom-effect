@@ -20,7 +20,14 @@ export const ERROR_MESSAGES = {
   EFFECT_CLEANUP_FAILED: 'Effect cleanup failed',
   EFFECT_DISPOSED: 'Attempted to run disposed effect',
 
+  // Scheduler Errors
+  SCHEDULER_FLUSH_OVERFLOW: (max: number, dropped: number): string =>
+    `Maximum flush iterations (${max}) exceeded. ${dropped} jobs dropped. Possible infinite loop.`,
+
   // System / Debug
-  LARGE_DEPENDENCY_GRAPH: (count: number): string => `Large dependency graph (${count} nodes)`,
   CALLBACK_ERROR_IN_ERROR_HANDLER: 'Exception encountered in onError handler',
+
+  // Effect frequency
+  EFFECT_FREQUENCY_LIMIT_EXCEEDED:
+    'Effect executed too frequently within 1 second. Suspected infinite loop.',
 } as const;

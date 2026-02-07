@@ -1,4 +1,4 @@
-import { IS_DEV, NODE_FLAGS, SMI_MAX } from '@/constants';
+import { IS_DEV, SMI_MAX } from '@/constants';
 import { SubscriberLink } from '@/core/dep-tracking';
 import { AtomError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
@@ -83,7 +83,7 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
   protected _notifySubscribers(newValue: T | undefined, oldValue: T | undefined): void {
     if (this._subscribers.length === 0) return;
 
-    const subs = [...this._subscribers];
+    const subs = this._subscribers.slice(0);
     const len = subs.length;
 
     for (let i = 0; i < len; i++) {

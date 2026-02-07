@@ -1,6 +1,7 @@
-import { ATOM_STATE_FLAGS, SMI_MAX } from '@/constants';
+import { ATOM_STATE_FLAGS } from '@/constants';
 import { ReactiveDependency } from '@/core/base';
 import { type SubscriberLink, trackDependency } from '@/core/dep-tracking';
+import { nextVersion } from '@/internal/epoch';
 import { scheduler } from '@/internal/scheduler';
 import { trackingContext } from '@/tracking';
 import type { AtomOptions, WritableAtom } from '@/types';
@@ -37,7 +38,7 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
     if (Object.is(oldValue, newValue)) return;
 
     this._value = newValue;
-    this.version = (this.version + 1) & SMI_MAX;
+    this.version = nextVersion(this.version);
 
     const flags = this.flags;
     if (this._subscribers.length === 0 || flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED) {
