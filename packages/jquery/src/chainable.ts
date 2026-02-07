@@ -27,7 +27,21 @@ $.fn.atomText = function <T>(source: ReactiveValue<T>, formatter?: (v: T) => str
 $.fn.atomHtml = function (source: ReactiveValue<string>): JQuery {
   return this.each(function () {
     const $el = $(this);
-    registerReactiveEffect(this, source, (val) => $el.html(String(val ?? '')), 'html');
+    registerReactiveEffect(
+      this,
+      source,
+      (val) => {
+        let safeVal = String(val ?? '');
+        // Basic XSS mitigation: Remove event handlers from HTML string
+        // Use word boundary to avoid false positives (e.g., "data-information")
+        safeVal = safeVal.replace(/\bon\w+\s*=/gi, 'data-unsafe-attr=');
+        if (safeVal !== String(val ?? '')) {
+          console.warn('[atomHtml] Unsafe attributes detected and neutralized.');
+        }
+        $el.html(safeVal);
+      },
+      'html'
+    );
   });
 };
 
@@ -123,6 +137,11 @@ $.fn.atomHide = function (condition: ReactiveValue<boolean>): JQuery {
  */
 $.fn.atomVal = function <T>(atom: WritableAtom<T>, options: ValOptions<T> = {}): JQuery {
   return this.each(function () {
+    const tagName = this.tagName.toLowerCase();
+    if (!['input', 'select', 'textarea'].includes(tagName)) {
+      console.warn(`[atomVal] Element <${tagName}> is not a valid input element.`);
+      return;
+    }
     const { effect: fxFn, cleanup } = applyInputBinding($(this), atom, options);
     registry.trackEffect(this, effect(fxFn));
     registry.trackCleanup(this, cleanup);

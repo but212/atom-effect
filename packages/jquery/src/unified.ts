@@ -51,7 +51,16 @@ function bindHtml(ctx: BindingContext, value: ReactiveValue<string>): void {
     el,
     value,
     (val) => {
-      const newVal = String(val ?? '');
+      let newVal = String(val ?? '');
+
+      // Basic XSS mitigation
+      // Use word boundary to avoid false positives (e.g., "data-information")
+      const sanitized = newVal.replace(/\bon\w+\s*=/gi, 'data-unsafe-attr=');
+      if (sanitized !== newVal) {
+        console.warn('[atomBind] Unsafe attributes detected and neutralized in html binding.');
+        newVal = sanitized;
+      }
+
       // Guard against redundant DOM writes which destroy/recreate subtrees
       if (el.innerHTML !== newVal) {
         el.innerHTML = newVal;
@@ -183,6 +192,11 @@ function bindVal<T>(
   ctx: BindingContext,
   cfg: WritableAtom<T> | [atom: WritableAtom<T>, options: ValOptions<T>]
 ): void {
+  const tagName = ctx.el.tagName.toLowerCase();
+  if (!['input', 'select', 'textarea'].includes(tagName)) {
+    console.warn(`[atomBind] Val binding used on non-input element <${tagName}>.`);
+    return;
+  }
   const isArr = Array.isArray(cfg);
   const { effect: fxFn, cleanup } = applyInputBinding(
     ctx.$el,
