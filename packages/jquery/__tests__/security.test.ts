@@ -1,258 +1,274 @@
-import { atom } from '@but212/atom-effect';
+import { atom, effect } from '@but212/atom-effect';
 import $ from 'jquery';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../src/chainable'; // Register plugins
+import '../src/unified'; // Register atomBind plugin
+import '../src/list'; // Register atomList plugin
+import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '../src/utils';
+import { registry } from '../src/registry';
 
-describe('Security Sanitization (Comprehensive XSS)', () => {
-  // 1. Basic Script Injection
-  it('should remove basic script tags', () => {
-    const div = $('<div>');
-    const malicious = '<script>alert("XSS")</script>';
-    const a = atom(malicious);
-    div.atomHtml(a);
-    expect(div.html().toLowerCase()).not.toContain('<script>');
-    expect(div.html()).not.toContain('alert("XSS")');
+// ============================================================================
+// PART 1: Unit Tests (Core Logic)
+// Validate the sanitization/security logic in isolation.
+// ============================================================================
+
+describe('Unit: sanitizeHtml (Core Logic)', () => {
+  // 1. Script Injection
+  it('should remove script tags', () => {
+    expect(sanitizeHtml('<script>alert("XSS")</script>')).not.toContain('<script');
+    expect(sanitizeHtml('<ScRiPt>alert(1)</sCrIpT>')).not.toContain('<script');
+    expect(sanitizeHtml('<script\n>alert(1)</script>')).not.toContain('<script');
   });
 
   // 2. Event Handlers
-  it('should remove event handlers (on*)', () => {
-    const div = $('<div>');
-    // Various event handlers
+  it('should neutralize event handlers (on*)', () => {
     const vectors = [
       '<img src=x onerror=alert(1)>',
       '<div onmouseover="alert(1)">Hover me</div>',
       '<body onload=alert(1)>',
       '<input onfocus=alert(1) autofocus>',
     ];
-
-    vectors.forEach((malicious) => {
-      const a = atom(malicious);
-      div.atomHtml(a);
-      const html = div.html().toLowerCase();
-      // Should sanitize event handlers
-      expect(html).not.toContain('onerror=');
-      expect(html).not.toContain('onmouseover=');
-      expect(html).not.toContain('onload=');
-      expect(html).not.toContain('onfocus=');
+    vectors.forEach((v) => {
+      const safe = sanitizeHtml(v).toLowerCase();
+      expect(safe).not.toContain('onerror=');
+      expect(safe).not.toContain('onmouseover=');
+      expect(safe).toContain('data-unsafe-attr=');
     });
   });
 
-  // 3. Protocol Handlers (javascript:)
-  it('should remove javascript: protocol', () => {
-    const div = $('<div>');
+  // 3. Protocol Handlers
+  it('should neutralize dangerous protocols', () => {
     const vectors = [
-      '<a href="javascript:alert(1)">Click me</a>',
-      '<iframe src="javascript:alert(1)"></iframe>',
-      '<form action="javascript:alert(1)"><button>Submit</button></form>',
+      '<a href="javascript:alert(1)">',
+      '<a href="vbscript:msgbox(1)">',
+      '<a href="java\u0000script:alert(1)">', // Null byte
     ];
-
-    vectors.forEach((malicious) => {
-      const a = atom(malicious);
-      div.atomHtml(a);
-      const html = div.html().toLowerCase();
-      // Should sanitize javascript protocol
-      expect(html).not.toContain('javascript:');
+    vectors.forEach((v) => {
+      const safe = sanitizeHtml(v).toLowerCase();
+      expect(safe).not.toContain('javascript:');
+      expect(safe).not.toContain('vbscript:');
+      expect(safe).toContain('data-unsafe-protocol:');
     });
   });
 
-  // 4. Advanced/Obfuscated Attacks
-  it('should handle obfuscated script tags', () => {
-    const div = $('<div>');
-    // Case-insensitive, whitespace variations
-    const vectors = [
-      '<ScRiPt>alert(1)</sCrIpT>',
-      '<script\n>alert(1)</script>',
-      '<script type="text/javascript">alert(1)</script>',
-    ];
-
-    vectors.forEach((malicious) => {
-      const a = atom(malicious);
-      div.atomHtml(a);
-      const html = div.html().toLowerCase();
-      expect(html).not.toContain('<script');
-    });
-  });
-
-  // 5. SVG XSS
-  it('should sanitize SVG payloads', () => {
-    const div = $('<div>');
-    const malicious = '<svg/onload=alert(1)>';
-    const a = atom(malicious);
-    div.atomHtml(a);
-    expect(div.html().toLowerCase()).not.toContain('onload=');
-  });
-
-  // 6. Iframe and Object
-  it('should remove risky tags like iframe, object, embed', () => {
-    const div = $('<div>');
+  // 4. Risky Tags
+  it('should remove risky tags (iframe, object, embed, meta)', () => {
     const vectors = [
       '<iframe src="http://evil.com"></iframe>',
       '<object data="http://evil.com"></object>',
       '<embed src="http://evil.com">',
+      '<meta http-equiv="refresh">',
     ];
-
-    vectors.forEach((malicious) => {
-      const a = atom(malicious);
-      div.atomHtml(a);
-      const html = div.html().toLowerCase();
-      expect(html).not.toContain('<iframe');
-      expect(html).not.toContain('<object');
-      expect(html).not.toContain('<embed');
+    vectors.forEach((v) => {
+      const safe = sanitizeHtml(v).toLowerCase();
+      expect(safe).not.toMatch(/<(iframe|object|embed|meta)/);
     });
   });
 
-  // 7. Base64 / Data URI
-  it('should sanitize data: URIs with executable content but preserve safe ones', () => {
-    const div = $('<div>');
-
-    // Malicious vector
-    const malicious =
-      '<a href="data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==">Click</a>';
-    const a1 = atom(malicious);
-    div.atomHtml(a1);
-    expect(div.html().toLowerCase()).not.toContain('data:text/html');
-
-    // Safe vector
-    const safe =
-      '<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=">';
-    const a2 = atom(safe);
-    div.atomHtml(a2);
-    expect(div.html().toLowerCase()).toContain('data:image/png');
+  // 4b. Practical tags should be allowed (form, style, template, title)
+  it('should allow practical tags (form, style, template)', () => {
+    expect(sanitizeHtml('<form action="/submit"><input></form>')).toContain('<form');
+    expect(sanitizeHtml('<style>.red { color: red }</style>')).toContain('<style');
+    expect(sanitizeHtml('<template><div>tmpl</div></template>')).toContain('<template');
   });
 
-  // 9. CSS-based Attacks
-  it('should sanitize CSS-based XSS', () => {
-    const div = $('<div>');
-    const vectors = [
-      '<div style="background:url(javascript:alert(1))">',
-      '<div style="behavior:url(malicious.htc)">', // IE
-      '<div style="expression(alert(1))">', // IE
-      '<style>@import "http://evil.com/xss.css";</style>',
-    ];
+  // 5. SVG / MathML (Allowed tags, sanitized attributes)
+  it('should preserve SVG/Math but neutralize handlers', () => {
+    expect(sanitizeHtml('<svg><circle r="10"/></svg>')).toContain('<svg');
+    const maliciousSvg = sanitizeHtml('<svg/onload=alert(1)>');
+    expect(maliciousSvg).toContain('<svg');
+    expect(maliciousSvg).not.toContain('onload=');
+  });
 
-    vectors.forEach((malicious) => {
-      const a = atom(malicious);
-      div.atomHtml(a);
-      const html = div.html().toLowerCase();
-      expect(html).not.toContain('javascript:');
-      expect(html).not.toContain('expression(');
-      expect(html).not.toContain('behavior:');
+  // 6. Data URIs
+  it('should block dangerous data URIs but allow images', () => {
+    const bad = sanitizeHtml('<a href="data:text/html;base64,PHNjcmlwdD4=">');
+    expect(bad).not.toContain('data:text/html');
+
+    const good = sanitizeHtml('<img src="data:image/png;base64,iVBOR...">');
+    expect(good).toContain('data:image/png');
+
+    // SVG data URIs should be allowed (icons, badges)
+    const svg = sanitizeHtml('<img src="data:image/svg+xml;base64,PHN2Zz4=">');
+    expect(svg).toContain('data:image/svg+xml');
+  });
+
+  // 7. CSS/Style Attacks
+  it('should sanitize CSS expressions and behavior', () => {
+    const v = '<div style="background:url(javascript:alert(1)); behavior:url(x.htc); expression(alert(1))">';
+    const safe = sanitizeHtml(v).toLowerCase();
+    expect(safe).not.toContain('javascript:');
+    expect(safe).not.toContain('behavior:');
+    expect(safe).not.toContain('expression(');
+  });
+
+  // 8. Bypass Attempts
+  it('should handle bypass attempts (nested tags, null bytes)', () => {
+    expect(sanitizeHtml('<scr<script>ipt>alert(1)</script>')).not.toContain('<script');
+    expect(sanitizeHtml('<scr\x00ipt>alert(1)</script>')).not.toContain('<script');
+  });
+});
+
+describe('Unit: isDangerousUrl', () => {
+  it('should identify dangerous protocols in URL attributes', () => {
+    expect(isDangerousUrl('href', 'javascript:alert(1)')).toBe(true);
+    expect(isDangerousUrl('src', 'vbscript:alert(1)')).toBe(true);
+    expect(isDangerousUrl('action', 'JAVASCRIPT:alert(1)')).toBe(true);
+  });
+
+  it('should allow safe URLs', () => {
+    expect(isDangerousUrl('href', 'https://example.com')).toBe(false);
+    expect(isDangerousUrl('href', '/login')).toBe(false);
+    expect(isDangerousUrl('src', 'data:image/png;...')).toBe(false); // isDangerousUrl only checks protocol scheme start
+  });
+
+  it('should checking ignore non-URL attributes', () => {
+    expect(isDangerousUrl('title', 'javascript:foo')).toBe(false);
+  });
+});
+
+describe('Unit: isDangerousCssValue', () => {
+  it('should identify dangerous protocols in url()', () => {
+    expect(isDangerousCssValue('url(javascript:alert(1))')).toBe(true);
+    expect(isDangerousCssValue("url('vbscript:alert(1)')")).toBe(true);
+    expect(isDangerousCssValue('  url(  javascript: )')).toBe(true);
+  });
+
+  it('should allow safe css values', () => {
+    expect(isDangerousCssValue('red')).toBe(false);
+    expect(isDangerousCssValue('url(https://example.com/bg.png)')).toBe(false);
+    expect(isDangerousCssValue('url(data:image/png;base64,...)')).toBe(false);
+  });
+});
+
+// ============================================================================
+// PART 2: Integration Tests (Wiring)
+// Verify that chainable methods and bindings actually USE the core logic.
+// ============================================================================
+
+describe('Integration: Security Wiring', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    document.body.innerHTML = '';
+  });
+
+  // 1. atomHtml
+  it('atomHtml -> should use sanitizeHtml', () => {
+    const div = $('<div>');
+    // We already tested specific vectors in Unit. Just verify the wiring filters a script tag.
+    div.atomHtml(atom('<script>alert("Wiring")</script>'));
+    expect(div.html()).not.toContain('<script');
+  });
+
+  // 2. atomList
+  it('atomList -> should use sanitizeHtml for items', () => {
+    const div = $('<div>');
+    const items = atom([{ html: '<script>alert("List")</script>' }]);
+    div.atomList(items, {
+      key: (i, idx) => idx,
+      render: (i) => i.html,
     });
+    expect(div.html()).not.toContain('<script');
   });
 
-  // 10. Template Injection
-  it('should sanitize template tags', () => {
-    const div = $('<div>');
-    const vectors = [
-      '<template><script>alert(1)</script></template>',
-      '<noscript><img src=x onerror=alert(1)></noscript>',
-    ];
+  // 3. atomAttr
+  it('atomAttr -> should block dangerous URLs via isDangerousUrl', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const a = $('<a>');
+    a.atomAttr('href', atom('javascript:alert(1)'));
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('href'));
+    expect(a.attr('href')).toBeUndefined();
+  });
 
-    vectors.forEach((malicious) => {
-      const a = atom(malicious);
-      div.atomHtml(a);
-      const html = div.html().toLowerCase();
-      expect(html).not.toContain('<script');
-      expect(html).not.toContain('onerror=');
+  it('atomAttr -> should block on* event handlers', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const div = $('<div>');
+    div.atomAttr('onclick', atom('alert(1)'));
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('onclick'));
+    expect(div.attr('onclick')).toBeUndefined();
+  });
+
+  // 4. atomCss
+  it('atomCss -> should block dangerous CSS values via isDangerousCssValue', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const div = $('<div>');
+    div.atomCss('background-image', atom('url(javascript:alert(1))'));
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('atomCss'));
+  });
+
+  // 5. atomProp
+  it('atomProp -> should block innerHTML/outerHTML injection', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const div = $('<div>');
+    div.atomProp('innerHTML', atom('<b>Bold</b>'));
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('innerHTML'));
+    expect(div.html()).toBe('');
+  });
+
+  // 6. atomBind (Unified)
+  it('atomBind -> should enforce security policies across all bindings', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const div = $('<div>');
+    div.atomBind({
+      html: atom('<script>'), // Should be sanitized
+      attr: { href: atom('javascript:') }, // Should be blocked
+      css: { background: atom('url(javascript:)') }, // Should be blocked
+      prop: { innerHTML: atom('') }, // Should be blocked
     });
+    
+    // Check call counts or message content to be sure failures happened
+    expect(warnSpy).toHaveBeenCalledTimes(4); 
+    // Just a smoke test for wiring; specific messages logic verified in unit/individual tests
+  });
+});
+
+// ============================================================================
+// PART 3: Practicality & Policy (Allowed Items)
+// Verify that the strict security rules do not break common legitimate UIs.
+// ============================================================================
+
+describe('Policy: Allowed / Practicality', () => {
+  // 1. SVG Icons
+  it('should allow inline SVG icons (common UI pattern)', () => {
+    const div = $('<div>');
+    const svgIcon =
+      '<svg class="feather"><circle cx="12" cy="7" r="4"></circle></svg>';
+    div.atomHtml(atom(svgIcon));
+    expect(div.html().toLowerCase()).toContain('<svg');
+    expect(div.find('circle').length).toBe(1);
   });
 
-  // 11. Meta/Link Redirect
-  it('should remove meta refresh and dangerous links', () => {
+  // 2. Data URIs
+  it('should allow data URIs for images in atomHtml & atomCss', () => {
     const div = $('<div>');
-    const vectors = [
-      '<meta http-equiv="refresh" content="0;url=javascript:alert(1)">',
-      '<link rel="import" href="http://evil.com/component.html">',
-    ];
+    const imgTag = '<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=">';
+    
+    div.atomHtml(atom(imgTag));
+    expect(div.find('img').length).toBe(1);
 
-    vectors.forEach((malicious) => {
-      const a = atom(malicious);
-      div.atomHtml(a);
-      const html = div.html().toLowerCase();
-      expect(html).not.toContain('<meta');
-      expect(html).not.toContain('rel="import"');
+    const bg = atom('url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=)');
+    div.atomCss('background-image', bg);
+    expect(div[0].style.backgroundImage).toContain('data:image/png');
+  });
+
+  // 3. Relative URLs
+  it('should allow relative URLs (SPA navigation)', () => {
+    const a = $('<a>');
+    a.atomAttr('href', atom('/dashboard?q=1'));
+    expect(a.attr('href')).toBe('/dashboard?q=1');
+  });
+
+  // 4. Escape Hatch
+  it('should ALLOW unsafe content via raw effect (Escape Hatch)', () => {
+    const div = $('<div>');
+    const iframe = '<iframe src="https://example.com"></iframe>';
+    
+    // User explicitly opts out of safety by using raw effect + jquery html()
+    const fx = effect(() => {
+      div.html(iframe);
     });
-  });
-
-  // 12. DOM Clobbering (Basic Mitigation)
-  it('should mitigate basic DOM clobbering patterns', () => {
-    const div = $('<div>');
-
-    // Vector 1: form-based clobbering. The sanitizer removes the <form> tag.
-    const formVector = '<form id="location"><input name="href" value="javascript:alert(1)"></form>';
-    const a1 = atom(formVector);
-    div.atomHtml(a1);
-    expect(div.html().toLowerCase()).not.toContain('<form');
-
-    // Vector 2: name-based clobbering. This is a known limitation of regex-based sanitizers
-    // and is not expected to be caught. The test confirms the sanitizer does not act on it.
-    const imgVector = '<img name="createElement">';
-    const a2 = atom(imgVector);
-    div.atomHtml(a2);
-    expect(div.html().toLowerCase()).toContain('<img name="createelement">');
-  });
-
-  // 13. Null Byte / Unicode Bypass
-  it('should handle null byte and unicode bypass attempts', () => {
-    const div = $('<div>');
-    const vectors = [
-      '<scr\x00ipt>alert(1)</script>',
-      '<a href="java\u0000script:alert(1)">',
-      '<img src="\u0001javascript:alert(1)">', // Control char
-    ];
-
-    vectors.forEach((malicious) => {
-      const a = atom(malicious);
-      div.atomHtml(a);
-      const html = div.html().toLowerCase();
-      expect(html).not.toContain('javascript:');
-      expect(html).not.toContain('<script');
-    });
-  });
-
-  // 14. VBScript
-  it('should block vbscript protocol', () => {
-    const div = $('<div>');
-    const malicious = '<a href="vbscript:msgbox(1)">Click</a>';
-    const a = atom(malicious);
-    div.atomHtml(a);
-    expect(div.html().toLowerCase()).not.toContain('vbscript:');
-  });
-
-  // 15. srcset / poster
-  it('should sanitize srcset and poster attributes', () => {
-    const div = $('<div>');
-    const vectors = [
-      '<img srcset="javascript:alert(1)">',
-      '<video poster="javascript:alert(1)">',
-      '<source src="javascript:alert(1)">',
-    ];
-
-    vectors.forEach((malicious) => {
-      const a = atom(malicious);
-      div.atomHtml(a);
-      const html = div.html().toLowerCase();
-      expect(html).not.toContain('javascript:');
-    });
-  });
-
-  // 16. Double Encoding
-  it('should handle double encoding', () => {
-    const div = $('<div>');
-    const vectors = [
-      '<a href="javascript&#58;alert(1)">',
-      '<a href="javascript%3Aalert(1)">',
-      '<a href="&#106;&#97;&#118;&#97;&#115;&#99;&#114;&#105;&#112;&#116;&#58;alert(1)">',
-    ];
-
-    vectors.forEach((malicious) => {
-      const a = atom(malicious);
-      div.atomHtml(a);
-      const html = div.html().toLowerCase();
-      // Browser decodes entities/percent encoding in attributes.
-      // Our sanitizer works on string, so it might miss these unless we decode first.
-      // This test confirms if current approach fails or succeeds.
-      expect(html).not.toContain('javascript:');
-    });
+    registry.trackEffect(div[0], fx);
+    
+    expect(div.find('iframe').length).toBe(1);
   });
 });

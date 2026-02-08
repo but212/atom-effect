@@ -26,7 +26,7 @@ export type ReactiveValue<T> = T | ReadonlyAtom<T> | ComputedAtom<T>;
  */
 export type CssValue =
   | ReactiveValue<string | number>
-  | [source: ReactiveValue<number>, unit: string];
+  | [source: ReactiveValue<string | number>, unit: string];
 
 /**
  * CSS bindings map property names to CSS values.

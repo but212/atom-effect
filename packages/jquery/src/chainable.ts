@@ -6,7 +6,7 @@ import { applyInputBinding } from './input-binding';
 import { registry } from './registry';
 import type { ReactiveValue, ValOptions, WritableAtom } from './types';
 import { BindingFlags, createInputBindingState } from './types';
-import { sanitizeHtml } from './utils';
+import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from './utils';
 
 /**
  * Updates element text content.
@@ -71,8 +71,22 @@ $.fn.atomCss = function (
   return this.each(function () {
     const $el = $(this);
     const update = unit
-      ? (val: string | number) => $el.css(prop, `${val}${unit}`)
-      : (val: string | number) => $el.css(prop, val);
+      ? (val: string | number) => {
+          const strVal = `${val}${unit}`;
+          if (isDangerousCssValue(strVal)) {
+            console.warn(`[atomCss] Blocked dangerous value in "${prop}" property.`);
+            return;
+          }
+          $el.css(prop, strVal);
+        }
+      : (val: string | number) => {
+          const strVal = String(val);
+          if (isDangerousCssValue(strVal)) {
+            console.warn(`[atomCss] Blocked dangerous value in "${prop}" property.`);
+            return;
+          }
+          $el.css(prop, val);
+        };
 
     registerReactiveEffect(this, source, update, `css.${prop}`);
   });
@@ -82,6 +96,12 @@ $.fn.atomCss = function (
  * Updates an HTML attribute.
  */
 $.fn.atomAttr = function (name: string, source: ReactiveValue<string | boolean | null>): JQuery {
+  // Block event handler attributes (on*)
+  if (/^on/i.test(name)) {
+    console.warn(`[atomAttr] Blocked setting dangerous event handler attribute "${name}".`);
+    return this;
+  }
+
   return this.each(function () {
     const $el = $(this);
     registerReactiveEffect(
@@ -92,7 +112,12 @@ $.fn.atomAttr = function (name: string, source: ReactiveValue<string | boolean |
           $el.removeAttr(name);
           return;
         }
-        $el.attr(name, val === true ? name : String(val));
+        const strVal = val === true ? name : String(val);
+        if (isDangerousUrl(name, strVal)) {
+          console.warn(`[atomAttr] Blocked dangerous protocol in "${name}" attribute.`);
+          return;
+        }
+        $el.attr(name, strVal);
       },
       `attr.${name}`
     );
@@ -106,6 +131,13 @@ $.fn.atomProp = function <T extends string | number | boolean | null | undefined
   name: string,
   source: ReactiveValue<T>
 ): JQuery {
+  // Block dangerous DOM properties that can inject raw HTML
+  const dangerousProps = ['innerHTML', 'outerHTML'];
+  if (dangerousProps.includes(name)) {
+    console.warn(`[atomProp] Blocked setting dangerous property "${name}". Use atomHtml for sanitized HTML binding.`);
+    return this;
+  }
+
   return this.each(function () {
     const $el = $(this);
     registerReactiveEffect(this, source, (val) => $el.prop(name, val), `prop.${name}`);

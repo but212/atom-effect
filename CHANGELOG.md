@@ -1,30 +1,47 @@
 # Changelog
 
+## [Unreleased]
+
+### jQuery
+
+#### Fixed - jQuery
+
+- **Security Hardening**: Implemented comprehensive XSS protection across all binding methods.
+  - Blocks `on*` handlers, dangerous protocols (`javascript:`, `vbscript:`), and risky CSS values.
+  - Prevents direct HTML injection via `innerHTML`/`outerHTML`.
+  - Auto-sanitizes content in `atomList` rendering.
+
+#### Changed - jQuery
+
+- **Sanitization Optimization**: Refactored `sanitizeHtml` as a lightweight first-pass filter.
+  - Simplified implementation using whitespace-tolerant regex.
+  - Allowed practical tags (`<form>`, `<style>`, `<template>`) and `data:image/svg+xml`.
+
 ## [0.19.0]
 
-### Core
+### Core - 0.19.0
 
-#### Added
+#### Added - Core 0.19.0
 
 - **Configurable Async Retries**: Added `maxAsyncRetries` option to `ComputedOptions`, allowing per-instance control over async drift retry limits (default: 3).
 - **ArrayPool `enableStats`**: Added `enableStats` constructor parameter to force-enable pool statistics even in production builds.
 - **Error Dependency Count**: Added `_errorDepCount` field to `ComputedAtom` for O(1) fast-path `hasError` checks, with live scan fallback for async error propagation.
 
-#### Changed - Core
+#### Changed - Core 0.19.0
 
 - **Notification Performance**: Replaced `[...subscribers]` spread with `Array.prototype.slice(0)` in `_notifySubscribers` to avoid iterator protocol overhead.
 - **EMPTY_LINKS Type Safety**: Changed `EMPTY_LINKS` type to `DependencyLink[]`, eliminating 8 `as unknown as DependencyLink[]` double casts across `computed.ts` and `effect.ts`.
 - **Dev Error Logging**: Added `IS_DEV` guarded `console.warn` in `_commitDeps` error recovery catch block for better debugging of dependency commit failures.
 
-#### Refactored - Core
+#### Refactored - Core 0.19.0
 
 - **Version Arithmetic**: Extracted `nextVersion(v)` utility in `epoch.ts` to replace repeated `(version + 1) & SMI_MAX` pattern across `atom.ts` and `computed.ts`.
 - **Flag Transition Masks**: Extracted pre-computed flag masks (`CLEAR_FOR_PENDING`, `CLEAR_FOR_REJECTED`, `SET_REJECTED`, `CLEAR_FOR_RESOLVED`) in `computed.ts` to simplify state transitions.
 - **Unused Imports**: Removed unused `NODE_FLAGS` imports from `base.ts` and `dep-tracking.ts`.
 
-### jQuery
+### jQuery - 0.19.0
 
-#### Changed - jQuery
+#### Changed - jQuery 0.19.0
 
 - **RouteDefinition Type Safety**: Refactored `RouteDefinition` into a discriminated union (`TemplateRoute | RenderRoute`) to enforce mutual exclusivity of `template` and `render` at compile time. Prevents accidental misconfiguration where both are specified.
 - **XSS Prevention**: `atomHtml` now strictly processes HTML using a **minimal sanitization** strategy (removes `<script>` and `on*` events) to prevent accidental XSS, while explicitly recommending `DOMPurify` for production security. This rolls back the experimental heavy-weight sanitizer in favor of a standards-compliant, opt-in approach.
