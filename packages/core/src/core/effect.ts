@@ -1,16 +1,10 @@
-import {
-  COMPUTED_STATE_FLAGS,
-  EFFECT_STATE_FLAGS,
-  IS_DEV,
-  SCHEDULER_CONFIG,
-  TIME_CONSTANTS,
-} from '@/constants';
+import { COMPUTED_STATE_FLAGS, EFFECT_STATE_FLAGS, IS_DEV, SCHEDULER_CONFIG } from '@/constants';
 import { ReactiveNode } from '@/core/base';
 import { DependencyLink } from '@/core/dep-tracking';
 import { EffectError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
 import {
-  flushEpoch,
+  currentFlushEpoch,
   flushExecutionCount,
   incrementFlushExecutionCount,
   nextEpoch,
@@ -46,11 +40,10 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   private readonly _maxExecutionsPerFlush: number;
   private readonly _trackModifications: boolean;
 
-  // Execution history (Dev)
-  private _history: number[] | null;
+  // Frequency tracking (Dev)
   private _executionCount = 0;
-  private _historyPtr = 0;
-  private readonly _historyCapacity: number;
+  private _windowStart = 0;
+  private _windowCount = 0;
   private _execId = 0;
 
   constructor(fn: EffectFunction, options: EffectOptions = {}) {
@@ -63,14 +56,6 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     this._maxExecutionsPerFlush =
       options.maxExecutionsPerFlush ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_EFFECT;
     this._trackModifications = options.trackModifications ?? false;
-
-    // Initialize history buffer
-    const isFiniteLimit = Number.isFinite(this._maxExecutions);
-    const capacity = isFiniteLimit
-      ? Math.min(this._maxExecutions + 1, SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_SECOND + 1)
-      : 0;
-    this._historyCapacity = capacity;
-    this._history = IS_DEV && isFiniteLimit && capacity > 0 ? new Array(capacity).fill(0) : null;
 
     debug.attachDebugInfo(this, 'effect', this.id);
   }
@@ -290,7 +275,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   }
 
   private _checkInfiniteLoops(): void {
-    const epoch = flushEpoch;
+    const epoch = currentFlushEpoch();
     if (this._lastFlushEpoch !== epoch) {
       this._lastFlushEpoch = epoch;
       this._executionsInEpoch = 0;
@@ -303,18 +288,17 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 
     this._executionCount++;
 
-    // Frequency check
-    if (this._history) {
+    // Frequency check (dev only)
+    if (IS_DEV && Number.isFinite(this._maxExecutions)) {
       const now = Date.now();
-      this._history[this._historyPtr] = now;
-      this._historyPtr = (this._historyPtr + 1) % this._historyCapacity;
-      const oldest = this._history[this._historyPtr] || 0;
-
-      if (oldest > 0 && now - oldest < TIME_CONSTANTS.ONE_SECOND_MS) {
+      if (now - this._windowStart >= 1000) {
+        this._windowStart = now;
+        this._windowCount = 1;
+      } else if (++this._windowCount > this._maxExecutions) {
         const err = new EffectError(ERROR_MESSAGES.EFFECT_FREQUENCY_LIMIT_EXCEEDED);
         this.dispose();
         this._handleExecutionError(err);
-        if (IS_DEV) throw err;
+        throw err;
       }
     }
   }

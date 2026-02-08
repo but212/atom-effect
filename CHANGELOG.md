@@ -1,10 +1,31 @@
 # Changelog
 
-## [0.19.1]
+## [unreleased]
 
 ### Core
 
 #### Refactored - Core
+
+- **Epoch Unification**: Merged `collectorEpoch` and `flushEpoch` into a single monotonic counter.
+  - Removed exported `flushEpoch` variable; `startFlush()` now calls `nextEpoch()` to allocate from the shared counter.
+  - Added `currentFlushEpoch()` getter to replace direct variable access in `Effect._checkInfiniteLoops`.
+- **Flag Constants Inlining**: Removed `NODE_FLAGS` object and inlined `DISPOSED: 1 << 0` directly into `EFFECT_STATE_FLAGS`, `COMPUTED_STATE_FLAGS`, `ATOM_STATE_FLAGS`.
+  - Eliminated spread (`...NODE_FLAGS`) overhead and dead `TIME_CONSTANTS` export.
+- **Computed Simplification**: Replaced pre-computed flag transition masks and lookup table with inline expressions and `getAsyncState()` function.
+  - Removed `ASYNC_STATE_LOOKUP` array, `CLEAR_FOR_PENDING/REJECTED/RESOLVED`, `SET_REJECTED` constants.
+  - Destructured `COMPUTED_STATE_FLAGS` into short local names (`IDLE`, `DIRTY`, `PENDING`, etc.) for readability.
+- **Effect Frequency Detection**: Replaced circular buffer history (`_history[]`, `_historyPtr`, `_historyCapacity`) with simple sliding window (`_windowStart`, `_windowCount`).
+  - Reduces per-effect memory footprint and initialization cost.
+- **Version Snapshot**: Simplified `_captureVersionSnapshot` from DJB2 hash mixing to plain sum.
+- **Branded Type Removal**: Simplified `DependencyId` from `Branded<number, 'DependencyId'>` to plain `number`, removing the `Branded` utility type.
+- **Error Wrapping**: Replaced manual `TypeError`/`ReferenceError` branching with `error.constructor.name` for error category.
+- **Pool Cleanup**: Removed unused `EMPTY_DEPS`, `EMPTY_SUBS`, `EMPTY_UNSUBS`, `EMPTY_VERSIONS` constants and `depArrayPool`, `unsubArrayPool`, `versionArrayPool` pools.
+
+## [0.19.1]
+
+### Core - 0.19.1
+
+#### Refactored - Core 0.19.1
 
 - **Dependency Ownership**: Replaced `_tempUnsub` node pollution with local `Map<Dependency, () => void>` in `Effect` and `syncDependencies`.
   - Removed `_tempUnsub` from `ReactiveNode` and `Dependency` interface, eliminating tracker-owned temporary state from dependency nodes.
@@ -12,16 +33,16 @@
   - `syncDependencies` uses a local Map instead of mutating `node._tempUnsub`.
 - **trackDependency Documentation**: Added O(n) trade-off comment explaining why linear scan is acceptable (array size 1-10, hot path uses O(1) epoch-based dedup).
 
-### jQuery
+### jQuery - 0.19.1
 
-#### Fixed - jQuery
+#### Fixed - jQuery 0.19.1
 
 - **Security Hardening**: Implemented comprehensive XSS protection across all binding methods.
   - Blocks `on*` handlers, dangerous protocols (`javascript:`, `vbscript:`), and risky CSS values.
   - Prevents direct HTML injection via `innerHTML`/`outerHTML`.
   - Auto-sanitizes content in `atomList` rendering.
 
-#### Changed - jQuery
+#### Changed - jQuery 0.19.1
 
 - **Sanitization Optimization**: Refactored `sanitizeHtml` as a lightweight first-pass filter.
   - Simplified implementation using whitespace-tolerant regex.

@@ -21,11 +21,7 @@ export function wrapError(
   const originalMessage = isNativeError ? error.message : String(error);
   const cause = isNativeError ? error : undefined;
 
-  // Error category
-  let type = 'Unexpected error';
-  if (error instanceof TypeError) type = 'Type error';
-  else if (error instanceof ReferenceError) type = 'Reference error';
-
+  const type = isNativeError ? error.constructor.name : 'Unexpected error';
   const finalMessage = `${type} (${context}): ${originalMessage}`;
 
   return new ErrorClass(finalMessage, cause);

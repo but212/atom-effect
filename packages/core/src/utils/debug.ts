@@ -90,4 +90,4 @@ let nextId = 1;
 /**
  * Generates ID.
  */
-export const generateId = () => nextId++ as DependencyId;
+export const generateId = (): DependencyId => nextId++;
