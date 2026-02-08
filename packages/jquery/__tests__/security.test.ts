@@ -166,7 +166,7 @@ describe('Integration: Security Wiring', () => {
     const div = $('<div>');
     const items = atom([{ html: '<script>alert("List")</script>' }]);
     div.atomList(items, {
-      key: (i, idx) => idx,
+      key: (_i, idx) => idx,
       render: (i) => i.html,
     });
     expect(div.html()).not.toContain('<script');
