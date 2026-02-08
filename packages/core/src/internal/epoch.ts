@@ -17,9 +17,12 @@ export const currentEpoch = () => collectorEpoch;
 /** Increments a version counter within SMI range. */
 export const nextVersion = (v: number) => (v + 1) & SMI_MAX;
 
-export let flushEpoch = 0;
 export let flushExecutionCount = 0;
 let isFlushing = false;
+let _flushEpoch = 0;
+
+/** Current flush epoch. */
+export const currentFlushEpoch = () => _flushEpoch;
 
 /**
  * Starts flush cycle.
@@ -31,7 +34,7 @@ export function startFlush(): boolean {
   }
 
   isFlushing = true;
-  flushEpoch = (flushEpoch + 1) & SMI_MAX || 1;
+  _flushEpoch = nextEpoch();
   flushExecutionCount = 0;
   return true;
 }
@@ -50,7 +53,7 @@ export const incrementFlushExecutionCount = () => (isFlushing ? ++flushExecution
  * Resets flush state.
  */
 export function resetFlushState(): void {
-  flushEpoch = 0;
+  _flushEpoch = 0;
   flushExecutionCount = 0;
   isFlushing = false;
 }

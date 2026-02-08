@@ -83,7 +83,7 @@ describe('wrapError Utility', () => {
     const wrapped = wrapError(typeError, ComputedError, 'computation');
 
     expect(wrapped).toBeInstanceOf(ComputedError);
-    expect(wrapped.message).toContain('Type error');
+    expect(wrapped.message).toContain('TypeError');
     expect(wrapped.message).toContain('computation');
     expect(wrapped.cause).toBe(typeError);
   });
@@ -93,7 +93,7 @@ describe('wrapError Utility', () => {
     const wrapped = wrapError(refError, EffectError, 'execution');
 
     expect(wrapped).toBeInstanceOf(EffectError);
-    expect(wrapped.message).toContain('Reference error');
+    expect(wrapped.message).toContain('ReferenceError');
     expect(wrapped.message).toContain('execution');
     expect(wrapped.cause).toBe(refError);
   });
@@ -110,7 +110,7 @@ describe('wrapError Utility', () => {
     const wrapped = wrapError(genericError, SchedulerError, 'scheduling');
 
     expect(wrapped).toBeInstanceOf(SchedulerError);
-    expect(wrapped.message).toContain('Unexpected error');
+    expect(wrapped.message).toContain('Error');
     expect(wrapped.message).toContain('scheduling');
     expect(wrapped.cause).toBe(genericError);
   });

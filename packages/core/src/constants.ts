@@ -1,12 +1,4 @@
 /**
- * Global time constants.
- * Used for debouncing, throttling, and scheduling.
- */
-export const TIME_CONSTANTS = {
-  ONE_SECOND_MS: 1000,
-} as const;
-
-/**
  * Async operation states.
  */
 export const AsyncState = {
@@ -17,17 +9,10 @@ export const AsyncState = {
 } as const;
 
 /**
- * Base Node Flags.
- */
-export const NODE_FLAGS = {
-  DISPOSED: 1 << 0,
-} as const;
-
-/**
  * Effect flags.
  */
 export const EFFECT_STATE_FLAGS = {
-  ...NODE_FLAGS,
+  DISPOSED: 1 << 0,
   EXECUTING: 1 << 3,
 } as const;
 
@@ -35,7 +20,7 @@ export const EFFECT_STATE_FLAGS = {
  * Computed flags.
  */
 export const COMPUTED_STATE_FLAGS = {
-  ...NODE_FLAGS,
+  DISPOSED: 1 << 0,
   /** Marker bit: identifies this node as a computed. */
   IS_COMPUTED: 1 << 1,
   DIRTY: 1 << 3,
@@ -51,7 +36,7 @@ export const COMPUTED_STATE_FLAGS = {
  * Writable Atom Flags.
  */
 export const ATOM_STATE_FLAGS = {
-  ...NODE_FLAGS,
+  DISPOSED: 1 << 0,
   SYNC: 1 << 3,
   NOTIFICATION_SCHEDULED: 1 << 4,
 } as const;

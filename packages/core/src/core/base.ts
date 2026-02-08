@@ -19,7 +19,7 @@ export class ReactiveNode {
   /** Modified epoch */
   _modifiedAtEpoch = -1;
   /** Debug ID */
-  readonly id: DependencyId = (generateId() & SMI_MAX) as DependencyId;
+  readonly id: DependencyId = generateId() & SMI_MAX;
 }
 
 /**

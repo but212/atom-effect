@@ -1,14 +1,9 @@
 import type { AsyncState } from '@/constants';
 
 /**
- * Nominal type brand.
- */
-export type Branded<T, Brand> = T & { readonly __brand: Brand };
-
-/**
  * Dependency ID.
  */
-export type DependencyId = Branded<number, 'DependencyId'>;
+export type DependencyId = number;
 
 /**
  * Async state values.
