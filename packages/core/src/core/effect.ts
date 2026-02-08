@@ -25,7 +25,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   private _links: DependencyLink[] = EMPTY_LINKS;
   private _nextLinks: DependencyLink[] | null = null;
   private _executeTask: (() => void) | undefined;
-  private _parkedUnsubs: Map<Dependency, () => void> | null = null;
+  private _prevLinks: DependencyLink[] | null = null;
 
   private readonly _onError: ((error: unknown) => void) | null;
 
@@ -72,7 +72,10 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     this.flags |= EFFECT_STATE_FLAGS.DISPOSED;
 
     this._execCleanup();
-    this._releaseLinks(this._links);
+    this._unsubLinks(this._links);
+    if (this._links !== EMPTY_LINKS) {
+      linksArrayPool.release(this._links);
+    }
 
     // Reset State
     this._links = EMPTY_LINKS;
@@ -89,11 +92,17 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 
     const nextLinks = this._nextLinks!;
 
-    const parkedUnsub = this._parkedUnsubs?.get(dep);
-    if (parkedUnsub) {
-      nextLinks.push(new DependencyLink(dep, dep.version, parkedUnsub));
-      this._parkedUnsubs!.delete(dep);
-      return;
+    // Reclaim existing subscription from previous links (avoids unsubscribe + resubscribe)
+    const prev = this._prevLinks;
+    if (prev) {
+      for (let j = 0, plen = prev.length; j < plen; j++) {
+        const plink = prev[j];
+        if (plink && plink.node === dep && plink.unsub) {
+          nextLinks.push(new DependencyLink(dep, dep.version, plink.unsub));
+          plink.unsub = undefined; // Mark as reclaimed
+          return;
+        }
+      }
     }
 
     try {
@@ -136,15 +145,8 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     this._execCleanup();
 
     const prevLinks = this._links;
-    // Park subscriptions into local Map (avoids polluting dependency nodes)
-    if (prevLinks !== EMPTY_LINKS) {
-      const parked = new Map<Dependency, () => void>();
-      for (let i = 0, len = prevLinks.length; i < len; i++) {
-        const link = prevLinks[i];
-        if (link?.unsub) parked.set(link.node, link.unsub);
-      }
-      this._parkedUnsubs = parked;
-    }
+    // Store prev links for subscription reclamation in addDependency
+    this._prevLinks = prevLinks !== EMPTY_LINKS ? prevLinks : null;
 
     // Setup tracking
     const nextLinks = linksArrayPool.acquire();
@@ -157,7 +159,19 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       this._links = nextLinks;
       committed = true;
 
-      this._checkLoopWarnings();
+      // Inline _checkLoopWarnings
+      if (this._trackModifications && debug.enabled) {
+        const epoch = this._currentEpoch;
+        for (let i = 0, len = nextLinks.length; i < len; i++) {
+          const dep = nextLinks[i]!.node;
+          if (dep._modifiedAtEpoch === epoch) {
+            debug.warn(
+              true,
+              `Effect is reading a dependency (${debug.getDebugName(dep) || 'unknown'}) that it just modified. Infinite loop may occur`
+            );
+          }
+        }
+      }
 
       // Handle result
       if (isPromise(result)) {
@@ -205,10 +219,11 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     this._nextLinks = null;
 
     if (committed) {
-      // Cleanup unused parked subscriptions
-      if (this._parkedUnsubs) {
-        for (const unsub of this._parkedUnsubs.values()) {
-          unsub();
+      // Cleanup unclaimed prev subscriptions
+      const prev = this._prevLinks;
+      if (prev) {
+        for (let i = 0, len = prev.length; i < len; i++) {
+          prev[i]?.unsub?.();
         }
       }
       if (prevLinks !== EMPTY_LINKS) {
@@ -216,19 +231,17 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       }
     } else {
       // Abort and restore
-      this._releaseLinks(nextLinks);
+      this._unsubLinks(nextLinks);
       linksArrayPool.release(nextLinks);
     }
 
-    this._parkedUnsubs = null;
+    this._prevLinks = null;
   }
 
-  private _releaseLinks(links: DependencyLink[]): void {
-    if (links === EMPTY_LINKS) return;
+  private _unsubLinks(links: DependencyLink[]): void {
     for (let i = 0, len = links.length; i < len; i++) {
       links[i]?.unsub?.();
     }
-    linksArrayPool.release(links);
   }
 
   private _isDirty(): boolean {
@@ -333,22 +346,6 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
         this._onError(errorObj);
       } catch (e) {
         console.error(wrapError(e, EffectError, ERROR_MESSAGES.CALLBACK_ERROR_IN_ERROR_HANDLER));
-      }
-    }
-  }
-
-  private _checkLoopWarnings(): void {
-    if (this._trackModifications && debug.enabled) {
-      const epoch = this._currentEpoch;
-      const links = this._links;
-      for (let i = 0, len = links.length; i < len; i++) {
-        const dep = links[i]!.node;
-        if (dep._modifiedAtEpoch === epoch) {
-          debug.warn(
-            true,
-            `Effect is reading a dependency (${debug.getDebugName(dep) || 'unknown'}) that it just modified. Infinite loop may occur`
-          );
-        }
       }
     }
   }
