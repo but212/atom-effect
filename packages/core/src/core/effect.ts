@@ -72,7 +72,10 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     this.flags |= EFFECT_STATE_FLAGS.DISPOSED;
 
     this._execCleanup();
-    this._releaseLinks(this._links);
+    this._unsubLinks(this._links);
+    if (this._links !== EMPTY_LINKS) {
+      linksArrayPool.release(this._links);
+    }
 
     // Reset State
     this._links = EMPTY_LINKS;
@@ -228,19 +231,17 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       }
     } else {
       // Abort and restore
-      this._releaseLinks(nextLinks);
+      this._unsubLinks(nextLinks);
       linksArrayPool.release(nextLinks);
     }
 
     this._prevLinks = null;
   }
 
-  private _releaseLinks(links: DependencyLink[]): void {
-    if (links === EMPTY_LINKS) return;
+  private _unsubLinks(links: DependencyLink[]): void {
     for (let i = 0, len = links.length; i < len; i++) {
       links[i]?.unsub?.();
     }
-    linksArrayPool.release(links);
   }
 
   private _isDirty(): boolean {
