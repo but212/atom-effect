@@ -1,9 +1,4 @@
-import {
-  COMPUTED_STATE_FLAGS,
-  EFFECT_STATE_FLAGS,
-  IS_DEV,
-  SCHEDULER_CONFIG,
-} from '@/constants';
+import { COMPUTED_STATE_FLAGS, EFFECT_STATE_FLAGS, IS_DEV, SCHEDULER_CONFIG } from '@/constants';
 import { ReactiveNode } from '@/core/base';
 import { DependencyLink } from '@/core/dep-tracking';
 import { EffectError } from '@/errors/errors';

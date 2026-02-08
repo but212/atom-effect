@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { EMPTY_LINKS, linksArrayPool } from '@/internal/pool';
 import type { DependencyLink } from '@/core/dep-tracking';
+import { EMPTY_LINKS, linksArrayPool } from '@/internal/pool';
 
 describe('ArrayPool', () => {
   beforeEach(() => {
