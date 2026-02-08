@@ -11,7 +11,10 @@ export function trackDependency<T>(
 ): void {
   if (typeof current === 'function') {
     const fn = current as (newValue?: T, oldValue?: T) => void;
-    // Check for existing subscription
+    // O(n) duplicate check — acceptable because:
+    // 1. subscribers array is typically 1-10 elements
+    // 2. DependencySubscriber (hot path) uses O(1) epoch-based dedup via addDependency
+    // 3. This branch only runs for raw function listeners (uncommon)
     for (let i = 0, len = subscribers.length; i < len; i++) {
       const link = subscribers[i];
       if (link && link.fn === fn) return;
@@ -35,45 +38,45 @@ export function trackDependency<T>(
 
 /**
  * Syncs dependencies.
+ * Uses a local Map to park previous subscriptions, avoiding
+ * temporary state on dependency nodes.
  */
 export function syncDependencies(
   nextLinks: DependencyLink[],
   prevLinks: DependencyLink[],
   tracker: Subscriber
 ): void {
+  // Park: collect previous subscriptions into a local Map
+  const parked = new Map<Dependency, () => void>();
   for (let i = 0, len = prevLinks.length; i < len; i++) {
     const link = prevLinks[i];
-    if (link) {
-      link.node._tempUnsub = link.unsub;
+    if (link?.unsub) {
+      parked.set(link.node, link.unsub);
+      link.unsub = undefined;
     }
   }
 
+  // Reclaim or subscribe
   for (let i = 0, len = nextLinks.length; i < len; i++) {
     const link = nextLinks[i];
     if (!link) continue;
 
     const node = link.node;
-    if (node._tempUnsub !== undefined) {
-      // Re-link: Found in previous set, reclaim the subscription
-      link.unsub = node._tempUnsub;
-      node._tempUnsub = undefined; // Consumed
+    const existing = parked.get(node);
+    if (existing !== undefined) {
+      // Re-link: reclaim subscription from previous set
+      link.unsub = existing;
+      parked.delete(node);
     } else {
-      // New Link: Subscribe afresh
+      // New link: subscribe afresh
       debug.checkCircular(node, tracker);
       link.unsub = node.subscribe(tracker);
     }
   }
 
-  for (let i = 0, len = prevLinks.length; i < len; i++) {
-    const link = prevLinks[i];
-    if (link) {
-      const node = link.node;
-      if (node._tempUnsub !== undefined) {
-        node._tempUnsub(); // Release
-        node._tempUnsub = undefined;
-      }
-      link.unsub = undefined;
-    }
+  // Cleanup: release unused subscriptions
+  for (const unsub of parked.values()) {
+    unsub();
   }
 }
 

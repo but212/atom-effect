@@ -3,7 +3,7 @@ import $ from 'jquery';
 import { debug } from './debug';
 import { registry } from './registry';
 import type { ListOptions, ReadonlyAtom } from './types';
-import { getLIS, getSelector } from './utils';
+import { getLIS, getSelector, sanitizeHtml } from './utils';
 
 /**
  * atomList with Smart Reconciliation
@@ -35,7 +35,8 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
       if (itemCount === 0) {
         if (empty && !$emptyEl) {
           // Use type assertion to avoid overload ambiguity while maintaining JQuery return type
-          $emptyEl = ($(empty as string) as JQuery).appendTo($container);
+          const safeEmpty = typeof empty === 'string' ? sanitizeHtml(empty) : empty;
+          $emptyEl = ($(safeEmpty as string) as JQuery).appendTo($container);
         }
       } else if ($emptyEl) {
         $emptyEl.remove();
@@ -161,7 +162,10 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
             }
 
             if (isChanged) {
-              const $newEl = $(render(item, i) as string) as JQuery;
+              const rawRender = render(item, i);
+              const safeRender =
+                typeof rawRender === 'string' ? sanitizeHtml(rawRender) : rawRender;
+              const $newEl = $(safeRender as string) as JQuery;
               const needsNextNodeUpdate = nextNode === el;
               entry.$el.replaceWith($newEl);
               entry.$el = $newEl;
@@ -186,7 +190,8 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
         } else {
           // New Item Path
           const rendered = render(item, i);
-          const $el = $(rendered as string) as JQuery;
+          const safeRendered = typeof rendered === 'string' ? sanitizeHtml(rendered) : rendered;
+          const $el = $(safeRendered as string) as JQuery;
           itemMap.set(k, { $el, item });
 
           if (nextNode?.isConnected) $el.insertBefore(nextNode);

@@ -79,7 +79,6 @@ describe('Utils & Handlers - Extra Coverage', () => {
       const dep = {
         version: 1,
         subscribe: vi.fn(() => () => {}),
-        _tempUnsub: undefined,
       } as unknown as Dependency;
       const unsub = vi.fn();
 

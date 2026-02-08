@@ -1,5 +1,4 @@
 import type { AsyncState } from '@/constants';
-import type { DependencyLink } from '@/core/dep-tracking';
 
 /**
  * Nominal type brand.
@@ -70,9 +69,6 @@ export interface Dependency {
   /** Last validated epoch. */
   _lastSeenEpoch: number;
 
-  /** Temporary unsubscribe. */
-  _tempUnsub?: (() => void) | undefined;
-
   /** Last modified epoch. */
   _modifiedAtEpoch?: number;
 
@@ -87,22 +83,6 @@ export interface Dependency {
 
   /** Value accessor. */
   value?: unknown;
-}
-
-/**
- * Graph entry.
- */
-export interface DependencyEntry<T extends object = Dependency> {
-  /** Dependency reference. */
-  ref: WeakRef<T>;
-  unsubscribe: () => void;
-}
-
-/**
- * Poolable interface.
- */
-export interface Poolable {
-  reset(): void;
 }
 
 /**
@@ -142,32 +122,8 @@ export interface ComputedAtom<T = unknown> extends ReadonlyAtom<T> {
   dispose(): void;
 }
 
-/**
- * Computation context.
- */
-export interface ComputationContext {
-  links: DependencyLink[];
-}
-
-export type TransformFunction<T, U> = (value: T) => U;
-
 export interface Subscriber {
   execute(): void;
-}
-
-export interface IScheduler<T> {
-  markDirty(atom: T): void;
-  scheduleNotify(atom: T): void;
-}
-
-/**
- * Scheduler atom interface.
- */
-export interface IAtom {
-  readonly id: number;
-  version: number;
-  _internalNotifySubscribers(): void;
-  recompute?(): void;
 }
 
 /**
@@ -188,11 +144,6 @@ export interface EffectObject {
   run(): void;
   readonly isDisposed: boolean;
   readonly executionCount: number;
-}
-
-export interface EffectExecutionContext {
-  prevLinks: DependencyLink[];
-  nextLinks: DependencyLink[];
 }
 
 export interface PoolStats {

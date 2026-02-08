@@ -36,6 +36,8 @@ export const EFFECT_STATE_FLAGS = {
  */
 export const COMPUTED_STATE_FLAGS = {
   ...NODE_FLAGS,
+  /** Marker bit: identifies this node as a computed. */
+  IS_COMPUTED: 1 << 1,
   DIRTY: 1 << 3,
   IDLE: 1 << 4,
   PENDING: 1 << 5,

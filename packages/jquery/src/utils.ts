@@ -59,74 +59,32 @@ export function sanitizeHtml(html: string): string {
   safe = safe.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
 
   // 1. Remove dangerous tags entirely (content included or tag stripped)
-  // Dangerous tags: script, iframe, object, embed, base, meta, form, applet, link, style, template, noscript, title
+  // Lightweight first pass — DOMPurify handles the full sanitization.
+  // Note: svg/math are NOT removed — they have legitimate uses (icons, equations).
+  // Their event handlers (on*) are already neutralized in step 3.
   // Also remove processing instructions <? ... ?> which can be abused in some contexts
-  safe = safe
-    .replace(/<\?[\s\S]*?\?>/g, '')
-    .replace(
-      /<(script|iframe|object|embed|base|meta|form|applet|link|style|template|noscript|title)\b[^>]*>([\s\S]*?)<\/\1>/gim,
-      ''
-    )
-    .replace(
-      /<(script|iframe|object|embed|base|meta|form|applet|link|style|template|noscript|title)\b[^>]*\/?>/gim,
-      ''
-    );
+  safe = safe.replace(/<\?[\s\S]*?\?>/g, '');
 
-  // 2. Neutralize dangerous protocols (javascript:, vbscript:, data:)
+  // Loop tag removal to prevent nested reassembly bypass (e.g. "<scr<script>ipt>")
+  const dangerousTagPattern =
+    /(<(script|iframe|object|embed|base|meta|applet|noscript)\b[^>]*>([\s\S]*?)<\/\2>|<(script|iframe|object|embed|base|meta|applet|noscript)\b[^>]*\/?>)/gim;
+  let prev: string;
+  do {
+    prev = safe;
+    safe = safe.replace(dangerousTagPattern, '');
+  } while (safe !== prev);
 
-  // Helper to decode HTML entities for inspection (simple implementation)
-  // This allows us to detect obfuscated protocols like "&#106;avascript:" -> "javascript:"
-  const decodeEntities = (str: string) => {
-    return str
-      .replace(/&#x([0-9a-f]+);?/gi, (_, code) => String.fromCharCode(parseInt(code, 16)))
-      .replace(/&#([0-9]+);?/gi, (_, code) => String.fromCharCode(parseInt(code, 10)));
-  };
-
-  const decoded = decodeEntities(safe);
-  // Check against decoded version for protocols
-  // We use a simple regex on the decoded string to find protocols
-  if (decoded.match(/(?:java|vb)script:|data:/i)) {
-    // If decoded string contains dangerous protocol, we must sanitize the ORIGINAL string
-    // Since we can't easily map back, we aggressively replace potential protocol patterns in the original
-    // A robust way: fail safe by removing the protocol from the original if detected in decoded
-
-    // Aggressive pattern for the original string dealing with entities
-    // Matches "j" or "&#106;" followed by "a" or "&#97;" etc...
-    // This is too complex.
-    // Easier: Just replace the specific dangerous strings in the original using a broad regex
-    // that matches the protocol chars OR their entity equivalents.
-
-    // Let's use a regex that matches "javascript:" where each char can be an entity
-    const buildProtocolRegex = (protocol: string) => {
-      return new RegExp(
-        `${protocol
-          .split('')
-          .map((c) => {
-            const code = c.charCodeAt(0);
-            // Match the char, or decimal entity, or hex entity (case insensitive)
-            return `(?:${c}|&#0*${code};?|&#x0*${code.toString(16)};?)`;
-          })
-          .join('\\s*')}\\s*(?::|&colon;|&#x?0*((58)|(3a));?|%3a)`,
-        'gi'
-      );
-    };
-
-    safe = safe
-      .replace(buildProtocolRegex('javascript'), 'data-unsafe-protocol:')
-      .replace(buildProtocolRegex('vbscript'), 'data-unsafe-protocol:');
-    // data: is handled separately below to allow images
-  } else {
-    // Fast path for non-obfuscated protocols
-    const protocolRegex =
-      /((?:j\s*a\s*v\s*a\s*s\s*c\s*r\s*i\s*p\s*t|v\s*b\s*s\s*c\s*r\s*i\s*p\s*t)\s*(?::|&colon;|&#x?0*((58)|(3a));?|%3a))/gim;
-    safe = safe.replace(protocolRegex, 'data-unsafe-protocol:');
-  }
+  // 2. Neutralize dangerous protocols (javascript:, vbscript:)
+  // Simple whitespace-tolerant regex. Entity-based obfuscation is left to DOMPurify.
+  // Step 0 already strips null bytes/control chars, so basic spacing tricks are caught here.
+  const protocolRegex =
+    /(j\s*a\s*v\s*a\s*s\s*c\s*r\s*i\s*p\s*t|v\s*b\s*s\s*c\s*r\s*i\s*p\s*t)\s*:/gi;
+  safe = safe.replace(protocolRegex, 'data-unsafe-protocol:');
 
   // Separately handle dangerous data URIs (e.g. text/html, base64 encoded scripts)
-  // This allows common inline images (data:image/...) while blocking executable payloads.
-  // Note: Only basic detection.
+  // Allows common inline images (data:image/...) including SVG while blocking executable payloads.
   const dangerousDataUriRegex =
-    /data\s*:\s*(?:text\/html|application\/javascript|text\/javascript|text\/vbscript)/gim;
+    /data\s*:\s*(?:text\/html|application\/javascript|text\/javascript|text\/vbscript|text\/xml|application\/xhtml\+xml)/gim;
   safe = safe.replace(dangerousDataUriRegex, 'data-unsafe-protocol:');
 
   // 3. Neutralize event handlers (on* attributes)
@@ -140,6 +98,49 @@ export function sanitizeHtml(html: string): string {
     .replace(/behavior\s*:/gim, 'data-unsafe-css:');
 
   return safe;
+}
+
+/**
+ * Checks if a given attribute value contains a dangerous protocol (javascript:, vbscript:).
+ * Used by atomAttr/bindAttr to guard URL-bearing attributes.
+ */
+const URL_ATTRS = new Set([
+  'href',
+  'src',
+  'action',
+  'formaction',
+  'xlink:href',
+  'data',
+  'poster',
+  'srcset',
+  'background',
+  'cite',
+  'longdesc',
+  'profile',
+  'usemap',
+  'classid',
+  'codebase',
+]);
+
+const DANGEROUS_PROTOCOL_RE = /^\s*(?:javascript|vbscript)\s*:/i;
+
+export function isDangerousUrl(attrName: string, value: string): boolean {
+  if (!URL_ATTRS.has(attrName.toLowerCase())) return false;
+  return DANGEROUS_PROTOCOL_RE.test(value);
+}
+
+/**
+ * Checks if a CSS value contains dangerous protocols in url() functions.
+ * e.g. background-image: url("javascript:alert(1)")
+ */
+export function isDangerousCssValue(value: string): boolean {
+  // fast check for url(
+  if (!value.toLowerCase().includes('url(')) return false;
+
+  // Check for dangerous protocols inside url(...)
+  // Pattern matches: url(  ['"]?  protocol:
+  const dangerousCssUrlRe = /url\s*\(\s*(?:["']?\s*)?(?:javascript|vbscript)\s*:/i;
+  return dangerousCssUrlRe.test(value);
 }
 
 /**

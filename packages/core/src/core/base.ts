@@ -20,8 +20,6 @@ export class ReactiveNode {
   _modifiedAtEpoch = -1;
   /** Debug ID */
   readonly id: DependencyId = (generateId() & SMI_MAX) as DependencyId;
-  /** Temporary unsubscribe slot */
-  _tempUnsub: (() => void) | undefined = undefined;
 }
 
 /**
