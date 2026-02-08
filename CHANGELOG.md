@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Core
+
+#### Refactored - Core
+
+- **Dependency Ownership**: Replaced `_tempUnsub` node pollution with local `Map<Dependency, () => void>` in `Effect` and `syncDependencies`.
+  - Removed `_tempUnsub` from `ReactiveNode` and `Dependency` interface, eliminating tracker-owned temporary state from dependency nodes.
+  - `EffectImpl` now uses `_parkedUnsubs` Map for subscription parking/reclaiming during re-execution.
+  - `syncDependencies` uses a local Map instead of mutating `node._tempUnsub`.
+- **trackDependency Documentation**: Added O(n) trade-off comment explaining why linear scan is acceptable (array size 1-10, hot path uses O(1) epoch-based dedup).
+
 ### jQuery
 
 #### Fixed - jQuery

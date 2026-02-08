@@ -18,41 +18,47 @@ export interface SchedulerJob {
 /**
  * Scheduler implementation.
  */
-export const scheduler = {
+class Scheduler {
   /** Queue buffer */
-  _queueBuffer: [[], []] as [SchedulerJob[], SchedulerJob[]],
-  _bufferIndex: 0,
-  _size: 0,
+  _queueBuffer: [SchedulerJob[], SchedulerJob[]] = [[], []];
+  _bufferIndex = 0;
+  _size = 0;
 
   /** Epoch counter */
-  _epoch: 0,
+  _epoch = 0;
 
   /** State flags */
-  _isProcessing: false,
-  _isBatching: false,
-  _isFlushingSync: false,
+  _isProcessing = false;
+  _isBatching = false;
+  _isFlushingSync = false;
 
   /** Batching state */
-  _batchDepth: 0,
-  _batchQueue: [] as SchedulerJob[],
-  _batchQueueSize: 0,
+  _batchDepth = 0;
+  _batchQueue: SchedulerJob[] = [];
+  _batchQueueSize = 0;
 
   /** Config */
-  _maxFlushIterations: SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS as number,
+  _maxFlushIterations: number = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
+
+  /** Overflow callback */
+  onOverflow: ((droppedCount: number) => void) | null = null;
+
+  /** Bound run loop for microtask */
+  private readonly _boundRunLoop = this._runLoop.bind(this);
 
   get phase(): SchedulerPhase {
     if (this._isProcessing || this._isFlushingSync) return SchedulerPhase.FLUSHING;
     if (this._isBatching) return SchedulerPhase.BATCHING;
     return SchedulerPhase.IDLE;
-  },
+  }
 
   get queueSize(): number {
     return this._size;
-  },
+  }
 
   get isBatching(): boolean {
     return this._isBatching;
-  },
+  }
 
   /**
    * Schedules job.
@@ -78,7 +84,7 @@ export const scheduler = {
     if (!this._isProcessing) {
       this._flush();
     }
-  },
+  }
 
   /**
    * Triggers flush.
@@ -87,27 +93,27 @@ export const scheduler = {
     if (this._isProcessing || this._size === 0) return;
     this._isProcessing = true;
 
-    queueMicrotask(this._runLoop);
-  },
+    queueMicrotask(this._boundRunLoop);
+  }
 
   /**
    * Scheduler loop.
    */
-  _runLoop: () => {
+  private _runLoop(): void {
     try {
-      if (scheduler._size === 0) return;
+      if (this._size === 0) return;
 
       const started = startFlush();
-      scheduler._drainQueue();
+      this._drainQueue();
       if (started) endFlush();
     } finally {
-      scheduler._isProcessing = false;
+      this._isProcessing = false;
       // If new jobs arrived during flush (and not batching), re-schedule
-      if (scheduler._size > 0 && !scheduler._isBatching) {
-        scheduler._flush();
+      if (this._size > 0 && !this._isBatching) {
+        this._flush();
       }
     }
-  },
+  }
 
   _flushSync(): void {
     this._isFlushingSync = true;
@@ -119,7 +125,7 @@ export const scheduler = {
       this._isFlushingSync = false;
       if (started) endFlush();
     }
-  },
+  }
 
   _mergeBatchQueue(): void {
     if (this._batchQueueSize === 0) return;
@@ -147,7 +153,7 @@ export const scheduler = {
     if (bQueue.length > SCHEDULER_CONFIG.BATCH_QUEUE_SHRINK_THRESHOLD) {
       bQueue.length = 0;
     }
-  },
+  }
 
   _drainQueue(): void {
     let iterations = 0;
@@ -163,7 +169,7 @@ export const scheduler = {
       // If batch updates happened during processing, merge them in now
       this._mergeBatchQueue();
     }
-  },
+  }
 
   _processQueue(): void {
     const idx = this._bufferIndex;
@@ -185,12 +191,9 @@ export const scheduler = {
     }
     // Clear the consumed buffer
     jobs.length = 0;
-  },
+  }
 
-  /** Overflow callback */
-  onOverflow: null as ((droppedCount: number) => void) | null,
-
-  _handleFlushOverflow(): void {
+  private _handleFlushOverflow(): void {
     const droppedCount = this._size + this._batchQueueSize;
     console.error(
       new SchedulerError(
@@ -206,12 +209,12 @@ export const scheduler = {
         this.onOverflow(droppedCount);
       } catch {}
     }
-  },
+  }
 
   startBatch(): void {
     this._batchDepth++;
     this._isBatching = true;
-  },
+  }
 
   endBatch(): void {
     if (this._batchDepth === 0) {
@@ -223,7 +226,7 @@ export const scheduler = {
       this._flushSync();
       this._isBatching = false;
     }
-  },
+  }
 
   setMaxFlushIterations(max: number): void {
     if (max < SCHEDULER_CONFIG.MIN_FLUSH_ITERATIONS)
@@ -231,5 +234,7 @@ export const scheduler = {
         `Max flush iterations must be at least ${SCHEDULER_CONFIG.MIN_FLUSH_ITERATIONS}`
       );
     this._maxFlushIterations = max;
-  },
-};
+  }
+}
+
+export const scheduler = new Scheduler();

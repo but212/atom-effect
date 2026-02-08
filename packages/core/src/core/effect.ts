@@ -1,4 +1,10 @@
-import { EFFECT_STATE_FLAGS, IS_DEV, SCHEDULER_CONFIG, TIME_CONSTANTS } from '@/constants';
+import {
+  COMPUTED_STATE_FLAGS,
+  EFFECT_STATE_FLAGS,
+  IS_DEV,
+  SCHEDULER_CONFIG,
+  TIME_CONSTANTS,
+} from '@/constants';
 import { ReactiveNode } from '@/core/base';
 import { DependencyLink } from '@/core/dep-tracking';
 import { EffectError } from '@/errors/errors';
@@ -25,6 +31,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   private _links: DependencyLink[] = EMPTY_LINKS;
   private _nextLinks: DependencyLink[] | null = null;
   private _executeTask: (() => void) | undefined;
+  private _parkedUnsubs: Map<Dependency, () => void> | null = null;
 
   private readonly _onError: ((error: unknown) => void) | null;
 
@@ -97,9 +104,10 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 
     const nextLinks = this._nextLinks!;
 
-    if (dep._tempUnsub) {
-      nextLinks.push(new DependencyLink(dep, dep.version, dep._tempUnsub));
-      dep._tempUnsub = undefined;
+    const parkedUnsub = this._parkedUnsubs?.get(dep);
+    if (parkedUnsub) {
+      nextLinks.push(new DependencyLink(dep, dep.version, parkedUnsub));
+      this._parkedUnsubs!.delete(dep);
       return;
     }
 
@@ -143,12 +151,14 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     this._execCleanup();
 
     const prevLinks = this._links;
-    // Park subscriptions
+    // Park subscriptions into local Map (avoids polluting dependency nodes)
     if (prevLinks !== EMPTY_LINKS) {
+      const parked = new Map<Dependency, () => void>();
       for (let i = 0, len = prevLinks.length; i < len; i++) {
         const link = prevLinks[i];
-        if (link) link.node._tempUnsub = link.unsub;
+        if (link?.unsub) parked.set(link.node, link.unsub);
       }
+      this._parkedUnsubs = parked;
     }
 
     // Setup tracking
@@ -210,30 +220,22 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     this._nextLinks = null;
 
     if (committed) {
-      // Cleanup unused subscriptions
-      if (prevLinks !== EMPTY_LINKS) {
-        for (let i = 0, len = prevLinks.length; i < len; i++) {
-          const link = prevLinks[i];
-          const unsub = link?.node._tempUnsub;
-          if (unsub) {
-            unsub();
-            if (link) link.node._tempUnsub = undefined;
-          }
+      // Cleanup unused parked subscriptions
+      if (this._parkedUnsubs) {
+        for (const unsub of this._parkedUnsubs.values()) {
+          unsub();
         }
+      }
+      if (prevLinks !== EMPTY_LINKS) {
         linksArrayPool.release(prevLinks);
       }
     } else {
       // Abort and restore
       this._releaseLinks(nextLinks);
       linksArrayPool.release(nextLinks);
-
-      if (prevLinks !== EMPTY_LINKS) {
-        for (let i = 0, len = prevLinks.length; i < len; i++) {
-          // Clear park slots
-          if (prevLinks[i]) prevLinks[i]!.node._tempUnsub = undefined;
-        }
-      }
     }
+
+    this._parkedUnsubs = null;
   }
 
   private _releaseLinks(links: DependencyLink[]): void {
@@ -255,8 +257,8 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
         const link = links[i]!;
         const dep = link.node;
 
-        // Check computed values (read to trigger recomputation if needed)
-        if ('value' in (dep as object)) {
+        // Trigger recomputation for computed dependencies
+        if (dep.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) {
           try {
             // Access value directly since we've disabled tracking
             void (dep as { value: unknown }).value;
