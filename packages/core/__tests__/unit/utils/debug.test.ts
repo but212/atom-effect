@@ -75,13 +75,67 @@ describe('debug.checkCircular', () => {
     }).toThrow(/circular dependency/i);
   });
 
-  it('does not throw for different nodes', () => {
+  it('detects indirect circular reference (development mode)', () => {
+    const originalEnabled = debug.enabled;
+    debug.enabled = true;
+
+    const nodeA = { id: 1, dependencies: [] } as unknown as Dependency;
+    const nodeB = { id: 2, dependencies: [nodeA] } as unknown as Dependency;
+    const nodeC = { id: 3, dependencies: [nodeB] } as unknown as Dependency;
+    (nodeA as unknown as { dependencies: unknown[] }).dependencies.push(nodeC); // A → C → B → A
+
+    expect(() => {
+      debug.checkCircular(nodeC, nodeA);
+    }).toThrow(ComputedError);
+
+    debug.enabled = originalEnabled;
+  });
+
+  it('does not check indirect circular reference in production mode', () => {
+    const originalEnabled = debug.enabled;
+    debug.enabled = false;
+
+    const nodeA = { dependencies: [] } as unknown as Dependency;
+    const nodeB = { dependencies: [nodeA] } as unknown as Dependency;
+    const nodeC = { dependencies: [nodeB] } as unknown as Dependency;
+    (nodeA as unknown as { dependencies: unknown[] }).dependencies.push(nodeC);
+
+    // No error in production (for performance)
+    // However, direct circular is still detected
+    expect(() => {
+      debug.checkCircular(nodeB, nodeA); // indirect circular
+    }).not.toThrow();
+
+    debug.enabled = originalEnabled;
+  });
+
+  it('handles nodes without dependencies', () => {
+    const originalEnabled = debug.enabled;
+    debug.enabled = true;
+
     const node1 = {} as Dependency;
-    const node2 = {} as Dependency;
+    const node2 = { dependencies: [] } as unknown as Dependency;
 
     expect(() => {
       debug.checkCircular(node1, node2);
     }).not.toThrow();
+
+    debug.enabled = originalEnabled;
+  });
+
+  it('checks recursively with epoch-based optimization', () => {
+    const originalEnabled = debug.enabled;
+    debug.enabled = true;
+
+    const nodeA = { dependencies: [] } as unknown as Dependency;
+    const nodeB = { dependencies: [nodeA] } as unknown as Dependency;
+
+    // Should not throw for non-circular dependency
+    expect(() => {
+      debug.checkCircular(nodeB, {});
+    }).not.toThrow();
+
+    debug.enabled = originalEnabled;
   });
 });
 

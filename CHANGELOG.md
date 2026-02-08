@@ -18,7 +18,6 @@
   - Reduces per-effect memory footprint and initialization cost.
 - **Version Snapshot**: Simplified `_captureVersionSnapshot` from DJB2 hash mixing to plain sum.
 - **Branded Type Removal**: Simplified `DependencyId` from `Branded<number, 'DependencyId'>` to plain `number`, removing the `Branded` utility type.
-- **Debug Circular Check**: Removed recursive `checkCircularInternal` traversal; retained direct identity check only.
 - **Error Wrapping**: Replaced manual `TypeError`/`ReferenceError` branching with `error.constructor.name` for error category.
 - **Pool Cleanup**: Removed unused `EMPTY_DEPS`, `EMPTY_SUBS`, `EMPTY_UNSUBS`, `EMPTY_VERSIONS` constants and `depArrayPool`, `unsubArrayPool`, `versionArrayPool` pools.
 

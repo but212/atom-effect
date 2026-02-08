@@ -113,16 +113,38 @@ describe('Utils & Handlers - Extra Coverage', () => {
   });
 
   describe('Debug Utils', () => {
-    it('checkCircular detects direct identity match', () => {
-      const node = { id: 1 } as unknown as Dependency;
+    it('checkCircular implementation details', () => {
+      const wasEnabled = debug.enabled;
+      debug.enabled = true;
 
-      expect(() => debug.checkCircular(node, node)).toThrow(
-        /circular dependency/i
+      interface MockDep {
+        id: number;
+        dependencies?: MockDep[];
+      }
+      const dep1: MockDep = { id: 1 };
+      const dep2: MockDep = { id: 2, dependencies: [dep1] };
+
+      // Case 1: Indirect circular
+      dep1.dependencies = [dep2];
+
+      expect(() => debug.checkCircular(dep1 as unknown as Dependency, dep2)).toThrow(
+        /Circular dependency detected/
       );
 
-      // Different nodes should not throw
-      const other = { id: 2 } as unknown as Dependency;
-      expect(() => debug.checkCircular(node, other)).not.toThrow();
+      // Case 2: Diamond dependency (hits visited branch)
+      // dep1 -> dep2, dep1 -> dep3, dep2 -> dep4, dep3 -> dep4
+      const d4: MockDep = { id: 4 };
+      const d2: MockDep = { id: 2, dependencies: [d4] };
+      const d3: MockDep = { id: 3, dependencies: [d4] };
+      const d1: MockDep = { id: 1, dependencies: [d2, d3] };
+
+      expect(() => debug.checkCircular(d1 as unknown as Dependency, {})).not.toThrow();
+
+      // Case 3: Dep without dependencies array
+      const emptyDep: MockDep = { id: 3 };
+      expect(() => debug.checkCircular(emptyDep as unknown as Dependency, {})).not.toThrow();
+
+      debug.enabled = wasEnabled;
     });
   });
 });

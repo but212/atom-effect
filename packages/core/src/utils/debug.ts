@@ -9,6 +9,39 @@ export const DEBUG_TYPE = Symbol('AtomEffect.Type');
 export const NO_DEFAULT_VALUE = Symbol('AtomEffect.NoDefaultValue');
 
 /**
+ * Dependency type guard.
+ */
+const hasDeps = (o: Dependency): o is Dependency & { dependencies: Dependency[] } =>
+  'dependencies' in o && Array.isArray((o as { dependencies: unknown }).dependencies);
+
+/**
+ * Cycle detection.
+ */
+function checkCircularInternal(dep: Dependency, current: object, visited: Set<number>): void {
+  // Cycle detected in *this* path
+  if (dep === current) {
+    throw new ComputedError(
+      'Circular dependency detected: The computation refers to itself explicitly or implicitly.'
+    );
+  }
+
+  // Cycle check
+  if (visited.has(dep.id)) return;
+  visited.add(dep.id);
+
+  if (hasDeps(dep)) {
+    const deps = dep.dependencies;
+    // Check dependencies
+    for (let i = 0; i < deps.length; i++) {
+      const child = deps[i];
+      if (child) {
+        checkCircularInternal(child, current, visited);
+      }
+    }
+  }
+}
+
+/**
  * Debug controller.
  */
 export const debug: DebugConfig = {
@@ -26,6 +59,10 @@ export const debug: DebugConfig = {
   checkCircular(dep, current) {
     if (dep === current) {
       throw new ComputedError('Direct circular dependency detected');
+    }
+
+    if (IS_DEV && this.enabled) {
+      checkCircularInternal(dep, current, new Set());
     }
   },
 
