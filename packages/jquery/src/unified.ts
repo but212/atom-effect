@@ -167,7 +167,9 @@ function bindProp(ctx: BindingContext, propMap: Record<string, ReactiveValue<unk
   for (const name in propMap) {
     // Block dangerous DOM properties that can inject raw HTML
     if (DANGEROUS_PROPS.includes(name)) {
-      console.warn(`[atomBind] Blocked setting dangerous property "${name}". Use html binding for sanitized HTML.`);
+      console.warn(
+        `[atomBind] Blocked setting dangerous property "${name}". Use html binding for sanitized HTML.`
+      );
       continue;
     }
 

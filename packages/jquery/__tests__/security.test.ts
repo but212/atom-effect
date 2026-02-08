@@ -4,8 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../src/chainable'; // Register plugins
 import '../src/unified'; // Register atomBind plugin
 import '../src/list'; // Register atomList plugin
-import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '../src/utils';
 import { registry } from '../src/registry';
+import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '../src/utils';
 
 // ============================================================================
 // PART 1: Unit Tests (Core Logic)
@@ -95,7 +95,8 @@ describe('Unit: sanitizeHtml (Core Logic)', () => {
 
   // 7. CSS/Style Attacks
   it('should sanitize CSS expressions and behavior', () => {
-    const v = '<div style="background:url(javascript:alert(1)); behavior:url(x.htc); expression(alert(1))">';
+    const v =
+      '<div style="background:url(javascript:alert(1)); behavior:url(x.htc); expression(alert(1))">';
     const safe = sanitizeHtml(v).toLowerCase();
     expect(safe).not.toContain('javascript:');
     expect(safe).not.toContain('behavior:');
@@ -215,9 +216,9 @@ describe('Integration: Security Wiring', () => {
       css: { background: atom('url(javascript:)') }, // Should be blocked
       prop: { innerHTML: atom('') }, // Should be blocked
     });
-    
+
     // Check call counts or message content to be sure failures happened
-    expect(warnSpy).toHaveBeenCalledTimes(4); 
+    expect(warnSpy).toHaveBeenCalledTimes(4);
     // Just a smoke test for wiring; specific messages logic verified in unit/individual tests
   });
 });
@@ -231,8 +232,7 @@ describe('Policy: Allowed / Practicality', () => {
   // 1. SVG Icons
   it('should allow inline SVG icons (common UI pattern)', () => {
     const div = $('<div>');
-    const svgIcon =
-      '<svg class="feather"><circle cx="12" cy="7" r="4"></circle></svg>';
+    const svgIcon = '<svg class="feather"><circle cx="12" cy="7" r="4"></circle></svg>';
     div.atomHtml(atom(svgIcon));
     expect(div.html().toLowerCase()).toContain('<svg');
     expect(div.find('circle').length).toBe(1);
@@ -241,12 +241,15 @@ describe('Policy: Allowed / Practicality', () => {
   // 2. Data URIs
   it('should allow data URIs for images in atomHtml & atomCss', () => {
     const div = $('<div>');
-    const imgTag = '<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=">';
-    
+    const imgTag =
+      '<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=">';
+
     div.atomHtml(atom(imgTag));
     expect(div.find('img').length).toBe(1);
 
-    const bg = atom('url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=)');
+    const bg = atom(
+      'url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=)'
+    );
     div.atomCss('background-image', bg);
     expect(div[0].style.backgroundImage).toContain('data:image/png');
   });
@@ -262,13 +265,13 @@ describe('Policy: Allowed / Practicality', () => {
   it('should ALLOW unsafe content via raw effect (Escape Hatch)', () => {
     const div = $('<div>');
     const iframe = '<iframe src="https://example.com"></iframe>';
-    
+
     // User explicitly opts out of safety by using raw effect + jquery html()
     const fx = effect(() => {
       div.html(iframe);
     });
     registry.trackEffect(div[0], fx);
-    
+
     expect(div.find('iframe').length).toBe(1);
   });
 });

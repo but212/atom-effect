@@ -134,7 +134,9 @@ $.fn.atomProp = function <T extends string | number | boolean | null | undefined
   // Block dangerous DOM properties that can inject raw HTML
   const dangerousProps = ['innerHTML', 'outerHTML'];
   if (dangerousProps.includes(name)) {
-    console.warn(`[atomProp] Blocked setting dangerous property "${name}". Use atomHtml for sanitized HTML binding.`);
+    console.warn(
+      `[atomProp] Blocked setting dangerous property "${name}". Use atomHtml for sanitized HTML binding.`
+    );
     return this;
   }
 

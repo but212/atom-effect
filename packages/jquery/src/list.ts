@@ -163,7 +163,8 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
 
             if (isChanged) {
               const rawRender = render(item, i);
-              const safeRender = typeof rawRender === 'string' ? sanitizeHtml(rawRender) : rawRender;
+              const safeRender =
+                typeof rawRender === 'string' ? sanitizeHtml(rawRender) : rawRender;
               const $newEl = $(safeRender as string) as JQuery;
               const needsNextNodeUpdate = nextNode === el;
               entry.$el.replaceWith($newEl);
