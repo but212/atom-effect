@@ -37,7 +37,7 @@ export {
   untracked,
 } from '@but212/atom-effect';
 // Optional: Auto-batching for jQuery events
-export { enablejQueryBatching, enablejQueryOverrides } from './jquery-patch';
+export { enablejQueryOverrides } from './jquery-patch';
 // Export types
 export type {
   BindingOptions,

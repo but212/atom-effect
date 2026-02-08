@@ -66,43 +66,28 @@ export function route(config: RouteConfig): Router {
 
   /**
    * Parses query parameters from hash string.
-   * Optimized for low allocation (no intermediate arrays).
    * @example parseQueryParams('#home?id=123&name=test') // { id: '123', name: 'test' }
    */
   const parseQueryParams = (hash: string): Record<string, string> => {
     const qIndex = hash.indexOf('?');
     if (qIndex === -1) return {};
 
+    const raw = hash.substring(qIndex + 1);
     const params: Record<string, string> = {};
-    const len = hash.length;
-    let start = qIndex + 1;
+    const sp = new URLSearchParams(raw);
+    sp.forEach((value, key) => {
+      params[key] = value;
+    });
 
-    // Helper for safe decoding
-    const safeDecode = (str: string): string => {
+    // Warn about malformed percent-encoded sequences (e.g. %FF%FE)
+    if (raw.includes('%')) {
       try {
-        return decodeURIComponent(str);
+        decodeURIComponent(raw);
       } catch (_e) {
-        console.warn(`${LOG_PREFIX} Malformed URI component: ${str}`);
-        return str;
+        console.warn(`${LOG_PREFIX} Malformed URI component: ${raw}`);
       }
-    };
-
-    while (start < len) {
-      let end = hash.indexOf('&', start);
-      if (end === -1) end = len;
-
-      if (end > start) {
-        const eqIndex = hash.indexOf('=', start);
-        if (eqIndex !== -1 && eqIndex < end) {
-          params[safeDecode(hash.substring(start, eqIndex))] = safeDecode(
-            hash.substring(eqIndex + 1, end)
-          );
-        } else {
-          params[safeDecode(hash.substring(start, end))] = '';
-        }
-      }
-      start = end + 1;
     }
+
     return params;
   };
 

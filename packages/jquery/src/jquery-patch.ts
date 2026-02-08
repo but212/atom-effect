@@ -125,9 +125,3 @@ export function enablejQueryOverrides() {
     return originalOff.apply(this, args as Parameters<typeof originalOff>);
   };
 }
-
-/**
- * @deprecated use `enablejQueryOverrides()` instead.
- * This alias will be removed in the future.
- */
-export const enablejQueryBatching = enablejQueryOverrides;

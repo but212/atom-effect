@@ -27,10 +27,26 @@ function getCamelCase(prop: string): string {
 }
 
 // ============================================================================
+// Binding Context Factory
+// ============================================================================
+
+export function createContext(el: HTMLElement): BindingContext {
+  let _$el: JQuery | null = null;
+  return {
+    get $el() {
+      if (!_$el) _$el = $(el);
+      return _$el;
+    },
+    el,
+    trackCleanup: (fn) => registry.trackCleanup(el, fn),
+  };
+}
+
+// ============================================================================
 // One-Way Binding Handlers (Atom → DOM)
 // ============================================================================
 
-function bindText<T>(ctx: BindingContext, value: ReactiveValue<T>): void {
+export function bindText<T>(ctx: BindingContext, value: ReactiveValue<T>): void {
   const el = ctx.el;
   registerReactiveEffect(
     el,
@@ -46,7 +62,7 @@ function bindText<T>(ctx: BindingContext, value: ReactiveValue<T>): void {
   );
 }
 
-function bindHtml(ctx: BindingContext, value: ReactiveValue<string>): void {
+export function bindHtml(ctx: BindingContext, value: ReactiveValue<string>): void {
   const el = ctx.el;
   registerReactiveEffect(
     el,
@@ -62,7 +78,6 @@ function bindHtml(ctx: BindingContext, value: ReactiveValue<string>): void {
       const safeVal = sanitized;
 
       // Guard against redundant DOM writes which destroy/recreate subtrees
-      // Guard against redundant DOM writes which destroy/recreate subtrees
       if (el.innerHTML !== safeVal) {
         el.innerHTML = safeVal;
       }
@@ -71,7 +86,10 @@ function bindHtml(ctx: BindingContext, value: ReactiveValue<string>): void {
   );
 }
 
-function bindClass(ctx: BindingContext, classMap: Record<string, ReactiveValue<boolean>>): void {
+export function bindClass(
+  ctx: BindingContext,
+  classMap: Record<string, ReactiveValue<boolean>>
+): void {
   for (const className in classMap) {
     registerReactiveEffect(
       ctx.el,
@@ -84,7 +102,7 @@ function bindClass(ctx: BindingContext, classMap: Record<string, ReactiveValue<b
   }
 }
 
-function bindCss(ctx: BindingContext, cssMap: Record<string, CssValue>): void {
+export function bindCss(ctx: BindingContext, cssMap: Record<string, CssValue>): void {
   const el = ctx.el;
   const style = el.style as unknown as Record<string, string>;
   for (const prop in cssMap) {
@@ -92,40 +110,27 @@ function bindCss(ctx: BindingContext, cssMap: Record<string, CssValue>): void {
     if (val === undefined) continue;
 
     const camel = getCamelCase(prop);
+    const isArr = Array.isArray(val);
+    const source = isArr ? val[0] : val;
+    const unit = isArr ? val[1] : '';
 
-    if (Array.isArray(val)) {
-      registerReactiveEffect(
-        el,
-        val[0],
-        (v) => {
-          const strVal = `${v}${val[1]}`;
-          if (isDangerousCssValue(strVal)) {
-            console.warn(`[atomBind] Blocked dangerous value in "${prop}" property.`);
-            return;
-          }
-          style[camel] = strVal;
-        },
-        `css.${prop}`
-      );
-    } else {
-      registerReactiveEffect(
-        el,
-        val,
-        (v) => {
-          const strVal = String(v);
-          if (isDangerousCssValue(strVal)) {
-            console.warn(`[atomBind] Blocked dangerous value in "${prop}" property.`);
-            return;
-          }
-          style[camel] = strVal;
-        },
-        `css.${prop}`
-      );
-    }
+    registerReactiveEffect(
+      el,
+      source,
+      (v) => {
+        const strVal = unit ? `${v}${unit}` : String(v);
+        if (isDangerousCssValue(strVal)) {
+          console.warn(`[atomBind] Blocked dangerous value in "${prop}" property.`);
+          return;
+        }
+        style[camel] = strVal;
+      },
+      `css.${prop}`
+    );
   }
 }
 
-function bindAttr(
+export function bindAttr(
   ctx: BindingContext,
   attrMap: Record<string, ReactiveValue<string | boolean | null>>
 ): void {
@@ -162,7 +167,10 @@ function bindAttr(
 
 const DANGEROUS_PROPS = ['innerHTML', 'outerHTML'];
 
-function bindProp(ctx: BindingContext, propMap: Record<string, ReactiveValue<unknown>>): void {
+export function bindProp(
+  ctx: BindingContext,
+  propMap: Record<string, ReactiveValue<unknown>>
+): void {
   const el = ctx.el as unknown as Record<string, unknown>;
   for (const name in propMap) {
     // Block dangerous DOM properties that can inject raw HTML
@@ -187,31 +195,22 @@ function bindProp(ctx: BindingContext, propMap: Record<string, ReactiveValue<unk
   }
 }
 
-function bindShow(ctx: BindingContext, condition: ReactiveValue<boolean>): void {
+export function bindVisibility(
+  ctx: BindingContext,
+  condition: ReactiveValue<boolean>,
+  invert: boolean,
+  label: 'show' | 'hide'
+): void {
   const el = ctx.el;
   registerReactiveEffect(
     el,
     condition,
     (val) => {
-      // Direct style access is faster than $el.toggle()
-      el.style.display = val ? '' : 'none';
-      if (debug.enabled) debug.domUpdated(el, 'show', val);
+      const visible = invert ? !val : !!val;
+      el.style.display = visible ? '' : 'none';
+      if (debug.enabled) debug.domUpdated(el, label, val);
     },
-    'show'
-  );
-}
-
-function bindHide(ctx: BindingContext, condition: ReactiveValue<boolean>): void {
-  const el = ctx.el;
-  registerReactiveEffect(
-    el,
-    condition,
-    (val) => {
-      // Direct style access is faster than $el.toggle()
-      el.style.display = val ? 'none' : '';
-      if (debug.enabled) debug.domUpdated(el, 'hide', val);
-    },
-    'hide'
+    label
   );
 }
 
@@ -219,7 +218,7 @@ function bindHide(ctx: BindingContext, condition: ReactiveValue<boolean>): void 
  * Two-way value binding with full feature parity to $.fn.atomVal.
  * Supports parse/format options, debouncing, IME composition, and focus-aware updates.
  */
-function bindVal<T>(
+export function bindVal<T>(
   ctx: BindingContext,
   cfg: WritableAtom<T> | [atom: WritableAtom<T>, options: ValOptions<T>]
 ): void {
@@ -239,7 +238,7 @@ function bindVal<T>(
   ctx.trackCleanup(cleanup);
 }
 
-function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): void {
+export function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): void {
   const el = ctx.el as HTMLInputElement;
   const state = createInputBindingState();
 
@@ -281,7 +280,7 @@ type EventBindingMap = {
   [eventName: string]: JQuery.EventHandler<HTMLElement, undefined> | false | undefined;
 };
 
-function bindEvents(ctx: BindingContext, eventMap: EventBindingMap): void {
+export function bindEvents(ctx: BindingContext, eventMap: EventBindingMap): void {
   for (const name in eventMap) {
     const handler = eventMap[name];
     if (typeof handler !== 'function') continue;
@@ -312,20 +311,7 @@ $.fn.atomBind = function <T extends string | number | boolean | null | undefined
   options: BindingOptions<T>
 ): JQuery {
   return this.each(function () {
-    const el = this;
-    let _$el: JQuery | null = null;
-
-    // Build binding context with a lazy JQuery wrapper
-    const ctx: BindingContext = {
-      get $el() {
-        if (!_$el) {
-          _$el = $(el);
-        }
-        return _$el;
-      },
-      el,
-      trackCleanup: (fn) => registry.trackCleanup(el, fn),
-    };
+    const ctx = createContext(this);
 
     // Apply bindings through focused handlers
     if (options.text !== undefined) bindText(ctx, options.text);
@@ -334,8 +320,8 @@ $.fn.atomBind = function <T extends string | number | boolean | null | undefined
     if (options.css) bindCss(ctx, options.css);
     if (options.attr) bindAttr(ctx, options.attr);
     if (options.prop) bindProp(ctx, options.prop);
-    if (options.show !== undefined) bindShow(ctx, options.show);
-    if (options.hide !== undefined) bindHide(ctx, options.hide);
+    if (options.show !== undefined) bindVisibility(ctx, options.show, false, 'show');
+    if (options.hide !== undefined) bindVisibility(ctx, options.hide, true, 'hide');
     if (options.val !== undefined) bindVal(ctx, options.val);
     if (options.checked !== undefined) bindChecked(ctx, options.checked);
     if (options.on) bindEvents(ctx, options.on);
