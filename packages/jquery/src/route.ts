@@ -73,11 +73,8 @@ export function route(config: RouteConfig): Router {
     if (qIndex === -1) return {};
 
     const raw = hash.substring(qIndex + 1);
-    const params: Record<string, string> = {};
     const sp = new URLSearchParams(raw);
-    sp.forEach((value, key) => {
-      params[key] = value;
-    });
+    const params: Record<string, string> = Object.fromEntries(sp);
 
     // Warn about malformed percent-encoded sequences (e.g. %FF%FE)
     if (raw.includes('%')) {
