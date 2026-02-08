@@ -70,23 +70,17 @@ $.fn.atomCss = function (
 ): JQuery {
   return this.each(function () {
     const $el = $(this);
-    const update = unit
-      ? (val: string | number) => {
-          const strVal = `${val}${unit}`;
-          if (isDangerousCssValue(strVal)) {
-            console.warn(`[atomCss] Blocked dangerous value in "${prop}" property.`);
-            return;
-          }
-          $el.css(prop, strVal);
-        }
-      : (val: string | number) => {
-          const strVal = String(val);
-          if (isDangerousCssValue(strVal)) {
-            console.warn(`[atomCss] Blocked dangerous value in "${prop}" property.`);
-            return;
-          }
-          $el.css(prop, val);
-        };
+    const update = (val: string | number) => {
+      const cssValue = unit ? `${val}${unit}` : val;
+      const cssValueString = String(cssValue);
+
+      if (isDangerousCssValue(cssValueString)) {
+        console.warn(`[atomCss] Blocked dangerous value in "${prop}" property.`);
+        return;
+      }
+
+      $el.css(prop, cssValue);
+    };
 
     registerReactiveEffect(this, source, update, `css.${prop}`);
   });
