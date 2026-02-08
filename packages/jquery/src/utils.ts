@@ -144,6 +144,32 @@ export function isDangerousCssValue(value: string): boolean {
 }
 
 /**
+ * Shallow equality check for plain objects.
+ * Returns true if both objects have the same keys with identical values (===).
+ */
+export function shallowEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== 'object' || a === null || typeof b !== 'object' || b === null) return false;
+
+  const objA = a as Record<string, unknown>;
+  const objB = b as Record<string, unknown>;
+  let countA = 0;
+
+  for (const prop in objA) {
+    if (objA[prop] !== objB[prop]) return false;
+    countA++;
+  }
+
+  let countB = 0;
+  for (const _prop in objB) {
+    countB++;
+    if (countB > countA) return false;
+  }
+
+  return countA === countB;
+}
+
+/**
  * Longest Increasing Subsequence (LIS)
  * Optimized for hardware and TypeScript strict null checks.
  * Time Complexity: O(N log N), Space Complexity: $O(N)$.

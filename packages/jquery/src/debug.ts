@@ -84,75 +84,38 @@ export const debug = {
 };
 
 /**
- * Visual highlight - flashes a red border.
- * Optimized with WeakMap and direct style access to minimize GC and reflows in debug mode.
+ * Visual highlight - flashes a red border via CSS class toggle.
  */
-interface HighlightState {
-  timer?: ReturnType<typeof setTimeout>;
-  cleanupTimer?: ReturnType<typeof setTimeout>;
-  orgStyle?: {
-    outline: string;
-    outlineOffset: string;
-    transition: string;
-  };
+const HIGHLIGHT_CLASS = 'atom-debug-highlight';
+let styleInjected = false;
+
+function injectHighlightStyle(): void {
+  if (styleInjected) return;
+  styleInjected = true;
+  const style = document.createElement('style');
+  style.textContent = `.${HIGHLIGHT_CLASS}{outline:2px solid rgba(255,68,68,0.8);outline-offset:1px;transition:outline 0.5s ease-out}`;
+  document.head.appendChild(style);
 }
 
-const highlightStateMap = new WeakMap<HTMLElement, HighlightState>();
+const highlightTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
 
 function highlightElement($el: JQuery | Element): void {
   const el = ('jquery' in $el ? $el[0] : $el) as HTMLElement | undefined;
-  if (!el || !el.isConnected) return; // O(1) check instead of O(N) document.contains
+  if (!el || !el.isConnected) return;
 
-  let state = highlightStateMap.get(el);
-  if (!state) {
-    state = {};
-    highlightStateMap.set(el, state);
-  }
+  injectHighlightStyle();
 
-  // 1. Clear existing timers
-  if (state.timer) clearTimeout(state.timer);
-  if (state.cleanupTimer) clearTimeout(state.cleanupTimer);
+  // Clear existing timer if re-highlighted
+  const existing = highlightTimers.get(el);
+  if (existing) clearTimeout(existing);
 
-  // 2. Save original style (inline only for performance & correctness)
-  if (!state.orgStyle) {
-    const style = el.style;
-    state.orgStyle = {
-      outline: style.outline,
-      outlineOffset: style.outlineOffset,
-      transition: style.transition,
-    };
-  }
+  el.classList.add(HIGHLIGHT_CLASS);
 
-  // 3. Apply highlight style via direct DOM properties
-  const style = el.style;
-  style.outline = '2px solid rgba(255, 68, 68, 0.8)';
-  style.outlineOffset = '1px';
-  style.transition = 'none';
-
-  // 4. Set timer to restore
-  state.timer = setTimeout(() => {
-    if (!el.isConnected) return;
-
-    // We add a transition for the fade out
-    style.transition = 'outline 0.5s ease-out';
-
-    // Defer the actual style restoration to allow transition to take effect
-    requestAnimationFrame(() => {
-      if (!el.isConnected) return;
-
-      const org = state?.orgStyle;
-      if (org) {
-        style.outline = org.outline;
-        style.outlineOffset = org.outlineOffset;
-      }
-
-      // 5. Cleanup data after fade out
-      state!.cleanupTimer = setTimeout(() => {
-        if (el.isConnected && state?.orgStyle) {
-          style.transition = state.orgStyle.transition;
-        }
-        highlightStateMap.delete(el);
-      }, 500);
-    });
-  }, 100);
+  highlightTimers.set(
+    el,
+    setTimeout(() => {
+      el.classList.remove(HIGHLIGHT_CLASS);
+      highlightTimers.delete(el);
+    }, 600)
+  );
 }

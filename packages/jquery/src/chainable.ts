@@ -2,14 +2,23 @@ import { effect } from '@but212/atom-effect';
 import $ from 'jquery';
 import { debug } from './debug';
 import { registerReactiveEffect } from './effect-factory';
-import { applyInputBinding } from './input-binding';
 import { registry } from './registry';
 import type { ReactiveValue, ValOptions, WritableAtom } from './types';
 import { BindingFlags, createInputBindingState } from './types';
-import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from './utils';
+import {
+  bindAttr,
+  bindClass,
+  bindCss,
+  bindHtml,
+  bindProp,
+  bindVal,
+  bindVisibility,
+  createContext,
+} from './unified';
 
 /**
  * Updates element text content.
+ * Kept separate from unified bindText because of the formatter parameter.
  */
 $.fn.atomText = function <T>(source: ReactiveValue<T>, formatter?: (v: T) => string): JQuery {
   return this.each(function () {
@@ -27,21 +36,7 @@ $.fn.atomText = function <T>(source: ReactiveValue<T>, formatter?: (v: T) => str
  */
 $.fn.atomHtml = function (source: ReactiveValue<string>): JQuery {
   return this.each(function () {
-    const $el = $(this);
-    registerReactiveEffect(
-      this,
-      source,
-      (val) => {
-        const rawVal = String(val ?? '');
-        const safeVal = sanitizeHtml(rawVal);
-
-        if (safeVal !== rawVal) {
-          console.warn('[atomHtml] Unsafe content neutralized during sanitization.');
-        }
-        $el.html(safeVal);
-      },
-      'html'
-    );
+    bindHtml(createContext(this), source);
   });
 };
 
@@ -50,13 +45,7 @@ $.fn.atomHtml = function (source: ReactiveValue<string>): JQuery {
  */
 $.fn.atomClass = function (className: string, condition: ReactiveValue<boolean>): JQuery {
   return this.each(function () {
-    const $el = $(this);
-    registerReactiveEffect(
-      this,
-      condition,
-      (val) => $el.toggleClass(className, Boolean(val)),
-      `class.${className}`
-    );
+    bindClass(createContext(this), { [className]: condition });
   });
 };
 
@@ -69,20 +58,7 @@ $.fn.atomCss = function (
   unit?: string
 ): JQuery {
   return this.each(function () {
-    const $el = $(this);
-    const update = (val: string | number) => {
-      const cssValue = unit ? `${val}${unit}` : val;
-      const cssValueString = String(cssValue);
-
-      if (isDangerousCssValue(cssValueString)) {
-        console.warn(`[atomCss] Blocked dangerous value in "${prop}" property.`);
-        return;
-      }
-
-      $el.css(prop, cssValue);
-    };
-
-    registerReactiveEffect(this, source, update, `css.${prop}`);
+    bindCss(createContext(this), { [prop]: unit ? [source, unit] : source });
   });
 };
 
@@ -90,31 +66,8 @@ $.fn.atomCss = function (
  * Updates an HTML attribute.
  */
 $.fn.atomAttr = function (name: string, source: ReactiveValue<string | boolean | null>): JQuery {
-  // Block event handler attributes (on*)
-  if (/^on/i.test(name)) {
-    console.warn(`[atomAttr] Blocked setting dangerous event handler attribute "${name}".`);
-    return this;
-  }
-
   return this.each(function () {
-    const $el = $(this);
-    registerReactiveEffect(
-      this,
-      source,
-      (val) => {
-        if (val == null || val === false) {
-          $el.removeAttr(name);
-          return;
-        }
-        const strVal = val === true ? name : String(val);
-        if (isDangerousUrl(name, strVal)) {
-          console.warn(`[atomAttr] Blocked dangerous protocol in "${name}" attribute.`);
-          return;
-        }
-        $el.attr(name, strVal);
-      },
-      `attr.${name}`
-    );
+    bindAttr(createContext(this), { [name]: source });
   });
 };
 
@@ -125,18 +78,8 @@ $.fn.atomProp = function <T extends string | number | boolean | null | undefined
   name: string,
   source: ReactiveValue<T>
 ): JQuery {
-  // Block dangerous DOM properties that can inject raw HTML
-  const dangerousProps = ['innerHTML', 'outerHTML'];
-  if (dangerousProps.includes(name)) {
-    console.warn(
-      `[atomProp] Blocked setting dangerous property "${name}". Use atomHtml for sanitized HTML binding.`
-    );
-    return this;
-  }
-
   return this.each(function () {
-    const $el = $(this);
-    registerReactiveEffect(this, source, (val) => $el.prop(name, val), `prop.${name}`);
+    bindProp(createContext(this), { [name]: source });
   });
 };
 
@@ -145,8 +88,7 @@ $.fn.atomProp = function <T extends string | number | boolean | null | undefined
  */
 $.fn.atomShow = function (condition: ReactiveValue<boolean>): JQuery {
   return this.each(function () {
-    const $el = $(this);
-    registerReactiveEffect(this, condition, (val) => $el.toggle(Boolean(val)), 'show');
+    bindVisibility(createContext(this), condition, false, 'show');
   });
 };
 
@@ -155,8 +97,7 @@ $.fn.atomShow = function (condition: ReactiveValue<boolean>): JQuery {
  */
 $.fn.atomHide = function (condition: ReactiveValue<boolean>): JQuery {
   return this.each(function () {
-    const $el = $(this);
-    registerReactiveEffect(this, condition, (val) => $el.toggle(!val), 'hide');
+    bindVisibility(createContext(this), condition, true, 'hide');
   });
 };
 
@@ -165,19 +106,16 @@ $.fn.atomHide = function (condition: ReactiveValue<boolean>): JQuery {
  */
 $.fn.atomVal = function <T>(atom: WritableAtom<T>, options: ValOptions<T> = {}): JQuery {
   return this.each(function () {
-    const tagName = this.tagName.toLowerCase();
-    if (!['input', 'select', 'textarea'].includes(tagName)) {
-      console.warn(`[atomVal] Element <${tagName}> is not a valid input element.`);
-      return;
-    }
-    const { effect: fxFn, cleanup } = applyInputBinding($(this), atom, options);
-    registry.trackEffect(this, effect(fxFn));
-    registry.trackCleanup(this, cleanup);
+    bindVal(
+      createContext(this),
+      options && Object.keys(options).length > 0 ? [atom, options] : atom
+    );
   });
 };
 
 /**
  * Two-way binding for checkbox/radio checked state.
+ * Uses jQuery event system (not native) for compatibility with $.fn.trigger().
  */
 $.fn.atomChecked = function (atom: WritableAtom<boolean>): JQuery {
   return this.each(function () {

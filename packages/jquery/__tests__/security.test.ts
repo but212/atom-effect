@@ -194,7 +194,7 @@ describe('Integration: Security Wiring', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const div = $('<div>');
     div.atomCss('background-image', atom('url(javascript:alert(1))'));
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('atomCss'));
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('background-image'));
   });
 
   // 5. atomProp

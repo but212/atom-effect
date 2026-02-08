@@ -21,6 +21,25 @@
 - **Error Wrapping**: Replaced manual `TypeError`/`ReferenceError` branching with `error.constructor.name` for error category.
 - **Pool Cleanup**: Removed unused `EMPTY_DEPS`, `EMPTY_SUBS`, `EMPTY_UNSUBS`, `EMPTY_VERSIONS` constants and `depArrayPool`, `unsubArrayPool`, `versionArrayPool` pools.
 
+### jQuery
+
+#### Refactored - jQuery
+
+- **Chainable → Unified Delegation**: Refactored chainable methods (`atomHtml`, `atomClass`, `atomCss`, `atomAttr`, `atomProp`, `atomShow`, `atomHide`, `atomVal`) to delegate to exported unified binding handlers, eliminating duplicated security logic and DOM update code.
+  - `atomText` retained separately due to `formatter` parameter; `atomChecked` retained for jQuery event compatibility.
+  - Exported `createContext` factory and all bind handlers from `unified.ts`.
+- **bindShow/bindHide → bindVisibility**: Merged two near-identical functions into a single `bindVisibility(ctx, condition, invert, label)`.
+- **bindCss Normalization**: Unified Array/non-Array branches into a single `registerReactiveEffect` call.
+- **shallowEqual Extraction**: Extracted 30-line inline shallow equality check from `list.ts` into reusable `shallowEqual()` in `utils.ts`.
+- **parseQueryParams → URLSearchParams**: Replaced 35-line manual query parser in `route.ts` with native `URLSearchParams`.
+- **Debug Highlight Simplification**: Replaced `WeakMap<HighlightState>` + double timer + `requestAnimationFrame` with CSS class toggle (`classList.add/remove`) + single `setTimeout` + injected `<style>` tag.
+
+#### Removed - jQuery
+
+- **Deprecated `enablejQueryBatching`**: Removed alias and its re-export from `index.ts`. Use `enablejQueryOverrides()` directly.
+- **Unused `atomMetadata` WeakMap**: Removed from `namespace.ts`; was written but never read.
+- **Duplicate comment**: Removed duplicated guard comment in `bindHtml`.
+
 ## [0.19.1]
 
 ### Core - 0.19.1

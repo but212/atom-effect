@@ -42,25 +42,21 @@ describe('Debug Mode', () => {
     warnSpy.mockRestore();
   });
 
-  it('highlightElement should apply and restore styles', async () => {
+  it('highlightElement should apply and remove CSS class', async () => {
     vi.useFakeTimers();
     const $el = $('<div>').appendTo(document.body);
     debug.enabled = true;
 
     debug.domUpdated($el, 'text', 'hello');
 
-    // Check if highlight is applied
-    expect($el.css('outline')).toContain('255, 68, 68');
+    // Check if highlight class is applied
+    expect($el[0]!.classList.contains('atom-debug-highlight')).toBe(true);
 
-    // Fast-forward flash duration (100ms)
-    vi.advanceTimersByTime(110);
+    // Fast-forward past highlight duration (600ms)
+    vi.advanceTimersByTime(610);
 
-    // We need to run RAF as well
-    vi.runAllTimers();
-
-    // Check if data is cleaned up
-    expect($el.data('atom_debug_timer')).toBeUndefined();
-    expect($el.data('atom_debug_org_style')).toBeUndefined();
+    // Check if highlight class is removed
+    expect($el[0]!.classList.contains('atom-debug-highlight')).toBe(false);
 
     $el.remove();
     vi.useRealTimers();

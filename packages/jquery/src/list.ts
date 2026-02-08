@@ -3,7 +3,7 @@ import $ from 'jquery';
 import { debug } from './debug';
 import { registry } from './registry';
 import type { ListOptions, ReadonlyAtom } from './types';
-import { getLIS, getSelector, sanitizeHtml } from './utils';
+import { getLIS, getSelector, sanitizeHtml, shallowEqual } from './utils';
 
 /**
  * atomList with Smart Reconciliation
@@ -128,40 +128,8 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
           if (update) {
             update(entry.$el, item, i);
             debug.domUpdated(entry.$el, 'list.update', item);
-          } else if (oldItem !== item) {
-            // Optimized shallow equal (O(K) without Object.keys allocations)
-            let isChanged = true;
-            if (
-              typeof oldItem === 'object' &&
-              oldItem !== null &&
-              typeof item === 'object' &&
-              item !== null
-            ) {
-              isChanged = false;
-              let countA = 0;
-              const objA = oldItem as Record<string, unknown>;
-              const objB = item as Record<string, unknown>;
-              for (const prop in objA) {
-                if (objA[prop] !== objB[prop]) {
-                  isChanged = true;
-                  break;
-                }
-                countA++;
-              }
-              if (!isChanged) {
-                let countB = 0;
-                for (const _prop in objB) {
-                  countB++;
-                  if (countB > countA) {
-                    isChanged = true;
-                    break;
-                  }
-                }
-                if (countA !== countB) isChanged = true;
-              }
-            }
-
-            if (isChanged) {
+          } else if (oldItem !== item && !shallowEqual(oldItem, item)) {
+            {
               const rawRender = render(item, i);
               const safeRender =
                 typeof rawRender === 'string' ? sanitizeHtml(rawRender) : rawRender;
