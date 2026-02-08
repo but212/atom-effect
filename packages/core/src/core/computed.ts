@@ -8,7 +8,7 @@ import {
 } from '@/core/dep-tracking';
 import { ComputedError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
-import { currentEpoch, nextEpoch, nextVersion } from '@/internal/epoch';
+import { nextEpoch, nextVersion } from '@/internal/epoch';
 import { EMPTY_LINKS, linksArrayPool } from '@/internal/pool';
 import { trackingContext } from '@/tracking';
 import type {
@@ -53,16 +53,9 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   protected _subscribers: SubscriberLink<T>[] = [];
   private _links: DependencyLink[] = EMPTY_LINKS;
 
-  /** Error cache */
-  private _cachedErrors: readonly Error[] | null = null;
-  private _errorCacheEpoch = -1;
-
   // Async state
   private _asyncStartAggregateVersion = 0;
   private _asyncRetryCount = 0;
-
-  // Error dependency count for O(1) hasError
-  private _errorDepCount = 0;
 
   // Dependency collection state
   private _trackEpoch = -1;
@@ -153,10 +146,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._track();
     if (this.flags & (REJECTED | HAS_ERROR)) return true;
 
-    // Fast path: cached count from last _recompute
-    if (this._errorDepCount > 0) return true;
-
-    // Live scan: deps may have changed error state asynchronously since last recompute
+    // Live scan: deps may have changed error state asynchronously
     const links = this._links;
     for (let i = 0, len = links.length; i < len; i++) {
       const node = links[i]?.node;
@@ -172,9 +162,6 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   get errors(): readonly Error[] {
     this._track();
     if (!this.hasError) return EMPTY_ERROR_ARRAY;
-
-    const epoch = currentEpoch();
-    if (this._errorCacheEpoch === epoch && this._cachedErrors) return this._cachedErrors;
 
     // Collect errors directly into array, dedupe via indexOf (avoids Set allocation)
     const collected: Error[] = [];
@@ -195,10 +182,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       }
     }
 
-    const errors = Object.freeze(collected);
-    this._errorCacheEpoch = epoch;
-    this._cachedErrors = errors;
-    return errors;
+    return Object.freeze(collected);
   }
 
   get lastError(): Error | null {
@@ -218,8 +202,6 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
 
   invalidate(): void {
     this._markDirty();
-    this._errorCacheEpoch = -1;
-    this._cachedErrors = null;
   }
 
   dispose(): void {
@@ -241,8 +223,6 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._error = null;
     this._value = undefined as T;
     this._promiseId = (this._promiseId + 1) % MAX_PROMISE_ID;
-    this._cachedErrors = null;
-    this._errorCacheEpoch = -1;
   }
 
   addDependency(dep: Dependency): void {
@@ -261,23 +241,6 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._trackCount++;
   }
 
-  private _commitDeps(prevLinks: DependencyLink[]): void {
-    // Sync dependencies
-    this._trackLinks.length = this._trackCount;
-    syncDependencies(this._trackLinks, prevLinks, this);
-    this._links = this._trackLinks;
-  }
-
-  private _updateErrorDepCount(): void {
-    let count = 0;
-    const links = this._links;
-    for (let i = 0, len = links.length; i < len; i++) {
-      const node = links[i]?.node;
-      if (node && node.flags & HAS_ERROR) count++;
-    }
-    this._errorDepCount = count;
-  }
-
   private _recompute(): void {
     if (this.flags & RECOMPUTING) return;
     this.flags |= RECOMPUTING;
@@ -292,9 +255,11 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       // Execute function
       const result = trackingContext.run(this, this._fn);
 
-      this._commitDeps(prevLinks);
+      // Inline _commitDeps
+      this._trackLinks.length = this._trackCount;
+      syncDependencies(this._trackLinks, prevLinks, this);
+      this._links = this._trackLinks;
       committed = true;
-      this._updateErrorDepCount();
 
       // Handle Result
       if (isPromise(result)) {
@@ -306,9 +271,10 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       // Commit dependencies on error
       if (!committed) {
         try {
-          this._commitDeps(prevLinks);
+          this._trackLinks.length = this._trackCount;
+          syncDependencies(this._trackLinks, prevLinks, this);
+          this._links = this._trackLinks;
           committed = true;
-          this._updateErrorDepCount();
         } catch (commitErr) {
           if (IS_DEV) {
             console.warn('[atom-effect] _commitDeps failed during error recovery:', commitErr);
@@ -413,9 +379,6 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._error = null;
     // Set resolved, clear idle/dirty/pending/rejected/has_error
     this.flags = (this.flags | RESOLVED) & ~(IDLE | DIRTY | PENDING | REJECTED | HAS_ERROR);
-
-    this._cachedErrors = null;
-    this._errorCacheEpoch = -1;
   }
 
   execute(): void {
@@ -430,8 +393,6 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._notifySubscribers(undefined, undefined);
   }
 }
-
-Object.freeze(ComputedAtomImpl.prototype);
 
 /**
  * Creates a computed value.
