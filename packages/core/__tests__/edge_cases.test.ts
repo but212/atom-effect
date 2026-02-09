@@ -171,9 +171,10 @@ describe('Reactive Core - Edge Cases', () => {
       // Custom equal treats same-id objects as equal, so version should not bump
       // The derived value may or may not update depending on implementation,
       // but the version should remain unchanged (no downstream notification)
+      // biome-ignore lint/suspicious/noExplicitAny: accessing internal version property
       const getVersion = (d: any) => d.version;
       const versionBefore = getVersion(derived);
-      
+
       count.value = { id: 1, val: 30 };
       await waitForScheduler();
 

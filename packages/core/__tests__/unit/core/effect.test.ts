@@ -208,7 +208,7 @@ describe('Effect', () => {
     it('commits partial dependencies when effect throws mid-execution', () => {
       const a = atom(0);
       const b = atom(0);
-      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.spyOn(console, 'error').mockImplementation(() => {});
 
       effect(() => {
         a.value;

@@ -36,10 +36,7 @@ function buildRandomGraph(
 
   for (let i = 0; i < computedCount; i++) {
     const numDeps = Math.floor(random() * maxDepsPerComputed) + 1;
-    const deps = Array.from(
-      { length: numDeps },
-      () => atoms[Math.floor(random() * atoms.length)]!
-    );
+    const deps = Array.from({ length: numDeps }, () => atoms[Math.floor(random() * atoms.length)]!);
     computeds.push(computed(() => deps.reduce((sum, dep) => sum + dep.value, 0)));
   }
 
