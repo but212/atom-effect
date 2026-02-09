@@ -376,6 +376,7 @@ describe('$.route() - SPA Routing', () => {
 
       expect(router.currentRoute.value).toBe('page2');
       expect(document.querySelector('#app')?.innerHTML).toContain('Page2');
+      expect($newLink.hasClass('active-link')).toBe(true);
 
       router.destroy();
     });
