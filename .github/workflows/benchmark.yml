@@ -19,12 +19,21 @@ jobs:
 
       - name: Run micro benchmarks
         working-directory: packages/core
-        run: pnpm bench:micro
+        run: pnpm bench:micro | tee ../../benchmark-micro.txt
 
       - name: Run macro benchmarks
         working-directory: packages/core
-        run: pnpm bench:macro
+        run: pnpm bench:macro | tee ../../benchmark-macro.txt
 
       - name: Run realistic benchmarks
         working-directory: packages/core
-        run: pnpm bench:realistic
+        run: pnpm bench:realistic | tee ../../benchmark-realistic.txt
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: |
+            benchmark-micro.txt
+            benchmark-macro.txt
+            benchmark-realistic.txt
