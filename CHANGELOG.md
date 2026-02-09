@@ -15,6 +15,8 @@
 - **Utils**: Simplified error classification and version snapshotting.
 - **Inlining**: Inlined `_commitDeps` and `_checkLoopWarnings`.
 - **Cleanup**: Removed unused pools and `Object.freeze`.
+- **Memory**: Removed unused `timestamp` from `AtomError` and `_modifiedAtEpoch` from `ReactiveNode`.
+- **Logic**: Removed redundant `_promiseId` increment and `unsub` clearing.
 
 ### jQuery
 

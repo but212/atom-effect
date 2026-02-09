@@ -222,7 +222,6 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     // Release Memory
     this._error = null;
     this._value = undefined as T;
-    this._promiseId = (this._promiseId + 1) % MAX_PROMISE_ID;
   }
 
   addDependency(dep: Dependency): void {
