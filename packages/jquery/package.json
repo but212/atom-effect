@@ -57,11 +57,11 @@
   },
   "devDependencies": {
     "@types/jquery": "^3.5.33",
-    "@vitest/coverage-v8": "^4.0.17",
-    "jquery": "^3.7.1",
-    "jsdom": "^27.4.0",
+    "@vitest/coverage-v8": "^4.0.18",
+    "jquery": "^4.0.0",
+    "jsdom": "^28.0.0",
     "vite": "^7.3.1",
     "vite-plugin-dts": "^4.5.4",
-    "vitest": "^4.0.17"
+    "vitest": "^4.0.18"
   }
 }
