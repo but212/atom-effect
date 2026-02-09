@@ -6,30 +6,30 @@
 
 #### Refactored - Core
 
-- **Epoch**: Unified `collectorEpoch` and `flushEpoch` into shared counter.
-- **Flags**: Inlined `NODE_FLAGS` and simplified transition logic.
-- **Computed**: Removed lookup tables and error caching mechanism.
-- **Effect**: Replaced circular buffer with sliding window for loop detection.
-- **Parking**: Replaced `Map` with array scan for subscription reuse.
-- **Types**: Removed `Branded` type from `DependencyId`.
-- **Utils**: Simplified error classification and version snapshotting.
-- **Inlining**: Inlined `_commitDeps` and `_checkLoopWarnings`.
-- **Cleanup**: Removed unused pools and `Object.freeze`.
-- **Memory**: Removed unused `timestamp` from `AtomError` and `_modifiedAtEpoch` from `ReactiveNode`.
-- **Logic**: Removed redundant `_promiseId` increment and `unsub` clearing.
+- **Epoch Unification**: Merged `collectorEpoch` and `flushEpoch` into a shared counter to reduce module-level state and simplify epoch tracking.
+- **Flag Inlining**: Inlined `NODE_FLAGS` constants directly into usage sites to eliminate object lookup overhead and simplified state transition logic.
+- **Computed Simplification**: Removed complex lookup tables and internal error caching mechanisms in favor of streamlined inline expressions and on-demand error collection.
+- **Effect Loop Detection**: Replaced the circular buffer implementation with a sliding window approach for more efficient infinite loop detection.
+- **Subscription Parking**: Replaced `Map`-based subscription storage with a linear array scan for significantly faster subscription reuse and lower memory overhead.
+- **Type Simplification**: Removed the `Branded` type wrapper from `DependencyId` to simplify type definitions and reduce TypeScript compilation overhead.
+- **Utility Consolidation**: Simplified error classification logic and version snapshotting by moving them into shared internal utilities.
+- **Method Inlining**: Inlined `_commitDeps` and `_checkLoopWarnings` methods to reduce function call overhead in hot paths.
+- **Dead Code Cleanup**: Removed unused object pools and `Object.freeze` calls to reduce bundle size and runtime initialization cost.
+- **Memory Optimization**: Removed unused `timestamp` property from `AtomError` and `_modifiedAtEpoch` from `ReactiveNode` to reduce object size.
+- **Logic Refinement**: Removed redundant `_promiseId` increment in computed error handling and unnecessary `unsub` clearing in dependency synchronization.
 
 ### jQuery
 
 #### Refactored - jQuery
 
-- **Chainable Methods**: Delegated methods to unified binding handlers in `unified.ts`.
-- **atomChecked**: Updated to use `bindChecked` and jQuery events.
-- **Utils**: Centralized `shallowEqual` and `isReactive` in `utils.ts`.
-- **Debug**: Added enablement check to `domUpdated`.
-- **Visibility**: Merged `bindShow` and `bindHide` into `bindVisibility`.
-- **bindCss**: Unified rendering logic for array and string values.
-- **Router**: Replaced manual parser with `URLSearchParams`.
-- **Debug UI**: Simplified highlight implementation.
+- **Chainable Method Delegation**: Refactored chainable methods to delegate directly to unified binding handlers in `unified.ts`, reducing code duplication between chainable and declarative APIs.
+- **Checked Binding Normalization**: Updated `atomChecked` to utilize the standard `bindChecked` handler and jQuery events for consistent behavior across binding types.
+- **Utility Centralization**: Centralized `shallowEqual` and `isReactive` checks into `utils.ts` to ensure consistent equality logic across the library.
+- **Debug Performance**: Added an enablement check to `domUpdated` to prevent unnecessary DOM access when debug mode is disabled.
+- **Visibility Logic Merger**: Merged `bindShow` and `bindHide` implementations into a single `bindVisibility` function to reduce code footprint.
+- **CSS Binding Unification**: Unified `bindCss` rendering logic to handle both array and string values within a single pass.
+- **Router Simplification**: Replaced manual query string parsing with standard `URLSearchParams` for more robust and standard-compliant route handling.
+- **Debug UI Simplification**: Simplified the visual highlight implementation to avoid complex DOM manipulation.
 
 #### Changed - jQuery
 
