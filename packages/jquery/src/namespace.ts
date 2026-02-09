@@ -30,9 +30,8 @@ Object.defineProperty(atom, 'debug', {
 });
 
 /**
- * Waits for the next microtask (tick).
- * Useful for waiting for batched updates to complete in tests or async logic.
- * logic: Uses setTimeout to ensure it runs after all microtasks (where effects are processed).
+ * Waits for the next macrotask (setTimeout 0).
+ * Effects are processed in microtasks, so this runs AFTER all pending effects complete.
  */
 function nextTick(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));

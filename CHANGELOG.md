@@ -6,30 +6,15 @@
 
 #### Refactored - Core
 
-- **Epoch Unification**: Merged `collectorEpoch` and `flushEpoch` into a single monotonic counter.
-  - Removed exported `flushEpoch` variable; `startFlush()` now calls `nextEpoch()` to allocate from the shared counter.
-  - Added `currentFlushEpoch()` getter to replace direct variable access in `Effect._checkInfiniteLoops`.
-- **Flag Constants Inlining**: Removed `NODE_FLAGS` object and inlined `DISPOSED: 1 << 0` directly into `EFFECT_STATE_FLAGS`, `COMPUTED_STATE_FLAGS`, `ATOM_STATE_FLAGS`.
-  - Eliminated spread (`...NODE_FLAGS`) overhead and dead `TIME_CONSTANTS` export.
-- **Computed Simplification**: Replaced pre-computed flag transition masks and lookup table with inline expressions and `getAsyncState()` function.
-  - Removed `ASYNC_STATE_LOOKUP` array, `CLEAR_FOR_PENDING/REJECTED/RESOLVED`, `SET_REJECTED` constants.
-  - Destructured `COMPUTED_STATE_FLAGS` into short local names (`IDLE`, `DIRTY`, `PENDING`, etc.) for readability.
-- **Effect Frequency Detection**: Replaced circular buffer history (`_history[]`, `_historyPtr`, `_historyCapacity`) with simple sliding window (`_windowStart`, `_windowCount`).
-  - Reduces per-effect memory footprint and initialization cost.
-- **Version Snapshot**: Simplified `_captureVersionSnapshot` from DJB2 hash mixing to plain sum.
-- **Branded Type Removal**: Simplified `DependencyId` from `Branded<number, 'DependencyId'>` to plain `number`, removing the `Branded` utility type.
-- **Error Wrapping**: Replaced manual `TypeError`/`ReferenceError` branching with `error.constructor.name` for error category.
-- **Pool Cleanup**: Removed unused `EMPTY_DEPS`, `EMPTY_SUBS`, `EMPTY_UNSUBS`, `EMPTY_VERSIONS` constants and `depArrayPool`, `unsubArrayPool`, `versionArrayPool` pools.
-- **Computed Error Cache Removal**: Removed `_cachedErrors`, `_errorCacheEpoch`, `_errorDepCount` fields and `_updateErrorDepCount()` method.
-  - `get errors()` now collects directly on each access (low-frequency path, epoch caching unnecessary).
-  - `get hasError()` uses live link scan only, removing `_errorDepCount` fast path.
-  - Simplified `invalidate()`, `dispose()`, `_finalizeResolution()` by removing cache invalidation code.
-- **Computed `_commitDeps` Inline**: Inlined 3-line `_commitDeps()` method directly into `_recompute()` at both call sites.
-- **Computed `Object.freeze` Removal**: Removed `Object.freeze(ComputedAtomImpl.prototype)` (no practical benefit for internal class).
-- **Effect Parking Simplification**: Replaced `_parkedUnsubs: Map<Dependency, () => void>` with `_prevLinks` array reference for subscription reclamation.
-  - `addDependency()` now scans `_prevLinks` linearly to reclaim existing subscriptions (O(n×m), acceptable for typical 1–10 deps).
-  - Eliminates per-execution `Map` allocation overhead.
-- **Effect `_checkLoopWarnings` Inline**: Inlined `_checkLoopWarnings()` method directly into `execute()`.
+- **Epoch**: Unified `collectorEpoch` and `flushEpoch` into shared counter.
+- **Flags**: Inlined `NODE_FLAGS` and simplified transition logic.
+- **Computed**: Removed lookup tables and error caching mechanism.
+- **Effect**: Replaced circular buffer with sliding window for loop detection.
+- **Parking**: Replaced `Map` with array scan for subscription reuse.
+- **Types**: Removed `Branded` type from `DependencyId`.
+- **Utils**: Simplified error classification and version snapshotting.
+- **Inlining**: Inlined `_commitDeps` and `_checkLoopWarnings`.
+- **Cleanup**: Removed unused pools and `Object.freeze`.
 
 ### jQuery
 
