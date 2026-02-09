@@ -10,6 +10,7 @@ import {
 import $ from 'jquery';
 import { debug } from './debug';
 import type { AtomOptions, WritableAtom } from './types';
+import { isReactive } from './utils';
 
 /**
  * Creates an atom with optional metadata.
@@ -48,6 +49,6 @@ $.extend({
   untracked,
   isAtom,
   isComputed,
-  isReactive: (v: unknown) => isAtom(v) || isComputed(v),
+  isReactive,
   nextTick,
 });

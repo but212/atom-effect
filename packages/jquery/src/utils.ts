@@ -1,22 +1,18 @@
+import { isAtom, isComputed } from '@but212/atom-effect';
 import type { ComputedAtom, ReactiveValue, ReadonlyAtom } from './types';
 
 /**
  * Checks if a given value is a reactive object (Atom or Computed).
- * Robust check for correctness: must have both 'value' property and 'subscribe' method.
  */
 export function isReactive(value: unknown): value is ReadonlyAtom<unknown> | ComputedAtom<unknown> {
-  return value !== null && typeof value === 'object' && 'value' in value && 'subscribe' in value;
+  return isAtom(value) || isComputed(value);
 }
 
 /**
  * Extracts the underlying raw value from a ReactiveValue.
- * Optimized for hot path by inlining the reactive check with high correctness.
  */
 export function getValue<T>(source: ReactiveValue<T>): T {
-  if (source !== null && typeof source === 'object' && 'value' in source && 'subscribe' in source) {
-    return (source as ReadonlyAtom<T>).value;
-  }
-  return source as T;
+  return isReactive(source) ? source.value : source as T;
 }
 
 /**
@@ -151,22 +147,16 @@ export function shallowEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (typeof a !== 'object' || a === null || typeof b !== 'object' || b === null) return false;
 
-  const objA = a as Record<string, unknown>;
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) return false;
+
   const objB = b as Record<string, unknown>;
-  let countA = 0;
-
-  for (const prop in objA) {
-    if (objA[prop] !== objB[prop]) return false;
-    countA++;
+  for (let i = 0; i < keysA.length; i++) {
+    const key = keysA[i]!;
+    if ((a as Record<string, unknown>)[key] !== objB[key]) return false;
   }
-
-  let countB = 0;
-  for (const _prop in objB) {
-    countB++;
-    if (countB > countA) return false;
-  }
-
-  return countA === countB;
+  return true;
 }
 
 /**

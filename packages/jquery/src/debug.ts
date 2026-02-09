@@ -6,7 +6,7 @@
  * 2. Visually highlights DOM updates (red border flash).
  *
  * Debug mode can be enabled in two ways:
- * 1. Environment variable (build-time): NODE_ENV=development
+ * 1. Build-time: import.meta.env.DEV
  * 2. Runtime: $.atom.debug = true or window.__ATOM_DEBUG__ = true
  */
 
@@ -14,7 +14,7 @@ import { getSelector } from './utils';
 
 /**
  * Determines the initial debug state based on environment.
- * Priority: window.__ATOM_DEBUG__ > NODE_ENV === 'development'
+ * Priority: window.__ATOM_DEBUG__ > import.meta.env.DEV
  */
 function getInitialDebugState(): boolean {
   if (typeof window !== 'undefined') {
@@ -23,13 +23,6 @@ function getInitialDebugState(): boolean {
   }
 
   if (import.meta.env?.DEV && import.meta.env.MODE !== 'test') return true;
-
-  try {
-    // @ts-expect-error
-    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'development') return true;
-  } catch {
-    // ignore
-  }
 
   return false;
 }

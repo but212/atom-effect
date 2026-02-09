@@ -35,14 +35,19 @@
 
 #### Refactored - jQuery
 
-- **Chainable → Unified Delegation**: Refactored chainable methods (`atomHtml`, `atomClass`, `atomCss`, `atomAttr`, `atomProp`, `atomShow`, `atomHide`, `atomVal`) to delegate to exported unified binding handlers, eliminating duplicated security logic and DOM update code.
-  - `atomText` retained separately due to `formatter` parameter; `atomChecked` retained for jQuery event compatibility.
-  - Exported `createContext` factory and all bind handlers from `unified.ts`.
-- **bindShow/bindHide → bindVisibility**: Merged two near-identical functions into a single `bindVisibility(ctx, condition, invert, label)`.
-- **bindCss Normalization**: Unified Array/non-Array branches into a single `registerReactiveEffect` call.
-- **shallowEqual Extraction**: Extracted 30-line inline shallow equality check from `list.ts` into reusable `shallowEqual()` in `utils.ts`.
-- **parseQueryParams → URLSearchParams**: Replaced 35-line manual query parser in `route.ts` with native `URLSearchParams`.
-- **Debug Highlight Simplification**: Replaced `WeakMap<HighlightState>` + double timer + `requestAnimationFrame` with CSS class toggle (`classList.add/remove`) + single `setTimeout` + injected `<style>` tag.
+- **Chainable Methods**: Delegated methods to unified binding handlers in `unified.ts`.
+- **atomChecked**: Updated to use `bindChecked` and jQuery events.
+- **Utils**: Centralized `shallowEqual` and `isReactive` in `utils.ts`.
+- **Debug**: Added enablement check to `domUpdated`.
+- **Visibility**: Merged `bindShow` and `bindHide` into `bindVisibility`.
+- **bindCss**: Unified rendering logic for array and string values.
+- **Router**: Replaced manual parser with `URLSearchParams`.
+- **Debug UI**: Simplified highlight implementation.
+
+#### Changed - jQuery
+
+- **Environment**: Updated debug mode detection logic.
+- **Initialization**: Deferred `enablejQueryOverrides` to DOM ready.
 
 #### Removed - jQuery
 

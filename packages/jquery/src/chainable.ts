@@ -1,12 +1,10 @@
-import { effect } from '@but212/atom-effect';
 import $ from 'jquery';
-import { debug } from './debug';
 import { registerReactiveEffect } from './effect-factory';
 import { registry } from './registry';
 import type { ReactiveValue, ValOptions, WritableAtom } from './types';
-import { BindingFlags, createInputBindingState } from './types';
 import {
   bindAttr,
+  bindChecked,
   bindClass,
   bindCss,
   bindHtml,
@@ -119,33 +117,7 @@ $.fn.atomVal = function <T>(atom: WritableAtom<T>, options: ValOptions<T> = {}):
  */
 $.fn.atomChecked = function (atom: WritableAtom<boolean>): JQuery {
   return this.each(function () {
-    const $el = $(this);
-    const element = this as HTMLInputElement;
-    const state = createInputBindingState();
-
-    // DOM → Atom
-    const handler = () => {
-      if (state.flags & BindingFlags.Busy) return;
-      const checked = element.checked;
-      if (atom.value !== checked) {
-        atom.value = checked;
-      }
-    };
-
-    $el.on('change', handler);
-    registry.trackCleanup(this, () => $el.off('change', handler));
-
-    // Atom → DOM
-    const fx = effect(() => {
-      state.flags |= BindingFlags.SyncingToDom;
-      const val = !!atom.value;
-      if (element.checked !== val) {
-        element.checked = val;
-        debug.domUpdated($el, 'checked', val);
-      }
-      state.flags &= ~BindingFlags.SyncingToDom;
-    });
-    registry.trackEffect(this, fx);
+    bindChecked(createContext(this), atom);
   });
 };
 
