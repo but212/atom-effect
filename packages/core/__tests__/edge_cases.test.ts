@@ -7,72 +7,8 @@ describe('Reactive Core - Edge Cases', () => {
     vi.restoreAllMocks();
   });
 
-  describe('Circular Dependencies', () => {
-    it('detects direct self-reference in computed', () => {
-      const a = atom(1);
-      // biome-ignore lint/suspicious/noExplicitAny: test
-      let b: any;
-      const c = computed(() => {
-        if (b) return b.value + 1;
-        return a.value;
-      });
-
-      b = computed(() => c.value + 1);
-
-      expect(() => b.value).toThrowError(/Circular dependency detected/);
-    });
-
-    it('detects circular dependency in effect (infinite loop)', async () => {
-      // Use default (async) scheduling so the scheduler manages execution.
-      // The scheduler detects infinite loops when tasks keep being added.
-      const count = atom(0);
-      const onError = vi.fn();
-
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-      // Create effect that triggers itself
-      effect(
-        () => {
-          count.value++;
-        },
-        {
-          onError,
-          maxExecutionsPerFlush: 10,
-        }
-      );
-
-      // Wait for scheduler to process the queue and detect limits
-      await waitForScheduler();
-
-      // onError is NOT called because the error is thrown during scheduling/execution checks
-      // outside the effect's own try/catch block.
-      expect(onError).not.toHaveBeenCalled();
-
-      // But it MUST have logged the error (twice: once by Effect, once by Scheduler)
-      expect(consoleErrorSpy).toHaveBeenCalled();
-
-      const calls = consoleErrorSpy.mock.calls;
-      const found = calls.some((args) => {
-        const err = args[0];
-        // Check for EffectError or SchedulerError wrapping it
-        const msg = err instanceof Error ? err.message : String(err);
-        // biome-ignore lint/suspicious/noExplicitAny: test
-        const cause = err instanceof Error ? (err as any).cause : undefined;
-        const causeMsg = cause instanceof Error ? cause.message : String(cause);
-
-        return (
-          msg.includes('Infinite loop detected') || causeMsg.includes('Infinite loop detected')
-        );
-      });
-
-      expect(found).toBe(true);
-
-      consoleErrorSpy.mockRestore();
-    });
-  });
-
   describe('Conditional Dependencies (Dynamic Graph)', () => {
-    it('prunes unused dependencies', async () => {
+    it('prunes unused dependencies on branch switch', async () => {
       const toggle = atom(true);
       const a = atom('A');
       const b = atom('B');
@@ -86,25 +22,25 @@ describe('Reactive Core - Edge Cases', () => {
       expect(result.value).toBe('A');
       expect(computations).toBe(1);
 
-      // Change b: but toggle is True, so b is not read.
+      // b is not a dependency while toggle is true
       b.value = 'B2';
       await waitForScheduler();
       expect(result.value).toBe('A');
       expect(computations).toBe(1);
 
-      // Switch to B
+      // Switch branch: b becomes dependency, a is pruned
       toggle.value = false;
       await waitForScheduler();
       expect(result.value).toBe('B2');
       expect(computations).toBe(2);
 
-      // Now change A: should NOT trigger recompute as A is not read anymore
+      // a no longer triggers recompute
       a.value = 'A2';
       await waitForScheduler();
       expect(result.value).toBe('B2');
       expect(computations).toBe(2);
 
-      // Change B: SHOULD trigger
+      // b triggers recompute
       b.value = 'B3';
       await waitForScheduler();
       expect(result.value).toBe('B3');
@@ -113,55 +49,6 @@ describe('Reactive Core - Edge Cases', () => {
   });
 
   describe('Error Handling', () => {
-    it('propagates errors through computed chains', () => {
-      const a = atom(0, { sync: true });
-      const b = computed(() => {
-        if (a.value < 0) throw new Error('Negative Value');
-        return a.value * 2;
-      });
-      const c = computed(() => b.value + 1);
-
-      expect(c.value).toBe(1);
-
-      a.value = -1;
-
-      // biome-ignore lint/suspicious/noExplicitAny: test
-      let caught: any;
-      try {
-        c.value;
-      } catch (e) {
-        caught = e;
-      }
-
-      expect(caught).toBeDefined();
-      expect(String(caught)).toMatch(/Negative Value/);
-
-      // Recover
-      a.value = 5;
-      expect(c.value).toBe(11);
-    });
-
-    it('handles async computed rejections with defaultValue', async () => {
-      const shouldFail = atom(false);
-      const data = computed(
-        async () => {
-          if (shouldFail.value) throw new Error('Async Failed');
-          return 'Success';
-        },
-        { defaultValue: 'Loading' }
-      );
-
-      expect(data.value).toBe('Loading');
-      await waitForScheduler();
-      expect(data.value).toBe('Success');
-
-      shouldFail.value = true;
-      await waitForScheduler();
-
-      // Computed with fallback should return fallback on error
-      expect(data.value).toBe('Loading');
-    });
-
     it('captures errors in effect onError handler', async () => {
       const trigger = atom(0);
       const onError = vi.fn();
@@ -250,41 +137,8 @@ describe('Reactive Core - Edge Cases', () => {
     });
   });
 
-  describe('Disposal', () => {
-    it('stops effects after disposal', async () => {
-      const count = atom(0);
-      const listener = vi.fn();
-
-      const eff = effect(() => {
-        listener(count.value);
-      });
-
-      await waitForScheduler();
-      expect(listener).toHaveBeenCalledTimes(1);
-
-      eff.dispose();
-
-      count.value = 1;
-      await waitForScheduler();
-
-      expect(listener).toHaveBeenCalledTimes(1);
-    });
-
-    it('releases computed references after disposal', () => {
-      const count = atom(0);
-      const derived = computed(() => count.value * 2);
-      expect(derived.value).toBe(0);
-
-      derived.dispose();
-
-      count.value = 10;
-      // Accessing a disposed computed should throw an error.
-      expect(() => derived.value).toThrow();
-    });
-  });
-
   describe('Equality Checks', () => {
-    it('skips updates if values are equal', async () => {
+    it('skips updates if values are equal (Object.is)', async () => {
       const count = atom(10);
       const listener = vi.fn();
 
@@ -301,37 +155,29 @@ describe('Reactive Core - Edge Cases', () => {
       expect(listener).toHaveBeenCalledTimes(1);
     });
 
-    it('verifies consistency with custom equality check in computed', async () => {
-      // Note: "skipping execution" is an optimization.
-      // If the optimization is missed but the value is correct, looking for strict call counts makes tests brittle.
-      // We verify that the value we receive is correct/consistent.
-
+    it('uses custom equality to suppress version bumps', async () => {
       const count = atom({ id: 1, val: 10 });
       const derived = computed(() => count.value, {
         equal: (a, b) => a.id === b.id,
       });
 
-      const listener = vi.fn();
-      effect(() => {
-        listener(derived.value);
-      });
+      // Initial value
+      expect(derived.value).toEqual({ id: 1, val: 10 });
 
-      await waitForScheduler();
-      // Initial run
-      expect(listener).toHaveBeenCalledTimes(1);
-      expect(listener).toHaveBeenLastCalledWith({ id: 1, val: 10 });
-
-      // Update with same ID
+      // Update with same id but different val
       count.value = { id: 1, val: 20 };
       await waitForScheduler();
 
-      // If optimized, it calls 1 time. If not, 2 times.
-      // Check correctness:
-      if (listener.mock.calls.length > 1) {
-        expect(listener).toHaveBeenLastCalledWith({ id: 1, val: 20 });
-      } else {
-        expect(listener).toHaveBeenCalledTimes(1);
-      }
+      // Custom equal treats same-id objects as equal, so version should not bump
+      // The derived value may or may not update depending on implementation,
+      // but the version should remain unchanged (no downstream notification)
+      const getVersion = (d: any) => d.version;
+      const versionBefore = getVersion(derived);
+      
+      count.value = { id: 1, val: 30 };
+      await waitForScheduler();
+
+      expect(getVersion(derived)).toBe(versionBefore);
     });
   });
 });

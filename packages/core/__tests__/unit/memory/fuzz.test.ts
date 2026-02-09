@@ -20,118 +20,85 @@ function seededRandom(seed: number): () => number {
   };
 }
 
+// Helper: build a random dependency graph
+function buildRandomGraph(
+  random: () => number,
+  atomCount: number,
+  computedCount: number,
+  maxDepsPerComputed: number
+) {
+  const atoms: ReturnType<typeof atom<number>>[] = [];
+  const computeds: ReturnType<typeof computed<number>>[] = [];
+
+  for (let i = 0; i < atomCount; i++) {
+    atoms.push(atom(Math.floor(random() * 100)));
+  }
+
+  for (let i = 0; i < computedCount; i++) {
+    const numDeps = Math.floor(random() * maxDepsPerComputed) + 1;
+    const deps = Array.from(
+      { length: numDeps },
+      () => atoms[Math.floor(random() * atoms.length)]!
+    );
+    computeds.push(computed(() => deps.reduce((sum, dep) => sum + dep.value, 0)));
+  }
+
+  return { atoms, computeds };
+}
+
+// Helper: dispose all nodes, ignoring errors from already-disposed nodes
+function disposeAll(...groups: Array<{ dispose: () => void }[]>) {
+  for (const group of groups) {
+    for (const node of group) {
+      try {
+        node.dispose();
+      } catch {}
+    }
+  }
+}
+
 describe('Fuzz Testing - Heavy Mode', () => {
   describe('Random dependency graph stability', () => {
-    it('should handle large random dependency graph without crashing', () => {
+    it('should survive random graph with sequential and batched updates', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const random = seededRandom(42);
 
-      const atoms: ReturnType<typeof atom<number>>[] = [];
-      const computeds: ReturnType<typeof computed<number>>[] = [];
+      const { atoms, computeds } = buildRandomGraph(
+        random,
+        FUZZ_CONFIG.atomCount,
+        FUZZ_CONFIG.computedCount,
+        FUZZ_CONFIG.maxDepsPerComputed
+      );
 
-      // Create atoms
-      for (let i = 0; i < FUZZ_CONFIG.atomCount; i++) {
-        atoms.push(atom(Math.floor(random() * 100)));
-      }
-
-      // Create computed with random dependencies
-      for (let i = 0; i < FUZZ_CONFIG.computedCount; i++) {
-        const numDeps = Math.floor(random() * FUZZ_CONFIG.maxDepsPerComputed) + 1;
-        const depIndices: number[] = [];
-
-        for (let j = 0; j < numDeps; j++) {
-          depIndices.push(Math.floor(random() * atoms.length));
-        }
-
-        const deps = depIndices.map((idx) => atoms[idx]!);
-
-        computeds.push(
-          computed(() => {
-            return deps.reduce((sum, dep) => sum + dep.value, 0);
-          })
-        );
-      }
-
-      // Read some computed values to establish dependencies
+      // Read computed values to establish dependencies
       const sampledComputeds = computeds.slice(0, 100);
       for (const c of sampledComputeds) {
         try {
           c.value;
-        } catch {
-          // Ignore errors during initial read
-        }
+        } catch {}
       }
 
-      // Random updates
+      // Phase 1: Sequential random updates
       for (let i = 0; i < FUZZ_CONFIG.updateCount; i++) {
         const atomIdx = Math.floor(random() * atoms.length);
-        const newValue = Math.floor(random() * 100);
-
         try {
-          atoms[atomIdx]!.value = newValue;
-        } catch {
-          // Ignore update errors
-        }
+          atoms[atomIdx]!.value = Math.floor(random() * 100);
+        } catch {}
       }
 
-      // Verify we can still read values
+      // Verify reads still work after sequential updates
       let successfulReads = 0;
       for (const c of sampledComputeds) {
         try {
           c.value;
           successfulReads++;
-        } catch {
-          // Count failures
-        }
+        } catch {}
       }
-
       expect(successfulReads).toBeGreaterThan(0);
 
-      // Cleanup
-      computeds.forEach((c) => {
-        try {
-          c.dispose();
-        } catch {}
-      });
-      atoms.forEach((a) => {
-        try {
-          a.dispose();
-        } catch {}
-      });
-
-      consoleSpy.mockRestore();
-    });
-
-    it('should handle batched random updates', () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      const random = seededRandom(123);
-
-      const atoms: ReturnType<typeof atom<number>>[] = [];
-      const computeds: ReturnType<typeof computed<number>>[] = [];
-
-      // Create smaller graph for batched test
-      const BATCH_ATOM_COUNT = 200;
-      const BATCH_COMPUTED_COUNT = 100;
-      const BATCH_UPDATE_COUNT = 1000;
-
-      for (let i = 0; i < BATCH_ATOM_COUNT; i++) {
-        atoms.push(atom(Math.floor(random() * 100)));
-      }
-
-      for (let i = 0; i < BATCH_COMPUTED_COUNT; i++) {
-        const numDeps = Math.floor(random() * 3) + 1;
-        const deps = Array.from(
-          { length: numDeps },
-          () => atoms[Math.floor(random() * atoms.length)]!
-        );
-
-        computeds.push(computed(() => deps.reduce((sum, dep) => sum + dep.value, 0)));
-      }
-
-      // Perform batched updates
+      // Phase 2: Batched random updates
       let batchErrors = 0;
-
-      for (let batch_i = 0; batch_i < BATCH_UPDATE_COUNT / 10; batch_i++) {
+      for (let i = 0; i < 100; i++) {
         try {
           batch(() => {
             for (let j = 0; j < 10; j++) {
@@ -143,22 +110,19 @@ describe('Fuzz Testing - Heavy Mode', () => {
           batchErrors++;
         }
       }
+      expect(batchErrors).toBeLessThan(10);
 
-      // Some errors are acceptable, but system should still work
-      expect(batchErrors).toBeLessThan(BATCH_UPDATE_COUNT / 100);
-
-      // Cleanup
-      computeds.forEach((c) => {
+      // Verify reads still work after batched updates
+      successfulReads = 0;
+      for (const c of sampledComputeds) {
         try {
-          c.dispose();
+          c.value;
+          successfulReads++;
         } catch {}
-      });
-      atoms.forEach((a) => {
-        try {
-          a.dispose();
-        } catch {}
-      });
+      }
+      expect(successfulReads).toBeGreaterThan(0);
 
+      disposeAll(computeds, atoms);
       consoleSpy.mockRestore();
     });
   });
@@ -170,13 +134,12 @@ describe('Fuzz Testing - Heavy Mode', () => {
 
       const atoms: ReturnType<typeof atom<number>>[] = [];
       const effects: ReturnType<typeof effect>[] = [];
+      let totalExecutions = 0;
 
-      // Create atoms
       for (let i = 0; i < 100; i++) {
         atoms.push(atom(Math.floor(random() * 100)));
       }
 
-      // Create effects with random dependencies
       for (let i = 0; i < FUZZ_CONFIG.effectCount; i++) {
         const numDeps = Math.floor(random() * 3) + 1;
         const depIndices = Array.from({ length: numDeps }, () =>
@@ -185,6 +148,7 @@ describe('Fuzz Testing - Heavy Mode', () => {
 
         effects.push(
           effect(() => {
+            totalExecutions++;
             let _sum = 0;
             for (const idx of depIndices) {
               _sum += atoms[idx]!.value;
@@ -204,69 +168,31 @@ describe('Fuzz Testing - Heavy Mode', () => {
 
       await sleep(100);
 
-      // Cleanup
-      effects.forEach((fx) => {
-        try {
-          fx.dispose();
-        } catch {}
-      });
-      atoms.forEach((a) => {
-        try {
-          a.dispose();
-        } catch {}
-      });
+      // Effects should have executed at least once each during creation
+      expect(totalExecutions).toBeGreaterThanOrEqual(FUZZ_CONFIG.effectCount);
 
-      // Test passes if we get here without hanging
-      expect(true).toBe(true);
+      // All effects should dispose cleanly
+      let disposedCount = 0;
+      for (const fx of effects) {
+        fx.dispose();
+        if (fx.isDisposed) disposedCount++;
+      }
+      expect(disposedCount).toBe(effects.length);
 
+      disposeAll(atoms);
       consoleSpy.mockRestore();
     });
   });
 
   describe('Memory pressure testing', () => {
-    it('should handle rapid create/dispose cycles', () => {
-      const CYCLES = 100;
-      const ITEMS_PER_CYCLE = 50;
-
-      for (let cycle = 0; cycle < CYCLES; cycle++) {
-        const atoms: ReturnType<typeof atom<number>>[] = [];
-        const computeds: ReturnType<typeof computed<number>>[] = [];
-
-        // Create
-        for (let i = 0; i < ITEMS_PER_CYCLE; i++) {
-          atoms.push(atom(i));
-        }
-
-        for (let i = 0; i < ITEMS_PER_CYCLE / 2; i++) {
-          const a = atoms[i * 2]!;
-          const b = atoms[i * 2 + 1]!;
-          computeds.push(computed(() => a.value + b.value));
-        }
-
-        // Access values
-        for (const c of computeds) {
-          c.value;
-        }
-
-        // Dispose
-        for (const c of computeds) {
-          c.dispose();
-        }
-        for (const a of atoms) {
-          a.dispose();
-        }
-      }
-
-      // Test passes if we complete without memory issues
-      expect(true).toBe(true);
-    });
-
-    it('should handle interleaved creation and disposal', () => {
+    it('should handle interleaved create/update/dispose without crashing', () => {
       const random = seededRandom(789);
       const activeAtoms: ReturnType<typeof atom<number>>[] = [];
       const activeComputeds: ReturnType<typeof computed<number>>[] = [];
 
       const OPERATIONS = 1000;
+      let totalCreated = 0;
+      let totalDisposed = 0;
 
       for (let i = 0; i < OPERATIONS; i++) {
         const op = random();
@@ -274,24 +200,28 @@ describe('Fuzz Testing - Heavy Mode', () => {
         if (op < 0.4 || activeAtoms.length < 10) {
           // Create atom
           activeAtoms.push(atom(Math.floor(random() * 100)));
+          totalCreated++;
         } else if (op < 0.6 && activeAtoms.length > 1) {
-          // Create computed
+          // Create computed with random deps
           const numDeps = Math.min(3, activeAtoms.length);
           const deps: ReturnType<typeof atom<number>>[] = [];
           for (let j = 0; j < numDeps; j++) {
             deps.push(activeAtoms[Math.floor(random() * activeAtoms.length)]!);
           }
           activeComputeds.push(computed(() => deps.reduce((sum, d) => sum + d.value, 0)));
+          totalCreated++;
         } else if (op < 0.7 && activeAtoms.length > 20) {
           // Dispose random atom
           const idx = Math.floor(random() * activeAtoms.length);
           const [removed] = activeAtoms.splice(idx, 1);
           removed?.dispose();
+          totalDisposed++;
         } else if (op < 0.8 && activeComputeds.length > 10) {
           // Dispose random computed
           const idx = Math.floor(random() * activeComputeds.length);
           const [removed] = activeComputeds.splice(idx, 1);
           removed?.dispose();
+          totalDisposed++;
         } else if (activeAtoms.length > 0) {
           // Update random atom
           const idx = Math.floor(random() * activeAtoms.length);
@@ -299,30 +229,23 @@ describe('Fuzz Testing - Heavy Mode', () => {
         }
       }
 
-      // Cleanup remaining
-      for (const c of activeComputeds) {
-        try {
-          c.dispose();
-        } catch {}
-      }
-      for (const a of activeAtoms) {
-        try {
-          a.dispose();
-        } catch {}
-      }
+      // Verify operations actually happened
+      expect(totalCreated).toBeGreaterThan(0);
+      expect(totalDisposed).toBeGreaterThan(0);
 
-      expect(true).toBe(true);
+      // Cleanup remaining and verify all dispose cleanly
+      disposeAll(activeComputeds, activeAtoms);
     });
   });
 
   describe('Concurrent update patterns', () => {
-    it('should handle simultaneous updates to same atom', async () => {
+    it('should maintain consistency under microtask-concurrent updates', async () => {
       const a = atom(0);
       const results: number[] = [];
 
       const c = computed(() => a.value * 2);
 
-      // Simulate concurrent updates
+      // Simulate microtask-concurrent updates
       const promises = Array.from({ length: 100 }, (_, i) =>
         Promise.resolve().then(() => {
           a.value = i;
