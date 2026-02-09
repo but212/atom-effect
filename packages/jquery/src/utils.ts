@@ -12,7 +12,7 @@ export function isReactive(value: unknown): value is ReadonlyAtom<unknown> | Com
  * Extracts the underlying raw value from a ReactiveValue.
  */
 export function getValue<T>(source: ReactiveValue<T>): T {
-  return isReactive(source) ? source.value : source as T;
+  return isReactive(source) ? source.value : (source as T);
 }
 
 /**
