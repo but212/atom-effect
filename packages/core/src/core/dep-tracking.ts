@@ -52,7 +52,6 @@ export function syncDependencies(
     const link = prevLinks[i];
     if (link?.unsub) {
       parked.set(link.node, link.unsub);
-      link.unsub = undefined;
     }
   }
 

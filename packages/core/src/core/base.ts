@@ -16,8 +16,6 @@ export class ReactiveNode {
   version = 0;
   /** Last access epoch */
   _lastSeenEpoch = -1;
-  /** Modified epoch */
-  _modifiedAtEpoch = -1;
   /** Debug ID */
   readonly id: DependencyId = generateId() & SMI_MAX;
 }

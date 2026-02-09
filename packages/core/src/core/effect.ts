@@ -258,7 +258,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
         // Trigger recomputation for computed dependencies
         if (dep.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) {
           try {
-            // Access value directly since we've disabled tracking
+            // Force computed to re-evaluate so version reflects latest state
             void (dep as { value: unknown }).value;
           } catch {
             if (IS_DEV) {

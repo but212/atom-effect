@@ -240,9 +240,10 @@ export function bindVal<T>(
 
 export function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): void {
   const el = ctx.el as HTMLInputElement;
+  const $el = ctx.$el;
   const state = createInputBindingState();
 
-  // DOM → Atom
+  // DOM → Atom (jQuery events for .trigger() compatibility)
   const handler = () => {
     if (state.flags & BindingFlags.Busy) return;
     const current = el.checked;
@@ -251,8 +252,8 @@ export function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): v
     }
   };
 
-  el.addEventListener('change', handler);
-  ctx.trackCleanup(() => el.removeEventListener('change', handler));
+  $el.on('change', handler);
+  ctx.trackCleanup(() => $el.off('change', handler));
 
   // Atom → DOM
   const fx = effect(() => {
@@ -260,7 +261,7 @@ export function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): v
     const val = !!atom.value;
     if (el.checked !== val) {
       el.checked = val;
-      if (debug.enabled) debug.domUpdated(el, 'checked', val);
+      if (debug.enabled) debug.domUpdated($el, 'checked', val);
     }
     state.flags &= ~BindingFlags.SyncingToDom;
   });

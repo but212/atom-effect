@@ -117,7 +117,7 @@ export function applyInputBinding<T>(
         const { selectionStart: start, selectionEnd: end } = el;
         el.value = formatted;
         const len = formatted.length;
-        el.setSelectionRange(Math.min(start ?? len, len), Math.min(end ?? len, len));
+        el.setSelectionRange(Math.min(start ?? 0, len), Math.min(end ?? 0, len));
       } else {
         el.value = formatted;
       }

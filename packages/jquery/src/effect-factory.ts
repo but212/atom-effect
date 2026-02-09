@@ -31,6 +31,6 @@ export function registerReactiveEffect<T>(
     );
   } else {
     updater(source);
-    debug.domUpdated($(el), debugType, source);
+    if (debug.enabled) debug.domUpdated($(el), debugType, source);
   }
 }

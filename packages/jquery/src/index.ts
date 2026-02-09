@@ -23,8 +23,8 @@ import { enablejQueryOverrides } from './jquery-patch';
 import { disableAutoCleanup, enableAutoCleanup, registry } from './registry';
 
 // Auto-enable on DOM ready
-enablejQueryOverrides();
 $(() => {
+  enablejQueryOverrides();
   enableAutoCleanup(document.body);
 });
 

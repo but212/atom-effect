@@ -2,8 +2,6 @@
  * Base error class.
  */
 export class AtomError extends Error {
-  readonly timestamp = new Date();
-
   constructor(
     message: string,
     public cause: Error | null = null,

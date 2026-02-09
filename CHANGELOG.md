@@ -6,43 +6,35 @@
 
 #### Refactored - Core
 
-- **Epoch Unification**: Merged `collectorEpoch` and `flushEpoch` into a single monotonic counter.
-  - Removed exported `flushEpoch` variable; `startFlush()` now calls `nextEpoch()` to allocate from the shared counter.
-  - Added `currentFlushEpoch()` getter to replace direct variable access in `Effect._checkInfiniteLoops`.
-- **Flag Constants Inlining**: Removed `NODE_FLAGS` object and inlined `DISPOSED: 1 << 0` directly into `EFFECT_STATE_FLAGS`, `COMPUTED_STATE_FLAGS`, `ATOM_STATE_FLAGS`.
-  - Eliminated spread (`...NODE_FLAGS`) overhead and dead `TIME_CONSTANTS` export.
-- **Computed Simplification**: Replaced pre-computed flag transition masks and lookup table with inline expressions and `getAsyncState()` function.
-  - Removed `ASYNC_STATE_LOOKUP` array, `CLEAR_FOR_PENDING/REJECTED/RESOLVED`, `SET_REJECTED` constants.
-  - Destructured `COMPUTED_STATE_FLAGS` into short local names (`IDLE`, `DIRTY`, `PENDING`, etc.) for readability.
-- **Effect Frequency Detection**: Replaced circular buffer history (`_history[]`, `_historyPtr`, `_historyCapacity`) with simple sliding window (`_windowStart`, `_windowCount`).
-  - Reduces per-effect memory footprint and initialization cost.
-- **Version Snapshot**: Simplified `_captureVersionSnapshot` from DJB2 hash mixing to plain sum.
-- **Branded Type Removal**: Simplified `DependencyId` from `Branded<number, 'DependencyId'>` to plain `number`, removing the `Branded` utility type.
-- **Error Wrapping**: Replaced manual `TypeError`/`ReferenceError` branching with `error.constructor.name` for error category.
-- **Pool Cleanup**: Removed unused `EMPTY_DEPS`, `EMPTY_SUBS`, `EMPTY_UNSUBS`, `EMPTY_VERSIONS` constants and `depArrayPool`, `unsubArrayPool`, `versionArrayPool` pools.
-- **Computed Error Cache Removal**: Removed `_cachedErrors`, `_errorCacheEpoch`, `_errorDepCount` fields and `_updateErrorDepCount()` method.
-  - `get errors()` now collects directly on each access (low-frequency path, epoch caching unnecessary).
-  - `get hasError()` uses live link scan only, removing `_errorDepCount` fast path.
-  - Simplified `invalidate()`, `dispose()`, `_finalizeResolution()` by removing cache invalidation code.
-- **Computed `_commitDeps` Inline**: Inlined 3-line `_commitDeps()` method directly into `_recompute()` at both call sites.
-- **Computed `Object.freeze` Removal**: Removed `Object.freeze(ComputedAtomImpl.prototype)` (no practical benefit for internal class).
-- **Effect Parking Simplification**: Replaced `_parkedUnsubs: Map<Dependency, () => void>` with `_prevLinks` array reference for subscription reclamation.
-  - `addDependency()` now scans `_prevLinks` linearly to reclaim existing subscriptions (O(n×m), acceptable for typical 1–10 deps).
-  - Eliminates per-execution `Map` allocation overhead.
-- **Effect `_checkLoopWarnings` Inline**: Inlined `_checkLoopWarnings()` method directly into `execute()`.
+- **Epoch Unification**: Merged `collectorEpoch` and `flushEpoch` into a shared counter to reduce module-level state and simplify epoch tracking.
+- **Flag Inlining**: Inlined `NODE_FLAGS` constants directly into usage sites to eliminate object lookup overhead and simplified state transition logic.
+- **Computed Simplification**: Removed complex lookup tables and internal error caching mechanisms in favor of streamlined inline expressions and on-demand error collection.
+- **Effect Loop Detection**: Replaced the circular buffer implementation with a sliding window approach for more efficient infinite loop detection.
+- **Subscription Parking**: Replaced `Map`-based subscription storage with a linear array scan for significantly faster subscription reuse and lower memory overhead.
+- **Type Simplification**: Removed the `Branded` type wrapper from `DependencyId` to simplify type definitions and reduce TypeScript compilation overhead.
+- **Utility Consolidation**: Simplified error classification logic and version snapshotting by moving them into shared internal utilities.
+- **Method Inlining**: Inlined `_commitDeps` and `_checkLoopWarnings` methods to reduce function call overhead in hot paths.
+- **Dead Code Cleanup**: Removed unused object pools and `Object.freeze` calls to reduce bundle size and runtime initialization cost.
+- **Memory Optimization**: Removed unused `timestamp` property from `AtomError` and `_modifiedAtEpoch` from `ReactiveNode` to reduce object size.
+- **Logic Refinement**: Removed redundant `_promiseId` increment in computed error handling and unnecessary `unsub` clearing in dependency synchronization.
 
 ### jQuery
 
 #### Refactored - jQuery
 
-- **Chainable → Unified Delegation**: Refactored chainable methods (`atomHtml`, `atomClass`, `atomCss`, `atomAttr`, `atomProp`, `atomShow`, `atomHide`, `atomVal`) to delegate to exported unified binding handlers, eliminating duplicated security logic and DOM update code.
-  - `atomText` retained separately due to `formatter` parameter; `atomChecked` retained for jQuery event compatibility.
-  - Exported `createContext` factory and all bind handlers from `unified.ts`.
-- **bindShow/bindHide → bindVisibility**: Merged two near-identical functions into a single `bindVisibility(ctx, condition, invert, label)`.
-- **bindCss Normalization**: Unified Array/non-Array branches into a single `registerReactiveEffect` call.
-- **shallowEqual Extraction**: Extracted 30-line inline shallow equality check from `list.ts` into reusable `shallowEqual()` in `utils.ts`.
-- **parseQueryParams → URLSearchParams**: Replaced 35-line manual query parser in `route.ts` with native `URLSearchParams`.
-- **Debug Highlight Simplification**: Replaced `WeakMap<HighlightState>` + double timer + `requestAnimationFrame` with CSS class toggle (`classList.add/remove`) + single `setTimeout` + injected `<style>` tag.
+- **Chainable Method Delegation**: Refactored chainable methods to delegate directly to unified binding handlers in `unified.ts`, reducing code duplication between chainable and declarative APIs.
+- **Checked Binding Normalization**: Updated `atomChecked` to utilize the standard `bindChecked` handler and jQuery events for consistent behavior across binding types.
+- **Utility Centralization**: Centralized `shallowEqual` and `isReactive` checks into `utils.ts` to ensure consistent equality logic across the library.
+- **Debug Performance**: Added an enablement check to `domUpdated` to prevent unnecessary DOM access when debug mode is disabled.
+- **Visibility Logic Merger**: Merged `bindShow` and `bindHide` implementations into a single `bindVisibility` function to reduce code footprint.
+- **CSS Binding Unification**: Unified `bindCss` rendering logic to handle both array and string values within a single pass.
+- **Router Simplification**: Replaced manual query string parsing with standard `URLSearchParams` for more robust and standard-compliant route handling.
+- **Debug UI Simplification**: Simplified the visual highlight implementation to avoid complex DOM manipulation.
+
+#### Changed - jQuery
+
+- **Environment**: Updated debug mode detection logic.
+- **Initialization**: Deferred `enablejQueryOverrides` to DOM ready.
 
 #### Removed - jQuery
 

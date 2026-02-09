@@ -15,7 +15,6 @@ describe('Error Classes', () => {
     expect(error.message).toBe('Test message');
     expect(error.cause).toBe(null);
     expect(error.recoverable).toBe(true);
-    expect(error.timestamp).toBeInstanceOf(Date);
   });
 
   it('AtomError can receive cause', () => {
