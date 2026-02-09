@@ -12,71 +12,16 @@
     />
     <script src="https://code.jquery.com/jquery-4.0.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.19.1"></script>
+    <link rel="stylesheet" href="./styles.css" />
     <style>
-      :root {
-        --primary-red: #e63946;
-        --primary-blue: #2a52be;
-        --primary-yellow: #ffd60a;
-        --black: #000000;
-        --white: #ffffff;
-        --font-main: "Inter", sans-serif;
-      }
-
-      .visually-hidden {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        margin: -1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        border-width: 0;
-      }
-
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-
-      body {
-        font-family: var(--font-main);
-        background-color: var(--white);
-        color: var(--black);
-        line-height: 1.2;
-        overflow-x: hidden;
-      }
-
+      /* Page Specific Styles */
       .container {
-        display: grid;
-        grid-template-columns: repeat(12, 1fr);
-        gap: 20px;
-        max-width: 1400px;
-        margin: 0 auto;
-        padding: 40px;
+        gap: 20px; /* Override common gap */
       }
 
-      /* Header */
       header {
-        grid-column: 1 / -1;
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
         margin-bottom: 80px;
-      }
-
-      .logo {
-        font-weight: 900;
-        font-size: 2.5rem;
-        letter-spacing: -2px;
-        line-height: 0.9;
-        text-transform: uppercase;
-        cursor: default;
-      }
-
-      .logo span {
-        color: var(--primary-red);
-        font-size: 1.2em;
+        align-items: center; /* minimalist aligns center on header usually */
       }
 
       nav ul {
@@ -127,17 +72,15 @@
         gap: 15px;
       }
 
+      /* Override btn to match original minimalist style slightly if needed, 
+         but common style is close enough. Keeping specific padding. */
       .btn {
         padding: 18px 36px;
+        border: none; /* minimalist had no border on buttons? No, it had. Wait. */
+      }
+      /* Reviewing minimalist btn: border: none; */
+      .btn {
         border: none;
-        font-weight: 700;
-        font-size: 0.9rem;
-        text-transform: uppercase;
-        cursor: pointer;
-        transition:
-          transform 0.2s,
-          background-color 0.2s;
-        letter-spacing: 1px;
       }
 
       .btn-primary {
@@ -148,11 +91,6 @@
       .btn-secondary {
         background-color: var(--black);
         color: var(--white);
-      }
-
-      .btn:hover {
-        transform: translateY(-3px);
-        filter: brightness(1.2);
       }
 
       /* Visualizer Area */
@@ -168,32 +106,9 @@
         height: 100%;
       }
 
-      /* Info Sections */
+      /* Info Sections overrides */
       .info-section {
-        grid-column: span 6;
         margin-top: 100px;
-      }
-
-      .info-tag {
-        width: 32px;
-        height: 32px;
-        margin-bottom: 24px;
-      }
-
-      .tag-red {
-        background-color: var(--primary-red);
-      }
-      .tag-yellow {
-        background-color: var(--primary-yellow);
-        clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
-      }
-
-      .info-title {
-        font-size: 2rem;
-        font-weight: 900;
-        text-transform: uppercase;
-        margin-bottom: 20px;
-        letter-spacing: -1px;
       }
 
       .info-content {
@@ -203,20 +118,7 @@
         line-height: 1.5;
       }
 
-      footer {
-        grid-column: 1 / -1;
-        margin-top: 120px;
-        padding-top: 40px;
-        border-top: 3px solid var(--black);
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-end;
-        font-size: 0.85rem;
-        font-weight: 700;
-        text-transform: uppercase;
-        padding-bottom: 40px;
-      }
-
+      /* Footer specific */
       .footer-brand {
         display: flex;
         flex-direction: column;
