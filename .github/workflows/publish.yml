@@ -9,6 +9,7 @@ jobs:
   publish:
     name: Publish Packages
     runs-on: ubuntu-latest
+    environment: production
 
     permissions:
       contents: write
@@ -65,13 +66,13 @@ jobs:
 
       - name: Publish @but212/atom-effect
         working-directory: packages/core
-        run: pnpm publish --no-git-checks
+        run: pnpm publish --no-git-checks --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @but212/atom-effect-jquery
         working-directory: packages/jquery
-        run: pnpm publish --no-git-checks
+        run: pnpm publish --no-git-checks --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 

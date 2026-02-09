@@ -8,12 +8,13 @@
     "build": "turbo run build",
     "test": "turbo run test",
     "test:run": "turbo run test:run",
+    "test:coverage": "turbo run test:coverage",
     "lint": "turbo run lint",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
     "typecheck": "turbo run typecheck",
     "bench": "turbo run bench",
-    "clean": "rimraf packages/*/dist apps/*/dist .turbo node_modules/.cache"
+    "clean": "rimraf packages/*/dist .turbo node_modules/.cache"
   },
   "keywords": [
     "reactive",
