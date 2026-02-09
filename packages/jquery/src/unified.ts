@@ -75,11 +75,9 @@ export function bindHtml(ctx: BindingContext, value: ReactiveValue<string>): voi
         console.warn('[atomBind] Unsafe content neutralized during sanitization.');
       }
 
-      const safeVal = sanitized;
-
       // Guard against redundant DOM writes which destroy/recreate subtrees
-      if (el.innerHTML !== safeVal) {
-        el.innerHTML = safeVal;
+      if (el.innerHTML !== sanitized) {
+        el.innerHTML = sanitized;
       }
     },
     'html'
@@ -137,7 +135,8 @@ export function bindAttr(
   const el = ctx.el;
   for (const name in attrMap) {
     // Block event handler attributes (on*)
-    if (/^on/i.test(name)) {
+    const c0 = name.charCodeAt(0);
+    if ((c0 === 111 || c0 === 79) && (name.charCodeAt(1) === 110 || name.charCodeAt(1) === 78)) {
       console.warn(`[atomBind] Blocked setting dangerous event handler attribute "${name}".`);
       continue;
     }
@@ -223,7 +222,7 @@ export function bindVal<T>(
   cfg: WritableAtom<T> | [atom: WritableAtom<T>, options: ValOptions<T>]
 ): void {
   const tagName = ctx.el.tagName.toLowerCase();
-  if (!['input', 'select', 'textarea'].includes(tagName)) {
+  if (tagName !== 'input' && tagName !== 'select' && tagName !== 'textarea') {
     console.warn(`[atomBind] Val binding used on non-input element <${tagName}>.`);
     return;
   }

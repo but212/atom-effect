@@ -16,82 +16,17 @@
     />
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.19.1"></script>
+    <link rel="stylesheet" href="./styles.css" />
     <style>
       :root {
-        --primary-red: #e63946;
-        --primary-blue: #2a52be;
-        --primary-yellow: #ffd60a;
-        --black: #000000;
-        --white: #ffffff;
-        --font-main: "Inter", sans-serif;
-        --font-mono: "IBM Plex Mono", monospace;
-
+        /* Status Colors reused from common styles, but explicitly defining custom ones if needed */
         --status-idle: #666;
         --status-pending: var(--primary-yellow);
         --status-resolved: #22c55e;
         --status-rejected: var(--primary-red);
       }
-
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-
-      body {
-        font-family: var(--font-main);
-        background-color: var(--white);
-        color: var(--black);
-        line-height: 1.2;
-        overflow-x: hidden;
-      }
-
-      .container {
-        display: grid;
-        grid-template-columns: repeat(12, 1fr);
-        gap: 30px;
-        max-width: 1400px;
-        margin: 0 auto;
-        padding: 40px;
-      }
-
-      main {
-        display: contents;
-      }
-
-      /* Header */
-      header {
-        grid-column: 1 / -1;
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        margin-bottom: 60px;
-      }
-
-      .logo {
-        font-weight: 900;
-        font-size: 2.5rem;
-        letter-spacing: -2px;
-        line-height: 0.9;
-        text-transform: uppercase;
-        cursor: default;
-      }
-
-      .logo span {
-        color: var(--primary-red);
-        font-size: 1.2em;
-      }
-
-      .badge {
-        display: inline-block;
-        background-color: var(--black);
-        color: var(--white);
-        padding: 4px 12px;
-        font-weight: 900;
-        font-size: 0.75rem;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-      }
+      
+      /* Page Specific Styles */
 
       /* Section */
       .section {
@@ -118,20 +53,8 @@
       }
 
       .card {
-        background: var(--white);
-        border: 3px solid var(--black);
-        padding: 30px;
-        box-shadow: 12px 12px 0px var(--black);
-        position: relative;
         display: flex;
         flex-direction: column;
-      }
-
-      .card-red {
-        box-shadow: 12px 12px 0px var(--primary-red);
-      }
-      .card-blue {
-        box-shadow: 12px 12px 0px var(--primary-blue);
       }
 
       .card-header {
@@ -165,30 +88,12 @@
       }
 
       .code-block {
-        background: #f8f8f8;
-        border: 3px solid var(--black);
-        padding: 24px;
-        font-family: var(--font-mono);
-        font-size: 0.85rem;
-        line-height: 1.5;
-        overflow-x: auto;
         margin-bottom: 20px;
       }
-
-      .code-keyword {
-        color: var(--primary-red);
-        font-weight: 700;
-      }
-      .code-function {
-        color: var(--primary-blue);
-        font-weight: 700;
-      }
-      .code-string {
-        color: #22c55e;
-      }
-      .code-comment {
-        color: #999;
-        font-style: italic;
+      
+      .code-fn {
+          color: var(--primary-blue);
+          font-weight: 700;
       }
 
       .list-style {
@@ -237,12 +142,7 @@
 
       .btn {
         padding: 15px 30px;
-        border: 3px solid var(--black);
-        font-weight: 900;
         font-size: 0.85rem;
-        text-transform: uppercase;
-        cursor: pointer;
-        transition: transform 0.2s;
         letter-spacing: 1px;
       }
 
@@ -255,11 +155,6 @@
         background: var(--primary-red);
         color: var(--white);
         box-shadow: 6px 6px 0px var(--black);
-      }
-
-      .btn:hover {
-        transform: translate(-2px, -2px);
-        box-shadow: 8px 8px 0px var(--black);
       }
 
       .pipeline {
@@ -355,20 +250,7 @@
       }
 
       .spinner {
-        width: 14px;
-        height: 14px;
-        border: 2px solid var(--black);
-        border-top-color: transparent;
-        border-radius: 50%;
-        animation: spin 0.6s linear infinite;
         margin-right: 10px;
-        display: inline-block;
-      }
-
-      @keyframes spin {
-        to {
-          transform: rotate(360deg);
-        }
       }
 
       /* Insight Box */
@@ -380,50 +262,10 @@
         gap: 30px;
       }
 
-      .info-card {
-        grid-column: span 6;
-      }
-      .info-tag {
-        width: 32px;
-        height: 32px;
-        margin-bottom: 24px;
-      }
-      .tag-red {
-        background-color: var(--primary-red);
-      }
-      .tag-yellow {
-        background-color: var(--primary-yellow);
-        clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
-      }
-      .tag-circle {
-        border-radius: 50%;
-        background: var(--primary-blue);
-      }
-
-      .info-title {
-        font-size: 2rem;
-        font-weight: 900;
-        text-transform: uppercase;
-        margin-bottom: 20px;
-        letter-spacing: -1px;
-      }
       .info-content {
         font-weight: 700;
         line-height: 1.4;
         color: var(--black);
-      }
-
-      footer {
-        grid-column: 1 / -1;
-        margin-top: 100px;
-        padding: 40px 0;
-        border-top: 3px solid var(--black);
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-end;
-        font-weight: 900;
-        text-transform: uppercase;
-        font-size: 0.85rem;
       }
 
       @media (max-width: 900px) {

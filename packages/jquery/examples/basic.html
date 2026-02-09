@@ -18,79 +18,9 @@
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <!-- atom-effect-jquery -->
     <script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.19.1"></script>
+    <link rel="stylesheet" href="./styles.css" />
     <style>
-      :root {
-        --primary-red: #e63946;
-        --primary-blue: #2a52be;
-        --primary-yellow: #ffd60a;
-        --black: #000000;
-        --white: #ffffff;
-        --font-main: "Inter", sans-serif;
-        --font-mono: "IBM Plex Mono", monospace;
-      }
-
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-
-      body {
-        font-family: var(--font-main);
-        background-color: var(--white);
-        color: var(--black);
-        line-height: 1.2;
-        overflow-x: hidden;
-      }
-
-      .container {
-        display: grid;
-        grid-template-columns: repeat(12, 1fr);
-        gap: 30px;
-        max-width: 1400px;
-        margin: 0 auto;
-        padding: 40px;
-      }
-
-      main {
-        display: contents;
-      }
-
-      /* Header */
-      header {
-        grid-column: 1 / -1;
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        margin-bottom: 60px;
-      }
-
-      .logo {
-        font-weight: 900;
-        font-size: 2.5rem;
-        letter-spacing: -2px;
-        line-height: 0.9;
-        text-transform: uppercase;
-        cursor: default;
-      }
-
-      .logo span {
-        color: var(--primary-red);
-        font-size: 1.2em;
-      }
-
-      .badge {
-        display: inline-block;
-        background-color: var(--black);
-        color: var(--white);
-        padding: 4px 12px;
-        font-weight: 900;
-        font-size: 0.75rem;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-      }
-
-      /* Counter Card */
+      /* Page Specific Styles */
       .grid-main {
         grid-column: 1 / 7;
       }
@@ -99,19 +29,7 @@
       }
 
       .card {
-        background: var(--white);
-        border: 3px solid var(--black);
-        padding: 40px;
-        box-shadow: 12px 12px 0px var(--black);
-        position: relative;
         text-align: center;
-      }
-
-      .card-blue {
-        box-shadow: 12px 12px 0px var(--primary-blue);
-      }
-      .card-yellow {
-        box-shadow: 12px 12px 0px var(--primary-yellow);
       }
 
       .display-value {
@@ -129,33 +47,6 @@
 
       .btn {
         flex: 1;
-        padding: 20px;
-        border: 3px solid var(--black);
-        font-weight: 900;
-        font-size: 1.5rem;
-        cursor: pointer;
-        transition:
-          transform 0.1s,
-          box-shadow 0.1s;
-        background: var(--white);
-        box-shadow: 6px 6px 0px var(--black);
-      }
-
-      .btn:hover {
-        transform: translate(-2px, -2px);
-        box-shadow: 8px 8px 0px var(--black);
-      }
-
-      .btn:active {
-        transform: translate(2px, 2px);
-        box-shadow: 2px 2px 0px var(--black);
-      }
-
-      .btn-decrement {
-        color: var(--primary-red);
-      }
-      .btn-increment {
-        color: var(--primary-blue);
       }
 
       /* Side Stats */
@@ -178,86 +69,9 @@
         color: var(--black);
       }
 
-      /* Technical Section */
-      .info-section {
-        grid-column: 1 / -1;
-        margin-top: 60px;
-        display: grid;
-        grid-template-columns: repeat(12, 1fr);
-        gap: 30px;
-      }
-
-      .info-card {
-        grid-column: span 6;
-      }
-      .info-tag {
-        width: 32px;
-        height: 32px;
-        margin-bottom: 24px;
-      }
-      .tag-red {
-        background: var(--primary-red);
-      }
-      .tag-blue {
-        background: var(--primary-blue);
-        border-radius: 50%;
-      }
-
-      .info-title {
-        font-size: 2rem;
-        font-weight: 900;
-        text-transform: uppercase;
-        margin-bottom: 20px;
-        letter-spacing: -1px;
-      }
-
-      .code-block {
-        background: #f8f8f8;
-        border: 3px solid var(--black);
-        padding: 24px;
-        font-family: var(--font-mono);
-        font-size: 0.85rem;
-        line-height: 1.5;
-        overflow-x: auto;
-      }
-
-      .code-keyword {
-        color: var(--primary-red);
-        font-weight: 700;
-      }
-      .code-function {
-        color: var(--primary-blue);
-        font-weight: 700;
-      }
-      .code-string {
-        color: #22c55e;
-      }
-      .code-comment {
-        color: #999;
-        font-style: italic;
-      }
-
-      footer {
-        grid-column: 1 / -1;
-        margin-top: 100px;
-        padding: 40px 0;
-        border-top: 3px solid var(--black);
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-end;
-        font-weight: 900;
-        text-transform: uppercase;
-        font-size: 0.85rem;
-      }
-
       @media (max-width: 900px) {
         .display-value {
           font-size: 5rem;
-        }
-        .grid-main,
-        .grid-side,
-        .info-card {
-          grid-column: 1 / -1;
         }
       }
     </style>

@@ -12,31 +12,14 @@
     />
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.19.1"></script>
+    <link rel="stylesheet" href="./styles.css" />
     <style>
+      /* Page Specific overrides */
       :root {
-        --primary-red: #e63946;
-        --primary-blue: #2a52be;
-        --primary-yellow: #ffd60a;
-        --black: #000000;
-        --white: #ffffff;
         --grey: #f0f0f0;
-
-        --border-width: 3px;
-        --hard-shadow: 8px 8px 0px var(--black);
-        --font-main: "Inter", sans-serif;
-        --font-mono: "IBM Plex Mono", monospace;
-      }
-
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
       }
 
       body {
-        font-family: var(--font-main);
-        background-color: var(--white);
-        color: var(--black);
         height: 100vh;
         overflow: hidden;
         display: flex;
@@ -179,6 +162,7 @@
         align-items: center;
         justify-content: space-between;
         border-bottom: var(--border-width) solid var(--black);
+        margin-bottom: 0; /* Override styles.css margin */
       }
 
       #page-title {
@@ -203,25 +187,15 @@
       }
 
       /* --- Cards & Components --- */
-      .card {
-        background: var(--white);
-        border: var(--border-width) solid var(--black);
-        padding: 30px;
-        margin-bottom: 40px;
-        box-shadow: var(--hard-shadow);
-        position: relative;
-      }
-
       .card-blue {
         background: var(--primary-blue);
         color: white;
+        box-shadow: var(--hard-shadow);
       }
       .card-red {
         background: var(--primary-red);
         color: white;
-      }
-      .card-yellow {
-        background: var(--primary-yellow);
+        box-shadow: var(--hard-shadow);
       }
 
       .stats-grid {
@@ -376,13 +350,7 @@
         color: white;
       }
 
-      /* Refactored Classes */
-      .card-title {
-        font-weight: 900;
-        text-transform: uppercase;
-        margin-bottom: 20px;
-      }
-
+      /* Refactored Classes overrides */
       .card-body-mono {
         font-family: var(--font-mono);
         font-weight: 700;
@@ -401,19 +369,6 @@
         text-align: center;
         font-weight: 900;
         text-transform: uppercase;
-      }
-
-      /* Accessibility */
-      .visually-hidden {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        margin: -1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        white-space: nowrap;
-        border: 0;
       }
     </style>
   </head>
