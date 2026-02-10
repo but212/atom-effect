@@ -12,17 +12,16 @@ const mountedComponents = new WeakMap<Element, () => void>();
  */
 $.fn.atomMount = function <P>(component: ComponentFn<P>, props: P = {} as P): JQuery {
   return this.each(function () {
-    const isDebug = debug.enabled;
-    const selector = isDebug ? getSelector(this) : '';
+    const selector = getSelector(this);
 
     // 1. Unmount existing component (Consolidated O(1) lookup)
     const existingUnmount = mountedComponents.get(this);
     if (existingUnmount) {
-      if (isDebug) debug.log('mount', `${selector} unmounting existing component`);
+      debug.log('mount', `${selector} unmounting existing component`);
       existingUnmount();
     }
 
-    if (isDebug) debug.log('mount', `${selector} mounting component`);
+    debug.log('mount', `${selector} mounting component`);
 
     // 2. Mount
     let userCleanup: undefined | (() => void);
@@ -38,7 +37,7 @@ $.fn.atomMount = function <P>(component: ComponentFn<P>, props: P = {} as P): JQ
       // Atomic delete() acts as a high-performance guard against double-cleanup
       if (!mountedComponents.delete(this)) return;
 
-      if (isDebug) debug.log('mount', `${selector} full cleanup`);
+      debug.log('mount', `${selector} full cleanup`);
 
       if (typeof userCleanup === 'function') {
         try {
