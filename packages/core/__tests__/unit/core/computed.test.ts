@@ -255,6 +255,99 @@ describe('Computed', () => {
     });
   });
 
+  describe('addDependency - Link Reuse', () => {
+    it('reuses existing link objects when trackCount < trackLinks.length', () => {
+      // When a computed recomputes, if the trackLinks array already has slots from
+      // a previous run, it reuses them instead of pushing new DependencyLink objects.
+      // This happens at lines 233-236 of computed.ts.
+      const a = atom(0);
+      const b = atom(0);
+      let readB = true;
+
+      const c = computed(() => {
+        const val = a.value;
+        if (readB) b.value;
+        return val;
+      });
+
+      // First computation: tracks both a and b
+      expect(c.value).toBe(0);
+
+      // Second computation: only tracks a (fewer deps, but trackLinks still has 2 slots)
+      readB = false;
+      a.value = 1;
+      c.invalidate();
+      expect(c.value).toBe(1);
+
+      // Third computation: tracks both again (reuses existing link slots)
+      readB = true;
+      a.value = 2;
+      c.invalidate();
+      expect(c.value).toBe(2);
+
+      c.dispose();
+    });
+  });
+
+  describe('Async - Promise Rejection & Stale PromiseId', () => {
+    it('ignores stale promise rejection when promiseId has changed', async () => {
+      // Lines 318-321, 332-334: when a new async computation starts,
+      // the old promise's rejection is ignored because promiseId changed.
+      const trigger = atom(0);
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const c = computed(
+        async () => {
+          const val = trigger.value;
+          await sleep(val === 0 ? 50 : 10);
+          if (val === 0) throw new Error('Old promise rejection');
+          return val * 10;
+        },
+        { defaultValue: -1 }
+      );
+
+      // Start first computation (will take 50ms and reject)
+      c.value;
+      expect(c.isPending).toBe(true);
+
+      // Immediately trigger a new computation (invalidates old promiseId)
+      trigger.value = 1;
+      await sleep(5);
+      c.value; // Force recompute
+
+      // Wait for both promises to settle
+      await sleep(100);
+
+      // The stale rejection should be ignored; value should be from second computation
+      expect(c.value).toBe(10);
+
+      c.dispose();
+      consoleError.mockRestore();
+    });
+
+    it('handles async promise rejection with promiseId check', async () => {
+      // Lines 332-334: rejection handler checks promiseId === this._promiseId
+      const onError = vi.fn();
+      const c = computed(
+        async () => {
+          await sleep(10);
+          throw new Error('Async rejection');
+        },
+        { defaultValue: 0, onError }
+      );
+
+      c.value;
+      expect(c.isPending).toBe(true);
+
+      await sleep(50);
+
+      expect(c.hasError).toBe(true);
+      expect(onError).toHaveBeenCalled();
+
+      c.dispose();
+    });
+  });
+
   describe('Lifecycle', () => {
     it('dependencies are cleaned up on dispose', async () => {
       const count = atom(0);

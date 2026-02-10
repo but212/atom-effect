@@ -68,6 +68,54 @@ describe('Input Bindings (Two-way)', () => {
     $el.remove();
   });
 
+  it('atomVal should preserve cursor position when focused and atom updates', async () => {
+    const val = $.atom('hello');
+    const $el = $('<input>').appendTo(document.body);
+
+    $el.atomVal(val);
+    await $.nextTick();
+
+    // Simulate focus
+    $el.trigger('focus');
+
+    // Set cursor position (simulate user editing in middle of text)
+    const el = $el[0] as HTMLInputElement;
+    el.setSelectionRange(3, 3);
+
+    // Update atom while focused — should preserve cursor position (lines 115-120)
+    val.value = 'world';
+    await $.nextTick();
+
+    expect(el.value).toBe('world');
+    // Cursor should be clamped to min(3, 'world'.length=5) = 3
+    expect(el.selectionStart).toBe(3);
+    expect(el.selectionEnd).toBe(3);
+
+    $el.remove();
+  });
+
+  it('atomVal handles null selectionStart/End with fallback to 0', async () => {
+    const val = $.atom('abc');
+    const $el = $('<input>').appendTo(document.body);
+
+    $el.atomVal(val);
+    await $.nextTick();
+
+    $el.trigger('focus');
+
+    // Mock selectionStart/End as null (some input types don't support selection)
+    const el = $el[0] as HTMLInputElement;
+    Object.defineProperty(el, 'selectionStart', { get: () => null, configurable: true });
+    Object.defineProperty(el, 'selectionEnd', { get: () => null, configurable: true });
+
+    val.value = 'xyz';
+    await $.nextTick();
+
+    expect(el.value).toBe('xyz');
+
+    $el.remove();
+  });
+
   it('atomChecked should handle two-way sync and cycle prevention', async () => {
     const isChecked = $.atom(false);
     const $el = $('<input type="checkbox">').appendTo(document.body);

@@ -308,6 +308,82 @@ describe('$.route() - SPA Routing', () => {
     });
   });
 
+  describe('Route Resolution Edge Cases', () => {
+    it('warns when route not found and no notFound configured (lines 102-104)', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const router = $.route({
+        target: '#app',
+        default: 'home',
+        // No notFound configured
+        routes: {
+          home: { template: '#tmpl-home' },
+        },
+      });
+
+      router.navigate('nonexistent');
+      await $.nextTick();
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('not found and no notFound route configured')
+      );
+
+      router.destroy();
+      warnSpy.mockRestore();
+    });
+
+    it('warns when template selector does not exist (lines 117-119)', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const router = $.route({
+        target: '#app',
+        default: 'home',
+        routes: {
+          home: { template: '#nonexistent-template' },
+        },
+      });
+
+      await $.nextTick();
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Template "#nonexistent-template" not found')
+      );
+
+      router.destroy();
+      warnSpy.mockRestore();
+    });
+
+    it('restores hash when onLeave guard blocks hashchange navigation (lines 220-224)', async () => {
+      const router = $.route({
+        target: '#app',
+        default: 'home',
+        routes: {
+          home: { template: '#tmpl-home' },
+          about: {
+            template: '#tmpl-about',
+            onLeave: () => false, // Block leaving about
+          },
+        },
+      });
+
+      // Navigate to about first
+      router.navigate('about');
+      await $.nextTick();
+      expect(router.currentRoute.value).toBe('about');
+
+      // Try to navigate via hashchange (simulating back button)
+      window.location.hash = '#home';
+      window.dispatchEvent(new window.Event('hashchange'));
+      await $.nextTick();
+
+      // Navigation should be blocked and hash restored
+      expect(router.currentRoute.value).toBe('about');
+      expect(window.location.hash).toBe('#about');
+
+      router.destroy();
+    });
+  });
+
   describe('Safety & Robustness', () => {
     it('should handle malformed URL parameters gracefully', async () => {
       const $target = $('<div id="app-route-err"></div>').appendTo(document.body);

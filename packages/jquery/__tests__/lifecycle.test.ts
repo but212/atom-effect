@@ -285,5 +285,43 @@ describe('jQuery Lifecycle Overrides', () => {
       expect(() => $el.atomUnmount()).not.toThrow();
       $el.remove();
     });
+
+    it('should log console.error when userCleanup throws', () => {
+      const $el = $('<div>').appendTo(document.body);
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      $el.atomMount(() => {
+        return () => {
+          throw new Error('user cleanup error');
+        };
+      });
+
+      $el.atomUnmount();
+
+      // Lines 43-49: userCleanup error triggers console.error
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[atom-effect-jquery] Cleanup error:',
+        expect.any(Error)
+      );
+      consoleSpy.mockRestore();
+      $el.remove();
+    });
+
+    it('double atomUnmount() only runs cleanup once', () => {
+      const $el = $('<div>').appendTo(document.body);
+      const cleanup = vi.fn();
+
+      $el.atomMount(() => cleanup);
+
+      // First unmount: runs cleanup
+      $el.atomUnmount();
+      expect(cleanup).toHaveBeenCalledTimes(1);
+
+      // Second unmount: guard via mountedComponents.delete() returns false (lines 38-39)
+      $el.atomUnmount();
+      expect(cleanup).toHaveBeenCalledTimes(1);
+
+      $el.remove();
+    });
   });
 });
