@@ -32,18 +32,18 @@ describe('Effect', () => {
     });
 
     it('throws error when run() is called on disposed effect', async () => {
-      const e = effect(() => {});
+      const effectHandle = effect(() => {});
       await vi.runAllTimersAsync();
 
-      e.dispose();
+      effectHandle.dispose();
 
-      expect(() => e.run()).toThrow(EffectError);
+      expect(() => effectHandle.run()).toThrow(EffectError);
     });
 
     it('can manually execute with run() method', async () => {
       const calls: number[] = [];
 
-      const e = effect(
+      const effectHandle = effect(
         () => {
           calls.push(Date.now());
         },
@@ -52,7 +52,7 @@ describe('Effect', () => {
 
       const initialCount = calls.length;
 
-      e.run();
+      effectHandle.run();
 
       expect(calls.length).toBe(initialCount + 1);
     });
@@ -85,7 +85,7 @@ describe('Effect', () => {
     it('ignores non-function cleanup return value', async () => {
       const count = atom(0);
 
-      const e = effect(() => {
+      const effectHandle = effect(() => {
         count.value;
         return 'not a function' as unknown as () => void;
       });
@@ -95,24 +95,24 @@ describe('Effect', () => {
       count.value = 1;
       await vi.runAllTimersAsync();
 
-      expect(e.isDisposed).toBe(false);
+      expect(effectHandle.isDisposed).toBe(false);
     });
 
     it('dispose is idempotent', async () => {
       const count = atom(0);
       const calls: number[] = [];
 
-      const e = effect(() => {
+      const effectHandle = effect(() => {
         calls.push(count.value);
       });
 
       await vi.runAllTimersAsync();
       expect(calls.length).toBeGreaterThan(0);
 
-      e.dispose();
+      effectHandle.dispose();
 
-      expect(() => e.dispose()).not.toThrow();
-      expect(e.isDisposed).toBe(true);
+      expect(() => effectHandle.dispose()).not.toThrow();
+      expect(effectHandle.isDisposed).toBe(true);
     });
 
     it('reports isExecuting correctly', () => {
@@ -122,7 +122,7 @@ describe('Effect', () => {
       // biome-ignore lint/suspicious/noExplicitAny: test
       let eRef: any;
 
-      const e = effect(
+      const effectHandle = effect(
         () => {
           runCount++;
           a.value;
@@ -132,19 +132,19 @@ describe('Effect', () => {
         },
         { sync: true }
       );
-      eRef = e;
+      eRef = effectHandle;
 
       a.value = 1;
 
       expect(runCount).toBe(2);
       expect(capturedIsExecuting).toBe(true);
-      e.dispose();
+      effectHandle.dispose();
     });
 
     it('handles many sync executions without error', async () => {
       const count = atom(0, { sync: true });
 
-      const e = effect(
+      const effectHandle = effect(
         () => {
           count.value;
         },
@@ -155,7 +155,7 @@ describe('Effect', () => {
         count.value = i;
       }
 
-      expect(e.executionCount).toBeGreaterThan(100);
+      expect(effectHandle.executionCount).toBeGreaterThan(100);
     });
   });
 
@@ -245,7 +245,7 @@ describe('Effect', () => {
       const c = computed(() => a.value + 1);
       let runs = 0;
 
-      const e = effect(() => {
+      const effectHandle = effect(() => {
         runs++;
         c.value;
       });
@@ -258,7 +258,7 @@ describe('Effect', () => {
 
       expect(runs).toBe(2);
       expect(c.value).toBe(2);
-      e.dispose();
+      effectHandle.dispose();
     });
 
     it('treats throwing computed dependency as dirty', async () => {
@@ -292,7 +292,7 @@ describe('Effect', () => {
       const count2 = atom(10);
       let result = 0;
 
-      const e = effect(() => {
+      const effectHandle = effect(() => {
         result = condition.value ? count1.value * 2 : count2.value * 3;
       });
 
@@ -314,7 +314,7 @@ describe('Effect', () => {
       await vi.runAllTimersAsync();
       expect(result).toBe(60);
 
-      e.dispose();
+      effectHandle.dispose();
     });
   });
 
@@ -324,7 +324,7 @@ describe('Effect', () => {
       const count = atom(0);
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      const e = effect(
+      const effectHandle = effect(
         () => {
           count.value++;
         },
@@ -333,7 +333,7 @@ describe('Effect', () => {
 
       await sleep(100);
 
-      expect(e.isDisposed).toBe(true);
+      expect(effectHandle.isDisposed).toBe(true);
       expect(consoleError).toHaveBeenCalled();
     });
 
@@ -341,7 +341,7 @@ describe('Effect', () => {
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
       const a = atom(0, { sync: true });
 
-      const e = effect(
+      const effectHandle = effect(
         () => {
           a.value;
         },
@@ -355,7 +355,7 @@ describe('Effect', () => {
         a.value = i;
       }
 
-      expect(e.isDisposed).toBe(true);
+      expect(effectHandle.isDisposed).toBe(true);
       expect(consoleError).toHaveBeenCalledWith(
         expect.objectContaining({
           message: expect.stringMatching(/Infinite loop detected/),
@@ -393,7 +393,7 @@ describe('Effect', () => {
       let throwOnSecondRun = false;
       let runCount = 0;
 
-      const e = effect(
+      const effectHandle = effect(
         () => {
           runCount++;
           a.value; // Track dependency
@@ -413,9 +413,9 @@ describe('Effect', () => {
       expect(runCount).toBe(2);
       expect(consoleError).toHaveBeenCalled();
       // Effect should still be alive (not disposed)
-      expect(e.isDisposed).toBe(false);
+      expect(effectHandle.isDisposed).toBe(false);
 
-      e.dispose();
+      effectHandle.dispose();
       consoleError.mockRestore();
     });
   });
@@ -430,7 +430,7 @@ describe('Effect', () => {
       let totalExecutions = 0;
 
       // High per-effect limit but lower global limit should eventually trigger
-      const e = effect(
+      const effectHandle = effect(
         () => {
           totalExecutions++;
           a.value;
@@ -450,7 +450,7 @@ describe('Effect', () => {
 
       expect(totalExecutions).toBeGreaterThan(1);
 
-      if (!e.isDisposed) e.dispose();
+      if (!effectHandle.isDisposed) effectHandle.dispose();
       consoleError.mockRestore();
     });
   });
@@ -460,16 +460,16 @@ describe('Effect', () => {
       vi.useRealTimers();
       const cleanup = vi.fn();
 
-      const e = effect(async () => {
+      const effectHandle = effect(async () => {
         await sleep(10);
         return cleanup;
       });
 
-      e.dispose();
+      effectHandle.dispose();
 
       await sleep(50);
 
-      expect(e.isDisposed).toBe(true);
+      expect(effectHandle.isDisposed).toBe(true);
     });
   });
 });

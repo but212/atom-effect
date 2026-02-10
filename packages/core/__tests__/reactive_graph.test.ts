@@ -31,8 +31,8 @@ const framework = {
     };
   },
   effect: (fn: () => void) => {
-    const e = effect(fn);
-    return () => e.dispose();
+    const effectHandle = effect(fn);
+    return () => effectHandle.dispose();
   },
   withBuild: <T>(fn: () => T) => fn(),
   withBatch: (fn: () => void) => batch(fn),

@@ -62,7 +62,7 @@ import { atom, effect } from '@but212/atom-effect';
 
 const name = atom('World');
 
-const e = effect(() => {
+const effectHandle = effect(() => {
   console.log(`Hello, ${name.value}!`);
   // Optional cleanup function
   return () => console.log('Cleaning up...');
@@ -72,7 +72,7 @@ const e = effect(() => {
 name.value = 'Alice';
 // (after microtask) Logs: "Cleaning up..." then "Hello, Alice!"
 
-e.dispose(); // Stop watching
+effectHandle.dispose(); // Stop watching
 ```
 
 **Key behavior**:
@@ -203,9 +203,9 @@ effect(() => {
 Effects keep running until disposed. Always clean up in component lifecycles:
 
 ```typescript
-const e = effect(() => { /* ... */ });
+const effectHandle = effect(() => { /* ... */ });
 // Later:
-e.dispose();
+effectHandle.dispose();
 ```
 
 ### 2. Writing Inside Computed

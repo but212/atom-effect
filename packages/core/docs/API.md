@@ -86,7 +86,7 @@ Runs a side effect immediately, and re-runs it whenever dependencies change.
 ### Example - effect
 
 ```typescript
-const e = effect(() => {
+const effectHandle = effect(() => {
   const currentCount = count.value;
   document.title = `Count: ${currentCount}`;
 
@@ -97,7 +97,7 @@ const e = effect(() => {
 });
 
 // Later: stop the effect
-e.dispose();
+effectHandle.dispose();
 ```
 
 `effect()` returns an `EffectObject` with the following properties:

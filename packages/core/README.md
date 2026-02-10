@@ -24,7 +24,7 @@ const multiplier = atom(2);
 const doubled = computed(() => count.value * multiplier.value);
 
 // 3. React to Changes
-const e = effect(() => {
+const effectHandle = effect(() => {
   console.log(`Count: ${count.value}, Doubled: ${doubled.value}`);
 });
 // Output: "Count: 0, Doubled: 0"
