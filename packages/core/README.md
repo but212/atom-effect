@@ -24,7 +24,7 @@ const multiplier = atom(2);
 const doubled = computed(() => count.value * multiplier.value);
 
 // 3. React to Changes
-const dispose = effect(() => {
+const e = effect(() => {
   console.log(`Count: ${count.value}, Doubled: ${doubled.value}`);
 });
 // Output: "Count: 0, Doubled: 0"
@@ -34,12 +34,13 @@ count.value = 1;
 // Output: "Count: 1, Doubled: 2"
 
 // 5. Cleanup
-dispose();
+e.dispose();
 ```
 
 ## Documentation
 
-- [**API Reference**](./docs/API.md): Detailed usage of `atom`, `computed`, `effect`.
+- [**Onboarding Guide**](./docs/ONBOARDING.md): Mental model, key concepts, and common pitfalls.
+- [**API Reference**](./docs/API.md): Detailed usage of `atom`, `computed`, `effect`, `batch`, `untracked`.
 - [**Architecture**](./docs/ARCHITECTURE.md): Deep dive into the epoch-based propagation system.
 
 ## License

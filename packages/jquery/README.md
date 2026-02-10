@@ -51,6 +51,8 @@ $('#content').atomHtml($.computed(() => DOMPurify.sanitize(rawHTML.value)));
 ## Documentation
 
 - [**API Reference**](./docs/API.md): Full list of bindings (`atomText`, `atomVal`, `atomBind`...).
+- [**Architecture**](./docs/ARCHITECTURE.md): Internal design — binding pipeline, lifecycle management, list reconciliation.
+- [**Security Guide**](./docs/SECURITY.md): HTML sanitization and DOMPurify integration.
 - [**Common Patterns**](./docs/PATTERNS.md): How to handle async loading, modals, and legacy plugins.
 
 ## License
