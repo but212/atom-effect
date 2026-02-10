@@ -3,10 +3,8 @@
  * @description Real-world scenario: Todo CRUD with full DOM reflection via jQuery bindings
  */
 
-import { atom, computed } from '@but212/atom-effect';
-import $ from 'jquery';
 import { bench, describe } from 'vitest';
-import '../../src/index';
+import $ from '../../src/index';
 import { cleanupContainer, createContainer, macroBenchOptions } from '../utils/setup';
 
 interface Todo {
@@ -25,7 +23,7 @@ describe('Todo App — DOM Scenarios', () => {
     'add 50 todos (atomList + render)',
     () => {
       const $c = createContainer();
-      const todos = atom<Todo[]>([]);
+      const todos = $.atom<Todo[]>([]);
       $c.atomList(todos, {
         key: 'id',
         render: (todo) =>
@@ -45,7 +43,7 @@ describe('Todo App — DOM Scenarios', () => {
     () => {
       const $c = createContainer();
       const initial = Array.from({ length: 50 }, (_, i) => createTodo(`Task ${i}`));
-      const todos = atom<Todo[]>(initial);
+      const todos = $.atom<Todo[]>(initial);
 
       $c.atomList(todos, {
         key: 'id',
@@ -67,14 +65,14 @@ describe('Todo App — DOM Scenarios', () => {
     'filter switch (computed → atomList re-render)',
     () => {
       const $c = createContainer();
-      const allTodos = atom<Todo[]>(
+      const allTodos = $.atom<Todo[]>(
         Array.from({ length: 100 }, (_, i) => ({
           ...createTodo(`Task ${i}`),
           completed: i % 3 === 0,
         }))
       );
-      const filter = atom<'all' | 'active' | 'completed'>('all');
-      const filtered = computed(() => {
+      const filter = $.atom<'all' | 'active' | 'completed'>('all');
+      const filtered = $.computed(() => {
         const f = filter.value;
         if (f === 'all') return allTodos.value;
         if (f === 'active') return allTodos.value.filter((t) => !t.completed);
@@ -99,9 +97,9 @@ describe('Todo App — DOM Scenarios', () => {
     'full workflow: add → toggle → filter → delete',
     () => {
       const $c = createContainer();
-      const todos = atom<Todo[]>([]);
-      const filter = atom<'all' | 'active' | 'completed'>('all');
-      const filtered = computed(() => {
+      const todos = $.atom<Todo[]>([]);
+      const filter = $.atom<'all' | 'active' | 'completed'>('all');
+      const filtered = $.computed(() => {
         const f = filter.value;
         if (f === 'all') return todos.value;
         if (f === 'active') return todos.value.filter((t) => !t.completed);
@@ -109,13 +107,13 @@ describe('Todo App — DOM Scenarios', () => {
       });
 
       // Stats
-      const totalCount = computed(() => todos.value.length);
-      const completedCount = computed(() => todos.value.filter((t) => t.completed).length);
+      const totalCount = $.computed(() => todos.value.length);
+      const completedCount = $.computed(() => todos.value.filter((t) => t.completed).length);
 
       // DOM
       const $list = $('<ul></ul>').appendTo($c);
       const $stats = $('<div class="stats"></div>').appendTo($c);
-      $stats.atomText(computed(() => `${completedCount.value}/${totalCount.value} completed`));
+      $stats.atomText($.computed(() => `${completedCount.value}/${totalCount.value} completed`));
 
       $list.atomList(filtered, {
         key: 'id',
@@ -150,10 +148,10 @@ describe('Todo App — Stats with Effects', () => {
     'todo stats auto-update (add 100 items)',
     () => {
       const $c = createContainer();
-      const todos = atom<Todo[]>([]);
-      const total = computed(() => todos.value.length);
-      const done = computed(() => todos.value.filter((t) => t.completed).length);
-      const rate = computed(() => (total.value === 0 ? 0 : (done.value / total.value) * 100));
+      const todos = $.atom<Todo[]>([]);
+      const total = $.computed(() => todos.value.length);
+      const done = $.computed(() => todos.value.filter((t) => t.completed).length);
+      const rate = $.computed(() => (total.value === 0 ? 0 : (done.value / total.value) * 100));
 
       $('<span class="total"></span>').appendTo($c).atomText(total);
       $('<span class="done"></span>').appendTo($c).atomText(done);

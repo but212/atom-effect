@@ -5,10 +5,8 @@
  * NOTE: Running in jsdom — measures binding overhead, not real browser rendering.
  */
 
-import { atom } from '@but212/atom-effect';
-import $ from 'jquery';
 import { bench, describe } from 'vitest';
-import '../../src/index';
+import $ from '../../src/index';
 import { cleanupContainer, createContainer, microBenchOptions } from '../utils/setup';
 
 describe('atomText Binding', () => {
@@ -16,7 +14,7 @@ describe('atomText Binding', () => {
     'create 100 text bindings',
     () => {
       const $c = createContainer();
-      const source = atom('hello');
+      const source = $.atom('hello');
       for (let i = 0; i < 100; i++) {
         $('<span></span>').appendTo($c).atomText(source);
       }
@@ -29,7 +27,7 @@ describe('atomText Binding', () => {
     'update text propagation (100 elements x 50 updates)',
     () => {
       const $c = createContainer();
-      const source = atom('initial');
+      const source = $.atom('initial');
       for (let i = 0; i < 100; i++) {
         $('<span></span>').appendTo($c).atomText(source);
       }
@@ -45,7 +43,7 @@ describe('atomText Binding', () => {
     'text binding with formatter (100 elements x 50 updates)',
     () => {
       const $c = createContainer();
-      const source = atom(42);
+      const source = $.atom(42);
       for (let i = 0; i < 100; i++) {
         $('<span></span>')
           .appendTo($c)
@@ -65,7 +63,7 @@ describe('atomHtml Binding', () => {
     'create 100 html bindings',
     () => {
       const $c = createContainer();
-      const source = atom('<em>bold</em>');
+      const source = $.atom('<em>bold</em>');
       for (let i = 0; i < 100; i++) {
         $('<div></div>').appendTo($c).atomHtml(source);
       }
@@ -78,7 +76,7 @@ describe('atomHtml Binding', () => {
     'update html propagation (100 elements x 50 updates)',
     () => {
       const $c = createContainer();
-      const source = atom('<em>initial</em>');
+      const source = $.atom('<em>initial</em>');
       for (let i = 0; i < 100; i++) {
         $('<div></div>').appendTo($c).atomHtml(source);
       }
@@ -96,7 +94,7 @@ describe('atomClass Binding', () => {
     'create 100 class bindings',
     () => {
       const $c = createContainer();
-      const condition = atom(false);
+      const condition = $.atom(false);
       for (let i = 0; i < 100; i++) {
         $('<div></div>').appendTo($c).atomClass('active', condition);
       }
@@ -109,7 +107,7 @@ describe('atomClass Binding', () => {
     'toggle class (100 elements x 100 toggles)',
     () => {
       const $c = createContainer();
-      const condition = atom(false);
+      const condition = $.atom(false);
       for (let i = 0; i < 100; i++) {
         $('<div></div>').appendTo($c).atomClass('active', condition);
       }
@@ -127,7 +125,7 @@ describe('atomCss Binding', () => {
     'create 100 css bindings',
     () => {
       const $c = createContainer();
-      const width = atom(100);
+      const width = $.atom(100);
       for (let i = 0; i < 100; i++) {
         $('<div></div>').appendTo($c).atomCss('width', width, 'px');
       }
@@ -140,7 +138,7 @@ describe('atomCss Binding', () => {
     'update css (100 elements x 100 updates)',
     () => {
       const $c = createContainer();
-      const width = atom(100);
+      const width = $.atom(100);
       for (let i = 0; i < 100; i++) {
         $('<div></div>').appendTo($c).atomCss('width', width, 'px');
       }
@@ -158,7 +156,7 @@ describe('atomAttr Binding', () => {
     'create + update attr (100 elements x 100 updates)',
     () => {
       const $c = createContainer();
-      const href = atom('#initial');
+      const href = $.atom('#initial');
       for (let i = 0; i < 100; i++) {
         $('<a></a>').appendTo($c).atomAttr('href', href);
       }
@@ -176,7 +174,7 @@ describe('atomProp Binding', () => {
     'create + update prop (100 elements x 100 updates)',
     () => {
       const $c = createContainer();
-      const disabled = atom(false);
+      const disabled = $.atom(false);
       for (let i = 0; i < 100; i++) {
         $('<button></button>').appendTo($c).atomProp('disabled', disabled);
       }
@@ -189,12 +187,12 @@ describe('atomProp Binding', () => {
   );
 });
 
-describe('atomShow / atomHide Binding', () => {
+describe('atomShow / $.atomHide Binding', () => {
   bench(
     'show toggle (100 elements x 100 toggles)',
     () => {
       const $c = createContainer();
-      const visible = atom(true);
+      const visible = $.atom(true);
       for (let i = 0; i < 100; i++) {
         $('<div>item</div>').appendTo($c).atomShow(visible);
       }
@@ -210,7 +208,7 @@ describe('atomShow / atomHide Binding', () => {
     'hide toggle (100 elements x 100 toggles)',
     () => {
       const $c = createContainer();
-      const hidden = atom(false);
+      const hidden = $.atom(false);
       for (let i = 0; i < 100; i++) {
         $('<div>item</div>').appendTo($c).atomHide(hidden);
       }
@@ -228,9 +226,9 @@ describe('atomBind (unified)', () => {
     'create composite binding (text + class + css + show) x 100',
     () => {
       const $c = createContainer();
-      const text = atom('hello');
-      const isActive = atom(true);
-      const width = atom(100);
+      const text = $.atom('hello');
+      const isActive = $.atom(true);
+      const width = $.atom(100);
       for (let i = 0; i < 100; i++) {
         $('<div></div>')
           .appendTo($c)
@@ -250,9 +248,9 @@ describe('atomBind (unified)', () => {
     'update composite binding (100 elements x 50 updates)',
     () => {
       const $c = createContainer();
-      const text = atom('hello');
-      const isActive = atom(true);
-      const width = atom(100);
+      const text = $.atom('hello');
+      const isActive = $.atom(true);
+      const width = $.atom(100);
       for (let i = 0; i < 100; i++) {
         $('<div></div>')
           .appendTo($c)
