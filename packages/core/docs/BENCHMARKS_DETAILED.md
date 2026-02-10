@@ -1,7 +1,7 @@
 # Benchmark Results - Detailed
 
-**Last Updated**: 2026-02-08  
-**Version**: v0.19.0  
+**Last Updated**: 2026-02-10
+**Version**: v0.20.0
 **Environment**:
 
 - **Node.js**: v20.x
@@ -15,75 +15,75 @@
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Create 1000 Atoms (Primitives) | 8,453 | 0.1183 | 0.7130 |
-| Create 1000 Atoms (Objects) | 8,444 | 0.1184 | 0.7569 |
-| Read 1000 Atoms (Value) | 36,193 | 0.0276 | 0.0364 |
-| Read 1000 Atoms (Peek) | 528,092 | 0.0019 | 0.0020 |
-| Write 1000 Atoms | 334,772 | 0.0030 | 0.0047 |
-| Subscribe/Unsubscribe (x100) | 299,794 | 0.0033 | 0.0060 |
-| Notify 1 Subscriber (x1000) | 26,711 | 0.0374 | 0.0470 |
-| Untracked Read (x1000) | 36,147 | 0.0277 | 0.0355 |
+| Create 1000 Atoms (Primitives) | 8,274 | 0.1209 | 0.7447 |
+| Create 1000 Atoms (Objects) | 7,792 | 0.1283 | 0.7981 |
+| Read 1000 Atoms (Value) | 40,732 | 0.0246 | 0.0289 |
+| Read 1000 Atoms (Peek) | 630,507 | 0.0016 | 0.0017 |
+| Write 1000 Atoms | 335,686 | 0.0030 | 0.0032 |
+| Subscribe/Unsubscribe (x100) | 304,010 | 0.0033 | 0.0045 |
+| Notify 1 Subscriber (x1000) | 29,682 | 0.0337 | 0.0420 |
+| Untracked Read (x1000) | 39,995 | 0.0250 | 0.0396 |
 
 ### Computed - Micro
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Create (Single Dep) (x1000) | 2,554 | 0.3914 | 1.1109 |
-| Create (3 Deps) (x1000) | 1,558 | 0.6418 | 1.3000 |
-| Create Chain (100) | 11,444 | 0.0874 | 0.1171 |
-| Read (Single Dep) (x1000) | 13,716 | 0.0729 | 0.0835 |
-| Read (Multiple) (x1000) | 12,967 | 0.0771 | 0.1049 |
-| Nested Computation (x1000) | 12,624 | 0.0792 | 0.1605 |
-| Recompute (Single Dep) | 796,534 | 0.0013 | 0.0016 |
-| Recompute (Chain of 10) | 148,659 | 0.0067 | 0.0130 |
-| No Recompute (Unchanged) (x1000) | 12,833 | 0.0779 | 0.0972 |
-| Lazy (Not Accessed) (x1000) | 2,730 | 0.3662 | 1.0524 |
-| Lazy (Accessed Once) | 705,166 | 0.0014 | 0.0018 |
-| Lazy (Multiple Access) | 618,027 | 0.0016 | 0.0019 |
-| Cache Invalidation | 783,188 | 0.0013 | 0.0021 |
-| Diamond Invalidation | 368,267 | 0.0027 | 0.0031 |
-| Dispose (x1000) | 2,010 | 0.4974 | 1.2045 |
-| Dispose Chain | 277,113 | 0.0036 | 0.0047 |
+| Create (Single Dep) (x1000) | 3,253 | 0.3074 | 1.1695 |
+| Create (3 Deps) (x1000) | 1,769 | 0.5653 | 1.3017 |
+| Create Chain (100) | 15,649 | 0.0639 | 0.0850 |
+| Read (Single Dep) (x1000) | 46,977 | 0.0213 | 0.0280 |
+| Read (Multiple) (x1000) | 46,639 | 0.0214 | 0.0382 |
+| Nested Computation (x1000) | 47,158 | 0.0212 | 0.0256 |
+| Recompute (Single Dep) | 1,119,692 | 0.0009 | 0.0013 |
+| Recompute (Chain of 10) | 190,095 | 0.0053 | 0.0064 |
+| No Recompute (Unchanged) (x1000) | 32,889 | 0.0304 | 0.0395 |
+| Lazy (Not Accessed) (x1000) | 3,307 | 0.3024 | 1.1229 |
+| Lazy (Accessed Once) | 944,280 | 0.0011 | 0.0014 |
+| Lazy (Multiple Access) | 983,641 | 0.0010 | 0.0016 |
+| Cache Invalidation | 1,039,574 | 0.0010 | 0.0015 |
+| Diamond Invalidation | 457,337 | 0.0022 | 0.0028 |
+| Dispose (x1000) | 2,475 | 0.4040 | 1.3464 |
+| Dispose Chain | 340,345 | 0.0029 | 0.0035 |
 
 ### Effect - Micro
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Create (Single Dep) | 302,360 | 0.0033 | 0.0055 |
-| Create (Multiple Deps) | 240,473 | 0.0042 | 0.0054 |
-| Create 10 Effects | 35,661 | 0.0280 | 0.0497 |
-| Execution (Dep Change) (x1000) | 15,364 | 0.0651 | 0.0857 |
-| Execution (Multiple) (x1000) | 7,529 | 0.1328 | 0.2689 |
-| With Computed Dep (x1000) | 14,507 | 0.0689 | 0.0903 |
-| Re-runs (10 times) | 955,684 | 0.0010 | 0.0014 |
-| Multiple on Same Dep (x1000) | 16,876 | 0.0593 | 0.0781 |
-| With Cleanup | 270,420 | 0.0037 | 0.0045 |
-| Cleanup on Dep Change (x1000) | 14,921 | 0.0670 | 0.0806 |
-| Dispose | 316,815 | 0.0032 | 0.0046 |
-| Dispose (with Cleanup) | 314,937 | 0.0032 | 0.0038 |
-| Dispose 10 Effects | 35,556 | 0.0281 | 0.0515 |
+| Create (Single Dep) | 879,714 | 0.0011 | 0.0016 |
+| Create (Multiple Deps) | 520,719 | 0.0019 | 0.0025 |
+| Create 10 Effects | 103,134 | 0.0097 | 0.0160 |
+| Execution (Dep Change) (x1000) | 18,589 | 0.0538 | 0.0638 |
+| Execution (Multiple) (x1000) | 8,809 | 0.1135 | 0.1307 |
+| With Computed Dep (x1000) | 18,704 | 0.0535 | 0.0621 |
+| Re-runs (10 times) | 1,100,380 | 0.0009 | 0.0014 |
+| Multiple on Same Dep (x1000) | 18,634 | 0.0537 | 0.0624 |
+| With Cleanup | 641,268 | 0.0016 | 0.0021 |
+| Cleanup on Dep Change (x1000) | 18,683 | 0.0535 | 0.0651 |
+| Dispose | 852,428 | 0.0012 | 0.0016 |
+| Dispose (with Cleanup) | 785,785 | 0.0013 | 0.0016 |
+| Dispose 10 Effects | 98,693 | 0.0101 | 0.0164 |
 
 ### Batch & Untracked - Micro
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Batch Update (2) (x1000) | 3,645 | 0.2743 | 0.3517 |
-| Batch Update (10) (x1000) | 1,850 | 0.5405 | 0.6364 |
-| Batch Update (100) | 286,573 | 0.0035 | 0.0050 |
-| Without Batch (10) | 558,948 | 0.0018 | 0.0021 |
-| With Batch (10) | 176,647 | 0.0057 | 0.0068 |
-| Nested Batch (2 levels) (x1000) | 2,279 | 0.4386 | 0.5987 |
-| Nested Batch (5 levels) (x1000) | 1,062 | 0.9411 | 1.1604 |
-| Batch with Computed | 296,244 | 0.0034 | 0.0040 |
-| Batch with Diamond | 294,651 | 0.0034 | 0.0040 |
+| Batch Update (2) (x1000) | 5,469 | 0.1828 | 0.2503 |
+| Batch Update (10) (x1000) | 2,273 | 0.4400 | 0.5121 |
+| Batch Update (100) | 309,149 | 0.0032 | 0.0043 |
+| Without Batch (10) | 796,789 | 0.0013 | 0.0018 |
+| With Batch (10) | 205,216 | 0.0049 | 0.0068 |
+| Nested Batch (2 levels) (x1000) | 3,898 | 0.2566 | 0.3695 |
+| Nested Batch (5 levels) (x1000) | 1,842 | 0.5429 | 0.6746 |
+| Batch with Computed | 371,173 | 0.0027 | 0.0035 |
+| Batch with Diamond | 394,788 | 0.0025 | 0.0033 |
 
 ### Propagation - Micro
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| 1 to 1 (Depth 1000) | 1,680 | 0.5951 | 1.0899 |
-| 1 to N (Fan Out 1000) | 1,423 | 0.7026 | 1.0736 |
-| N to 1 (Fan In 1000) | 11,357 | 0.0881 | 0.1757 |
+| 1 to 1 (Depth 1000) | 2,066 | 0.4841 | 0.9742 |
+| 1 to N (Fan Out 1000) | 1,874 | 0.5337 | 1.0557 |
+| N to 1 (Fan In 1000) | 9,067 | 0.1103 | 0.3497 |
 
 ## 2. Macro-Benchmarks
 
@@ -91,55 +91,55 @@
 
 | Scenario | ops/sec | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Create/Dispose 1K Atoms | 3,969 | 0.2519 | 0.8653 |
-| Create/Dispose 1K Computeds | 2,605 | 0.3838 | 1.0706 |
-| Create/Dispose 1K Effects | 295 | 3.3861 | 4.1460 |
-| Rapid GC (10K Cycles) | 524 | 1.9063 | 2.6082 |
-| Subscription Churn (1K) | 32,041 | 0.0312 | 0.1377 |
-| Object Pooling (10K) | 16 | 58.8256 | 59.0215 |
-| Weak Reference Cleanup (1K) | 2,592 | 0.3858 | 1.0961 |
-| Effect Cleanup (1K) | 105 | 9.4454 | 10.4750 |
-| Circular Reference Cleanup | 20,704 | 0.0483 | 0.0685 |
-| Large State Tree (10K) | 759 | 1.3170 | 2.0983 |
-| Memory Usage Monitoring | 160 | 6.2331 | 7.2572 |
+| Create/Dispose 1K Atoms | 4,023 | 0.2486 | 1.0015 |
+| Create/Dispose 1K Computeds | 3,240 | 0.3086 | 1.1430 |
+| Create/Dispose 1K Effects | 356 | 2.8117 | 4.0863 |
+| Rapid GC (10K Cycles) | 523 | 1.9114 | 2.7058 |
+| Subscription Churn (1K) | 31,742 | 0.0315 | 0.1379 |
+| Object Pooling (10K) | 21 | 46.9356 | 47.6533 |
+| Weak Reference Cleanup (1K) | 3,236 | 0.3090 | 1.1259 |
+| Effect Cleanup (1K) | 123 | 8.0990 | 9.2830 |
+| Circular Reference Cleanup | 21,034 | 0.0475 | 0.0592 |
+| Large State Tree (10K) | 906 | 1.1038 | 1.8980 |
+| Memory Usage Monitoring | 196 | 5.1051 | 6.3187 |
 
 ### Data Grid (1000 Rows) - Macro
 
 | Operation | ops/sec | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| [Vanilla] Initialize | 4,629 | 0.2160 | 0.4201 |
-| [Atom] Initialize | 4,667 | 0.2143 | 0.4333 |
-| [Vanilla] Sort (Name) | 4,350 | 0.2298 | 0.2685 |
-| [Atom] Sort (Name) | 1,798 | 0.5561 | 0.6753 |
-| [Vanilla] Filter (Department) | 436,414 | 0.0023 | 0.0032 |
-| [Atom] Filter (Department) | 24,781 | 0.0404 | 0.0491 |
-| [Vanilla] Sort + Filter + Paginate | 4,234 | 0.2362 | 0.3119 |
-| [Atom] Sort + Filter + Paginate | 1,865 | 0.5360 | 0.7153 |
-| Select/Deselect Rows | 1,928 | 0.5184 | 0.7241 |
+| [Vanilla] Initialize | 4,664 | 0.2144 | 0.4352 |
+| [Atom] Initialize | 4,645 | 0.2153 | 0.4534 |
+| [Vanilla] Sort (Name) | 4,319 | 0.2315 | 0.2609 |
+| [Atom] Sort (Name) | 1,951 | 0.5127 | 0.5738 |
+| [Vanilla] Filter (Department) | 500,833 | 0.0020 | 0.0026 |
+| [Atom] Filter (Department) | 25,282 | 0.0396 | 0.0444 |
+| [Vanilla] Sort + Filter + Paginate | 4,249 | 0.2354 | 0.2629 |
+| [Atom] Sort + Filter + Paginate | 1,905 | 0.5251 | 0.5658 |
+| Select/Deselect Rows | 2,031 | 0.4923 | 0.6617 |
 
 ### Dependency Graphs - Macro
 
 | Pattern | ops/sec | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Deep Chain (100 levels) | 18,120 | 0.0552 | 0.0721 |
-| Wide Fan-out (1→100) | 15,373 | 0.0650 | 0.0801 |
-| Diamond Pattern | 70,326 | 0.0142 | 0.0231 |
-| Pyramid (50 levels) | 26,410 | 0.0379 | 0.0492 |
-| Mixed (100A, 200C) | 54,293 | 0.0184 | 0.0261 |
-| Circular Avoidance | 337,251 | 0.0030 | 0.0037 |
-| Conditional Deps | 513,800 | 0.0019 | 0.0024 |
-| Array Dynamic Deps | 521,109 | 0.0019 | 0.0024 |
+| Deep Chain (100 levels) | 21,989 | 0.0455 | 0.0721 |
+| Wide Fan-out (1→100) | 19,391 | 0.0516 | 0.0675 |
+| Diamond Pattern | 78,865 | 0.0127 | 0.0199 |
+| Pyramid (50 levels) | 32,187 | 0.0311 | 0.0402 |
+| Mixed (100A, 200C) | 123,484 | 0.0081 | 0.0118 |
+| Circular Avoidance | 399,515 | 0.0025 | 0.0033 |
+| Conditional Deps | 667,386 | 0.0015 | 0.0020 |
+| Array Dynamic Deps | 685,487 | 0.0015 | 0.0020 |
 
 ### Todo App (100 Items) - Macro
 
 | Action | ops/sec | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Create 100 Todos | 782,041 | 0.0013 | 0.0023 |
-| Toggle Completion | 9,263 | 0.1079 | 0.1343 |
-| Filter (Active/Completed) | 607,435 | 0.0016 | 0.0025 |
-| Delete (50 from 100) | 41,985 | 0.0238 | 0.0469 |
-| Complete Workflow | 176,114 | 0.0057 | 0.0118 |
-| Stats with Auto-update | 491,408 | 0.0020 | 0.0046 |
+| Create 100 Todos | 921,941 | 0.0011 | 0.0021 |
+| Toggle Completion | 9,575 | 0.1044 | 0.1300 |
+| Filter (Active/Completed) | 806,462 | 0.0012 | 0.0019 |
+| Delete (50 from 100) | 43,216 | 0.0231 | 0.0458 |
+| Complete Workflow | 191,054 | 0.0052 | 0.0106 |
+| Stats with Auto-update | 565,788 | 0.0018 | 0.0030 |
 
 ## 3. Realistic-Benchmarks
 
@@ -147,24 +147,24 @@
 
 | Scenario | ops/sec | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Updates per frame (100 atoms) | 51,824 | 0.0193 | 0.0413 |
-| Updates per frame (100 atoms, batched) | 27,429 | 0.0365 | 0.0924 |
+| Updates per frame (100 atoms) | 86,921 | 0.0115 | 0.0186 |
+| Updates per frame (100 atoms, batched) | 34,520 | 0.0290 | 0.0388 |
 
 ### Memory Stability
 
 | Scenario | ops/sec | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Memory after component churn | 4,128 | 0.2422 | 0.9367 |
+| Memory after component churn | 8,886 | 0.1125 | 0.4101 |
 
 ### Batch Efficiency
 
 | Scenario | ops/sec | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Form reset (batch) | 135,872 | 0.0074 | 0.0156 |
-| Form reset (no batch) | 439,527 | 0.0023 | 0.0036 |
+| Form reset (batch) | 171,311 | 0.0058 | 0.0091 |
+| Form reset (no batch) | 609,213 | 0.0016 | 0.0025 |
 
 ### Input Latency
 
 | Scenario | ops/sec | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Input to render latency | 778,307 | 0.0013 | 0.0018 |
+| Input to render latency | 793,777 | 0.0013 | 0.0016 |
