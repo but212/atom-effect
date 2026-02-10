@@ -37,6 +37,9 @@
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
+    "bench": "vitest bench --config vitest.bench.config.ts",
+    "bench:micro": "pnpm run bench __benchmarks__/micro",
+    "bench:macro": "pnpm run bench __benchmarks__/macro",
     "prepublishOnly": "pnpm run build"
   },
   "author": "but212",

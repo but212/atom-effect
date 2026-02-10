@@ -29,6 +29,14 @@ jobs:
         working-directory: packages/core
         run: pnpm bench:realistic | tee ../../benchmark-realistic.txt
 
+      - name: Run jQuery micro benchmarks
+        working-directory: packages/jquery
+        run: pnpm bench:micro | tee ../../benchmark-jquery-micro.txt
+
+      - name: Run jQuery macro benchmarks
+        working-directory: packages/jquery
+        run: pnpm bench:macro | tee ../../benchmark-jquery-macro.txt
+
       - name: Upload benchmark results
         uses: actions/upload-artifact@v6
         with:
@@ -37,3 +45,5 @@ jobs:
             benchmark-micro.txt
             benchmark-macro.txt
             benchmark-realistic.txt
+            benchmark-jquery-micro.txt
+            benchmark-jquery-macro.txt

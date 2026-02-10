@@ -68,6 +68,22 @@ header {
   margin-bottom: 60px;
 }
 
+.section {
+  grid-column: 1 / -1;
+  margin-bottom: 60px;
+}
+
+.section-title {
+  font-size: 2rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  margin-bottom: 30px;
+  letter-spacing: -1px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
 /* Typography & Branding */
 .logo {
   font-weight: 900;
@@ -116,11 +132,27 @@ header {
   box-shadow: 12px 12px 0px var(--primary-red);
 }
 
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.card-header h3 {
+  font-weight: 900;
+  text-transform: uppercase;
+  font-size: 1rem;
+}
+
 .card-title {
   font-weight: 900;
   text-transform: uppercase;
   letter-spacing: -1px;
   margin-bottom: 24px;
+  font-size: 1.5rem;
+  display: flex;
+  justify-content: space-between;
 }
 
 /* Components: Buttons */
@@ -131,6 +163,14 @@ header {
   cursor: pointer;
   background: var(--white);
   box-shadow: 6px 6px 0px var(--black);
+
+  /* Integrated Standard Size */
+  padding: 15px 30px;
+  font-size: 0.85rem;
+  letter-spacing: 1px;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
 }
 
 .btn:hover {
@@ -154,6 +194,24 @@ header {
   color: var(--primary-red);
 }
 
+.btn-success {
+  background: var(--primary-blue);
+  color: var(--white);
+}
+
+.btn-fail {
+  background: var(--primary-red);
+  color: var(--white);
+}
+
+.btn-increment {
+  color: var(--primary-blue);
+}
+
+.btn-decrement {
+  color: var(--primary-red);
+}
+
 /* Components: Code Blocks */
 .code-block {
   background: #f8f8f8;
@@ -163,12 +221,14 @@ header {
   font-size: 0.85rem;
   line-height: 1.5;
   overflow-x: auto;
+  margin-bottom: 20px;
 }
 .code-keyword {
   color: var(--primary-red);
   font-weight: 700;
 }
-.code-function {
+.code-function,
+.code-fn {
   color: var(--primary-blue);
   font-weight: 700;
 }
@@ -178,6 +238,69 @@ header {
 .code-comment {
   color: #999;
   font-style: italic;
+}
+
+.code-tag {
+  font-size: 0.75rem;
+  font-weight: 900;
+  padding: 4px 10px;
+  border: 2px solid var(--black);
+  text-transform: uppercase;
+}
+.code-tag.bad {
+  background: var(--primary-red);
+  color: var(--white);
+}
+.code-tag.good {
+  background: var(--status-resolved);
+  color: var(--white);
+}
+
+/* Components: Inputs & Status */
+.search-input {
+  width: 100%;
+  padding: 16px;
+  border: 3px solid var(--black);
+  font-family: inherit;
+  font-size: 1.25rem;
+  font-weight: 700;
+  outline: none;
+  transition: transform 0.2s;
+}
+.search-input:focus {
+  transform: translate(-4px, -4px);
+  box-shadow: 4px 4px 0px var(--primary-blue);
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  font-size: 0.85rem;
+  letter-spacing: 1px;
+}
+.status::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--black);
+}
+.status-idle::before {
+  background: var(--white);
+}
+.status-pending {
+  color: var(--black);
+}
+.status-pending::before {
+  background: var(--primary-yellow);
+}
+.status-resolved::before {
+  background: var(--status-resolved);
+}
+.status-rejected::before {
+  background: var(--primary-red);
 }
 
 /* Info Sections */
@@ -190,6 +313,12 @@ header {
 }
 .info-card {
   grid-column: span 6;
+}
+
+.info-content {
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--black);
 }
 
 .info-tag {
@@ -256,5 +385,14 @@ footer {
 @media (max-width: 900px) {
   .info-card {
     grid-column: 1 / -1;
+  }
+
+  .grid-main,
+  .grid-side,
+  .comparison-grid,
+  .pipeline {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
   }
 }
