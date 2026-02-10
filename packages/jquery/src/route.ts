@@ -125,6 +125,7 @@ export function route(config: RouteConfig): Router {
    */
   const setUrl = (routeName: string): void => {
     if (isHistoryMode) {
+      // Remove trailing slash from basePath if present
       const url = `${basePath.replace(/\/$/, '')}/${routeName}`;
       history.pushState(null, '', url);
       previousUrl = url;
