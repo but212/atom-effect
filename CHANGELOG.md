@@ -29,6 +29,7 @@
 - **Visibility Logic Merger**: Merged `bindShow` and `bindHide` implementations into a single `bindVisibility` function to reduce code footprint.
 - **CSS Binding Unification**: Unified `bindCss` rendering logic to handle both array and string values within a single pass.
 - **Router Simplification**: Replaced manual query string parsing with standard `URLSearchParams` for more robust and standard-compliant route handling.
+- **pushState**: Added pushState support to the router.
 - **Debug UI Simplification**: Simplified the visual highlight implementation to avoid complex DOM manipulation.
 
 #### Changed - jQuery

@@ -20,8 +20,8 @@ describe('type-guards', () => {
   });
 
   it('should identify effects', () => {
-    const e = effect(() => {});
-    expect(isEffect(e)).toBe(true);
+    const effectHandle = effect(() => {});
+    expect(isEffect(effectHandle)).toBe(true);
     expect(isEffect({})).toBe(false);
   });
 

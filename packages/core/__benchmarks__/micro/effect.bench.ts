@@ -15,10 +15,10 @@ describe('Effect Creation', () => {
     () => {
       const a = atom(0);
       let _value = 0;
-      const e = effect(() => {
+      const effectHandle = effect(() => {
         _value = a.value;
       });
-      e.dispose();
+      effectHandle.dispose();
     },
     microBenchOptions
   );
@@ -30,10 +30,10 @@ describe('Effect Creation', () => {
       const b = atom(2);
       const c = atom(3);
       let _sum = 0;
-      const e = effect(() => {
+      const effectHandle = effect(() => {
         _sum = a.value + b.value + c.value;
       });
-      e.dispose();
+      effectHandle.dispose();
     },
     microBenchOptions
   );
@@ -169,14 +169,14 @@ describe('Effect Cleanup', () => {
     () => {
       const a = atom(0);
       let _cleaned = false;
-      const e = effect(() => {
+      const effectHandle = effect(() => {
         const _ = a.value;
         return () => {
           _cleaned = true;
         };
       });
       a.value = 1; // Triggers cleanup
-      e.dispose(); // Triggers final cleanup
+      effectHandle.dispose(); // Triggers final cleanup
     },
     microBenchOptions
   );
@@ -198,10 +198,10 @@ describe('Effect Disposal', () => {
     () => {
       const a = atom(0);
       let _value = 0;
-      const e = effect(() => {
+      const effectHandle = effect(() => {
         _value = a.value;
       });
-      e.dispose();
+      effectHandle.dispose();
     },
     microBenchOptions
   );
@@ -211,13 +211,13 @@ describe('Effect Disposal', () => {
     () => {
       const a = atom(0);
       let _cleaned = false;
-      const e = effect(() => {
+      const effectHandle = effect(() => {
         const _ = a.value;
         return () => {
           _cleaned = true;
         };
       });
-      e.dispose();
+      effectHandle.dispose();
     },
     microBenchOptions
   );

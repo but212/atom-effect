@@ -30,7 +30,7 @@ export interface ReadonlyAtom<T = unknown> {
    * @param listener - Function called when value changes.
    * @returns Unsubscribe function.
    */
-  subscribe(listener: (newValue?: T, oldValue?: T) => void): () => void;
+  subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void;
 
   /**
    * Non-reactive read.

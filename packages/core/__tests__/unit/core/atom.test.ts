@@ -147,6 +147,53 @@ describe('Atom - Error Handling and Edge Cases', () => {
     expect(listener2).not.toHaveBeenCalled();
   });
 
+  describe('Duplicate Subscriber Detection', () => {
+    it('returns empty unsubscribe and warns on duplicate function subscriber', async () => {
+      const count = atom(0);
+      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const listener = vi.fn();
+
+      const unsub1 = count.subscribe(listener);
+      expect(consoleWarn).not.toHaveBeenCalled();
+
+      // Second subscribe with same function: returns noop unsub + warns (lines 48-49)
+      const unsub2 = count.subscribe(listener);
+      expect(consoleWarn).toHaveBeenCalledWith('Duplicate subscription ignored.');
+
+      // The noop unsub should not affect original subscription
+      unsub2();
+
+      count.value = 1;
+      await waitForScheduler();
+      expect(listener).toHaveBeenCalled();
+
+      unsub1();
+      consoleWarn.mockRestore();
+    });
+
+    it('returns empty unsubscribe and warns on duplicate Subscriber object', async () => {
+      const count = atom(0);
+      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const sub = { execute: vi.fn() };
+
+      count.subscribe(sub);
+      expect(consoleWarn).not.toHaveBeenCalled();
+
+      // Duplicate subscriber object
+      const unsub2 = count.subscribe(sub);
+      expect(consoleWarn).toHaveBeenCalledWith('Duplicate subscription ignored.');
+
+      // Noop unsub
+      unsub2();
+
+      count.value = 1;
+      await waitForScheduler();
+      expect(sub.execute).toHaveBeenCalled();
+
+      consoleWarn.mockRestore();
+    });
+  });
+
   describe('Debug and Tracking', () => {
     it('provides subscriberCount in debug mode', () => {
       const wasEnabled = debug.enabled;
@@ -157,7 +204,7 @@ describe('Atom - Error Handling and Edge Cases', () => {
 
       if (atomWithDebug.subscriberCount) {
         expect(atomWithDebug.subscriberCount()).toBe(0);
-        count.subscribe(vi.fn());
+        count.subscribe(vi.fn() as unknown as (n?: number, o?: number) => void);
         expect(atomWithDebug.subscriberCount()).toBe(1);
       }
 

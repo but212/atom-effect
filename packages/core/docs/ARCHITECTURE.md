@@ -12,7 +12,7 @@ Every time a mutation starts (e.g., `atom.value = ...`), we increment a global *
 Every signal (atom, computed) tracks:
 
 1. `version`: When it last changed.
-2. `lastSeenEpoch`: When it was last verified.
+2. `_lastSeenEpoch`: Used for dependency deduplication — prevents the same dependency from being tracked twice within a single computation or effect execution.
 
 When you read a `computed` value, it checks:
 > "Are any of my dependencies changed since I last ran?"
@@ -43,9 +43,28 @@ When a `computed` returns a Promise:
 
 We use bitwise flags (integers) for high-performance state tracking:
 
+**Computed flags** (`COMPUTED_STATE_FLAGS`):
+
+- `DISPOSED`: Node has been cleaned up.
+- `IS_COMPUTED`: Marker bit to identify computed nodes.
 - `DIRTY`: Needs re-evaluation.
+- `IDLE`: Initial state before first computation.
+- `PENDING`: Async computation is in progress.
+- `RESOLVED`: Value has been successfully computed.
+- `REJECTED`: Computation threw an error.
 - `RECOMPUTING`: Currently running (detects circular deps).
-- `RESOLVED` / `REJECTED`: Async states.
+- `HAS_ERROR`: This node or its dependencies have errors.
+
+**Atom flags** (`ATOM_STATE_FLAGS`):
+
+- `DISPOSED`: Node has been cleaned up.
+- `SYNC`: Synchronous notification mode.
+- `NOTIFICATION_SCHEDULED`: A notification is already queued.
+
+**Effect flags** (`EFFECT_STATE_FLAGS`):
+
+- `DISPOSED`: Effect has been cleaned up.
+- `EXECUTING`: Effect is currently running.
 
 ## 4. Memory Management
 

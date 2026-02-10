@@ -9,10 +9,11 @@ import type { RouteConfig, RouteDefinition, Router, WritableAtom } from './types
 const LOG_PREFIX = '[$.route]';
 
 /**
- * Creates a hash-based SPA router with reactive state management.
+ * Creates an SPA router with reactive state management.
+ * Supports both hash-based and pushState-based (history) routing.
  *
  * This removes boilerplate from manual route handling by:
- * - Automatically tracking hash changes and updating the UI
+ * - Automatically tracking URL changes and updating the UI
  * - Managing template rendering with lifecycle hooks
  * - Handling active link states reactively
  * - Providing navigation guard support (onLeave)
@@ -38,26 +39,46 @@ export function route(config: RouteConfig): Router {
     default: defaultRoute,
     routes,
     notFound,
+    mode = 'hash',
+    basePath = '',
     autoBindLinks = false,
     activeClass = 'active',
     beforeTransition,
     afterTransition,
   } = config;
 
+  const isHistoryMode = mode === 'history';
+
   let isDestroyed = false;
   let previousRoute: string | null = null;
-  let previousHash: string = window.location.hash;
+  let previousUrl: string = isHistoryMode
+    ? window.location.pathname + window.location.search
+    : window.location.hash;
   const cleanups: Array<() => void> = [];
   const boundLinks = new Set<HTMLElement>(); // Track links for cleanup via registry
 
   // DOM references
   const $target = $(target);
 
+  // --- Mode-abstracted internal functions ---
+
   /**
-   * Extracts route name from current hash.
-   * Optimized to avoid array allocations.
+   * Extracts route name from current URL.
+   * Hash mode: parses window.location.hash
+   * History mode: extracts from pathname after basePath
    */
-  const getHashRoute = (): string => {
+  const getRouteName = (): string => {
+    if (isHistoryMode) {
+      let pathname = window.location.pathname;
+      // Remove basePath prefix
+      if (basePath && pathname.startsWith(basePath)) {
+        pathname = pathname.substring(basePath.length);
+      }
+      // Remove leading slash and extract route name (before any query)
+      const routeName = pathname.replace(/^\//, '');
+      return routeName || defaultRoute;
+    }
+    // Hash mode
     const hash = window.location.hash;
     const qIndex = hash.indexOf('?');
     const routeName = qIndex === -1 ? hash.substring(1) : hash.substring(1, qIndex);
@@ -65,14 +86,23 @@ export function route(config: RouteConfig): Router {
   };
 
   /**
-   * Parses query parameters from hash string.
-   * @example parseQueryParams('#home?id=123&name=test') // { id: '123', name: 'test' }
+   * Parses query parameters from the current URL.
+   * Hash mode: parses from hash string (after ?)
+   * History mode: parses from window.location.search
    */
-  const parseQueryParams = (hash: string): Record<string, string> => {
-    const qIndex = hash.indexOf('?');
-    if (qIndex === -1) return {};
+  const getQueryParams = (): Record<string, string> => {
+    let raw: string;
 
-    const raw = hash.substring(qIndex + 1);
+    if (isHistoryMode) {
+      raw = window.location.search.substring(1); // Remove leading '?'
+      if (!raw) return {};
+    } else {
+      const hash = window.location.hash;
+      const qIndex = hash.indexOf('?');
+      if (qIndex === -1) return {};
+      raw = hash.substring(qIndex + 1);
+    }
+
     const sp = new URLSearchParams(raw);
     const params: Record<string, string> = Object.fromEntries(sp);
 
@@ -87,6 +117,49 @@ export function route(config: RouteConfig): Router {
 
     return params;
   };
+
+  /**
+   * Updates the URL to reflect a new route.
+   * Hash mode: sets window.location.hash
+   * History mode: calls history.pushState
+   */
+  const setUrl = (routeName: string): void => {
+    if (isHistoryMode) {
+      // Remove trailing slash from basePath if present
+      const url = `${basePath.replace(/\/$/, '')}/${routeName}`;
+      history.pushState(null, '', url);
+      previousUrl = url;
+    } else {
+      const hash = `#${routeName}`;
+      previousUrl = hash;
+      window.location.hash = hash;
+    }
+  };
+
+  /**
+   * Restores the URL when a navigation guard blocks the transition.
+   * Hash mode: reverts window.location.hash
+   * History mode: calls history.replaceState
+   */
+  const restoreUrl = (): void => {
+    if (isHistoryMode) {
+      history.replaceState(null, '', previousUrl);
+    } else {
+      window.location.hash = previousUrl;
+    }
+  };
+
+  /**
+   * Returns the current full URL string for comparison purposes.
+   */
+  const getCurrentUrl = (): string => {
+    if (isHistoryMode) {
+      return window.location.pathname + window.location.search;
+    }
+    return window.location.hash;
+  };
+
+  // --- End mode-abstracted functions ---
 
   /**
    * Resolves route configuration, falling back to notFound route if needed.
@@ -124,7 +197,7 @@ export function route(config: RouteConfig): Router {
     return true;
   };
 
-  const currentRoute: WritableAtom<string> = createAtom(getHashRoute());
+  const currentRoute: WritableAtom<string> = createAtom(getRouteName());
 
   /**
    * Renders the specified route, including lifecycle hooks and content.
@@ -145,7 +218,7 @@ export function route(config: RouteConfig): Router {
     if (!routeConfig) return;
 
     // Parse query parameters
-    const params = parseQueryParams(window.location.hash);
+    const params = getQueryParams();
 
     // Call beforeTransition hook
     if (beforeTransition) {
@@ -196,22 +269,21 @@ export function route(config: RouteConfig): Router {
       if (canLeave === false) return; // Navigation blocked
     }
 
-    // Update hash and state, and pre-set previousHash to prevent double render
-    previousHash = `#${routeName}`;
-    window.location.hash = previousHash;
+    // Update URL and state
+    setUrl(routeName);
     currentRoute.value = routeName; // Update immediately for synchronous behavior
   };
 
   /**
-   * Handles browser hash change events.
+   * Handles browser URL change events (hashchange or popstate).
    */
-  const handleHashChange = (): void => {
+  const handleUrlChange = (): void => {
     if (isDestroyed) return;
 
-    const currentHash = window.location.hash;
-    if (currentHash === previousHash) return; // No actual change, or already handled by navigate()
+    const currentUrl = getCurrentUrl();
+    if (currentUrl === previousUrl) return; // No actual change, or already handled by navigate()
 
-    const newRoute = getHashRoute();
+    const newRoute = getRouteName();
     const oldRouteName = currentRoute.value;
 
     if (oldRouteName !== newRoute) {
@@ -219,18 +291,18 @@ export function route(config: RouteConfig): Router {
       const oldRouteConfig = routes[oldRouteName];
       if (oldRouteConfig?.onLeave) {
         if (oldRouteConfig.onLeave() === false) {
-          // Navigation blocked, revert hash
-          window.location.hash = previousHash;
+          // Navigation blocked, revert URL
+          restoreUrl();
           return;
         }
       }
       currentRoute.value = newRoute;
     } else {
-      // Same route but hash changed (e.g., query params), manually re-render
+      // Same route but URL changed (e.g., query params), manually re-render
       renderRoute(newRoute);
     }
 
-    previousHash = currentHash;
+    previousUrl = currentUrl;
   };
 
   /**
@@ -326,7 +398,7 @@ export function route(config: RouteConfig): Router {
     if (isDestroyed) return;
     isDestroyed = true;
 
-    // Cleanup router-level effects (hashchange listener, render effect)
+    // Cleanup router-level effects (event listener, render effect)
     cleanups.forEach((cleanup) => cleanup());
     cleanups.length = 0;
 
@@ -336,9 +408,10 @@ export function route(config: RouteConfig): Router {
     boundLinks.clear();
   };
 
-  // Set up hash change listener
-  window.addEventListener('hashchange', handleHashChange);
-  cleanups.push(() => window.removeEventListener('hashchange', handleHashChange));
+  // Set up URL change listener (hashchange for hash mode, popstate for history mode)
+  const eventName = isHistoryMode ? 'popstate' : 'hashchange';
+  window.addEventListener(eventName, handleUrlChange);
+  cleanups.push(() => window.removeEventListener(eventName, handleUrlChange));
 
   // Initialize: Set up reactive rendering effect
   const renderEffect = effect(() => {

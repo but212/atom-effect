@@ -18,16 +18,16 @@ describe('epoch', () => {
   it('should wrap around at SMI_MAX', () => {
     // We can't easily test wrap around without resetting or calling it many times
     // and SMI_MAX is large. But we can verify it's capped by SMI_MAX.
-    const e = nextEpoch();
-    expect(e).toBeLessThanOrEqual(2147483647);
+    const next = nextEpoch();
+    expect(next).toBeLessThanOrEqual(2147483647);
   });
 
   it('nextEpoch wrapping logic (manual trigger)', () => {
     // We can't easily set collectorEpoch, but we can call it.
     // However, the branch involves `|| 1` when result of `& SMI_MAX` is 0.
     // This happens when collectorEpoch was SMI_MAX.
-    const e = nextEpoch();
-    expect(e).toBeGreaterThan(0);
+    const next = nextEpoch();
+    expect(next).toBeGreaterThan(0);
   });
 
   it('startFlush warns when already flushing', () => {
