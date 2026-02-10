@@ -1,6 +1,6 @@
 {
   "name": "@but212/atom-effect",
-  "version": "0.19.1",
+  "version": "0.20.0",
   "type": "module",
   "description": "A reactive state management library that combines the power of `atom`, `computed`, and `effect` for seamless management of reactive state.",
   "main": "./dist/index.cjs",
@@ -65,7 +65,7 @@
     "@types/node": "^25.2.2",
     "@vitest/coverage-v8": "^4.0.18",
     "@vitest/ui": "^4.0.18",
-    "happy-dom": "^20.5.3",
+    "happy-dom": "^20.6.0",
     "jsdom": "^28.0.0",
     "tinybench": "^6.0.0",
     "vite": "^7.3.1",
