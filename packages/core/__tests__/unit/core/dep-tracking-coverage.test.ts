@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { SubscriberLink, trackDependency } from '@/core/dep-tracking';
+import { type SubscriberLink, trackDependency } from '@/core/dep-tracking';
 import type { Dependency, Subscriber } from '@/types';
 
 describe('trackDependency - branch coverage', () => {
