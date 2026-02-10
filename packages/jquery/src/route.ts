@@ -125,7 +125,7 @@ export function route(config: RouteConfig): Router {
    */
   const setUrl = (routeName: string): void => {
     if (isHistoryMode) {
-      const url = `${basePath}/${routeName}`;
+      const url = `${basePath.replace(/\/$/, '')}/${routeName}`;
       history.pushState(null, '', url);
       previousUrl = url;
     } else {
