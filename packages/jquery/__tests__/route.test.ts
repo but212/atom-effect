@@ -418,6 +418,237 @@ describe('$.route() - SPA Routing', () => {
     });
   });
 
+  describe('History Mode', () => {
+    it('should render default route using pathname', async () => {
+      // jsdom defaults pathname to '/' which resolves to defaultRoute
+      const router = $.route({
+        target: '#app',
+        default: 'home',
+        mode: 'history',
+        routes: {
+          home: { template: '#tmpl-home' },
+          about: { template: '#tmpl-about' },
+        },
+      });
+
+      await $.nextTick();
+
+      expect(router.currentRoute.value).toBe('home');
+      expect(document.querySelector('#app')?.innerHTML).toContain('Home Page');
+
+      router.destroy();
+    });
+
+    it('should navigate programmatically with pushState', async () => {
+      const pushStateSpy = vi.spyOn(history, 'pushState');
+
+      const router = $.route({
+        target: '#app',
+        default: 'home',
+        mode: 'history',
+        routes: {
+          home: { template: '#tmpl-home' },
+          about: { template: '#tmpl-about' },
+        },
+      });
+
+      await $.nextTick();
+
+      router.navigate('about');
+      await $.nextTick();
+
+      expect(pushStateSpy).toHaveBeenCalledWith(null, '', '/about');
+      expect(router.currentRoute.value).toBe('about');
+      expect(document.querySelector('#app')?.innerHTML).toContain('About Page');
+
+      router.destroy();
+      pushStateSpy.mockRestore();
+    });
+
+    it('should handle popstate event', async () => {
+      const router = $.route({
+        target: '#app',
+        default: 'home',
+        mode: 'history',
+        routes: {
+          home: { template: '#tmpl-home' },
+          about: { template: '#tmpl-about' },
+        },
+      });
+
+      await $.nextTick();
+
+      // Navigate to about first
+      router.navigate('about');
+      await $.nextTick();
+      expect(router.currentRoute.value).toBe('about');
+
+      // Simulate browser back button: change pathname then fire popstate
+      Object.defineProperty(window, 'location', {
+        value: { ...window.location, pathname: '/home', search: '' },
+        writable: true,
+        configurable: true,
+      });
+      window.dispatchEvent(new window.Event('popstate'));
+      await $.nextTick();
+
+      expect(router.currentRoute.value).toBe('home');
+
+      router.destroy();
+      // Restore location
+      Object.defineProperty(window, 'location', {
+        value: { ...window.location, pathname: '/', search: '', hash: '' },
+        writable: true,
+        configurable: true,
+      });
+    });
+
+    it('should block navigation with onLeave guard and replaceState', async () => {
+      const replaceStateSpy = vi.spyOn(history, 'replaceState');
+
+      const router = $.route({
+        target: '#app',
+        default: 'home',
+        mode: 'history',
+        routes: {
+          home: { template: '#tmpl-home' },
+          about: {
+            template: '#tmpl-about',
+            onLeave: () => false, // Block leaving
+          },
+        },
+      });
+
+      await $.nextTick();
+
+      // Navigate to about first
+      router.navigate('about');
+      await $.nextTick();
+      expect(router.currentRoute.value).toBe('about');
+
+      // Simulate popstate trying to go to home
+      Object.defineProperty(window, 'location', {
+        value: { ...window.location, pathname: '/home', search: '' },
+        writable: true,
+        configurable: true,
+      });
+      window.dispatchEvent(new window.Event('popstate'));
+      await $.nextTick();
+
+      // Navigation should be blocked
+      expect(router.currentRoute.value).toBe('about');
+      expect(replaceStateSpy).toHaveBeenCalledWith(null, '', '/about');
+
+      router.destroy();
+      replaceStateSpy.mockRestore();
+      Object.defineProperty(window, 'location', {
+        value: { ...window.location, pathname: '/', search: '', hash: '' },
+        writable: true,
+        configurable: true,
+      });
+    });
+
+    it('should apply basePath', async () => {
+      const pushStateSpy = vi.spyOn(history, 'pushState');
+
+      Object.defineProperty(window, 'location', {
+        value: { ...window.location, pathname: '/app/home', search: '' },
+        writable: true,
+        configurable: true,
+      });
+
+      const router = $.route({
+        target: '#app',
+        default: 'home',
+        mode: 'history',
+        basePath: '/app',
+        routes: {
+          home: { template: '#tmpl-home' },
+          about: { template: '#tmpl-about' },
+        },
+      });
+
+      await $.nextTick();
+      expect(router.currentRoute.value).toBe('home');
+
+      router.navigate('about');
+      await $.nextTick();
+
+      expect(pushStateSpy).toHaveBeenCalledWith(null, '', '/app/about');
+      expect(router.currentRoute.value).toBe('about');
+
+      router.destroy();
+      pushStateSpy.mockRestore();
+      Object.defineProperty(window, 'location', {
+        value: { ...window.location, pathname: '/', search: '', hash: '' },
+        writable: true,
+        configurable: true,
+      });
+    });
+
+    it('should parse query params from window.location.search', async () => {
+      const renderSpy = vi.fn(
+        (container: HTMLElement, _route: string, params: Record<string, string>) => {
+          container.innerHTML = `ID: ${params.id}`;
+        }
+      );
+
+      Object.defineProperty(window, 'location', {
+        value: { ...window.location, pathname: '/detail', search: '?id=99' },
+        writable: true,
+        configurable: true,
+      });
+
+      const router = $.route({
+        target: '#app',
+        default: 'home',
+        mode: 'history',
+        routes: {
+          home: { template: '#tmpl-home' },
+          detail: { render: renderSpy },
+        },
+      });
+
+      await $.nextTick();
+
+      expect(router.currentRoute.value).toBe('detail');
+      expect(renderSpy).toHaveBeenCalled();
+      const args = renderSpy.mock.calls[0];
+      expect(args![2]).toEqual({ id: '99' });
+
+      router.destroy();
+      Object.defineProperty(window, 'location', {
+        value: { ...window.location, pathname: '/', search: '', hash: '' },
+        writable: true,
+        configurable: true,
+      });
+    });
+
+    it('should listen to popstate not hashchange, and cleanup correctly', async () => {
+      const addSpy = vi.spyOn(window, 'addEventListener');
+      const removeSpy = vi.spyOn(window, 'removeEventListener');
+
+      const router = $.route({
+        target: '#app',
+        default: 'home',
+        mode: 'history',
+        routes: {
+          home: { template: '#tmpl-home' },
+        },
+      });
+
+      expect(addSpy).toHaveBeenCalledWith('popstate', expect.any(Function));
+      expect(addSpy).not.toHaveBeenCalledWith('hashchange', expect.any(Function));
+
+      router.destroy();
+
+      expect(removeSpy).toHaveBeenCalledWith('popstate', expect.any(Function));
+
+      addSpy.mockRestore();
+      removeSpy.mockRestore();
+    });
+  });
+
   describe('Dynamic Behavior', () => {
     it('should bind dynamically added [data-route] links', async () => {
       document.body.innerHTML = '<div id="app"></div><div id="links"></div>';

@@ -226,6 +226,10 @@ export interface RouteConfig {
   default: string;
   /** Route definitions map */
   routes: Record<string, RouteDefinition>;
+  /** Routing mode. 'hash' uses location.hash, 'history' uses pushState. Default: 'hash' */
+  mode?: 'hash' | 'history';
+  /** Base path for history mode (e.g., '/app'). Ignored in hash mode. Default: '' */
+  basePath?: string;
   /** Route name to use for 404/not found */
   notFound?: string;
   /** Automatically bind links with data-route attribute */

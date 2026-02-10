@@ -40,7 +40,7 @@ $('#close-btn, .modal-backdrop').on('click', () => isModalOpen.value = false);
 $('.modal').atomBind({
     class: { 'open': isModalOpen },
     // If you need animation, use an effect instead of simple class binding
-    visible: isModalOpen 
+    show: isModalOpen
 });
 
 // Or customized animation
@@ -50,7 +50,71 @@ $.effect(() => {
 });
 ```
 
-## 3. Legacy Plugins (Select2, Datepicker)
+## 3. Routing
+
+### Hash Mode (Default)
+
+```javascript
+const router = $.route({
+  target: '#app',
+  default: 'home',
+  autoBindLinks: true,
+  routes: {
+    home: { template: '#tmpl-home' },
+    about: { template: '#tmpl-about' },
+  }
+});
+
+// Derive page title from route
+const pageTitle = $.computed(() => `My App - ${router.currentRoute.value}`);
+$.effect(() => document.title = pageTitle.value);
+```
+
+### History Mode (pushState)
+
+For clean URLs without `#`:
+
+```javascript
+const router = $.route({
+  target: '#app',
+  default: 'home',
+  mode: 'history',
+  basePath: '/app',
+  autoBindLinks: true,
+  routes: {
+    home: { template: '#tmpl-home' },
+    settings: { template: '#tmpl-settings' },
+  }
+});
+// URL: /app/settings (no hash)
+router.navigate('settings');
+```
+
+> **Note**: History mode requires server-side configuration to serve your `index.html` for all routes (e.g., `try_files $uri /index.html` in nginx).
+
+### Navigation Guards
+
+```javascript
+const hasUnsavedChanges = $.atom(false);
+
+$.route({
+  target: '#app',
+  default: 'editor',
+  routes: {
+    editor: {
+      template: '#tmpl-editor',
+      onLeave: () => {
+        if (hasUnsavedChanges.value) {
+          return confirm('Discard unsaved changes?');
+        }
+      }
+    },
+    home: { template: '#tmpl-home' },
+  }
+});
+```
+
+## 4. Legacy Plugins (Select2, Datepicker)
 
 Integrating with plugins that don't trigger standard `input` events requires a manual bridge.
 
