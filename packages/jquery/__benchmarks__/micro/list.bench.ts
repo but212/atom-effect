@@ -4,7 +4,7 @@
  */
 
 import { bench, describe } from 'vitest';
-import '../../src/index';
+import $ from '../../src/index';
 import { cleanupContainer, createContainer, microBenchOptions } from '../utils/setup';
 
 interface Item {
