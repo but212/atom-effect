@@ -11,9 +11,9 @@ import {
 } from '@/internal/epoch';
 import { EMPTY_LINKS, linksArrayPool } from '@/internal/pool';
 import { scheduler } from '@/internal/scheduler';
+import { EFFECT_BRAND } from '@/symbols';
 import { type DependencyTracker, trackingContext } from '@/tracking';
 import type { Dependency, EffectFunction, EffectObject, EffectOptions } from '@/types';
-import { EFFECT_BRAND } from '@/symbols';
 import { debug } from '@/utils/debug';
 import { wrapError } from '@/utils/error';
 import { isPromise } from '@/utils/type-guards';

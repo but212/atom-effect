@@ -10,6 +10,7 @@ import { ComputedError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
 import { nextEpoch, nextVersion } from '@/internal/epoch';
 import { EMPTY_LINKS, linksArrayPool } from '@/internal/pool';
+import { ATOM_BRAND, COMPUTED_BRAND } from '@/symbols';
 import { trackingContext } from '@/tracking';
 import type {
   AsyncStateType,
@@ -20,7 +21,6 @@ import type {
 } from '@/types';
 import { debug, NO_DEFAULT_VALUE } from '@/utils/debug';
 import { wrapError } from '@/utils/error';
-import { ATOM_BRAND, COMPUTED_BRAND } from '@/symbols';
 import { isPromise } from '@/utils/type-guards';
 
 const MAX_ASYNC_RETRIES = 3;
