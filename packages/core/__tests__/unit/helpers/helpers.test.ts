@@ -161,14 +161,15 @@ describe('isComputed - Various Cases', () => {
     expect(isComputed(c)).toBe(true);
   });
 
-  it('recognizes as computed if invalidate method exists', () => {
+  it('rejects duck-typed objects without brand symbol', () => {
     const fakeComputed = {
       value: 0,
       subscribe: () => () => {},
       invalidate: () => {},
     };
 
-    expect(isComputed(fakeComputed)).toBe(true);
+    // Duck-typed objects should NOT pass brand-based type guards
+    expect(isComputed(fakeComputed)).toBe(false);
   });
 
   it('prioritizes debug type information', () => {

@@ -13,6 +13,7 @@ import { EMPTY_LINKS, linksArrayPool } from '@/internal/pool';
 import { scheduler } from '@/internal/scheduler';
 import { type DependencyTracker, trackingContext } from '@/tracking';
 import type { Dependency, EffectFunction, EffectObject, EffectOptions } from '@/types';
+import { EFFECT_BRAND } from '@/symbols';
 import { debug } from '@/utils/debug';
 import { wrapError } from '@/utils/error';
 import { isPromise } from '@/utils/type-guards';
@@ -21,6 +22,9 @@ import { isPromise } from '@/utils/type-guards';
  * Effect implementation.
  */
 class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker {
+  /** @internal */
+  readonly [EFFECT_BRAND] = true;
+
   private _cleanup: (() => void) | null = null;
   private _links: DependencyLink[] = EMPTY_LINKS;
   private _nextLinks: DependencyLink[] | null = null;
