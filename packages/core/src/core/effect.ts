@@ -117,7 +117,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
         if (this._sync) return this.execute();
 
         // Task creation
-        if (!this._executeTask) this._executeTask = () => this.execute();
+        this._executeTask ??= () => this.execute();
         scheduler.schedule(this._executeTask!);
       });
       nextLinks.push(new DependencyLink(dep, dep.version, unsubscribe));

@@ -12,12 +12,17 @@
 
 - **Robust Type Guards**: Refactored `isAtom`, `isComputed`, and `isEffect` to use internal brand symbols, improving reliability when interacting with foreign objects that mimic the reactive API.
 - **Hashing Optimization**: Optimized `_captureVersionSnapshot` in `ComputedAtom` to use a bitwise hash mixing function (`(hash << 5) - hash`) and signed 32-bit integer arithmetic (`| 0`) for faster and more consistent performance in V8.
+- **Browser Support**: Added ES2021+ badge to root and core `README.md`.
+- **Code Modernization**: Replaced `if (!x) x = ...` initialization pattern with nullish assignment (`??=`) in `effect.ts` task creation.
 
 ### jQuery
 
 #### Changed - jQuery
 
 - **Type Safety**: Updated `isReactive` utility to leverage the new brand-based type guards for more reliable reactivity detection.
+- **Build Target**: Set `vite.config.ts` build target to `es2021`, preserving modern syntax and eliminating unnecessary polyfills.
+- **Browser Support**: Added ES2021+ badge and legacy browser exclusion note to `README.md`.
+- **Code Modernization**: Replaced `if (!x) x = []` initialization pattern with nullish assignment (`??=`) in `registry.ts` `trackEffect`/`trackCleanup`.
 
 ## [0.20.0]
 
