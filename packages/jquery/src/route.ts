@@ -316,8 +316,8 @@ export function route(config: RouteConfig): Router {
     // 1. Event Delegation for Navigation (Handles future elements automatically)
     const delegateHandler = (e: JQuery.TriggeredEvent) => {
       e.preventDefault();
-      const routeAttr = $(e.currentTarget).data('route');
-      navigate(routeAttr);
+      const routeAttr = (e.currentTarget as HTMLElement).dataset.route;
+      if (routeAttr) navigate(routeAttr);
     };
 
     $(document).on('click', '[data-route]', delegateHandler);
@@ -331,21 +331,20 @@ export function route(config: RouteConfig): Router {
     const bindActiveState = (el: HTMLElement) => {
       if (boundLinks.has(el)) return;
 
-      const $link = $(el);
-      const routeAttr = $link.data('route') as string;
+      const routeAttr = el.dataset.route!;
 
       boundLinks.add(el);
 
       // Bind reactive active state tracking
       const activeEffect = effect(() => {
         const isActive = currentRoute.value === routeAttr;
-        $link.toggleClass(activeClass, isActive);
+        el.classList.toggle(activeClass, isActive);
 
         // Update aria-current for accessibility
         if (isActive) {
-          $link.attr('aria-current', 'page');
+          el.setAttribute('aria-current', 'page');
         } else {
-          $link.removeAttr('aria-current');
+          el.removeAttribute('aria-current');
         }
       });
 
@@ -359,9 +358,9 @@ export function route(config: RouteConfig): Router {
     };
 
     // Initial bind
-    $('[data-route]').each(function () {
-      bindActiveState(this as HTMLElement);
-    });
+    for (const el of document.querySelectorAll<HTMLElement>('[data-route]')) {
+      bindActiveState(el);
+    }
 
     // Watch for new elements
     const observer = new MutationObserver((mutations) => {

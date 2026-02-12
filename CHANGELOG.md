@@ -4,29 +4,16 @@
 
 ### Core
 
-#### Added - Core
-
-- **Brand Symbols for Type Identification**: Introduced `ATOM_BRAND`, `COMPUTED_BRAND`, and `EFFECT_BRAND` symbols in `src/symbols.ts` for reliable type identification and prevention of false positives from duck-typing.
-
-#### Changed - Core
-
-- **Robust Type Guards**: Refactored `isAtom`, `isComputed`, and `isEffect` to use internal brand symbols, improving reliability when interacting with foreign objects that mimic the reactive API.
-- **Version Hashing**: Updated `_captureVersionSnapshot` in `ComputedAtom` to use a bitwise hash mixing function (`(hash << 5) - hash`) and signed 32-bit integer arithmetic (`| 0`) instead of linear increments.
-- **Browser Support**: Added ES2021+ badge to root and core `README.md`.
-- **Code Modernization**: Replaced `if (!x) x = ...` initialization pattern with nullish assignment (`??=`) in `effect.ts` task creation.
+- **Brand Symbols**: Added internal symbols for reliable type identification.
+- **Type Guards**: Refactored type checks to use brand symbols.
+- **Version Hashing**: Optimized version snapshotting with bitwise hashing.
+- **Modernization**: Adopted ES2021 syntax and updated project build targets.
 
 ### jQuery
 
-#### Added - jQuery
-
-- **`$.atomFetch`**: Declarative AJAX primitive wrapping core's async `computed` with jQuery's `$.ajax`. Returns a standard `ComputedAtom<T>` with `isPending`, `hasError`, `invalidate()`, and reactive URL support. Auto-refetches when reactive dependencies in the URL function change.
-
-#### Changed - jQuery
-
-- **Type Safety**: Updated `isReactive` utility to leverage the new brand-based type guards for more reliable reactivity detection.
-- **Build Target**: Set `vite.config.ts` build target to `es2021`, preserving modern syntax and eliminating unnecessary polyfills.
-- **Browser Support**: Added ES2021+ badge and legacy browser exclusion note to `README.md`.
-- **Code Modernization**: Replaced `if (!x) x = []` initialization pattern with nullish assignment (`??=`) in `registry.ts` `trackEffect`/`trackCleanup`.
+- **$.atomFetch**: New declarative AJAX primitive with reactive support.
+- **Routing logic to Native DOM**: Migrated routing logic to native APIs to reduce overhead.
+- **Type Safety**: Improved reactivity detection using core symbols.
 
 ## [0.20.0]
 
