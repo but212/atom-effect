@@ -1,15 +1,21 @@
 # Changelog
 
-## [0.21.0]
+## [unreleased]
 
 ### Core
+
+- **Effect Optimization**: Aligned `Effect` dependency tracking with `Computed` by implementing O(n) map-based subscription reuse, replacing the previous O(n²) linear scan.
+
+## [0.21.0]
+
+### Core - 0.21.0
 
 - **Brand Symbols**: Added internal symbols for reliable type identification.
 - **Type Guards**: Refactored type checks to use brand symbols.
 - **Version Hashing**: Version snapshotting with bitwise hashing.
 - **Modernization**: Adopted ES2021 syntax and updated project build targets.
 
-### jQuery
+### jQuery - 0.21.0
 
 - **$.atomFetch**: New declarative AJAX primitive with reactive support.
 - **Routing logic to Native DOM**: Migrated routing logic to native APIs to reduce overhead.
