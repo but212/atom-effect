@@ -1,5 +1,5 @@
-import $ from 'jquery';
 import { describe, expect, it } from 'vitest';
+import $ from '../src/index'; // Register plugins ($.atom)
 import { getSelector, getValue, isReactive } from '../src/utils';
 
 describe('Utils', () => {
@@ -29,17 +29,22 @@ describe('Utils', () => {
 
   describe('isReactive', () => {
     it('should identify atoms as reactive', () => {
-      const a = { value: 1, subscribe: () => {} };
-      expect(isReactive(a as unknown as object)).toBe(true);
+      const a = $.atom(1);
+      expect(isReactive(a)).toBe(true);
       expect(isReactive(1)).toBe(false);
       expect(isReactive(null)).toBe(false);
+    });
+
+    it('should reject duck-typed objects without brand symbol', () => {
+      const fake = { value: 1, subscribe: () => {} };
+      expect(isReactive(fake)).toBe(false);
     });
   });
 
   describe('getValue', () => {
     it('should extract value from reactive objects', () => {
-      const a = { value: 10, subscribe: () => {} };
-      expect(getValue(a as unknown as object)).toBe(10);
+      const a = $.atom(10);
+      expect(getValue(a)).toBe(10);
       expect(getValue(5)).toBe(5);
       expect(getValue('str')).toBe('str');
       expect(getValue(null as unknown)).toBe(null);

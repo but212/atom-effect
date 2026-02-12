@@ -11,6 +11,7 @@ import {
 } from '@/internal/epoch';
 import { EMPTY_LINKS, linksArrayPool } from '@/internal/pool';
 import { scheduler } from '@/internal/scheduler';
+import { EFFECT_BRAND } from '@/symbols';
 import { type DependencyTracker, trackingContext } from '@/tracking';
 import type { Dependency, EffectFunction, EffectObject, EffectOptions } from '@/types';
 import { debug } from '@/utils/debug';
@@ -21,6 +22,9 @@ import { isPromise } from '@/utils/type-guards';
  * Effect implementation.
  */
 class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker {
+  /** @internal */
+  readonly [EFFECT_BRAND] = true;
+
   private _cleanup: (() => void) | null = null;
   private _links: DependencyLink[] = EMPTY_LINKS;
   private _nextLinks: DependencyLink[] | null = null;
@@ -113,7 +117,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
         if (this._sync) return this.execute();
 
         // Task creation
-        if (!this._executeTask) this._executeTask = () => this.execute();
+        this._executeTask ??= () => this.execute();
         scheduler.schedule(this._executeTask!);
       });
       nextLinks.push(new DependencyLink(dep, dep.version, unsubscribe));

@@ -3,6 +3,7 @@ import { ReactiveDependency } from '@/core/base';
 import { type SubscriberLink, trackDependency } from '@/core/dep-tracking';
 import { nextVersion } from '@/internal/epoch';
 import { scheduler } from '@/internal/scheduler';
+import { ATOM_BRAND } from '@/symbols';
 import { trackingContext } from '@/tracking';
 import type { AtomOptions, WritableAtom } from '@/types';
 import { debug } from '@/utils/debug';
@@ -17,6 +18,9 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
   /** Cached notification task */
   private _notifyTask: (() => void) | undefined = undefined;
   protected _subscribers: SubscriberLink<T>[] = [];
+
+  /** @internal */
+  readonly [ATOM_BRAND] = true;
 
   constructor(initialValue: T, sync: boolean) {
     super();

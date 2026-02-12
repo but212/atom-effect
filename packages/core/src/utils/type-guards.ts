@@ -1,3 +1,4 @@
+import { ATOM_BRAND, COMPUTED_BRAND, EFFECT_BRAND } from '@/symbols';
 import type { ComputedAtom, EffectObject, ReadonlyAtom, WritableAtom } from '@/types';
 
 /**
@@ -6,38 +7,28 @@ import type { ComputedAtom, EffectObject, ReadonlyAtom, WritableAtom } from '@/t
  * @param obj - Object to check.
  */
 export function isAtom(obj: unknown): obj is ReadonlyAtom {
-  return (
-    obj !== null &&
-    typeof obj === 'object' &&
-    'value' in obj &&
-    typeof (obj as { subscribe?: unknown }).subscribe === 'function'
-  );
+  return obj !== null && typeof obj === 'object' && ATOM_BRAND in obj;
 }
 
 /**
  * Writable atom check.
  */
 export function isWritable(obj: unknown): obj is WritableAtom {
-  return isAtom(obj) && typeof (obj as { dispose?: unknown }).dispose === 'function';
+  return isAtom(obj) && !isComputed(obj);
 }
 
 /**
  * Computed atom check.
  */
 export function isComputed(obj: unknown): obj is ComputedAtom {
-  return isAtom(obj) && typeof (obj as { invalidate?: unknown }).invalidate === 'function';
+  return obj !== null && typeof obj === 'object' && COMPUTED_BRAND in obj;
 }
 
 /**
  * Effect object check.
  */
 export function isEffect(obj: unknown): obj is EffectObject {
-  return (
-    obj !== null &&
-    typeof obj === 'object' &&
-    typeof (obj as { dispose?: unknown }).dispose === 'function' &&
-    typeof (obj as { run?: unknown }).run === 'function'
-  );
+  return obj !== null && typeof obj === 'object' && EFFECT_BRAND in obj;
 }
 
 /**

@@ -93,22 +93,15 @@ describe('Utils & Handlers - Extra Coverage', () => {
   });
 
   describe('Type Guards', () => {
-    it('isComputed checks debug type if enabled', () => {
-      const wasEnabled = debug.enabled;
-      debug.enabled = true;
-
+    it('isComputed rejects duck-typed objects without brand symbol', () => {
       const mockComputed = {
         value: 1,
         subscribe: () => {},
         invalidate: () => {},
       };
-      // Stub getDebugType to return 'computed'
-      const debugSpy = vi.spyOn(debug, 'getDebugType').mockReturnValue('computed');
 
-      expect(isComputed(mockComputed)).toBe(true);
-
-      debugSpy.mockRestore();
-      debug.enabled = wasEnabled;
+      // Duck-typed objects should NOT pass brand-based type guards
+      expect(isComputed(mockComputed)).toBe(false);
     });
   });
 

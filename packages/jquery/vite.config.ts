@@ -5,6 +5,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   build: {
+    target: 'es2021',
     lib: {
       entry: 'src/index.ts',
       name: 'AtomEffectJQuery',

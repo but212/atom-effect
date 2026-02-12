@@ -10,6 +10,7 @@ import { ComputedError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
 import { nextEpoch, nextVersion } from '@/internal/epoch';
 import { EMPTY_LINKS, linksArrayPool } from '@/internal/pool';
+import { ATOM_BRAND, COMPUTED_BRAND } from '@/symbols';
 import { trackingContext } from '@/tracking';
 import type {
   AsyncStateType,
@@ -39,6 +40,11 @@ function getAsyncState(flags: number): AsyncStateType {
  * Computed atom implementation.
  */
 class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<T>, Subscriber {
+  /** @internal */
+  readonly [ATOM_BRAND] = true;
+  /** @internal */
+  readonly [COMPUTED_BRAND] = true;
+
   private _value: T;
   private _error: Error | null = null;
   /** Promise tracking ID */
@@ -336,12 +342,12 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   }
 
   private _captureVersionSnapshot(): number {
-    let sum = 0;
+    let hash = 0;
     const links = this._links;
     for (let i = 0, len = links.length; i < len; i++) {
-      sum += links[i]!.node.version;
+      hash = ((hash << 5) - hash + links[i]!.node.version) | 0;
     }
-    return sum;
+    return hash;
   }
 
   private _handleError(err: unknown, msg: string, throwErr = false): void {
