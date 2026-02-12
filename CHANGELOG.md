@@ -11,7 +11,7 @@
 #### Changed - Core
 
 - **Robust Type Guards**: Refactored `isAtom`, `isComputed`, and `isEffect` to use internal brand symbols, improving reliability when interacting with foreign objects that mimic the reactive API.
-- **Hashing Optimization**: Optimized `_captureVersionSnapshot` in `ComputedAtom` to use a bitwise hash mixing function (`(hash << 5) - hash`) and signed 32-bit integer arithmetic (`| 0`) for faster and more consistent performance in V8.
+- **Version Hashing**: Updated `_captureVersionSnapshot` in `ComputedAtom` to use a bitwise hash mixing function (`(hash << 5) - hash`) and signed 32-bit integer arithmetic (`| 0`) instead of linear increments.
 - **Browser Support**: Added ES2021+ badge to root and core `README.md`.
 - **Code Modernization**: Replaced `if (!x) x = ...` initialization pattern with nullish assignment (`??=`) in `effect.ts` task creation.
 
