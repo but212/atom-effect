@@ -6,7 +6,7 @@
 
 - **Brand Symbols**: Added internal symbols for reliable type identification.
 - **Type Guards**: Refactored type checks to use brand symbols.
-- **Version Hashing**: Optimized version snapshotting with bitwise hashing.
+- **Version Hashing**: Version snapshotting with bitwise hashing.
 - **Modernization**: Adopted ES2021 syntax and updated project build targets.
 
 ### jQuery
