@@ -151,6 +151,57 @@ Aliases to the core functions, exposed for convenience.
 
 ---
 
+## Data Fetching
+
+### `$.atomFetch(urlOrFn, options)`
+
+Declarative AJAX primitive. Wraps core's async `computed` with jQuery's `$.ajax`, returning a `ComputedAtom<T>` with built-in loading/error states.
+
+**Parameters**:
+
+- `urlOrFn`: `string | () => string` — Static URL or a function that reads atoms (auto-refetches on change).
+- `options`: `FetchOptions<T>`
+  - `defaultValue`: `T` (Required) — Value before first response.
+  - `method`: `string` — HTTP method (default: `'GET'`).
+  - `headers`: `Record<string, string>` — Request headers.
+  - `transform`: `(raw: unknown) => T` — Response transformer.
+  - `ajaxOptions`: `JQuery.AjaxSettings` — Full `$.ajax` passthrough.
+
+**Returns**: `ComputedAtom<T>` — reactive value with:
+
+- `.value` — Resolved data (or `defaultValue` while pending).
+- `.isPending` — `true` during fetch.
+- `.hasError` / `.lastError` — Error state.
+- `.invalidate()` — Triggers refetch.
+
+```javascript
+const userId = $.atom(1);
+const user = $.atomFetch(() => `/api/users/${userId.value}`, {
+  defaultValue: null,
+});
+
+// Bind to DOM
+$('#name').atomText(user, u => u?.name ?? '');
+$('#spinner').atomShow(user.isPending);
+$('#error').atomShow(user.hasError);
+$('#retry').atomOn('click', () => user.invalidate());
+
+// Change userId → auto-refetches
+userId.value = 2;
+```
+
+```javascript
+// With transform and headers
+const count = $.atomFetch('/api/items', {
+  defaultValue: 0,
+  method: 'GET',
+  headers: { Authorization: 'Bearer token' },
+  transform: (raw) => raw.items.length,
+});
+```
+
+---
+
 ## Routing
 
 ### `$.route(config)`
