@@ -17,6 +17,10 @@
 
 ### jQuery
 
+#### Added - jQuery
+
+- **`$.atomFetch`**: Declarative AJAX primitive wrapping core's async `computed` with jQuery's `$.ajax`. Returns a standard `ComputedAtom<T>` with `isPending`, `hasError`, `invalidate()`, and reactive URL support. Auto-refetches when reactive dependencies in the URL function change.
+
 #### Changed - jQuery
 
 - **Type Safety**: Updated `isReactive` utility to leverage the new brand-based type guards for more reliable reactivity detection.

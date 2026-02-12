@@ -76,6 +76,22 @@ export interface ValOptions<T> {
 }
 
 /**
+ * Configuration options for `atomFetch`.
+ */
+export interface FetchOptions<T> {
+  /** Initial value before first fetch resolves. */
+  defaultValue: T;
+  /** HTTP method (default: 'GET'). */
+  method?: string;
+  /** Request headers. */
+  headers?: Record<string, string>;
+  /** Transform raw response before storing. */
+  transform?: (raw: unknown) => T;
+  /** Additional $.ajax settings passthrough. */
+  ajaxOptions?: JQuery.AjaxSettings;
+}
+
+/**
  * State context for two-way input bindings.
  * Consolidates scattered state flags into a single, traceable object.
  * This is the "bone structure" for input binding lifecycle management.
@@ -137,6 +153,7 @@ declare global {
     isReactive(v: unknown): boolean;
     nextTick(): Promise<void>;
     route(config: RouteConfig): Router;
+    atomFetch<T>(urlOrFn: string | (() => string), options: FetchOptions<T>): ComputedAtom<T>;
   }
 
   interface JQuery {

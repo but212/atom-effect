@@ -18,6 +18,7 @@ import './unified';
 import './list';
 import './mount';
 import './route';
+import './fetch';
 
 import { enablejQueryOverrides } from './jquery-patch';
 import { disableAutoCleanup, enableAutoCleanup, registry } from './registry';
