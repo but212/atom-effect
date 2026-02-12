@@ -8,10 +8,7 @@ import type { ComputedAtom, FetchOptions } from './types';
  * Wraps core's async `computed` with jQuery's `$.ajax`.
  * Returns a standard `ComputedAtom<T>` with `isPending`, `hasError`, `invalidate()`, etc.
  */
-function atomFetch<T>(
-  urlOrFn: string | (() => string),
-  options: FetchOptions<T>
-): ComputedAtom<T> {
+function atomFetch<T>(urlOrFn: string | (() => string), options: FetchOptions<T>): ComputedAtom<T> {
   const { defaultValue, transform, method, headers, ajaxOptions } = options;
   const getUrl = typeof urlOrFn === 'function' ? urlOrFn : () => urlOrFn;
 

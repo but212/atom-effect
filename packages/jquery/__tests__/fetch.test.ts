@@ -27,9 +27,7 @@ describe('$.atomFetch', () => {
     await $.nextTick();
 
     expect(user.value).toEqual({ name: 'Alice' });
-    expect($.ajax).toHaveBeenCalledWith(
-      expect.objectContaining({ url: '/api/user' })
-    );
+    expect($.ajax).toHaveBeenCalledWith(expect.objectContaining({ url: '/api/user' }));
   });
 
   it('should auto-refetch when a reactive URL changes', async () => {
@@ -61,7 +59,10 @@ describe('$.atomFetch', () => {
   it('should expose isPending state', async () => {
     let resolveAjax!: (v: unknown) => void;
     vi.spyOn($, 'ajax').mockImplementation(
-      () => new Promise((resolve) => { resolveAjax = resolve; }) as unknown as JQuery.jqXHR
+      () =>
+        new Promise((resolve) => {
+          resolveAjax = resolve;
+        }) as unknown as JQuery.jqXHR
     );
 
     const data = $.atomFetch('/api/slow', { defaultValue: null });
@@ -94,9 +95,7 @@ describe('$.atomFetch', () => {
   });
 
   it('should refetch on invalidate()', async () => {
-    vi.spyOn($, 'ajax')
-      .mockResolvedValueOnce({ v: 1 })
-      .mockResolvedValueOnce({ v: 2 });
+    vi.spyOn($, 'ajax').mockResolvedValueOnce({ v: 1 }).mockResolvedValueOnce({ v: 2 });
 
     const data = $.atomFetch('/api/data', { defaultValue: { v: 0 } });
 
