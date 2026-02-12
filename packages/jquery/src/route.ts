@@ -317,7 +317,7 @@ export function route(config: RouteConfig): Router {
     const delegateHandler = (e: JQuery.TriggeredEvent) => {
       e.preventDefault();
       const routeAttr = (e.currentTarget as HTMLElement).dataset.route;
-      if (routeAttr) navigate(routeAttr);
+      if (routeAttr != null) navigate(routeAttr);
     };
 
     $(document).on('click', '[data-route]', delegateHandler);
