@@ -269,9 +269,10 @@ export function route(config: RouteConfig): Router {
       if (canLeave === false) return; // Navigation blocked
     }
 
-    // Update URL and state
-    setUrl(routeName);
-    currentRoute.value = routeName; // Update immediately for synchronous behavior
+    // Resolve empty route name to default route, matching getRouteName behavior
+    const resolved = routeName || defaultRoute;
+    setUrl(resolved);
+    currentRoute.value = resolved;
   };
 
   /**
