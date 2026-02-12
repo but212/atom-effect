@@ -58,12 +58,14 @@ class BindingRegistry {
 
   trackEffect(el: Element, fx: EffectObject): void {
     const record = this._getOrCreateRecord(el);
-    (record.effects ??= []).push(fx);
+    record.effects ??= [];
+    record.effects.push(fx);
   }
 
   trackCleanup(el: Element, fn: () => void): void {
     const record = this._getOrCreateRecord(el);
-    (record.cleanups ??= []).push(fn);
+    record.cleanups ??= [];
+    record.cleanups.push(fn);
   }
 
   hasBind(el: Element): boolean {
