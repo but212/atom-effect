@@ -100,7 +100,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 
     // Reclaim existing subscription from previous links (avoids unsubscribe + resubscribe)
     const existingLink = this._depMap.get(dep);
-    if (existingLink && existingLink.unsub) {
+    if (existingLink?.unsub) {
       nextLinks.push(new DependencyLink(dep, dep.version, existingLink.unsub));
       this._depMap.delete(dep); // Mark as reclaimed
       return;
