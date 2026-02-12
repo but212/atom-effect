@@ -14,7 +14,7 @@ export function isAtom(obj: unknown): obj is ReadonlyAtom {
  * Writable atom check.
  */
 export function isWritable(obj: unknown): obj is WritableAtom {
-  return isAtom(obj) && typeof (obj as { dispose?: unknown }).dispose === 'function';
+  return isAtom(obj) && !isComputed(obj);
 }
 
 /**
