@@ -130,8 +130,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       if (this._trackModifications) {
         // trackModifications needs to capture `dep` for _modifiedAtEpoch tagging
         unsubscribe = dep.subscribe(() => {
-          if (this.flags & EFFECT_STATE_FLAGS.EXECUTING)
-            dep._modifiedAtEpoch = this._currentEpoch;
+          if (this.flags & EFFECT_STATE_FLAGS.EXECUTING) dep._modifiedAtEpoch = this._currentEpoch;
           this._notifyCallback();
         });
       } else {
