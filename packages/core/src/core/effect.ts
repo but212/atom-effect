@@ -173,7 +173,6 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     this._nextLinks = nextLinks;
     this._currentEpoch = nextEpoch();
 
-    const prevLinks = this._prevLinks;
     let committed = false;
     try {
       const result = trackingContext.run(this, this._fn);
@@ -206,7 +205,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       this._handleExecutionError(error);
       this._cleanup = null;
     } finally {
-      this._finalizeDependencies(committed, prevLinks, nextLinks);
+      this._finalizeDependencies(committed, this._prevLinks, nextLinks);
       this.flags &= ~EFFECT_STATE_FLAGS.EXECUTING;
     }
   }

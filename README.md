@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![ES2021+](https://img.shields.io/badge/target-ES2021%2B-blue)
 
-A high-performance reactive state management library with first-class async support.
+A reactive state management library with first-class async support.
 
 ## Packages
 

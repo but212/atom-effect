@@ -16,7 +16,7 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
   /** Old value for notifications */
   private _pendingOldValue: T | undefined = undefined;
   /** Cached notification task */
-  private _notifyTask: (() => void) | undefined = undefined;
+  private readonly _notifyTask = () => this._flushNotifications();
   protected _subscribers: SubscriberLink<T>[] = [];
 
   /** @internal */
@@ -59,10 +59,6 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
     }
 
     // Async scheduling
-    if (!this._notifyTask) {
-      // Create notification task
-      this._notifyTask = () => this._flushNotifications();
-    }
     scheduler.schedule(this._notifyTask);
   }
 
@@ -95,7 +91,6 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
     // Release references
     this._value = undefined as T;
     this._pendingOldValue = undefined;
-    this._notifyTask = undefined;
   }
 }
 

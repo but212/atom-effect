@@ -178,8 +178,8 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       const dep = links[i]!.node;
       if (dep.flags & HAS_ERROR) {
         const computedDep = dep as unknown as ComputedAtom<unknown>;
-        if (computedDep.errors) {
-          const depErrors = computedDep.errors;
+        const depErrors = computedDep.errors;
+        if (depErrors.length > 0) {
           for (let j = 0; j < depErrors.length; j++) {
             const err = depErrors[j];
             if (err && collected.indexOf(err) === -1) collected.push(err);

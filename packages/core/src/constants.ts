@@ -64,7 +64,6 @@ export const SCHEDULER_CONFIG = {
   MIN_FLUSH_ITERATIONS: 10,
 
   // Memory management
-  CLEANUP_THRESHOLD: 1000,
   BATCH_QUEUE_SHRINK_THRESHOLD: 1000,
 } as const;
 
