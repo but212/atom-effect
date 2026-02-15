@@ -4,22 +4,20 @@
 
 ### Core
 
-- **Effect Optimization**: Aligned `Effect` dependency tracking with `Computed` by implementing O(n) map-based subscription reuse, replacing the previous O(n²) linear scan.
-
 ## [0.21.0]
 
 ### Core - 0.21.0
 
-- **Brand Symbols**: Added internal symbols for reliable type identification.
-- **Type Guards**: Refactored type checks to use brand symbols.
-- **Version Hashing**: Version snapshotting with bitwise hashing.
+- **Brand Symbols**: Added internal `Symbol`-based brand markers for reliable runtime type identification. (Note: distinct from the `Branded` utility type removed in 0.20.0; these are runtime symbols, not compile-time wrappers.)
+- **Type Guards**: Refactored type checks to use the new brand symbols for more robust runtime validation.
+- **Version Hashing**: Replaced simple version incrementing with bitwise hashing for version snapshots, building on the shared utilities extracted in 0.20.0.
 - **Modernization**: Adopted ES2021 syntax and updated project build targets.
 
 ### jQuery - 0.21.0
 
 - **$.atomFetch**: New declarative AJAX primitive with reactive support.
-- **Routing logic to Native DOM**: Migrated routing logic to native APIs to reduce overhead.
-- **Type Safety**: Improved reactivity detection using core symbols.
+- **Native DOM Routing**: Migrated routing logic to native APIs to reduce overhead.
+- **Type Safety**: Improved reactivity detection using the new core brand symbols.
 
 ## [0.20.0]
 
@@ -31,8 +29,8 @@
 - **Flag Inlining**: Inlined `NODE_FLAGS` constants directly into usage sites to eliminate object lookup overhead and simplified state transition logic.
 - **Computed Simplification**: Removed complex lookup tables and internal error caching mechanisms in favor of streamlined inline expressions and on-demand error collection.
 - **Effect Loop Detection**: Replaced the circular buffer implementation with a sliding window approach for more efficient infinite loop detection.
-- **Subscription Parking**: Replaced `Map`-based subscription storage with a linear array scan for significantly faster subscription reuse and lower memory overhead.
-- **Type Simplification**: Removed the `Branded` type wrapper from `DependencyId` to simplify type definitions and reduce TypeScript compilation overhead.
+- **Subscription Parking**: Replaced the `Map`-based subscription storage (introduced in 0.19.1's `_parkedUnsubs`) with a linear array scan for faster subscription reuse and lower memory overhead. (Note: subsequently reverted to a Map-based approach in unreleased.)
+- **Type Simplification**: Removed the `Branded` compile-time type wrapper from `DependencyId` to simplify type definitions and reduce TypeScript compilation overhead. (Note: runtime brand symbols were later re-introduced in 0.21.0 as a separate mechanism.)
 - **Utility Consolidation**: Simplified error classification logic and version snapshotting by moving them into shared internal utilities.
 - **Method Inlining**: Inlined `_commitDeps` and `_checkLoopWarnings` methods to reduce function call overhead in hot paths.
 - **Dead Code Cleanup**: Removed unused object pools and `Object.freeze` calls to reduce bundle size and runtime initialization cost.
@@ -72,15 +70,15 @@
 
 - **Dependency Ownership**: Replaced `_tempUnsub` node pollution with local `Map<Dependency, () => void>` in `Effect` and `syncDependencies`.
   - Removed `_tempUnsub` from `ReactiveNode` and `Dependency` interface, eliminating tracker-owned temporary state from dependency nodes.
-  - `EffectImpl` now uses `_parkedUnsubs` Map for subscription parking/reclaiming during re-execution.
+  - `EffectImpl` now uses `_parkedUnsubs` Map for subscription parking/reclaiming during re-execution. (Note: replaced by linear array scan in 0.20.0.)
   - `syncDependencies` uses a local Map instead of mutating `node._tempUnsub`.
-- **trackDependency Documentation**: Added O(n) trade-off comment explaining why linear scan is acceptable (array size 1-10, hot path uses O(1) epoch-based dedup).
+- **trackDependency Documentation**: Added O(n) trade-off comment explaining why linear scan is acceptable (array size 1–10, hot path uses O(1) epoch-based dedup).
 
 ### jQuery - 0.19.1
 
 #### Fixed - jQuery 0.19.1
 
-- **Security Hardening**: Implemented comprehensive XSS protection across all binding methods.
+- **Security Hardening**: Implemented comprehensive XSS protection across all binding methods, expanding on the minimal sanitization strategy established in 0.19.0.
   - Blocks `on*` handlers, dangerous protocols (`javascript:`, `vbscript:`), and risky CSS values.
   - Prevents direct HTML injection via `innerHTML`/`outerHTML`.
   - Auto-sanitizes content in `atomList` rendering.
@@ -117,8 +115,8 @@
 
 #### Changed - jQuery 0.19.0
 
-- **RouteDefinition Type Safety**: Refactored `RouteDefinition` into a discriminated union (`TemplateRoute | RenderRoute`) to enforce mutual exclusivity of `template` and `render` at compile time. Prevents accidental misconfiguration where both are specified.
-- **XSS Prevention**: `atomHtml` now strictly processes HTML using a **minimal sanitization** strategy (removes `<script>` and `on*` events) to prevent accidental XSS, while explicitly recommending `DOMPurify` for production security. This rolls back the experimental heavy-weight sanitizer in favor of a standards-compliant, opt-in approach.
+- **RouteDefinition Type Safety**: Refactored `RouteDefinition` into a discriminated union (`TemplateRoute | RenderRoute`) to enforce mutual exclusivity of `template` and `render` at compile time.
+- **XSS Prevention**: `atomHtml` now uses a minimal sanitization strategy (removes `<script>` and `on*` events) to prevent accidental XSS, replacing the previous experimental heavy-weight sanitizer. Recommends `DOMPurify` for production security. (Note: further hardened in 0.19.1 with comprehensive binding-level protection.)
 - **Input Validation**: `atomVal` and `bindVal` now validate that the target element is a valid input (`input`, `select`, `textarea`), logging a warning if used incorrectly on non-input elements.
 - **Route Safety**: Route parameter parsing now safely handles malformed URIs using `try-catch`, preventing application crashes.
 - **List Diagnostics**: `atomList` now warns about duplicate keys in **Production Mode** (previously only debug), alerting developers to potential reconciliation issues.
@@ -139,7 +137,7 @@
 - **Router**: Introduced `$.route()` for lightweight, hash-based SPA routing with full reactivity support.
   - **Reactive State**: Exposes `currentRoute` as an atom, allowing UI to react instantly to navigation changes.
   - **Lifecycle Management**: Supports `onEnter` and `onLeave` hooks for data fetching and navigation guards.
-  - **Automatic Binding**: declaratively binds links with `data-route` to handle navigation and `active` class toggling automatically.
+  - **Automatic Binding**: Declaratively binds links with `data-route` to handle navigation and `active` class toggling automatically.
   - **Template Rendering**: Supports both `<template>` refs and custom render functions for flexible view management.
 
 ## [0.17.0]
@@ -238,7 +236,7 @@
 - **Debounce Blur Data Loss**: Fixed a critical bug where user input was lost when blurring an input field with a pending debounce timer. The `onBlur` handler now flushes pending sync operations before formatting.
 - **Zombie Binding Cleanup**: Fixed orphaned `_aes-bound` class markers on cloned elements. `cleanupDescendants` now removes the marker class from elements that have no WeakMap binding data.
 - **Cursor Jumping on External Update**: Improved UX by preserving cursor position when an input's atom value is updated externally while focused.
-- **State Phase Recovery**: Wrapped state phase transitions in `try...finally` blocks to ensure `state.phase` is always reset to `'idle'` even if `parse()` or DOM operations (e.g., `setSelectionRange`) throw errors. Previously, errors would leave the phase stuck, permanently disabling the input binding.
+- **State Phase Recovery**: Wrapped state phase transitions in `try...finally` blocks to ensure `state.phase` is always reset to `'idle'` even if `parse()` or DOM operations (e.g., `setSelectionRange`) throw errors.
 
 ## [0.15.0]
 
@@ -344,7 +342,7 @@
 
 #### Refactor - jQuery 0.13.0
 
-- **Marker-based Tree Traversal**: Optimized `cleanupTree` (used in `.empty()`, `.remove()`) to be $O(M)$ where M is the number of bound elements, instead of $O(N)$ (all descendants).
+- **Marker-based Tree Traversal**: Optimized `cleanupTree` (used in `.empty()`, `.remove()`) to be O(M) where M is the number of bound elements, instead of O(N) (all descendants).
   - Introduced `AES_BOUND` class marker to instantly locate bound descendants using `querySelectorAll` (`.aes-bound`).
   - Significantly reduces main-thread blocking when clearing large lists or tables.
 - **Algorithm Isolation**: Moved `getLIS` (Longest Increasing Subsequence) to `utils.ts` to separate algorithmic complexity from DOM manipulation logic.
@@ -418,18 +416,18 @@
 
 ### Core - 0.10.1
 
-#### Changed - Atom Effect Core 0.10.1
+#### Changed - Core 0.10.1
 
-- **Changed**: Added `ATOM_STATE_FLAGS` and simplified internal logic for `AtomImpl`.
+- Added `ATOM_STATE_FLAGS` and simplified internal logic for `AtomImpl`.
   - Implemented lazy initialization for subscriber managers to reduce initial memory footprint.
   - Streamlined `value` getter/setter using Guard Clauses for improved readability.
   - Reused notification task closures to avoid unnecessary heap allocations during updates.
 
 ### jQuery - 0.10.1
 
-#### Changed - Atom Effect jQuery 0.10.1
+#### Changed - jQuery 0.10.1
 
-- **Changed**: Refactored internal logic for `atomList`, `registry`, and chainable methods.
+- Refactored internal logic for `atomList`, `registry`, and chainable methods.
   - Updated `getLIS` and reconciliation loop in `atomList` for better memory usage and stability.
   - Optimized `registry` for element tracking and recursive tree cleanup.
   - Refined `chainable` bindings by moving invariant checks out of element iteration loops.
@@ -438,7 +436,7 @@
 
 ### Core - 0.10.0
 
-#### Changed - Atom Effect Core 0.10.0
+#### Changed - Core 0.10.0
 
 - **Docs**: Clarified `batch(fn)` behavior.
   - Emphasized that `batch()` results in **Synchronous Reflection** (immediate flush) upon completion.
@@ -447,7 +445,7 @@
 
 ### jQuery - 0.10.0
 
-#### Changed - Atom Effect jQuery 0.10.0
+#### Changed - jQuery 0.10.0
 
 - **Refactor**: Removed redundant `batch()` calls from event handlers and internal synchronization.
   - Relying on Core's automatic microtask batching for better performance and alignment with the browser's event loop.
@@ -481,7 +479,7 @@
 #### Changed - 0.9.0
 
 - **Performance**: Optimized Effect loop detection in debug mode.
-  - Replaced $O(N)$ array shifting with $O(1)$ Circular Buffer for execution history tracking.
+  - Replaced O(N) array shifting with O(1) Circular Buffer for execution history tracking.
   - Reduces overhead for high-frequency effects during development.
 - **Safety**: Enhanced Epoch system robustness.
   - Added wrap-around safety check to `nextEpoch` to prevent theoretical collision at 0.
@@ -538,7 +536,7 @@
 ### Refactor - 0.8.0
 
 - **Code Deduplication**: Extracted shared two-way data binding logic into `applyInputBinding` helper.
-  - unified `$.fn.atomVal` (chainable) and `bindVal` (declarative) implementation.
+  - Unified `$.fn.atomVal` (chainable) and `bindVal` (declarative) implementation.
   - Consolidated input handling logic (debounce, IME, focus tracking) in centrally managed module.
 
 ### Infrastructure - 0.8.0
@@ -595,7 +593,7 @@
 - **Async Computed State Tracking**: All state getters now trigger dependency tracking.
   - `.state`, `.hasError`, `.lastError`, `.isPending`, `.isResolved` getters now call `_registerTracking()`.
   - Effects and computed values that only read state properties (e.g., `searchResults.state`) will now properly re-execute when the async state changes.
-  - This provides a more intuitive developer experience - no need to read `.value` first just to track state changes.
+  - This provides a more intuitive developer experience — no need to read `.value` first just to track state changes.
 - **CDN**: Updated CDN options to use `unpkg` and `jsdelivr` instead of `jsDelivr`.
 
 ### Added - 0.6.0
