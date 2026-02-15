@@ -4,8 +4,6 @@
 
 ### Core
 
-- **Effect Subscription Strategy**: Reverted `Effect` dependency tracking from the O(n) linear array scan (introduced in 0.20.0) back to an O(n) `Map`-based subscription reuse strategy, now aligned with `Computed`'s approach for consistent behavior across both primitives.
-
 ## [0.21.0]
 
 ### Core - 0.21.0
