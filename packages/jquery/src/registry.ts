@@ -1,3 +1,4 @@
+import { AES_BOUND_CLASS } from './constants';
 import { debug } from './debug';
 import type { EffectObject } from './types';
 import { getSelector } from './utils';
@@ -5,7 +6,7 @@ import { getSelector } from './utils';
 /**
  * Marker class for bound elements to optimize selector engines.
  */
-const AES_BOUND = '_aes-bound';
+const AES_BOUND = AES_BOUND_CLASS;
 
 interface BindingRecord {
   effects?: EffectObject[];

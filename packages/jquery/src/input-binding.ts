@@ -1,3 +1,4 @@
+import { INPUT_DEFAULTS } from './constants';
 import { debug } from './debug';
 import type { InputBindingState, ValOptions, WritableAtom } from './types';
 import { BindingFlags, createInputBindingState } from './types';
@@ -18,7 +19,7 @@ export function applyInputBinding<T>(
 ): { effect: () => void; cleanup: () => void } {
   const {
     debounce: debounceMs,
-    event = 'input',
+    event = INPUT_DEFAULTS.EVENT,
     parse = (v: string) => v as unknown as T,
     format = (v: T) => String(v ?? ''),
     equal = Object.is,

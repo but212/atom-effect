@@ -1,5 +1,6 @@
 import { batch, effect } from '@but212/atom-effect';
 import $ from 'jquery';
+import { DANGEROUS_PROPS, ERROR_MESSAGES, LOG_PREFIXES } from './constants';
 import { debug } from './debug';
 import { registerReactiveEffect } from './effect-factory';
 import { applyInputBinding } from './input-binding';
@@ -72,7 +73,7 @@ export function bindHtml(ctx: BindingContext, value: ReactiveValue<string>): voi
       const sanitized = sanitizeHtml(newVal);
 
       if (sanitized !== newVal) {
-        console.warn('[atomBind] Unsafe content neutralized during sanitization.');
+        console.warn(`${LOG_PREFIXES.BIND} ${ERROR_MESSAGES.UNSAFE_CONTENT}`);
       }
 
       // Guard against redundant DOM writes which destroy/recreate subtrees
@@ -118,7 +119,7 @@ export function bindCss(ctx: BindingContext, cssMap: Record<string, CssValue>): 
       (v) => {
         const strVal = unit ? `${v}${unit}` : String(v);
         if (isDangerousCssValue(strVal)) {
-          console.warn(`[atomBind] Blocked dangerous value in "${prop}" property.`);
+          console.warn(`${LOG_PREFIXES.BIND} ${ERROR_MESSAGES.BLOCKED_DANGEROUS_VALUE(prop)}`);
           return;
         }
         style[camel] = strVal;
@@ -137,7 +138,7 @@ export function bindAttr(
     // Block event handler attributes (on*)
     const c0 = name.charCodeAt(0);
     if ((c0 === 111 || c0 === 79) && (name.charCodeAt(1) === 110 || name.charCodeAt(1) === 78)) {
-      console.warn(`[atomBind] Blocked setting dangerous event handler attribute "${name}".`);
+      console.warn(`${LOG_PREFIXES.BIND} ${ERROR_MESSAGES.BLOCKED_EVENT_HANDLER(name)}`);
       continue;
     }
 
@@ -151,7 +152,7 @@ export function bindAttr(
         }
         const newVal = v === true ? name : String(v);
         if (isDangerousUrl(name, newVal)) {
-          console.warn(`[atomBind] Blocked dangerous protocol in "${name}" attribute.`);
+          console.warn(`${LOG_PREFIXES.BIND} ${ERROR_MESSAGES.BLOCKED_PROTOCOL(name)}`);
           return;
         }
         // Attribute write guard
@@ -164,8 +165,6 @@ export function bindAttr(
   }
 }
 
-const DANGEROUS_PROPS = ['innerHTML', 'outerHTML'];
-
 export function bindProp(
   ctx: BindingContext,
   propMap: Record<string, ReactiveValue<unknown>>
@@ -173,10 +172,8 @@ export function bindProp(
   const el = ctx.el as unknown as Record<string, unknown>;
   for (const name in propMap) {
     // Block dangerous DOM properties that can inject raw HTML
-    if (DANGEROUS_PROPS.includes(name)) {
-      console.warn(
-        `[atomBind] Blocked setting dangerous property "${name}". Use html binding for sanitized HTML.`
-      );
+    if (DANGEROUS_PROPS.includes(name as (typeof DANGEROUS_PROPS)[number])) {
+      console.warn(`${LOG_PREFIXES.BIND} ${ERROR_MESSAGES.BLOCKED_DANGEROUS_PROP(name)}`);
       continue;
     }
 
