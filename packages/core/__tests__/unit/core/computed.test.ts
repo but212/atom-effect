@@ -158,21 +158,23 @@ describe('Computed', () => {
         async () => {
           throw new Error('Critical Fail');
         },
-        { 
+        {
           defaultValue: 999,
-          onError: () => { throw new Error('Handler Fail'); } // Even if handler fails
+          onError: () => {
+            throw new Error('Handler Fail');
+          }, // Even if handler fails
         }
       );
-      
+
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-      
+
       // Trigger computation (lazy by default)
       // Pending state -> returns default value immediately
       expect(c.value).toBe(999);
-      
+
       // Wait for async rejection to be processed and onError to fire
       await waitForScheduler();
-      
+
       expect(consoleError).toHaveBeenCalled(); // Should log handler error
       consoleError.mockRestore();
     });
@@ -180,19 +182,19 @@ describe('Computed', () => {
     it('reuses dependency links to optimize memory', async () => {
       const a = atom(0);
       const c = computed(() => a.value);
-      
+
       c.value; // Link created
-      
+
       // Access private _links to check reference stability
-      const links1 = (c as any)._links;
-      const linkNode1 = links1[0];
-      
+      const links1 = (c as unknown as { _links: { node: unknown }[] })._links;
+      const _linkNode1 = links1[0];
+
       a.value = 1;
       await waitForScheduler();
-      
-      const links2 = (c as any)._links;
-      expect(links2[0].node).toBe(a);
-      
+
+      const links2 = (c as unknown as { _links: { node: unknown }[] })._links;
+      expect(links2[0]?.node).toBe(a);
+
       // Verify no memory leak (links count matches deps)
       expect(links2.length).toBe(1);
     });

@@ -22,7 +22,9 @@ describe('Atom', () => {
 
     it('isolates subscriber errors to ensure robustness', async () => {
       const a = atom(0);
-      const errorSub = vi.fn().mockImplementation(() => { throw new Error('Fail'); });
+      const errorSub = vi.fn().mockImplementation(() => {
+        throw new Error('Fail');
+      });
       // Normal subscriber should still run despite error in peer
       const normalSub = vi.fn();
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
