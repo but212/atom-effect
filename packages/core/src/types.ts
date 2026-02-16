@@ -36,6 +36,11 @@ export interface ReadonlyAtom<T = unknown> {
    * Non-reactive read.
    */
   peek(): T;
+
+  /**
+   * Returns the number of active subscribers.
+   */
+  subscriberCount(): number;
 }
 
 /**
