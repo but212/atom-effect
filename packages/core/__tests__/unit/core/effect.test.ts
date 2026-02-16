@@ -245,7 +245,7 @@ describe('Effect', () => {
       trigger.value = true;
       await sleep(10);
 
-      expect(runs).toBeGreaterThanOrEqual(2);
+      expect(runs).toBe(2);
 
       consoleSpy.mockRestore();
       consoleWarnSpy.mockRestore();
