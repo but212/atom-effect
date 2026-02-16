@@ -13,9 +13,6 @@ describe('Effect Factory', () => {
   it('creates an effect that updates on atom change', async () => {
     const atom = $.atom('initial');
     const updater = vi.fn();
-    // Spying on registry is implementation detail but confirms registration happened
-    // However, the side effect (updater called later) is the true test.
-    // We'll trust the behavioral test: change atom -> updater called.
 
     registerReactiveEffect(document.createElement('div'), atom, updater, 'ctx');
     expect(updater).toHaveBeenCalledWith('initial');
