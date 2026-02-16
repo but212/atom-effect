@@ -4,132 +4,78 @@
 
 ### Core
 
-#### Fixed
-
-- **Effect Resource Leak**: Fixed a bug where `dispose()` failed to clean up subscriptions acquired before a mid-execution throw. The error path in `execute()` was missing `this._links = nextLinks`, causing orphaned subscriptions that could not be reclaimed.
-
-#### Refactored
-
-- **Naming**: Renamed `SubscriberLink` to `Subscription` to disambiguate from `DependencyLink`. The two classes represent opposite edge directions (downstream vs upstream), and the shared "Link" suffix caused confusion.
-- **Computed defaultValue Contract**: `defaultValue` now unconditionally serves as a fallback on any error, regardless of the error's `recoverable` flag. Previously, non-recoverable errors (e.g., `EffectError` propagating through a computed) would bypass `defaultValue` and throw, contradicting the user's explicit fallback intent.
-- **Hardcoded Values**: Moved `MAX_ASYNC_RETRIES`, `MAX_PROMISE_ID`, `EFFECT_FREQUENCY_WINDOW`, and scheduler error messages to `constants.ts` and `errors/messages.ts` for better maintainability.
+- **Effect Resource Leak**: Fixed failed subscription cleanup after mid-execution errors.
+- **Naming**: Renamed `SubscriberLink` to `Subscription` to avoid confusion.
+- **Computed Fallback**: `defaultValue` now serves as a fallback for all error types, including non-recoverable ones.
+- **Hardcoded Values**: extracted constants and error messages to dedicated files.
 
 ## [0.21.0]
 
 ### Core - 0.21.0
 
-- **Brand Symbols**: Added internal `Symbol`-based brand markers for reliable runtime type identification. (Note: distinct from the `Branded` utility type removed in 0.20.0; these are runtime symbols, not compile-time wrappers.)
-- **Type Guards**: Refactored type checks to use the new brand symbols for more robust runtime validation.
-- **Version Hashing**: Replaced simple version incrementing with bitwise hashing for version snapshots, building on the shared utilities extracted in 0.20.0.
-- **Modernization**: Adopted ES2021 syntax and updated project build targets.
+- **Brand Symbols**: Added specific symbols for robust runtime type identification.
+- **Version Hashing**: Implemented bitwise hashing for version snapshots.
+- **Modernization**: Adopted ES2021 syntax and updated build targets.
 
 ### jQuery - 0.21.0
 
-- **$.atomFetch**: New declarative AJAX primitive with reactive support.
-- **Native DOM Routing**: Migrated routing logic to native APIs to reduce overhead.
-- **Type Safety**: Improved reactivity detection using the new core brand symbols.
+- **$.atomFetch**: Added declarative reactive AJAX primitive.
+- **Native DOM Routing**: Migrated routing to native APIs.
+- **Type Safety**: Improved reactivity checks using new core symbols.
 
 ## [0.20.0]
 
 ### Core - 0.20.0
 
-#### Refactored - Core 0.20.0
-
-- **Epoch Unification**: Merged `collectorEpoch` and `flushEpoch` into a shared counter to reduce module-level state and simplify epoch tracking.
-- **Flag Inlining**: Inlined `NODE_FLAGS` constants directly into usage sites to eliminate object lookup overhead and simplified state transition logic.
-- **Computed Simplification**: Removed complex lookup tables and internal error caching mechanisms in favor of streamlined inline expressions and on-demand error collection.
-- **Effect Loop Detection**: Replaced the circular buffer implementation with a sliding window approach for more efficient infinite loop detection.
-- **Subscription Parking**: Replaced the `Map`-based subscription storage (introduced in 0.19.1's `_parkedUnsubs`) with a linear array scan for faster subscription reuse and lower memory overhead. (Note: subsequently reverted to a Map-based approach in unreleased.)
-- **Type Simplification**: Removed the `Branded` compile-time type wrapper from `DependencyId` to simplify type definitions and reduce TypeScript compilation overhead. (Note: runtime brand symbols were later re-introduced in 0.21.0 as a separate mechanism.)
-- **Utility Consolidation**: Simplified error classification logic and version snapshotting by moving them into shared internal utilities.
-- **Method Inlining**: Inlined `_commitDeps` and `_checkLoopWarnings` methods to reduce function call overhead in hot paths.
-- **Dead Code Cleanup**: Removed unused object pools and `Object.freeze` calls to reduce bundle size and runtime initialization cost.
-- **Memory Optimization**: Removed unused `timestamp` property from `AtomError` and `_modifiedAtEpoch` from `ReactiveNode` to reduce object size.
-- **Logic Refinement**: Removed redundant `_promiseId` increment in computed error handling and unnecessary `unsub` clearing in dependency synchronization.
+- **Optimization & Refactoring**:
+  - **Epoch Unification**: Merged epoch counters to simplify tracking.
+  - **Flag Inlining**: Inlined constants to reduce lookup overhead.
+  - **Computed Simplification**: Streamlined error collection and removed complex lookup tables.
+  - **Effect Loop Detection**: Switched to sliding window approach for efficiency.
+  - **Subscription Parking**: Optimized subscription reuse with linear scanning.
+  - **Code Cleanup**: Removed internal type wrappers, unused object pools, and redundant properties (`timestamp`, `_modifiedAtEpoch`).
+  - **Method Inlining**: Inlined hot-path methods (`_commitDeps`, `_checkLoopWarnings`) for performance.
 
 ### jQuery - 0.20.0
 
-#### Refactored - jQuery 0.20.0
-
-- **Chainable Method Delegation**: Refactored chainable methods to delegate directly to unified binding handlers in `unified.ts`, reducing code duplication between chainable and declarative APIs.
-- **Checked Binding Normalization**: Updated `atomChecked` to utilize the standard `bindChecked` handler and jQuery events for consistent behavior across binding types.
-- **Utility Centralization**: Centralized `shallowEqual` and `isReactive` checks into `utils.ts` to ensure consistent equality logic across the library.
-- **Debug Performance**: Added an enablement check to `domUpdated` to prevent unnecessary DOM access when debug mode is disabled.
-- **Visibility Logic Merger**: Merged `bindShow` and `bindHide` implementations into a single `bindVisibility` function to reduce code footprint.
-- **CSS Binding Unification**: Unified `bindCss` rendering logic to handle both array and string values within a single pass.
-- **Router Simplification**: Replaced manual query string parsing with standard `URLSearchParams` for more robust and standard-compliant route handling.
-- **pushState**: Added pushState support to the router.
-- **Debug UI Simplification**: Simplified the visual highlight implementation to avoid complex DOM manipulation.
-
-#### Changed - jQuery 0.20.0
-
-- **Environment**: Updated debug mode detection logic.
-- **Initialization**: Deferred `enablejQueryOverrides` to DOM ready.
-
-#### Removed - jQuery 0.20.0
-
-- **Deprecated `enablejQueryBatching`**: Removed alias and its re-export from `index.ts`. Use `enablejQueryOverrides()` directly.
-- **Unused `atomMetadata` WeakMap**: Removed from `namespace.ts`; was written but never read.
-- **Duplicate comment**: Removed duplicated guard comment in `bindHtml`.
+- **Refactoring**:
+  - **Delegation**: Refactored chainable methods to use unified binding handlers.
+  - **Normalization**: Standardized `atomChecked` and `bindVisibility` logic.
+  - **Performance**: Centralized equality checks and optimized debug mode DOM access.
+  - **Router**: Switched to `URLSearchParams` and added `pushState` support.
+  - **CSS**: Unified array/string value handling in `bindCss`.
 
 ## [0.19.1]
 
 ### Core - 0.19.1
 
-#### Refactored - Core 0.19.1
-
-- **Dependency Ownership**: Replaced `_tempUnsub` node pollution with local `Map<Dependency, () => void>` in `Effect` and `syncDependencies`.
-  - Removed `_tempUnsub` from `ReactiveNode` and `Dependency` interface, eliminating tracker-owned temporary state from dependency nodes.
-  - `EffectImpl` now uses `_parkedUnsubs` Map for subscription parking/reclaiming during re-execution. (Note: replaced by linear array scan in 0.20.0.)
-  - `syncDependencies` uses a local Map instead of mutating `node._tempUnsub`.
-- **trackDependency Documentation**: Added O(n) trade-off comment explaining why linear scan is acceptable (array size 1–10, hot path uses O(1) epoch-based dedup).
+- **Dependency Ownership**: Replaced global node pollution with local subscription maps for cleaner tracking.
 
 ### jQuery - 0.19.1
 
-#### Fixed - jQuery 0.19.1
-
-- **Security Hardening**: Implemented comprehensive XSS protection across all binding methods, expanding on the minimal sanitization strategy established in 0.19.0.
-  - Blocks `on*` handlers, dangerous protocols (`javascript:`, `vbscript:`), and risky CSS values.
-  - Prevents direct HTML injection via `innerHTML`/`outerHTML`.
-  - Auto-sanitizes content in `atomList` rendering.
-
-#### Changed - jQuery 0.19.1
-
-- **Sanitization Optimization**: Refactored `sanitizeHtml` as a lightweight first-pass filter.
-  - Simplified implementation using whitespace-tolerant regex.
-  - Allowed practical tags (`<form>`, `<style>`, `<template>`) and `data:image/svg+xml`.
+- **Security Hardening**: Implemented comprehensive XSS protection in bindings (blocking `on*` events and dangerous CSS).
+- **Sanitization**: Refactored `sanitizeHtml` for performance and safety.
 
 ## [0.19.0]
 
 ### Core - 0.19.0
 
-#### Added - Core 0.19.0
-
-- **Configurable Async Retries**: Added `maxAsyncRetries` option to `ComputedOptions`, allowing per-instance control over async drift retry limits (default: 3).
-- **ArrayPool `enableStats`**: Added `enableStats` constructor parameter to force-enable pool statistics even in production builds.
-- **Error Dependency Count**: Added `_errorDepCount` field to `ComputedAtom` for O(1) fast-path `hasError` checks, with live scan fallback for async error propagation.
-
-#### Changed - Core 0.19.0
-
-- **Notification Performance**: Replaced `[...subscribers]` spread with `Array.prototype.slice(0)` in `_notifySubscribers` to avoid iterator protocol overhead.
-- **EMPTY_LINKS Type Safety**: Changed `EMPTY_LINKS` type to `DependencyLink[]`, eliminating 8 `as unknown as DependencyLink[]` double casts across `computed.ts` and `effect.ts`.
-- **Dev Error Logging**: Added `IS_DEV` guarded `console.warn` in `_commitDeps` error recovery catch block for better debugging of dependency commit failures.
-
-#### Refactored - Core 0.19.0
-
-- **Version Arithmetic**: Extracted `nextVersion(v)` utility in `epoch.ts` to replace repeated `(version + 1) & SMI_MAX` pattern across `atom.ts` and `computed.ts`.
-- **Flag Transition Masks**: Extracted pre-computed flag masks (`CLEAR_FOR_PENDING`, `CLEAR_FOR_REJECTED`, `SET_REJECTED`, `CLEAR_FOR_RESOLVED`) in `computed.ts` to simplify state transitions.
-- **Unused Imports**: Removed unused `NODE_FLAGS` imports from `base.ts` and `dep-tracking.ts`.
+- **Features**:
+  - **Async Retries**: Added `maxAsyncRetries` to `ComputedOptions`.
+  - **Pool Stats**: Added stats enablement for `ArrayPool`.
+  - **Error Tracking**: Optimized `hasError` checks with O(1) lookups.
+- **Performance & Refactoring**:
+  - Optimized subscriber notification loop.
+  - Extracted version arithmetic and flag masks for maintenance.
+  - Improved type safety for empty links.
 
 ### jQuery - 0.19.0
 
-#### Changed - jQuery 0.19.0
-
-- **RouteDefinition Type Safety**: Refactored `RouteDefinition` into a discriminated union (`TemplateRoute | RenderRoute`) to enforce mutual exclusivity of `template` and `render` at compile time.
-- **XSS Prevention**: `atomHtml` now uses a minimal sanitization strategy (removes `<script>` and `on*` events) to prevent accidental XSS, replacing the previous experimental heavy-weight sanitizer. Recommends `DOMPurify` for production security. (Note: further hardened in 0.19.1 with comprehensive binding-level protection.)
-- **Input Validation**: `atomVal` and `bindVal` now validate that the target element is a valid input (`input`, `select`, `textarea`), logging a warning if used incorrectly on non-input elements.
-- **Route Safety**: Route parameter parsing now safely handles malformed URIs using `try-catch`, preventing application crashes.
-- **List Diagnostics**: `atomList` now warns about duplicate keys in **Production Mode** (previously only debug), alerting developers to potential reconciliation issues.
+- **Type Safety**: Refactored `RouteDefinition`, `atomVal`, and `bindVal`.
+- **Safety & Stability**:
+  - **XSS Prevention**: Minimal sanitization for `atomHtml`.
+  - **Route Safety**: Safe URI parsing for malformed URLs.
+  - **Diagnostics**: Added duplicate key warnings in production.
 
 ## [0.18.0]
 
