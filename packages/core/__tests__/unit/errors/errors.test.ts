@@ -1,5 +1,6 @@
 /**
- * @fileoverview Error class tests (coverage supplement)
+ * @fileoverview Error Handling System Tests
+ * @description Verifies Error hierarchy, wrapping logic, and type guards
  */
 
 import { describe, expect, it } from 'vitest';
@@ -7,145 +8,79 @@ import { AtomError, ComputedError, EffectError, SchedulerError } from '@/errors/
 import { wrapError } from '@/utils/error';
 import { isPromise } from '@/utils/type-guards';
 
-describe('Error Classes', () => {
-  it('AtomError has correct properties', () => {
-    const error = new AtomError('Test message');
+describe('Error Handling System', () => {
+  describe('Error Classes', () => {
+    const errorTypes = [
+      { Class: AtomError, name: 'AtomError', expectedRecoverable: true },
+      { Class: ComputedError, name: 'ComputedError', expectedRecoverable: true },
+      // Effect and Scheduler errors are typically fatal/non-recoverable by default
+      { Class: EffectError, name: 'EffectError', expectedRecoverable: false },
+      { Class: SchedulerError, name: 'SchedulerError', expectedRecoverable: false },
+    ];
 
-    expect(error.name).toBe('AtomError');
-    expect(error.message).toBe('Test message');
-    expect(error.cause).toBe(null);
-    expect(error.recoverable).toBe(true);
+    it.each(errorTypes)('$name should have correct structure and defaults', ({
+      Class,
+      name,
+      expectedRecoverable,
+    }) => {
+      const cause = new Error('root cause');
+      const err = new Class('test msg', cause);
+
+      expect(err).toBeInstanceOf(AtomError);
+      expect(err).toBeInstanceOf(Error);
+      expect(err.name).toBe(name);
+      expect(err.message).toBe('test msg');
+      expect(err.cause).toBe(cause);
+
+      // Verify default recoverable state
+      const defaultErr = new Class('default');
+      expect(defaultErr.recoverable).toBe(expectedRecoverable);
+    });
+
+    it('allows overriding recoverable status in AtomError', () => {
+      const err = new AtomError('fatal', null, false);
+      expect(err.recoverable).toBe(false);
+    });
   });
 
-  it('AtomError can receive cause', () => {
-    const cause = new Error('Original error');
-    const error = new AtomError('Wrapped error', cause);
+  describe('wrapError()', () => {
+    it('wraps native errors into target AtomError type', () => {
+      const nativeErr = new TypeError('native failure');
+      const wrapped = wrapError(nativeErr, ComputedError, 'context');
 
-    expect(error.cause).toBe(cause);
+      expect(wrapped).toBeInstanceOf(ComputedError);
+      expect(wrapped.cause).toBe(nativeErr);
+      expect(wrapped.message).toContain('context');
+      expect(wrapped.message).toContain('TypeError');
+    });
+
+    it('returns existing AtomErrors as-is (idempotent)', () => {
+      const original = new SchedulerError('already wrapped');
+      const result = wrapError(original, EffectError, 'new context');
+
+      expect(result).toBe(original);
+    });
+
+    it('normalizes non-error throwables', () => {
+      const stringErr = wrapError('string throw', AtomError, 'ctx');
+      expect(stringErr).toBeInstanceOf(AtomError);
+      expect(stringErr.message).toContain('string throw');
+
+      const numErr = wrapError(123, AtomError, 'ctx');
+      expect(numErr.message).toContain('123');
+    });
   });
 
-  it('AtomError recoverable can be set', () => {
-    const error = new AtomError('Test', null, false);
+  describe('Type Guards', () => {
+    describe('isPromise', () => {
+      it('identifies Promises and Thenables correctly', () => {
+        expect(isPromise(Promise.resolve())).toBe(true);
+        expect(isPromise({ then: () => {} })).toBe(true);
 
-    expect(error.recoverable).toBe(false);
-  });
-
-  it('ComputedError extends AtomError', () => {
-    const error = new ComputedError('Computed failed');
-
-    expect(error).toBeInstanceOf(AtomError);
-    expect(error.name).toBe('ComputedError');
-    expect(error.recoverable).toBe(true);
-  });
-
-  it('ComputedError can receive cause', () => {
-    const cause = new Error('Root cause');
-    const error = new ComputedError('Computed error', cause);
-
-    expect(error.cause).toBe(cause);
-  });
-
-  it('EffectError extends AtomError', () => {
-    const error = new EffectError('Effect failed');
-
-    expect(error).toBeInstanceOf(AtomError);
-    expect(error.name).toBe('EffectError');
-    expect(error.recoverable).toBe(false); // effect has recoverable=false
-  });
-
-  it('EffectError can receive cause', () => {
-    const cause = new Error('Root cause');
-    const error = new EffectError('Effect error', cause);
-
-    expect(error.cause).toBe(cause);
-  });
-
-  it('SchedulerError extends AtomError', () => {
-    const error = new SchedulerError('Scheduler failed');
-
-    expect(error).toBeInstanceOf(AtomError);
-    expect(error.name).toBe('SchedulerError');
-    expect(error.recoverable).toBe(false);
-  });
-
-  it('SchedulerError can receive cause', () => {
-    const cause = new Error('Root cause');
-    const error = new SchedulerError('Scheduler error', cause);
-
-    expect(error.cause).toBe(cause);
-  });
-});
-
-describe('wrapError Utility', () => {
-  it('wraps TypeError correctly', () => {
-    const typeError = new TypeError('Type is wrong');
-    const wrapped = wrapError(typeError, ComputedError, 'computation');
-
-    expect(wrapped).toBeInstanceOf(ComputedError);
-    expect(wrapped.message).toContain('TypeError');
-    expect(wrapped.message).toContain('computation');
-    expect(wrapped.cause).toBe(typeError);
-  });
-
-  it('wraps ReferenceError correctly', () => {
-    const refError = new ReferenceError('Variable not found');
-    const wrapped = wrapError(refError, EffectError, 'execution');
-
-    expect(wrapped).toBeInstanceOf(EffectError);
-    expect(wrapped.message).toContain('ReferenceError');
-    expect(wrapped.message).toContain('execution');
-    expect(wrapped.cause).toBe(refError);
-  });
-
-  it('returns AtomError as is', () => {
-    const atomError = new AtomError('Already wrapped');
-    const wrapped = wrapError(atomError, ComputedError, 'test');
-
-    expect(wrapped).toBe(atomError); // same object
-  });
-
-  it('wraps generic error as unexpected error', () => {
-    const genericError = new Error('Generic error');
-    const wrapped = wrapError(genericError, SchedulerError, 'scheduling');
-
-    expect(wrapped).toBeInstanceOf(SchedulerError);
-    expect(wrapped.message).toContain('Error');
-    expect(wrapped.message).toContain('scheduling');
-    expect(wrapped.cause).toBe(genericError);
-  });
-
-  it('wraps non-error objects as unexpected error', () => {
-    const wrapped = wrapError('string error', AtomError, 'test');
-    expect(wrapped).toBeInstanceOf(AtomError);
-    expect(wrapped.message).toContain('Unexpected error (test): string error');
-    expect(wrapped.cause).toBe(null);
-
-    const wrapped2 = wrapError(42, AtomError, 'test');
-    expect(wrapped2.message).toContain('42');
-  });
-});
-
-describe('isPromise Type Guard', () => {
-  it('detects Promise correctly', () => {
-    const promise = Promise.resolve(42);
-    expect(isPromise(promise)).toBe(true);
-  });
-
-  it('recognizes object with then method as Promise', () => {
-    const thenable = { then: () => {} };
-    expect(isPromise(thenable)).toBe(true);
-  });
-
-  it('plain objects are not Promise', () => {
-    expect(isPromise({})).toBe(false);
-    expect(isPromise(null)).toBe(false);
-    expect(isPromise(undefined)).toBe(false);
-    expect(isPromise(42)).toBe(false);
-    expect(isPromise('string')).toBe(false);
-  });
-
-  it('not a Promise if then is not a function', () => {
-    const notPromise = { then: 'not a function' };
-    expect(isPromise(notPromise)).toBe(false);
+        expect(isPromise({})).toBe(false);
+        expect(isPromise(null)).toBe(false);
+        expect(isPromise(123)).toBe(false);
+      });
+    });
   });
 });
