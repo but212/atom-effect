@@ -4,11 +4,7 @@
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { SchedulerError } from '@/errors/errors';
-import { scheduler, SchedulerPhase } from '@/internal/scheduler'; // Import internal strictly for testing internal enums if needed, or check if index exports it. 
-// Actually scheduler is exported from index, but SchedulerPhase might not be. 
-// Let's check imports. Original was: import { scheduler } from '@/index';
-// If I change to internal, I must ensure I don't break singleton usage if index exports a DIFFERENT instance (unlikely).
-// Safer to keep scheduler from index and import Phase from internal.
+import { scheduler, SchedulerPhase } from '@/internal/scheduler';
 import { SCHEDULER_CONFIG } from '@/constants';
 import { sleep } from '../../utils/test-helpers';
 
