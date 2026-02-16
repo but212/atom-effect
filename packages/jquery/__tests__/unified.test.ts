@@ -131,7 +131,7 @@ describe('Unified Bind (atomBind)', () => {
     $el.remove();
   });
 
-  it('should support two-way checked binding', async () => {
+  it('should support two-way checked binding via atomBind', async () => {
     const isChecked = $.atom(false);
     const $el = $('<input type="checkbox">').appendTo(document.body);
 
@@ -144,9 +144,7 @@ describe('Unified Bind (atomBind)', () => {
 
     // DOM -> Atom
     $el.prop('checked', false);
-    // Use native event to ensure addEventListener catches it
     $el[0].dispatchEvent(new Event('change'));
-
     expect(isChecked.value).toBe(false);
 
     $el.remove();

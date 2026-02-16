@@ -27,9 +27,6 @@ describe('Atom List Edge Cases', () => {
 
       await $.nextTick();
 
-      console.log('Duplicate Keys Children Count:', $container.children().length);
-      console.log('Duplicate Keys Child 0 Text:', $container.children().eq(0).text());
-
       // Expectation: Only 1 element exists because of key collision in Map
       expect($container.children().length).toBe(1);
 
@@ -122,8 +119,6 @@ describe('Atom List Edge Cases', () => {
     // Reorder: 3, 1, 2
     items.value = [{ id: 3 }, { id: 1 }, { id: 2 }];
     await $.nextTick();
-
-    console.log('Active Element ID after reorder:', document.activeElement?.id);
 
     // Verify DOM order
     const children = $container.children();

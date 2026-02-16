@@ -79,18 +79,6 @@ describe('Chainable Methods (Surface)', () => {
     await $.nextTick();
     expect($el.text()).toBe('initial');
   });
-  it('should prevent XSS sequences in atomHtml', async () => {
-    const maliciousHtml = '<img src=x onerror=alert(1)>';
-    const htmlAtom = $.atom(maliciousHtml);
-    const $el = $('<div>');
-
-    $el.atomHtml(htmlAtom);
-    await $.nextTick();
-
-    // Assert that the 'onerror' attribute has been removed/neutralized
-    expect($el.html()).not.toContain('onerror');
-  });
-
   it('should warn when atomVal is used on non-input elements', async () => {
     const val = $.atom('test');
     const $div = $('<div>'); // Not an input

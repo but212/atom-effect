@@ -108,6 +108,11 @@ describe('Unit: sanitizeHtml (Core Logic)', () => {
     expect(sanitizeHtml('<scr<script>ipt>alert(1)</script>')).not.toContain('<script');
     expect(sanitizeHtml('<scr\x00ipt>alert(1)</script>')).not.toContain('<script');
   });
+
+  // 9. Null / invalid input
+  it('should return empty string for null input', () => {
+    expect(sanitizeHtml(null as unknown as string)).toBe('');
+  });
 });
 
 describe('Unit: isDangerousUrl', () => {
@@ -121,6 +126,11 @@ describe('Unit: isDangerousUrl', () => {
     expect(isDangerousUrl('href', 'https://example.com')).toBe(false);
     expect(isDangerousUrl('href', '/login')).toBe(false);
     expect(isDangerousUrl('src', 'data:image/png;...')).toBe(false); // isDangerousUrl only checks protocol scheme start
+    expect(isDangerousUrl('href', 'mailto:user@example.com')).toBe(false);
+  });
+
+  it('should detect protocols with extra whitespace', () => {
+    expect(isDangerousUrl('href', '  javascript  :  alert(1)  ')).toBe(true);
   });
 
   it('should checking ignore non-URL attributes', () => {
