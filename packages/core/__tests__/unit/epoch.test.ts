@@ -1,16 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
-import { 
-  currentEpoch, 
-  endFlush, 
-  nextEpoch, 
-  startFlush,
-  resetFlushState,
-  incrementFlushExecutionCount,
-  flushExecutionCount,
-  nextVersion,
-  currentFlushEpoch
-} from '@/internal/epoch';
 import { SMI_MAX } from '@/constants';
+import {
+  currentEpoch,
+  currentFlushEpoch,
+  endFlush,
+  flushExecutionCount,
+  incrementFlushExecutionCount,
+  nextEpoch,
+  nextVersion,
+  resetFlushState,
+  startFlush,
+} from '@/internal/epoch';
 
 describe('epoch', () => {
   it('generates sequential non-zero epochs', () => {
@@ -30,12 +30,12 @@ describe('epoch', () => {
   it('calculates next version with wrap-around', () => {
     // Pure function logic verification
     expect(nextVersion(1)).toBe(2);
-    expect(nextVersion(SMI_MAX)).toBe(0); 
+    expect(nextVersion(SMI_MAX)).toBe(0);
   });
 
   it('manages flush lifecycle and state', () => {
     const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    
+
     // 0. Initial State
     resetFlushState();
     expect(incrementFlushExecutionCount()).toBe(0); // Should not count when idle
@@ -51,16 +51,16 @@ describe('epoch', () => {
     // 3. Increment Counts
     expect(incrementFlushExecutionCount()).toBe(1);
     expect(incrementFlushExecutionCount()).toBe(2);
-    expect(flushExecutionCount).toBe(2); 
+    expect(flushExecutionCount).toBe(2);
 
     // 4. Reset
     resetFlushState();
     expect(flushExecutionCount).toBe(0);
     expect(currentFlushEpoch()).toBe(0);
-    
+
     // 5. Restartable
     expect(startFlush()).toBe(true);
-    
+
     // Cleanup
     endFlush();
     consoleWarn.mockRestore();
