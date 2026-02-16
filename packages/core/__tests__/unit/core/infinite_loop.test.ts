@@ -81,7 +81,8 @@ describe('Infinite Loop Detection (Epoch Based)', () => {
     warnSpy.mockRestore();
   });
 
-  it('should allow valid executions within limit', () => {
+  it('should allow valid executions within limit without triggering detection', () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const count = atom(0);
     let executions = 0;
     const LIMIT = SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_EFFECT - 5;
@@ -96,6 +97,15 @@ describe('Infinite Loop Detection (Epoch Based)', () => {
       });
       count.value = 1;
     });
+
+    // Should complete all iterations without triggering infinite loop detection
     expect(executions).toBeGreaterThanOrEqual(LIMIT);
+    expect(consoleSpy).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringMatching(/Infinite loop detected/),
+      })
+    );
+
+    consoleSpy.mockRestore();
   });
 });
