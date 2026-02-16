@@ -20,6 +20,26 @@ describe('Atom', () => {
       expect(() => a.subscribe('invalid' as unknown as () => void)).toThrow(AtomError);
     });
 
+    it('isolates subscriber errors to ensure robustness', async () => {
+      const a = atom(0);
+      const errorSub = vi.fn().mockImplementation(() => { throw new Error('Fail'); });
+      // Normal subscriber should still run despite error in peer
+      const normalSub = vi.fn();
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      a.subscribe(errorSub);
+      a.subscribe(normalSub);
+
+      a.value = 1;
+      await waitForScheduler();
+
+      expect(errorSub).toHaveBeenCalled();
+      expect(normalSub).toHaveBeenCalled();
+      expect(consoleError).toHaveBeenCalled();
+
+      consoleError.mockRestore();
+    });
+
     it('warns on duplicate subscriptions', () => {
       const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const a = atom(0);

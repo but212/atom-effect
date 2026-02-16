@@ -30,6 +30,32 @@ describe('Dependency Graph Safety', () => {
       // c1 -> c2 -> c1 ...
       expect(() => c1.value).toThrow();
     });
+
+    it('handles deep dependency chains without stack overflow', async () => {
+      const depth = 1000;
+      const atoms: any[] = [];
+      const start = atom(0);
+      atoms.push(start);
+      
+      // Create chain: c[i] depends on c[i-1]
+      for (let i = 1; i <= depth; i++) {
+        const prev = atoms[i-1];
+        atoms.push(computed(() => prev.value + 1));
+      }
+      
+      const last = atoms[depth];
+      expect(last.value).toBe(depth);
+      
+      // Update
+      start.value = 1;
+      
+      // Atom updates are async by default, so we must wait for invalidation to propagate
+      // through the chain (start -> c1 -> ... -> c1000)
+      await flush();
+      
+      // Should propagate without stack overflow
+      expect(last.value).toBe(depth + 1);
+    });
   });
 
   describe('Infinite Loop Safety', () => {

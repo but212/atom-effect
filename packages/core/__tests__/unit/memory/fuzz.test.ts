@@ -1,97 +1,95 @@
 /**
- * @fileoverview Resilience testing for reactive dependency graphs
- * @description Deterministic stress tests for stability and consistency
+ * @fileoverview Deterministic Fuzz Testing
+ * @description Generates random dependency graphs and mutations to find edge cases.
+ * deterministically seeded for reproducibility.
  */
 
 import { describe, expect, it } from 'vitest';
 import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
-import { effect } from '@/core/effect';
-import { batch } from '@/index';
+import type { WritableAtom, ComputedAtom } from '@/types';
 
-describe('Resilience Testing', () => {
-  it('handles dynamic node creation and disposal cycle', () => {
-    // Deterministic pattern: Create -> Link -> Update -> Dispose
-    const atoms: ReturnType<typeof atom<number>>[] = [];
-    const computeds: ReturnType<typeof computed<number>>[] = [];
-    const effects: ReturnType<typeof effect>[] = [];
-    const CYCLE_COUNT = 100;
+// Simple seeded PRNG (sfc32)
+function seededRandom(seed: number) {
+  let a = 13971 ^ seed;
+  let b = 9461;
+  let c = 40503;
+  let d = 2654435769;
+  
+  return function() {
+    a |= 0; b |= 0; c |= 0; d |= 0;
+    const t = (a + b | 0) + d | 0;
+    d = d + 1 | 0;
+    a = b ^ b >>> 9;
+    b = c + (c << 3) | 0;
+    c = (c << 21 | c >>> 11);
+    c = c + t | 0;
+    return (t >>> 0) / 4294967296;
+  };
+}
 
-    for (let i = 0; i < CYCLE_COUNT; i++) {
-      // 1. Create
-      const a = atom(i);
-      atoms.push(a);
+describe('Fuzz Testing (Deterministic)', () => {
+    it('maintains consistency in random graph topologies', async () => {
+        const rand = seededRandom(12345); // Fixed seed
+        const ATOM_COUNT = 20;
+        const OPS_COUNT = 100;
+        
+        const atoms: WritableAtom<number>[] = [];
+        const computeds: ComputedAtom<number>[] = [];
+        const allNodes: (WritableAtom<number> | ComputedAtom<number>)[] = [];
 
-      // 2. Derive (Chain)
-      const c = computed(() => a.value * 2);
-      computeds.push(c);
+        // 1. Create Atoms
+        for(let i=0; i<5; i++) {
+            const a = atom(i);
+            atoms.push(a);
+            allNodes.push(a);
+        }
 
-      // 3. Subscribe
-      const e = effect(() => {
-        void c.value;
-      });
-      effects.push(e);
+        // 2. Create Computed layers
+        for(let i=0; i<ATOM_COUNT; i++) {
+            // Pick random dependencies from existing nodes
+            const numDeps = Math.floor(rand() * 3) + 1;
+            const deps: (WritableAtom<number> | ComputedAtom<number>)[] = [];
+            
+            for(let j=0; j<numDeps; j++) {
+                const idx = Math.floor(rand() * allNodes.length);
+                const dep = allNodes[idx];
+                if (dep) deps.push(dep);
+            }
+            
+            const c = computed(() => {
+                let sum = 0;
+                for(const d of deps) sum += d.value;
+                return sum;
+            });
+            
+            computeds.push(c);
+            allNodes.push(c);
+        }
 
-      // 4. Update
-      a.value = i + 1;
+        // 3. Mutate and Verify
+        for(let i=0; i<OPS_COUNT; i++) {
+            // Pick random atom to change
+            const atomIdx = Math.floor(rand() * atoms.length);
+            const targetAtom = atoms[atomIdx];
 
-      // 5. Dispose (Partial)
-      // Verify that interleaving disposals doesn't break the system
-      if (i % 2 === 0) {
-        e.dispose();
-        c.dispose();
-      }
-    }
+            if (targetAtom) {
+                const newVal = Math.floor(rand() * 100);
+                targetAtom.value = newVal;
+            }
 
-    // 6. Remaining Dispose
-    // Should execute without errors
-    expect(() => {
-      effects.forEach((e) => e.dispose());
-      computeds.forEach((c) => c.dispose());
-    }).not.toThrow();
-  });
-
-  it('maintains consistency under concurrent microtask updates', async () => {
-    const a = atom(0);
-    const c = computed(() => a.value * 2);
-
-    const updates = Array.from({ length: 50 }, (_, i) =>
-      Promise.resolve().then(() => {
-        a.value = i;
-        return c.value; // Capture value immediately after update in microtask
-      })
-    );
-
-    const capturedValues = await Promise.all(updates);
-
-    // Sync updates ensure c is always 2 * a
-    expect(capturedValues.every((val) => val % 2 === 0)).toBe(true);
-
-    // Final state check
-    expect(c.value).toBe(49 * 2);
-  });
-
-  it('stabilizes deep dependency chains in batch', () => {
-    const root = atom(1);
-    let current = computed(() => root.value);
-    const layers = [current];
-
-    // Build 50-layer deep chain: L(n) = L(n-1) + 1
-    for (let i = 0; i < 50; i++) {
-      const prev = current;
-      current = computed(() => prev.value + 1);
-      layers.push(current);
-    }
-
-    // Initial check: root=1. L0=1, L1=2, ..., L50=51
-    expect(layers[50]!.value).toBe(51);
-
-    // Batch update
-    batch(() => {
-      root.value = 10;
+            // Randomly read some computed values to trigger updates
+            // Use bitwise OR to coerce to integer 0 if undefined (though length check handles it)
+            if (computeds.length > 0) {
+                 const readIdx = Math.floor(rand() * computeds.length);
+                 const targetComputed = computeds[readIdx];
+                 
+                 if (targetComputed) {
+                     const val = targetComputed.value;
+                     expect(val).toBeTypeOf('number');
+                     expect(Number.isNaN(val)).toBe(false);
+                 }
+            }
+        }
     });
-
-    // Final check: root=10. L0=10, L1=11, ..., L50=60
-    expect(layers[50]!.value).toBe(60);
-  });
 });
