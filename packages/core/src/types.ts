@@ -139,6 +139,7 @@ export interface EffectObject {
   run(): void;
   readonly isDisposed: boolean;
   readonly executionCount: number;
+  readonly isExecuting: boolean;
 }
 
 export interface PoolStats {

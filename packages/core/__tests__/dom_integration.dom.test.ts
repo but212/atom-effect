@@ -13,9 +13,10 @@ describe('DOM Integration', () => {
     document.body.removeChild(container);
   });
 
-  it('should update text content and attributes reactively', async () => {
+  it('should update text content, attributes, styles and classes reactively', async () => {
     const text = atom('Hello');
     const isActive = atom(false);
+    const x = atom(0);
     const className = computed(() => (isActive.value ? 'active' : 'inactive'));
 
     const element = document.createElement('div');
@@ -24,17 +25,23 @@ describe('DOM Integration', () => {
     effect(() => {
       element.textContent = text.value;
       element.className = className.value;
+      element.style.transform = `translate(${x.value}px, 0px)`;
+      element.classList.toggle('highlight', isActive.value);
     });
 
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(element.textContent).toBe('Hello');
     expect(element.className).toBe('inactive');
+    expect(element.style.transform).toBe('translate(0px, 0px)');
 
     text.value = 'World';
     isActive.value = true;
+    x.value = 100;
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(element.textContent).toBe('World');
-    expect(element.className).toBe('active');
+    expect(element.className).toContain('active');
+    expect(element.style.transform).toBe('translate(100px, 0px)');
+    expect(element.classList.contains('highlight')).toBe(true);
   });
 
   it('should handle two-way form bindings (input, checkbox, radio, select)', async () => {
@@ -134,28 +141,5 @@ describe('DOM Integration', () => {
     show.value = false;
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(container.contains(ul)).toBe(false);
-  });
-
-  it('should update dynamic styles and classes', async () => {
-    const x = atom(0);
-    const isActive = atom(false);
-
-    const element = document.createElement('div');
-    container.appendChild(element);
-
-    effect(() => {
-      element.style.transform = `translate(${x.value}px, 0px)`;
-      element.classList.toggle('active', isActive.value);
-    });
-
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(element.style.transform).toBe('translate(0px, 0px)');
-    expect(element.classList.contains('active')).toBe(false);
-
-    x.value = 100;
-    isActive.value = true;
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(element.style.transform).toBe('translate(100px, 0px)');
-    expect(element.classList.contains('active')).toBe(true);
   });
 });

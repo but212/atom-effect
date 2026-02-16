@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { atom, batch, computed, effect } from '../src';
+import { atom, batch, computed, effect, untracked } from '../src';
 import { sleep, waitForScheduler } from './utils/test-helpers';
 
 describe('Reactive Core - Edge Cases', () => {
@@ -134,6 +134,37 @@ describe('Reactive Core - Edge Cases', () => {
 
       expect(asyncDerived.value).toBe(3);
       expect(results[results.length - 1]).toBe(3);
+    });
+  });
+
+  describe('Diamond Dependency (A->B,C->D)', () => {
+    it('notifies only once when shared source changes', async () => {
+      const a = atom(1);
+      const b = computed(() => a.value * 2);
+      const c = computed(() => a.value * 3);
+      const d = computed(() => b.value + c.value);
+      const listener = vi.fn();
+      d.subscribe(listener);
+
+      expect(d.value).toBe(5);
+
+      a.value = 2;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(d.value).toBe(10);
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('Untracked Reads', () => {
+    it('does not recompute when untracked dependency changes', () => {
+      const a = atom(1);
+      const b = atom(2);
+      const c = computed(() => a.value + untracked(() => b.value));
+
+      expect(c.value).toBe(3);
+      b.value = 10;
+      expect(c.value).toBe(3);
     });
   });
 

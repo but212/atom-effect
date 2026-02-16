@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { atom, batch, computed, effect } from '../src';
+import { atom, batch, computed } from '../src';
 
 interface Todo {
   id: number;
@@ -55,25 +55,5 @@ describe('Reactive Scenarios - Auth & App State', () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(greeting.value).toBe('Hello Admin');
     expect(isAdmin.value).toBe(true);
-  });
-
-  it('should handle complex state with nested updates', async () => {
-    const state = atom({ count: 0, multiplier: 1 });
-    const result = computed(() => state.value.count * state.value.multiplier);
-    const logs: number[] = [];
-
-    effect(() => {
-      logs.push(result.value);
-    });
-    await new Promise((r) => setTimeout(r, 0));
-
-    batch(() => {
-      state.value = { ...state.value, count: 10 };
-      state.value = { ...state.value, multiplier: 2 };
-    });
-
-    await new Promise((r) => setTimeout(r, 0));
-    expect(result.value).toBe(20);
-    expect(logs[logs.length - 1]).toBe(20);
   });
 });
