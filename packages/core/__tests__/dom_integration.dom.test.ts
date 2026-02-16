@@ -142,5 +142,4 @@ describe('DOM Integration', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(container.contains(ul)).toBe(false);
   });
-
 });

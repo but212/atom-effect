@@ -56,5 +56,4 @@ describe('Reactive Scenarios - Auth & App State', () => {
     expect(greeting.value).toBe('Hello Admin');
     expect(isAdmin.value).toBe(true);
   });
-
 });
