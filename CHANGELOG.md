@@ -4,6 +4,14 @@
 
 ### Core
 
+#### Fixed
+
+- **Effect Resource Leak**: Fixed a bug where `dispose()` failed to clean up subscriptions acquired before a mid-execution throw. The error path in `execute()` was missing `this._links = nextLinks`, causing orphaned subscriptions that could not be reclaimed.
+
+#### Refactored
+
+- **Naming**: Renamed `SubscriberLink` to `Subscription` to disambiguate from `DependencyLink`. The two classes represent opposite edge directions (downstream vs upstream), and the shared "Link" suffix caused confusion.
+
 ## [0.21.0]
 
 ### Core - 0.21.0

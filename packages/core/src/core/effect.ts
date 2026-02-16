@@ -200,7 +200,9 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
         this._cleanup = typeof result === 'function' ? result : null;
       }
     } catch (error) {
-      // Commit on error
+      // Commit on error — assign links before marking committed
+      // so _finalizeDependencies can clean up prevLinks correctly
+      this._links = nextLinks;
       committed = true;
       this._handleExecutionError(error);
       this._cleanup = null;
