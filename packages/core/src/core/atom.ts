@@ -1,6 +1,6 @@
 import { ATOM_STATE_FLAGS } from '@/constants';
 import { ReactiveDependency } from '@/core/base';
-import { type SubscriberLink, trackDependency } from '@/core/dep-tracking';
+import { type Subscription, trackDependency } from '@/core/dep-tracking';
 import { nextVersion } from '@/internal/epoch';
 import { scheduler } from '@/internal/scheduler';
 import { ATOM_BRAND } from '@/symbols';
@@ -17,7 +17,7 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
   private _pendingOldValue: T | undefined = undefined;
   /** Cached notification task */
   private readonly _notifyTask = () => this._flushNotifications();
-  protected _subscribers: SubscriberLink<T>[] = [];
+  protected _subscribers: Subscription<T>[] = [];
 
   /** @internal */
   readonly [ATOM_BRAND] = true;

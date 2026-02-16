@@ -3,13 +3,13 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { type SubscriberLink, trackDependency } from '@/core/dep-tracking';
+import { type Subscription, trackDependency } from '@/core/dep-tracking';
 import type { Dependency, Subscriber } from '@/types';
 
 describe('trackDependency - branch coverage', () => {
   it('returns early when duplicate raw function listener is detected', () => {
     const fn = vi.fn();
-    const subscribers: SubscriberLink<number>[] = [];
+    const subscribers: Subscription<number>[] = [];
     const dep = {} as Dependency;
 
     // First call: adds the function listener
@@ -24,7 +24,7 @@ describe('trackDependency - branch coverage', () => {
 
   it('returns early when duplicate Subscriber object is detected', () => {
     const sub: Subscriber = { execute: vi.fn() };
-    const subscribers: SubscriberLink<number>[] = [];
+    const subscribers: Subscription<number>[] = [];
     const dep = {} as Dependency;
 
     // First call: adds the subscriber
@@ -40,7 +40,7 @@ describe('trackDependency - branch coverage', () => {
   it('adds different function listeners separately', () => {
     const fn1 = vi.fn();
     const fn2 = vi.fn();
-    const subscribers: SubscriberLink<number>[] = [];
+    const subscribers: Subscription<number>[] = [];
     const dep = {} as Dependency;
 
     trackDependency(dep, fn1, subscribers);
@@ -51,7 +51,7 @@ describe('trackDependency - branch coverage', () => {
   it('adds different Subscriber objects separately', () => {
     const sub1: Subscriber = { execute: vi.fn() };
     const sub2: Subscriber = { execute: vi.fn() };
-    const subscribers: SubscriberLink<number>[] = [];
+    const subscribers: Subscription<number>[] = [];
     const dep = {} as Dependency;
 
     trackDependency(dep, sub1, subscribers);
@@ -62,7 +62,7 @@ describe('trackDependency - branch coverage', () => {
   it('routes DependencySubscriber through addDependency path', () => {
     const addDependency = vi.fn();
     const tracker = { addDependency };
-    const subscribers: SubscriberLink<number>[] = [];
+    const subscribers: Subscription<number>[] = [];
     const dep = {} as Dependency;
 
     trackDependency(dep, tracker, subscribers);

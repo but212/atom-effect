@@ -7,7 +7,7 @@ import { debug } from '@/utils/debug';
 export function trackDependency<T>(
   dependency: Dependency,
   current: Listener,
-  subscribers: SubscriberLink<T>[]
+  subscribers: Subscription<T>[]
 ): void {
   if (typeof current === 'function') {
     const fn = current as (newValue?: T, oldValue?: T) => void;
@@ -19,7 +19,7 @@ export function trackDependency<T>(
       const link = subscribers[i];
       if (link && link.fn === fn) return;
     }
-    subscribers.push(new SubscriberLink(fn, undefined));
+    subscribers.push(new Subscription(fn, undefined));
     return;
   }
 
@@ -33,7 +33,7 @@ export function trackDependency<T>(
     const link = subscribers[i];
     if (link && link.sub === sub) return;
   }
-  subscribers.push(new SubscriberLink(undefined, sub));
+  subscribers.push(new Subscription(undefined, sub));
 }
 
 /**
@@ -96,9 +96,9 @@ export class DependencyLink {
 }
 
 /**
- * Subscriber link.
+ * Subscription entry.
  */
-export class SubscriberLink<T> {
+export class Subscription<T> {
   public fn: ((newValue?: T, oldValue?: T) => void) | undefined;
   public sub: Subscriber | undefined;
 

@@ -2,7 +2,7 @@ import { AsyncState, COMPUTED_STATE_FLAGS, EMPTY_ERROR_ARRAY, IS_DEV } from '@/c
 import { ReactiveDependency } from '@/core/base';
 import {
   DependencyLink,
-  type SubscriberLink,
+  type Subscription,
   syncDependencies,
   trackDependency,
 } from '@/core/dep-tracking';
@@ -56,7 +56,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   private readonly _onError: ((error: Error) => void) | null;
   private readonly _maxAsyncRetries: number;
 
-  protected _subscribers: SubscriberLink<T>[] = [];
+  protected _subscribers: Subscription<T>[] = [];
   private _links: DependencyLink[] = EMPTY_LINKS;
 
   // Async state
