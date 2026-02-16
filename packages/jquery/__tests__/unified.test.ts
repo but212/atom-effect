@@ -131,16 +131,21 @@ describe('Unified Bind (atomBind)', () => {
     $el.remove();
   });
 
-  it('should support checked binding wiring via atomBind', async () => {
+  it('should support two-way checked binding via atomBind', async () => {
     const isChecked = $.atom(false);
     const $el = $('<input type="checkbox">').appendTo(document.body);
 
     $el.atomBind({ checked: isChecked });
 
-    // Verify atomBind wires Atom -> DOM correctly
+    // Atom -> DOM
     isChecked.value = true;
     await $.nextTick();
     expect($el.prop('checked')).toBe(true);
+
+    // DOM -> Atom
+    $el.prop('checked', false);
+    $el[0].dispatchEvent(new Event('change'));
+    expect(isChecked.value).toBe(false);
 
     $el.remove();
   });
