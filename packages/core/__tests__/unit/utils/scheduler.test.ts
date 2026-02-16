@@ -2,192 +2,140 @@
  * @fileoverview Scheduler tests (coverage improvement)
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { SCHEDULER_CONFIG } from '@/constants';
 import { SchedulerError } from '@/errors/errors';
-import { scheduler } from '@/index';
+import { SchedulerPhase, scheduler } from '@/internal/scheduler';
 import { sleep } from '../../utils/test-helpers';
 
 describe('Scheduler', () => {
-  // Scheduler uses Promise.resolve() so we use real timers
-
-  it('rejects invalid callback types', () => {
-    expect(() => {
-      scheduler.schedule('not a function' as unknown as () => void);
-    }).toThrow(SchedulerError);
-
-    expect(() => {
-      scheduler.schedule(null as unknown as () => void);
-    }).toThrow(SchedulerError);
+  beforeEach(async () => {
+    // Reset state
+    while (scheduler.isBatching) scheduler.endBatch();
+    await sleep(0);
   });
 
-  it('executes callbacks asynchronously', async () => {
-    const callback = vi.fn();
+  describe('Queue Execution', () => {
+    it('executes unique jobs asynchronously', async () => {
+      const job1 = vi.fn();
+      const job2 = vi.fn();
 
-    scheduler.schedule(callback);
-    expect(callback).not.toHaveBeenCalled();
+      scheduler.schedule(job1);
+      scheduler.schedule(job1); // Duplicate
+      scheduler.schedule(job2);
 
-    await sleep(10);
-    expect(callback).toHaveBeenCalled();
-  });
+      expect(scheduler.queueSize).toBe(2);
+      expect(job1).not.toHaveBeenCalled();
 
-  it('executes duplicate callbacks only once', async () => {
-    const callback = vi.fn();
+      await sleep(10);
 
-    scheduler.schedule(callback);
-    scheduler.schedule(callback);
-    scheduler.schedule(callback);
-
-    await sleep(10);
-
-    // Uses Set so duplicates are removed (called at least once)
-    expect(callback).toHaveBeenCalled();
-  });
-
-  it('does not flush during batching', () => {
-    const callback = vi.fn();
-
-    scheduler.startBatch();
-    scheduler.schedule(callback);
-
-    expect(callback).not.toHaveBeenCalled();
-    expect(scheduler.isBatching).toBe(true);
-  });
-
-  it('flushes when batch ends', async () => {
-    // Reset from previous test
-    while (scheduler.isBatching) {
-      scheduler.endBatch();
-    }
-
-    const callback = vi.fn();
-
-    scheduler.startBatch();
-    scheduler.schedule(callback);
-    scheduler.endBatch();
-
-    await sleep(10);
-
-    expect(callback).toHaveBeenCalled();
-    expect(scheduler.isBatching).toBe(false);
-  });
-
-  it('supports nested batching', async () => {
-    // Reset from previous test
-    while (scheduler.isBatching) {
-      scheduler.endBatch();
-    }
-
-    const callback = vi.fn();
-
-    scheduler.startBatch();
-    expect(scheduler.isBatching).toBe(true);
-
-    scheduler.startBatch();
-    expect(scheduler.isBatching).toBe(true);
-
-    scheduler.schedule(callback);
-
-    scheduler.endBatch();
-    expect(scheduler.isBatching).toBe(true); // Still in outer batch
-    expect(callback).not.toHaveBeenCalled();
-
-    scheduler.endBatch();
-    expect(scheduler.isBatching).toBe(false);
-
-    await sleep(10);
-    expect(callback).toHaveBeenCalled();
-  });
-
-  it('handles errors during callback execution', async () => {
-    // Reset from previous test
-    while (scheduler.isBatching) {
-      scheduler.endBatch();
-    }
-
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const errorCallback = vi.fn(() => {
-      throw new Error('Callback error');
-    });
-    const normalCallback = vi.fn();
-
-    scheduler.schedule(errorCallback);
-    scheduler.schedule(normalCallback);
-
-    await sleep(10);
-
-    expect(errorCallback).toHaveBeenCalled();
-    expect(normalCallback).toHaveBeenCalled();
-    expect(consoleError).toHaveBeenCalled();
-
-    consoleError.mockRestore();
-  });
-
-  it('new schedules wait during flush', async () => {
-    // Reset from previous test
-    while (scheduler.isBatching) {
-      scheduler.endBatch();
-    }
-
-    const callback1 = vi.fn();
-    const callback2 = vi.fn();
-
-    scheduler.schedule(callback1);
-
-    // Wait for first callback execution
-    await sleep(10);
-    expect(callback1).toHaveBeenCalled();
-
-    // Add second callback
-    scheduler.schedule(callback2);
-    await sleep(10);
-    expect(callback2).toHaveBeenCalled();
-  });
-
-  it('batchDepth does not go negative', () => {
-    scheduler.endBatch();
-    scheduler.endBatch();
-    scheduler.endBatch();
-
-    // Stays at 0, does not go negative
-    expect((scheduler as unknown as { _batchDepth: number })._batchDepth).toBe(0);
-  });
-
-  it('does not flush when queue is empty', async () => {
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-    // Call flush with empty queue
-    (scheduler as unknown as { _flush: () => void })._flush();
-
-    await sleep(10);
-
-    // Should complete without errors
-    expect(consoleError).not.toHaveBeenCalled();
-
-    consoleError.mockRestore();
-  });
-
-  it('skips flush when already processing', async () => {
-    const callback = vi.fn();
-
-    scheduler.schedule(callback);
-
-    await sleep(10);
-
-    // Callback should be executed only once
-    expect(callback).toHaveBeenCalledTimes(1);
-  });
-
-  it('re-flushes if queue is not empty after drain', async () => {
-    const callback2 = vi.fn();
-    const callback1 = vi.fn(() => {
-      // Schedule a new job while flushing
-      scheduler.schedule(callback2);
+      expect(job1).toHaveBeenCalledTimes(1);
+      expect(job2).toHaveBeenCalledTimes(1);
+      expect(scheduler.queueSize).toBe(0);
     });
 
-    scheduler.schedule(callback1);
-    await sleep(20);
+    it('re-schedules jobs triggered during flush', async () => {
+      const job2 = vi.fn();
+      const job1 = vi.fn(() => scheduler.schedule(job2));
 
-    expect(callback1).toHaveBeenCalled();
-    expect(callback2).toHaveBeenCalled();
+      scheduler.schedule(job1);
+      await sleep(10);
+
+      expect(job1).toHaveBeenCalled();
+      expect(job2).toHaveBeenCalled();
+    });
+  });
+
+  describe('Batching Strategy', () => {
+    it('defers execution until outer batch ends', async () => {
+      const job = vi.fn();
+
+      scheduler.startBatch(); // Level 1
+      scheduler.startBatch(); // Level 2
+
+      scheduler.schedule(job);
+      expect(scheduler.phase).toBe(SchedulerPhase.BATCHING);
+
+      scheduler.endBatch(); // Level 1
+      expect(job).not.toHaveBeenCalled(); // Still batching
+
+      scheduler.endBatch(); // Level 0 -> Flush
+
+      // Batch flushing is synchronous
+      expect(job).toHaveBeenCalled();
+      expect(scheduler.isBatching).toBe(false);
+    });
+
+    it('warns on unbalanced endBatch calls', () => {
+      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      scheduler.endBatch(); // No start
+
+      expect(consoleWarn).toHaveBeenCalled();
+
+      // Ensure state remains stable
+      expect(scheduler.isBatching).toBe(false);
+
+      consoleWarn.mockRestore();
+    });
+  });
+
+  describe('Error Resilience', () => {
+    it('isolates errors to specific jobs', async () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const fail = vi.fn(() => {
+        throw new Error('Found me');
+      });
+      const success = vi.fn();
+
+      // 1. Async Queue Error
+      scheduler.schedule(fail);
+      scheduler.schedule(success);
+      await sleep(10);
+
+      expect(fail).toHaveBeenCalled();
+      expect(success).toHaveBeenCalled();
+      expect(consoleError).toHaveBeenCalled();
+
+      // 2. Batch Flush Error
+      consoleError.mockClear();
+      scheduler.startBatch();
+      scheduler.schedule(fail);
+      scheduler.endBatch(); // Should not throw
+      expect(consoleError).toHaveBeenCalled();
+
+      consoleError.mockRestore();
+    });
+  });
+
+  describe('Safety & Configuration', () => {
+    it('validates inputs and config', () => {
+      expect(() => scheduler.schedule(null as unknown as () => void)).toThrow(SchedulerError);
+      expect(() => scheduler.setMaxFlushIterations(1)).toThrow();
+    });
+
+    it('protects against infinite loops (overflow)', async () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const onOverflow = vi.fn();
+      scheduler.onOverflow = onOverflow;
+
+      // Setup low limit
+      const originalMax = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
+      scheduler.setMaxFlushIterations(10);
+
+      // Recursive job
+      const loop = () => scheduler.schedule(loop);
+      scheduler.schedule(loop);
+
+      await sleep(20);
+
+      expect(onOverflow).toHaveBeenCalled();
+      expect(consoleError).toHaveBeenCalledWith(expect.any(SchedulerError));
+
+      // Cleanup
+      scheduler.onOverflow = null;
+      scheduler.setMaxFlushIterations(originalMax);
+      consoleError.mockRestore();
+    });
   });
 });

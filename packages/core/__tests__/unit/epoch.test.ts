@@ -1,45 +1,67 @@
 import { describe, expect, it, vi } from 'vitest';
-import { currentEpoch, endFlush, nextEpoch, startFlush } from '@/internal/epoch';
+import { SMI_MAX } from '@/constants';
+import {
+  currentEpoch,
+  currentFlushEpoch,
+  endFlush,
+  flushExecutionCount,
+  incrementFlushExecutionCount,
+  nextEpoch,
+  nextVersion,
+  resetFlushState,
+  startFlush,
+} from '@/internal/epoch';
 
 describe('epoch', () => {
-  it('should start at 0', () => {
-    // Note: epoch is global state, so it might not be 0 if other tests ran
-    const current = currentEpoch();
-    expect(typeof current).toBe('number');
-  });
-
-  it('should increment when nextEpoch is called', () => {
-    const before = currentEpoch();
+  it('generates sequential non-zero epochs', () => {
+    const previous = currentEpoch();
     const next = nextEpoch();
-    expect(next).toBe((before + 1) & 0x7fffffff);
-    expect(currentEpoch()).toBe(next);
-  });
 
-  it('should wrap around at SMI_MAX', () => {
-    // We can't easily test wrap around without resetting or calling it many times
-    // and SMI_MAX is large. But we can verify it's capped by SMI_MAX.
-    const next = nextEpoch();
-    expect(next).toBeLessThanOrEqual(2147483647);
-  });
+    // 1. Should update current epoch
+    expect(next).toBe(currentEpoch());
+    expect(next).not.toBe(previous);
 
-  it('nextEpoch wrapping logic (manual trigger)', () => {
-    // We can't easily set collectorEpoch, but we can call it.
-    // However, the branch involves `|| 1` when result of `& SMI_MAX` is 0.
-    // This happens when collectorEpoch was SMI_MAX.
-    const next = nextEpoch();
+    // 2. Boundary Check (1 <= epoch <= SMI_MAX)
+    // nextEpoch logic: (val + 1) & SMI_MAX || 1
     expect(next).toBeGreaterThan(0);
+    expect(next).toBeLessThanOrEqual(SMI_MAX);
   });
 
-  it('startFlush warns when already flushing', () => {
+  it('calculates next version with wrap-around', () => {
+    // Pure function logic verification
+    expect(nextVersion(1)).toBe(2);
+    expect(nextVersion(SMI_MAX)).toBe(0);
+  });
+
+  it('manages flush lifecycle and state', () => {
     const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-    startFlush();
-    const result = startFlush(); // Already flushing
+    // 0. Initial State
+    resetFlushState();
+    expect(incrementFlushExecutionCount()).toBe(0); // Should not count when idle
 
-    expect(result).toBe(false);
-    // Warning only in DEV mode. IS_DEV is usually true in tests.
+    // 1. Start Flush
+    expect(startFlush()).toBe(true);
+    expect(currentFlushEpoch()).toBeGreaterThan(0);
+
+    // 2. Prevent Re-entrancy
+    expect(startFlush()).toBe(false);
     expect(consoleWarn).toHaveBeenCalled();
 
+    // 3. Increment Counts
+    expect(incrementFlushExecutionCount()).toBe(1);
+    expect(incrementFlushExecutionCount()).toBe(2);
+    expect(flushExecutionCount).toBe(2);
+
+    // 4. Reset
+    resetFlushState();
+    expect(flushExecutionCount).toBe(0);
+    expect(currentFlushEpoch()).toBe(0);
+
+    // 5. Restartable
+    expect(startFlush()).toBe(true);
+
+    // Cleanup
     endFlush();
     consoleWarn.mockRestore();
   });

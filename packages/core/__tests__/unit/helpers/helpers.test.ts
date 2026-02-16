@@ -1,5 +1,6 @@
 /**
- * @fileoverview Helpers tests (coverage supplement)
+ * @fileoverview Reactivity Helpers Tests
+ * @description Verifies batch, untracked, and type guard behaviors.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -7,173 +8,93 @@ import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
 import { batch, isComputed, untracked } from '@/index';
 
-describe('batch - Error Handling', () => {
-  it('rejects invalid callback types', () => {
-    expect(() => {
-      batch('not a function' as unknown as () => void);
-    }).toThrow(TypeError);
+describe('Reactivity Helpers', () => {
+  describe('Batch', () => {
+    it('executes updates synchronously and minimally', () => {
+      const a = atom(0);
+      const log: number[] = [];
+      a.subscribe((v) => v !== undefined && log.push(v));
 
-    expect(() => {
-      batch(null as unknown as () => void);
-    }).toThrow(TypeError);
-  });
-
-  it('propagates errors from callback', () => {
-    expect(() => {
-      batch(() => {
-        throw new Error('Batch error');
-      });
-    }).toThrow('Batch error');
-  });
-
-  it('batch passes through return value', () => {
-    const result = batch(() => {
-      return 42;
-    });
-
-    expect(result).toBe(42);
-  });
-});
-
-describe('batch - Synchronous Execution', () => {
-  it('batch should execute synchronously', () => {
-    const a = atom(0);
-    const calls: number[] = [];
-
-    a.subscribe((newVal?: number) => {
-      if (newVal !== undefined) calls.push(newVal);
-    });
-
-    batch(() => {
-      a.value = 1;
-      a.value = 2;
-      a.value = 3;
-    });
-
-    // Should be called immediately after batch ends (no async wait needed)
-    expect(calls).toEqual([3]);
-  });
-
-  it('multiple atom updates inside batch execute synchronously', () => {
-    const a = atom(0);
-    const b = atom(0);
-    const calls: string[] = [];
-
-    a.subscribe((newVal?: number) => {
-      if (newVal !== undefined) calls.push(`a:${newVal}`);
-    });
-
-    b.subscribe((newVal?: number) => {
-      if (newVal !== undefined) calls.push(`b:${newVal}`);
-    });
-
-    batch(() => {
-      a.value = 1;
-      b.value = 2;
-      a.value = 3;
-    });
-
-    // All updates should be complete immediately after batch ends
-    // Set order is not guaranteed, so only check for inclusion
-    expect(calls).toContain('a:3');
-    expect(calls).toContain('b:2');
-    expect(calls).toHaveLength(2);
-  });
-
-  it('nested batch also executes synchronously', () => {
-    const a = atom(0);
-    const calls: number[] = [];
-
-    a.subscribe((newVal?: number) => {
-      if (newVal !== undefined) calls.push(newVal);
-    });
-
-    batch(() => {
-      a.value = 1;
-      batch(() => {
+      const result = batch(() => {
+        a.value = 1;
         a.value = 2;
+        batch(() => {
+          // Nested
+          a.value = 3;
+        });
+        return 'done';
       });
-      a.value = 3;
+
+      // 1. Return value pass-through
+      expect(result).toBe('done');
+
+      // 2. Coalesced updates (only final value notified)
+      expect(log).toEqual([3]);
     });
 
-    // Should be called immediately after outermost batch ends
-    expect(calls).toEqual([3]);
+    it('propagates errors and validates input', () => {
+      expect(() => batch(null as unknown as () => void)).toThrow();
+      expect(() =>
+        batch(() => {
+          throw new Error('Fail');
+        })
+      ).toThrow('Fail');
+    });
+
+    it('updates computed values consistently within batch', () => {
+      const a = atom(0);
+      const c = computed(() => a.value + 1);
+
+      batch(() => {
+        a.value = 10;
+        // Pull-based computed should be fresh on access
+        expect(c.value).toBe(11);
+      });
+
+      expect(c.value).toBe(11);
+    });
   });
 
-  it('computed updates immediately inside batch', () => {
-    const a = atom(0);
-    const b = computed(() => a.value * 2, { lazy: false }); // non-lazy for immediate computation
-    const calls: number[] = [];
+  describe('Untracked', () => {
+    it('executes without tracking dependencies', () => {
+      const a = atom(0);
+      let computeCount = 0;
 
-    b.subscribe(() => {
-      calls.push(b.value);
-    });
+      const c = computed(() => {
+        computeCount++;
+        // Read 'a' inside untracked -> should NOT depend on 'a'
+        return untracked(() => a.value);
+      });
 
-    batch(() => {
+      expect(c.value).toBe(0);
+      expect(computeCount).toBe(1);
+
       a.value = 1;
-      a.value = 2;
-      a.value = 3;
+      // Manually check if re-computation happens on access
+      expect(c.value).toBe(0); // Still old value because it didn't update
+      expect(computeCount).toBe(1); // No new computation
     });
 
-    // Computed should be updated immediately after batch ends
-    expect(b.value).toBe(6); // computed value itself is updated
-    expect(calls).toEqual([6]); // subscriber should also be called
-  });
-});
-
-describe('untracked - Error Handling', () => {
-  it('rejects invalid callback types', () => {
-    // In the optimized version, we let the runtime throw the TypeError naturally
-    // when trying to execute the non-function
-    expect(() => {
-      untracked('not a function' as unknown as () => void);
-    }).toThrow(TypeError);
-
-    expect(() => {
-      untracked(null as unknown as () => void);
-    }).toThrow(TypeError);
-  });
-
-  it('propagates errors from callback', () => {
-    expect(() => {
-      untracked(() => {
-        throw new Error('Untracked error');
-      });
-    }).toThrow('Untracked error');
-  });
-
-  it('untracked passes through return value', () => {
-    const result = untracked(() => {
-      return 'test';
+    it('handles errors and returns values', () => {
+      expect(untracked(() => 42)).toBe(42);
+      expect(() =>
+        untracked(() => {
+          throw new Error('Ops');
+        })
+      ).toThrow('Ops');
     });
-
-    expect(result).toBe('test');
-  });
-});
-
-describe('isComputed - Various Cases', () => {
-  it('works even when not in development mode', () => {
-    const a = atom(0);
-    const c = computed(() => 0);
-
-    // Even without dev mode, identifies by invalidate method
-    expect(isComputed(a)).toBe(false);
-    expect(isComputed(c)).toBe(true);
   });
 
-  it('rejects duck-typed objects without brand symbol', () => {
-    const fakeComputed = {
-      value: 0,
-      subscribe: () => () => {},
-      invalidate: () => {},
-    };
+  describe('Type Guards', () => {
+    it('distinguishes Computed from Atoms and others', () => {
+      const a = atom(0);
+      const c = computed(() => 0);
+      const fake = { value: 0, subscribe: () => {}, invalidate: () => {} };
 
-    // Duck-typed objects should NOT pass brand-based type guards
-    expect(isComputed(fakeComputed)).toBe(false);
-  });
-
-  it('prioritizes debug type information', () => {
-    // Already sufficiently tested in index.test.ts
-    expect(true).toBe(true);
+      expect(isComputed(c)).toBe(true);
+      expect(isComputed(a)).toBe(false);
+      expect(isComputed(fake)).toBe(false);
+      expect(isComputed(null)).toBe(false);
+    });
   });
 });

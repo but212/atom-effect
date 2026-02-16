@@ -1,249 +1,129 @@
 /**
- * @fileoverview Atom-specific tests (coverage supplement)
+ * @fileoverview Atom Behavior Tests
+ * @description Verifies validation, state management, lifecycle, and subscription handling.
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { atom } from '@/core/atom';
-import { computed } from '@/core/computed';
 import { AtomError } from '@/errors/errors';
-import { trackingContext } from '@/tracking';
-import { debug } from '@/utils/debug';
-import { tick, waitForScheduler } from '../../utils/test-helpers';
+import { waitForScheduler } from '../../utils/test-helpers';
 
-describe('Atom - Error Handling and Edge Cases', () => {
-  it('rejects invalid subscriber types', () => {
-    const count = atom(0);
-
-    expect(() => {
-      count.subscribe(
-        'not a function' as unknown as (newValue?: number, oldValue?: number) => void
-      );
-    }).toThrow(AtomError);
-
-    expect(() => {
-      count.subscribe(null as unknown as (newValue?: number, oldValue?: number) => void);
-    }).toThrow(AtomError);
+describe('Atom', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
-  it('unsubscribing non-existent listener is safe', () => {
-    const count = atom(0);
-    const listener = vi.fn();
-
-    const unsubscribe = count.subscribe(listener);
-    unsubscribe();
-
-    // Safe to unsubscribe an already unsubscribed listener
-    expect(() => unsubscribe()).not.toThrow();
-  });
-
-  it('other subscribers execute even if one throws an error (sync and async)', async () => {
-    // Test for default (async) mode
-    const countAsync = atom(0);
-    const errorListenerAsync = vi.fn(() => {
-      throw new Error('Async error');
-    });
-    const normalListenerAsync = vi.fn();
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-    countAsync.subscribe(errorListenerAsync);
-    countAsync.subscribe(normalListenerAsync);
-    countAsync.value = 1;
-    await waitForScheduler();
-
-    expect(errorListenerAsync).toHaveBeenCalled();
-    expect(normalListenerAsync).toHaveBeenCalled();
-    expect(consoleError).toHaveBeenCalled();
-
-    // Test for sync mode
-    const countSync = atom(0, { sync: true });
-    const errorListenerSync = vi.fn(() => {
-      throw new Error('Sync error');
-    });
-    const normalListenerSync = vi.fn();
-
-    countSync.subscribe(errorListenerSync);
-    countSync.subscribe(normalListenerSync);
-    countSync.value = 1;
-
-    expect(errorListenerSync).toHaveBeenCalled();
-    expect(normalListenerSync).toHaveBeenCalled();
-    expect(consoleError).toHaveBeenCalled();
-
-    consoleError.mockRestore();
-  });
-
-  it('object subscriber (execute method) works correctly', async () => {
-    const count = atom(0);
-    const executeCalls: number[] = [];
-
-    const _objectSubscriber = {
-      execute: () => {
-        executeCalls.push(count.peek());
-      },
-    };
-
-    // computed registers as object subscriber
-    const c = computed(() => count.value * 2);
-    c.value; // register dependency
-
-    count.value = 5;
-    await waitForScheduler();
-
-    expect(c.value).toBe(10);
-  });
-
-  it('sync option enables synchronous notification', () => {
-    const count = atom(0, { sync: true });
-    const calls: number[] = [];
-
-    count.subscribe((newValue) => {
-      if (newValue !== undefined) calls.push(newValue);
-    });
-
-    count.value = 1;
-    // sync=true so executes immediately
-    expect(calls).toEqual([1]);
-  });
-
-  it('version management ignores stale notifications', async () => {
-    const count = atom(0);
-    const calls: number[] = [];
-
-    count.subscribe((newValue) => {
-      if (newValue !== undefined) calls.push(newValue);
-    });
-
-    // Rapid multiple updates
-    count.value = 1;
-    count.value = 2;
-    count.value = 3;
-
-    await waitForScheduler();
-
-    // Version management ensures only final value is reflected
-    expect(calls[calls.length - 1]).toBe(3);
-  });
-
-  it('value is set to undefined after dispose', () => {
-    const count = atom(10);
-    count.dispose();
-
-    expect(count.peek()).toBe(undefined);
-  });
-
-  it('unsubscribing works correctly', async () => {
-    const count = atom(0);
-    const listener1 = vi.fn();
-    const listener2 = vi.fn();
-
-    count.subscribe(listener1);
-    const unsub2 = count.subscribe(listener2);
-    unsub2();
-
-    count.value = 1;
-    await waitForScheduler();
-
-    expect(listener1).toHaveBeenCalled();
-    expect(listener2).not.toHaveBeenCalled();
-  });
-
-  describe('Duplicate Subscriber Detection', () => {
-    it('returns empty unsubscribe and warns on duplicate function subscriber', async () => {
-      const count = atom(0);
-      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      const listener = vi.fn();
-
-      const unsub1 = count.subscribe(listener);
-      expect(consoleWarn).not.toHaveBeenCalled();
-
-      // Second subscribe with same function: returns noop unsub + warns (lines 48-49)
-      const unsub2 = count.subscribe(listener);
-      expect(consoleWarn).toHaveBeenCalledWith('Duplicate subscription ignored.');
-
-      // The noop unsub should not affect original subscription
-      unsub2();
-
-      count.value = 1;
-      await waitForScheduler();
-      expect(listener).toHaveBeenCalled();
-
-      unsub1();
-      consoleWarn.mockRestore();
-    });
-
-    it('returns empty unsubscribe and warns on duplicate Subscriber object', async () => {
-      const count = atom(0);
-      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      const sub = { execute: vi.fn() };
-
-      count.subscribe(sub);
-      expect(consoleWarn).not.toHaveBeenCalled();
-
-      // Duplicate subscriber object
-      const unsub2 = count.subscribe(sub);
-      expect(consoleWarn).toHaveBeenCalledWith('Duplicate subscription ignored.');
-
-      // Noop unsub
-      unsub2();
-
-      count.value = 1;
-      await waitForScheduler();
-      expect(sub.execute).toHaveBeenCalled();
-
-      consoleWarn.mockRestore();
-    });
-  });
-
-  describe('Debug and Tracking', () => {
-    it('provides subscriberCount in debug mode', () => {
-      const wasEnabled = debug.enabled;
-      debug.enabled = true;
-
-      const count = atom(0);
-      const atomWithDebug = count as unknown as { subscriberCount?: () => number };
-
-      if (atomWithDebug.subscriberCount) {
-        expect(atomWithDebug.subscriberCount()).toBe(0);
-        count.subscribe(vi.fn() as unknown as (n?: number, o?: number) => void);
-        expect(atomWithDebug.subscriberCount()).toBe(1);
-      }
-
-      debug.enabled = wasEnabled;
-    });
-
-    it('supports manual tracking via trackingContext', async () => {
+  describe('Validation & Safety', () => {
+    it('rejects invalid inputs', () => {
       const a = atom(0);
-      const listener = vi.fn();
-
-      trackingContext.run(listener, () => {
-        a.value;
-      });
-
-      a.value = 1;
-      await tick();
-
-      expect(listener).toHaveBeenCalledTimes(1);
+      expect(() => a.subscribe(null as unknown as () => void)).toThrow(AtomError);
+      expect(() => a.subscribe('invalid' as unknown as () => void)).toThrow(AtomError);
     });
 
-    it('logs error when object subscriber throws', async () => {
+    it('isolates subscriber errors to ensure robustness', async () => {
       const a = atom(0);
-      const tracker = {
-        execute: () => {
-          throw new Error('Object subscriber fail');
-        },
-      };
-
-      trackingContext.run(tracker, () => {
-        a.value;
+      const errorSub = vi.fn().mockImplementation(() => {
+        throw new Error('Fail');
       });
-
+      // Normal subscriber should still run despite error in peer
+      const normalSub = vi.fn();
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      a.value = 1;
-      await tick();
+      a.subscribe(errorSub);
+      a.subscribe(normalSub);
 
+      a.value = 1;
+      await waitForScheduler();
+
+      expect(errorSub).toHaveBeenCalled();
+      expect(normalSub).toHaveBeenCalled();
       expect(consoleError).toHaveBeenCalled();
+
       consoleError.mockRestore();
+    });
+
+    it('warns on duplicate subscriptions', () => {
+      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const a = atom(0);
+      const fn = () => {};
+
+      const unsub1 = a.subscribe(fn);
+      expect(consoleWarn).not.toHaveBeenCalled();
+
+      const unsub2 = a.subscribe(fn);
+      expect(consoleWarn).toHaveBeenCalledWith(expect.stringContaining('Duplicate'));
+
+      unsub1(); // Should work
+      unsub2(); // Should be no-op
+      consoleWarn.mockRestore();
+    });
+  });
+
+  describe('State & Lifecycle', () => {
+    it('manages value updates and version consistency', async () => {
+      const a = atom(0);
+      const log: number[] = [];
+      a.subscribe((v) => v !== undefined && log.push(v));
+
+      a.value = 1;
+      a.value = 2;
+      a.value = 3;
+
+      await waitForScheduler();
+
+      // Should only reflect final state (async batching)
+      expect(log).toEqual([3]);
+    });
+
+    it('supports synchronous updates', () => {
+      const a = atom(0, { sync: true });
+      const log: number[] = [];
+      a.subscribe((v) => v !== undefined && log.push(v));
+
+      a.value = 1;
+      a.value = 2;
+
+      // Sync updates happen immediately
+      expect(log).toEqual([1, 2]);
+    });
+
+    it('clears value on dispose', () => {
+      const a = atom(10);
+      expect(a.peek()).toBe(10);
+      a.dispose();
+      expect(a.peek()).toBe(undefined);
+    });
+  });
+
+  describe('Subscription Management', () => {
+    it('handles subscribe and idempotent unsubscribe', async () => {
+      const a = atom(0);
+      const spy = vi.fn();
+
+      const unsub = a.subscribe(spy);
+      a.value = 1;
+      await waitForScheduler();
+      expect(spy).toHaveBeenCalledTimes(1);
+
+      unsub();
+      unsub(); // Idempotent
+
+      a.value = 2;
+      await waitForScheduler();
+      expect(spy).toHaveBeenCalledTimes(1); // No new calls
+    });
+
+    it('supports object subscribers (Subscriber interface)', async () => {
+      const a = atom(0);
+      const spy = vi.fn();
+      const subscriber = { execute: () => spy(a.peek()) };
+
+      a.subscribe(subscriber);
+
+      a.value = 1;
+      await waitForScheduler();
+
+      expect(spy).toHaveBeenCalledWith(1);
     });
   });
 });

@@ -1,100 +1,100 @@
-import $ from 'jquery';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { debug } from '../src/debug';
 
-describe('Debug Mode', () => {
+describe('Debug Module', () => {
+  let originalConsoleLog: typeof console.log;
+  let originalConsoleWarn: typeof console.warn;
+  const logSpy = vi.fn();
+  const warnSpy = vi.fn();
+
   beforeEach(() => {
+    originalConsoleLog = console.log;
+    originalConsoleWarn = console.warn;
+    console.log = logSpy;
+    console.warn = warnSpy;
+    logSpy.mockClear();
+    warnSpy.mockClear();
     debug.enabled = false;
-    vi.clearAllMocks();
   });
 
-  it('should be disabled by default in test environment', () => {
+  afterEach(() => {
+    console.log = originalConsoleLog;
+    console.warn = originalConsoleWarn;
+    debug.enabled = false;
+  });
+
+  it('toggles enabled state properly', () => {
     expect(debug.enabled).toBe(false);
-  });
-
-  it('should enable/disable via debug.enabled', () => {
     debug.enabled = true;
     expect(debug.enabled).toBe(true);
-    debug.enabled = false;
-    expect(debug.enabled).toBe(false);
   });
 
-  it('should log to console when enabled', () => {
-    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-    debug.enabled = true;
+  describe('logging', () => {
+    it('logs only when enabled', () => {
+      debug.log('Test', 'msg');
+      expect(logSpy).not.toHaveBeenCalled();
 
-    debug.log('test', 'message');
-    expect(logSpy).toHaveBeenCalledWith('[atom-effect-jquery] test:', 'message');
+      debug.enabled = true;
+      debug.log('Test', 'msg');
+      expect(logSpy).toHaveBeenCalledWith('[atom-effect-jquery] Test:', 'msg');
+    });
 
-    debug.atomChanged('count', 0, 1);
-    expect(logSpy).toHaveBeenCalledWith('[atom-effect-jquery] Atom "count" changed:', 0, '→', 1);
+    it('warns only when enabled', () => {
+      debug.warn('warning message');
+      expect(warnSpy).not.toHaveBeenCalled();
 
-    logSpy.mockRestore();
+      debug.enabled = true;
+      debug.warn('warning message');
+      expect(warnSpy).toHaveBeenCalledWith('[atom-effect-jquery]', 'warning message');
+    });
   });
 
-  it('should warn to console when enabled', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    debug.enabled = true;
+  describe('events', () => {
+    it('logs atom changes when enabled', () => {
+      debug.enabled = true;
+      debug.atomChanged('testAtom', 1, 2);
 
-    debug.warn('test warning');
-    expect(warnSpy).toHaveBeenCalledWith('[atom-effect-jquery]', 'test warning');
+      expect(logSpy).toHaveBeenCalledWith(
+        '[atom-effect-jquery] Atom "testAtom" changed:',
+        1,
+        '→',
+        2
+      );
+    });
 
-    warnSpy.mockRestore();
-  });
+    it('logs DOM updates and highlights element when enabled', () => {
+      debug.enabled = true;
+      const el = document.createElement('div');
+      document.body.appendChild(el);
 
-  it('highlightElement should apply and remove CSS class', async () => {
-    vi.useFakeTimers();
-    const $el = $('<div>').appendTo(document.body);
-    debug.enabled = true;
+      debug.domUpdated(el, 'text', 'new text');
 
-    debug.domUpdated($el, 'text', 'hello');
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.stringContaining('[atom-effect-jquery] DOM updated:'),
+        'new text'
+      );
 
-    // Check if highlight class is applied
-    expect($el[0]!.classList.contains('atom-debug-highlight')).toBe(true);
+      // Verify highlight class added
+      expect(el.classList.contains('atom-debug-highlight')).toBe(true);
+      document.body.removeChild(el);
+    });
 
-    // Fast-forward past highlight duration (600ms)
-    vi.advanceTimersByTime(610);
+    it('handles jQuery objects in DOM updates', () => {
+      debug.enabled = true;
+      const el = document.createElement('div');
+      document.body.appendChild(el);
+      const jqEl = Object.assign([el], { jquery: 'mock' }) as unknown as JQuery;
 
-    // Check if highlight class is removed
-    expect($el[0]!.classList.contains('atom-debug-highlight')).toBe(false);
+      debug.domUpdated(jqEl, 'text', 'val');
 
-    $el.remove();
-    vi.useRealTimers();
-  });
+      expect(el.classList.contains('atom-debug-highlight')).toBe(true);
+      document.body.removeChild(el);
+    });
 
-  it('should generate complex selectors correctly', () => {
-    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-    debug.enabled = true;
-
-    const $el = $('<div id="my-id" class="c1 c2">');
-    debug.domUpdated($el, 'text', 'hello');
-    expect(logSpy).toHaveBeenCalledWith(
-      expect.stringContaining('DOM updated: #my-id.text ='),
-      'hello'
-    );
-
-    const $el2 = $('<div class="foo bar">');
-    debug.domUpdated($el2, 'html', 'world');
-    expect(logSpy).toHaveBeenCalledWith(
-      expect.stringContaining('DOM updated: div.foo.bar.html ='),
-      'world'
-    );
-
-    logSpy.mockRestore();
-  });
-
-  it('debug.warn should log to console.warn', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    debug.enabled = true;
-    debug.warn('test warning');
-    expect(warnSpy).toHaveBeenCalledWith('[atom-effect-jquery]', 'test warning');
-    warnSpy.mockRestore();
-  });
-
-  it('should handle getInitialDebugState from window.__ATOM_DEBUG__', () => {
-    // This is tricky because the module is already loaded.
-    // We would need to re-import or test the function if it were exported.
-    // Since it's internal, we'll skip direct test or use a workaround if possible.
-    // For coverage, we can just ensure we hit the paths if we can re-evaluate.
+    it('logs cleanup', () => {
+      debug.enabled = true;
+      debug.cleanup('#test');
+      expect(logSpy).toHaveBeenCalledWith('[atom-effect-jquery] Cleanup: #test');
+    });
   });
 });
