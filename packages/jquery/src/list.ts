@@ -1,5 +1,6 @@
 import { effect } from '@but212/atom-effect';
 import $ from 'jquery';
+import { ERROR_MESSAGES, LOG_PREFIXES } from './constants';
 import { debug } from './debug';
 import { registry } from './registry';
 import type { ListOptions, ReadonlyAtom } from './types';
@@ -68,7 +69,7 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
         const k = getKey(item, i);
 
         if (newKeySet.has(k)) {
-          console.warn(`[atomList] Duplicate key "${k}" at index ${i}.`);
+          console.warn(`${LOG_PREFIXES.LIST} ${ERROR_MESSAGES.DUPLICATE_KEY(k, i)}`);
         }
 
         newKeys[i] = k;

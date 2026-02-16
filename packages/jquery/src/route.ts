@@ -1,12 +1,13 @@
 import { atom as createAtom, effect } from '@but212/atom-effect';
 import $ from 'jquery';
+import { LOG_PREFIXES, ROUTE_DEFAULTS } from './constants';
 import { registry } from './registry';
 import type { RouteConfig, RouteDefinition, Router, WritableAtom } from './types';
 
 /**
  * Log prefix for router warnings and errors.
  */
-const LOG_PREFIX = '[$.route]';
+const LOG_PREFIX = LOG_PREFIXES.ROUTE;
 
 /**
  * Creates an SPA router with reactive state management.
@@ -39,10 +40,10 @@ export function route(config: RouteConfig): Router {
     default: defaultRoute,
     routes,
     notFound,
-    mode = 'hash',
-    basePath = '',
-    autoBindLinks = false,
-    activeClass = 'active',
+    mode = ROUTE_DEFAULTS.MODE,
+    basePath = ROUTE_DEFAULTS.BASE_PATH,
+    autoBindLinks = ROUTE_DEFAULTS.AUTO_BIND_LINKS,
+    activeClass = ROUTE_DEFAULTS.ACTIVE_CLASS,
     beforeTransition,
     afterTransition,
   } = config;

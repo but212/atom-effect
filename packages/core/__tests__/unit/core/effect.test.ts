@@ -221,6 +221,24 @@ describe('Effect', () => {
       expect((b as unknown as { subscriberCount: () => number }).subscriberCount()).toBe(0);
     });
 
+    it('dispose cleans up subscriptions acquired before mid-execution throw', () => {
+      const a = atom(0);
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const effectHandle = effect(() => {
+        a.value;
+        throw new Error('fail');
+      });
+
+      // a has a subscriber from the partial execution
+      expect((a as unknown as { subscriberCount: () => number }).subscriberCount()).toBe(1);
+
+      effectHandle.dispose();
+
+      // After dispose, the subscription must be cleaned up
+      expect((a as unknown as { subscriberCount: () => number }).subscriberCount()).toBe(0);
+    });
+
     it('logs both errors when onError handler throws', () => {
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 

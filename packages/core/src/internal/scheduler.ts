@@ -65,7 +65,7 @@ class Scheduler {
    */
   schedule(callback: SchedulerJob): void {
     if (IS_DEV && typeof callback !== 'function') {
-      throw new SchedulerError('Scheduler callback must be a function');
+      throw new SchedulerError(ERROR_MESSAGES.SCHEDULER_CALLBACK_MUST_BE_FUNCTION);
     }
 
     // Deduplicate job
@@ -218,7 +218,7 @@ class Scheduler {
 
   endBatch(): void {
     if (this._batchDepth === 0) {
-      if (IS_DEV) console.warn('endBatch() called without matching startBatch(). Ignoring.');
+      if (IS_DEV) console.warn(ERROR_MESSAGES.SCHEDULER_END_BATCH_WITHOUT_START);
       return;
     }
 

@@ -1,5 +1,5 @@
 import { IS_DEV, SMI_MAX } from '@/constants';
-import { SubscriberLink } from '@/core/dep-tracking';
+import { Subscription } from '@/core/dep-tracking';
 import { AtomError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
 import type { DependencyId, Subscriber } from '@/types';
@@ -24,7 +24,7 @@ export class ReactiveNode {
  * Reactive dependency base class.
  */
 export abstract class ReactiveDependency<T> extends ReactiveNode {
-  protected abstract _subscribers: SubscriberLink<T>[];
+  protected abstract _subscribers: Subscription<T>[];
 
   /**
    * Adds subscriber.
@@ -50,7 +50,7 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
       }
     }
 
-    const link = new SubscriberLink<T>(
+    const link = new Subscription<T>(
       isFn ? (listener as (newValue?: T, oldValue?: T) => void) : undefined,
       !isFn ? (listener as Subscriber) : undefined
     );
@@ -60,7 +60,7 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
     return () => this._unsubscribe(link);
   }
 
-  private _unsubscribe(link: SubscriberLink<T>): void {
+  private _unsubscribe(link: Subscription<T>): void {
     const subs = this._subscribers;
     const idx = subs.indexOf(link);
     if (idx === -1) return;

@@ -1,8 +1,14 @@
-import { AsyncState, COMPUTED_STATE_FLAGS, EMPTY_ERROR_ARRAY, IS_DEV } from '@/constants';
+import {
+  AsyncState,
+  COMPUTED_CONFIG,
+  COMPUTED_STATE_FLAGS,
+  EMPTY_ERROR_ARRAY,
+  IS_DEV,
+} from '@/constants';
 import { ReactiveDependency } from '@/core/base';
 import {
   DependencyLink,
-  type SubscriberLink,
+  type Subscription,
   syncDependencies,
   trackDependency,
 } from '@/core/dep-tracking';
@@ -22,9 +28,6 @@ import type {
 import { debug, NO_DEFAULT_VALUE } from '@/utils/debug';
 import { wrapError } from '@/utils/error';
 import { isPromise } from '@/utils/type-guards';
-
-const MAX_ASYNC_RETRIES = 3;
-const MAX_PROMISE_ID = Number.MAX_SAFE_INTEGER - 1;
 
 const { IDLE, DIRTY, PENDING, RESOLVED, REJECTED, HAS_ERROR, RECOMPUTING, DISPOSED, IS_COMPUTED } =
   COMPUTED_STATE_FLAGS;
@@ -56,7 +59,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   private readonly _onError: ((error: Error) => void) | null;
   private readonly _maxAsyncRetries: number;
 
-  protected _subscribers: SubscriberLink<T>[] = [];
+  protected _subscribers: Subscription<T>[] = [];
   private _links: DependencyLink[] = EMPTY_LINKS;
 
   // Async state
@@ -80,7 +83,8 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._defaultValue = 'defaultValue' in options ? options.defaultValue : (NO_DEFAULT_VALUE as T);
     this._onError = options.onError ?? null;
     const retries = options.maxAsyncRetries;
-    this._maxAsyncRetries = retries != null && retries >= 0 ? retries : MAX_ASYNC_RETRIES;
+    this._maxAsyncRetries =
+      retries != null && retries >= 0 ? retries : COMPUTED_CONFIG.MAX_ASYNC_RETRIES;
 
     debug.attachDebugInfo(this, 'computed', this.id);
 
@@ -132,7 +136,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     }
 
     if (this.flags & REJECTED) {
-      if ((this._error as ComputedError)?.recoverable && hasDef) return def;
+      if (hasDef) return def;
       throw this._error;
     }
 
@@ -312,7 +316,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._asyncStartAggregateVersion = this._captureVersionSnapshot();
     this._asyncRetryCount = 0;
     // Invalidate old promises
-    this._promiseId = (this._promiseId + 1) % MAX_PROMISE_ID;
+    this._promiseId = (this._promiseId + 1) % COMPUTED_CONFIG.MAX_PROMISE_ID;
     const promiseId = this._promiseId;
 
     promise.then(
@@ -354,7 +358,6 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     const error = wrapError(err, ComputedError, msg);
 
     if (!throwErr && !(this.flags & REJECTED)) {
-      // Update version
       this.version = nextVersion(this.version);
     }
 
