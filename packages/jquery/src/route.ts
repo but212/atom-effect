@@ -1,6 +1,6 @@
 import { atom as createAtom, effect } from '@but212/atom-effect';
 import $ from 'jquery';
-import { ERROR_MESSAGES, LOG_PREFIXES, ROUTE_DEFAULTS } from './constants';
+import { LOG_PREFIXES, ROUTE_DEFAULTS } from './constants';
 import { registry } from './registry';
 import type { RouteConfig, RouteDefinition, Router, WritableAtom } from './types';
 
