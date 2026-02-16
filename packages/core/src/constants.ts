@@ -72,6 +72,15 @@ export const SCHEDULER_CONFIG = {
  */
 export const DEBUG_CONFIG = {
   WARN_INFINITE_LOOP: true,
+  EFFECT_FREQUENCY_WINDOW: 1000,
+} as const;
+
+/**
+ * Computed configuration.
+ */
+export const COMPUTED_CONFIG = {
+  MAX_ASYNC_RETRIES: 3,
+  MAX_PROMISE_ID: Number.MAX_SAFE_INTEGER - 1,
 } as const;
 
 /**

@@ -12,6 +12,7 @@
 
 - **Naming**: Renamed `SubscriberLink` to `Subscription` to disambiguate from `DependencyLink`. The two classes represent opposite edge directions (downstream vs upstream), and the shared "Link" suffix caused confusion.
 - **Computed defaultValue Contract**: `defaultValue` now unconditionally serves as a fallback on any error, regardless of the error's `recoverable` flag. Previously, non-recoverable errors (e.g., `EffectError` propagating through a computed) would bypass `defaultValue` and throw, contradicting the user's explicit fallback intent.
+- **Hardcoded Values**: Moved `MAX_ASYNC_RETRIES`, `MAX_PROMISE_ID`, `EFFECT_FREQUENCY_WINDOW`, and scheduler error messages to `constants.ts` and `errors/messages.ts` for better maintainability.
 
 ## [0.21.0]
 

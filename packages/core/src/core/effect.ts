@@ -1,4 +1,10 @@
-import { COMPUTED_STATE_FLAGS, EFFECT_STATE_FLAGS, IS_DEV, SCHEDULER_CONFIG } from '@/constants';
+import {
+  COMPUTED_STATE_FLAGS,
+  DEBUG_CONFIG,
+  EFFECT_STATE_FLAGS,
+  IS_DEV,
+  SCHEDULER_CONFIG,
+} from '@/constants';
 import { ReactiveNode } from '@/core/base';
 import { DependencyLink } from '@/core/dep-tracking';
 import { EffectError } from '@/errors/errors';
@@ -324,7 +330,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     // Frequency check (dev only)
     if (IS_DEV && Number.isFinite(this._maxExecutions)) {
       const now = Date.now();
-      if (now - this._windowStart >= 1000) {
+      if (now - this._windowStart >= DEBUG_CONFIG.EFFECT_FREQUENCY_WINDOW) {
         this._windowStart = now;
         this._windowCount = 1;
       } else if (++this._windowCount > this._maxExecutions) {

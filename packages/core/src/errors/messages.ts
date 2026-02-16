@@ -30,4 +30,7 @@ export const ERROR_MESSAGES = {
   // Effect frequency
   EFFECT_FREQUENCY_LIMIT_EXCEEDED:
     'Effect executed too frequently within 1 second. Suspected infinite loop.',
+
+  SCHEDULER_CALLBACK_MUST_BE_FUNCTION: 'Scheduler callback must be a function',
+  SCHEDULER_END_BATCH_WITHOUT_START: 'endBatch() called without matching startBatch(). Ignoring.',
 } as const;
