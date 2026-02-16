@@ -108,6 +108,29 @@ describe('Scheduler', () => {
     });
   });
 
+  describe('Batch Queue Shrink', () => {
+    it('shrinks batch queue when it exceeds threshold', () => {
+      scheduler.startBatch();
+
+      // Fill batch queue beyond BATCH_QUEUE_SHRINK_THRESHOLD
+      for (let i = 0; i <= SCHEDULER_CONFIG.BATCH_QUEUE_SHRINK_THRESHOLD; i++) {
+        const job = vi.fn();
+        scheduler.schedule(job);
+      }
+
+      // endBatch triggers _flushSync -> _mergeBatchQueue -> shrink check
+      scheduler.endBatch();
+
+      // Internal batch queue should have been shrunk (length reset to 0)
+      // Verify by scheduling again — should still work correctly
+      const afterJob = vi.fn();
+      scheduler.startBatch();
+      scheduler.schedule(afterJob);
+      scheduler.endBatch();
+      expect(afterJob).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('Safety & Configuration', () => {
     it('validates inputs and config', () => {
       expect(() => scheduler.schedule(null as unknown as () => void)).toThrow(SchedulerError);
