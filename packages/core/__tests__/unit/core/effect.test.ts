@@ -25,7 +25,6 @@ describe('Effect', () => {
       expect(() => effect(null as unknown as () => void)).toThrow(EffectError);
       expect(() => effect('invalid' as unknown as () => void)).toThrow(EffectError);
     });
-
   });
 
   describe('Lifecycle & Cleanup', () => {

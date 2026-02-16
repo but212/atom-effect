@@ -7,8 +7,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   atom,
   batch,
+  type ComputedError,
   computed,
-  ComputedError,
   effect,
   isAtom,
   isComputed,
@@ -64,7 +64,7 @@ describe('Version Semantics', () => {
         await new Promise((r) => setTimeout(r, 5));
         throw new Error('async-fail');
       },
-      { defaultValue: -1 },
+      { defaultValue: -1 }
     );
 
     c.value; // triggers async → PENDING
@@ -213,7 +213,9 @@ describe('Disposal Finality', () => {
     const a = atom(42);
     const c = computed(() => a.value);
     c.value; // resolve
-    const e = effect(() => { void c.value; });
+    const e = effect(() => {
+      void c.value;
+    });
 
     // First dispose
     a.dispose();
@@ -249,7 +251,9 @@ describe('Error Isolation', () => {
   it('subscriber errors do not affect sibling subscribers', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const a = atom(0);
-    const bad = vi.fn(() => { throw new Error('bad'); });
+    const bad = vi.fn(() => {
+      throw new Error('bad');
+    });
     const good = vi.fn();
 
     a.subscribe(bad);
@@ -264,7 +268,9 @@ describe('Error Isolation', () => {
   });
 
   it('computed wraps errors as ComputedError with cause', () => {
-    const c = computed(() => { throw new TypeError('raw'); });
+    const c = computed(() => {
+      throw new TypeError('raw');
+    });
     try {
       c.value;
     } catch (e) {
@@ -280,8 +286,10 @@ describe('Error Isolation', () => {
 
     // Normal onError
     effect(
-      () => { if (trigger.value === 1) throw new Error('boom'); },
-      { onError },
+      () => {
+        if (trigger.value === 1) throw new Error('boom');
+      },
+      { onError }
     );
 
     trigger.value = 1;
@@ -293,8 +301,14 @@ describe('Error Isolation', () => {
     // onError that throws — system must stay functional
     const trigger2 = atom(false);
     effect(
-      () => { if (trigger2.value) throw new Error('x'); },
-      { onError: () => { throw new Error('handler boom'); } },
+      () => {
+        if (trigger2.value) throw new Error('x');
+      },
+      {
+        onError: () => {
+          throw new Error('handler boom');
+        },
+      }
     );
 
     trigger2.value = true;
@@ -312,7 +326,9 @@ describe('Node Identity', () => {
   it('brand symbols identify node types correctly', () => {
     const a = atom(0);
     const c = computed(() => a.value);
-    const e = effect(() => { void c.value; });
+    const e = effect(() => {
+      void c.value;
+    });
 
     expect(isAtom(a)).toBe(true);
     expect(isComputed(c)).toBe(true);
@@ -328,7 +344,9 @@ describe('Node Identity', () => {
 describe('Scheduler Invariants', () => {
   it('deduplicates same job within same epoch', async () => {
     let count = 0;
-    const job = () => { count++; };
+    const job = () => {
+      count++;
+    };
 
     scheduler.schedule(job);
     scheduler.schedule(job);
@@ -410,7 +428,7 @@ describe('Computed State Machine', () => {
         await new Promise((r) => setTimeout(r, 10));
         return 99;
       },
-      { defaultValue: 0 },
+      { defaultValue: 0 }
     );
 
     expect(c.value).toBe(0);
@@ -487,7 +505,7 @@ describe('Infinite Loop Protection', () => {
     expect(consoleSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         message: expect.stringMatching(/Infinite loop detected/),
-      }),
+      })
     );
 
     consoleSpy.mockRestore();
@@ -507,7 +525,7 @@ describe('Async Computed Safety', () => {
         await new Promise((r) => setTimeout(r, 20));
         return val;
       },
-      { defaultValue: 0 },
+      { defaultValue: 0 }
     );
 
     effect(() => {
