@@ -132,7 +132,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     }
 
     if (this.flags & REJECTED) {
-      if ((this._error as ComputedError)?.recoverable && hasDef) return def;
+      if (hasDef) return def;
       throw this._error;
     }
 
@@ -354,7 +354,6 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     const error = wrapError(err, ComputedError, msg);
 
     if (!throwErr && !(this.flags & REJECTED)) {
-      // Update version
       this.version = nextVersion(this.version);
     }
 

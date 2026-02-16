@@ -5,7 +5,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
-import { AtomError, ComputedError } from '@/errors/errors';
+import { AtomError, ComputedError, EffectError } from '@/errors/errors';
 import { sleep, waitForScheduler } from '../../utils/test-helpers';
 
 describe('Computed', () => {
@@ -345,6 +345,24 @@ describe('Computed', () => {
       expect(onError).toHaveBeenCalled();
 
       c.dispose();
+    });
+  });
+
+  describe('defaultValue Fallback', () => {
+    it('returns defaultValue even when a non-recoverable AtomError propagates', () => {
+      const c = computed(
+        () => {
+          // EffectError has recoverable=false — wrapError passes AtomError subclasses through as-is
+          throw new EffectError('non-recoverable origin');
+        },
+        { defaultValue: 42 }
+      );
+
+      // First access: _recompute throws synchronously, error is stored as REJECTED
+      expect(() => c.value).toThrow();
+
+      // Second access: hits REJECTED branch — should return defaultValue, not re-throw
+      expect(c.value).toBe(42);
     });
   });
 
