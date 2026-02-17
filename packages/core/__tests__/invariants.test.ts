@@ -234,22 +234,23 @@ describe('Disposal Finality', () => {
   });
 
   it('Symbol.dispose allows using keyword for automatic cleanup', () => {
-    const log: string[] = [];
+    const fn = vi.fn();
 
     {
       using a = atom(0);
       using c = computed(() => a.value * 2);
-      using _e = effect(() => {
-        void c.value;
-      });
+      using _e = effect(
+        () => {
+          void c.value;
+          return fn;
+        }
+      );
 
       expect(c.value).toBe(0);
-      a.value = 5;
-      log.push('before-dispose');
     }
 
-    log.push('after-dispose');
-    expect(log).toEqual(['before-dispose', 'after-dispose']);
+    // Block exit -> effect disposed -> cleanup called
+    expect(fn).toHaveBeenCalledTimes(1);
   });
 
   it('effect cleanup runs on disposal', () => {
