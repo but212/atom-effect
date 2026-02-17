@@ -36,12 +36,17 @@ export interface ReadonlyAtom<T = unknown> {
    * Non-reactive read.
    */
   peek(): T;
+
+  /**
+   * Returns the number of active subscribers.
+   */
+  subscriberCount(): number;
 }
 
 /**
  * Writable atom interface.
  */
-export interface WritableAtom<T = unknown> extends ReadonlyAtom<T> {
+export interface WritableAtom<T = unknown> extends ReadonlyAtom<T>, Disposable {
   value: T;
   /**
    * Cleans up the atom and releases resources.
@@ -99,7 +104,7 @@ export interface ComputedOptions<T = unknown> {
 /**
  * Computed atom interface.
  */
-export interface ComputedAtom<T = unknown> extends ReadonlyAtom<T> {
+export interface ComputedAtom<T = unknown> extends ReadonlyAtom<T>, Disposable {
   readonly state: AsyncStateType;
   readonly hasError: boolean;
   readonly lastError: Error | null;
@@ -134,7 +139,7 @@ export interface EffectOptions {
   onError?: (error: unknown) => void;
 }
 
-export interface EffectObject {
+export interface EffectObject extends Disposable {
   dispose(): void;
   run(): void;
   readonly isDisposed: boolean;

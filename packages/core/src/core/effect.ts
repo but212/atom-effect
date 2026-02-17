@@ -106,6 +106,10 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     this._prevLinks = EMPTY_LINKS;
   }
 
+  [Symbol.dispose](): void {
+    this.dispose();
+  }
+
   public addDependency(dep: Dependency): void {
     // Only track if currently executing (double check)
     if (!(this.flags & EFFECT_STATE_FLAGS.EXECUTING)) return;

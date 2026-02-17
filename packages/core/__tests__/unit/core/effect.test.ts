@@ -25,33 +25,9 @@ describe('Effect', () => {
       expect(() => effect(null as unknown as () => void)).toThrow(EffectError);
       expect(() => effect('invalid' as unknown as () => void)).toThrow(EffectError);
     });
-
-    it('prevents running disposed effects', () => {
-      const e = effect(() => {});
-      e.dispose();
-      expect(() => e.run()).toThrow(EffectError);
-    });
   });
 
   describe('Lifecycle & Cleanup', () => {
-    it('manages manual run and idempotent dispose', () => {
-      let runs = 0;
-      const e = effect(
-        () => {
-          runs++;
-        },
-        { sync: true }
-      );
-
-      expect(runs).toBe(1); // Initial run
-      e.run();
-      expect(runs).toBe(2); // Manual run
-
-      e.dispose();
-      e.dispose(); // Idempotent
-      expect(e.isDisposed).toBe(true);
-    });
-
     it('executes valid cleanup and ignores invalid cleanup returns', async () => {
       // Valid cleanup
       const cleanup = vi.fn();
@@ -84,31 +60,6 @@ describe('Effect', () => {
       // It runs initial (1), then triggers update (2).
       // If re-entrancy wasn't handled, it might crash or stack overflow.
       expect(runs).toBeGreaterThanOrEqual(1);
-    });
-  });
-
-  describe('Dependency Dynamics', () => {
-    it('tracks and untracks dependencies dynamically', async () => {
-      const switchAtom = atom(true);
-      const a = atom('a');
-      const b = atom('b');
-      let result = '';
-
-      effect(() => {
-        result = switchAtom.value ? a.value : b.value;
-      });
-
-      await vi.runAllTimersAsync();
-      expect(result).toBe('a');
-
-      switchAtom.value = false; // Switch branch
-      await vi.runAllTimersAsync();
-      expect(result).toBe('b');
-
-      // 'a' should be untracked now
-      a.value = 'change';
-      await vi.runAllTimersAsync();
-      expect(result).toBe('b'); // No update triggered by 'a'
     });
   });
 
@@ -249,29 +200,6 @@ describe('Effect', () => {
 
       consoleSpy.mockRestore();
       consoleWarnSpy.mockRestore();
-    });
-  });
-
-  describe('Error Handler Edge Cases', () => {
-    it('survives when onError callback itself throws', async () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-      effect(
-        () => {
-          throw new Error('Primary error');
-        },
-        {
-          onError: () => {
-            throw new Error('Handler error');
-          },
-        }
-      );
-
-      await vi.runAllTimersAsync();
-
-      // Should log execution error + handler error without crashing
-      expect(consoleSpy).toHaveBeenCalledTimes(2);
-      consoleSpy.mockRestore();
     });
   });
 

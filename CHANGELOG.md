@@ -1,15 +1,22 @@
 # Changelog
 
-## [0.21.1]
+## [Unreleased]
 
 ### Core
+
+- **Tree-shaking**: Configured Vite to remove debug code in production builds (~6% bundle size reduction).
+- **Symbol.dispose**: Implemented `[Symbol.dispose]()` on `Atom`, `Computed`, and `Effect` for `using` keyword support.
+
+## [0.21.1]
+
+### Core - 0.21.1
 
 - **Effect Resource Leak**: Fixed failed subscription cleanup after mid-execution errors.
 - **Naming**: Renamed `SubscriberLink` to `Subscription` to avoid confusion.
 - **Computed Fallback**: `defaultValue` now serves as a fallback for all error types, including non-recoverable ones.
 - **Hardcoded Values**: extracted constants and error messages to dedicated files.
 
-### jQuery
+### jQuery - 0.21.1
 
 - **Hardcoded Values**: extracted constants, log prefixes, and error messages to `constants.ts`.
 

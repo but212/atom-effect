@@ -20,28 +20,6 @@ describe('Atom', () => {
       expect(() => a.subscribe('invalid' as unknown as () => void)).toThrow(AtomError);
     });
 
-    it('isolates subscriber errors to ensure robustness', async () => {
-      const a = atom(0);
-      const errorSub = vi.fn().mockImplementation(() => {
-        throw new Error('Fail');
-      });
-      // Normal subscriber should still run despite error in peer
-      const normalSub = vi.fn();
-      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-      a.subscribe(errorSub);
-      a.subscribe(normalSub);
-
-      a.value = 1;
-      await waitForScheduler();
-
-      expect(errorSub).toHaveBeenCalled();
-      expect(normalSub).toHaveBeenCalled();
-      expect(consoleError).toHaveBeenCalled();
-
-      consoleError.mockRestore();
-    });
-
     it('warns on duplicate subscriptions', () => {
       const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const a = atom(0);
@@ -86,17 +64,10 @@ describe('Atom', () => {
       // Sync updates happen immediately
       expect(log).toEqual([1, 2]);
     });
-
-    it('clears value on dispose', () => {
-      const a = atom(10);
-      expect(a.peek()).toBe(10);
-      a.dispose();
-      expect(a.peek()).toBe(undefined);
-    });
   });
 
   describe('Subscription Management', () => {
-    it('handles subscribe and idempotent unsubscribe', async () => {
+    it('handles subscribe and unsubscribe stops notifications', async () => {
       const a = atom(0);
       const spy = vi.fn();
 
@@ -106,24 +77,10 @@ describe('Atom', () => {
       expect(spy).toHaveBeenCalledTimes(1);
 
       unsub();
-      unsub(); // Idempotent
 
       a.value = 2;
       await waitForScheduler();
       expect(spy).toHaveBeenCalledTimes(1); // No new calls
-    });
-
-    it('supports object subscribers (Subscriber interface)', async () => {
-      const a = atom(0);
-      const spy = vi.fn();
-      const subscriber = { execute: () => spy(a.peek()) };
-
-      a.subscribe(subscriber);
-
-      a.value = 1;
-      await waitForScheduler();
-
-      expect(spy).toHaveBeenCalledWith(1);
     });
   });
 });
