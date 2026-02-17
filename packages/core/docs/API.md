@@ -113,7 +113,6 @@ effectHandle.dispose();
 - `onError`: `(error: unknown) => void`. Custom error handler.
 - `maxExecutionsPerSecond`: Number (default `1000`). Maximum executions per second (dev mode only).
 - `maxExecutionsPerFlush`: Number (default `100`). Maximum executions per flush cycle before infinite loop detection triggers.
-- `trackModifications`: Boolean (default `false`). Enables warnings when an effect reads a dependency it just modified.
 
 ## `batch(fn: () => void)`
 

@@ -69,9 +69,6 @@ export interface Dependency {
   /** Last validated epoch. */
   _lastSeenEpoch: number;
 
-  /** Last modified epoch. */
-  _modifiedAtEpoch?: number;
-
   /**
    * Adds a subscriber to this dependency.
    * @param listener - The subscriber (function or object with execute method).
@@ -135,7 +132,6 @@ export interface EffectOptions {
   sync?: boolean;
   maxExecutionsPerSecond?: number;
   maxExecutionsPerFlush?: number;
-  trackModifications?: boolean; // Useful for debugging side-effects
   onError?: (error: unknown) => void;
 }
 
