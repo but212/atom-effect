@@ -5,6 +5,10 @@ import dts from 'vite-plugin-dts';
 import tsconfigPaths from 'vite-tsconfig-paths';
 
 export default defineConfig({
+  define: {
+    'process.env.NODE_ENV': JSON.stringify('production'),
+    '__DEV__': 'false',
+  },
   build: {
     lib: {
       entry: resolve(__dirname, 'src/index.ts'),

@@ -92,6 +92,10 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
     this._value = undefined as T;
     this._pendingOldValue = undefined;
   }
+
+  [Symbol.dispose](): void {
+    this.dispose();
+  }
 }
 
 /**

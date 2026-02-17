@@ -46,7 +46,7 @@ export interface ReadonlyAtom<T = unknown> {
 /**
  * Writable atom interface.
  */
-export interface WritableAtom<T = unknown> extends ReadonlyAtom<T> {
+export interface WritableAtom<T = unknown> extends ReadonlyAtom<T>, Disposable {
   value: T;
   /**
    * Cleans up the atom and releases resources.
@@ -120,6 +120,7 @@ export interface ComputedAtom<T = unknown> extends ReadonlyAtom<T> {
   /** Invalidates atom. */
   invalidate(): void;
   dispose(): void;
+  [Symbol.dispose](): void;
 }
 
 export interface Subscriber {
@@ -139,7 +140,7 @@ export interface EffectOptions {
   onError?: (error: unknown) => void;
 }
 
-export interface EffectObject {
+export interface EffectObject extends Disposable {
   dispose(): void;
   run(): void;
   readonly isDisposed: boolean;

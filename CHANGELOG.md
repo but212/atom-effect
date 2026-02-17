@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### Core
+
+- **Tree-shaking**: Added `define` config to Vite build (`process.env.NODE_ENV`, `__DEV__`) for compile-time dead code elimination. All `if (IS_DEV)` debug blocks are now fully removed in production builds (~6% bundle size reduction).
+- **Symbol.dispose**: Implemented `[Symbol.dispose]()` on `Atom`, `Computed`, and `Effect` classes, enabling TypeScript 5.2+ `using` keyword for automatic resource cleanup. Updated `WritableAtom`, `ComputedAtom`, and `EffectObject` interfaces to extend `Disposable`.
+
 ## [0.21.1]
 
 ### Core

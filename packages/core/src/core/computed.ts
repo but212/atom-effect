@@ -234,6 +234,10 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._value = undefined as T;
   }
 
+  [Symbol.dispose](): void {
+    this.dispose();
+  }
+
   addDependency(dep: Dependency): void {
     // Deduplicate dependencies
     if (dep._lastSeenEpoch === this._trackEpoch) return;
