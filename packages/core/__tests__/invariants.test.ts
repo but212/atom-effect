@@ -239,7 +239,9 @@ describe('Disposal Finality', () => {
     {
       using a = atom(0);
       using c = computed(() => a.value * 2);
-      using e = effect(() => { void c.value; });
+      using _e = effect(() => {
+        void c.value;
+      });
 
       expect(c.value).toBe(0);
       a.value = 5;
