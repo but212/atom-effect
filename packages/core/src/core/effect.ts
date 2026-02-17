@@ -53,8 +53,6 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   private readonly _sync: boolean;
   private readonly _maxExecutions: number;
   private readonly _maxExecutionsPerFlush: number;
-  private readonly _trackModifications: boolean;
-
   // Frequency tracking (Dev)
   private _executionCount = 0;
   private _windowStart = 0;
@@ -70,8 +68,6 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       options.maxExecutionsPerSecond ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_SECOND;
     this._maxExecutionsPerFlush =
       options.maxExecutionsPerFlush ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_EFFECT;
-    this._trackModifications = options.trackModifications ?? false;
-
     // Pre-allocate callbacks once — eliminates per-dependency closure allocation
     if (this._sync) {
       this._executeTask = undefined;
@@ -136,17 +132,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     }
 
     try {
-      let unsubscribe: () => void;
-      if (this._trackModifications) {
-        // trackModifications needs to capture `dep` for _modifiedAtEpoch tagging
-        unsubscribe = dep.subscribe(() => {
-          if (this.flags & EFFECT_STATE_FLAGS.EXECUTING) dep._modifiedAtEpoch = this._currentEpoch;
-          this._notifyCallback();
-        });
-      } else {
-        // Hot path: shared callback, zero per-dependency closure allocation
-        unsubscribe = dep.subscribe(this._notifyCallback);
-      }
+      const unsubscribe = dep.subscribe(this._notifyCallback);
       nextLinks.push(new DependencyLink(dep, dep.version, unsubscribe));
     } catch (error) {
       const wrapped = wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_EXECUTION_FAILED);
@@ -188,20 +174,6 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       const result = trackingContext.run(this, this._fn);
       this._links = nextLinks;
       committed = true;
-
-      // Inline _checkLoopWarnings
-      if (this._trackModifications && debug.enabled) {
-        const epoch = this._currentEpoch;
-        for (let i = 0, len = nextLinks.length; i < len; i++) {
-          const dep = nextLinks[i]!.node;
-          if (dep._modifiedAtEpoch === epoch) {
-            debug.warn(
-              true,
-              `Effect is reading a dependency (${debug.getDebugName(dep) || 'unknown'}) that it just modified. Infinite loop may occur`
-            );
-          }
-        }
-      }
 
       // Handle result
       if (isPromise(result)) {

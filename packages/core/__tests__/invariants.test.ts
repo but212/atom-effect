@@ -233,6 +233,24 @@ describe('Disposal Finality', () => {
     e.dispose();
   });
 
+  it('Symbol.dispose allows using keyword for automatic cleanup', () => {
+    const fn = vi.fn();
+
+    {
+      using a = atom(0);
+      using c = computed(() => a.value * 2);
+      using _e = effect(() => {
+        void c.value;
+        return fn;
+      });
+
+      expect(c.value).toBe(0);
+    }
+
+    // Block exit -> effect disposed -> cleanup called
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
   it('effect cleanup runs on disposal', () => {
     const cleanup = vi.fn();
     const e = effect(() => cleanup, { sync: true });
