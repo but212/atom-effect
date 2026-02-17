@@ -233,22 +233,32 @@ describe('Disposal Finality', () => {
     e.dispose();
   });
 
-  it('Symbol.dispose allows using keyword for automatic cleanup', () => {
-    const fn = vi.fn();
+  it('Symbol.dispose prevents memory leaks and zombie listeners compared to manual management', async () => {
+    const leakContainer: number[] = [];
+    const source = atom(0);
 
     {
-      using a = atom(0);
-      using c = computed(() => a.value * 2);
-      using _e = effect(() => {
-        void c.value;
-        return fn;
+      const _leakEffect = effect(() => {
+        leakContainer.push(source.value);
       });
-
-      expect(c.value).toBe(0);
     }
 
-    // Block exit -> effect disposed -> cleanup called
-    expect(fn).toHaveBeenCalledTimes(1);
+    source.value = 1;
+    await waitForScheduler();
+    expect(leakContainer).toEqual([0, 1]);
+
+    const safeContainer: number[] = [];
+    {
+      using _safeEffect = effect(() => {
+        safeContainer.push(source.value);
+      });
+    }
+
+    source.value = 2;
+    await waitForScheduler();
+
+    expect(safeContainer).toEqual([1]);
+    expect(leakContainer).toEqual([0, 1, 2]);
   });
 
   it('effect cleanup runs on disposal', () => {
