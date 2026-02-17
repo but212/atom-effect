@@ -104,7 +104,7 @@ export interface ComputedOptions<T = unknown> {
 /**
  * Computed atom interface.
  */
-export interface ComputedAtom<T = unknown> extends ReadonlyAtom<T> {
+export interface ComputedAtom<T = unknown> extends ReadonlyAtom<T>, Disposable {
   readonly state: AsyncStateType;
   readonly hasError: boolean;
   readonly lastError: Error | null;
@@ -120,7 +120,6 @@ export interface ComputedAtom<T = unknown> extends ReadonlyAtom<T> {
   /** Invalidates atom. */
   invalidate(): void;
   dispose(): void;
-  [Symbol.dispose](): void;
 }
 
 export interface Subscriber {

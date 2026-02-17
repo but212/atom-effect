@@ -18,12 +18,12 @@ import {
 } from '../src';
 import { waitForScheduler } from './utils/test-helpers';
 
+// biome-ignore lint/suspicious/noExplicitAny: internal version access
+const v = (node: any): number => node.version;
+
 // ─── 1. Version Semantics ───────────────────────────────────────────────────
 
 describe('Version Semantics', () => {
-  // biome-ignore lint/suspicious/noExplicitAny: internal version access
-  const v = (node: any): number => node.version;
-
   it('atom version increments on change, stays on same-value assignment', () => {
     const a = atom(0);
     const v0 = v(a);
@@ -394,9 +394,6 @@ describe('Equality Contract', () => {
   });
 
   it('computed supports custom equality to suppress version bumps', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: internal version access
-    const v = (node: any): number => node.version;
-
     const src = atom({ id: 1, data: 'a' });
     const c = computed(() => src.value, {
       equal: (a, b) => a.id === b.id,
