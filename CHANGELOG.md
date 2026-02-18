@@ -1,5 +1,16 @@
 # Changelog
 
+## [unreleased]
+
+### jQuery
+
+- **Router**:
+  - **Reactive Query Params**: Added `queryParams` atom to `Router` to track URL query parameters reactively.
+  - **Optimized Param Updates**: Introduced `onParamsChange` hook to handle same-route parameter changes efficiently without full re-renders.
+  - **Mount Hook**: Added `onMount` lifecycle hook for template-based routes, providing direct access to the rendered jQuery element.
+  - **Performance**: Consolidated active link tracking into a single effect, significantly reducing memory usage for apps with many navigation links.
+  - **Robustness**: Traceable `history.pushState` and `history.replaceState` failures (e.g., `file://` protocol) now log warnings via `debug` instead of crashing, with strict try-catch guards around all History API interactions.
+
 ## [0.21.2]
 
 ### Core

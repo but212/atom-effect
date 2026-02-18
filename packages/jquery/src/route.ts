@@ -1,6 +1,7 @@
-import { atom as createAtom, effect } from '@but212/atom-effect';
+import { computed, atom as createAtom, effect } from '@but212/atom-effect';
 import $ from 'jquery';
 import { LOG_PREFIXES, ROUTE_DEFAULTS } from './constants';
+import { debug } from './debug';
 import { registry } from './registry';
 import type { RouteConfig, RouteDefinition, Router, WritableAtom } from './types';
 
@@ -112,23 +113,46 @@ export function route(config: RouteConfig): Router {
       try {
         decodeURIComponent(raw);
       } catch (_e) {
-        console.warn(`${LOG_PREFIX} Malformed URI component: ${raw}`);
+        debug.warn(`${LOG_PREFIX} Malformed URI component: ${raw}`);
       }
     }
 
     return params;
   };
 
+  // --- Helper: Safe History API Wrappers ---
+  const safePushState = (data: unknown, unused: string, url: string | URL | null) => {
+    try {
+      history.pushState(data, unused, url);
+      return true;
+    } catch (e) {
+      debug.warn(
+        `${LOG_PREFIX} PushState failed (likely file:// protocol or security restriction). UI will update, but URL will not.`,
+        e
+      );
+      return false;
+    }
+  };
+
+  const safeReplaceState = (data: unknown, unused: string, url: string | URL | null) => {
+    try {
+      history.replaceState(data, unused, url);
+      return true;
+    } catch (e) {
+      debug.warn(`${LOG_PREFIX} ReplaceState failed.`, e);
+      return false;
+    }
+  };
+
   /**
    * Updates the URL to reflect a new route.
-   * Hash mode: sets window.location.hash
-   * History mode: calls history.pushState
    */
   const setUrl = (routeName: string): void => {
     if (isHistoryMode) {
       // Remove trailing slash from basePath if present
       const url = `${basePath.replace(/\/$/, '')}/${routeName}`;
-      history.pushState(null, '', url);
+      safePushState(null, '', url);
+      // Always update previousUrl so internal state remains consistent
       previousUrl = url;
     } else {
       const hash = `#${routeName}`;
@@ -139,12 +163,10 @@ export function route(config: RouteConfig): Router {
 
   /**
    * Restores the URL when a navigation guard blocks the transition.
-   * Hash mode: reverts window.location.hash
-   * History mode: calls history.replaceState
    */
   const restoreUrl = (): void => {
     if (isHistoryMode) {
-      history.replaceState(null, '', previousUrl);
+      safeReplaceState(null, '', previousUrl);
     } else {
       window.location.hash = previousUrl;
     }
@@ -174,7 +196,7 @@ export function route(config: RouteConfig): Router {
     }
 
     if (!routeConfig) {
-      console.warn(`${LOG_PREFIX} Route "${routeName}" not found and no notFound route configured`);
+      debug.warn(`${LOG_PREFIX} Route "${routeName}" not found and no notFound route configured`);
       return null;
     }
 
@@ -189,16 +211,18 @@ export function route(config: RouteConfig): Router {
     const template = document.querySelector(templateSelector) as HTMLTemplateElement;
 
     if (!template?.content) {
-      console.warn(`${LOG_PREFIX} Template "${templateSelector}" not found`);
+      debug.warn(`${LOG_PREFIX} Template "${templateSelector}" not found`);
       return false;
     }
 
     const clonedContent = template.content.cloneNode(true) as DocumentFragment;
     $target.append(clonedContent);
+
     return true;
   };
 
   const currentRoute: WritableAtom<string> = createAtom(getRouteName());
+  const queryParamsAtom: WritableAtom<Record<string, string>> = createAtom(getQueryParams());
 
   /**
    * Renders the specified route, including lifecycle hooks and content.
@@ -210,7 +234,7 @@ export function route(config: RouteConfig): Router {
     // Validate target element exists
     const container = $target[0];
     if (!container) {
-      console.warn(`${LOG_PREFIX} Target element "${target}" not found`);
+      debug.warn(`${LOG_PREFIX} Target element "${target}" not found`);
       return;
     }
 
@@ -242,7 +266,11 @@ export function route(config: RouteConfig): Router {
     if (routeConfig.render) {
       routeConfig.render(container, routeName, routeParams);
     } else if (routeConfig.template) {
-      renderTemplate(routeConfig.template);
+      if (renderTemplate(routeConfig.template)) {
+        if (routeConfig.onMount) {
+          routeConfig.onMount($target.children());
+        }
+      }
     }
 
     // Call afterTransition hook
@@ -287,6 +315,7 @@ export function route(config: RouteConfig): Router {
 
     const newRoute = getRouteName();
     const oldRouteName = currentRoute.value;
+    const params = getQueryParams();
 
     if (oldRouteName !== newRoute) {
       // Check onLeave guard for user-driven navigation
@@ -299,9 +328,16 @@ export function route(config: RouteConfig): Router {
         }
       }
       currentRoute.value = newRoute;
+      queryParamsAtom.value = params;
     } else {
-      // Same route but URL changed (e.g., query params), manually re-render
-      renderRoute(newRoute);
+      // Same route but URL changed (e.g., query params)
+      queryParamsAtom.value = params;
+      const routeConfig = routes[oldRouteName];
+      if (routeConfig?.onParamsChange) {
+        routeConfig.onParamsChange(params);
+      } else {
+        renderRoute(newRoute);
+      }
     }
 
     previousUrl = currentUrl;
@@ -328,62 +364,62 @@ export function route(config: RouteConfig): Router {
       $(document).off('click', '[data-route]', delegateHandler);
     });
 
-    // 2. Active State Management via MutationObserver
-    // We need to attach effects to any [data-route] element that appears in the DOM.
-    const bindActiveState = (el: HTMLElement) => {
+    // 2. Active State Management — single effect for all links
+    const trackLink = (el: HTMLElement) => {
       if (boundLinks.has(el)) return;
-
-      const routeAttr = el.dataset.route!;
-
       boundLinks.add(el);
+      el.classList.add('_aes-bound');
+    };
 
-      // Bind reactive active state tracking
-      const activeEffect = effect(() => {
-        const isActive = currentRoute.value === routeAttr;
+    // Initial bind
+    for (const el of document.querySelectorAll<HTMLElement>('[data-route]')) {
+      trackLink(el);
+    }
+
+    const updateActiveStates = (current: string) => {
+      for (const el of boundLinks) {
+        const routeAttr = el.dataset.route!;
+        const isActive = current === routeAttr;
         el.classList.toggle(activeClass, isActive);
-
-        // Update aria-current for accessibility
         if (isActive) {
           el.setAttribute('aria-current', 'page');
         } else {
           el.removeAttribute('aria-current');
         }
-      });
-
-      // Register effect with registry
-      registry.trackEffect(el, activeEffect);
-
-      // Cleanup tracking
-      registry.trackCleanup(el, () => {
-        boundLinks.delete(el);
-      });
+      }
     };
 
-    // Initial bind
-    for (const el of document.querySelectorAll<HTMLElement>('[data-route]')) {
-      bindActiveState(el);
-    }
+    // Single effect that updates all tracked links
+    const activeLinksEffect = effect(() => {
+      updateActiveStates(currentRoute.value);
+    });
+    cleanups.push(() => activeLinksEffect.dispose());
 
     // Watch for new elements
     const observer = new MutationObserver((mutations) => {
+      let added = false;
       for (const mutation of mutations) {
         if (mutation.type === 'childList') {
           mutation.addedNodes.forEach((node) => {
             if (node.nodeType === 1) {
-              // ELEMENT_NODE
               const el = node as HTMLElement;
               if (el.matches?.('[data-route]')) {
-                bindActiveState(el);
+                trackLink(el);
+                added = true;
               }
-              // Check descendants
               if (el.querySelectorAll) {
-                el.querySelectorAll('[data-route]').forEach((child) =>
-                  bindActiveState(child as HTMLElement)
-                );
+                el.querySelectorAll('[data-route]').forEach((child) => {
+                  trackLink(child as HTMLElement);
+                  added = true;
+                });
               }
             }
           });
         }
+      }
+      // Update active states for newly added links
+      if (added) {
+        updateActiveStates(currentRoute.value);
       }
     });
 
@@ -403,9 +439,11 @@ export function route(config: RouteConfig): Router {
     cleanups.forEach((cleanup) => cleanup());
     cleanups.length = 0;
 
-    // Cleanup bound links via registry
-    // This handles both click handlers and active state effects
-    boundLinks.forEach((el) => registry.cleanup(el));
+    // Cleanup bound links
+    boundLinks.forEach((el) => {
+      el.classList.remove('_aes-bound');
+      registry.cleanup(el);
+    });
     boundLinks.clear();
   };
 
@@ -430,6 +468,7 @@ export function route(config: RouteConfig): Router {
 
   return {
     currentRoute,
+    queryParams: computed(() => queryParamsAtom.value),
     navigate,
     destroy,
   };
