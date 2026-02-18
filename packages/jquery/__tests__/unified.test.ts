@@ -150,3 +150,141 @@ describe('Unified Bind (atomBind)', () => {
     $el.remove();
   });
 });
+
+// ============================================================================
+// Red Phase: Pending structural improvements
+// ============================================================================
+
+describe('Red Phase: bindChecked Busy guard is dead code', () => {
+  /**
+   * SyncingToDom flag is set during Atom->DOM sync (el.checked = val).
+   * However, assigning to el.checked does NOT fire a 'change' event natively.
+   * Therefore, the Busy guard in the DOM->Atom handler can never block anything
+   * during normal reactive sync. These tests document and verify that invariant.
+   */
+
+  it('native property assignment does not trigger change event', () => {
+    // Verifies the core assumption: el.checked = x never fires 'change'
+    const el = document.createElement('input');
+    el.type = 'checkbox';
+    document.body.appendChild(el);
+
+    const changeHandler = vi.fn();
+    el.addEventListener('change', changeHandler);
+
+    el.checked = true; // Atom->DOM path
+    expect(changeHandler).not.toHaveBeenCalled();
+
+    el.removeEventListener('change', changeHandler);
+    el.remove();
+  });
+
+  it('Busy guard never fires: change event from user only reaches atom when not busy', async () => {
+    // Even if we could somehow set Busy before a change event,
+    // the only way change fires is via dispatchEvent (user action simulation),
+    // never from property assignment. This test proves the handler always runs
+    // on simulated user input (Busy is always 0 at that point).
+    const isChecked = $.atom(false);
+    const $el = $('<input type="checkbox">').appendTo(document.body);
+
+    $el.atomChecked(isChecked);
+
+    // Simulate user unchecking
+    ($el[0] as HTMLInputElement).checked = false;
+    $el[0].dispatchEvent(new Event('change'));
+    expect(isChecked.value).toBe(false);
+
+    // Simulate user checking
+    ($el[0] as HTMLInputElement).checked = true;
+    $el[0].dispatchEvent(new Event('change'));
+    expect(isChecked.value).toBe(true);
+
+    $el.remove();
+  });
+
+  it('removing Busy guard from handler does not change behavior', async () => {
+    // If the Busy guard were removed, behavior should be identical.
+    // This test shows the guard adds no observable protection.
+    const isChecked = $.atom(true);
+    const $el = $('<input type="checkbox">').appendTo(document.body);
+
+    $el.atomChecked(isChecked);
+    await $.nextTick();
+    expect(($el[0] as HTMLInputElement).checked).toBe(true);
+
+    // Atom->DOM update (sets SyncingToDom flag during execution)
+    isChecked.value = false;
+    await $.nextTick();
+    expect(($el[0] as HTMLInputElement).checked).toBe(false);
+
+    // After Atom->DOM, Busy flag must be cleared (not stuck)
+    // Subsequent user input must still reach atom
+    ($el[0] as HTMLInputElement).checked = true;
+    $el[0].dispatchEvent(new Event('change'));
+    expect(isChecked.value).toBe(true); // would fail if Busy was stuck
+
+    $el.remove();
+  });
+});
+
+describe('Red Phase: bindVal effect registration symmetry with bindChecked', () => {
+  /**
+   * bindVal delegates effect creation to applyInputBinding which returns
+   * { effect: fn, cleanup: fn }, and unified.ts wraps fn with effect() externally.
+   * bindChecked creates effect() internally.
+   * Both should behave identically regarding cleanup via atomUnbind.
+   */
+
+  it('atomUnbind disposes val effect (effect registered via external effect() wrap)', async () => {
+    const val = $.atom('hello');
+    const $el = $('<input>').appendTo(document.body);
+
+    $el.atomVal(val);
+    await $.nextTick();
+    expect($el.val()).toBe('hello');
+
+    $el.atomUnbind();
+
+    val.value = 'world';
+    await $.nextTick();
+    // Effect disposed: DOM should not update
+    expect($el.val()).toBe('hello');
+
+    $el.remove();
+  });
+
+  it('atomUnbind disposes checked effect (effect registered internally)', async () => {
+    const isChecked = $.atom(false);
+    const $el = $('<input type="checkbox">').appendTo(document.body);
+
+    $el.atomChecked(isChecked);
+    await $.nextTick();
+    expect(($el[0] as HTMLInputElement).checked).toBe(false);
+
+    $el.atomUnbind();
+
+    isChecked.value = true;
+    await $.nextTick();
+    // Effect disposed: DOM should not update
+    expect(($el[0] as HTMLInputElement).checked).toBe(false);
+
+    $el.remove();
+  });
+
+  it('val cleanup removes event listeners after atomUnbind', async () => {
+    const val = $.atom('a');
+    const $el = $('<input>').appendTo(document.body);
+
+    $el.atomVal(val);
+    $el.atomUnbind();
+
+    // Simulate user input after unbind: atom should not change
+    const el = $el[0] as HTMLInputElement;
+    el.value = 'b';
+    el.dispatchEvent(new Event('input'));
+
+    expect(val.value).toBe('a');
+
+    $el.remove();
+  });
+});

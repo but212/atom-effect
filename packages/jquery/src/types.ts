@@ -239,7 +239,7 @@ declare global {
     atomOn(event: string, handler: (e: JQuery.Event) => void): this;
 
     /** Integrated multi-behavior reactive binding. */
-    atomBind<T = unknown>(options: BindingOptions<T>): this;
+    atomBind(options: BindingOptions): this;
 
     /** Reactive list rendering with efficient LIS-based reconciliation. */
     atomList<T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>): this;

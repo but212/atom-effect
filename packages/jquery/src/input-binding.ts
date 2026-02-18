@@ -1,6 +1,7 @@
+import { effect } from '@but212/atom-effect';
 import { INPUT_DEFAULTS } from './constants';
 import { debug } from './debug';
-import type { ValOptions, WritableAtom } from './types';
+import type { EffectObject, ValOptions, WritableAtom } from './types';
 import { BindingFlags } from './types';
 
 /**
@@ -178,13 +179,13 @@ class InputBinding<T> {
  * @param $el - The jQuery element to bind.
  * @param atom - The target atom for two-way binding.
  * @param options - Binding options (parse, format, debounce, events).
- * @returns Object containing the effect function (for Atom -> DOM) and cleanup function.
+ * @returns Object containing the registered EffectObject and cleanup function.
  */
 export function applyInputBinding<T>(
   $el: JQuery,
   atom: WritableAtom<T>,
   options: ValOptions<T> = {}
-): { effect: () => void; cleanup: () => void } {
+): { fx: EffectObject; cleanup: () => void } {
   const binding = new InputBinding($el, atom, options);
-  return { effect: binding.effect, cleanup: binding.cleanup };
+  return { fx: effect(binding.effect), cleanup: binding.cleanup };
 }

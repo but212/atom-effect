@@ -19,6 +19,17 @@
   - **Duplicate Node on Async Re-add**: When the same key is re-inserted while its `onRemove` Promise is still pending, `commitRemoval` now removes only the captured old `$el` reference, leaving the newly inserted node intact.
   - **LIS Distortion by Async-Removing Keys**: Keys still undergoing async removal are excluded from LIS index lookup (`-1`), preventing their stale positions from anchoring LIS calculation for surviving items.
 - **atomList — Refactor**: Extracted `renderItem()`, `insertOrAppend()`, and `scheduleRemoval()` helpers to eliminate render logic duplication, flatten the removal closure, and remove spurious nested `{}` block; unified empty-template handling with the hot-path guard.
+- **unified.ts — Refactor**:
+  - **`bindVisibility`**: Removed redundant `label` parameter; derived from `invert` internally. Simplified visible-state expression to `invert !== !!val`.
+  - **`bindChecked`**: Removed dead-code re-entrancy guard (`state`, `BindingFlags.Busy/SyncingToDom`); `el.checked = x` never fires `change`, so the guard was never reachable.
+  - **`bindVal`**: Resolved asymmetry with `bindChecked` by moving `effect()` creation into `applyInputBinding`, which now returns `{ fx: EffectObject, cleanup }` directly.
+  - **`createContext`**: Removed lazy `$el` getter; `$(el)` is now created eagerly at context construction time.
+  - **`$.fn.atomBind`**: Removed unused generic `<T>`; delegates to `BindingOptions` default (`unknown`).
+  - **for-in index access**: Added missing non-null assertions (`!`) on `attrMap[name]`, `propMap[name]`, and `eventMap[name]` for `noUncheckedIndexedAccess` compliance; removed contradictory `!` on `cssMap[prop]` where an `undefined` guard already follows.
+  - **`bindChecked` effect formatting**: Extracted `effect(...)` result to `const fx` before passing to `registry.trackEffect` for consistency with `bindVal`.
+- **mount.ts — Bug Fixes**:
+  - **Mount error handling**: Component function errors are now caught and logged as `[atom-effect-jquery] Mount error:` instead of propagating uncaught.
+  - **Cleanup error message**: Standardized component cleanup error log to `[atom-effect-jquery] Cleanup error:` (was `Component cleanup error:`).
 
 ## [0.21.3]
 

@@ -13,7 +13,13 @@ export function mountComponent<P>($el: JQuery, component: ComponentFn<P>, props:
   unmountComponent($el);
 
   // Initialize component and register cleanup
-  const cleanup = component($el, props);
+  let cleanup: ReturnType<typeof component>;
+  try {
+    cleanup = component($el, props);
+  } catch (err) {
+    console.error('[atom-effect-jquery] Mount error:', err);
+    return;
+  }
   if (typeof cleanup === 'function') {
     // Registry will automatically mark as bound via _getOrCreateRecord
     registry.setComponentCleanup(el, cleanup);
@@ -30,7 +36,7 @@ export function unmountComponent($el: JQuery): void {
       try {
         cleanup();
       } catch (err) {
-        console.error('[atom-effect-jquery] Component cleanup error:', err);
+        console.error('[atom-effect-jquery] Cleanup error:', err);
       }
       registry.setComponentCleanup(this, undefined);
     }

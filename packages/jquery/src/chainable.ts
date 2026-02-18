@@ -80,7 +80,7 @@ $.fn.atomProp = function (name: string, source: ReactiveValue<unknown>): JQuery 
  */
 $.fn.atomShow = function (condition: ReactiveValue<boolean>): JQuery {
   return this.each(function () {
-    bindVisibility(createContext(this), condition, false, 'show');
+    bindVisibility(createContext(this), condition, false);
   });
 };
 
@@ -89,7 +89,7 @@ $.fn.atomShow = function (condition: ReactiveValue<boolean>): JQuery {
  */
 $.fn.atomHide = function (condition: ReactiveValue<boolean>): JQuery {
   return this.each(function () {
-    bindVisibility(createContext(this), condition, true, 'hide');
+    bindVisibility(createContext(this), condition, true);
   });
 };
 

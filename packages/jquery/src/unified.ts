@@ -14,7 +14,6 @@ import type {
   ValOptions,
   WritableAtom,
 } from './types';
-import { BindingFlags, createInputBindingState } from './types';
 import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from './utils';
 
 // Cache for CSS property camelization to avoid repeated regex and check overhead
@@ -33,12 +32,8 @@ function getCamelCase(prop: string): string {
 // ============================================================================
 
 export function createContext(el: HTMLElement): BindingContext {
-  let _$el: JQuery | null = null;
   return {
-    get $el() {
-      if (!_$el) _$el = $(el);
-      return _$el;
-    },
+    $el: $(el),
     el,
     trackCleanup: (fn) => registry.trackCleanup(el, fn),
   };
@@ -106,7 +101,7 @@ export function bindClass(
   for (const className in classMap) {
     registerReactiveEffect(
       ctx.el,
-      classMap[className],
+      classMap[className]!,
       (val) => {
         ctx.el.classList.toggle(className, !!val);
       },
@@ -164,7 +159,7 @@ export function bindAttr(
 
     registerReactiveEffect(
       el,
-      attrMap[name],
+      attrMap[name]!,
       (v) => {
         if (v === null || v === undefined || v === false) {
           el.removeAttribute(name);
@@ -202,7 +197,7 @@ export function bindProp(
 
     registerReactiveEffect(
       ctx.el,
-      propMap[name],
+      propMap[name]!,
       (val) => {
         // Redundancy check specifically for DOM properties
         if (el[name] !== val) {
@@ -220,15 +215,15 @@ export function bindProp(
 export function bindVisibility(
   ctx: BindingContext,
   condition: ReactiveValue<boolean>,
-  invert: boolean,
-  label: 'show' | 'hide'
+  invert: boolean
 ): void {
   const el = ctx.el;
+  const label = invert ? 'hide' : 'show';
   registerReactiveEffect(
     el,
     condition,
     (val) => {
-      const visible = invert ? !val : !!val;
+      const visible = invert !== !!val;
       el.style.display = visible ? '' : 'none';
       if (debug.enabled) debug.domUpdated(el, label, val);
     },
@@ -250,13 +245,13 @@ export function bindVal<T>(
     return;
   }
   const isArr = Array.isArray(cfg);
-  const { effect: fxFn, cleanup } = applyInputBinding(
+  const { fx, cleanup } = applyInputBinding(
     ctx.$el,
     isArr ? cfg[0] : cfg,
     isArr ? cfg[1] : {}
   );
 
-  registry.trackEffect(ctx.el, effect(fxFn));
+  registry.trackEffect(ctx.el, fx);
   ctx.trackCleanup(cleanup);
 }
 
@@ -266,11 +261,10 @@ export function bindVal<T>(
 export function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): void {
   const el = ctx.el as HTMLInputElement;
   const $el = ctx.$el;
-  const state = createInputBindingState();
 
   // DOM → Atom (jQuery events for .trigger() compatibility)
+  // Note: el.checked = x does not fire 'change', so no re-entrancy guard is needed.
   const handler = () => {
-    if (state.flags & BindingFlags.Busy) return;
     const current = el.checked;
     if (atom.value !== current) {
       atom.value = current;
@@ -282,13 +276,11 @@ export function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): v
 
   // Atom → DOM
   const fx = effect(() => {
-    state.flags |= BindingFlags.SyncingToDom;
     const val = !!atom.value;
     if (el.checked !== val) {
       el.checked = val;
       if (debug.enabled) debug.domUpdated($el, 'checked', val);
     }
-    state.flags &= ~BindingFlags.SyncingToDom;
   });
   registry.trackEffect(el, fx);
 }
@@ -306,7 +298,7 @@ type EventBindingMap = {
 
 export function bindEvents(ctx: BindingContext, eventMap: EventBindingMap): void {
   for (const name in eventMap) {
-    const handler = eventMap[name];
+    const handler = eventMap[name]!;
     if (typeof handler !== 'function') continue;
     bindOn(ctx, name, handler);
   }
@@ -334,7 +326,7 @@ export function bindOn(
  * Extends jQuery with atom-based data binding capabilities.
  * Synchronizes multiple element states with reactive atoms in a single batch call.
  */
-$.fn.atomBind = function <T>(options: BindingOptions<T>): JQuery {
+$.fn.atomBind = function (options: BindingOptions): JQuery {
   return this.each(function () {
     const ctx = createContext(this);
 
@@ -345,8 +337,8 @@ $.fn.atomBind = function <T>(options: BindingOptions<T>): JQuery {
     if (options.css) bindCss(ctx, options.css);
     if (options.attr) bindAttr(ctx, options.attr);
     if (options.prop) bindProp(ctx, options.prop);
-    if (options.show !== undefined) bindVisibility(ctx, options.show, false, 'show');
-    if (options.hide !== undefined) bindVisibility(ctx, options.hide, true, 'hide');
+    if (options.show !== undefined) bindVisibility(ctx, options.show, false);
+    if (options.hide !== undefined) bindVisibility(ctx, options.hide, true);
     if (options.val !== undefined) bindVal(ctx, options.val);
     if (options.checked !== undefined) bindChecked(ctx, options.checked);
     if (options.on) bindEvents(ctx, options.on);
