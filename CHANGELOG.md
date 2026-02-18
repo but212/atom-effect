@@ -1,6 +1,6 @@
 # Changelog
 
-## [unreleased]
+## [0.21.3]
 
 ### jQuery
 
@@ -11,7 +11,7 @@
   - **Performance**: Consolidated active link tracking into a single effect, significantly reducing memory usage for apps with many navigation links.
   - **Robustness**: Traceable `history.pushState` and `history.replaceState` failures (e.g., `file://` protocol) now log warnings via `debug` instead of crashing, with strict try-catch guards around all History API interactions.
 
-## [0.21.2]
+## [0.21.3]
 
 ### Core
 
