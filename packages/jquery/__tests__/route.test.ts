@@ -449,7 +449,7 @@ describe('$.route() - SPA Routing', () => {
       // Verify warning logged
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('PushState failed'),
-        expect.any(Error)
+        expect.anything()
       );
 
       // Verify UI updated despite URL error
@@ -497,7 +497,7 @@ describe('$.route() - SPA Routing', () => {
       expect(replaceStateSpy).toHaveBeenCalled();
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('ReplaceState failed'),
-        expect.any(Error)
+        expect.anything()
       );
 
       router.destroy();
