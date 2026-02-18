@@ -1,6 +1,6 @@
 # Changelog
 
-## [unreleased]
+## [0.21.3]
 
 ### jQuery
 
@@ -13,7 +13,7 @@
 
 ## [0.21.2]
 
-### Core
+### Core - 0.21.2
 
 - **Tree-shaking**: Configured Vite to remove debug code in production builds (~6% bundle size reduction).
 - **Symbol.dispose**: Implemented `[Symbol.dispose]()` on `Atom`, `Computed`, and `Effect` for `using` keyword support.
