@@ -10,12 +10,17 @@ The preferred way to apply multiple bindings at once.
 
 ```javascript
 $('.user-card').atomBind({
-  text: nameAtom,                 // same as .text(val)
-  class: { 'active': isActive },  // toggle class
-  css: { 'color': colorAtom },    // style property
-  attr: { 'data-id': idAtom },    // attribute
+  text: nameAtom,                 // Binds textContent (any reactive source)
+  html: bioAtom,                  // Binds sanitized innerHTML
+  class: { 'active': isActive },  // Toggles class
+  css: { 'color': colorAtom },    // Style property
+  attr: { 'data-id': idAtom },    // Attribute (PrimitiveValue)
+  prop: { 'disabled': isDisabled },// DOM property (any type)
   show: isVisible,                // show/hide
-  on: { click: handleClick }      // event handler
+  hide: isHidden,                 // Inverse of show
+  val: inputAtom,                 // Two-way binding: atom or [atom, options]
+  checked: isChecked,             // Two-way binding for checkbox/radio
+  on: { click: handleClick }      // Event handler
 });
 ```
 
@@ -37,11 +42,11 @@ $('#price').atomText(price, p => `$${p.toFixed(2)}`);
 
 Updates `innerHTML`.
 
-> **⚠️ Security Warning**:
-> This method performs **basic sanitization** (removing `<script>` tags, `on*` events, `javascript:` protocols) but is NOT safe against all advanced XSS vectors.
+> **🛡️ Security Note**:
+> Since version 0.22.0, this method uses a native `DOMParser`-based sanitizer for robust protection. It strips `<script>` tags, `on*` event attributes, and dangerous protocols (`javascript:`, `data:`).
 >
-> **For production:** We strongly recommend using a dedicated sanitizer like [DOMPurify](https://github.com/cure53/DOMPurify) **before** passing values to `atomHtml`.
-> See the [Security Guide](./SECURITY.md) for detailed integration patterns.
+> While much safer than regex-based filters, we still recommend using [DOMPurify](https://github.com/cure53/DOMPurify) for complex, user-generated content.
+> See the [Security Guide](./SECURITY.md) for details.
 >
 > ```javascript
 > import DOMPurify from 'dompurify';
@@ -59,17 +64,21 @@ Toggles `className` based on the atom's truthiness.
 $('#btn').atomClass('disabled', isLoading);
 ```
 
-### `.atomCss(property, atom)`
+### `.atomCss(property, atom, unit?)`
 
-Updates a single CSS property.
+Updates a single CSS property. An optional `unit` string (e.g. `'px'`, `'%'`) is appended to the value.
 
 ```javascript
 $('.box').atomCss('opacity', opacityLevel);
+$('.box').atomCss('width', widthAtom, 'px'); // Outputs e.g. "120px"
 ```
 
 ### `.atomAttr(attribute, atom)`
 
 Updates an HTML attribute.
+
+- **Security Guards**: Automatically blocks `on*` event handlers and dangerous protocols (`javascript:`) to prevent injection.
+- **Constraints**: Accepts `PrimitiveValue` (string, number, boolean, null, undefined).
 
 ```javascript
 $('img').atomAttr('src', imageUrl);
@@ -78,6 +87,8 @@ $('img').atomAttr('src', imageUrl);
 ### `.atomProp(property, atom)`
 
 Updates a DOM property (e.g., `checked`, `disabled`, `value`).
+
+- **Flexible**: Decoupled from the primary binding generic to allow any property type.
 
 ```javascript
 $('input').atomProp('disabled', shouldDisable);
@@ -89,10 +100,11 @@ $('input').atomProp('disabled', shouldDisable);
 
 ### `.atomShow(booleanAtom)` / `.atomHide(booleanAtom)`
 
-Toggles visibility (`display: none`).
+Toggles visibility (`display: none`). `atomHide` is the inverse — hides the element when the atom is truthy.
 
 ```javascript
 $('.loading-spinner').atomShow(isLoading);
+$('.overlay').atomHide(isDismissed);
 ```
 
 ### `.atomList(listAtom, options)`
@@ -141,6 +153,54 @@ Two-way binding for `<input>`, `<textarea>`, and `<select>`.
 $('#search').atomVal(queryAtom, { debounce: 300 });
 ```
 
+### `.atomChecked(atom)`
+
+Two-way binding for `<input type="checkbox">` and `<input type="radio">` elements.
+
+- Uses jQuery's event system for compatibility with `.trigger()`.
+
+```javascript
+$('#agree').atomChecked(isAgreedAtom);
+```
+
+### `.atomOn(event, handler)`
+
+Lifecycle-aware event listener. The handler is automatically removed when the element is unbound or unmounted.
+
+```javascript
+$('#btn').atomOn('click', () => doSomething());
+```
+
+---
+
+## Components
+
+### `.atomMount(component, props?)`
+
+Mounts a functional component to an element. Automatically handles cleanup of existing components and reactive effects on that element.
+
+- **component**: `($el, props) => EffectResult` (Function returning an optional cleanup).
+- **props**: Optional initial data object.
+
+```javascript
+const UserProfile = ($el, { id }) => {
+  const data = $.atomFetch(`/api/user/${id}`, { defaultValue: {} });
+  $el.atomText($.computed(() => data.value.name));
+
+  return () => console.log('Cleaning up user profile...');
+};
+
+$('#root').atomMount(UserProfile, { id: 42 });
+```
+
+### `.atomUnmount()`
+
+Triggers the unmount sequence: executes the component's cleanup function and disposes of all nested reactive bindings.
+
+### `.atomUnbind()`
+
+Manually disposes all reactive effects and cleanups registered on the selected elements and their descendants. Does not invoke the component cleanup function — use `.atomUnmount()` for full component teardown.
+
 ---
 
 ## Static Methods
@@ -149,13 +209,60 @@ $('#search').atomVal(queryAtom, { debounce: 300 });
 
 Aliases to the core functions, exposed for convenience.
 
+### `$.batch(fn)`
+
+Groups multiple atom writes into a single synchronous notification cycle, preventing intermediate re-renders.
+
+```javascript
+$.batch(() => {
+  nameAtom.value = 'Alice';
+  ageAtom.value = 30;
+});
+```
+
+### `$.untracked(fn)`
+
+Executes a function without establishing reactive dependencies. Useful inside effects when reading an atom value should not create a subscription.
+
+```javascript
+$.effect(() => {
+  const count = countAtom.value; // tracked
+  const snapshot = $.untracked(() => snapshotAtom.value); // not tracked
+});
+```
+
+### `$.isAtom(v)`, `$.isComputed(v)`, `$.isReactive(v)`
+
+Runtime type checks for reactive nodes.
+
+```javascript
+$.isAtom(myAtom);      // true for WritableAtom
+$.isComputed(myComp);  // true for ComputedAtom
+$.isReactive(v);       // true for any reactive node (atom or computed)
+```
+
+### `$.nextTick()`
+
+Returns a `Promise` that resolves after the next scheduler flush. Effects are processed in microtasks, so `nextTick` (via `setTimeout`) runs after all pending effects complete.
+
+```javascript
+countAtom.value = 1;
+await $.nextTick();
+// DOM is now updated
+```
+
 ---
 
 ## Data Fetching
 
 ### `$.atomFetch(urlOrFn, options)`
 
-Declarative AJAX primitive. Wraps core's async `computed` with jQuery's `$.ajax`, returning a `ComputedAtom<T>` with built-in loading/error states.
+Declarative AJAX primitive. Wraps core's async `computed` with jQuery's `$.ajax`.
+
+**Key Features**:
+
+- **Auto-Cancellation**: Automatically aborts previous pending requests using `AbortController` when dependencies change or `.invalidate()` is called. Aborted requests are silently discarded — they do **not** set `hasError`.
+- **Reactive URL**: Re-fetches automatically if `urlOrFn` depends on atoms.
 
 **Parameters**:
 
@@ -171,7 +278,7 @@ Declarative AJAX primitive. Wraps core's async `computed` with jQuery's `$.ajax`
 
 - `.value` — Resolved data (or `defaultValue` while pending).
 - `.isPending` — `true` during fetch.
-- `.hasError` / `.lastError` — Error state.
+- `.hasError` / `.lastError` — Error state. Only set for real network/server errors; cancellations via abort are not treated as errors.
 - `.invalidate()` — Triggers refetch.
 
 ```javascript
@@ -230,6 +337,7 @@ Creates an SPA router with reactive state management. Supports both hash-based a
 A `Router` object with:
 
 - `currentRoute`: `WritableAtom<string>` containing the active route name.
+- `queryParams`: `ReadonlyAtom<Record<string, string>>` reactive map of URL parameters.
 - `navigate(route)`: Programmatically change route.
 - `destroy()`: Cleanup listeners and effects.
 

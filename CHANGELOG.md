@@ -4,10 +4,16 @@
 
 ### jQuery
 
-- **Router**:
-  - **Refactor**: Replaced `_aes-bound` class based link tracking with efficient event delegation and reactive active state management, significantly reducing memory usage.
-  - **Stability**: Fixed `restoreUrl` to use `pushState` instead of `replaceState` to prevent back-button traps during navigation blocking.
-  - **Internal**: Refactored `$.route` core logic to class-based `RouterImpl` for better maintainability.
+- **Router**: Refactored core to `RouterImpl` and migrated link tracking to event delegation, improving stability and reducing memory usage.
+- **Security**: Hardened XSS protection using native `DOMParser` and defense-in-depth script encoding.
+- **Type System**: Introduced `PrimitiveValue` and `EffectResult` types; decoupled `BindingOptions` for better reactive source flexibility.
+- **Core Architecture**: Centralized binding handlers in `unified.ts` and enhanced `atomFetch` with automatic `AbortController` cancellation.
+- **Debug & Utils**: Improved selector specificity in `getSelector` and synchronized visual highlights with `requestAnimationFrame`.
+- **atomFetch — Bug Fixes**:
+  - **Abort Error Suppression**: XHR rejections caused by `AbortController.abort()` are no longer surfaced as errors. `hasError` stays `false` and `lastError` is not set when a request is cancelled by a subsequent fetch or `invalidate()`.
+  - **Race Window Guard**: Added a synchronous `signal.aborted` check after `signal.addEventListener()` to ensure `xhr.abort()` is called even if the abort event fired in the window between `$.ajax()` and handler registration.
+- **atomFetch — Refactor**: Extracted `linkXhrToSignal()` helper and `PENDING` constant to flatten the nested `try-finally` structure in the `computed` body, improving readability.
+- **API.md**: Added missing methods (`atomChecked`, `atomHide`, `atomOn`, `atomUnbind`) and static utilities (`$.batch`, `$.untracked`, `$.isAtom`, `$.isComputed`, `$.isReactive`, `$.nextTick`); corrected `atomCss` signature to include optional `unit` parameter; documented `atomBind` `hide` and `checked` options.
 
 ## [0.21.3]
 
