@@ -44,7 +44,7 @@ export function getSelector(el: Element | JQuery): string {
  * Basic HTML sanitization for XSS mitigation.
  * Note: This is NOT a replacement for a full-featured sanitizer like DOMPurify.
  * It prevents common attacks like <script> tags and javascript: protocols.
- * 
+ *
  * Advanced HTML sanitization using native DOMParser.
  * Parses HTML, traverses the tree, and removes dangerous tags/attributes.
  * Much more robust than regex-based approaches.
@@ -52,88 +52,95 @@ export function getSelector(el: Element | JQuery): string {
 export function sanitizeHtml(html: string): string {
   if (!html) return '';
 
-  // 0. Pre-process: Remove null bytes and control characters (bypass vectors)
-  // These are often used to bypass filters while browsers ignore them
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: Intentionally matching control characters for XSS sanitization
-  const safeHtml = html.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
+  // 0. Pre-process: Remove null bytes, control characters, and processing instructions
+  const safeHtml = html
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: Intentionally matching control characters for XSS sanitization
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '')
+    .replace(/<\?[\s\S]*?\?>/g, '');
 
   const parser = new DOMParser();
   const doc = parser.parseFromString(safeHtml, 'text/html');
 
-  // 1. Remove dangerous tags
-  const dangerousTags = [
-    'script',
-    'iframe',
-    'object',
-    'embed',
-    'base',
-    'meta',
-    'applet',
-    'noscript',
-    'form',
-  ];
-  dangerousTags.forEach((tag) => {
-    // Query entire doc to catch head/body items
-    const nodes = doc.querySelectorAll(tag);
-    nodes.forEach((node) => node.remove());
-  });
-
-  // 2. Clear dangerous attributes (on*, javascript:)
+  // Single-pass tree traversal for performance
   const allElements = doc.querySelectorAll('*');
   for (let i = 0; i < allElements.length; i++) {
     const el = allElements[i];
     if (!el) continue;
-    const attrs = el.attributes;
 
-    // Reverse loop because we might remove attributes
-    for (let j = attrs.length - 1; j >= 0; j--) {
-      const attr = attrs[j];
-      if (!attr) continue;
-      const name = attr.name.toLowerCase();
-      const val = attr.value.toLowerCase();
+    const tagName = el.tagName.toLowerCase();
 
-      // Remove event handlers
-      if (name.startsWith('on')) {
-        el.removeAttribute(name);
-        continue;
-      }
-
-      // Remove dangerous protocols in URL attributes
-      if (URL_ATTRS.has(name) && DANGEROUS_PROTOCOL_RE.test(val)) {
-        el.removeAttribute(name);
-        continue;
-      }
-
-      // Remove dangerous data URIs
-      // Matches data:text/html, data:application/javascript, etc.
-      if (val.trim().startsWith('data:') && !val.trim().startsWith('data:image/')) {
-        el.removeAttribute(name);
-        continue;
-      }
-
-      // 3. Special handling for 'style' attributes (Internal string sanitization)
-      if (name === 'style' && DANGEROUS_CSS_RE.test(attr.value)) {
-        // We could selectively strip parts, but total removal of the attribute is safer for suspicious CSS
-        el.removeAttribute(name);
-      }
+    // 1. Remove dangerous tags entirely
+    if (DANGEROUS_TAGS.has(tagName)) {
+      el.remove();
+      continue;
     }
+
+    // 2. Sanitize attributes for safe tags
+    sanitizeAttributes(el);
   }
 
-  // Serialize: combine head (for styles) and body.
-  // doc.head might be null if no head parsed, doc.body might be null (unlikely but safe to check)
+  // Serialize: combine head and body
   const headContent = doc.head ? doc.head.innerHTML : '';
   const bodyContent = doc.body ? doc.body.innerHTML : '';
 
-  // Final pass: Encode any remaining <script strings to capture text nodes
-  // that might look like tags but were parsed as text (e.g. <scr<script>ipt>)
-  // This is defense-in-depth against parser confusion vectors.
+  // Final defense-in-depth against parser confusion
   return (headContent + bodyContent).replace(/<script/gi, '&lt;script');
+}
+
+/**
+ * Internal helper to sanitize all attributes of a given element.
+ */
+function sanitizeAttributes(el: Element): void {
+  const attrs = el.attributes;
+  // Reverse loop because we might remove attributes
+  for (let j = attrs.length - 1; j >= 0; j--) {
+    const attr = attrs[j];
+    if (!attr) continue;
+
+    const name = attr.name.toLowerCase();
+    const val = attr.value.toLowerCase();
+
+    // Remove event handlers (on*)
+    if (name.startsWith('on')) {
+      el.removeAttribute(name);
+      continue;
+    }
+
+    // Remove dangerous protocols in URL attributes
+    if (URL_ATTRS.has(name) && DANGEROUS_PROTOCOL_RE.test(val)) {
+      el.removeAttribute(name);
+      continue;
+    }
+
+    // Remove dangerous data URIs (excluding safe images)
+    if (val.trim().startsWith('data:') && !val.trim().startsWith('data:image/')) {
+      el.removeAttribute(name);
+      continue;
+    }
+
+    // Special handling for 'style' attributes (Internal string sanitization)
+    if (name === 'style' && DANGEROUS_CSS_RE.test(attr.value)) {
+      el.removeAttribute(name);
+    }
+  }
 }
 
 /**
  * Checks if a given attribute value contains a dangerous protocol (javascript:, vbscript:).
  * Used by atomAttr/bindAttr to guard URL-bearing attributes.
  */
+const DANGEROUS_TAGS = new Set([
+  'script',
+  'iframe',
+  'object',
+  'embed',
+  'base',
+  'meta',
+  'applet',
+  'noscript',
+  'form',
+]);
+
 const URL_ATTRS = new Set([
   'href',
   'src',
@@ -154,9 +161,9 @@ const URL_ATTRS = new Set([
 
 const DANGEROUS_PROTOCOL_RE = /^\s*(?:javascript|vbscript)\s*:/i;
 
-/** Regex to match dangerous CSS properties and functions (e.g., expression(), behavior:, javascript:). */
 const DANGEROUS_CSS_RE =
-  /(?:expression\(|behavior\s*:|(?:\\[0-9a-f]{1,6}\s*|[\s\x00-\x20\/'"])*j\s*a\s*v\s*a\s*s\s*c\s*r\s*i\s*p\s*t\s*:)/i;
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: Intentionally matching control characters for XSS sanitization
+  /(?:expression\s*\(|behavior\s*:|(?:\\[0-9a-f]{1,6}\s*|[\s\x00-\x20/'"])*(?:j\s*a\s*v\s*a\s*s\s*c\s*r\s*i\s*p\s*t|v\s*b\s*s\s*c\s*r\s*i\s*p\s*t|d\s*a\s*t\s*a)\s*:(?!image\/))/i;
 
 export function isDangerousUrl(attrName: string, value: string): boolean {
   if (!URL_ATTRS.has(attrName.toLowerCase())) return false;
