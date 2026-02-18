@@ -1,8 +1,17 @@
 # Changelog
 
-## [0.21.3]
+## [Unreleased]
 
 ### jQuery
+
+- **Router**:
+  - **Refactor**: Replaced `_aes-bound` class based link tracking with efficient event delegation and reactive active state management, significantly reducing memory usage.
+  - **Stability**: Fixed `restoreUrl` to use `pushState` instead of `replaceState` to prevent back-button traps during navigation blocking.
+  - **Internal**: Refactored `$.route` core logic to class-based `RouterImpl` for better maintainability.
+
+## [0.21.3]
+
+### jQuery - 0.21.3
 
 - **Router**:
   - **Reactive Query Params**: Added `queryParams` atom to `Router` to track URL query parameters reactively.
