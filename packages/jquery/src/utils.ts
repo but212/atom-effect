@@ -44,8 +44,7 @@ export function getSelector(el: Element | JQuery): string {
  * Basic HTML sanitization for XSS mitigation.
  * Note: This is NOT a replacement for a full-featured sanitizer like DOMPurify.
  * It prevents common attacks like <script> tags and javascript: protocols.
- */
-/**
+ * 
  * Advanced HTML sanitization using native DOMParser.
  * Parses HTML, traverses the tree, and removes dangerous tags/attributes.
  * Much more robust than regex-based approaches.
@@ -109,6 +108,13 @@ export function sanitizeHtml(html: string): string {
       // Matches data:text/html, data:application/javascript, etc.
       if (val.trim().startsWith('data:') && !val.trim().startsWith('data:image/')) {
         el.removeAttribute(name);
+        continue;
+      }
+
+      // 3. Special handling for 'style' attributes (Internal string sanitization)
+      if (name === 'style' && DANGEROUS_CSS_RE.test(attr.value)) {
+        // We could selectively strip parts, but total removal of the attribute is safer for suspicious CSS
+        el.removeAttribute(name);
       }
     }
   }
@@ -147,6 +153,10 @@ const URL_ATTRS = new Set([
 ]);
 
 const DANGEROUS_PROTOCOL_RE = /^\s*(?:javascript|vbscript)\s*:/i;
+
+/** Regex to match dangerous CSS properties and functions (e.g., expression(), behavior:, javascript:). */
+const DANGEROUS_CSS_RE =
+  /(?:expression\(|behavior\s*:|(?:\\[0-9a-f]{1,6}\s*|[\s\x00-\x20\/'"])*j\s*a\s*v\s*a\s*s\s*c\s*r\s*i\s*p\s*t\s*:)/i;
 
 export function isDangerousUrl(attrName: string, value: string): boolean {
   if (!URL_ATTRS.has(attrName.toLowerCase())) return false;

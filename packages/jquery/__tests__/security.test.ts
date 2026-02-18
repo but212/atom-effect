@@ -98,9 +98,8 @@ describe('Unit: sanitizeHtml (Core Logic)', () => {
   });
 
   // 7. CSS/Style Attacks
-  it.skip('should sanitize CSS expressions and behavior', () => {
-    // TODO: Re-enable this test once CSS sanitization within style attributes is implemented.
-    // The current DOMParser-based implementation does not handle this, unlike the previous regex-based one.
+  it('should sanitize CSS expressions and behavior', () => {
+    // Re-enabled as we restored regex-based CSS sanitization within style attributes
     const v =
       '<div style="background:url(javascript:alert(1)); behavior:url(x.htc); expression(alert(1))">';
     const safe = sanitizeHtml(v).toLowerCase();
