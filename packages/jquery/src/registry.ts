@@ -1,16 +1,17 @@
-import { AES_BOUND_CLASS } from './constants';
 import { debug } from './debug';
 import type { EffectObject } from './types';
 import { getSelector } from './utils';
 
 /**
  * Marker class for bound elements to optimize selector engines.
+ * Internal use only.
  */
-const AES_BOUND = AES_BOUND_CLASS;
+const AES_BOUND = '_aes-bound';
 
 interface BindingRecord {
   effects?: EffectObject[];
   cleanups?: Array<() => void>;
+  componentCleanup?: (() => void) | undefined;
 }
 
 /**
@@ -69,6 +70,15 @@ class BindingRegistry {
     record.cleanups.push(fn);
   }
 
+  setComponentCleanup(el: Element, fn: (() => void) | undefined): void {
+    const record = this._getOrCreateRecord(el);
+    record.componentCleanup = fn;
+  }
+
+  getComponentCleanup(el: Element): (() => void) | undefined {
+    return this.records.get(el)?.componentCleanup;
+  }
+
   hasBind(el: Element): boolean {
     return this.boundElements.has(el);
   }
@@ -84,11 +94,26 @@ class BindingRegistry {
     this.records.delete(el);
     this.preservedNodes.delete(el);
     this.ignoredNodes.delete(el);
-    el.classList.remove(AES_BOUND);
+
+    // Only touch DOM if element is still connected (e.g. manual cleanup)
+    // If it's being removed, class removal is redundant overhead
+    if (el.isConnected) {
+      el.classList.remove(AES_BOUND);
+    }
 
     // Hoist costly selector string generation to debug-only block
     if (debug.enabled) {
       debug.cleanup(getSelector(el));
+    }
+
+    // 0. Component Cleanup (Top Priority)
+    // This allows components to unmount gracefully before effects are killed
+    if (record.componentCleanup) {
+      try {
+        record.componentCleanup();
+      } catch (e) {
+        console.error('[atom-effect-jquery] Cleanup error:', e);
+      }
     }
 
     // 1. Dispose Effects (Atom -> Subscription severed)

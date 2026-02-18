@@ -2,8 +2,6 @@
  * Constants for atom-effect-jquery
  */
 
-export const AES_BOUND_CLASS = '_aes-bound';
-
 export const LOG_PREFIXES = {
   ROUTE: '[$.route]',
   BIND: '[atomBind]',
@@ -11,7 +9,7 @@ export const LOG_PREFIXES = {
 } as const;
 
 export const ROUTE_DEFAULTS = {
-  MODE: 'hash' as const,
+  MODE: 'hash',
   ACTIVE_CLASS: 'active',
   BASE_PATH: '',
   AUTO_BIND_LINKS: false,

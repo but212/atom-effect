@@ -1,65 +1,52 @@
 import $ from 'jquery';
-import { debug } from './debug';
 import { registry } from './registry';
 import type { ComponentFn } from './types';
-import { getSelector } from './utils';
-
-const mountedComponents = new WeakMap<Element, () => void>();
 
 /**
- * Mounts a functional component to the element.
- * Automatically cleans up existing components on the same element.
+ * Functional component mounting logic.
  */
-$.fn.atomMount = function <P>(component: ComponentFn<P>, props: P = {} as P): JQuery {
-  return this.each(function () {
-    const selector = getSelector(this);
+export function mountComponent<P>($el: JQuery, component: ComponentFn<P>, props: P): void {
+  const el = $el[0];
+  if (!el) return;
 
-    // 1. Unmount existing component (Consolidated O(1) lookup)
-    const existingUnmount = mountedComponents.get(this);
-    if (existingUnmount) {
-      debug.log('mount', `${selector} unmounting existing component`);
-      existingUnmount();
-    }
+  // Cleanup existing component if any
+  unmountComponent($el);
 
-    debug.log('mount', `${selector} mounting component`);
+  // Initialize component and register cleanup
+  const cleanup = component($el, props);
+  if (typeof cleanup === 'function') {
+    // Registry will automatically mark as bound via _getOrCreateRecord
+    registry.setComponentCleanup(el, cleanup);
+  }
+}
 
-    // 2. Mount
-    let userCleanup: undefined | (() => void);
-    try {
-      userCleanup = component($(this), props);
-    } catch (e) {
-      console.error('[atom-effect-jquery] Mount error:', e);
-      return;
-    }
-
-    // 3. Optimized cleanup
-    const fullCleanup = () => {
-      // Atomic delete() acts as a high-performance guard against double-cleanup
-      if (!mountedComponents.delete(this)) return;
-
-      debug.log('mount', `${selector} full cleanup`);
-
-      if (typeof userCleanup === 'function') {
-        try {
-          userCleanup();
-        } catch (e) {
-          console.error('[atom-effect-jquery] Cleanup error:', e);
-        }
+/**
+ * Functional component unmounting logic.
+ */
+export function unmountComponent($el: JQuery): void {
+  $el.each(function () {
+    const cleanup = registry.getComponentCleanup(this);
+    if (cleanup) {
+      try {
+        cleanup();
+      } catch (err) {
+        console.error('[atom-effect-jquery] Component cleanup error:', err);
       }
-      registry.cleanupTree(this);
-    };
+      registry.setComponentCleanup(this, undefined);
+    }
 
-    mountedComponents.set(this, fullCleanup);
-    registry.trackCleanup(this, fullCleanup);
+    // Also run general effect cleanup for this tree
+    registry.cleanupTree(this);
+  });
+}
+
+$.fn.atomMount = function <P>(component: ComponentFn<P>, props?: P): JQuery {
+  return this.each(function () {
+    mountComponent($(this), component, (props ?? {}) as P);
   });
 };
 
-/**
- * Manually unmounts a component from the element.
- */
 $.fn.atomUnmount = function (): JQuery {
-  return this.each(function () {
-    const unmount = mountedComponents.get(this);
-    if (unmount) unmount();
-  });
+  unmountComponent(this);
+  return this;
 };
