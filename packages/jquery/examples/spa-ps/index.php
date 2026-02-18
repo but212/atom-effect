@@ -1,0 +1,829 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AEJ / BAUHAUS EDITION (PUSH STATE)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&family=Inter:ital,wght@0,100..900;1,100..900&display=swap"
+    rel="stylesheet" />
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.21.2"></script>
+  <link rel="stylesheet" href="./styles.css" />
+
+  <style>
+    :root {
+      --primary-red: #e63946;
+      --primary-blue: #2a52be;
+      --primary-yellow: #ffd60a;
+      --black: #000000;
+      --white: #ffffff;
+      --grey: #f0f0f0;
+
+      --font-main: "Inter", sans-serif;
+      --font-mono: "IBM Plex Mono", monospace;
+
+      --border-width: 3px;
+      --hard-shadow: 8px 8px 0px var(--black);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: var(--font-main);
+      background-color: var(--white);
+      color: var(--black);
+      line-height: 1.2;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+    }
+
+    /* Accessibility */
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    /* --- Layout --- */
+    .main-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .view-content {
+      flex: 1;
+      padding: 40px;
+      overflow-y: auto;
+      background:
+        linear-gradient(90deg, var(--black) 1px, transparent 1px) 0 0 / 100px 100%,
+        linear-gradient(var(--black) 1px, transparent 1px) 0 0 / 100% 100px;
+      background-color: var(--white);
+    }
+
+    header {
+      height: 110px;
+      padding: 0 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: var(--border-width) solid var(--black);
+      margin-bottom: 0;
+    }
+
+    #page-title {
+      font-size: 3.5rem;
+      font-weight: 900;
+      letter-spacing: -4px;
+      text-transform: uppercase;
+      line-height: 1;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    /* --- Sidebar (Bauhaus Grid) --- */
+    .sidebar {
+      width: 320px;
+      border-right: var(--border-width) solid var(--black);
+      display: flex;
+      flex-direction: column;
+      background: var(--white);
+      z-index: 100;
+      transition: width 0.3s cubic-bezier(0.19, 1, 0.22, 1);
+      overflow: hidden;
+    }
+
+    .sidebar.collapsed {
+      width: 80px;
+    }
+
+    .sidebar-header {
+      padding: 40px 24px;
+      border-bottom: var(--border-width) solid var(--black);
+      background: var(--primary-red);
+      color: var(--white);
+    }
+
+    .logo-text {
+      font-size: 2rem;
+      font-weight: 900;
+      letter-spacing: -2px;
+      line-height: 0.8;
+      text-transform: uppercase;
+    }
+
+    .logo-text .short {
+      display: none;
+    }
+
+    .sidebar.collapsed .logo-text .full {
+      display: none;
+    }
+
+    .sidebar.collapsed .logo-text .short {
+      display: block;
+      font-size: 3rem;
+      line-height: 1;
+    }
+
+    .sidebar.collapsed .sidebar-header {
+      padding: 20px 10px;
+      text-align: center;
+    }
+
+    .sidebar nav {
+      flex: 1;
+    }
+
+    .nav-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .nav-item {
+      border-bottom: var(--border-width) solid var(--black);
+    }
+
+    .nav-link {
+      display: flex;
+      align-items: center;
+      padding: 24px;
+      text-decoration: none;
+      color: var(--black);
+      font-weight: 900;
+      text-transform: uppercase;
+      font-size: 1.1rem;
+      letter-spacing: -0.5px;
+      cursor: pointer;
+      transition: background 0.1s;
+      white-space: nowrap;
+    }
+
+    .nav-link:hover {
+      background: var(--grey);
+    }
+
+    .nav-link.active {
+      background: var(--primary-blue);
+      color: var(--white);
+    }
+
+    .sidebar.collapsed .nav-link {
+      justify-content: center;
+      padding: 24px 0;
+    }
+
+    .sidebar.collapsed .nav-link span {
+      display: none;
+    }
+
+    .sidebar.collapsed .nav-link::after {
+      content: attr(data-short);
+      font-size: 2rem;
+    }
+
+    /* --- Skip Link --- */
+    .skip-link {
+      position: absolute;
+      top: -100px;
+      left: 0;
+      background: var(--black);
+      color: var(--white);
+      padding: 12px 24px;
+      z-index: 9999;
+      font-weight: 900;
+      text-transform: uppercase;
+      text-decoration: none;
+      border: none;
+      cursor: pointer;
+    }
+
+    .skip-link:focus {
+      top: 0;
+    }
+
+    /* --- Cards & Components --- */
+    .card {
+      background: var(--white);
+      border: 3px solid var(--black);
+      padding: 30px;
+      margin-bottom: 30px;
+      box-shadow: 12px 12px 0px var(--black);
+      position: relative;
+    }
+
+    .card-title {
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: -1px;
+      margin-bottom: 24px;
+      font-size: 1.5rem;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .card-body-mono {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      line-height: 1.6;
+      max-width: 800px;
+    }
+
+    .card-blue {
+      box-shadow: 12px 12px 0px var(--primary-blue);
+      background: var(--primary-blue);
+      color: white;
+    }
+
+    .card-red {
+      box-shadow: 12px 12px 0px var(--primary-red);
+      background: var(--primary-red);
+      color: white;
+    }
+
+    .card-yellow {
+      box-shadow: 12px 12px 0px var(--primary-yellow);
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 40px;
+      margin-bottom: 60px;
+    }
+
+    .stat-card {
+      border: var(--border-width) solid var(--black);
+      padding: 32px;
+      background: var(--white);
+      box-shadow: var(--hard-shadow);
+    }
+
+    .stat-value {
+      font-size: 4rem;
+      font-weight: 900;
+      letter-spacing: -3px;
+      line-height: 1;
+      margin-bottom: 8px;
+    }
+
+    .stat-label {
+      font-weight: 900;
+      text-transform: uppercase;
+      font-size: 0.85rem;
+      background: var(--black);
+      color: var(--white);
+      display: inline-block;
+      padding: 2px 8px;
+    }
+
+    /* --- Buttons --- */
+    .btn-black {
+      background: var(--black);
+      color: var(--white);
+      border: none;
+      padding: 12px 24px;
+      font-weight: 900;
+      text-transform: uppercase;
+      cursor: pointer;
+      box-shadow: 4px 4px 0px var(--primary-blue);
+      font-family: var(--font-main);
+      font-size: 0.85rem;
+      letter-spacing: 1px;
+    }
+
+    .btn-black:active {
+      transform: translate(2px, 2px);
+      box-shadow: 2px 2px 0px var(--black);
+    }
+
+    .fab-add {
+      position: fixed;
+      bottom: 40px;
+      right: 40px;
+      width: 80px;
+      height: 80px;
+      background: var(--primary-red);
+      color: var(--white);
+      border: var(--border-width) solid var(--black);
+      font-size: 3rem;
+      font-weight: 900;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 10px 10px 0px var(--black);
+      z-index: 1000;
+    }
+
+    .fab-add:hover {
+      transform: translate(-4px, -4px);
+      box-shadow: 14px 14px 0px var(--black);
+    }
+
+    /* --- Tasks --- */
+    .search-input {
+      width: 100%;
+      padding: 20px;
+      border: var(--border-width) solid var(--black);
+      font-family: var(--font-mono);
+      font-size: 1.25rem;
+      font-weight: 700;
+      outline: none;
+      margin-bottom: 40px;
+      box-shadow: 4px 4px 0px var(--primary-blue);
+    }
+
+    .search-input:focus {
+      transform: translate(-4px, -4px);
+      box-shadow: 4px 4px 0px var(--primary-blue);
+    }
+
+    .task-list {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .task-item {
+      border: var(--border-width) solid var(--black);
+      padding: 20px;
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      background: var(--white);
+      transition: transform 0.1s;
+    }
+
+    .task-item:hover {
+      transform: translate(-4px, -4px);
+      box-shadow: 4px 4px 0px var(--black);
+    }
+
+    .task-title {
+      flex: 1;
+      font-weight: 900;
+      font-size: 1.2rem;
+      text-transform: uppercase;
+    }
+
+    .task-item.completed .task-title {
+      color: #ccc;
+      text-decoration: line-through;
+    }
+
+    .task-tag {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 0.8rem;
+      padding: 4px 12px;
+      border: 2px solid var(--black);
+    }
+
+    .checkbox-rect {
+      width: 32px;
+      height: 32px;
+      border: var(--border-width) solid var(--black);
+      cursor: pointer;
+      position: relative;
+    }
+
+    .checkbox-rect.checked::after {
+      content: "";
+      position: absolute;
+      top: 4px;
+      left: 4px;
+      right: 4px;
+      bottom: 4px;
+      background: var(--primary-red);
+    }
+
+    .checkbox-rect:focus {
+      outline: 3px solid var(--primary-blue);
+      outline-offset: 4px;
+    }
+
+    .empty-tasks-placeholder {
+      display: none;
+      padding: 100px;
+      text-align: center;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    /* --- Utils --- */
+    .mb-2 {
+      margin-bottom: 20px;
+    }
+
+    .text-white {
+      color: white;
+    }
+  </style>
+</head>
+
+<body>
+  <button type="button" data-target="#router-view" class="skip-link">
+    Skip to main content
+  </button>
+
+  <aside class="sidebar" id="sidebar" aria-label="Main navigation">
+    <div class="sidebar-header">
+      <div class="logo-text" aria-hidden="true">
+        <span class="full">AEJ<br />SYSTEM<br />(PS)</span>
+        <span class="short">PS</span>
+      </div>
+    </div>
+
+    <nav aria-label="Primary">
+      <ul class="nav-list">
+        <li class="nav-item">
+          <a class="nav-link" href="dashboard" data-route="dashboard" data-short="D">
+            <span>Dashboard</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="tasks" data-route="tasks" data-short="T">
+            <span>Tasks</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="log" data-route="log" data-short="L">
+            <span>Log</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="config" data-route="config" data-short="C">
+            <span>Config</span>
+          </a>
+        </li>
+      </ul>
+    </nav>
+  </aside>
+
+  <div class="main-container">
+    <header>
+      <h1 id="page-title">DASHBOARD</h1>
+      <button class="btn-black" id="toggle-sidebar" aria-expanded="false" aria-controls="sidebar"
+        aria-label="Toggle sidebar navigation">
+        UI/COLLAPSE
+      </button>
+    </header>
+
+    <div class="view-content">
+      <main id="router-view" aria-live="polite" tabindex="-1">
+        <!-- INJECTED -->
+      </main>
+    </div>
+  </div>
+
+  <button class="fab-add" id="add-task-btn" style="display: none" aria-label="Add new task">
+    +
+  </button>
+
+  <!-- Templates -->
+  <template id="tmpl-dashboard">
+    <section aria-labelledby="dashboard-heading">
+      <h2 id="dashboard-heading" class="visually-hidden">
+        Dashboard Statistics
+      </h2>
+      <div class="stats-grid" role="region" aria-label="System statistics">
+        <article class="stat-card" aria-labelledby="stat-uptime-label">
+          <div class="stat-value" aria-describedby="stat-uptime-label">
+            99.9
+          </div>
+          <div class="stat-label" id="stat-uptime-label">UPTIME / PERF</div>
+        </article>
+        <article class="stat-card" style="border-color: var(--primary-blue)" aria-labelledby="stat-total-label">
+          <div class="stat-value" id="dashboard-total-tasks" role="status" aria-describedby="stat-total-label">
+            0
+          </div>
+          <div class="stat-label" id="stat-total-label">TOTAL / LOAD</div>
+        </article>
+        <article class="stat-card" style="border-color: var(--primary-red)" aria-labelledby="stat-done-label">
+          <div class="stat-value" id="dashboard-completed-tasks" role="status" aria-describedby="stat-done-label">
+            0
+          </div>
+          <div class="stat-label" id="stat-done-label">DONE / SYNC</div>
+        </article>
+      </div>
+
+      <article class="card card-yellow">
+        <h2 class="card-title">Fundamental Reactivity</h2>
+        <p class="card-body-mono">
+          ATOM-EFFECT-JQUERY IS NOT A FRAMEWORK. IT IS A BRIDGE. BY ADHERING
+          TO SWISS DESIGN PRINCIPLES—GRID, TYPOGRAPHY, AND FUNCTION—WE
+          MANIFEST THE UNDERLYING STRUCTURE OF STATE RECONCILIATION.
+        </p>
+      </article>
+    </section>
+  </template>
+
+  <template id="tmpl-tasks">
+    <section style="max-width: 900px; margin: 0 auto" aria-labelledby="tasks-heading">
+      <h2 id="tasks-heading" class="visually-hidden">Task Management</h2>
+      <div role="search">
+        <label for="task-search" class="visually-hidden">Search tasks</label>
+        <input type="search" class="search-input" id="task-search" placeholder="QUERY_STRING..." />
+      </div>
+
+      <ul class="task-list" id="task-list-container" role="list" aria-label="Tasks"></ul>
+
+      <p id="tasks-empty" class="empty-tasks-placeholder" role="status">
+        NULL_DATA_SET
+      </p>
+    </section>
+  </template>
+
+  <template id="tmpl-log">
+    <section class="card card-blue" aria-labelledby="log-heading">
+      <h2 id="log-heading" class="card-title">System Event Log</h2>
+      <ul role="log" aria-live="polite" aria-label="Recent system events" style="
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+            list-style: none;
+            padding: 0;
+          ">
+        <li>[02:41:40] ROUTE_CHANGE: DASHBOARD -> LOG</li>
+        <li>[02:41:35] ATOM_SYNC: TASKS_COUNT_UPDATED</li>
+        <li>[02:41:30] KERNEL_BOOT: AEJ_LOADED_OK</li>
+      </ul>
+    </section>
+  </template>
+
+  <template id="tmpl-config">
+    <section class="card card-red" aria-labelledby="config-heading">
+      <h2 id="config-heading" class="card-title">System Preferences</h2>
+      <dl style="display: flex; flex-direction: column; gap: 20px">
+        <div style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              border-bottom: 2px solid white;
+              padding-bottom: 10px;
+            ">
+          <dt style="font-weight: 700">STRICT_MODE</dt>
+          <dd style="font-family: var(--font-mono); font-weight: 700; margin: 0">
+            ENABLED
+          </dd>
+        </div>
+        <div style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              border-bottom: 2px solid white;
+              padding-bottom: 10px;
+            ">
+          <dt style="font-weight: 700">RECONCILIATION_SPEED</dt>
+          <dd style="font-family: var(--font-mono); font-weight: 700; margin: 0">
+            OPTIMAL
+          </dd>
+        </div>
+      </dl>
+      <p style="margin-top: 20px; font-size: 0.8rem; font-style: italic">
+        ALL SETTINGS ARE STORED IN ATOMIC MEMORY.
+      </p>
+    </section>
+  </template>
+
+  <!-- File Protocol Warning -->
+  <div id="file-warning" style="
+        display: none;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: var(--primary-red);
+        color: white;
+        padding: 10px;
+        text-align: center;
+        font-weight: bold;
+        z-index: 9999;
+        border-top: 4px solid var(--black);
+      ">
+    ⚠️ RUNNING ON FILE PROTOCOL - URL UPDATES DISABLED. PLEASE USE A LOCAL
+    SERVER (e.g., npm run dev) FOR FULL PUSHSTATE SUPPORT.
+  </div>
+  <script>
+    if (window.location.protocol === "file:") {
+      document.getElementById("file-warning").style.display = "block";
+    }
+  </script>
+
+  <script>
+    // --- Skip Link Handler (Prevent Router Conflict) ---
+    $(".skip-link").on("click", function (e) {
+      const target = $($(this).data("target"));
+      target.focus();
+    });
+
+    // --- Atoms (State) ---
+    const isSidebarCollapsed = $.atom(false);
+    const searchQuery = $.atom("");
+    const tasks = $.atom([
+      { id: 1, title: "Define Atomic Schema", completed: true, tag: "CORE" },
+      {
+        id: 2,
+        title: "Refactor List Reconciliation",
+        completed: true,
+        tag: "DIFF",
+      },
+      { id: 3, title: "Implement Bauhaus Grid", completed: false, tag: "UI" },
+      {
+        id: 4,
+        title: "Propagate Global Signals",
+        completed: false,
+        tag: "ASYNC",
+      },
+    ]);
+
+    // --- Computed ---
+    const filteredTasks = $.computed(() => {
+      const query = searchQuery.value.toLowerCase();
+      return tasks.value.filter((t) => t.title.toLowerCase().includes(query));
+    });
+    const totalTaskCount = $.computed(() => tasks.value.length);
+    const completedTaskCount = $.computed(
+      () => tasks.value.filter((t) => t.completed).length,
+    );
+
+    // --- Global UI Bindings ---
+    $("#sidebar").atomBind({ class: { collapsed: isSidebarCollapsed } });
+    $("#toggle-sidebar").atomBind({
+      attr: { "aria-expanded": $.computed(() => !isSidebarCollapsed.value) },
+      on: {
+        click: () => {
+          isSidebarCollapsed.value = !isSidebarCollapsed.value;
+        },
+      },
+    });
+
+    // --- Components ---
+    const updateTaskElement = ($el, task) => {
+      $el.toggleClass("completed", task.completed);
+      $el
+        .find(".checkbox-rect")
+        .toggleClass("checked", task.completed)
+        .attr("aria-checked", task.completed)
+        .attr(
+          "aria-label",
+          `Mark "${task.title}" as ${task.completed ? "incomplete" : "complete"}`,
+        );
+      $el.find(".task-title").text(task.title);
+      $el.find(".task-tag").text(task.tag);
+    };
+
+    // --- Router setup ---
+    // Note: pushState routing works best with a web server.
+    // On file:// protocol, pushState behaviors are limited/restricted by browsers.
+
+    // Calculate directory path
+    const pathname = window.location.pathname;
+    const scriptName = "index.php"; // Updated to match PHP file name
+    const scriptIndex = pathname.indexOf(scriptName);
+
+    // If we are served as a file (e.g. /spa-ps/index.php), base path is the full file path
+    // This allows URL to become /spa-ps/index.php/dashboard
+    const dynamicBasePath =
+      scriptIndex !== -1
+        ? pathname.substring(0, scriptIndex + scriptName.length)
+        : pathname.replace(/\/$/, "") + "/index.php"; // Handle directory root access case if needed
+
+    // Helper for PushState Query Param Update
+    const updateQueryParam = (key, value) => {
+      const url = new URL(window.location);
+      if (value) {
+        url.searchParams.set(key, value);
+      } else {
+        url.searchParams.delete(key);
+      }
+      history.pushState(null, "", url);
+      // Manual dispatch to trigger router detection
+      window.dispatchEvent(new Event("popstate"));
+    };
+
+    const router = $.route({
+      target: "#router-view",
+      default: "dashboard",
+      mode: "history",
+      basePath: dynamicBasePath,
+      autoBindLinks: true,
+      routes: {
+        dashboard: {
+          template: "#tmpl-dashboard",
+          onMount: ($container) => {
+            $container
+              .find("#dashboard-total-tasks")
+              .atomText(totalTaskCount);
+            $container
+              .find("#dashboard-completed-tasks")
+              .atomText(completedTaskCount);
+          },
+        },
+        tasks: {
+          template: "#tmpl-tasks",
+          onMount: ($container) => {
+            // 1. Sync State from URL
+            searchQuery.value = router.queryParams.value.q || "";
+
+            // 2. Bind Input
+            const $input = $container.find("#task-search");
+
+            // Bind atom -> input (for initial value & external updates)
+            // and input -> atom (local state)
+            $input.atomVal(searchQuery);
+
+            // Input -> URL (Push State)
+            // We use 'change' or 'input' depending on desired frequency.
+            // unique 'input' ensures URL matches typing, but use debounce if needed.
+            // Here we do direct update for demo purposes.
+            $input.on("input", (e) => {
+              updateQueryParam("q", e.target.value);
+            });
+
+            // 3. Bind List
+            $container.find("#task-list-container").atomList(filteredTasks, {
+              key: "id",
+              render: (task) => {
+                const $el = $(`
+                            <li class="task-item">
+                                <div class="checkbox-rect" role="checkbox" tabindex="0"></div>
+                                <span class="task-title"></span>
+                                <span class="task-tag"></span>
+                            </li>
+                        `).attr("data-id", task.id);
+                updateTaskElement($el, task);
+                return $el;
+              },
+              update: updateTaskElement,
+              bind: ($el, task) => {
+                const toggle = () => {
+                  tasks.value = tasks.value.map((t) =>
+                    t.id === task.id ? { ...t, completed: !t.completed } : t,
+                  );
+                };
+                $el.find(".checkbox-rect").on("click", toggle);
+                $el.find(".checkbox-rect").on("keydown", (e) => {
+                  if (e.key === " " || e.key === "Enter") {
+                    e.preventDefault();
+                    toggle();
+                  }
+                });
+              },
+              empty: "#tasks-empty",
+            });
+          },
+          onParamsChange: (params) => {
+            // Handle same-route param changes (e.g. back button, or input typing -> popstate)
+            // This prevents full re-render of the route
+            const newQuery = params.q || "";
+            if (searchQuery.value !== newQuery) {
+              searchQuery.value = newQuery;
+            }
+          },
+        },
+        log: { template: "#tmpl-log" },
+        config: { template: "#tmpl-config" },
+      },
+    });
+
+    // Page Title Sync
+    $("#page-title").atomText(
+      $.computed(() => router.currentRoute.value.toUpperCase()),
+    );
+
+    // --- FAB ---
+    $.effect(() => {
+      $("#add-task-btn").toggle(router.currentRoute.value === "tasks");
+    });
+    $("#add-task-btn").on("click", () => {
+      const title = prompt("NEW_TASK:");
+      if (title) {
+        const id = Date.now();
+        tasks.value = [
+          ...tasks.value,
+          { id, title, completed: false, tag: "USER" },
+        ];
+      }
+    });
+  </script>
+</body>
+
+</html>
