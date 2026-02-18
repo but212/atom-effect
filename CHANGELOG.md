@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.21.3]
+
+### jQuery - 0.21.3
+
+- **Router Robustness**:
+  - Traceable `history.pushState` and `history.replaceState` failures (e.g., `file://` protocol) now log warnings via `debug` instead of crashing, ensuring UI navigation integrity.
+  - Added strict try-catch guards around all History API interactions.
+
 ## [0.21.2]
 
 ### Core

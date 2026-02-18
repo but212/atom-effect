@@ -1,6 +1,7 @@
 import $ from 'jquery';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../src/index';
+import { debug } from '../src/debug';
 
 describe('$.route() - SPA Routing', () => {
   beforeEach(() => {
@@ -17,11 +18,14 @@ describe('$.route() - SPA Routing', () => {
       <template id="tmpl-notfound"><h1>404</h1><p>Page not found</p></template>
     `;
     window.location.hash = '';
+    // Reset debug state
+    debug.enabled = false;
   });
 
   afterEach(() => {
     document.body.innerHTML = '';
     window.location.hash = '';
+    vi.restoreAllMocks();
   });
 
   describe('Core Functionality', () => {
@@ -310,7 +314,8 @@ describe('$.route() - SPA Routing', () => {
 
   describe('Route Resolution Edge Cases', () => {
     it('warns when route not found and no notFound configured (lines 102-104)', async () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(debug, 'warn');
+      debug.enabled = true;
 
       const router = $.route({
         target: '#app',
@@ -329,11 +334,11 @@ describe('$.route() - SPA Routing', () => {
       );
 
       router.destroy();
-      warnSpy.mockRestore();
     });
 
     it('warns when template selector does not exist (lines 117-119)', async () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(debug, 'warn');
+      debug.enabled = true;
 
       const router = $.route({
         target: '#app',
@@ -350,7 +355,6 @@ describe('$.route() - SPA Routing', () => {
       );
 
       router.destroy();
-      warnSpy.mockRestore();
     });
 
     it('restores hash when onLeave guard blocks hashchange navigation (lines 220-224)', async () => {
@@ -387,6 +391,8 @@ describe('$.route() - SPA Routing', () => {
   describe('Safety & Robustness', () => {
     it('should handle malformed URL parameters gracefully', async () => {
       const $target = $('<div id="app-route-err"></div>').appendTo(document.body);
+      const warnSpy = vi.spyOn(debug, 'warn');
+      debug.enabled = true; // Enable debug to capture params warning
 
       const router = $.route({
         target: '#app-route-err',
@@ -400,8 +406,6 @@ describe('$.route() - SPA Routing', () => {
         },
       });
 
-      const warnSpy = vi.spyOn(console, 'warn');
-
       // Trigger malformed hash
       window.location.hash = '#home?bad=%FF%FE';
       window.dispatchEvent(new window.Event('hashchange'));
@@ -414,7 +418,94 @@ describe('$.route() - SPA Routing', () => {
 
       router.destroy();
       $target.remove();
-      warnSpy.mockRestore();
+    });
+
+    it('continues navigation even if pushState throws (e.g. file:// restriction)', async () => {
+      const pushStateSpy = vi.spyOn(history, 'pushState').mockImplementation(() => {
+        throw new DOMException('SecurityError: The operation is insecure.', 'SecurityError');
+      });
+      const warnSpy = vi.spyOn(debug, 'warn');
+      debug.enabled = true; // Enable debug logging
+
+      const router = $.route({
+        target: '#app',
+        default: 'home',
+        mode: 'history',
+        routes: {
+          home: { template: '#tmpl-home' },
+          about: { template: '#tmpl-about' },
+        },
+      });
+
+      await $.nextTick();
+
+      // Attempt navigation
+      router.navigate('about');
+      await $.nextTick();
+
+      // Verify pushState failed but swallowed
+      expect(pushStateSpy).toHaveBeenCalled();
+      
+      // Verify warning logged
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('PushState failed'),
+        expect.any(Error)
+      );
+
+      // Verify UI updated despite URL error
+      expect(router.currentRoute.value).toBe('about');
+      expect(document.querySelector('#app')?.innerHTML).toContain('About Page');
+
+      router.destroy();
+    });
+
+    it('logs warning if replaceState throws', async () => {
+      const replaceStateSpy = vi.spyOn(history, 'replaceState').mockImplementation(() => {
+        throw new Error('Mock Replace Failure');
+      });
+      const warnSpy = vi.spyOn(debug, 'warn');
+      debug.enabled = true;
+
+      const router = $.route({
+        target: '#app',
+        default: 'home',
+        mode: 'history',
+        routes: {
+          home: { template: '#tmpl-home' },
+          about: {
+            template: '#tmpl-about',
+            onLeave: () => false, // Will trigger restoreUrl -> replaceState
+          },
+        },
+      });
+
+      await $.nextTick();
+      router.navigate('about');
+      await $.nextTick();
+      expect(router.currentRoute.value).toBe('about');
+
+      // Now try popstate back to home, which should be blocked and trigger replaceState (restoreUrl)
+      Object.defineProperty(window, 'location', {
+        value: { ...window.location, pathname: '/home' },
+        writable: true,
+        configurable: true,
+      });
+      window.dispatchEvent(new window.Event('popstate'));
+      await $.nextTick();
+
+      expect(router.currentRoute.value).toBe('about'); // Blocked
+      expect(replaceStateSpy).toHaveBeenCalled();
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('ReplaceState failed'),
+        expect.any(Error)
+      );
+
+      router.destroy();
+      Object.defineProperty(window, 'location', {
+        value: { ...window.location, pathname: '/', search: '', hash: '' },
+        writable: true,
+        configurable: true,
+      });
     });
   });
 
@@ -462,7 +553,6 @@ describe('$.route() - SPA Routing', () => {
       expect(document.querySelector('#app')?.innerHTML).toContain('About Page');
 
       router.destroy();
-      pushStateSpy.mockRestore();
     });
 
     it('should handle popstate event', async () => {
@@ -540,7 +630,6 @@ describe('$.route() - SPA Routing', () => {
       expect(replaceStateSpy).toHaveBeenCalledWith(null, '', '/about');
 
       router.destroy();
-      replaceStateSpy.mockRestore();
       Object.defineProperty(window, 'location', {
         value: { ...window.location, pathname: '/', search: '', hash: '' },
         writable: true,
@@ -578,7 +667,6 @@ describe('$.route() - SPA Routing', () => {
       expect(router.currentRoute.value).toBe('about');
 
       router.destroy();
-      pushStateSpy.mockRestore();
       Object.defineProperty(window, 'location', {
         value: { ...window.location, pathname: '/', search: '', hash: '' },
         writable: true,

@@ -3,6 +3,7 @@ import $ from 'jquery';
 import { LOG_PREFIXES, ROUTE_DEFAULTS } from './constants';
 import { registry } from './registry';
 import type { RouteConfig, RouteDefinition, Router, WritableAtom } from './types';
+import { debug } from './debug';
 
 /**
  * Log prefix for router warnings and errors.
@@ -112,23 +113,46 @@ export function route(config: RouteConfig): Router {
       try {
         decodeURIComponent(raw);
       } catch (_e) {
-        console.warn(`${LOG_PREFIX} Malformed URI component: ${raw}`);
+        debug.warn(`${LOG_PREFIX} Malformed URI component: ${raw}`);
       }
     }
 
     return params;
   };
 
+  // --- Helper: Safe History API Wrappers ---
+  const safePushState = (data: any, unused: string, url: string | URL | null) => {
+    try {
+      history.pushState(data, unused, url);
+      return true;
+    } catch (e) {
+      debug.warn(
+        `${LOG_PREFIX} PushState failed (likely file:// protocol or security restriction). UI will update, but URL will not.`,
+        e
+      );
+      return false;
+    }
+  };
+
+  const safeReplaceState = (data: any, unused: string, url: string | URL | null) => {
+    try {
+      history.replaceState(data, unused, url);
+      return true;
+    } catch (e) {
+      debug.warn(`${LOG_PREFIX} ReplaceState failed.`, e);
+      return false;
+    }
+  };
+
   /**
    * Updates the URL to reflect a new route.
-   * Hash mode: sets window.location.hash
-   * History mode: calls history.pushState
    */
   const setUrl = (routeName: string): void => {
     if (isHistoryMode) {
       // Remove trailing slash from basePath if present
       const url = `${basePath.replace(/\/$/, '')}/${routeName}`;
-      history.pushState(null, '', url);
+      safePushState(null, '', url);
+      // Always update previousUrl so internal state remains consistent
       previousUrl = url;
     } else {
       const hash = `#${routeName}`;
@@ -139,12 +163,10 @@ export function route(config: RouteConfig): Router {
 
   /**
    * Restores the URL when a navigation guard blocks the transition.
-   * Hash mode: reverts window.location.hash
-   * History mode: calls history.replaceState
    */
   const restoreUrl = (): void => {
     if (isHistoryMode) {
-      history.replaceState(null, '', previousUrl);
+      safeReplaceState(null, '', previousUrl);
     } else {
       window.location.hash = previousUrl;
     }
@@ -174,7 +196,7 @@ export function route(config: RouteConfig): Router {
     }
 
     if (!routeConfig) {
-      console.warn(`${LOG_PREFIX} Route "${routeName}" not found and no notFound route configured`);
+      debug.warn(`${LOG_PREFIX} Route "${routeName}" not found and no notFound route configured`);
       return null;
     }
 
@@ -189,7 +211,7 @@ export function route(config: RouteConfig): Router {
     const template = document.querySelector(templateSelector) as HTMLTemplateElement;
 
     if (!template?.content) {
-      console.warn(`${LOG_PREFIX} Template "${templateSelector}" not found`);
+      debug.warn(`${LOG_PREFIX} Template "${templateSelector}" not found`);
       return false;
     }
 
@@ -210,7 +232,7 @@ export function route(config: RouteConfig): Router {
     // Validate target element exists
     const container = $target[0];
     if (!container) {
-      console.warn(`${LOG_PREFIX} Target element "${target}" not found`);
+      debug.warn(`${LOG_PREFIX} Target element "${target}" not found`);
       return;
     }
 
