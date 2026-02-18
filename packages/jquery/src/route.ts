@@ -24,16 +24,6 @@ function safePushState(data: unknown, unused: string, url: string | URL | null):
   }
 }
 
-function safeReplaceState(data: unknown, unused: string, url: string | URL | null): boolean {
-  try {
-    history.replaceState(data, unused, url);
-    return true;
-  } catch (e) {
-    debug.warn(`${LOG_PREFIX} ReplaceState failed.`, e);
-    return false;
-  }
-}
-
 class RouterImpl implements Router {
   public currentRoute: WritableAtom<string>;
   public queryParams: import('@but212/atom-effect').ReadonlyAtom<Record<string, string>>;

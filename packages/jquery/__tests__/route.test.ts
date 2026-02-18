@@ -408,9 +408,7 @@ describe('$.route() - SPA Routing', () => {
       // Check that target still exists and router is alive
       expect(document.getElementById('app-route-err')).not.toBeNull();
       // Verify warning was logged (implementation does not pass the error object)
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Malformed URI component')
-      );
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Malformed URI component'));
 
       router.destroy();
       $target.remove();
