@@ -165,7 +165,9 @@ describe('$.atomFetch', () => {
     vi.spyOn($, 'ajax')
       .mockReturnValueOnce(
         Object.assign(
-          new Promise<unknown>((_, reject) => { rejectXhr = reject; }),
+          new Promise<unknown>((_, reject) => {
+            rejectXhr = reject;
+          }),
           { abort: abortFn }
         ) as unknown as JQuery.jqXHR
       )
@@ -206,7 +208,9 @@ describe('$.atomFetch', () => {
 
     vi.spyOn($, 'ajax').mockReturnValue(
       Object.assign(
-        new Promise<unknown>((_, reject) => { rejectXhr = reject; }),
+        new Promise<unknown>((_, reject) => {
+          rejectXhr = reject;
+        }),
         { abort: () => rejectXhr(new Error('Request aborted')) }
       ) as unknown as JQuery.jqXHR
     );
