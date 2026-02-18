@@ -4,32 +4,15 @@
 
 ### jQuery
 
-- **Router**: Refactored core to `RouterImpl` and migrated link tracking to event delegation, improving stability and reducing memory usage.
-- **Security**: Hardened XSS protection using native `DOMParser` and defense-in-depth script encoding.
-- **Type System**: Introduced `PrimitiveValue` and `EffectResult` types; decoupled `BindingOptions` for better reactive source flexibility.
-- **Core Architecture**: Centralized binding handlers in `unified.ts` and enhanced `atomFetch` with automatic `AbortController` cancellation.
-- **Debug & Utils**: Improved selector specificity in `getSelector` and synchronized visual highlights with `requestAnimationFrame`.
-- **atomFetch — Bug Fixes**:
-  - **Abort Error Suppression**: XHR rejections caused by `AbortController.abort()` are no longer surfaced as errors. `hasError` stays `false` and `lastError` is not set when a request is cancelled by a subsequent fetch or `invalidate()`.
-  - **Race Window Guard**: Added a synchronous `signal.aborted` check after `signal.addEventListener()` to ensure `xhr.abort()` is called even if the abort event fired in the window between `$.ajax()` and handler registration.
-- **atomFetch — Refactor**: Extracted `linkXhrToSignal()` helper and `PENDING` constant to flatten the nested `try-finally` structure in the `computed` body, improving readability.
-- **API.md**: Added missing methods (`atomChecked`, `atomHide`, `atomOn`, `atomUnbind`) and static utilities (`$.batch`, `$.untracked`, `$.isAtom`, `$.isComputed`, `$.isReactive`, `$.nextTick`); corrected `atomCss` signature to include optional `unit` parameter; documented `atomBind` `hide` and `checked` options.
-- **atomList — Bug Fixes**:
-  - **Effect Leak on replaceWith**: `registry.cleanup()` is now called on the old element before `replaceWith()`, preventing detached elements from retaining reactive effects and the `_aes-bound` marker.
-  - **Duplicate Node on Async Re-add**: When the same key is re-inserted while its `onRemove` Promise is still pending, `commitRemoval` now removes only the captured old `$el` reference, leaving the newly inserted node intact.
-  - **LIS Distortion by Async-Removing Keys**: Keys still undergoing async removal are excluded from LIS index lookup (`-1`), preventing their stale positions from anchoring LIS calculation for surviving items.
-- **atomList — Refactor**: Extracted `renderItem()`, `insertOrAppend()`, and `scheduleRemoval()` helpers to eliminate render logic duplication, flatten the removal closure, and remove spurious nested `{}` block; unified empty-template handling with the hot-path guard.
-- **unified.ts — Refactor**:
-  - **`bindVisibility`**: Removed redundant `label` parameter; derived from `invert` internally. Simplified visible-state expression to `invert !== !!val`.
-  - **`bindChecked`**: Removed dead-code re-entrancy guard (`state`, `BindingFlags.Busy/SyncingToDom`); `el.checked = x` never fires `change`, so the guard was never reachable.
-  - **`bindVal`**: Resolved asymmetry with `bindChecked` by moving `effect()` creation into `applyInputBinding`, which now returns `{ fx: EffectObject, cleanup }` directly.
-  - **`createContext`**: Removed lazy `$el` getter; `$(el)` is now created eagerly at context construction time.
-  - **`$.fn.atomBind`**: Removed unused generic `<T>`; delegates to `BindingOptions` default (`unknown`).
-  - **for-in index access**: Added missing non-null assertions (`!`) on `attrMap[name]`, `propMap[name]`, and `eventMap[name]` for `noUncheckedIndexedAccess` compliance; removed contradictory `!` on `cssMap[prop]` where an `undefined` guard already follows.
-  - **`bindChecked` effect formatting**: Extracted `effect(...)` result to `const fx` before passing to `registry.trackEffect` for consistency with `bindVal`.
-- **mount.ts — Bug Fixes**:
-  - **Mount error handling**: Component function errors are now caught and logged as `[atom-effect-jquery] Mount error:` instead of propagating uncaught.
-  - **Cleanup error message**: Standardized component cleanup error log to `[atom-effect-jquery] Cleanup error:` (was `Component cleanup error:`).
+- **Router**: Refactored core to `RouterImpl` using event delegation.
+- **Security**: Hardened XSS protection via native `DOMParser`. Added defense-in-depth encoding.
+- **Type System**: Introduced `PrimitiveValue` / `EffectResult` types for constraint safety.
+- **API**: Updated `API.md` methods. Synchronized signatures.
+- **atomFetch**: Added `AbortController` cancellation. Suppressed abort errors.
+- **atomList**: Fixed effect leaks. Resolved duplicate nodes during async lifecycle.
+- **Core**: Simplified binding logic in `unified.ts`. Optimized context initialization.
+- **Mount**: Added error guards for component lifecycle phases.
+- **Debug**: Synchronized visual highlights with `requestAnimationFrame`.
 
 ## [0.21.3]
 
