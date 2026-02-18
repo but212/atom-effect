@@ -776,6 +776,24 @@ describe('$.route() - SPA Routing', () => {
 
       router.destroy();
     });
+
+    it('should be read-only (computed)', async () => {
+      const router = $.route({
+        target: '#app',
+        default: 'home',
+        routes: { home: { template: '#tmpl-home' } },
+      });
+
+      await $.nextTick();
+
+      // Attempt to modify the computed queryParams should fail
+      expect(() => {
+        // @ts-expect-error: property is readonly
+        router.queryParams.value = { foo: 'bar' };
+      }).toThrow();
+
+      router.destroy();
+    });
   });
 
   describe('Same-route param change: onParamsChange', () => {
@@ -936,13 +954,14 @@ describe('$.route() - SPA Routing', () => {
   });
 
   describe('Template onMount hook', () => {
-    it('should call onMount with jQuery object after rendering', async () => {
+    it('should call onMount with jQuery object of CONTENT (children) after rendering', async () => {
       const onMountSpy = vi.fn((_$content: JQuery) => {});
 
       const router = $.route({
         target: '#app',
         default: 'home',
         routes: {
+          // tmpl-home has <h1> and <p>, so children should be length 2
           home: {
             template: '#tmpl-home',
             onMount: onMountSpy,
@@ -956,6 +975,12 @@ describe('$.route() - SPA Routing', () => {
       // Should receive a jQuery object
       const arg = onMountSpy.mock.calls[0]![0];
       expect(arg).toBeInstanceOf($);
+
+      // Verify it is the content, not the container
+      // The container is #app. The content is <h1> and <p>.
+      expect(arg.attr('id')).not.toBe('app');
+      expect(arg.length).toBe(2); // h1 + p
+      expect(arg.filter('h1').text()).toBe('Home Page');
 
       router.destroy();
     });
@@ -1000,6 +1025,7 @@ describe('$.route() - SPA Routing', () => {
             template: '#tmpl-home',
             onMount: ($content: JQuery) => {
               // Check that the content is actually in the DOM
+              // $content is collection of children, check first one
               isConnectedAtCallTime = $content[0]?.isConnected ?? false;
             },
           },

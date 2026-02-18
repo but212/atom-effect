@@ -1,4 +1,4 @@
-import { atom as createAtom, effect } from '@but212/atom-effect';
+import { atom as createAtom, computed, effect } from '@but212/atom-effect';
 import $ from 'jquery';
 import { LOG_PREFIXES, ROUTE_DEFAULTS } from './constants';
 import { debug } from './debug';
@@ -33,7 +33,7 @@ const LOG_PREFIX = LOG_PREFIXES.ROUTE;
  *     about: { template: '#tmpl-about' }
  *   }
  * });
- */
+ * */
 export function route(config: RouteConfig): Router {
   // Destructure configuration with defaults
   const {
@@ -266,9 +266,10 @@ export function route(config: RouteConfig): Router {
     if (routeConfig.render) {
       routeConfig.render(container, routeName, routeParams);
     } else if (routeConfig.template) {
-      renderTemplate(routeConfig.template);
-      if (routeConfig.onMount) {
-        routeConfig.onMount($target);
+      if (renderTemplate(routeConfig.template)) {
+        if (routeConfig.onMount) {
+          routeConfig.onMount($target.children());
+        }
       }
     }
 
@@ -467,7 +468,7 @@ export function route(config: RouteConfig): Router {
 
   return {
     currentRoute,
-    queryParams: queryParamsAtom,
+    queryParams: computed(() => queryParamsAtom.value),
     navigate,
     destroy,
   };
