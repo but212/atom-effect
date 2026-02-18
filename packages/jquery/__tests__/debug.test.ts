@@ -39,10 +39,11 @@ describe('Debug Module', () => {
       expect(logSpy).toHaveBeenCalledWith('[atom-effect-jquery] Test:', 'msg');
     });
 
-    it('warns only when enabled', () => {
+    it('warns regardless of enabled state', () => {
       debug.warn('warning message');
-      expect(warnSpy).not.toHaveBeenCalled();
+      expect(warnSpy).toHaveBeenCalledWith('[atom-effect-jquery]', 'warning message');
 
+      warnSpy.mockClear();
       debug.enabled = true;
       debug.warn('warning message');
       expect(warnSpy).toHaveBeenCalledWith('[atom-effect-jquery]', 'warning message');
@@ -62,7 +63,7 @@ describe('Debug Module', () => {
       );
     });
 
-    it('logs DOM updates and highlights element when enabled', () => {
+    it('logs DOM updates and highlights element when enabled', async () => {
       debug.enabled = true;
       const el = document.createElement('div');
       document.body.appendChild(el);
@@ -74,12 +75,13 @@ describe('Debug Module', () => {
         'new text'
       );
 
-      // Verify highlight class added
+      // Verify highlight class added (async due to rAF)
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       expect(el.classList.contains('atom-debug-highlight')).toBe(true);
       document.body.removeChild(el);
     });
 
-    it('handles jQuery objects in DOM updates', () => {
+    it('handles jQuery objects in DOM updates', async () => {
       debug.enabled = true;
       const el = document.createElement('div');
       document.body.appendChild(el);
@@ -87,6 +89,8 @@ describe('Debug Module', () => {
 
       debug.domUpdated(jqEl, 'text', 'val');
 
+      // Verify highlight class added (async due to rAF)
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       expect(el.classList.contains('atom-debug-highlight')).toBe(true);
       document.body.removeChild(el);
     });
