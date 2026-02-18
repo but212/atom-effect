@@ -6,7 +6,7 @@ describe('Utils', () => {
   describe('getSelector', () => {
     it('should generate correct selectors', () => {
       const cases = [
-        { id: 'test-id', class: '', tag: 'div', expected: '#test-id' },
+        { id: 'test-id', class: '', tag: 'div', expected: 'div#test-id' },
         { id: '', class: 'foo bar', tag: 'div', expected: 'div.foo.bar' },
         { id: '', class: '', tag: 'span', expected: 'span' },
         { id: '', class: '   ', tag: 'div', expected: 'div' },
