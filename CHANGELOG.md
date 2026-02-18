@@ -1,8 +1,22 @@
 # Changelog
 
-## [0.21.3]
+## [Unreleased]
 
 ### jQuery
+
+- **Router**: Refactored core to `RouterImpl` using event delegation.
+- **Security**: Hardened XSS protection via native `DOMParser`. Added defense-in-depth encoding.
+- **Type System**: Introduced `PrimitiveValue` / `EffectResult` types for constraint safety.
+- **API**: Updated `API.md` methods. Synchronized signatures.
+- **atomFetch**: Added `AbortController` cancellation. Suppressed abort errors.
+- **atomList**: Fixed effect leaks. Resolved duplicate nodes during async lifecycle.
+- **Core**: Simplified binding logic in `unified.ts`. Optimized context initialization.
+- **Mount**: Added error guards for component lifecycle phases.
+- **Debug**: Synchronized visual highlights with `requestAnimationFrame`.
+
+## [0.21.3]
+
+### jQuery - 0.21.3
 
 - **Router**:
   - **Reactive Query Params**: Added `queryParams` atom to `Router` to track URL query parameters reactively.

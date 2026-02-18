@@ -57,10 +57,15 @@ export const debug = {
   /**
    * Logs DOM updates and triggers visual highlight.
    */
-  domUpdated<T>($el: JQuery | Element, type: string, value: T) {
-    if (!debugEnabled) return;
-    console.log(`[atom-effect-jquery] DOM updated: ${getSelector($el)}.${type} =`, value);
-    highlightElement($el);
+  domUpdated(target: Element | JQuery, type: string, value: unknown) {
+    if (!debug.enabled) return;
+
+    // Fast path: if it's already an Element, use it directly
+    const el = target instanceof Element ? target : target[0];
+    if (!el) return;
+
+    console.log(`[atom-effect-jquery] DOM updated: ${getSelector(el)}.${type} =`, value);
+    highlightElement(el);
   },
 
   cleanup(selector: string) {
@@ -70,9 +75,7 @@ export const debug = {
   },
 
   warn<T>(...args: T[]) {
-    if (debugEnabled) {
-      console.warn('[atom-effect-jquery]', ...args);
-    }
+    console.warn('[atom-effect-jquery]', ...args);
   },
 };
 
@@ -92,8 +95,8 @@ function injectHighlightStyle(): void {
 
 const highlightTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
 
-function highlightElement($el: JQuery | Element): void {
-  const el = ('jquery' in $el ? $el[0] : $el) as HTMLElement | undefined;
+function highlightElement(target: Element | JQuery): void {
+  const el = (target instanceof Element ? target : target[0]) as HTMLElement | undefined;
   if (!el || !el.isConnected) return;
 
   injectHighlightStyle();
@@ -102,13 +105,16 @@ function highlightElement($el: JQuery | Element): void {
   const existing = highlightTimers.get(el);
   if (existing) clearTimeout(existing);
 
-  el.classList.add(HIGHLIGHT_CLASS);
+  // Use rAF to ensure style application happens in the next paint frame
+  requestAnimationFrame(() => {
+    el.classList.add(HIGHLIGHT_CLASS);
 
-  highlightTimers.set(
-    el,
-    setTimeout(() => {
-      el.classList.remove(HIGHLIGHT_CLASS);
-      highlightTimers.delete(el);
-    }, 600)
-  );
+    highlightTimers.set(
+      el,
+      setTimeout(() => {
+        el.classList.remove(HIGHLIGHT_CLASS);
+        highlightTimers.delete(el);
+      }, 600)
+    );
+  });
 }

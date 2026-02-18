@@ -1,5 +1,4 @@
 import { effect } from '@but212/atom-effect';
-import $ from 'jquery';
 import { debug } from './debug';
 import { registry } from './registry';
 import type { ReactiveValue } from './types';
@@ -26,11 +25,11 @@ export function registerReactiveEffect<T>(
       effect(() => {
         const value = source.value;
         updater(value);
-        debug.domUpdated($(el), debugType, value);
+        if (debug.enabled) debug.domUpdated(el, debugType, value);
       })
     );
   } else {
     updater(source);
-    if (debug.enabled) debug.domUpdated($(el), debugType, source);
+    if (debug.enabled) debug.domUpdated(el, debugType, source);
   }
 }

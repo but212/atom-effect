@@ -1,12 +1,8 @@
 import $ from 'jquery';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../src/index';
 
 describe('$.atomFetch', () => {
-  beforeEach(() => {
-    document.body.innerHTML = '';
-  });
-
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -22,7 +18,6 @@ describe('$.atomFetch', () => {
       defaultValue: { name: '' },
     });
 
-    // Wait for async resolution
     await $.nextTick();
     await $.nextTick();
 
@@ -42,13 +37,11 @@ describe('$.atomFetch', () => {
 
     await $.nextTick();
     await $.nextTick();
-
     expect(user.value).toEqual({ id: 1, name: 'Alice' });
 
-    // Change the atom → URL changes → auto-refetch
     id.value = 2;
-    await $.nextTick(); // atom notification propagates
-    void user.value; // trigger re-evaluation (effects do this automatically in real usage)
+    await $.nextTick();
+    void user.value;
     await $.nextTick();
     await $.nextTick();
 
@@ -67,11 +60,9 @@ describe('$.atomFetch', () => {
 
     const data = $.atomFetch('/api/slow', { defaultValue: null });
 
-    // Before resolution: should be pending
     await $.nextTick();
     expect(data.isPending).toBe(true);
 
-    // Resolve
     resolveAjax({ done: true });
     await $.nextTick();
     await $.nextTick();
@@ -80,7 +71,7 @@ describe('$.atomFetch', () => {
     expect(data.isResolved).toBe(true);
   });
 
-  it('should set hasError and lastError on fetch failure', async () => {
+  it('should set hasError and lastError on real fetch failure', async () => {
     vi.spyOn($, 'ajax').mockRejectedValue(new Error('Network error'));
 
     const data = $.atomFetch('/api/fail', { defaultValue: null });
@@ -90,7 +81,6 @@ describe('$.atomFetch', () => {
 
     expect(data.hasError).toBe(true);
     expect(data.lastError?.message).toContain('Network error');
-    // Should fall back to defaultValue
     expect(data.value).toBeNull();
   });
 
@@ -104,7 +94,7 @@ describe('$.atomFetch', () => {
     expect(data.value).toEqual({ v: 1 });
 
     data.invalidate();
-    void data.value; // trigger re-evaluation
+    void data.value;
     await $.nextTick();
     await $.nextTick();
 
@@ -162,5 +152,117 @@ describe('$.atomFetch', () => {
         timeout: 5000,
       })
     );
+  });
+
+  // ---------------------------------------------------------------------------
+  // Abort / Cancellation
+  // ---------------------------------------------------------------------------
+
+  it('abort by subsequent fetch should NOT set hasError', async () => {
+    let rejectXhr!: (e: unknown) => void;
+    const abortFn = () => rejectXhr(new Error('Request aborted'));
+
+    vi.spyOn($, 'ajax')
+      .mockReturnValueOnce(
+        Object.assign(
+          new Promise<unknown>((_, reject) => {
+            rejectXhr = reject;
+          }),
+          { abort: abortFn }
+        ) as unknown as JQuery.jqXHR
+      )
+      .mockResolvedValueOnce({ ok: true });
+
+    const data = $.atomFetch('/api/slow', { defaultValue: null });
+
+    await $.nextTick();
+    expect(data.isPending).toBe(true);
+
+    data.invalidate();
+    void data.value;
+    abortFn();
+
+    await $.nextTick();
+    await $.nextTick();
+    await $.nextTick();
+
+    expect(data.hasError).toBe(false);
+    expect(data.value).toEqual({ ok: true });
+  });
+
+  it('abort rejection should not bleed into lastError', async () => {
+    // Real abort flow: AbortController.abort() sets signal.aborted=true,
+    // fires the 'abort' event → xhr.abort() → xhr rejects.
+    // The impl detects signal.aborted in the catch block and suppresses the error.
+    const OriginalAbortController = globalThis.AbortController;
+    let capturedAbortController: AbortController | null = null;
+    let rejectXhr!: (e: unknown) => void;
+
+    vi.spyOn(globalThis, 'AbortController').mockImplementationOnce(function (
+      this: AbortController
+    ) {
+      const real = new OriginalAbortController();
+      capturedAbortController = real;
+      return real;
+    } as unknown as typeof AbortController);
+
+    vi.spyOn($, 'ajax').mockReturnValue(
+      Object.assign(
+        new Promise<unknown>((_, reject) => {
+          rejectXhr = reject;
+        }),
+        { abort: () => rejectXhr(new Error('Request aborted')) }
+      ) as unknown as JQuery.jqXHR
+    );
+
+    const data = $.atomFetch('/api/slow', { defaultValue: null });
+    await $.nextTick();
+
+    capturedAbortController!.abort();
+    rejectXhr(new Error('Request aborted'));
+
+    await $.nextTick();
+    await $.nextTick();
+
+    expect(data.hasError).toBe(false);
+    expect(data.lastError).toBeFalsy();
+  });
+
+  it('AbortController.abort() before signal.addEventListener — xhr.abort() must still fire', async () => {
+    // Race window: abort() fires between $.ajax() and signal.addEventListener().
+    // The impl must check signal.aborted synchronously after addEventListener
+    // and call xhr.abort() directly as a fallback.
+    //
+    // Simulated by intercepting addEventListener, calling abort() inside the mock
+    // (before returning), and skipping handler registration.
+    const OriginalAbortController = globalThis.AbortController;
+    let capturedAbortController: AbortController | null = null;
+    const abortSpy = vi.fn();
+
+    vi.spyOn(globalThis, 'AbortController').mockImplementationOnce(function (
+      this: AbortController
+    ) {
+      const real = new OriginalAbortController();
+      capturedAbortController = real;
+      return real;
+    } as unknown as typeof AbortController);
+
+    vi.spyOn(AbortSignal.prototype, 'addEventListener').mockImplementationOnce(function (
+      this: AbortSignal,
+      _type: string,
+      _handler: EventListenerOrEventListenerObject
+    ) {
+      capturedAbortController!.abort(); // signal.aborted = true in the race window
+      // Handler not registered — simulating missed event.
+    });
+
+    vi.spyOn($, 'ajax').mockReturnValueOnce(
+      Object.assign(new Promise<unknown>(() => {}), { abort: abortSpy }) as unknown as JQuery.jqXHR
+    );
+
+    $.atomFetch('/api/race', { defaultValue: null });
+    await $.nextTick();
+
+    expect(abortSpy).toHaveBeenCalledTimes(1);
   });
 });

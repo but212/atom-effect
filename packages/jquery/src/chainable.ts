@@ -1,14 +1,15 @@
 import $ from 'jquery';
-import { registerReactiveEffect } from './effect-factory';
 import { registry } from './registry';
-import type { ReactiveValue, ValOptions, WritableAtom } from './types';
+import type { PrimitiveValue, ReactiveValue, ValOptions, WritableAtom } from './types';
 import {
   bindAttr,
   bindChecked,
   bindClass,
   bindCss,
   bindHtml,
+  bindOn,
   bindProp,
+  bindText,
   bindVal,
   bindVisibility,
   createContext,
@@ -20,17 +21,12 @@ import {
  */
 $.fn.atomText = function <T>(source: ReactiveValue<T>, formatter?: (v: T) => string): JQuery {
   return this.each(function () {
-    const $el = $(this);
-    const update = formatter
-      ? (val: T) => $el.text(formatter(val))
-      : (val: T) => $el.text(String(val ?? ''));
-
-    registerReactiveEffect(this, source, update, 'text');
+    bindText(createContext(this), source, formatter);
   });
 };
 
 /**
- * Updates element inner HTML.
+ * Updates element inner HTML with sanitization.
  */
 $.fn.atomHtml = function (source: ReactiveValue<string>): JQuery {
   return this.each(function () {
@@ -61,9 +57,9 @@ $.fn.atomCss = function (
 };
 
 /**
- * Updates an HTML attribute.
+ * Updates an HTML attribute with sanitization and write guards.
  */
-$.fn.atomAttr = function (name: string, source: ReactiveValue<string | boolean | null>): JQuery {
+$.fn.atomAttr = function (name: string, source: ReactiveValue<PrimitiveValue>): JQuery {
   return this.each(function () {
     bindAttr(createContext(this), { [name]: source });
   });
@@ -71,31 +67,29 @@ $.fn.atomAttr = function (name: string, source: ReactiveValue<string | boolean |
 
 /**
  * Updates a DOM property (e.g., checked, selected, value).
+ * Generic constraint removed to allow flexibility for various property types.
  */
-$.fn.atomProp = function <T extends string | number | boolean | null | undefined>(
-  name: string,
-  source: ReactiveValue<T>
-): JQuery {
+$.fn.atomProp = function (name: string, source: ReactiveValue<unknown>): JQuery {
   return this.each(function () {
     bindProp(createContext(this), { [name]: source });
   });
 };
 
 /**
- * Shows element when condition is true.
+ * Shows element when condition is true (display: '').
  */
 $.fn.atomShow = function (condition: ReactiveValue<boolean>): JQuery {
   return this.each(function () {
-    bindVisibility(createContext(this), condition, false, 'show');
+    bindVisibility(createContext(this), condition, false);
   });
 };
 
 /**
- * Hides element when condition is true.
+ * Hides element when condition is true (display: 'none').
  */
 $.fn.atomHide = function (condition: ReactiveValue<boolean>): JQuery {
   return this.each(function () {
-    bindVisibility(createContext(this), condition, true, 'hide');
+    bindVisibility(createContext(this), condition, true);
   });
 };
 
@@ -122,18 +116,16 @@ $.fn.atomChecked = function (atom: WritableAtom<boolean>): JQuery {
 };
 
 /**
- * Binds an event handler with automatic cleanup.
+ * Binds an event handler with automatic cleanup and batched execution.
  */
 $.fn.atomOn = function (event: string, handler: (e: JQuery.Event) => void): JQuery {
   return this.each(function () {
-    const $el = $(this);
-    $el.on(event, handler);
-    registry.trackCleanup(this, () => $el.off(event, handler));
+    bindOn(createContext(this), event, handler);
   });
 };
 
 /**
- * Removes all atom bindings.
+ * Destroys all reactive bindings on the selected elements and their children.
  */
 $.fn.atomUnbind = function (): JQuery {
   return this.each(function () {

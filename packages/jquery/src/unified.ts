@@ -1,4 +1,4 @@
-import { batch, effect } from '@but212/atom-effect';
+import { effect } from '@but212/atom-effect';
 import $ from 'jquery';
 import { DANGEROUS_PROPS, ERROR_MESSAGES, LOG_PREFIXES } from './constants';
 import { debug } from './debug';
@@ -9,11 +9,11 @@ import type {
   BindingContext,
   BindingOptions,
   CssValue,
+  PrimitiveValue,
   ReactiveValue,
   ValOptions,
   WritableAtom,
 } from './types';
-import { BindingFlags, createInputBindingState } from './types';
 import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from './utils';
 
 // Cache for CSS property camelization to avoid repeated regex and check overhead
@@ -32,12 +32,8 @@ function getCamelCase(prop: string): string {
 // ============================================================================
 
 export function createContext(el: HTMLElement): BindingContext {
-  let _$el: JQuery | null = null;
   return {
-    get $el() {
-      if (!_$el) _$el = $(el);
-      return _$el;
-    },
+    $el: $(el),
     el,
     trackCleanup: (fn) => registry.trackCleanup(el, fn),
   };
@@ -47,14 +43,21 @@ export function createContext(el: HTMLElement): BindingContext {
 // One-Way Binding Handlers (Atom → DOM)
 // ============================================================================
 
-export function bindText<T>(ctx: BindingContext, value: ReactiveValue<T>): void {
+/**
+ * Updates element text content. Decoupled from generic T for flexibility with any reactive source.
+ */
+export function bindText<T = unknown>(
+  ctx: BindingContext,
+  value: ReactiveValue<T>,
+  formatter?: (val: T) => string
+): void {
   const el = ctx.el;
   registerReactiveEffect(
     el,
     value,
     (val) => {
-      const newVal = typeof val === 'string' ? val : String(val ?? '');
-      // Guard against redundant DOM writes
+      const newVal = formatter ? formatter(val) : typeof val === 'string' ? val : String(val ?? '');
+      // Guard against redundant DOM writes which trigger browser reflows
       if (el.textContent !== newVal) {
         el.textContent = newVal;
       }
@@ -63,6 +66,9 @@ export function bindText<T>(ctx: BindingContext, value: ReactiveValue<T>): void 
   );
 }
 
+/**
+ * Updates element inner HTML with XSS sanitization.
+ */
 export function bindHtml(ctx: BindingContext, value: ReactiveValue<string>): void {
   const el = ctx.el;
   registerReactiveEffect(
@@ -85,6 +91,9 @@ export function bindHtml(ctx: BindingContext, value: ReactiveValue<string>): voi
   );
 }
 
+/**
+ * Toggles multiple CSS classes based on reactive boolean conditions.
+ */
 export function bindClass(
   ctx: BindingContext,
   classMap: Record<string, ReactiveValue<boolean>>
@@ -92,7 +101,7 @@ export function bindClass(
   for (const className in classMap) {
     registerReactiveEffect(
       ctx.el,
-      classMap[className],
+      classMap[className]!,
       (val) => {
         ctx.el.classList.toggle(className, !!val);
       },
@@ -101,6 +110,9 @@ export function bindClass(
   }
 }
 
+/**
+ * Updates multiple CSS style properties. Supports units (e.g., [source, 'px']).
+ */
 export function bindCss(ctx: BindingContext, cssMap: Record<string, CssValue>): void {
   const el = ctx.el;
   const style = el.style as unknown as Record<string, string>;
@@ -129,13 +141,16 @@ export function bindCss(ctx: BindingContext, cssMap: Record<string, CssValue>): 
   }
 }
 
+/**
+ * Binds DOM attributes with security guards and primitive value constraints.
+ */
 export function bindAttr(
   ctx: BindingContext,
-  attrMap: Record<string, ReactiveValue<string | boolean | null>>
+  attrMap: Record<string, ReactiveValue<PrimitiveValue>>
 ): void {
   const el = ctx.el;
   for (const name in attrMap) {
-    // Block event handler attributes (on*)
+    // Block event handler attributes (on*) to prevent inline JS injection
     const c0 = name.charCodeAt(0);
     if ((c0 === 111 || c0 === 79) && (name.charCodeAt(1) === 110 || name.charCodeAt(1) === 78)) {
       console.warn(`${LOG_PREFIXES.BIND} ${ERROR_MESSAGES.BLOCKED_EVENT_HANDLER(name)}`);
@@ -144,7 +159,7 @@ export function bindAttr(
 
     registerReactiveEffect(
       el,
-      attrMap[name],
+      attrMap[name]!,
       (v) => {
         if (v === null || v === undefined || v === false) {
           el.removeAttribute(name);
@@ -165,13 +180,16 @@ export function bindAttr(
   }
 }
 
+/**
+ * Binds DOM properties. Uses strict property write guards.
+ */
 export function bindProp(
   ctx: BindingContext,
   propMap: Record<string, ReactiveValue<unknown>>
 ): void {
   const el = ctx.el as unknown as Record<string, unknown>;
   for (const name in propMap) {
-    // Block dangerous DOM properties that can inject raw HTML
+    // Block dangerous DOM properties that can inject raw HTML (e.g., innerHTML)
     if (DANGEROUS_PROPS.includes(name as (typeof DANGEROUS_PROPS)[number])) {
       console.warn(`${LOG_PREFIXES.BIND} ${ERROR_MESSAGES.BLOCKED_DANGEROUS_PROP(name)}`);
       continue;
@@ -179,9 +197,9 @@ export function bindProp(
 
     registerReactiveEffect(
       ctx.el,
-      propMap[name],
+      propMap[name]!,
       (val) => {
-        // Redundancy check for DOM properties (e.g. className, title)
+        // Redundancy check specifically for DOM properties
         if (el[name] !== val) {
           el[name] = val;
         }
@@ -191,18 +209,21 @@ export function bindProp(
   }
 }
 
+/**
+ * Handlers visibility (display: none) toggle.
+ */
 export function bindVisibility(
   ctx: BindingContext,
   condition: ReactiveValue<boolean>,
-  invert: boolean,
-  label: 'show' | 'hide'
+  invert: boolean
 ): void {
   const el = ctx.el;
+  const label = invert ? 'hide' : 'show';
   registerReactiveEffect(
     el,
     condition,
     (val) => {
-      const visible = invert ? !val : !!val;
+      const visible = invert !== !!val;
       el.style.display = visible ? '' : 'none';
       if (debug.enabled) debug.domUpdated(el, label, val);
     },
@@ -224,24 +245,22 @@ export function bindVal<T>(
     return;
   }
   const isArr = Array.isArray(cfg);
-  const { effect: fxFn, cleanup } = applyInputBinding(
-    ctx.$el,
-    isArr ? cfg[0] : cfg,
-    isArr ? cfg[1] : {}
-  );
+  const { fx, cleanup } = applyInputBinding(ctx.$el, isArr ? cfg[0] : cfg, isArr ? cfg[1] : {});
 
-  registry.trackEffect(ctx.el, effect(fxFn));
+  registry.trackEffect(ctx.el, fx);
   ctx.trackCleanup(cleanup);
 }
 
+/**
+ * Two-way binding for checkbox/radio checked state.
+ */
 export function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): void {
   const el = ctx.el as HTMLInputElement;
   const $el = ctx.$el;
-  const state = createInputBindingState();
 
   // DOM → Atom (jQuery events for .trigger() compatibility)
+  // Note: el.checked = x does not fire 'change', so no re-entrancy guard is needed.
   const handler = () => {
-    if (state.flags & BindingFlags.Busy) return;
     const current = el.checked;
     if (atom.value !== current) {
       atom.value = current;
@@ -253,13 +272,11 @@ export function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): v
 
   // Atom → DOM
   const fx = effect(() => {
-    state.flags |= BindingFlags.SyncingToDom;
     const val = !!atom.value;
     if (el.checked !== val) {
       el.checked = val;
       if (debug.enabled) debug.domUpdated($el, 'checked', val);
     }
-    state.flags &= ~BindingFlags.SyncingToDom;
   });
   registry.trackEffect(el, fx);
 }
@@ -268,30 +285,33 @@ export function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): v
 // Event Binding Handler
 // ============================================================================
 
-/** Event handler map type for atomBind({ on: ... }) using jQuery's event handler signature */
+/**
+ * Event handler map type for atomBind({ on: ... })
+ */
 type EventBindingMap = {
-  [K in keyof JQuery.TypeToTriggeredEventMap<HTMLElement, undefined, HTMLElement, HTMLElement>]?:
-    | JQuery.TypeEventHandler<HTMLElement, undefined, HTMLElement, HTMLElement, K>
-    | false;
-} & {
-  [eventName: string]: JQuery.EventHandler<HTMLElement, undefined> | false | undefined;
+  [eventName: string]: (e: JQuery.Event) => void;
 };
 
 export function bindEvents(ctx: BindingContext, eventMap: EventBindingMap): void {
   for (const name in eventMap) {
-    const handler = eventMap[name];
+    const handler = eventMap[name]!;
     if (typeof handler !== 'function') continue;
-    const listener = (e: Event) => {
-      batch(() =>
-        (handler as JQuery.EventHandler<HTMLElement, undefined>).call(
-          ctx.el,
-          $.Event(e.type, { originalEvent: e }) as JQuery.TriggeredEvent<HTMLElement>
-        )
-      );
-    };
-    ctx.el.addEventListener(name, listener);
-    ctx.trackCleanup(() => ctx.el.removeEventListener(name, listener));
+    bindOn(ctx, name, handler);
   }
+}
+
+/**
+ * Binds a single event handler using jQuery's event system for compatibility.
+ * Optimized to avoid creating jQuery wrapper objects repeatedly during setup/teardown.
+ */
+export function bindOn(
+  ctx: BindingContext,
+  event: string,
+  handler: (e: JQuery.Event) => void
+): void {
+  const $el = ctx.$el;
+  $el.on(event, handler);
+  ctx.trackCleanup(() => $el.off(event, handler));
 }
 
 // ============================================================================
@@ -300,13 +320,9 @@ export function bindEvents(ctx: BindingContext, eventMap: EventBindingMap): void
 
 /**
  * Extends jQuery with atom-based data binding capabilities.
- *
- * This plugin synchronizes DOM element states (text, html, classes, styles, etc.)
- * with reactive atoms. Handlers are modular and focused for maintainability.
+ * Synchronizes multiple element states with reactive atoms in a single batch call.
  */
-$.fn.atomBind = function <T extends string | number | boolean | null | undefined>(
-  options: BindingOptions<T>
-): JQuery {
+$.fn.atomBind = function (options: BindingOptions): JQuery {
   return this.each(function () {
     const ctx = createContext(this);
 
@@ -317,8 +333,8 @@ $.fn.atomBind = function <T extends string | number | boolean | null | undefined
     if (options.css) bindCss(ctx, options.css);
     if (options.attr) bindAttr(ctx, options.attr);
     if (options.prop) bindProp(ctx, options.prop);
-    if (options.show !== undefined) bindVisibility(ctx, options.show, false, 'show');
-    if (options.hide !== undefined) bindVisibility(ctx, options.hide, true, 'hide');
+    if (options.show !== undefined) bindVisibility(ctx, options.show, false);
+    if (options.hide !== undefined) bindVisibility(ctx, options.hide, true);
     if (options.val !== undefined) bindVal(ctx, options.val);
     if (options.checked !== undefined) bindChecked(ctx, options.checked);
     if (options.on) bindEvents(ctx, options.on);

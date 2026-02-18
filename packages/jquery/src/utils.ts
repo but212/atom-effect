@@ -24,82 +24,123 @@ export function getSelector(el: Element | JQuery): string {
   const dom = 'jquery' in el ? (el as JQuery)[0] : (el as Element);
   if (!dom) return 'unknown';
 
-  const id = dom.id;
-  if (id && typeof id === 'string') return `#${id}`;
-
   const tagName = dom.tagName.toLowerCase();
+  const id = dom.id;
+  if (id) return `${tagName}#${id}`;
+
   const classes = dom.classList;
+  let selector = tagName;
 
   if (classes && classes.length > 0) {
-    let res = tagName;
-    for (let i = 0, len = classes.length; i < len; i++) {
-      const cls = classes[i];
-      if (cls) res += `.${cls}`;
+    for (let i = 0; i < classes.length; i++) {
+      selector += `.${classes[i]}`;
     }
-    return res;
   }
-  return tagName;
+
+  return selector;
 }
 
 /**
  * Basic HTML sanitization for XSS mitigation.
  * Note: This is NOT a replacement for a full-featured sanitizer like DOMPurify.
  * It prevents common attacks like <script> tags and javascript: protocols.
+ *
+ * Advanced HTML sanitization using native DOMParser.
+ * Parses HTML, traverses the tree, and removes dangerous tags/attributes.
+ * Much more robust than regex-based approaches.
  */
 export function sanitizeHtml(html: string): string {
-  let safe = String(html ?? '');
+  if (!html) return '';
 
-  // 0. Pre-process: Remove null bytes and control characters (bypass vectors)
-  // These are often used to bypass regex filters while browsers ignore them
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: Intentionally matching control characters for XSS sanitization
-  safe = safe.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
+  // 0. Pre-process: Remove null bytes, control characters, and processing instructions
+  const safeHtml = html
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: Intentionally matching control characters for XSS sanitization
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '')
+    .replace(/<\?[\s\S]*?\?>/g, '');
 
-  // 1. Remove dangerous tags entirely (content included or tag stripped)
-  // Lightweight first pass — DOMPurify handles the full sanitization.
-  // Note: svg/math are NOT removed — they have legitimate uses (icons, equations).
-  // Their event handlers (on*) are already neutralized in step 3.
-  // Also remove processing instructions <? ... ?> which can be abused in some contexts
-  safe = safe.replace(/<\?[\s\S]*?\?>/g, '');
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(safeHtml, 'text/html');
 
-  // Loop tag removal to prevent nested reassembly bypass (e.g. "<scr<script>ipt>")
-  const dangerousTagPattern =
-    /(<(script|iframe|object|embed|base|meta|applet|noscript)\b[^>]*>([\s\S]*?)<\/\2>|<(script|iframe|object|embed|base|meta|applet|noscript)\b[^>]*\/?>)/gim;
-  let prev: string;
-  do {
-    prev = safe;
-    safe = safe.replace(dangerousTagPattern, '');
-  } while (safe !== prev);
+  // Single-pass tree traversal for performance
+  const allElements = doc.querySelectorAll('*');
+  for (let i = 0; i < allElements.length; i++) {
+    const el = allElements[i];
+    if (!el) continue;
 
-  // 2. Neutralize dangerous protocols (javascript:, vbscript:)
-  // Simple whitespace-tolerant regex. Entity-based obfuscation is left to DOMPurify.
-  // Step 0 already strips null bytes/control chars, so basic spacing tricks are caught here.
-  const protocolRegex =
-    /(j\s*a\s*v\s*a\s*s\s*c\s*r\s*i\s*p\s*t|v\s*b\s*s\s*c\s*r\s*i\s*p\s*t)\s*:/gi;
-  safe = safe.replace(protocolRegex, 'data-unsafe-protocol:');
+    const tagName = el.tagName.toLowerCase();
 
-  // Separately handle dangerous data URIs (e.g. text/html, base64 encoded scripts)
-  // Allows common inline images (data:image/...) including SVG while blocking executable payloads.
-  const dangerousDataUriRegex =
-    /data\s*:\s*(?:text\/html|application\/javascript|text\/javascript|text\/vbscript|text\/xml|application\/xhtml\+xml)/gim;
-  safe = safe.replace(dangerousDataUriRegex, 'data-unsafe-protocol:');
+    // 1. Remove dangerous tags entirely
+    if (DANGEROUS_TAGS.has(tagName)) {
+      el.remove();
+      continue;
+    }
 
-  // 3. Neutralize event handlers (on* attributes)
-  // Replaces "onclick=" with "data-unsafe-attr="
-  safe = safe.replace(/\bon\w+\s*=/gim, 'data-unsafe-attr=');
+    // 2. Sanitize attributes for safe tags
+    sanitizeAttributes(el);
+  }
 
-  // 4. Neutralize CSS expressions (IE legacy but dangerous) and behavior
-  // expression(...), behavior:url(...)
-  safe = safe
-    .replace(/expression\s*\(/gim, 'data-unsafe-css(')
-    .replace(/behavior\s*:/gim, 'data-unsafe-css:');
+  // Serialize: combine head and body
+  const headContent = doc.head ? doc.head.innerHTML : '';
+  const bodyContent = doc.body ? doc.body.innerHTML : '';
 
-  return safe;
+  // Final defense-in-depth against parser confusion
+  return (headContent + bodyContent).replace(/<script/gi, '&lt;script');
+}
+
+/**
+ * Internal helper to sanitize all attributes of a given element.
+ */
+function sanitizeAttributes(el: Element): void {
+  const attrs = el.attributes;
+  // Reverse loop because we might remove attributes
+  for (let j = attrs.length - 1; j >= 0; j--) {
+    const attr = attrs[j];
+    if (!attr) continue;
+
+    const name = attr.name.toLowerCase();
+    const val = attr.value.toLowerCase();
+
+    // Remove event handlers (on*)
+    if (name.startsWith('on')) {
+      el.removeAttribute(name);
+      continue;
+    }
+
+    // Remove dangerous protocols in URL attributes
+    if (URL_ATTRS.has(name) && DANGEROUS_PROTOCOL_RE.test(val)) {
+      el.removeAttribute(name);
+      continue;
+    }
+
+    // Remove dangerous data URIs (excluding safe images)
+    if (val.trim().startsWith('data:') && !val.trim().startsWith('data:image/')) {
+      el.removeAttribute(name);
+      continue;
+    }
+
+    // Special handling for 'style' attributes (Internal string sanitization)
+    if (name === 'style' && DANGEROUS_CSS_RE.test(attr.value)) {
+      el.removeAttribute(name);
+    }
+  }
 }
 
 /**
  * Checks if a given attribute value contains a dangerous protocol (javascript:, vbscript:).
  * Used by atomAttr/bindAttr to guard URL-bearing attributes.
  */
+const DANGEROUS_TAGS = new Set([
+  'script',
+  'iframe',
+  'object',
+  'embed',
+  'base',
+  'meta',
+  'applet',
+  'noscript',
+  'form',
+]);
+
 const URL_ATTRS = new Set([
   'href',
   'src',
@@ -119,6 +160,10 @@ const URL_ATTRS = new Set([
 ]);
 
 const DANGEROUS_PROTOCOL_RE = /^\s*(?:javascript|vbscript)\s*:/i;
+
+const DANGEROUS_CSS_RE =
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: Intentionally matching control characters for XSS sanitization
+  /(?:expression\s*\(|behavior\s*:|(?:\\[0-9a-f]{1,6}\s*|[\s\x00-\x20/'"])*(?:j\s*a\s*v\s*a\s*s\s*c\s*r\s*i\s*p\s*t|v\s*b\s*s\s*c\s*r\s*i\s*p\s*t|d\s*a\s*t\s*a)\s*:(?!image\/))/i;
 
 export function isDangerousUrl(attrName: string, value: string): boolean {
   if (!URL_ATTRS.has(attrName.toLowerCase())) return false;

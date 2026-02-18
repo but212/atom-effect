@@ -220,7 +220,7 @@ describe('$.route() - SPA Routing', () => {
   });
 
   describe('Lifecycle & Cleanup', () => {
-    it('should clean up listeners and bound links on destroy', async () => {
+    it('should clean up listeners on destroy', async () => {
       const router = $.route({
         target: '#app',
         default: 'home',
@@ -231,13 +231,7 @@ describe('$.route() - SPA Routing', () => {
         },
       });
 
-      const homeLink = document.querySelector('[data-route="home"]') as HTMLElement;
-      expect(homeLink.classList.contains('_aes-bound')).toBe(true);
-
       router.destroy();
-
-      // Links unbinding
-      expect(homeLink.classList.contains('_aes-bound')).toBe(false);
 
       // Listener cleanup (simulated by hash change not affecting router)
       const initialRoute = router.currentRoute.value;
@@ -413,7 +407,7 @@ describe('$.route() - SPA Routing', () => {
 
       // Check that target still exists and router is alive
       expect(document.getElementById('app-route-err')).not.toBeNull();
-      // Verify warning was logged
+      // Verify warning was logged (implementation does not pass the error object)
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Malformed URI component'));
 
       router.destroy();
@@ -459,9 +453,10 @@ describe('$.route() - SPA Routing', () => {
       router.destroy();
     });
 
-    it('logs warning if replaceState throws', async () => {
-      const replaceStateSpy = vi.spyOn(history, 'replaceState').mockImplementation(() => {
-        throw new Error('Mock Replace Failure');
+    it('logs warning if pushState throws (was replaceState)', async () => {
+      // restoreUrl now uses pushState to avoid back button traps
+      const pushStateSpy = vi.spyOn(history, 'pushState').mockImplementation(() => {
+        throw new Error('Mock Push Failure');
       });
       const warnSpy = vi.spyOn(debug, 'warn');
       debug.enabled = true;
@@ -474,7 +469,7 @@ describe('$.route() - SPA Routing', () => {
           home: { template: '#tmpl-home' },
           about: {
             template: '#tmpl-about',
-            onLeave: () => false, // Will trigger restoreUrl -> replaceState
+            onLeave: () => false, // Will trigger restoreUrl -> pushState
           },
         },
       });
@@ -494,9 +489,9 @@ describe('$.route() - SPA Routing', () => {
       await $.nextTick();
 
       expect(router.currentRoute.value).toBe('about'); // Blocked
-      expect(replaceStateSpy).toHaveBeenCalled();
+      expect(pushStateSpy).toHaveBeenCalled();
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('ReplaceState failed'),
+        expect.stringContaining('PushState failed'),
         expect.anything()
       );
 
