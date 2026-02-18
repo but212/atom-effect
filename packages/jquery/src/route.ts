@@ -217,10 +217,12 @@ export function route(config: RouteConfig): Router {
 
     const clonedContent = template.content.cloneNode(true) as DocumentFragment;
     $target.append(clonedContent);
+
     return true;
   };
 
   const currentRoute: WritableAtom<string> = createAtom(getRouteName());
+  const queryParamsAtom: WritableAtom<Record<string, string>> = createAtom(getQueryParams());
 
   /**
    * Renders the specified route, including lifecycle hooks and content.
@@ -265,6 +267,9 @@ export function route(config: RouteConfig): Router {
       routeConfig.render(container, routeName, routeParams);
     } else if (routeConfig.template) {
       renderTemplate(routeConfig.template);
+      if (routeConfig.onMount) {
+        routeConfig.onMount($target);
+      }
     }
 
     // Call afterTransition hook
@@ -309,6 +314,7 @@ export function route(config: RouteConfig): Router {
 
     const newRoute = getRouteName();
     const oldRouteName = currentRoute.value;
+    const params = getQueryParams();
 
     if (oldRouteName !== newRoute) {
       // Check onLeave guard for user-driven navigation
@@ -321,9 +327,16 @@ export function route(config: RouteConfig): Router {
         }
       }
       currentRoute.value = newRoute;
+      queryParamsAtom.value = params;
     } else {
-      // Same route but URL changed (e.g., query params), manually re-render
-      renderRoute(newRoute);
+      // Same route but URL changed (e.g., query params)
+      queryParamsAtom.value = params;
+      const routeConfig = routes[oldRouteName];
+      if (routeConfig?.onParamsChange) {
+        routeConfig.onParamsChange(params);
+      } else {
+        renderRoute(newRoute);
+      }
     }
 
     previousUrl = currentUrl;
@@ -350,62 +363,62 @@ export function route(config: RouteConfig): Router {
       $(document).off('click', '[data-route]', delegateHandler);
     });
 
-    // 2. Active State Management via MutationObserver
-    // We need to attach effects to any [data-route] element that appears in the DOM.
-    const bindActiveState = (el: HTMLElement) => {
+    // 2. Active State Management — single effect for all links
+    const trackLink = (el: HTMLElement) => {
       if (boundLinks.has(el)) return;
-
-      const routeAttr = el.dataset.route!;
-
       boundLinks.add(el);
+      el.classList.add('_aes-bound');
+    };
 
-      // Bind reactive active state tracking
-      const activeEffect = effect(() => {
-        const isActive = currentRoute.value === routeAttr;
+    // Initial bind
+    for (const el of document.querySelectorAll<HTMLElement>('[data-route]')) {
+      trackLink(el);
+    }
+
+    const updateActiveStates = (current: string) => {
+      for (const el of boundLinks) {
+        const routeAttr = el.dataset.route!;
+        const isActive = current === routeAttr;
         el.classList.toggle(activeClass, isActive);
-
-        // Update aria-current for accessibility
         if (isActive) {
           el.setAttribute('aria-current', 'page');
         } else {
           el.removeAttribute('aria-current');
         }
-      });
-
-      // Register effect with registry
-      registry.trackEffect(el, activeEffect);
-
-      // Cleanup tracking
-      registry.trackCleanup(el, () => {
-        boundLinks.delete(el);
-      });
+      }
     };
 
-    // Initial bind
-    for (const el of document.querySelectorAll<HTMLElement>('[data-route]')) {
-      bindActiveState(el);
-    }
+    // Single effect that updates all tracked links
+    const activeLinksEffect = effect(() => {
+      updateActiveStates(currentRoute.value);
+    });
+    cleanups.push(() => activeLinksEffect.dispose());
 
     // Watch for new elements
     const observer = new MutationObserver((mutations) => {
+      let added = false;
       for (const mutation of mutations) {
         if (mutation.type === 'childList') {
           mutation.addedNodes.forEach((node) => {
             if (node.nodeType === 1) {
-              // ELEMENT_NODE
               const el = node as HTMLElement;
               if (el.matches?.('[data-route]')) {
-                bindActiveState(el);
+                trackLink(el);
+                added = true;
               }
-              // Check descendants
               if (el.querySelectorAll) {
-                el.querySelectorAll('[data-route]').forEach((child) =>
-                  bindActiveState(child as HTMLElement)
-                );
+                el.querySelectorAll('[data-route]').forEach((child) => {
+                  trackLink(child as HTMLElement);
+                  added = true;
+                });
               }
             }
           });
         }
+      }
+      // Update active states for newly added links
+      if (added) {
+        updateActiveStates(currentRoute.value);
       }
     });
 
@@ -425,9 +438,11 @@ export function route(config: RouteConfig): Router {
     cleanups.forEach((cleanup) => cleanup());
     cleanups.length = 0;
 
-    // Cleanup bound links via registry
-    // This handles both click handlers and active state effects
-    boundLinks.forEach((el) => registry.cleanup(el));
+    // Cleanup bound links
+    boundLinks.forEach((el) => {
+      el.classList.remove('_aes-bound');
+      registry.cleanup(el);
+    });
     boundLinks.clear();
   };
 
@@ -452,6 +467,7 @@ export function route(config: RouteConfig): Router {
 
   return {
     currentRoute,
+    queryParams: queryParamsAtom,
     navigate,
     destroy,
   };

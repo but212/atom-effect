@@ -207,6 +207,8 @@ interface RouteLifecycle {
   onEnter?: (params: Record<string, string>) => Record<string, string> | undefined;
   /** Called when leaving this route. Return false to prevent navigation. */
   onLeave?: () => boolean | undefined;
+  /** Called when the same route's query params change, instead of a full re-render. */
+  onParamsChange?: (params: Record<string, string>) => void;
 }
 
 /**
@@ -216,6 +218,8 @@ interface TemplateRoute extends RouteLifecycle {
   /** Template selector (e.g., '#tmpl-home') */
   template: string;
   render?: never;
+  /** Called after template content is appended to the DOM. Receives a jQuery wrapper of the content. */
+  onMount?: ($content: JQuery) => void;
 }
 
 /**
@@ -265,6 +269,8 @@ export interface RouteConfig {
 export interface Router {
   /** Reactive atom containing current route name */
   currentRoute: WritableAtom<string>;
+  /** Reactive computed containing current query parameters */
+  queryParams: ReadonlyAtom<Record<string, string>>;
   /** Navigate to a different route */
   navigate: (route: string) => void;
   /** Cleanup and destroy the router */
