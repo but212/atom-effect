@@ -69,7 +69,7 @@ Located in `__benchmarks__/macro/`, these test real-world DOM scenarios:
 
 ## Latest Results
 
-**Version**: v0.21.2
+**Version**: v0.21.3
 **Last Updated**: 2026-02-18
 **Environment**:
 

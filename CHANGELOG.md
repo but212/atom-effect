@@ -11,9 +11,9 @@
   - **Performance**: Consolidated active link tracking into a single effect, significantly reducing memory usage for apps with many navigation links.
   - **Robustness**: Traceable `history.pushState` and `history.replaceState` failures (e.g., `file://` protocol) now log warnings via `debug` instead of crashing, with strict try-catch guards around all History API interactions.
 
-## [0.21.3]
+## [0.21.2]
 
-### Core
+### Core - 0.21.2
 
 - **Tree-shaking**: Configured Vite to remove debug code in production builds (~6% bundle size reduction).
 - **Symbol.dispose**: Implemented `[Symbol.dispose]()` on `Atom`, `Computed`, and `Effect` for `using` keyword support.
