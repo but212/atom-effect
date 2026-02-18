@@ -92,14 +92,20 @@ describe('Atom List', () => {
 
     items.value = [5, 4, 3, 2, 1];
     await $.nextTick();
-    const reversed = $ul.children().map((_, el) => $(el).text()).get();
+    const reversed = $ul
+      .children()
+      .map((_, el) => $(el).text())
+      .get();
     expect(reversed).toEqual(['5', '4', '3', '2', '1']);
 
     $ul.remove();
   });
 
   it('should support bind, onRemove (async), and complex LIS sequences', async () => {
-    interface Item { id: number; name?: string }
+    interface Item {
+      id: number;
+      name?: string;
+    }
     const items = $.atom<Item[]>([{ id: 1, name: 'a' }]);
     const $container = $('<div>').appendTo(document.body);
     let bindCalled = false;
@@ -175,7 +181,10 @@ describe('Atom List', () => {
     $container.atomList(items, {
       key: (item) => item.id,
       render: () => `<span data-id="1"></span>`,
-      onRemove: () => new Promise<void>((r) => { resolveRemove = r; }),
+      onRemove: () =>
+        new Promise<void>((r) => {
+          resolveRemove = r;
+        }),
     });
 
     await $.nextTick();
@@ -208,10 +217,12 @@ describe('Atom List', () => {
       render: (item) => `<span>${item.name}</span>`,
       bind: ($el) => {
         if (!firstEl) firstEl = $el[0];
-        $el.atomText($.computed(() => {
-          effectRunCount++;
-          return nameAtom.value;
-        }));
+        $el.atomText(
+          $.computed(() => {
+            effectRunCount++;
+            return nameAtom.value;
+          })
+        );
       },
     });
 
@@ -250,7 +261,10 @@ describe('Atom List', () => {
 
     await new Promise((r) => setTimeout(r, 50));
 
-    const order = $container.find('span').map((_, el) => el.getAttribute('data-id')).get();
+    const order = $container
+      .find('span')
+      .map((_, el) => el.getAttribute('data-id'))
+      .get();
     expect(order).toEqual(['3', '1']);
 
     $container.remove();

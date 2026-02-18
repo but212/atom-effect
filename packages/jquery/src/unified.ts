@@ -245,11 +245,7 @@ export function bindVal<T>(
     return;
   }
   const isArr = Array.isArray(cfg);
-  const { fx, cleanup } = applyInputBinding(
-    ctx.$el,
-    isArr ? cfg[0] : cfg,
-    isArr ? cfg[1] : {}
-  );
+  const { fx, cleanup } = applyInputBinding(ctx.$el, isArr ? cfg[0] : cfg, isArr ? cfg[1] : {});
 
   registry.trackEffect(ctx.el, fx);
   ctx.trackCleanup(cleanup);

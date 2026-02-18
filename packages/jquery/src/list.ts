@@ -9,11 +9,7 @@ import { getLIS, getSelector, sanitizeHtml, shallowEqual } from './utils';
 /**
  * Renders an item to a jQuery element, sanitizing string output.
  */
-function renderItem<T>(
-  render: ListOptions<T>['render'],
-  item: T,
-  index: number
-): JQuery {
+function renderItem<T>(render: ListOptions<T>['render'], item: T, index: number): JQuery {
   const raw = render(item, index);
   const safe = typeof raw === 'string' ? sanitizeHtml(raw) : raw;
   return $(safe as string) as JQuery;
