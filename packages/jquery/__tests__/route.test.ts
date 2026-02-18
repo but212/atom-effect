@@ -445,7 +445,7 @@ describe('$.route() - SPA Routing', () => {
 
       // Verify pushState failed but swallowed
       expect(pushStateSpy).toHaveBeenCalled();
-      
+
       // Verify warning logged
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('PushState failed'),

@@ -1,9 +1,9 @@
 import { atom as createAtom, effect } from '@but212/atom-effect';
 import $ from 'jquery';
 import { LOG_PREFIXES, ROUTE_DEFAULTS } from './constants';
+import { debug } from './debug';
 import { registry } from './registry';
 import type { RouteConfig, RouteDefinition, Router, WritableAtom } from './types';
-import { debug } from './debug';
 
 /**
  * Log prefix for router warnings and errors.
@@ -121,7 +121,7 @@ export function route(config: RouteConfig): Router {
   };
 
   // --- Helper: Safe History API Wrappers ---
-  const safePushState = (data: any, unused: string, url: string | URL | null) => {
+  const safePushState = (data: unknown, unused: string, url: string | URL | null) => {
     try {
       history.pushState(data, unused, url);
       return true;
@@ -134,7 +134,7 @@ export function route(config: RouteConfig): Router {
     }
   };
 
-  const safeReplaceState = (data: any, unused: string, url: string | URL | null) => {
+  const safeReplaceState = (data: unknown, unused: string, url: string | URL | null) => {
     try {
       history.replaceState(data, unused, url);
       return true;
