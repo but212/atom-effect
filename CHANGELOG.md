@@ -14,6 +14,11 @@
   - **Race Window Guard**: Added a synchronous `signal.aborted` check after `signal.addEventListener()` to ensure `xhr.abort()` is called even if the abort event fired in the window between `$.ajax()` and handler registration.
 - **atomFetch — Refactor**: Extracted `linkXhrToSignal()` helper and `PENDING` constant to flatten the nested `try-finally` structure in the `computed` body, improving readability.
 - **API.md**: Added missing methods (`atomChecked`, `atomHide`, `atomOn`, `atomUnbind`) and static utilities (`$.batch`, `$.untracked`, `$.isAtom`, `$.isComputed`, `$.isReactive`, `$.nextTick`); corrected `atomCss` signature to include optional `unit` parameter; documented `atomBind` `hide` and `checked` options.
+- **atomList — Bug Fixes**:
+  - **Effect Leak on replaceWith**: `registry.cleanup()` is now called on the old element before `replaceWith()`, preventing detached elements from retaining reactive effects and the `_aes-bound` marker.
+  - **Duplicate Node on Async Re-add**: When the same key is re-inserted while its `onRemove` Promise is still pending, `commitRemoval` now removes only the captured old `$el` reference, leaving the newly inserted node intact.
+  - **LIS Distortion by Async-Removing Keys**: Keys still undergoing async removal are excluded from LIS index lookup (`-1`), preventing their stale positions from anchoring LIS calculation for surviving items.
+- **atomList — Refactor**: Extracted `renderItem()`, `insertOrAppend()`, and `scheduleRemoval()` helpers to eliminate render logic duplication, flatten the removal closure, and remove spurious nested `{}` block; unified empty-template handling with the hot-path guard.
 
 ## [0.21.3]
 
