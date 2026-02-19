@@ -12,6 +12,8 @@
 - **atomList**: Fixed effect leaks. Resolved duplicate nodes during async lifecycle.
 - **Core**: Simplified binding logic in `unified.ts`. Optimized context initialization.
 - **Mount**: Added error guards for component lifecycle phases.
+- **Patch**: Refactored jQuery method overrides (`.on`, `.off`, `.remove`, etc.) with a restoration system (`disablejQueryOverrides`); introduced `INTERNAL_HANDLER` to skip redundant batching for library-internal events.
+- **Registry**: Hardened `BindingRegistry` with state desync detection and enhanced error handling in cleanup phases; refactored `enableAutoCleanup` to require explicit root elements and prevent accidental re-observation.
 - **Debug**: Refactored visual highlights using `requestAnimationFrame` with cancellation; migrated debug opt-in to `VITE_ATOM_DEBUG` env var; added unconditional `warn`/`error` logging for critical failures.
 - **Bindings**: Hardened `registerReactiveEffect` with error boundaries and structured `BindingDebugType`.
 - **Namespace**: Refactored `$.atom` factory and static extensions for better type safety and `nextTick` documentation.
