@@ -1,6 +1,7 @@
 import $ from 'jquery';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../src/index';
+import { LOG_PREFIXES } from '../src/constants';
 import { debug } from '../src/debug';
 
 describe('$.route() - SPA Routing', () => {
@@ -155,7 +156,7 @@ describe('$.route() - SPA Routing', () => {
       await $.nextTick();
 
       expect(renderSpy).toHaveBeenCalledTimes(2);
-      const args = renderSpy.mock.calls[1];
+      const args = renderSpy.mock.calls[1]!;
       // container, route, params
       expect(args[2]).toEqual({ id: '42', extra: 'injected' });
       expect(document.querySelector('#app')?.innerHTML).toContain('Route: home, ID: 42');
@@ -324,6 +325,7 @@ describe('$.route() - SPA Routing', () => {
       await $.nextTick();
 
       expect(warnSpy).toHaveBeenCalledWith(
+        LOG_PREFIXES.ROUTE,
         expect.stringContaining('not found and no notFound route configured')
       );
 
@@ -345,6 +347,7 @@ describe('$.route() - SPA Routing', () => {
       await $.nextTick();
 
       expect(warnSpy).toHaveBeenCalledWith(
+        LOG_PREFIXES.ROUTE,
         expect.stringContaining('Template "#nonexistent-template" not found')
       );
 
@@ -408,7 +411,10 @@ describe('$.route() - SPA Routing', () => {
       // Check that target still exists and router is alive
       expect(document.getElementById('app-route-err')).not.toBeNull();
       // Verify warning was logged (implementation does not pass the error object)
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Malformed URI component'));
+      expect(warnSpy).toHaveBeenCalledWith(
+        LOG_PREFIXES.ROUTE,
+        expect.stringContaining('Malformed URI component')
+      );
 
       router.destroy();
       $target.remove();
@@ -442,6 +448,7 @@ describe('$.route() - SPA Routing', () => {
 
       // Verify warning logged
       expect(warnSpy).toHaveBeenCalledWith(
+        LOG_PREFIXES.ROUTE,
         expect.stringContaining('PushState failed'),
         expect.anything()
       );
@@ -491,6 +498,7 @@ describe('$.route() - SPA Routing', () => {
       expect(router.currentRoute.value).toBe('about'); // Blocked
       expect(pushStateSpy).toHaveBeenCalled();
       expect(warnSpy).toHaveBeenCalledWith(
+        LOG_PREFIXES.ROUTE,
         expect.stringContaining('PushState failed'),
         expect.anything()
       );
@@ -717,7 +725,7 @@ describe('$.route() - SPA Routing', () => {
       const $newLink = $('<a href="#page2" data-route="page2">Page 2</a>').appendTo('#links');
 
       // Navigate via click (Event Delegation)
-      $newLink[0].click();
+      $newLink[0]!.click();
       await $.nextTick();
 
       expect(router.currentRoute.value).toBe('page2');

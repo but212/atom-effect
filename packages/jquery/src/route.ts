@@ -1,23 +1,22 @@
+import type { ReadonlyAtom } from '@but212/atom-effect';
 import { computed, atom as createAtom, effect } from '@but212/atom-effect';
 import $ from 'jquery';
-import { LOG_PREFIXES, ROUTE_DEFAULTS } from './constants';
+import { ERROR_MESSAGES, LOG_PREFIXES, ROUTE_DEFAULTS } from './constants';
 import { debug } from './debug';
 import { registry } from './registry';
 import type { RouteConfig, RouteDefinition, Router, WritableAtom } from './types';
 
-/**
- * Log prefix for router warnings and errors.
- */
-const LOG_PREFIX = LOG_PREFIXES.ROUTE;
-
 // --- Helper: Safe History API Wrappers ---
-function safePushState(data: unknown, unused: string, url: string | URL | null): boolean {
+function safePushState(data: unknown, url: string | URL | null): boolean {
   try {
-    history.pushState(data, unused, url);
+    // Second argument (title) is deprecated in the spec and ignored by all
+    // browsers — pass an empty string as required by the signature.
+    history.pushState(data, '', url);
     return true;
   } catch (e) {
     debug.warn(
-      `${LOG_PREFIX} PushState failed (likely file:// protocol or security restriction). UI will update, but URL will not.`,
+      LOG_PREFIXES.ROUTE,
+      'PushState failed (likely file:// protocol or security restriction). UI will update, but URL will not.',
       e
     );
     return false;
@@ -25,43 +24,66 @@ function safePushState(data: unknown, unused: string, url: string | URL | null):
 }
 
 class RouterImpl implements Router {
-  public currentRoute: WritableAtom<string>;
-  public queryParams: import('@but212/atom-effect').ReadonlyAtom<Record<string, string>>;
+  /**
+   * Reactive atom containing the current route name.
+   * Exposed as ReadonlyAtom so external code cannot mutate route state
+   * without going through navigate(), which keeps URL and atom in sync.
+   */
+  public currentRoute: ReadonlyAtom<string>;
+  public queryParams: ReadonlyAtom<Record<string, string>>;
 
   private config: RouteConfig;
   private isDestroyed = false;
-  private previousRoute: string | null = null;
+  /**
+   * Tracks the route name of the last completed transition.
+   * Initialized to empty string so beforeTransition/afterTransition always
+   * receive a consistent `from` value — never `from === to` on the first render.
+   */
+  private previousRoute = '';
+  /**
+   * Mirrors the browser URL after every committed navigation.
+   * Used by handleUrlChange to detect real URL changes (vs. our own
+   * programmatic updates) and by restoreUrl to roll back blocked transitions.
+   */
   private previousUrl: string;
   private cleanups: Array<() => void> = [];
 
   private $target: JQuery;
   private isHistoryMode: boolean;
+  private currentRouteAtom: WritableAtom<string>;
   private queryParamsAtom: WritableAtom<Record<string, string>>;
-  private templateCache = new Map<string, HTMLTemplateElement>(); // Optimization: Cache templates
-  private normalizedBasePath: string; // Optimization: Pre-calculated base path
+  /** Caches resolved HTMLTemplateElement references to avoid repeated querySelector calls. */
+  private templateCache = new Map<string, HTMLTemplateElement>();
+  /** Pre-calculated base path with trailing slash stripped for consistent URL building. */
+  private normalizedBasePath: string;
 
   constructor(config: RouteConfig) {
     // Destructure configuration with defaults for internal use
     this.config = {
       ...config,
-      mode: config.mode ?? ROUTE_DEFAULTS.MODE,
-      basePath: config.basePath ?? ROUTE_DEFAULTS.BASE_PATH,
-      autoBindLinks: config.autoBindLinks ?? ROUTE_DEFAULTS.AUTO_BIND_LINKS,
-      activeClass: config.activeClass ?? ROUTE_DEFAULTS.ACTIVE_CLASS,
+      mode: config.mode ?? ROUTE_DEFAULTS.mode,
+      basePath: config.basePath ?? ROUTE_DEFAULTS.basePath,
+      autoBindLinks: config.autoBindLinks ?? ROUTE_DEFAULTS.autoBindLinks,
+      activeClass: config.activeClass ?? ROUTE_DEFAULTS.activeClass,
     };
 
     this.isHistoryMode = this.config.mode === 'history';
     this.$target = $(this.config.target);
+    // Strip trailing slash so URL construction is always `${base}/${route}`.
     this.normalizedBasePath = this.config.basePath?.replace(/\/$/, '') || '';
 
-    // Initialize previousUrl based on current state before setting up atoms
+    // Initialize previousUrl based on current state before setting up atoms.
+    // getCurrentUrl() cannot be called yet (method depends on isHistoryMode which is set above).
     this.previousUrl = this.isHistoryMode
       ? window.location.pathname + window.location.search
       : window.location.hash;
 
-    // Initialize state atoms
-    this.currentRoute = createAtom(this.getRouteName());
+    // Initialize state atoms; expose via ReadonlyAtom to prevent external mutation.
+    this.currentRouteAtom = createAtom(this.getRouteName());
+    this.currentRoute = this.currentRouteAtom;
     this.queryParamsAtom = createAtom(this.getQueryParams());
+    // Use computed() to ensure queryParams is truly read-only at runtime,
+    // as verified by the 'should be read-only (computed)' test.
     this.queryParams = computed(() => this.queryParamsAtom.value);
 
     // Bind methods that are used as callbacks
@@ -80,7 +102,7 @@ class RouterImpl implements Router {
 
     // Set up reactive rendering effect
     const renderEffect = effect(() => {
-      this.renderRoute(this.currentRoute.value);
+      this.renderRoute(this.currentRouteAtom.value);
     });
     this.cleanups.push(() => renderEffect.dispose());
 
@@ -97,17 +119,18 @@ class RouterImpl implements Router {
 
   /**
    * Extracts route name from current URL.
+   * Uses `normalizedBasePath` for consistent stripping in history mode.
    */
   private getRouteName(): string {
-    const { basePath, default: defaultRoute } = this.config;
+    const { default: defaultRoute } = this.config;
 
     if (this.isHistoryMode) {
       let pathname = window.location.pathname;
-      // Remove basePath prefix
-      if (basePath && pathname.startsWith(basePath)) {
-        pathname = pathname.substring(basePath.length);
+      // Strip the pre-normalized base path prefix.
+      if (this.normalizedBasePath && pathname.startsWith(this.normalizedBasePath)) {
+        pathname = pathname.substring(this.normalizedBasePath.length);
       }
-      // Remove leading slash (optimized)
+      // Remove leading slash (optimized: charCodeAt avoids substring allocation)
       if (pathname.charCodeAt(0) === 47) {
         pathname = pathname.slice(1);
       }
@@ -122,6 +145,11 @@ class RouterImpl implements Router {
 
   /**
    * Parses query parameters from the current URL.
+   *
+   * Note: duplicate keys (e.g. `?a=1&a=2`) are collapsed to the last value
+   * only (`{ a: '2' }`). This matches `URLSearchParams` → `Object.fromEntries`
+   * behaviour. If multi-value keys are needed, access `queryParams` via
+   * `new URLSearchParams(window.location.search).getAll('key')` directly.
    */
   private getQueryParams(): Record<string, string> {
     let raw: string;
@@ -144,7 +172,7 @@ class RouterImpl implements Router {
       try {
         decodeURIComponent(raw);
       } catch (_e) {
-        debug.warn(`${LOG_PREFIX} Malformed URI component: ${raw}`);
+        debug.warn(LOG_PREFIXES.ROUTE, ERROR_MESSAGES.MALFORMED_URI(raw));
       }
     }
 
@@ -152,25 +180,24 @@ class RouterImpl implements Router {
   }
 
   /**
-   * Updates the URL to reflect a new route.
+   * Updates the browser URL to reflect a new route and keeps `previousUrl`
+   * in sync so `handleUrlChange` does not re-process our own navigation.
    */
   private setUrl(routeName: string): void {
     if (this.isHistoryMode) {
-      // Use pre-calculated base path
       const url = `${this.normalizedBasePath}/${routeName}`;
-      safePushState(null, '', url);
-      // Always update previousUrl so internal state remains consistent
+      safePushState(null, url);
+      // Mirror the target URL so handleUrlChange knows this change was programmatic.
       this.previousUrl = url;
     } else {
       const hash = `#${routeName}`;
-      this.previousUrl = hash;
+      // Set hash before updating previousUrl so getCurrentUrl() returns the
+      // new value when we store it.
       window.location.hash = hash;
+      this.previousUrl = hash;
     }
   }
 
-  /**
-   * Restores the URL when a navigation guard blocks the transition.
-   */
   /**
    * Restores the URL when a navigation guard blocks the transition.
    * Uses pushState to safely add a new history entry, avoiding "back button traps"
@@ -178,7 +205,7 @@ class RouterImpl implements Router {
    */
   private restoreUrl(): void {
     if (this.isHistoryMode) {
-      safePushState(null, '', this.previousUrl);
+      safePushState(null, this.previousUrl);
     } else {
       window.location.hash = this.previousUrl;
     }
@@ -209,7 +236,7 @@ class RouterImpl implements Router {
     }
 
     if (!routeConfig) {
-      debug.warn(`${LOG_PREFIX} Route "${routeName}" not found and no notFound route configured`);
+      debug.warn(LOG_PREFIXES.ROUTE, ERROR_MESSAGES.ROUTE_NOT_FOUND(routeName));
       return null;
     }
 
@@ -217,7 +244,9 @@ class RouterImpl implements Router {
   }
 
   /**
-   * Renders template content into target container.
+   * Appends cloned template content into the target container.
+   * Always appends — callers are responsible for calling `$target.empty()`
+   * before invoking this method if a clean slate is needed.
    */
   private renderTemplate(templateSelector: string): boolean {
     let template = this.templateCache.get(templateSelector);
@@ -225,7 +254,7 @@ class RouterImpl implements Router {
     if (!template) {
       const el = document.querySelector(templateSelector);
       if (!el || !(el instanceof HTMLTemplateElement)) {
-        debug.warn(`${LOG_PREFIX} Template "${templateSelector}" not found`);
+        debug.warn(LOG_PREFIXES.ROUTE, ERROR_MESSAGES.TEMPLATE_NOT_FOUND(templateSelector));
         return false;
       }
       template = el;
@@ -240,6 +269,16 @@ class RouterImpl implements Router {
 
   /**
    * Renders the specified route, including lifecycle hooks and content.
+   *
+   * Called from within a reactive effect, so DOM mutations here run
+   * synchronously inside the effect body. `registry.cleanupDescendants` is
+   * called before `$target.empty()` to ensure any reactive bindings on
+   * outgoing content are disposed before the nodes are removed — preventing
+   * the MutationObserver auto-cleanup path from firing a redundant cleanup.
+   *
+   * If `beforeTransition` throws, the render is aborted and the outgoing
+   * content remains in the DOM. This is intentional — a throwing hook signals
+   * that the transition should not proceed.
    */
   private renderRoute(routeName: string): void {
     if (this.isDestroyed) return;
@@ -247,7 +286,7 @@ class RouterImpl implements Router {
     // Validate target element exists
     const container = this.$target[0];
     if (!container) {
-      debug.warn(`${LOG_PREFIX} Target element "${this.config.target}" not found`);
+      debug.warn(LOG_PREFIXES.ROUTE, ERROR_MESSAGES.TARGET_NOT_FOUND(this.config.target));
       return;
     }
 
@@ -258,12 +297,18 @@ class RouterImpl implements Router {
     // Parse query parameters
     const params = this.getQueryParams();
 
-    // Call beforeTransition hook
+    // `previousRoute` is '' on first render, so from !== to in all cases.
+    const fromRoute = this.previousRoute;
+
+    // Call beforeTransition hook.
+    // If it throws, the render is aborted — outgoing content stays in the DOM.
     if (this.config.beforeTransition) {
-      this.config.beforeTransition(this.previousRoute || routeName, routeName);
+      this.config.beforeTransition(fromRoute, routeName);
     }
 
-    // Clear current content
+    // Dispose reactive bindings on outgoing content before clearing the DOM,
+    // so cleanup callbacks run while their elements are still connected.
+    registry.cleanupDescendants(container);
     this.$target.empty();
 
     // Call onEnter hook and merge params
@@ -288,7 +333,7 @@ class RouterImpl implements Router {
 
     // Call afterTransition hook
     if (this.config.afterTransition) {
-      this.config.afterTransition(this.previousRoute || routeName, routeName);
+      this.config.afterTransition(fromRoute, routeName);
     }
 
     // Update previous route for next transition
@@ -302,10 +347,11 @@ class RouterImpl implements Router {
     if (this.isDestroyed) return;
 
     const currentUrl = this.getCurrentUrl();
-    if (currentUrl === this.previousUrl) return; // No actual change, or already handled by navigate()
+    // Early-exit if URL didn't actually change (e.g., called by our own navigate()).
+    if (currentUrl === this.previousUrl) return;
 
     const newRoute = this.getRouteName();
-    const oldRouteName = this.currentRoute.value;
+    const oldRouteName = this.currentRouteAtom.value;
     const params = this.getQueryParams();
 
     if (oldRouteName !== newRoute) {
@@ -313,15 +359,20 @@ class RouterImpl implements Router {
       const oldRouteConfig = this.config.routes[oldRouteName];
       if (oldRouteConfig?.onLeave) {
         if (oldRouteConfig.onLeave() === false) {
-          // Navigation blocked, revert URL
+          // Navigation blocked — restore the URL without updating previousUrl,
+          // so the next real navigation is still detected correctly.
           this.restoreUrl();
           return;
         }
       }
-      this.currentRoute.value = newRoute;
+      // Update route first; the reactive effect will call renderRoute.
+      // queryParamsAtom is set here so it is in sync before any subscriber
+      // reads it during the same flush — renderRoute reads getQueryParams()
+      // directly from the URL so there is no double-write risk.
+      this.currentRouteAtom.value = newRoute;
       this.queryParamsAtom.value = params;
     } else {
-      // Same route but URL changed (e.g., query params)
+      // Same route but URL changed (e.g., query params only)
       this.queryParamsAtom.value = params;
       const routeConfig = this.config.routes[oldRouteName];
       if (routeConfig?.onParamsChange) {
@@ -331,18 +382,25 @@ class RouterImpl implements Router {
       }
     }
 
+    // Commit the new URL only after a successful (unblocked) transition.
     this.previousUrl = currentUrl;
   }
 
   /**
    * Sets up automatic binding for navigation links with data-route attribute.
-   * PERFORMANCE: Uses a reactive effect to bulk-update links on route change
-   * instead of a persistent MutationObserver, significantly reducing overhead.
+   *
+   * Event delegation is attached to `document` (not `$target`) so that
+   * `[data-route]` links anywhere in the page — including outside the router's
+   * target container — can trigger navigation. This is intentional: nav links
+   * typically live in headers or sidebars, not inside the routed content area.
+   *
+   * Active-link management uses a reactive effect that re-runs only when
+   * `currentRoute` changes — more efficient than a persistent MutationObserver.
    */
   private setupAutoBindLinks(): void {
     if (!this.config.autoBindLinks) return;
 
-    // 1. Event Delegation for Navigation (Efficient: single listener)
+    // 1. Event delegation on document so nav links outside $target are handled.
     const delegateHandler = (e: JQuery.TriggeredEvent) => {
       e.preventDefault();
       const routeAttr = (e.currentTarget as HTMLElement).dataset.route;
@@ -354,33 +412,26 @@ class RouterImpl implements Router {
       $(document).off('click', '[data-route]', delegateHandler);
     });
 
-    // 2. Active State Management (Efficient: Poll on change)
+    // 2. Active state management — re-runs only when currentRoute changes.
+    // `activeClass` is always set (constructor fills it from ROUTE_DEFAULTS).
     const { activeClass } = this.config;
-    if (!activeClass) return;
 
-    // Effect re-runs only when currentRoute changes
     const activeLinksEffect = effect(() => {
-      const current = this.currentRoute.value;
-      // Query specific links only when needed - Data Locality friendly
+      const current = this.currentRouteAtom.value;
       const links = document.querySelectorAll<HTMLElement>('[data-route]');
 
-      // Optimization: Cached length loop
-      for (let i = 0, len = links.length; i < len; i++) {
-        const el = links[i];
-        if (!el) continue;
-
+      links.forEach((el) => {
         const routeAttr = el.dataset.route!;
         const isActive = current === routeAttr;
 
-        // Direct DOM manipulation avoiding jQuery overhead for class switching
         if (isActive) {
-          el.classList.add(activeClass);
+          el.classList.add(activeClass as string);
           el.setAttribute('aria-current', 'page');
         } else {
-          el.classList.remove(activeClass);
+          el.classList.remove(activeClass as string);
           el.removeAttribute('aria-current');
         }
-      }
+      });
     });
 
     this.cleanups.push(() => activeLinksEffect.dispose());
@@ -388,12 +439,17 @@ class RouterImpl implements Router {
 
   /**
    * Navigates to the specified route programmatically.
+   *
+   * If `routeName` resolves to an empty string after falling back to
+   * `config.default`, `setUrl` will be called with an empty string, producing
+   * a URL of `${basePath}/` in history mode. Callers should ensure
+   * `config.default` is always a non-empty route name.
    */
   public navigate(routeName: string): void {
     if (this.isDestroyed) return;
 
     // Check if leaving current route is allowed
-    const currentRouteName = this.currentRoute.value;
+    const currentRouteName = this.currentRouteAtom.value;
     const currentRouteConfig = this.config.routes[currentRouteName];
 
     if (currentRouteConfig?.onLeave) {
@@ -403,24 +459,40 @@ class RouterImpl implements Router {
 
     // Resolve empty route name to default route, matching getRouteName behavior
     const resolved = routeName || this.config.default;
+    if (!resolved) {
+      debug.warn(
+        LOG_PREFIXES.ROUTE,
+        'navigate() called with empty routeName and no default configured.'
+      );
+      return;
+    }
+
     this.setUrl(resolved);
-    this.currentRoute.value = resolved;
+    // Clear stale query params when navigating to a new route.
+    this.queryParamsAtom.value = {};
+    this.currentRouteAtom.value = resolved;
   }
 
   /**
-   * Cleans up all event listeners and effects.
+   * Cleans up all event listeners and effects, and releases the template cache.
+   * Each cleanup function is called in a try/catch so that a single failing
+   * cleanup does not prevent the remaining ones from running.
    */
   public destroy(): void {
     if (this.isDestroyed) return;
     this.isDestroyed = true;
 
-    // Cleanup router-level effects (event listener, render effect)
-    this.cleanups.forEach((cleanup) => cleanup());
+    this.cleanups.forEach((fn) => {
+      try {
+        fn();
+      } catch (e) {
+        debug.warn(LOG_PREFIXES.ROUTE, 'Cleanup error during destroy:', e);
+      }
+    });
     this.cleanups.length = 0;
 
-    // Cleanup bound links
-    // Note: boundLinks set removed for performance. _aes-bound class is harmless effectively.
-    // Explicit cleanup of data-route links is no longer tracked to save memory.
+    // Release cached template references to allow GC.
+    this.templateCache.clear();
   }
 }
 
@@ -455,6 +527,7 @@ export function route(config: RouteConfig): Router {
 
 /**
  * Register as jQuery static method.
+ * `$.extend(obj)` merges into JQueryStatic; use `$.fn.extend(obj)` for instance methods.
  */
 $.extend({
   route,

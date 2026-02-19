@@ -154,6 +154,38 @@ describe('$.atomFetch', () => {
     );
   });
 
+  it('should call onError with the fetch error', async () => {
+    const networkErr = new Error('Network error');
+    vi.spyOn($, 'ajax').mockRejectedValue(networkErr);
+    const onError = vi.fn();
+
+    const data = $.atomFetch('/api/fail', { defaultValue: null, onError });
+
+    await $.nextTick();
+    await $.nextTick();
+
+    expect(onError).toHaveBeenCalledWith(networkErr);
+    expect(data.hasError).toBe(true);
+  });
+
+  it('should preserve the original error even if onError throws', async () => {
+    const networkErr = new Error('Network error');
+    vi.spyOn($, 'ajax').mockRejectedValue(networkErr);
+    const onError = vi.fn(() => {
+      throw new Error('onError threw');
+    });
+
+    const data = $.atomFetch('/api/fail', { defaultValue: null, onError });
+
+    await $.nextTick();
+    await $.nextTick();
+
+    // The core wraps thrown errors in ComputedError; the original error is the cause.
+    expect(data.hasError).toBe(true);
+    expect(data.lastError?.message).toContain('Network error');
+    expect(data.lastError?.message).not.toContain('onError threw');
+  });
+
   // ---------------------------------------------------------------------------
   // Abort / Cancellation
   // ---------------------------------------------------------------------------
