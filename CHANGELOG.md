@@ -12,7 +12,9 @@
 - **atomList**: Fixed effect leaks. Resolved duplicate nodes during async lifecycle.
 - **Core**: Simplified binding logic in `unified.ts`. Optimized context initialization.
 - **Mount**: Added error guards for component lifecycle phases.
-- **Debug**: Synchronized visual highlights with `requestAnimationFrame`.
+- **Debug**: Refactored visual highlights using `requestAnimationFrame` with cancellation; migrated debug opt-in to `VITE_ATOM_DEBUG` env var; added unconditional `warn`/`error` logging for critical failures.
+- **Bindings**: Hardened `registerReactiveEffect` with error boundaries and structured `BindingDebugType`.
+- **Namespace**: Refactored `$.atom` factory and static extensions for better type safety and `nextTick` documentation.
 
 ### Core
 
