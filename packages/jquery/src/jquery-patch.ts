@@ -56,6 +56,8 @@ const getWrappedHandler = (fn: EventHandler): EventHandler => {
     wrapped = function (this: unknown, ...args: unknown[]) {
       return batch(() => fn.apply(this, args as Parameters<EventHandler>));
     } as unknown as EventHandler;
+    // Mark the wrapper itself as internal so it isn't double-wrapped if passed again.
+    (wrapped as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
     handlerMap.set(fn, wrapped);
   }
   return wrapped;

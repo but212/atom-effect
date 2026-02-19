@@ -311,9 +311,8 @@ class RouterImpl implements Router {
       this.config.beforeTransition(fromRoute, routeName);
     }
 
-    // Dispose reactive bindings on outgoing content before clearing the DOM,
-    // so cleanup callbacks run while their elements are still connected.
-    registry.cleanupDescendants(container);
+    // Dispose reactive bindings on outgoing content before clearing the DOM.
+    // $.fn.empty() (patched via jquery-patch) handles cleanupDescendants automatically.
     this.$target.empty();
 
     // Call onEnter hook and merge params
@@ -429,18 +428,17 @@ class RouterImpl implements Router {
       untracked(() => {
         const links = document.querySelectorAll<HTMLElement>('[data-route]');
 
-        links.forEach((el) => {
+        for (const el of links) {
           const routeAttr = el.dataset.route!;
           const isActive = current === routeAttr;
 
+          el.classList.toggle(activeClass as string, isActive);
           if (isActive) {
-            el.classList.add(activeClass as string);
             el.setAttribute('aria-current', 'page');
           } else {
-            el.classList.remove(activeClass as string);
             el.removeAttribute('aria-current');
           }
-        });
+        }
       });
     });
 

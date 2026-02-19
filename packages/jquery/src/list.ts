@@ -11,23 +11,6 @@ import { getLIS, getSelector, sanitizeHtml, shallowEqual } from './utils';
 // ============================================================================
 
 /**
- * Renders an item to a jQuery element.
- * String output is sanitized against XSS; a warning is emitted if the content
- * was modified so callers are aware of unsafe markup.
- */
-function _renderItem<T>(render: ListOptions<T>['render'], item: T, index: number): JQuery {
-  const raw = render(item, index);
-  if (typeof raw === 'string') {
-    return $(sanitizeHtml(raw));
-  }
-  // Element, DocumentFragment, or JQuery — pass through directly.
-  // The cast to `never` is required because jQuery's overloads do not expose
-  // a single unified signature for all DOM-compatible input types, but the
-  // runtime handles all of them correctly.
-  return $(raw as never) as JQuery;
-}
-
-/**
  * Inserts `$el` before `nextNode` when `nextNode` is non-null and connected,
  * otherwise appends it to `$container`.
  */
@@ -137,7 +120,11 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
         const newKeys: (string | number)[] = new Array(itemCount);
         const newKeySet = new Set<string | number>();
         const newIndices = new Int32Array(itemCount);
-        const targetsToRender: { k: string | number; item: T; idx: number }[] = [];
+        // Parallel arrays replace an array-of-objects to reduce GC pressure and
+        // improve cache locality when iterating targetsToRender (step 3).
+        const trKeys: (string | number)[] = [];
+        const trItems: T[] = [];
+        const trIdxs: number[] = [];
 
         for (let i = 0; i < itemCount; i++) {
           const item = items[i]!;
@@ -155,29 +142,32 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
           if (entry) {
             const oldItem = entry.item;
             if (!update && oldItem !== item && !shallowEqual(oldItem, item)) {
-              targetsToRender.push({ k, item, idx: i });
+              trKeys.push(k);
+              trItems.push(item);
+              trIdxs.push(i);
             }
             newIndices[i] = removingKeys.has(k) ? -1 : (oldIndexMap.get(k) ?? -1);
           } else {
-            targetsToRender.push({ k, item, idx: i });
+            trKeys.push(k);
+            trItems.push(item);
+            trIdxs.push(i);
             newIndices[i] = -1;
           }
         }
 
         // 3. Render New/Updated Items (Batch Sanitization)
         const SEPARATOR = '<!--sep-->';
+        const renderCount = trKeys.length;
         const renderResults: Array<string | Element | DocumentFragment | JQuery> = new Array(
-          targetsToRender.length
+          renderCount
         );
         const htmlParts: string[] = [];
-        const htmlPartIndices: number[] = [];
 
-        for (let t = 0; t < targetsToRender.length; t++) {
-          const raw = render(targetsToRender[t]!.item, targetsToRender[t]!.idx);
+        for (let t = 0; t < renderCount; t++) {
+          const raw = render(trItems[t]!, trIdxs[t]!);
           renderResults[t] = raw;
           if (typeof raw === 'string') {
             htmlParts.push(raw);
-            htmlPartIndices.push(t);
           }
         }
 
@@ -191,15 +181,15 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
 
         // Create $el for each target
         let fragIdx = 0;
-        for (let t = 0; t < targetsToRender.length; t++) {
-          const target = targetsToRender[t]!;
+        for (let t = 0; t < renderCount; t++) {
           const raw = renderResults[t]!;
           const $el =
             typeof raw === 'string'
               ? $(sanitizedFragments![fragIdx++]!)
               : ($(raw as never) as JQuery);
 
-          const entry = itemMap.get(target.k);
+          const k = trKeys[t]!;
+          const entry = itemMap.get(k);
           if (entry) {
             const oldEl = entry.$el[0];
             if (oldEl) registry.cleanupTree(oldEl);
@@ -207,7 +197,7 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
             entry.$el = $el;
             entry.state = 'replaced';
           } else {
-            itemMap.set(target.k, { $el, item: null as unknown as T, state: 'new' });
+            itemMap.set(k, { $el, item: null as unknown as T, state: 'new' });
           }
         }
 
@@ -229,7 +219,7 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
         const useInnerHtml =
           isInitial &&
           sanitizedFragments !== null &&
-          fragIdx === targetsToRender.length &&
+          fragIdx === renderCount &&
           !bind &&
           !onAdd &&
           !onRemove &&
@@ -258,32 +248,62 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
         } else {
           const fragment = isInitial ? document.createDocumentFragment() : null;
 
-          for (let i = itemCount - 1; i >= 0; i--) {
-            const k = newKeys[i]!;
-            const item = items[i]!;
-            const entry = itemMap.get(k)!;
-            if (!entry) continue;
+          if (isInitial && fragment) {
+            // ── Initial render: accumulate into DocumentFragment ──────────────
+            // Loop-invariant branch hoisted out: avoids per-iteration isInitial check.
+            for (let i = itemCount - 1; i >= 0; i--) {
+              const k = newKeys[i]!;
+              const item = items[i]!;
+              const entry = itemMap.get(k)!;
+              if (!entry) continue;
 
-            const state = entry.state;
-            const isNewItem = state === 'new';
-            const isReplaced = state === 'replaced';
-            entry.item = item;
-            entry.state = undefined;
+              const state = entry.state;
+              const isNewItem = state === 'new';
+              const isReplaced = state === 'replaced';
+              entry.item = item;
+              entry.state = undefined;
 
-            if (entry.$el[0]) {
-              if (!isNewItem && !isReplaced && update) {
-                update(entry.$el, item, i);
-              } else if ((isNewItem || isReplaced) && bind) {
-                bind(entry.$el, item, i);
+              if (entry.$el[0]) {
+                if (!isNewItem && !isReplaced && update) {
+                  update(entry.$el, item, i);
+                } else if ((isNewItem || isReplaced) && bind) {
+                  bind(entry.$el, item, i);
+                }
               }
-            }
 
-            if (isInitial && fragment) {
               for (let j = entry.$el.length - 1; j >= 0; j--) {
                 fragment.insertBefore(entry.$el[j]!, fragment.firstChild);
               }
               if (onAdd && isNewItem) onAdd(entry.$el);
-            } else {
+
+              if (isNewItem) {
+                removingKeys.delete(k);
+                debug.domUpdated(entry.$el, 'list.add', item);
+              }
+            }
+            this.appendChild(fragment);
+          } else {
+            // ── Incremental update: LIS-based reconciliation ──────────────────
+            for (let i = itemCount - 1; i >= 0; i--) {
+              const k = newKeys[i]!;
+              const item = items[i]!;
+              const entry = itemMap.get(k)!;
+              if (!entry) continue;
+
+              const state = entry.state;
+              const isNewItem = state === 'new';
+              const isReplaced = state === 'replaced';
+              entry.item = item;
+              entry.state = undefined;
+
+              if (entry.$el[0]) {
+                if (!isNewItem && !isReplaced && update) {
+                  update(entry.$el, item, i);
+                } else if ((isNewItem || isReplaced) && bind) {
+                  bind(entry.$el, item, i);
+                }
+              }
+
               if (lisIdx >= 0 && lisArr[lisIdx] === i) {
                 lisIdx--;
               } else {
@@ -291,16 +311,12 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
               }
               if (onAdd && isNewItem) onAdd(entry.$el);
               nextNode = entry.$el[0] ?? null;
-            }
 
-            if (isNewItem) {
-              removingKeys.delete(k);
-              debug.domUpdated(entry.$el, 'list.add', item);
+              if (isNewItem) {
+                removingKeys.delete(k);
+                debug.domUpdated(entry.$el, 'list.add', item);
+              }
             }
-          }
-
-          if (isInitial && fragment) {
-            this.appendChild(fragment);
           }
         }
 

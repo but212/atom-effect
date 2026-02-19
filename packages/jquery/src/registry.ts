@@ -36,15 +36,8 @@ interface BindingRecord {
 class BindingRegistry {
   private records = new WeakMap<Element, BindingRecord>();
 
-  /**
-   * Dual-purpose set:
-   * 1. `hasBind()` membership check — O(1).
-   * 2. Cleanup guard in `cleanup()` — atomically deleted to prevent re-entry.
-   *
-   * Invariant: an element is in `boundElements` if and only if it has a record
-   * in `records`. The two collections are always mutated together.
-   */
-  private boundElements = new WeakSet<Element>();
+  // boundElements removed: records is now the Single Source of Truth.
+  // WeakMap.has() provides the existence check.
 
   private preservedNodes = new WeakSet<Node>();
   private ignoredNodes = new WeakSet<Node>();
@@ -78,10 +71,6 @@ class BindingRegistry {
     if (!res) {
       res = {};
       this.records.set(el, res);
-      // boundElements and records are always in sync (see invariant above),
-      // so no membership check is needed here — if records had no entry,
-      // boundElements has no entry either.
-      this.boundElements.add(el);
       el.classList.add(AES_BOUND);
     }
     return res;
@@ -105,7 +94,7 @@ class BindingRegistry {
   }
 
   hasBind(el: Element): boolean {
-    return this.boundElements.has(el);
+    return this.records.has(el);
   }
 
   // --------------------------------------------------------------------------
@@ -113,24 +102,18 @@ class BindingRegistry {
   // --------------------------------------------------------------------------
 
   cleanup(el: Element): void {
-    // Atomic delete doubles as a re-entry guard and an existence check.
-    if (!this.boundElements.delete(el)) return;
-
+    // Optimization: Single lookup + delete.
     const record = this.records.get(el);
     if (!record) {
-      // boundElements and records must always be in sync (see invariant).
-      // Reaching here indicates a state desync — surface it for debugging.
-      debug.warn(
-        LOG_PREFIXES.BINDING,
-        'registry desync: boundElements had entry but records did not for',
-        el
-      );
-      el.classList.remove(AES_BOUND);
+      // Already cleaned up or never bound.
+      // Ensure specific class is removed just in case of stale DOM state.
+      if (el.isConnected) el.classList.remove(AES_BOUND);
       this.preservedNodes.delete(el);
       this.ignoredNodes.delete(el);
       return;
     }
 
+    // Atomic deletion doubles as a re-entry guard.
     this.records.delete(el);
     this.preservedNodes.delete(el);
     this.ignoredNodes.delete(el);
@@ -175,15 +158,15 @@ class BindingRegistry {
   }
 
   cleanupDescendants(el: Element): void {
-    // querySelectorAll returns a static NodeList — safe to iterate even though
-    // cleanup() mutates boundElements and may trigger further DOM changes.
-    el.querySelectorAll(`.${AES_BOUND}`).forEach((child) => {
-      if (this.boundElements.has(child)) {
+    // querySelectorAll returns a static NodeList, which is safe to iterate
+    // even though cleanup() triggers DOM changes.
+    // Iterating with for...of avoids index-access type checking issues.
+    const descendants = el.querySelectorAll(`.${AES_BOUND}`);
+    for (const child of descendants) {
+      if (this.records.has(child)) {
         this.cleanup(child);
       } else {
         // The AES_BOUND class is present but the registry has no record.
-        // This indicates a state desync — the class was not removed when the
-        // element was last cleaned up (e.g. a non-connected cleanup path).
         // Remove the stale class and warn so it surfaces in debug mode.
         child.classList.remove(AES_BOUND);
         debug.warn(
@@ -192,7 +175,7 @@ class BindingRegistry {
           child
         );
       }
-    });
+    }
   }
 
   cleanupTree(el: Element): void {
@@ -236,30 +219,26 @@ export function enableAutoCleanup(root: Element): void {
 
   observedRoot = root;
   observer = new MutationObserver((mutations) => {
-    mutations.forEach((mutation) => {
-      mutation.removedNodes.forEach((node) => {
+    // Optimization: use for...of for iteration speed.
+    for (const mutation of mutations) {
+      // removedNodes is a NodeList, which is iterable in modern environments.
+      // If legacy browser support is needed, a C-style loop over .length might be required.
+      // Assuming ES6+ target (based on WeekMap usage).
+      for (const node of mutation.removedNodes) {
         // Only Element nodes can carry AES_BOUND bindings.
-        // 1 === Node.ELEMENT_NODE; the global `Node` is not available in all
-        // MutationObserver callback contexts (e.g. jsdom in some test setups).
-        if (node.nodeType !== 1) return;
+        // 1 === Node.ELEMENT_NODE
+        if (node.nodeType !== 1) continue;
 
-        // isConnected handles the move case: when a node is removed from one
-        // parent and inserted into another in the same microtask, the
-        // MutationObserver fires after both operations, so the node is already
-        // reconnected. Skipping it here preserves its bindings correctly.
-        //
-        // isKept handles explicit .detach() — the element is temporarily out
-        // of the DOM but should retain its bindings for re-attachment.
-        //
-        // isIgnored handles .remove() — the jquery-patch marks the element
-        // before cleanupTree runs, preventing a redundant second cleanup here.
+        // isConnected handles the move case.
+        // isKept handles explicit .detach().
+        // isIgnored handles .remove().
         if (node.isConnected || registry.isKept(node) || registry.isIgnored(node)) {
-          return;
+          continue;
         }
 
         registry.cleanupTree(node as Element);
-      });
-    });
+      }
+    }
   });
 
   observer.observe(root, { childList: true, subtree: true });
