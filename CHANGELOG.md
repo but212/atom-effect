@@ -4,21 +4,15 @@
 
 ### jQuery
 
-- **Router**: Refactored core to `RouterImpl` using event delegation.
-- **Security**: Hardened XSS protection via native `DOMParser`. Added defense-in-depth encoding.
-- **Type System**: Introduced `PrimitiveValue` / `EffectResult` types for constraint safety.
-- **API**: Updated `API.md` methods. Synchronized signatures.
-- **atomFetch**: Added `AbortController` cancellation. Suppressed abort errors.
-- **atomList**: Fixed effect leaks. Resolved duplicate nodes during async lifecycle.
-- **Core**: Simplified binding logic in `unified.ts`. Optimized context initialization.
-- **Mount**: Added error guards for component lifecycle phases.
-- **Patch**: Refactored jQuery method overrides (`.on`, `.off`, `.remove`, etc.) with a restoration system (`disablejQueryOverrides`); introduced `INTERNAL_HANDLER` to skip redundant batching for library-internal events.
-- **Registry**: Hardened `BindingRegistry` with state desync detection and enhanced error handling in cleanup phases; refactored `enableAutoCleanup` to require explicit root elements and prevent accidental re-observation.
-- **Input Binding**: Introduced per-instance event namespacing (`.atomBind-N`) to prevent cleanup collisions; marked internal handlers to bypass redundant `batch()` wrapping via `INTERNAL_HANDLER`; improved robustness of Atom↔DOM synchronization with selection-range guards and `try-catch` blocks.
-- **Testing**: Added focused test suites for input binding edge cases, verifying "busy guard" invariants and registration symmetry between `atomVal` and `atomChecked`.
-- **Debug**: Refactored visual highlights using `requestAnimationFrame` with cancellation; migrated debug opt-in to `VITE_ATOM_DEBUG` env var; added unconditional `warn`/`error` logging for critical failures.
-- **Bindings**: Hardened `registerReactiveEffect` with error boundaries and structured `BindingDebugType`.
-- **Namespace**: Refactored `$.atom` factory and static extensions for better type safety and `nextTick` documentation.
+- **Core & Architecture**: Refactored package entry and internal binding logic for consistency; migrated to `forEach` for allocation safety and upgraded internal caches (`camelCache`) to `Map`; hardened `BindingRegistry` with state desync detection and enhanced error handling.
+- **Bindings & Inputs**: Introduced per-instance event namespacing (`.atomBind-N`) and `INTERNAL_HANDLER` optimization to bypass redundant batching; improved Atom↔DOM synchronization robustness with selection-range guards and `try-catch` blocks.
+- **Routing & Networking**: Overhauled `RouterImpl` with read-only state atoms and navigation guards; enhanced `atomFetch` with abort-safety (`NEVER_SETTLE`), `onError` hooks, and eager/lazy request control.
+- **Rendering & Lists**: Enhanced `atomList` with LIS-based reconciliation and async removal safety; unified `atomBind` multi-behavior logic; updated all chainable methods (`$.fn.atom*`) with overloads, validation, and JSDoc.
+- **Components & Lifecycle**: Refactored `atomMount`/`atomUnmount` to ensure single-component ownership and recursive cleanup; improved `MutationObserver` auto-cleanup logic to require explicit root elements.
+- **Patch & Security**: Refactored jQuery overrides with a restoration system (`disablejQueryOverrides`); hardened XSS protection via native `DOMParser` and added proactive sanitization warnings.
+- **Types & DX**: Comprehensive overhaul of `types.ts` with JSDoc; added global interface augmentations for full IDE completion of all jQuery plugin methods.
+- **Testing**: Unified and expanded test suites to cover edge cases, error boundaries, and reactive symmetry; verified and documented busy-guard invariants.
+- **Debug**: Refactored visual highlights with `requestAnimationFrame`; migrated to `VITE_ATOM_DEBUG` env var; added unconditional logging for critical runtime errors.
 
 ### Core
 
