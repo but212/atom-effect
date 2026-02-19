@@ -109,8 +109,8 @@ describe('SVG Support', () => {
     // Check namespace of first child
     // If it was created as HTMLUnknownElement (default for HTML parsing), this test will fail.
     // SVG elements must be in the SVG namespace.
-    expect(children[0].namespaceURI).toBe(SVG_NS);
-    expect(children[0].tagName).toMatch(/circle/i);
+    expect(children[0]!.namespaceURI).toBe(SVG_NS);
+    expect(children[0]!.tagName).toMatch(/circle/i);
 
     $(svg).remove();
   });

@@ -1,58 +1,74 @@
 import $ from 'jquery';
+import { ERROR_MESSAGES, LOG_PREFIXES } from './constants';
+import { debug } from './debug';
 import { registry } from './registry';
 import type { ComponentFn } from './types';
+import { bindUnbind } from './unified';
+
+// ============================================================================
+// Internal helpers
+// ============================================================================
 
 /**
- * Functional component mounting logic.
+ * Mounts a functional component on a single element.
+ *
+ * If a component is already mounted on `el`, it is unmounted first so that
+ * its cleanup runs before the new component initialises.
+ *
+ * The component function receives `($el, props)` and may return an optional
+ * cleanup callback — see {@link ComponentFn}. That callback is stored in the
+ * registry and called automatically when the element is removed or
+ * `atomUnmount` is invoked. `registry.cleanup` runs `componentCleanup` before
+ * any reactive effects, giving the component a chance to unmount gracefully.
+ * Errors thrown by the cleanup are caught and logged by `registry.cleanup`
+ * using `MOUNT_CLEANUP_ERROR` — no additional wrapping is needed here.
  */
-export function mountComponent<P>($el: JQuery, component: ComponentFn<P>, props: P): void {
-  const el = $el[0];
-  if (!el) return;
+function mountComponent<P>(el: HTMLElement, component: ComponentFn<P>, props: P): void {
+  // Unmount any existing component before mounting the new one.
+  registry.cleanupTree(el);
 
-  // Cleanup existing component if any
-  unmountComponent($el);
-
-  // Initialize component and register cleanup
-  let cleanup: ReturnType<typeof component>;
+  const $el = $(el);
+  let teardown: ReturnType<typeof component>;
   try {
-    cleanup = component($el, props);
+    teardown = component($el, props);
   } catch (err) {
-    console.error('[atom-effect-jquery] Mount error:', err);
+    debug.error(LOG_PREFIXES.MOUNT, ERROR_MESSAGES.MOUNT_ERROR(), err);
     return;
   }
-  if (typeof cleanup === 'function') {
-    // Registry will automatically mark as bound via _getOrCreateRecord
-    registry.setComponentCleanup(el, cleanup);
+
+  if (typeof teardown === 'function') {
+    registry.setComponentCleanup(el, teardown);
   }
 }
 
+// ============================================================================
+// jQuery plugin methods
+// ============================================================================
+
 /**
- * Functional component unmounting logic.
+ * Mounts a functional component on each selected element.
+ *
+ * @param component - Function receiving `($el, props)` and returning an
+ *   optional cleanup callback. See {@link ComponentFn}.
+ * @param props - Props passed to the component. When omitted, `P` must be
+ *   compatible with an empty object (i.e. all fields optional or
+ *   `P = object`). Passing no props to a component with required fields is
+ *   a type error that TypeScript will catch at the call site, but only when
+ *   `props` is explicitly typed — the `{} as P` fallback is not type-safe
+ *   for components with required fields.
  */
-export function unmountComponent($el: JQuery): void {
-  $el.each(function () {
-    const cleanup = registry.getComponentCleanup(this);
-    if (cleanup) {
-      try {
-        cleanup();
-      } catch (err) {
-        console.error('[atom-effect-jquery] Cleanup error:', err);
-      }
-      registry.setComponentCleanup(this, undefined);
-    }
-
-    // Also run general effect cleanup for this tree
-    registry.cleanupTree(this);
-  });
-}
-
 $.fn.atomMount = function <P>(component: ComponentFn<P>, props?: P): JQuery {
   return this.each(function () {
-    mountComponent($(this), component, (props ?? {}) as P);
+    mountComponent(this, component, (props ?? {}) as P);
   });
 };
 
+/**
+ * Unmounts the component and disposes all reactive bindings on each selected
+ * element and its descendants.
+ */
 $.fn.atomUnmount = function (): JQuery {
-  unmountComponent(this);
-  return this;
+  return this.each(function () {
+    bindUnbind(this);
+  });
 };

@@ -18,6 +18,12 @@ export type EffectCleanup = () => void;
 export type EffectResult = undefined | EffectCleanup;
 
 /**
+ * Generic equality predicate shared by `ValOptions` and any future consumer.
+ * Extracted as a named type to avoid duplicating the inline function signature.
+ */
+export type EqualFn<T> = (a: T, b: T) => boolean;
+
+/**
  * Extended options for Atom creation.
  */
 export interface AtomOptions extends BaseAtomOptions {
@@ -26,9 +32,14 @@ export interface AtomOptions extends BaseAtomOptions {
 }
 
 /**
- * Represents a value that can be either dynamic (Atom/Computed) or static.
+ * Represents a value that can be either a reactive node (Atom or Computed)
+ * or a plain static value of the same type.
+ *
+ * `ComputedAtom<T>` is a structural sub-type of `ReadonlyAtom<T>`, so it is
+ * already covered by `ReadonlyAtom<T>` — listing it separately would be
+ * redundant and misleading.
  */
-export type ReactiveValue<T> = T | ReadonlyAtom<T> | ComputedAtom<T>;
+export type ReactiveValue<T> = T | ReadonlyAtom<T>;
 
 /**
  * Values allowed for DOM properties and attributes.
@@ -36,12 +47,16 @@ export type ReactiveValue<T> = T | ReadonlyAtom<T> | ComputedAtom<T>;
 export type PrimitiveValue = string | number | boolean | null | undefined;
 
 /**
- * CSS value: either a direct reactive value or a tuple of [source, unit].
- * Named type provides clear bone structure for CSS binding configurations.
+ * CSS value: either a direct reactive value or a numeric tuple of [source, unit].
+ *
+ * The tuple form `[source, unit]` only accepts numeric sources because appending
+ * a unit suffix to a string value (e.g. `"100%" + "px"`) is semantically
+ * meaningless. Use `ReactiveValue<string>` directly when the full CSS value is
+ * already a string (e.g. `fontFamilyAtom`).
  */
 export type CssValue =
   | ReactiveValue<string | number>
-  | [source: ReactiveValue<string | number>, unit: string];
+  | [source: ReactiveValue<number>, unit: string];
 
 /**
  * CSS bindings map property names to CSS values.
@@ -50,12 +65,11 @@ export type CssBindings = Record<string, CssValue>;
 
 /**
  * Configuration options for `atomBind`.
- * @template T - The type of the value for two-way binding ('val').
  */
-export interface BindingOptions<T = unknown> {
-  /** Binds textContent. Decoupled from generic T to allow any reactive source (usually string/number). */
+export interface BindingOptions {
+  /** Binds textContent to any reactive source (usually string/number). */
   text?: ReactiveValue<unknown>;
-  /** Binds innerHTML. */
+  /** Binds innerHTML to a reactive string source (sanitized). */
   html?: ReactiveValue<string>;
   /** Map of class names to reactive boolean conditions. */
   class?: Record<string, ReactiveValue<boolean>>;
@@ -63,14 +77,17 @@ export interface BindingOptions<T = unknown> {
   css?: CssBindings;
   /** Binds attributes with consistent primitive constraints. */
   attr?: Record<string, ReactiveValue<PrimitiveValue>>;
-  /** Binds DOM properties. Decoupled from generic T for realistic multi-type property usage. */
+  /** Binds DOM properties. */
   prop?: Record<string, ReactiveValue<unknown>>;
   /** Direct visibility control (display: none). */
   show?: ReactiveValue<boolean>;
   /** Inverse visibility control. */
   hide?: ReactiveValue<boolean>;
-  /** Two-way binding for input values. This is the primary use of generic T. */
-  val?: WritableAtom<T> | [atom: WritableAtom<T>, options: ValOptions<T>];
+  /**
+   * Two-way binding for input values.
+   * Pass a bare atom or a `[atom, options]` tuple to customise parse/format/debounce.
+   */
+  val?: WritableAtom<unknown> | [atom: WritableAtom<unknown>, options: ValOptions<unknown>];
   /** Two-way binding for checkboxes and radio buttons. */
   checked?: WritableAtom<boolean>;
   /** Event listeners with automatic batched execution and lifecycle-bound cleanup. */
@@ -110,24 +127,64 @@ export interface ValOptions<T> {
   /** Formatter to convert Atom type T to string for DOM display. */
   format?: (v: T) => string;
   /** Custom equality check for comparing parsed values. Defaults to Object.is. */
-  equal?: (a: T, b: T) => boolean;
+  equal?: EqualFn<T>;
 }
 
 /**
  * Configuration options for `atomFetch`.
  */
 export interface FetchOptions<T> {
-  /** Initial value before first fetch resolves. */
+  /**
+   * Value exposed by the atom before the first fetch resolves.
+   * Also returned while a subsequent fetch is in flight.
+   */
   defaultValue: T;
-  /** HTTP method (default: 'GET'). */
-  method?: string;
-  /** Request headers. */
+  /**
+   * HTTP method forwarded to `$.ajax` (default: `'GET'`).
+   * Takes precedence over the same field in `ajaxOptions`.
+   * Accepts any string for non-standard methods; common values are
+   * auto-completed: `'GET'`, `'POST'`, `'PUT'`, `'PATCH'`, `'DELETE'`.
+   */
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS' | (string & {});
+  /**
+   * HTTP headers forwarded to `$.ajax`.
+   * Takes precedence over the same field in `ajaxOptions`.
+   */
   headers?: Record<string, string>;
-  /** Transform raw response before storing. */
+  /**
+   * Transforms the raw `$.ajax` response into `T`.
+   *
+   * When omitted the raw response is cast to `T` with no runtime validation.
+   * Provide this function whenever the server response shape is not
+   * guaranteed to match `T` at runtime.
+   */
   transform?: (raw: unknown) => T;
-  /** Additional $.ajax settings passthrough. */
+  /**
+   * Additional `$.ajax` settings.
+   * Top-level fields (`url`, `method`, `headers`) always override the same
+   * fields here, so avoid duplicating them to prevent silent conflicts.
+   */
   ajaxOptions?: JQuery.AjaxSettings;
+  /**
+   * Called when the fetch fails with a non-abort error.
+   * Receives the raw rejection value from `$.ajax`.
+   * Does not suppress the error — the computed atom still enters its error
+   * state and `hasError` becomes true.
+   */
+  onError?: (err: unknown) => void;
+  /**
+   * When `true` (default), the first fetch starts immediately on creation.
+   * When `false`, the fetch is deferred until `atom.value` is first accessed.
+   */
+  eager?: boolean;
 }
+
+// ============================================================================
+// Input binding internals
+// Consumed only by input-binding.ts. Centralised here so enum definitions live
+// alongside their sibling types, but marked @internal — not part of the public
+// API surface and subject to change without notice.
+// ============================================================================
 
 /**
  * Bit flags for input binding state management.
@@ -137,6 +194,8 @@ export interface FetchOptions<T> {
  *   are packed into a single integer for O(1) state checks.
  * - 'Busy' mask is used as a Re-entrancy Guard to prevent infinite sync loops
  *   between DOM events and Atom updates.
+ *
+ * @internal
  */
 export enum BindingFlags {
   None = 0,
@@ -153,28 +212,18 @@ export enum BindingFlags {
 }
 
 /**
- * State context for two-way input bindings.
- * Consolidates scattered state flags into a single, traceable object.
- */
-export interface InputBindingState {
-  /** Timeout ID for debounced updates. */
-  timeoutId: number | null;
-  /** Bitmask of current state flags (BindingFlags). */
-  flags: number;
-}
-
-/**
- * Creates a fresh InputBindingState with default values.
- */
-export function createInputBindingState(): InputBindingState {
-  return { timeoutId: null, flags: BindingFlags.None };
-}
-
-/**
  * Functional Component type.
  * A function that initializes logic on a jQuery element and returns an optional cleanup function.
+ * `P` defaults to `object` (empty props) — use `P = Record<string, never>` for strictly no-props
+ * components.
  */
-export type ComponentFn<P = {}> = ($el: JQuery, props: P) => EffectResult;
+export type ComponentFn<P = object> = ($el: JQuery, props: P) => EffectResult;
+
+// ============================================================================
+// jQuery global interface augmentation
+// Extends JQueryStatic and JQuery with atom-effect plugin methods.
+// Importing this file applies these augmentations as a side effect.
+// ============================================================================
 
 declare global {
   interface JQueryStatic {
@@ -219,14 +268,22 @@ declare global {
     atomText<T>(source: ReactiveValue<T>, formatter?: (v: T) => string): this;
     /** Binds innerHTML to a reactive source (sanitized). */
     atomHtml(source: ReactiveValue<string>): this;
-    /** Toggles a CSS class based on a reactive boolean. */
+    /** Toggles a single CSS class based on a reactive boolean. */
     atomClass(className: string, condition: ReactiveValue<boolean>): this;
-    /** Binds a CSS property. */
+    /** Toggles multiple CSS classes from a map of class names to reactive booleans. */
+    atomClass(classMap: Record<string, ReactiveValue<boolean>>): this;
+    /** Binds a single CSS property to a reactive value, with an optional unit suffix. */
     atomCss(prop: string, source: ReactiveValue<string | number>, unit?: string): this;
-    /** Binds a DOM attribute with security guards. */
+    /** Binds multiple CSS properties from a map of property names to reactive values. */
+    atomCss(cssMap: CssBindings): this;
+    /** Binds a single DOM attribute to a reactive value with security guards. */
     atomAttr(name: string, source: ReactiveValue<PrimitiveValue>): this;
-    /** Binds a DOM property. */
-    atomProp(name: string, source: ReactiveValue<unknown>): this;
+    /** Binds multiple DOM attributes from a map of attribute names to reactive values. */
+    atomAttr(attrMap: Record<string, ReactiveValue<PrimitiveValue>>): this;
+    /** Binds a single DOM property to a reactive value. */
+    atomProp<T>(name: string, source: ReactiveValue<T>): this;
+    /** Binds multiple DOM properties from a map of property names to reactive values. */
+    atomProp<T>(propMap: Record<string, ReactiveValue<T>>): this;
     /** Controls element visibility (display: none). */
     atomShow(condition: ReactiveValue<boolean>): this;
     /** Inverse of atomShow. */
@@ -256,6 +313,8 @@ declare global {
 
 /**
  * Context passed to binding handlers for unified lifecycle management.
+ *
+ * @internal consumed only by unified.ts and its callers within this package.
  */
 export interface BindingContext {
   /** The specific jQuery-wrapped element being bound. */
@@ -266,81 +325,127 @@ export interface BindingContext {
   readonly trackCleanup: (fn: EffectCleanup) => void;
 }
 
+// ============================================================================
+// Route types
+// ============================================================================
+
 /**
- * Shared route lifecycle hooks.
+ * Shared route lifecycle hooks available on every route definition.
  */
-interface RouteLifecycle {
-  /** Called when entering this route. Can return additional params. */
+export interface RouteLifecycle {
+  /**
+   * Called when entering this route. May return additional params to merge
+   * into the params object passed to `render` / `onMount`.
+   */
   onEnter?: (params: Record<string, string>) => Record<string, string> | undefined;
-  /** Called when leaving this route. Return false to prevent navigation. */
+  /**
+   * Called when leaving this route.
+   * Return `false` to block navigation; returning `void` (or nothing) allows it.
+   */
   onLeave?: () => boolean | undefined;
-  /** Called when the same route's query params change (e.g. search filter). */
+  /** Called when the same route is re-activated with new query parameters. */
   onParamsChange?: (params: Record<string, string>) => void;
 }
 
 /**
- * Route using a template selector.
+ * Route that renders content by cloning a `<template>` element.
  */
-interface TemplateRoute extends RouteLifecycle {
-  /** Template selector (e.g., '#tmpl-home') */
+export interface TemplateRoute extends RouteLifecycle {
+  /** CSS selector for a `<template>` element (e.g., `'#tmpl-home'`). */
   template: string;
   render?: never;
-  /** Called after template content is appended to the DOM. */
+  /** Called after template content is appended to the container. */
   onMount?: ($content: JQuery) => void;
 }
 
 /**
- * Route using a custom render function.
+ * Route that renders content via a custom function.
  */
-interface RenderRoute extends RouteLifecycle {
-  /** Custom render function providing full control over DOM. */
+export interface RenderRoute extends RouteLifecycle {
+  /** Custom render function providing full control over the container DOM. */
   render: (container: HTMLElement, route: string, params: Record<string, string>) => void;
   template?: never;
 }
 
 /**
  * Route definition for a single route.
- * Either template OR render must be provided, but not both.
+ * Exactly one of `template` or `render` must be provided.
+ *
+ * Use `isTemplateRoute` / `isRenderRoute` from `utils.ts` for safe narrowing
+ * instead of direct property access.
  */
 export type RouteDefinition = TemplateRoute | RenderRoute;
 
 /**
- * Configuration for $.route()
+ * Configuration for `$.route()`.
  */
 export interface RouteConfig {
-  /** Target element selector for rendering route content. */
+  /** CSS selector of the element into which route content is rendered. */
   target: string;
-  /** Default route name when no hash or path is present. */
+  /** Route name used when the URL has no explicit route segment. */
   default: string;
-  /** Route definitions map. */
+  /** Map of route names to their definitions. */
   routes: Record<string, RouteDefinition>;
-  /** Routing mode. 'hash' (location.hash) or 'history' (pushState). Default: 'hash'. */
+  /**
+   * Routing strategy. Default: `'hash'`.
+   * - `'hash'`    — reads/writes `location.hash` (`#routeName`).
+   * - `'history'` — reads/writes `location.pathname` via `history.pushState`.
+   */
   mode?: 'hash' | 'history';
-  /** Base path for history mode navigation. */
+  /**
+   * Path prefix stripped from `location.pathname` in history mode.
+   * A trailing slash is normalized away internally.
+   * Has no effect in hash mode.
+   */
   basePath?: string;
-  /** Route name to use for fallback / 404. */
+  /** Route name to render when the requested route is not found (404 fallback). */
   notFound?: string;
-  /** Automatically intercept links with data-route attribute. */
+  /**
+   * When `true`, clicks on `[data-route]` elements are intercepted and
+   * handled via `navigate()` instead of triggering a full page load.
+   * Default: `false`.
+   */
   autoBindLinks?: boolean;
-  /** CSS class to add to links that point to the current active route. */
+  /**
+   * CSS class added to `[data-route]` links that match the current route.
+   * Also sets `aria-current="page"` on the active link.
+   * Default: `'active'`.
+   */
   activeClass?: string;
-  /** Global hook called before route transition. */
+  /**
+   * Called before each route transition.
+   * `from` is `''` on the very first render (no previous route).
+   */
   beforeTransition?: (from: string, to: string) => void;
-  /** Global hook called after route transition. */
+  /**
+   * Called after each route transition completes.
+   * `from` is `''` on the very first render (no previous route).
+   */
   afterTransition?: (from: string, to: string) => void;
 }
 
 /**
- * Router instance returned by $.route()
+ * Router instance returned by `$.route()`.
+ *
+ * `currentRoute` and `queryParams` reflect the current URL state reactively:
+ * - In `'hash'` mode, `queryParams` is parsed from the query string after `?`
+ *   in the hash fragment (e.g., `#home?page=2` → `{ page: '2' }`).
+ * - In `'history'` mode, `queryParams` is parsed from `location.search`.
  */
 export interface Router {
-  /** Reactive atom containing the current route name. */
-  currentRoute: WritableAtom<string>;
-  /** Reactive computed containing current query parameters. */
+  /**
+   * Reactive atom containing the current route name.
+   * Read-only — use `navigate()` to change routes so that the URL stays in sync.
+   */
+  currentRoute: ReadonlyAtom<string>;
+  /**
+   * Reactive atom containing the current query parameters as a plain object.
+   * Updated automatically on URL changes; reset to `{}` on programmatic navigation.
+   */
   queryParams: ReadonlyAtom<Record<string, string>>;
-  /** Navigate to a different route. */
+  /** Navigate programmatically to the named route. */
   navigate: (route: string) => void;
-  /** Entirely destroy the router and its event listeners. */
+  /** Destroy the router, removing all event listeners and reactive effects. */
   destroy: () => void;
 }
 

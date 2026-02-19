@@ -23,10 +23,10 @@ describe('jQuery Lifecycle Overrides', () => {
       const text = atom('hello');
       $el.atomText(text);
 
-      expect(registry.hasBind($el[0])).toBe(true);
+      expect(registry.hasBind($el[0]!!)).toBe(true);
 
       $el.remove();
-      expect(registry.hasBind($el[0])).toBe(false);
+      expect(registry.hasBind($el[0]!!)).toBe(false);
 
       // Second remove should not throw (idempotent)
       $el.remove();
@@ -38,12 +38,12 @@ describe('jQuery Lifecycle Overrides', () => {
       const text = atom('hello');
       $child.atomText(text);
 
-      expect(registry.hasBind($child[0])).toBe(true);
+      expect(registry.hasBind($child[0]!!)).toBe(true);
 
       $parent.empty();
 
-      expect(registry.hasBind($child[0])).toBe(false);
-      expect($parent[0].hasChildNodes()).toBe(false);
+      expect(registry.hasBind($child[0]!!)).toBe(false);
+      expect($parent[0]!!.hasChildNodes()).toBe(false);
     });
 
     it('should preserve bindings on .detach() and restore on re-attach', async () => {
@@ -51,14 +51,14 @@ describe('jQuery Lifecycle Overrides', () => {
       const text = atom('hello');
       $el.atomText(text);
 
-      expect(registry.hasBind($el[0])).toBe(true);
+      expect(registry.hasBind($el[0]!)).toBe(true);
 
       const $detached = $el.detach();
       await new Promise((r) => setTimeout(r, 0));
 
       // Bindings preserved while detached
-      expect(registry.hasBind($el[0])).toBe(true);
-      expect(document.body.contains($el[0])).toBe(false);
+      expect(registry.hasBind($el[0]!)).toBe(true);
+      expect(document.body.contains($el[0]!)).toBe(false);
 
       // Reactivity works in memory
       text.value = 'world';
@@ -75,9 +75,9 @@ describe('jQuery Lifecycle Overrides', () => {
 
       // Detach then remove: cleanup happens on remove
       $el.detach();
-      expect(registry.hasBind($el[0])).toBe(true);
+      expect(registry.hasBind($el[0]!)).toBe(true);
       $el.remove();
-      expect(registry.hasBind($el[0])).toBe(false);
+      expect(registry.hasBind($el[0]!)).toBe(false);
     });
 
     it('should support selectors in remove and detach', () => {
@@ -85,17 +85,17 @@ describe('jQuery Lifecycle Overrides', () => {
       const $child1 = $('<div class="a">').appendTo($parent);
       const $child2 = $('<div class="b">').appendTo($parent);
 
-      registry.trackCleanup($child1[0], () => {});
-      registry.trackCleanup($child2[0], () => {});
+      registry.trackCleanup($child1[0]!, () => {});
+      registry.trackCleanup($child2[0]!, () => {});
 
       // remove with selector
       $parent.children().remove('.a');
-      expect(registry.hasBind($child1[0])).toBe(false);
-      expect(registry.hasBind($child2[0])).toBe(true);
+      expect(registry.hasBind($child1[0]!)).toBe(false);
+      expect(registry.hasBind($child2[0]!)).toBe(true);
 
       // detach with selector
       $parent.children().detach('.b');
-      expect(registry.isKept($child2[0])).toBe(true);
+      expect(registry.isKept($child2[0]!)).toBe(true);
 
       $parent.remove();
     });
@@ -112,7 +112,7 @@ describe('jQuery Lifecycle Overrides', () => {
     });
 
     it('should handle errors during dispose and cleanup', () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const el = document.createElement('div');
       $.atom.debug = true;
 
@@ -123,20 +123,21 @@ describe('jQuery Lifecycle Overrides', () => {
         },
         run: () => {},
         isDisposed: false,
+        isExecuting: false,
         executionCount: 0,
       });
 
       registry.cleanup(el);
-      expect(warnSpy).toHaveBeenCalled();
+      expect(errorSpy).toHaveBeenCalled();
 
       // Cleanup error
       registry.trackCleanup(el, () => {
         throw new Error('cleanup fail');
       });
       registry.cleanup(el);
-      expect(warnSpy).toHaveBeenCalledTimes(2);
+      expect(errorSpy).toHaveBeenCalledTimes(2);
 
-      warnSpy.mockRestore();
+      errorSpy.mockRestore();
     });
   });
 
@@ -269,7 +270,7 @@ describe('jQuery Lifecycle Overrides', () => {
       });
 
       expect(consoleSpy).toHaveBeenCalledWith(
-        '[atom-effect-jquery] Mount error:',
+        expect.stringContaining('[atom-mount] Mount error'),
         expect.any(Error)
       );
       consoleSpy.mockRestore();
@@ -300,7 +301,7 @@ describe('jQuery Lifecycle Overrides', () => {
 
       // Lines 43-49: userCleanup error triggers console.error
       expect(consoleSpy).toHaveBeenCalledWith(
-        '[atom-effect-jquery] Cleanup error:',
+        expect.stringContaining('[atom-mount] Cleanup error'),
         expect.any(Error)
       );
       consoleSpy.mockRestore();

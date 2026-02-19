@@ -171,7 +171,7 @@ describe('Integration & Core API', () => {
             const parsed = parseInt(v, 10);
             return Number.isNaN(parsed) ? null : parsed;
           },
-          format: (v: number | null) => (v === null ? '' : String(v)),
+          format: (v: unknown) => (v === null ? '' : String(v)),
         },
       ],
       css: {
@@ -264,8 +264,8 @@ describe('Integration & Core API', () => {
     expect($app.find('#cat-2 .item-list li').length).toBe(1);
 
     // Add item to Fruit
-    categories.value[0].items.value = [
-      ...categories.value[0].items.value,
+    categories.value[0]!.items.value = [
+      ...categories.value[0]!.items.value,
       { id: 103, name: 'Cherry' },
     ];
     await $.nextTick();
