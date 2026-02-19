@@ -120,15 +120,15 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 
     // Reclaim existing subscription from previous links (linear scan — typically 1-10 deps)
     const prev = this._prevLinks;
-    for (let i = 0, len = prev.length; i < len; i++) {
-      const link = prev[i];
-      if (link && link.node === dep && link.unsub) {
-        // Reuse DependencyLink object — update version, move to nextLinks
-        link.version = dep.version;
-        nextLinks.push(link);
-        prev[i] = null!; // Mark as reclaimed (avoid double-reclaim)
-        return;
-      }
+    const existingIndex = prev.findIndex((link) => link && link.node === dep && link.unsub);
+
+    if (existingIndex !== -1) {
+      const link = prev[existingIndex]!;
+      // Reuse DependencyLink object — update version, move to nextLinks
+      link.version = dep.version;
+      nextLinks.push(link);
+      prev[existingIndex] = null!; // Mark as reclaimed (avoid double-reclaim)
+      return;
     }
 
     try {
@@ -225,10 +225,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 
     if (committed) {
       // Cleanup unclaimed prev subscriptions (entries not nulled out by addDependency)
-      for (let i = 0, len = prevLinks.length; i < len; i++) {
-        const link = prevLinks[i];
-        if (link) link.unsub?.();
-      }
+      prevLinks.forEach((link) => link?.unsub?.());
 
       if (prevLinks !== EMPTY_LINKS) {
         linksArrayPool.release(prevLinks);
@@ -241,9 +238,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   }
 
   private _unsubLinks(links: DependencyLink[]): void {
-    for (let i = 0, len = links.length; i < len; i++) {
-      links[i]?.unsub?.();
-    }
+    links.forEach((link) => link?.unsub?.());
   }
 
   private _isDirty(): boolean {
@@ -253,8 +248,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     trackingContext.current = null;
 
     try {
-      for (let i = 0, len = links.length; i < len; i++) {
-        const link = links[i]!;
+      return links.some((link) => {
         const dep = link.node;
 
         // Trigger recomputation for computed dependencies
@@ -271,9 +265,8 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
         }
 
         // Version Check
-        if (dep.version !== link.version) return true;
-      }
-      return false;
+        return dep.version !== link.version;
+      });
     } finally {
       trackingContext.current = prevContext;
     }

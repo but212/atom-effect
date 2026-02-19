@@ -83,8 +83,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._defaultValue = 'defaultValue' in options ? options.defaultValue : (NO_DEFAULT_VALUE as T);
     this._onError = options.onError ?? null;
     const retries = options.maxAsyncRetries;
-    this._maxAsyncRetries =
-      retries != null && retries >= 0 ? retries : COMPUTED_CONFIG.MAX_ASYNC_RETRIES;
+    this._maxAsyncRetries = retries ?? COMPUTED_CONFIG.MAX_ASYNC_RETRIES;
 
     debug.attachDebugInfo(this, 'computed', this.id);
 
@@ -157,12 +156,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     if (this.flags & (REJECTED | HAS_ERROR)) return true;
 
     // Live scan: deps may have changed error state asynchronously
-    const links = this._links;
-    for (let i = 0, len = links.length; i < len; i++) {
-      const node = links[i]?.node;
-      if (node && node.flags & HAS_ERROR) return true;
-    }
-    return false;
+    return this._links.some((link) => link?.node?.flags & HAS_ERROR);
   }
 
   get isValid(): boolean {
@@ -178,19 +172,15 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     if (this._error) collected.push(this._error);
 
     const links = this._links;
-    for (let i = 0, len = links.length; i < len; i++) {
-      const dep = links[i]!.node;
+    links.forEach((link) => {
+      const dep = link.node;
       if (dep.flags & HAS_ERROR) {
         const computedDep = dep as unknown as ComputedAtom<unknown>;
-        const depErrors = computedDep.errors;
-        if (depErrors.length > 0) {
-          for (let j = 0; j < depErrors.length; j++) {
-            const err = depErrors[j];
-            if (err && collected.indexOf(err) === -1) collected.push(err);
-          }
-        }
+        computedDep.errors.forEach((err) => {
+          if (err && !collected.includes(err)) collected.push(err);
+        });
       }
-    }
+    });
 
     return Object.freeze(collected);
   }
@@ -219,9 +209,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
 
     const links = this._links;
     if (links !== EMPTY_LINKS) {
-      for (let i = 0, len = links.length; i < len; i++) {
-        links[i]!.unsub?.();
-      }
+      links.forEach((link) => link!.unsub?.());
       linksArrayPool.release(links);
       this._links = EMPTY_LINKS;
     }

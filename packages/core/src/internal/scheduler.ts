@@ -137,14 +137,13 @@ class Scheduler {
     let currentSize = this._size;
 
     // Merge batch
-    for (let i = 0; i < this._batchQueueSize; i++) {
-      const job = bQueue[i]!;
+    bQueue.slice(0, this._batchQueueSize).forEach((job) => {
       // Retag jobs
       if (job._nextEpoch !== epoch) {
         job._nextEpoch = epoch;
         targetBuffer[currentSize++] = job;
       }
-    }
+    });
 
     this._size = currentSize;
     this._batchQueueSize = 0;
@@ -181,8 +180,8 @@ class Scheduler {
     this._size = 0;
     this._epoch++;
 
+    // Execute jobs
     for (let i = 0; i < count; i++) {
-      // Execute job
       try {
         jobs[i]!();
       } catch (e) {

@@ -14,6 +14,13 @@
 - **Mount**: Added error guards for component lifecycle phases.
 - **Debug**: Synchronized visual highlights with `requestAnimationFrame`.
 
+### Core
+
+- **Refactoring**: Replaced manual `for` loops with modern array methods (`forEach`, `some`, `includes`, `findIndex`) across the reactive engine for improved readability and maintainability.
+- **Scheduler**: Streamlined batch queue merging and job execution loops.
+- **Computed**: Simplified error collection and dependency scanning logic using native array primitives.
+- **Effect**: Optimized dependency reclamation and dirty-check scanning.
+
 ## [0.21.3]
 
 ### jQuery - 0.21.3
