@@ -14,6 +14,8 @@
 - **Mount**: Added error guards for component lifecycle phases.
 - **Patch**: Refactored jQuery method overrides (`.on`, `.off`, `.remove`, etc.) with a restoration system (`disablejQueryOverrides`); introduced `INTERNAL_HANDLER` to skip redundant batching for library-internal events.
 - **Registry**: Hardened `BindingRegistry` with state desync detection and enhanced error handling in cleanup phases; refactored `enableAutoCleanup` to require explicit root elements and prevent accidental re-observation.
+- **Input Binding**: Introduced per-instance event namespacing (`.atomBind-N`) to prevent cleanup collisions; marked internal handlers to bypass redundant `batch()` wrapping via `INTERNAL_HANDLER`; improved robustness of Atom↔DOM synchronization with selection-range guards and `try-catch` blocks.
+- **Testing**: Added focused test suites for input binding edge cases, verifying "busy guard" invariants and registration symmetry between `atomVal` and `atomChecked`.
 - **Debug**: Refactored visual highlights using `requestAnimationFrame` with cancellation; migrated debug opt-in to `VITE_ATOM_DEBUG` env var; added unconditional `warn`/`error` logging for critical failures.
 - **Bindings**: Hardened `registerReactiveEffect` with error boundaries and structured `BindingDebugType`.
 - **Namespace**: Refactored `$.atom` factory and static extensions for better type safety and `nextTick` documentation.
