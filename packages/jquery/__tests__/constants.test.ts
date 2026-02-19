@@ -3,30 +3,34 @@ import { ERROR_MESSAGES } from '../src/constants';
 
 describe('Constants', () => {
   describe('ERROR_MESSAGES', () => {
-    it('should generate error messages with dynamic content', () => {
-      // iterate over keys that are functions to ensure they interpolate correctly
-      const dynamicErrors = [
-        { fn: ERROR_MESSAGES.ROUTE_NOT_FOUND, args: ['home'], expected: 'home' },
-        { fn: ERROR_MESSAGES.TEMPLATE_NOT_FOUND, args: ['#tpl'], expected: '#tpl' },
-        { fn: ERROR_MESSAGES.TARGET_NOT_FOUND, args: ['#app'], expected: '#app' },
-        { fn: ERROR_MESSAGES.MALFORMED_URI, args: ['%'], expected: '%' },
-        { fn: ERROR_MESSAGES.BLOCKED_DANGEROUS_VALUE, args: ['innerHTML'], expected: 'innerHTML' },
-        { fn: ERROR_MESSAGES.BLOCKED_EVENT_HANDLER, args: ['onclick'], expected: 'onclick' },
-        { fn: ERROR_MESSAGES.BLOCKED_PROTOCOL, args: ['href'], expected: 'href' },
-        { fn: ERROR_MESSAGES.BLOCKED_DANGEROUS_PROP, args: ['innerHTML'], expected: 'innerHTML' },
-        { fn: ERROR_MESSAGES.INVALID_INPUT_ELEMENT, args: ['div'], expected: 'div' },
-        { fn: ERROR_MESSAGES.DUPLICATE_KEY, args: ['id-1', 5], expected: 'id-1' },
+    it('should interpolate dynamic arguments into the message', () => {
+      const cases: [string, string][] = [
+        [ERROR_MESSAGES.ROUTE_NOT_FOUND('home'), 'home'],
+        [ERROR_MESSAGES.TEMPLATE_NOT_FOUND('#tpl'), '#tpl'],
+        [ERROR_MESSAGES.TARGET_NOT_FOUND('#app'), '#app'],
+        [ERROR_MESSAGES.MALFORMED_URI('%'), '%'],
+        [ERROR_MESSAGES.BLOCKED_DANGEROUS_CSS_VALUE('color'), 'color'],
+        [ERROR_MESSAGES.BLOCKED_EVENT_HANDLER('onclick'), 'onclick'],
+        [ERROR_MESSAGES.BLOCKED_PROTOCOL('href'), 'href'],
+        [ERROR_MESSAGES.BLOCKED_DANGEROUS_PROP('innerHTML'), 'innerHTML'],
+        [ERROR_MESSAGES.INVALID_INPUT_ELEMENT('div'), 'div'],
+        [ERROR_MESSAGES.DUPLICATE_KEY('id-1', 5), 'id-1'],
+        [ERROR_MESSAGES.MISSING_SOURCE('atomAttr'), 'atomAttr'],
+        [ERROR_MESSAGES.MISSING_CONDITION('atomClass'), 'atomClass'],
       ];
 
-      dynamicErrors.forEach(({ fn, args, expected }) => {
-        // @ts-expect-error
-        const result = fn(...args);
+      cases.forEach(([result, expected]) => {
         expect(result).toContain(expected);
       });
     });
 
-    it('should have required static error messages', () => {
-      expect(ERROR_MESSAGES.UNSAFE_CONTENT).toBeTruthy();
+    it('should return a non-empty string for zero-argument messages', () => {
+      expect(ERROR_MESSAGES.UNSAFE_CONTENT()).toBeTruthy();
+      expect(ERROR_MESSAGES.PARSE_ERROR()).toBeTruthy();
+      expect(ERROR_MESSAGES.MOUNT_ERROR()).toBeTruthy();
+      expect(ERROR_MESSAGES.MOUNT_CLEANUP_ERROR()).toBeTruthy();
+      expect(ERROR_MESSAGES.EFFECT_DISPOSE_ERROR()).toBeTruthy();
+      expect(ERROR_MESSAGES.BINDING_CLEANUP_ERROR()).toBeTruthy();
     });
   });
 });

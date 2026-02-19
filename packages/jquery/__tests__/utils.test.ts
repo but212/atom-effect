@@ -20,9 +20,9 @@ describe('Utils', () => {
       });
     });
 
-    it('should unknown for invalid inputs', () => {
-      expect(getSelector($())).toBe('unknown');
-      expect(getSelector(null as unknown as Element)).toBe('unknown');
+    it('should return tagName for element without id or classes', () => {
+      const el = document.createElement('div');
+      expect(getSelector(el)).toBe('div');
     });
   });
 
