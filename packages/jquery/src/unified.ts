@@ -324,9 +324,9 @@ export function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): v
 // ============================================================================
 
 export function bindEvents(ctx: BindingContext, eventMap: NonNullable<BindingOptions['on']>): void {
-  Object.entries(eventMap).forEach(([name, handler]) => {
-    bindOn(ctx, name, handler);
-  });
+  const $el = ctx.$el;
+  $el.on(eventMap);
+  ctx.trackCleanup(() => $el.off(eventMap));
 }
 
 /**

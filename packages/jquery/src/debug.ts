@@ -149,11 +149,14 @@ const HIGHLIGHT_STYLE_ATTR = 'data-atom-debug';
 
 /**
  * Injects the highlight CSS once per document lifetime.
- * Guards against re-injection by checking the DOM rather than a module-level
- * flag, so that JSDOM resets in tests do not cause desync.
+ * Uses a WeakRef so that JSDOM test resets naturally invalidate the cache:
+ * when the old document is GC'd the WeakRef deref returns undefined and
+ * the style is re-injected into the fresh document — no module-level boolean
+ * flag needed.
  */
+let _highlightStyleRef: WeakRef<HTMLStyleElement> | undefined;
 function injectHighlightStyle(): void {
-  if (document.querySelector(`style[${HIGHLIGHT_STYLE_ATTR}]`)) return;
+  if (_highlightStyleRef?.deref()?.isConnected) return;
   const style = document.createElement('style');
   style.setAttribute(HIGHLIGHT_STYLE_ATTR, '');
   style.textContent =
@@ -163,6 +166,7 @@ function injectHighlightStyle(): void {
     `transition:outline ${HIGHLIGHT_TRANSITION} ease-out` +
     `}`;
   document.head.appendChild(style);
+  _highlightStyleRef = new WeakRef(style);
 }
 
 // Tracks the pending setTimeout handle per element.
@@ -188,17 +192,17 @@ function highlightElement(el: HTMLElement): void {
   injectHighlightStyle();
 
   // Cancel pending rAF to avoid duplicate classList.add.
+  // .set() below overwrites the entry, so .delete() here is not needed.
   const existingRaf = highlightRafs.get(el);
   if (existingRaf !== undefined) {
     cancelAnimationFrame(existingRaf);
-    highlightRafs.delete(el);
   }
 
   // Cancel pending timeout so the class is not prematurely removed.
+  // .set() in the rAF callback overwrites the entry, so .delete() here is not needed.
   const existingTimer = highlightTimers.get(el);
   if (existingTimer !== undefined) {
     clearTimeout(existingTimer);
-    highlightTimers.delete(el);
   }
 
   const rafId = requestAnimationFrame(() => {

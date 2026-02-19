@@ -10,41 +10,7 @@ import { bindUnbind } from './unified';
 // Internal helpers
 // ============================================================================
 
-/**
- * Mounts a functional component on a single element.
- *
- * If a component is already mounted on `el`, it is unmounted first so that
- * its cleanup runs before the new component initialises.
- *
- * The component function receives `($el, props)` and may return an optional
- * cleanup callback — see {@link ComponentFn}. That callback is stored in the
- * registry and called automatically when the element is removed or
- * `atomUnmount` is invoked. `registry.cleanup` runs `componentCleanup` before
- * any reactive effects, giving the component a chance to unmount gracefully.
- * Errors thrown by the cleanup are caught and logged by `registry.cleanup`
- * using `MOUNT_CLEANUP_ERROR` — no additional wrapping is needed here.
- */
-function mountComponent<P>(el: HTMLElement, component: ComponentFn<P>, props: P): void {
-  // Unmount any existing component before mounting the new one.
-  registry.cleanupTree(el);
-
-  const $el = $(el);
-  let teardown: ReturnType<typeof component>;
-  try {
-    // untracked: component setup code must not register dependencies on any
-    // outer reactive context (e.g. if atomMount is called inside an effect).
-    // Inner effect() calls inside the component set up their own subscriptions
-    // independently via the registry.
-    teardown = untracked(() => component($el, props));
-  } catch (err) {
-    debug.error(LOG_PREFIXES.MOUNT, ERROR_MESSAGES.MOUNT_ERROR(), err);
-    return;
-  }
-
-  if (typeof teardown === 'function') {
-    registry.setComponentCleanup(el, teardown);
-  }
-}
+const EMPTY_PROPS = Object.freeze({});
 
 // ============================================================================
 // jQuery plugin methods
@@ -63,8 +29,27 @@ function mountComponent<P>(el: HTMLElement, component: ComponentFn<P>, props: P)
  *   for components with required fields.
  */
 $.fn.atomMount = function <P>(component: ComponentFn<P>, props?: P): JQuery {
+  // Hoist default props object to avoid allocation in loop
+  const p = (props ?? EMPTY_PROPS) as P;
+
   return this.each(function () {
-    mountComponent(this, component, (props ?? {}) as P);
+    // Unmount any existing component before mounting the new one.
+    registry.cleanupTree(this);
+
+    const $el = $(this);
+    let teardown: ReturnType<typeof component>;
+    try {
+      // untracked: component setup code must not register dependencies on any
+      // outer reactive context (e.g. if atomMount is called inside an effect).
+      teardown = untracked(() => component($el, p));
+    } catch (err) {
+      debug.error(LOG_PREFIXES.MOUNT, ERROR_MESSAGES.MOUNT_ERROR(), err);
+      return;
+    }
+
+    if (typeof teardown === 'function') {
+      registry.setComponentCleanup(this, teardown);
+    }
   });
 };
 

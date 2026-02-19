@@ -62,12 +62,11 @@ $.fn.atomClass = function (
     console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.MISSING_CONDITION('atomClass')}`);
     return this;
   }
+  // Hoist: build the map once, not once-per-element inside each().
+  const classMap =
+    typeof classNameOrMap === 'string' ? { [classNameOrMap]: condition! } : classNameOrMap;
   return this.each(function () {
-    if (typeof classNameOrMap === 'string') {
-      bindClass(createContext(this), { [classNameOrMap]: condition! });
-    } else {
-      bindClass(createContext(this), classNameOrMap);
-    }
+    bindClass(createContext(this), classMap);
   });
 };
 
@@ -87,14 +86,13 @@ $.fn.atomCss = function (
     console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.MISSING_SOURCE('atomCss')}`);
     return this;
   }
+  // Hoist: build the map once, not once-per-element inside each().
+  const cssMap: CssBindings =
+    typeof propOrMap === 'string'
+      ? { [propOrMap]: unit ? [source as ReactiveValue<number>, unit] : source! }
+      : propOrMap;
   return this.each(function () {
-    if (typeof propOrMap === 'string') {
-      bindCss(createContext(this), {
-        [propOrMap]: unit ? [source as ReactiveValue<number>, unit] : source!,
-      });
-    } else {
-      bindCss(createContext(this), propOrMap);
-    }
+    bindCss(createContext(this), cssMap);
   });
 };
 
@@ -114,12 +112,12 @@ $.fn.atomAttr = function (
     console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.MISSING_SOURCE('atomAttr')}`);
     return this;
   }
+  // Hoist: build the map once, not once-per-element inside each().
+  const attrMap: Record<string, ReactiveValue<PrimitiveValue>> = typeof nameOrMap === 'string'
+    ? { [nameOrMap]: source! }
+    : nameOrMap;
   return this.each(function () {
-    if (typeof nameOrMap === 'string') {
-      bindAttr(createContext(this), { [nameOrMap]: source! });
-    } else {
-      bindAttr(createContext(this), nameOrMap);
-    }
+    bindAttr(createContext(this), attrMap);
   });
 };
 
@@ -139,10 +137,11 @@ $.fn.atomProp = function <T>(
     console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.MISSING_SOURCE('atomProp')}`);
     return this;
   }
+  // Hoist: build the map once, not once-per-element inside each().
+  const propMap: Record<string, ReactiveValue<unknown>> = typeof nameOrMap === 'string'
+    ? { [nameOrMap]: source as ReactiveValue<unknown> }
+    : (nameOrMap as Record<string, ReactiveValue<unknown>>);
   return this.each(function () {
-    const propMap: Record<string, ReactiveValue<unknown>> = typeof nameOrMap === 'string'
-      ? { [nameOrMap]: source as ReactiveValue<unknown> }
-      : (nameOrMap as Record<string, ReactiveValue<unknown>>);
     bindProp(createContext(this), propMap);
   });
 };

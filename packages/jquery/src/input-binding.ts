@@ -11,16 +11,6 @@ let instanceCounter = 0;
 
 type InputEl = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
 
-/** True only for element types that expose a text selection range. */
-function supportsSelection(el: InputEl): el is HTMLInputElement | HTMLTextAreaElement {
-  return el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement;
-}
-
-/** Marks a function as an internal handler so the jQuery patch skips batch() wrapping. */
-function markInternal(fn: () => void): void {
-  (fn as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
-}
-
 class InputBinding<T> {
   private readonly $el: JQuery;
   private readonly el: InputEl;
@@ -35,25 +25,44 @@ class InputBinding<T> {
   /** Per-instance jQuery event namespace — prevents cleanup collisions. */
   private readonly ns = `.atomBind-${++instanceCounter}`;
 
+  // Initialized in constructor based on options.debounce decision.
+  private readonly handleInput: () => void;
+
   constructor($el: JQuery, atom: WritableAtom<T>, options: ValOptions<T>) {
     this.$el = $el;
     this.el = $el[0] as InputEl;
     this.atom = atom;
 
+    const debounce = options.debounce ?? 0;
     this.options = {
-      debounce: options.debounce ?? 0,
+      debounce,
       event: options.event ?? INPUT_DEFAULTS.EVENT,
       parse: options.parse ?? ((v: string) => v as unknown as T),
       format: options.format ?? ((v: T) => String(v ?? '')),
       equal: options.equal ?? Object.is,
     };
 
+    // Optimization: Pre-bind the appropriate input handler to avoid per-event branching.
+    if (debounce > 0) {
+      this.handleInput = () => {
+        if (this.flags & BindingFlags.Composing) return;
+        clearTimeout(this.timeoutId);
+        this.timeoutId = setTimeout(() => this.syncAtomFromDom(), debounce);
+      };
+    } else {
+      this.handleInput = () => {
+        if (this.flags & BindingFlags.Composing) return;
+        this.syncAtomFromDom();
+      };
+    }
+
     // Mark all internal handlers so the jQuery patch skips batch() wrapping.
-    markInternal(this.handleFocus);
-    markInternal(this.handleBlur);
-    markInternal(this.handleCompositionStart);
-    markInternal(this.handleCompositionEnd);
-    markInternal(this.handleInput);
+    // Inlining markInternal avoids helper call overhead.
+    (this.handleFocus as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
+    (this.handleBlur as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
+    (this.handleCompositionStart as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
+    (this.handleCompositionEnd as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
+    (this.handleInput as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
 
     this.bindEvents();
   }
@@ -91,18 +100,6 @@ class InputBinding<T> {
     const formatted = this.options.format(this.atom.peek());
     if (this.el.value !== formatted) {
       this.el.value = formatted;
-    }
-  };
-
-  private readonly handleInput = () => {
-    // Defer sync until IME composition is complete.
-    if (this.flags & BindingFlags.Composing) return;
-
-    if (this.options.debounce) {
-      clearTimeout(this.timeoutId);
-      this.timeoutId = setTimeout(() => this.syncAtomFromDom(), this.options.debounce);
-    } else {
-      this.syncAtomFromDom();
     }
   };
 
@@ -167,7 +164,10 @@ class InputBinding<T> {
 
       this.flags |= BindingFlags.SyncingToDom;
       try {
-        if (isFocused && supportsSelection(this.el)) {
+        if (
+          isFocused &&
+          (this.el instanceof HTMLInputElement || this.el instanceof HTMLTextAreaElement)
+        ) {
           // Preserve cursor position so external atom updates don't jump the caret.
           const start = this.el.selectionStart;
           const end = this.el.selectionEnd;

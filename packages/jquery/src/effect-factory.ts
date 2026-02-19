@@ -73,7 +73,10 @@ export function registerReactiveEffect<T>(
             debug.error(LOG_PREFIXES.BINDING, `${ERROR_MESSAGES.UPDATER_ERROR(debugType)}:`, e);
             return;
           }
-          debug.domUpdated(el, debugType, value);
+          // debug.domUpdated already guards on debug.enabled internally, but
+          // skipping the call entirely avoids a function-call overhead on every
+          // atom update in production (debug disabled).
+          if (debug.enabled) debug.domUpdated(el, debugType, value);
         });
       })
     );
@@ -85,6 +88,6 @@ export function registerReactiveEffect<T>(
       debug.error(LOG_PREFIXES.BINDING, `${ERROR_MESSAGES.UPDATER_ERROR(debugType)} (static):`, e);
       return;
     }
-    debug.domUpdated(el, debugType, source);
+    if (debug.enabled) debug.domUpdated(el, debugType, source);
   }
 }
