@@ -1,35 +1,45 @@
-import { effect } from '@but212/atom-effect';
-import { INPUT_DEFAULTS } from './constants';
+import { effect, untracked } from '@but212/atom-effect';
+import { ERROR_MESSAGES, INPUT_DEFAULTS, LOG_PREFIXES } from './constants';
 import { debug } from './debug';
+import { INTERNAL_HANDLER } from './jquery-patch';
 import type { EffectObject, ValOptions, WritableAtom } from './types';
 import { BindingFlags } from './types';
 
-/**
- * Applies two-way data binding configuration to an input element.
- * Shared logic used by both implicit (atomBind) and explicit (atomVal) bindings.
- *
- * @param $el - The jQuery element to bind.
- * @param atom - The target atom for two-way binding.
- * @param options - Binding options (parse, format, debounce, events).
- * @returns Object containing the effect function (for Atom -> DOM) and cleanup function.
- */
+// Monotonically increasing counter used to generate per-instance event
+// namespaces, preventing cleanup of sibling bindings on the same element.
+let instanceCounter = 0;
+
+type InputEl = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+
+/** True only for element types that expose a text selection range. */
+function supportsSelection(el: InputEl): el is HTMLInputElement | HTMLTextAreaElement {
+  return el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement;
+}
+
+/** Marks a function as an internal handler so the jQuery patch skips batch() wrapping. */
+function markInternal(fn: () => void): void {
+  (fn as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
+}
+
 class InputBinding<T> {
   private readonly $el: JQuery;
-  private readonly el: HTMLInputElement | HTMLTextAreaElement;
+  private readonly el: InputEl;
   private readonly atom: WritableAtom<T>;
   private readonly options: Required<ValOptions<T>>;
 
-  // State from createInputBindingState
   private flags = 0;
-  private timeoutId: ReturnType<typeof setTimeout> | null = null;
-  private readonly ns = '.atomBind';
+  // undefined instead of null so clearTimeout(this.timeoutId) is always safe
+  // without a null-check (clearTimeout(undefined) is a no-op per spec).
+  private timeoutId: ReturnType<typeof setTimeout> | undefined = undefined;
+
+  /** Per-instance jQuery event namespace — prevents cleanup collisions. */
+  private readonly ns = `.atomBind-${++instanceCounter}`;
 
   constructor($el: JQuery, atom: WritableAtom<T>, options: ValOptions<T>) {
     this.$el = $el;
-    this.el = $el[0] as HTMLInputElement | HTMLTextAreaElement;
+    this.el = $el[0] as InputEl;
     this.atom = atom;
 
-    // Normalize options
     this.options = {
       debounce: options.debounce ?? 0,
       event: options.event ?? INPUT_DEFAULTS.EVENT,
@@ -38,20 +48,27 @@ class InputBinding<T> {
       equal: options.equal ?? Object.is,
     };
 
+    // Mark all internal handlers so the jQuery patch skips batch() wrapping.
+    markInternal(this.handleFocus);
+    markInternal(this.handleBlur);
+    markInternal(this.handleCompositionStart);
+    markInternal(this.handleCompositionEnd);
+    markInternal(this.handleInput);
+
     this.bindEvents();
   }
 
-  // --- Event Handlers (Bound) ---
+  // --- Event Handlers ---
 
   private readonly handleCompositionStart = () => {
     this.flags |= BindingFlags.Composing;
   };
 
-  private readonly handleCompositionEnd = (e: JQuery.Event) => {
+  private readonly handleCompositionEnd = () => {
     this.flags &= ~BindingFlags.Composing;
-    // Chromium: triggers input event after compositionend
-    // Safari/Firefox: might need manual sync
-    this.handleInput(e);
+    // Chromium fires an input event after compositionend.
+    // Safari/Firefox may not, so we trigger sync manually.
+    this.handleInput();
   };
 
   private readonly handleFocus = () => {
@@ -61,26 +78,28 @@ class InputBinding<T> {
   private readonly handleBlur = () => {
     this.flags &= ~BindingFlags.Focused;
 
-    // Flush pending debounce
-    if (this.timeoutId) {
+    // Flush any pending debounce timer on blur.
+    if (this.timeoutId !== undefined) {
       clearTimeout(this.timeoutId);
-      this.timeoutId = null;
+      this.timeoutId = undefined;
       this.syncAtomFromDom();
     }
 
-    // Force formatting on blur
-    const formatted = this.options.format(this.atom.value);
+    // Re-format the displayed value to match the atom's canonical format.
+    // peek() instead of .value: this is an event handler path — we want the
+    // current value but must not register a reactive dependency here.
+    const formatted = this.options.format(this.atom.peek());
     if (this.el.value !== formatted) {
       this.el.value = formatted;
     }
   };
 
-  private readonly handleInput = (_e: JQuery.Event) => {
-    // If composing, do nothing (wait for compositionend)
+  private readonly handleInput = () => {
+    // Defer sync until IME composition is complete.
     if (this.flags & BindingFlags.Composing) return;
 
     if (this.options.debounce) {
-      if (this.timeoutId) clearTimeout(this.timeoutId);
+      clearTimeout(this.timeoutId);
       this.timeoutId = setTimeout(() => this.syncAtomFromDom(), this.options.debounce);
     } else {
       this.syncAtomFromDom();
@@ -90,18 +109,22 @@ class InputBinding<T> {
   // --- Sync Logic ---
 
   private syncAtomFromDom(): void {
-    // Skip if system is busy or user is composing (IME)
-    if (this.flags & BindingFlags.Busy || this.flags & BindingFlags.Composing) return;
+    // BindingFlags.Busy covers Composing | SyncingToAtom | SyncingToDom.
+    // SyncingToDom is included defensively: if a future synchronous code path
+    // triggers handleInput during an Atom→DOM write, this guard prevents echo.
+    if (this.flags & BindingFlags.Busy) return;
 
     this.flags |= BindingFlags.SyncingToAtom;
     try {
-      const currentRaw = this.el.value;
-      const parsed = this.options.parse(currentRaw);
-
-      // Only update if value actually changed
-      if (!this.options.equal(this.atom.value, parsed)) {
+      const parsed = this.options.parse(this.el.value);
+      // peek() instead of .value: equality check in an event handler must not
+      // register a dependency — only syncDomFromAtom (the effect body) tracks.
+      if (!this.options.equal(this.atom.peek(), parsed)) {
         this.atom.value = parsed;
       }
+    } catch (e) {
+      // parse() threw (e.g. invalid input) — leave the atom unchanged.
+      debug.warn(LOG_PREFIXES.BINDING, `${ERROR_MESSAGES.PARSE_ERROR()}:`, e);
     } finally {
       this.flags &= ~BindingFlags.SyncingToAtom;
     }
@@ -109,51 +132,69 @@ class InputBinding<T> {
 
   // --- Public Interface ---
 
-  public readonly effect = () => {
+  /**
+   * Reactive effect body (Atom → DOM).
+   * Called by the `effect()` wrapper in `applyInputBinding` whenever the atom
+   * value changes. Named `syncDomFromAtom` to distinguish it from the imported
+   * `effect` function and to clarify the data-flow direction.
+   */
+  public readonly syncDomFromAtom = () => {
+    // Only this.atom.value is the intended dependency of this effect.
+    // Everything else — format(), parse(), equal(), el.value DOM reads —
+    // runs untracked so user callbacks cannot accidentally subscribe this
+    // effect to extra atoms.
     const val = this.atom.value;
-    const formatted = this.options.format(val);
-    const currentVal = this.el.value;
 
-    // 1. Skip if already synchronized
-    if (currentVal === formatted) return;
+    untracked(() => {
+      const formatted = this.options.format(val);
+      const currentVal = this.el.value;
 
-    // 2. Skip if focused and current input parses to same value (don't interrupt user)
-    if (
-      this.flags & BindingFlags.Focused &&
-      this.options.equal(this.options.parse(currentVal), val)
-    ) {
-      return;
-    }
+      // Skip if already synchronised.
+      if (currentVal === formatted) return;
 
-    this.flags |= BindingFlags.SyncingToDom;
-    try {
-      // Preserve cursor if focused
-      if (this.flags & BindingFlags.Focused) {
-        const start = this.el.selectionStart;
-        const end = this.el.selectionEnd;
+      const isFocused = !!(this.flags & BindingFlags.Focused);
 
-        this.el.value = formatted;
-
-        const len = formatted.length;
-        if (start !== null && end !== null) {
-          this.el.setSelectionRange(Math.min(start, len), Math.min(end, len));
+      // While focused, skip update if the current raw input already parses to
+      // the same logical value — avoids interrupting in-progress user input.
+      if (isFocused) {
+        try {
+          if (this.options.equal(this.options.parse(currentVal), val)) return;
+        } catch {
+          // parse() threw on the current raw input (e.g. partially typed number).
+          // Fall through and apply the formatted value.
         }
-      } else {
-        this.el.value = formatted;
       }
 
-      debug.domUpdated(this.$el, 'val', formatted);
-    } finally {
-      this.flags &= ~BindingFlags.SyncingToDom;
-    }
+      this.flags |= BindingFlags.SyncingToDom;
+      try {
+        if (isFocused && supportsSelection(this.el)) {
+          // Preserve cursor position so external atom updates don't jump the caret.
+          const start = this.el.selectionStart;
+          const end = this.el.selectionEnd;
+
+          this.el.value = formatted;
+
+          const len = formatted.length;
+          if (start !== null && end !== null) {
+            this.el.setSelectionRange(Math.min(start, len), Math.min(end, len));
+          }
+        } else {
+          this.el.value = formatted;
+        }
+
+        debug.domUpdated(this.$el, 'val', formatted);
+      } finally {
+        this.flags &= ~BindingFlags.SyncingToDom;
+      }
+    });
   };
 
   public readonly cleanup = () => {
-    this.$el.off(this.ns); // Remove all namespaced events
-    if (this.timeoutId) {
-      clearTimeout(this.timeoutId);
-      this.timeoutId = null;
-    }
+    // Remove only this instance's namespaced events — other bindings on the
+    // same element are unaffected.
+    this.$el.off(this.ns);
+    clearTimeout(this.timeoutId);
+    this.timeoutId = undefined;
   };
 
   private bindEvents(): void {
@@ -161,31 +202,26 @@ class InputBinding<T> {
       .on(`focus${this.ns}`, this.handleFocus)
       .on(`blur${this.ns}`, this.handleBlur)
       .on(`compositionstart${this.ns}`, this.handleCompositionStart)
-      .on(`compositionend${this.ns}`, this.handleCompositionEnd);
-
-    const eventName = this.options.event;
-    if (eventName === 'input') {
-      this.$el.on(`input${this.ns}`, this.handleInput);
-    } else {
-      this.$el.on(`${eventName}${this.ns}`, this.handleInput);
-    }
+      .on(`compositionend${this.ns}`, this.handleCompositionEnd)
+      .on(`${this.options.event}${this.ns}`, this.handleInput);
   }
 }
 
 /**
- * Applies two-way data binding configuration to an input element.
- * Shared logic used by both implicit (atomBind) and explicit (atomVal) bindings.
+ * Applies two-way data binding between a writable atom and an input element.
+ * Used by both `$.fn.atomVal` (explicit) and `$.fn.atomBind({ val })` (implicit).
  *
- * @param $el - The jQuery element to bind.
- * @param atom - The target atom for two-way binding.
- * @param options - Binding options (parse, format, debounce, events).
- * @returns Object containing the registered EffectObject and cleanup function.
+ * @param $el     - jQuery-wrapped input, textarea, or select element.
+ * @param atom    - Writable atom to keep in sync with the element's value.
+ * @param options - Optional parse/format/debounce/event/equal configuration.
+ * @returns `fx` — the registered reactive effect (Atom → DOM),
+ *          `cleanup` — removes all event listeners and cancels pending timers.
  */
 export function applyInputBinding<T>(
   $el: JQuery,
   atom: WritableAtom<T>,
-  options: ValOptions<T> = {}
+  options: ValOptions<T>
 ): { fx: EffectObject; cleanup: () => void } {
   const binding = new InputBinding($el, atom, options);
-  return { fx: effect(binding.effect), cleanup: binding.cleanup };
+  return { fx: effect(binding.syncDomFromAtom), cleanup: binding.cleanup };
 }

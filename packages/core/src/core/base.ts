@@ -40,14 +40,14 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
       );
     }
 
-    const subs = this._subscribers;
-    for (let i = 0, len = subs.length; i < len; i++) {
-      const sub = subs[i];
-      if (!sub) continue;
-      if (isFn ? sub.fn === listener : sub.sub === listener) {
-        if (IS_DEV) console.warn('Duplicate subscription ignored.');
-        return () => {};
-      }
+    if (
+      this._subscribers.some((sub) => {
+        if (!sub) return false;
+        return isFn ? sub.fn === listener : sub.sub === listener;
+      })
+    ) {
+      if (IS_DEV) console.warn('Duplicate subscription ignored.');
+      return () => {};
     }
 
     const link = new Subscription<T>(
@@ -55,6 +55,7 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
       !isFn ? (listener as Subscriber) : undefined
     );
 
+    const subs = this._subscribers;
     subs.push(link);
 
     return () => this._unsubscribe(link);
@@ -80,18 +81,15 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
     if (this._subscribers.length === 0) return;
 
     const subs = this._subscribers.slice(0);
-    const len = subs.length;
-
-    for (let i = 0; i < len; i++) {
-      const s = subs[i];
-      if (!s) continue;
+    subs.forEach((s) => {
+      if (!s) return;
       try {
         if (s.fn) s.fn(newValue, oldValue);
         else if (s.sub) s.sub.execute();
       } catch (err) {
         this._handleNotifyError(err);
       }
-    }
+    });
   }
 
   private _handleNotifyError(err: unknown): void {

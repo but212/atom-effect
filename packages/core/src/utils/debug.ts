@@ -30,14 +30,12 @@ function checkCircularInternal(dep: Dependency, current: object, visited: Set<nu
   visited.add(dep.id);
 
   if (hasDeps(dep)) {
-    const deps = dep.dependencies;
     // Check dependencies
-    for (let i = 0; i < deps.length; i++) {
-      const child = deps[i];
+    dep.dependencies.forEach((child) => {
       if (child) {
         checkCircularInternal(child, current, visited);
       }
-    }
+    });
   }
 }
 

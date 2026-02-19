@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { LOG_PREFIXES } from '../src/constants';
 import { debug } from '../src/debug';
 
 describe('Debug Module', () => {
@@ -36,17 +37,17 @@ describe('Debug Module', () => {
 
       debug.enabled = true;
       debug.log('Test', 'msg');
-      expect(logSpy).toHaveBeenCalledWith('[atom-effect-jquery] Test:', 'msg');
+      expect(logSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.MOUNT} Test:`, 'msg');
     });
 
     it('warns regardless of enabled state', () => {
-      debug.warn('warning message');
-      expect(warnSpy).toHaveBeenCalledWith('[atom-effect-jquery]', 'warning message');
+      debug.warn(LOG_PREFIXES.MOUNT, 'warning message');
+      expect(warnSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.MOUNT} warning message`);
 
       warnSpy.mockClear();
       debug.enabled = true;
-      debug.warn('warning message');
-      expect(warnSpy).toHaveBeenCalledWith('[atom-effect-jquery]', 'warning message');
+      debug.warn(LOG_PREFIXES.MOUNT, 'warning message');
+      expect(warnSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.MOUNT} warning message`);
     });
   });
 
@@ -56,7 +57,7 @@ describe('Debug Module', () => {
       debug.atomChanged('testAtom', 1, 2);
 
       expect(logSpy).toHaveBeenCalledWith(
-        '[atom-effect-jquery] Atom "testAtom" changed:',
+        `${LOG_PREFIXES.MOUNT} Atom "testAtom" changed:`,
         1,
         '→',
         2
@@ -71,7 +72,7 @@ describe('Debug Module', () => {
       debug.domUpdated(el, 'text', 'new text');
 
       expect(logSpy).toHaveBeenCalledWith(
-        expect.stringContaining('[atom-effect-jquery] DOM updated:'),
+        expect.stringContaining(`${LOG_PREFIXES.MOUNT} DOM updated:`),
         'new text'
       );
 
@@ -98,7 +99,7 @@ describe('Debug Module', () => {
     it('logs cleanup', () => {
       debug.enabled = true;
       debug.cleanup('#test');
-      expect(logSpy).toHaveBeenCalledWith('[atom-effect-jquery] Cleanup: #test');
+      expect(logSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.MOUNT} Cleanup: #test`);
     });
   });
 });

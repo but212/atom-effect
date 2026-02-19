@@ -269,4 +269,30 @@ describe('Atom List', () => {
 
     $container.remove();
   });
+
+  // ---------------------------------------------------------------------------
+  // Batch rendering
+  // ---------------------------------------------------------------------------
+
+  it('batch rendering: 1000 items should render with correct text', async () => {
+    const data = Array.from({ length: 1000 }, (_, i) => ({ id: i, label: `Item-${i}` }));
+    const items = $.atom(data);
+    const $container = $('<div>').appendTo(document.body);
+
+    $container.atomList(items, {
+      key: 'id',
+      render: (item) => `<span data-id="${item.id}">${item.label}</span>`,
+    });
+
+    await $.nextTick();
+
+    expect($container.children().length).toBe(1000);
+    for (let i = 0; i < 1000; i++) {
+      const $child = $container.children().eq(i);
+      expect($child.attr('data-id')).toBe(String(i));
+      expect($child.text()).toBe(`Item-${i}`);
+    }
+
+    $container.remove();
+  });
 });

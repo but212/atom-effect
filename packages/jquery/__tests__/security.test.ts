@@ -268,7 +268,7 @@ describe('Policy: Allowed / Practicality', () => {
       'url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=)'
     );
     div.atomCss('background-image', bg);
-    expect(div[0].style.backgroundImage).toContain('data:image/png');
+    expect(div[0]!.style.backgroundImage).toContain('data:image/png');
   });
 
   // 3. Relative URLs
@@ -287,7 +287,7 @@ describe('Policy: Allowed / Practicality', () => {
     const fx = effect(() => {
       div.html(iframe);
     });
-    registry.trackEffect(div[0], fx);
+    registry.trackEffect(div[0]!, fx);
 
     expect(div.find('iframe').length).toBe(1);
   });

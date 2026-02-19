@@ -1,32 +1,57 @@
+import { ERROR_MESSAGES, LOG_PREFIXES } from './constants';
 import { debug } from './debug';
 import type { EffectObject } from './types';
 import { getSelector } from './utils';
 
 /**
- * Marker class for bound elements to optimize selector engines.
+ * CSS class added to every element that has at least one active binding.
+ * Used by `querySelectorAll` in `cleanupDescendants` for efficient subtree traversal.
  * Internal use only.
  */
 const AES_BOUND = '_aes-bound';
 
+/**
+ * Per-element record of all reactive resources that must be released on cleanup.
+ * Fields are optional to avoid allocating arrays for the common case where only
+ * one resource type is used.
+ */
 interface BindingRecord {
-  effects?: EffectObject[];
-  cleanups?: Array<() => void>;
+  effects?: EffectObject[] | undefined;
+  cleanups?: Array<() => void> | undefined;
   componentCleanup?: (() => void) | undefined;
 }
 
+// ============================================================================
+// BindingRegistry
+// ============================================================================
+
 /**
- * Binding Registry
+ * Central registry mapping DOM elements to their reactive binding records.
  *
- * Highly optimized for performance:
- * - Uses WeakMap for zero-leak DOM associations.
- * - Minimal allocations in the tracking path.
- * - Efficient tree traversal for cleanup.
+ * Design goals:
+ * - Zero memory leaks: all collections use WeakMap/WeakSet keyed by Element.
+ * - Minimal allocations in the hot tracking path.
+ * - O(bound-descendants) cleanup via a single querySelectorAll pass.
  */
 class BindingRegistry {
   private records = new WeakMap<Element, BindingRecord>();
+
+  /**
+   * Dual-purpose set:
+   * 1. `hasBind()` membership check — O(1).
+   * 2. Cleanup guard in `cleanup()` — atomically deleted to prevent re-entry.
+   *
+   * Invariant: an element is in `boundElements` if and only if it has a record
+   * in `records`. The two collections are always mutated together.
+   */
   private boundElements = new WeakSet<Element>();
+
   private preservedNodes = new WeakSet<Node>();
-  private ignoredNodes = new WeakSet<Node>(); // Prevent redundant cleanup
+  private ignoredNodes = new WeakSet<Node>();
+
+  // --------------------------------------------------------------------------
+  // Lifecycle flags
+  // --------------------------------------------------------------------------
 
   keep(node: Node): void {
     this.preservedNodes.add(node);
@@ -44,114 +69,130 @@ class BindingRegistry {
     return this.ignoredNodes.has(node);
   }
 
-  private _getOrCreateRecord(el: Element): BindingRecord {
+  // --------------------------------------------------------------------------
+  // Tracking
+  // --------------------------------------------------------------------------
+
+  private getOrCreateRecord(el: Element): BindingRecord {
     let res = this.records.get(el);
     if (!res) {
       res = {};
       this.records.set(el, res);
-      // Mark as bound and add class for faster querySelector lookup
-      if (!this.boundElements.has(el)) {
-        this.boundElements.add(el);
-        el.classList.add(AES_BOUND);
-      }
+      // boundElements and records are always in sync (see invariant above),
+      // so no membership check is needed here — if records had no entry,
+      // boundElements has no entry either.
+      this.boundElements.add(el);
+      el.classList.add(AES_BOUND);
     }
     return res;
   }
 
   trackEffect(el: Element, fx: EffectObject): void {
-    const record = this._getOrCreateRecord(el);
+    const record = this.getOrCreateRecord(el);
     record.effects ??= [];
     record.effects.push(fx);
   }
 
   trackCleanup(el: Element, fn: () => void): void {
-    const record = this._getOrCreateRecord(el);
+    const record = this.getOrCreateRecord(el);
     record.cleanups ??= [];
     record.cleanups.push(fn);
   }
 
   setComponentCleanup(el: Element, fn: (() => void) | undefined): void {
-    const record = this._getOrCreateRecord(el);
+    const record = this.getOrCreateRecord(el);
     record.componentCleanup = fn;
-  }
-
-  getComponentCleanup(el: Element): (() => void) | undefined {
-    return this.records.get(el)?.componentCleanup;
   }
 
   hasBind(el: Element): boolean {
     return this.boundElements.has(el);
   }
 
+  // --------------------------------------------------------------------------
+  // Cleanup
+  // --------------------------------------------------------------------------
+
   cleanup(el: Element): void {
-    // Atomic delete return value used as a high-performance guard
+    // Atomic delete doubles as a re-entry guard and an existence check.
     if (!this.boundElements.delete(el)) return;
 
     const record = this.records.get(el);
-    if (!record) return;
+    if (!record) {
+      // boundElements and records must always be in sync (see invariant).
+      // Reaching here indicates a state desync — surface it for debugging.
+      debug.warn(
+        LOG_PREFIXES.BINDING,
+        'registry desync: boundElements had entry but records did not for',
+        el
+      );
+      el.classList.remove(AES_BOUND);
+      this.preservedNodes.delete(el);
+      this.ignoredNodes.delete(el);
+      return;
+    }
 
-    // Fast cleanup of metadata
     this.records.delete(el);
     this.preservedNodes.delete(el);
     this.ignoredNodes.delete(el);
 
-    // Only touch DOM if element is still connected (e.g. manual cleanup)
-    // If it's being removed, class removal is redundant overhead
+    // Avoid a classList write for elements that are already leaving the DOM —
+    // the browser will discard the class along with the node.
     if (el.isConnected) {
       el.classList.remove(AES_BOUND);
     }
 
-    // Hoist costly selector string generation to debug-only block
     if (debug.enabled) {
       debug.cleanup(getSelector(el));
     }
 
-    // 0. Component Cleanup (Top Priority)
-    // This allows components to unmount gracefully before effects are killed
+    // Step 0 — Component cleanup runs first so the component can unmount
+    // gracefully before its reactive effects are severed.
     if (record.componentCleanup) {
       try {
         record.componentCleanup();
       } catch (e) {
-        console.error('[atom-effect-jquery] Cleanup error:', e);
+        debug.error(LOG_PREFIXES.MOUNT, ERROR_MESSAGES.MOUNT_CLEANUP_ERROR(), e);
       }
     }
 
-    // 1. Dispose Effects (Atom -> Subscription severed)
-    const effects = record.effects;
-    if (effects) {
-      for (let i = 0, len = effects.length; i < len; i++) {
-        try {
-          effects[i]?.dispose();
-        } catch (e) {
-          debug.warn('Effect dispose error:', e);
-        }
+    // Step 1 — Sever atom → effect subscriptions.
+    record.effects?.forEach((fx) => {
+      try {
+        fx.dispose();
+      } catch (e) {
+        debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.EFFECT_DISPOSE_ERROR(), e);
       }
-    }
+    });
 
-    // 2. Execute custom cleanups
-    const cleanups = record.cleanups;
-    if (cleanups) {
-      for (let i = 0, len = cleanups.length; i < len; i++) {
-        try {
-          cleanups[i]?.();
-        } catch (e) {
-          debug.warn('Cleanup error:', e);
-        }
+    // Step 2 — Run general-purpose cleanup callbacks.
+    record.cleanups?.forEach((fn) => {
+      try {
+        fn();
+      } catch (e) {
+        debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING_CLEANUP_ERROR(), e);
       }
-    }
+    });
   }
 
   cleanupDescendants(el: Element): void {
-    const children = el.querySelectorAll(`.${AES_BOUND}`);
-    for (let i = 0, len = children.length; i < len; i++) {
-      const child = children[i] as Element;
-      // Double check because querySelectorAll might return disconnected leftovers
-      if (child && this.boundElements.has(child)) {
+    // querySelectorAll returns a static NodeList — safe to iterate even though
+    // cleanup() mutates boundElements and may trigger further DOM changes.
+    el.querySelectorAll(`.${AES_BOUND}`).forEach((child) => {
+      if (this.boundElements.has(child)) {
         this.cleanup(child);
-      } else if (child) {
+      } else {
+        // The AES_BOUND class is present but the registry has no record.
+        // This indicates a state desync — the class was not removed when the
+        // element was last cleaned up (e.g. a non-connected cleanup path).
+        // Remove the stale class and warn so it surfaces in debug mode.
         child.classList.remove(AES_BOUND);
+        debug.warn(
+          LOG_PREFIXES.BINDING,
+          `${AES_BOUND} class found on unregistered element:`,
+          child
+        );
       }
-    }
+    });
   }
 
   cleanupTree(el: Element): void {
@@ -160,39 +201,75 @@ class BindingRegistry {
   }
 }
 
+// ============================================================================
+// Singleton + auto-cleanup
+// ============================================================================
+
 export const registry = new BindingRegistry();
 
 let observer: MutationObserver | null = null;
+let observedRoot: Element | null = null;
 
-export function enableAutoCleanup(root: Element = document.body): void {
-  if (observer) return;
+/**
+ * Starts observing `root` for removed elements and automatically disposes
+ * their reactive bindings when they leave the DOM.
+ *
+ * The `root` parameter is required (no default) to make the caller explicit
+ * about which subtree is being observed — `document.body` can be null if the
+ * script runs before the body is parsed.
+ *
+ * Idempotent: calling more than once with the same root before
+ * `disableAutoCleanup` has no effect. Calling with a different root while
+ * already active emits a warning and returns without re-observing.
+ */
+export function enableAutoCleanup(root: Element): void {
+  if (observer !== null) {
+    if (observedRoot !== root) {
+      debug.warn(
+        LOG_PREFIXES.BINDING,
+        'enableAutoCleanup() called with a different root while already active. Observation was NOT switched — call disableAutoCleanup() first.',
+        { current: observedRoot, requested: root }
+      );
+    }
+    return;
+  }
 
+  observedRoot = root;
   observer = new MutationObserver((mutations) => {
-    for (let i = 0, len = mutations.length; i < len; i++) {
-      const removedNodes = mutations[i]?.removedNodes;
-      if (!removedNodes) continue;
-      const rLen = removedNodes.length;
-      if (rLen === 0) continue;
+    mutations.forEach((mutation) => {
+      mutation.removedNodes.forEach((node) => {
+        // Only Element nodes can carry AES_BOUND bindings.
+        // 1 === Node.ELEMENT_NODE; the global `Node` is not available in all
+        // MutationObserver callback contexts (e.g. jsdom in some test setups).
+        if (node.nodeType !== 1) return;
 
-      for (let j = 0; j < rLen; j++) {
-        const node = removedNodes[j]!;
-        // Early exit: only elements can have AES_BOUND bindings
-        if (node.nodeType !== 1) continue;
-
-        // Skip if kept (detached for moves), explicitly ignored, or still connected
+        // isConnected handles the move case: when a node is removed from one
+        // parent and inserted into another in the same microtask, the
+        // MutationObserver fires after both operations, so the node is already
+        // reconnected. Skipping it here preserves its bindings correctly.
+        //
+        // isKept handles explicit .detach() — the element is temporarily out
+        // of the DOM but should retain its bindings for re-attachment.
+        //
+        // isIgnored handles .remove() — the jquery-patch marks the element
+        // before cleanupTree runs, preventing a redundant second cleanup here.
         if (node.isConnected || registry.isKept(node) || registry.isIgnored(node)) {
-          continue;
+          return;
         }
 
         registry.cleanupTree(node as Element);
-      }
-    }
+      });
+    });
   });
 
   observer.observe(root, { childList: true, subtree: true });
 }
 
+/**
+ * Stops the MutationObserver started by `enableAutoCleanup`.
+ */
 export function disableAutoCleanup(): void {
   observer?.disconnect();
   observer = null;
+  observedRoot = null;
 }

@@ -4,15 +4,22 @@
 
 ### jQuery
 
-- **Router**: Refactored core to `RouterImpl` using event delegation.
-- **Security**: Hardened XSS protection via native `DOMParser`. Added defense-in-depth encoding.
-- **Type System**: Introduced `PrimitiveValue` / `EffectResult` types for constraint safety.
-- **API**: Updated `API.md` methods. Synchronized signatures.
-- **atomFetch**: Added `AbortController` cancellation. Suppressed abort errors.
-- **atomList**: Fixed effect leaks. Resolved duplicate nodes during async lifecycle.
-- **Core**: Simplified binding logic in `unified.ts`. Optimized context initialization.
-- **Mount**: Added error guards for component lifecycle phases.
-- **Debug**: Synchronized visual highlights with `requestAnimationFrame`.
+- **Core Architecture & Safety**: Refactored package entry and internal binding logic for consistency; migrated to `Map` for internal caches and `forEach` for allocation safety; hardened reactivity using `untracked` for user-provided callbacks and `peek()` for event handlers; enhanced `BindingRegistry` with state desync detection.
+- **Rendering, Security & Lists**: Hardened XSS protection via global `DOMParser` singleton and `htmlSanitizeCache` (WeakMap); added proactive sanitization warnings; enhanced `atomList` with LIS-based reconciliation and async removal safety; unified `atomBind` and updated all chainable methods with overloads and validation.
+- **Bindings & Form Inputs**: Introduced per-instance event namespacing (`.atomBind-N`) and `INTERNAL_HANDLER` optimization to bypass redundant batching; improved synchronization robustness with selection-range guards, `try-catch` blocks, and busy-guard invariants.
+- **Routing & Networking**: Overhauled `RouterImpl` with navigation guards and read-only state atoms; enhanced `atomFetch` with abort-safety (`NEVER_SETTLE`), `onError` hooks, and eager/lazy request control.
+- **Lifecycle, Types & Testing**: Standardized `atomMount` ownership and recursive cleanup; refined `MutationObserver` auto-cleanup logic; comprehensive `types.ts` overhaul with global interface augmentations; expanded test suites with hardened non-null assertions; refactored visual debug highlights using `requestAnimationFrame`.
+- **atomList Batch Sanitization**: Optimized `atomList` rendering performance by batching per-item `sanitizeHtml()` calls into a single invocation using `<!--sep-->` comment separators, reducing N DOMParser parses to 1.
+  - **innerHTML Fast Path**: Initial renders with no `bind`/`onAdd`/`onRemove` callbacks bypass DocumentFragment assembly and use `innerHTML` for direct DOM creation.
+  - **Safety Guards**: innerHTML fast path is gated by `removingKeys.size === 0` to preserve async removal race correctness.
+  - **Tests**: Added separator preservation tests (`utils.test.ts`), 1000-item batch rendering correctness test (`list.test.ts`).
+
+### Core
+
+- **Refactoring**: Replaced manual `for` loops with modern array methods (`forEach`, `some`, `includes`, `findIndex`) across the reactive engine for improved readability and maintainability.
+- **Scheduler**: Streamlined batch queue merging and job execution loops.
+- **Computed**: Simplified error collection and dependency scanning logic using native array primitives.
+- **Effect**: Optimized dependency reclamation and dirty-check scanning.
 
 ## [0.21.3]
 

@@ -1,9 +1,10 @@
-import { effect } from '@but212/atom-effect';
+import { computed, effect, isAtom, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
-import { DANGEROUS_PROPS, ERROR_MESSAGES, LOG_PREFIXES } from './constants';
+import { DANGEROUS_PROPS, ERROR_MESSAGES, LOG_PREFIXES, VALID_INPUT_TAGS } from './constants';
 import { debug } from './debug';
-import { registerReactiveEffect } from './effect-factory';
+import { type BindingDebugType, registerReactiveEffect } from './effect-factory';
 import { applyInputBinding } from './input-binding';
+import { INTERNAL_HANDLER } from './jquery-patch';
 import { registry } from './registry';
 import type {
   BindingContext,
@@ -14,16 +15,43 @@ import type {
   ValOptions,
   WritableAtom,
 } from './types';
+
+export type { BindingContext };
+
 import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from './utils';
 
-// Cache for CSS property camelization to avoid repeated regex and check overhead
-const camelCache: Record<string, string> = Object.create(null);
+// Cache for CSS property camelization to avoid repeated regex overhead.
+// Uses Map instead of a plain object to avoid prototype pollution risk and
+// for clearer semantics — CSS property names are a small, finite set so the
+// cache is effectively bounded in practice.
+const camelCache = new Map<string, string>();
 function getCamelCase(prop: string): string {
-  let cached = camelCache[prop];
-  if (cached) return cached;
+  let cached = camelCache.get(prop);
+  if (cached !== undefined) return cached;
 
   cached = prop.includes('-') ? prop.replace(/-./g, (m) => m[1]!.toUpperCase()) : prop;
-  camelCache[prop] = cached;
+  camelCache.set(prop, cached);
+  return cached;
+}
+
+/**
+ * Cache for sanitized versions of reactive strings.
+ * Ensures that if 100 elements are bound to the same atom, sanitizeHtml() is
+ * called only once per update instead of 100 times.
+ */
+const htmlSanitizeCache = new WeakMap<
+  import('@but212/atom-effect').ReadonlyAtom<string>,
+  import('@but212/atom-effect').ComputedAtom<string>
+>();
+
+function getSanitizedHtml(
+  source: import('@but212/atom-effect').ReadonlyAtom<string>
+): import('@but212/atom-effect').ComputedAtom<string> {
+  let cached = htmlSanitizeCache.get(source);
+  if (!cached) {
+    cached = computed(() => sanitizeHtml(source.value));
+    htmlSanitizeCache.set(source, cached);
+  }
   return cached;
 }
 
@@ -68,22 +96,26 @@ export function bindText<T = unknown>(
 
 /**
  * Updates element inner HTML with XSS sanitization.
+ * Calls `registry.cleanupDescendants` before replacing innerHTML so that any
+ * reactive bindings on outgoing child nodes are disposed before they are removed —
+ * preventing the MutationObserver auto-cleanup path from firing a redundant cleanup.
  */
 export function bindHtml(ctx: BindingContext, value: ReactiveValue<string>): void {
   const el = ctx.el;
+
+  // Optimization: If the source is reactive, use a cached computed atom to
+  // ensure sanitization runs exactly once per atom change for all observers.
+  const reactiveSource = isAtom(value)
+    ? getSanitizedHtml(value as import('@but212/atom-effect').ReadonlyAtom<string>)
+    : value;
+
   registerReactiveEffect(
     el,
-    value,
-    (val) => {
-      const newVal = String(val ?? '');
-      const sanitized = sanitizeHtml(newVal);
-
-      if (sanitized !== newVal) {
-        console.warn(`${LOG_PREFIXES.BIND} ${ERROR_MESSAGES.UNSAFE_CONTENT}`);
-      }
-
-      // Guard against redundant DOM writes which destroy/recreate subtrees
+    reactiveSource,
+    (sanitized) => {
       if (el.innerHTML !== sanitized) {
+        // Dispose child bindings before the nodes are removed from the DOM.
+        registry.cleanupDescendants(el);
         el.innerHTML = sanitized;
       }
     },
@@ -98,16 +130,16 @@ export function bindClass(
   ctx: BindingContext,
   classMap: Record<string, ReactiveValue<boolean>>
 ): void {
-  for (const className in classMap) {
+  Object.entries(classMap).forEach(([className, source]) => {
     registerReactiveEffect(
       ctx.el,
-      classMap[className]!,
+      source,
       (val) => {
         ctx.el.classList.toggle(className, !!val);
       },
       `class.${className}`
     );
-  }
+  });
 }
 
 /**
@@ -116,14 +148,10 @@ export function bindClass(
 export function bindCss(ctx: BindingContext, cssMap: Record<string, CssValue>): void {
   const el = ctx.el;
   const style = el.style as unknown as Record<string, string>;
-  for (const prop in cssMap) {
-    const val = cssMap[prop];
-    if (val === undefined) continue;
-
+  Object.entries(cssMap).forEach(([prop, val]) => {
     const camel = getCamelCase(prop);
-    const isArr = Array.isArray(val);
-    const source = isArr ? val[0] : val;
-    const unit = isArr ? val[1] : '';
+    // Destructure the tuple form explicitly so TypeScript can narrow each branch.
+    const [source, unit] = Array.isArray(val) ? val : ([val, ''] as const);
 
     registerReactiveEffect(
       el,
@@ -131,14 +159,16 @@ export function bindCss(ctx: BindingContext, cssMap: Record<string, CssValue>): 
       (v) => {
         const strVal = unit ? `${v}${unit}` : String(v);
         if (isDangerousCssValue(strVal)) {
-          console.warn(`${LOG_PREFIXES.BIND} ${ERROR_MESSAGES.BLOCKED_DANGEROUS_VALUE(prop)}`);
+          console.warn(
+            `${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BLOCKED_DANGEROUS_CSS_VALUE(prop)}`
+          );
           return;
         }
         style[camel] = strVal;
       },
       `css.${prop}`
     );
-  }
+  });
 }
 
 /**
@@ -149,12 +179,13 @@ export function bindAttr(
   attrMap: Record<string, ReactiveValue<PrimitiveValue>>
 ): void {
   const el = ctx.el;
-  for (const name in attrMap) {
-    // Block event handler attributes (on*) to prevent inline JS injection
-    const c0 = name.charCodeAt(0);
-    if ((c0 === 111 || c0 === 79) && (name.charCodeAt(1) === 110 || name.charCodeAt(1) === 78)) {
-      console.warn(`${LOG_PREFIXES.BIND} ${ERROR_MESSAGES.BLOCKED_EVENT_HANDLER(name)}`);
-      continue;
+  Object.keys(attrMap).forEach((name) => {
+    // Block event handler attributes (on*) to prevent inline JS injection.
+    // Attribute names from the DOM API are lowercase, but user-supplied keys
+    // may use mixed case — normalize before the check.
+    if (name.toLowerCase().startsWith('on')) {
+      console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BLOCKED_EVENT_HANDLER(name)}`);
+      return;
     }
 
     registerReactiveEffect(
@@ -167,7 +198,7 @@ export function bindAttr(
         }
         const newVal = v === true ? name : String(v);
         if (isDangerousUrl(name, newVal)) {
-          console.warn(`${LOG_PREFIXES.BIND} ${ERROR_MESSAGES.BLOCKED_PROTOCOL(name)}`);
+          console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BLOCKED_PROTOCOL(name)}`);
           return;
         }
         // Attribute write guard
@@ -177,7 +208,7 @@ export function bindAttr(
       },
       `attr.${name}`
     );
-  }
+  });
 }
 
 /**
@@ -188,11 +219,11 @@ export function bindProp(
   propMap: Record<string, ReactiveValue<unknown>>
 ): void {
   const el = ctx.el as unknown as Record<string, unknown>;
-  for (const name in propMap) {
+  Object.keys(propMap).forEach((name) => {
     // Block dangerous DOM properties that can inject raw HTML (e.g., innerHTML)
-    if (DANGEROUS_PROPS.includes(name as (typeof DANGEROUS_PROPS)[number])) {
-      console.warn(`${LOG_PREFIXES.BIND} ${ERROR_MESSAGES.BLOCKED_DANGEROUS_PROP(name)}`);
-      continue;
+    if (DANGEROUS_PROPS.has(name)) {
+      console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BLOCKED_DANGEROUS_PROP(name)}`);
+      return;
     }
 
     registerReactiveEffect(
@@ -206,11 +237,11 @@ export function bindProp(
       },
       `prop.${name}`
     );
-  }
+  });
 }
 
 /**
- * Handlers visibility (display: none) toggle.
+ * Handles visibility (display: none) toggle.
  */
 export function bindVisibility(
   ctx: BindingContext,
@@ -218,14 +249,13 @@ export function bindVisibility(
   invert: boolean
 ): void {
   const el = ctx.el;
-  const label = invert ? 'hide' : 'show';
+  const label: BindingDebugType = invert ? 'hide' : 'show';
   registerReactiveEffect(
     el,
     condition,
     (val) => {
       const visible = invert !== !!val;
       el.style.display = visible ? '' : 'none';
-      if (debug.enabled) debug.domUpdated(el, label, val);
     },
     label
   );
@@ -235,17 +265,17 @@ export function bindVisibility(
  * Two-way value binding with full feature parity to $.fn.atomVal.
  * Supports parse/format options, debouncing, IME composition, and focus-aware updates.
  */
-export function bindVal<T>(
+export function bindVal(
   ctx: BindingContext,
-  cfg: WritableAtom<T> | [atom: WritableAtom<T>, options: ValOptions<T>]
+  atom: WritableAtom<unknown>,
+  options: ValOptions<unknown> = {}
 ): void {
   const tagName = ctx.el.tagName.toLowerCase();
-  if (tagName !== 'input' && tagName !== 'select' && tagName !== 'textarea') {
-    console.warn(`[atomBind] Val binding used on non-input element <${tagName}>.`);
+  if (!VALID_INPUT_TAGS.has(tagName)) {
+    console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.INVALID_INPUT_ELEMENT(tagName)}`);
     return;
   }
-  const isArr = Array.isArray(cfg);
-  const { fx, cleanup } = applyInputBinding(ctx.$el, isArr ? cfg[0] : cfg, isArr ? cfg[1] : {});
+  const { fx, cleanup } = applyInputBinding(ctx.$el, atom, options);
 
   registry.trackEffect(ctx.el, fx);
   ctx.trackCleanup(cleanup);
@@ -266,17 +296,25 @@ export function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): v
       atom.value = current;
     }
   };
+  // Internal handler — skip batch() wrapping in the jQuery patch.
+  (handler as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
 
+  // DOM → Atom cleanup goes through ctx.trackCleanup (element lifecycle).
+  // Atom → DOM cleanup goes through registry.trackEffect (reactive effect lifecycle).
+  // The split is intentional: effects are disposed by the registry's effect tracker;
+  // plain event listeners have no registry counterpart and need manual teardown.
   $el.on('change', handler);
   ctx.trackCleanup(() => $el.off('change', handler));
 
   // Atom → DOM
   const fx = effect(() => {
     const val = !!atom.value;
-    if (el.checked !== val) {
-      el.checked = val;
-      if (debug.enabled) debug.domUpdated($el, 'checked', val);
-    }
+    untracked(() => {
+      if (el.checked !== val) {
+        el.checked = val;
+        debug.domUpdated($el, 'checked', val);
+      }
+    });
   });
   registry.trackEffect(el, fx);
 }
@@ -285,19 +323,10 @@ export function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): v
 // Event Binding Handler
 // ============================================================================
 
-/**
- * Event handler map type for atomBind({ on: ... })
- */
-type EventBindingMap = {
-  [eventName: string]: (e: JQuery.Event) => void;
-};
-
-export function bindEvents(ctx: BindingContext, eventMap: EventBindingMap): void {
-  for (const name in eventMap) {
-    const handler = eventMap[name]!;
-    if (typeof handler !== 'function') continue;
+export function bindEvents(ctx: BindingContext, eventMap: NonNullable<BindingOptions['on']>): void {
+  Object.entries(eventMap).forEach(([name, handler]) => {
     bindOn(ctx, name, handler);
-  }
+  });
 }
 
 /**
@@ -314,29 +343,10 @@ export function bindOn(
   ctx.trackCleanup(() => $el.off(event, handler));
 }
 
-// ============================================================================
-// Main Entry Point
-// ============================================================================
-
 /**
- * Extends jQuery with atom-based data binding capabilities.
- * Synchronizes multiple element states with reactive atoms in a single batch call.
+ * Disposes all reactive bindings on an element and its descendants.
+ * Centralised here so `chainable.ts` does not need to import `registry` directly.
  */
-$.fn.atomBind = function (options: BindingOptions): JQuery {
-  return this.each(function () {
-    const ctx = createContext(this);
-
-    // Apply bindings through focused handlers
-    if (options.text !== undefined) bindText(ctx, options.text);
-    if (options.html !== undefined) bindHtml(ctx, options.html);
-    if (options.class) bindClass(ctx, options.class);
-    if (options.css) bindCss(ctx, options.css);
-    if (options.attr) bindAttr(ctx, options.attr);
-    if (options.prop) bindProp(ctx, options.prop);
-    if (options.show !== undefined) bindVisibility(ctx, options.show, false);
-    if (options.hide !== undefined) bindVisibility(ctx, options.hide, true);
-    if (options.val !== undefined) bindVal(ctx, options.val);
-    if (options.checked !== undefined) bindChecked(ctx, options.checked);
-    if (options.on) bindEvents(ctx, options.on);
-  });
-};
+export function bindUnbind(el: HTMLElement): void {
+  registry.cleanupTree(el);
+}

@@ -10,18 +10,41 @@ import {
 import $ from 'jquery';
 import { debug } from './debug';
 import type { AtomOptions, WritableAtom } from './types';
+// isReactive is defined in utils.ts because core's isAtom already covers computed
+// atoms (ComputedAtom carries ATOM_BRAND), making a separate isComputed check redundant.
 import { isReactive } from './utils';
 
+// ============================================================================
+// atom factory + debug namespace
+// ============================================================================
+
 /**
- * Creates an atom with optional metadata.
+ * Wraps core's `atom` factory to attach the `$.atom.debug` property.
+ *
+ * A locally-owned function object is required so that `Object.defineProperty`
+ * can add a getter/setter accessor — imported function references cannot be
+ * mutated this way. The `debug` accessor is attached below via
+ * `Object.defineProperty`; `staticExtensions` then registers both on `$`.
+ *
+ * `options` is not defaulted here — core's `atom` defaults `options` to `{}`
+ * internally, so passing `undefined` is safe and avoids an extra allocation
+ * per call.
  */
-function atom<T>(initialValue: T, options: AtomOptions = {}): WritableAtom<T> {
+function atom<T>(initialValue: T, options?: AtomOptions): WritableAtom<T> {
   return createAtom(initialValue, options);
 }
 
-// Add debug property
+// `atom as unknown as JQueryStatic['atom']` in staticExtensions is required
+// because TypeScript cannot see the runtime-added `debug` accessor through the
+// function's declared type. The `NamespaceExtensions` annotation on
+// `staticExtensions` still verifies that every other field is correctly typed.
 Object.defineProperty(atom, 'debug', {
-  get() {
+  enumerable: true,
+  // configurable: true allows tests and advanced consumers to redefine or
+  // delete the accessor if needed. The default (false) would permanently lock
+  // the property on the function object.
+  configurable: true,
+  get(): boolean {
     return debug.enabled;
   },
   set(value: boolean) {
@@ -29,19 +52,73 @@ Object.defineProperty(atom, 'debug', {
   },
 });
 
-/**
- * Waits for the next macrotask (setTimeout 0).
- * Effects are processed in microtasks, so this runs AFTER all pending effects complete.
- */
-function nextTick(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
-}
+// ============================================================================
+// nextTick
+// ============================================================================
 
 /**
- * Extend jQuery static methods.
+ * Resolves after all pending microtask-scheduled reactive effects have flushed.
+ *
+ * Implementation uses `setTimeout(0)` (a macrotask) which always runs after
+ * the current microtask queue is drained. This is intentional: core's
+ * scheduler enqueues effects as microtasks, so by the time the macrotask
+ * fires, all pending reactive propagation for the current turn is complete.
+ *
+ * Note: browsers may enforce a minimum 4 ms delay for nested `setTimeout`
+ * calls. For unit tests this is typically not an issue. If sub-millisecond
+ * resolution is needed, use `Promise.resolve()` directly to wait for a single
+ * microtask tick instead.
+ *
+ * **Caveats**: A single `await nextTick()` covers one reactive propagation
+ * wave. Chains of computed → effect → atom → effect may require multiple
+ * awaits — one per propagation step.
  */
-$.extend({
-  atom,
+export function nextTick(): Promise<void> {
+  return new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
+
+// ============================================================================
+// Static extension registration
+// ============================================================================
+
+/**
+ * The subset of `JQueryStatic` that this module registers.
+ *
+ * Typed as `Pick<JQueryStatic, ...>` so that the compiler verifies:
+ * 1. Every key listed here actually exists on `JQueryStatic`.
+ * 2. Every value's type is assignable to the declared `JQueryStatic` member.
+ *
+ * Adding or removing a key in either `JQueryStatic` or this object without
+ * updating the other produces a compile-time error.
+ *
+ * Exception: `nextTick` originates in this file (not imported from core), so
+ * its source of truth is the `export function nextTick` declaration above —
+ * `JQueryStatic['nextTick']` is verified against that signature, not the other
+ * way around.
+ *
+ * Note: `$.extend(staticExtensions)` merges the fields into `$` at runtime.
+ * TypeScript does not model this mutation on the `$` type — the augmented
+ * types are declared separately via global interface merging in `types.ts`.
+ */
+type NamespaceExtensions = Pick<
+  JQueryStatic,
+  | 'atom'
+  | 'computed'
+  | 'effect'
+  | 'batch'
+  | 'untracked'
+  | 'isAtom'
+  | 'isComputed'
+  | 'isReactive'
+  | 'nextTick'
+>;
+
+const staticExtensions: NamespaceExtensions = {
+  // `atom` carries a runtime `debug` accessor added via Object.defineProperty.
+  // TypeScript cannot see it through the declared function type, so the double
+  // cast is unavoidable. The NamespaceExtensions annotation still verifies all
+  // other fields; only `atom`'s shape escapes static checking here.
+  atom: atom as unknown as JQueryStatic['atom'],
   computed,
   effect,
   batch,
@@ -50,4 +127,8 @@ $.extend({
   isComputed,
   isReactive,
   nextTick,
-});
+};
+
+// $.extend(obj) merges into JQueryStatic (i.e. the $ function itself).
+// Use $.fn.extend(obj) instead to add instance methods on jQuery collections.
+$.extend(staticExtensions);

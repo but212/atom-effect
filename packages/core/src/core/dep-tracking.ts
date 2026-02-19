@@ -15,10 +15,7 @@ export function trackDependency<T>(
     // 1. subscribers array is typically 1-10 elements
     // 2. DependencySubscriber (hot path) uses O(1) epoch-based dedup via addDependency
     // 3. This branch only runs for raw function listeners (uncommon)
-    for (let i = 0, len = subscribers.length; i < len; i++) {
-      const link = subscribers[i];
-      if (link && link.fn === fn) return;
-    }
+    if (subscribers.some((link) => link && link.fn === fn)) return;
     subscribers.push(new Subscription(fn, undefined));
     return;
   }
@@ -29,10 +26,7 @@ export function trackDependency<T>(
   }
 
   const sub = current as Subscriber;
-  for (let i = 0, len = subscribers.length; i < len; i++) {
-    const link = subscribers[i];
-    if (link && link.sub === sub) return;
-  }
+  if (subscribers.some((link) => link && link.sub === sub)) return;
   subscribers.push(new Subscription(undefined, sub));
 }
 
@@ -48,17 +42,15 @@ export function syncDependencies(
 ): void {
   // Park: collect previous subscriptions into a local Map
   const parked = new Map<Dependency, () => void>();
-  for (let i = 0, len = prevLinks.length; i < len; i++) {
-    const link = prevLinks[i];
+  prevLinks.forEach((link) => {
     if (link?.unsub) {
       parked.set(link.node, link.unsub);
     }
-  }
+  });
 
   // Reclaim or subscribe
-  for (let i = 0, len = nextLinks.length; i < len; i++) {
-    const link = nextLinks[i];
-    if (!link) continue;
+  nextLinks.forEach((link) => {
+    if (!link) return;
 
     const node = link.node;
     const existing = parked.get(node);
@@ -71,12 +63,10 @@ export function syncDependencies(
       debug.checkCircular(node, tracker);
       link.unsub = node.subscribe(tracker);
     }
-  }
+  });
 
   // Cleanup: release unused subscriptions
-  for (const unsub of parked.values()) {
-    unsub();
-  }
+  parked.forEach((unsub) => unsub());
 }
 
 /**

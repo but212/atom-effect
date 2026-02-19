@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import $ from '../src/index'; // Register plugins ($.atom)
-import { getLIS, getSelector, getValue, isReactive, shallowEqual } from '../src/utils';
+import {
+  getLIS,
+  getSelector,
+  getValue,
+  isReactive,
+  sanitizeHtml,
+  shallowEqual,
+} from '../src/utils';
 
 describe('Utils', () => {
   describe('getSelector', () => {
@@ -20,9 +27,9 @@ describe('Utils', () => {
       });
     });
 
-    it('should unknown for invalid inputs', () => {
-      expect(getSelector($())).toBe('unknown');
-      expect(getSelector(null as unknown as Element)).toBe('unknown');
+    it('should return tagName for element without id or classes', () => {
+      const el = document.createElement('div');
+      expect(getSelector(el)).toBe('div');
     });
   });
 
@@ -59,6 +66,35 @@ describe('Utils', () => {
       cases.forEach(([a, b, expected]) => {
         expect(shallowEqual(a, b)).toBe(expected);
       });
+    });
+  });
+
+  describe('sanitizeHtml', () => {
+    it('should preserve HTML comment separators', () => {
+      const input = '<div>A</div><!--sep--><span>B</span>';
+      const output = sanitizeHtml(input);
+      expect(output).toContain('<!--sep-->');
+      expect(output).toContain('A');
+      expect(output).toContain('B');
+    });
+
+    it('should preserve multiple consecutive comment separators', () => {
+      const parts = ['<p>1</p>', '<p>2</p>', '<p>3</p>'];
+      const combined = parts.join('<!--sep-->');
+      const sanitized = sanitizeHtml(combined);
+      const fragments = sanitized.split('<!--sep-->');
+      expect(fragments).toHaveLength(3);
+    });
+
+    it('should sanitize dangerous tags while preserving separators', () => {
+      const input =
+        '<div>Safe</div><!--sep--><script>alert("xss")</script><!--sep--><span>OK</span>';
+      const sanitized = sanitizeHtml(input);
+      const fragments = sanitized.split('<!--sep-->');
+      expect(fragments).toHaveLength(3);
+      expect(fragments[0]).toContain('Safe');
+      expect(fragments[1]).not.toContain('script');
+      expect(fragments[2]).toContain('OK');
     });
   });
 
