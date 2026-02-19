@@ -6,25 +6,51 @@ import { registry } from './registry';
 import type { ListOptions, ReadonlyAtom } from './types';
 import { getLIS, getSelector, sanitizeHtml, shallowEqual } from './utils';
 
+// ============================================================================
+// Helpers
+// ============================================================================
+
 /**
- * Renders an item to a jQuery element, sanitizing string output.
+ * Renders an item to a jQuery element.
+ * String output is sanitized against XSS; a warning is emitted if the content
+ * was modified so callers are aware of unsafe markup.
  */
 function renderItem<T>(render: ListOptions<T>['render'], item: T, index: number): JQuery {
   const raw = render(item, index);
-  const safe = typeof raw === 'string' ? sanitizeHtml(raw) : raw;
-  return $(safe as string) as JQuery;
+  if (typeof raw === 'string') {
+    const sanitized = sanitizeHtml(raw);
+    if (sanitized !== raw) {
+      debug.warn(LOG_PREFIXES.LIST, ERROR_MESSAGES.UNSAFE_CONTENT());
+    }
+    return $(sanitized);
+  }
+  // Element, DocumentFragment, or JQuery — pass through directly.
+  // The cast to `never` is required because jQuery's overloads do not expose
+  // a single unified signature for all DOM-compatible input types, but the
+  // runtime handles all of them correctly.
+  return $(raw as never) as JQuery;
 }
 
 /**
- * Inserts $el before nextNode if connected, otherwise appends to $container.
+ * Inserts `$el` before `nextNode` when `nextNode` is non-null and connected,
+ * otherwise appends it to `$container`.
  */
 function insertOrAppend($el: JQuery, nextNode: Node | null, $container: JQuery): void {
   if (nextNode?.isConnected) $el.insertBefore(nextNode);
   else $el.appendTo($container);
 }
 
+// ============================================================================
+// atomList
+// ============================================================================
+
 /**
- * atomList with LIS-based reconciliation.
+ * Reactive list rendering with LIS-based DOM reconciliation.
+ *
+ * Note: when `key` is a property name string, the resolved property value is
+ * used as the Map key. The property must produce a `string | number` at
+ * runtime — boolean or object values will be coerced by the Map and may cause
+ * unexpected key collisions.
  */
 $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>): JQuery {
   const { key, render, bind, update, onAdd, onRemove, empty } = options;
@@ -44,95 +70,131 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
     let $emptyEl: JQuery | null = null;
 
     /**
-     * Schedules DOM removal after optional async onRemove transition.
-     * Captures $el and el at schedule time so re-insertion of the same key
-     * does not cause the deferred cleanup to remove the newly added node.
+     * Schedules DOM removal after an optional async `onRemove` transition.
+     * `$el` is captured at schedule time so a re-insertion of the same key
+     * does not cause the deferred cleanup to remove the new node.
+     *
+     * On Promise rejection the removal is still committed — a failed
+     * transition must not leave the element stranded in `removingKeys`.
      */
     const scheduleRemoval = (k: string | number, entry: { $el: JQuery; item: T }) => {
-      const el = entry.$el[0];
-
       const commitRemoval = () => {
-        // entry.$el was captured when the item was removed from itemMap.
-        // If the same key was re-added later, removingKeys will have been
-        // cleared by the new item path — but $el is a distinct old reference,
-        // so removing it is always safe.
+        // entry.$el is the captured reference from when the item was removed.
+        // If the same key was re-added, removingKeys will have been cleared by
+        // the new-item path, but this $el is a distinct old reference so
+        // removing it is always safe.
+        // $.fn.remove is patched by jquery-patch to call registry.cleanupTree,
+        // so no manual registry call is needed here.
         entry.$el.remove();
-        if (el) registry.cleanup(el);
+        // Always delete from removingKeys regardless of whether el existed —
+        // an absent el still means the removal is complete.
         removingKeys.delete(k);
         debug.log('list', `${containerSelector} removed item:`, k);
       };
 
       if (onRemove) {
         const result = onRemove(entry.$el);
-        if (result instanceof Promise) result.then(commitRemoval);
-        else commitRemoval();
+        if (result instanceof Promise) {
+          // Use then(onFulfilled, onRejected) so that a rejected transition
+          // still commits removal — preventing permanent key/DOM leaks.
+          result.then(commitRemoval, commitRemoval);
+        } else {
+          commitRemoval();
+        }
       } else {
         commitRemoval();
       }
+    };
+
+    // Removes an item from itemMap and schedules its DOM removal.
+    // Extracted to eliminate the repeated 3-line sequence in the empty-state
+    // and departed-key paths.
+    const removeItem = (k: string | number, entry: { $el: JQuery; item: T }) => {
+      itemMap.delete(k);
+      removingKeys.add(k);
+      scheduleRemoval(k, entry);
     };
 
     const fx = effect(() => {
       const items = source.value;
       const itemCount = items.length;
 
-      // Show/hide empty placeholder and short-circuit when there is nothing to reconcile.
-      if (itemCount === 0) {
-        if (empty && !$emptyEl) {
-          const safeEmpty = typeof empty === 'string' ? sanitizeHtml(empty) : empty;
-          $emptyEl = ($(safeEmpty as string) as JQuery).appendTo($container);
-        }
-        if (itemMap.size === 0) {
-          oldKeys = [];
-          return;
-        }
-      } else if ($emptyEl) {
+      // ── Empty state ────────────────────────────────────────────────────────
+      // Manage the placeholder and skip reconciliation when there is nothing
+      // to do. Both the "already empty with no items" early-exit and the
+      // "just became empty" removal path are handled in a single block.
+
+      if ($emptyEl && itemCount > 0) {
         $emptyEl.remove();
         $emptyEl = null;
       }
 
-      debug.log('list', `${containerSelector} updating with ${itemCount} items`);
+      if (itemCount === 0) {
+        if (empty && !$emptyEl) {
+          if (typeof empty === 'string') {
+            const sanitized = sanitizeHtml(empty);
+            if (sanitized !== empty) {
+              debug.warn(LOG_PREFIXES.LIST, ERROR_MESSAGES.UNSAFE_CONTENT());
+            }
+            $emptyEl = ($(sanitized) as JQuery).appendTo($container);
+          } else {
+            $emptyEl = ($(empty as never) as JQuery).appendTo($container);
+          }
+        }
 
-      // Build old-key → old-index map for O(1) LIS index lookups (O(M)).
-      const oldIndexMap = new Map<string | number, number>();
-      for (let i = 0; i < oldKeys.length; i++) {
-        oldIndexMap.set(oldKeys[i]!, i);
+        // Remove departing items even when the new list is empty.
+        itemMap.forEach((entry, k) => {
+          if (!removingKeys.has(k)) removeItem(k, entry);
+        });
+
+        oldKeys = [];
+        return;
       }
 
-      // Build new key set and LIS source indices in one pass (O(N)).
-      // Keys still undergoing async removal are treated as absent (-1)
-      // so their stale positions don't distort LIS for surviving items.
+      debug.log('list', `${containerSelector} updating with ${itemCount} items`);
+
+      // ── Build index structures (O(M) + O(N)) ──────────────────────────────
+
+      const oldIndexMap = new Map<string | number, number>();
+      oldKeys.forEach((oldKey, i) => {
+        oldIndexMap.set(oldKey, i);
+      });
+
       const newKeys: (string | number)[] = new Array(itemCount);
       const newKeySet = new Set<string | number>();
       const newIndices = new Int32Array(itemCount);
 
       for (let i = 0; i < itemCount; i++) {
-        const item = items[i] as T;
+        const item = items[i]!;
         const k = getKey(item, i);
 
+        // Assign key unconditionally — both the duplicate and normal paths need it.
+        newKeys[i] = k;
+
         if (newKeySet.has(k)) {
-          console.warn(`${LOG_PREFIXES.LIST} ${ERROR_MESSAGES.DUPLICATE_KEY(k, i)}`);
+          // Duplicate key: warn and skip this entry to prevent the first
+          // occurrence's DOM node from being silently orphaned/overwritten.
+          debug.warn(LOG_PREFIXES.LIST, ERROR_MESSAGES.DUPLICATE_KEY(k, i));
+          newIndices[i] = -1; // treat as absent so LIS is not distorted
+          continue;
         }
 
-        newKeys[i] = k;
         newKeySet.add(k);
+        // Keys mid-removal are treated as absent (-1) so their stale
+        // old-positions don't anchor surviving items incorrectly.
         newIndices[i] = removingKeys.has(k) ? -1 : (oldIndexMap.get(k) ?? -1);
       }
 
-      // Schedule removal for items that have left the list (O(M)).
+      // ── Schedule removals for departed keys (O(M)) ────────────────────────
+
       for (const [k, entry] of itemMap) {
         if (newKeySet.has(k) || removingKeys.has(k)) continue;
-        itemMap.delete(k);
-        removingKeys.add(k);
-        scheduleRemoval(k, entry);
+        removeItem(k, entry);
       }
 
-      if (itemCount === 0) {
-        oldKeys = [];
-        return;
-      }
+      // ── Reorder and patch — backwards for stable insertBefore anchors ─────
 
-      // Reorder and update — backwards so insertBefore always has a valid anchor.
-      const lisArr = getLIS(newIndices);
+      const lisArr: Int32Array = getLIS(newIndices);
       let lisIdx = lisArr.length - 1;
       let nextNode: Node | null = null;
 
@@ -142,7 +204,8 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
         const entry = itemMap.get(k);
 
         if (entry) {
-          // Existing item: update content if needed, then reposition if outside LIS.
+          // Existing item: optionally update content, then reposition if
+          // outside the longest stable subsequence.
           const oldItem = entry.item;
           entry.item = item;
           const el = entry.$el[0];
@@ -154,7 +217,9 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
           } else if (oldItem !== item && !shallowEqual(oldItem, item)) {
             const $newEl = renderItem(render, item, i);
             const needsNextNodeUpdate = nextNode === el;
-            registry.cleanup(el);
+            // cleanupTree disposes el's own bindings AND all descendant
+            // bindings — replaceWith is not patched so cleanup is manual.
+            registry.cleanupTree(el);
             entry.$el.replaceWith($newEl);
             entry.$el = $newEl;
             if (bind) bind($newEl, item, i);
@@ -169,7 +234,8 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
           }
           nextNode = entry.$el[0] ?? null;
         } else {
-          // New item: render, insert, and cancel any pending async removal for this key.
+          // New item: render, track, insert, and cancel any in-flight async
+          // removal for this key (same-key re-add before transition completes).
           const $el = renderItem(render, item, i);
           itemMap.set(k, { $el, item });
           removingKeys.delete(k);
@@ -191,6 +257,8 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
       itemMap.clear();
       removingKeys.clear();
       oldKeys = [];
+      // $.fn.remove is patched — this call automatically triggers
+      // registry.cleanupTree on $emptyEl and its descendants.
       $emptyEl?.remove();
     });
   });
