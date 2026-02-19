@@ -4,6 +4,7 @@ import {
   COMPUTED_STATE_FLAGS,
   EMPTY_ERROR_ARRAY,
   IS_DEV,
+  SMI_MAX,
 } from '@/constants';
 import { ReactiveDependency } from '@/core/base';
 import {
@@ -83,7 +84,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._defaultValue = 'defaultValue' in options ? options.defaultValue : (NO_DEFAULT_VALUE as T);
     this._onError = options.onError ?? null;
     const retries = options.maxAsyncRetries;
-    this._maxAsyncRetries = retries ?? COMPUTED_CONFIG.MAX_ASYNC_RETRIES;
+    this._maxAsyncRetries = (retries ?? COMPUTED_CONFIG.MAX_ASYNC_RETRIES) & SMI_MAX;
 
     debug.attachDebugInfo(this, 'computed', this.id);
 
