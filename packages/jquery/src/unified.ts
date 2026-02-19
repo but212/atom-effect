@@ -1,4 +1,4 @@
-import { effect } from '@but212/atom-effect';
+import { computed, effect, isAtom, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
 import { DANGEROUS_PROPS, ERROR_MESSAGES, LOG_PREFIXES, VALID_INPUT_TAGS } from './constants';
 import { debug } from './debug';
@@ -31,6 +31,27 @@ function getCamelCase(prop: string): string {
 
   cached = prop.includes('-') ? prop.replace(/-./g, (m) => m[1]!.toUpperCase()) : prop;
   camelCache.set(prop, cached);
+  return cached;
+}
+
+/**
+ * Cache for sanitized versions of reactive strings.
+ * Ensures that if 100 elements are bound to the same atom, sanitizeHtml() is
+ * called only once per update instead of 100 times.
+ */
+const htmlSanitizeCache = new WeakMap<
+  import('@but212/atom-effect').ReadonlyAtom<string>,
+  import('@but212/atom-effect').ComputedAtom<string>
+>();
+
+function getSanitizedHtml(
+  source: import('@but212/atom-effect').ReadonlyAtom<string>
+): import('@but212/atom-effect').ComputedAtom<string> {
+  let cached = htmlSanitizeCache.get(source);
+  if (!cached) {
+    cached = computed(() => sanitizeHtml(source.value));
+    htmlSanitizeCache.set(source, cached);
+  }
   return cached;
 }
 
@@ -81,17 +102,17 @@ export function bindText<T = unknown>(
  */
 export function bindHtml(ctx: BindingContext, value: ReactiveValue<string>): void {
   const el = ctx.el;
+
+  // Optimization: If the source is reactive, use a cached computed atom to
+  // ensure sanitization runs exactly once per atom change for all observers.
+  const reactiveSource = isAtom(value)
+    ? getSanitizedHtml(value as import('@but212/atom-effect').ReadonlyAtom<string>)
+    : value;
+
   registerReactiveEffect(
     el,
-    value,
-    (val) => {
-      const newVal = String(val ?? '');
-      const sanitized = sanitizeHtml(newVal);
-
-      if (sanitized !== newVal) {
-        console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.UNSAFE_CONTENT()}`);
-      }
-
+    reactiveSource,
+    (sanitized) => {
       if (el.innerHTML !== sanitized) {
         // Dispose child bindings before the nodes are removed from the DOM.
         registry.cleanupDescendants(el);
@@ -288,10 +309,12 @@ export function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): v
   // Atom → DOM
   const fx = effect(() => {
     const val = !!atom.value;
-    if (el.checked !== val) {
-      el.checked = val;
-      debug.domUpdated($el, 'checked', val);
-    }
+    untracked(() => {
+      if (el.checked !== val) {
+        el.checked = val;
+        debug.domUpdated($el, 'checked', val);
+      }
+    });
   });
   registry.trackEffect(el, fx);
 }

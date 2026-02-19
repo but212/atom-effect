@@ -1,5 +1,5 @@
 import type { ReadonlyAtom } from '@but212/atom-effect';
-import { computed, atom as createAtom, effect } from '@but212/atom-effect';
+import { computed, atom as createAtom, effect, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
 import { ERROR_MESSAGES, LOG_PREFIXES, ROUTE_DEFAULTS } from './constants';
 import { debug } from './debug';
@@ -100,9 +100,14 @@ class RouterImpl implements Router {
     window.addEventListener(eventName, this.handleUrlChange);
     this.cleanups.push(() => window.removeEventListener(eventName, this.handleUrlChange));
 
-    // Set up reactive rendering effect
+    // Set up reactive rendering effect.
+    // Only currentRouteAtom.value is the intended reactive dependency.
+    // renderRoute calls user lifecycle hooks (beforeTransition, onEnter, render,
+    // onMount, afterTransition) that may read atoms — those reads must not
+    // subscribe this effect to extra dependencies.
     const renderEffect = effect(() => {
-      this.renderRoute(this.currentRouteAtom.value);
+      const routeName = this.currentRouteAtom.value; // sole tracked dependency
+      untracked(() => this.renderRoute(routeName)); // user hooks run untracked
     });
     this.cleanups.push(() => renderEffect.dispose());
 
@@ -351,7 +356,8 @@ class RouterImpl implements Router {
     if (currentUrl === this.previousUrl) return;
 
     const newRoute = this.getRouteName();
-    const oldRouteName = this.currentRouteAtom.value;
+    // peek(): event handler path — reading for comparison only, not to subscribe.
+    const oldRouteName = this.currentRouteAtom.peek();
     const params = this.getQueryParams();
 
     if (oldRouteName !== newRoute) {
@@ -417,20 +423,24 @@ class RouterImpl implements Router {
     const { activeClass } = this.config;
 
     const activeLinksEffect = effect(() => {
-      const current = this.currentRouteAtom.value;
-      const links = document.querySelectorAll<HTMLElement>('[data-route]');
+      const current = this.currentRouteAtom.value; // sole tracked dependency
+      // DOM queries and class manipulations run untracked: they must not
+      // subscribe the effect to anything beyond currentRouteAtom.
+      untracked(() => {
+        const links = document.querySelectorAll<HTMLElement>('[data-route]');
 
-      links.forEach((el) => {
-        const routeAttr = el.dataset.route!;
-        const isActive = current === routeAttr;
+        links.forEach((el) => {
+          const routeAttr = el.dataset.route!;
+          const isActive = current === routeAttr;
 
-        if (isActive) {
-          el.classList.add(activeClass as string);
-          el.setAttribute('aria-current', 'page');
-        } else {
-          el.classList.remove(activeClass as string);
-          el.removeAttribute('aria-current');
-        }
+          if (isActive) {
+            el.classList.add(activeClass as string);
+            el.setAttribute('aria-current', 'page');
+          } else {
+            el.classList.remove(activeClass as string);
+            el.removeAttribute('aria-current');
+          }
+        });
       });
     });
 
@@ -448,8 +458,9 @@ class RouterImpl implements Router {
   public navigate(routeName: string): void {
     if (this.isDestroyed) return;
 
-    // Check if leaving current route is allowed
-    const currentRouteName = this.currentRouteAtom.value;
+    // peek(): navigate() is called imperatively (not inside an effect), so
+    // reading the current route must not register a reactive dependency.
+    const currentRouteName = this.currentRouteAtom.peek();
     const currentRouteConfig = this.config.routes[currentRouteName];
 
     if (currentRouteConfig?.onLeave) {

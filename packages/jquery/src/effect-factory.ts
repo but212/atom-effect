@@ -1,4 +1,4 @@
-import { effect, type ReadonlyAtom } from '@but212/atom-effect';
+import { effect, type ReadonlyAtom, untracked } from '@but212/atom-effect';
 import { ERROR_MESSAGES, LOG_PREFIXES } from './constants';
 import { debug } from './debug';
 import { registry } from './registry';
@@ -59,14 +59,22 @@ export function registerReactiveEffect<T>(
     registry.trackEffect(
       el,
       effect(() => {
+        // Read the source value inside the tracking context — this is the
+        // ONLY dependency this effect should subscribe to.
         const value = reactiveSource.value;
-        try {
-          updater(value);
-        } catch (e) {
-          debug.error(LOG_PREFIXES.BINDING, `${ERROR_MESSAGES.UPDATER_ERROR(debugType)}:`, e);
-          return;
-        }
-        debug.domUpdated(el, debugType, value);
+
+        // Run the updater untracked so that any atom reads inside updater
+        // (user formatters, guards, computed lookups) cannot accidentally
+        // add extra subscriptions to this effect.
+        untracked(() => {
+          try {
+            updater(value);
+          } catch (e) {
+            debug.error(LOG_PREFIXES.BINDING, `${ERROR_MESSAGES.UPDATER_ERROR(debugType)}:`, e);
+            return;
+          }
+          debug.domUpdated(el, debugType, value);
+        });
       })
     );
   } else {

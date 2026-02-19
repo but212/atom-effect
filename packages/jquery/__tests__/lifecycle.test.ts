@@ -23,10 +23,10 @@ describe('jQuery Lifecycle Overrides', () => {
       const text = atom('hello');
       $el.atomText(text);
 
-      expect(registry.hasBind($el[0]!!)).toBe(true);
+      expect(registry.hasBind($el[0]!)).toBe(true);
 
       $el.remove();
-      expect(registry.hasBind($el[0]!!)).toBe(false);
+      expect(registry.hasBind($el[0]!)).toBe(false);
 
       // Second remove should not throw (idempotent)
       $el.remove();
@@ -38,12 +38,12 @@ describe('jQuery Lifecycle Overrides', () => {
       const text = atom('hello');
       $child.atomText(text);
 
-      expect(registry.hasBind($child[0]!!)).toBe(true);
+      expect(registry.hasBind($child[0]!)).toBe(true);
 
       $parent.empty();
 
-      expect(registry.hasBind($child[0]!!)).toBe(false);
-      expect($parent[0]!!.hasChildNodes()).toBe(false);
+      expect(registry.hasBind($child[0]!)).toBe(false);
+      expect($parent[0]!.hasChildNodes()).toBe(false);
     });
 
     it('should preserve bindings on .detach() and restore on re-attach', async () => {

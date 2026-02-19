@@ -1,4 +1,4 @@
-import { effect } from '@but212/atom-effect';
+import { effect, untracked } from '@but212/atom-effect';
 import { ERROR_MESSAGES, INPUT_DEFAULTS, LOG_PREFIXES } from './constants';
 import { debug } from './debug';
 import { INTERNAL_HANDLER } from './jquery-patch';
@@ -86,11 +86,9 @@ class InputBinding<T> {
     }
 
     // Re-format the displayed value to match the atom's canonical format.
-    // Note: this write does not set SyncingToDom because it happens outside
-    // the reactive effect path — no atom read occurs here that could cause
-    // re-entrancy, and the effect will short-circuit on its next run when it
-    // finds el.value already matches the formatted value.
-    const formatted = this.options.format(this.atom.value);
+    // peek() instead of .value: this is an event handler path — we want the
+    // current value but must not register a reactive dependency here.
+    const formatted = this.options.format(this.atom.peek());
     if (this.el.value !== formatted) {
       this.el.value = formatted;
     }
@@ -119,7 +117,9 @@ class InputBinding<T> {
     this.flags |= BindingFlags.SyncingToAtom;
     try {
       const parsed = this.options.parse(this.el.value);
-      if (!this.options.equal(this.atom.value, parsed)) {
+      // peek() instead of .value: equality check in an event handler must not
+      // register a dependency — only syncDomFromAtom (the effect body) tracks.
+      if (!this.options.equal(this.atom.peek(), parsed)) {
         this.atom.value = parsed;
       }
     } catch (e) {
@@ -139,47 +139,54 @@ class InputBinding<T> {
    * `effect` function and to clarify the data-flow direction.
    */
   public readonly syncDomFromAtom = () => {
+    // Only this.atom.value is the intended dependency of this effect.
+    // Everything else — format(), parse(), equal(), el.value DOM reads —
+    // runs untracked so user callbacks cannot accidentally subscribe this
+    // effect to extra atoms.
     const val = this.atom.value;
-    const formatted = this.options.format(val);
-    const currentVal = this.el.value;
 
-    // Skip if already synchronised.
-    if (currentVal === formatted) return;
+    untracked(() => {
+      const formatted = this.options.format(val);
+      const currentVal = this.el.value;
 
-    const isFocused = !!(this.flags & BindingFlags.Focused);
+      // Skip if already synchronised.
+      if (currentVal === formatted) return;
 
-    // While focused, skip update if the current raw input already parses to
-    // the same logical value — avoids interrupting in-progress user input.
-    if (isFocused) {
-      try {
-        if (this.options.equal(this.options.parse(currentVal), val)) return;
-      } catch {
-        // parse() threw on the current raw input (e.g. partially typed number).
-        // Fall through and apply the formatted value.
-      }
-    }
+      const isFocused = !!(this.flags & BindingFlags.Focused);
 
-    this.flags |= BindingFlags.SyncingToDom;
-    try {
-      if (isFocused && supportsSelection(this.el)) {
-        // Preserve cursor position so external atom updates don't jump the caret.
-        const start = this.el.selectionStart;
-        const end = this.el.selectionEnd;
-
-        this.el.value = formatted;
-
-        const len = formatted.length;
-        if (start !== null && end !== null) {
-          this.el.setSelectionRange(Math.min(start, len), Math.min(end, len));
+      // While focused, skip update if the current raw input already parses to
+      // the same logical value — avoids interrupting in-progress user input.
+      if (isFocused) {
+        try {
+          if (this.options.equal(this.options.parse(currentVal), val)) return;
+        } catch {
+          // parse() threw on the current raw input (e.g. partially typed number).
+          // Fall through and apply the formatted value.
         }
-      } else {
-        this.el.value = formatted;
       }
 
-      debug.domUpdated(this.$el, 'val', formatted);
-    } finally {
-      this.flags &= ~BindingFlags.SyncingToDom;
-    }
+      this.flags |= BindingFlags.SyncingToDom;
+      try {
+        if (isFocused && supportsSelection(this.el)) {
+          // Preserve cursor position so external atom updates don't jump the caret.
+          const start = this.el.selectionStart;
+          const end = this.el.selectionEnd;
+
+          this.el.value = formatted;
+
+          const len = formatted.length;
+          if (start !== null && end !== null) {
+            this.el.setSelectionRange(Math.min(start, len), Math.min(end, len));
+          }
+        } else {
+          this.el.value = formatted;
+        }
+
+        debug.domUpdated(this.$el, 'val', formatted);
+      } finally {
+        this.flags &= ~BindingFlags.SyncingToDom;
+      }
+    });
   };
 
   public readonly cleanup = () => {

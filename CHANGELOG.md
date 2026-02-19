@@ -4,15 +4,15 @@
 
 ### jQuery
 
-- **Core & Architecture**: Refactored package entry and internal binding logic for consistency; migrated to `forEach` for allocation safety and upgraded internal caches (`camelCache`) to `Map`; hardened `BindingRegistry` with state desync detection and enhanced error handling.
-- **Bindings & Inputs**: Introduced per-instance event namespacing (`.atomBind-N`) and `INTERNAL_HANDLER` optimization to bypass redundant batching; improved Atom↔DOM synchronization robustness with selection-range guards and `try-catch` blocks.
-- **Routing & Networking**: Overhauled `RouterImpl` with read-only state atoms and navigation guards; enhanced `atomFetch` with abort-safety (`NEVER_SETTLE`), `onError` hooks, and eager/lazy request control.
-- **Rendering & Lists**: Enhanced `atomList` with LIS-based reconciliation and async removal safety; unified `atomBind` multi-behavior logic; updated all chainable methods (`$.fn.atom*`) with overloads, validation, and JSDoc.
-- **Components & Lifecycle**: Refactored `atomMount`/`atomUnmount` to ensure single-component ownership and recursive cleanup; improved `MutationObserver` auto-cleanup logic to require explicit root elements.
-- **Patch & Security**: Refactored jQuery overrides with a restoration system (`disablejQueryOverrides`); hardened XSS protection via native `DOMParser` and added proactive sanitization warnings.
-- **Types & DX**: Comprehensive overhaul of `types.ts` with JSDoc; added global interface augmentations for full IDE completion of all jQuery plugin methods.
-- **Testing**: Unified and expanded test suites to cover edge cases, error boundaries, and reactive symmetry; verified and documented busy-guard invariants.
-- **Debug**: Refactored visual highlights with `requestAnimationFrame`; migrated to `VITE_ATOM_DEBUG` env var; added unconditional logging for critical runtime errors.
+- **Core Architecture & Safety**: Refactored package entry and internal binding logic for consistency; migrated to `Map` for internal caches and `forEach` for allocation safety; hardened reactivity using `untracked` for user-provided callbacks and `peek()` for event handlers; enhanced `BindingRegistry` with state desync detection.
+- **Rendering, Security & Lists**: Hardened XSS protection via global `DOMParser` singleton and `htmlSanitizeCache` (WeakMap); added proactive sanitization warnings; enhanced `atomList` with LIS-based reconciliation and async removal safety; unified `atomBind` and updated all chainable methods with overloads and validation.
+- **Bindings & Form Inputs**: Introduced per-instance event namespacing (`.atomBind-N`) and `INTERNAL_HANDLER` optimization to bypass redundant batching; improved synchronization robustness with selection-range guards, `try-catch` blocks, and busy-guard invariants.
+- **Routing & Networking**: Overhauled `RouterImpl` with navigation guards and read-only state atoms; enhanced `atomFetch` with abort-safety (`NEVER_SETTLE`), `onError` hooks, and eager/lazy request control.
+- **Lifecycle, Types & Testing**: Standardized `atomMount` ownership and recursive cleanup; refined `MutationObserver` auto-cleanup logic; comprehensive `types.ts` overhaul with global interface augmentations; expanded test suites with hardened non-null assertions; refactored visual debug highlights using `requestAnimationFrame`.
+- **atomList Batch Sanitization**: Optimized `atomList` rendering performance by batching per-item `sanitizeHtml()` calls into a single invocation using `<!--sep-->` comment separators, reducing N DOMParser parses to 1.
+  - **innerHTML Fast Path**: Initial renders with no `bind`/`onAdd`/`onRemove` callbacks bypass DocumentFragment assembly and use `innerHTML` for direct DOM creation.
+  - **Safety Guards**: innerHTML fast path is gated by `removingKeys.size === 0` to preserve async removal race correctness.
+  - **Tests**: Added separator preservation tests (`utils.test.ts`), 1000-item batch rendering correctness test (`list.test.ts`).
 
 ### Core
 

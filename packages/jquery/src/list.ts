@@ -1,4 +1,4 @@
-import { effect } from '@but212/atom-effect';
+import { effect, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
 import { ERROR_MESSAGES, LOG_PREFIXES } from './constants';
 import { debug } from './debug';
@@ -15,14 +15,10 @@ import { getLIS, getSelector, sanitizeHtml, shallowEqual } from './utils';
  * String output is sanitized against XSS; a warning is emitted if the content
  * was modified so callers are aware of unsafe markup.
  */
-function renderItem<T>(render: ListOptions<T>['render'], item: T, index: number): JQuery {
+function _renderItem<T>(render: ListOptions<T>['render'], item: T, index: number): JQuery {
   const raw = render(item, index);
   if (typeof raw === 'string') {
-    const sanitized = sanitizeHtml(raw);
-    if (sanitized !== raw) {
-      debug.warn(LOG_PREFIXES.LIST, ERROR_MESSAGES.UNSAFE_CONTENT());
-    }
-    return $(sanitized);
+    return $(sanitizeHtml(raw));
   }
   // Element, DocumentFragment, or JQuery — pass through directly.
   // The cast to `never` is required because jQuery's overloads do not expose
@@ -60,34 +56,25 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
       ? key
       : (item: T, _index: number) => item[key as keyof T] as unknown as string | number;
 
-  return this.each(function () {
+  return this.each(function (this: HTMLElement) {
     const $container = $(this);
     const containerSelector = getSelector(this);
 
-    const itemMap = new Map<string | number, { $el: JQuery; item: T }>();
+    const itemMap = new Map<
+      string | number,
+      { $el: JQuery; item: T; state?: 'new' | 'replaced' | undefined }
+    >();
     const removingKeys = new Set<string | number>();
     let oldKeys: (string | number)[] = [];
     let $emptyEl: JQuery | null = null;
 
     /**
      * Schedules DOM removal after an optional async `onRemove` transition.
-     * `$el` is captured at schedule time so a re-insertion of the same key
-     * does not cause the deferred cleanup to remove the new node.
-     *
-     * On Promise rejection the removal is still committed — a failed
-     * transition must not leave the element stranded in `removingKeys`.
      */
     const scheduleRemoval = (k: string | number, entry: { $el: JQuery; item: T }) => {
       const commitRemoval = () => {
-        // entry.$el is the captured reference from when the item was removed.
-        // If the same key was re-added, removingKeys will have been cleared by
-        // the new-item path, but this $el is a distinct old reference so
-        // removing it is always safe.
-        // $.fn.remove is patched by jquery-patch to call registry.cleanupTree,
-        // so no manual registry call is needed here.
+        if (fx?.isDisposed) return; // Container already torn down — skip stale DOM work
         entry.$el.remove();
-        // Always delete from removingKeys regardless of whether el existed —
-        // an absent el still means the removal is complete.
         removingKeys.delete(k);
         debug.log('list', `${containerSelector} removed item:`, k);
       };
@@ -95,8 +82,6 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
       if (onRemove) {
         const result = onRemove(entry.$el);
         if (result instanceof Promise) {
-          // Use then(onFulfilled, onRejected) so that a rejected transition
-          // still commits removal — preventing permanent key/DOM leaks.
           result.then(commitRemoval, commitRemoval);
         } else {
           commitRemoval();
@@ -106,150 +91,221 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
       }
     };
 
-    // Removes an item from itemMap and schedules its DOM removal.
-    // Extracted to eliminate the repeated 3-line sequence in the empty-state
-    // and departed-key paths.
     const removeItem = (k: string | number, entry: { $el: JQuery; item: T }) => {
       itemMap.delete(k);
       removingKeys.add(k);
       scheduleRemoval(k, entry);
     };
 
-    const fx = effect(() => {
+    // Declare fx with let so scheduleRemoval's closure can reference it after assignment.
+    let fx: ReturnType<typeof effect>;
+
+    fx = effect(() => {
+      // Only source.value is tracked. All side effects (DOM reads/writes,
+      // render calls, bind calls) ran inside untracked() so they cannot
+      // accidentally subscribe the list effect to atom reads within user callbacks.
       const items = source.value;
       const itemCount = items.length;
 
-      // ── Empty state ────────────────────────────────────────────────────────
-      // Manage the placeholder and skip reconciliation when there is nothing
-      // to do. Both the "already empty with no items" early-exit and the
-      // "just became empty" removal path are handled in a single block.
+      untracked(() => {
+        // 1. Handle Empty Template
+        if ($emptyEl && itemCount > 0) {
+          $emptyEl.remove();
+          $emptyEl = null;
+        }
 
-      if ($emptyEl && itemCount > 0) {
-        $emptyEl.remove();
-        $emptyEl = null;
-      }
+        if (itemCount === 0) {
+          if (empty && !$emptyEl) {
+            const safeEmpty = typeof empty === 'string' ? sanitizeHtml(empty) : empty;
+            $emptyEl = ($(safeEmpty as string) as JQuery).appendTo($container);
+          }
+          itemMap.forEach((entry, k) => {
+            if (!removingKeys.has(k)) removeItem(k, entry);
+          });
+          oldKeys = [];
+          return;
+        }
 
-      if (itemCount === 0) {
-        if (empty && !$emptyEl) {
-          if (typeof empty === 'string') {
-            const sanitized = sanitizeHtml(empty);
-            if (sanitized !== empty) {
-              debug.warn(LOG_PREFIXES.LIST, ERROR_MESSAGES.UNSAFE_CONTENT());
+        debug.log('list', `${containerSelector} updating with ${itemCount} items`);
+
+        // 2. Build index structures
+        const oldIndexMap = new Map<string | number, number>();
+        for (let i = 0; i < oldKeys.length; i++) {
+          oldIndexMap.set(oldKeys[i]!, i);
+        }
+
+        const newKeys: (string | number)[] = new Array(itemCount);
+        const newKeySet = new Set<string | number>();
+        const newIndices = new Int32Array(itemCount);
+        const targetsToRender: { k: string | number; item: T; idx: number }[] = [];
+
+        for (let i = 0; i < itemCount; i++) {
+          const item = items[i]!;
+          const k = getKey(item, i);
+          newKeys[i] = k;
+
+          if (newKeySet.has(k)) {
+            debug.warn(LOG_PREFIXES.LIST, ERROR_MESSAGES.DUPLICATE_KEY(k, i));
+            newIndices[i] = -1;
+            continue;
+          }
+          newKeySet.add(k);
+
+          const entry = itemMap.get(k);
+          if (entry) {
+            const oldItem = entry.item;
+            if (!update && oldItem !== item && !shallowEqual(oldItem, item)) {
+              targetsToRender.push({ k, item, idx: i });
             }
-            $emptyEl = ($(sanitized) as JQuery).appendTo($container);
+            newIndices[i] = removingKeys.has(k) ? -1 : (oldIndexMap.get(k) ?? -1);
           } else {
-            $emptyEl = ($(empty as never) as JQuery).appendTo($container);
+            targetsToRender.push({ k, item, idx: i });
+            newIndices[i] = -1;
           }
         }
 
-        // Remove departing items even when the new list is empty.
-        itemMap.forEach((entry, k) => {
-          if (!removingKeys.has(k)) removeItem(k, entry);
-        });
+        // 3. Render New/Updated Items (Batch Sanitization)
+        const SEPARATOR = '<!--sep-->';
+        const renderResults: Array<string | Element | DocumentFragment | JQuery> = new Array(
+          targetsToRender.length
+        );
+        const htmlParts: string[] = [];
+        const htmlPartIndices: number[] = [];
 
-        oldKeys = [];
-        return;
-      }
-
-      debug.log('list', `${containerSelector} updating with ${itemCount} items`);
-
-      // ── Build index structures (O(M) + O(N)) ──────────────────────────────
-
-      const oldIndexMap = new Map<string | number, number>();
-      oldKeys.forEach((oldKey, i) => {
-        oldIndexMap.set(oldKey, i);
-      });
-
-      const newKeys: (string | number)[] = new Array(itemCount);
-      const newKeySet = new Set<string | number>();
-      const newIndices = new Int32Array(itemCount);
-
-      for (let i = 0; i < itemCount; i++) {
-        const item = items[i]!;
-        const k = getKey(item, i);
-
-        // Assign key unconditionally — both the duplicate and normal paths need it.
-        newKeys[i] = k;
-
-        if (newKeySet.has(k)) {
-          // Duplicate key: warn and skip this entry to prevent the first
-          // occurrence's DOM node from being silently orphaned/overwritten.
-          debug.warn(LOG_PREFIXES.LIST, ERROR_MESSAGES.DUPLICATE_KEY(k, i));
-          newIndices[i] = -1; // treat as absent so LIS is not distorted
-          continue;
+        for (let t = 0; t < targetsToRender.length; t++) {
+          const raw = render(targetsToRender[t]!.item, targetsToRender[t]!.idx);
+          renderResults[t] = raw;
+          if (typeof raw === 'string') {
+            htmlParts.push(raw);
+            htmlPartIndices.push(t);
+          }
         }
 
-        newKeySet.add(k);
-        // Keys mid-removal are treated as absent (-1) so their stale
-        // old-positions don't anchor surviving items incorrectly.
-        newIndices[i] = removingKeys.has(k) ? -1 : (oldIndexMap.get(k) ?? -1);
-      }
+        // Batch sanitize: N calls → 1 call
+        let sanitizedFragments: string[] | null = null;
+        if (htmlParts.length > 0) {
+          const combined = htmlParts.join(SEPARATOR);
+          const sanitized = sanitizeHtml(combined);
+          sanitizedFragments = sanitized.split(SEPARATOR);
+        }
 
-      // ── Schedule removals for departed keys (O(M)) ────────────────────────
+        // Create $el for each target
+        let fragIdx = 0;
+        for (let t = 0; t < targetsToRender.length; t++) {
+          const target = targetsToRender[t]!;
+          const raw = renderResults[t]!;
+          const $el =
+            typeof raw === 'string'
+              ? $(sanitizedFragments![fragIdx++]!)
+              : ($(raw as never) as JQuery);
 
-      for (const [k, entry] of itemMap) {
-        if (newKeySet.has(k) || removingKeys.has(k)) continue;
-        removeItem(k, entry);
-      }
-
-      // ── Reorder and patch — backwards for stable insertBefore anchors ─────
-
-      const lisArr: Int32Array = getLIS(newIndices);
-      let lisIdx = lisArr.length - 1;
-      let nextNode: Node | null = null;
-
-      for (let i = itemCount - 1; i >= 0; i--) {
-        const k = newKeys[i]!;
-        const item = items[i]!;
-        const entry = itemMap.get(k);
-
-        if (entry) {
-          // Existing item: optionally update content, then reposition if
-          // outside the longest stable subsequence.
-          const oldItem = entry.item;
-          entry.item = item;
-          const el = entry.$el[0];
-          if (!el) continue;
-
-          if (update) {
-            update(entry.$el, item, i);
-            debug.domUpdated(entry.$el, 'list.update', item);
-          } else if (oldItem !== item && !shallowEqual(oldItem, item)) {
-            const $newEl = renderItem(render, item, i);
-            const needsNextNodeUpdate = nextNode === el;
-            // cleanupTree disposes el's own bindings AND all descendant
-            // bindings — replaceWith is not patched so cleanup is manual.
-            registry.cleanupTree(el);
-            entry.$el.replaceWith($newEl);
-            entry.$el = $newEl;
-            if (bind) bind($newEl, item, i);
-            debug.domUpdated($newEl, 'list.render', item);
-            if (needsNextNodeUpdate) nextNode = $newEl[0] ?? null;
-          }
-
-          if (lisIdx >= 0 && lisArr[lisIdx] === i) {
-            lisIdx--;
+          const entry = itemMap.get(target.k);
+          if (entry) {
+            const oldEl = entry.$el[0];
+            if (oldEl) registry.cleanupTree(oldEl);
+            entry.$el.replaceWith($el);
+            entry.$el = $el;
+            entry.state = 'replaced';
           } else {
-            insertOrAppend(entry.$el, nextNode, $container);
+            itemMap.set(target.k, { $el, item: null as unknown as T, state: 'new' });
           }
-          nextNode = entry.$el[0] ?? null;
+        }
+
+        // 4. Cleanup Removed Keys
+        for (const [k, entry] of itemMap) {
+          if (!newKeySet.has(k) && !removingKeys.has(k)) {
+            removeItem(k, entry);
+          }
+        }
+
+        // 5. Place and Reorder via LIS
+        const lisArr = getLIS(newIndices);
+        let lisIdx = lisArr.length - 1;
+        let nextNode: Node | null = null;
+        const isInitial = oldKeys.length === 0;
+
+        // innerHTML fast path: initial render, all string renders, no callbacks,
+        // and no elements currently mid-removal (innerHTML would destroy them).
+        const useInnerHtml =
+          isInitial &&
+          sanitizedFragments !== null &&
+          fragIdx === targetsToRender.length &&
+          !bind &&
+          !onAdd &&
+          !onRemove &&
+          removingKeys.size === 0;
+
+        if (useInnerHtml) {
+          this.innerHTML = sanitizedFragments!.join('');
+
+          // Map children back to itemMap entries
+          let childIdx = 0;
+          for (let i = 0; i < itemCount; i++) {
+            const k = newKeys[i]!;
+            const item = items[i]!;
+            const entry = itemMap.get(k);
+            if (!entry) continue;
+
+            const el = this.children[childIdx++] as HTMLElement | undefined;
+            if (el) {
+              entry.$el = $(el);
+              entry.item = item;
+              entry.state = undefined;
+              removingKeys.delete(k);
+              debug.domUpdated(entry.$el, 'list.add', item);
+            }
+          }
         } else {
-          // New item: render, track, insert, and cancel any in-flight async
-          // removal for this key (same-key re-add before transition completes).
-          const $el = renderItem(render, item, i);
-          itemMap.set(k, { $el, item });
-          removingKeys.delete(k);
+          const fragment = isInitial ? document.createDocumentFragment() : null;
 
-          insertOrAppend($el, nextNode, $container);
-          if (bind) bind($el, item, i);
-          if (onAdd) onAdd($el);
+          for (let i = itemCount - 1; i >= 0; i--) {
+            const k = newKeys[i]!;
+            const item = items[i]!;
+            const entry = itemMap.get(k)!;
+            if (!entry) continue;
 
-          debug.domUpdated($el, 'list.add', item);
-          nextNode = $el[0] ?? null;
+            const state = entry.state;
+            const isNewItem = state === 'new';
+            const isReplaced = state === 'replaced';
+            entry.item = item;
+            entry.state = undefined;
+
+            if (entry.$el[0]) {
+              if (!isNewItem && !isReplaced && update) {
+                update(entry.$el, item, i);
+              } else if ((isNewItem || isReplaced) && bind) {
+                bind(entry.$el, item, i);
+              }
+            }
+
+            if (isInitial && fragment) {
+              for (let j = entry.$el.length - 1; j >= 0; j--) {
+                fragment.insertBefore(entry.$el[j]!, fragment.firstChild);
+              }
+              if (onAdd && isNewItem) onAdd(entry.$el);
+            } else {
+              if (lisIdx >= 0 && lisArr[lisIdx] === i) {
+                lisIdx--;
+              } else {
+                insertOrAppend(entry.$el, nextNode, $container);
+              }
+              if (onAdd && isNewItem) onAdd(entry.$el);
+              nextNode = entry.$el[0] ?? null;
+            }
+
+            if (isNewItem) {
+              removingKeys.delete(k);
+              debug.domUpdated(entry.$el, 'list.add', item);
+            }
+          }
+
+          if (isInitial && fragment) {
+            this.appendChild(fragment);
+          }
         }
-      }
 
-      oldKeys = newKeys;
+        oldKeys = newKeys;
+      });
     });
 
     registry.trackEffect(this, fx);
@@ -257,8 +313,6 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
       itemMap.clear();
       removingKeys.clear();
       oldKeys = [];
-      // $.fn.remove is patched — this call automatically triggers
-      // registry.cleanupTree on $emptyEl and its descendants.
       $emptyEl?.remove();
     });
   });

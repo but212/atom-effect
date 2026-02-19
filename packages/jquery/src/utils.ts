@@ -1,5 +1,7 @@
 import type { ReadonlyAtom } from '@but212/atom-effect';
 import { isAtom } from '@but212/atom-effect';
+import { ERROR_MESSAGES, LOG_PREFIXES } from './constants';
+import { debug } from './debug';
 import type { ReactiveValue, RenderRoute, RouteDefinition, TemplateRoute } from './types';
 
 /**
@@ -41,6 +43,9 @@ export function getSelector(el: Element): string {
 // ============================================================================
 
 // --- Constants used by sanitizeHtml / sanitizeAttributes ---
+
+/** Global singleton parser — avoids the overhead of repeated instantiation. */
+const parser = new DOMParser();
 
 const DANGEROUS_TAGS = new Set([
   'script',
@@ -138,7 +143,6 @@ export function sanitizeHtml(html: string): string {
     .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '')
     .replace(/<\?[\s\S]*?\?>/g, '');
 
-  const parser = new DOMParser();
   const doc = parser.parseFromString(safeHtml, 'text/html');
 
   // Single-pass tree traversal: remove dangerous tags, sanitize attributes.
@@ -158,10 +162,16 @@ export function sanitizeHtml(html: string): string {
   // Defense-in-depth: re-encode any dangerous tag openers that may survive
   // parser re-serialization (e.g. JSDOM edge cases). Covers all DANGEROUS_TAGS,
   // not just <script>, so the fallback is consistent with the removal pass above.
-  return serialized.replace(
+  const finalized = serialized.replace(
     /<(script|iframe|object|embed|base|meta|applet|noscript|form)[\s/>]/gi,
     (_, tag: string) => `&lt;${tag}`
   );
+
+  if (finalized !== html) {
+    debug.warn(LOG_PREFIXES.BINDING, ERROR_MESSAGES.UNSAFE_CONTENT());
+  }
+
+  return finalized;
 }
 
 // ============================================================================

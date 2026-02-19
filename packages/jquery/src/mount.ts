@@ -1,3 +1,4 @@
+import { untracked } from '@but212/atom-effect';
 import $ from 'jquery';
 import { ERROR_MESSAGES, LOG_PREFIXES } from './constants';
 import { debug } from './debug';
@@ -30,7 +31,11 @@ function mountComponent<P>(el: HTMLElement, component: ComponentFn<P>, props: P)
   const $el = $(el);
   let teardown: ReturnType<typeof component>;
   try {
-    teardown = component($el, props);
+    // untracked: component setup code must not register dependencies on any
+    // outer reactive context (e.g. if atomMount is called inside an effect).
+    // Inner effect() calls inside the component set up their own subscriptions
+    // independently via the registry.
+    teardown = untracked(() => component($el, props));
   } catch (err) {
     debug.error(LOG_PREFIXES.MOUNT, ERROR_MESSAGES.MOUNT_ERROR(), err);
     return;
