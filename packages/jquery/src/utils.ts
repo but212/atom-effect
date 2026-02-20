@@ -42,24 +42,6 @@ export function getSelector(el: Element): string {
 // HTML sanitization
 // ============================================================================
 
-// --- Constants used by sanitizeHtml / sanitizeAttributes ---
-
-/** Global singleton parser — avoids the overhead of repeated instantiation. */
-const parser = new DOMParser();
-
-// HTML element tagName is always uppercase in browser DOM — no toLowerCase() needed.
-const DANGEROUS_TAGS = new Set([
-  'SCRIPT',
-  'IFRAME',
-  'OBJECT',
-  'EMBED',
-  'BASE',
-  'META',
-  'APPLET',
-  'NOSCRIPT',
-  'FORM',
-]);
-
 const URL_ATTRS = new Set([
   'href',
   'src',
@@ -90,112 +72,68 @@ const DANGEROUS_CSS_URL_RE = /url\s*\(\s*(?:["']?\s*)?(?:javascript|vbscript)\s*
 // --- Helpers ---
 
 /**
- * Internal helper to sanitize all attributes of a given element in-place.
+ * HTML sanitization for XSS mitigation using regex-based filtering.
  *
- * Iterates in reverse so live-index removal via `removeAttribute` is safe
- * without copying the NamedNodeMap into a temporary array.
- * Lowercase conversion is deferred (lazy) to only the checks that require it.
- */
-function sanitizeAttributes(el: Element): void {
-  for (let i = el.attributes.length - 1; i >= 0; i--) {
-    const attr = el.attributes[i]!;
-    const rawName = attr.name;
-
-    // Remove event handlers (on*) — prefix check is case-insensitive via lowercase
-    const nameLower = rawName.toLowerCase();
-    if (nameLower.startsWith('on')) {
-      el.removeAttribute(rawName);
-      continue;
-    }
-
-    // Remove dangerous protocols in URL attributes (lazy: only when name matches)
-    if (URL_ATTRS.has(nameLower) && DANGEROUS_PROTOCOL_RE.test(attr.value)) {
-      el.removeAttribute(rawName);
-      continue;
-    }
-
-    // Remove dangerous data URIs (excluding safe images) — check raw value, trim once
-    const trimmed = attr.value.trimStart();
-    const trimmedLower = trimmed.toLowerCase();
-    if (trimmedLower.startsWith('data:') && !trimmedLower.startsWith('data:image/')) {
-      el.removeAttribute(rawName);
-      continue;
-    }
-
-    // Remove style attributes containing dangerous CSS
-    if (nameLower === 'style' && DANGEROUS_CSS_RE.test(attr.value)) {
-      el.removeAttribute(rawName);
-    }
-  }
-}
-
-/**
- * HTML sanitization for XSS mitigation using native DOMParser.
- *
- * Parses the input string into a document, removes dangerous tags (script,
- * iframe, etc.) entirely, and strips dangerous attributes (event handlers,
- * javascript: URLs, unsafe data URIs, dangerous CSS). Finally serialises the
- * cleaned document back to a string.
+ * Faster than DOMParser but relies on pattern matching.
+ * Neutralizes dangerous attributes (on*, protocols) instead of removing them entirely.
  *
  * **Note:** This is a best-effort defense layer, not a full-featured sanitizer.
  * For user-controlled rich text, prefer a dedicated library such as DOMPurify.
  */
 export function sanitizeHtml(html: string): string {
-  if (!html) return '';
+  let safe = String(html ?? '');
 
-  // Strip null bytes before parsing: DOMParser converts \x00 → \ufffd which
-  // can split dangerous protocol strings (e.g. "java\x00script:" → "java\ufffds…")
-  // and bypass the DANGEROUS_PROTOCOL_RE check in sanitizeAttributes.
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: Intentionally matching null bytes for XSS sanitization
-  const safeHtml = html.replace(/\x00/g, '');
+  // 0. Pre-process: Remove null bytes and control characters (bypass vectors)
+  // These are often used to bypass regex filters while browsers ignore them
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: Intentionally matching control characters for XSS sanitization
+  safe = safe.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
 
-  const doc = parser.parseFromString(safeHtml, 'text/html');
+  const baseline = safe;
 
-  // TreeWalker visits only Element nodes without allocating a static NodeList.
-  // createTreeWalker(root, SHOW_ELEMENT) — NodeFilter.SHOW_ELEMENT = 0x1
-  const walker = doc.createTreeWalker(doc, 0x1);
-  const toRemove: Element[] = [];
+  // 1. Remove dangerous tags entirely (content included or tag stripped)
+  // Lightweight first pass — DOMPurify handles the full sanitization.
+  // Note: svg/math are NOT removed — they have legitimate uses (icons, equations).
+  // Their event handlers (on*) are already neutralized in step 3.
+  // Also remove processing instructions <? ... ?> which can be abused in some contexts
+  safe = safe.replace(/<\?[\s\S]*?\?>/g, '');
 
-  let node = walker.nextNode();
-  while (node !== null) {
-    const el = node as Element;
-    if (DANGEROUS_TAGS.has(el.tagName)) {
-      // Collect for deferred removal — mutating the tree during traversal
-      // would invalidate the walker's current position.
-      toRemove.push(el);
-    } else {
-      sanitizeAttributes(el);
-    }
-    node = walker.nextNode();
-  }
+  // Loop tag removal to prevent nested reassembly bypass (e.g. "<scr<script>ipt>")
+  const dangerousTagPattern =
+    /(<(script|iframe|object|embed|base|meta|applet|noscript|form)\b[^>]*>([\s\S]*?)<\/\2>|<(script|iframe|object|embed|base|meta|applet|noscript|form)\b[^>]*\/?>)/gim;
+  let prev: string;
+  do {
+    prev = safe;
+    safe = safe.replace(dangerousTagPattern, '');
+  } while (safe !== prev);
 
-  for (const el of toRemove) {
-    el.remove();
-  }
+  // 2. Neutralize dangerous protocols (javascript:, vbscript:)
+  // Simple whitespace-tolerant regex. Entity-based obfuscation is left to DOMPurify.
+  // Step 0 already strips null bytes/control chars, so basic spacing tricks are caught here.
+  const protocolRegex =
+    /(j\s*a\s*v\s*a\s*s\s*c\s*r\s*i\s*p\s*t|v\s*b\s*s\s*c\s*r\s*i\s*p\s*t)\s*:/gi;
+  safe = safe.replace(protocolRegex, 'data-unsafe-protocol:');
 
-  // Serialize: combine head and body content.
-  const headContent = doc.head ? doc.head.innerHTML : '';
-  const bodyContent = doc.body ? doc.body.innerHTML : '';
-  const serialized = headContent + bodyContent;
+  // Separately handle dangerous data URIs (e.g. text/html, base64 encoded scripts)
+  // Allows common inline images (data:image/...) including SVG while blocking executable payloads.
+  const dangerousDataUriRegex =
+    /data\s*:\s*(?:text\/html|application\/javascript|text\/javascript|text\/vbscript|text\/xml|application\/xhtml\+xml)/gim;
+  safe = safe.replace(dangerousDataUriRegex, 'data-unsafe-protocol:');
 
-  // Defense-in-depth: re-encode any dangerous tag openers that may survive
-  // parser re-serialization (e.g. JSDOM edge cases). Covers all DANGEROUS_TAGS,
-  // not just <script>, so the fallback is consistent with the removal pass above.
-  const finalized = serialized.replace(
-    /<(script|iframe|object|embed|base|meta|applet|noscript|form)(?=[\s/>]|$)/gi,
-    (_, tag: string) => `&lt;${tag}`
-  );
+  // 3. Neutralize event handlers (on* attributes)
+  // Replaces "onclick=" with "data-unsafe-attr="
+  safe = safe.replace(/\bon\w+\s*=/gim, 'data-unsafe-attr=');
 
-  // Warn when sanitization changed anything: either the DOM removal pass
-  // stripped dangerous tags/attributes, or the defense-in-depth regex had to
-  // escape a dangerous tag opener that survived re-serialization (JSDOM edge case).
-  // Compare against safeHtml (null-byte-stripped input) rather than the original
-  // html to avoid false positives from DOMParser normalization of malformed markup.
-  if (finalized !== safeHtml) {
+  // 4. Neutralize CSS expressions (IE legacy but dangerous) and behavior
+  // expression(...), behavior:url(...)
+  safe = safe
+    .replace(/expression\s*\(/gim, 'data-unsafe-css(')
+    .replace(/behavior\s*:/gim, 'data-unsafe-css:');
+
+  if (safe !== baseline) {
     debug.warn(LOG_PREFIXES.BINDING, ERROR_MESSAGES.UNSAFE_CONTENT());
   }
 
-  return finalized;
+  return safe;
 }
 
 // ============================================================================
