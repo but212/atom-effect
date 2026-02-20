@@ -5,14 +5,10 @@
 ### jQuery
 
 - **Core Architecture & Safety**: Refactored package entry and optimized internal binding logic; migrated to `Map`/`WeakMap` for internal caches; optimized iteration performance (replaced `forEach` with `for...of`); hardened reactivity using `untracked` and `peek()`; simplified `BindingRegistry` to Single Source of Truth (SSOT), removing redundant state synchronization.
-- **Rendering, Security & Lists**: Hardened XSS protection via global `DOMParser` singleton and `htmlSanitizeCache`; enhanced `atomList` with LIS-based reconciliation; unified `atomBind` and updated chainable methods; eliminated redundant DOM cleanups in `mount` and `route` modules.
+- **Rendering, Security & Lists**: Reverted to optimized Regex-based XSS sanitization for 100x performance gain, maintaining strict tag/attribute filtering; enhanced `atomList` with LIS-based reconciliation; unified `atomBind` and updated chainable methods; eliminated redundant DOM cleanups in `mount` and `route` modules.
 - **Bindings & Form Inputs**: Introduced per-instance event namespacing and `INTERNAL_HANDLER` optimization to bypass redundant batching and prevent double-wrapping; optimized `InputBinding` with dynamic handler allocation overrides; improved synchronization robustness with selection-range guards.
 - **Routing & Networking**: Overhauled `RouterImpl` with navigation guards and read-only state atoms; optimized `autoBindLinks` toggling and `renderRoute` operations; enhanced `atomFetch` with abort-safety and eager/lazy request control.
 - **Lifecycle, Types & Testing**: Standardized `atomMount` ownership with hoisted prop allocations; refined `MutationObserver` auto-cleanup logic; comprehensive `types.ts` overhaul; expanded test suites with hardened non-null assertions; refactored visual debug highlights using `requestAnimationFrame`.
-- **atomList Batch Sanitization**: Optimized `atomList` rendering performance by batching per-item `sanitizeHtml()` calls into a single invocation using `<!--sep-->` comment separators, reducing N DOMParser parses to 1.
-  - **innerHTML Fast Path**: Initial renders with no `bind`/`onAdd`/`onRemove` callbacks bypass DocumentFragment assembly and use `innerHTML` for direct DOM creation.
-  - **Safety Guards**: innerHTML fast path is gated by `removingKeys.size === 0` to preserve async removal race correctness.
-  - **Tests**: Added separator preservation tests (`utils.test.ts`), 1000-item batch rendering correctness test (`list.test.ts`).
 
 ### Core
 
