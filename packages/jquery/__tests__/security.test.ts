@@ -54,24 +54,24 @@ describe('Unit: sanitizeHtml (Core Logic)', () => {
   });
 
   // 4. Risky Tags
-  it('should remove risky tags (iframe, object, embed, meta)', () => {
+  it('should remove risky tags (iframe, object, embed, meta, link)', () => {
     const vectors = [
       '<iframe src="http://evil.com"></iframe>',
       '<object data="http://evil.com"></object>',
       '<embed src="http://evil.com">',
       '<meta http-equiv="refresh">',
+      '<link rel="stylesheet" href="http://evil.com/style.css">',
     ];
     vectors.forEach((v) => {
       const safe = sanitizeHtml(v).toLowerCase();
-      expect(safe).not.toMatch(/<(iframe|object|embed|meta)/);
+      expect(safe).not.toMatch(/<(iframe|object|embed|meta|link)/);
     });
   });
 
-  // 4b. Practical tags should be allowed (style, template) - form is currently removed by strict list
-  it('should allow practical tags (style, template) but remove form in strict mode', () => {
+  it('should allow practical tags (template) but remove form/style in strict mode', () => {
     // Current implementation removes forms for safety
     expect(sanitizeHtml('<form action="/submit"><input></form>')).not.toContain('<form');
-    expect(sanitizeHtml('<style>.red { color: red }</style>')).toContain('<style');
+    expect(sanitizeHtml('<style>.red { color: red }</style>')).not.toContain('<style');
     expect(sanitizeHtml('<template><div>tmpl</div></template>')).toContain('<template');
   });
 
@@ -84,16 +84,21 @@ describe('Unit: sanitizeHtml (Core Logic)', () => {
   });
 
   // 6. Data URIs
-  it('should block dangerous data URIs but allow images', () => {
-    const bad = sanitizeHtml('<a href="data:text/html;base64,PHNjcmlwdD4=">');
-    expect(bad).not.toContain('data:text/html');
+  it('should block dangerous data URIs but allow simple images', () => {
+    const bad = [
+      '<a href="data:text/html;base64,PHNjcmlwdD4=">',
+      '<a href="data:application/xml;base64,...">',
+      '<a href="data:application/x-shockwave-flash;base64,...">',
+      // SVG in data URI is unsafe because it can execute scripts
+      '<img src="data:image/svg+xml;base64,PHN2Zz4=">',
+    ];
+
+    bad.forEach((v) => {
+      expect(sanitizeHtml(v)).toContain('data-unsafe-protocol:');
+    });
 
     const good = sanitizeHtml('<img src="data:image/png;base64,iVBOR...">');
     expect(good).toContain('data:image/png');
-
-    // SVG data URIs should be allowed (icons, badges)
-    const svg = sanitizeHtml('<img src="data:image/svg+xml;base64,PHN2Zz4=">');
-    expect(svg).toContain('data:image/svg+xml');
   });
 
   // 7. CSS/Style Attacks

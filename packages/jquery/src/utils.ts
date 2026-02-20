@@ -80,7 +80,7 @@ const DANGEROUS_CSS_URL_RE = /url\s*\(\s*(?:["']?\s*)?(?:javascript|vbscript)\s*
  * **Note:** This is a best-effort defense layer, not a full-featured sanitizer.
  * For user-controlled rich text, prefer a dedicated library such as DOMPurify.
  */
-export function sanitizeHtml(html: string): string {
+export function sanitizeHtml(html: string | null | undefined): string {
   let safe = String(html ?? '');
 
   // 0. Pre-process: Remove null bytes and control characters (bypass vectors)
@@ -99,7 +99,7 @@ export function sanitizeHtml(html: string): string {
 
   // Loop tag removal to prevent nested reassembly bypass (e.g. "<scr<script>ipt>")
   const dangerousTagPattern =
-    /(<(script|iframe|object|embed|base|meta|applet|noscript|form)\b[^>]*>([\s\S]*?)<\/\2>|<(script|iframe|object|embed|base|meta|applet|noscript|form)\b[^>]*\/?>)/gim;
+    /(<(script|iframe|object|embed|base|meta|applet|noscript|form|style|link)\b[^>]*>([\s\S]*?)<\/\2>|<(script|iframe|object|embed|base|meta|applet|noscript|form|style|link)\b[^>]*\/?>)/gi;
   let prev: string;
   do {
     prev = safe;
@@ -114,9 +114,9 @@ export function sanitizeHtml(html: string): string {
   safe = safe.replace(protocolRegex, 'data-unsafe-protocol:');
 
   // Separately handle dangerous data URIs (e.g. text/html, base64 encoded scripts)
-  // Allows common inline images (data:image/...) including SVG while blocking executable payloads.
+  // Allows common inline images (data:image/...) BUT blocks SVG (can contain scripts) and XML.
   const dangerousDataUriRegex =
-    /data\s*:\s*(?:text\/html|application\/javascript|text\/javascript|text\/vbscript|text\/xml|application\/xhtml\+xml)/gim;
+    /data\s*:\s*(?:text\/(?:html|javascript|vbscript|xml)|application\/(?:javascript|xhtml\+xml|xml|x-shockwave-flash)|image\/svg\+xml)/gi;
   safe = safe.replace(dangerousDataUriRegex, 'data-unsafe-protocol:');
 
   // 3. Neutralize event handlers (on* attributes)
