@@ -1,7 +1,5 @@
 import type { ReadonlyAtom } from '@but212/atom-effect';
 import { isAtom } from '@but212/atom-effect';
-import { ERROR_MESSAGES, LOG_PREFIXES } from './constants';
-import { debug } from './debug';
 import type { ReactiveValue, RenderRoute, RouteDefinition, TemplateRoute } from './types';
 
 /**
@@ -109,8 +107,6 @@ export function sanitizeHtml(html: string | null | undefined): string {
   // 0. Pre-process: Remove null bytes and control characters (bypass vectors)
   // These are often used to bypass regex filters while browsers ignore them
   safe = safe.replace(STRIP_CTRL_RE, '');
-
-  const baseline = safe;
 
   // 1. Remove dangerous tags entirely (content included or tag stripped)
   // Lightweight first pass — DOMPurify handles the full sanitization.
