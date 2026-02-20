@@ -5,10 +5,10 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { AsyncState } from '@/constants';
 import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
 import { effect } from '@/core/effect';
-import { AsyncState } from '@/constants';
 import { resetFlushState } from '@/internal/epoch';
 import { sleep } from '../../utils/test-helpers';
 
@@ -31,7 +31,7 @@ describe('Async Drift → REJECTED', () => {
         await sleep(50);
         return v;
       },
-      { defaultValue: -1, maxAsyncRetries: 0 },
+      { defaultValue: -1, maxAsyncRetries: 0 }
     );
 
     c.value; // start computation (reads src=0)
@@ -57,7 +57,7 @@ describe('Async Drift → REJECTED', () => {
         await sleep(30);
         return v;
       },
-      { defaultValue: -1, maxAsyncRetries: 0 },
+      { defaultValue: -1, maxAsyncRetries: 0 }
     );
 
     c.value;
@@ -80,7 +80,7 @@ describe('Async Drift → REJECTED', () => {
         await sleep(50);
         return v;
       },
-      { defaultValue: -1, maxAsyncRetries: 0, onError },
+      { defaultValue: -1, maxAsyncRetries: 0, onError }
     );
 
     c.value;
@@ -118,7 +118,7 @@ describe('Async Drift → REJECTED', () => {
         await sleep(60);
         return v;
       },
-      { defaultValue: -1, maxAsyncRetries: 1 },
+      { defaultValue: -1, maxAsyncRetries: 1 }
     );
 
     // Subscribe via effect so _markDirty() triggers automatic recompute
@@ -162,7 +162,7 @@ describe('Async Drift → REJECTED', () => {
         await sleep(30);
         return v;
       },
-      { defaultValue: 'default', maxAsyncRetries: 0, onError },
+      { defaultValue: 'default', maxAsyncRetries: 0, onError }
     );
 
     c.value; // start P1
