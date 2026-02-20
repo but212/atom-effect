@@ -141,10 +141,6 @@ export function sanitizeHtml(html: string | null | undefined): string {
   // 4. Neutralize CSS expressions (IE legacy but dangerous) and behavior
   safe = safe.replace(DANGEROUS_CSS_GLOBAL_RE, 'data-unsafe-css:');
 
-  if (safe !== baseline) {
-    debug.warn(LOG_PREFIXES.BINDING, ERROR_MESSAGES.UNSAFE_CONTENT());
-  }
-
   return safe;
 }
 
