@@ -159,9 +159,6 @@ export function bindCss(ctx: BindingContext, cssMap: Record<string, CssValue>): 
       (v) => {
         const strVal = unit ? `${v}${unit}` : String(v);
         if (isDangerousCssValue(strVal)) {
-          console.warn(
-            `${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BLOCKED_DANGEROUS_CSS_VALUE(prop)}`
-          );
           return;
         }
         style[camel] = strVal;
@@ -184,7 +181,6 @@ export function bindAttr(
     // Attribute names from the DOM API are lowercase, but user-supplied keys
     // may use mixed case — normalize before the check.
     if (name.toLowerCase().startsWith('on')) {
-      console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BLOCKED_EVENT_HANDLER(name)}`);
       return;
     }
 
@@ -198,7 +194,6 @@ export function bindAttr(
         }
         const newVal = v === true ? name : String(v);
         if (isDangerousUrl(name, newVal)) {
-          console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BLOCKED_PROTOCOL(name)}`);
           return;
         }
         // Attribute write guard
@@ -222,7 +217,6 @@ export function bindProp(
   Object.keys(propMap).forEach((name) => {
     // Block dangerous DOM properties that can inject raw HTML (e.g., innerHTML)
     if (DANGEROUS_PROPS.has(name)) {
-      console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BLOCKED_DANGEROUS_PROP(name)}`);
       return;
     }
 

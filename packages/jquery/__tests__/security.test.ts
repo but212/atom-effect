@@ -193,41 +193,33 @@ describe('Integration: Security Wiring', () => {
 
   // 3. atomAttr
   it('atomAttr -> should block dangerous URLs via isDangerousUrl', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const a = $('<a>');
     a.atomAttr('href', atom('javascript:alert(1)'));
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('href'));
     expect(a.attr('href')).toBeUndefined();
   });
 
   it('atomAttr -> should block on* event handlers', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const div = $('<div>');
     div.atomAttr('onclick', atom('alert(1)'));
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('onclick'));
     expect(div.attr('onclick')).toBeUndefined();
   });
 
   // 4. atomCss
   it('atomCss -> should block dangerous CSS values via isDangerousCssValue', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const div = $('<div>');
     div.atomCss('background-image', atom('url(javascript:alert(1))'));
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('background-image'));
+    expect(div.css('background-image')).toBe('');
   });
 
   // 5. atomProp
   it('atomProp -> should block innerHTML/outerHTML injection', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const div = $('<div>');
     div.atomProp('innerHTML', atom('<b>Bold</b>'));
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('innerHTML'));
     expect(div.html()).toBe('');
   });
 
   // 6. atomBind (Unified)
   it('atomBind -> should enforce security policies across all bindings', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const div = $('<div>');
     div.atomBind({
       html: atom('<script>'), // Should be sanitized
@@ -236,9 +228,10 @@ describe('Integration: Security Wiring', () => {
       prop: { innerHTML: atom('') }, // Should be blocked
     });
 
-    // Check call counts or message content to be sure failures happened
-    expect(warnSpy).toHaveBeenCalledTimes(4);
-    // Just a smoke test for wiring; specific messages logic verified in unit/individual tests
+    expect(div.html()).not.toContain('<script');
+    expect(div.attr('href')).toBeUndefined();
+    expect(div.css('background-image')).toBe('');
+    expect(div.html()).toBe('');
   });
 });
 
