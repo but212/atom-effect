@@ -209,6 +209,8 @@ Manually disposes all reactive effects and cleanups registered on the selected e
 
 Aliases to the core functions, exposed for convenience.
 
+`$.atom` also exposes a **`$.atom.debug`** boolean accessor. Setting it to `true` enables internal debug logging across the reactive system.
+
 ### `$.batch(fn)`
 
 Groups multiple atom writes into a single synchronous notification cycle, preventing intermediate re-renders.
@@ -281,6 +283,11 @@ Declarative AJAX primitive. Wraps core's async `computed` with jQuery's `$.ajax`
 - `.hasError` / `.lastError` — Error state. Only set for real network/server errors; cancellations via abort are not treated as errors.
 - `.invalidate()` — Triggers refetch.
 
+**Additional Options**:
+
+- `onError`: `(err: unknown) => void` — Called when the fetch fails with an error (not called on abort/cancellation).
+- `eager`: `boolean` — If `false`, the first fetch is deferred until `.invalidate()` is called or a dependency changes. Default: `true`.
+
 ```javascript
 const userId = $.atom(1);
 const user = $.atomFetch(() => `/api/users/${userId.value}`, {
@@ -322,8 +329,10 @@ Creates an SPA router with reactive state management. Supports both hash-based a
 - `routes`: Object mapping route names to definitions. Each route must specify **either** `template` **or** `render`, but not both (mutually exclusive).
   - `template`: Selector for a `<template>` element to clone.
   - `render`: Custom function `(container, route, params) => void`.
-  - `onEnter`: Hook called before rendering. Can return additional params.
+  - `onEnter`: Hook called before rendering. Can return additional params to merge.
   - `onLeave`: Hook called before navigating away. Return `false` to cancel.
+  - `onParamsChange`: Called when the same route is re-activated with new query parameters (instead of re-rendering).
+  - `onMount`: `($content: JQuery) => void` — **Template routes only.** Called after template content is appended to the container.
 - `mode`: (Optional) `'hash'` (default) or `'history'`. Hash mode uses `location.hash` and `hashchange`; history mode uses `pushState`/`popstate`.
 - `basePath`: (Optional) Base path prefix for history mode (e.g., `'/app'`). Ignored in hash mode. Default: `''`.
 - `notFound`: (Optional) Route name to use when no match is found.
@@ -336,7 +345,7 @@ Creates an SPA router with reactive state management. Supports both hash-based a
 
 A `Router` object with:
 
-- `currentRoute`: `WritableAtom<string>` containing the active route name.
+- `currentRoute`: `ReadonlyAtom<string>` containing the active route name. Use `navigate()` to change routes.
 - `queryParams`: `ReadonlyAtom<Record<string, string>>` reactive map of URL parameters.
 - `navigate(route)`: Programmatically change route.
 - `destroy()`: Cleanup listeners and effects.
