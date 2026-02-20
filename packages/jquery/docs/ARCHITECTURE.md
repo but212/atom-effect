@@ -206,10 +206,10 @@ The hash/history difference is isolated to 5 internal functions, so all renderin
 
 ### Key Design Decisions
 
-- **Reactive**: `currentRoute` is a writable atom, so computed values and effects can depend on it naturally.
+- **Reactive**: `currentRoute` is a `ReadonlyAtom` — external code reads it reactively but must use `navigate()` to change routes, keeping the URL in sync.
 - **Navigation Guards**: `onLeave` hooks can return `false` to block navigation. URL is restored on block (hash revert or `replaceState`).
 - **Event Delegation**: `autoBindLinks` uses `$(document).on('click', '[data-route]')` for dynamically added links.
-- **Active State**: `MutationObserver` watches for new `[data-route]` elements and binds active class effects automatically.
+- **Active State**: Active-link class management uses a reactive `effect` that re-runs whenever `currentRoute` changes, updating all `[data-route]` links in a single pass — more efficient than a persistent `MutationObserver`.
 - **Backwards Compatible**: Default mode is `'hash'`, preserving existing behavior.
 
 ## 8. Security
@@ -236,6 +236,7 @@ packages/jquery/src/
   list.ts           — atomList with keyed LIS-based reconciliation
   mount.ts          — atomMount / atomUnmount component lifecycle
   route.ts          — SPA router (hash + history mode) with reactive state
+  fetch.ts          — $.atomFetch declarative AJAX primitive
   registry.ts       — WeakMap-based binding registry + MutationObserver cleanup
   jquery-patch.ts   — jQuery method patches (.on batch, .remove cleanup)
   debug.ts          — Debug mode logging and visual highlighting

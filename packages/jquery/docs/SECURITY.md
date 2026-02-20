@@ -10,14 +10,37 @@ This guide explains the built-in sanitization layer and how to integrate [DOMPur
 
 ### What it blocks
 
+`sanitizeHtml` (used by `atomHtml`):
+
 | Vector | Action |
 | ------ | ------ |
-| `<script>`, `<iframe>`, `<object>`, `<embed>`, `<base>`, `<meta>`, `<applet>`, `<noscript>` | Tag removed entirely |
+| `<script>`, `<iframe>`, `<object>`, `<embed>`, `<base>`, `<meta>`, `<applet>`, `<noscript>`, `<form>`, `<style>`, `<link>` | Tag removed entirely (loop until stable) |
 | `onclick`, `onerror`, etc. (`on*` attributes) | Replaced with `data-unsafe-attr=` |
 | `javascript:`, `vbscript:` protocols | Replaced with `data-unsafe-protocol:` |
-| Dangerous data URIs (`text/html`, `application/javascript`) | Replaced with `data-unsafe-protocol:` |
-| CSS `expression()`, `behavior:` | Neutralized |
+| Dangerous data URIs (`text/html`, `application/javascript`, `image/svg+xml`, etc.) | Replaced with `data-unsafe-protocol:` |
+| CSS `expression()`, `behavior:`, obfuscated protocol sequences | Replaced with `data-unsafe-css:` |
 | Null bytes / control characters | Stripped |
+| XML processing instructions (`<?...?>`) | Stripped |
+
+`bindAttr` (used by `atomAttr` / `atomBind.attr`):
+
+| Vector | Action |
+| ------ | ------ |
+| `on*` attribute names (e.g., `onclick`) | Silently blocked (attribute not set) |
+| `javascript:` / `vbscript:` in URL attributes (`href`, `src`, `action`, etc.) | Silently blocked |
+
+`bindCss` (used by `atomCss` / `atomBind.css`):
+
+| Vector | Action |
+| ------ | ------ |
+| `url(javascript:...)` / `url(vbscript:...)` in CSS values | Silently blocked (style not applied) |
+
+`bindProp` (used by `atomProp` / `atomBind.prop`):
+
+| Vector | Action |
+| ------ | ------ |
+| `innerHTML`, `outerHTML`, `srcdoc` (HTML injection sinks) | Silently blocked |
+| `__proto__`, `constructor`, `prototype` (prototype pollution) | Silently blocked |
 
 ### What it does NOT block
 
