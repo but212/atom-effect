@@ -34,8 +34,15 @@ export function getSelector(el: Element): string {
   const tagName = el.tagName.toLowerCase();
   if (el.id) return `${tagName}#${el.id}`;
 
-  const classes = Array.from(el.classList);
-  return classes.length > 0 ? `${tagName}.${classes.join('.')}` : tagName;
+  const list = el.classList;
+  const len = list.length;
+  if (len === 0) return tagName;
+
+  let selector = tagName;
+  for (let i = 0; i < len; i++) {
+    selector += `.${list[i]!}`;
+  }
+  return selector;
 }
 
 // ============================================================================
@@ -60,6 +67,9 @@ const URL_ATTRS = new Set([
   'codebase',
 ]);
 
+/** cached hasOwnProperty for safe checks */
+const hasOwn = Object.prototype.hasOwnProperty;
+
 const DANGEROUS_PROTOCOL_RE = /^\s*(?:javascript|vbscript)\s*:/i;
 
 const DANGEROUS_CSS_RE =
@@ -68,6 +78,19 @@ const DANGEROUS_CSS_RE =
 
 /** Module-level constant — avoids recreating the RegExp on every call. */
 const DANGEROUS_CSS_URL_RE = /url\s*\(\s*(?:["']?\s*)?(?:javascript|vbscript)\s*:/i;
+
+// Pre-compiled regexes for sanitizeHtml to avoid reallocation
+// biome-ignore lint/suspicious/noControlCharactersInRegex: Intentionally matching control characters
+const STRIP_CTRL_RE = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g;
+const STRIP_XML_RE = /<\?[\s\S]*?\?>/g;
+const DANGEROUS_TAG_RE =
+  /(<(script|iframe|object|embed|base|meta|applet|noscript|form|style|link)\b[^>]*>([\s\S]*?)<\/\2>|<(script|iframe|object|embed|base|meta|applet|noscript|form|style|link)\b[^>]*\/?>)/gi;
+const DANGEROUS_PROTOCOL_GLOBAL_RE =
+  /(j\s*a\s*v\s*a\s*s\s*c\s*r\s*i\s*p\s*t|v\s*b\s*s\s*c\s*r\s*i\s*p\s*t)\s*:/gi;
+const DANGEROUS_DATA_URI_RE =
+  /data\s*:\s*(?:text\/(?:html|javascript|vbscript|xml)|application\/(?:javascript|xhtml\+xml|xml|x-shockwave-flash)|image\/svg\+xml)/gi;
+const UNSAFE_ATTR_RE = /\bon\w+\s*=/gim;
+const DANGEROUS_CSS_GLOBAL_RE = new RegExp(DANGEROUS_CSS_RE.source, 'gim');
 
 // --- Helpers ---
 
@@ -85,8 +108,7 @@ export function sanitizeHtml(html: string | null | undefined): string {
 
   // 0. Pre-process: Remove null bytes and control characters (bypass vectors)
   // These are often used to bypass regex filters while browsers ignore them
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: Intentionally matching control characters for XSS sanitization
-  safe = safe.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
+  safe = safe.replace(STRIP_CTRL_RE, '');
 
   const baseline = safe;
 
@@ -95,36 +117,29 @@ export function sanitizeHtml(html: string | null | undefined): string {
   // Note: svg/math are NOT removed — they have legitimate uses (icons, equations).
   // Their event handlers (on*) are already neutralized in step 3.
   // Also remove processing instructions <? ... ?> which can be abused in some contexts
-  safe = safe.replace(/<\?[\s\S]*?\?>/g, '');
+  safe = safe.replace(STRIP_XML_RE, '');
 
   // Loop tag removal to prevent nested reassembly bypass (e.g. "<scr<script>ipt>")
-  const dangerousTagPattern =
-    /(<(script|iframe|object|embed|base|meta|applet|noscript|form|style|link)\b[^>]*>([\s\S]*?)<\/\2>|<(script|iframe|object|embed|base|meta|applet|noscript|form|style|link)\b[^>]*\/?>)/gi;
   let prev: string;
   do {
     prev = safe;
-    safe = safe.replace(dangerousTagPattern, '');
+    safe = safe.replace(DANGEROUS_TAG_RE, '');
   } while (safe !== prev);
 
   // 2. Neutralize dangerous protocols (javascript:, vbscript:)
   // Simple whitespace-tolerant regex. Entity-based obfuscation is left to DOMPurify.
-  // Step 0 already strips null bytes/control chars, so basic spacing tricks are caught here.
-  const protocolRegex =
-    /(j\s*a\s*v\s*a\s*s\s*c\s*r\s*i\s*p\s*t|v\s*b\s*s\s*c\s*r\s*i\s*p\s*t)\s*:/gi;
-  safe = safe.replace(protocolRegex, 'data-unsafe-protocol:');
+  safe = safe.replace(DANGEROUS_PROTOCOL_GLOBAL_RE, 'data-unsafe-protocol:');
 
   // Separately handle dangerous data URIs (e.g. text/html, base64 encoded scripts)
   // Allows common inline images (data:image/...) BUT blocks SVG (can contain scripts) and XML.
-  const dangerousDataUriRegex =
-    /data\s*:\s*(?:text\/(?:html|javascript|vbscript|xml)|application\/(?:javascript|xhtml\+xml|xml|x-shockwave-flash)|image\/svg\+xml)/gi;
-  safe = safe.replace(dangerousDataUriRegex, 'data-unsafe-protocol:');
+  safe = safe.replace(DANGEROUS_DATA_URI_RE, 'data-unsafe-protocol:');
 
   // 3. Neutralize event handlers (on* attributes)
   // Replaces "onclick=" with "data-unsafe-attr="
-  safe = safe.replace(/\bon\w+\s*=/gim, 'data-unsafe-attr=');
+  safe = safe.replace(UNSAFE_ATTR_RE, 'data-unsafe-attr=');
 
   // 4. Neutralize CSS expressions (IE legacy but dangerous) and behavior
-  safe = safe.replace(new RegExp(DANGEROUS_CSS_RE, 'gim'), 'data-unsafe-css:');
+  safe = safe.replace(DANGEROUS_CSS_GLOBAL_RE, 'data-unsafe-css:');
 
   if (safe !== baseline) {
     debug.warn(LOG_PREFIXES.BINDING, ERROR_MESSAGES.UNSAFE_CONTENT());
@@ -181,7 +196,7 @@ export function isRenderRoute(r: RouteDefinition): r is RenderRoute {
  */
 export function shallowEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
-  if (typeof a !== 'object' || a === null || typeof b !== 'object' || b === null) return false;
+  if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return false;
 
   const keysA = Object.keys(a);
   const keysB = Object.keys(b);
@@ -189,7 +204,14 @@ export function shallowEqual(a: unknown, b: unknown): boolean {
 
   const objA = a as Record<string, unknown>;
   const objB = b as Record<string, unknown>;
-  return keysA.every((key) => objA[key] === objB[key]);
+
+  for (let i = 0; i < keysA.length; i++) {
+    const key = keysA[i]!;
+    if (!hasOwn.call(objB, key) || objA[key] !== objB[key]) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /**
