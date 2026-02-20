@@ -124,10 +124,7 @@ export function sanitizeHtml(html: string): string {
   safe = safe.replace(/\bon\w+\s*=/gim, 'data-unsafe-attr=');
 
   // 4. Neutralize CSS expressions (IE legacy but dangerous) and behavior
-  // expression(...), behavior:url(...)
-  safe = safe
-    .replace(/expression\s*\(/gim, 'data-unsafe-css(')
-    .replace(/behavior\s*:/gim, 'data-unsafe-css:');
+  safe = safe.replace(new RegExp(DANGEROUS_CSS_RE, 'gim'), 'data-unsafe-css:');
 
   if (safe !== baseline) {
     debug.warn(LOG_PREFIXES.BINDING, ERROR_MESSAGES.UNSAFE_CONTENT());
