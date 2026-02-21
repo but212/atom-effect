@@ -1,11 +1,11 @@
 # Contributing Guide
 
-Welcome! We appreciate your interest in contributing to `@but212/atom-effect`. This guide will help you get started.
+Contributions to `@but212/atom-effect` are welcome. This guide will help you get started.
 
 ## Prerequisites
 
 - **Node.js**: v20.x or higher.
-- **pnpm**: We use `pnpm` for package management. Please do not use `npm` or `yarn`.
+- **pnpm**: This project uses `pnpm` for package management. Do not use `npm` or `yarn`.
 
 ## Getting Started
 
@@ -46,7 +46,7 @@ Most contributions will likely be in `packages/core`.
 
 ### Running Tests
 
-We use **Vitest** for testing.
+**Vitest** is used for testing.
 
 - Run all tests:
 
@@ -62,7 +62,7 @@ We use **Vitest** for testing.
 
 ### Type Checking
 
-We use TypeScript for static analysis.
+TypeScript is used for static analysis.
 
 - Run type check:
 
@@ -72,7 +72,7 @@ We use TypeScript for static analysis.
 
 ### Linting and Formatting
 
-We use **Biome** for linting and formatting.
+**Biome** is used for linting and formatting.
 
 - Check for issues:
 
@@ -99,7 +99,7 @@ Performance is critical. If you make a change, please verify there are no regres
 
 ## Coding Standards
 
-- **Performance Awareness**: We pay attention to V8 characteristics (hidden classes, Smi packing) in core logic. Please read [ARCHITECTURE.md](./packages/core/docs/ARCHITECTURE.md) before making structural changes.
+- **Performance Awareness**: V8 characteristics (hidden classes, Smi packing) are considered carefully in core logic. Please read [ARCHITECTURE.md](./packages/core/docs/ARCHITECTURE.md) before making structural changes.
 - **Tests Required**: Every feature or bug fix should include a regression test.
 - **API Stability**: If you change the public API, please discuss it in an issue first.
 

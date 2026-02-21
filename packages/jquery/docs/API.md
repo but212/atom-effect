@@ -45,7 +45,7 @@ Updates `innerHTML`.
 > **🛡️ Security Note**:
 > Since version 0.22.0, this method uses a high-performance regex-based sanitizer for speed (approx 100x faster). It neutralizes `<script>` tags, `on*` event attributes, and dangerous protocols (`javascript:`, `data:`).
 >
-> While efficient for most cases, we recommend using [DOMPurify](https://github.com/cure53/DOMPurify) for complex, user-generated content to ensure maximum security.
+> While efficient for most cases, For complex, user-generated content, [DOMPurify](https://github.com/cure53/DOMPurify) is recommended to ensure maximum security.
 > See the [Security Guide](./SECURITY.md) for details.
 >
 > ```javascript
