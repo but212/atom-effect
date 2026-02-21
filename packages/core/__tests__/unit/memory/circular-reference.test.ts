@@ -16,10 +16,6 @@ describe('Dependency Graph Safety', () => {
   describe('Cycle Detection', () => {
     it('detects synchronous circular dependency in computed', () => {
       // A -> B -> A
-      // We use a mutable object to simulate late-binding if needed,
-      // but typically closures capture references.
-
-      // To construct a cycle with immutable `const`, we need deferred access.
       let c1: ReturnType<typeof computed<number>>;
       let c2: ReturnType<typeof computed<number>>;
 
@@ -49,7 +45,6 @@ describe('Dependency Graph Safety', () => {
       // Update
       start.value = 1;
 
-      // Atom updates are async by default, so we must wait for invalidation to propagate
       // through the chain (start -> c1 -> ... -> c1000)
       await flush();
 

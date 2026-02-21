@@ -13,8 +13,6 @@ describe('Batch Efficiency', () => {
   }, benchEffectOptions);
 
   bench('form reset overhead (batch)', () => {
-    // We toggle values to ensure change propagates
-    // If it's empty, set to 'initial', else set to ''
     const nextVal = formFieldsBatch[0].value === '' ? 'initial' : '';
 
     batch(() => {

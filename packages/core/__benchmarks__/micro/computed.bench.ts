@@ -94,8 +94,6 @@ describe('Computed Dependency Tracking', () => {
 });
 
 describe('Computed Recomputation', () => {
-  // Recomputation requires triggering an update.
-  // We need to set up the graph, then inside bench, modify source and read result.
   const a = atom(0);
   const c = computed(() => a.value * 2);
 
@@ -140,15 +138,6 @@ describe('Computed Recomputation', () => {
 });
 
 describe('Computed Lazy Evaluation', () => {
-  // Lazy evaluation benchmarks often want to verify cost of creation vs first access.
-  // If we lift creation out, we only test access.
-  // Testing "lazy creation" specifically should creation inside loop, but we want to test "lazy computation skipping".
-
-  // We can't really benchmark "not accessed" meaningfully if we don't create it in the loop,
-  // because "not accessing a pre-existing computed" is literally doing nothing.
-  // So we 'll leave creation inside for "lazy (not accessed)" benchmark to enforce that creation is cheap?
-  // Actually, standard benchmarks for "lazy" usually mean "how fast is creating it vs creating + calculating".
-
   bench(
     `lazy computed (not accessed) (x${REPEATS})`,
     () => {
@@ -170,7 +159,6 @@ describe('Computed Lazy Evaluation', () => {
     microBenchOptions
   );
 
-  // For multiple access, we can test the caching mechanism.
   bench(
     'lazy computed (accessed multiple times)',
     () => {

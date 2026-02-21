@@ -47,19 +47,12 @@ $.extend({
         abortController = new AbortController();
         const signal = abortController.signal;
 
-        // Optimization: Use pre-merged options.
-        // If staticUrl is present, it's used; otherwise getUrl() is called.
-        // jQuery's ajax settings object is mutable but $.ajax copies it.
-        // We create a fresh object here to be safe and reactive-friendly.
         const reqOptions = staticUrl
           ? { ...baseOptions, url: staticUrl }
           : { ...baseOptions, url: getUrl!() };
 
         const xhr = $.ajax(reqOptions);
 
-        // Optimization: Use onabort property directly instead of addEventListener
-        // to avoid the overhead of the EventTarget registry.
-        // This signal is fresh per request and private to this scope.
         signal.onabort = () => xhr.abort();
         if (signal.aborted) xhr.abort();
 
@@ -77,7 +70,7 @@ $.extend({
           }
           throw err;
         } finally {
-          signal.onabort = null; // Cleanup
+          signal.onabort = null;
           if (abortController.signal === signal) abortController = null;
         }
       },

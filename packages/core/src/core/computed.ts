@@ -15,7 +15,7 @@ import {
 } from '@/core/dep-tracking';
 import { ComputedError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
-import { nextEpoch, nextVersion } from '@/internal/epoch';
+import { currentFlushEpoch, nextEpoch, nextVersion } from '@/internal/epoch';
 import { EMPTY_LINKS, linksArrayPool } from '@/internal/pool';
 import { ATOM_BRAND, COMPUTED_BRAND } from '@/symbols';
 import { trackingContext } from '@/tracking';
@@ -66,6 +66,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   // Async state
   private _asyncStartAggregateVersion = 0;
   private _asyncRetryCount = 0;
+  private _lastDriftEpoch = -1;
 
   // Dependency collection state
   private _trackEpoch = -1;
@@ -316,8 +317,14 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       (res) => {
         if (promiseId !== this._promiseId) return; // Stale
 
-        // Check for stale reads (did deps change while we waited?)
         if (this._captureVersionSnapshot() !== this._asyncStartAggregateVersion) {
+          // Reset retry counter when flush epoch changes — drifts across different
+          // scheduler flushes are independent bursts, not a continuous failure streak.
+          const epoch = currentFlushEpoch();
+          if (this._lastDriftEpoch !== epoch) {
+            this._lastDriftEpoch = epoch;
+            this._asyncRetryCount = 0;
+          }
           if (this._asyncRetryCount++ < this._maxAsyncRetries) {
             return this._markDirty(); // Retry
           }

@@ -29,11 +29,5 @@ describe('Memory Stability', () => {
     for (const comp of components) {
       comp.stop.dispose();
     }
-
-    // Note: We can't easily measure memory usage *inside* the benchmark loop
-    // reliably for the result, but the execution time will reflect overhead
-    // of creation/destruction/cleanup.
-    // Actual memory usage snapshots are better done outside of micro-benchmarking loops.
-    // But this tests the performance of the lifecycle.
   });
 });

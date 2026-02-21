@@ -1,76 +1,106 @@
 # Architecture & Design
 
-This document explains the internal mechanics of `@but212/atom-effect`. It is intended for developers who want to understand "how it works under the hood" or contribute to the core.
+This document explains the internal mechanics of `@but212/atom-effect`. It bridges the gap between the core principles and the technical trade-offs required to realize them in a high-performance environment.
 
-## 1. The Glitch-Free Guarantee
+---
 
-A "glitch" occurs when a computed value is observed in an inconsistent intermediate state during an update. We solve this using **Epoch-based State Versioning**.
+## 0. Atomic Principles: Autonomous Nodes
 
-### The Concept
+The core design focuses on **decentralized responsibility**. Truth is not managed by an external orchestrator; instead, each node is intended to remain the source of truth for its own state.
 
-Every time a mutation starts (e.g., `atom.value = ...`), we increment a global **Epoch** counter.
-Every signal (atom, computed) tracks:
+### Key Mechanisms
 
-1. `version`: When it last changed.
-2. `_lastSeenEpoch`: Used for dependency deduplication — prevents the same dependency from being tracked twice within a single computation or effect execution.
+1. **Local Versioning**: Nodes track their own `version`. Staleness is determined by comparing a node's current state with what was previously observed by its subscribers.
+2. **Implicit Subscriptions**: Relationships are formed through usage. Reading a `.value` registers the caller as a dependency automatically via `trackingContext`.
+3. **Lifecycle Snapshots**: For asynchronous tasks, nodes capture a hash of their dependencies' versions (`_asyncStartAggregateVersion`). This allows a node to detect if the "world" has moved on during its execution.
 
-When you read a `computed` value, it checks:
-> "Are any of my dependencies changed since I last ran?"
+### The Fundamental Trade-off: Local vs. Global
 
-It does this recursively (topological sort via recursion), ensuring you *always* see the most up-to-date value, even in "Diamond Dependency" graphs.
+To make autonomous judgment possible, a **Global Epoch** is accepted. While each node makes its own decision, it does so based on a shared "pulse" of time. Absolute decentralization is traded for the performance and consistency of a single global counter.
 
-## 2. Two-Phase Propagation
+---
 
-To optimize performance, we don't immediately re-calculate everything.
+## 1. The Glitch-Free Guarantee: Epoch & Version
 
-1. **Mark / Dirty Phase**: When an atom changes, we set the `DIRTY` flag and propagate change notifications to subscribers.
-2. **Sweep / Evaluation Phase**: When a value is *read*, we re-evaluate only if the node is dirty.
+A "glitch" occurs when an inconsistent intermediate state is observed. The approach is to separate the **Moment of Change (Epoch)** from the **Result of Change (Version)**.
 
-If an Effect observes a computed value, it subscribes to it. The computed value in turn subscribes to its dependencies. This creates a **Dynamic Dependency Graph** that updates automatically.
+- **Global Epoch**: Incremented whenever a mutation starts. It acts as a "logical clock" to identify *when* something happened across the entire system.
+- **Local Version**: Incremented only when a node's *value* actually changes.
 
-## 3. Async as a First-Class Citizen
+### Rationale
 
-Most reactivity libraries treat Promises as "just values". We treat them as **State Machines**.
+By comparing `version` instead of just reacting to `epoch`, unnecessary re-calculations are avoided. If a dependency's output is the same as before, nodes further down the chain can stay idle.
 
-When a `computed` returns a Promise:
+---
 
-1. It immediately enters a `PENDING` state.
-2. It returns the `defaultValue` (if provided) to consumers initially.
-3. It attaches handlers to the Promise.
-4. If a dependency changes *while* the Promise is pending, the old Promise is **cancelled** (ignored) and a new one starts. This prevents "race conditions" where an old request overwrites a newer one.
+## 2. Efficiency through Deferral: Two-Phase Propagation
 
-### State Flags
+To reduce unnecessary work, a **Notify-and-Check** approach is used.
 
-We use bitwise flags (integers) for high-performance state tracking:
+1. **Phase 1: Notification**: When an atom changes, it notifies its immediate subscribers. For **Computed** nodes, this sets the `DIRTY` flag. For **Effects**, this schedules an execution check via the scheduler.
+2. **Phase 2: Evaluation (Sweep)**: The check differs by node type:
+   - **Computed**: On `.value` access, evaluates lazily only if the `DIRTY` flag is set.
+   - **Effect**: Before re-executing, `_isDirty()` is called, which accesses each computed dependency's `.value` to force re-evaluation, then compares `dep.version` against the stored `link.version`. The effect only re-runs if any version has changed.
 
-**Computed flags** (`COMPUTED_STATE_FLAGS`):
+**Trade-off: Runtime Overhead vs. Eager Memory**
+This "pull-based" evaluation requires a version check walk, which has a small runtime cost. The benefit is that it avoids "ghost updates" where values are calculated but never consumed.
 
-- `DISPOSED`: Node has been cleaned up.
-- `IS_COMPUTED`: Marker bit to identify computed nodes.
-- `DIRTY`: Needs re-evaluation.
-- `IDLE`: Initial state before first computation.
-- `PENDING`: Async computation is in progress.
-- `RESOLVED`: Value has been successfully computed.
-- `REJECTED`: Computation threw an error.
-- `RECOMPUTING`: Currently running (detects circular deps).
-- `HAS_ERROR`: This node or its dependencies have errors.
+---
 
-**Atom flags** (`ATOM_STATE_FLAGS`):
+## 3. Integrity at the Async Boundary
 
-- `DISPOSED`: Node has been cleaned up.
-- `SYNC`: Synchronous notification mode.
-- `NOTIFICATION_SCHEDULED`: A notification is already queued.
+Async computed nodes are treated as state machines, using **version snapshots** to guard against race conditions.
 
-**Effect flags** (`EFFECT_STATE_FLAGS`):
+- **Async Drift Detection**: If dependency versions change between a Promise's start and resolution, the result is discarded and the node re-evaluates.
+- **Cancellation**: Only the latest "Promise ID" is allowed to resolve. This prevents slow, stale responses from overwriting newer results.
 
-- `DISPOSED`: Effect has been cleaned up.
-- `EXECUTING`: Effect is currently running.
+**Implementation Detail**: Bitwise flags (e.g., `PENDING`, `RESOLVED`, `RECOMPUTING`) are used to keep state transitions fast and memory-efficient.
 
-## 4. Memory Management
+---
 
-We use **Subscriber Links** and **Array Pooling** to minimize Garbage Collection pressure.
+## 4. Resource Stewardship: Memory Management
 
-- Arrays containing `DependencyLink` objects are pooled and recycled.
-- Empty constant arrays are reused via `Object.freeze()`.
+Reactivity systems are prone to memory leaks if subscriptions are not cleaned up. Two mechanisms are used: **Subscriber Links** and **Array Pooling**.
 
-This allows the library to handle high-frequency updates (like mouse movements or animations) without causing GC stutter.
+- **Subscriber Links**: A linked relationship between dependencies and subscribers is maintained, allowing for $O(1)$ cleanup when a node is disposed.
+- **Link Pooling**: Instead of allocating new objects for every dependency relationship, links are reused from a pre-allocated pool to reduce GC pressure.
+
+**Trade-off: Complexity vs. Stability**
+Pooling adds complexity to the internal code, but is intended to reduce GC pauses in data-intensive, high-frequency update scenarios.
+
+---
+
+## 5. Architectural Trade-offs & Compromises
+
+Each design choice is a balance between ideals and practicality.
+
+| Feature | The IDEAL Choice | The PRAGMATIC Choice | Why? |
+| :--- | :--- | :--- | :--- |
+| **Consistency** | Strict Topological Sort | Recursive Lazy Evaluation | Avoids performance spikes on large graphs. |
+| **Accuracy** | Deep Equality Checks | `Object.is` (Reference-based) | Deep checks are expensive; finer equality is better handled at the user level. |
+| **Safety** | Immutable Objects | Mutative Bit-flags & Internal State | Reduces garbage collection pressure for high-frequency updates. |
+| **Tracking** | Explicit Dependency Arrays | Implicit Global `trackingContext` | Dependencies are discovered automatically, reducing boilerplate. |
+| **Counter Range** | Arbitrary Integers | SMI-capped (`& 0x3fffffff`) | Keeps epoch/version values in V8's Small Integer range, avoiding heap allocation for boxed numbers and enabling JIT optimizations. |
+
+---
+
+## 6. Security & Boundaries
+
+A **Symmetric Boundary** is enforced between production and consumption.
+
+- **Atoms & Computeds (Pure)**: Intended to be free of side effects. They form the "logic" layer.
+- **Effects (Impure)**: The designated place for side effects (DOM mutation, logging, API calls).
+
+**Protection**: `RECOMPUTING` flags are used to detect circular dependencies. If a Computed node is accessed while it is already calculating, an error is raised to protect the integrity of the graph.
+
+### Infinite Loop Defense
+
+Effects can inadvertently create feedback loops (e.g., an effect that writes to an atom it also reads). Layered hard limits are in place to prevent runaway execution:
+
+| Limit | Threshold | Scope |
+| :--- | :--- | :--- |
+| `MAX_EXECUTIONS_PER_EFFECT` | 100 per flush | Per individual effect |
+| `MAX_EXECUTIONS_PER_FLUSH` | 10,000 per flush | Global across all effects |
+| `MAX_EXECUTIONS_PER_SECOND` | 1,000 / sec (dev only) | Frequency guard per effect |
+
+When a threshold is crossed, an `EffectError` is thrown and the offending effect is disposed to avoid blocking the main thread indefinitely.

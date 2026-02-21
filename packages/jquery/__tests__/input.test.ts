@@ -26,8 +26,7 @@ describe('Input Bindings (Two-way)', () => {
     // Focus stability: don't overwrite user typing if parsed value matches
     val.value = '가'; // Same value
     $el.trigger('focus');
-    $el.val('가 '); // User added a space, but might parse to same thing if we had a parser
-    // (In this simple case it's different, but the principle is: if focus, be careful)
+    $el.val('가 ');
 
     $el.remove();
   });

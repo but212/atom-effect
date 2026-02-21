@@ -13,13 +13,6 @@ describe('Todo App Scenarios', () => {
   bench(
     'create 100 todos',
     () => {
-      // We reset/re-create in this case, but we try to avoid `atom` creation.
-      // Actually here we are just appending to the array.
-      // But the array gets bigger and bigger.
-      // We should probably reset it if it gets too big, or just focus on the update operation.
-      // The original bench did: todos.value = [...todos.value, newTodo] 100 times.
-      // This is O(N^2) effectively.
-      // Let's assume we want to measure "adding 1 item", but repeat it 100 times.
       if (todosCreate.value.length > 1000) todosCreate.value = [];
       const currentLen = todosCreate.value.length;
       todosCreate.value = [
@@ -106,22 +99,7 @@ describe('Todo App Scenarios', () => {
           createdAt: new Date(),
         }));
       }
-
-      // Delete one item per run? Or loop?
-      // Original loop: delete every other todo (50 updates).
       const _current = todosDelete.value;
-      // We can just filter once? No, original simulated 50 separate delete actions.
-      // Benchmarking 50 updates is acceptable.
-      // But let's just do ONE delete to simulate latency of "Delete".
-      // Doing 50 in a loop measures throughput.
-      // We'll stick to throughput.
-      // Optimizing: Use filter all at once if we want to test "Batch Delete".
-      // But here we test "Delete 50 from 100".
-      // We will simply remove the first item 50 times?
-      // Or filter out odds.
-      // Re-implementing original logic safely:
-      // Original was: for i=1 to 100 step 2: todos = todos.filter(...)
-      // This is O(N^2) again.
       for (let i = 0; i < 50; i++) {
         if (todosDelete.value.length > 0) {
           const idToRemove = todosDelete.value[0].id; // remove first
