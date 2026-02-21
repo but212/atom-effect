@@ -228,8 +228,6 @@ const totalCount = atom(0);
 effect(() => {
   const query = searchQuery.value; // Tracked
 
-  // Only read totalCount without tracking — we don't want
-  // this effect to re-run when totalCount changes
   const count = untracked(() => totalCount.value);
 
   console.log(`Searching "${query}" (${count} total results so far)`);

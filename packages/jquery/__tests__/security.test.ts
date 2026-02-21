@@ -103,7 +103,6 @@ describe('Unit: sanitizeHtml (Core Logic)', () => {
 
   // 7. CSS/Style Attacks
   it('should sanitize CSS expressions and behavior', () => {
-    // Re-enabled as we restored regex-based CSS sanitization within style attributes
     const v =
       '<div style="background:url(javascript:alert(1)); behavior:url(x.htc); expression(alert(1))">';
     const safe = sanitizeHtml(v).toLowerCase();
@@ -175,7 +174,6 @@ describe('Integration: Security Wiring', () => {
   // 1. atomHtml
   it('atomHtml -> should use sanitizeHtml', () => {
     const div = $('<div>');
-    // We already tested specific vectors in Unit. Just verify the wiring filters a script tag.
     div.atomHtml(atom('<script>alert("Wiring")</script>'));
     expect(div.html()).not.toContain('<script');
   });

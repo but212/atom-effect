@@ -699,12 +699,10 @@
     const scriptName = "index.php"; // Updated to match PHP file name
     const scriptIndex = pathname.indexOf(scriptName);
 
-    // If we are served as a file (e.g. /spa-ps/index.php), base path is the full file path
-    // This allows URL to become /spa-ps/index.php/dashboard
     const dynamicBasePath =
       scriptIndex !== -1
         ? pathname.substring(0, scriptIndex + scriptName.length)
-        : pathname.replace(/\/$/, "") + "/index.php"; // Handle directory root access case if needed
+        : pathname.replace(/\/$/, "") + "/index.php";
 
     // Helper for PushState Query Param Update
     const updateQueryParam = (key, value) => {
@@ -746,14 +744,8 @@
             // 2. Bind Input
             const $input = $container.find("#task-search");
 
-            // Bind atom -> input (for initial value & external updates)
-            // and input -> atom (local state)
             $input.atomVal(searchQuery);
 
-            // Input -> URL (Push State)
-            // We use 'change' or 'input' depending on desired frequency.
-            // unique 'input' ensures URL matches typing, but use debounce if needed.
-            // Here we do direct update for demo purposes.
             $input.on("input", (e) => {
               updateQueryParam("q", e.target.value);
             });

@@ -75,8 +75,6 @@ class InputBinding<T> {
 
   private readonly handleCompositionEnd = () => {
     this.flags &= ~BindingFlags.Composing;
-    // Chromium fires an input event after compositionend.
-    // Safari/Firefox may not, so we trigger sync manually.
     this.handleInput();
   };
 
@@ -94,9 +92,6 @@ class InputBinding<T> {
       this.syncAtomFromDom();
     }
 
-    // Re-format the displayed value to match the atom's canonical format.
-    // peek() instead of .value: this is an event handler path — we want the
-    // current value but must not register a reactive dependency here.
     const formatted = this.options.format(this.atom.peek());
     if (this.el.value !== formatted) {
       this.el.value = formatted;

@@ -192,12 +192,9 @@ class RouterImpl implements Router {
     if (this.isHistoryMode) {
       const url = `${this.normalizedBasePath}/${routeName}`;
       safePushState(null, url);
-      // Mirror the target URL so handleUrlChange knows this change was programmatic.
       this.previousUrl = url;
     } else {
       const hash = `#${routeName}`;
-      // Set hash before updating previousUrl so getCurrentUrl() returns the
-      // new value when we store it.
       window.location.hash = hash;
       this.previousUrl = hash;
     }

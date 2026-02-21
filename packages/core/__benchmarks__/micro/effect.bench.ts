@@ -151,10 +151,6 @@ describe('Effect Re-execution', () => {
 });
 
 describe('Effect Cleanup', () => {
-  // We need to create an effect that has cleanup, then trigger it.
-  // This might involve creating/disposing or relying on triggers.
-  // "effect cleanup on dependency change" -> we can reuse a stable effect.
-
   const aCleanup = atom(0);
   let _cleanupCount = 0;
   effect(() => {

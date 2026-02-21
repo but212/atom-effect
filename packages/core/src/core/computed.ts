@@ -317,7 +317,6 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       (res) => {
         if (promiseId !== this._promiseId) return; // Stale
 
-        // Check for stale reads (did deps change while we waited?)
         if (this._captureVersionSnapshot() !== this._asyncStartAggregateVersion) {
           // Reset retry counter when flush epoch changes — drifts across different
           // scheduler flushes are independent bursts, not a continuous failure streak.

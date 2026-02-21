@@ -67,8 +67,6 @@ describe('Computed', () => {
       expect(c2.isResolved).toBe(true);
 
       // 3. Error Fallback
-      // If onError is not guaranteed to be called when defaultValue is present (implementation detail),
-      // we focus on the value fallback behavior which is the contract.
       const c3 = computed(
         async () => {
           await sleep(10);

@@ -37,7 +37,6 @@ describe('SVG Support', () => {
 
     // jQuery .attr usually handles direct names better, but strictly speaking
     // xlink:href needs setAttributeNS. Let's see if plain atomAttr works
-    // via jQuery's abstracting or if we need specific handling.
     $use.atomAttr('xlink:href', href);
 
     await $.nextTick();
