@@ -9,7 +9,7 @@ Benchmarking suite for `@but212/atom-effect-jquery` to measure DOM binding perfo
 | **Text Binding** | Propagation (100el × 50) | 143 ops/sec | ~7.0ms per round |
 | **Class Binding** | Toggle (100el × 100) | 148 ops/sec | ~6.7ms per round |
 | **List Render** | 100 items | 96 ops/sec | ~10.4ms per render |
-| **Input (DOM→Atom)** | 881 ops/sec | 881 ops/sec | ~1.1ms per round |
+| **Input (DOM→Atom)** | 100 events | 881 ops/sec | ~1.1ms per round |
 | **Todo App** | Full workflow | 2,012 ops/sec | ~0.50ms per cycle |
 | **Dashboard** | Fan-in chain | 1,140 ops/sec | ~0.88ms per update |
 

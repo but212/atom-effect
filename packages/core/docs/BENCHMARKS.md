@@ -9,7 +9,7 @@ Comprehensive benchmarking suite for `atom-effect` to measure performance and de
 | **Atom** | Read (peek) | 613K ops/sec | Near-native array access speed |
 | **Computed** | Recompute (cached) | 979K ops/sec | Cached reads are nearly free |
 | **Effect** | Re-runs | 1,137K ops/sec | Efficient change propagation |
-| **Real-world** | Todo App (100 items) | 782K ops/sec | Production-ready performance |
+| **Real-world** | Todo App (Create 100 items) | 782K ops/sec | Production-ready performance |
 | **Frame Budget** | 100 atom updates | 0.012ms | Well under 16ms budget |
 
 ## Running Benchmarks
