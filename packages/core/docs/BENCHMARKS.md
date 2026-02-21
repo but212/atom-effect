@@ -6,11 +6,11 @@ Comprehensive benchmarking suite for `atom-effect` to measure performance and de
 
 | Category | Key Metric | Value | Context |
 | ---------- | ---------- | ----- | ------- |
-| **Atom** | Read (peek) | 599K ops/sec | Near-native array access speed |
-| **Computed** | Recompute (cached) | 1,011K ops/sec | Cached reads are nearly free |
-| **Effect** | Re-runs | 1,100K ops/sec | Efficient change propagation |
-| **Real-world** | Todo App (100 items) | 855K ops/sec | Production-ready performance |
-| **Frame Budget** | 100 atom updates | 0.013ms | Well under 16ms budget |
+| **Atom** | Read (peek) | 613K ops/sec | Near-native array access speed |
+| **Computed** | Recompute (cached) | 979K ops/sec | Cached reads are nearly free |
+| **Effect** | Re-runs | 1,137K ops/sec | Efficient change propagation |
+| **Real-world** | Todo App (Create 100 items) | 782K ops/sec | Production-ready performance |
+| **Frame Budget** | 100 atom updates | 0.012ms | Well under 16ms budget |
 
 ## Running Benchmarks
 
@@ -97,8 +97,8 @@ Production-like scenarios:
 
 ## Latest Results
 
-**Version**: v0.21.3
-**Last Updated**: 2026-02-18
+**Version**: v0.22.1
+**Last Updated**: 2026-02-21
 **Environment**:
 
 - **Node.js**: v20.x
@@ -110,12 +110,12 @@ Production-like scenarios:
 
 | Benchmark | Result | Analysis |
 | ---------- | ------ | -------- |
-| Atom peek (1000x) | 599K ops/sec | Near-native performance |
-| Computed recompute | 1,011K ops/sec | Cached reads are virtually free |
-| Effect re-runs (10x) | 1,100K ops/sec | Efficient propagation |
-| Todo App workflow | 855K ops/sec | Production-ready |
-| Frame Budget (100 atoms) | 0.013ms | Well under 16ms |
-| Data Grid Sort (1000 rows) | 0.49ms | Real-time filtering |
+| Atom peek (1000x) | 613K ops/sec | Near-native performance |
+| Computed recompute | 979K ops/sec | Cached reads are virtually free |
+| Effect re-runs (10x) | 1,137K ops/sec | Efficient propagation |
+| Todo App workflow | 175K ops/sec | Production-ready (Complete workflow) |
+| Frame Budget (100 atoms) | 0.012ms | Well under 16ms |
+| Data Grid Sort (1000 rows) | 0.50ms | Real-time filtering |
 
 ## Contributing Benchmarks
 
