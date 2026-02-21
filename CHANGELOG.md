@@ -4,8 +4,8 @@
 
 ### Core
 
-- **Async Drift Resilience**: Replaced the flat `_asyncRetryCount` with an epoch-based reset strategy. The retry counter now resets whenever the flush epoch changes, so drifts that occur in separate scheduler flushes are treated as independent events rather than a continuous failure streak. This prevents false REJECTED states under fast-input / slow-network conditions (e.g., ~81% → near-0% rejection probability for λ=10 req/s, 300 ms latency).
-- **Tests**: Added `async-drift.test.ts` covering REJECTED on immediate drift (`maxAsyncRetries = 0`), stable-dep happy path, `onError` callback with drift message, per-chain retry counter reset, and boundary drift detection.
+- **Async Retry Stability**: Improved the retry counter logic to reset appropriately between separate scheduler updates, preventing false REJECTED states during rapid inputs and slow network conditions.
+- **Tests**: Added tests for async drift scenarios, retry behavior, and `onError` callbacks.
 
 ## [0.22.0]
 
