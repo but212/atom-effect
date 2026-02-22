@@ -29,17 +29,21 @@ $.extend({
     const { defaultValue, transform, method, headers, ajaxOptions, onError, eager } = options;
 
     // Hoist 1: Determine URL getter once.
-    const getUrl = typeof urlOrFn === 'function' ? urlOrFn : null;
-    const staticUrl = typeof urlOrFn === 'string' ? urlOrFn : undefined;
+    const isStaticUrl = typeof urlOrFn === 'string';
+    const staticUrl = isStaticUrl ? urlOrFn : undefined;
+    const getUrl = isStaticUrl ? null : urlOrFn;
 
     // Hoist 2: Pre-merge static options to avoid repeated object spreads per request.
-    const baseOptions = {
-      ...ajaxOptions,
-      ...(method !== undefined && { method }),
-      ...(headers !== undefined && { headers }),
-    };
+    const reqOptions: JQuery.AjaxSettings = Object.assign({}, ajaxOptions);
+    if (method !== undefined) reqOptions.method = method;
+    if (headers !== undefined) reqOptions.headers = headers;
+
+    if (isStaticUrl) {
+      reqOptions.url = staticUrl;
+    }
 
     let abortController: AbortController | null = null;
+    const isLazy = !(eager ?? true);
 
     return computed(
       async () => {
@@ -47,9 +51,9 @@ $.extend({
         abortController = new AbortController();
         const signal = abortController.signal;
 
-        const reqOptions = staticUrl
-          ? { ...baseOptions, url: staticUrl }
-          : { ...baseOptions, url: getUrl!() };
+        if (!isStaticUrl) {
+          reqOptions.url = getUrl!();
+        }
 
         const xhr = $.ajax(reqOptions);
 
@@ -74,7 +78,7 @@ $.extend({
           if (abortController.signal === signal) abortController = null;
         }
       },
-      { defaultValue, lazy: !(eager ?? true) }
+      { defaultValue, lazy: isLazy }
     );
   },
 });

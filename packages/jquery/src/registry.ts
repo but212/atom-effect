@@ -139,41 +139,53 @@ class BindingRegistry {
     }
 
     // Step 1 — Sever atom → effect subscriptions.
-    record.effects?.forEach((fx) => {
-      try {
-        fx.dispose();
-      } catch (e) {
-        debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.EFFECT_DISPOSE_ERROR(), e);
+    if (record.effects) {
+      const effects = record.effects;
+      for (let i = 0, len = effects.length; i < len; i++) {
+        try {
+          effects[i]!.dispose();
+        } catch (e) {
+          debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.EFFECT_DISPOSE_ERROR(), e);
+        }
       }
-    });
+    }
 
     // Step 2 — Run general-purpose cleanup callbacks.
-    record.cleanups?.forEach((fn) => {
-      try {
-        fn();
-      } catch (e) {
-        debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING_CLEANUP_ERROR(), e);
+    if (record.cleanups) {
+      const cleanups = record.cleanups;
+      for (let i = 0, len = cleanups.length; i < len; i++) {
+        try {
+          cleanups[i]!();
+        } catch (e) {
+          debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING_CLEANUP_ERROR(), e);
+        }
       }
-    });
+    }
   }
 
   cleanupDescendants(el: Element): void {
-    // querySelectorAll returns a static NodeList, which is safe to iterate
-    // even though cleanup() triggers DOM changes.
-    // Iterating with for...of avoids index-access type checking issues.
-    const descendants = el.querySelectorAll(`.${AES_BOUND}`);
-    for (const child of descendants) {
+    // getElementsByClassName is significantly faster than querySelectorAll as it
+    // avoids the CSS selector parsing engine and returns a live HTMLCollection.
+    // Iterating backwards handles live collection mutations gracefully, though
+    // cleanup() doesn't immediately remove elements from the tree.
+    const descendants = el.getElementsByClassName(AES_BOUND);
+    for (let i = descendants.length - 1; i >= 0; i--) {
+      const child = descendants[i];
+      if (!child) continue;
+
       if (this.records.has(child)) {
         this.cleanup(child);
       } else {
         // The AES_BOUND class is present but the registry has no record.
         // Remove the stale class and warn so it surfaces in debug mode.
         child.classList.remove(AES_BOUND);
-        debug.warn(
-          LOG_PREFIXES.BINDING,
-          `${AES_BOUND} class found on unregistered element:`,
-          child
-        );
+        if (debug.enabled) {
+          debug.warn(
+            LOG_PREFIXES.BINDING,
+            `${AES_BOUND} class found on unregistered element:`,
+            child
+          );
+        }
       }
     }
   }
@@ -219,12 +231,12 @@ export function enableAutoCleanup(root: Element): void {
 
   observedRoot = root;
   observer = new MutationObserver((mutations) => {
-    // Optimization: use for...of for iteration speed.
-    for (const mutation of mutations) {
-      // removedNodes is a NodeList, which is iterable in modern environments.
-      // If legacy browser support is needed, a C-style loop over .length might be required.
-      // Assuming ES6+ target (based on WeekMap usage).
-      for (const node of mutation.removedNodes) {
+    // Optimization: raw for-loop avoids iterator allocations.
+    for (let i = 0, mLen = mutations.length; i < mLen; i++) {
+      const removedNodes = mutations[i]!.removedNodes;
+      for (let j = 0, rLen = removedNodes.length; j < rLen; j++) {
+        const node = removedNodes[j]!;
+
         // Only Element nodes can carry AES_BOUND bindings.
         // 1 === Node.ELEMENT_NODE
         if (node.nodeType !== 1) continue;

@@ -425,7 +425,8 @@ class RouterImpl implements Router {
       untracked(() => {
         const links = document.querySelectorAll<HTMLElement>('[data-route]');
 
-        for (const el of links) {
+        for (let i = 0, len = links.length; i < len; i++) {
+          const el = links[i]!;
           const routeAttr = el.dataset.route!;
           const isActive = current === routeAttr;
 
@@ -488,13 +489,14 @@ class RouterImpl implements Router {
     if (this.isDestroyed) return;
     this.isDestroyed = true;
 
-    this.cleanups.forEach((fn) => {
+    const cleanups = this.cleanups;
+    for (let i = 0, len = cleanups.length; i < len; i++) {
       try {
-        fn();
+        cleanups[i]!();
       } catch (e) {
         debug.warn(LOG_PREFIXES.ROUTE, 'Cleanup error during destroy:', e);
       }
-    });
+    }
     this.cleanups.length = 0;
 
     // Release cached template references to allow GC.

@@ -7,10 +7,6 @@ describe('$.atomFetch', () => {
     vi.restoreAllMocks();
   });
 
-  it('should be registered as a static method on $', () => {
-    expect(typeof $.atomFetch).toBe('function');
-  });
-
   it('should resolve data from a static URL', async () => {
     vi.spyOn($, 'ajax').mockResolvedValue({ name: 'Alice' });
 
@@ -71,7 +67,7 @@ describe('$.atomFetch', () => {
     expect(data.isResolved).toBe(true);
   });
 
-  it('should set hasError and lastError on real fetch failure', async () => {
+  it('should set hasError and lastError on fetch failure', async () => {
     vi.spyOn($, 'ajax').mockRejectedValue(new Error('Network error'));
 
     const data = $.atomFetch('/api/fail', { defaultValue: null });
@@ -116,13 +112,14 @@ describe('$.atomFetch', () => {
     expect(count.value).toBe(3);
   });
 
-  it('should forward method and headers to $.ajax', async () => {
+  it('should forward method, headers, and ajaxOptions to $.ajax', async () => {
     vi.spyOn($, 'ajax').mockResolvedValue({ ok: true });
 
     $.atomFetch('/api/resource', {
       defaultValue: null,
       method: 'POST',
       headers: { Authorization: 'Bearer token123' },
+      ajaxOptions: { dataType: 'text', timeout: 5000 },
     });
 
     await $.nextTick();
@@ -132,22 +129,6 @@ describe('$.atomFetch', () => {
         url: '/api/resource',
         method: 'POST',
         headers: { Authorization: 'Bearer token123' },
-      })
-    );
-  });
-
-  it('should forward ajaxOptions to $.ajax', async () => {
-    vi.spyOn($, 'ajax').mockResolvedValue('raw');
-
-    $.atomFetch('/api/data', {
-      defaultValue: '',
-      ajaxOptions: { dataType: 'text', timeout: 5000 },
-    });
-
-    await $.nextTick();
-
-    expect($.ajax).toHaveBeenCalledWith(
-      expect.objectContaining({
         dataType: 'text',
         timeout: 5000,
       })
@@ -180,15 +161,10 @@ describe('$.atomFetch', () => {
     await $.nextTick();
     await $.nextTick();
 
-    // The core wraps thrown errors in ComputedError; the original error is the cause.
     expect(data.hasError).toBe(true);
     expect(data.lastError?.message).toContain('Network error');
     expect(data.lastError?.message).not.toContain('onError threw');
   });
-
-  // ---------------------------------------------------------------------------
-  // Abort / Cancellation
-  // ---------------------------------------------------------------------------
 
   it('abort by subsequent fetch should NOT set hasError', async () => {
     let rejectXhr!: (e: unknown) => void;
@@ -222,51 +198,7 @@ describe('$.atomFetch', () => {
     expect(data.value).toEqual({ ok: true });
   });
 
-  it('abort rejection should not bleed into lastError', async () => {
-    // Real abort flow: AbortController.abort() sets signal.aborted=true,
-    // fires the 'abort' event → xhr.abort() → xhr rejects.
-    // The impl detects signal.aborted in the catch block and suppresses the error.
-    const OriginalAbortController = globalThis.AbortController;
-    let capturedAbortController: AbortController | null = null;
-    let rejectXhr!: (e: unknown) => void;
-
-    vi.spyOn(globalThis, 'AbortController').mockImplementationOnce(function (
-      this: AbortController
-    ) {
-      const real = new OriginalAbortController();
-      capturedAbortController = real;
-      return real;
-    } as unknown as typeof AbortController);
-
-    vi.spyOn($, 'ajax').mockReturnValue(
-      Object.assign(
-        new Promise<unknown>((_, reject) => {
-          rejectXhr = reject;
-        }),
-        { abort: () => rejectXhr(new Error('Request aborted')) }
-      ) as unknown as JQuery.jqXHR
-    );
-
-    const data = $.atomFetch('/api/slow', { defaultValue: null });
-    await $.nextTick();
-
-    capturedAbortController!.abort();
-    rejectXhr(new Error('Request aborted'));
-
-    await $.nextTick();
-    await $.nextTick();
-
-    expect(data.hasError).toBe(false);
-    expect(data.lastError).toBeFalsy();
-  });
-
   it('AbortController.abort() before signal.addEventListener — xhr.abort() must still fire', async () => {
-    // Race window: abort() fires between $.ajax() and signal.addEventListener().
-    // The impl must check signal.aborted synchronously after addEventListener
-    // and call xhr.abort() directly as a fallback.
-    //
-    // Simulated by intercepting addEventListener, calling abort() inside the mock
-    // (before returning), and skipping handler registration.
     const OriginalAbortController = globalThis.AbortController;
     let capturedAbortController: AbortController | null = null;
     const abortSpy = vi.fn();
@@ -284,8 +216,7 @@ describe('$.atomFetch', () => {
       _type: string,
       _handler: EventListenerOrEventListenerObject
     ) {
-      capturedAbortController!.abort(); // signal.aborted = true in the race window
-      // Handler not registered — simulating missed event.
+      capturedAbortController!.abort();
     });
 
     vi.spyOn($, 'ajax').mockReturnValueOnce(

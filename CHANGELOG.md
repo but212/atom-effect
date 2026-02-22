@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### jQuery
+
+- **Performance & Data Locality**:
+  - Eliminated iterator and closure overheads (`.each`, `forEach`, `for...of`, `Object.keys/entries`) by adopting native `for` and `for...in` loops in DOM syncs, cleanups, and batch operations.
+  - Reduced memory allocations and GC pressure by hoisting configurations and using faster static queries (`getElementsByClassName`).
+
+- **Security**:
+  - `sanitizeHtml`: Added entity decoding pre-pass to block `&#NNN;`/`&#xHH;` protocol bypasses; added `-moz-binding` to blocked CSS patterns.
+
 ## [0.22.1]
 
 ### Core

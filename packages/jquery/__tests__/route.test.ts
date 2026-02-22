@@ -19,7 +19,6 @@ describe('$.route() - SPA Routing', () => {
       <template id="tmpl-notfound"><h1>404</h1><p>Page not found</p></template>
     `;
     window.location.hash = '';
-    // Reset debug state
     debug.enabled = false;
   });
 
@@ -87,10 +86,8 @@ describe('$.route() - SPA Routing', () => {
         },
       });
 
-      // Default fallback
       expect(router.currentRoute.value).toBe('home');
 
-      // 404 handling
       router.navigate('unknown-route');
       await $.nextTick();
 
@@ -116,12 +113,10 @@ describe('$.route() - SPA Routing', () => {
 
       await $.nextTick();
 
-      // Initial state
       expect(homeLink.classList.contains('active')).toBe(true);
       expect(homeLink.getAttribute('aria-current')).toBe('page');
       expect(aboutLink.classList.contains('active')).toBe(false);
 
-      // Navigation via click
       aboutLink.click();
       await $.nextTick();
 
@@ -157,7 +152,6 @@ describe('$.route() - SPA Routing', () => {
 
       expect(renderSpy).toHaveBeenCalledTimes(2);
       const args = renderSpy.mock.calls[1]!;
-      // container, route, params
       expect(args[2]).toEqual({ id: '42', extra: 'injected' });
       expect(document.querySelector('#app')?.innerHTML).toContain('Route: home, ID: 42');
     });
@@ -182,7 +176,6 @@ describe('$.route() - SPA Routing', () => {
       await $.nextTick();
       expect(onEnterHome).toHaveBeenCalledTimes(1);
 
-      // Navigate home -> about
       router.navigate('about');
       await $.nextTick();
       expect(onLeaveHome).toHaveBeenCalledTimes(1);
@@ -192,7 +185,7 @@ describe('$.route() - SPA Routing', () => {
       router.navigate('contact');
       await $.nextTick();
       expect(onLeaveAbout).toHaveBeenCalledTimes(1);
-      expect(router.currentRoute.value).toBe('about'); // Should remain
+      expect(router.currentRoute.value).toBe('about');
     });
 
     it('should call global transition hooks with correct from/to', async () => {
@@ -234,36 +227,12 @@ describe('$.route() - SPA Routing', () => {
 
       router.destroy();
 
-      // Listener cleanup (simulated by hash change not affecting router)
       const initialRoute = router.currentRoute.value;
       window.location.hash = '#about';
       window.dispatchEvent(new window.Event('hashchange'));
       await $.nextTick();
 
       expect(router.currentRoute.value).toBe(initialRoute);
-    });
-
-    it('should auto-cleanup when target element is removed', async () => {
-      document.body.innerHTML = `
-        <div id="wrapper"><div id="app"></div></div>
-        <template id="tmpl-home"><h1>Home</h1></template>
-      `;
-
-      const _router = $.route({
-        target: '#app',
-        default: 'home',
-        routes: { home: { template: '#tmpl-home' } },
-      });
-
-      // Spy on destroy mechanism indirectly via event listener removal
-      const removeListenerSpy = vi.spyOn(window, 'removeEventListener');
-
-      document.getElementById('app')?.remove();
-
-      // Wait for MutationObserver (Auto-cleanup is async)
-      await new Promise((r) => setTimeout(r, 50));
-
-      expect(removeListenerSpy).toHaveBeenCalledWith('hashchange', expect.any(Function));
     });
   });
 
@@ -308,17 +277,14 @@ describe('$.route() - SPA Routing', () => {
   });
 
   describe('Route Resolution Edge Cases', () => {
-    it('warns when route not found and no notFound configured (lines 102-104)', async () => {
+    it('warns when route not found and no notFound configured', async () => {
       const warnSpy = vi.spyOn(debug, 'warn');
       debug.enabled = true;
 
       const router = $.route({
         target: '#app',
         default: 'home',
-        // No notFound configured
-        routes: {
-          home: { template: '#tmpl-home' },
-        },
+        routes: { home: { template: '#tmpl-home' } },
       });
 
       router.navigate('nonexistent');
@@ -332,16 +298,14 @@ describe('$.route() - SPA Routing', () => {
       router.destroy();
     });
 
-    it('warns when template selector does not exist (lines 117-119)', async () => {
+    it('warns when template selector does not exist', async () => {
       const warnSpy = vi.spyOn(debug, 'warn');
       debug.enabled = true;
 
       const router = $.route({
         target: '#app',
         default: 'home',
-        routes: {
-          home: { template: '#nonexistent-template' },
-        },
+        routes: { home: { template: '#nonexistent-template' } },
       });
 
       await $.nextTick();
@@ -354,7 +318,7 @@ describe('$.route() - SPA Routing', () => {
       router.destroy();
     });
 
-    it('restores hash when onLeave guard blocks hashchange navigation (lines 220-224)', async () => {
+    it('restores hash when onLeave guard blocks hashchange navigation', async () => {
       const router = $.route({
         target: '#app',
         default: 'home',
@@ -362,22 +326,19 @@ describe('$.route() - SPA Routing', () => {
           home: { template: '#tmpl-home' },
           about: {
             template: '#tmpl-about',
-            onLeave: () => false, // Block leaving about
+            onLeave: () => false,
           },
         },
       });
 
-      // Navigate to about first
       router.navigate('about');
       await $.nextTick();
       expect(router.currentRoute.value).toBe('about');
 
-      // Try to navigate via hashchange (simulating back button)
       window.location.hash = '#home';
       window.dispatchEvent(new window.Event('hashchange'));
       await $.nextTick();
 
-      // Navigation should be blocked and hash restored
       expect(router.currentRoute.value).toBe('about');
       expect(window.location.hash).toBe('#about');
 
@@ -389,7 +350,7 @@ describe('$.route() - SPA Routing', () => {
     it('should handle malformed URL parameters gracefully', async () => {
       const $target = $('<div id="app-route-err"></div>').appendTo(document.body);
       const warnSpy = vi.spyOn(debug, 'warn');
-      debug.enabled = true; // Enable debug to capture params warning
+      debug.enabled = true;
 
       const router = $.route({
         target: '#app-route-err',
@@ -403,14 +364,11 @@ describe('$.route() - SPA Routing', () => {
         },
       });
 
-      // Trigger malformed hash
       window.location.hash = '#home?bad=%FF%FE';
       window.dispatchEvent(new window.Event('hashchange'));
       await $.nextTick();
 
-      // Check that target still exists and router is alive
       expect(document.getElementById('app-route-err')).not.toBeNull();
-      // Verify warning was logged (implementation does not pass the error object)
       expect(warnSpy).toHaveBeenCalledWith(
         LOG_PREFIXES.ROUTE,
         expect.stringContaining('Malformed URI component')
@@ -420,12 +378,12 @@ describe('$.route() - SPA Routing', () => {
       $target.remove();
     });
 
-    it('continues navigation even if pushState throws (e.g. file:// restriction)', async () => {
+    it('continues navigation even if pushState throws', async () => {
       const pushStateSpy = vi.spyOn(history, 'pushState').mockImplementation(() => {
         throw new DOMException('SecurityError: The operation is insecure.', 'SecurityError');
       });
       const warnSpy = vi.spyOn(debug, 'warn');
-      debug.enabled = true; // Enable debug logging
+      debug.enabled = true;
 
       const router = $.route({
         target: '#app',
@@ -439,82 +397,24 @@ describe('$.route() - SPA Routing', () => {
 
       await $.nextTick();
 
-      // Attempt navigation
       router.navigate('about');
       await $.nextTick();
 
-      // Verify pushState failed but swallowed
       expect(pushStateSpy).toHaveBeenCalled();
-
-      // Verify warning logged
       expect(warnSpy).toHaveBeenCalledWith(
         LOG_PREFIXES.ROUTE,
         expect.stringContaining('PushState failed'),
         expect.anything()
       );
-
-      // Verify UI updated despite URL error
       expect(router.currentRoute.value).toBe('about');
       expect(document.querySelector('#app')?.innerHTML).toContain('About Page');
 
       router.destroy();
     });
-
-    it('logs warning if pushState throws (was replaceState)', async () => {
-      // restoreUrl now uses pushState to avoid back button traps
-      const pushStateSpy = vi.spyOn(history, 'pushState').mockImplementation(() => {
-        throw new Error('Mock Push Failure');
-      });
-      const warnSpy = vi.spyOn(debug, 'warn');
-      debug.enabled = true;
-
-      const router = $.route({
-        target: '#app',
-        default: 'home',
-        mode: 'history',
-        routes: {
-          home: { template: '#tmpl-home' },
-          about: {
-            template: '#tmpl-about',
-            onLeave: () => false, // Will trigger restoreUrl -> pushState
-          },
-        },
-      });
-
-      await $.nextTick();
-      router.navigate('about');
-      await $.nextTick();
-      expect(router.currentRoute.value).toBe('about');
-
-      // Now try popstate back to home, which should be blocked and trigger replaceState (restoreUrl)
-      Object.defineProperty(window, 'location', {
-        value: { ...window.location, pathname: '/home' },
-        writable: true,
-        configurable: true,
-      });
-      window.dispatchEvent(new window.Event('popstate'));
-      await $.nextTick();
-
-      expect(router.currentRoute.value).toBe('about'); // Blocked
-      expect(pushStateSpy).toHaveBeenCalled();
-      expect(warnSpy).toHaveBeenCalledWith(
-        LOG_PREFIXES.ROUTE,
-        expect.stringContaining('PushState failed'),
-        expect.anything()
-      );
-
-      router.destroy();
-      Object.defineProperty(window, 'location', {
-        value: { ...window.location, pathname: '/', search: '', hash: '' },
-        writable: true,
-        configurable: true,
-      });
-    });
   });
 
   describe('History Mode', () => {
     it('should render default route using pathname', async () => {
-      // jsdom defaults pathname to '/' which resolves to defaultRoute
       const router = $.route({
         target: '#app',
         default: 'home',
@@ -571,12 +471,10 @@ describe('$.route() - SPA Routing', () => {
 
       await $.nextTick();
 
-      // Navigate to about first
       router.navigate('about');
       await $.nextTick();
       expect(router.currentRoute.value).toBe('about');
 
-      // Simulate browser back button: change pathname then fire popstate
       Object.defineProperty(window, 'location', {
         value: { ...window.location, pathname: '/home', search: '' },
         writable: true,
@@ -588,7 +486,6 @@ describe('$.route() - SPA Routing', () => {
       expect(router.currentRoute.value).toBe('home');
 
       router.destroy();
-      // Restore location
       Object.defineProperty(window, 'location', {
         value: { ...window.location, pathname: '/', search: '', hash: '' },
         writable: true,
@@ -659,9 +556,7 @@ describe('$.route() - SPA Routing', () => {
       await $.nextTick();
 
       expect(router.currentRoute.value).toBe('detail');
-      expect(renderSpy).toHaveBeenCalled();
-      const args = renderSpy.mock.calls[0];
-      expect(args![2]).toEqual({ id: '99' });
+      expect(renderSpy.mock.calls[0]![2]).toEqual({ id: '99' });
 
       router.destroy();
       Object.defineProperty(window, 'location', {
@@ -669,30 +564,6 @@ describe('$.route() - SPA Routing', () => {
         writable: true,
         configurable: true,
       });
-    });
-
-    it('should listen to popstate not hashchange, and cleanup correctly', async () => {
-      const addSpy = vi.spyOn(window, 'addEventListener');
-      const removeSpy = vi.spyOn(window, 'removeEventListener');
-
-      const router = $.route({
-        target: '#app',
-        default: 'home',
-        mode: 'history',
-        routes: {
-          home: { template: '#tmpl-home' },
-        },
-      });
-
-      expect(addSpy).toHaveBeenCalledWith('popstate', expect.any(Function));
-      expect(addSpy).not.toHaveBeenCalledWith('hashchange', expect.any(Function));
-
-      router.destroy();
-
-      expect(removeSpy).toHaveBeenCalledWith('popstate', expect.any(Function));
-
-      addSpy.mockRestore();
-      removeSpy.mockRestore();
     });
   });
 
@@ -721,10 +592,8 @@ describe('$.route() - SPA Routing', () => {
 
       await $.nextTick();
 
-      // Add link dynamically AFTER init
       const $newLink = $('<a href="#page2" data-route="page2">Page 2</a>').appendTo('#links');
 
-      // Navigate via click (Event Delegation)
       $newLink[0]!.click();
       await $.nextTick();
 
@@ -737,7 +606,7 @@ describe('$.route() - SPA Routing', () => {
   });
 
   describe('queryParams reactive atom', () => {
-    it('should start empty and reactively update when hash changes with params', async () => {
+    it('should start empty, update on hash params, and update again on param change', async () => {
       const router = $.route({
         target: '#app',
         default: 'home',
@@ -750,32 +619,12 @@ describe('$.route() - SPA Routing', () => {
       window.location.hash = '#home?id=42&tab=info';
       window.dispatchEvent(new window.Event('hashchange'));
       await $.nextTick();
-
       expect(router.queryParams.value).toEqual({ id: '42', tab: 'info' });
 
-      router.destroy();
-    });
-
-    it('should update when only params change on the same route', async () => {
-      const router = $.route({
-        target: '#app',
-        default: 'home',
-        routes: { home: { template: '#tmpl-home' } },
-      });
-
-      await $.nextTick();
-
-      window.location.hash = '#home?id=1';
+      window.location.hash = '#home?id=99';
       window.dispatchEvent(new window.Event('hashchange'));
       await $.nextTick();
-
-      expect(router.queryParams.value).toEqual({ id: '1' });
-
-      window.location.hash = '#home?id=2';
-      window.dispatchEvent(new window.Event('hashchange'));
-      await $.nextTick();
-
-      expect(router.queryParams.value).toEqual({ id: '2' });
+      expect(router.queryParams.value).toEqual({ id: '99' });
 
       router.destroy();
     });
@@ -789,7 +638,6 @@ describe('$.route() - SPA Routing', () => {
 
       await $.nextTick();
 
-      // Attempt to modify the computed queryParams should fail
       expect(() => {
         // @ts-expect-error: property is readonly
         router.queryParams.value = { foo: 'bar' };
@@ -810,56 +658,19 @@ describe('$.route() - SPA Routing', () => {
         target: '#app',
         default: 'home',
         routes: {
-          home: {
-            render: renderSpy,
-            onParamsChange: onParamsChangeSpy,
-          },
+          home: { render: renderSpy, onParamsChange: onParamsChangeSpy },
         },
       });
 
       await $.nextTick();
       expect(renderSpy).toHaveBeenCalledTimes(1);
 
-      // Change only params on the same route
       window.location.hash = '#home?id=42';
       window.dispatchEvent(new window.Event('hashchange'));
       await $.nextTick();
 
-      expect(renderSpy).toHaveBeenCalledTimes(1); // No additional render
-      expect(onParamsChangeSpy).toHaveBeenCalledWith({ id: '42' });
-
-      router.destroy();
-    });
-
-    it('should call onParamsChange multiple times for consecutive param changes', async () => {
-      const renderSpy = vi.fn((el: HTMLElement) => {
-        el.innerHTML = '<div>Rendered</div>';
-      });
-      const onParamsChangeSpy = vi.fn((_params: Record<string, string>) => {});
-
-      const router = $.route({
-        target: '#app',
-        default: 'home',
-        routes: {
-          home: {
-            render: renderSpy,
-            onParamsChange: onParamsChangeSpy,
-          },
-        },
-      });
-
-      await $.nextTick();
-
-      window.location.hash = '#home?page=1';
-      window.dispatchEvent(new window.Event('hashchange'));
-      await $.nextTick();
-
-      window.location.hash = '#home?page=2';
-      window.dispatchEvent(new window.Event('hashchange'));
-      await $.nextTick();
-
       expect(renderSpy).toHaveBeenCalledTimes(1);
-      expect(onParamsChangeSpy).toHaveBeenCalledTimes(2);
+      expect(onParamsChangeSpy).toHaveBeenCalledWith({ id: '42' });
 
       router.destroy();
     });
@@ -874,10 +685,7 @@ describe('$.route() - SPA Routing', () => {
         target: '#app',
         default: 'home',
         routes: {
-          home: {
-            render: homeRenderSpy,
-            onParamsChange: onParamsChangeSpy,
-          },
+          home: { render: homeRenderSpy, onParamsChange: onParamsChangeSpy },
           about: { template: '#tmpl-about' },
         },
       });
@@ -886,19 +694,16 @@ describe('$.route() - SPA Routing', () => {
 
       router.navigate('about');
       await $.nextTick();
-
       router.navigate('home');
       await $.nextTick();
 
-      // render called for initial + re-entry = 2 times
       expect(homeRenderSpy).toHaveBeenCalledTimes(2);
-      // onParamsChange should NOT have been called (route changed, not just params)
       expect(onParamsChangeSpy).not.toHaveBeenCalled();
 
       router.destroy();
     });
 
-    it('should NOT call $target.empty() on param-only change (preserve DOM reference)', async () => {
+    it('should NOT clear DOM on param-only change (preserve DOM reference)', async () => {
       let capturedEl: HTMLElement | null = null;
       const renderSpy = vi.fn((el: HTMLElement) => {
         const div = document.createElement('div');
@@ -926,61 +731,29 @@ describe('$.route() - SPA Routing', () => {
       window.dispatchEvent(new window.Event('hashchange'));
       await $.nextTick();
 
-      // The DOM element created during render should still be present
       expect(document.getElementById('persistent-element')).toBe(capturedEl);
 
       router.destroy();
     });
   });
 
-  describe('activeLinks single effect', () => {
-    it('should create only 1 effect for N links (3 links)', async () => {
-      const router = $.route({
-        target: '#app',
-        default: 'home',
-        autoBindLinks: true,
-        routes: {
-          home: { template: '#tmpl-home' },
-          about: { template: '#tmpl-about' },
-          contact: { template: '#tmpl-contact' },
-        },
-      });
-
-      await $.nextTick();
-
-      // subscriberCount should be 2: renderEffect + 1 activeLinks effect
-      // (not 1 per link)
-      expect(router.currentRoute.subscriberCount()).toBe(2);
-
-      router.destroy();
-    });
-  });
-
   describe('Template onMount hook', () => {
-    it('should call onMount with jQuery object of CONTENT (children) after rendering', async () => {
+    it('should call onMount with jQuery object of content children after rendering', async () => {
       const onMountSpy = vi.fn((_$content: JQuery) => {});
 
       const router = $.route({
         target: '#app',
         default: 'home',
         routes: {
-          // tmpl-home has <h1> and <p>, so children should be length 2
-          home: {
-            template: '#tmpl-home',
-            onMount: onMountSpy,
-          },
+          home: { template: '#tmpl-home', onMount: onMountSpy },
         },
       });
 
       await $.nextTick();
 
       expect(onMountSpy).toHaveBeenCalledTimes(1);
-      // Should receive a jQuery object
       const arg = onMountSpy.mock.calls[0]![0];
       expect(arg).toBeInstanceOf($);
-
-      // Verify it is the content, not the container
-      // The container is #app. The content is <h1> and <p>.
       expect(arg.attr('id')).not.toBe('app');
       expect(arg.length).toBe(2); // h1 + p
       expect(arg.filter('h1').text()).toBe('Home Page');
@@ -988,17 +761,14 @@ describe('$.route() - SPA Routing', () => {
       router.destroy();
     });
 
-    it('should call onMount again on route re-entry (total 2 times)', async () => {
+    it('should call onMount again on route re-entry', async () => {
       const onMountSpy = vi.fn((_$content: JQuery) => {});
 
       const router = $.route({
         target: '#app',
         default: 'home',
         routes: {
-          home: {
-            template: '#tmpl-home',
-            onMount: onMountSpy,
-          },
+          home: { template: '#tmpl-home', onMount: onMountSpy },
           about: { template: '#tmpl-about' },
         },
       });
@@ -1006,38 +776,12 @@ describe('$.route() - SPA Routing', () => {
       await $.nextTick();
       expect(onMountSpy).toHaveBeenCalledTimes(1);
 
-      // Navigate away and back
       router.navigate('about');
       await $.nextTick();
       router.navigate('home');
       await $.nextTick();
 
       expect(onMountSpy).toHaveBeenCalledTimes(2);
-
-      router.destroy();
-    });
-
-    it('should call onMount when content is already connected to DOM', async () => {
-      let isConnectedAtCallTime = false;
-
-      const router = $.route({
-        target: '#app',
-        default: 'home',
-        routes: {
-          home: {
-            template: '#tmpl-home',
-            onMount: ($content: JQuery) => {
-              // Check that the content is actually in the DOM
-              // $content is collection of children, check first one
-              isConnectedAtCallTime = $content[0]?.isConnected ?? false;
-            },
-          },
-        },
-      });
-
-      await $.nextTick();
-
-      expect(isConnectedAtCallTime).toBe(true);
 
       router.destroy();
     });

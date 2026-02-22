@@ -32,9 +32,10 @@ import {
  *   Defaults to `String(val ?? '')`.
  */
 $.fn.atomText = function <T>(source: ReactiveValue<T>, formatter?: (v: T) => string): JQuery {
-  return this.each(function () {
-    bindText(createContext(this), source, formatter);
-  });
+  for (let i = 0, len = this.length; i < len; i++) {
+    bindText(createContext(this[i]!), source, formatter);
+  }
+  return this;
 };
 
 /**
@@ -42,9 +43,10 @@ $.fn.atomText = function <T>(source: ReactiveValue<T>, formatter?: (v: T) => str
  * The value is automatically sanitized before insertion to prevent XSS.
  */
 $.fn.atomHtml = function (source: ReactiveValue<string>): JQuery {
-  return this.each(function () {
-    bindHtml(createContext(this), source);
-  });
+  for (let i = 0, len = this.length; i < len; i++) {
+    bindHtml(createContext(this[i]!), source);
+  }
+  return this;
 };
 
 /**
@@ -65,9 +67,10 @@ $.fn.atomClass = function (
   // Hoist: build the map once, not once-per-element inside each().
   const classMap =
     typeof classNameOrMap === 'string' ? { [classNameOrMap]: condition! } : classNameOrMap;
-  return this.each(function () {
-    bindClass(createContext(this), classMap);
-  });
+  for (let i = 0, len = this.length; i < len; i++) {
+    bindClass(createContext(this[i]!), classMap);
+  }
+  return this;
 };
 
 /**
@@ -91,9 +94,10 @@ $.fn.atomCss = function (
     typeof propOrMap === 'string'
       ? { [propOrMap]: unit ? [source as ReactiveValue<number>, unit] : source! }
       : propOrMap;
-  return this.each(function () {
-    bindCss(createContext(this), cssMap);
-  });
+  for (let i = 0, len = this.length; i < len; i++) {
+    bindCss(createContext(this[i]!), cssMap);
+  }
+  return this;
 };
 
 /**
@@ -116,9 +120,10 @@ $.fn.atomAttr = function (
   const attrMap: Record<string, ReactiveValue<PrimitiveValue>> = typeof nameOrMap === 'string'
     ? { [nameOrMap]: source! }
     : nameOrMap;
-  return this.each(function () {
-    bindAttr(createContext(this), attrMap);
-  });
+  for (let i = 0, len = this.length; i < len; i++) {
+    bindAttr(createContext(this[i]!), attrMap);
+  }
+  return this;
 };
 
 /**
@@ -141,18 +146,20 @@ $.fn.atomProp = function <T>(
   const propMap: Record<string, ReactiveValue<unknown>> = typeof nameOrMap === 'string'
     ? { [nameOrMap]: source as ReactiveValue<unknown> }
     : (nameOrMap as Record<string, ReactiveValue<unknown>>);
-  return this.each(function () {
-    bindProp(createContext(this), propMap);
-  });
+  for (let i = 0, len = this.length; i < len; i++) {
+    bindProp(createContext(this[i]!), propMap);
+  }
+  return this;
 };
 
 /**
  * Shows the element when `condition` is truthy (`display: ''`).
  */
 $.fn.atomShow = function (condition: ReactiveValue<boolean>): JQuery {
-  return this.each(function () {
-    bindVisibility(createContext(this), condition, false);
-  });
+  for (let i = 0, len = this.length; i < len; i++) {
+    bindVisibility(createContext(this[i]!), condition, false);
+  }
+  return this;
 };
 
 /**
@@ -160,9 +167,10 @@ $.fn.atomShow = function (condition: ReactiveValue<boolean>): JQuery {
  * Inverse of `atomShow`.
  */
 $.fn.atomHide = function (condition: ReactiveValue<boolean>): JQuery {
-  return this.each(function () {
-    bindVisibility(createContext(this), condition, true);
-  });
+  for (let i = 0, len = this.length; i < len; i++) {
+    bindVisibility(createContext(this[i]!), condition, true);
+  }
+  return this;
 };
 
 /**
@@ -174,9 +182,10 @@ $.fn.atomHide = function (condition: ReactiveValue<boolean>): JQuery {
  *   An empty object and an omitted options argument are equivalent — both use defaults.
  */
 $.fn.atomVal = function <T>(atom: WritableAtom<T>, options: ValOptions<T> = {}): JQuery {
-  return this.each(function () {
-    bindVal(createContext(this), atom as WritableAtom<unknown>, options as ValOptions<unknown>);
-  });
+  for (let i = 0, len = this.length; i < len; i++) {
+    bindVal(createContext(this[i]!), atom as WritableAtom<unknown>, options as ValOptions<unknown>);
+  }
+  return this;
 };
 
 /**
@@ -184,9 +193,10 @@ $.fn.atomVal = function <T>(atom: WritableAtom<T>, options: ValOptions<T> = {}):
  * Uses the jQuery event system (not native `addEventListener`) for `.trigger()` compatibility.
  */
 $.fn.atomChecked = function (atom: WritableAtom<boolean>): JQuery {
-  return this.each(function () {
-    bindChecked(createContext(this), atom);
-  });
+  for (let i = 0, len = this.length; i < len; i++) {
+    bindChecked(createContext(this[i]!), atom);
+  }
+  return this;
 };
 
 /**
@@ -197,9 +207,10 @@ $.fn.atomChecked = function (atom: WritableAtom<boolean>): JQuery {
  * @param handler - Callback receiving the jQuery event object.
  */
 $.fn.atomOn = function (event: string, handler: (e: JQuery.Event) => void): JQuery {
-  return this.each(function () {
-    bindOn(createContext(this), event, handler);
-  });
+  for (let i = 0, len = this.length; i < len; i++) {
+    bindOn(createContext(this[i]!), event, handler);
+  }
+  return this;
 };
 
 /**
@@ -210,30 +221,35 @@ $.fn.atomOn = function (event: string, handler: (e: JQuery.Event) => void): JQue
  * falsy values (`show: false`, `hide: false`, `class: {}`) are handled correctly.
  */
 $.fn.atomBind = function (options: BindingOptions): JQuery {
-  return this.each(function () {
-    const ctx = createContext(this);
+  const { text, html, class: cls, css, attr, prop, show, hide, val, checked, on } = options;
+  let valAtom: WritableAtom<unknown> | undefined;
+  let valOpts: ValOptions<unknown> | undefined;
 
-    if (options.text !== undefined) bindText(ctx, options.text);
-    if (options.html !== undefined) bindHtml(ctx, options.html);
-    if (options.class !== undefined) bindClass(ctx, options.class);
-    if (options.css !== undefined) bindCss(ctx, options.css);
-    if (options.attr !== undefined) bindAttr(ctx, options.attr);
-    if (options.prop !== undefined) bindProp(ctx, options.prop);
-    if (options.show !== undefined) bindVisibility(ctx, options.show, false);
-    if (options.hide !== undefined) bindVisibility(ctx, options.hide, true);
-    if (options.val !== undefined) {
-      if (Array.isArray(options.val)) {
-        // BindingOptions.val is typed as WritableAtom | [WritableAtom, ValOptions].
-        // Array.isArray narrows to the tuple branch; the cast makes the tuple explicit.
-        const [atom, valOpts] = options.val as [WritableAtom<unknown>, ValOptions<unknown>];
-        bindVal(ctx, atom, valOpts);
-      } else {
-        bindVal(ctx, options.val);
-      }
+  if (val !== undefined) {
+    if (Array.isArray(val)) {
+      valAtom = val[0] as WritableAtom<unknown>;
+      valOpts = val[1] as ValOptions<unknown>;
+    } else {
+      valAtom = val as WritableAtom<unknown>;
     }
-    if (options.checked !== undefined) bindChecked(ctx, options.checked);
-    if (options.on !== undefined) bindEvents(ctx, options.on);
-  });
+  }
+
+  for (let i = 0, len = this.length; i < len; i++) {
+    const ctx = createContext(this[i]!);
+
+    if (text !== undefined) bindText(ctx, text);
+    if (html !== undefined) bindHtml(ctx, html);
+    if (cls !== undefined) bindClass(ctx, cls);
+    if (css !== undefined) bindCss(ctx, css);
+    if (attr !== undefined) bindAttr(ctx, attr);
+    if (prop !== undefined) bindProp(ctx, prop);
+    if (show !== undefined) bindVisibility(ctx, show, false);
+    if (hide !== undefined) bindVisibility(ctx, hide, true);
+    if (val !== undefined) bindVal(ctx, valAtom!, valOpts);
+    if (checked !== undefined) bindChecked(ctx, checked);
+    if (on !== undefined) bindEvents(ctx, on);
+  }
+  return this;
 };
 
 /**
@@ -245,7 +261,8 @@ $.fn.atomBind = function (options: BindingOptions): JQuery {
  * `atomMount`. `atomUnbind` removes all bindings regardless of how they were created.
  */
 $.fn.atomUnbind = function (): JQuery {
-  return this.each(function () {
-    bindUnbind(this);
-  });
+  for (let i = 0, len = this.length; i < len; i++) {
+    bindUnbind(this[i]!);
+  }
+  return this;
 };

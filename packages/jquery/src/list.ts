@@ -39,9 +39,14 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
       ? key
       : (item: T, _index: number) => item[key as keyof T] as unknown as string | number;
 
-  return this.each(function (this: HTMLElement) {
-    const $container = $(this);
-    const containerSelector = getSelector(this);
+  for (
+    let containerIdx = 0, containerLen = this.length;
+    containerIdx < containerLen;
+    containerIdx++
+  ) {
+    const rawContainer = this[containerIdx]!;
+    const $container = $(rawContainer);
+    const containerSelector = getSelector(rawContainer);
 
     const itemMap = new Map<
       string | number,
@@ -62,13 +67,14 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
         debug.log('list', `${containerSelector} removed item:`, k);
       };
 
-      if (onRemove) {
-        const result = onRemove(entry.$el);
-        if (result instanceof Promise) {
-          result.then(commitRemoval, commitRemoval);
-        } else {
-          commitRemoval();
-        }
+      if (!onRemove) {
+        commitRemoval();
+        return;
+      }
+
+      const result = onRemove(entry.$el);
+      if (result instanceof Promise) {
+        result.then(commitRemoval, commitRemoval);
       } else {
         commitRemoval();
       }
@@ -102,10 +108,12 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
             const safeEmpty = typeof empty === 'string' ? sanitizeHtml(empty) : empty;
             $emptyEl = ($(safeEmpty as string) as JQuery).appendTo($container);
           }
-          itemMap.forEach((entry, k) => {
-            if (!removingKeys.has(k)) removeItem(k, entry);
-          });
-          oldKeys = [];
+          for (let i = 0; i < oldKeys.length; i++) {
+            const k = oldKeys[i]!;
+            const entry = itemMap.get(k);
+            if (entry) removeItem(k, entry);
+          }
+          oldKeys.length = 0;
           return;
         }
 
@@ -156,7 +164,6 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
         }
 
         // 3. Render New/Updated Items (Batch Sanitization)
-        const SEPARATOR = '<!--sep-->';
         const renderCount = trKeys.length;
         const renderResults: Array<string | Element | DocumentFragment | JQuery> = new Array(
           renderCount
@@ -174,9 +181,9 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
         // Batch sanitize: N calls → 1 call
         let sanitizedFragments: string[] | null = null;
         if (htmlParts.length > 0) {
-          const combined = htmlParts.join(SEPARATOR);
-          const sanitized = sanitizeHtml(combined);
-          sanitizedFragments = sanitized.split(SEPARATOR);
+          // Generate an ephemeral separator per batch to ensure zero collision with user content
+          const batchSeparator = `<!--sep-${Math.random().toString(36).substring(2)}-${Date.now().toString(36)}-->`;
+          sanitizedFragments = sanitizeHtml(htmlParts.join(batchSeparator)).split(batchSeparator);
         }
 
         // Create $el for each target
@@ -202,9 +209,14 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
         }
 
         // 4. Cleanup Removed Keys
-        for (const [k, entry] of itemMap) {
-          if (!newKeySet.has(k) && !removingKeys.has(k)) {
-            removeItem(k, entry);
+        // Array iteration is faster than itemMap entries iteration,
+        // and safely skips keys already in removingKeys since oldKeys
+        // never overlaps with them.
+        for (let i = 0; i < oldKeys.length; i++) {
+          const k = oldKeys[i]!;
+          if (!newKeySet.has(k)) {
+            const entry = itemMap.get(k);
+            if (entry) removeItem(k, entry);
           }
         }
 
@@ -226,7 +238,7 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
           removingKeys.size === 0;
 
         if (useInnerHtml) {
-          this.innerHTML = sanitizedFragments!.join('');
+          rawContainer.innerHTML = sanitizedFragments!.join('');
 
           // Map children back to itemMap entries
           let childIdx = 0;
@@ -236,7 +248,7 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
             const entry = itemMap.get(k);
             if (!entry) continue;
 
-            const el = this.children[childIdx++] as HTMLElement | undefined;
+            const el = rawContainer.children[childIdx++] as HTMLElement | undefined;
             if (el) {
               entry.$el = $(el);
               entry.item = item;
@@ -254,19 +266,17 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
             for (let i = itemCount - 1; i >= 0; i--) {
               const k = newKeys[i]!;
               const item = items[i]!;
-              const entry = itemMap.get(k)!;
+              const entry = itemMap.get(k);
               if (!entry) continue;
 
               const state = entry.state;
-              const isNewItem = state === 'new';
-              const isReplaced = state === 'replaced';
               entry.item = item;
               entry.state = undefined;
 
               if (entry.$el[0]) {
-                if (!isNewItem && !isReplaced && update) {
-                  update(entry.$el, item, i);
-                } else if ((isNewItem || isReplaced) && bind) {
+                if (state === undefined) {
+                  if (update) update(entry.$el, item, i);
+                } else if (bind) {
                   bind(entry.$el, item, i);
                 }
               }
@@ -274,32 +284,30 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
               for (let j = entry.$el.length - 1; j >= 0; j--) {
                 fragment.insertBefore(entry.$el[j]!, fragment.firstChild);
               }
-              if (onAdd && isNewItem) onAdd(entry.$el);
 
-              if (isNewItem) {
+              if (state === 'new') {
+                if (onAdd) onAdd(entry.$el);
                 removingKeys.delete(k);
                 debug.domUpdated(entry.$el, 'list.add', item);
               }
             }
-            this.appendChild(fragment);
+            rawContainer.appendChild(fragment);
           } else {
             // ── Incremental update: LIS-based reconciliation ──────────────────
             for (let i = itemCount - 1; i >= 0; i--) {
               const k = newKeys[i]!;
               const item = items[i]!;
-              const entry = itemMap.get(k)!;
+              const entry = itemMap.get(k);
               if (!entry) continue;
 
               const state = entry.state;
-              const isNewItem = state === 'new';
-              const isReplaced = state === 'replaced';
               entry.item = item;
               entry.state = undefined;
 
               if (entry.$el[0]) {
-                if (!isNewItem && !isReplaced && update) {
-                  update(entry.$el, item, i);
-                } else if ((isNewItem || isReplaced) && bind) {
+                if (state === undefined) {
+                  if (update) update(entry.$el, item, i);
+                } else if (bind) {
                   bind(entry.$el, item, i);
                 }
               }
@@ -309,10 +317,11 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
               } else {
                 insertOrAppend(entry.$el, nextNode, $container);
               }
-              if (onAdd && isNewItem) onAdd(entry.$el);
+
               nextNode = entry.$el[0] ?? null;
 
-              if (isNewItem) {
+              if (state === 'new') {
+                if (onAdd) onAdd(entry.$el);
                 removingKeys.delete(k);
                 debug.domUpdated(entry.$el, 'list.add', item);
               }
@@ -324,12 +333,14 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
       });
     });
 
-    registry.trackEffect(this, fx);
-    registry.trackCleanup(this, () => {
+    registry.trackEffect(rawContainer, fx);
+    registry.trackCleanup(rawContainer, () => {
       itemMap.clear();
       removingKeys.clear();
-      oldKeys = [];
+      oldKeys.length = 0;
       $emptyEl?.remove();
     });
-  });
+  }
+
+  return this;
 };

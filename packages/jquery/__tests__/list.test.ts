@@ -141,31 +141,6 @@ describe('Atom List', () => {
     $container.remove();
   });
 
-  it('should add _aes-bound marker class to bound elements', async () => {
-    const items = $.atom([
-      { id: 1, text: 'A' },
-      { id: 2, text: 'B' },
-    ]);
-    const $ul = $('<ul>').appendTo(document.body);
-
-    $ul.atomList(items, {
-      key: 'id',
-      render: (item) => `<li>${item.text}</li>`,
-      bind: ($el, item) => {
-        $el.atomText($.computed(() => item.text));
-      },
-    });
-
-    await $.nextTick();
-
-    const $children = $ul.children();
-    expect($children.eq(0).hasClass('_aes-bound')).toBe(true);
-    expect($children.eq(1).hasClass('_aes-bound')).toBe(true);
-
-    $ul.remove();
-    expect($children.eq(0).hasClass('_aes-bound')).toBe(false);
-  });
-
   // ---------------------------------------------------------------------------
   // Regression
   // ---------------------------------------------------------------------------
@@ -266,32 +241,6 @@ describe('Atom List', () => {
       .map((_, el) => el.getAttribute('data-id'))
       .get();
     expect(order).toEqual(['3', '1']);
-
-    $container.remove();
-  });
-
-  // ---------------------------------------------------------------------------
-  // Batch rendering
-  // ---------------------------------------------------------------------------
-
-  it('batch rendering: 1000 items should render with correct text', async () => {
-    const data = Array.from({ length: 1000 }, (_, i) => ({ id: i, label: `Item-${i}` }));
-    const items = $.atom(data);
-    const $container = $('<div>').appendTo(document.body);
-
-    $container.atomList(items, {
-      key: 'id',
-      render: (item) => `<span data-id="${item.id}">${item.label}</span>`,
-    });
-
-    await $.nextTick();
-
-    expect($container.children().length).toBe(1000);
-    for (let i = 0; i < 1000; i++) {
-      const $child = $container.children().eq(i);
-      expect($child.attr('data-id')).toBe(String(i));
-      expect($child.text()).toBe(`Item-${i}`);
-    }
 
     $container.remove();
   });

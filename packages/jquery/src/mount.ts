@@ -32,11 +32,14 @@ $.fn.atomMount = function <P>(component: ComponentFn<P>, props?: P): JQuery {
   // Hoist default props object to avoid allocation in loop
   const p = (props ?? EMPTY_PROPS) as P;
 
-  return this.each(function () {
-    // Unmount any existing component before mounting the new one.
-    registry.cleanupTree(this);
+  for (let i = 0, len = this.length; i < len; i++) {
+    const rootEl = this[i];
+    if (!rootEl) continue;
 
-    const $el = $(this);
+    // Unmount any existing component before mounting the new one.
+    registry.cleanupTree(rootEl);
+
+    const $el = $(rootEl);
     let teardown: ReturnType<typeof component>;
     try {
       // untracked: component setup code must not register dependencies on any
@@ -44,13 +47,15 @@ $.fn.atomMount = function <P>(component: ComponentFn<P>, props?: P): JQuery {
       teardown = untracked(() => component($el, p));
     } catch (err) {
       debug.error(LOG_PREFIXES.MOUNT, ERROR_MESSAGES.MOUNT_ERROR(), err);
-      return;
+      continue;
     }
 
     if (typeof teardown === 'function') {
-      registry.setComponentCleanup(this, teardown);
+      registry.setComponentCleanup(rootEl, teardown);
     }
-  });
+  }
+
+  return this;
 };
 
 /**
@@ -58,7 +63,9 @@ $.fn.atomMount = function <P>(component: ComponentFn<P>, props?: P): JQuery {
  * element and its descendants.
  */
 $.fn.atomUnmount = function (): JQuery {
-  return this.each(function () {
-    bindUnbind(this);
-  });
+  for (let i = 0, len = this.length; i < len; i++) {
+    const el = this[i];
+    if (el) bindUnbind(el);
+  }
+  return this;
 };
