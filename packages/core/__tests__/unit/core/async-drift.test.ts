@@ -12,43 +12,13 @@ import { effect } from '@/core/effect';
 import { resetFlushState } from '@/internal/epoch';
 import { sleep } from '../../utils/test-helpers';
 
-afterEach(() => {
-  vi.restoreAllMocks();
-  resetFlushState();
-});
-
-describe('Async Drift → REJECTED', () => {
-  /**
-   * maxAsyncRetries = 0: a single drift triggers REJECTED immediately.
-   * Any dep change while the promise is in-flight causes rejection with no retries.
-   */
-  it('rejects immediately when maxAsyncRetries = 0 and dep changes mid-flight', async () => {
-    const src = atom(0);
-
-    const c = computed(
-      async () => {
-        const v = src.value;
-        await sleep(50);
-        return v;
-      },
-      { defaultValue: -1, maxAsyncRetries: 0 }
-    );
-
-    c.value; // start computation (reads src=0)
-
-    await sleep(10);
-    src.value = 1; // change dep mid-flight → drift detected on resolve
-
-    await sleep(60); // wait for promise resolve + drift handling
-
-    expect(c.state).toBe(AsyncState.REJECTED);
+describe('Async Drift Constraint & Recovery', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    resetFlushState();
   });
 
-  /**
-   * maxAsyncRetries = 0 with a stable dep resolves normally.
-   * Verifies the happy path is not broken by a zero-retry configuration.
-   */
-  it('resolves normally with maxAsyncRetries = 0 when dep is stable', async () => {
+  it('resolves reliably without retries (maxAsyncRetries = 0) when dependencies remain stable', async () => {
     const src = atom(42);
 
     const c = computed(
@@ -60,19 +30,47 @@ describe('Async Drift → REJECTED', () => {
       { defaultValue: -1, maxAsyncRetries: 0 }
     );
 
-    c.value;
+    c.value; // init
     await sleep(50);
 
     expect(c.state).toBe(AsyncState.RESOLVED);
     expect(c.value).toBe(42);
   });
 
-  /**
-   * onError is called with a message containing "drift" when retries are exhausted.
-   */
-  it('calls onError with drift message when maxAsyncRetries = 0 and dep changes', async () => {
+  it('rejects, falls back to default, and fires onError when dependencies mutate mid-flight (maxAsyncRetries = 0)', async () => {
     const src = atom(0);
     const onError = vi.fn();
+
+    const c = computed(
+      async () => {
+        const v = src.value;
+        await sleep(40);
+        return v;
+      },
+      { defaultValue: -99, maxAsyncRetries: 0, onError }
+    );
+
+    c.value; // start computation
+
+    // Change dependency at an arbitrary mid-flight point (25ms out of 40ms)
+    await sleep(25);
+    src.value = 1;
+
+    // Await computation finish + scheduler
+    await sleep(30);
+
+    expect(c.state).toBe(AsyncState.REJECTED);
+    expect(c.value).toBe(-99); // Returned fallback while maintaining rejection flag
+
+    // Verify error dispatch
+    expect(onError).toHaveBeenCalledOnce();
+    const errorParam = onError.mock.calls[0]![0] as Error;
+    expect(errorParam).toBeInstanceOf(Error);
+    expect(errorParam.message).toMatch(/drift/i); // Explicitly contains drift reason
+  });
+
+  it('isolates retry counting per computation path independently to prevent global cascading failures', async () => {
+    const src = atom(0);
 
     const c = computed(
       async () => {
@@ -80,101 +78,31 @@ describe('Async Drift → REJECTED', () => {
         await sleep(50);
         return v;
       },
-      { defaultValue: -1, maxAsyncRetries: 0, onError }
-    );
-
-    c.value;
-    await sleep(10);
-    src.value = 99;
-
-    await sleep(60);
-
-    expect(c.state).toBe(AsyncState.REJECTED);
-    expect(onError).toHaveBeenCalledOnce();
-    expect(onError.mock.calls[0]![0]).toBeInstanceOf(Error);
-    expect(onError.mock.calls[0]![0].message).toMatch(/drift/i);
-  });
-
-  /**
-   * Retry counter resets independently per promise chain, not across chains.
-   *
-   * Each call to _handleAsyncComputation resets _asyncRetryCount to 0,
-   * so drifts that happen on different promises do not accumulate.
-   *
-   * Flow (with an effect subscriber to trigger automatic recompute):
-   *   P2(src=1) → drift(src=2) → count 0→1, ≤ maxRetries=1 → retry → P3 starts (_count=0)
-   *   P3(src=2) → drift(src=3) → count 0→1, ≤ maxRetries=1 → retry → P4 starts (_count=0)
-   *   P4(src=3) → no drift → RESOLVED(3)
-   *
-   * If the counter accumulated globally, it would reach 2 and hit REJECTED.
-   * The per-chain reset is what keeps it alive.
-   */
-  it('retries independently per promise chain — count resets on each new computation', async () => {
-    const src = atom(0);
-
-    const c = computed(
-      async () => {
-        const v = src.value;
-        await sleep(60);
-        return v;
-      },
       { defaultValue: -1, maxAsyncRetries: 1 }
     );
 
-    // Subscribe via effect so _markDirty() triggers automatic recompute
-    const fx = effect(() => {
+    // Mount an effect to trigger continuous dependency pulls
+    const runner = effect(() => {
       void c.value;
     });
 
-    await sleep(80); // wait for initial P1 to resolve
+    await sleep(70); // Resolve initial stable pull
 
-    // Round 1: trigger P2 (reads src=1), then change src before P2 resolves
+    // Round 1: Trigger a drift just before resolution
     src.value = 1;
     await sleep(10);
-    src.value = 2; // P2 resolves with drift → retry → P3 starts (_count=0)
-    await sleep(80);
+    src.value = 2; // Drift 1 -> uses its 1 allowed retry -> begins next compute safely
 
-    // Round 2: change src before P3 resolves
-    src.value = 3; // P3 resolves with drift → retry → P4 starts (_count=0)
-    await sleep(80);
+    await sleep(70);
 
-    // P4 resolves with no drift → RESOLVED
-    await sleep(80);
+    // Round 2: A totally new drift cycle
+    src.value = 3;
+    await sleep(70); // Resolves normally without drift, no accumulated timeouts
 
+    // If the counter was global, round 2 drift would have exhausted the limit and rejected completely
     expect(c.state).toBe(AsyncState.RESOLVED);
     expect(c.value).toBe(3);
 
-    fx.dispose();
-  });
-
-  /**
-   * Dep change just before resolve (boundary case).
-   * Verifies the drift detection path fires even when the change is very close
-   * to the resolution point, and that defaultValue is returned while REJECTED.
-   */
-  it('handles drift at the exact resolve boundary (maxAsyncRetries = 0)', async () => {
-    const src = atom('initial');
-    const onError = vi.fn();
-
-    const c = computed(
-      async () => {
-        const v = src.value;
-        await sleep(30);
-        return v;
-      },
-      { defaultValue: 'default', maxAsyncRetries: 0, onError }
-    );
-
-    c.value; // start P1
-
-    // Change dep just before resolve (25ms into a 30ms computation)
-    await sleep(25);
-    src.value = 'changed';
-
-    await sleep(20); // P1 resolves + drift handling completes
-
-    expect(c.state).toBe(AsyncState.REJECTED);
-    expect(onError).toHaveBeenCalledOnce();
-    expect(c.value).toBe('default'); // falls back to defaultValue
+    runner.dispose();
   });
 });

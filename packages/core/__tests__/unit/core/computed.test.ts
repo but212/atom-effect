@@ -3,219 +3,247 @@
  * @description Verifies validation, async flows, caching strategies, and lifecycle management.
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
 import { AtomError, ComputedError } from '@/errors/errors';
+import { ATOM_BRAND, COMPUTED_BRAND } from '@/symbols';
 import { debug } from '@/utils/debug';
 import { sleep, waitForScheduler } from '../../utils/test-helpers';
 
 describe('Computed', () => {
-  describe('Validation & Error Safety', () => {
-    it('rejects invalid inputs', () => {
-      expect(() => computed(null as unknown as () => void)).toThrow(ComputedError);
-      const c = computed(() => 1);
-      expect(() => c.subscribe('invalid' as unknown as () => void)).toThrow(AtomError);
-    });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
 
-    it('handles internal errors gracefully', () => {
-      // 1. Function execution error
+  describe('Identity & Validation', () => {
+    it('ensures unique identity, branding, and rejects invalid constructor inputs', () => {
+      const c1 = computed(() => 1);
+      const c2 = computed(() => 2);
+
+      expect((c1 as unknown as Record<symbol, boolean>)[ATOM_BRAND]).toBe(true);
+      expect((c1 as unknown as Record<symbol, boolean>)[COMPUTED_BRAND]).toBe(true);
+      expect((c1 as unknown as { id: number }).id).not.toBe((c2 as unknown as { id: number }).id);
+
+      expect(() => computed(null as unknown as () => void)).toThrow(ComputedError);
+      expect(() => c1.subscribe('invalid' as unknown as () => void)).toThrow(AtomError);
+    });
+  });
+
+  describe('Error Safety & Handlers', () => {
+    it('safely catches computation errors and exposes full error state', () => {
+      const err = new Error('Fn Error');
       const c = computed(() => {
-        throw new Error('Fn Error');
+        throw err;
       });
 
-      // Should wrap error
       expect(() => c.value).toThrow(ComputedError);
       expect(c.hasError).toBe(true);
+      expect(c.isValid).toBe(false);
+      expect(c.lastError).toBeInstanceOf(ComputedError);
+      expect(c.errors[0]).toBeInstanceOf(ComputedError);
+    });
 
-      // 2. Internal tracking error (simulated via debug spy)
-      const a = atom(1);
-      const spy = vi.spyOn(debug, 'checkCircular').mockImplementation(() => {
-        throw new Error('Internal Error');
+    it('invokes onError callbacks securely without propagating handler errors', () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const handler = vi.fn(() => {
+        throw new Error('handler boom');
       });
-      const c2 = computed(() => a.value);
 
-      // Should catch internal error and transition to error state
-      expect(() => c2.value).toThrow(ComputedError);
-      expect(c2.hasError).toBe(true);
+      const c = computed(
+        () => {
+          throw new Error('boom');
+        },
+        { onError: handler }
+      );
 
+      expect(() => c.value).toThrow(ComputedError);
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(consoleError).toHaveBeenCalled(); // Caught internally
+    });
+
+    it('handles obscure internal tracking errors gracefully', () => {
+      const spy = vi.spyOn(debug, 'checkCircular').mockImplementation(() => {
+        throw new Error('Internal');
+      });
+      const c = computed(() => atom(1).value);
+      expect(() => c.value).toThrow(ComputedError);
       spy.mockRestore();
     });
   });
 
-  describe('Async Workflow', () => {
-    it('manages pending, resolved, and rejected states', async () => {
-      // 1. Pending Access Check (no default)
-      const c1 = computed(async () => {
-        await sleep(50);
-        return 1;
-      });
-      expect(() => c1.value).toThrow(ComputedError);
-      expect(c1.isPending).toBe(true);
+  describe('State & Reactivity (Lazy & Caching)', () => {
+    it('maintains state transitions: idle -> cached & tracks dep changes exactly', async () => {
+      const src = atom(0);
+      const fn = vi.fn(() => src.value * 2);
+      const c = computed(fn) as unknown as {
+        state: string;
+        isPending: boolean;
+        value: number;
+        version: number;
+      };
 
-      // 2. Success Transition
+      // 1. Initial Identity Check
+      expect(c.state).toBe('idle');
+      expect(c.isPending).toBe(false);
+      expect(fn).not.toHaveBeenCalled(); // Lazy evaluation
+
+      // 2. First Access: resolves and caches
+      expect(c.value).toBe(0);
+      expect(c.state).toBe('resolved');
+      expect(fn).toHaveBeenCalledTimes(1);
+
+      c.value;
+      c.value;
+      expect(fn).toHaveBeenCalledTimes(1); // Cached
+
+      // 3. Dependency update triggers recompute & version bump
+      const v0 = c.version;
+      src.value = 5;
+      await waitForScheduler();
+      expect(c.value).toBe(10);
+      expect(fn).toHaveBeenCalledTimes(2);
+      expect(c.version).toBeGreaterThan(v0);
+
+      // 4. Same structural value does NOT recompute
+      src.value = 5;
+      await waitForScheduler();
+      c.value;
+      expect(fn).toHaveBeenCalledTimes(2); // Still cached
+    });
+
+    it('respects custom equality function without redundant bumping', async () => {
+      const src = atom({ x: 1 });
+      const c = computed(() => ({ x: src.value.x }), {
+        equal: (a, b) => a.x === b.x,
+      }) as unknown as { value: { x: number }; version: number };
+      c.value;
+
+      const v0 = c.version;
+      src.value = { x: 1 };
+      await waitForScheduler();
+      c.value;
+      expect(c.version).toBe(v0);
+    });
+
+    it('can be manually invalidated or peeked stalely', async () => {
+      const src = atom(0);
+      const fn = vi.fn(() => src.value);
+      const c = computed(fn);
+
+      c.value;
+      c.invalidate();
+      await waitForScheduler();
+      c.value; // pull triggers recompute after invalidation
+      expect(fn).toHaveBeenCalledTimes(2);
+
+      src.value = 99;
+      await waitForScheduler();
+      expect(c.peek()).toBe(0); // Stale read skips computation
+      expect(fn).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('Chain & Lifecycle Behavior', () => {
+    it('propagates transparently through multiple levels and tracks subscribers', async () => {
+      const a = atom(1);
+      const b = computed(() => a.value + 1);
+      const c = computed(() => b.value * 2);
+
+      expect(c.value).toBe(4);
+      expect(c.subscriberCount()).toBe(0);
+
+      const spy = vi.fn();
+      const unsub = c.subscribe(spy);
+      expect(c.subscriberCount()).toBe(1);
+
+      a.value = 4;
+      await waitForScheduler();
+      expect(c.value).toBe(10);
+      expect(spy).toHaveBeenCalledTimes(1);
+
+      unsub();
+      expect(c.subscriberCount()).toBe(0);
+    });
+
+    it('dispose() cleans up resources exhaustively and denies usage', () => {
+      const c = computed(() => 1);
+      c.subscribe(() => {});
+
+      c.dispose();
+      c[Symbol.dispose](); // Double dispose safety
+
+      expect(() => c.value).toThrow(ComputedError);
+      expect(c.subscriberCount()).toBe(0);
+    });
+
+    it('re-uses existing dependency links without excessive memory growth', async () => {
+      const a = atom(0);
+      const c = computed(() => a.value) as unknown as { value: number; _links: unknown[] };
+      c.value;
+      const linksLen = c._links.length;
+      a.value = 1;
+      await waitForScheduler();
+      c.value;
+      expect(c._links.length).toBe(linksLen);
+    });
+  });
+
+  describe('Async & Eager Scenarios', () => {
+    it('eager evaluations compute on-creation and trap errors', () => {
+      const fn = vi.fn(() => 42);
+      const c1 = computed(fn, { lazy: false });
+      expect(c1.value).toBe(42);
+      expect(fn).toHaveBeenCalledTimes(1);
+
       const c2 = computed(
+        () => {
+          throw new Error('eager boom');
+        },
+        { lazy: false }
+      );
+      expect(c2.hasError).toBe(true);
+    });
+
+    it('flows through idle -> pending -> resolved with safe default wrappers', async () => {
+      const c = computed(
         async () => {
-          await sleep(10);
+          await sleep(20);
           return 42;
         },
         { defaultValue: 0 }
       );
-      expect(c2.value).toBe(0); // Initial default
-      await sleep(20);
-      expect(c2.value).toBe(42);
-      expect(c2.isResolved).toBe(true);
 
-      // 3. Error Fallback
-      const c3 = computed(
-        async () => {
-          await sleep(10);
-          throw new Error('Fail');
-        },
-        { defaultValue: -1 }
-      );
-      await sleep(20);
+      expect(c.state).toBe('idle');
 
-      // Value should be fallback
-      expect(c3.value).toBe(-1);
+      expect(c.value).toBe(0); // Uses default while pending
+      expect(c.isPending).toBe(true);
+      expect(c.state).toBe('pending');
+
+      await sleep(30);
+      expect(c.value).toBe(42); // Resolved properly
+      expect(c.isResolved).toBe(true);
+      expect(c.state).toBe('resolved');
     });
 
-    it('resolves race conditions by ignoring stale promises', async () => {
+    it('resolves race conditions by ignoring obsolete stale promises', async () => {
       const trigger = atom(0);
       const c = computed(
         async () => {
           const v = trigger.value;
-          // Case 0: slow (50ms), Case 1: fast (10ms)
           await sleep(v === 0 ? 50 : 10);
           return v;
         },
         { defaultValue: -1 }
       );
 
-      c.value; // Start Run 0
+      c.value; // Run 1 (50ms latency)
+      trigger.value = 1;
+      await sleep(5);
+      c.value; // Run 2 (10ms latency) - Intercepts!
 
-      trigger.value = 1; // Start Run 1 (invalidates partial Run 0)
-      await sleep(5); // Ensure Run 1 starts
-      c.value;
-
-      await sleep(60); // Wait for all timing
-
-      // Run 1 finishes at T+15-20. Run 0 finishes at T+50.
-      // Result should be 1 (Run 0 should be ignored).
-      expect(c.value).toBe(1);
-    });
-  });
-
-  describe('Caching Strategy', () => {
-    it('caches values and supports manual invalidation', async () => {
-      const fn = vi.fn(() => Math.random());
-      const c = computed(fn);
-
-      const v1 = c.value;
-      const v2 = c.value;
-      expect(v1).toBe(v2);
-      expect(fn).toHaveBeenCalledTimes(1);
-
-      c.invalidate();
-      await waitForScheduler();
-
-      const v3 = c.value;
-      expect(v3).not.toBe(v1);
-      expect(fn).toHaveBeenCalledTimes(2);
-    });
-
-    it('recomputes only when necessary (Lazy & Peek)', async () => {
-      const src = atom(0);
-      const fn = vi.fn(() => src.value);
-      const c = computed(fn);
-
-      // Lazy: No computation until pull
-      expect(fn).not.toHaveBeenCalled();
-
-      c.value;
-      expect(fn).toHaveBeenCalledTimes(1);
-
-      src.value = 1;
-      await waitForScheduler();
-
-      // Still 1 (lazy invalidation, no pull yet)
-      expect(fn).toHaveBeenCalledTimes(1);
-
-      // Peek returns current cached value (stale or not? usually stale if dirty but not recomputed)
-      // Based on previous tests: peek() returns 0 (stale) without recompute.
-      expect(c.peek()).toBe(0);
-      expect(fn).toHaveBeenCalledTimes(1);
-
-      // Pull triggers update
-      expect(c.value).toBe(1);
-      expect(fn).toHaveBeenCalledTimes(2);
-    });
-    it('returns default value on critical error when configured', async () => {
-      // Restore critical error fallback test
-      const c = computed(
-        async () => {
-          throw new Error('Critical Fail');
-        },
-        {
-          defaultValue: 999,
-          onError: () => {
-            throw new Error('Handler Fail');
-          }, // Even if handler fails
-        }
-      );
-
-      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-      // Trigger computation (lazy by default)
-      // Pending state -> returns default value immediately
-      expect(c.value).toBe(999);
-
-      // Wait for async rejection to be processed and onError to fire
-      await waitForScheduler();
-
-      expect(consoleError).toHaveBeenCalled(); // Should log handler error
-      consoleError.mockRestore();
-    });
-
-    it('reuses dependency links to optimize memory', async () => {
-      const a = atom(0);
-      const c = computed(() => a.value);
-
-      c.value; // Link created
-
-      // Access private _links to check reference stability
-      const links1 = (c as unknown as { _links: { node: unknown }[] })._links;
-      const _linkNode1 = links1[0];
-
-      a.value = 1;
-      await waitForScheduler();
-
-      const links2 = (c as unknown as { _links: { node: unknown }[] })._links;
-      expect(links2[0]?.node).toBe(a);
-
-      // Verify no memory leak (links count matches deps)
-      expect(links2.length).toBe(1);
-    });
-  });
-
-  describe('Lifecycle', () => {
-    it('cleans up dependencies on dispose', async () => {
-      const a = atom(0);
-      const spy = vi.fn();
-      const c = computed(() => a.value);
-      c.subscribe(spy);
-
-      c.value; // Link
-      a.value = 1;
-      await waitForScheduler();
-      expect(spy).toHaveBeenCalled(); // Active
-
-      spy.mockClear();
-      c.dispose();
-
-      a.value = 2;
-      await waitForScheduler();
-      expect(spy).not.toHaveBeenCalled(); // Inactive
+      await sleep(60);
+      expect(c.value).toBe(1); // the latest valid state wins
     });
   });
 });

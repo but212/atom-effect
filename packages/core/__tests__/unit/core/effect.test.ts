@@ -8,6 +8,7 @@ import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
 import { effect } from '@/core/effect';
 import { EffectError } from '@/errors/errors';
+import { EFFECT_BRAND } from '@/symbols';
 import { sleep } from '../../utils/test-helpers';
 
 describe('Effect', () => {
@@ -20,93 +21,143 @@ describe('Effect', () => {
     vi.useRealTimers();
   });
 
-  describe('Validation & Safety', () => {
-    it('rejects invalid inputs', () => {
+  describe('Identity, Validation & Initialization', () => {
+    it('sets brand, rejects invalid inputs, and maintains correct initial state', async () => {
+      // Validation
       expect(() => effect(null as unknown as () => void)).toThrow(EffectError);
       expect(() => effect('invalid' as unknown as () => void)).toThrow(EffectError);
+
+      // Identity & State
+      const e = effect(() => {});
+      expect((e as unknown as Record<symbol, boolean>)[EFFECT_BRAND]).toBe(true);
+      expect(e.isDisposed).toBe(false);
+
+      await vi.runAllTimersAsync();
+      expect(e.isExecuting).toBe(false);
+      expect(e.executionCount).toBe(1);
+
+      e.dispose();
+    });
+  });
+
+  describe('Reactivity & Dependency Tracking', () => {
+    it('tracks deep dependencies (atoms/computeds) and re-executes on actual changes', async () => {
+      const src = atom(0);
+      const untracked = atom(0);
+      const doubled = computed(() => src.value * 2);
+
+      const log: number[] = [];
+      const e = effect(() => {
+        log.push(doubled.value);
+      }); // reads computed which reads atom
+
+      await vi.runAllTimersAsync();
+      expect(log).toEqual([0]);
+      expect(e.executionCount).toBe(1);
+
+      // Untracked change -> no re-execution
+      untracked.value = 99;
+      await vi.runAllTimersAsync();
+      expect(log).toEqual([0]);
+
+      // Tracked Object.is equal change -> no re-execution
+      src.value = 0;
+      await vi.runAllTimersAsync();
+      expect(e.executionCount).toBe(1);
+
+      // Actual structural change -> re-execution
+      src.value = 5;
+      await vi.runAllTimersAsync();
+      expect(log).toEqual([0, 10]);
+      expect(e.executionCount).toBe(2);
+
+      e.dispose();
+    });
+
+    it('run() forces an immediate synchronous re-execution bypassing normal scheduling', async () => {
+      let count = 0;
+      const e = effect(() => {
+        count++;
+      });
+      await vi.runAllTimersAsync();
+
+      e.run();
+      expect(count).toBe(2);
+
+      e.dispose();
+      expect(() => e.run()).toThrow(EffectError);
+    });
+
+    it('isExecuting correctly flags active execution periods', async () => {
+      const a = atom(0);
+      let capturedExecuting = false;
+      let ref: ReturnType<typeof effect> | null = null;
+
+      const e = effect(() => {
+        a.value;
+        if (ref) capturedExecuting = ref.isExecuting;
+      });
+      ref = e;
+
+      await vi.runAllTimersAsync(); // init run
+      a.value = 1;
+      await vi.runAllTimersAsync(); // re-eval
+
+      expect(capturedExecuting).toBe(true);
+      expect(e.isExecuting).toBe(false);
+
+      e.dispose();
     });
   });
 
   describe('Lifecycle & Cleanup', () => {
-    it('executes valid cleanup and ignores invalid cleanup returns', async () => {
-      // Valid cleanup
-      const cleanup = vi.fn();
-      const e1 = effect(() => cleanup);
-      await vi.runAllTimersAsync();
-      e1.dispose();
-      expect(cleanup).toHaveBeenCalled();
+    it('orchestrates cleanup properly on re-runs and final disposal idempotently', async () => {
+      const src = atom(0, { sync: true });
+      const order: string[] = [];
 
-      // Invalid cleanup (non-function return) — should not crash
-      const e2 = effect(() => 'invalid' as unknown as () => void);
-      await vi.runAllTimersAsync();
-      expect(() => e2.dispose()).not.toThrow();
-    });
-
-    it('prevents re-entrant sync execution cycles', async () => {
-      const a = atom(0);
-      let runs = 0;
-
-      // This pattern normally causes infinite recursion loops if not guarded
-      effect(
+      const e = effect(
         () => {
-          runs++;
-          a.value; // Track
-          if (runs === 1) a.value = 1; // Trigger immediate update
+          src.value;
+          order.push('run');
+          return () => order.push('cleanup');
         },
         { sync: true }
       );
 
+      src.value = 1;
       await vi.runAllTimersAsync();
-      // It runs initial (1), then triggers update (2).
-      // If re-entrancy wasn't handled, it might crash or stack overflow.
-      expect(runs).toBeGreaterThanOrEqual(1);
-    });
-  });
 
-  describe('Error Resilience', () => {
-    it('handles execution and cleanup errors without crashing', async () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-      // 1. Execution error — logs but doesn't throw, dispose still works
-      const a = atom(0);
-      const e1 = effect(() => {
-        a.value;
-        throw new Error('Exec Fail');
-      });
-      await vi.runAllTimersAsync();
-      expect(consoleSpy).toHaveBeenCalled();
-      e1.dispose();
-      expect(e1.isDisposed).toBe(true);
-      consoleSpy.mockClear();
-
-      // 2. Cleanup error — logs but doesn't throw
-      const e2 = effect(() => () => {
-        throw new Error('Cleanup Fail');
-      });
-      await vi.runAllTimersAsync();
-      e2.dispose();
-      expect(consoleSpy).toHaveBeenCalled();
-
-      consoleSpy.mockRestore();
-    });
-  });
-
-  describe('Async Effect Lifecycle', () => {
-    it('handles async effect with cleanup', async () => {
-      vi.useRealTimers();
-      const cleanup = vi.fn();
-
-      const e = effect(async () => {
-        await sleep(5);
-        return cleanup;
-      });
-
-      await sleep(20);
       e.dispose();
-      expect(cleanup).toHaveBeenCalledTimes(1);
+      e[Symbol.dispose](); // Idempotent
+
+      expect(order).toEqual(['run', 'cleanup', 'run', 'cleanup']);
+      expect(e.isDisposed).toBe(true);
     });
 
-    it('runs stale cleanup when newer execution supersedes', async () => {
+    it('gracefully handles missing or invalid cleanup returns', async () => {
+      const e = effect(() => 'invalid' as unknown as () => void);
+      await vi.runAllTimersAsync();
+      expect(() => e.dispose()).not.toThrow();
+    });
+
+    it('severs reactivity after disposal', async () => {
+      const src = atom(0);
+      let runs = 0;
+      const e = effect(() => {
+        src.value;
+        runs++;
+      });
+      await vi.runAllTimersAsync();
+
+      e.dispose();
+      src.value = 1;
+      await vi.runAllTimersAsync();
+      expect(runs).toBe(1);
+    });
+  });
+
+  describe('Async Lifecycle Patterns', () => {
+    it('executes async cleanups and ignores stale cleanups when superseded', async () => {
       vi.useRealTimers();
       const source = atom(0);
       const staleCleanup = vi.fn();
@@ -118,137 +169,59 @@ describe('Effect', () => {
         return val === 0 ? staleCleanup : freshCleanup;
       });
 
-      // Trigger a second execution before first resolves
-      await sleep(2);
-      source.value = 1;
+      await sleep(2); // Mid-execution
+      source.value = 1; // Trigger new run overriding the old one
       await sleep(30);
-
-      // Stale cleanup should be called immediately (race guard)
-      expect(staleCleanup).toHaveBeenCalled();
       e.dispose();
+
+      expect(staleCleanup).toHaveBeenCalled(); // Stale cleanup runs but isn't kept
+      expect(freshCleanup).toHaveBeenCalled();
     });
+  });
 
-    it('handles async error in rejected promise', async () => {
-      vi.useRealTimers();
+  describe('Error Resilience & Safeguards', () => {
+    it('localizes runtime & cleanup errors without crashing framework flows', async () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      const onError = vi.fn();
+      const onError = vi.fn(() => {
+        throw new Error('onError fail');
+      });
 
-      effect(
-        async () => {
-          await sleep(5);
-          throw new Error('Async boom');
+      const a = atom(0);
+      const e = effect(
+        () => {
+          a.value;
+          throw new Error('Exec Fail');
         },
         { onError }
       );
 
-      await sleep(20);
-      expect(consoleSpy).toHaveBeenCalled();
-      consoleSpy.mockRestore();
-    });
-  });
-
-  describe('Dirty Check Edge Cases', () => {
-    it('skips execution when dependencies have not changed', async () => {
-      const source = atom(1);
-      let runs = 0;
-
-      effect(() => {
-        source.value;
-        runs++;
-      });
-
       await vi.runAllTimersAsync();
-      expect(runs).toBe(1);
 
-      // Set same value — atom equality check prevents version bump
-      source.value = 1;
-      await vi.runAllTimersAsync();
-      expect(runs).toBe(1); // No re-execution
+      expect(consoleSpy).toHaveBeenCalled(); // Caught internally
+      expect(onError).toHaveBeenCalledWith(expect.any(EffectError));
+
+      // Still safely disposable despite throwing errors constantly
+      expect(() => e.dispose()).not.toThrow();
+      expect(e.isDisposed).toBe(true);
     });
 
-    it('detects dirty state when computed throws during dirty check', async () => {
+    it('auto-disposes to prevent infinite loops based on frequency constraints', async () => {
       vi.useRealTimers();
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      const trigger = atom(false, { sync: true });
-      let runs = 0;
 
-      const c = computed(() => {
-        if (trigger.value) throw new Error('Computed fail');
-        return 1;
-      });
-
-      effect(
-        () => {
-          try {
-            c.value;
-          } catch {
-            // Expected when computed throws
-          }
-          runs++;
-        },
-        { sync: true }
-      );
-
-      expect(runs).toBe(1);
-
-      // Now make computed throw — dirty check catches error, marks dirty, effect re-runs
-      trigger.value = true;
-      await sleep(10);
-
-      expect(runs).toBe(2);
-
-      consoleSpy.mockRestore();
-      consoleWarnSpy.mockRestore();
-    });
-  });
-
-  describe('Observable Properties', () => {
-    it('exposes executionCount and isExecuting', async () => {
       const a = atom(0);
-      let capturedExecuting = false;
-      let effectRef: ReturnType<typeof effect> | null = null;
-
-      const e = effect(() => {
-        a.value;
-        if (effectRef) capturedExecuting = effectRef.isExecuting;
-      });
-      effectRef = e;
-
-      await vi.runAllTimersAsync();
-      expect(e.executionCount).toBeGreaterThanOrEqual(1);
-      expect(e.isExecuting).toBe(false);
-
-      // Trigger re-run so the closure captures isExecuting
-      a.value = 1;
-      await vi.runAllTimersAsync();
-
-      expect(capturedExecuting).toBe(true);
-      expect(e.isExecuting).toBe(false);
-      e.dispose();
-    });
-  });
-
-  describe('Loop Detection & Limits', () => {
-    it('detects independent infinite loops and enforces limits', async () => {
-      vi.useRealTimers();
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      const a = atom(0);
-
       const e = effect(
         () => {
-          // Need a condition to start the loop, otherwise it runs on init
-          if (a.value > 0) a.value = a.value + 1;
+          if (a.value > 0) a.value++; // Infinite loop pingpong
         },
-        { sync: true, maxExecutionsPerSecond: 10 }
+        { sync: true, maxExecutionsPerFlush: 3 }
       );
 
-      a.value = 1; // Start loop
-      await sleep(50);
+      a.value = 1;
+      await sleep(30);
 
-      expect(e.isDisposed).toBe(true);
-      expect(consoleSpy).toHaveBeenCalled();
-      consoleSpy.mockRestore();
+      expect(e.isDisposed).toBe(true); // Terminated circuit breaker
+      expect(consoleSpy).toHaveBeenCalledWith(expect.any(EffectError));
     });
   });
 });

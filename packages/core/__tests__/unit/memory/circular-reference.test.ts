@@ -7,33 +7,43 @@ import { describe, expect, it, vi } from 'vitest';
 import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
 import { effect } from '@/core/effect';
-import { SchedulerError } from '@/errors/errors';
+import { ComputedError, SchedulerError } from '@/errors/errors';
 
-// Helper for waiting updates
 const flush = async () => await new Promise((r) => setTimeout(r, 0));
 
 describe('Dependency Graph Safety', () => {
   describe('Cycle Detection', () => {
-    it('detects synchronous circular dependency in computed', () => {
-      // A -> B -> A
+    it('throws ComputedError with circular dependency message on direct cycle', () => {
       let c1: ReturnType<typeof computed<number>>;
       let c2: ReturnType<typeof computed<number>>;
 
       c1 = computed(() => (c2 ? c2.value : 0) + 1);
       c2 = computed(() => c1.value + 1);
 
-      // Initial read triggers the cycle
-      // c1 -> c2 -> c1 ...
-      expect(() => c1.value).toThrow();
+      expect(() => c1.value).toThrow(ComputedError);
+      expect(() => c1.value).toThrow('Circular');
+    });
+
+    it('does not throw when a cyclic node has defaultValue — uses it as recursive base case', () => {
+      // c1 -> c2 -> c1: when c1 is RECOMPUTING and c2 tries to read c1,
+      // c1 returns its defaultValue instead of throwing.
+      // This means the cycle resolves to a finite value rather than a stack overflow.
+      const box = { c2: null as ReturnType<typeof computed<number>> | null };
+
+      const c1 = computed(() => box.c2!.value + 1, { defaultValue: 0 });
+      box.c2 = computed(() => c1.value + 1);
+
+      // No throw — cycle terminates via defaultValue base case
+      expect(() => c1.value).not.toThrow();
     });
 
     it('handles deep dependency chains without stack overflow', async () => {
       const depth = 1000;
-      const atoms: (ReturnType<typeof atom<number>> | ReturnType<typeof computed<number>>)[] = [];
       const start = atom(0);
-      atoms.push(start);
+      const atoms: (ReturnType<typeof atom<number>> | ReturnType<typeof computed<number>>)[] = [
+        start,
+      ];
 
-      // Create chain: c[i] depends on c[i-1]
       for (let i = 1; i <= depth; i++) {
         const prev = atoms[i - 1]!;
         atoms.push(computed(() => prev.value + 1));
@@ -42,13 +52,9 @@ describe('Dependency Graph Safety', () => {
       const last = atoms[depth]!;
       expect(last.value).toBe(depth);
 
-      // Update
       start.value = 1;
-
-      // through the chain (start -> c1 -> ... -> c1000)
       await flush();
 
-      // Should propagate without stack overflow
       expect(last.value).toBe(depth + 1);
     });
   });
@@ -58,50 +64,79 @@ describe('Dependency Graph Safety', () => {
       const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const counter = atom(0);
 
-      // Effect triggers itself: Read -> Write -> Read ...
       const fx = effect(() => {
         const val = counter.value;
-        // Unbounded recursion attempt
-        // System should cap this at MAX_FLUSH_ITERATIONS (e.g. 100)
-        if (val < 200) {
-          counter.value = val + 1;
-        }
+        if (val < 200) counter.value = val + 1;
       });
 
       await flush();
 
-      // Should have caught the error and stopped
       expect(spy).toHaveBeenCalledWith(expect.any(SchedulerError));
+      expect(fx.isDisposed).toBe(true);
 
-      // Cleanup
-      fx.dispose();
       spy.mockRestore();
     });
   });
 
   describe('Diamond Glitch Freedom', () => {
-    it('computes diamond dependencies consistently', async () => {
+    it('computes diamond dependencies to a single consistent value', async () => {
       //      A(1)
       //     /   \
-      //   B(2)  C(3)  (B=A*2, C=A*3)
+      //   B(2)  C(3)
       //     \   /
-      //      D(5)     (D=B+C)
-
+      //      D(5)
       const a = atom(1);
       const b = computed(() => a.value * 2);
       const c = computed(() => a.value * 3);
       const d = computed(() => b.value + c.value);
 
-      // 1. Initial Consistency
       expect(d.value).toBe(5);
 
-      // 2. Update Source
-      a.value = 2; // B->4, C->6, D->10
+      a.value = 2;
       await flush();
 
-      // 3. Glitch Freedom check: Valid final state
-      // (A glitch would be seeing D=7 (4+3) or D=8 (2+6) transiently)
+      // Glitch would be D=7 (4+3) or D=8 (2+6) — must be 10
       expect(d.value).toBe(10);
+    });
+
+    it('propagates errors through diamond and recovers cleanly', async () => {
+      const a = atom(true);
+      const b = computed(
+        () => {
+          if (a.value) throw new Error('B fail');
+          return 1;
+        },
+        { defaultValue: 0 }
+      );
+      const c = computed(
+        () => {
+          if (a.value) throw new Error('C fail');
+          return 1;
+        },
+        { defaultValue: 0 }
+      );
+      const d = computed(() => b.value + c.value, { defaultValue: -1 });
+
+      try {
+        b.value;
+      } catch {
+        /* expected */
+      }
+      try {
+        c.value;
+      } catch {
+        /* expected */
+      }
+
+      expect(d.value).toBe(0);
+      expect(d.hasError).toBe(true);
+      expect(d.errors.some((e) => e.message.includes('B fail'))).toBe(true);
+      expect(d.errors.some((e) => e.message.includes('C fail'))).toBe(true);
+
+      a.value = false;
+      await flush();
+      expect(d.value).toBe(2);
+      expect(d.hasError).toBe(false);
     });
   });
 });
