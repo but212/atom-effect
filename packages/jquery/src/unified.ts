@@ -18,7 +18,7 @@ import type {
 
 export type { BindingContext };
 
-import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from './utils';
+import { hasOwn, isDangerousCssValue, isDangerousUrl, sanitizeHtml } from './utils';
 
 // Cache for CSS property camelization to avoid repeated regex overhead.
 // Uses Map instead of a plain object to avoid prototype pollution risk and
@@ -130,16 +130,19 @@ export function bindClass(
   ctx: BindingContext,
   classMap: Record<string, ReactiveValue<boolean>>
 ): void {
-  Object.entries(classMap).forEach(([className, source]) => {
-    registerReactiveEffect(
-      ctx.el,
-      source,
-      (val) => {
-        ctx.el.classList.toggle(className, !!val);
-      },
-      `class.${className}`
-    );
-  });
+  for (const className in classMap) {
+    if (hasOwn.call(classMap, className)) {
+      const source = classMap[className]!;
+      registerReactiveEffect(
+        ctx.el,
+        source,
+        (val) => {
+          ctx.el.classList.toggle(className, !!val);
+        },
+        `class.${className}`
+      );
+    }
+  }
 }
 
 /**
@@ -148,24 +151,26 @@ export function bindClass(
 export function bindCss(ctx: BindingContext, cssMap: Record<string, CssValue>): void {
   const el = ctx.el;
   const style = el.style as unknown as Record<string, string>;
-  Object.entries(cssMap).forEach(([prop, val]) => {
-    const camel = getCamelCase(prop);
-    // Destructure the tuple form explicitly so TypeScript can narrow each branch.
-    const [source, unit] = Array.isArray(val) ? val : ([val, ''] as const);
+  for (const prop in cssMap) {
+    if (hasOwn.call(cssMap, prop)) {
+      const val = cssMap[prop]!;
+      const camel = getCamelCase(prop);
+      // Destructure the tuple form explicitly so TypeScript can narrow each branch.
+      const [source, unit] = Array.isArray(val) ? val : ([val, ''] as const);
 
-    registerReactiveEffect(
-      el,
-      source,
-      (v) => {
-        const strVal = unit ? `${v}${unit}` : String(v);
-        if (isDangerousCssValue(strVal)) {
-          return;
-        }
-        style[camel] = strVal;
-      },
-      `css.${prop}`
-    );
-  });
+      registerReactiveEffect(
+        el,
+        source,
+        (v) => {
+          const strVal = unit ? `${v}${unit}` : String(v);
+          if (!isDangerousCssValue(strVal)) {
+            style[camel] = strVal;
+          }
+        },
+        `css.${prop}`
+      );
+    }
+  }
 }
 
 /**
@@ -176,34 +181,34 @@ export function bindAttr(
   attrMap: Record<string, ReactiveValue<PrimitiveValue>>
 ): void {
   const el = ctx.el;
-  Object.keys(attrMap).forEach((name) => {
-    // Block event handler attributes (on*) to prevent inline JS injection.
-    // Attribute names from the DOM API are lowercase, but user-supplied keys
-    // may use mixed case — normalize before the check.
-    if (name.toLowerCase().startsWith('on')) {
-      return;
-    }
+  for (const name in attrMap) {
+    if (hasOwn.call(attrMap, name)) {
+      // Block event handler attributes (on*) to prevent inline JS injection.
+      // Attribute names from the DOM API are lowercase, but user-supplied keys
+      // may use mixed case — normalize before the check.
+      if (name.toLowerCase().startsWith('on')) continue;
 
-    registerReactiveEffect(
-      el,
-      attrMap[name]!,
-      (v) => {
-        if (v === null || v === undefined || v === false) {
-          el.removeAttribute(name);
-          return;
-        }
-        const newVal = v === true ? name : String(v);
-        if (isDangerousUrl(name, newVal)) {
-          return;
-        }
-        // Attribute write guard
-        if (el.getAttribute(name) !== newVal) {
-          el.setAttribute(name, newVal);
-        }
-      },
-      `attr.${name}`
-    );
-  });
+      registerReactiveEffect(
+        el,
+        attrMap[name]!,
+        (v) => {
+          if (v === null || v === undefined || v === false) {
+            el.removeAttribute(name);
+            return;
+          }
+          const newVal = v === true ? name : String(v);
+          if (isDangerousUrl(name, newVal)) {
+            return;
+          }
+          // Attribute write guard
+          if (el.getAttribute(name) !== newVal) {
+            el.setAttribute(name, newVal);
+          }
+        },
+        `attr.${name}`
+      );
+    }
+  }
 }
 
 /**
@@ -214,24 +219,24 @@ export function bindProp(
   propMap: Record<string, ReactiveValue<unknown>>
 ): void {
   const el = ctx.el as unknown as Record<string, unknown>;
-  Object.keys(propMap).forEach((name) => {
-    // Block dangerous DOM properties that can inject raw HTML (e.g., innerHTML)
-    if (DANGEROUS_PROPS.has(name)) {
-      return;
-    }
+  for (const name in propMap) {
+    if (hasOwn.call(propMap, name)) {
+      // Block dangerous DOM properties that can inject raw HTML (e.g., innerHTML)
+      if (DANGEROUS_PROPS.has(name)) continue;
 
-    registerReactiveEffect(
-      ctx.el,
-      propMap[name]!,
-      (val) => {
-        // Redundancy check specifically for DOM properties
-        if (el[name] !== val) {
-          el[name] = val;
-        }
-      },
-      `prop.${name}`
-    );
-  });
+      registerReactiveEffect(
+        ctx.el,
+        propMap[name]!,
+        (val) => {
+          // Redundancy check specifically for DOM properties
+          if (el[name] !== val) {
+            el[name] = val;
+          }
+        },
+        `prop.${name}`
+      );
+    }
+  }
 }
 
 /**

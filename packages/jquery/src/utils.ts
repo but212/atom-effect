@@ -66,7 +66,7 @@ const URL_ATTRS = new Set([
 ]);
 
 /** cached hasOwnProperty for safe checks */
-const hasOwn = Object.prototype.hasOwnProperty;
+export const hasOwn = Object.prototype.hasOwnProperty;
 
 const DANGEROUS_PROTOCOL_RE = /^\s*(?:javascript|vbscript)\s*:/i;
 

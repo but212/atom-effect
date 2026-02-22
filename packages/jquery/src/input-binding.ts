@@ -15,7 +15,11 @@ class InputBinding<T> {
   private readonly $el: JQuery;
   private readonly el: InputEl;
   private readonly atom: WritableAtom<T>;
-  private readonly options: Required<ValOptions<T>>;
+
+  // Hoisted fast local properties vs deep this.options.x lookups for hot paths.
+  private readonly parse: (v: string) => T;
+  private readonly format: (v: T) => string;
+  private readonly equal: (a: T, b: T) => boolean;
 
   private flags = 0;
   // undefined instead of null so clearTimeout(this.timeoutId) is always safe
@@ -23,7 +27,7 @@ class InputBinding<T> {
   private timeoutId: ReturnType<typeof setTimeout> | undefined = undefined;
 
   /** Per-instance jQuery event namespace — prevents cleanup collisions. */
-  private readonly ns = `.atomBind-${++instanceCounter}`;
+  private readonly ns: string;
 
   // Initialized in constructor based on options.debounce decision.
   private readonly handleInput: () => void;
@@ -32,15 +36,13 @@ class InputBinding<T> {
     this.$el = $el;
     this.el = $el[0] as InputEl;
     this.atom = atom;
+    this.ns = `.atomBind-${++instanceCounter}`;
 
     const debounce = options.debounce ?? 0;
-    this.options = {
-      debounce,
-      event: options.event ?? INPUT_DEFAULTS.EVENT,
-      parse: options.parse ?? ((v: string) => v as unknown as T),
-      format: options.format ?? ((v: T) => String(v ?? '')),
-      equal: options.equal ?? Object.is,
-    };
+    const eventName = options.event ?? INPUT_DEFAULTS.EVENT;
+    this.parse = options.parse ?? ((v: string) => v as unknown as T);
+    this.format = options.format ?? ((v: T) => String(v ?? ''));
+    this.equal = options.equal ?? Object.is;
 
     // Optimization: Pre-bind the appropriate input handler to avoid per-event branching.
     if (debounce > 0) {
@@ -64,7 +66,7 @@ class InputBinding<T> {
     (this.handleCompositionEnd as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
     (this.handleInput as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
 
-    this.bindEvents();
+    this.bindEvents(eventName);
   }
 
   // --- Event Handlers ---
@@ -92,7 +94,7 @@ class InputBinding<T> {
       this.syncAtomFromDom();
     }
 
-    const formatted = this.options.format(this.atom.peek());
+    const formatted = this.format(this.atom.peek());
     if (this.el.value !== formatted) {
       this.el.value = formatted;
     }
@@ -108,10 +110,10 @@ class InputBinding<T> {
 
     this.flags |= BindingFlags.SyncingToAtom;
     try {
-      const parsed = this.options.parse(this.el.value);
+      const parsed = this.parse(this.el.value);
       // peek() instead of .value: equality check in an event handler must not
       // register a dependency — only syncDomFromAtom (the effect body) tracks.
-      if (!this.options.equal(this.atom.peek(), parsed)) {
+      if (!this.equal(this.atom.peek(), parsed)) {
         this.atom.value = parsed;
       }
     } catch (e) {
@@ -138,7 +140,7 @@ class InputBinding<T> {
     const val = this.atom.value;
 
     untracked(() => {
-      const formatted = this.options.format(val);
+      const formatted = this.format(val);
       const currentVal = this.el.value;
 
       // Skip if already synchronised.
@@ -150,7 +152,7 @@ class InputBinding<T> {
       // the same logical value — avoids interrupting in-progress user input.
       if (isFocused) {
         try {
-          if (this.options.equal(this.options.parse(currentVal), val)) return;
+          if (this.equal(this.parse(currentVal), val)) return;
         } catch {
           // parse() threw on the current raw input (e.g. partially typed number).
           // Fall through and apply the formatted value.
@@ -168,10 +170,10 @@ class InputBinding<T> {
           const end = this.el.selectionEnd;
 
           this.el.value = formatted;
-
           const len = formatted.length;
+
           if (start !== null && end !== null) {
-            this.el.setSelectionRange(Math.min(start, len), Math.min(end, len));
+            this.el.setSelectionRange(start < len ? start : len, end < len ? end : len);
           }
         } else {
           this.el.value = formatted;
@@ -192,13 +194,15 @@ class InputBinding<T> {
     this.timeoutId = undefined;
   };
 
-  private bindEvents(): void {
+  private bindEvents(eventName: string): void {
+    // Hoist 1: Pre-compute event strings to avoid N allocations per input.
+    const ns = this.ns;
     this.$el
-      .on(`focus${this.ns}`, this.handleFocus)
-      .on(`blur${this.ns}`, this.handleBlur)
-      .on(`compositionstart${this.ns}`, this.handleCompositionStart)
-      .on(`compositionend${this.ns}`, this.handleCompositionEnd)
-      .on(`${this.options.event}${this.ns}`, this.handleInput);
+      .on(`focus${ns}`, this.handleFocus)
+      .on(`blur${ns}`, this.handleBlur)
+      .on(`compositionstart${ns}`, this.handleCompositionStart)
+      .on(`compositionend${ns}`, this.handleCompositionEnd)
+      .on(`${eventName}${ns}`, this.handleInput);
   }
 }
 
