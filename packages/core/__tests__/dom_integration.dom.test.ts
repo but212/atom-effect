@@ -53,15 +53,21 @@ describe('DOM Integration', () => {
     input.addEventListener('input', (e) => {
       inputValue.value = (e.target as HTMLInputElement).value;
     });
-    effect(() => { input.value = inputValue.value; });
+    effect(() => {
+      input.value = inputValue.value;
+    });
     container.appendChild(input);
 
     // 2. Checkbox
     const isChecked = atom(false);
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
-    checkbox.addEventListener('change', () => { isChecked.value = checkbox.checked; });
-    effect(() => { checkbox.checked = isChecked.value; });
+    checkbox.addEventListener('change', () => {
+      isChecked.value = checkbox.checked;
+    });
+    effect(() => {
+      checkbox.checked = isChecked.value;
+    });
     container.appendChild(checkbox);
 
     // 3. Select
@@ -76,7 +82,9 @@ describe('DOM Integration', () => {
     select.addEventListener('change', (e) => {
       selection.value = (e.target as HTMLSelectElement).value;
     });
-    effect(() => { select.value = selection.value; });
+    effect(() => {
+      select.value = selection.value;
+    });
     container.appendChild(select);
 
     await flush();
@@ -143,7 +151,9 @@ describe('DOM Integration', () => {
     container.appendChild(button);
 
     let clickCount = 0;
-    const handler = () => { clickCount++; };
+    const handler = () => {
+      clickCount++;
+    };
 
     const e = effect(() => {
       el.textContent = label.value;
@@ -175,8 +185,12 @@ describe('DOM Integration', () => {
     container.appendChild(el1);
     container.appendChild(el2);
 
-    const e1 = effect(() => { el1.textContent = title.value; });
-    effect(() => { el2.textContent = title.value.toUpperCase(); });
+    const e1 = effect(() => {
+      el1.textContent = title.value;
+    });
+    effect(() => {
+      el2.textContent = title.value.toUpperCase();
+    });
 
     await flush();
     expect(el1.textContent).toBe('init');
@@ -187,7 +201,7 @@ describe('DOM Integration', () => {
     title.value = 'updated';
     await flush();
 
-    expect(el1.textContent).toBe('init');   // disposed — unchanged
+    expect(el1.textContent).toBe('init'); // disposed — unchanged
     expect(el2.textContent).toBe('UPDATED'); // still active
   });
 });

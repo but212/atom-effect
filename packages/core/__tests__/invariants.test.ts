@@ -4,14 +4,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  atom,
-  batch,
-  type ComputedError,
-  computed,
-  effect,
-  untracked,
-} from '../src';
+import { atom, batch, type ComputedError, computed, effect, untracked } from '../src';
 import { waitForScheduler } from './utils/test-helpers';
 
 // biome-ignore lint/suspicious/noExplicitAny: internal version access
