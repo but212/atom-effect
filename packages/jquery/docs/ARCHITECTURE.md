@@ -87,7 +87,7 @@ Storage uses **WeakMap/WeakSet** to prevent memory leaks — if a DOM element is
 
 ### 3.2 Marker Class Optimization
 
-Bound elements receive a `_aes-bound` CSS class marker. This enables O(M) cleanup via `querySelectorAll('._aes-bound')` where M is the number of bound elements, instead of O(N) traversal of all descendants.
+Bound elements receive a `_aes-bound` CSS class marker. This enables O(M) cleanup via `getElementsByClassName('_aes-bound')` where M is the number of bound elements, instead of O(N) traversal of all descendants. This approach is significantly faster than `querySelectorAll` as it avoids the CSS selector parsing engine and returns a live `HTMLCollection`.
 
 ### 3.3 Auto-Cleanup via MutationObserver
 
