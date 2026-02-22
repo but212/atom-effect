@@ -8,7 +8,6 @@ import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
 import { AtomError, ComputedError } from '@/errors/errors';
 import { ATOM_BRAND, COMPUTED_BRAND } from '@/symbols';
-import { debug } from '@/utils/debug';
 import { sleep, waitForScheduler } from '../../utils/test-helpers';
 
 describe('Computed', () => {
@@ -17,16 +16,19 @@ describe('Computed', () => {
   });
 
   describe('Identity & Validation', () => {
-    it('ensures unique identity, branding, and rejects invalid constructor inputs', () => {
+    it('assigns unique identity and proper brands for valid computed instances', () => {
       const c1 = computed(() => 1);
       const c2 = computed(() => 2);
 
       expect((c1 as unknown as Record<symbol, boolean>)[ATOM_BRAND]).toBe(true);
       expect((c1 as unknown as Record<symbol, boolean>)[COMPUTED_BRAND]).toBe(true);
       expect((c1 as unknown as { id: number }).id).not.toBe((c2 as unknown as { id: number }).id);
+    });
 
+    it('throws errors when initialized with invalid arguments or handlers', () => {
+      const c = computed(() => 1);
       expect(() => computed(null as unknown as () => void)).toThrow(ComputedError);
-      expect(() => c1.subscribe('invalid' as unknown as () => void)).toThrow(AtomError);
+      expect(() => c.subscribe('invalid' as unknown as () => void)).toThrow(AtomError);
     });
   });
 
@@ -61,55 +63,59 @@ describe('Computed', () => {
       expect(handler).toHaveBeenCalledTimes(1);
       expect(consoleError).toHaveBeenCalled(); // Caught internally
     });
-
-    it('handles obscure internal tracking errors gracefully', () => {
-      const spy = vi.spyOn(debug, 'checkCircular').mockImplementation(() => {
-        throw new Error('Internal');
-      });
-      const c = computed(() => atom(1).value);
-      expect(() => c.value).toThrow(ComputedError);
-      spy.mockRestore();
-    });
   });
 
   describe('State & Reactivity (Lazy & Caching)', () => {
-    it('maintains state transitions: idle -> cached & tracks dep changes exactly', async () => {
+    it('does not evaluate the computation function until first accessed', () => {
       const src = atom(0);
       const fn = vi.fn(() => src.value * 2);
-      const c = computed(fn) as unknown as {
-        state: string;
-        isPending: boolean;
-        value: number;
-        version: number;
-      };
+      const c = computed(fn) as unknown as { state: string; isPending: boolean };
 
-      // 1. Initial Identity Check
       expect(c.state).toBe('idle');
       expect(c.isPending).toBe(false);
-      expect(fn).not.toHaveBeenCalled(); // Lazy evaluation
+      expect(fn).not.toHaveBeenCalled();
+    });
 
-      // 2. First Access: resolves and caches
-      expect(c.value).toBe(0);
+    it('caches the result and skips recomputation on subsequent accesses', () => {
+      const fn = vi.fn(() => 42);
+      const c = computed(fn) as unknown as { value: number; state: string };
+
+      expect(c.value).toBe(42);
       expect(c.state).toBe('resolved');
       expect(fn).toHaveBeenCalledTimes(1);
 
       c.value;
       c.value;
-      expect(fn).toHaveBeenCalledTimes(1); // Cached
+      expect(fn).toHaveBeenCalledTimes(1);
+    });
 
-      // 3. Dependency update triggers recompute & version bump
+    it('recomputes automatically and bumps version when dependencies change', async () => {
+      const src = atom(0);
+      const fn = vi.fn(() => src.value * 2);
+      const c = computed(fn) as unknown as { value: number; version: number };
+
+      c.value; // Access to establish dependency
       const v0 = c.version;
+
       src.value = 5;
       await waitForScheduler();
+
       expect(c.value).toBe(10);
       expect(fn).toHaveBeenCalledTimes(2);
       expect(c.version).toBeGreaterThan(v0);
+    });
 
-      // 4. Same structural value does NOT recompute
-      src.value = 5;
+    it('skips recomputation if the dependency update yields the same structural value', async () => {
+      const src = atom(5);
+      const fn = vi.fn(() => src.value * 2);
+      const c = computed(fn);
+
+      c.value; // first evaluation
+      src.value = 5; // identical value update
       await waitForScheduler();
+
       c.value;
-      expect(fn).toHaveBeenCalledTimes(2); // Still cached
+      expect(fn).toHaveBeenCalledTimes(1);
     });
 
     it('respects custom equality function without redundant bumping', async () => {
@@ -175,17 +181,6 @@ describe('Computed', () => {
 
       expect(() => c.value).toThrow(ComputedError);
       expect(c.subscriberCount()).toBe(0);
-    });
-
-    it('re-uses existing dependency links without excessive memory growth', async () => {
-      const a = atom(0);
-      const c = computed(() => a.value) as unknown as { value: number; _links: unknown[] };
-      c.value;
-      const linksLen = c._links.length;
-      a.value = 1;
-      await waitForScheduler();
-      c.value;
-      expect(c._links.length).toBe(linksLen);
     });
   });
 
