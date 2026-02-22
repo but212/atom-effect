@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { atom, computed, effect } from '../src';
 
-const flush = () => new Promise<void>((r) => setTimeout(r, 0));
+import { flush } from './utils/test-helpers';
 
 describe('DOM Integration', () => {
   let container: HTMLDivElement;
