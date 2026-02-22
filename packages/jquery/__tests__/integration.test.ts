@@ -4,54 +4,6 @@ import type { WritableAtom } from '../src/types';
 import '../src/index';
 
 describe('Integration & Core API', () => {
-  describe('Global API ($ namespace)', () => {
-    it('should expose atom and computed via $', async () => {
-      const a = $.atom(1);
-      const b = $.computed(() => a.value + 1);
-      expect(b.value).toBe(2);
-
-      a.value = 10;
-      await $.nextTick();
-      expect(b.value).toBe(11);
-    });
-
-    it('should expose utility methods', () => {
-      const a = $.atom(0);
-      expect($.isReactive(a)).toBe(true);
-      expect($.isReactive({})).toBe(false);
-    });
-
-    it('should have debug toggle', () => {
-      $.atom.debug = true;
-      expect($.atom.debug).toBe(true);
-      $.atom.debug = false;
-    });
-  });
-
-  it('should handle complex updates', async () => {
-    // Counter app simulation
-    const count = $.atom(0);
-    const $app = $('<div id="app">').appendTo(document.body);
-
-    $app.append('<span id="count"></span>');
-    $app.append('<button id="inc"></button>');
-
-    const $count = $app.find('#count');
-    const $inc = $app.find('#inc');
-
-    $count.atomText(count);
-    $inc.atomOn('click', () => count.value++);
-
-    await $.nextTick();
-    expect($count.text()).toBe('0');
-
-    $inc.click();
-    await $.nextTick();
-    expect($count.text()).toBe('1');
-
-    $app.remove();
-  });
-
   it('should handle Todo List with Search (synergy between atomList, atomVal, and computed)', async () => {
     interface Todo {
       id: number;

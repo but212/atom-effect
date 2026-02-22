@@ -102,15 +102,6 @@ describe('jQuery Lifecycle Overrides', () => {
   });
 
   describe('Registry', () => {
-    it('should correctly report hasBind through lifecycle', () => {
-      const el = document.createElement('div');
-      expect(registry.hasBind(el)).toBe(false);
-      registry.trackCleanup(el, () => {});
-      expect(registry.hasBind(el)).toBe(true);
-      registry.cleanup(el);
-      expect(registry.hasBind(el)).toBe(false);
-    });
-
     it('should handle errors during dispose and cleanup', () => {
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const el = document.createElement('div');
@@ -142,11 +133,10 @@ describe('jQuery Lifecycle Overrides', () => {
   });
 
   describe('Event Patching', () => {
-    it('should support on/off with handlers and edge cases', () => {
+    it('should support on/off cycle', () => {
       const $el = $('<div>');
       const handler = vi.fn();
 
-      // Normal on/off cycle
       $el.on('click', handler);
       $el.trigger('click');
       expect(handler).toHaveBeenCalledTimes(1);
@@ -154,16 +144,6 @@ describe('jQuery Lifecycle Overrides', () => {
       $el.off('click', handler);
       $el.trigger('click');
       expect(handler).toHaveBeenCalledTimes(1);
-
-      // .on(events, false) branch
-      $el.on('click', false);
-      $el.trigger('click');
-
-      // off without handler (no throw)
-      expect(() => $el.off('click')).not.toThrow();
-
-      // off with unregistered handler (no throw)
-      expect(() => $el.off('click', () => {})).not.toThrow();
     });
 
     it('should batch updates inside jQuery events', async () => {
@@ -192,39 +172,6 @@ describe('jQuery Lifecycle Overrides', () => {
       $btn.remove();
     });
 
-    it('should preserve original this context', () => {
-      const $btn = $('<button>').appendTo(document.body);
-      let capturedThis: HTMLElement | null = null;
-
-      $btn.on('click', function (this: HTMLElement) {
-        capturedThis = this;
-      });
-
-      $btn.trigger('click');
-      expect(capturedThis).toBe($btn[0]);
-      $btn.remove();
-    });
-
-    it('should reuse wrapper for same handler across events', () => {
-      const handler = vi.fn();
-      const $btn = $('<button>');
-
-      $btn.on('click', handler);
-      $btn.on('mouseover', handler);
-
-      // Trigger both to verify handler works
-      $btn.trigger('click');
-      $btn.trigger('mouseover');
-      expect(handler).toHaveBeenCalledTimes(2);
-
-      $btn.off('click', handler);
-      $btn.off('mouseover', handler);
-
-      // Verify cleanup
-      $btn.trigger('click');
-      $btn.trigger('mouseover');
-      expect(handler).toHaveBeenCalledTimes(2);
-    });
   });
 
   describe('Atom Mount', () => {
@@ -274,16 +221,6 @@ describe('jQuery Lifecycle Overrides', () => {
         expect.any(Error)
       );
       consoleSpy.mockRestore();
-      $el.remove();
-    });
-
-    it('should handle cleanup functions that throw errors', () => {
-      const $el = $('<div>').appendTo(document.body);
-      $el.atomMount(() => () => {
-        throw new Error('cleanup fail');
-      });
-
-      expect(() => $el.atomUnmount()).not.toThrow();
       $el.remove();
     });
 

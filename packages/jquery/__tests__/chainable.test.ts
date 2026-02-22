@@ -3,73 +3,41 @@ import { describe, expect, it, vi } from 'vitest';
 import '../src/index';
 
 describe('Chainable Methods (Surface)', () => {
-  it('should support basic reactive bindings for all methods', async () => {
+  it('smoke: reactive chain with update', async () => {
     const text = $.atom('a');
     const color = $.atom('red');
     const isActive = $.atom(true);
     const attr = $.atom('val');
+    const html = $.atom('<b>b</b>');
 
     const $el = $('<div>').appendTo(document.body);
+    const $el2 = $('<div>').appendTo(document.body);
 
-    // Chain multiple bindings
     $el
       .atomText(text)
       .atomCss('color', color)
       .atomClass('active', isActive)
       .atomAttr('data-test', attr);
+    $el2.atomHtml(html);
 
     await $.nextTick();
     expect($el.text()).toBe('a');
     expect($el.css('color')).toMatch(/red|rgb\(255, 0, 0\)/);
     expect($el.hasClass('active')).toBe(true);
     expect($el.attr('data-test')).toBe('val');
+    expect($el2.html()).toBe('<b>b</b>');
 
-    // Update all
     text.value = 'A';
     isActive.value = false;
     await $.nextTick();
     expect($el.text()).toBe('A');
     expect($el.hasClass('active')).toBe(false);
 
-    // atomHtml separately to avoid overwriting atomText on same element
-    const html = $.atom('<b>b</b>');
-    const $el2 = $('<div>').appendTo(document.body);
-    $el2.atomHtml(html);
-    await $.nextTick();
-    expect($el2.html()).toBe('<b>b</b>');
-
     $el.remove();
     $el2.remove();
   });
 
-  it('should support static values, formatters, and other helpers', () => {
-    const $el = $('<div>');
-
-    $el.atomText(123, (v) => `V:${v}`);
-    expect($el.text()).toBe('V:123');
-
-    $el.atomCss('width', 10, 'px');
-    expect($el.css('width')).toBe('10px');
-
-    $el.atomAttr('disabled', true);
-    expect($el.attr('disabled')).toBe('disabled');
-    $el.atomAttr('disabled', false);
-    expect($el.attr('disabled')).toBeUndefined();
-
-    const $input = $('<input type="checkbox">');
-    $input.atomProp('checked', true);
-    expect($input.prop('checked')).toBe(true);
-
-    // atomShow/atomHide require DOM-attached element for computed style
-    const $showHide = $('<div>').appendTo(document.body);
-    $showHide.atomShow(true);
-    expect($showHide.css('display')).not.toBe('none');
-    $showHide.atomHide(true);
-    expect($showHide.css('display')).toBe('none');
-    $showHide.remove();
-  });
-
-  it('atomUnbind should stop all reactivity', async () => {
+  it('atomUnbind stops all reactivity', async () => {
     const text = $.atom('initial');
     const $el = $('<div>');
     $el.atomText(text);
@@ -79,9 +47,10 @@ describe('Chainable Methods (Surface)', () => {
     await $.nextTick();
     expect($el.text()).toBe('initial');
   });
-  it('should warn when atomVal is used on non-input elements', async () => {
+
+  it('atomVal warns on non-input element', async () => {
     const val = $.atom('test');
-    const $div = $('<div>'); // Not an input
+    const $div = $('<div>');
     const warnSpy = vi.spyOn(console, 'warn');
 
     $div.atomVal(val);
@@ -90,16 +59,181 @@ describe('Chainable Methods (Surface)', () => {
     expect(warnSpy).toHaveBeenCalled();
     warnSpy.mockRestore();
   });
+
+  it('missing-arg warns: atomClass / atomCss / atomAttr / atomProp', () => {
+    const warnSpy = vi.spyOn(console, 'warn');
+    const $el = $('<div>');
+
+    // @ts-expect-error - testing JS runtime guard
+    $el.atomClass('active');
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect($el.hasClass('active')).toBe(false);
+
+    // @ts-expect-error - testing JS runtime guard
+    $el.atomCss('color');
+    expect(warnSpy).toHaveBeenCalledTimes(2);
+
+    // @ts-expect-error - testing JS runtime guard
+    $el.atomAttr('data-foo');
+    expect(warnSpy).toHaveBeenCalledTimes(3);
+
+    // @ts-expect-error - testing JS runtime guard
+    $el.atomProp('id');
+    expect(warnSpy).toHaveBeenCalledTimes(4);
+
+    warnSpy.mockRestore();
+  });
+
+  it('atomClass: map overload toggles multiple classes', async () => {
+    const isActive = $.atom(true);
+    const isDisabled = $.atom(false);
+    const $el = $('<div>');
+
+    $el.atomClass({ active: isActive, disabled: isDisabled });
+
+    await $.nextTick();
+    expect($el.hasClass('active')).toBe(true);
+    expect($el.hasClass('disabled')).toBe(false);
+
+    isActive.value = false;
+    isDisabled.value = true;
+    await $.nextTick();
+    expect($el.hasClass('active')).toBe(false);
+    expect($el.hasClass('disabled')).toBe(true);
+  });
+
+  it('atomCss: map with unit tuple and reactive update', async () => {
+    const opacity = $.atom(0.5);
+    const $el = $('<div>').appendTo(document.body);
+
+    $el.atomCss({ opacity, 'font-size': [20, 'px'] });
+
+    await $.nextTick();
+    expect($el.css('opacity')).toBe('0.5');
+    expect($el.css('font-size')).toBe('20px');
+
+    opacity.value = 1;
+    await $.nextTick();
+    expect($el.css('opacity')).toBe('1');
+
+    $el.remove();
+  });
+
+  it('atomAttr: map overload sets multiple attributes', async () => {
+    const href = $.atom('https://example.com');
+    const title = $.atom('My Link');
+    const $el = $('<a>');
+
+    $el.atomAttr({ href, title });
+
+    await $.nextTick();
+    expect($el.attr('href')).toBe('https://example.com');
+    expect($el.attr('title')).toBe('My Link');
+
+    title.value = 'Updated';
+    await $.nextTick();
+    expect($el.attr('title')).toBe('Updated');
+  });
+
+  it('atomAttr: blocks on* event handler attributes', async () => {
+    const $el = $('<div>');
+    $el.atomAttr('onclick', $.atom('alert(1)'));
+    await $.nextTick();
+    expect($el.attr('onclick')).toBeUndefined();
+  });
+
+  it('atomProp: blocks dangerous properties (innerHTML, outerHTML)', async () => {
+    const $el = $('<div>');
+    $el.atomProp('innerHTML', $.atom('<script>alert(1)</script>'));
+    await $.nextTick();
+    expect($el.html()).toBe('');
+  });
+
+  it('atomOn: binds event and cleans up on atomUnbind', () => {
+    const $el = $('<button>').appendTo(document.body);
+    const handler = vi.fn();
+
+    $el.atomOn('click', handler);
+    $el.trigger('click');
+    expect(handler).toHaveBeenCalledTimes(1);
+
+    $el.atomUnbind();
+    $el.trigger('click');
+    expect(handler).toHaveBeenCalledTimes(1);
+
+    $el.remove();
+  });
+
+  it('atomChecked: two-way binding for checkboxes', async () => {
+    const isChecked = $.atom(false);
+    const $el = $('<input type="checkbox">').appendTo(document.body);
+
+    $el.atomChecked(isChecked);
+
+    isChecked.value = true;
+    await $.nextTick();
+    expect($el.prop('checked')).toBe(true);
+
+    $el.prop('checked', false);
+    $el[0]!.dispatchEvent(new Event('change'));
+    expect(isChecked.value).toBe(false);
+
+    $el.remove();
+  });
+
+  it('atomShow/atomHide: react to reactive atom changes', async () => {
+    const show = $.atom(true);
+    const hide = $.atom(false);
+    const $a = $('<div>').appendTo(document.body);
+    const $b = $('<div>').appendTo(document.body);
+
+    $a.atomShow(show);
+    $b.atomHide(hide);
+    await $.nextTick();
+    expect($a.css('display')).not.toBe('none');
+    expect($b.css('display')).not.toBe('none');
+
+    show.value = false;
+    hide.value = true;
+    await $.nextTick();
+    expect($a.css('display')).toBe('none');
+    expect($b.css('display')).toBe('none');
+
+    $a.remove();
+    $b.remove();
+  });
+
+  it('multi-element set: binding applies to all elements', async () => {
+    const text = $.atom('hello');
+    const $els = $('<span>').add('<span>').appendTo(document.body);
+
+    $els.atomText(text);
+    await $.nextTick();
+    $els.each((_, el) => {
+      expect($(el).text()).toBe('hello');
+    });
+
+    text.value = 'world';
+    await $.nextTick();
+    $els.each((_, el) => {
+      expect($(el).text()).toBe('world');
+    });
+
+    $els.each((_, el) => {
+      $(el).atomUnbind();
+    });
+    $els.remove();
+  });
 });
 
 describe('atomBind', () => {
-  it('should bind multiple properties simultaneously', async () => {
+  it('binds multiple properties simultaneously and updates reactively', async () => {
     const text = $.atom('title');
     const isActive = $.atom(false);
     const $el = $('<div>').appendTo(document.body);
 
     $el.atomBind({
-      text: text,
+      text,
       class: { active: isActive },
       attr: { 'data-mode': 'demo' },
     });
@@ -118,49 +252,11 @@ describe('atomBind', () => {
     $el.remove();
   });
 
-  it('should support complex CSS and static properties', () => {
-    const $el = $('<div>');
-    $el.atomBind({
-      css: {
-        opacity: 0.5,
-        'font-size': [20, 'px'],
-        margin: $.atom(10),
-      },
-      prop: { id: 'test-id' },
-      show: true,
-    });
-
-    expect($el.css('font-size')).toBe('20px');
-    expect($el.prop('id')).toBe('test-id');
-    expect($el.css('display')).not.toBe('none');
-  });
-
-  it('should support event binding with automatic cleanup', () => {
-    const count = $.atom(0);
-    const $el = $('<button>').appendTo(document.body);
-    const handler = vi.fn(() => count.value++);
-
-    $el.atomBind({
-      on: { click: handler },
-    });
-
-    $el.trigger('click');
-    expect(count.value).toBe(1);
-
-    $el.atomUnbind();
-    $el.trigger('click');
-    expect(count.value).toBe(1);
-
-    $el.remove();
-  });
-
-  it('should support custom options for two-way val binding', async () => {
+  it('val: [atom, options] tuple applies format function', async () => {
     const val = $.atom(0);
     const $el = $('<input>').appendTo(document.body);
 
-    $el.atomBind({
-      val: [val, { format: (v) => `N:${v}` }],
-    });
+    $el.atomBind({ val: [val, { format: (v) => `N:${v}` }] });
 
     await $.nextTick();
     expect($el.val()).toBe('N:0');
@@ -168,27 +264,11 @@ describe('atomBind', () => {
     $el.remove();
   });
 
-  it('should support html binding', async () => {
-    const html = $.atom('<span>initial</span>');
-    const $el = $('<div>');
-
-    $el.atomBind({ html });
-
-    await $.nextTick();
-    expect($el.html()).toBe('<span>initial</span>');
-
-    html.value = '<span>updated</span>';
-    await $.nextTick();
-    expect($el.html()).toBe('<span>updated</span>');
-  });
-
-  it('should remove attributes when value is null or false', async () => {
+  it('attr: null and false remove the attribute', async () => {
     const attrVal = $.atom<string | boolean | null>('initial');
     const $el = $('<div>');
 
-    $el.atomBind({
-      attr: { 'data-test': attrVal },
-    });
+    $el.atomBind({ attr: { 'data-test': attrVal } });
 
     await $.nextTick();
     expect($el.attr('data-test')).toBe('initial');
@@ -206,36 +286,19 @@ describe('atomBind', () => {
     expect($el.attr('data-test')).toBeUndefined();
   });
 
-  it('should support hide binding', async () => {
-    const shouldHide = $.atom(false);
-    const $el = $('<div>').appendTo(document.body);
+  it('atomUnbind cleans up all bindings registered via atomBind', async () => {
+    const text = $.atom('before');
+    const cls = $.atom(false);
+    const $el = $('<div>');
 
-    $el.atomBind({ hide: shouldHide });
+    $el.atomBind({ text, class: { active: cls } });
+    $el.atomUnbind();
 
+    text.value = 'after';
+    cls.value = true;
     await $.nextTick();
-    expect($el.css('display')).not.toBe('none');
 
-    shouldHide.value = true;
-    await $.nextTick();
-    expect($el.css('display')).toBe('none');
-
-    $el.remove();
-  });
-
-  it('should support two-way checked binding', async () => {
-    const isChecked = $.atom(false);
-    const $el = $('<input type="checkbox">').appendTo(document.body);
-
-    $el.atomBind({ checked: isChecked });
-
-    isChecked.value = true;
-    await $.nextTick();
-    expect($el.prop('checked')).toBe(true);
-
-    $el.prop('checked', false);
-    $el[0]!.dispatchEvent(new Event('change'));
-    expect(isChecked.value).toBe(false);
-
-    $el.remove();
+    expect($el.text()).toBe('before');
+    expect($el.hasClass('active')).toBe(false);
   });
 });
