@@ -8,6 +8,11 @@
   - Eliminated iterator and closure overheads (`.each`, `forEach`, `for...of`, `Object.keys/entries`) by adopting native `for` and `for...in` loops in DOM syncs, cleanups, and batch operations.
   - Reduced memory allocations and GC pressure by hoisting configurations and using faster static queries (`getElementsByClassName`).
 
+- **Security**:
+  - `sanitizeHtml`: Added HTML entity decoding pre-pass (numeric `&#NNN;`/`&#xHH;` and named `&colon;`/`&Tab;`/`&NewLine;`) before regex sanitization, closing the entity-encoded protocol bypass (`&#106;avascript:` → `javascript:`).
+  - `sanitizeHtml`: Added `-moz-binding` to blocked CSS patterns (Gecko XBL vector).
+  - `security.test.ts`: Comprehensive XSS test suite covering all externally exposed APIs (`atomHtml`, `atomAttr`, `atomCss`, `atomProp`, `atomList`, `atomVal`, `atomText`, `atomChecked`, `atomShow`, `atomClass`); merged redundant vectors into single behavioral tests (95 → 34 tests).
+
 ## [0.22.1]
 
 ### Core

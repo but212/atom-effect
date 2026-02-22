@@ -72,7 +72,7 @@ const DANGEROUS_PROTOCOL_RE = /^\s*(?:javascript|vbscript)\s*:/i;
 
 const DANGEROUS_CSS_RE =
   // biome-ignore lint/suspicious/noControlCharactersInRegex: Intentionally matching control characters for XSS sanitization
-  /(?:expression\s*\(|behavior\s*:|(?:\\[0-9a-f]{1,6}\s*|[\s\x00-\x20/'"])*(?:j\s*a\s*v\s*a\s*s\s*c\s*r\s*i\s*p\s*t|v\s*b\s*s\s*c\s*r\s*i\s*p\s*t|d\s*a\s*t\s*a)\s*:(?!image\/))/i;
+  /(?:expression\s*\(|behavior\s*:|-moz-binding\s*:|(?:\\[0-9a-f]{1,6}\s*|[\s\x00-\x20/'"])*(?:j\s*a\s*v\s*a\s*s\s*c\s*r\s*i\s*p\s*t|v\s*b\s*s\s*c\s*r\s*i\s*p\s*t|d\s*a\s*t\s*a)\s*:(?!image\/))/i;
 
 /** Module-level constant — avoids recreating the RegExp on every call. */
 const DANGEROUS_CSS_URL_RE = /url\s*\(\s*(?:["']?\s*)?(?:javascript|vbscript)\s*:/i;
@@ -80,6 +80,19 @@ const DANGEROUS_CSS_URL_RE = /url\s*\(\s*(?:["']?\s*)?(?:javascript|vbscript)\s*
 // Pre-compiled regexes for sanitizeHtml to avoid reallocation
 // biome-ignore lint/suspicious/noControlCharactersInRegex: Intentionally matching control characters
 const STRIP_CTRL_RE = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g;
+// Numeric HTML entity decoder: &#NNN; and &#xHH; forms.
+// Must run before protocol/tag checks so entity-encoded bypasses like
+// "&#106;avascript:" (j=106) are normalised to their literal characters
+// before the dangerous-protocol regex sees them.
+// Named entities (&colon; &Tab; &NewLine;) that are relevant to protocol
+// smuggling are also decoded here to close the named-entity bypass path.
+const DECODE_NUMERIC_ENTITY_RE = /&#x([0-9a-f]+);?|&#([0-9]+);?/gi;
+const NAMED_ENTITY_MAP: Record<string, string> = {
+  'colon': ':',
+  'Tab': '\t',
+  'NewLine': '\n',
+};
+const DECODE_NAMED_ENTITY_RE = /&(colon|Tab|NewLine);/g;
 const STRIP_XML_RE = /<\?[\s\S]*?\?>/g;
 const DANGEROUS_TAG_RE =
   /(<(script|iframe|object|embed|base|meta|applet|noscript|form|style|link)\b[^>]*>([\s\S]*?)<\/\2>|<(script|iframe|object|embed|base|meta|applet|noscript|form|style|link)\b[^>]*\/?>)/gi;
@@ -107,6 +120,17 @@ export function sanitizeHtml(html: string | null | undefined): string {
   // 0. Pre-process: Remove null bytes and control characters (bypass vectors)
   // These are often used to bypass regex filters while browsers ignore them
   safe = safe.replace(STRIP_CTRL_RE, '');
+
+  // 0b. Decode numeric HTML entities (&#NNN; / &#xHH;) and dangerous named
+  // entities so that protocol-bypass vectors like "&#106;avascript:" are
+  // normalised to their literal characters before the dangerous-tag and
+  // dangerous-protocol regexes run. Safe structural entities (&amp; &lt; &gt;
+  // &quot;) are intentionally left encoded — they do not produce dangerous
+  // characters and must remain escaped for correct HTML rendering.
+  safe = safe.replace(DECODE_NUMERIC_ENTITY_RE, (_, hex, dec) =>
+    String.fromCodePoint(hex ? parseInt(hex, 16) : parseInt(dec, 10))
+  );
+  safe = safe.replace(DECODE_NAMED_ENTITY_RE, (_, name) => NAMED_ENTITY_MAP[name] ?? '');
 
   // 1. Remove dangerous tags entirely (content included or tag stripped)
   // Lightweight first pass — DOMPurify handles the full sanitization.
