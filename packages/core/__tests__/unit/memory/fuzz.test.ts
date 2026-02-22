@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
+import { batch } from '@/internal/batch';
 import type { ComputedAtom, WritableAtom } from '@/types';
 
 // Simple seeded PRNG (sfc32)
@@ -31,67 +32,80 @@ function seededRandom(seed: number) {
   };
 }
 
-describe('Fuzz Testing (Deterministic)', () => {
-  it('maintains consistency in random graph topologies', async () => {
-    const rand = seededRandom(12345); // Fixed seed
-    const ATOM_COUNT = 20;
-    const OPS_COUNT = 100;
+function buildGraph(rand: () => number, atomCount = 5, computedCount = 20) {
+  const atoms: WritableAtom<number>[] = [];
+  const computeds: ComputedAtom<number>[] = [];
+  const allNodes: (WritableAtom<number> | ComputedAtom<number>)[] = [];
+  const depMap: (WritableAtom<number> | ComputedAtom<number>)[][] = [];
 
-    const atoms: WritableAtom<number>[] = [];
-    const computeds: ComputedAtom<number>[] = [];
-    const allNodes: (WritableAtom<number> | ComputedAtom<number>)[] = [];
+  for (let i = 0; i < atomCount; i++) {
+    const a = atom(i);
+    atoms.push(a);
+    allNodes.push(a);
+  }
 
-    // 1. Create Atoms
-    for (let i = 0; i < 5; i++) {
-      const a = atom(i);
-      atoms.push(a);
-      allNodes.push(a);
+  for (let i = 0; i < computedCount; i++) {
+    const numDeps = Math.floor(rand() * 3) + 1;
+    const deps: (WritableAtom<number> | ComputedAtom<number>)[] = [];
+    for (let j = 0; j < numDeps; j++) {
+      const dep = allNodes[Math.floor(rand() * allNodes.length)];
+      if (dep) deps.push(dep);
     }
+    depMap.push(deps);
+    const c = computed(() => deps.reduce((sum, d) => sum + d.value, 0));
+    computeds.push(c);
+    allNodes.push(c);
+  }
 
-    // 2. Create Computed layers
-    for (let i = 0; i < ATOM_COUNT; i++) {
-      // Pick random dependencies from existing nodes
-      const numDeps = Math.floor(rand() * 3) + 1;
-      const deps: (WritableAtom<number> | ComputedAtom<number>)[] = [];
+  return { atoms, computeds, depMap };
+}
 
-      for (let j = 0; j < numDeps; j++) {
-        const idx = Math.floor(rand() * allNodes.length);
-        const dep = allNodes[idx];
-        if (dep) deps.push(dep);
-      }
+describe('Fuzz Testing (Deterministic)', () => {
+  it('computed values stay finite after random mutations', () => {
+    const rand = seededRandom(12345);
+    const { atoms, computeds } = buildGraph(rand);
 
-      const c = computed(() => {
-        let sum = 0;
-        for (const d of deps) sum += d.value;
-        return sum;
+    for (let i = 0; i < 100; i++) {
+      const targetAtom = atoms[Math.floor(rand() * atoms.length)];
+      if (targetAtom) targetAtom.value = Math.floor(rand() * 100);
+
+      const targetComputed = computeds[Math.floor(rand() * computeds.length)];
+      if (targetComputed) expect(Number.isFinite(targetComputed.value)).toBe(true);
+    }
+  });
+
+  it('batch mutations produce glitch-free final state across the graph', () => {
+    const rand = seededRandom(77777);
+    const { atoms, computeds, depMap } = buildGraph(rand, 5, 10);
+
+    for (let i = 0; i < 30; i++) {
+      batch(() => {
+        atoms.forEach((a) => {
+          a.value = Math.floor(rand() * 100);
+        });
       });
 
-      computeds.push(c);
-      allNodes.push(c);
+      computeds.forEach((c, idx) => {
+        const expected = depMap[idx]!.reduce((sum, d) => sum + d.value, 0);
+        expect(c.value).toBe(expected);
+      });
     }
+  });
 
-    // 3. Mutate and Verify
-    for (let i = 0; i < OPS_COUNT; i++) {
-      // Pick random atom to change
-      const atomIdx = Math.floor(rand() * atoms.length);
-      const targetAtom = atoms[atomIdx];
+  it('invalidate forces recomputation to a consistent value', () => {
+    const rand = seededRandom(54321);
+    const { atoms, computeds, depMap } = buildGraph(rand, 5, 10);
 
-      if (targetAtom) {
-        const newVal = Math.floor(rand() * 100);
-        targetAtom.value = newVal;
-      }
+    for (let i = 0; i < 30; i++) {
+      const targetAtom = atoms[Math.floor(rand() * atoms.length)];
+      if (targetAtom) targetAtom.value = Math.floor(rand() * 100);
 
-      // Randomly read some computed values to trigger updates
-      // Use bitwise OR to coerce to integer 0 if undefined (though length check handles it)
-      if (computeds.length > 0) {
-        const readIdx = Math.floor(rand() * computeds.length);
-        const targetComputed = computeds[readIdx];
-
-        if (targetComputed) {
-          const val = targetComputed.value;
-          expect(val).toBeTypeOf('number');
-          expect(Number.isNaN(val)).toBe(false);
-        }
+      const c = computeds[Math.floor(rand() * computeds.length)];
+      const idx = computeds.indexOf(c!);
+      if (c && idx !== -1) {
+        c.invalidate();
+        const expected = depMap[idx]!.reduce((sum, d) => sum + d.value, 0);
+        expect(c.value).toBe(expected);
       }
     }
   });

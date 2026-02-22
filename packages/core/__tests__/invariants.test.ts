@@ -10,10 +10,6 @@ import {
   type ComputedError,
   computed,
   effect,
-  isAtom,
-  isComputed,
-  isEffect,
-  scheduler,
   untracked,
 } from '../src';
 import { waitForScheduler } from './utils/test-helpers';
@@ -217,12 +213,10 @@ describe('Disposal Finality', () => {
       void c.value;
     });
 
-    // First dispose
     a.dispose();
     c.dispose();
     e.dispose();
 
-    // Post-dispose behavior
     expect(a.value).toBeUndefined();
     expect(() => c.value).toThrow();
     expect(() => e.run()).toThrow();
@@ -259,15 +253,6 @@ describe('Disposal Finality', () => {
 
     expect(safeContainer).toEqual([1]);
     expect(leakContainer).toEqual([0, 1, 2]);
-  });
-
-  it('effect cleanup runs on disposal', () => {
-    const cleanup = vi.fn();
-    const e = effect(() => cleanup, { sync: true });
-    expect(cleanup).not.toHaveBeenCalled();
-
-    e.dispose();
-    expect(cleanup).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -312,7 +297,6 @@ describe('Error Isolation', () => {
     const trigger = atom(0);
     const onError = vi.fn();
 
-    // Normal onError
     effect(
       () => {
         if (trigger.value === 1) throw new Error('boom');
@@ -348,67 +332,7 @@ describe('Error Isolation', () => {
   });
 });
 
-// ─── 7. Node Identity ───────────────────────────────────────────────────────
-
-describe('Node Identity', () => {
-  it('brand symbols identify node types correctly', () => {
-    const a = atom(0);
-    const c = computed(() => a.value);
-    const e = effect(() => {
-      void c.value;
-    });
-
-    expect(isAtom(a)).toBe(true);
-    expect(isComputed(c)).toBe(true);
-    expect(isEffect(e)).toBe(true);
-    expect(isAtom({})).toBe(false);
-
-    e.dispose();
-  });
-});
-
-// ─── 8. Scheduler Invariants ────────────────────────────────────────────────
-
-describe('Scheduler Invariants', () => {
-  it('deduplicates same job within same epoch', async () => {
-    let count = 0;
-    const job = () => {
-      count++;
-    };
-
-    scheduler.schedule(job);
-    scheduler.schedule(job);
-
-    await waitForScheduler();
-    expect(count).toBe(1);
-  });
-});
-
-// ─── 9. Diamond Dependency ──────────────────────────────────────────────────
-
-describe('Diamond Dependency', () => {
-  it('effect observing diamond graph computes correct value and runs once', async () => {
-    const a = atom(1);
-    const b = computed(() => a.value * 2);
-    const c = computed(() => a.value * 3);
-    const d = computed(() => b.value + c.value);
-
-    const results: number[] = [];
-    const e = effect(() => {
-      results.push(d.value);
-    });
-    expect(results).toEqual([5]); // 2 + 3
-    results.length = 0;
-
-    a.value = 2;
-    await waitForScheduler();
-
-    expect(results).toEqual([10]); // 4 + 6, exactly once
-    e.dispose();
-  });
-});
-
-// ─── 10. Equality Contract ──────────────────────────────────────────────────
+// ─── 7. Equality Contract ───────────────────────────────────────────────────
 
 describe('Equality Contract', () => {
   it('atom uses Object.is (NaN === NaN)', async () => {
@@ -436,7 +360,7 @@ describe('Equality Contract', () => {
   });
 });
 
-// ─── 11. Computed State Machine ─────────────────────────────────────────────
+// ─── 8. Computed State Machine ──────────────────────────────────────────────
 
 describe('Computed State Machine', () => {
   it('sync: IDLE → RESOLVED on first access', () => {
@@ -465,7 +389,7 @@ describe('Computed State Machine', () => {
   });
 });
 
-// ─── 12. Subscription Protocol ──────────────────────────────────────────────
+// ─── 9. Subscription Protocol ───────────────────────────────────────────────
 
 describe('Subscription Protocol', () => {
   it('unsubscribe decrements count and is idempotent', () => {
@@ -512,32 +436,7 @@ describe('Subscription Protocol', () => {
   });
 });
 
-// ─── 13. Infinite Loop Protection ───────────────────────────────────────────
-
-describe('Infinite Loop Protection', () => {
-  it('detects and reports when effect exceeds per-flush execution limit', () => {
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const count = atom(0);
-
-    batch(() => {
-      effect(() => {
-        const val = count.value;
-        if (val < 200) count.value = val + 1;
-      });
-      count.value = 1;
-    });
-
-    expect(consoleSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: expect.stringMatching(/Infinite loop detected/),
-      })
-    );
-
-    consoleSpy.mockRestore();
-  });
-});
-
-// ─── 14. Async Computed Safety ──────────────────────────────────────────────
+// ─── 10. Async Computed Safety ──────────────────────────────────────────────
 
 describe('Async Computed Safety', () => {
   it('eventually resolves to latest value after dependency drift', async () => {

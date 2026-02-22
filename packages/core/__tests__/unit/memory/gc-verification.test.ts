@@ -1,58 +1,83 @@
 /**
  * @fileoverview Garbage Collection Verification
- * @description Verifies that unreferenced nodes are collected by the GC.
- * Requires --expose-gc flag to run the actual verification.
+ * @description Verifies that subscription cleanup is deterministic on dispose.
  */
 
 import { describe, expect, it } from 'vitest';
 import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
+import { effect } from '@/core/effect';
 
-// Type definition for exposed GC
-declare const global: {
-  gc?: () => void;
-};
+const subCount = (node: object) =>
+  (node as unknown as { _subscribers: unknown[] })._subscribers.length;
 
 describe('Memory Leaks (GC)', () => {
-  it('collects unreferenced atoms and computeds', async () => {
-    if (typeof global.gc !== 'function') {
-      console.warn('Skipping GC test: global.gc is not exposed. Run with node --expose-gc');
-      return;
-    }
-
-    let ref: WeakRef<object> | null = null;
-
-    // Scope for creation and release
-    (() => {
-      const a = atom(0);
-      const c = computed(() => a.value + 1);
-      ref = new WeakRef(c);
-
-      // Force computation linkage
-      c.value;
-    })();
-
-    // Force GC
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    global.gc();
-
-    const deref = ref!.deref();
-    if (deref) {
-      console.log('Object still alive (might be valid depending on GC timing)');
-    }
-  });
-
-  it('cleans up subscriptions on dispose', () => {
+  it('cleans up computed subscription on dispose', () => {
     const a = atom(0);
     const c = computed(() => a.value);
 
-    // Leak check via subscription count (deterministic)
-    const subCount = () => (a as unknown as { _subscribers: unknown[] })._subscribers.length;
-
     c.value;
-    expect(subCount()).toBe(1);
+    expect(subCount(a)).toBe(1);
 
     c.dispose();
-    expect(subCount()).toBe(0);
+    expect(subCount(a)).toBe(0);
+  });
+
+  it('cleans up effect subscription on dispose', () => {
+    const a = atom(0);
+    const e = effect(() => {
+      a.value;
+    });
+
+    expect(subCount(a)).toBe(1);
+
+    e.dispose();
+    expect(subCount(a)).toBe(0);
+  });
+
+  it('cleans up chain subscriptions when intermediate computed is disposed', () => {
+    // a → b → c: disposing b must remove b from a's subscribers
+    const a = atom(0);
+    const b = computed(() => a.value + 1);
+    const c = computed(() => b.value + 1);
+
+    c.value;
+    expect(subCount(a)).toBe(1);
+
+    b.dispose();
+    expect(subCount(a)).toBe(0);
+  });
+
+  it('tracks subscriber count as computeds are disposed one by one', () => {
+    const a = atom(0);
+    const b = computed(() => a.value * 2);
+    const c = computed(() => a.value + 1);
+
+    b.value;
+    c.value;
+    expect(subCount(a)).toBe(2);
+
+    b.dispose();
+    expect(subCount(a)).toBe(1);
+
+    c.dispose();
+    expect(subCount(a)).toBe(0);
+  });
+
+  it('runs effect cleanup function on dispose', () => {
+    const a = atom(0);
+    let cleaned = false;
+
+    const e = effect(() => {
+      a.value;
+      return () => {
+        cleaned = true;
+      };
+    });
+
+    expect(cleaned).toBe(false);
+
+    e.dispose();
+    expect(cleaned).toBe(true);
   });
 });

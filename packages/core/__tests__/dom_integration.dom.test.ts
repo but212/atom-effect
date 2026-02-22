@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { atom, computed, effect } from '../src';
 
+const flush = () => new Promise<void>((r) => setTimeout(r, 0));
+
 describe('DOM Integration', () => {
   let container: HTMLDivElement;
 
@@ -29,7 +31,7 @@ describe('DOM Integration', () => {
       element.classList.toggle('highlight', isActive.value);
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flush();
     expect(element.textContent).toBe('Hello');
     expect(element.className).toBe('inactive');
     expect(element.style.transform).toBe('translate(0px, 0px)');
@@ -37,35 +39,29 @@ describe('DOM Integration', () => {
     text.value = 'World';
     isActive.value = true;
     x.value = 100;
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flush();
     expect(element.textContent).toBe('World');
     expect(element.className).toContain('active');
     expect(element.style.transform).toBe('translate(100px, 0px)');
     expect(element.classList.contains('highlight')).toBe(true);
   });
 
-  it('should handle two-way form bindings (input, checkbox, radio, select)', async () => {
+  it('should handle two-way form bindings (input, checkbox, select)', async () => {
     // 1. Text Input
     const inputValue = atom('');
     const input = document.createElement('input');
     input.addEventListener('input', (e) => {
       inputValue.value = (e.target as HTMLInputElement).value;
     });
-    effect(() => {
-      input.value = inputValue.value;
-    });
+    effect(() => { input.value = inputValue.value; });
     container.appendChild(input);
 
     // 2. Checkbox
     const isChecked = atom(false);
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
-    checkbox.addEventListener('change', () => {
-      isChecked.value = checkbox.checked;
-    });
-    effect(() => {
-      checkbox.checked = isChecked.value;
-    });
+    checkbox.addEventListener('change', () => { isChecked.value = checkbox.checked; });
+    effect(() => { checkbox.checked = isChecked.value; });
     container.appendChild(checkbox);
 
     // 3. Select
@@ -80,23 +76,21 @@ describe('DOM Integration', () => {
     select.addEventListener('change', (e) => {
       selection.value = (e.target as HTMLSelectElement).value;
     });
-    effect(() => {
-      select.value = selection.value;
-    });
+    effect(() => { select.value = selection.value; });
     container.appendChild(select);
 
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flush();
 
-    // Test Model -> View
+    // Model -> View
     inputValue.value = 'Initial';
     isChecked.value = true;
     selection.value = 'A';
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flush();
     expect(input.value).toBe('Initial');
     expect(checkbox.checked).toBe(true);
     expect(select.value).toBe('A');
 
-    // Test View -> Model
+    // View -> Model
     input.value = 'Updated';
     input.dispatchEvent(new Event('input'));
     checkbox.checked = false;
@@ -129,17 +123,71 @@ describe('DOM Integration', () => {
       }
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flush();
     expect(ul.children.length).toBe(2);
 
-    // Update list
     items.value = [...items.value, 'Cherry'];
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flush();
     expect(ul.children.length).toBe(3);
 
-    // Conditional toggle
     show.value = false;
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flush();
     expect(container.contains(ul)).toBe(false);
+  });
+
+  it('should stop updating DOM after dispose and run cleanup', async () => {
+    const label = atom('on');
+    const el = document.createElement('span');
+    const button = document.createElement('button');
+    container.appendChild(el);
+    container.appendChild(button);
+
+    let clickCount = 0;
+    const handler = () => { clickCount++; };
+
+    const e = effect(() => {
+      el.textContent = label.value;
+      button.addEventListener('click', handler);
+      return () => button.removeEventListener('click', handler);
+    });
+
+    await flush();
+    expect(el.textContent).toBe('on');
+    button.click();
+    expect(clickCount).toBe(1);
+
+    e.dispose();
+
+    // Cleanup ran — listener removed
+    button.click();
+    expect(clickCount).toBe(1);
+
+    // DOM no longer updates
+    label.value = 'off';
+    await flush();
+    expect(el.textContent).toBe('on');
+  });
+
+  it('should allow multiple independent effects on the same atom', async () => {
+    const title = atom('init');
+    const el1 = document.createElement('h1');
+    const el2 = document.createElement('h2');
+    container.appendChild(el1);
+    container.appendChild(el2);
+
+    const e1 = effect(() => { el1.textContent = title.value; });
+    effect(() => { el2.textContent = title.value.toUpperCase(); });
+
+    await flush();
+    expect(el1.textContent).toBe('init');
+    expect(el2.textContent).toBe('INIT');
+
+    e1.dispose();
+
+    title.value = 'updated';
+    await flush();
+
+    expect(el1.textContent).toBe('init');   // disposed — unchanged
+    expect(el2.textContent).toBe('UPDATED'); // still active
   });
 });

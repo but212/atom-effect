@@ -6,6 +6,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { atom } from '@/core/atom';
 import { AtomError } from '@/errors/errors';
+import { scheduler } from '@/internal/scheduler';
+import { ATOM_BRAND } from '@/symbols';
 import { waitForScheduler } from '../../utils/test-helpers';
 
 describe('Atom', () => {
@@ -13,74 +15,151 @@ describe('Atom', () => {
     vi.restoreAllMocks();
   });
 
-  describe('Validation & Safety', () => {
-    it('rejects invalid inputs', () => {
-      const a = atom(0);
-      expect(() => a.subscribe(null as unknown as () => void)).toThrow(AtomError);
-      expect(() => a.subscribe('invalid' as unknown as () => void)).toThrow(AtomError);
-    });
+  describe('Identity, Validation & Initialization', () => {
+    it('sets initial value, carries ATOM_BRAND, and rejects invalid subscribers', () => {
+      const a = atom(42);
+      expect(a.value).toBe(42);
+      expect(atom(null).value).toBeNull();
 
-    it('warns on duplicate subscriptions', () => {
-      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      const a = atom(0);
-      const fn = () => {};
+      expect((a as unknown as Record<symbol, boolean>)[ATOM_BRAND]).toBe(true);
 
-      const unsub1 = a.subscribe(fn);
-      expect(consoleWarn).not.toHaveBeenCalled();
+      ['invalid', null, {}].forEach((sub) => {
+        expect(() => a.subscribe(sub as unknown as () => void)).toThrow(AtomError);
+      });
 
-      const unsub2 = a.subscribe(fn);
-      expect(consoleWarn).toHaveBeenCalledWith(expect.stringContaining('Duplicate'));
-
-      unsub1(); // Should work
-      unsub2(); // Should be no-op
-      consoleWarn.mockRestore();
+      // Valid subscriber with execute method should not throw
+      expect(() => a.subscribe({ execute: vi.fn() } as unknown as () => void)).not.toThrow();
     });
   });
 
-  describe('State & Lifecycle', () => {
-    it('manages value updates and version consistency', async () => {
+  describe('Read Access & Updates', () => {
+    it('peek() returns current value synchronously without side-effects', () => {
+      const a = atom(7);
+      expect(a.peek()).toBe(7);
+      a.value = 8;
+      expect(a.peek()).toBe(8);
+    });
+
+    it('defers notifications and batches rapid updates (Default Async Behaviors)', async () => {
       const a = atom(0);
-      const log: number[] = [];
-      a.subscribe((v) => v !== undefined && log.push(v));
+      const log: Array<[number | undefined, number | undefined]> = [];
+
+      a.subscribe((nv, ov) => log.push([nv, ov]));
 
       a.value = 1;
+      expect(log).toHaveLength(0); // Synchronous access shows no updates
+
       a.value = 2;
       a.value = 3;
-
       await waitForScheduler();
 
-      // Should only reflect final state (async batching)
-      expect(log).toEqual([3]);
+      // Should batch rapid updates into one notification
+      expect(log).toEqual([[3, 0]]);
     });
 
-    it('supports synchronous updates', () => {
-      const a = atom(0, { sync: true });
-      const log: number[] = [];
-      a.subscribe((v) => v !== undefined && log.push(v));
-
-      a.value = 1;
-      a.value = 2;
-
-      // Sync updates happen immediately
-      expect(log).toEqual([1, 2]);
-    });
-  });
-
-  describe('Subscription Management', () => {
-    it('handles subscribe and unsubscribe stops notifications', async () => {
-      const a = atom(0);
+    it('ignores structurally identical updates (Object.is)', async () => {
       const spy = vi.fn();
 
-      const unsub = a.subscribe(spy);
-      a.value = 1;
+      const numAtom = atom(NaN);
+      numAtom.subscribe(spy);
+      numAtom.value = NaN; // ignored
+      await waitForScheduler();
+      expect(spy).not.toHaveBeenCalled();
+
+      // +0 vs -0 are distinct
+      numAtom.value = 0;
+      numAtom.value = -0;
       await waitForScheduler();
       expect(spy).toHaveBeenCalledTimes(1);
 
-      unsub();
+      spy.mockClear();
 
-      a.value = 2;
+      const obj = { x: 1 };
+      const objAtom = atom(obj);
+      objAtom.subscribe(spy);
+      objAtom.value = obj; // ignored
       await waitForScheduler();
-      expect(spy).toHaveBeenCalledTimes(1); // No new calls
+      expect(spy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Sync Mode Execution', () => {
+    it('notifies synchronously immediately unless scheduler is batching', async () => {
+      const a = atom(0, { sync: true });
+      const spy = vi.fn();
+      a.subscribe(spy);
+
+      // Immediate notification
+      a.value = 1;
+      expect(spy).toHaveBeenCalledTimes(1);
+
+      // Does not triple-fire after async scheduler flush
+      await waitForScheduler();
+      expect(spy).toHaveBeenCalledTimes(1);
+
+      // Suppressed during manual scheduler batch
+      scheduler.startBatch();
+      a.value = 2;
+      a.value = 3;
+      expect(spy).toHaveBeenCalledTimes(1); // Still 1
+
+      scheduler.endBatch();
+      expect(spy).toHaveBeenCalledTimes(2); // Final value synced
+    });
+  });
+
+  describe('Subscription Lifecycles & Dispositions', () => {
+    it('manages counts, duplicate warnings, and unsubscription idempotently', () => {
+      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const a = atom(0);
+      const fn = vi.fn();
+
+      const unsub1 = a.subscribe(fn);
+      expect(a.subscriberCount()).toBe(1);
+
+      // Duplicates throw warning but act as no-op tracking-wise
+      const unsub2 = a.subscribe(fn);
+      expect(consoleWarn).toHaveBeenCalled();
+      expect(a.subscriberCount()).toBe(1);
+
+      unsub1();
+      expect(a.subscriberCount()).toBe(0);
+      expect(() => unsub2()).not.toThrow(); // Safe double unsubscribe
+    });
+
+    it('isolates subscriber errors so peers still execute', async () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const a = atom(0);
+
+      const bad = vi.fn().mockImplementation(() => {
+        throw new Error('boom');
+      });
+      const good = vi.fn();
+
+      a.subscribe(bad);
+      a.subscribe(good);
+
+      a.value = 1;
+      await waitForScheduler();
+
+      expect(bad).toHaveBeenCalled();
+      expect(good).toHaveBeenCalled();
+      expect(consoleError).toHaveBeenCalled();
+    });
+
+    it('dispose() rigidly clears listeners and supports Symbol.dispose', async () => {
+      const a = atom(0);
+      const spy = vi.fn();
+
+      a.subscribe(spy);
+      a.dispose();
+      a[Symbol.dispose](); // Double call is safe
+
+      expect(a.subscriberCount()).toBe(0);
+
+      a.value = 99;
+      await waitForScheduler();
+      expect(spy).not.toHaveBeenCalled();
     });
   });
 });

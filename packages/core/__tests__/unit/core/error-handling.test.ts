@@ -3,135 +3,143 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { AsyncState, EMPTY_ERROR_ARRAY } from '@/constants';
+import { EMPTY_ERROR_ARRAY } from '@/constants';
 import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
 import { effect } from '@/core/effect';
 import { sleep, waitForScheduler } from '../../utils/test-helpers';
 
 describe('Core - Error Handling and Propagation', () => {
-  describe('Sync Error Propagation', () => {
-    it('propagates errors through a computed chain', () => {
-      const source = atom(1, { sync: true });
-      const a = computed(
-        () => {
-          if (source.value === 0) throw new Error('Zero error');
-          return source.value;
-        },
-        { defaultValue: -1 }
-      );
-      const b = computed(() => a.value * 2, { defaultValue: -1 });
+  describe('Sync Error Propagation & Recovery', () => {
+    it('aggregates multiple upstream errors, wraps as ComputedError, and clears completely upon recovery', () => {
+      expect(Object.isFrozen(EMPTY_ERROR_ARRAY)).toBe(true);
 
-      expect(b.value).toBe(2);
+      const cause1 = atom(true, { sync: true });
+      const cause2 = atom(true, { sync: true });
 
-      source.value = 0;
-      expect(() => b.value).toThrow('Zero error');
-      expect(a.hasError).toBe(true);
-      expect(b.hasError).toBe(true);
-
-      expect(b.errors.some((e) => e.message.includes('Zero error'))).toBe(true);
-
-      source.value = 2;
-      expect(b.value).toBe(4);
-      expect(b.hasError).toBe(false);
-    });
-
-    it('accumulates errors from multiple sources', () => {
       const x = computed(
         () => {
-          throw new Error('X fail');
+          if (cause1.value) throw new Error('X fail');
+          return 1;
         },
         { defaultValue: 0 }
       );
       const y = computed(
         () => {
-          throw new Error('Y fail');
+          if (cause2.value) throw new Error('Y fail');
+          return 2;
         },
         { defaultValue: 0 }
       );
 
-      expect(() => x.value).toThrow();
-      expect(() => y.value).toThrow();
-
       const z = computed(() => x.value + y.value, { defaultValue: -1 });
-      expect(z.value).toBe(0); // Recovered via defaultValues
+
+      expect(z.hasError).toBe(false);
+      expect(z.errors).toBe(EMPTY_ERROR_ARRAY);
+
+      // Trigger x and y evaluations — direct access throws even with defaultValue
+      try {
+        x.value;
+      } catch {
+        /* expected */
+      }
+      try {
+        y.value;
+      } catch {
+        /* expected */
+      }
+
+      expect(z.value).toBe(0); // 0 + 0
       expect(z.hasError).toBe(true);
+      expect(z.errors.length).toBeGreaterThanOrEqual(2);
       expect(z.errors.some((e) => e.message.includes('X fail'))).toBe(true);
       expect(z.errors.some((e) => e.message.includes('Y fail'))).toBe(true);
+      expect(Object.isFrozen(z.errors)).toBe(true);
+
+      // Partial recovery: x clears, y still fails
+      cause1.value = false;
+      expect(z.value).toBe(1); // 1 + 0
+      expect(z.hasError).toBe(true);
+      expect(z.errors.length).toBe(1);
+
+      // Full recovery
+      cause2.value = false;
+      expect(z.value).toBe(3); // 1 + 2
+      expect(z.hasError).toBe(false);
+      expect(z.lastError).toBeNull();
+      expect(z.errors).toBe(EMPTY_ERROR_ARRAY);
     });
   });
 
-  describe('Async Error Propagation', () => {
-    it('propagates async errors to downstream observers', async () => {
+  describe('Async Lifecycle Error Propagation', () => {
+    it('transitions asynchronously to rejected state and recovers fully upon retry', async () => {
+      const shouldFail = atom(true);
       const user = computed(
         async () => {
           await sleep(10);
-          throw new Error('API Fail');
-        },
-        { defaultValue: null }
-      );
-
-      const profile = computed(
-        async () => {
-          if (!user.value) return null;
+          if (shouldFail.value) throw new Error('API Fail');
           return { name: 'Test' };
         },
         { defaultValue: null }
       );
 
-      profile.value; // Trigger
+      expect(user.state).toBe('idle');
+      user.value;
+      expect(user.state).toBe('pending');
+
       await sleep(30);
 
-      expect(user.state).toBe(AsyncState.REJECTED);
-      expect(profile.hasError).toBe(true);
-      expect(profile.errors[0]?.message).toContain('API Fail');
-    });
-
-    it('clears errors on successful recovery', async () => {
-      const shouldFail = atom(true);
-      const data = computed(
-        async () => {
-          await sleep(10);
-          if (shouldFail.value) throw new Error('Fail');
-          return 'Success';
-        },
-        { defaultValue: 'Loading' }
-      );
-
-      data.value;
-      await sleep(30);
-      expect(data.hasError).toBe(true);
+      expect(user.state).toBe('rejected');
+      expect(user.hasError).toBe(true);
+      expect(user.errors[0]?.message).toContain('API Fail');
 
       shouldFail.value = false;
-      data.invalidate();
-      data.value;
+      user.invalidate();
+      user.value;
+
       await sleep(30);
-      expect(data.hasError).toBe(false);
-      expect(data.value).toBe('Success');
+
+      expect(user.state).toBe('resolved');
+      expect(user.hasError).toBe(false);
+      expect(user.errors).toBe(EMPTY_ERROR_ARRAY);
+      expect(user.value).toEqual({ name: 'Test' });
     });
   });
 
-  describe('Edge Cases', () => {
-    it('returns EMPTY_ERROR_ARRAY for valid states', () => {
-      const c = computed(() => 42);
-      expect(c.value).toBe(42);
-      expect(c.errors).toBe(EMPTY_ERROR_ARRAY);
-    });
-
-    it('handles subscriber errors gracefully', async () => {
+  describe('Effect & Subscriber Isolation', () => {
+    it('isolates crashing side-effects and wraps errors via onError safely', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const a = atom(0);
-      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const goodWorker = vi.fn();
+      const errHandler = vi.fn();
 
-      effect(() => {
-        if (a.value > 0) throw new Error('Effect crash');
+      a.subscribe(() => {
+        throw new Error('Subscriber crash');
       });
+      a.subscribe(goodWorker);
+
+      const e = effect(
+        () => {
+          if (a.value > 0) throw new Error('Effect crash');
+        },
+        { onError: errHandler }
+      );
 
       await waitForScheduler();
+
       a.value = 1;
       await waitForScheduler();
 
-      expect(consoleError).toHaveBeenCalled();
-      consoleError.mockRestore();
+      expect(goodWorker).toHaveBeenCalledTimes(1);
+      expect(errHandler).toHaveBeenCalledTimes(1);
+      expect(errHandler.mock.calls[0]![0]).toBeInstanceOf(Error);
+      expect(consoleSpy).toHaveBeenCalled();
+
+      expect(e.isDisposed).toBe(false);
+      e.dispose();
+      expect(e.isDisposed).toBe(true);
+
+      consoleSpy.mockRestore();
     });
   });
 });

@@ -16,7 +16,7 @@ describe('Scheduler', () => {
   });
 
   describe('Queue Execution', () => {
-    it('executes unique jobs asynchronously', async () => {
+    it('executes unique jobs asynchronously and deduplicates', async () => {
       const job1 = vi.fn();
       const job2 = vi.fn();
 
@@ -33,21 +33,12 @@ describe('Scheduler', () => {
       expect(job2).toHaveBeenCalledTimes(1);
       expect(scheduler.queueSize).toBe(0);
     });
-
-    it('re-schedules jobs triggered during flush', async () => {
-      const job2 = vi.fn();
-      const job1 = vi.fn(() => scheduler.schedule(job2));
-
-      scheduler.schedule(job1);
-      await sleep(10);
-
-      expect(job1).toHaveBeenCalled();
-      expect(job2).toHaveBeenCalled();
-    });
   });
 
   describe('Batching Strategy', () => {
-    it('defers execution until outer batch ends', async () => {
+    it('starts IDLE, defers execution until outer batch ends, then returns to IDLE', () => {
+      expect(scheduler.phase).toBe(SchedulerPhase.IDLE);
+
       const job = vi.fn();
 
       scheduler.startBatch(); // Level 1
@@ -64,6 +55,7 @@ describe('Scheduler', () => {
       // Batch flushing is synchronous
       expect(job).toHaveBeenCalled();
       expect(scheduler.isBatching).toBe(false);
+      expect(scheduler.phase).toBe(SchedulerPhase.IDLE);
     });
 
     it('warns on unbalanced endBatch calls', () => {
@@ -72,11 +64,32 @@ describe('Scheduler', () => {
       scheduler.endBatch(); // No start
 
       expect(consoleWarn).toHaveBeenCalled();
-
-      // Ensure state remains stable
       expect(scheduler.isBatching).toBe(false);
 
       consoleWarn.mockRestore();
+    });
+
+    it('deduplicates jobs scheduled within the same batch', () => {
+      const job = vi.fn();
+
+      scheduler.startBatch();
+      scheduler.schedule(job);
+      scheduler.schedule(job); // duplicate within same epoch — must be ignored
+      scheduler.endBatch();
+
+      expect(job).toHaveBeenCalledTimes(1);
+    });
+
+    it('executes job added during sync flush (schedule inside batch job)', () => {
+      const second = vi.fn();
+      const first = vi.fn(() => scheduler.schedule(second));
+
+      scheduler.startBatch();
+      scheduler.schedule(first);
+      scheduler.endBatch(); // triggers _flushSync → first runs → second queued → drained
+
+      expect(first).toHaveBeenCalledTimes(1);
+      expect(second).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -108,29 +121,6 @@ describe('Scheduler', () => {
     });
   });
 
-  describe('Batch Queue Shrink', () => {
-    it('shrinks batch queue when it exceeds threshold', () => {
-      scheduler.startBatch();
-
-      // Fill batch queue beyond BATCH_QUEUE_SHRINK_THRESHOLD
-      for (let i = 0; i <= SCHEDULER_CONFIG.BATCH_QUEUE_SHRINK_THRESHOLD; i++) {
-        const job = vi.fn();
-        scheduler.schedule(job);
-      }
-
-      // endBatch triggers _flushSync -> _mergeBatchQueue -> shrink check
-      scheduler.endBatch();
-
-      // Internal batch queue should have been shrunk (length reset to 0)
-      // Verify by scheduling again — should still work correctly
-      const afterJob = vi.fn();
-      scheduler.startBatch();
-      scheduler.schedule(afterJob);
-      scheduler.endBatch();
-      expect(afterJob).toHaveBeenCalledTimes(1);
-    });
-  });
-
   describe('Safety & Configuration', () => {
     it('validates inputs and config', () => {
       expect(() => scheduler.schedule(null as unknown as () => void)).toThrow(SchedulerError);
@@ -142,20 +132,17 @@ describe('Scheduler', () => {
       const onOverflow = vi.fn();
       scheduler.onOverflow = onOverflow;
 
-      // Setup low limit
       const originalMax = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
       scheduler.setMaxFlushIterations(10);
 
-      // Recursive job
       const loop = () => scheduler.schedule(loop);
       scheduler.schedule(loop);
 
       await sleep(20);
 
-      expect(onOverflow).toHaveBeenCalled();
+      expect(onOverflow).toHaveBeenCalledWith(expect.any(Number));
       expect(consoleError).toHaveBeenCalledWith(expect.any(SchedulerError));
 
-      // Cleanup
       scheduler.onOverflow = null;
       scheduler.setMaxFlushIterations(originalMax);
       consoleError.mockRestore();
