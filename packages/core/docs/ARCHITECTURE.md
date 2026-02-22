@@ -70,21 +70,7 @@ Pooling adds complexity to the internal code, but is intended to reduce GC pause
 
 ---
 
-## 5. Architectural Trade-offs & Compromises
-
-Each design choice is a balance between ideals and practicality.
-
-| Feature | The IDEAL Choice | The PRAGMATIC Choice | Why? |
-| :--- | :--- | :--- | :--- |
-| **Consistency** | Strict Topological Sort | Recursive Lazy Evaluation | Avoids performance spikes on large graphs. |
-| **Accuracy** | Deep Equality Checks | `Object.is` (Reference-based) | Deep checks are expensive; finer equality is better handled at the user level. |
-| **Safety** | Immutable Objects | Mutative Bit-flags & Internal State | Reduces garbage collection pressure for high-frequency updates. |
-| **Tracking** | Explicit Dependency Arrays | Implicit Global `trackingContext` | Dependencies are discovered automatically, reducing boilerplate. |
-| **Counter Range** | Arbitrary Integers | SMI-capped (`& 0x3fffffff`) | Keeps epoch/version values in V8's Small Integer range, avoiding heap allocation for boxed numbers and enabling JIT optimizations. |
-
----
-
-## 6. Security & Boundaries
+## 5. Security & Boundaries
 
 A **Symmetric Boundary** is enforced between production and consumption.
 
