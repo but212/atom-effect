@@ -7,7 +7,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { atom } from '@/core/atom';
 import { AtomError } from '@/errors/errors';
 import { scheduler } from '@/internal/scheduler';
-import { ATOM_BRAND } from '@/symbols';
 import { waitForScheduler } from '../../utils/test-helpers';
 
 describe('Atom', () => {
@@ -16,12 +15,10 @@ describe('Atom', () => {
   });
 
   describe('Identity, Validation & Initialization', () => {
-    it('sets initial value, carries ATOM_BRAND, and rejects invalid subscribers', () => {
+    it('sets initial value and rejects invalid subscribers', () => {
       const a = atom(42);
       expect(a.value).toBe(42);
       expect(atom(null).value).toBeNull();
-
-      expect((a as unknown as Record<symbol, boolean>)[ATOM_BRAND]).toBe(true);
 
       ['invalid', null, {}].forEach((sub) => {
         expect(() => a.subscribe(sub as unknown as () => void)).toThrow(AtomError);

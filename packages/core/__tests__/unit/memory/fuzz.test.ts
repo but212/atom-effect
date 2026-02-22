@@ -9,28 +9,7 @@ import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
 import { batch } from '@/internal/batch';
 import type { ComputedAtom, WritableAtom } from '@/types';
-
-// Simple seeded PRNG (sfc32)
-function seededRandom(seed: number) {
-  let a = 13971 ^ seed;
-  let b = 9461;
-  let c = 40503;
-  let d = 2654435769;
-
-  return () => {
-    a |= 0;
-    b |= 0;
-    c |= 0;
-    d |= 0;
-    const t = (((a + b) | 0) + d) | 0;
-    d = (d + 1) | 0;
-    a = b ^ (b >>> 9);
-    b = (c + (c << 3)) | 0;
-    c = (c << 21) | (c >>> 11);
-    c = (c + t) | 0;
-    return (t >>> 0) / 4294967296;
-  };
-}
+import { seededRandom } from '../../utils/test-helpers';
 
 function buildGraph(rand: () => number, atomCount = 5, computedCount = 20) {
   const atoms: WritableAtom<number>[] = [];

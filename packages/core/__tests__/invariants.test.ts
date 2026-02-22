@@ -5,46 +5,43 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { atom, batch, type ComputedError, computed, effect, untracked } from '../src';
-import { waitForScheduler } from './utils/test-helpers';
-
-// biome-ignore lint/suspicious/noExplicitAny: internal version access
-const v = (node: any): number => node.version;
+import { getNodeVersion, waitForScheduler } from './utils/test-helpers';
 
 // ─── 1. Version Semantics ───────────────────────────────────────────────────
 
 describe('Version Semantics', () => {
   it('atom version increments on change, stays on same-value assignment', () => {
     const a = atom(0);
-    const v0 = v(a);
+    const v0 = getNodeVersion(a);
 
     a.value = 1;
-    expect(v(a)).toBe(v0 + 1);
+    expect(getNodeVersion(a)).toBe(v0 + 1);
 
-    const v1 = v(a);
+    const v1 = getNodeVersion(a);
     a.value = 1; // same value
-    expect(v(a)).toBe(v1);
+    expect(getNodeVersion(a)).toBe(v1);
   });
 
   it('computed version bumps only on resolution with changed value', () => {
     const src = atom(0);
     const c = computed(() => Math.floor(src.value / 10));
     c.value; // initial resolve → 0
-    const v0 = v(c);
+    const v0 = getNodeVersion(c);
 
     // markDirty does NOT bump version
     c.invalidate();
-    expect(v(c)).toBe(v0);
+    expect(getNodeVersion(c)).toBe(v0);
 
     // same resolved value (floor(5/10)=0) → no bump
     src.value = 5;
     c.value;
-    expect(v(c)).toBe(v0);
+    expect(getNodeVersion(c)).toBe(v0);
 
     // different resolved value → bump
     src.value = 99;
     c.invalidate();
     c.value;
-    expect(v(c)).toBeGreaterThan(v0);
+    expect(getNodeVersion(c)).toBeGreaterThan(v0);
   });
 
   it('computed bumps version on async error', async () => {
@@ -57,11 +54,11 @@ describe('Version Semantics', () => {
     );
 
     c.value; // triggers async → PENDING
-    const v0 = v(c);
+    const v0 = getNodeVersion(c);
 
     await new Promise((r) => setTimeout(r, 30));
 
-    expect(v(c)).toBeGreaterThan(v0);
+    expect(getNodeVersion(c)).toBeGreaterThan(v0);
     expect(c.hasError).toBe(true);
   });
 });
@@ -345,11 +342,11 @@ describe('Equality Contract', () => {
     });
 
     c.value;
-    const v0 = v(c);
+    const v0 = getNodeVersion(c);
 
     src.value = { id: 1, data: 'b' };
     c.value;
-    expect(v(c)).toBe(v0);
+    expect(getNodeVersion(c)).toBe(v0);
   });
 });
 

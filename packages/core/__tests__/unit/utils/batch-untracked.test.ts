@@ -4,7 +4,7 @@ import { computed } from '@/core/computed';
 import { effect } from '@/core/effect';
 import { batch, scheduler, untracked } from '@/index';
 
-const flush = () => new Promise<void>((r) => setTimeout(r, 0));
+import { flush } from '../../utils/test-helpers';
 
 describe('batch()', () => {
   it('coalesces updates and passes return value through', () => {
