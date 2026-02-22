@@ -270,18 +270,24 @@ describe('Effect', () => {
       e.dispose();
     });
 
-    it('safely handles errors from async execution and async cleanups', async () => {
+    it('safely handles errors from async execution', async () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       vi.useRealTimers();
 
       let rejectAsync!: (val: unknown) => void;
-      let resolveAsync!: (val: () => void) => void;
-
-      // 1. Async Promise Rejection
       effect(() => new Promise((_, r) => (rejectAsync = r)));
       rejectAsync(new Error('async reject'));
 
-      // 2. Async Cleanup Error
+      await sleep(10);
+      expect(consoleSpy).toHaveBeenCalledTimes(1);
+      expect(consoleSpy).toHaveBeenCalledWith(expect.any(EffectError));
+    });
+
+    it('safely handles errors from async cleanups', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.useRealTimers();
+
+      let resolveAsync!: (val: () => void) => void;
       const e = effect(() => new Promise<() => void>((r) => (resolveAsync = r)));
       e.dispose(); // disposed before resolve
       resolveAsync(() => {
@@ -289,7 +295,7 @@ describe('Effect', () => {
       });
 
       await sleep(10);
-      expect(consoleSpy).toHaveBeenCalledTimes(2);
+      expect(consoleSpy).toHaveBeenCalledTimes(1);
       expect(consoleSpy).toHaveBeenCalledWith(expect.any(EffectError));
     });
   });
