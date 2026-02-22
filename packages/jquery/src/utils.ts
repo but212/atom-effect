@@ -88,9 +88,9 @@ const STRIP_CTRL_RE = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g;
 // smuggling are also decoded here to close the named-entity bypass path.
 const DECODE_NUMERIC_ENTITY_RE = /&#x([0-9a-f]+);?|&#([0-9]+);?/gi;
 const NAMED_ENTITY_MAP: Record<string, string> = {
-  'colon': ':',
-  'Tab': '\t',
-  'NewLine': '\n',
+  colon: ':',
+  Tab: '\t',
+  NewLine: '\n',
 };
 const DECODE_NAMED_ENTITY_RE = /&(colon|Tab|NewLine);/g;
 const STRIP_XML_RE = /<\?[\s\S]*?\?>/g;

@@ -1,6 +1,6 @@
 import { atom, effect } from '@but212/atom-effect';
 import $ from 'jquery';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import '../src/index'; // Register all plugins including $.nextTick
 import { registry } from '../src/registry';
 import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '../src/utils';
@@ -38,7 +38,9 @@ describe('Unit: sanitizeHtml (Core Logic)', () => {
     // template is allowed
     expect(sanitizeHtml('<template><div>ok</div></template>')).toContain('<template');
     // base tag stripped but sibling content survives
-    expect(sanitizeHtml('<base href="https://evil.com/"><a href="/login">Login</a>')).toContain('/login');
+    expect(sanitizeHtml('<base href="https://evil.com/"><a href="/login">Login</a>')).toContain(
+      '/login'
+    );
   });
 
   it('neutralizes on* event handler attributes (any case, newline before =)', () => {
@@ -61,9 +63,9 @@ describe('Unit: sanitizeHtml (Core Logic)', () => {
     const vectors = [
       '<a href="javascript:alert(1)">',
       '<a href="vbscript:msgbox(1)">',
-      '<a href="java\u0000script:alert(1)">',   // null byte stripped then matched
-      '<a href="j\ta\tv\ta\ts\tc\tr\ti\tp\tt:alert(1)">',  // tab-split
-      '<a href="j\ra\rv\ra\rs\rc\rr\ri\rp\rt:alert(1)">',  // CR-split
+      '<a href="java\u0000script:alert(1)">', // null byte stripped then matched
+      '<a href="j\ta\tv\ta\ts\tc\tr\ti\tp\tt:alert(1)">', // tab-split
+      '<a href="j\ra\rv\ra\rs\rc\rr\ri\rp\rt:alert(1)">', // CR-split
       '<img srcset="javascript:alert(1) 2x">',
     ];
     vectors.forEach((v) => {
@@ -75,15 +77,15 @@ describe('Unit: sanitizeHtml (Core Logic)', () => {
 
   it('neutralizes entity-encoded protocols (&#NNN; / &#xHH; / named &colon;) before regex runs', () => {
     const vectors = [
-      '<a href="&#106;avascript:alert(1)">',    // decimal j
-      '<a href="&#x6a;avascript:alert(1)">',    // hex lowercase
-      '<a href="&#X6A;avascript:alert(1)">',    // hex uppercase X
+      '<a href="&#106;avascript:alert(1)">', // decimal j
+      '<a href="&#x6a;avascript:alert(1)">', // hex lowercase
+      '<a href="&#X6A;avascript:alert(1)">', // hex uppercase X
       '<a href="&#0000106;avascript:alert(1)">', // zero-padded
-      '<a href="java&#x73;cript:alert(1)">',    // entity mid-keyword
-      '<a href="javascript&#x3A;alert(1)">',    // entity colon (hex)
-      '<a href="javascript&colon;alert(1)">',   // named entity colon
-      '<a href="&#106avascript:alert(1)">',     // semicolon-free entity
-      '<a href="&#74;AVASCRIPT:alert(1)">',     // uppercase J=74
+      '<a href="java&#x73;cript:alert(1)">', // entity mid-keyword
+      '<a href="javascript&#x3A;alert(1)">', // entity colon (hex)
+      '<a href="javascript&colon;alert(1)">', // named entity colon
+      '<a href="&#106avascript:alert(1)">', // semicolon-free entity
+      '<a href="&#74;AVASCRIPT:alert(1)">', // uppercase J=74
     ];
     vectors.forEach((v) => {
       const safe = sanitizeHtml(v);
@@ -112,8 +114,8 @@ describe('Unit: sanitizeHtml (Core Logic)', () => {
       '<div style="-moz-binding:url(evil.xml#xss)">',
       '<div style="width:expression(alert(1))">',
       '<div style="width:expression(/**/alert(1))">',
-      '<div style="background:url(\\6a avascript:alert(1))">',  // CSS unicode escape j
-      '<div style="background:url(\\76 bscript:msgbox(1))">',   // CSS unicode escape v
+      '<div style="background:url(\\6a avascript:alert(1))">', // CSS unicode escape j
+      '<div style="background:url(\\76 bscript:msgbox(1))">', // CSS unicode escape v
     ];
     vectors.forEach((v) => {
       const safe = sanitizeHtml(v).toLowerCase();
@@ -178,18 +180,29 @@ describe('Unit: isDangerousCssValue', () => {
 // ============================================================================
 
 describe('atomHtml: XSS attack surface', () => {
-  afterEach(() => { document.body.innerHTML = ''; });
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
 
   it('strips dangerous tags (script, iframe, object, embed)', () => {
     const vectors = [
-      { payload: '<script>alert(1)</script><b>ok</b>',       check: () => expect($('<div>').appendTo(document.body).atomHtml(atom('<script>alert(1)</script><b>ok</b>')).find('script').length).toBe(0) },
+      {
+        payload: '<script>alert(1)</script><b>ok</b>',
+        check: () =>
+          expect(
+            $('<div>')
+              .appendTo(document.body)
+              .atomHtml(atom('<script>alert(1)</script><b>ok</b>'))
+              .find('script').length
+          ).toBe(0),
+      },
     ];
     // consolidated: all tag strips via single loop
     const payloads: [string, string][] = [
-      ['<script>alert(1)</script>',              'script'],
+      ['<script>alert(1)</script>', 'script'],
       ['<iframe src="https://evil.com"></iframe>', 'iframe'],
-      ['<object data="evil.swf"></object>',       'object'],
-      ['<embed src="evil.swf">',                  'embed'],
+      ['<object data="evil.swf"></object>', 'object'],
+      ['<embed src="evil.swf">', 'embed'],
     ];
     payloads.forEach(([html, tag]) => {
       const div = $('<div>').appendTo(document.body);
@@ -256,18 +269,20 @@ describe('atomHtml: XSS attack surface', () => {
 });
 
 describe('atomAttr: XSS attack surface', () => {
-  afterEach(() => { document.body.innerHTML = ''; });
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
 
   it('blocks javascript:/vbscript: in URL attributes (href, src, action, formaction, xlink:href — any case, with whitespace)', () => {
     const blocked: [string, string, string][] = [
-      ['a',      'href',       'javascript:alert(1)'],
-      ['a',      'href',       'vbscript:msgbox(1)'],
-      ['a',      'href',       '  javascript:alert(1)'],
-      ['a',      'href',       'JAVASCRIPT:alert(1)'],
-      ['img',    'src',        'javascript:alert(1)'],
-      ['form',   'action',     'javascript:alert(1)'],
+      ['a', 'href', 'javascript:alert(1)'],
+      ['a', 'href', 'vbscript:msgbox(1)'],
+      ['a', 'href', '  javascript:alert(1)'],
+      ['a', 'href', 'JAVASCRIPT:alert(1)'],
+      ['img', 'src', 'javascript:alert(1)'],
+      ['form', 'action', 'javascript:alert(1)'],
       ['button', 'formaction', 'javascript:alert(1)'],
-      ['use',    'xlink:href', 'javascript:alert(1)'],
+      ['use', 'xlink:href', 'javascript:alert(1)'],
     ];
     blocked.forEach(([tag, attr, val]) => {
       const el = $(`<${tag}>`).appendTo(document.body);
@@ -300,14 +315,16 @@ describe('atomAttr: XSS attack surface', () => {
 });
 
 describe('atomCss: XSS attack surface', () => {
-  afterEach(() => { document.body.innerHTML = ''; });
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
 
   it('blocks url(javascript:/vbscript:) across multiple properties', () => {
     const props: [string, string][] = [
-      ['background-image',  'url(javascript:alert(1))'],
-      ['background',        "url('vbscript:msgbox(1)')"],
-      ['list-style-image',  'url(javascript:alert(1))'],
-      ['cursor',            'url(javascript:alert(1)), auto'],
+      ['background-image', 'url(javascript:alert(1))'],
+      ['background', "url('vbscript:msgbox(1)')"],
+      ['list-style-image', 'url(javascript:alert(1))'],
+      ['cursor', 'url(javascript:alert(1)), auto'],
     ];
     props.forEach(([prop, val]) => {
       const div = $('<div>').appendTo(document.body);
@@ -330,7 +347,8 @@ describe('atomCss: XSS attack surface', () => {
     div.atomCss('color', atom('red'));
     div.atomCss('font-size', atom('16px'));
     div.atomCss('background-image', atom('url(https://example.com/bg.png)'));
-    const b64 = 'url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=)';
+    const b64 =
+      'url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=)';
     div.atomCss('background-image', atom(b64));
     expect(div[0]!.style.color).toBe('red');
     expect(div[0]!.style.fontSize).toBe('16px');
@@ -339,15 +357,19 @@ describe('atomCss: XSS attack surface', () => {
 });
 
 describe('atomProp: XSS attack surface', () => {
-  afterEach(() => { document.body.innerHTML = ''; });
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
 
   it('blocks all DANGEROUS_PROPS (innerHTML, outerHTML, srcdoc, __proto__, constructor, prototype)', () => {
     const div = $('<div>').appendTo(document.body);
-    ['innerHTML', 'outerHTML', 'srcdoc', '__proto__', 'constructor', 'prototype'].forEach((prop) => {
-      div.atomProp(prop, atom('<script>alert(1)</script>'));
-    });
+    ['innerHTML', 'outerHTML', 'srcdoc', '__proto__', 'constructor', 'prototype'].forEach(
+      (prop) => {
+        div.atomProp(prop, atom('<script>alert(1)</script>'));
+      }
+    );
     expect(div.html()).toBe('');
-    expect(({} as Record<string, unknown>)['polluted']).toBeUndefined();
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
   });
 
   it('allows safe props (disabled, tabIndex)', async () => {
@@ -363,7 +385,9 @@ describe('atomProp: XSS attack surface', () => {
 });
 
 describe('atomList: XSS attack surface', () => {
-  afterEach(() => { document.body.innerHTML = ''; });
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
 
   it('sanitizes all render() string outputs and empty option (batch)', () => {
     const div = $('<div>').appendTo(document.body);
@@ -400,7 +424,9 @@ describe('atomList: XSS attack surface', () => {
 });
 
 describe('atomVal / atomText / atomChecked / atomShow / atomClass: structural safety', () => {
-  afterEach(() => { document.body.innerHTML = ''; });
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
 
   it('atomVal: writes to el.value — HTML never parsed', async () => {
     const input = $('<input>').appendTo(document.body);
@@ -446,14 +472,17 @@ describe('atomVal / atomText / atomChecked / atomShow / atomClass: structural sa
 // ============================================================================
 
 describe('Policy: Allowed / Practicality', () => {
-  afterEach(() => { document.body.innerHTML = ''; });
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
 
   it('allows inline SVG icons, data:image/* src, relative href, safe CSS', () => {
     const div = $('<div>').appendTo(document.body);
     div.atomHtml(atom('<svg class="feather"><circle cx="12" cy="7" r="4"></circle></svg>'));
     expect(div.find('circle').length).toBe(1);
 
-    const b64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+    const b64 =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
     div.atomHtml(atom(`<img src="${b64}">`));
     expect(div.find('img').length).toBe(1);
 
@@ -468,7 +497,9 @@ describe('Policy: Allowed / Practicality', () => {
 
   it('escape hatch: raw effect bypasses sanitization (user opt-out)', () => {
     const div = $('<div>');
-    const fx = effect(() => { div.html('<iframe src="https://example.com"></iframe>'); });
+    const fx = effect(() => {
+      div.html('<iframe src="https://example.com"></iframe>');
+    });
     registry.trackEffect(div[0]!, fx);
     expect(div.find('iframe').length).toBe(1);
   });

@@ -171,7 +171,6 @@ describe('jQuery Lifecycle Overrides', () => {
       expect(count.value).toBe(2);
       $btn.remove();
     });
-
   });
 
   describe('Atom Mount', () => {

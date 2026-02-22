@@ -577,8 +577,16 @@ describe('$.route() - SPA Routing', () => {
         autoBindLinks: true,
         activeClass: 'active-link',
         routes: {
-          home: { render: (el) => { el.innerHTML = 'Home'; } },
-          page2: { render: (el) => { el.innerHTML = 'Page2'; } },
+          home: {
+            render: (el) => {
+              el.innerHTML = 'Home';
+            },
+          },
+          page2: {
+            render: (el) => {
+              el.innerHTML = 'Page2';
+            },
+          },
         },
       });
 
@@ -641,7 +649,9 @@ describe('$.route() - SPA Routing', () => {
 
   describe('Same-route param change: onParamsChange', () => {
     it('should call onParamsChange instead of render when only params change', async () => {
-      const renderSpy = vi.fn((el: HTMLElement) => { el.innerHTML = '<div>Rendered</div>'; });
+      const renderSpy = vi.fn((el: HTMLElement) => {
+        el.innerHTML = '<div>Rendered</div>';
+      });
       const onParamsChangeSpy = vi.fn((_params: Record<string, string>) => {});
 
       const router = $.route({
@@ -666,7 +676,9 @@ describe('$.route() - SPA Routing', () => {
     });
 
     it('should call render (not onParamsChange) when navigating to a different route', async () => {
-      const homeRenderSpy = vi.fn((el: HTMLElement) => { el.innerHTML = 'Home'; });
+      const homeRenderSpy = vi.fn((el: HTMLElement) => {
+        el.innerHTML = 'Home';
+      });
       const onParamsChangeSpy = vi.fn((_params: Record<string, string>) => {});
 
       const router = $.route({

@@ -244,5 +244,4 @@ describe('Atom List', () => {
 
     $container.remove();
   });
-
 });

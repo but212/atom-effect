@@ -56,10 +56,7 @@ describe('Debug Module', () => {
   it('error: emits with prefix and cause regardless of enabled state', () => {
     const cause = new Error('boom');
     debug.error(LOG_PREFIXES.BINDING, 'Effect dispose error', cause);
-    expect(errorSpy).toHaveBeenCalledWith(
-      `${LOG_PREFIXES.BINDING} Effect dispose error`,
-      cause
-    );
+    expect(errorSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.BINDING} Effect dispose error`, cause);
   });
 
   // --------------------------------------------------------------------------
@@ -72,12 +69,7 @@ describe('Debug Module', () => {
 
     debug.enabled = true;
     debug.atomChanged('counter', 0, 1);
-    expect(logSpy).toHaveBeenCalledWith(
-      `${LOG_PREFIXES.MOUNT} Atom "counter" changed:`,
-      0,
-      '→',
-      1
-    );
+    expect(logSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.MOUNT} Atom "counter" changed:`, 0, '→', 1);
   });
 
   it('atomChanged: falls back to "anonymous" when name is undefined', () => {
