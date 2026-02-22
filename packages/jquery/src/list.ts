@@ -10,8 +10,6 @@ import { getLIS, getSelector, sanitizeHtml, shallowEqual } from './utils';
 // Helpers
 // ============================================================================
 
-const SEPARATOR = '<!--sep-->';
-
 /**
  * Inserts `$el` before `nextNode` when `nextNode` is non-null and connected,
  * otherwise appends it to `$container`.
@@ -183,7 +181,9 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
         // Batch sanitize: N calls → 1 call
         let sanitizedFragments: string[] | null = null;
         if (htmlParts.length > 0) {
-          sanitizedFragments = sanitizeHtml(htmlParts.join(SEPARATOR)).split(SEPARATOR);
+          // Generate an ephemeral separator per batch to ensure zero collision with user content
+          const batchSeparator = `<!--sep-${Math.random().toString(36).substring(2)}-${Date.now().toString(36)}-->`;
+          sanitizedFragments = sanitizeHtml(htmlParts.join(batchSeparator)).split(batchSeparator);
         }
 
         // Create $el for each target
