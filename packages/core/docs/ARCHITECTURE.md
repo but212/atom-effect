@@ -60,13 +60,13 @@ Async computed nodes are treated as state machines, using **version snapshots** 
 
 ## 4. Resource Stewardship: Memory Management
 
-Reactivity systems are prone to memory leaks if subscriptions are not cleaned up. Two mechanisms are used: **Subscriber Links** and **Array Pooling**.
+Reactivity systems are prone to memory leaks if subscriptions are not cleaned up. Two mechanisms are used to manage memory efficiently: **Subscriber Management** and **Array Pooling**.
 
-- **Subscriber Links**: A linked relationship between dependencies and subscribers is maintained, allowing for $O(1)$ cleanup when a node is disposed.
-- **Link Pooling**: Instead of allocating new objects for every dependency relationship, links are reused from a pre-allocated pool to reduce GC pressure.
+- **Subscriber Management**: A linked relationship between dependencies and subscribers is maintained. To minimize memory overhead from managing complex pointers (like double-linked lists), subscriptions are stored in arrays. Cleanup uses a fast $O(1)$ pop-and-swap technique, trading a minor $O(n)$ linear search (acceptable for typically small subscriber lists) for a reduced memory footprint.
+- **Dependency Array Pooling**: Instead of allocating new arrays for every evaluation cycle, dependency tracking arrays (`DependencyLink[]`) are acquired from and released back to a pre-allocated global `ArrayPool`. Single link objects can also be reused during effect evaluation to save allocations.
 
-**Trade-off: Complexity vs. Stability**
-Pooling adds complexity to the internal code, but is intended to reduce GC pauses in data-intensive, high-frequency update scenarios.
+**Trade-off: Complexity vs. GC Pauses**
+Managing array lifecycles manually via pooling adds complexity to the internal code, but it is necessary to reduce Garbage Collection (GC) pauses in data-intensive, high-frequency update scenarios.
 
 ---
 
