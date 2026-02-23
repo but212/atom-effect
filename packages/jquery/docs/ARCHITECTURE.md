@@ -164,6 +164,24 @@ This ensures O(N log N) DOM operations instead of O(N) recreations.
 - `onAdd($el)`: Called after insertion (for entry animations).
 - `onRemove($el)`: Called before removal (supports async exit animations via Promise).
 
+### Delegated Event Listeners (`events`)
+
+`events` attaches one listener per event type on the **container**, not on each item. This keeps memory usage constant regardless of list size.
+
+```text
+events: { 'click .del': handler }
+  → $container.on('click', delegateHandler)     // 1 listener total
+
+delegateHandler(e):
+  walk e.target → parentElement chain
+    → elToKey (WeakMap<Element, key>)           // O(1) root lookup
+    → itemMap.get(key)                          // O(1) entry lookup
+    → keyToIndex.get(key)                       // O(1) index lookup
+    → handler(item, index, e)
+```
+
+Both indexes (`elToKey`, `keyToIndex`) are kept in sync at the end of every effect run and cleared via `registry.trackCleanup` on container teardown.
+
 ## 6. Component Mounting
 
 `atomMount` (`mount.ts`) provides a simple component lifecycle:
