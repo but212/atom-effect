@@ -222,17 +222,15 @@ $.fn.atomOn = function (event: string, handler: (e: JQuery.Event) => void): JQue
  */
 $.fn.atomBind = function (options: BindingOptions): JQuery {
   const { text, html, class: cls, css, attr, prop, show, hide, val, checked, on } = options;
-  let valAtom: WritableAtom<unknown> | undefined;
-  let valOpts: ValOptions<unknown> | undefined;
 
-  if (val !== undefined) {
-    if (Array.isArray(val)) {
-      valAtom = val[0] as WritableAtom<unknown>;
-      valOpts = val[1] as ValOptions<unknown>;
-    } else {
-      valAtom = val as WritableAtom<unknown>;
-    }
-  }
+  // Parse val once before the element loop. Result is kept as a typed pair so
+  // the call site (bindVal) can receive atom and opts without a non-null assertion.
+  const valParsed: { atom: WritableAtom<unknown>; opts: ValOptions<unknown> | undefined } | null =
+    val === undefined
+      ? null
+      : Array.isArray(val)
+        ? { atom: val[0] as WritableAtom<unknown>, opts: val[1] as ValOptions<unknown> }
+        : { atom: val as WritableAtom<unknown>, opts: undefined };
 
   for (let i = 0, len = this.length; i < len; i++) {
     const ctx = createContext(this[i]!);
@@ -245,7 +243,7 @@ $.fn.atomBind = function (options: BindingOptions): JQuery {
     if (prop !== undefined) bindProp(ctx, prop);
     if (show !== undefined) bindVisibility(ctx, show, false);
     if (hide !== undefined) bindVisibility(ctx, hide, true);
-    if (val !== undefined) bindVal(ctx, valAtom!, valOpts);
+    if (valParsed !== null) bindVal(ctx, valParsed.atom, valParsed.opts);
     if (checked !== undefined) bindChecked(ctx, checked);
     if (on !== undefined) bindEvents(ctx, on);
   }

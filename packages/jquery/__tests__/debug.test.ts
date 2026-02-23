@@ -27,12 +27,12 @@ describe('Debug Module', () => {
   // --------------------------------------------------------------------------
 
   it('log: silent when disabled, emits formatted message when enabled', () => {
-    debug.log('Event', 'payload');
+    debug.log(LOG_PREFIXES.LIST, 'payload');
     expect(logSpy).not.toHaveBeenCalled();
 
     debug.enabled = true;
-    debug.log('Event', 'payload');
-    expect(logSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.MOUNT} Event:`, 'payload');
+    debug.log(LOG_PREFIXES.LIST, 'payload');
+    expect(logSpy).toHaveBeenCalledWith(LOG_PREFIXES.LIST, 'payload');
   });
 
   // --------------------------------------------------------------------------
@@ -64,17 +64,17 @@ describe('Debug Module', () => {
   // --------------------------------------------------------------------------
 
   it('atomChanged: silent when disabled, emits formatted change when enabled', () => {
-    debug.atomChanged('counter', 0, 1);
+    debug.atomChanged(LOG_PREFIXES.MOUNT, 'counter', 0, 1);
     expect(logSpy).not.toHaveBeenCalled();
 
     debug.enabled = true;
-    debug.atomChanged('counter', 0, 1);
+    debug.atomChanged(LOG_PREFIXES.MOUNT, 'counter', 0, 1);
     expect(logSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.MOUNT} Atom "counter" changed:`, 0, '→', 1);
   });
 
   it('atomChanged: falls back to "anonymous" when name is undefined', () => {
     debug.enabled = true;
-    debug.atomChanged(undefined, 'a', 'b');
+    debug.atomChanged(LOG_PREFIXES.MOUNT, undefined, 'a', 'b');
     expect(logSpy).toHaveBeenCalledWith(
       `${LOG_PREFIXES.MOUNT} Atom "anonymous" changed:`,
       'a',
@@ -89,8 +89,8 @@ describe('Debug Module', () => {
 
   it('cleanup: logs selector when enabled', () => {
     debug.enabled = true;
-    debug.cleanup('#test');
-    expect(logSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.MOUNT} Cleanup: #test`);
+    debug.cleanup(LOG_PREFIXES.BINDING, '#test');
+    expect(logSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.BINDING} Cleanup: #test`);
   });
 
   // --------------------------------------------------------------------------
@@ -102,10 +102,10 @@ describe('Debug Module', () => {
     const el = document.createElement('div');
     document.body.appendChild(el);
 
-    debug.domUpdated(el, 'text', 'new text');
+    debug.domUpdated(LOG_PREFIXES.BINDING, el, 'text', 'new text');
 
     expect(logSpy).toHaveBeenCalledWith(
-      expect.stringContaining(`${LOG_PREFIXES.MOUNT} DOM updated:`),
+      `${LOG_PREFIXES.BINDING} DOM updated: div.text =`,
       'new text'
     );
 
@@ -120,7 +120,7 @@ describe('Debug Module', () => {
     document.body.appendChild(el);
     const jqEl = Object.assign([el], { jquery: 'mock' }) as unknown as JQuery;
 
-    debug.domUpdated(jqEl, 'text', 'val');
+    debug.domUpdated(LOG_PREFIXES.BINDING, jqEl, 'text', 'val');
 
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
     expect(el.classList.contains('atom-debug-highlight')).toBe(true);
@@ -132,7 +132,9 @@ describe('Debug Module', () => {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     document.body.appendChild(svg);
 
-    expect(() => debug.domUpdated(svg as unknown as Element, 'attr', 'val')).not.toThrow();
+    expect(() =>
+      debug.domUpdated(LOG_PREFIXES.BINDING, svg as unknown as Element, 'attr', 'val')
+    ).not.toThrow();
     expect(logSpy).not.toHaveBeenCalled();
     svg.remove();
   });
@@ -142,7 +144,7 @@ describe('Debug Module', () => {
     const el = document.createElement('div');
     document.body.appendChild(el);
 
-    debug.domUpdated(el, 'text', 'val');
+    debug.domUpdated(LOG_PREFIXES.BINDING, el, 'text', 'val');
 
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
     expect(el.classList.contains('atom-debug-highlight')).toBe(true);
@@ -158,8 +160,8 @@ describe('Debug Module', () => {
     const el = document.createElement('div');
     document.body.appendChild(el);
 
-    debug.domUpdated(el, 'text', 'a');
-    debug.domUpdated(el, 'text', 'b');
+    debug.domUpdated(LOG_PREFIXES.BINDING, el, 'text', 'a');
+    debug.domUpdated(LOG_PREFIXES.BINDING, el, 'text', 'b');
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
 
     expect(document.querySelectorAll('style[data-atom-debug]').length).toBe(1);

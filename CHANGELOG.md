@@ -4,20 +4,23 @@
 
 ### jQuery
 
-- **atomList – Incremental Update Sanitization**:
-  - Single-item string renders (the common incremental case) now call `sanitizeHtml` directly instead of going through join → sanitize → split, eliminating `Math.random()`, `Date.now()`, `join`, and `split` allocations entirely.
-  - Two-or-more string renders retain the existing batch join/split path to preserve the O(1) regex cost per batch.
-
-- **atomList – Delegated Event Listeners**:
-  - Added `events` option to `ListOptions<T>` for container-level event delegation. One listener per event type is registered on the container regardless of item count, eliminating per-item handler allocation.
-  - Key syntax: `'eventType'` (item root) or `'eventType selector'` (child selector). Handlers receive `(item, currentIndex, event)`.
-  - item → entry lookup uses a `WeakMap<Element, key>` reverse index (O(1)); current index lookup uses a `Map<key, index>` forward index (O(1)), replacing O(n) `itemMap` scan and `oldKeys.indexOf` on every event.
-  - Child selector matching uses native `element.closest()` instead of jQuery wrapper allocation.
-  - Both indexes are kept in sync inside the effect run and cleared on container cleanup via `registry.trackCleanup`.
+- **route**: Improved JSDoc clarity for routing sequences and error edge cases. Fixed `destroy` loop robustness to prevent unbounded iterations.
+- **namespace & mount**: Consolidated scattered JSDoc explanations and eliminated redundant inline comments.
+- **unified & jquery-patch**: Narrowed internal handler types for stricter type safety (`boolean` to `true`). Replaced `forEach` with `for...in` to eliminate closure allocations per key.
+- **input-binding**: Unified handler declarations and decoupled debounce flushing from display changes to prevent data loss.
+- **atomFetch**: Isolated `transform` exceptions to the computed state; `onError` is now strictly for network/server failures.
+- **atomList**:
+  - Fixed event scope escaping by verifying matches with `node.contains()`.
+  - Optimized single-item string renders by skipping array allocations (`join`/`split`).
+  - Added `events` option for global container-level delegation using O(1) `WeakMap` lookups, eliminating per-item handler allocation overhead.
+  - Fixed `innerHTML` fast path silently dropping delegated events.
+- **atomBind**: Simplified variable assignment control flow, eliminating non-null assertions.
+- **effect-factory**: Standardized dynamic error messaging and added clarity to untracked `try/catch` intent.
+- **debug**: Unified logging prefixes (`[atom-mount]`, `[atom-list]`, etc.) across all debug methods and tightened the highlight element guard.
 
 ## [0.22.2]
 
-### jQuery
+### jQuery - 0.22.2
 
 - **Performance & Data Locality**:
   - Eliminated iterator and closure overheads (`.each`, `forEach`, `for...of`, `Object.keys/entries`) by adopting native `for` and `for...in` loops in DOM syncs, cleanups, and batch operations.
@@ -28,7 +31,7 @@
 
 ## [0.22.1]
 
-### Core
+### Core - 0.22.1
 
 - **Async Retry Stability**: Improved the retry counter logic to reset appropriately between separate scheduler updates, preventing false REJECTED states during rapid inputs and slow network conditions.
 - **Tests**: Added tests for async drift scenarios, retry behavior, and `onError` callbacks.

@@ -13,7 +13,6 @@
  * polluting the console without explicit opt-in.
  */
 
-import { LOG_PREFIXES } from './constants';
 import { getSelector } from './utils';
 
 // ============================================================================
@@ -67,24 +66,24 @@ export const debug = {
 
   /**
    * Logs a message only when debug mode is active.
+   *
+   * `prefix` is the subsystem tag (e.g. `LOG_PREFIXES.LIST`) so that the
+   * originating subsystem appears in the log. Consistent with `warn`/`error`.
    */
-  log(type: string, ...args: unknown[]) {
+  log(prefix: string, ...args: unknown[]) {
     if (debugEnabled) {
-      console.log(`${LOG_PREFIXES.MOUNT} ${type}:`, ...args);
+      console.log(`${prefix}`, ...args);
     }
   },
 
   /**
    * Logs an atom value change only when debug mode is active.
+   *
+   * `prefix` is the subsystem tag (e.g. `LOG_PREFIXES.MOUNT`).
    */
-  atomChanged(name: string | undefined, oldVal: unknown, newVal: unknown) {
+  atomChanged(prefix: string, name: string | undefined, oldVal: unknown, newVal: unknown) {
     if (debugEnabled) {
-      console.log(
-        `${LOG_PREFIXES.MOUNT} Atom "${name ?? 'anonymous'}" changed:`,
-        oldVal,
-        '→',
-        newVal
-      );
+      console.log(`${prefix} Atom "${name ?? 'anonymous'}" changed:`, oldVal, '→', newVal);
     }
   },
 
@@ -92,27 +91,30 @@ export const debug = {
    * Logs a DOM update and triggers a visual highlight flash.
    * Only active when debug mode is enabled.
    *
+   * `prefix` is the subsystem tag (e.g. `LOG_PREFIXES.BINDING`).
    * @param target - The element or jQuery wrapper that was updated.
    * @param type - The binding type (e.g. 'text', 'checked', 'attr.href').
    * @param value - The new value that was applied.
    */
-  domUpdated(target: Element | JQuery, type: string, value: unknown) {
+  domUpdated(prefix: string, target: Element | JQuery, type: string, value: unknown) {
     if (!debugEnabled) return;
 
     const el: Element | undefined =
       target instanceof Element ? target : (target[0] as Element | undefined);
     if (!(el instanceof HTMLElement)) return;
 
-    console.log(`${LOG_PREFIXES.MOUNT} DOM updated: ${getSelector(el)}.${type} =`, value);
+    console.log(`${prefix} DOM updated: ${getSelector(el)}.${type} =`, value);
     highlightElement(el);
   },
 
   /**
    * Logs a cleanup event only when debug mode is active.
+   *
+   * `prefix` is the subsystem tag (e.g. `LOG_PREFIXES.BINDING`).
    */
-  cleanup(selector: string) {
+  cleanup(prefix: string, selector: string) {
     if (debugEnabled) {
-      console.log(`${LOG_PREFIXES.MOUNT} Cleanup: ${selector}`);
+      console.log(`${prefix} Cleanup: ${selector}`);
     }
   },
 
@@ -154,9 +156,9 @@ const HIGHLIGHT_STYLE_ATTR = 'data-atom-debug';
  * the style is re-injected into the fresh document — no module-level boolean
  * flag needed.
  */
-let _highlightStyleRef: WeakRef<HTMLStyleElement> | undefined;
+let highlightStyleRef: WeakRef<HTMLStyleElement> | undefined;
 function injectHighlightStyle(): void {
-  if (_highlightStyleRef?.deref()?.isConnected) return;
+  if (highlightStyleRef?.deref()?.isConnected) return;
   const style = document.createElement('style');
   style.setAttribute(HIGHLIGHT_STYLE_ATTR, '');
   style.textContent =
@@ -166,7 +168,7 @@ function injectHighlightStyle(): void {
     `transition:outline ${HIGHLIGHT_TRANSITION} ease-out` +
     `}`;
   document.head.appendChild(style);
-  _highlightStyleRef = new WeakRef(style);
+  highlightStyleRef = new WeakRef(style);
 }
 
 // Tracks the pending setTimeout handle per element.
@@ -187,7 +189,7 @@ const highlightRafs = new WeakMap<HTMLElement, ReturnType<typeof requestAnimatio
  * - Cancels any pending timeout before scheduling a new one.
  */
 function highlightElement(el: HTMLElement): void {
-  if (!el.isConnected) return;
+  if (!debugEnabled || !el.isConnected) return;
 
   injectHighlightStyle();
 

@@ -13,6 +13,12 @@ import { isReactive } from './utils';
  * Structured label identifying which binding produced a debug log entry.
  * Fixed bindings use a plain literal; per-key bindings use a `prefix.key` form
  * where the key portion must be non-empty.
+ *
+ * Note: the trailing `(string & {})` member makes this type accept any string
+ * at runtime while still surfacing the named literals as IDE autocomplete
+ * suggestions. It does NOT enforce that only the listed values are used —
+ * TypeScript absorbs all narrower literal members into `string & {}`, so there
+ * is no compile-time restriction beyond `string`.
  */
 export type BindingDebugType =
   | 'text'
@@ -67,16 +73,18 @@ export function registerReactiveEffect<T>(
         // (user formatters, guards, computed lookups) cannot accidentally
         // add extra subscriptions to this effect.
         untracked(() => {
+          // The effect continues running on future source changes regardless of
+          // whether updater throws — the catch here is purely for error surfacing.
           try {
             updater(value);
           } catch (e) {
-            debug.error(LOG_PREFIXES.BINDING, `${ERROR_MESSAGES.UPDATER_ERROR(debugType)}:`, e);
+            debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.UPDATER_ERROR(debugType), e);
             return;
           }
           // debug.domUpdated already guards on debug.enabled internally, but
           // skipping the call entirely avoids a function-call overhead on every
           // atom update in production (debug disabled).
-          if (debug.enabled) debug.domUpdated(el, debugType, value);
+          if (debug.enabled) debug.domUpdated(LOG_PREFIXES.BINDING, el, debugType, value);
         });
       })
     );
@@ -85,9 +93,9 @@ export function registerReactiveEffect<T>(
     try {
       updater(source);
     } catch (e) {
-      debug.error(LOG_PREFIXES.BINDING, `${ERROR_MESSAGES.UPDATER_ERROR(debugType)} (static):`, e);
+      debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.UPDATER_ERROR(debugType, true), e);
       return;
     }
-    if (debug.enabled) debug.domUpdated(el, debugType, source);
+    if (debug.enabled) debug.domUpdated(LOG_PREFIXES.BINDING, el, debugType, source);
   }
 }

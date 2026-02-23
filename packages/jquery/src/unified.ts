@@ -296,7 +296,7 @@ export function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): v
     }
   };
   // Internal handler — skip batch() wrapping in the jQuery patch.
-  (handler as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
+  (handler as unknown as Record<symbol, true>)[INTERNAL_HANDLER] = true;
 
   // DOM → Atom cleanup goes through ctx.trackCleanup (element lifecycle).
   // Atom → DOM cleanup goes through registry.trackEffect (reactive effect lifecycle).
@@ -311,7 +311,7 @@ export function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): v
     untracked(() => {
       if (el.checked !== val) {
         el.checked = val;
-        debug.domUpdated($el, 'checked', val);
+        debug.domUpdated(LOG_PREFIXES.BINDING, $el, 'checked', val);
       }
     });
   });

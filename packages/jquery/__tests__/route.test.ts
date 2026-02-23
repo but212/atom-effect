@@ -1,7 +1,7 @@
 import $ from 'jquery';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../src/index';
-import { LOG_PREFIXES } from '../src/constants';
+import { ERROR_MESSAGES, LOG_PREFIXES } from '../src/constants';
 import { debug } from '../src/debug';
 
 describe('$.route() - SPA Routing', () => {
@@ -292,7 +292,7 @@ describe('$.route() - SPA Routing', () => {
 
       expect(warnSpy).toHaveBeenCalledWith(
         LOG_PREFIXES.ROUTE,
-        expect.stringContaining('not found and no notFound route configured')
+        ERROR_MESSAGES.ROUTE_NOT_FOUND('nonexistent')
       );
 
       router.destroy();
@@ -312,7 +312,7 @@ describe('$.route() - SPA Routing', () => {
 
       expect(warnSpy).toHaveBeenCalledWith(
         LOG_PREFIXES.ROUTE,
-        expect.stringContaining('Template "#nonexistent-template" not found')
+        ERROR_MESSAGES.TEMPLATE_NOT_FOUND('#nonexistent-template')
       );
 
       router.destroy();
@@ -371,7 +371,7 @@ describe('$.route() - SPA Routing', () => {
       expect(document.getElementById('app-route-err')).not.toBeNull();
       expect(warnSpy).toHaveBeenCalledWith(
         LOG_PREFIXES.ROUTE,
-        expect.stringContaining('Malformed URI component')
+        ERROR_MESSAGES.MALFORMED_URI('bad=%FF%FE')
       );
 
       router.destroy();
@@ -403,7 +403,7 @@ describe('$.route() - SPA Routing', () => {
       expect(pushStateSpy).toHaveBeenCalled();
       expect(warnSpy).toHaveBeenCalledWith(
         LOG_PREFIXES.ROUTE,
-        expect.stringContaining('PushState failed'),
+        'PushState failed (likely file:// protocol or security restriction). UI will update, but URL will not.',
         expect.anything()
       );
       expect(router.currentRoute.value).toBe('about');

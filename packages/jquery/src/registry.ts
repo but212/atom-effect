@@ -125,7 +125,7 @@ class BindingRegistry {
     }
 
     if (debug.enabled) {
-      debug.cleanup(getSelector(el));
+      debug.cleanup(LOG_PREFIXES.BINDING, getSelector(el));
     }
 
     // Step 0 — Component cleanup runs first so the component can unmount
