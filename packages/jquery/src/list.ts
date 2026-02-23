@@ -4,7 +4,7 @@ import { ERROR_MESSAGES, LOG_PREFIXES } from './constants';
 import { debug } from './debug';
 import { registry } from './registry';
 import type { ListOptions, ReadonlyAtom } from './types';
-import { getLIS, getSelector, sanitizeHtml, shallowEqual } from './utils';
+import { getLIS, getSelector, hasOwn, sanitizeHtml, shallowEqual } from './utils';
 
 // ============================================================================
 // Helpers
@@ -380,9 +380,9 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
     // elToKey / keyToIndex provide O(1) target → item and key → index lookup,
     // avoiding a full itemMap scan on every event.
     if (events) {
-      const eventEntries = Object.entries(events);
-      for (let ei = 0; ei < eventEntries.length; ei++) {
-        const [eventKey, handler] = eventEntries[ei]!;
+      for (const eventKey in events) {
+        if (!hasOwn.call(events, eventKey)) continue;
+        const handler = events[eventKey]!;
 
         // Split "click .selector" → eventType="click", childSelector=".selector"
         const spaceIdx = eventKey.indexOf(' ');
