@@ -134,7 +134,8 @@ export const ERROR_MESSAGES = {
     `[${method}] condition is required when className is a string.`,
   DUPLICATE_KEY: (key: string | number, index: number) =>
     `Duplicate key "${key}" at index ${index}.`,
-  UPDATER_ERROR: (debugType: string) => `Updater threw in binding "${debugType}"`,
+  UPDATER_ERROR: (debugType: string, isStatic?: boolean) =>
+    `Updater threw in binding "${debugType}"${isStatic ? ' (static)' : ''}`,
   EFFECT_DISPOSE_ERROR: () => 'Effect dispose error',
   BINDING_CLEANUP_ERROR: () => 'Binding cleanup error',
   PARSE_ERROR: () => 'parse() threw during DOM→Atom sync',

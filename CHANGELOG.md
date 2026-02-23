@@ -31,6 +31,11 @@
   - Replaced separate `let valAtom` / `let valOpts` variables with a single `valParsed: { atom, opts } | null` object, eliminating the `valAtom!` non-null assertion and making the type flow explicit.
   - Formatting of the single→map ternary in `atomAttr` and `atomProp` aligned with the style used in `atomClass` and `atomCss`.
 
+- **effect-factory – error message and code clarity**:
+  - `UPDATER_ERROR` in `constants.ts` now accepts an optional `isStatic` flag, centralising the `(static)` suffix that was previously assembled inline at the call site. Both reactive and static error paths now call `ERROR_MESSAGES.UPDATER_ERROR(debugType, isStatic)` uniformly.
+  - Added a comment above the `untracked` try/catch block clarifying that the effect continues running on future source changes regardless of whether `updater` throws — the catch is purely for error surfacing.
+  - `BindingDebugType` JSDoc updated to document that the trailing `(string & {})` union member is an IDE-autocomplete idiom and does not enforce compile-time restrictions on the accepted values.
+
 - **debug – subsystem prefix consistency**:
   - `debug.log`, `debug.atomChanged`, `debug.domUpdated`, and `debug.cleanup` now accept a `prefix` as their first argument (matching the existing `debug.warn` / `debug.error` API). Previously all four methods hard-coded `LOG_PREFIXES.MOUNT` (`[atom-mount]`), so list and binding log lines were attributed to the wrong subsystem.
   - All call sites updated: `list.ts` now passes `LOG_PREFIXES.LIST`, binding helpers pass `LOG_PREFIXES.BINDING`.
