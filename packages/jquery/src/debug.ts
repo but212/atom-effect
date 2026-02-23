@@ -13,7 +13,6 @@
  * polluting the console without explicit opt-in.
  */
 
-import { LOG_PREFIXES } from './constants';
 import { getSelector } from './utils';
 
 // ============================================================================
@@ -84,12 +83,7 @@ export const debug = {
    */
   atomChanged(prefix: string, name: string | undefined, oldVal: unknown, newVal: unknown) {
     if (debugEnabled) {
-      console.log(
-        `${prefix} Atom "${name ?? 'anonymous'}" changed:`,
-        oldVal,
-        '→',
-        newVal
-      );
+      console.log(`${prefix} Atom "${name ?? 'anonymous'}" changed:`, oldVal, '→', newVal);
     }
   },
 

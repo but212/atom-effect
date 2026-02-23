@@ -132,7 +132,9 @@ describe('Debug Module', () => {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     document.body.appendChild(svg);
 
-    expect(() => debug.domUpdated(LOG_PREFIXES.BINDING, svg as unknown as Element, 'attr', 'val')).not.toThrow();
+    expect(() =>
+      debug.domUpdated(LOG_PREFIXES.BINDING, svg as unknown as Element, 'attr', 'val')
+    ).not.toThrow();
     expect(logSpy).not.toHaveBeenCalled();
     svg.remove();
   });
