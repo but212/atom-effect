@@ -4,6 +4,11 @@
 
 ### jQuery
 
+- **namespace – comment consolidation**:
+  - Merged the two separate explanations of why the `atom` wrapper function exists (one in the function JSDoc, one above `staticExtensions`) into a single unified "WHY A WRAPPER EXISTS" section in the function JSDoc, eliminating the need to cross-reference two locations.
+  - Removed the now-redundant inline comment above `atom:` in `staticExtensions`; replaced with a concise back-reference to the function JSDoc.
+  - Clarified `NamespaceExtensions` JSDoc to explicitly name the dependency-direction inversion for `nextTick` (`JQueryStatic['nextTick']` follows the local signature, not vice versa), making the exception visually distinct from the standard keys.
+
 - **mount – documentation and type clarity**:
   - `atomMount` comment on `registry.cleanupTree` now explicitly states it uses the same full-subtree path as `atomUnmount → bindUnbind → cleanupTree`, removing the apparent asymmetry between the two mount paths.
   - `atomUnmount` JSDoc extended to document that `bindUnbind` delegates to `registry.cleanupTree`, grounding the "descendants" guarantee in the call chain rather than leaving it implicit.

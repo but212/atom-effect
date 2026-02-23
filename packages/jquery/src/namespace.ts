@@ -19,12 +19,17 @@ import { isReactive } from './utils';
 // ============================================================================
 
 /**
- * Wraps core's `atom` factory to attach the `$.atom.debug` property.
+ * Local wrapper around core's `atom` factory.
  *
- * A locally-owned function object is required so that `Object.defineProperty`
- * can add a getter/setter accessor — imported function references cannot be
- * mutated this way. The `debug` accessor is attached below via
- * `Object.defineProperty`; `staticExtensions` then registers both on `$`.
+ * WHY A WRAPPER EXISTS:
+ * `$.atom.debug` must be an accessor (getter/setter) attached to the function
+ * object itself. `Object.defineProperty` requires an own, locally-created
+ * function — imported references are owned by the module system and cannot
+ * be extended this way. The `debug` accessor is added immediately below via
+ * `Object.defineProperty`; `staticExtensions` then registers the augmented
+ * function on `$` with a double cast (`atom as unknown as JQueryStatic['atom']`)
+ * because TypeScript cannot see the runtime-added accessor through the declared
+ * function type.
  *
  * `options` is not defaulted here — core's `atom` defaults `options` to `{}`
  * internally, so passing `undefined` is safe and avoids an extra allocation
@@ -34,10 +39,6 @@ function atom<T>(initialValue: T, options?: AtomOptions): WritableAtom<T> {
   return createAtom(initialValue, options);
 }
 
-// `atom as unknown as JQueryStatic['atom']` in staticExtensions is required
-// because TypeScript cannot see the runtime-added `debug` accessor through the
-// function's declared type. The `NamespaceExtensions` annotation on
-// `staticExtensions` still verifies that every other field is correctly typed.
 Object.defineProperty(atom, 'debug', {
   enumerable: true,
   // configurable: true allows tests and advanced consumers to redefine or
@@ -91,10 +92,11 @@ export function nextTick(): Promise<void> {
  * Adding or removing a key in either `JQueryStatic` or this object without
  * updating the other produces a compile-time error.
  *
- * Exception: `nextTick` originates in this file (not imported from core), so
- * its source of truth is the `export function nextTick` declaration above —
- * `JQueryStatic['nextTick']` is verified against that signature, not the other
- * way around.
+ * Dependency direction note: most keys flow from `JQueryStatic` into this
+ * type (the interface is the source of truth). `nextTick` is the exception —
+ * it originates in this file, so `JQueryStatic['nextTick']` is verified
+ * against the local `export function nextTick` signature, not the other way
+ * around.
  *
  * Note: `$.extend(staticExtensions)` merges the fields into `$` at runtime.
  * TypeScript does not model this mutation on the `$` type — the augmented
@@ -114,10 +116,10 @@ type NamespaceExtensions = Pick<
 >;
 
 const staticExtensions: NamespaceExtensions = {
-  // `atom` carries a runtime `debug` accessor added via Object.defineProperty.
-  // TypeScript cannot see it through the declared function type, so the double
-  // cast is unavoidable. The NamespaceExtensions annotation still verifies all
-  // other fields; only `atom`'s shape escapes static checking here.
+  // Double cast required: `atom` carries a runtime `debug` accessor added via
+  // Object.defineProperty (see function JSDoc above). TypeScript cannot see
+  // that accessor through the declared function type, so the shape escapes
+  // static checking here. All other fields are fully verified by NamespaceExtensions.
   atom: atom as unknown as JQueryStatic['atom'],
   computed,
   effect,
