@@ -18,7 +18,7 @@ type InputEl = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
  * harmful here since InputBinding manages atom writes directly.
  */
 function markInternal(fn: () => void): void {
-  (fn as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
+  (fn as unknown as Record<symbol, true>)[INTERNAL_HANDLER] = true;
 }
 
 class InputBinding<T> {

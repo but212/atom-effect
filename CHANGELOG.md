@@ -4,6 +4,13 @@
 
 ### jQuery
 
+- **jquery-patch – structural cleanup**:
+  - `INTERNAL_HANDLER` symbol property type narrowed from `Record<symbol, boolean>` to `Record<symbol, true>` in both `getWrappedHandler` and `markInternal` — only `true` is ever stored, so `boolean` was an overstatement.
+  - `wrapEventMap` and `resolveOffEventMap` converted from `Object.keys(...).forEach` to `for...in` with `hasOwnProperty` guard, matching the `for` loop style used throughout the rest of the file and eliminating the implicit closure allocation per key.
+  - `wrapEventMap` and `resolveOffEventMap` JSDoc updated to document the consistent key-iteration strategy and the deliberate `undefined`-preservation asymmetry between the two functions.
+  - `const orig = originals` capture documented: explains why the local const is needed to keep closure references stable after `disablejQueryOverrides()` resets the module-level `originals` to `null`.
+  - Moved the `markIgnored`/`cleanupTree` ordering rationale into an inline comment directly above the two calls where the order matters, instead of above the function definition.
+
 - **input-binding – structural cleanup**:
   - Extracted `markInternal(fn)` helper to replace five repeated inline `INTERNAL_HANDLER` symbol casts in the constructor. New handlers are now marked by calling a single function, eliminating silent omission risk.
   - Unified `handleInput` field declaration: the field is now declared at the class level (matching all other handlers) and assigned conditionally in the constructor, making the debounce branch the only reason the constructor assigns it.

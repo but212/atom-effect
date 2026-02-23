@@ -27,8 +27,11 @@ const handlerMap = new WeakMap<EventHandler, EventHandler>();
 /**
  * Snapshot of jQuery prototype methods captured at `enablejQueryOverrides()`
  * time and restored by `disablejQueryOverrides()`.
- * Stored as a typed object so the override closures can reference the fields
- * directly without `!` non-null assertions.
+ *
+ * Stored as a typed object and captured into `orig` (a local const) inside
+ * `enablejQueryOverrides` so that the override closures always reference the
+ * pre-patch methods even if `disablejQueryOverrides()` later resets `originals`
+ * to null between a `.off()` call and the patched handler running.
  */
 type OriginalMethods = {
   on: typeof $.fn.on;
@@ -46,7 +49,7 @@ let originals: OriginalMethods | null = null;
 
 const getWrappedHandler = (fn: EventHandler): EventHandler => {
   // Skip wrapping for library-internal handlers.
-  if ((fn as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER]) return fn;
+  if ((fn as unknown as Record<symbol, true>)[INTERNAL_HANDLER]) return fn;
 
   let wrapped = handlerMap.get(fn);
   if (!wrapped) {
@@ -57,39 +60,46 @@ const getWrappedHandler = (fn: EventHandler): EventHandler => {
       return batch(() => fn.apply(this, args as Parameters<EventHandler>));
     } as unknown as EventHandler;
     // Mark the wrapper itself as internal so it isn't double-wrapped if passed again.
-    (wrapped as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
+    (wrapped as unknown as Record<symbol, true>)[INTERNAL_HANDLER] = true;
     handlerMap.set(fn, wrapped);
   }
   return wrapped;
 };
 
 /**
- * Wraps the handlers in an event-map object with `getWrappedHandler`.
- * Uses Object.keys to iterate own properties only, avoiding inherited keys.
+ * Wraps each handler in an `.on()` event-map with `getWrappedHandler`.
+ * Skips keys whose value is falsy — mirrors jQuery's own behaviour of ignoring
+ * undefined handlers in event-maps.
+ * Uses `for...in` with `hasOwnProperty` guard to iterate own properties only,
+ * consistent with the `for` loops used elsewhere in this file.
  */
 function wrapEventMap(map: Record<string, EventHandler>): Record<string, EventHandler> {
   const newMap: Record<string, EventHandler> = {};
-  Object.keys(map).forEach((key) => {
-    const handler = map[key];
-    if (handler) newMap[key] = getWrappedHandler(handler);
-  });
+  for (const key in map) {
+    if (Object.hasOwn(map, key)) {
+      const handler = map[key];
+      if (handler) newMap[key] = getWrappedHandler(handler);
+    }
+  }
   return newMap;
 }
 
 /**
- * Resolves the wrapped counterpart for each handler in an off event-map.
+ * Resolves the wrapped counterpart for each handler in an `.off()` event-map.
  * Preserves `undefined` values — `.off({ click: undefined })` is a valid
- * jQuery call that removes ALL listeners for that event.
- * Uses Object.keys to iterate own properties only, avoiding inherited keys.
+ * jQuery call that removes ALL listeners for that event type.
+ * Uses `for...in` with `hasOwnProperty` guard, consistent with `wrapEventMap`.
  */
 function resolveOffEventMap(
   map: Record<string, EventHandler | undefined>
 ): Record<string, EventHandler | undefined> {
   const newMap: Record<string, EventHandler | undefined> = {};
-  Object.keys(map).forEach((key) => {
-    const handler = map[key];
-    newMap[key] = handler ? (handlerMap.get(handler) ?? handler) : undefined;
-  });
+  for (const key in map) {
+    if (Object.hasOwn(map, key)) {
+      const handler = map[key];
+      newMap[key] = handler ? (handlerMap.get(handler) ?? handler) : undefined;
+    }
+  }
   return newMap;
 }
 
@@ -118,6 +128,9 @@ export function enablejQueryOverrides(): void {
     detach: $.fn.detach,
   };
 
+  // Capture into a local const so the closures below always hold a stable
+  // reference to the originals even after disablejQueryOverrides() resets
+  // the module-level `originals` variable to null.
   const orig = originals;
 
   // --- Lifecycle overrides ---
@@ -126,13 +139,14 @@ export function enablejQueryOverrides(): void {
   // Only elements matched by `selector` (or all elements when selector is
   // omitted) are cleaned up — other elements in `this` are not affected,
   // mirroring jQuery's own selector-scoped remove behaviour.
-  // markIgnored is called BEFORE cleanupTree so that a MutationObserver
-  // callback firing synchronously sees the ignored flag and skips redundant cleanup.
   $.fn.remove = function (this: JQuery, selector?: string) {
     const targets = selector ? this.filter(selector) : this;
     for (let i = 0, len = targets.length; i < len; i++) {
       const el = targets[i];
       if (el) {
+        // markIgnored BEFORE cleanupTree: a MutationObserver callback that
+        // fires synchronously during removal will see the ignored flag and
+        // skip the redundant second cleanup pass.
         registry.markIgnored(el);
         registry.cleanupTree(el);
       }
