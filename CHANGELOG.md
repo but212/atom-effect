@@ -4,81 +4,23 @@
 
 ### jQuery
 
-- **route – correctness and type clarity**:
-  - `handleUrlChange` / `navigate`: documented that the two-atom writes (`currentRouteAtom` + `queryParamsAtom`) are flushed together by the scheduler's automatic microtask batching — no explicit `batch()` needed. Also documented why `setUrl`/`previousUrl` is committed before the atom writes in `navigate`, intentionally differing from `handleUrlChange`.
-  - `renderRoute` JSDoc: documented the `onEnter`-throws edge case — container is emptied before `onEnter` runs, so a throwing hook leaves an empty container with a stale `previousRoute`. Known limitation; recovery requires the hook to catch internally.
-  - `activeClass`: extracted as a `private activeClass: string` field resolved in the constructor, replacing the `as string` cast in `setupAutoBindLinks`. `RouteConfig.activeClass` is optional but the constructor always fills it from `ROUTE_DEFAULTS`, so the field is guaranteed non-undefined.
-  - `getQueryParams` JSDoc: documented that malformed percent-encoding is silently replaced by `URLSearchParams` (U+FFFD substitution); the best-effort parsed result is still returned alongside the `debug.warn`.
-  - `destroy`: swap `this.cleanups = []` before iterating instead of `length = 0` after, preventing a misbehaving cleanup from pushing new entries that would be silently skipped or cause unbounded iteration.
-
-- **namespace – comment consolidation**:
-  - Merged the two separate explanations of why the `atom` wrapper function exists (one in the function JSDoc, one above `staticExtensions`) into a single unified "WHY A WRAPPER EXISTS" section in the function JSDoc, eliminating the need to cross-reference two locations.
-  - Removed the now-redundant inline comment above `atom:` in `staticExtensions`; replaced with a concise back-reference to the function JSDoc.
-  - Clarified `NamespaceExtensions` JSDoc to explicitly name the dependency-direction inversion for `nextTick` (`JQueryStatic['nextTick']` follows the local signature, not vice versa), making the exception visually distinct from the standard keys.
-
-- **mount – documentation and type clarity**:
-  - `atomMount` comment on `registry.cleanupTree` now explicitly states it uses the same full-subtree path as `atomUnmount → bindUnbind → cleanupTree`, removing the apparent asymmetry between the two mount paths.
-  - `atomUnmount` JSDoc extended to document that `bindUnbind` delegates to `registry.cleanupTree`, grounding the "descendants" guarantee in the call chain rather than leaving it implicit.
-  - `as P` cast on `EMPTY_PROPS` annotated with an inline comment explaining why the cast is intentional and where TypeScript enforces the safety boundary (the call site).
-
-- **unified – type precision**:
-  - `INTERNAL_HANDLER` property type in `bindChecked` narrowed from `Record<symbol, boolean>` to `Record<symbol, true>`, consistent with `jquery-patch.ts` and `input-binding.ts`.
-
-- **jquery-patch – structural cleanup**:
-  - `INTERNAL_HANDLER` symbol property type narrowed from `Record<symbol, boolean>` to `Record<symbol, true>` in both `getWrappedHandler` and `markInternal` — only `true` is ever stored, so `boolean` was an overstatement.
-  - `wrapEventMap` and `resolveOffEventMap` converted from `Object.keys(...).forEach` to `for...in` with `hasOwnProperty` guard, matching the `for` loop style used throughout the rest of the file and eliminating the implicit closure allocation per key.
-  - `wrapEventMap` and `resolveOffEventMap` JSDoc updated to document the consistent key-iteration strategy and the deliberate `undefined`-preservation asymmetry between the two functions.
-  - `const orig = originals` capture documented: explains why the local const is needed to keep closure references stable after `disablejQueryOverrides()` resets the module-level `originals` to `null`.
-  - Moved the `markIgnored`/`cleanupTree` ordering rationale into an inline comment directly above the two calls where the order matters, instead of above the function definition.
-
-- **input-binding – structural cleanup**:
-  - Extracted `markInternal(fn)` helper to replace five repeated inline `INTERNAL_HANDLER` symbol casts in the constructor. New handlers are now marked by calling a single function, eliminating silent omission risk.
-  - Unified `handleInput` field declaration: the field is now declared at the class level (matching all other handlers) and assigned conditionally in the constructor, making the debounce branch the only reason the constructor assigns it.
-  - Split `handleBlur` into two focused private methods: `flushPendingDebounce()` and `normalizeDomValue()`. The call order in `handleBlur` now explicitly documents the required sequencing (flush atom write before re-formatting the display value).
-  - Added inline comments explaining why both `$el` (jQuery wrapper, event binding + debug) and `el` (raw DOM, hot-path property access) are retained as separate fields.
-  - Added `TRACKING NOTE` JSDoc to `syncDomFromAtom` to document why `format()`, `parse()`, and `equal()` run inside `untracked()`.
-
-- **atomFetch – transform error isolation**:
-  - `transform` errors no longer call `onError`. `onError` is now strictly limited to network/server failures (`$.ajax` rejections). Transform exceptions propagate directly to the computed atom's error state.
-  - Fixed: previously a bug in `transform` would surface as a network error and trigger `onError`, misleading callers.
-
-- **atomList – childSelector scope guard**:
-  - Fixed: `target.closest(selector)` could escape upward past the item root and match an ancestor element that shares the selector class, causing the handler to fire incorrectly.
-  - Fix: after `closest()` finds a match, `node.contains(matched)` verifies the match is a descendant of the item root.
-
-- **atomList – Incremental Update Sanitization**:
-  - Single-item string renders (the common incremental case) now call `sanitizeHtml` directly instead of going through join → sanitize → split, eliminating `Math.random()`, `Date.now()`, `join`, and `split` allocations entirely.
-  - Two-or-more string renders retain the existing batch join/split path to preserve the O(1) regex cost per batch.
-
-- **atomList – Delegated Event Listeners**:
-  - Added `events` option to `ListOptions<T>` for container-level event delegation. One listener per event type is registered on the container regardless of item count, eliminating per-item handler allocation.
-  - Key syntax: `'eventType'` (item root) or `'eventType selector'` (child selector). Handlers receive `(item, currentIndex, event)`.
-  - item → entry lookup uses a `WeakMap<Element, key>` reverse index (O(1)); current index lookup uses a `Map<key, index>` forward index (O(1)), replacing O(n) `itemMap` scan and `oldKeys.indexOf` on every event.
-  - Child selector matching uses native `element.closest()` instead of jQuery wrapper allocation.
-  - Both indexes are kept in sync inside the effect run and cleared on container cleanup via `registry.trackCleanup`.
-
-- **atomList – innerHTML fast path correctness**:
-  - Fixed: `events` option now disables the `innerHTML` fast path. Previously, the fast path bypassed the per-element `$el` assignment that `elToKey` depends on, causing all delegated event handlers to silently drop every event on initial render.
-  - Removed the redundant `removingKeys.size === 0` guard from the fast-path condition — `removingKeys` is always empty on initial render (`isInitial`), so the check was dead code.
-
-- **atomBind – val parsing cleanup**:
-  - Replaced separate `let valAtom` / `let valOpts` variables with a single `valParsed: { atom, opts } | null` object, eliminating the `valAtom!` non-null assertion and making the type flow explicit.
-  - Formatting of the single→map ternary in `atomAttr` and `atomProp` aligned with the style used in `atomClass` and `atomCss`.
-
-- **effect-factory – error message and code clarity**:
-  - `UPDATER_ERROR` in `constants.ts` now accepts an optional `isStatic` flag, centralising the `(static)` suffix that was previously assembled inline at the call site. Both reactive and static error paths now call `ERROR_MESSAGES.UPDATER_ERROR(debugType, isStatic)` uniformly.
-  - Added a comment above the `untracked` try/catch block clarifying that the effect continues running on future source changes regardless of whether `updater` throws — the catch is purely for error surfacing.
-  - `BindingDebugType` JSDoc updated to document that the trailing `(string & {})` union member is an IDE-autocomplete idiom and does not enforce compile-time restrictions on the accepted values.
-
-- **debug – subsystem prefix consistency**:
-  - `debug.log`, `debug.atomChanged`, `debug.domUpdated`, and `debug.cleanup` now accept a `prefix` as their first argument (matching the existing `debug.warn` / `debug.error` API). Previously all four methods hard-coded `LOG_PREFIXES.MOUNT` (`[atom-mount]`), so list and binding log lines were attributed to the wrong subsystem.
-  - All call sites updated: `list.ts` now passes `LOG_PREFIXES.LIST`, binding helpers pass `LOG_PREFIXES.BINDING`.
-  - `highlightElement` guard tightened: early-returns when `debugEnabled` is false, preventing accidental highlight activation if called outside `domUpdated` in the future.
-  - `_highlightStyleRef` renamed to `highlightStyleRef` to match the naming convention used by all other module-level variables in the file.
+- **route**: Improved JSDoc clarity for routing sequences and error edge cases. Fixed `destroy` loop robustness to prevent unbounded iterations.
+- **namespace & mount**: Consolidated scattered JSDoc explanations and eliminated redundant inline comments.
+- **unified & jquery-patch**: Narrowed internal handler types for stricter type safety (`boolean` to `true`). Replaced `forEach` with `for...in` to eliminate closure allocations per key.
+- **input-binding**: Unified handler declarations and decoupled debounce flushing from display changes to prevent data loss.
+- **atomFetch**: Isolated `transform` exceptions to the computed state; `onError` is now strictly for network/server failures.
+- **atomList**:
+  - Fixed event scope escaping by verifying matches with `node.contains()`.
+  - Optimized single-item string renders by skipping array allocations (`join`/`split`).
+  - Added `events` option for global container-level delegation using O(1) `WeakMap` lookups, eliminating per-item handler allocation overhead.
+  - Fixed `innerHTML` fast path silently dropping delegated events.
+- **atomBind**: Simplified variable assignment control flow, eliminating non-null assertions.
+- **effect-factory**: Standardized dynamic error messaging and added clarity to untracked `try/catch` intent.
+- **debug**: Unified logging prefixes (`[atom-mount]`, `[atom-list]`, etc.) across all debug methods and tightened the highlight element guard.
 
 ## [0.22.2]
 
-### jQuery
+### jQuery - 0.22.2
 
 - **Performance & Data Locality**:
   - Eliminated iterator and closure overheads (`.each`, `forEach`, `for...of`, `Object.keys/entries`) by adopting native `for` and `for...in` loops in DOM syncs, cleanups, and batch operations.
@@ -89,7 +31,7 @@
 
 ## [0.22.1]
 
-### Core
+### Core - 0.22.1
 
 - **Async Retry Stability**: Improved the retry counter logic to reset appropriately between separate scheduler updates, preventing false REJECTED states during rapid inputs and slow network conditions.
 - **Tests**: Added tests for async drift scenarios, retry behavior, and `onError` callbacks.
