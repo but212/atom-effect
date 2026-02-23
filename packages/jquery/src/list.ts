@@ -32,7 +32,7 @@ function insertOrAppend($el: JQuery, nextNode: Node | null, $container: JQuery):
  * unexpected key collisions.
  */
 $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>): JQuery {
-  const { key, render, bind, update, onAdd, onRemove, empty } = options;
+  const { key, render, bind, update, onAdd, onRemove, empty, events } = options;
 
   const getKey =
     typeof key === 'function'
@@ -55,6 +55,16 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
     const removingKeys = new Set<string | number>();
     let oldKeys: (string | number)[] = [];
     let $emptyEl: JQuery | null = null;
+
+    // Reverse index: root Element → item key.
+    // Kept in sync with itemMap so delegated event handlers can resolve the
+    // owning entry in O(1) instead of walking the entire itemMap.
+    const elToKey = new WeakMap<Element, string | number>();
+
+    // Forward index: key → current list position.
+    // Updated at the end of every effect run alongside oldKeys so that
+    // delegated handlers read the correct index without a linear search.
+    const keyToIndex = new Map<string | number, number>();
 
     /**
      * Schedules DOM removal after an optional async `onRemove` transition.
@@ -329,15 +339,81 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
           }
         }
 
+        // Sync reverse/forward indexes for delegated event lookup.
+        if (events) {
+          // Remove stale entries for keys no longer in the list.
+          for (let i = 0; i < oldKeys.length; i++) {
+            const k = oldKeys[i]!;
+            if (!newKeySet.has(k)) {
+              const staleEl = itemMap.get(k)?.$el[0];
+              if (staleEl) elToKey.delete(staleEl);
+              keyToIndex.delete(k);
+            }
+          }
+          // Register/update entries for keys in the new list.
+          for (let i = 0; i < itemCount; i++) {
+            const k = newKeys[i]!;
+            const entry = itemMap.get(k);
+            const rootEl = entry?.$el[0];
+            if (rootEl) elToKey.set(rootEl, k);
+            keyToIndex.set(k, i);
+          }
+        }
+
         oldKeys = newKeys;
       });
     });
+
+    // ── Delegated event listeners ─────────────────────────────────────────
+    // One listener per event type is attached to the container.
+    // elToKey / keyToIndex provide O(1) target → item and key → index lookup,
+    // avoiding a full itemMap scan on every event.
+    if (events) {
+      const eventEntries = Object.entries(events);
+      for (let ei = 0; ei < eventEntries.length; ei++) {
+        const [eventKey, handler] = eventEntries[ei]!;
+
+        // Split "click .selector" → eventType="click", childSelector=".selector"
+        const spaceIdx = eventKey.indexOf(' ');
+        const eventType = spaceIdx === -1 ? eventKey : eventKey.slice(0, spaceIdx);
+        const childSelector = spaceIdx === -1 ? null : eventKey.slice(spaceIdx + 1).trim();
+
+        const delegateHandler = (e: JQuery.TriggeredEvent) => {
+          const target = e.target as HTMLElement | null;
+          if (!target) return;
+
+          // Walk up from target to find the item root registered in elToKey.
+          let node: HTMLElement | null = target;
+          while (node && node !== rawContainer) {
+            const k = elToKey.get(node);
+            if (k !== undefined) {
+              // If a child selector was specified, target must match it within the root.
+              if (childSelector !== null && !target.closest(childSelector)) {
+                return;
+              }
+              const entry = itemMap.get(k);
+              if (!entry) return;
+              handler(entry.item, keyToIndex.get(k) ?? -1, e);
+              return;
+            }
+            node = node.parentElement;
+          }
+        };
+
+        $container.on(eventType, delegateHandler);
+
+        registry.trackCleanup(rawContainer, () => {
+          $container.off(eventType, delegateHandler);
+        });
+      }
+    }
 
     registry.trackEffect(rawContainer, fx);
     registry.trackCleanup(rawContainer, () => {
       itemMap.clear();
       removingKeys.clear();
       oldKeys.length = 0;
+      keyToIndex.clear();
       $emptyEl?.remove();
     });
   }

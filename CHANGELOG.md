@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### jQuery
+
+- **atomList – Delegated Event Listeners**:
+  - Added `events` option to `ListOptions<T>` for container-level event delegation. One listener per event type is registered on the container regardless of item count, eliminating per-item handler allocation.
+  - Key syntax: `'eventType'` (item root) or `'eventType selector'` (child selector). Handlers receive `(item, currentIndex, event)`.
+  - item → entry lookup uses a `WeakMap<Element, key>` reverse index (O(1)); current index lookup uses a `Map<key, index>` forward index (O(1)), replacing O(n) `itemMap` scan and `oldKeys.indexOf` on every event.
+  - Child selector matching uses native `element.closest()` instead of jQuery wrapper allocation.
+  - Both indexes are kept in sync inside the effect run and cleared on container cleanup via `registry.trackCleanup`.
+
 ## [0.22.2]
 
 ### jQuery
