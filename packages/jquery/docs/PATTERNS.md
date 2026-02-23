@@ -250,7 +250,7 @@ $('ul').atomList(users, {
 
 ### Delegated events vs. `bind`
 
-| | `events` | `bind` + `.on()` |
+| case | `events` | `bind` + `.on()` |
 | - | - | - |
 | Listeners registered | 1 per event type (on container) | 1 per item per event type |
 | Item data access | Provided directly as argument | Captured via closure |
