@@ -230,26 +230,51 @@ Use `atomList` for efficient keyed list rendering. It uses LIS-based diffing to 
 
 ```javascript
 const users = $.atom([
-  { id: 1, name: $.atom('Alice') },
-  { id: 2, name: $.atom('Bob') },
+  { id: 1, name: 'Alice' },
+  { id: 2, name: 'Bob' },
 ]);
 
 $('ul').atomList(users, {
   key: u => u.id,
-  render: u => `<li class="user-item"></li>`,
-  bind: ($el, user) => {
-    // Reactive bindings run once per element
-    $el.atomText(user.name);
-    $el.on('click', () => selectUser(user));
-  },
+  render: u => `<li class="user-item"><span>${u.name}</span><button class="del">✕</button></li>`,
   onAdd:    $el => $el.hide().fadeIn(200),           // Entry animation
   onRemove: $el => $el.fadeOut(200).promise(),       // Exit animation (async)
   empty:    '<li class="empty">No users found.</li>',
+  events: {
+    // One listener on the container — O(1) regardless of list size.
+    'click .del': (user, index, e) => removeUser(user.id),
+    'click':      (user, index, e) => selectUser(user),
+  },
 });
 ```
 
-> See [`.atomList`](./API.md#atomlistlistatom-options) for all options (`update`, `onAdd`, `onRemove`, `empty`).
-> For diffing algorithm details, see [Architecture §5](./ARCHITECTURE.md#5-list-reconciliation).
+### Delegated events vs. `bind`
+
+| | `events` | `bind` + `.on()` |
+| - | - | - |
+| Listeners registered | 1 per event type (on container) | 1 per item per event type |
+| Item data access | Provided directly as argument | Captured via closure |
+| Reorder / update cost | Zero — listener stays on container | Zero — listener stays on element |
+| Best for | Click, dblclick, input, etc. | Reactive atom bindings (`atomText`, `atomClass`, …) |
+
+Use `bind` when you need to attach **reactive bindings** to an item's internals. Use `events` for **DOM event handlers**.
+
+```javascript
+$('ul').atomList(itemsAtom, {
+  key: 'id',
+  render: item => `<li><span class="name"></span><button class="del">✕</button></li>`,
+  bind: ($el, item) => {
+    // Reactive binding: re-runs when nameAtom changes
+    $el.find('.name').atomText(item.nameAtom);
+  },
+  events: {
+    'click .del': (item) => remove(item.id),
+  },
+});
+```
+
+> See [`.atomList`](./API.md#atomlistlistatom-options) for all options (`update`, `onAdd`, `onRemove`, `empty`, `events`).
+> For diffing algorithm and delegation internals, see [Architecture §5](./ARCHITECTURE.md#5-list-reconciliation).
 
 ## 8. Functional Components
 
