@@ -398,9 +398,13 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
           while (node && node !== rawContainer) {
             const k = elToKey.get(node);
             if (k !== undefined) {
-              // If a child selector was specified, target must match it within the root.
-              if (childSelector !== null && !target.closest(childSelector)) {
-                return;
+              // If a child selector was specified, the matched element must exist
+              // AND be a descendant of this item root (node). Without the contains()
+              // check, target.closest() can escape upward past the container and
+              // match an ancestor element that happens to share the selector.
+              if (childSelector !== null) {
+                const matched = target.closest(childSelector);
+                if (!matched || !node.contains(matched)) return;
               }
               const entry = itemMap.get(k);
               if (!entry) return;

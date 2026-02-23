@@ -226,4 +226,36 @@ describe('atomList – events delegation', () => {
     expect(clickHandler.mock.calls[0]![0]).toEqual({ id: 1 });
     expect(dblClickHandler.mock.calls[0]![0]).toEqual({ id: 1 });
   });
+
+  // -------------------------------------------------------------------------
+  // 8. childSelector must not escape outside the item root
+  // -------------------------------------------------------------------------
+
+  it('does not fire when closest() matches an ancestor outside the item root', async () => {
+    // Wrap the container in a parent that has the same class as the child selector.
+    // target.closest('.btn') would escape upward and find this outer element
+    // if we do not guard with node.contains(matched).
+    const $outer = $('<div class="btn">').appendTo(document.body);
+    $container.appendTo($outer);
+
+    const items = $.atom([{ id: 1 }]);
+    const handler = vi.fn();
+
+    $container.atomList(items, {
+      key: 'id',
+      // Item has NO .btn inside — only plain text.
+      render: () => `<li>text</li>`,
+      events: { 'click .btn': handler },
+    });
+
+    await $.nextTick();
+
+    // Click the plain text inside <li>. closest('.btn') will find $outer,
+    // but $outer is not a descendant of the item root <li>.
+    click($container.find('li')[0]!);
+
+    expect(handler).not.toHaveBeenCalled();
+
+    $outer.remove();
+  });
 });
