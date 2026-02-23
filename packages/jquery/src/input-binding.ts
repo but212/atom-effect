@@ -17,7 +17,7 @@ type InputEl = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
  * wrapped in batch() by the jQuery override, which is redundant and potentially
  * harmful here since InputBinding manages atom writes directly.
  */
-function markInternal(fn: () => void): void {
+function markInternal(fn: Function): void {
   (fn as unknown as Record<symbol, true>)[INTERNAL_HANDLER] = true;
 }
 
@@ -46,7 +46,8 @@ class InputBinding<T> {
   // Declared here so TypeScript knows the field exists; assigned in the
   // constructor where the debounce branch decides which closure to use.
   // Must be readonly after construction — markInternal relies on the final
-  // function reference being stable.
+  // function reference being stable, which is ensured by calling it after
+  // all handler assignments are complete.
   private readonly handleInput: () => void;
 
   constructor($el: JQuery, atom: WritableAtom<T>, options: ValOptions<T>) {

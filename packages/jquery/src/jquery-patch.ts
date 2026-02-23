@@ -31,8 +31,8 @@ const handlerMap = new WeakMap<EventHandler, EventHandler>();
  *
  * Stored as a typed object and captured into `orig` (a local const) inside
  * `enablejQueryOverrides` so that the override closures always reference the
- * pre-patch methods even if `disablejQueryOverrides()` later resets `originals`
- * to null between a `.off()` call and the patched handler running.
+ * pre-patch methods even if `disablejQueryOverrides()` later resets the
+ * module-level `originals` variable to null.
  */
 type OriginalMethods = {
   on: typeof $.fn.on;

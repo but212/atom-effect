@@ -215,10 +215,7 @@ describe('jQuery Lifecycle Overrides', () => {
         throw new Error('mount fail');
       });
 
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('[atom-mount] Mount error'),
-        expect.any(Error)
-      );
+      expect(consoleSpy).toHaveBeenCalledWith('[atom-mount] Mount error', expect.any(Error));
       consoleSpy.mockRestore();
       $el.remove();
     });
@@ -236,10 +233,7 @@ describe('jQuery Lifecycle Overrides', () => {
       $el.atomUnmount();
 
       // Lines 43-49: userCleanup error triggers console.error
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('[atom-mount] Cleanup error'),
-        expect.any(Error)
-      );
+      expect(consoleSpy).toHaveBeenCalledWith('[atom-mount] Cleanup error', expect.any(Error));
       consoleSpy.mockRestore();
       $el.remove();
     });

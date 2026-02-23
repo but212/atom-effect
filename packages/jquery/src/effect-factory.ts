@@ -78,7 +78,7 @@ export function registerReactiveEffect<T>(
           try {
             updater(value);
           } catch (e) {
-            debug.error(LOG_PREFIXES.BINDING, `${ERROR_MESSAGES.UPDATER_ERROR(debugType)}:`, e);
+            debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.UPDATER_ERROR(debugType), e);
             return;
           }
           // debug.domUpdated already guards on debug.enabled internally, but
@@ -93,7 +93,7 @@ export function registerReactiveEffect<T>(
     try {
       updater(source);
     } catch (e) {
-      debug.error(LOG_PREFIXES.BINDING, `${ERROR_MESSAGES.UPDATER_ERROR(debugType, true)}:`, e);
+      debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.UPDATER_ERROR(debugType, true), e);
       return;
     }
     if (debug.enabled) debug.domUpdated(LOG_PREFIXES.BINDING, el, debugType, source);

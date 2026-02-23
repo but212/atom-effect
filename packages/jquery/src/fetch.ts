@@ -14,9 +14,7 @@ import type { ComputedAtom, FetchOptions } from './types';
  * site without an `as unknown` double-cast — `never` is assignable to any `T`.
  *
  * Intentional module-level singleton: the Promise executor never resolves or
- * rejects, so the object is permanently live. This is expected and safe —
- * there are no closures over external references that would prevent GC of other
- * objects.
+ * rejects, so the object is permanently live without preventing GC of other objects.
  */
 const NEVER_SETTLE = new Promise<never>(() => {});
 
@@ -30,8 +28,8 @@ $.extend({
 
     // Hoist 1: Determine URL getter once.
     const isStaticUrl = typeof urlOrFn === 'string';
-    const staticUrl = isStaticUrl ? urlOrFn : undefined;
-    const getUrl = isStaticUrl ? null : urlOrFn;
+    const staticUrl = typeof urlOrFn === 'string' ? urlOrFn : undefined;
+    const getUrl = typeof urlOrFn === 'function' ? urlOrFn : null;
 
     // Hoist 2: Pre-merge static options to avoid repeated object spreads per request.
     const reqOptions: JQuery.AjaxSettings = Object.assign({}, ajaxOptions);

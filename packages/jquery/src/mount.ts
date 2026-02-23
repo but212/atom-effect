@@ -32,8 +32,8 @@ const EMPTY_PROPS = Object.freeze({});
 $.fn.atomMount = function <P>(component: ComponentFn<P>, props?: P): JQuery {
   // `props ?? EMPTY_PROPS` is cast to P: when props is omitted, P is
   // constrained by the caller to be compatible with `{}` (all fields optional).
-  // The cast is unsafe for components with required fields, but TypeScript
-  // catches that at the call site when props is explicitly typed.
+  // The cast is necessary because TypeScript cannot infer the exact type of P
+  // from the `props` argument alone, especially for components with required fields.
   const p = (props ?? EMPTY_PROPS) as P;
 
   for (let i = 0, len = this.length; i < len; i++) {
@@ -41,8 +41,8 @@ $.fn.atomMount = function <P>(component: ComponentFn<P>, props?: P): JQuery {
     if (!rootEl) continue;
 
     // Dispose any existing component and its reactive bindings on this element
-    // before mounting the new one. Uses the same cleanupTree path as atomUnmount
-    // (via bindUnbind) so both paths are guaranteed to cover the full subtree.
+    // *before* mounting the new one. This ensures a clean slate and uses the
+    // same `cleanupTree` path as `atomUnmount` for consistency.
     registry.cleanupTree(rootEl);
 
     const $el = $(rootEl);
@@ -68,9 +68,10 @@ $.fn.atomMount = function <P>(component: ComponentFn<P>, props?: P): JQuery {
  * Unmounts the component and disposes all reactive bindings on each selected
  * element and its descendants.
  *
- * Delegates to `bindUnbind`, which calls `registry.cleanupTree` — the same
- * full-subtree cleanup path used by `atomMount` when replacing an existing
- * component.
+ * Delegates to `bindUnbind`, which calls `registry.cleanupTree` — performing
+ * a recursive cleanup of all reactive bindings on the element and its descendants.
+ * This is the same full-subtree cleanup path used by `atomMount` when replacing
+ * an existing component.
  */
 $.fn.atomUnmount = function (): JQuery {
   for (let i = 0, len = this.length; i < len; i++) {

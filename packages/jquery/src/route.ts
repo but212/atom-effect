@@ -57,10 +57,8 @@ class RouterImpl implements Router {
   /** Pre-calculated base path with trailing slash stripped for consistent URL building. */
   private normalizedBasePath: string;
   /**
-   * Resolved active-link CSS class. Stored as a typed `string` field so that
-   * `setupAutoBindLinks` can use it without an `as string` cast — the
-   * constructor always fills this from `ROUTE_DEFAULTS.activeClass`, so it is
-   * never `undefined` at runtime even though `RouteConfig.activeClass` is optional.
+   * Resolved CSS class for active links. Never `undefined` at runtime as it's
+   * always filled from `ROUTE_DEFAULTS.activeClass` in the constructor.
    */
   private activeClass: string;
 
@@ -166,9 +164,9 @@ class RouterImpl implements Router {
    *
    * Malformed percent-encoding (e.g. `%FF%FE`) is handled silently by
    * `URLSearchParams` — it replaces undecodable sequences with the replacement
-   * character (U+FFFD) and continues parsing. The returned object may therefore
-   * contain garbled values for malformed keys/values; a warning is emitted via
-   * `debug.warn` but the best-effort parsed result is still returned.
+   * character (U+FFFD) and continues parsing. If malformed encoding is detected,
+   * a warning is emitted via `debug.warn`, but the best-effort parsed result
+   * is still returned.
    */
   private getQueryParams(): Record<string, string> {
     let raw: string;
@@ -298,8 +296,8 @@ class RouterImpl implements Router {
    *   the transition should not proceed.
    * - `onEnter` throws → container is already empty (`$target.empty()` ran),
    *   rendering is skipped, and `previousRoute` is NOT updated. The router
-   *   is left in an empty-container / stale-previousRoute state. This is a
-   *   known limitation: `onEnter` is not expected to throw in normal usage.
+   *   is left in an empty-container / stale-previousRoute state. This behavior
+   *   is by design to prevent unintended state changes if the `onEnter` hook fails.
    *   If recovery is needed, the hook should catch its own errors internally.
    */
   private renderRoute(routeName: string): void {
@@ -389,7 +387,7 @@ class RouterImpl implements Router {
       }
       // Two separate writes — the scheduler's automatic microtask batching
       // guarantees they are flushed together in the next microtask tick,
-      // so subscribers always see a consistent (route, params) pair.
+      // so subscribers always see a consistent snapshot of the (route, params) pair.
       // renderRoute reads getQueryParams() directly from the URL, so there
       // is no double-write risk from the queryParamsAtom update.
       this.currentRouteAtom.value = newRoute;
@@ -500,8 +498,9 @@ class RouterImpl implements Router {
     // This is intentionally different from handleUrlChange, where previousUrl
     // is committed at the END after a successful unblocked transition.
     this.setUrl(resolved);
-    // Two separate writes — flushed together by the scheduler's automatic
-    // microtask batching, so subscribers always see a consistent (route, params) pair.
+    // Two separate writes — the scheduler's automatic microtask batching
+    // guarantees they are flushed together in the next microtask tick,
+    // so subscribers always see a consistent snapshot of the (route, params) pair.
     this.queryParamsAtom.value = {};
     this.currentRouteAtom.value = resolved;
   }

@@ -21,15 +21,9 @@ import { isReactive } from './utils';
 /**
  * Local wrapper around core's `atom` factory.
  *
- * WHY A WRAPPER EXISTS:
- * `$.atom.debug` must be an accessor (getter/setter) attached to the function
- * object itself. `Object.defineProperty` requires an own, locally-created
- * function — imported references are owned by the module system and cannot
- * be extended this way. The `debug` accessor is added immediately below via
- * `Object.defineProperty`; `staticExtensions` then registers the augmented
- * function on `$` with a double cast (`atom as unknown as JQueryStatic['atom']`)
- * because TypeScript cannot see the runtime-added accessor through the declared
- * function type.
+ * This wrapper exists to attach the `$.atom.debug` accessor directly to the
+ * function object at runtime. TypeScript requires a double cast for this
+ * augmentation, but `NamespaceExtensions` ensures all other fields are type-safe.
  *
  * `options` is not defaulted here — core's `atom` defaults `options` to `{}`
  * internally, so passing `undefined` is safe and avoids an extra allocation
@@ -92,11 +86,9 @@ export function nextTick(): Promise<void> {
  * Adding or removing a key in either `JQueryStatic` or this object without
  * updating the other produces a compile-time error.
  *
- * Dependency direction note: most keys flow from `JQueryStatic` into this
- * type (the interface is the source of truth). `nextTick` is the exception —
- * it originates in this file, so `JQueryStatic['nextTick']` is verified
- * against the local `export function nextTick` signature, not the other way
- * around.
+ * Dependency direction note: `nextTick` is defined locally in this file, so
+ * `JQueryStatic['nextTick']` is validated against its signature. For most other
+ * keys, `JQueryStatic` serves as the source of truth for typing.
  *
  * Note: `$.extend(staticExtensions)` merges the fields into `$` at runtime.
  * TypeScript does not model this mutation on the `$` type — the augmented
@@ -116,10 +108,9 @@ type NamespaceExtensions = Pick<
 >;
 
 const staticExtensions: NamespaceExtensions = {
-  // Double cast required: `atom` carries a runtime `debug` accessor added via
-  // Object.defineProperty (see function JSDoc above). TypeScript cannot see
-  // that accessor through the declared function type, so the shape escapes
-  // static checking here. All other fields are fully verified by NamespaceExtensions.
+  // Double cast required for the `atom` function due to its runtime `debug`
+  // accessor (see JSDoc for `function atom` above). All other fields are
+  // fully verified by `NamespaceExtensions`.
   atom: atom as unknown as JQueryStatic['atom'],
   computed,
   effect,

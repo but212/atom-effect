@@ -32,7 +32,7 @@ describe('Debug Module', () => {
 
     debug.enabled = true;
     debug.log(LOG_PREFIXES.LIST, 'payload');
-    expect(logSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.LIST}`, 'payload');
+    expect(logSpy).toHaveBeenCalledWith(LOG_PREFIXES.LIST, 'payload');
   });
 
   // --------------------------------------------------------------------------
@@ -105,7 +105,7 @@ describe('Debug Module', () => {
     debug.domUpdated(LOG_PREFIXES.BINDING, el, 'text', 'new text');
 
     expect(logSpy).toHaveBeenCalledWith(
-      expect.stringContaining(`${LOG_PREFIXES.BINDING} DOM updated:`),
+      `${LOG_PREFIXES.BINDING} DOM updated: div.text =`,
       'new text'
     );
 
