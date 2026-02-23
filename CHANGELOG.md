@@ -31,6 +31,12 @@
   - Replaced separate `let valAtom` / `let valOpts` variables with a single `valParsed: { atom, opts } | null` object, eliminating the `valAtom!` non-null assertion and making the type flow explicit.
   - Formatting of the single→map ternary in `atomAttr` and `atomProp` aligned with the style used in `atomClass` and `atomCss`.
 
+- **debug – subsystem prefix consistency**:
+  - `debug.log`, `debug.atomChanged`, `debug.domUpdated`, and `debug.cleanup` now accept a `prefix` as their first argument (matching the existing `debug.warn` / `debug.error` API). Previously all four methods hard-coded `LOG_PREFIXES.MOUNT` (`[atom-mount]`), so list and binding log lines were attributed to the wrong subsystem.
+  - All call sites updated: `list.ts` now passes `LOG_PREFIXES.LIST`, binding helpers pass `LOG_PREFIXES.BINDING`.
+  - `highlightElement` guard tightened: early-returns when `debugEnabled` is false, preventing accidental highlight activation if called outside `domUpdated` in the future.
+  - `_highlightStyleRef` renamed to `highlightStyleRef` to match the naming convention used by all other module-level variables in the file.
+
 ## [0.22.2]
 
 ### jQuery

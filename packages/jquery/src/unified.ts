@@ -311,7 +311,7 @@ export function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): v
     untracked(() => {
       if (el.checked !== val) {
         el.checked = val;
-        debug.domUpdated($el, 'checked', val);
+        debug.domUpdated(LOG_PREFIXES.BINDING, $el, 'checked', val);
       }
     });
   });

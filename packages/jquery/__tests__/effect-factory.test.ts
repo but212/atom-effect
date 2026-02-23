@@ -30,7 +30,7 @@ describe('Effect Factory', () => {
     try {
       debug.enabled = true;
       registerReactiveEffect(el, 'static', updater, 'debug-test');
-      expect(domUpdatedSpy).toHaveBeenCalledWith(expect.anything(), 'debug-test', 'static');
+      expect(domUpdatedSpy).toHaveBeenCalledWith(expect.anything(), el, 'debug-test', 'static');
     } finally {
       debug.enabled = false;
     }

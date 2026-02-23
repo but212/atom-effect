@@ -179,7 +179,7 @@ class InputBinding<T> {
           this.el.value = formatted;
         }
 
-        debug.domUpdated(this.$el, 'val', formatted);
+        debug.domUpdated(LOG_PREFIXES.BINDING, this.$el, 'val', formatted);
       } finally {
         this.flags &= ~BindingFlags.SyncingToDom;
       }

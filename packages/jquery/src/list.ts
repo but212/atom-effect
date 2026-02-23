@@ -74,7 +74,7 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
         if (fx?.isDisposed) return; // Container already torn down — skip stale DOM work
         entry.$el.remove();
         removingKeys.delete(k);
-        debug.log('list', `${containerSelector} removed item:`, k);
+        debug.log(LOG_PREFIXES.LIST, `${containerSelector} removed item:`, k);
       };
 
       if (!onRemove) {
@@ -127,7 +127,7 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
           return;
         }
 
-        debug.log('list', `${containerSelector} updating with ${itemCount} items`);
+        debug.log(LOG_PREFIXES.LIST, `${containerSelector} updating with ${itemCount} items`);
 
         // 2. Build index structures
         const oldIndexMap = new Map<string | number, number>();
@@ -278,7 +278,7 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
               entry.item = item;
               entry.state = undefined;
               removingKeys.delete(k);
-              debug.domUpdated(entry.$el, 'list.add', item);
+              debug.domUpdated(LOG_PREFIXES.LIST, entry.$el, 'list.add', item);
             }
           }
         } else {
@@ -312,7 +312,7 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
               if (state === 'new') {
                 if (onAdd) onAdd(entry.$el);
                 removingKeys.delete(k);
-                debug.domUpdated(entry.$el, 'list.add', item);
+                debug.domUpdated(LOG_PREFIXES.LIST, entry.$el, 'list.add', item);
               }
             }
             rawContainer.appendChild(fragment);
@@ -347,7 +347,7 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
               if (state === 'new') {
                 if (onAdd) onAdd(entry.$el);
                 removingKeys.delete(k);
-                debug.domUpdated(entry.$el, 'list.add', item);
+                debug.domUpdated(LOG_PREFIXES.LIST, entry.$el, 'list.add', item);
               }
             }
           }
