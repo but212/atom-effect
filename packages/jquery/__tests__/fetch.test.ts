@@ -198,6 +198,55 @@ describe('$.atomFetch', () => {
     expect(data.value).toEqual({ ok: true });
   });
 
+  // -------------------------------------------------------------------------
+  // transform error isolation
+  // -------------------------------------------------------------------------
+
+  it('transform error sets hasError but does NOT call onError', async () => {
+    vi.spyOn($, 'ajax').mockResolvedValue({ raw: true });
+    const onError = vi.fn();
+    const transformErr = new Error('bad shape');
+
+    const data = $.atomFetch('/api/data', {
+      defaultValue: null,
+      transform: () => { throw transformErr; },
+      onError,
+    });
+
+    await $.nextTick();
+    await $.nextTick();
+
+    expect(data.hasError).toBe(true);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('transform error message is surfaced on the atom lastError', async () => {
+    vi.spyOn($, 'ajax').mockResolvedValue({ raw: true });
+
+    const data = $.atomFetch('/api/data', {
+      defaultValue: null,
+      transform: () => { throw new Error('bad shape'); },
+    });
+
+    await $.nextTick();
+    await $.nextTick();
+
+    expect(data.lastError?.message).toContain('bad shape');
+  });
+
+  it('network error still calls onError (transform error isolation does not regress this)', async () => {
+    const networkErr = new Error('Network error');
+    vi.spyOn($, 'ajax').mockRejectedValue(networkErr);
+    const onError = vi.fn();
+
+    $.atomFetch('/api/fail', { defaultValue: null, onError });
+
+    await $.nextTick();
+    await $.nextTick();
+
+    expect(onError).toHaveBeenCalledWith(networkErr);
+  });
+
   it('AbortController.abort() before signal.addEventListener — xhr.abort() must still fire', async () => {
     const OriginalAbortController = globalThis.AbortController;
     let capturedAbortController: AbortController | null = null;

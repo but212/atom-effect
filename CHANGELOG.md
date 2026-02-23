@@ -4,6 +4,14 @@
 
 ### jQuery
 
+- **atomFetch – transform error isolation**:
+  - `transform` errors no longer call `onError`. `onError` is now strictly limited to network/server failures (`$.ajax` rejections). Transform exceptions propagate directly to the computed atom's error state.
+  - Fixed: previously a bug in `transform` would surface as a network error and trigger `onError`, misleading callers.
+
+- **atomList – childSelector scope guard**:
+  - Fixed: `target.closest(selector)` could escape upward past the item root and match an ancestor element that shares the selector class, causing the handler to fire incorrectly.
+  - Fix: after `closest()` finds a match, `node.contains(matched)` verifies the match is a descendant of the item root.
+
 - **atomList – Incremental Update Sanitization**:
   - Single-item string renders (the common incremental case) now call `sanitizeHtml` directly instead of going through join → sanitize → split, eliminating `Math.random()`, `Date.now()`, `join`, and `split` allocations entirely.
   - Two-or-more string renders retain the existing batch join/split path to preserve the O(1) regex cost per batch.

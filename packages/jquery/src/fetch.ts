@@ -60,23 +60,28 @@ $.extend({
         signal.onabort = () => xhr.abort();
         if (signal.aborted) xhr.abort();
 
+        let raw: unknown;
         try {
-          const raw = await xhr;
-          return transform ? transform(raw) : (raw as T);
+          raw = await xhr;
         } catch (err) {
           if (signal.aborted) {
             return NEVER_SETTLE as Promise<T>;
           }
+          // Network / server error — notify the caller via onError.
           try {
             onError?.(err);
           } catch {
-            // Ignore
+            // Ignore errors thrown by onError itself.
           }
           throw err;
         } finally {
           signal.onabort = null;
           if (abortController.signal === signal) abortController = null;
         }
+
+        // Transform errors are kept separate from network errors so that
+        // onError is not called for bugs in the transform function itself.
+        return transform ? transform(raw) : (raw as T);
       },
       { defaultValue, lazy: isLazy }
     );
