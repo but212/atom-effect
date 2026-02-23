@@ -84,6 +84,16 @@ export const COMPUTED_CONFIG = {
 } as const;
 
 /**
+ * Epoch sentinel values.
+ */
+export const EPOCH_CONSTANTS = {
+  /** Uninitialized epoch marker. Used as initial value before any flush has occurred. */
+  UNINITIALIZED: -1,
+  /** Minimum valid epoch value after a counter reset. */
+  MIN: 1,
+} as const;
+
+/**
  * V8 Small Integer (SMI) max value.
  */
 export const SMI_MAX = 0x3fffffff;

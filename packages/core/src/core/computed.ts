@@ -3,6 +3,7 @@ import {
   COMPUTED_CONFIG,
   COMPUTED_STATE_FLAGS,
   EMPTY_ERROR_ARRAY,
+  EPOCH_CONSTANTS,
   IS_DEV,
   SMI_MAX,
 } from '@/constants';
@@ -66,10 +67,10 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   // Async state
   private _asyncStartAggregateVersion = 0;
   private _asyncRetryCount = 0;
-  private _lastDriftEpoch = -1;
+  private _lastDriftEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
 
   // Dependency collection state
-  private _trackEpoch = -1;
+  private _trackEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
   private _trackLinks: DependencyLink[] = EMPTY_LINKS;
   private _trackCount = 0;
 
@@ -294,7 +295,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       }
 
       // Reset transient state
-      this._trackEpoch = -1;
+      this._trackEpoch = EPOCH_CONSTANTS.UNINITIALIZED;
       this._trackLinks = EMPTY_LINKS;
       this._trackCount = 0;
       this.flags &= ~RECOMPUTING;
