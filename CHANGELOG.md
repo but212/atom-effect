@@ -23,6 +23,14 @@
   - Child selector matching uses native `element.closest()` instead of jQuery wrapper allocation.
   - Both indexes are kept in sync inside the effect run and cleared on container cleanup via `registry.trackCleanup`.
 
+- **atomList – innerHTML fast path correctness**:
+  - Fixed: `events` option now disables the `innerHTML` fast path. Previously, the fast path bypassed the per-element `$el` assignment that `elToKey` depends on, causing all delegated event handlers to silently drop every event on initial render.
+  - Removed the redundant `removingKeys.size === 0` guard from the fast-path condition — `removingKeys` is always empty on initial render (`isInitial`), so the check was dead code.
+
+- **atomBind – val parsing cleanup**:
+  - Replaced separate `let valAtom` / `let valOpts` variables with a single `valParsed: { atom, opts } | null` object, eliminating the `valAtom!` non-null assertion and making the type flow explicit.
+  - Formatting of the single→map ternary in `atomAttr` and `atomProp` aligned with the style used in `atomClass` and `atomCss`.
+
 ## [0.22.2]
 
 ### jQuery

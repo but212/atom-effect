@@ -209,7 +209,9 @@ describe('$.atomFetch', () => {
 
     const data = $.atomFetch('/api/data', {
       defaultValue: null,
-      transform: () => { throw transformErr; },
+      transform: () => {
+        throw transformErr;
+      },
       onError,
     });
 
@@ -225,7 +227,9 @@ describe('$.atomFetch', () => {
 
     const data = $.atomFetch('/api/data', {
       defaultValue: null,
-      transform: () => { throw new Error('bad shape'); },
+      transform: () => {
+        throw new Error('bad shape');
+      },
     });
 
     await $.nextTick();

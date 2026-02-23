@@ -247,8 +247,11 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
         let nextNode: Node | null = null;
         const isInitial = oldKeys.length === 0;
 
-        // innerHTML fast path: initial render, all string renders, no callbacks,
-        // and no elements currently mid-removal (innerHTML would destroy them).
+        // innerHTML fast path: initial render, all string renders, no callbacks.
+        // events is excluded because innerHTML skips the per-element $el
+        // assignment that elToKey depends on; delegated handlers would fire
+        // but find nothing in elToKey, silently dropping every event.
+        // removingKeys is always empty on initial render so no guard needed.
         const useInnerHtml =
           isInitial &&
           sanitizedFragments !== null &&
@@ -256,7 +259,7 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
           !bind &&
           !onAdd &&
           !onRemove &&
-          removingKeys.size === 0;
+          !events;
 
         if (useInnerHtml) {
           rawContainer.innerHTML = sanitizedFragments!.join('');
