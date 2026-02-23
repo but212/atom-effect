@@ -188,10 +188,21 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
           }
         }
 
-        // Batch sanitize: N calls → 1 call
+        // Sanitize rendered HTML strings.
+        //
+        // Strategy depends on the number of string parts:
+        //
+        // • 0 parts  — nothing to do.
+        // • 1 part   — call sanitizeHtml once directly; join/split adds pure overhead.
+        // • ≥2 parts — batch via join/split to pay sanitizeHtml's regex cost once
+        //              instead of N times.  A random HTML-comment separator is generated
+        //              per batch so it cannot collide with user content regardless of
+        //              what the render function returns.
         let sanitizedFragments: string[] | null = null;
-        if (htmlParts.length > 0) {
-          // Generate an ephemeral separator per batch to ensure zero collision with user content
+        const htmlPartCount = htmlParts.length;
+        if (htmlPartCount === 1) {
+          sanitizedFragments = [sanitizeHtml(htmlParts[0]!)];
+        } else if (htmlPartCount > 1) {
           const batchSeparator = `<!--sep-${Math.random().toString(36).substring(2)}-${Date.now().toString(36)}-->`;
           sanitizedFragments = sanitizeHtml(htmlParts.join(batchSeparator)).split(batchSeparator);
         }

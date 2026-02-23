@@ -4,6 +4,10 @@
 
 ### jQuery
 
+- **atomList – Incremental Update Sanitization**:
+  - Single-item string renders (the common incremental case) now call `sanitizeHtml` directly instead of going through join → sanitize → split, eliminating `Math.random()`, `Date.now()`, `join`, and `split` allocations entirely.
+  - Two-or-more string renders retain the existing batch join/split path to preserve the O(1) regex cost per batch.
+
 - **atomList – Delegated Event Listeners**:
   - Added `events` option to `ListOptions<T>` for container-level event delegation. One listener per event type is registered on the container regardless of item count, eliminating per-item handler allocation.
   - Key syntax: `'eventType'` (item root) or `'eventType selector'` (child selector). Handlers receive `(item, currentIndex, event)`.
