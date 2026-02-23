@@ -11,7 +11,21 @@ let instanceCounter = 0;
 
 type InputEl = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
 
+/**
+ * Marks a handler as library-internal so the jQuery patch skips batch() wrapping.
+ * All handlers registered by InputBinding must be marked — unmarked handlers are
+ * wrapped in batch() by the jQuery override, which is redundant and potentially
+ * harmful here since InputBinding manages atom writes directly.
+ */
+function markInternal(fn: () => void): void {
+  (fn as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
+}
+
 class InputBinding<T> {
+  // $el: used only for jQuery event binding and debug.domUpdated — kept as a
+  // field to avoid re-wrapping $el[0] on every call.
+  // el:  raw DOM reference for hot-path property access (value, selectionStart,
+  //      etc.) — avoids jQuery wrapper overhead on every input event.
   private readonly $el: JQuery;
   private readonly el: InputEl;
   private readonly atom: WritableAtom<T>;
@@ -29,7 +43,10 @@ class InputBinding<T> {
   /** Per-instance jQuery event namespace — prevents cleanup collisions. */
   private readonly ns: string;
 
-  // Initialized in constructor based on options.debounce decision.
+  // Declared here so TypeScript knows the field exists; assigned in the
+  // constructor where the debounce branch decides which closure to use.
+  // Must be readonly after construction — markInternal relies on the final
+  // function reference being stable.
   private readonly handleInput: () => void;
 
   constructor($el: JQuery, atom: WritableAtom<T>, options: ValOptions<T>) {
@@ -44,7 +61,9 @@ class InputBinding<T> {
     this.format = options.format ?? ((v: T) => String(v ?? ''));
     this.equal = options.equal ?? Object.is;
 
-    // Optimization: Pre-bind the appropriate input handler to avoid per-event branching.
+    // Optimization: pre-bind the appropriate input handler to avoid per-event
+    // branching at runtime. The debounce branch produces a closure that clears
+    // and resets a timer; the no-debounce branch calls syncAtomFromDom directly.
     if (debounce > 0) {
       this.handleInput = () => {
         if (this.flags & BindingFlags.Composing) return;
@@ -58,13 +77,15 @@ class InputBinding<T> {
       };
     }
 
-    // Mark all internal handlers so the jQuery patch skips batch() wrapping.
-    // Inlining markInternal avoids helper call overhead.
-    (this.handleFocus as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
-    (this.handleBlur as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
-    (this.handleCompositionStart as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
-    (this.handleCompositionEnd as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
-    (this.handleInput as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
+    // Mark all handlers so the jQuery patch skips batch() wrapping.
+    // Done after all handler references are finalized (handleInput is assigned
+    // above; the others are class-field arrow functions initialized before the
+    // constructor body runs).
+    markInternal(this.handleFocus);
+    markInternal(this.handleBlur);
+    markInternal(this.handleCompositionStart);
+    markInternal(this.handleCompositionEnd);
+    markInternal(this.handleInput);
 
     this.bindEvents(eventName);
   }
@@ -86,19 +107,39 @@ class InputBinding<T> {
 
   private readonly handleBlur = () => {
     this.flags &= ~BindingFlags.Focused;
+    // Order matters: flush the pending debounce write BEFORE normalizing the
+    // display value so that normalizeDomValue reads the atom state that
+    // includes any value the user was typing.
+    this.flushPendingDebounce();
+    this.normalizeDomValue();
+  };
 
-    // Flush any pending debounce timer on blur.
+  // --- Blur helpers ---
+
+  /**
+   * Flushes any pending debounce timer immediately.
+   * Called on blur so that a value the user finished typing is not lost
+   * when focus moves away before the debounce delay expires.
+   */
+  private flushPendingDebounce(): void {
     if (this.timeoutId !== undefined) {
       clearTimeout(this.timeoutId);
       this.timeoutId = undefined;
       this.syncAtomFromDom();
     }
+  }
 
+  /**
+   * Re-formats the current atom value into the input element on blur.
+   * Ensures the displayed text matches the canonical format (e.g. trims trailing
+   * spaces, applies number formatting) after the user finishes editing.
+   */
+  private normalizeDomValue(): void {
     const formatted = this.format(this.atom.peek());
     if (this.el.value !== formatted) {
       this.el.value = formatted;
     }
-  };
+  }
 
   // --- Sync Logic ---
 
@@ -131,12 +172,14 @@ class InputBinding<T> {
    * Called by the `effect()` wrapper in `applyInputBinding` whenever the atom
    * value changes. Named `syncDomFromAtom` to distinguish it from the imported
    * `effect` function and to clarify the data-flow direction.
+   *
+   * TRACKING NOTE: only `this.atom.value` is intentionally tracked as a
+   * reactive dependency. `format()`, `parse()`, and `equal()` run inside
+   * `untracked()` so that user-supplied callbacks cannot accidentally subscribe
+   * this effect to additional atoms — even if those callbacks internally read
+   * reactive state.
    */
   public readonly syncDomFromAtom = () => {
-    // Only this.atom.value is the intended dependency of this effect.
-    // Everything else — format(), parse(), equal(), el.value DOM reads —
-    // runs untracked so user callbacks cannot accidentally subscribe this
-    // effect to extra atoms.
     const val = this.atom.value;
 
     untracked(() => {
@@ -195,7 +238,6 @@ class InputBinding<T> {
   };
 
   private bindEvents(eventName: string): void {
-    // Hoist 1: Pre-compute event strings to avoid N allocations per input.
     const ns = this.ns;
     this.$el
       .on(`focus${ns}`, this.handleFocus)

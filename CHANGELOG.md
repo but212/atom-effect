@@ -4,6 +4,13 @@
 
 ### jQuery
 
+- **input-binding – structural cleanup**:
+  - Extracted `markInternal(fn)` helper to replace five repeated inline `INTERNAL_HANDLER` symbol casts in the constructor. New handlers are now marked by calling a single function, eliminating silent omission risk.
+  - Unified `handleInput` field declaration: the field is now declared at the class level (matching all other handlers) and assigned conditionally in the constructor, making the debounce branch the only reason the constructor assigns it.
+  - Split `handleBlur` into two focused private methods: `flushPendingDebounce()` and `normalizeDomValue()`. The call order in `handleBlur` now explicitly documents the required sequencing (flush atom write before re-formatting the display value).
+  - Added inline comments explaining why both `$el` (jQuery wrapper, event binding + debug) and `el` (raw DOM, hot-path property access) are retained as separate fields.
+  - Added `TRACKING NOTE` JSDoc to `syncDomFromAtom` to document why `format()`, `parse()`, and `equal()` run inside `untracked()`.
+
 - **atomFetch – transform error isolation**:
   - `transform` errors no longer call `onError`. `onError` is now strictly limited to network/server failures (`$.ajax` rejections). Transform exceptions propagate directly to the computed atom's error state.
   - Fixed: previously a bug in `transform` would surface as a network error and trigger `onError`, misleading callers.
