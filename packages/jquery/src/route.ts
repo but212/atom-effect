@@ -1,5 +1,5 @@
 import type { ReadonlyAtom } from '@but212/atom-effect';
-import { batch, computed, atom as createAtom, effect, untracked } from '@but212/atom-effect';
+import { computed, atom as createAtom, effect, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
 import { ERROR_MESSAGES, LOG_PREFIXES, ROUTE_DEFAULTS } from './constants';
 import { debug } from './debug';
@@ -387,14 +387,13 @@ class RouterImpl implements Router {
           return;
         }
       }
-      // batch(): write both atoms atomically so subscribers see a consistent
-      // (route, params) pair and the reactive effect fires exactly once.
+      // Two separate writes — the scheduler's automatic microtask batching
+      // guarantees they are flushed together in the next microtask tick,
+      // so subscribers always see a consistent (route, params) pair.
       // renderRoute reads getQueryParams() directly from the URL, so there
       // is no double-write risk from the queryParamsAtom update.
-      batch(() => {
-        this.currentRouteAtom.value = newRoute;
-        this.queryParamsAtom.value = params;
-      });
+      this.currentRouteAtom.value = newRoute;
+      this.queryParamsAtom.value = params;
     } else {
       // Same route but URL changed (e.g., query params only)
       this.queryParamsAtom.value = params;
@@ -501,12 +500,10 @@ class RouterImpl implements Router {
     // This is intentionally different from handleUrlChange, where previousUrl
     // is committed at the END after a successful unblocked transition.
     this.setUrl(resolved);
-    // Atomically clear stale query params and update the route atom so
-    // subscribers always see a consistent (route, params) pair.
-    batch(() => {
-      this.queryParamsAtom.value = {};
-      this.currentRouteAtom.value = resolved;
-    });
+    // Two separate writes — flushed together by the scheduler's automatic
+    // microtask batching, so subscribers always see a consistent (route, params) pair.
+    this.queryParamsAtom.value = {};
+    this.currentRouteAtom.value = resolved;
   }
 
   /**
