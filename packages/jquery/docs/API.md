@@ -120,15 +120,18 @@ Efficiently renders a list of items using keyed diffing.
 - `onAdd`: `($el) => void` - Called when an item is added to the DOM.
 - `onRemove`: `($el) => Promise<void> | void` - Called before removal (supports async exit animations).
 - `empty`: `string | Element | DocumentFragment | JQuery` - Content to show when the list is empty.
+- `events`: `Record<string, (item, index, e) => void>` - Delegated event handlers attached to the container. One listener per event type regardless of item count. Key format: `'eventType'` or `'eventType selector'`.
 
 ```javascript
 $('ul').atomList(usersAtom, {
   key: u => u.id,
-  render: u => `<li class="user-item"></li>`, // Container only
+  render: u => `<li class="user-item"></li>`,
   bind: ($el, user) => {
-    // Bind internal structure here. This assumes `user.name` is an atom.
     $el.atomText(user.name);
-    $el.on('click', () => selectUser(user));
+  },
+  events: {
+    'click .delete': (user, index, e) => removeUser(user.id),
+    'click': (user, index, e) => selectUser(user),
   }
 });
 ```

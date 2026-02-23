@@ -1,4 +1,4 @@
-import { IS_DEV, SMI_MAX } from '@/constants';
+import { EPOCH_CONSTANTS, IS_DEV, SMI_MAX } from '@/constants';
 import { Subscription } from '@/core/dep-tracking';
 import { AtomError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
@@ -15,7 +15,7 @@ export class ReactiveNode {
   /** Version counter */
   version = 0;
   /** Last access epoch */
-  _lastSeenEpoch = -1;
+  _lastSeenEpoch = EPOCH_CONSTANTS.UNINITIALIZED;
   /** Debug ID */
   readonly id: DependencyId = generateId() & SMI_MAX;
 }

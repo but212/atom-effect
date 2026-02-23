@@ -2,6 +2,7 @@ import {
   COMPUTED_STATE_FLAGS,
   DEBUG_CONFIG,
   EFFECT_STATE_FLAGS,
+  EPOCH_CONSTANTS,
   IS_DEV,
   SCHEDULER_CONFIG,
 } from '@/constants';
@@ -45,8 +46,8 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   private readonly _onError: ((error: unknown) => void) | null;
 
   // Cycle detection
-  private _currentEpoch = -1;
-  private _lastFlushEpoch = -1;
+  private _currentEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
+  private _lastFlushEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
   private _executionsInEpoch = 0;
 
   private readonly _fn: EffectFunction;

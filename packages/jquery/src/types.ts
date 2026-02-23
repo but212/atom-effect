@@ -112,6 +112,23 @@ export interface ListOptions<T> {
   onRemove?: ($el: JQuery) => Promise<void> | void;
   /** Content to show when the list is empty. */
   empty?: string | Element | DocumentFragment | JQuery;
+  /**
+   * Delegated event handlers attached to the container (not to each item).
+   *
+   * Keys follow the pattern `"eventType"` or `"eventType selector"`.
+   * A single listener per event type is registered on the container,
+   * and the callback receives the matched item data, its current index,
+   * and the original jQuery event.
+   *
+   * @example
+   * ```js
+   * events: {
+   *   'click .delete': (item, index, e) => remove(item.id),
+   *   'click': (item, index, e) => select(item),
+   * }
+   * ```
+   */
+  events?: Record<string, (item: T, index: number, e: JQuery.TriggeredEvent) => void>;
 }
 
 /**
