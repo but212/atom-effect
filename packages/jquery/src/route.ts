@@ -1,5 +1,5 @@
 import type { ReadonlyAtom } from '@but212/atom-effect';
-import { computed, atom as createAtom, effect, untracked } from '@but212/atom-effect';
+import { batch, computed, atom as createAtom, effect, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
 import { ERROR_MESSAGES, LOG_PREFIXES, ROUTE_DEFAULTS } from './constants';
 import { debug } from './debug';
@@ -56,6 +56,13 @@ class RouterImpl implements Router {
   private templateCache = new Map<string, HTMLTemplateElement>();
   /** Pre-calculated base path with trailing slash stripped for consistent URL building. */
   private normalizedBasePath: string;
+  /**
+   * Resolved active-link CSS class. Stored as a typed `string` field so that
+   * `setupAutoBindLinks` can use it without an `as string` cast — the
+   * constructor always fills this from `ROUTE_DEFAULTS.activeClass`, so it is
+   * never `undefined` at runtime even though `RouteConfig.activeClass` is optional.
+   */
+  private activeClass: string;
 
   constructor(config: RouteConfig) {
     // Destructure configuration with defaults for internal use
@@ -71,6 +78,7 @@ class RouterImpl implements Router {
     this.$target = $(this.config.target);
     // Strip trailing slash so URL construction is always `${base}/${route}`.
     this.normalizedBasePath = this.config.basePath?.replace(/\/$/, '') || '';
+    this.activeClass = this.config.activeClass ?? ROUTE_DEFAULTS.activeClass;
 
     // Initialize previousUrl based on current state before setting up atoms.
     // getCurrentUrl() cannot be called yet (method depends on isHistoryMode which is set above).
@@ -155,6 +163,12 @@ class RouterImpl implements Router {
    * only (`{ a: '2' }`). This matches `URLSearchParams` → `Object.fromEntries`
    * behaviour. If multi-value keys are needed, access `queryParams` via
    * `new URLSearchParams(window.location.search).getAll('key')` directly.
+   *
+   * Malformed percent-encoding (e.g. `%FF%FE`) is handled silently by
+   * `URLSearchParams` — it replaces undecodable sequences with the replacement
+   * character (U+FFFD) and continues parsing. The returned object may therefore
+   * contain garbled values for malformed keys/values; a warning is emitted via
+   * `debug.warn` but the best-effort parsed result is still returned.
    */
   private getQueryParams(): Record<string, string> {
     let raw: string;
@@ -278,9 +292,15 @@ class RouterImpl implements Router {
    * outgoing content are disposed before the nodes are removed — preventing
    * the MutationObserver auto-cleanup path from firing a redundant cleanup.
    *
-   * If `beforeTransition` throws, the render is aborted and the outgoing
-   * content remains in the DOM. This is intentional — a throwing hook signals
-   * that the transition should not proceed.
+   * EXCEPTION BEHAVIOUR:
+   * - `beforeTransition` throws → render aborted, outgoing DOM intact,
+   *   `previousRoute` unchanged. Intentional: a throwing hook signals that
+   *   the transition should not proceed.
+   * - `onEnter` throws → container is already empty (`$target.empty()` ran),
+   *   rendering is skipped, and `previousRoute` is NOT updated. The router
+   *   is left in an empty-container / stale-previousRoute state. This is a
+   *   known limitation: `onEnter` is not expected to throw in normal usage.
+   *   If recovery is needed, the hook should catch its own errors internally.
    */
   private renderRoute(routeName: string): void {
     if (this.isDestroyed) return;
@@ -367,12 +387,14 @@ class RouterImpl implements Router {
           return;
         }
       }
-      // Update route first; the reactive effect will call renderRoute.
-      // queryParamsAtom is set here so it is in sync before any subscriber
-      // reads it during the same flush — renderRoute reads getQueryParams()
-      // directly from the URL so there is no double-write risk.
-      this.currentRouteAtom.value = newRoute;
-      this.queryParamsAtom.value = params;
+      // batch(): write both atoms atomically so subscribers see a consistent
+      // (route, params) pair and the reactive effect fires exactly once.
+      // renderRoute reads getQueryParams() directly from the URL, so there
+      // is no double-write risk from the queryParamsAtom update.
+      batch(() => {
+        this.currentRouteAtom.value = newRoute;
+        this.queryParamsAtom.value = params;
+      });
     } else {
       // Same route but URL changed (e.g., query params only)
       this.queryParamsAtom.value = params;
@@ -415,8 +437,7 @@ class RouterImpl implements Router {
     });
 
     // 2. Active state management — re-runs only when currentRoute changes.
-    // `activeClass` is always set (constructor fills it from ROUTE_DEFAULTS).
-    const { activeClass } = this.config;
+    const activeClass = this.activeClass;
 
     const activeLinksEffect = effect(() => {
       const current = this.currentRouteAtom.value; // sole tracked dependency
@@ -430,7 +451,7 @@ class RouterImpl implements Router {
           const routeAttr = el.dataset.route!;
           const isActive = current === routeAttr;
 
-          el.classList.toggle(activeClass as string, isActive);
+          el.classList.toggle(activeClass, isActive);
           if (isActive) {
             el.setAttribute('aria-current', 'page');
           } else {
@@ -474,10 +495,18 @@ class RouterImpl implements Router {
       return;
     }
 
+    // setUrl() updates the browser URL AND sets this.previousUrl so that
+    // the resulting hashchange/popstate event (which fires synchronously on
+    // some browsers for hash-mode) is ignored by handleUrlChange.
+    // This is intentionally different from handleUrlChange, where previousUrl
+    // is committed at the END after a successful unblocked transition.
     this.setUrl(resolved);
-    // Clear stale query params when navigating to a new route.
-    this.queryParamsAtom.value = {};
-    this.currentRouteAtom.value = resolved;
+    // Atomically clear stale query params and update the route atom so
+    // subscribers always see a consistent (route, params) pair.
+    batch(() => {
+      this.queryParamsAtom.value = {};
+      this.currentRouteAtom.value = resolved;
+    });
   }
 
   /**
@@ -489,7 +518,12 @@ class RouterImpl implements Router {
     if (this.isDestroyed) return;
     this.isDestroyed = true;
 
+    // Swap before iterating: if a cleanup function somehow pushes to
+    // this.cleanups (e.g. a misbehaving plugin), those additions are not
+    // iterated and do not cause an infinite loop or missed teardown.
     const cleanups = this.cleanups;
+    this.cleanups = [];
+
     for (let i = 0, len = cleanups.length; i < len; i++) {
       try {
         cleanups[i]!();
@@ -497,7 +531,6 @@ class RouterImpl implements Router {
         debug.warn(LOG_PREFIXES.ROUTE, 'Cleanup error during destroy:', e);
       }
     }
-    this.cleanups.length = 0;
 
     // Release cached template references to allow GC.
     this.templateCache.clear();

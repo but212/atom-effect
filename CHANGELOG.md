@@ -4,6 +4,14 @@
 
 ### jQuery
 
+- **route – correctness and type clarity**:
+  - `handleUrlChange`: wrapped the two-atom write (`currentRouteAtom` + `queryParamsAtom`) in `batch()` so subscribers always see a consistent (route, params) pair and the render effect fires exactly once per URL change.
+  - `navigate`: same — `queryParamsAtom` and `currentRouteAtom` writes are now wrapped in `batch()`. Added a comment documenting why `setUrl`/`previousUrl` is committed before the atom writes here, intentionally differing from `handleUrlChange`.
+  - `renderRoute` JSDoc: documented the `onEnter`-throws edge case — container is emptied before `onEnter` runs, so a throwing hook leaves an empty container with a stale `previousRoute`. Known limitation; recovery requires the hook to catch internally.
+  - `activeClass`: extracted as a `private activeClass: string` field resolved in the constructor, replacing the `as string` cast in `setupAutoBindLinks`. `RouteConfig.activeClass` is optional but the constructor always fills it from `ROUTE_DEFAULTS`, so the field is guaranteed non-undefined.
+  - `getQueryParams` JSDoc: documented that malformed percent-encoding is silently replaced by `URLSearchParams` (U+FFFD substitution); the best-effort parsed result is still returned alongside the `debug.warn`.
+  - `destroy`: swap `this.cleanups = []` before iterating instead of `length = 0` after, preventing a misbehaving cleanup from pushing new entries that would be silently skipped or cause unbounded iteration.
+
 - **namespace – comment consolidation**:
   - Merged the two separate explanations of why the `atom` wrapper function exists (one in the function JSDoc, one above `staticExtensions`) into a single unified "WHY A WRAPPER EXISTS" section in the function JSDoc, eliminating the need to cross-reference two locations.
   - Removed the now-redundant inline comment above `atom:` in `staticExtensions`; replaced with a concise back-reference to the function JSDoc.
