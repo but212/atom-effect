@@ -1,6 +1,7 @@
 import { batch } from '@but212/atom-effect';
 import $ from 'jquery';
 import { registry } from './registry';
+import { hasOwn } from './utils';
 
 /** Generic event handler type matching jQuery's internal handler signature. */
 type EventHandler = JQuery.EventHandlerBase<unknown, JQuery.TriggeredEvent>;
@@ -76,7 +77,7 @@ const getWrappedHandler = (fn: EventHandler): EventHandler => {
 function wrapEventMap(map: Record<string, EventHandler>): Record<string, EventHandler> {
   const newMap: Record<string, EventHandler> = {};
   for (const key in map) {
-    if (Object.hasOwn(map, key)) {
+    if (hasOwn.call(map, key)) {
       const handler = map[key];
       if (handler) newMap[key] = getWrappedHandler(handler);
     }
@@ -95,7 +96,7 @@ function resolveOffEventMap(
 ): Record<string, EventHandler | undefined> {
   const newMap: Record<string, EventHandler | undefined> = {};
   for (const key in map) {
-    if (Object.hasOwn(map, key)) {
+    if (hasOwn.call(map, key)) {
       const handler = map[key];
       newMap[key] = handler ? (handlerMap.get(handler) ?? handler) : undefined;
     }

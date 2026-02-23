@@ -4,6 +4,14 @@
 
 ### jQuery
 
+- **mount – documentation and type clarity**:
+  - `atomMount` comment on `registry.cleanupTree` now explicitly states it uses the same full-subtree path as `atomUnmount → bindUnbind → cleanupTree`, removing the apparent asymmetry between the two mount paths.
+  - `atomUnmount` JSDoc extended to document that `bindUnbind` delegates to `registry.cleanupTree`, grounding the "descendants" guarantee in the call chain rather than leaving it implicit.
+  - `as P` cast on `EMPTY_PROPS` annotated with an inline comment explaining why the cast is intentional and where TypeScript enforces the safety boundary (the call site).
+
+- **unified – type precision**:
+  - `INTERNAL_HANDLER` property type in `bindChecked` narrowed from `Record<symbol, boolean>` to `Record<symbol, true>`, consistent with `jquery-patch.ts` and `input-binding.ts`.
+
 - **jquery-patch – structural cleanup**:
   - `INTERNAL_HANDLER` symbol property type narrowed from `Record<symbol, boolean>` to `Record<symbol, true>` in both `getWrappedHandler` and `markInternal` — only `true` is ever stored, so `boolean` was an overstatement.
   - `wrapEventMap` and `resolveOffEventMap` converted from `Object.keys(...).forEach` to `for...in` with `hasOwnProperty` guard, matching the `for` loop style used throughout the rest of the file and eliminating the implicit closure allocation per key.
