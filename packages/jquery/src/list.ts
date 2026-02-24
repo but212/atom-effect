@@ -96,10 +96,7 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
       scheduleRemoval(k, entry);
     };
 
-    // Declare fx with let so scheduleRemoval's closure can reference it after assignment.
-    let fx: ReturnType<typeof effect>;
-
-    fx = effect(() => {
+    const fx = effect(() => {
       // Only source.value is tracked. All side effects (DOM reads/writes,
       // render calls, bind calls) ran inside untracked() so they cannot
       // accidentally subscribe the list effect to atom reads within user callbacks.
