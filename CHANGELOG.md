@@ -10,9 +10,11 @@
 - **input-binding**: Unified handler declarations and decoupled debounce flushing from display changes to prevent data loss.
 - **atomFetch**: Isolated `transform` exceptions to the computed state; `onError` is now strictly for network/server failures.
 - **atomList**:
-  - Fixed event scope escaping by verifying matches with `node.contains()`.
+  - **Reconciliation Refactor**: Extracted flat closures into a unified `ListContext` and step functions (`handleEmpty`, `buildIndices`, `renderItems`, `placeItems`) for better maintainability and localized state.
+  - **Lifecycle Timing**: Fixed a bug where `bind` and `update` callbacks were invoked before DOM insertion. Hooks now execute strictly after elements are attached to the container.
+  - **Event Delegation**: Replaced custom upward traversal with jQuery's native `.on()` delegation, enabling correct `this` binding and native support for non-bubbling events (e.g., `mouseenter`).
+  - **Sanitization Robustness**: Swapped the batch-sanitization separator from HTML comments to `<template>` elements to prevent `DOMPurify` content stripping.
   - Optimized single-item string renders by skipping array allocations (`join`/`split`).
-  - Added `events` option for global container-level delegation using O(1) `WeakMap` lookups, eliminating per-item handler allocation overhead.
   - Fixed `innerHTML` fast path silently dropping delegated events.
 - **atomBind**: Simplified variable assignment control flow, eliminating non-null assertions.
 - **effect-factory**: Standardized dynamic error messaging and added clarity to untracked `try/catch` intent.
