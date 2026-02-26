@@ -59,7 +59,7 @@
     "@but212/atom-effect": "workspace:*"
   },
   "devDependencies": {
-    "@types/jquery": "^3.5.33",
+    "@types/jquery": "^4.0.0",
     "@vitest/coverage-v8": "^4.0.18",
     "jquery": "^4.0.0",
     "jsdom": "^28.1.0",
