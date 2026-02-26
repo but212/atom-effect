@@ -244,4 +244,136 @@ describe('Atom List', () => {
 
     $container.remove();
   });
+
+  it('should support delegated event handlers via events option', async () => {
+    const items = $.atom([
+      { id: 1, text: 'Apple' },
+      { id: 2, text: 'Banana' },
+    ]);
+    const $container = $('<ul>').appendTo(document.body);
+
+    let lastClickedItem: { id: number; text: string } | null = null;
+    let lastClickedIndex = -1;
+    let mouseEnterFired = false;
+
+    $container.atomList(items, {
+      key: 'id',
+      render: (item) =>
+        `<li><button class="btn">${item.text}</button><span class="other"></span></li>`,
+      events: {
+        'click .btn': (item, index, _e) => {
+          lastClickedItem = item;
+          lastClickedIndex = index;
+        },
+        mouseenter: (item, _index, _e) => {
+          // No child selector -> event fires on the item root
+          lastClickedItem = item;
+          mouseEnterFired = true;
+        },
+      },
+    });
+
+    await $.nextTick();
+
+    // 1. Test child selector (.btn)
+    $container.find('li').eq(0).find('.btn').trigger('click');
+    expect(lastClickedItem).toEqual({ id: 1, text: 'Apple' });
+    expect(lastClickedIndex).toBe(0);
+
+    // 2. Click outside the selector should not trigger
+    lastClickedItem = null;
+    $container.find('li').eq(0).find('.other').trigger('click');
+    expect(lastClickedItem).toBeNull();
+
+    // 3. Test without child selector (mouseenter on the root element itself)
+    lastClickedItem = null;
+    $container.find('li').eq(1).trigger('mouseenter');
+    expect(lastClickedItem).toEqual({ id: 2, text: 'Banana' });
+    expect(mouseEnterFired).toBe(true);
+
+    // 4. Update items order and check index sync
+    items.value = [
+      { id: 2, text: 'Banana' },
+      { id: 1, text: 'Apple' },
+    ];
+    await $.nextTick();
+
+    lastClickedItem = null;
+    lastClickedIndex = -1;
+    $container.find('li').eq(0).find('.btn').trigger('click'); // Now points to Banana
+    expect(lastClickedItem).toEqual({ id: 2, text: 'Banana' });
+    expect(lastClickedIndex).toBe(0); // Index updated to 0
+
+    $container.remove();
+  });
+
+  it('should prevent DOMPurify stripping by using template tags for batch sanitization', async () => {
+    const items = $.atom([1, 2, 3]);
+    const $container = $('<ul>').appendTo(document.body);
+
+    $container.atomList(items, {
+      key: (item) => item,
+      render: (item) => `<li><!-- comment -->Item ${item}</li>`,
+    });
+
+    await $.nextTick();
+    expect($container.children().length).toBe(3);
+    expect($container.children().eq(1).text()).toBe('Item 2');
+
+    $container.remove();
+  });
+
+  it('should execute bind and update callbacks AFTER elements are appended to the container (Two-pass lifecycle)', async () => {
+    const items = $.atom([{ id: 1 }, { id: 2 }]);
+    const $container = $('<div>').appendTo(document.body);
+    let bindParentCount = 0;
+    let updateParentCount = 0;
+
+    $container.atomList(items, {
+      key: 'id',
+      render: (item) => `<span id="item-${item.id}"></span>`,
+      bind: ($el) => {
+        // Element must be attached to the container at bind time!
+        if ($el.parent()[0] === $container[0]) bindParentCount++;
+      },
+      update: ($el) => {
+        if ($el.parent()[0] === $container[0]) updateParentCount++;
+      },
+    });
+
+    await $.nextTick();
+    expect(bindParentCount).toBe(2);
+
+    items.value = [{ id: 1 }, { id: 2, touch: true } as any];
+    await $.nextTick();
+    expect(updateParentCount).toBe(2);
+
+    $container.remove();
+  });
+
+  it('should define `this` as the matching delegated element in event handlers', async () => {
+    const items = $.atom([{ id: 1, text: 'Button' }]);
+    const $container = $('<div>').appendTo(document.body);
+
+    let handlerThis: HTMLElement | null = null;
+
+    $container.atomList(items, {
+      key: 'id',
+      render: (item) => `<div><button class="btn">${item.text}</button></div>`,
+      events: {
+        'click .btn': function (item, index, e) {
+          handlerThis = this as unknown as HTMLElement; // Ensure contextual 'this'
+        },
+      },
+    });
+
+    await $.nextTick();
+
+    const $btn = $container.find('.btn');
+    $btn.trigger('click');
+
+    expect(handlerThis).toBe($btn[0]);
+
+    $container.remove();
+  });
 });

@@ -94,14 +94,38 @@ export interface BindingOptions {
   on?: Record<string, (e: JQuery.Event) => void>;
 }
 
+// ── List internals ────────────────────────────────────────────────────────────
+
+/** Key type for Map/Set inside list.ts */
+export type ListKey = string | number;
+
+/** Lifecycle state of the itemMap entry */
+export type ListItemState = 'new' | 'replaced';
+
+/** Possible return types for render() / empty */
+export type ListRenderResult = string | Element | DocumentFragment | JQuery;
+
+/** Key extractor — used for ListOptions.key field & getKey variable type */
+export type ListKeyFn<T> = (item: T, index: number) => ListKey;
+
+/**
+ * Item record stored in itemMap.
+ * @internal For list.ts only
+ */
+export interface ListItemEntry<T> {
+  $el: JQuery;
+  item: T;
+  state?: ListItemState | undefined;
+}
+
 /**
  * Configuration options for `atomList`.
  */
 export interface ListOptions<T> {
   /** Key to track items (property name or extractor function). */
-  key: keyof T | ((item: T, index: number) => string | number);
+  key: keyof T | ListKeyFn<T>;
   /** Render function for each item. */
-  render: (item: T, index: number) => string | Element | DocumentFragment | JQuery;
+  render: (item: T, index: number) => ListRenderResult;
   /** Optional post-render binding logic. */
   bind?: ($el: JQuery, item: T, index: number) => void;
   /** Optional update logic when item data changes but DOM is reused. */
@@ -111,7 +135,7 @@ export interface ListOptions<T> {
   /** Lifecycle hook: called when an element is about to be removed. Supports async transitions. */
   onRemove?: ($el: JQuery) => Promise<void> | void;
   /** Content to show when the list is empty. */
-  empty?: string | Element | DocumentFragment | JQuery;
+  empty?: ListRenderResult;
   /**
    * Delegated event handlers attached to the container (not to each item).
    *

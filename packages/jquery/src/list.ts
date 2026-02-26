@@ -3,7 +3,15 @@ import $ from 'jquery';
 import { ERROR_MESSAGES, LOG_PREFIXES } from './constants';
 import { debug } from './debug';
 import { registry } from './registry';
-import type { ListOptions, ReadonlyAtom } from './types';
+import type {
+  EffectObject,
+  ListItemEntry,
+  ListItemState,
+  ListKey,
+  ListKeyFn,
+  ListOptions,
+  ReadonlyAtom,
+} from './types';
 import { getLIS, getSelector, hasOwn, sanitizeHtml, shallowEqual } from './utils';
 
 // ============================================================================
@@ -19,6 +27,432 @@ function insertOrAppend($el: JQuery, nextNode: Node | null, $container: JQuery):
   else $el.appendTo($container);
 }
 
+/**
+ * Applies bind or update callback to an existing entry's element.
+ * - `state === undefined` → item existed before; call `update` if provided.
+ * - `state !== undefined` → item was just rendered; call `bind` if provided.
+ */
+function applyItemCallbacks<T>(
+  state: ListItemState | undefined,
+  entry: ListItemEntry<T>,
+  item: T,
+  index: number,
+  bind: ListOptions<T>['bind'],
+  update: ListOptions<T>['update']
+): void {
+  if (!entry.$el[0]) return;
+  if (state === undefined) {
+    if (update) update(entry.$el, item, index);
+  } else if (bind) {
+    bind(entry.$el, item, index);
+  }
+}
+
+// ============================================================================
+// ListContext
+// ============================================================================
+
+/**
+ * Per-container mutable state + removal logic for a single atomList instance.
+ * Replaces the flat closure variables from Phase 1.
+ * @internal
+ */
+class ListContext<T> {
+  readonly itemMap = new Map<ListKey, ListItemEntry<T>>();
+  readonly removingKeys = new Set<ListKey>();
+  oldKeys: ListKey[] = [];
+  $emptyEl: JQuery | null = null;
+  readonly elToKey = new WeakMap<Element, ListKey>();
+  readonly keyToIndex = new Map<ListKey, number>();
+  /** Assigned immediately after effect() returns. Used only inside commitRemoval callbacks. */
+  fx?: EffectObject;
+
+  constructor(
+    public readonly $container: JQuery,
+    private readonly containerSelector: string,
+    private readonly onRemove: (($el: JQuery) => Promise<void> | void) | undefined
+  ) {}
+
+  scheduleRemoval(k: ListKey, entry: ListItemEntry<T>): void {
+    const commitRemoval = () => {
+      if (this.fx?.isDisposed) return;
+      entry.$el.remove();
+      this.removingKeys.delete(k);
+      debug.log(LOG_PREFIXES.LIST, `${this.containerSelector} removed item:`, k);
+    };
+    if (!this.onRemove) {
+      commitRemoval();
+      return;
+    }
+    const result = this.onRemove(entry.$el);
+    if (result instanceof Promise) {
+      result.then(commitRemoval, commitRemoval);
+    } else {
+      commitRemoval();
+    }
+  }
+
+  removeItem(k: ListKey, entry: ListItemEntry<T>): void {
+    this.itemMap.delete(k);
+    this.removingKeys.add(k);
+    this.scheduleRemoval(k, entry);
+  }
+
+  dispose(): void {
+    this.itemMap.clear();
+    this.removingKeys.clear();
+    this.oldKeys.length = 0;
+    this.keyToIndex.clear();
+    this.$emptyEl?.remove();
+    this.$container.off('.atomList');
+  }
+}
+
+// ============================================================================
+// Internal diff types
+// ============================================================================
+
+/** Return value of buildIndices() */
+interface PreparedDiff<T> {
+  newKeys: ListKey[];
+  newKeySet: Set<ListKey>;
+  newIndices: Int32Array;
+  trKeys: ListKey[];
+  trItems: T[];
+  trIdxs: number[];
+}
+
+/** Callback subset of ListOptions passed to placeItems. */
+interface PlaceCallbacks<T> {
+  bind: ListOptions<T>['bind'];
+  update: ListOptions<T>['update'];
+  onAdd: ListOptions<T>['onAdd'];
+  onRemove: ListOptions<T>['onRemove'];
+  events: ListOptions<T>['events'];
+}
+
+// ============================================================================
+// Step functions
+// ============================================================================
+
+/**
+ * Step 1: Handle empty list state.
+ * Shows/hides the empty template and removes all current items.
+ * Caller should `return` immediately after if `itemCount === 0`.
+ */
+function handleEmpty<T>(
+  ctx: ListContext<T>,
+  itemCount: number,
+  $container: JQuery,
+  empty: ListOptions<T>['empty']
+): void {
+  if (ctx.$emptyEl && itemCount > 0) {
+    ctx.$emptyEl.remove();
+    ctx.$emptyEl = null;
+  }
+
+  if (itemCount !== 0) return;
+
+  if (empty && !ctx.$emptyEl) {
+    const safeEmpty = typeof empty === 'string' ? sanitizeHtml(empty) : empty;
+    ctx.$emptyEl = ($(safeEmpty as string) as JQuery).appendTo($container);
+  }
+
+  const { oldKeys, itemMap } = ctx;
+  for (let i = 0, len = oldKeys.length; i < len; i++) {
+    const k = oldKeys[i]!;
+    const entry = itemMap.get(k);
+    if (entry) ctx.removeItem(k, entry);
+  }
+  oldKeys.length = 0;
+}
+
+/**
+ * Step 2: Build key/index structures for diff computation.
+ */
+function buildIndices<T>(
+  ctx: ListContext<T>,
+  items: T[],
+  itemCount: number,
+  getKey: ListKeyFn<T>,
+  update: ListOptions<T>['update']
+): PreparedDiff<T> {
+  const { oldKeys, itemMap, removingKeys } = ctx;
+  const oldIndexMap = new Map<ListKey, number>();
+  for (let i = 0, len = oldKeys.length; i < len; i++) {
+    oldIndexMap.set(oldKeys[i]!, i);
+  }
+
+  const newKeys: ListKey[] = new Array(itemCount);
+  const newKeySet = new Set<ListKey>();
+  const newIndices = new Int32Array(itemCount);
+  // Parallel arrays replace an array-of-objects to reduce GC pressure and
+  // improve cache locality when iterating targetsToRender (step 3).
+  const trKeys: ListKey[] = [];
+  const trItems: T[] = [];
+  const trIdxs: number[] = [];
+
+  for (let i = 0; i < itemCount; i++) {
+    const item = items[i]!;
+    const k = getKey(item, i);
+    newKeys[i] = k;
+
+    if (newKeySet.has(k)) {
+      debug.warn(LOG_PREFIXES.LIST, ERROR_MESSAGES.DUPLICATE_KEY(k, i));
+      newIndices[i] = -1;
+      continue;
+    }
+    newKeySet.add(k);
+
+    const entry = itemMap.get(k);
+    if (!entry) {
+      trKeys.push(k);
+      trItems.push(item);
+      trIdxs.push(i);
+      newIndices[i] = -1;
+      continue;
+    }
+
+    const oldItem = entry.item;
+    if (!update && oldItem !== item && !shallowEqual(oldItem, item)) {
+      trKeys.push(k);
+      trItems.push(item);
+      trIdxs.push(i);
+    }
+    newIndices[i] = removingKeys.has(k) ? -1 : (oldIndexMap.get(k) ?? -1);
+  }
+
+  return { newKeys, newKeySet, newIndices, trKeys, trItems, trIdxs };
+}
+
+/**
+ * Step 3: Render new/updated items safely converting strings to DOM via batch sanitization.
+ * Creates $el nodes and updates ctx.itemMap for each target.
+ * Returns innerHTML fragments if the fast path can be used, otherwise null.
+ */
+function renderItems<T>(
+  ctx: ListContext<T>,
+  diff: PreparedDiff<T>,
+  options: ListOptions<T>,
+  isInitial: boolean
+): string[] | null {
+  const { trKeys, trItems, trIdxs } = diff;
+  const renderCount = trKeys.length;
+  const itemMap = ctx.itemMap;
+  const render = options.render;
+
+  const renderResults: Array<string | Element | DocumentFragment | JQuery> = new Array(renderCount);
+  const htmlParts: string[] = [];
+  let stringRenderCount = 0;
+
+  for (let t = 0; t < renderCount; t++) {
+    const raw = render(trItems[t]!, trIdxs[t]!);
+    renderResults[t] = raw;
+    if (typeof raw === 'string') {
+      htmlParts.push(raw);
+      stringRenderCount++;
+    }
+  }
+
+  let sanitizedFragments: string[] | null = null;
+  const htmlPartCount = htmlParts.length;
+  if (htmlPartCount === 1) {
+    sanitizedFragments = [sanitizeHtml(htmlParts[0]!)];
+  } else if (htmlPartCount > 1) {
+    const batchId = Math.random().toString(36).substring(2) + Date.now().toString(36);
+    const batchSeparator = `<template data-atom-sep="${batchId}"></template>`;
+    sanitizedFragments = sanitizeHtml(htmlParts.join(batchSeparator)).split(batchSeparator);
+  }
+
+  const useInnerHtml =
+    isInitial &&
+    sanitizedFragments !== null &&
+    stringRenderCount === renderCount &&
+    !options.bind &&
+    !options.onAdd &&
+    !options.onRemove &&
+    !options.events;
+
+  if (useInnerHtml) {
+    return sanitizedFragments;
+  }
+
+  let fragIdx = 0;
+  for (let t = 0; t < renderCount; t++) {
+    const raw = renderResults[t]!;
+    const $el =
+      typeof raw === 'string' ? $(sanitizedFragments![fragIdx++]!) : ($(raw as never) as JQuery);
+
+    const k = trKeys[t]!;
+    const entry = itemMap.get(k);
+
+    if (!entry) {
+      itemMap.set(k, { $el, item: null as unknown as T, state: 'new' });
+      continue;
+    }
+
+    const oldEl = entry.$el[0];
+    if (oldEl) registry.cleanupTree(oldEl);
+    entry.$el.replaceWith($el);
+    entry.$el = $el;
+    entry.state = 'replaced';
+  }
+
+  return null;
+}
+
+/**
+ * Step 4: Remove keys no longer present in the new list.
+ */
+function cleanupRemoved<T>(ctx: ListContext<T>, newKeySet: Set<ListKey>): void {
+  // Array iteration is faster than itemMap entries iteration,
+  // and safely skips keys already in removingKeys since oldKeys
+  // never overlaps with them.
+  const { oldKeys, itemMap } = ctx;
+  for (let i = 0, len = oldKeys.length; i < len; i++) {
+    const k = oldKeys[i]!;
+    if (newKeySet.has(k)) continue;
+
+    const entry = itemMap.get(k);
+    if (entry) ctx.removeItem(k, entry);
+  }
+}
+
+/**
+ * Step 5: Place and reorder DOM elements via LIS-based reconciliation.
+ * `isInitial` is derived from `ctx.oldKeys.length === 0` inside the function.
+ */
+function placeItems<T>(
+  ctx: ListContext<T>,
+  items: T[],
+  diff: PreparedDiff<T>,
+  rawContainer: Element,
+  $container: JQuery,
+  callbacks: PlaceCallbacks<T>,
+  innerHtmlFragments: string[] | null
+): void {
+  const { bind, update, onAdd } = callbacks;
+  const { newKeys, newIndices } = diff;
+  const itemCount = items.length;
+  const isInitial = ctx.oldKeys.length === 0;
+
+  const lisArr = getLIS(newIndices);
+  let lisIdx = lisArr.length - 1;
+
+  const { itemMap, removingKeys } = ctx;
+
+  if (innerHtmlFragments !== null) {
+    // ── Initial render: innerHTML fast path ──────────────
+    rawContainer.innerHTML = innerHtmlFragments.join('');
+
+    let childIdx = 0;
+    for (let i = 0; i < itemCount; i++) {
+      const k = newKeys[i]!;
+      const item = items[i]!;
+
+      // Note: If an item renders multiple sibling roots, childIdx++ only captures the first one.
+      // This is a known limitation of the innerHTML fast-path from previous versions.
+      const el = rawContainer.children[childIdx++] as HTMLElement | undefined;
+      if (el) {
+        const $el = $(el);
+        itemMap.set(k, { $el, item, state: undefined });
+        removingKeys.delete(k);
+        debug.domUpdated(LOG_PREFIXES.LIST, $el, 'list.add', item);
+      }
+    }
+    return;
+  }
+
+  if (isInitial) {
+    // ── Initial render: accumulate into DocumentFragment ──────────────
+    const fragment = document.createDocumentFragment();
+    for (let i = itemCount - 1; i >= 0; i--) {
+      const k = newKeys[i]!;
+      const entry = itemMap.get(k);
+      if (!entry) continue;
+
+      const $el = entry.$el;
+      for (let j = $el.length - 1; j >= 0; j--) {
+        fragment.insertBefore($el[j]!, fragment.firstChild);
+      }
+    }
+    rawContainer.appendChild(fragment);
+  } else {
+    // ── Incremental update: LIS-based reconciliation ──────────────────
+    let nextNode: Node | null = null;
+    for (let i = itemCount - 1; i >= 0; i--) {
+      const k = newKeys[i]!;
+      const entry = itemMap.get(k);
+      if (!entry) continue;
+
+      if (lisIdx >= 0 && lisArr[lisIdx] === i) {
+        lisIdx--;
+      } else {
+        insertOrAppend(entry.$el, nextNode, $container);
+      }
+
+      nextNode = entry.$el[0] ?? null;
+    }
+  }
+
+  // ── Post-DOM insertion: apply callbacks ───────────────────────────
+  for (let i = 0; i < itemCount; i++) {
+    const k = newKeys[i]!;
+    const item = items[i]!;
+    const entry = itemMap.get(k);
+    if (!entry) continue;
+
+    const state = entry.state;
+    entry.item = item;
+    entry.state = undefined;
+
+    applyItemCallbacks(state, entry, item, i, bind, update);
+
+    if (state === 'new') {
+      if (onAdd) onAdd(entry.$el);
+      removingKeys.delete(k);
+      debug.domUpdated(LOG_PREFIXES.LIST, entry.$el, 'list.add', item);
+    }
+  }
+}
+
+/**
+ * Step 5 (tail): Sync reverse/forward indexes for delegated event lookup.
+ * Caller must check `if (events)` before calling.
+ */
+function syncEventIndices<T>(ctx: ListContext<T>, diff: PreparedDiff<T>): void {
+  const { newKeys, newKeySet } = diff;
+  const itemCount = newKeys.length;
+  const { oldKeys, itemMap, elToKey, keyToIndex } = ctx;
+
+  // Remove stale entries for keys no longer in the list.
+  for (let i = 0, len = oldKeys.length; i < len; i++) {
+    const k = oldKeys[i]!;
+    if (newKeySet.has(k)) continue;
+
+    const staleEntry = itemMap.get(k);
+    if (staleEntry) {
+      for (let j = 0; j < staleEntry.$el.length; j++) {
+        const rootEl = staleEntry.$el[j];
+        if (rootEl) elToKey.delete(rootEl);
+      }
+    }
+    keyToIndex.delete(k);
+  }
+  // Register/update entries for keys in the new list.
+  for (let i = 0; i < itemCount; i++) {
+    const k = newKeys[i]!;
+    const entry = itemMap.get(k);
+    if (entry) {
+      for (let j = 0; j < entry.$el.length; j++) {
+        const rootEl = entry.$el[j];
+        if (rootEl) elToKey.set(rootEl, k);
+      }
+      keyToIndex.set(k, i);
+    }
+  }
+}
+
 // ============================================================================
 // atomList
 // ============================================================================
@@ -32,12 +466,14 @@ function insertOrAppend($el: JQuery, nextNode: Node | null, $container: JQuery):
  * unexpected key collisions.
  */
 $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>): JQuery {
-  const { key, render, bind, update, onAdd, onRemove, empty, events } = options;
+  const { key, bind, update, onAdd, onRemove, empty, events } = options;
 
-  const getKey =
+  const getKey: ListKeyFn<T> =
     typeof key === 'function'
       ? key
-      : (item: T, _index: number) => item[key as keyof T] as unknown as string | number;
+      : (item: T, _index: number) => item[key as keyof T] as unknown as ListKey;
+
+  const callbacks: PlaceCallbacks<T> = { bind, update, onAdd, onRemove, events };
 
   for (
     let containerIdx = 0, containerLen = this.length;
@@ -46,55 +482,13 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
   ) {
     const rawContainer = this[containerIdx]!;
     const $container = $(rawContainer);
+
+    // Unbind previous list delegation to prevent memory leaks when re-initializing
+    $container.off('.atomList');
+
     const containerSelector = getSelector(rawContainer);
 
-    const itemMap = new Map<
-      string | number,
-      { $el: JQuery; item: T; state?: 'new' | 'replaced' | undefined }
-    >();
-    const removingKeys = new Set<string | number>();
-    let oldKeys: (string | number)[] = [];
-    let $emptyEl: JQuery | null = null;
-
-    // Reverse index: root Element → item key.
-    // Kept in sync with itemMap so delegated event handlers can resolve the
-    // owning entry in O(1) instead of walking the entire itemMap.
-    const elToKey = new WeakMap<Element, string | number>();
-
-    // Forward index: key → current list position.
-    // Updated at the end of every effect run alongside oldKeys so that
-    // delegated handlers read the correct index without a linear search.
-    const keyToIndex = new Map<string | number, number>();
-
-    /**
-     * Schedules DOM removal after an optional async `onRemove` transition.
-     */
-    const scheduleRemoval = (k: string | number, entry: { $el: JQuery; item: T }) => {
-      const commitRemoval = () => {
-        if (fx?.isDisposed) return; // Container already torn down — skip stale DOM work
-        entry.$el.remove();
-        removingKeys.delete(k);
-        debug.log(LOG_PREFIXES.LIST, `${containerSelector} removed item:`, k);
-      };
-
-      if (!onRemove) {
-        commitRemoval();
-        return;
-      }
-
-      const result = onRemove(entry.$el);
-      if (result instanceof Promise) {
-        result.then(commitRemoval, commitRemoval);
-      } else {
-        commitRemoval();
-      }
-    };
-
-    const removeItem = (k: string | number, entry: { $el: JQuery; item: T }) => {
-      itemMap.delete(k);
-      removingKeys.add(k);
-      scheduleRemoval(k, entry);
-    };
+    const ctx = new ListContext<T>($container, containerSelector, onRemove);
 
     const fx = effect(() => {
       // Only source.value is tracked. All side effects (DOM reads/writes,
@@ -104,281 +498,29 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
       const itemCount = items.length;
 
       untracked(() => {
-        // 1. Handle Empty Template
-        if ($emptyEl && itemCount > 0) {
-          $emptyEl.remove();
-          $emptyEl = null;
-        }
-
-        if (itemCount === 0) {
-          if (empty && !$emptyEl) {
-            const safeEmpty = typeof empty === 'string' ? sanitizeHtml(empty) : empty;
-            $emptyEl = ($(safeEmpty as string) as JQuery).appendTo($container);
-          }
-          for (let i = 0; i < oldKeys.length; i++) {
-            const k = oldKeys[i]!;
-            const entry = itemMap.get(k);
-            if (entry) removeItem(k, entry);
-          }
-          oldKeys.length = 0;
-          return;
-        }
+        handleEmpty(ctx, itemCount, $container, empty);
+        if (itemCount === 0) return;
 
         debug.log(LOG_PREFIXES.LIST, `${containerSelector} updating with ${itemCount} items`);
 
-        // 2. Build index structures
-        const oldIndexMap = new Map<string | number, number>();
-        for (let i = 0; i < oldKeys.length; i++) {
-          oldIndexMap.set(oldKeys[i]!, i);
-        }
+        const diff = buildIndices(ctx, items, itemCount, getKey, update);
+        const isInitial = ctx.oldKeys.length === 0;
 
-        const newKeys: (string | number)[] = new Array(itemCount);
-        const newKeySet = new Set<string | number>();
-        const newIndices = new Int32Array(itemCount);
-        // Parallel arrays replace an array-of-objects to reduce GC pressure and
-        // improve cache locality when iterating targetsToRender (step 3).
-        const trKeys: (string | number)[] = [];
-        const trItems: T[] = [];
-        const trIdxs: number[] = [];
+        const innerHtmlFragments = renderItems(ctx, diff, options, isInitial);
+        cleanupRemoved(ctx, diff.newKeySet);
+        placeItems(ctx, items, diff, rawContainer, $container, callbacks, innerHtmlFragments);
 
-        for (let i = 0; i < itemCount; i++) {
-          const item = items[i]!;
-          const k = getKey(item, i);
-          newKeys[i] = k;
+        if (events) syncEventIndices(ctx, diff);
 
-          if (newKeySet.has(k)) {
-            debug.warn(LOG_PREFIXES.LIST, ERROR_MESSAGES.DUPLICATE_KEY(k, i));
-            newIndices[i] = -1;
-            continue;
-          }
-          newKeySet.add(k);
-
-          const entry = itemMap.get(k);
-          if (entry) {
-            const oldItem = entry.item;
-            if (!update && oldItem !== item && !shallowEqual(oldItem, item)) {
-              trKeys.push(k);
-              trItems.push(item);
-              trIdxs.push(i);
-            }
-            newIndices[i] = removingKeys.has(k) ? -1 : (oldIndexMap.get(k) ?? -1);
-          } else {
-            trKeys.push(k);
-            trItems.push(item);
-            trIdxs.push(i);
-            newIndices[i] = -1;
-          }
-        }
-
-        // 3. Render New/Updated Items (Batch Sanitization)
-        const renderCount = trKeys.length;
-        const renderResults: Array<string | Element | DocumentFragment | JQuery> = new Array(
-          renderCount
-        );
-        const htmlParts: string[] = [];
-
-        for (let t = 0; t < renderCount; t++) {
-          const raw = render(trItems[t]!, trIdxs[t]!);
-          renderResults[t] = raw;
-          if (typeof raw === 'string') {
-            htmlParts.push(raw);
-          }
-        }
-
-        // Sanitize rendered HTML strings.
-        //
-        // Strategy depends on the number of string parts:
-        //
-        // • 0 parts  — nothing to do.
-        // • 1 part   — call sanitizeHtml once directly; join/split adds pure overhead.
-        // • ≥2 parts — batch via join/split to pay sanitizeHtml's regex cost once
-        //              instead of N times.  A random HTML-comment separator is generated
-        //              per batch so it cannot collide with user content regardless of
-        //              what the render function returns.
-        let sanitizedFragments: string[] | null = null;
-        const htmlPartCount = htmlParts.length;
-        if (htmlPartCount === 1) {
-          sanitizedFragments = [sanitizeHtml(htmlParts[0]!)];
-        } else if (htmlPartCount > 1) {
-          const batchSeparator = `<!--sep-${Math.random().toString(36).substring(2)}-${Date.now().toString(36)}-->`;
-          sanitizedFragments = sanitizeHtml(htmlParts.join(batchSeparator)).split(batchSeparator);
-        }
-
-        // Create $el for each target
-        let fragIdx = 0;
-        for (let t = 0; t < renderCount; t++) {
-          const raw = renderResults[t]!;
-          const $el =
-            typeof raw === 'string'
-              ? $(sanitizedFragments![fragIdx++]!)
-              : ($(raw as never) as JQuery);
-
-          const k = trKeys[t]!;
-          const entry = itemMap.get(k);
-          if (entry) {
-            const oldEl = entry.$el[0];
-            if (oldEl) registry.cleanupTree(oldEl);
-            entry.$el.replaceWith($el);
-            entry.$el = $el;
-            entry.state = 'replaced';
-          } else {
-            itemMap.set(k, { $el, item: null as unknown as T, state: 'new' });
-          }
-        }
-
-        // 4. Cleanup Removed Keys
-        // Array iteration is faster than itemMap entries iteration,
-        // and safely skips keys already in removingKeys since oldKeys
-        // never overlaps with them.
-        for (let i = 0; i < oldKeys.length; i++) {
-          const k = oldKeys[i]!;
-          if (!newKeySet.has(k)) {
-            const entry = itemMap.get(k);
-            if (entry) removeItem(k, entry);
-          }
-        }
-
-        // 5. Place and Reorder via LIS
-        const lisArr = getLIS(newIndices);
-        let lisIdx = lisArr.length - 1;
-        let nextNode: Node | null = null;
-        const isInitial = oldKeys.length === 0;
-
-        // innerHTML fast path: initial render, all string renders, no callbacks.
-        // events is excluded because innerHTML skips the per-element $el
-        // assignment that elToKey depends on; delegated handlers would fire
-        // but find nothing in elToKey, silently dropping every event.
-        // removingKeys is always empty on initial render so no guard needed.
-        const useInnerHtml =
-          isInitial &&
-          sanitizedFragments !== null &&
-          fragIdx === renderCount &&
-          !bind &&
-          !onAdd &&
-          !onRemove &&
-          !events;
-
-        if (useInnerHtml) {
-          rawContainer.innerHTML = sanitizedFragments!.join('');
-
-          // Map children back to itemMap entries
-          let childIdx = 0;
-          for (let i = 0; i < itemCount; i++) {
-            const k = newKeys[i]!;
-            const item = items[i]!;
-            const entry = itemMap.get(k);
-            if (!entry) continue;
-
-            const el = rawContainer.children[childIdx++] as HTMLElement | undefined;
-            if (el) {
-              entry.$el = $(el);
-              entry.item = item;
-              entry.state = undefined;
-              removingKeys.delete(k);
-              debug.domUpdated(LOG_PREFIXES.LIST, entry.$el, 'list.add', item);
-            }
-          }
-        } else {
-          const fragment = isInitial ? document.createDocumentFragment() : null;
-
-          if (isInitial && fragment) {
-            // ── Initial render: accumulate into DocumentFragment ──────────────
-            // Loop-invariant branch hoisted out: avoids per-iteration isInitial check.
-            for (let i = itemCount - 1; i >= 0; i--) {
-              const k = newKeys[i]!;
-              const item = items[i]!;
-              const entry = itemMap.get(k);
-              if (!entry) continue;
-
-              const state = entry.state;
-              entry.item = item;
-              entry.state = undefined;
-
-              if (entry.$el[0]) {
-                if (state === undefined) {
-                  if (update) update(entry.$el, item, i);
-                } else if (bind) {
-                  bind(entry.$el, item, i);
-                }
-              }
-
-              for (let j = entry.$el.length - 1; j >= 0; j--) {
-                fragment.insertBefore(entry.$el[j]!, fragment.firstChild);
-              }
-
-              if (state === 'new') {
-                if (onAdd) onAdd(entry.$el);
-                removingKeys.delete(k);
-                debug.domUpdated(LOG_PREFIXES.LIST, entry.$el, 'list.add', item);
-              }
-            }
-            rawContainer.appendChild(fragment);
-          } else {
-            // ── Incremental update: LIS-based reconciliation ──────────────────
-            for (let i = itemCount - 1; i >= 0; i--) {
-              const k = newKeys[i]!;
-              const item = items[i]!;
-              const entry = itemMap.get(k);
-              if (!entry) continue;
-
-              const state = entry.state;
-              entry.item = item;
-              entry.state = undefined;
-
-              if (entry.$el[0]) {
-                if (state === undefined) {
-                  if (update) update(entry.$el, item, i);
-                } else if (bind) {
-                  bind(entry.$el, item, i);
-                }
-              }
-
-              if (lisIdx >= 0 && lisArr[lisIdx] === i) {
-                lisIdx--;
-              } else {
-                insertOrAppend(entry.$el, nextNode, $container);
-              }
-
-              nextNode = entry.$el[0] ?? null;
-
-              if (state === 'new') {
-                if (onAdd) onAdd(entry.$el);
-                removingKeys.delete(k);
-                debug.domUpdated(LOG_PREFIXES.LIST, entry.$el, 'list.add', item);
-              }
-            }
-          }
-        }
-
-        // Sync reverse/forward indexes for delegated event lookup.
-        if (events) {
-          // Remove stale entries for keys no longer in the list.
-          for (let i = 0; i < oldKeys.length; i++) {
-            const k = oldKeys[i]!;
-            if (!newKeySet.has(k)) {
-              const staleEl = itemMap.get(k)?.$el[0];
-              if (staleEl) elToKey.delete(staleEl);
-              keyToIndex.delete(k);
-            }
-          }
-          // Register/update entries for keys in the new list.
-          for (let i = 0; i < itemCount; i++) {
-            const k = newKeys[i]!;
-            const entry = itemMap.get(k);
-            const rootEl = entry?.$el[0];
-            if (rootEl) elToKey.set(rootEl, k);
-            keyToIndex.set(k, i);
-          }
-        }
-
-        oldKeys = newKeys;
+        ctx.oldKeys = diff.newKeys;
       });
     });
 
+    ctx.fx = fx;
+
     // ── Delegated event listeners ─────────────────────────────────────────
-    // One listener per event type is attached to the container.
-    // elToKey / keyToIndex provide O(1) target → item and key → index lookup,
-    // avoiding a full itemMap scan on every event.
+    // We leverage jQuery's native event delegation to properly handle bubbling
+    // and correct semantics for mouseenter/mouseleave.
     if (events) {
       for (const eventKey in events) {
         if (!hasOwn.call(events, eventKey)) continue;
@@ -389,48 +531,34 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
         const eventType = spaceIdx === -1 ? eventKey : eventKey.slice(0, spaceIdx);
         const childSelector = spaceIdx === -1 ? null : eventKey.slice(spaceIdx + 1).trim();
 
-        const delegateHandler = (e: JQuery.TriggeredEvent) => {
-          const target = e.target as HTMLElement | null;
-          if (!target) return;
+        // If no child selector is provided, default to immediate children of container.
+        // This ensures non-bubbling events like mouseenter work properly on item boundaries.
+        const actualSelector = childSelector ? childSelector : '> *';
 
-          // Walk up from target to find the item root registered in elToKey.
-          let node: HTMLElement | null = target;
+        const delegateHandler = function (this: Element, e: JQuery.TriggeredEvent) {
+          // `this` is the matched delegated element.
+          // Walk up to find the element that is actually an item root.
+          let node: HTMLElement | null = this as HTMLElement | null;
           while (node && node !== rawContainer) {
-            const k = elToKey.get(node);
+            const k = ctx.elToKey.get(node);
             if (k !== undefined) {
-              // If a child selector was specified, the matched element must exist
-              // AND be a descendant of this item root (node). Without the contains()
-              // check, target.closest() can escape upward past the container and
-              // match an ancestor element that happens to share the selector.
-              if (childSelector !== null) {
-                const matched = target.closest(childSelector);
-                if (!matched || !node.contains(matched)) return;
+              const entry = ctx.itemMap.get(k);
+              if (entry) {
+                handler.call(this as HTMLElement, entry.item, ctx.keyToIndex.get(k) ?? -1, e);
               }
-              const entry = itemMap.get(k);
-              if (!entry) return;
-              handler(entry.item, keyToIndex.get(k) ?? -1, e);
               return;
             }
             node = node.parentElement;
           }
         };
 
-        $container.on(eventType, delegateHandler);
-
-        registry.trackCleanup(rawContainer, () => {
-          $container.off(eventType, delegateHandler);
-        });
+        // Attach with namespace so cleanup can easily unbind all atomList events.
+        $container.on(`${eventType}.atomList`, actualSelector, delegateHandler);
       }
     }
 
     registry.trackEffect(rawContainer, fx);
-    registry.trackCleanup(rawContainer, () => {
-      itemMap.clear();
-      removingKeys.clear();
-      oldKeys.length = 0;
-      keyToIndex.clear();
-      $emptyEl?.remove();
-    });
+    registry.trackCleanup(rawContainer, () => ctx.dispose());
   }
 
   return this;
