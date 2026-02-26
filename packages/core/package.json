@@ -61,7 +61,7 @@
     "directory": "packages/core"
   },
   "devDependencies": {
-    "@types/jsdom": "^27.0.0",
+    "@types/jsdom": "^28.0.0",
     "@types/node": "^25.3.0",
     "@vitest/coverage-v8": "^4.0.18",
     "@vitest/ui": "^4.0.18",
