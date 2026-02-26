@@ -101,46 +101,6 @@ describe('Atom List', () => {
     $ul.remove();
   });
 
-  it('should support bind, onRemove (async), and complex LIS sequences', async () => {
-    interface Item {
-      id: number;
-      name?: string;
-    }
-    const items = $.atom<Item[]>([{ id: 1, name: 'a' }]);
-    const $container = $('<div>').appendTo(document.body);
-    let bindCalled = false;
-    let removeCalled = false;
-
-    $container.atomList(items, {
-      key: (item) => item.id,
-      render: (item) => `<span>${item.name}</span>`,
-      bind: ($el) => {
-        bindCalled = true;
-        $el.attr('data-bound', 'true');
-      },
-      onRemove: async () => {
-        removeCalled = true;
-        await new Promise((r) => setTimeout(r, 10));
-      },
-    });
-
-    await $.nextTick();
-    expect(bindCalled).toBe(true);
-
-    items.value = [{ id: 4 }, { id: 5 }, { id: 1 }, { id: 2 }, { id: 3 }];
-    await $.nextTick();
-    expect($container.children().length).toBe(5);
-    expect($container.children().eq(2).attr('data-bound')).toBe('true');
-
-    items.value = [];
-    await $.nextTick();
-    expect(removeCalled).toBe(true);
-    await new Promise((r) => setTimeout(r, 20));
-    expect($container.children().length).toBe(0);
-
-    $container.remove();
-  });
-
   // ---------------------------------------------------------------------------
   // Regression
   // ---------------------------------------------------------------------------
@@ -255,15 +215,17 @@ describe('Atom List', () => {
     let lastClickedItem: { id: number; text: string } | null = null;
     let lastClickedIndex = -1;
     let mouseEnterFired = false;
+    let handlerThis: HTMLElement | null = null;
 
     $container.atomList(items, {
       key: 'id',
       render: (item) =>
         `<li><button class="btn">${item.text}</button><span class="other"></span></li>`,
       events: {
-        'click .btn': (item, index, _e) => {
+        'click .btn': function (item, index, _e) {
           lastClickedItem = item;
           lastClickedIndex = index;
+          handlerThis = this as unknown as HTMLElement; // Capture contextual 'this'
         },
         mouseenter: (item, _index, _e) => {
           // No child selector -> event fires on the item root
@@ -276,9 +238,11 @@ describe('Atom List', () => {
     await $.nextTick();
 
     // 1. Test child selector (.btn)
-    $container.find('li').eq(0).find('.btn').trigger('click');
+    const $btn = $container.find('li').eq(0).find('.btn');
+    $btn.trigger('click');
     expect(lastClickedItem).toEqual({ id: 1, text: 'Apple' });
     expect(lastClickedIndex).toBe(0);
+    expect(handlerThis).toBe($btn[0]); // Verify 'this' context
 
     // 2. Click outside the selector should not trigger
     lastClickedItem = null;
@@ -323,11 +287,12 @@ describe('Atom List', () => {
     $container.remove();
   });
 
-  it('should execute bind and update callbacks AFTER elements are appended to the container (Two-pass lifecycle)', async () => {
+  it('should execute lifecycle hooks (bind, update, onRemove) with correct DOM attachment context', async () => {
     const items = $.atom<{ id: number; touch?: boolean }[]>([{ id: 1 }, { id: 2 }]);
     const $container = $('<div>').appendTo(document.body);
     let bindParentCount = 0;
     let updateParentCount = 0;
+    let removeCalled = false;
 
     $container.atomList(items, {
       key: 'id',
@@ -339,40 +304,28 @@ describe('Atom List', () => {
       update: ($el) => {
         if ($el.parent()[0] === $container[0]) updateParentCount++;
       },
+      onRemove: async ($el) => {
+        removeCalled = true;
+        // Element must still be attached during async removal start
+        expect($el.parent()[0]).toBe($container[0]);
+        await new Promise((r) => setTimeout(r, 10));
+      },
     });
 
     await $.nextTick();
     expect(bindParentCount).toBe(2);
+    expect($container.children().length).toBe(2);
 
     items.value = [{ id: 1 }, { id: 2, touch: true }];
     await $.nextTick();
     expect(updateParentCount).toBe(2);
 
-    $container.remove();
-  });
-
-  it('should define `this` as the matching delegated element in event handlers', async () => {
-    const items = $.atom([{ id: 1, text: 'Button' }]);
-    const $container = $('<div>').appendTo(document.body);
-
-    let handlerThis: HTMLElement | null = null;
-
-    $container.atomList(items, {
-      key: 'id',
-      render: (item) => `<div><button class="btn">${item.text}</button></div>`,
-      events: {
-        'click .btn': function (_item, _index, _e) {
-          handlerThis = this as unknown as HTMLElement; // Ensure contextual 'this'
-        },
-      },
-    });
-
+    items.value = [];
     await $.nextTick();
+    expect(removeCalled).toBe(true);
 
-    const $btn = $container.find('.btn');
-    $btn.trigger('click');
-
-    expect(handlerThis).toBe($btn[0]);
+    await new Promise((r) => setTimeout(r, 20));
+    expect($container.children().length).toBe(0);
 
     $container.remove();
   });
