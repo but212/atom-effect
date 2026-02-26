@@ -18,6 +18,9 @@ import { getLIS, getSelector, hasOwn, sanitizeHtml, shallowEqual } from './utils
 // Helpers
 // ============================================================================
 
+const listInstances = new WeakMap<Element, { fx: EffectObject; ctx: ListContext<unknown> }>();
+let listBatchIdCounter = 0;
+
 /**
  * Inserts `$el` before `nextNode` when `nextNode` is non-null and connected,
  * otherwise appends it to `$container`.
@@ -259,7 +262,7 @@ function renderItems<T>(
   if (htmlPartCount === 1) {
     sanitizedFragments = [sanitizeHtml(htmlParts[0]!)];
   } else if (htmlPartCount > 1) {
-    const batchId = Math.random().toString(36).substring(2) + Date.now().toString(36);
+    const batchId = (listBatchIdCounter++).toString(36);
     const batchSeparator = `<template data-atom-sep="${batchId}"></template>`;
     sanitizedFragments = sanitizeHtml(htmlParts.join(batchSeparator)).split(batchSeparator);
   }
@@ -485,6 +488,12 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
 
     // Unbind previous list delegation to prevent memory leaks when re-initializing
     $container.off('.atomList');
+    // Clean up any previous atomList instance on this container
+    const oldInstance = listInstances.get(rawContainer);
+    if (oldInstance) {
+      oldInstance.fx.dispose();
+      oldInstance.ctx.dispose();
+    }
 
     const containerSelector = getSelector(rawContainer);
 
@@ -558,7 +567,11 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
     }
 
     registry.trackEffect(rawContainer, fx);
-    registry.trackCleanup(rawContainer, () => ctx.dispose());
+    listInstances.set(rawContainer, { fx, ctx });
+    registry.trackCleanup(rawContainer, () => {
+      ctx.dispose();
+      listInstances.delete(rawContainer);
+    });
   }
 
   return this;

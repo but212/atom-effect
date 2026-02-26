@@ -324,7 +324,7 @@ describe('Atom List', () => {
   });
 
   it('should execute bind and update callbacks AFTER elements are appended to the container (Two-pass lifecycle)', async () => {
-    const items = $.atom([{ id: 1 }, { id: 2 }]);
+    const items = $.atom<{ id: number; touch?: boolean }[]>([{ id: 1 }, { id: 2 }]);
     const $container = $('<div>').appendTo(document.body);
     let bindParentCount = 0;
     let updateParentCount = 0;
@@ -344,7 +344,7 @@ describe('Atom List', () => {
     await $.nextTick();
     expect(bindParentCount).toBe(2);
 
-    items.value = [{ id: 1 }, { id: 2, touch: true } as any];
+    items.value = [{ id: 1 }, { id: 2, touch: true }];
     await $.nextTick();
     expect(updateParentCount).toBe(2);
 
@@ -361,7 +361,7 @@ describe('Atom List', () => {
       key: 'id',
       render: (item) => `<div><button class="btn">${item.text}</button></div>`,
       events: {
-        'click .btn': function (item, index, e) {
+        'click .btn': function (_item, _index, _e) {
           handlerThis = this as unknown as HTMLElement; // Ensure contextual 'this'
         },
       },
@@ -373,6 +373,45 @@ describe('Atom List', () => {
     $btn.trigger('click');
 
     expect(handlerThis).toBe($btn[0]);
+
+    $container.remove();
+  });
+
+  it('should clean up previous instance when atomList is called multiple times on the same element', async () => {
+    const list1 = $.atom([1, 2]);
+    const list2 = $.atom(['A', 'B']);
+    const $container = $('<ul>').appendTo(document.body);
+
+    let render1Count = 0;
+
+    $container.atomList(list1, {
+      key: (i) => i,
+      render: (i) => {
+        render1Count++;
+        return `<li>${i}</li>`;
+      },
+    });
+
+    await $.nextTick();
+    expect(render1Count).toBe(2);
+
+    // Second atomList call on the same container
+    $container.atomList(list2, {
+      key: (i) => i,
+      render: (i) => `<li>${i}</li>`,
+    });
+
+    await $.nextTick();
+    expect($container.children().length).toBe(2);
+    expect($container.children().eq(0).text()).toBe('A');
+
+    // Mutate the first list. The first effect should be disposed,
+    // so its render function should NOT be called again.
+    render1Count = 0;
+    list1.value = [1, 2, 3];
+    await $.nextTick();
+
+    expect(render1Count).toBe(0); // Proof that the old effect was disposed
 
     $container.remove();
   });
