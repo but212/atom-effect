@@ -61,6 +61,18 @@ export const INPUT_DEFAULTS = {
 } as const;
 
 // ============================================================================
+// Debug Defaults
+// ============================================================================
+
+/**
+ * Default values for debug mode.
+ */
+export const DEBUG_DEFAULTS = {
+  /** Default duration in ms for visual highlighting during DOM updates. */
+  HIGHLIGHT_DURATION_MS: 500,
+} as const;
+
+// ============================================================================
 // Security-Sensitive DOM Elements & Properties
 // ============================================================================
 
@@ -91,6 +103,7 @@ export const URL_PROPS: ReadonlySet<string> = new Set([
   'usemap',
   'classid',
   'codebase',
+  'xlink:href',
 ]);
 
 /**
@@ -119,32 +132,45 @@ export const DANGEROUS_PROPS: ReadonlySet<string> = new Set([
  * Every entry is a function providing consistent caller-side context.
  */
 export const ERROR_MESSAGES = {
-  ROUTE_NOT_FOUND: (name: string) => `Route "${name}" not found and no notFound route configured`,
-  TEMPLATE_NOT_FOUND: (selector: string) => `Template "${selector}" not found`,
-  TARGET_NOT_FOUND: (selector: string) => `Target element "${selector}" not found`,
-  MALFORMED_URI: (raw: string) => `Malformed URI component: ${raw}`,
-  /** Emitted when sanitizeHtml modifies the input. */
-  UNSAFE_CONTENT: () => 'Unsafe content neutralized during sanitization.',
-  /** Emitted when a CSS style property value contains a dangerous protocol. */
-  BLOCKED_DANGEROUS_CSS_VALUE: (prop: string) =>
-    `Blocked dangerous value in CSS style property "${prop}".`,
-  BLOCKED_EVENT_HANDLER: (name: string) =>
-    `Blocked setting dangerous event handler attribute/property "${name}".`,
-  BLOCKED_PROTOCOL: (name: string) => `Blocked dangerous protocol in "${name}".`,
-  BLOCKED_DANGEROUS_PROP: (name: string) =>
-    `Blocked setting dangerous property "${name}". Use html binding for sanitized HTML.`,
-  INVALID_INPUT_ELEMENT: (tagName: string) => `Val binding used on non-input element <${tagName}>.`,
-  MISSING_SOURCE: (method: string) => `[${method}] source is required when prop/name is a string.`,
-  MISSING_CONDITION: (method: string) =>
-    `[${method}] condition is required when className is a string.`,
-  DUPLICATE_KEY: (key: string | number, index: number) =>
-    `Duplicate key "${key}" at index ${index} in atomList.`,
-  UPDATER_ERROR: (debugType: string, isStatic?: boolean) =>
-    `Updater threw in binding "${debugType}"${isStatic ? ' (static)' : ''}`,
-  EFFECT_DISPOSE_ERROR: (info?: string) => `Effect dispose error${info ? `: ${info}` : ''}`,
-  BINDING_CLEANUP_ERROR: (info?: string) => `Binding cleanup error${info ? `: ${info}` : ''}`,
-  PARSE_ERROR: (details?: string) =>
-    `parse() threw during DOM→Atom sync${details ? `: ${details}` : ''}`,
-  MOUNT_ERROR: (name?: string) => `Mount error${name ? ` in component <${name}>` : ''}`,
-  MOUNT_CLEANUP_ERROR: (name?: string) => `Cleanup error${name ? ` in component <${name}>` : ''}`,
+  ROUTE: {
+    NOT_FOUND: (name: string) => `Route "${name}" not found and no notFound route configured`,
+    TEMPLATE_NOT_FOUND: (selector: string) => `Template "${selector}" not found`,
+    TARGET_NOT_FOUND: (selector: string) => `Target element "${selector}" not found`,
+    MALFORMED_URI: (raw: string) => `Malformed URI component: ${raw}`,
+  },
+  SECURITY: {
+    /** Emitted when sanitizeHtml modifies the input. */
+    UNSAFE_CONTENT: () => 'Unsafe content neutralized during sanitization.',
+    /** Emitted when a CSS style property value contains a dangerous protocol. */
+    BLOCKED_CSS_VALUE: (prop: string) => `Blocked dangerous value in CSS style property "${prop}".`,
+    BLOCKED_EVENT_HANDLER: (name: string) =>
+      `Blocked setting dangerous event handler attribute/property "${name}".`,
+    BLOCKED_PROTOCOL: (name: string) => `Blocked dangerous protocol in "${name}".`,
+    BLOCKED_PROP: (name: string) =>
+      `Blocked setting dangerous property "${name}". Use html binding for sanitized HTML.`,
+  },
+  BINDING: {
+    INVALID_INPUT_ELEMENT: (tagName: string) =>
+      `Val binding used on non-input element <${tagName}>.`,
+    MISSING_SOURCE: (method: string) =>
+      `[${method}] source is required when prop/name is a string.`,
+    MISSING_CONDITION: (method: string) =>
+      `[${method}] condition is required when className is a string.`,
+    UPDATER_ERROR: (debugType: string, isStatic?: boolean) =>
+      `Updater threw in binding "${debugType}"${isStatic ? ' (static)' : ''}`,
+    CLEANUP_ERROR: (info?: string) => `Binding cleanup error${info ? `: ${info}` : ''}`,
+    PARSE_ERROR: (details?: string) =>
+      `parse() threw during DOM→Atom sync${details ? `: ${details}` : ''}`,
+  },
+  LIST: {
+    DUPLICATE_KEY: (key: string | number, index: number, container: string) =>
+      `Duplicate key "${key}" at index ${index} in atomList <${container}>.`,
+  },
+  MOUNT: {
+    ERROR: (name?: string) => `Mount error${name ? ` in component <${name}>` : ''}`,
+    CLEANUP_ERROR: (name?: string) => `Cleanup error${name ? ` in component <${name}>` : ''}`,
+  },
+  CORE: {
+    EFFECT_DISPOSE_ERROR: (info?: string) => `Effect dispose error${info ? `: ${info}` : ''}`,
+  },
 } as const;

@@ -13,18 +13,16 @@
  * polluting the console without explicit opt-in.
  */
 
+import { DEBUG_DEFAULTS } from './constants';
 import { getSelector } from './utils';
 
 // ============================================================================
-// Timing constants — HIGHLIGHT_TRANSITION is derived from HIGHLIGHT_DURATION_MS
+// Timing constants — HIGHLIGHT_TRANSITION is derived from HIGHLIGHT_DEFAULTS
 // so the two values stay in sync automatically.
 // ============================================================================
 
-/** Duration (ms) of the highlight flash animation. */
-const HIGHLIGHT_DURATION_MS = 600;
-
-/** CSS transition duration derived from HIGHLIGHT_DURATION_MS. */
-const HIGHLIGHT_TRANSITION = `${HIGHLIGHT_DURATION_MS / 1000}s`;
+/** CSS transition duration derived from DEBUG_DEFAULTS.HIGHLIGHT_DURATION_MS. */
+const HIGHLIGHT_TRANSITION = `${DEBUG_DEFAULTS.HIGHLIGHT_DURATION_MS / 1000}s`;
 
 // ============================================================================
 // Initial state
@@ -226,7 +224,7 @@ function highlightElement(el: Element): void {
           el.classList.remove(HIGHLIGHT_CLASS);
         }
         highlightTimers.delete(el);
-      }, HIGHLIGHT_DURATION_MS)
+      }, DEBUG_DEFAULTS.HIGHLIGHT_DURATION_MS)
     );
   });
 

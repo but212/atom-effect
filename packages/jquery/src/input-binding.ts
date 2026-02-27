@@ -162,7 +162,7 @@ class InputBinding<T> {
       // parse() threw (e.g. invalid input) — leave the atom unchanged.
       debug.warn(
         LOG_PREFIXES.BINDING,
-        ERROR_MESSAGES.PARSE_ERROR(e instanceof Error ? e.message : String(e)),
+        ERROR_MESSAGES.BINDING.PARSE_ERROR(e instanceof Error ? e.message : String(e)),
         e
       );
     } finally {

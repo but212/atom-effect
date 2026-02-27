@@ -26,7 +26,9 @@
 - **Cleanup**: Removed dead `getValue<T>` export; corrected misleading `sanitizeHtml` comment; added `querySelector()` misuse warning to `getSelector` JSDoc.
 - **Core Types**: Hardened `ListOptions.key` to property names; added generics to `BindingOptions` and `atomBind` for improved 2-way binding type inference; decoupled internal implementation types in `types.ts`.
 - **Security Hardening**: Implemented `URL_PROPS` and `on*` property guards in `bindProp`, closing potential XSS protocol bypasses via property assignment; centralized `INPUT_DEFAULTS.DEBOUNCE`.
-- **Error Context**: Transformed static error strings into contextual functions; all binding/cleanup errors now include element selectors or component names to accelerate debugging in complex UIs.
+- **Error Context**: Structured `ERROR_MESSAGES` into domain-specific namespaces (`ROUTE`, `SECURITY`, `BINDING`, `LIST`, `MOUNT`, `CORE`). Enhanced `DUPLICATE_KEY` to include container selectors, providing better context for list-rendering errors.
+- **Security**: Hardened `URL_PROPS` by adding `xlink:href` for SVG XSS prevention. Expanded `DANGEROUS_PROPS` to block more prototype pollution vectors.
+- **Refactor**: Centralized debug configuration in `constants.ts` under `DEBUG_DEFAULTS`; moved `HIGHLIGHT_DURATION_MS` from `debug.ts` to improve maintainability.
 - **Binding Stability**: Wrapped `effect-factory` static paths in `untracked()` to prevent outer dependency leaks; broadened element types to `Element` for first-class SVG support; integrated `debugType` as effect names.
 - **Debug Enhancements**: Enabled visual highlights for SVG elements; linked `debug.enabled` to `window.__ATOM_DEBUG__` for immediate runtime toggling; added `isConnected` re-verification in `rAF` callbacks to eliminate race conditions during removal; implemented cross-environment variable detection and `WeakRef` fallbacks.
 

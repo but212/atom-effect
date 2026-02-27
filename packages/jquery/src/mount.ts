@@ -52,7 +52,7 @@ $.fn.atomMount = function <P>(component: ComponentFn<P>, props?: P): JQuery {
       // outer reactive context (e.g. if atomMount is called inside an effect).
       teardown = untracked(() => component($el, p));
     } catch (err) {
-      debug.error(LOG_PREFIXES.MOUNT, ERROR_MESSAGES.MOUNT_ERROR(component.name), err);
+      debug.error(LOG_PREFIXES.MOUNT, ERROR_MESSAGES.MOUNT.ERROR(component.name), err);
       continue;
     }
 

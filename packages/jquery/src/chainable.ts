@@ -61,7 +61,9 @@ $.fn.atomClass = function (
 ): JQuery {
   // Validate arguments once before iterating — avoids repeated warnings per element.
   if (typeof classNameOrMap === 'string' && condition === undefined) {
-    console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.MISSING_CONDITION('atomClass')}`);
+    console.warn(
+      `${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BINDING.MISSING_CONDITION('atomClass')}`
+    );
     return this;
   }
   // Hoist: build the map once, not once-per-element inside each().
@@ -86,7 +88,7 @@ $.fn.atomCss = function (
 ): JQuery {
   // Validate arguments once before iterating — avoids repeated warnings per element.
   if (typeof propOrMap === 'string' && source === undefined) {
-    console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.MISSING_SOURCE('atomCss')}`);
+    console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BINDING.MISSING_SOURCE('atomCss')}`);
     return this;
   }
   // Hoist: build the map once, not once-per-element inside each().
@@ -113,7 +115,7 @@ $.fn.atomAttr = function (
 ): JQuery {
   // Validate arguments once before iterating — avoids repeated warnings per element.
   if (typeof nameOrMap === 'string' && source === undefined) {
-    console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.MISSING_SOURCE('atomAttr')}`);
+    console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BINDING.MISSING_SOURCE('atomAttr')}`);
     return this;
   }
   // Hoist: build the map once, not once-per-element inside each().
@@ -139,7 +141,7 @@ $.fn.atomProp = function <T>(
 ): JQuery {
   // Validate arguments once before iterating — avoids repeated warnings per element.
   if (typeof nameOrMap === 'string' && source === undefined) {
-    console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.MISSING_SOURCE('atomProp')}`);
+    console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BINDING.MISSING_SOURCE('atomProp')}`);
     return this;
   }
   // Hoist: build the map once, not once-per-element inside each().

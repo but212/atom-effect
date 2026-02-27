@@ -189,7 +189,7 @@ class RouterImpl implements Router {
       try {
         decodeURIComponent(raw);
       } catch (_e) {
-        debug.warn(LOG_PREFIXES.ROUTE, ERROR_MESSAGES.MALFORMED_URI(raw));
+        debug.warn(LOG_PREFIXES.ROUTE, ERROR_MESSAGES.ROUTE.MALFORMED_URI(raw));
       }
     }
 
@@ -250,7 +250,7 @@ class RouterImpl implements Router {
     }
 
     if (!routeConfig) {
-      debug.warn(LOG_PREFIXES.ROUTE, ERROR_MESSAGES.ROUTE_NOT_FOUND(routeName));
+      debug.warn(LOG_PREFIXES.ROUTE, ERROR_MESSAGES.ROUTE.NOT_FOUND(routeName));
       return null;
     }
 
@@ -268,7 +268,7 @@ class RouterImpl implements Router {
     if (!template) {
       const el = document.querySelector(templateSelector);
       if (!el || !(el instanceof HTMLTemplateElement)) {
-        debug.warn(LOG_PREFIXES.ROUTE, ERROR_MESSAGES.TEMPLATE_NOT_FOUND(templateSelector));
+        debug.warn(LOG_PREFIXES.ROUTE, ERROR_MESSAGES.ROUTE.TEMPLATE_NOT_FOUND(templateSelector));
         return false;
       }
       template = el;
@@ -306,7 +306,7 @@ class RouterImpl implements Router {
     // Validate target element exists
     const container = this.$target[0];
     if (!container) {
-      debug.warn(LOG_PREFIXES.ROUTE, ERROR_MESSAGES.TARGET_NOT_FOUND(this.config.target));
+      debug.warn(LOG_PREFIXES.ROUTE, ERROR_MESSAGES.ROUTE.TARGET_NOT_FOUND(this.config.target));
       return;
     }
 

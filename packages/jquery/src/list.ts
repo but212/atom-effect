@@ -207,10 +207,7 @@ function buildIndices<T>(
     newKeys[i] = k;
 
     if (newKeySet.has(k)) {
-      debug.warn(
-        LOG_PREFIXES.LIST,
-        `${ctx.containerSelector}: ${ERROR_MESSAGES.DUPLICATE_KEY(k, i)}`
-      );
+      debug.warn(LOG_PREFIXES.LIST, ERROR_MESSAGES.LIST.DUPLICATE_KEY(k, i, ctx.containerSelector));
       newIndices[i] = -1;
       continue;
     }

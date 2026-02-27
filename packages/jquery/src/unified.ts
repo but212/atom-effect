@@ -193,7 +193,9 @@ export function bindAttr(
       const lowerName = name.toLowerCase();
       // Block event handler attributes (on*) to prevent inline JS injection.
       if (lowerName.startsWith('on')) {
-        console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BLOCKED_EVENT_HANDLER(name)}`);
+        console.warn(
+          `${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_EVENT_HANDLER(name)}`
+        );
         continue;
       }
 
@@ -207,7 +209,9 @@ export function bindAttr(
           }
           const newVal = v === true ? name : String(v);
           if (isDangerousUrl(name, newVal)) {
-            console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BLOCKED_PROTOCOL(name)}`);
+            console.warn(
+              `${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_PROTOCOL(name)}`
+            );
             return;
           }
           // Attribute write guard
@@ -235,13 +239,15 @@ export function bindProp(
 
       // 1. Block dangerous event handler properties.
       if (lowerName.startsWith('on')) {
-        console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BLOCKED_EVENT_HANDLER(name)}`);
+        console.warn(
+          `${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_EVENT_HANDLER(name)}`
+        );
         continue;
       }
 
       // 2. Block properties that can inject raw HTML or pollute prototype.
       if (DANGEROUS_PROPS.has(name)) {
-        console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BLOCKED_DANGEROUS_PROP(name)}`);
+        console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_PROP(name)}`);
         continue;
       }
 
@@ -253,7 +259,9 @@ export function bindProp(
           // Even when set via .prop(), javascript: protocols can execute.
           if (URL_PROPS.has(lowerName) && typeof val === 'string') {
             if (isDangerousUrl(name, val)) {
-              console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BLOCKED_PROTOCOL(name)}`);
+              console.warn(
+                `${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_PROTOCOL(name)}`
+              );
               return;
             }
           }
@@ -301,7 +309,9 @@ export function bindVal(
 ): void {
   const tagName = ctx.el.tagName.toLowerCase();
   if (!VALID_INPUT_TAGS.has(tagName)) {
-    console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.INVALID_INPUT_ELEMENT(tagName)}`);
+    console.warn(
+      `${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BINDING.INVALID_INPUT_ELEMENT(tagName)}`
+    );
     return;
   }
   const { fx, cleanup } = applyInputBinding(ctx.$el, atom, options);
