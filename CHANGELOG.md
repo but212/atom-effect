@@ -28,6 +28,7 @@
 - **Security Hardening**: Implemented `URL_PROPS` and `on*` property guards in `bindProp`, closing potential XSS protocol bypasses via property assignment; centralized `INPUT_DEFAULTS.DEBOUNCE`.
 - **Error Context**: Transformed static error strings into contextual functions; all binding/cleanup errors now include element selectors or component names to accelerate debugging in complex UIs.
 - **Binding Stability**: Wrapped `effect-factory` static paths in `untracked()` to prevent outer dependency leaks; broadened element types to `Element` for first-class SVG support; integrated `debugType` as effect names.
+- **Debug Enhancements**: Enabled visual highlights for SVG elements; linked `debug.enabled` to `window.__ATOM_DEBUG__` for immediate runtime toggling; added `isConnected` re-verification in `rAF` callbacks to eliminate race conditions during removal; implemented cross-environment variable detection and `WeakRef` fallbacks.
 
 ## [0.22.2]
 
