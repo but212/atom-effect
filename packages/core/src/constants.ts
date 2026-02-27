@@ -42,15 +42,6 @@ export const ATOM_STATE_FLAGS = {
 } as const;
 
 /**
- * Array pool configuration.
- */
-export const POOL_CONFIG = {
-  MAX_SIZE: 1000,
-  WARMUP_SIZE: 100,
-  ENABLE_STATS: false,
-} as const;
-
-/**
  * Scheduler configuration.
  */
 export const SCHEDULER_CONFIG = {

@@ -1,6 +1,4 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ComputedError } from '@/errors/errors';
-import type { Dependency } from '@/types';
 import {
   DEBUG_ID,
   DEBUG_NAME,
@@ -44,59 +42,6 @@ describe('debug.warn', () => {
     expect(consoleWarn).not.toHaveBeenCalled();
 
     consoleWarn.mockRestore();
-    debug.enabled = originalEnabled;
-  });
-});
-
-describe('debug.checkCircular', () => {
-  it('detects direct circular reference regardless of debug.enabled', () => {
-    const node = {} as Dependency;
-    const originalEnabled = debug.enabled;
-    debug.enabled = false;
-
-    expect(() => debug.checkCircular(node, node)).toThrow(ComputedError);
-    expect(() => debug.checkCircular(node, node)).toThrow('Direct circular dependency detected');
-
-    debug.enabled = originalEnabled;
-  });
-
-  it('detects indirect circular reference when enabled', () => {
-    const originalEnabled = debug.enabled;
-    debug.enabled = true;
-
-    const nodeA = { id: 1, dependencies: [] } as unknown as Dependency;
-    const nodeB = { id: 2, dependencies: [nodeA] } as unknown as Dependency;
-    const nodeC = { id: 3, dependencies: [nodeB] } as unknown as Dependency;
-    (nodeA as unknown as { dependencies: unknown[] }).dependencies.push(nodeC); // A → C → B → A
-
-    expect(() => debug.checkCircular(nodeC, nodeA)).toThrow(ComputedError);
-
-    debug.enabled = originalEnabled;
-  });
-
-  it('skips indirect check when disabled', () => {
-    const originalEnabled = debug.enabled;
-    debug.enabled = false;
-
-    const nodeA = { dependencies: [] } as unknown as Dependency;
-    const nodeB = { dependencies: [nodeA] } as unknown as Dependency;
-    const nodeC = { dependencies: [nodeB] } as unknown as Dependency;
-    (nodeA as unknown as { dependencies: unknown[] }).dependencies.push(nodeC);
-
-    expect(() => debug.checkCircular(nodeB, nodeA)).not.toThrow();
-
-    debug.enabled = originalEnabled;
-  });
-
-  it('does not throw for non-circular dependency chain', () => {
-    const originalEnabled = debug.enabled;
-    debug.enabled = true;
-
-    const nodeA = { dependencies: [] } as unknown as Dependency;
-    const nodeB = { dependencies: [nodeA] } as unknown as Dependency;
-
-    expect(() => debug.checkCircular(nodeB, {})).not.toThrow();
-
     debug.enabled = originalEnabled;
   });
 });

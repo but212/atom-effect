@@ -56,24 +56,39 @@ export interface WritableAtom<T = unknown> extends ReadonlyAtom<T>, Disposable {
 
 /**
  * Dependency interface.
+ *
+ * @remarks
+ * Internal fields (`version`, `flags`, `_lastSeenEpoch`) are part of the
+ * engine contract between reactive nodes and must not be mutated externally.
  */
 export interface Dependency {
   readonly id: DependencyId;
 
-  /** Version counter. */
+  /**
+   * Incremented whenever the dependency's value changes.
+   * @internal
+   */
   version: number;
 
-  /** State flags. */
+  /**
+   * Bitfield of internal state flags (e.g. DIRTY, DISPOSED, IS_COMPUTED).
+   * @internal
+   */
   flags: number;
 
-  /** Last validated epoch. */
+  /**
+   * Tracks the last epoch in which this dependency was visited during
+   * dependency collection — used to deduplicate traversal.
+   * @internal
+   */
   _lastSeenEpoch: number;
 
   /**
    * Adds a subscriber to this dependency.
-   * @param listener - The subscriber (function or object with execute method).
+   * The listener may optionally receive the new and previous values.
+   * @param listener - A callback or Subscriber object.
    */
-  subscribe(listener: (() => void) | Subscriber): () => void;
+  subscribe(listener: ((newValue?: unknown, oldValue?: unknown) => void) | Subscriber): () => void;
 
   /** Peek hook. */
   peek?(): unknown;
@@ -155,7 +170,6 @@ export interface DebugConfig {
   enabled: boolean;
   warnInfiniteLoop: boolean;
   warn(condition: boolean, message: string): void;
-  checkCircular(dep: Dependency, current: object): void;
   attachDebugInfo(obj: object, type: string, id: number): void;
   getDebugName(obj: object | null | undefined): string | undefined;
   getDebugType(obj: object | null | undefined): string | undefined;

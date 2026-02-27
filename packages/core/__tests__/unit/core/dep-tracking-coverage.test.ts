@@ -5,7 +5,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DependencyLink, Subscription, syncDependencies } from '@/core/dep-tracking';
 import type { Dependency, Subscriber } from '@/types';
-import { debug } from '@/utils/debug';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -77,25 +76,6 @@ describe('syncDependencies', () => {
     expect(() =>
       syncDependencies([link], [null as unknown as DependencyLink], tracker)
     ).not.toThrow();
-  });
-
-  it('interacts correctly with debug.checkCircular', () => {
-    const checkCircular = vi.spyOn(debug, 'checkCircular').mockImplementation(() => {});
-    const dep = makeDep();
-    const tracker = makeTracker();
-    const link1 = new DependencyLink(dep, 0);
-
-    // Resolves new dependency -> calls debugger
-    syncDependencies([link1], [], tracker);
-    expect(checkCircular).toHaveBeenCalledTimes(1);
-    expect(checkCircular).toHaveBeenCalledWith(dep, tracker);
-
-    checkCircular.mockClear();
-
-    // Reclaims parked dependency -> bypasses debugger
-    const link2 = new DependencyLink(dep, 1);
-    syncDependencies([link2], [link1], tracker);
-    expect(checkCircular).not.toHaveBeenCalled();
   });
 });
 
