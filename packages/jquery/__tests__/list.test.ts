@@ -368,4 +368,45 @@ describe('$.atomList (Integration)', () => {
 
     $container.remove();
   });
+
+  it('should not fire events on stale elements undergoing async removal when keys are reused', async () => {
+    let resolveRemove!: () => void;
+    const items = $.atom([{ id: 1, text: 'old' }]);
+    const $container = $('<div>').appendTo(document.body);
+    let handlerItem: any = null;
+
+    $container.atomList(items, {
+      key: 'id',
+      render: (item) => `<button class="btn">${item.text}</button>`,
+      onRemove: () => new Promise<void>((r) => { resolveRemove = r; }),
+      events: {
+        'click .btn': (item) => {
+          handlerItem = item;
+        }
+      }
+    });
+
+    await $.nextTick();
+    const $oldBtn = $container.find('.btn');
+
+    // Remove item to start async removal
+    items.value = [];
+    await $.nextTick();
+
+    // Re-add item with same key
+    items.value = [{ id: 1, text: 'new' }];
+    await $.nextTick();
+
+    // Trigger click on the old button which is still in the DOM
+    $oldBtn.trigger('click');
+
+    // The event should not trigger the handler for the new item
+    expect(handlerItem).toBeNull();
+
+    // Clean up
+    resolveRemove();
+    await new Promise((r) => setTimeout(r, 10));
+
+    $container.remove();
+  });
 });

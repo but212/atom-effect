@@ -96,6 +96,10 @@ class ListContext<T> {
   }
 
   removeItem(k: ListKey, entry: ListItemEntry<T>): void {
+    for (let j = 0; j < entry.$el.length; j++) {
+      const el = entry.$el[j];
+      if (el) this.elToKey.delete(el);
+    }
     this.itemMap.delete(k);
     this.removingKeys.add(k);
     this.scheduleRemoval(k, entry);
