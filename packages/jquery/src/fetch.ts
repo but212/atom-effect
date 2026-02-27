@@ -64,12 +64,14 @@ export class FetchContext<T> {
         throw abortErr;
       }
 
-      let finalErr = err as Error;
+      let finalErr: Error;
+      // Normalize jqXHR and other potential rejection values into standard Error instances.
       if (err && typeof (err as JQuery.jqXHR).readyState !== 'undefined') {
         const jXhr = err as JQuery.jqXHR;
-        // Construct pure Error, but attach the original jqXHR for advanced use-cases
         finalErr = new Error(`Network Error: ${jXhr.statusText || 'Unknown'} (${jXhr.status})`);
         (finalErr as FetchError).jqXHR = jXhr;
+      } else {
+        finalErr = err instanceof Error ? err : new Error(String(err ?? 'Unknown network error'));
       }
 
       const onError = this.onErrorFn;
