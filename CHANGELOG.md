@@ -8,7 +8,10 @@
 - **namespace & mount**: Consolidated scattered JSDoc explanations and eliminated redundant inline comments.
 - **unified & jquery-patch**: Narrowed internal handler types for stricter type safety (`boolean` to `true`). Replaced `forEach` with `for...in` to eliminate closure allocations per key.
 - **input-binding**: Unified handler declarations and decoupled debounce flushing from display changes to prevent data loss.
-- **atomFetch**: Isolated `transform` exceptions to the computed state; `onError` is now strictly for network/server failures.
+- **atomFetch**:
+  - Isolated `transform` exceptions to the computed state; `onError` is now strictly for network/server failures.
+  - **Memory & Lifecycle**: Eliminated a memory leak involving unresolved Promises during aborted requests. Abort handling (both superseded routing and manual `.abort()`) is now elegantly delegated to the core `computed` tracking engine via explicit `AbortError` throws, properly resolving `isPending` and `hasError` states.
+  - **Type Safety**: Normalized jQuery `jqXHR` rejection objects into standard `Error` instances (`FetchError`), preserving origin details while strictly adhering to error interfaces.
 - **atomList**:
   - **Reconciliation Refactor**: Extracted flat closures into a unified `ListContext` and step functions (`handleEmpty`, `buildIndices`, `renderItems`, `placeItems`) for better maintainability and localized state.
   - **Lifecycle Timing**: Fixed a bug where `bind` and `update` callbacks were invoked before DOM insertion. Hooks now execute strictly after elements are attached to the container.

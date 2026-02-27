@@ -220,6 +220,15 @@ export interface FetchOptions<T> {
   eager?: boolean;
 }
 
+/**
+ * Error potentially thrown or returned by atomFetch when a network request fails.
+ * Includes the native error specifics, alongside the original jQuery XHR object.
+ */
+export interface FetchError extends Error {
+  /** The original jQuery XHR object, available if the error originated from a network failure. */
+  jqXHR?: JQuery.jqXHR;
+}
+
 // ============================================================================
 // Input binding internals
 // Consumed only by input-binding.ts. Centralised here so enum definitions live
@@ -301,7 +310,10 @@ declare global {
     /** Initializes the lightweight SPA router. */
     route(config: RouteConfig): Router;
     /** Declarative reactive AJAX primitive. */
-    atomFetch<T>(urlOrFn: string | (() => string), options: FetchOptions<T>): ComputedAtom<T>;
+    atomFetch<T>(
+      urlOrFn: string | (() => string),
+      options: FetchOptions<T>
+    ): ComputedAtom<T> & { abort: () => void };
   }
 
   interface JQuery {
