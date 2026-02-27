@@ -3,12 +3,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  DependencyLink,
-  Subscription,
-  syncDependencies,
-  trackDependency,
-} from '@/core/dep-tracking';
+import { DependencyLink, Subscription, syncDependencies } from '@/core/dep-tracking';
 import type { Dependency, Subscriber } from '@/types';
 import { debug } from '@/utils/debug';
 
@@ -28,53 +23,6 @@ function makeDep(overrides: Partial<Dependency> = {}): Dependency {
 function makeTracker(): Subscriber {
   return { execute: vi.fn() };
 }
-
-// ── trackDependency ───────────────────────────────────────────────────────────
-
-describe('trackDependency', () => {
-  it('adds and deduplicates function listeners', () => {
-    const fn1 = vi.fn();
-    const fn2 = vi.fn();
-    const subs: Subscription<number>[] = [];
-
-    trackDependency(makeDep(), fn1, subs);
-    trackDependency(makeDep(), fn1, subs); // Duplicate, should be ignored
-    trackDependency(makeDep(), fn2, subs);
-
-    expect(subs).toHaveLength(2);
-    expect(subs[0]!.fn).toBe(fn1);
-    expect(subs[1]!.fn).toBe(fn2);
-    expect(subs[0]!.sub).toBeUndefined();
-  });
-
-  it('adds and deduplicates Subscriber objects', () => {
-    const sub1: Subscriber = { execute: vi.fn() };
-    const sub2: Subscriber = { execute: vi.fn() };
-    const subs: Subscription<number>[] = [];
-
-    trackDependency(makeDep(), sub1 as unknown as Parameters<typeof trackDependency>[1], subs);
-    trackDependency(makeDep(), sub1 as unknown as Parameters<typeof trackDependency>[1], subs); // Duplicate
-    trackDependency(makeDep(), sub2 as unknown as Parameters<typeof trackDependency>[1], subs);
-
-    expect(subs).toHaveLength(2);
-    expect(subs[0]!.sub).toBe(sub1);
-    expect(subs[1]!.sub).toBe(sub2);
-    expect(subs[0]!.fn).toBeUndefined();
-  });
-
-  it('delegates to addDependency if available (DependencySubscriber path)', () => {
-    const addDependency = vi.fn();
-    // Prioritizes addDependency even if execute exists
-    const tracker = { addDependency, execute: vi.fn() };
-    const subs: Subscription<number>[] = [];
-    const dep = makeDep();
-
-    trackDependency(dep, tracker, subs);
-
-    expect(addDependency).toHaveBeenCalledWith(dep);
-    expect(subs).toHaveLength(0); // Subs array is untouched in this path
-  });
-});
 
 // ── syncDependencies ──────────────────────────────────────────────────────────
 

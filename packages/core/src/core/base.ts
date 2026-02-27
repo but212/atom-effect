@@ -16,6 +16,8 @@ export class ReactiveNode {
   version = 0;
   /** Last access epoch */
   _lastSeenEpoch = EPOCH_CONSTANTS.UNINITIALIZED;
+  /** Scheduler epoch tag */
+  _nextEpoch?: number;
   /** Debug ID */
   readonly id: DependencyId = generateId() & SMI_MAX;
 }
@@ -24,7 +26,8 @@ export class ReactiveNode {
  * Reactive dependency base class.
  */
 export abstract class ReactiveDependency<T> extends ReactiveNode {
-  protected abstract _subscribers: Subscription<T>[];
+  protected abstract _subscribers: (Subscription<T> | null)[];
+  private _notifying = 0;
 
   /**
    * Adds subscriber.
@@ -40,12 +43,21 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
       );
     }
 
-    if (
-      this._subscribers.some((sub) => {
-        if (!sub) return false;
-        return isFn ? sub.fn === listener : sub.sub === listener;
-      })
-    ) {
+    const subs = this._subscribers;
+    const len = subs.length;
+    let duplicate = false;
+
+    for (let i = 0; i < len; i++) {
+      const sub = subs[i];
+      if (sub != null) {
+        if (isFn ? sub.fn === listener : sub.sub === listener) {
+          duplicate = true;
+          break;
+        }
+      }
+    }
+
+    if (duplicate) {
       if (IS_DEV) console.warn('Duplicate subscription ignored.');
       return () => {};
     }
@@ -55,7 +67,6 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
       !isFn ? (listener as Subscriber) : undefined
     );
 
-    const subs = this._subscribers;
     subs.push(link);
 
     return () => this._unsubscribe(link);
@@ -63,33 +74,76 @@ export abstract class ReactiveDependency<T> extends ReactiveNode {
 
   private _unsubscribe(link: Subscription<T>): void {
     const subs = this._subscribers;
-    const idx = subs.indexOf(link);
+    let idx = -1;
+    for (let i = 0; i < subs.length; i++) {
+      if (subs[i] === link) {
+        idx = i;
+        break;
+      }
+    }
+
     if (idx === -1) return;
 
-    // Remove subscriber
+    if (this._notifying > 0) {
+      // Tombstone
+      subs[idx] = null;
+      return;
+    }
+
+    // Remove subscriber (pop-and-swap)
     const last = subs.pop();
-    if (idx < subs.length && last) {
+    if (idx < subs.length && last !== undefined) {
       subs[idx] = last;
     }
   }
 
   subscriberCount(): number {
-    return this._subscribers.length;
+    let count = 0;
+    const subs = this._subscribers;
+    for (let i = 0; i < subs.length; i++) {
+      if (subs[i] != null) count++;
+    }
+    return count;
   }
 
   protected _notifySubscribers(newValue: T | undefined, oldValue: T | undefined): void {
-    if (this._subscribers.length === 0) return;
+    const subs = this._subscribers;
+    const len = subs.length;
+    if (len === 0) return;
 
-    const subs = this._subscribers.slice(0);
-    subs.forEach((s) => {
-      if (!s) return;
-      try {
-        if (s.fn) s.fn(newValue, oldValue);
-        else if (s.sub) s.sub.execute();
-      } catch (err) {
-        this._handleNotifyError(err);
+    this._notifying++;
+    try {
+      for (let i = 0; i < len; i++) {
+        const s = subs[i];
+        if (s != null) {
+          try {
+            s.notify(newValue, oldValue);
+          } catch (err) {
+            this._handleNotifyError(err);
+          }
+        }
       }
-    });
+    } finally {
+      this._notifying--;
+      if (this._notifying === 0) {
+        this._cleanupTombstones();
+      }
+    }
+  }
+
+  private _cleanupTombstones(): void {
+    const subs = this._subscribers;
+    let i = 0;
+    while (i < subs.length) {
+      if (subs[i] === null) {
+        const last = subs.pop();
+        if (i < subs.length && last !== undefined) {
+          subs[i] = last;
+        }
+      } else {
+        i++;
+      }
+    }
   }
 
   private _handleNotifyError(err: unknown): void {

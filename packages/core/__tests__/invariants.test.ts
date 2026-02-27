@@ -410,7 +410,7 @@ describe('Subscription Protocol', () => {
     expect(objCalls).toEqual([5]);
   });
 
-  it('notifications use snapshot (concurrent unsubscribe is safe)', () => {
+  it('concurrent unsubscribe prevents notification in current batch', () => {
     const a = atom(0, { sync: true });
     const calls: string[] = [];
     let unsub2: () => void;
@@ -422,7 +422,8 @@ describe('Subscription Protocol', () => {
     unsub2 = a.subscribe(() => calls.push('second'));
 
     a.value = 1;
-    expect(calls).toEqual(['first', 'second']);
+    // 'second' is no longer pushed since unsubscribe is immediate via tombstones
+    expect(calls).toEqual(['first']);
   });
 });
 

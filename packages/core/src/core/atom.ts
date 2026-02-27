@@ -1,11 +1,11 @@
 import { ATOM_STATE_FLAGS } from '@/constants';
 import { ReactiveDependency } from '@/core/base';
-import { type Subscription, trackDependency } from '@/core/dep-tracking';
+import type { Subscription } from '@/core/dep-tracking';
 import { nextVersion } from '@/internal/epoch';
 import { scheduler } from '@/internal/scheduler';
 import { ATOM_BRAND } from '@/symbols';
 import { trackingContext } from '@/tracking';
-import type { AtomOptions, WritableAtom } from '@/types';
+import type { AtomOptions, Dependency, WritableAtom } from '@/types';
 import { debug } from '@/utils/debug';
 
 /**
@@ -15,9 +15,7 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
   private _value: T;
   /** Old value for notifications */
   private _pendingOldValue: T | undefined = undefined;
-  /** Cached notification task */
-  private readonly _notifyTask = () => this._flushNotifications();
-  protected _subscribers: Subscription<T>[] = [];
+  protected _subscribers: (Subscription<T> | null)[] = [];
 
   /** @internal */
   readonly [ATOM_BRAND] = true;
@@ -30,9 +28,10 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
   }
 
   get value(): T {
-    const current = trackingContext.current;
-    if (current) {
-      trackDependency(this, current, this._subscribers);
+    // Only typecast what we need for the dynamic check
+    const current = trackingContext.current as { addDependency?: (dep: Dependency) => void } | null;
+    if (current?.addDependency) {
+      current.addDependency(this);
     }
     return this._value;
   }
@@ -59,7 +58,15 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
     }
 
     // Async scheduling
-    scheduler.schedule(this._notifyTask);
+    scheduler.schedule(this);
+  }
+
+  /**
+   * Executes scheduled notification.
+   * @internal
+   */
+  execute(): void {
+    this._flushNotifications();
   }
 
   /**

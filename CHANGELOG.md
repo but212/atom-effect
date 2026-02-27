@@ -2,26 +2,18 @@
 
 ## [Unreleased]
 
+### Core
+
+- **Performance**: Applied engine-level micro-optimizations (Zero-allocation arrays, duck-typed scheduler, monomorphic caching) to significantly reduce GC overhead and improve JIT compilation.
+- **Safety**: Fixed concurrent unsubscription bugs preventing stale callback execution during batch notifications.
+
 ### jQuery
 
-- **route**: Improved JSDoc clarity for routing sequences and error edge cases. Fixed `destroy` loop robustness to prevent unbounded iterations.
-- **namespace & mount**: Consolidated scattered JSDoc explanations and eliminated redundant inline comments.
-- **unified & jquery-patch**: Narrowed internal handler types for stricter type safety (`boolean` to `true`). Replaced `forEach` with `for...in` to eliminate closure allocations per key.
-- **input-binding**: Unified handler declarations and decoupled debounce flushing from display changes to prevent data loss.
-- **atomFetch**:
-  - Isolated `transform` exceptions to the computed state; `onError` is now strictly for network/server failures.
-  - **Memory & Lifecycle**: Eliminated a memory leak involving unresolved Promises during aborted requests. Abort handling (both superseded routing and manual `.abort()`) is now elegantly delegated to the core `computed` tracking engine via explicit `AbortError` throws, properly resolving `isPending` and `hasError` states.
-  - **Type Safety**: Normalized jQuery `jqXHR` rejection objects into standard `Error` instances (`FetchError`), preserving origin details while strictly adhering to error interfaces.
-- **atomList**:
-  - **Reconciliation Refactor**: Extracted flat closures into a unified `ListContext` and step functions (`handleEmpty`, `buildIndices`, `renderItems`, `placeItems`) for better maintainability and localized state.
-  - **Lifecycle Timing**: Fixed a bug where `bind` and `update` callbacks were invoked before DOM insertion. Hooks now execute strictly after elements are attached to the container.
-  - **Event Delegation**: Replaced custom upward traversal with jQuery's native `.on()` delegation, enabling correct `this` binding and native support for non-bubbling events (e.g., `mouseenter`).
-  - **Sanitization Robustness**: Swapped the batch-sanitization separator from HTML comments to `<template>` elements to prevent `DOMPurify` content stripping.
-  - Optimized single-item string renders by skipping array allocations (`join`/`split`).
-  - Fixed `innerHTML` fast path silently dropping delegated events.
-- **atomBind**: Simplified variable assignment control flow, eliminating non-null assertions.
-- **effect-factory**: Standardized dynamic error messaging and added clarity to untracked `try/catch` intent.
-- **debug**: Unified logging prefixes (`[atom-mount]`, `[atom-list]`, etc.) across all debug methods and tightened the highlight element guard.
+- **Router**: Improved JSDoc clarity, error handling, and fixed destroy loop issues.
+- **Input & Binding**: Unified handlers, fixed debounce data loss, and improved event delegation.
+- **atomFetch**: Fixed memory leaks on aborted requests and improved error normalization (`FetchError`).
+- **atomList**: Refactored reconciliation, fixed DOM insertion lifecycle bugs, and enhanced sanitization robustness.
+- **Internal**: Narrowed types for stricter type safety, optimized iterations (`for...in`), and cleaned up comments/logging.
 
 ## [0.22.2]
 
