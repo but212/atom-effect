@@ -18,7 +18,8 @@ import type {
 
 export type { BindingContext };
 
-import { hasOwn, isDangerousCssValue, isDangerousUrl, sanitizeHtml } from './utils';
+import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from './sanitize';
+import { hasOwn } from './utils';
 
 // Cache for CSS property camelization to avoid repeated regex overhead.
 // Uses Map instead of a plain object to avoid prototype pollution risk and
