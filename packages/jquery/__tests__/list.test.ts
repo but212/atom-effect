@@ -2,7 +2,7 @@ import $ from 'jquery';
 import { describe, expect, it } from 'vitest';
 import '../src/index';
 
-describe('Atom List', () => {
+describe('$.atomList (Integration)', () => {
   const EXPANDO = 'data-test-expando';
 
   it('should handle empty state transitions', async () => {
@@ -365,6 +365,50 @@ describe('Atom List', () => {
     await $.nextTick();
 
     expect(render1Count).toBe(0); // Proof that the old effect was disposed
+
+    $container.remove();
+  });
+
+  it('should not fire events on stale elements undergoing async removal when keys are reused', async () => {
+    let resolveRemove!: () => void;
+    const items = $.atom([{ id: 1, text: 'old' }]);
+    const $container = $('<div>').appendTo(document.body);
+    let handlerItem: { id: number; text: string } | null = null;
+
+    $container.atomList(items, {
+      key: 'id',
+      render: (item) => `<button class="btn">${item.text}</button>`,
+      onRemove: () =>
+        new Promise<void>((r) => {
+          resolveRemove = r;
+        }),
+      events: {
+        'click .btn': (item) => {
+          handlerItem = item;
+        },
+      },
+    });
+
+    await $.nextTick();
+    const $oldBtn = $container.find('.btn');
+
+    // Remove item to start async removal
+    items.value = [];
+    await $.nextTick();
+
+    // Re-add item with same key
+    items.value = [{ id: 1, text: 'new' }];
+    await $.nextTick();
+
+    // Trigger click on the old button which is still in the DOM
+    $oldBtn.trigger('click');
+
+    // The event should not trigger the handler for the new item
+    expect(handlerItem).toBeNull();
+
+    // Clean up
+    resolveRemove();
+    await new Promise((r) => setTimeout(r, 10));
 
     $container.remove();
   });

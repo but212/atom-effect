@@ -12,10 +12,10 @@ function click(el: HTMLElement): void {
 }
 
 // ---------------------------------------------------------------------------
-// Suite
+// Integration Suite: atomList
 // ---------------------------------------------------------------------------
 
-describe('atomList – events delegation', () => {
+describe('$.atomList – events delegation (Integration)', () => {
   let $container: JQuery;
 
   beforeEach(() => {
@@ -26,10 +26,7 @@ describe('atomList – events delegation', () => {
     $container.remove();
   });
 
-  // -------------------------------------------------------------------------
   // 1. Basic delegation with child selector
-  // -------------------------------------------------------------------------
-
   it('calls handler with (item, index, event) when delegated child is clicked', async () => {
     interface User {
       id: number;
@@ -61,10 +58,7 @@ describe('atomList – events delegation', () => {
     expect(e).toBeDefined();
   });
 
-  // -------------------------------------------------------------------------
   // 2. Delegation without child selector (item root click)
-  // -------------------------------------------------------------------------
-
   it('calls handler when item root element is clicked (no selector)', async () => {
     const items = $.atom([{ id: 10 }, { id: 20 }]);
     const handler = vi.fn();
@@ -87,10 +81,7 @@ describe('atomList – events delegation', () => {
     expect(handler.mock.calls[0]![1]).toBe(0);
   });
 
-  // -------------------------------------------------------------------------
   // 3. All items reachable via a single delegated listener
-  // -------------------------------------------------------------------------
-
   it('fires handler for every item in the list via a single delegated listener', async () => {
     const items = $.atom([1, 2, 3, 4, 5].map((id) => ({ id })));
     const handler = vi.fn();
@@ -110,10 +101,7 @@ describe('atomList – events delegation', () => {
     expect(receivedIds).toEqual([1, 2, 3, 4, 5]);
   });
 
-  // -------------------------------------------------------------------------
   // 4. Removed items do not fire the handler
-  // -------------------------------------------------------------------------
-
   it('does not call handler for items that have been removed from the list', async () => {
     const items = $.atom([{ id: 1 }, { id: 2 }]);
     const handler = vi.fn();
@@ -140,10 +128,7 @@ describe('atomList – events delegation', () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
-  // -------------------------------------------------------------------------
   // 5. Event listener is removed when container is cleaned up
-  // -------------------------------------------------------------------------
-
   it('removes the delegated listener when the container element is unbound', async () => {
     const items = $.atom([{ id: 1 }]);
     const handler = vi.fn();
@@ -169,10 +154,7 @@ describe('atomList – events delegation', () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
-  // -------------------------------------------------------------------------
   // 6. index reflects current order after reorder
-  // -------------------------------------------------------------------------
-
   it('reports the current list index after items are reordered', async () => {
     const items = $.atom([{ id: 1 }, { id: 2 }, { id: 3 }]);
     const handler = vi.fn();
@@ -185,11 +167,9 @@ describe('atomList – events delegation', () => {
 
     await $.nextTick();
 
-    // Reverse order: [3, 2, 1]
     items.value = [{ id: 3 }, { id: 2 }, { id: 1 }];
     await $.nextTick();
 
-    // Click item id=1, which is now at index 2.
     click($container.find('[data-id="1"]')[0]!);
 
     expect(handler).toHaveBeenCalledTimes(1);
@@ -197,10 +177,7 @@ describe('atomList – events delegation', () => {
     expect(handler.mock.calls[0]![1]).toBe(2);
   });
 
-  // -------------------------------------------------------------------------
   // 7. Multiple event types each get their own single listener
-  // -------------------------------------------------------------------------
-
   it('supports multiple event types simultaneously', async () => {
     const items = $.atom([{ id: 1 }]);
     const clickHandler = vi.fn();
@@ -227,10 +204,7 @@ describe('atomList – events delegation', () => {
     expect(dblClickHandler.mock.calls[0]![0]).toEqual({ id: 1 });
   });
 
-  // -------------------------------------------------------------------------
   // 8. childSelector must not escape outside the item root
-  // -------------------------------------------------------------------------
-
   it('does not fire when closest() matches an ancestor outside the item root', async () => {
     // Wrap the container in a parent that has the same class as the child selector.
     // target.closest('.btn') would escape upward and find this outer element

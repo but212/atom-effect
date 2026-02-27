@@ -6,7 +6,7 @@ import type { ComputedAtom, FetchError, FetchOptions } from './types';
 // atomFetch
 // ============================================================================
 
-export class FetchContext<T> {
+class FetchContext<T> {
   private abortController: AbortController | null = null;
   private readonly baseOptions: JQuery.AjaxSettings;
   private readonly isStaticUrl: boolean;
