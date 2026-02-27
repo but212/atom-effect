@@ -287,7 +287,7 @@ describe('$.atomFetch (Reactivity and Atom State)', () => {
     await $.nextTick();
     await $.nextTick();
 
-    // The NEVER_SETTLE returned by FetchContext suppresses the error passing
+    // The AbortError thrown by the superseded request is ignored by the `computed` core, so the atom does not enter an error state.
     expect(data.hasError).toBe(false);
     expect(data.value).toEqual({ ok: true });
   });
