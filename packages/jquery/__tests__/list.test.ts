@@ -373,17 +373,20 @@ describe('$.atomList (Integration)', () => {
     let resolveRemove!: () => void;
     const items = $.atom([{ id: 1, text: 'old' }]);
     const $container = $('<div>').appendTo(document.body);
-    let handlerItem: any = null;
+    let handlerItem: { id: number; text: string } | null = null;
 
     $container.atomList(items, {
       key: 'id',
       render: (item) => `<button class="btn">${item.text}</button>`,
-      onRemove: () => new Promise<void>((r) => { resolveRemove = r; }),
+      onRemove: () =>
+        new Promise<void>((r) => {
+          resolveRemove = r;
+        }),
       events: {
         'click .btn': (item) => {
           handlerItem = item;
-        }
-      }
+        },
+      },
     });
 
     await $.nextTick();
