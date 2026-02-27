@@ -1,87 +1,109 @@
 import { computed } from '@but212/atom-effect';
 import $ from 'jquery';
-import type { ComputedAtom, FetchOptions } from './types';
-
-/**
- * A Promise that never settles, used to keep a computed atom in its pending
- * state after an aborted request — until the next reactive run supersedes it.
- *
- * When the async computed fn returns this value, core treats the run as still
- * in-flight (pending flag stays set) without resolving or rejecting. The next
- * run (triggered by invalidate() or a dependency change) replaces this state.
- *
- * Typed as `Promise<never>` so it can be widened to `Promise<T>` at the call
- * site without an `as unknown` double-cast — `never` is assignable to any `T`.
- *
- * Intentional module-level singleton: the Promise executor never resolves or
- * rejects, so the object is permanently live without preventing GC of other objects.
- */
-const NEVER_SETTLE = new Promise<never>(() => {});
+import type { ComputedAtom, FetchError, FetchOptions } from './types';
 
 // ============================================================================
 // atomFetch
 // ============================================================================
 
-$.extend({
-  atomFetch<T>(urlOrFn: string | (() => string), options: FetchOptions<T>): ComputedAtom<T> {
-    const { defaultValue, transform, method, headers, ajaxOptions, onError, eager } = options;
+export class FetchContext<T> {
+  private abortController: AbortController | null = null;
+  private readonly baseOptions: JQuery.AjaxSettings;
+  private readonly isStaticUrl: boolean;
+  private readonly staticUrl?: string;
+  private readonly getUrl?: () => string;
+  private readonly transformFn: ((val: unknown) => T) | undefined;
+  private readonly onErrorFn: ((err: unknown) => void) | undefined;
 
-    // Hoist 1: Determine URL getter once.
-    const isStaticUrl = typeof urlOrFn === 'string';
-    const staticUrl = typeof urlOrFn === 'string' ? urlOrFn : undefined;
-    const getUrl = typeof urlOrFn === 'function' ? urlOrFn : null;
-
-    // Hoist 2: Pre-merge static options to avoid repeated object spreads per request.
-    const reqOptions: JQuery.AjaxSettings = Object.assign({}, ajaxOptions);
-    if (method !== undefined) reqOptions.method = method;
-    if (headers !== undefined) reqOptions.headers = headers;
-
-    if (isStaticUrl) {
-      reqOptions.url = staticUrl;
+  constructor(urlOrFn: string | (() => string), options: FetchOptions<T>) {
+    this.isStaticUrl = typeof urlOrFn === 'string';
+    if (this.isStaticUrl) {
+      this.staticUrl = urlOrFn as string;
+    } else {
+      this.getUrl = urlOrFn as () => string;
     }
 
-    let abortController: AbortController | null = null;
-    const isLazy = !(eager ?? true);
+    this.baseOptions = Object.assign({}, options.ajaxOptions);
+    if (options.method !== undefined) this.baseOptions.method = options.method;
+    if (options.headers !== undefined) this.baseOptions.headers = options.headers;
 
-    return computed(
-      async () => {
-        abortController?.abort();
-        abortController = new AbortController();
-        const signal = abortController.signal;
+    this.transformFn = options.transform;
+    this.onErrorFn = options.onError;
 
-        if (!isStaticUrl) {
-          reqOptions.url = getUrl!();
-        }
+    this.execute = this.execute.bind(this);
+  }
 
-        const xhr = $.ajax(reqOptions);
+  public abort(): void {
+    this.abortController?.abort();
+  }
 
-        signal.onabort = () => xhr.abort();
-        if (signal.aborted) xhr.abort();
+  public async execute(): Promise<T> {
+    this.abortController?.abort();
+    this.abortController = new AbortController();
+    const signal = this.abortController.signal;
 
-        let raw: unknown;
+    // Create a fresh options object for each request to prevent jQuery from mutating the shared object
+    const reqOptions: JQuery.AjaxSettings = { ...this.baseOptions };
+    reqOptions.url = this.isStaticUrl ? this.staticUrl : this.getUrl!();
+
+    const xhr = $.ajax(reqOptions);
+
+    signal.onabort = () => xhr.abort();
+    if (signal.aborted) xhr.abort();
+
+    let raw: unknown;
+    try {
+      raw = await xhr;
+    } catch (err) {
+      if (signal.aborted) {
+        // Delegate abort handling gracefully to the core computed tracking system.
+        // - Superseded aborts: core ignores them (since _promiseId bumps up).
+        // - Manual aborts: core catches them, updating state (hasError/isPending).
+        const abortErr = new Error('AbortError');
+        abortErr.name = 'AbortError';
+        throw abortErr;
+      }
+
+      let finalErr = err as Error;
+      if (err && typeof (err as JQuery.jqXHR).readyState !== 'undefined') {
+        const jXhr = err as JQuery.jqXHR;
+        // Construct pure Error, but attach the original jqXHR for advanced use-cases
+        finalErr = new Error(`Network Error: ${jXhr.statusText || 'Unknown'} (${jXhr.status})`);
+        (finalErr as FetchError).jqXHR = jXhr;
+      }
+
+      const onError = this.onErrorFn;
+      if (onError) {
         try {
-          raw = await xhr;
-        } catch (err) {
-          if (signal.aborted) {
-            return NEVER_SETTLE as Promise<T>;
-          }
-          // Network / server error — notify the caller via onError.
-          try {
-            onError?.(err);
-          } catch {
-            // Ignore errors thrown by onError itself.
-          }
-          throw err;
-        } finally {
-          signal.onabort = null;
-          if (abortController.signal === signal) abortController = null;
+          // Call without `this` binding to preserve purity of user callback
+          onError(finalErr);
+        } catch {
+          // Ignore errors thrown by onError itself.
         }
+      }
+      throw finalErr;
+    } finally {
+      signal.onabort = null;
+      if (this.abortController?.signal === signal) this.abortController = null;
+    }
 
-        // Transform errors are kept separate from network errors so that
-        // onError is not called for bugs in the transform function itself.
-        return transform ? transform(raw) : (raw as T);
-      },
-      { defaultValue, lazy: isLazy }
-    );
+    const transform = this.transformFn;
+    return transform ? transform(raw) : (raw as T);
+  }
+}
+
+$.extend({
+  atomFetch<T>(urlOrFn: string | (() => string), options: FetchOptions<T>): ComputedAtom<T> {
+    const context = new FetchContext<T>(urlOrFn, options);
+    const isLazy = !(options.eager ?? true);
+
+    const atomVal = computed(context.execute, {
+      defaultValue: options.defaultValue,
+      lazy: isLazy,
+    });
+
+    return Object.assign(atomVal, {
+      abort: () => context.abort(),
+    }) as ComputedAtom<T> & { abort: () => void };
   },
 });
