@@ -306,7 +306,7 @@ describe('$.atomFetch (Reactivity and Atom State)', () => {
     );
 
     const data = $.atomFetch('/api/manual-abort', { defaultValue: null });
-    
+
     await $.nextTick();
     expect(data.isPending).toBe(true);
     expect(abortSpy).not.toHaveBeenCalled();
