@@ -3,7 +3,7 @@ import $ from 'jquery';
 import { afterEach, describe, expect, it } from 'vitest';
 import '../src/index'; // Register all plugins including $.nextTick
 import { registry } from '../src/registry';
-import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '../src/utils';
+import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '../src/sanitize';
 
 // ============================================================================
 // PART 1: Unit Tests — sanitizeHtml core logic

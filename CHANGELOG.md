@@ -20,6 +20,9 @@
 - **atomFetch**: Fixed memory leaks on aborted requests and improved error normalization (`FetchError`).
 - **atomList**: Refactored reconciliation, fixed DOM insertion lifecycle bugs, and enhanced sanitization robustness.
 - **Internal**: Narrowed types for stricter type safety, optimized iterations (`for...in`), and cleaned up comments/logging.
+- **Refactor**: Extracted `sanitize.ts`; isolated `sanitizeHtml`, `isDangerousUrl`, `isDangerousCssValue`, and all XSS regex constants from `utils.ts` for focused security auditing.
+- **Security**: Removed `srcset` from `isDangerousUrl` allowlist — start-anchored regex cannot guard multi-URL `srcset` values; limitation documented in source.
+- **Cleanup**: Removed dead `getValue<T>` export; corrected misleading `sanitizeHtml` comment; added `querySelector()` misuse warning to `getSelector` JSDoc.
 
 ## [0.22.2]
 

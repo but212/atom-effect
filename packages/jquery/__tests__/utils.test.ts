@@ -1,13 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import $ from '../src/index'; // Register plugins ($.atom)
-import {
-  getLIS,
-  getSelector,
-  getValue,
-  isReactive,
-  sanitizeHtml,
-  shallowEqual,
-} from '../src/utils';
+import { sanitizeHtml } from '../src/sanitize';
+import { getLIS, getSelector, isReactive, shallowEqual } from '../src/utils';
 
 describe('Utils', () => {
   describe('getSelector', () => {
@@ -39,13 +33,6 @@ describe('Utils', () => {
       expect(isReactive(1)).toBe(false);
       expect(isReactive(null)).toBe(false);
       expect(isReactive({ value: 1, subscribe: () => {} })).toBe(false);
-    });
-
-    it('getValue extracts value', () => {
-      expect(getValue($.atom(10))).toBe(10);
-      expect(getValue(5)).toBe(5);
-      expect(getValue('str')).toBe('str');
-      expect(getValue(null as unknown)).toBe(null);
     });
   });
 

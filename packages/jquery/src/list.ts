@@ -3,6 +3,7 @@ import $ from 'jquery';
 import { ERROR_MESSAGES, LOG_PREFIXES } from './constants';
 import { debug } from './debug';
 import { registry } from './registry';
+import { sanitizeHtml } from './sanitize';
 import type {
   EffectObject,
   ListItemEntry,
@@ -12,7 +13,7 @@ import type {
   ListOptions,
   ReadonlyAtom,
 } from './types';
-import { getLIS, getSelector, hasOwn, sanitizeHtml, shallowEqual } from './utils';
+import { getLIS, getSelector, hasOwn, shallowEqual } from './utils';
 
 // ============================================================================
 // Helpers
