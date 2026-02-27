@@ -24,6 +24,8 @@
 - **Micro-Frontends**: Scaled `enableAutoCleanup` to support multiple concurrent `observedRoot` environments via a tracking `Map`, resolving edge-cases in MFEs or independent plugin spaces.
 - **Engine Locality**: Enforced Monomorphic object initializations for `BindingRecord` to guarantee fixed V8 hidden classes, optimizing hot-path lookups during reactive graph churn.
 - **DOM Stability**: Strengthened `.cleanup()` to unconditionally remove the `AES_BOUND` class marker, averting "zombie marker" regressions when detached nodes are cached and re-inserted by users.
+- **Patch Optimization**: Removed `.empty()` performance bottlenecks by skipping `cleanupDescendants` DOM traversals on nodes lacking `hasChildNodes()`. Replaced unpredictable `for...in` loops mapped over event objects with robust `Object.entries()` iterations to defend against prototype pollution.
+- **Chaining Guarantee**: Fortified $.fn overrides (`.remove()`, `.empty()`, `.detach()`, `.on()`, `.off()`) to strictly ensure return values preserve jQuery chaining (`return result !== undefined ? result : this`), preempting third-party plugin collisions.
 - **Docs**: Outlined Web Component (Shadow DOM) cleanup limitations within `cleanupDescendants`, instructing developers to manually invoke `registry.cleanupTree(shadowRoot)`.
 - **Refactor**: Extracted `sanitize.ts`; isolated `sanitizeHtml`, `isDangerousUrl`, `isDangerousCssValue`, and all XSS regex constants from `utils.ts` for focused security auditing.
 - **Security**: Removed `srcset` from `isDangerousUrl` allowlist — start-anchored regex cannot guard multi-URL `srcset` values; limitation documented in source.

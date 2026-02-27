@@ -129,7 +129,7 @@ describe('jQuery Lifecycle Overrides', () => {
     it('should support manual cleanupTree on a ShadowRoot', () => {
       const $host = $('<div>').appendTo(document.body);
       const shadow = $host[0]!.attachShadow({ mode: 'open' });
-      const $child = $('<span>').appendTo(shadow as any);
+      const $child = $('<span>').appendTo(shadow as unknown as HTMLElement);
 
       const cleanup = vi.fn();
       registry.trackCleanup($child[0]!, cleanup);
@@ -138,7 +138,7 @@ describe('jQuery Lifecycle Overrides', () => {
       expect($child.hasClass('_aes-bound')).toBe(true);
 
       // registry.cleanupTree(shadow) works via polyfilled/fallback querySelectorAll
-      registry.cleanupTree(shadow as any);
+      registry.cleanupTree(shadow);
 
       expect(registry.hasBind($child[0]!)).toBe(false);
       expect($child.hasClass('_aes-bound')).toBe(false);
@@ -180,7 +180,10 @@ describe('jQuery Lifecycle Overrides', () => {
       const el = document.createElement('div');
       registry.trackCleanup(el, () => {});
 
-      const record = (registry as any).records.get(el);
+      const internals = registry as unknown as {
+        records: WeakMap<Element, Record<string, unknown>>;
+      };
+      const record = internals.records.get(el)!;
       expect('effects' in record).toBe(true);
       expect('cleanups' in record).toBe(true);
       expect('componentCleanup' in record).toBe(true);

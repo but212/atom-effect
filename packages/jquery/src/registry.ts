@@ -169,17 +169,16 @@ class BindingRegistry {
     }
   }
 
-  cleanupDescendants(el: Element): void {
+  cleanupDescendants(el: Element | DocumentFragment | ShadowRoot): void {
     // ⚠ Blind Spot Notice: Web Components & Shadow DOM
     // getElementsByClassName only traverses the Light DOM. If reactive elements
     // are placed inside a ShadowRoot, they will NOT be discovered or cleaned up
     // automatically by a parent's removal. Users must explicitly track and call
     // `registry.cleanupTree(shadowRoot)` to avoid memory leaks in Shadow DOMs.
 
-    // getElementsByClassName is significantly faster than querySelectorAll but
     // is not available on ShadowRoot.
     const descendants =
-      typeof el.getElementsByClassName === 'function'
+      'getElementsByClassName' in el && typeof el.getElementsByClassName === 'function'
         ? el.getElementsByClassName(AES_BOUND)
         : el.querySelectorAll(`.${AES_BOUND}`);
     for (let i = descendants.length - 1; i >= 0; i--) {
@@ -205,7 +204,7 @@ class BindingRegistry {
 
   cleanupTree(el: Element | Node): void {
     if (el instanceof Element || el instanceof ShadowRoot || el instanceof DocumentFragment) {
-      this.cleanupDescendants(el as any);
+      this.cleanupDescendants(el);
     }
     this.cleanup(el);
   }
