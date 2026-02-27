@@ -12,18 +12,22 @@
 - **API Surface**: Removed public export of internal brand symbols (`ATOM_BRAND`, `COMPUTED_BRAND`, `EFFECT_BRAND`); `isAtom/isComputed/isEffect` guards are the intended public API.
 - **Dead Constant**: Removed `POOL_CONFIG` from `constants.ts` — zero consumers, values 20× off from actual `ArrayPool` defaults.
 - **Contract Clarity**: Marked `Dependency.version/flags/_lastSeenEpoch` as `@internal`; aligned `Dependency.subscribe` signature with `ReadonlyAtom.subscribe`.
+- **Debugging**: Extended `EffectOptions` with a `name` field; enabling better identification and profiling of reactive effects in core engine logs.
 
 ### jQuery
 
 - **Router**: Improved JSDoc clarity, error handling, and fixed destroy loop issues.
 - **Input & Binding**: Unified handlers, fixed debounce data loss, and improved event delegation.
 - **atomFetch**: Fixed memory leaks on aborted requests and improved error normalization (`FetchError`).
-- **atomList**: Refactored reconciliation, fixed DOM insertion lifecycle bugs, and enhanced sanitization robustness.
+- **atomList**: Refactored reconciliation, fixed DOM insertion lifecycle bugs, and enhanced sanitization robustness; exposed `containerSelector` as `@internal readonly` for better debug visibility.
 - **Internal**: Narrowed types for stricter type safety, optimized iterations (`for...in`), and cleaned up comments/logging.
 - **Refactor**: Extracted `sanitize.ts`; isolated `sanitizeHtml`, `isDangerousUrl`, `isDangerousCssValue`, and all XSS regex constants from `utils.ts` for focused security auditing.
 - **Security**: Removed `srcset` from `isDangerousUrl` allowlist — start-anchored regex cannot guard multi-URL `srcset` values; limitation documented in source.
 - **Cleanup**: Removed dead `getValue<T>` export; corrected misleading `sanitizeHtml` comment; added `querySelector()` misuse warning to `getSelector` JSDoc.
-- **Core Types**: Hardened `ListOptions.key` to only allow string/number property names; added generics to `BindingOptions` and `atomBind` for improved 2-way binding type inference; decoupled internal implementation types from public API surface in `types.ts`.
+- **Core Types**: Hardened `ListOptions.key` to property names; added generics to `BindingOptions` and `atomBind` for improved 2-way binding type inference; decoupled internal implementation types in `types.ts`.
+- **Security Hardening**: Implemented `URL_PROPS` and `on*` property guards in `bindProp`, closing potential XSS protocol bypasses via property assignment; centralized `INPUT_DEFAULTS.DEBOUNCE`.
+- **Error Context**: Transformed static error strings into contextual functions; all binding/cleanup errors now include element selectors or component names to accelerate debugging in complex UIs.
+- **Binding Stability**: Wrapped `effect-factory` static paths in `untracked()` to prevent outer dependency leaks; broadened element types to `Element` for first-class SVG support; integrated `debugType` as effect names.
 
 ## [0.22.2]
 
