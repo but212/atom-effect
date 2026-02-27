@@ -9,11 +9,19 @@ export enum SchedulerPhase {
   FLUSHING = 2,
 }
 
-export interface SchedulerJob {
+export interface SchedulerJobObject {
+  execute(): void;
+  /** Next scheduled epoch */
+  _nextEpoch?: number;
+}
+
+export interface SchedulerJobFunction {
   (): void;
   /** Next scheduled epoch */
   _nextEpoch?: number;
 }
+
+export type SchedulerJob = SchedulerJobFunction | SchedulerJobObject;
 
 /**
  * Scheduler implementation.
@@ -64,8 +72,15 @@ class Scheduler {
    * Schedules job.
    */
   schedule(callback: SchedulerJob): void {
-    if (IS_DEV && typeof callback !== 'function') {
-      throw new SchedulerError(ERROR_MESSAGES.SCHEDULER_CALLBACK_MUST_BE_FUNCTION);
+    if (IS_DEV) {
+      const isFn = typeof callback === 'function';
+      const isObj =
+        typeof callback === 'object' &&
+        callback !== null &&
+        typeof (callback as SchedulerJobObject).execute === 'function';
+      if (!isFn && !isObj) {
+        throw new SchedulerError(ERROR_MESSAGES.SCHEDULER_CALLBACK_MUST_BE_FUNCTION);
+      }
     }
 
     // Deduplicate job
@@ -183,7 +198,9 @@ class Scheduler {
     // Execute jobs
     for (let i = 0; i < count; i++) {
       try {
-        jobs[i]!();
+        const job = jobs[i]!;
+        if (typeof job === 'function') job();
+        else job.execute();
       } catch (e) {
         console.error(new SchedulerError('Error occurred during scheduler execution', e as Error));
       }

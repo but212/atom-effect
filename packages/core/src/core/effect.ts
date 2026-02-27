@@ -37,9 +37,6 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   private _nextLinks: DependencyLink[] | null = null;
   private _prevLinks: DependencyLink[] = EMPTY_LINKS;
 
-  /** Pre-allocated scheduler task (created once in constructor) */
-  private readonly _executeTask: (() => void) | undefined;
-
   /** Pre-allocated notify callback shared by all subscriptions */
   private readonly _notifyCallback: () => void;
 
@@ -71,11 +68,9 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       options.maxExecutionsPerFlush ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_EFFECT;
     // Pre-allocate callbacks once — eliminates per-dependency closure allocation
     if (this._sync) {
-      this._executeTask = undefined;
       this._notifyCallback = () => this.execute();
     } else {
-      this._executeTask = () => this.execute();
-      this._notifyCallback = () => scheduler.schedule(this._executeTask!);
+      this._notifyCallback = () => scheduler.schedule(this);
     }
 
     debug.attachDebugInfo(this, 'effect', this.id);

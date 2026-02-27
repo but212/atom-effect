@@ -1,35 +1,6 @@
-import type { DependencySubscriber, Listener } from '@/tracking/tracking.types';
 import type { Dependency, Subscriber } from '@/types';
 import { debug } from '@/utils/debug';
-/**
- * Tracks dependency.
- */
-export function trackDependency<T>(
-  dependency: Dependency,
-  current: Listener,
-  subscribers: Subscription<T>[]
-): void {
-  if (typeof current === 'function') {
-    const fn = current as (newValue?: T, oldValue?: T) => void;
-    // O(n) duplicate check — acceptable because:
-    // 1. subscribers array is typically 1-10 elements
-    // 2. DependencySubscriber (hot path) uses O(1) epoch-based dedup via addDependency
-    // 3. This branch only runs for raw function listeners (uncommon)
-    if (subscribers.some((link) => link && link.fn === fn)) return;
-    subscribers.push(new Subscription(fn, undefined));
-    return;
-  }
-
-  if ('addDependency' in (current as object)) {
-    (current as DependencySubscriber).addDependency(dependency);
-    return;
-  }
-
-  const sub = current as Subscriber;
-  if (subscribers.some((link) => link && link.sub === sub)) return;
-  subscribers.push(new Subscription(undefined, sub));
-}
-
+// trackDependency removed as it was obsolete and caused polymorphic cache misses
 /**
  * Syncs dependencies.
  * Uses a local Map to park previous subscriptions, avoiding
@@ -40,33 +11,39 @@ export function syncDependencies(
   prevLinks: DependencyLink[],
   tracker: Subscriber
 ): void {
-  // Park: collect previous subscriptions into a local Map
-  const parked = new Map<Dependency, () => void>();
-  prevLinks.forEach((link) => {
-    if (link?.unsub) {
-      parked.set(link.node, link.unsub);
-    }
-  });
-
   // Reclaim or subscribe
-  nextLinks.forEach((link) => {
-    if (!link) return;
+  for (let i = 0; i < nextLinks.length; i++) {
+    const nextLink = nextLinks[i];
+    if (!nextLink) continue;
 
-    const node = link.node;
-    const existing = parked.get(node);
-    if (existing !== undefined) {
-      // Re-link: reclaim subscription from previous set
-      link.unsub = existing;
-      parked.delete(node);
-    } else {
+    const node = nextLink.node;
+    let reclaimed = false;
+
+    // Linear scan for previous link (Zero-allocation Map)
+    for (let j = 0; j < prevLinks.length; j++) {
+      const prevLink = prevLinks[j];
+      if (prevLink && prevLink.node === node && prevLink.unsub) {
+        nextLink.unsub = prevLink.unsub;
+        prevLinks[j] = null!; // Mark as reclaimed
+        reclaimed = true;
+        break;
+      }
+    }
+
+    if (!reclaimed) {
       // New link: subscribe afresh
       debug.checkCircular(node, tracker);
-      link.unsub = node.subscribe(tracker);
+      nextLink.unsub = node.subscribe(tracker);
     }
-  });
+  }
 
   // Cleanup: release unused subscriptions
-  parked.forEach((unsub) => unsub());
+  for (let j = 0; j < prevLinks.length; j++) {
+    const prevLink = prevLinks[j];
+    if (prevLink?.unsub) {
+      prevLink.unsub();
+    }
+  }
 }
 
 /**
@@ -96,5 +73,10 @@ export class Subscription<T> {
     // Always initialize both properties to maintain consistent V8 hidden class
     this.fn = fn;
     this.sub = sub;
+  }
+
+  notify(newValue?: T, oldValue?: T): void {
+    if (this.fn) this.fn(newValue, oldValue);
+    else if (this.sub) this.sub.execute();
   }
 }
