@@ -220,7 +220,7 @@ $.fn.atomOn = function (event: string, handler: (e: JQuery.Event) => void): JQue
  * All conditional checks use `!== undefined` consistently so that meaningful
  * falsy values (`show: false`, `hide: false`, `class: {}`) are handled correctly.
  */
-$.fn.atomBind = function (options: BindingOptions): JQuery {
+$.fn.atomBind = function <T = unknown>(options: BindingOptions<T>): JQuery {
   const { text, html, class: cls, css, attr, prop, show, hide, val, checked, on } = options;
 
   // Parse val once before the element loop. Result is kept as a typed pair so
@@ -229,7 +229,10 @@ $.fn.atomBind = function (options: BindingOptions): JQuery {
     val === undefined
       ? null
       : Array.isArray(val)
-        ? { atom: val[0] as WritableAtom<unknown>, opts: val[1] as ValOptions<unknown> }
+        ? {
+            atom: val[0] as WritableAtom<unknown>,
+            opts: val[1] as unknown as ValOptions<unknown>,
+          }
         : { atom: val as WritableAtom<unknown>, opts: undefined };
 
   for (let i = 0, len = this.length; i < len; i++) {
