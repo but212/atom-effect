@@ -1,5 +1,4 @@
 import type { Dependency, Subscriber } from '@/types';
-import { debug } from '@/utils/debug';
 // trackDependency removed as it was obsolete and caused polymorphic cache misses
 /**
  * Syncs dependencies.
@@ -32,7 +31,6 @@ export function syncDependencies(
 
     if (!reclaimed) {
       // New link: subscribe afresh
-      debug.checkCircular(node, tracker);
       nextLink.unsub = node.subscribe(tracker);
     }
   }

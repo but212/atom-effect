@@ -1,4 +1,4 @@
-import { ATOM_BRAND, COMPUTED_BRAND, EFFECT_BRAND } from '@/symbols';
+import { ATOM_BRAND, COMPUTED_BRAND, EFFECT_BRAND, WRITABLE_BRAND } from '@/symbols';
 import type { ComputedAtom, EffectObject, ReadonlyAtom, WritableAtom } from '@/types';
 
 /**
@@ -12,9 +12,12 @@ export function isAtom(obj: unknown): obj is ReadonlyAtom {
 
 /**
  * Writable atom check.
+ *
+ * Uses a dedicated positive brand instead of `!isComputed()` to remain
+ * correct if new ReadonlyAtom-style primitives are added in the future.
  */
 export function isWritable(obj: unknown): obj is WritableAtom {
-  return isAtom(obj) && !isComputed(obj);
+  return obj !== null && typeof obj === 'object' && WRITABLE_BRAND in obj;
 }
 
 /**

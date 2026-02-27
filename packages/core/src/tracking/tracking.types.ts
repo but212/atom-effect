@@ -20,16 +20,15 @@ export interface ExecutableSubscriber {
 /**
  * Dependency tracker.
  */
-export interface DependencyTracker
-  extends Partial<DependencySubscriber>,
-    Partial<ExecutableSubscriber> {}
+export interface DependencyTracker extends DependencySubscriber, ExecutableSubscriber {}
 
 /**
  * Trackable function.
  */
-export type TrackableFunction = (() => void) & Partial<DependencySubscriber>;
+export type TrackableFunction = (() => void) & DependencySubscriber;
 
 /**
  * Listener.
+ * A listener must be able to collect dependencies.
  */
-export type Listener = DependencyTracker | TrackableFunction;
+export type Listener = DependencySubscriber;

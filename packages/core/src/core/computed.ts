@@ -96,10 +96,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   }
 
   private _track(): void {
-    const current = trackingContext.current as { addDependency?: (dep: Dependency) => void } | null;
-    if (current?.addDependency) {
-      current.addDependency(this);
-    }
+    trackingContext.current?.addDependency(this);
   }
 
   get value(): T {

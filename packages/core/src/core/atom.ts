@@ -3,9 +3,9 @@ import { ReactiveDependency } from '@/core/base';
 import type { Subscription } from '@/core/dep-tracking';
 import { nextVersion } from '@/internal/epoch';
 import { scheduler } from '@/internal/scheduler';
-import { ATOM_BRAND } from '@/symbols';
+import { ATOM_BRAND, WRITABLE_BRAND } from '@/symbols';
 import { trackingContext } from '@/tracking';
-import type { AtomOptions, Dependency, WritableAtom } from '@/types';
+import type { AtomOptions, WritableAtom } from '@/types';
 import { debug } from '@/utils/debug';
 
 /**
@@ -19,6 +19,8 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
 
   /** @internal */
   readonly [ATOM_BRAND] = true;
+  /** @internal */
+  readonly [WRITABLE_BRAND] = true;
 
   constructor(initialValue: T, sync: boolean) {
     super();
@@ -28,11 +30,7 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
   }
 
   get value(): T {
-    // Only typecast what we need for the dynamic check
-    const current = trackingContext.current as { addDependency?: (dep: Dependency) => void } | null;
-    if (current?.addDependency) {
-      current.addDependency(this);
-    }
+    trackingContext.current?.addDependency(this);
     return this._value;
   }
 

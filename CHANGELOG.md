@@ -6,6 +6,12 @@
 
 - **Performance**: Applied engine-level micro-optimizations (Zero-allocation arrays, duck-typed scheduler, monomorphic caching) to significantly reduce GC overhead and improve JIT compilation.
 - **Safety**: Fixed concurrent unsubscription bugs preventing stale callback execution during batch notifications.
+- **Dead Code Removal**: Removed zombie `checkCircular`/`checkCircularInternal` from `debug.ts` and its call-site in `dep-tracking.ts`; the logic depended on a defunct `dependencies` property and was unreachable. Cycle detection is covered in O(1) by the `RECOMPUTING` flag in `computed.ts`.
+- **Type Safety**: Dropped `Partial<>` from `DependencyTracker` / `TrackableFunction` and narrowed `Listener` to `DependencySubscriber`. Removed defensive optional-chain casts in `AtomImpl` and `ComputedAtomImpl` hot-path getters.
+- **Branding**: Added `WRITABLE_BRAND` (`Symbol.for('atom-effect/writable')`) stamped only on `AtomImpl`; `isWritable()` now uses positive brand identification instead of `!isComputed()`.
+- **API Surface**: Removed public export of internal brand symbols (`ATOM_BRAND`, `COMPUTED_BRAND`, `EFFECT_BRAND`); `isAtom/isComputed/isEffect` guards are the intended public API.
+- **Dead Constant**: Removed `POOL_CONFIG` from `constants.ts` — zero consumers, values 20× off from actual `ArrayPool` defaults.
+- **Contract Clarity**: Marked `Dependency.version/flags/_lastSeenEpoch` as `@internal`; aligned `Dependency.subscribe` signature with `ReadonlyAtom.subscribe`.
 
 ### jQuery
 

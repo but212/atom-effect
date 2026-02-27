@@ -1,3 +1,4 @@
+import { ERROR_MESSAGES } from '@/errors/messages';
 import { scheduler } from './scheduler';
 
 /**
@@ -9,7 +10,7 @@ import { scheduler } from './scheduler';
 export function batch<T>(fn: () => T): T {
   // Validate callback
   if (typeof fn !== 'function') {
-    throw new TypeError('Batch callback must be a function');
+    throw new TypeError(ERROR_MESSAGES.BATCH_CALLBACK_MUST_BE_FUNCTION);
   }
 
   scheduler.startBatch();
