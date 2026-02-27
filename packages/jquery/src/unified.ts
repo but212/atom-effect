@@ -1,6 +1,12 @@
 import { computed, effect, isAtom, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
-import { DANGEROUS_PROPS, ERROR_MESSAGES, LOG_PREFIXES, VALID_INPUT_TAGS } from './constants';
+import {
+  DANGEROUS_PROPS,
+  ERROR_MESSAGES,
+  LOG_PREFIXES,
+  URL_PROPS,
+  VALID_INPUT_TAGS,
+} from './constants';
 import { debug } from './debug';
 import { type BindingDebugType, registerReactiveEffect } from './effect-factory';
 import { applyInputBinding } from './input-binding';
@@ -184,10 +190,12 @@ export function bindAttr(
   const el = ctx.el;
   for (const name in attrMap) {
     if (hasOwn.call(attrMap, name)) {
+      const lowerName = name.toLowerCase();
       // Block event handler attributes (on*) to prevent inline JS injection.
-      // Attribute names from the DOM API are lowercase, but user-supplied keys
-      // may use mixed case — normalize before the check.
-      if (name.toLowerCase().startsWith('on')) continue;
+      if (lowerName.startsWith('on')) {
+        console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BLOCKED_EVENT_HANDLER(name)}`);
+        continue;
+      }
 
       registerReactiveEffect(
         el,
@@ -199,6 +207,7 @@ export function bindAttr(
           }
           const newVal = v === true ? name : String(v);
           if (isDangerousUrl(name, newVal)) {
+            console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BLOCKED_PROTOCOL(name)}`);
             return;
           }
           // Attribute write guard
@@ -213,7 +222,7 @@ export function bindAttr(
 }
 
 /**
- * Binds DOM properties. Uses strict property write guards.
+ * Binds DOM properties. Uses strict property write guards and security filters.
  */
 export function bindProp(
   ctx: BindingContext,
@@ -222,14 +231,34 @@ export function bindProp(
   const el = ctx.el as unknown as Record<string, unknown>;
   for (const name in propMap) {
     if (hasOwn.call(propMap, name)) {
-      // Block dangerous DOM properties that can inject raw HTML (e.g., innerHTML)
-      if (DANGEROUS_PROPS.has(name)) continue;
+      const lowerName = name.toLowerCase();
+
+      // 1. Block dangerous event handler properties.
+      if (lowerName.startsWith('on')) {
+        console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BLOCKED_EVENT_HANDLER(name)}`);
+        continue;
+      }
+
+      // 2. Block properties that can inject raw HTML or pollute prototype.
+      if (DANGEROUS_PROPS.has(name)) {
+        console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BLOCKED_DANGEROUS_PROP(name)}`);
+        continue;
+      }
 
       registerReactiveEffect(
         ctx.el,
         propMap[name]!,
         (val) => {
-          // Redundancy check specifically for DOM properties
+          // 3. Block dangerous protocols in property values (src, href, etc.).
+          // Even when set via .prop(), javascript: protocols can execute.
+          if (URL_PROPS.has(lowerName) && typeof val === 'string') {
+            if (isDangerousUrl(name, val)) {
+              console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BLOCKED_PROTOCOL(name)}`);
+              return;
+            }
+          }
+
+          // Strict write guard
           if (el[name] !== val) {
             el[name] = val;
           }

@@ -73,7 +73,8 @@ class ListContext<T> {
 
   constructor(
     public readonly $container: JQuery,
-    private readonly containerSelector: string,
+    /** @internal */
+    public readonly containerSelector: string,
     private readonly onRemove: (($el: JQuery) => Promise<void> | void) | undefined
   ) {}
 
@@ -206,7 +207,10 @@ function buildIndices<T>(
     newKeys[i] = k;
 
     if (newKeySet.has(k)) {
-      debug.warn(LOG_PREFIXES.LIST, ERROR_MESSAGES.DUPLICATE_KEY(k, i));
+      debug.warn(
+        LOG_PREFIXES.LIST,
+        `${ctx.containerSelector}: ${ERROR_MESSAGES.DUPLICATE_KEY(k, i)}`
+      );
       newIndices[i] = -1;
       continue;
     }

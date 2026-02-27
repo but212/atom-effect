@@ -134,7 +134,7 @@ class BindingRegistry {
       try {
         record.componentCleanup();
       } catch (e) {
-        debug.error(LOG_PREFIXES.MOUNT, ERROR_MESSAGES.MOUNT_CLEANUP_ERROR(), e);
+        debug.error(LOG_PREFIXES.MOUNT, ERROR_MESSAGES.MOUNT_CLEANUP_ERROR(getSelector(el)), e);
       }
     }
 
@@ -145,7 +145,11 @@ class BindingRegistry {
         try {
           effects[i]!.dispose();
         } catch (e) {
-          debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.EFFECT_DISPOSE_ERROR(), e);
+          debug.error(
+            LOG_PREFIXES.BINDING,
+            ERROR_MESSAGES.EFFECT_DISPOSE_ERROR(getSelector(el)),
+            e
+          );
         }
       }
     }
@@ -157,7 +161,11 @@ class BindingRegistry {
         try {
           cleanups[i]!();
         } catch (e) {
-          debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING_CLEANUP_ERROR(), e);
+          debug.error(
+            LOG_PREFIXES.BINDING,
+            ERROR_MESSAGES.BINDING_CLEANUP_ERROR(getSelector(el)),
+            e
+          );
         }
       }
     }

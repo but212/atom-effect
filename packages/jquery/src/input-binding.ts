@@ -160,7 +160,11 @@ class InputBinding<T> {
       }
     } catch (e) {
       // parse() threw (e.g. invalid input) — leave the atom unchanged.
-      debug.warn(LOG_PREFIXES.BINDING, `${ERROR_MESSAGES.PARSE_ERROR()}:`, e);
+      debug.warn(
+        LOG_PREFIXES.BINDING,
+        ERROR_MESSAGES.PARSE_ERROR(e instanceof Error ? e.message : String(e)),
+        e
+      );
     } finally {
       this.flags &= ~BindingFlags.SyncingToAtom;
     }
