@@ -2,7 +2,7 @@ import $ from 'jquery';
 import { describe, expect, it } from 'vitest';
 import '../src/index';
 
-describe('Atom List', () => {
+describe('$.atomList (Integration)', () => {
   const EXPANDO = 'data-test-expando';
 
   it('should handle empty state transitions', async () => {

@@ -431,16 +431,9 @@ function syncEventIndices<T>(ctx: ListContext<T>, diff: PreparedDiff<T>): void {
   // Remove stale entries for keys no longer in the list.
   for (let i = 0, len = oldKeys.length; i < len; i++) {
     const k = oldKeys[i]!;
-    if (newKeySet.has(k)) continue;
-
-    const staleEntry = itemMap.get(k);
-    if (staleEntry) {
-      for (let j = 0; j < staleEntry.$el.length; j++) {
-        const rootEl = staleEntry.$el[j];
-        if (rootEl) elToKey.delete(rootEl);
-      }
+    if (!newKeySet.has(k)) {
+      keyToIndex.delete(k);
     }
-    keyToIndex.delete(k);
   }
   // Register/update entries for keys in the new list.
   for (let i = 0; i < itemCount; i++) {
