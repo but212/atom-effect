@@ -23,6 +23,7 @@
 - **Refactor**: Extracted `sanitize.ts`; isolated `sanitizeHtml`, `isDangerousUrl`, `isDangerousCssValue`, and all XSS regex constants from `utils.ts` for focused security auditing.
 - **Security**: Removed `srcset` from `isDangerousUrl` allowlist — start-anchored regex cannot guard multi-URL `srcset` values; limitation documented in source.
 - **Cleanup**: Removed dead `getValue<T>` export; corrected misleading `sanitizeHtml` comment; added `querySelector()` misuse warning to `getSelector` JSDoc.
+- **Core Types**: Hardened `ListOptions.key` to only allow string/number property names; added generics to `BindingOptions` and `atomBind` for improved 2-way binding type inference; decoupled internal implementation types from public API surface in `types.ts`.
 
 ## [0.22.2]
 
