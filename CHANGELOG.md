@@ -21,6 +21,10 @@
 - **atomFetch**: Fixed memory leaks on aborted requests and improved error normalization (`FetchError`).
 - **atomList**: Refactored reconciliation, fixed DOM insertion lifecycle bugs, and enhanced sanitization robustness; exposed `containerSelector` as `@internal readonly` for better debug visibility.
 - **Internal**: Narrowed types for stricter type safety, optimized iterations (`for...in`), and cleaned up comments/logging.
+- **Micro-Frontends**: Scaled `enableAutoCleanup` to support multiple concurrent `observedRoot` environments via a tracking `Map`, resolving edge-cases in MFEs or independent plugin spaces.
+- **Engine Locality**: Enforced Monomorphic object initializations for `BindingRecord` to guarantee fixed V8 hidden classes, optimizing hot-path lookups during reactive graph churn.
+- **DOM Stability**: Strengthened `.cleanup()` to unconditionally remove the `AES_BOUND` class marker, averting "zombie marker" regressions when detached nodes are cached and re-inserted by users.
+- **Docs**: Outlined Web Component (Shadow DOM) cleanup limitations within `cleanupDescendants`, instructing developers to manually invoke `registry.cleanupTree(shadowRoot)`.
 - **Refactor**: Extracted `sanitize.ts`; isolated `sanitizeHtml`, `isDangerousUrl`, `isDangerousCssValue`, and all XSS regex constants from `utils.ts` for focused security auditing.
 - **Security**: Removed `srcset` from `isDangerousUrl` allowlist — start-anchored regex cannot guard multi-URL `srcset` values; limitation documented in source.
 - **Cleanup**: Removed dead `getValue<T>` export; corrected misleading `sanitizeHtml` comment; added `querySelector()` misuse warning to `getSelector` JSDoc.

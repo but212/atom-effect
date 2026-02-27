@@ -69,7 +69,8 @@ class BindingRegistry {
   private getOrCreateRecord(el: Element): BindingRecord {
     let res = this.records.get(el);
     if (!res) {
-      res = {};
+      // V8 Optimization: Enforce monomorphic object shape from creation time.
+      res = { effects: undefined, cleanups: undefined, componentCleanup: undefined };
       this.records.set(el, res);
       el.classList.add(AES_BOUND);
     }
@@ -101,31 +102,33 @@ class BindingRegistry {
   // Cleanup
   // --------------------------------------------------------------------------
 
-  cleanup(el: Element): void {
+  cleanup(el: Element | Node): void {
     // Optimization: Single lookup + delete.
-    const record = this.records.get(el);
+    const record = this.records.get(el as Element);
     if (!record) {
       // Already cleaned up or never bound.
-      // Ensure specific class is removed just in case of stale DOM state.
-      if (el.isConnected) el.classList.remove(AES_BOUND);
+      // Ensure specific class is removed unconditionally just in case of stale DOM state
+      // (e.g. detached node being re-inserted).
+      if (el instanceof Element) el.classList.remove(AES_BOUND);
       this.preservedNodes.delete(el);
       this.ignoredNodes.delete(el);
       return;
     }
 
     // Atomic deletion doubles as a re-entry guard.
-    this.records.delete(el);
+    this.records.delete(el as Element);
     this.preservedNodes.delete(el);
     this.ignoredNodes.delete(el);
 
-    // Avoid a classList write for elements that are already leaving the DOM —
-    // the browser will discard the class along with the node.
-    if (el.isConnected) {
-      el.classList.remove(AES_BOUND);
-    }
+    // Unconditionally remove the class to prevent "zombie markers".
+    // If a detached node is cached by the user and re-inserted into the DOM later,
+    // leaving the class would cause false-positive lookups during subtree cleanups.
+    // (classList.remove on detached nodes is virtually free).
+    if (el instanceof Element) el.classList.remove(AES_BOUND);
 
     if (debug.enabled) {
-      debug.cleanup(LOG_PREFIXES.BINDING, getSelector(el));
+      const info = el instanceof Element ? getSelector(el) : el.nodeName || 'Node';
+      debug.cleanup(LOG_PREFIXES.BINDING, info);
     }
 
     // Step 0 — Component cleanup runs first so the component can unmount
@@ -134,7 +137,8 @@ class BindingRegistry {
       try {
         record.componentCleanup();
       } catch (e) {
-        debug.error(LOG_PREFIXES.MOUNT, ERROR_MESSAGES.MOUNT.CLEANUP_ERROR(getSelector(el)), e);
+        const selector = el instanceof Element ? getSelector(el) : 'Node';
+        debug.error(LOG_PREFIXES.MOUNT, ERROR_MESSAGES.MOUNT.CLEANUP_ERROR(selector), e);
       }
     }
 
@@ -145,11 +149,8 @@ class BindingRegistry {
         try {
           effects[i]!.dispose();
         } catch (e) {
-          debug.error(
-            LOG_PREFIXES.BINDING,
-            ERROR_MESSAGES.CORE.EFFECT_DISPOSE_ERROR(getSelector(el)),
-            e
-          );
+          const selector = el instanceof Element ? getSelector(el) : 'Node';
+          debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.CORE.EFFECT_DISPOSE_ERROR(selector), e);
         }
       }
     }
@@ -161,22 +162,26 @@ class BindingRegistry {
         try {
           cleanups[i]!();
         } catch (e) {
-          debug.error(
-            LOG_PREFIXES.BINDING,
-            ERROR_MESSAGES.BINDING.CLEANUP_ERROR(getSelector(el)),
-            e
-          );
+          const selector = el instanceof Element ? getSelector(el) : 'Node';
+          debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.CLEANUP_ERROR(selector), e);
         }
       }
     }
   }
 
   cleanupDescendants(el: Element): void {
-    // getElementsByClassName is significantly faster than querySelectorAll as it
-    // avoids the CSS selector parsing engine and returns a live HTMLCollection.
-    // Iterating backwards handles live collection mutations gracefully, though
-    // cleanup() doesn't immediately remove elements from the tree.
-    const descendants = el.getElementsByClassName(AES_BOUND);
+    // ⚠ Blind Spot Notice: Web Components & Shadow DOM
+    // getElementsByClassName only traverses the Light DOM. If reactive elements
+    // are placed inside a ShadowRoot, they will NOT be discovered or cleaned up
+    // automatically by a parent's removal. Users must explicitly track and call
+    // `registry.cleanupTree(shadowRoot)` to avoid memory leaks in Shadow DOMs.
+
+    // getElementsByClassName is significantly faster than querySelectorAll but
+    // is not available on ShadowRoot.
+    const descendants =
+      typeof el.getElementsByClassName === 'function'
+        ? el.getElementsByClassName(AES_BOUND)
+        : el.querySelectorAll(`.${AES_BOUND}`);
     for (let i = descendants.length - 1; i >= 0; i--) {
       const child = descendants[i];
       if (!child) continue;
@@ -198,8 +203,10 @@ class BindingRegistry {
     }
   }
 
-  cleanupTree(el: Element): void {
-    this.cleanupDescendants(el);
+  cleanupTree(el: Element | Node): void {
+    if (el instanceof Element || el instanceof ShadowRoot || el instanceof DocumentFragment) {
+      this.cleanupDescendants(el as any);
+    }
     this.cleanup(el);
   }
 }
@@ -210,35 +217,25 @@ class BindingRegistry {
 
 export const registry = new BindingRegistry();
 
-let observer: MutationObserver | null = null;
-let observedRoot: Element | null = null;
+const observers = new Map<Element, MutationObserver>();
 
 /**
  * Starts observing `root` for removed elements and automatically disposes
  * their reactive bindings when they leave the DOM.
  *
+ * Multiple roots can be observed concurrently (e.g. for Micro-Frontends).
  * The `root` parameter is required (no default) to make the caller explicit
- * about which subtree is being observed — `document.body` can be null if the
- * script runs before the body is parsed.
+ * about which subtree is being observed.
  *
- * Idempotent: calling more than once with the same root before
- * `disableAutoCleanup` has no effect. Calling with a different root while
- * already active emits a warning and returns without re-observing.
+ * Idempotent: calling more than once with the same root has no effect.
  */
 export function enableAutoCleanup(root: Element): void {
-  if (observer !== null) {
-    if (observedRoot !== root) {
-      debug.warn(
-        LOG_PREFIXES.BINDING,
-        'enableAutoCleanup() called with a different root while already active. Observation was NOT switched — call disableAutoCleanup() first.',
-        { current: observedRoot, requested: root }
-      );
-    }
+  // Support independent multiple roots for Micro-Frontend architectures.
+  if (observers.has(root)) {
     return;
   }
 
-  observedRoot = root;
-  observer = new MutationObserver((mutations) => {
+  const observer = new MutationObserver((mutations) => {
     // Optimization: raw for-loop avoids iterator allocations.
     for (let i = 0, mLen = mutations.length; i < mLen; i++) {
       const removedNodes = mutations[i]!.removedNodes;
@@ -262,13 +259,13 @@ export function enableAutoCleanup(root: Element): void {
   });
 
   observer.observe(root, { childList: true, subtree: true });
+  observers.set(root, observer);
 }
 
 /**
- * Stops the MutationObserver started by `enableAutoCleanup`.
+ * Stops all MutationObservers started by `enableAutoCleanup`.
  */
 export function disableAutoCleanup(): void {
-  observer?.disconnect();
-  observer = null;
-  observedRoot = null;
+  observers.forEach((obs) => obs.disconnect());
+  observers.clear();
 }
