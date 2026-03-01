@@ -29,6 +29,7 @@ class InputBinding<T> {
   private readonly $el: JQuery;
   private readonly el: InputEl;
   private readonly atom: WritableAtom<T>;
+  private readonly isMultipleSelect: boolean;
 
   // Hoisted fast local properties vs deep this.options.x lookups for hot paths.
   private readonly parse: (v: string) => T;
@@ -54,13 +55,33 @@ class InputBinding<T> {
     this.$el = $el;
     this.el = $el[0] as InputEl;
     this.atom = atom;
+    this.isMultipleSelect = this.el.tagName === 'SELECT' && (this.el as HTMLSelectElement).multiple;
     this.ns = `.atomBind-${++instanceCounter}`;
 
     const debounce = options.debounce ?? 0;
     const eventName = options.event ?? INPUT_DEFAULTS.EVENT;
+
     this.parse = options.parse ?? ((v: string) => v as unknown as T);
-    this.format = options.format ?? ((v: T) => String(v ?? ''));
-    this.equal = options.equal ?? Object.is;
+    this.format =
+      options.format ??
+      ((v: T) => {
+        // Return array directly for <select multiple> instead of stringifying
+        if (this.isMultipleSelect) {
+          return (Array.isArray(v) ? v : v ? [String(v)] : []).join(',');
+        }
+        return String(v ?? '');
+      });
+
+    // Wrap user-provided or default equality with shallow array comparison
+    // to support <select multiple> without leaking `unknown` into the public type.
+    const baseEqual = options.equal ?? Object.is;
+    this.equal = (a: T, b: T): boolean => {
+      if (baseEqual(a, b)) return true;
+      if (Array.isArray(a) && Array.isArray(b)) {
+        return a.length === b.length && a.every((val, i) => Object.is(val, b[i]));
+      }
+      return false;
+    };
 
     // Optimization: pre-bind the appropriate input handler to avoid per-event
     // branching at runtime. The debounce branch produces a closure that clears
@@ -108,10 +129,23 @@ class InputBinding<T> {
 
   private readonly handleBlur = () => {
     this.flags &= ~BindingFlags.Focused;
+
+    // FIX 4: Clear composing state securely when an element is unexpectedly blurred
+    // while composition was active (e.g., click away during IME typing).
+    const wasComposing = !!(this.flags & BindingFlags.Composing);
+    this.flags &= ~BindingFlags.Composing;
+
     // Order matters: flush the pending debounce write BEFORE normalizing the
     // display value so that normalizeDomValue reads the atom state that
     // includes any value the user was typing.
     this.flushPendingDebounce();
+
+    // If debounce === 0 and was composing, flushPendingDebounce wouldn't have synced Atom
+    // (since timeoutId is undefined), so we must manually sync to prevent typed text from evaporating.
+    if (wasComposing && this.timeoutId === undefined) {
+      this.syncAtomFromDom();
+    }
+
     this.normalizeDomValue();
   };
 
@@ -137,7 +171,14 @@ class InputBinding<T> {
    */
   private normalizeDomValue(): void {
     const formatted = this.format(this.atom.peek());
-    if (this.el.value !== formatted) {
+
+    if (this.isMultipleSelect) {
+      const currentVal = (this.$el.val() as string[] | null) || [];
+      const formattedArr = Array.isArray(this.atom.peek()) ? this.atom.peek() : [];
+      if (!this.equal(currentVal as unknown as T, formattedArr as unknown as T)) {
+        this.$el.val(formattedArr as unknown as string[]);
+      }
+    } else if (this.el.value !== formatted) {
       this.el.value = formatted;
     }
   }
@@ -152,7 +193,15 @@ class InputBinding<T> {
 
     this.flags |= BindingFlags.SyncingToAtom;
     try {
-      const parsed = this.parse(this.el.value);
+      // FIX 3: Support <select multiple> arrays
+      let rawValue: string;
+      if (this.isMultipleSelect) {
+        rawValue = ((this.$el.val() as string[] | null) || []) as unknown as string;
+      } else {
+        rawValue = this.el.value;
+      }
+
+      const parsed = this.parse(rawValue);
       // peek() instead of .value: equality check in an event handler must not
       // register a dependency — only syncDomFromAtom (the effect body) tracks.
       if (!this.equal(this.atom.peek(), parsed)) {
@@ -160,7 +209,11 @@ class InputBinding<T> {
       }
     } catch (e) {
       // parse() threw (e.g. invalid input) — leave the atom unchanged.
-      debug.warn(LOG_PREFIXES.BINDING, `${ERROR_MESSAGES.PARSE_ERROR()}:`, e);
+      debug.warn(
+        LOG_PREFIXES.BINDING,
+        ERROR_MESSAGES.BINDING.PARSE_ERROR(e instanceof Error ? e.message : String(e)),
+        e
+      );
     } finally {
       this.flags &= ~BindingFlags.SyncingToAtom;
     }
@@ -185,10 +238,16 @@ class InputBinding<T> {
 
     untracked(() => {
       const formatted = this.format(val);
-      const currentVal = this.el.value;
+
+      let currentVal: T;
+      if (this.isMultipleSelect) {
+        currentVal = ((this.$el.val() as string[] | null) || []) as unknown as T;
+      } else {
+        currentVal = this.el.value as unknown as T;
+      }
 
       // Skip if already synchronised.
-      if (currentVal === formatted) return;
+      if (this.equal(currentVal, val)) return;
 
       const isFocused = !!(this.flags & BindingFlags.Focused);
 
@@ -196,7 +255,10 @@ class InputBinding<T> {
       // the same logical value — avoids interrupting in-progress user input.
       if (isFocused) {
         try {
-          if (this.equal(this.parse(currentVal), val)) return;
+          const parsedCurrent = this.isMultipleSelect
+            ? currentVal // already T (string[]) from DOM
+            : this.parse(this.el.value);
+          if (this.equal(parsedCurrent, val)) return;
         } catch {
           // parse() threw on the current raw input (e.g. partially typed number).
           // Fall through and apply the formatted value.
@@ -205,19 +267,26 @@ class InputBinding<T> {
 
       this.flags |= BindingFlags.SyncingToDom;
       try {
-        if (
+        if (this.isMultipleSelect) {
+          this.$el.val(val as unknown as string[]);
+        } else if (
           isFocused &&
           (this.el instanceof HTMLInputElement || this.el instanceof HTMLTextAreaElement)
         ) {
           // Preserve cursor position so external atom updates don't jump the caret.
-          const start = this.el.selectionStart;
-          const end = this.el.selectionEnd;
+          try {
+            const start = this.el.selectionStart;
+            const end = this.el.selectionEnd;
 
-          this.el.value = formatted;
-          const len = formatted.length;
+            this.el.value = formatted;
+            const len = formatted.length;
 
-          if (start !== null && end !== null) {
-            this.el.setSelectionRange(start < len ? start : len, end < len ? end : len);
+            if (start !== null && end !== null) {
+              this.el.setSelectionRange(start < len ? start : len, end < len ? end : len);
+            }
+          } catch (_e) {
+            // FIX 1: Accessing selectionStart on types like 'number' throws an InvalidStateError DOMException.
+            this.el.value = formatted;
           }
         } else {
           this.el.value = formatted;
@@ -240,12 +309,19 @@ class InputBinding<T> {
 
   private bindEvents(eventName: string): void {
     const ns = this.ns;
+    // FIX 2: Apply namespace to every space-separated event type.
+    const namespacedEvents = eventName
+      .trim()
+      .split(/\s+/)
+      .map((e) => `${e}${ns}`)
+      .join(' ');
+
     this.$el
       .on(`focus${ns}`, this.handleFocus)
       .on(`blur${ns}`, this.handleBlur)
       .on(`compositionstart${ns}`, this.handleCompositionStart)
       .on(`compositionend${ns}`, this.handleCompositionEnd)
-      .on(`${eventName}${ns}`, this.handleInput);
+      .on(namespacedEvents, this.handleInput);
   }
 }
 

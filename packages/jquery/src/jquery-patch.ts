@@ -1,7 +1,6 @@
 import { batch } from '@but212/atom-effect';
 import $ from 'jquery';
 import { registry } from './registry';
-import { hasOwn } from './utils';
 
 /** Generic event handler type matching jQuery's internal handler signature. */
 type EventHandler = JQuery.EventHandlerBase<unknown, JQuery.TriggeredEvent>;
@@ -76,10 +75,13 @@ const getWrappedHandler = (fn: EventHandler): EventHandler => {
  */
 function wrapEventMap(map: Record<string, EventHandler>): Record<string, EventHandler> {
   const newMap: Record<string, EventHandler> = {};
-  for (const key in map) {
-    if (hasOwn.call(map, key)) {
-      const handler = map[key];
-      if (handler) newMap[key] = getWrappedHandler(handler);
+  const entries = Object.entries(map);
+  for (let i = 0, len = entries.length; i < len; i++) {
+    const entry = entries[i]!;
+    const key = entry[0];
+    const handler = entry[1];
+    if (handler) {
+      newMap[key] = getWrappedHandler(handler);
     }
   }
   return newMap;
@@ -95,11 +97,12 @@ function resolveOffEventMap(
   map: Record<string, EventHandler | undefined>
 ): Record<string, EventHandler | undefined> {
   const newMap: Record<string, EventHandler | undefined> = {};
-  for (const key in map) {
-    if (hasOwn.call(map, key)) {
-      const handler = map[key];
-      newMap[key] = handler ? (handlerMap.get(handler) ?? handler) : undefined;
-    }
+  const entries = Object.entries(map);
+  for (let i = 0, len = entries.length; i < len; i++) {
+    const entry = entries[i]!;
+    const key = entry[0];
+    const handler = entry[1];
+    newMap[key] = handler ? (handlerMap.get(handler) ?? handler) : undefined;
   }
   return newMap;
 }
@@ -152,16 +155,23 @@ export function enablejQueryOverrides(): void {
         registry.cleanupTree(el);
       }
     }
-    return orig.remove.call(this, selector);
+    const result = orig.remove.call(this, selector);
+    // Ensure chaining is definitively unbroken even if original was sub-patched
+    return result !== undefined ? (result as JQuery) : this;
   };
 
   // .empty() — recursively clean up descendants, then delegate.
   $.fn.empty = function (this: JQuery) {
     for (let i = 0, len = this.length; i < len; i++) {
       const el = this[i];
-      if (el) registry.cleanupDescendants(el);
+      // Fast path: Avoid expensive DOM queries if the element has no children at all.
+      // E.g. .empty() called on a text-only or already-empty element.
+      if (el?.hasChildNodes()) {
+        registry.cleanupDescendants(el);
+      }
     }
-    return orig.empty.call(this);
+    const result = orig.empty.call(this);
+    return result !== undefined ? (result as JQuery) : this;
   };
 
   // .detach() — mark elements as kept so the MutationObserver does not
@@ -172,7 +182,8 @@ export function enablejQueryOverrides(): void {
       const el = targets[i];
       if (el) registry.keep(el);
     }
-    return orig.detach.call(this, selector);
+    const result = orig.detach.call(this, selector);
+    return result !== undefined ? (result as JQuery) : this;
   };
 
   // --- Event overrides ---
@@ -194,15 +205,17 @@ export function enablejQueryOverrides(): void {
     if (types && typeof types === 'object') {
       args[0] = wrapEventMap(types as Record<string, EventHandler>);
     } else {
-      for (let i = args.length - 1; i >= 0; i--) {
-        if (typeof args[i] === 'function') {
-          args[i] = getWrappedHandler(args[i] as EventHandler);
-          break;
-        }
+      // In jQuery signature .on(events, [selector], [data], handler), the handler
+      // is always the last argument provided. We inspect the exact last element
+      // to avoid wrapping a function that is actually passed as 'data'.
+      const lastIndex = args.length - 1;
+      if (lastIndex >= 0 && typeof args[lastIndex] === 'function') {
+        args[lastIndex] = getWrappedHandler(args[lastIndex] as EventHandler);
       }
     }
 
-    return orig.on.apply(this, args as Parameters<typeof $.fn.on>);
+    const result = orig.on.apply(this, args as Parameters<typeof $.fn.on>);
+    return result !== undefined ? (result as JQuery) : this;
   };
 
   // .off() — resolve the original handler back to its wrapped counterpart so
@@ -213,16 +226,16 @@ export function enablejQueryOverrides(): void {
     if (types && typeof types === 'object') {
       args[0] = resolveOffEventMap(types as Record<string, EventHandler | undefined>);
     } else {
-      for (let i = args.length - 1; i >= 0; i--) {
-        if (typeof args[i] === 'function') {
-          const fn = args[i] as EventHandler;
-          args[i] = handlerMap.get(fn) ?? fn;
-          break;
-        }
+      // Like .on(), only unwrap if the last provided argument is a function.
+      const lastIndex = args.length - 1;
+      if (lastIndex >= 0 && typeof args[lastIndex] === 'function') {
+        const fn = args[lastIndex] as EventHandler;
+        args[lastIndex] = handlerMap.get(fn) ?? fn;
       }
     }
 
-    return orig.off.apply(this, args as Parameters<typeof $.fn.off>);
+    const result = orig.off.apply(this, args as Parameters<typeof $.fn.off>);
+    return result !== undefined ? (result as JQuery) : this;
   };
 }
 

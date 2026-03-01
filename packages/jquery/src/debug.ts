@@ -13,18 +13,16 @@
  * polluting the console without explicit opt-in.
  */
 
+import { DEBUG_DEFAULTS } from './constants';
 import { getSelector } from './utils';
 
 // ============================================================================
-// Timing constants — HIGHLIGHT_TRANSITION is derived from HIGHLIGHT_DURATION_MS
+// Timing constants — HIGHLIGHT_TRANSITION is derived from HIGHLIGHT_DEFAULTS
 // so the two values stay in sync automatically.
 // ============================================================================
 
-/** Duration (ms) of the highlight flash animation. */
-const HIGHLIGHT_DURATION_MS = 600;
-
-/** CSS transition duration derived from HIGHLIGHT_DURATION_MS. */
-const HIGHLIGHT_TRANSITION = `${HIGHLIGHT_DURATION_MS / 1000}s`;
+/** CSS transition duration derived from DEBUG_DEFAULTS.HIGHLIGHT_DURATION_MS. */
+const HIGHLIGHT_TRANSITION = `${DEBUG_DEFAULTS.HIGHLIGHT_DURATION_MS / 1000}s`;
 
 // ============================================================================
 // Initial state
@@ -41,10 +39,27 @@ function getInitialDebugState(): boolean {
     if (typeof flag === 'boolean') return flag;
   }
 
-  // Vite inlines import.meta.env at build time; guard for non-Vite environments
-  // (e.g. Jest/Node) where import.meta.env may be undefined.
-  if (import.meta.env?.VITE_ATOM_DEBUG === 'true') {
-    return true;
+  // Vite inlines import.meta.env at build time; guard for non-Vite environments.
+  // We also check for process.env as a fallback for other build tools.
+  try {
+    if (import.meta.env?.VITE_ATOM_DEBUG === 'true') return true;
+  } catch {
+    /* ignore if import.meta is unavailable */
+  }
+
+  try {
+    // Cast globalThis to include optional process.env for environment detection
+    const env = (
+      globalThis as typeof globalThis & {
+        process?: { env?: Record<string, string | undefined> };
+      }
+    ).process?.env;
+
+    if (env?.VITE_ATOM_DEBUG === 'true') {
+      return true;
+    }
+  } catch {
+    /* ignore */
   }
 
   return false;
@@ -58,6 +73,11 @@ let debugEnabled = getInitialDebugState();
 
 export const debug = {
   get enabled() {
+    // Check global flag at runtime to allow dynamic toggling via console.
+    if (typeof window !== 'undefined') {
+      const globalFlag = (window as Window & { __ATOM_DEBUG__?: boolean }).__ATOM_DEBUG__;
+      if (typeof globalFlag === 'boolean') return globalFlag;
+    }
     return debugEnabled;
   },
   set enabled(value: boolean) {
@@ -66,42 +86,33 @@ export const debug = {
 
   /**
    * Logs a message only when debug mode is active.
-   *
-   * `prefix` is the subsystem tag (e.g. `LOG_PREFIXES.LIST`) so that the
-   * originating subsystem appears in the log. Consistent with `warn`/`error`.
    */
   log(prefix: string, ...args: unknown[]) {
-    if (debugEnabled) {
+    if (this.enabled) {
       console.log(`${prefix}`, ...args);
     }
   },
 
   /**
    * Logs an atom value change only when debug mode is active.
-   *
-   * `prefix` is the subsystem tag (e.g. `LOG_PREFIXES.MOUNT`).
    */
   atomChanged(prefix: string, name: string | undefined, oldVal: unknown, newVal: unknown) {
-    if (debugEnabled) {
+    if (this.enabled) {
       console.log(`${prefix} Atom "${name ?? 'anonymous'}" changed:`, oldVal, '→', newVal);
     }
   },
 
   /**
    * Logs a DOM update and triggers a visual highlight flash.
-   * Only active when debug mode is enabled.
-   *
-   * `prefix` is the subsystem tag (e.g. `LOG_PREFIXES.BINDING`).
-   * @param target - The element or jQuery wrapper that was updated.
-   * @param type - The binding type (e.g. 'text', 'checked', 'attr.href').
-   * @param value - The new value that was applied.
    */
   domUpdated(prefix: string, target: Element | JQuery, type: string, value: unknown) {
-    if (!debugEnabled) return;
+    if (!this.enabled) return;
 
     const el: Element | undefined =
       target instanceof Element ? target : (target[0] as Element | undefined);
-    if (!(el instanceof HTMLElement)) return;
+
+    // SVG elements also support classList, so we relax the check to Element.
+    if (!el) return;
 
     console.log(`${prefix} DOM updated: ${getSelector(el)}.${type} =`, value);
     highlightElement(el);
@@ -109,24 +120,15 @@ export const debug = {
 
   /**
    * Logs a cleanup event only when debug mode is active.
-   *
-   * `prefix` is the subsystem tag (e.g. `LOG_PREFIXES.BINDING`).
    */
   cleanup(prefix: string, selector: string) {
-    if (debugEnabled) {
+    if (this.enabled) {
       console.log(`${prefix} Cleanup: ${selector}`);
     }
   },
 
   /**
-   * Unconditional warning for runtime errors and unexpected states.
-   * Not gated by debugEnabled — these are always surfaced regardless of
-   * debug mode because they indicate real problems (e.g. dispose failures,
-   * missing route targets, pushState security errors).
-   *
-   * `prefix` is the subsystem tag (e.g. `LOG_PREFIXES.ROUTE`) so that the
-   * originating subsystem appears in the log rather than the generic MOUNT tag.
-   * Pass an empty string to emit a prefix-free message.
+   * Unconditional warning for runtime errors.
    */
   warn(prefix: string, message: string, ...rest: unknown[]) {
     console.warn(`${prefix} ${message}`, ...rest);
@@ -134,8 +136,6 @@ export const debug = {
 
   /**
    * Unconditional error for binding failures.
-   * Not gated by debugEnabled — binding errors are always surfaced because
-   * they indicate a broken updater that silently stopped applying values.
    */
   error(prefix: string, message: string, cause: unknown) {
     console.error(`${prefix} ${message}`, cause);
@@ -151,14 +151,18 @@ const HIGHLIGHT_STYLE_ATTR = 'data-atom-debug';
 
 /**
  * Injects the highlight CSS once per document lifetime.
- * Uses a WeakRef so that JSDOM test resets naturally invalidate the cache:
- * when the old document is GC'd the WeakRef deref returns undefined and
- * the style is re-injected into the fresh document — no module-level boolean
- * flag needed.
+ * Uses a WeakRef with a plain fallback to handle both test resets and old environments.
  */
-let highlightStyleRef: WeakRef<HTMLStyleElement> | undefined;
+let highlightStyleRef: WeakRef<HTMLStyleElement> | HTMLStyleElement | undefined;
 function injectHighlightStyle(): void {
-  if (highlightStyleRef?.deref()?.isConnected) return;
+  const current =
+    highlightStyleRef instanceof HTMLStyleElement ? highlightStyleRef : highlightStyleRef?.deref();
+
+  if (current?.isConnected) return;
+
+  // Final guard: check if the style already exists in the document (e.g. from a previous session)
+  if (document.querySelector(`style[${HIGHLIGHT_STYLE_ATTR}]`)) return;
+
   const style = document.createElement('style');
   style.setAttribute(HIGHLIGHT_STYLE_ATTR, '');
   style.textContent =
@@ -168,40 +172,36 @@ function injectHighlightStyle(): void {
     `transition:outline ${HIGHLIGHT_TRANSITION} ease-out` +
     `}`;
   document.head.appendChild(style);
-  highlightStyleRef = new WeakRef(style);
+
+  // Use WeakRef only if available (ES2021)
+  if (typeof WeakRef !== 'undefined') {
+    highlightStyleRef = new WeakRef(style);
+  } else {
+    highlightStyleRef = style;
+  }
 }
 
-// Tracks the pending setTimeout handle per element.
-// Stored outside rAF so that rapid successive calls can cancel a previously
-// scheduled timer even before the rAF callback has fired.
-const highlightTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
-
-// Tracks pending rAF IDs so that a second call before the first rAF fires
-// can cancel it, preventing duplicate classList.add calls.
-const highlightRafs = new WeakMap<HTMLElement, ReturnType<typeof requestAnimationFrame>>();
+// Tracks pending operations per element.
+const highlightTimers = new WeakMap<Element, ReturnType<typeof setTimeout>>();
+const highlightRafs = new WeakMap<Element, ReturnType<typeof requestAnimationFrame>>();
 
 /**
  * Flashes a red outline on an element to indicate a reactive DOM update.
- * Accepts only HTMLElement — callers are responsible for unwrapping JQuery.
- *
- * Handles rapid successive calls correctly:
- * - Cancels any pending rAF before scheduling a new one.
- * - Cancels any pending timeout before scheduling a new one.
+ * Supports both HTML and SVG elements via classList manipulation.
  */
-function highlightElement(el: HTMLElement): void {
-  if (!debugEnabled || !el.isConnected) return;
+function highlightElement(el: Element): void {
+  // Re-check debug state and connection.
+  if (!debug.enabled || !el.isConnected) return;
 
   injectHighlightStyle();
 
-  // Cancel pending rAF to avoid duplicate classList.add.
-  // .set() below overwrites the entry, so .delete() here is not needed.
+  // Cancel any pending rAF.
   const existingRaf = highlightRafs.get(el);
   if (existingRaf !== undefined) {
     cancelAnimationFrame(existingRaf);
   }
 
-  // Cancel pending timeout so the class is not prematurely removed.
-  // .set() in the rAF callback overwrites the entry, so .delete() here is not needed.
+  // Cancel any pending timeout.
   const existingTimer = highlightTimers.get(el);
   if (existingTimer !== undefined) {
     clearTimeout(existingTimer);
@@ -209,14 +209,22 @@ function highlightElement(el: HTMLElement): void {
 
   const rafId = requestAnimationFrame(() => {
     highlightRafs.delete(el);
+
+    // Re-verify connection inside rAF as the node might have been removed
+    // between the scheduling and execution of the frame.
+    if (!el.isConnected) return;
+
     el.classList.add(HIGHLIGHT_CLASS);
 
     highlightTimers.set(
       el,
       setTimeout(() => {
-        el.classList.remove(HIGHLIGHT_CLASS);
+        // Re-verify connection again before trying to remove class.
+        if (el.isConnected) {
+          el.classList.remove(HIGHLIGHT_CLASS);
+        }
         highlightTimers.delete(el);
-      }, HIGHLIGHT_DURATION_MS)
+      }, DEBUG_DEFAULTS.HIGHLIGHT_DURATION_MS)
     );
   });
 

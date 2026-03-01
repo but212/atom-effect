@@ -190,4 +190,91 @@ describe('Input Bindings (Two-way)', () => {
 
     $el.remove();
   });
+  it('Should not throw DOMException when accessing selectionStart on type="number" (Fix 1)', async () => {
+    const val = $.atom(10);
+    const $el = $('<input type="number">').appendTo(document.body);
+
+    $el.atomVal(val);
+    await $.nextTick();
+
+    // Focus and update value to trigger syncDomFromAtom
+    $el.trigger('focus');
+    val.value = 20;
+    await $.nextTick();
+
+    expect($el.val()).toBe('20'); // Should sync successfully without throwing InvalidStateError
+    $el.remove();
+  });
+
+  it('Should correctly namespace multiple events and remove all of them on cleanup (Fix 2)', async () => {
+    const val = $.atom('initial');
+    const $el = $('<input>').appendTo(document.body);
+
+    let eventsFired = 0;
+    $el.on('custom-a custom-b', () => eventsFired++);
+
+    $el.atomBind({ val: [val, { event: 'custom-a custom-b' }] });
+    await $.nextTick();
+
+    $el.val('changed').trigger('custom-a');
+    await $.nextTick();
+    expect(val.value).toBe('changed');
+
+    $el.val('changed2').trigger('custom-b');
+    await $.nextTick();
+    expect(val.value).toBe('changed2');
+
+    // Test cleanup
+    $el.atomUnbind();
+    $el.val('should never update').trigger('custom-a');
+    $el.trigger('custom-b');
+    await $.nextTick();
+
+    expect(val.value).toBe('changed2'); // Atom should remain unchanged
+    $el.remove();
+  });
+
+  it('Should support <select multiple> arrays through shallow equality (Fix 3)', async () => {
+    const val = $.atom(['A', 'C']);
+    const $el = $(`
+      <select multiple>
+        <option value="A">A</option>
+        <option value="B">B</option>
+        <option value="C">C</option>
+      </select>
+    `).appendTo(document.body);
+
+    $el.atomVal(val);
+    await $.nextTick();
+
+    expect($el.val()).toEqual(['A', 'C']);
+
+    // DOM -> Atom
+    $el.val(['B']).trigger('input');
+    await $.nextTick();
+
+    expect(val.value).toEqual(['B']);
+
+    $el.remove();
+  });
+
+  it('Should manually sync composing state if blurred during composition when debounce=0 (Fix 4)', async () => {
+    const val = $.atom('');
+    const $el = $('<input>').appendTo(document.body);
+
+    $el.atomVal(val, { debounce: 0 }); // Focus issue specifically when debounce = 0
+    await $.nextTick();
+
+    $el.trigger('focus');
+    $el.trigger('compositionstart'); // Enter composing state
+    $el.val('typing...');
+
+    // User clicks outside while still composing
+    $el.trigger('blur'); // Fix ensures sync happens before normalize wipes the DOM
+
+    // It should force sync Atom
+    expect(val.value).toBe('typing...');
+
+    $el.remove();
+  });
 });

@@ -47,15 +47,15 @@ export type BindingDebugType =
  *   `debug.domUpdated` so that all DOM writes appear in a uniform format.
  * - Error path: catches `updater` exceptions and surfaces them via `console.error`
  *   so that a broken binding does not silently kill the effect loop.
- *   Both the reactive and static paths are guarded consistently.
+ *   Both the reactive and static paths are guarded consistently with `untracked`.
  *
- * @param el        DOM element to associate the effect with.
+ * @param el        DOM element or SVG element to associate the effect with.
  * @param source    Reactive or static value source.
  * @param updater   Function that writes the value to the DOM.
- * @param debugType Structured label used in debug log output.
+ * @param debugType Structured label used in debug log output and effect naming.
  */
 export function registerReactiveEffect<T>(
-  el: HTMLElement,
+  el: Element,
   source: ReactiveValue<T>,
   updater: (value: T) => void,
   debugType: BindingDebugType
@@ -64,38 +64,44 @@ export function registerReactiveEffect<T>(
     const reactiveSource = source as ReadonlyAtom<T>;
     registry.trackEffect(
       el,
-      effect(() => {
-        // Read the source value inside the tracking context — this is the
-        // ONLY dependency this effect should subscribe to.
-        const value = reactiveSource.value;
+      effect(
+        () => {
+          // Read the source value inside the tracking context — this is the
+          // ONLY dependency this effect should subscribe to.
+          const value = reactiveSource.value;
 
-        // Run the updater untracked so that any atom reads inside updater
-        // (user formatters, guards, computed lookups) cannot accidentally
-        // add extra subscriptions to this effect.
-        untracked(() => {
-          // The effect continues running on future source changes regardless of
-          // whether updater throws — the catch here is purely for error surfacing.
-          try {
-            updater(value);
-          } catch (e) {
-            debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.UPDATER_ERROR(debugType), e);
-            return;
-          }
-          // debug.domUpdated already guards on debug.enabled internally, but
-          // skipping the call entirely avoids a function-call overhead on every
-          // atom update in production (debug disabled).
-          if (debug.enabled) debug.domUpdated(LOG_PREFIXES.BINDING, el, debugType, value);
-        });
-      })
+          // Run the updater untracked so that any atom reads inside updater
+          // (user formatters, guards, computed lookups) cannot accidentally
+          // add extra subscriptions to this effect.
+          untracked(() => {
+            // The effect continues running on future source changes regardless of
+            // whether updater throws — the catch here is purely for error surfacing.
+            try {
+              updater(value);
+            } catch (e) {
+              debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType), e);
+              return;
+            }
+            // debug.domUpdated already guards on debug.enabled internally, but
+            // skipping the call entirely avoids a function-call overhead on every
+            // atom update in production (debug disabled).
+            if (debug.enabled) debug.domUpdated(LOG_PREFIXES.BINDING, el, debugType, value);
+          });
+        },
+        { name: debugType }
+      )
     );
   } else {
-    // Static value: apply once with the same error surface as the reactive path.
-    try {
-      updater(source);
-    } catch (e) {
-      debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.UPDATER_ERROR(debugType, true), e);
-      return;
-    }
-    if (debug.enabled) debug.domUpdated(LOG_PREFIXES.BINDING, el, debugType, source);
+    // Static path: apply once within untracked() to prevent dependency leak
+    // if registerReactiveEffect is called inside an outer reactive context.
+    untracked(() => {
+      try {
+        updater(source);
+      } catch (e) {
+        debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType, true), e);
+        return;
+      }
+      if (debug.enabled) debug.domUpdated(LOG_PREFIXES.BINDING, el, debugType, source);
+    });
   }
 }

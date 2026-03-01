@@ -144,6 +144,7 @@ export interface Subscriber {
 export type EffectFunction = () => void | (() => void) | Promise<undefined | (() => void)>;
 
 export interface EffectOptions {
+  name?: string;
   sync?: boolean;
   maxExecutionsPerSecond?: number;
   maxExecutionsPerFlush?: number;

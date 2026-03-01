@@ -127,15 +127,18 @@ describe('Debug Module', () => {
     el.remove();
   });
 
-  it('domUpdated: ignores non-HTMLElement targets (SVGElement)', () => {
+  it('domUpdated: supports SVGElement targets', async () => {
     debug.enabled = true;
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     document.body.appendChild(svg);
 
-    expect(() =>
-      debug.domUpdated(LOG_PREFIXES.BINDING, svg as unknown as Element, 'attr', 'val')
-    ).not.toThrow();
-    expect(logSpy).not.toHaveBeenCalled();
+    debug.domUpdated(LOG_PREFIXES.BINDING, svg, 'attr', 'val');
+
+    expect(logSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.BINDING} DOM updated: svg.attr =`, 'val');
+
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    expect(svg.classList.contains('atom-debug-highlight')).toBe(true);
+
     svg.remove();
   });
 
