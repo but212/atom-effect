@@ -6,8 +6,8 @@
 
 #### Added
 
-- `EffectOptions.name` field for better identification and profiling of reactive effects in engine logs.
-- `WRITABLE_BRAND` (`Symbol.for('atom-effect/writable')`) stamped on `AtomImpl`; `isWritable()` now uses positive brand identification.
+- **API**: `EffectOptions.name` field for better identification and profiling of reactive effects in engine logs.
+- **Internal**: `WRITABLE_BRAND` (`Symbol.for('atom-effect/writable')`) stamped on `AtomImpl`; `isWritable()` now uses positive brand identification.
 
 #### Changed
 
@@ -17,25 +17,25 @@
 
 #### Fixed
 
-- Concurrent unsubscription bug that allowed stale callback execution during batch notifications.
+- **Reactivity**: Concurrent unsubscription bug that allowed stale callback execution during batch notifications.
 
 #### Removed
 
-- Public export of internal brand symbols (`ATOM_BRAND`, `COMPUTED_BRAND`, `EFFECT_BRAND`); use `isAtom`/`isComputed`/`isEffect` guards instead.
-- Dead `checkCircular`/`checkCircularInternal` from `debug.ts` — depended on defunct `dependencies` property; cycle detection is handled by the `RECOMPUTING` flag.
-- Unused `POOL_CONFIG` from `constants.ts`.
+- **API**: Public export of internal brand symbols (`ATOM_BRAND`, `COMPUTED_BRAND`, `EFFECT_BRAND`); use `isAtom`/`isComputed`/`isEffect` guards instead.
+- **Debug**: Dead `checkCircular`/`checkCircularInternal` from `debug.ts` — depended on defunct `dependencies` property; cycle detection is handled by the `RECOMPUTING` flag.
+- **Internal**: Unused `POOL_CONFIG` from `constants.ts`.
 
 ### jQuery
 
 #### Added
 
-- `nodeType === 1` guards and `warnNonElement` debug logging to all 13 `$.fn.atom*` methods to prevent runtime errors on non-Element nodes.
-- Reactive `ajaxOptions` support in `atomFetch` via function getters, enabling dynamic request payloads with automatic atom tracking.
-- Native `<select multiple>` support with array-based synchronization and shallow equality.
-- Forced `blur` sync during active IME composition to prevent data loss when `debounce: 0`.
-- `enableAutoCleanup` multi-root support via a tracking `Map`, resolving edge-cases in micro-frontend environments.
-- Visual debug highlights for SVG elements; `debug.enabled` linked to `window.__ATOM_DEBUG__` for runtime toggling.
-- Web Component (Shadow DOM) cleanup documentation — developers must manually invoke `registry.cleanupTree(shadowRoot)`.
+- **Robustness**: `nodeType === 1` guards and `warnNonElement` debug logging to all 13 `$.fn.atom*` methods to prevent runtime errors on non-Element nodes.
+- **atomFetch**: Reactive `ajaxOptions` support in `atomFetch` via function getters, enabling dynamic request payloads with automatic atom tracking.
+- **Binding**: Native `<select multiple>` support with array-based synchronization and shallow equality.
+- **IME**: Forced `blur` sync during active IME composition to prevent data loss when `debounce: 0`.
+- **Lifecycle**: `enableAutoCleanup` multi-root support via a tracking `Map`, resolving edge-cases in micro-frontend environments.
+- **Debug**: Visual debug highlights for SVG elements; `debug.enabled` linked to `window.__ATOM_DEBUG__` for runtime toggling.
+- **Documentation**: Web Component (Shadow DOM) cleanup documentation — developers must manually invoke `registry.cleanupTree(shadowRoot)`.
 
 #### Changed
 
@@ -62,7 +62,7 @@
 
 #### Removed
 
-- Dead `getValue<T>` export; corrected misleading `sanitizeHtml` comment.
+- **API**: Dead `getValue<T>` export; corrected misleading `sanitizeHtml` comment.
 
 #### Security
 
@@ -93,7 +93,7 @@
 
 #### Added
 
-- Tests for async drift scenarios, retry behavior, and `onError` callbacks.
+- **Testing**: Tests for async drift scenarios, retry behavior, and `onError` callbacks.
 
 ## [0.22.0]
 
@@ -101,7 +101,7 @@
 
 #### Changed
 
-- Replaced manual `for` loops with modern array methods (`forEach`, `some`, `includes`, `findIndex`) across the reactive engine for improved readability and maintainability.
+- **Refactor**: Replaced manual `for` loops with modern array methods (`forEach`, `some`, `includes`, `findIndex`) across the reactive engine for improved readability and maintainability.
 
 ### jQuery
 
@@ -119,9 +119,9 @@
 
 #### Added
 
-- `queryParams` atom on `Router` to track URL query parameters reactively.
-- `onParamsChange` hook to handle same-route parameter changes efficiently without full re-renders.
-- `onMount` lifecycle hook for template-based routes, providing direct access to the rendered jQuery element.
+- **Routing**: `queryParams` atom on `Router` to track URL query parameters reactively.
+- **Routing**: `onParamsChange` hook to handle same-route parameter changes efficiently without full re-renders.
+- **Lifecycle**: `onMount` lifecycle hook for template-based routes, providing direct access to the rendered jQuery element.
 
 #### Changed
 
@@ -138,7 +138,7 @@
 
 #### Added
 
-- `[Symbol.dispose]()` on `Atom`, `Computed`, and `Effect` for `using` keyword support.
+- **API**: `[Symbol.dispose]()` on `Atom`, `Computed`, and `Effect` for `using` keyword support.
 
 #### Changed
 
@@ -150,9 +150,9 @@
 
 #### Changed
 
-- Renamed `SubscriberLink` to `Subscription` to avoid confusion.
-- `defaultValue` now serves as a fallback for all error types, including non-recoverable ones.
-- Extracted constants and error messages to dedicated files.
+- **Naming**: Renamed `SubscriberLink` to `Subscription` to avoid confusion.
+- **Reactivity**: `defaultValue` now serves as a fallback for all error types, including non-recoverable ones.
+- **Refactor**: Extracted constants and error messages to dedicated files.
 
 #### Fixed
 
@@ -162,7 +162,7 @@
 
 #### Changed
 
-- Extracted constants, log prefixes, and error messages to `constants.ts`.
+- **Refactor**: Extracted constants, log prefixes, and error messages to `constants.ts`.
 
 ## [0.21.0]
 
@@ -170,23 +170,23 @@
 
 #### Added
 
-- Brand symbols for robust runtime type identification.
-- Bitwise hashing for version snapshots.
+- **API**: Brand symbols for robust runtime type identification.
+- **Internal**: Bitwise hashing for version snapshots.
 
 #### Changed
 
-- Adopted ES2021 syntax and updated build targets.
+- **Compilation**: Adopted ES2021 syntax and updated build targets.
 
 ### jQuery
 
 #### Added
 
-- `$.atomFetch`: Declarative reactive AJAX primitive.
+- **API**: `$.atomFetch`: Declarative reactive AJAX primitive.
 
 #### Changed
 
-- Migrated routing to native DOM APIs.
-- Improved reactivity checks using new core brand symbols.
+- **Routing**: Migrated routing to native DOM APIs.
+- **Reactivity**: Improved reactivity checks using new core brand symbols.
 
 ## [0.20.0]
 
@@ -194,25 +194,25 @@
 
 #### Changed
 
-- Merged epoch counters to simplify tracking.
-- Inlined constants and hot-path methods (`_commitDeps`, `_checkLoopWarnings`) to reduce lookup overhead.
-- Streamlined error collection and removed complex lookup tables in `Computed`.
-- Switched effect loop detection to sliding window approach.
-- Optimized subscription reuse with linear scanning.
+- **Internal**: Merged epoch counters to simplify tracking.
+- **Performance**: Inlined constants and hot-path methods (`_commitDeps`, `_checkLoopWarnings`) to reduce lookup overhead.
+- **Core**: Streamlined error collection and removed complex lookup tables in `Computed`.
+- **Debug**: Switched effect loop detection to sliding window approach.
+- **Performance**: Optimized subscription reuse with linear scanning.
 
 #### Removed
 
-- Internal type wrappers, unused object pools, and redundant properties (`timestamp`, `_modifiedAtEpoch`).
+- **Internal**: Internal type wrappers, unused object pools, and redundant properties (`timestamp`, `_modifiedAtEpoch`).
 
 ### jQuery
 
 #### Changed
 
-- Refactored chainable methods to use unified binding handlers.
-- Standardized `atomChecked` and `bindVisibility` logic.
-- Centralized equality checks and optimized debug mode DOM access.
-- Switched router to `URLSearchParams` and added `pushState` support.
-- Unified array/string value handling in `bindCss`.
+- **Binding**: Refactored chainable methods to use unified binding handlers.
+- **Binding**: Standardized `atomChecked` and `bindVisibility` logic.
+- **Debug**: Centralized equality checks and optimized debug mode DOM access.
+- **Routing**: Switched router to `URLSearchParams` and added `pushState` support.
+- **Binding**: Unified array/string value handling in `bindCss`.
 
 ## [0.19.1]
 
@@ -220,13 +220,13 @@
 
 #### Changed
 
-- Replaced global node pollution with local subscription maps for cleaner dependency tracking.
+- **Internal**: Replaced global node pollution with local subscription maps for cleaner dependency tracking.
 
 ### jQuery
 
 #### Changed
 
-- Refactored `sanitizeHtml` for performance and safety.
+- **Performance**: Refactored `sanitizeHtml` for performance and safety.
 
 #### Security
 
@@ -238,22 +238,22 @@
 
 #### Added
 
-- `maxAsyncRetries` option to `ComputedOptions`.
-- Stats enablement for `ArrayPool`.
+- **API**: `maxAsyncRetries` option to `ComputedOptions`.
+- **Profiling**: Stats enablement for `ArrayPool`.
 
 #### Changed
 
-- Optimized `hasError` checks with O(1) lookups.
-- Optimized subscriber notification loop.
-- Extracted version arithmetic and flag masks for maintenance.
-- Improved type safety for empty links.
+- **Performance**: Optimized `hasError` checks with O(1) lookups.
+- **Performance**: Optimized subscriber notification loop.
+- **Refactor**: Extracted version arithmetic and flag masks for maintenance.
+- **Type Safety**: Improved type safety for empty links.
 
 ### jQuery
 
 #### Changed
 
-- Refactored `RouteDefinition`, `atomVal`, and `bindVal` for improved type safety.
-- Safe URI parsing for malformed URLs in router.
+- **Types**: Refactored `RouteDefinition`, `atomVal`, and `bindVal` for improved type safety.
+- **Routing**: Safe URI parsing for malformed URLs in router.
 
 #### Security
 
@@ -267,7 +267,7 @@
 #### Changed
 
 - **Memory Efficiency**: Replaced `Set` with strict array deduplication for error collection in `ComputedAtom`, and reduced closure allocations in `Effect._isDirty` checks.
-- Removed redundant `_fnSubCount` and `_objSubCount` counters from `ReactiveDependency`, simplifying subscriber tracking to use direct array length checks.
+- **Internal**: Removed redundant `_fnSubCount` and `_objSubCount` counters from `ReactiveDependency`, simplifying subscriber tracking to use direct array length checks.
 
 ### jQuery
 
@@ -283,23 +283,23 @@
 
 ### Documentation
 
-- Major documentation overhaul for improved discoverability and depth.
+- **Overhaul**: Major documentation overhaul for improved discoverability and depth.
   - **Core**: Extracted detailed guides into `docs/API.md`, `docs/ARCHITECTURE.md`, and `docs/ONBOARDING.md`. Refined `README.md` for quick start.
   - **jQuery**: Added `docs/API.md` and `docs/PATTERNS.md` for comprehensive API reference and common recipes. Refined `README.md`.
-  - Removed root `ARCHITECTURE.md` in favor of package-specific documentation.
+  - **Refactor**: Removed root `ARCHITECTURE.md` in favor of package-specific documentation.
 
 ### Core
 
 #### Added
 
-- Expanded unit tests for edge cases including disposal errors, lazy evaluation, and infinite loop detection.
+- **Testing**: Expanded unit tests for edge cases including disposal errors, lazy evaluation, and infinite loop detection.
 
 #### Changed
 
 - **Performance**: Optimized core classes with inline property initialization, bitwise masks, and loop streamlining for improved V8 stability.
 - **Architecture**: Converted internal utilities to singletons and decomposed complex methods to reduce bundle size and cyclomatic complexity.
 - **DX & Maintenance**: Standardized error types, implemented `Symbol`-based debugging, and refined public API documentation.
-- Streamlined internal constants and utility logic (pools, errors) for better maintainability and smaller footprint.
+- **Refactor**: Streamlined internal constants and utility logic (pools, errors) for better maintainability and smaller footprint.
 
 ## [0.16.1] - 2026-01-27
 
@@ -307,7 +307,7 @@
 
 #### Changed
 
-- Replaced parallel arrays with `Link` objects (`DependencyLink`, `SubscriberLink`) to improve data cohesion and cache locality.
+- **Internal**: Replaced parallel arrays with `Link` objects (`DependencyLink`, `SubscriberLink`) to improve data cohesion and cache locality.
 
 ## [0.16.0] - 2026-01-27
 
@@ -315,22 +315,22 @@
 
 #### Changed
 
-- Achieved massive performance gains through V8 hidden class stabilization (monomorphism), property access reduction, and bitwise flag consolidation.
-- Micro-optimized tracking and notification loops to minimize call stack depth and branch mispredictions.
-- Implemented zero-allocation array reuse (`arr.length = 0`) across `Atom`, `Computed`, and `Effect` to reduce GC pressure.
-- Refactored scheduler buffer management and drain cycles for better cache locality and microtask efficiency.
-- Hoisted error handlers and internal helpers (e.g., `_addSubscriber`) to improve JIT inlining and code reuse.
+- **Performance**: Achieved massive performance gains through V8 hidden class stabilization (monomorphism), property access reduction, and bitwise flag consolidation.
+- **Performance**: Micro-optimized tracking and notification loops to minimize call stack depth and branch mispredictions.
+- **Memory**: Implemented zero-allocation array reuse (`arr.length = 0`) across `Atom`, `Computed`, and `Effect` to reduce GC pressure.
+- **Internal**: Refactored scheduler buffer management and drain cycles for better cache locality and microtask efficiency.
+- **Internal**: Hoisted error handlers and internal helpers (e.g., `_addSubscriber`) to improve JIT inlining and code reuse.
 
 ### jQuery
 
 #### Changed
 
-- Implemented redundant write guards (`el.textContent !== newVal`) and direct property access to minimize expensive layout reflows.
-- Migrated from jQuery's `$.data()` to `WeakMap`-based binding records and debug states, ensuring zero memory leaks and faster lookup.
-- Unified declarative and chainable binding handlers into a shared context, reducing closure nesting.
-- Introduced a camel-case property cache to eliminate repeated regex overhead during style updates.
-- Optimized shallow equality and path preparation in `atomList` for hardware-friendly propagation.
-- Refactored visual highlighting using `requestAnimationFrame` and direct style manipulation for minimal overhead.
+- **Performance**: Implemented redundant write guards (`el.textContent !== newVal`) and direct property access to minimize expensive layout reflows.
+- **Memory**: Migrated from jQuery's `$.data()` to `WeakMap`-based binding records and debug states, ensuring zero memory leaks and faster lookup.
+- **Refactor**: Unified declarative and chainable binding handlers into a shared context, reducing closure nesting.
+- **Performance**: Introduced a camel-case property cache to eliminate repeated regex overhead during style updates.
+- **Performance**: Optimized shallow equality and path preparation in `atomList` for hardware-friendly propagation.
+- **Debug**: Refactored visual highlighting using `requestAnimationFrame` and direct style manipulation for minimal overhead.
 
 ## [0.15.4]
 
@@ -346,7 +346,7 @@
 
 #### Added
 
-- Test for circular dependencies in effects.
+- **Testing**: Test for circular dependencies in effects.
 
 ### jQuery
 
@@ -390,9 +390,9 @@
 
 #### Changed
 
-- Added warnings for duplicate subscriptions and mismatched batching; optimized production checks.
-- Improved object pool resetting, epoch overflow prevention, and type guard simplification.
-- Enhanced async drift detection using DJB2-style bitwise hash mixing for snapshots.
+- **Debug**: Added warnings for duplicate subscriptions and mismatched batching; optimized production checks.
+- **Internal**: Improved object pool resetting, epoch overflow prevention, and type guard simplification.
+- **Reactivity**: Enhanced async drift detection using DJB2-style bitwise hash mixing for snapshots.
 
 #### Removed
 
@@ -405,14 +405,14 @@
 
 #### Fixed
 
-- Improved cleanup error logging and registry management for detached nodes.
+- **Debug**: Improved cleanup error logging and registry management for detached nodes.
 
 #### Changed
 
-- Added custom equality support and unified phase state logic.
-- Enhanced event handler and binding map type safety, replacing `any` with strong types.
-- Ensured static values trigger DOM debug events.
-- Added duplicate key warnings in development mode.
+- **API**: Added custom equality support and unified phase state logic.
+- **Type Safety**: Enhanced event handler and binding map type safety, replacing `any` with strong types.
+- **Debug**: Ensured static values trigger DOM debug events.
+- **Robustness**: Added duplicate key warnings in development mode.
 
 #### Removed
 
@@ -424,15 +424,15 @@
 
 #### Changed
 
-- Refined subscriber internal storage and notification paths using bitwise flags and pre-initialized arrays.
-- Improved state transition logic and dependency checks for more consistent performance.
-- Simplified property access and synchronized state flags for improved code clarity.
+- **Internal**: Refined subscriber internal storage and notification paths using bitwise flags and pre-initialized arrays.
+- **Performance**: Improved state transition logic and dependency checks for more consistent performance.
+- **Internal**: Simplified property access and synchronized state flags for improved code clarity.
 
 ### jQuery
 
 #### Changed
 
-- Wrapped jQuery event handlers in `batch()` to ensure synchronous DOM updates and state consistency.
+- **Reactivity**: Wrapped jQuery event handlers in `batch()` to ensure synchronous DOM updates and state consistency.
 
 ## [0.13.1]
 
@@ -446,7 +446,7 @@
 
 ### Benchmarks
 
-- Overhauled benchmark suite to prioritize statistical significance and eliminate measurement noise.
+- **Overhaul**: Overhauled benchmark suite to prioritize statistical significance and eliminate measurement noise.
   - Migrated micro-benchmarks to batch operations (x1000) for better signal-to-noise ratio.
   - Isolated reactive graph initialization from measurement loops.
   - Introduced Vanilla JS baselines in macro-benchmarks for transparent overhead comparison.
@@ -457,11 +457,11 @@
 
 #### Changed
 
-- Flattened `core/` directory and consolidated all interfaces into a single `src/types.ts` file.
-- Moved `scheduler.ts` and `batch.ts` to `src/internal/`; unified `ReactiveNode` and `ReactiveDependency` into `src/core/base.ts`.
-- Migrated all internal and test imports to `@/` path aliases.
-- Refactored core unit tests to eliminate redundancy and improve signal quality.
-- Resolved path errors in `reactive_core.test.ts`.
+- **Refactor**: Flattened `core/` directory and consolidated all interfaces into a single `src/types.ts` file.
+- **Refactor**: Moved `scheduler.ts` and `batch.ts` to `src/internal/`; unified `ReactiveNode` and `ReactiveDependency` into `src/core/base.ts`.
+- **Refactor**: Migrated all internal and test imports to `@/` path aliases.
+- **Testing**: Refactored core unit tests to eliminate redundancy and improve signal quality.
+- **Fixed**: Resolved path errors in `reactive_core.test.ts`.
 
 ### jQuery
 
@@ -485,21 +485,21 @@
 
 #### Changed
 
-- Internalized subscriber management within `ReactiveDependency` by removing `SubscriberManager`; `Atom`, `Computed`, and `Effect` now manage subscriber arrays directly.
-- Extracted `EffectExecutionContext` interface to `types/effect.ts`; renamed `_prepareEffectContext()` → `_prepareEffectExecutionContext()`.
-- Unified sync/async result handlers in `ComputedAtomImpl` via shared `_finalizeResolution(value: T)` method.
+- **Internal**: Internalized subscriber management within `ReactiveDependency` by removing `SubscriberManager`; `Atom`, `Computed`, and `Effect` now manage subscriber arrays directly.
+- **Refactor**: Extracted `EffectExecutionContext` interface to `types/effect.ts`; renamed `_prepareEffectContext()` → `_prepareEffectExecutionContext()`.
+- **Internal**: Unified sync/async result handlers in `ComputedAtomImpl` via shared `_finalizeResolution(value: T)` method.
 
 ### jQuery
 
 #### Changed
 
-- Introduced `effect-factory.ts` to centralize reactive binding logic, eliminating ~40% of boilerplate.
-- Refactored `atomList` using a structured lifecycle pattern (Empty State, Removal, LIS-Reconciliation, Patching).
-- Extracted `BindingContext` and removed all `any` types and non-null assertions.
-- Migrated high-frequency binding handlers to native DOM properties (e.g., `textContent`, `classList`), bypassing jQuery wrapper overhead.
-- Optimized `bindCss` using direct `style` property access for both camelCase and kebab-case.
-- Replaced `Object.entries()` with `for...in` loops to eliminate temporary array allocations.
-- Switched to native `addEventListener` for general events; lazy element wrapping for reduced jQuery object creation cost.
+- **Refactor**: Introduced `effect-factory.ts` to centralize reactive binding logic, eliminating ~40% of boilerplate.
+- **atomList**: Refactored `atomList` using a structured lifecycle pattern (Empty State, Removal, LIS-Reconciliation, Patching).
+- **Type Safety**: Extracted `BindingContext` and removed all `any` types and non-null assertions.
+- **Performance**: Migrated high-frequency binding handlers to native DOM properties (e.g., `textContent`, `classList`), bypassing jQuery wrapper overhead.
+- **Performance**: Optimized `bindCss` using direct `style` property access for both camelCase and kebab-case.
+- **Memory**: Replaced `Object.entries()` with `for...in` loops to eliminate temporary array allocations.
+- **Performance**: Switched to native `addEventListener` for general events; lazy element wrapping for reduced jQuery object creation cost.
 
 ## [0.11.0]
 
@@ -510,7 +510,7 @@
 - **Discrete Phase-Shift Versioning**: 30-bit cyclic phase structure (10-bit Cycle, 20-bit Phase) optimized for V8 Smi. Moved `version` field from `ReactiveDependency` to `ReactiveNode`.
 - **Branchless Operations**: `rotatePhase()` for O(1) bitwise rotation; `getShift()` for O(1) modular distance calculation.
 - **Urgent Priority Queue**: Jobs exceeding `PHASE_THRESHOLD` are prioritized. Branchless urgency detection.
-- `_getAggregateShift()` for tracking total staleness across all dependencies.
+- **Internal**: `_getAggregateShift()` for tracking total staleness across all dependencies.
 - **Async Drift Validation**: Phase drift detection with fail-fast policy (up to `MAX_ASYNC_RETRIES = 3`). Prevents UI flickering from race conditions.
 
 ## [0.10.1]
@@ -519,14 +519,14 @@
 
 #### Changed
 
-- Added `ATOM_STATE_FLAGS` and simplified internal logic for `AtomImpl`.
+- **Internal**: Added `ATOM_STATE_FLAGS` and simplified internal logic for `AtomImpl`.
   - Lazy initialization for subscriber managers; streamlined `value` getter/setter; reused notification task closures.
 
 ### jQuery
 
 #### Changed
 
-- Refactored internal logic for `atomList`, `registry`, and chainable methods.
+- **Refactor**: Refactored internal logic for `atomList`, `registry`, and chainable methods.
   - Updated `getLIS` and reconciliation loop; optimized `registry` for element tracking; moved invariant checks out of iteration loops.
 
 ## [0.10.0]
@@ -535,14 +535,14 @@
 
 #### Changed
 
-- Clarified `batch(fn)` behavior: emphasizes Synchronous Reflection (immediate flush) and Automatic Microtask Batching.
+- **Refactor**: Clarified `batch(fn)` behavior: emphasizes Synchronous Reflection (immediate flush) and Automatic Microtask Batching.
 
 ### jQuery
 
 #### Changed
 
-- Removed redundant `batch()` calls from event handlers and internal synchronization.
-- Updated README to reflect that `atomOn` focuses on automatic lifecycle management.
+- **Internal**: Removed redundant `batch()` calls from event handlers and internal synchronization.
+- **Documentation**: Updated README to reflect that `atomOn` focuses on automatic lifecycle management.
 
 ## [0.9.2]
 
@@ -550,7 +550,7 @@
 
 #### Changed
 
-- Removed performance note from README.md.
+- **Documentation**: Removed performance note from README.md.
 
 ## [0.9.1]
 
@@ -558,7 +558,7 @@
 
 #### Changed
 
-- Overhauled `Scheduler` for true "Automatic Group Updates".
+- **Architecture**: Overhauled `Scheduler` for true "Automatic Group Updates".
   - Replaced microtask-chaining with a robust `_drainQueue` mechanism.
   - Synchronous updates within the same tick are now gathered into a single microtask execution cycle.
   - Eliminates redundant microtask scheduling and context switching.
@@ -569,8 +569,8 @@
 
 #### Changed
 
-- Optimized Effect loop detection in debug mode using O(1) Circular Buffer.
-- Enhanced Epoch system robustness with wrap-around safety check.
+- **Debug**: Optimized Effect loop detection in debug mode using O(1) Circular Buffer.
+- **Internal**: Enhanced Epoch system robustness with wrap-around safety check.
 
 #### Added
 
@@ -580,7 +580,7 @@
 
 ### Changed
 
-- Overhauled benchmark suite for fairness and accuracy.
+- **Benchmarks**: Overhauled benchmark suite for fairness and accuracy.
   - Lifted object creation out of benchmark loops; replaced static assignments with toggling logic.
   - Added benchmarks for `batch()` throughput and pure Effect re-execution.
 
@@ -588,20 +588,20 @@
 
 ### Changed
 
-- Introduced `ComputationContext` interface for better type safety in computed atom lifecycle.
-- Reduced duplication in `AtomImpl` and `ComputedAtomImpl` via shared tracking utility.
+- **Type Safety**: Introduced `ComputationContext` interface for better type safety in computed atom lifecycle.
+- **Refactor**: Reduced duplication in `AtomImpl` and `ComputedAtomImpl` via shared tracking utility.
 
 ## [0.8.2]
 
 ### Fixed
 
-- Added `publishConfig.access: public` to `@but212/atom-effect-jquery` to fix NPM payment required error for scoped packages.
+- **Packaging**: Added `publishConfig.access: public` to `@but212/atom-effect-jquery` to fix NPM payment required error for scoped packages.
 
 ## [0.8.1]
 
 ### Fixed
 
-- Scoped `atom-effect-jquery` to `@but212/atom-effect-jquery` to resolve NPM publishing permission errors.
+- **Packaging**: Scoped `atom-effect-jquery` to `@but212/atom-effect-jquery` to resolve NPM publishing permission errors.
 
 ## [0.8.0]
 
@@ -613,9 +613,9 @@
   - Turborepo enables parallel builds with dependency-aware caching.
   - `atom-effect-jquery` now uses `workspace:*` for seamless local development.
 - **Unified Versioning**: Both packages share the same version number; single `v*` tag deploys simultaneously.
-- Extracted shared two-way data binding logic into `applyInputBinding` helper, unifying `$.fn.atomVal` and `bindVal`.
-- Added `pnpm-workspace.yaml`, `turbo.json`, `tsconfig.base.json` for workspace configuration.
-- Updated GitHub workflows (`ci.yml`, `benchmark.yml`, `publish.yml`) for monorepo paths.
+- **Binding**: Extracted shared two-way data binding logic into `applyInputBinding` helper, unifying `$.fn.atomVal` and `bindVal`.
+- **Infrastructure**: Added `pnpm-workspace.yaml`, `turbo.json`, `tsconfig.base.json` for workspace configuration.
+- **CI/CD**: Updated GitHub workflows (`ci.yml`, `benchmark.yml`, `publish.yml`) for monorepo paths.
 
 ## [0.7.0]
 
@@ -625,17 +625,17 @@
   - `errors: readonly Error[]` on `ComputedAtom`: immutable array of deduplicated errors from self and all dependencies.
   - `isValid: boolean`: convenience getter (inverse of `hasError`).
   - `hasError` now propagates error status from the dependency chain.
-- `examples/async-propagation.html` — comprehensive demo of declarative async pipeline handling.
+- **Documentation**: `examples/async-propagation.html` — comprehensive demo of declarative async pipeline handling.
 
 ### Changed
 
-- `ComputedAtom` catches dependency errors and wraps them in `ComputedError`; returns `defaultValue` on recoverable errors for graceful degradation.
-- Error deduplication via internal `Set` to prevent duplicate reports in diamond dependency patterns.
+- **Reactivity**: `ComputedAtom` catches dependency errors and wraps them in `ComputedError`; returns `defaultValue` on recoverable errors for graceful degradation.
+- **Internal**: Error deduplication via internal `Set` to prevent duplicate reports in diamond dependency patterns.
 
 ### Fixed
 
-- Computed values throwing synchronous errors were not registered as dependencies in parent computations.
-- Async computed values did not correctly propagate error states to downstream dependencies.
+- **Reactivity**: Computed values throwing synchronous errors were not registered as dependencies in parent computations.
+- **Reactivity**: Async computed values did not correctly propagate error states to downstream dependencies.
 
 ### Removed
 
@@ -645,22 +645,22 @@
 
 ### Added
 
-- `examples/async-computed-dom.html` — standalone demo showcasing async computed with vanilla DOM manipulation.
+- **Documentation**: `examples/async-computed-dom.html` — standalone demo showcasing async computed with vanilla DOM manipulation.
 
 ### Changed
 
-- All async computed state getters (`.state`, `.hasError`, `.lastError`, `.isPending`, `.isResolved`) now trigger dependency tracking via `_registerTracking()`.
-- Updated CDN options to use `unpkg` and `jsdelivr`.
+- **Reactivity**: All async computed state getters (`.state`, `.hasError`, `.lastError`, `.isPending`, `.isResolved`) now trigger dependency tracking via `_registerTracking()`.
+- **Documentation**: Updated CDN options to use `unpkg` and `jsdelivr`.
 
 ### Fixed
 
-- `_handleAsyncResolution` now calls `_notifyJob()` after async computation completes, ensuring effects re-execute.
+- **Reactivity**: `_handleAsyncResolution` now calls `_notifyJob()` after async computation completes, ensuring effects re-execute.
 
 ## [0.5.1]
 
 ### Changed
 
-- Relaxed Scheduler limits to support higher-frequency updates and complex dependency graphs.
+- **Performance**: Relaxed Scheduler limits to support higher-frequency updates and complex dependency graphs.
   - `MAX_EXECUTIONS_PER_EFFECT`: 50 → **100**
   - `MAX_EXECUTIONS_PER_SECOND`: 100 → **1000**
   - `MAX_EXECUTIONS_PER_FLUSH`: 5000 → **10000**
@@ -670,28 +670,28 @@
 
 ### Changed
 
-- Centralized utility functions into `src/utils/` (`ArrayPool`, `type-guards`, `error`).
-- Introduced `DependencyId` branded type for strict ID typing.
+- **Refactor**: Centralized utility functions into `src/utils/` (`ArrayPool`, `type-guards`, `error`).
+- **Type Safety**: Introduced `DependencyId` branded type for strict ID typing.
 - **Breaking**: `batch` and `untracked` now propagate original errors instead of wrapping in `AtomError`.
 
 ## [0.4.0]
 
 ### Changed
 
-- Streamlined `Atom`, `Computed`, and `Effect` implementations; removed unused variables and redundant type checks.
-- Renamed `_notify()` to `_scheduleNotification()`; optimized `Computed` hot paths.
-- Refactored dependency tracking with user-defined type guards (`hasDependencyMethod()`, `isPlainListener()`, `hasExecuteMethod()`, `isTrackableFunction()`), replacing unsafe `as` type assertions.
+- **Internal**: Streamlined `Atom`, `Computed`, and `Effect` implementations; removed unused variables and redundant type checks.
+- **Refactor**: Renamed `_notify()` to `_scheduleNotification()`; optimized `Computed` hot paths.
+- **Type Safety**: Refactored dependency tracking with user-defined type guards (`hasDependencyMethod()`, `isPlainListener()`, `hasExecuteMethod()`, `isTrackableFunction()`), replacing unsafe `as` type assertions.
 
 ## [0.3.3]
 
 ### Added
 
-- Comprehensive memory and stability tests (`gc-verification`, `circular-reference`, `fuzz`).
+- **Testing**: Comprehensive memory and stability tests (`gc-verification`, `circular-reference`, `fuzz`).
 
 ### Changed
 
-- Moved internal modules (`pool.ts`, `epoch.ts`, `scheduler/`) to `src/internal/`.
-- Reduced excessive JSDoc comments across 7 core files (~1,200 lines removed).
+- **Refactor**: Moved internal modules (`pool.ts`, `epoch.ts`, `scheduler/`) to `src/internal/`.
+- **Documentation**: Reduced excessive JSDoc comments across 7 core files (~1,200 lines removed).
 
 ### Fixed
 
@@ -701,19 +701,19 @@
 
 ### Changed
 
-- Implemented "Push-State, Pull-Value" reactive propagation pattern.
-  - `Computed._markDirty()` propagates dirty flags synchronously without scheduler registration.
-  - Removed `_recomputeJob` field (lazy recomputation via `value` getter).
-  - `Computed.version` only increments when value actually changes (respects `equal` option).
+- **Architecture**: Implemented "Push-State, Pull-Value" reactive propagation pattern.
+  - **Internal**: `Computed._markDirty()` propagates dirty flags synchronously without scheduler registration.
+  - **Refactor**: Removed `_recomputeJob` field (lazy recomputation via `value` getter).
+  - **Performance**: `Computed.version` only increments when value actually changes (respects `equal` option).
 
 ## [0.3.1] - 2026-01-09
 
 ### Changed
 
-- Replaced `Map` with `Array` for `_subscriptions` in `Computed` and `Effect`.
-- Replaced `Set` with epoch check for `_modifiedDeps` in `Effect`.
-- `Computed` now implements `Subscriber` interface for direct object subscription.
-- `debug.checkCircular` now uses epoch-based traversal.
+- **Memory**: Replaced `Map` with `Array` for `_subscriptions` in `Computed` and `Effect`.
+- **Performance**: Replaced `Set` with epoch check for `_modifiedDeps` in `Effect`.
+- **Internal**: `Computed` now implements `Subscriber` interface for direct object subscription.
+- **Debug**: `debug.checkCircular` now uses epoch-based traversal.
 
 ## [0.3.0] - 2026-01-09
 
@@ -723,7 +723,7 @@
 
 ### Changed
 
-- Applied branchless optimizations (bitwise masking) to `Computed` and `Effect` state management hot paths.
+- **Performance**: Applied branchless optimizations (bitwise masking) to `Computed` and `Effect` state management hot paths.
 
 ## [0.2.2] - 2026-01-08
 
@@ -735,7 +735,7 @@
 
 ### Changed
 
-- Replaced `WeakMap` with pure array-based lookup in `SubscriberManager`.
+- **Performance**: Replaced `WeakMap` with pure array-based lookup in `SubscriberManager`.
 
 ## [0.2.0] - 2026-01-04
 
@@ -752,44 +752,44 @@
 
 ### Changed
 
-- Optimized build output: bundled type definitions into `index.d.ts`; standardized `package.json` paths with `./dist/` prefix.
+- **Bundling**: Optimized build output: bundled type definitions into `index.d.ts`; standardized `package.json` paths with `./dist/` prefix.
 
 ## [0.1.4] - 2026-01-02
 
 ### Changed
 
-- Enforced strict property initialization order in `ComputedAtomImpl` for V8 Hidden Class Monomorphism.
+- **Performance**: Enforced strict property initialization order in `ComputedAtomImpl` for V8 Hidden Class Monomorphism.
 
 ## [0.1.3] - 2026-01-02
 
 ### Changed
 
-- Implemented "Delta Sync" (Diffing) in `Effect` and `Computed` to minimize subscription churn.
-- Refactored `DependencyManager` to use strong references; optimized `Scheduler` with double buffering.
-- Replaced `AtomImpl`'s custom subscription logic with `SubscriberManager`.
+- **Performance**: Implemented "Delta Sync" (Diffing) in `Effect` and `Computed` to minimize subscription churn.
+- **Performance**: Refactored `DependencyManager` to use strong references; optimized `Scheduler` with double buffering.
+- **Refactor**: Replaced `AtomImpl`'s custom subscription logic with `SubscriberManager`.
 
 ### Fixed
 
-- Infinite loops caused by synchronous self-modification were not detected due to delayed subscription.
+- **Reactivity**: Infinite loops caused by synchronous self-modification were not detected due to delayed subscription.
 
 ## [0.1.2] - 2026-01-01
 
 ### Changed
 
-- Updated README.md
+- **Documentation**: Updated README.md
 
 ## [0.1.1] - 2026-01-01
 
 ### Changed
 
-- Updated installation command in README.md
+- **Documentation**: Updated installation command in README.md
 
 ## [0.1.0] - 2025-12-31
 
 ### Added
 
-- Initial release.
-- Core primitives: `atom`, `computed`, `effect`, `batch`, `untracked`.
-- Zero dependencies, full TypeScript support.
-- Object pooling, circular dependency detection, infinite loop protection.
-- Comprehensive test suite (200+ test cases).
+- **Initial Release**: Initial release.
+- **Core**: Core primitives: `atom`, `computed`, `effect`, `batch`, `untracked`.
+- **General**: Zero dependencies, full TypeScript support.
+- **Internal**: Object pooling, circular dependency detection, infinite loop protection.
+- **Testing**: Comprehensive test suite (200+ test cases).
