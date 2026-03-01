@@ -91,7 +91,7 @@ Bound elements receive a `_aes-bound` CSS class marker. This enables O(M) cleanu
 
 ### 3.3 Auto-Cleanup via MutationObserver
 
-`enableAutoCleanup()` installs a `MutationObserver` on `document.body` that watches for removed nodes:
+`enableAutoCleanup(root)` installs a `MutationObserver` on the specified `root` element that watches for removed nodes. Multiple roots can be observed concurrently (e.g., for micro-frontends).
 
 ```text
 DOM Removal Detected
@@ -104,7 +104,11 @@ DOM Removal Detected
     → cleanup(el)             // Cleanup the element itself
 ```
 
-### 3.4 jQuery Method Patches
+### 3.4 Shadow DOM
+
+The automatic `MutationObserver` cleanup does not cross Shadow DOM boundaries. If you use Web Components with Shadow Roots, you must manually call `registry.cleanupTree(shadowRoot)` when the component is disconnected to prevent memory leaks in its internal bindings.
+
+### 3.5 jQuery Method Patches
 
 `enablejQueryOverrides()` (`jquery-patch.ts`) patches core jQuery methods:
 
@@ -237,7 +241,7 @@ The binding layer includes defensive measures against XSS:
 - `bindHtml`: Sanitizes content via `sanitizeHtml()` (removes `<script>`, `on*` events, `javascript:` protocols).
 - `bindAttr`: Blocks `on*` event handler attributes and dangerous URL protocols.
 - `bindCss`: Blocks CSS values containing `expression()`, `url(javascript:)`, etc.
-- `bindProp`: Blocks `innerHTML`/`outerHTML` property writes.
+- `bindProp`: Blocks dangerous properties (`innerHTML`, `outerHTML`), prototype pollution vectors (`__proto__`, `constructor`, `prototype`), `on*` event handlers, and checks mapped URL properties for dangerous protocols.
 
 These are **first-pass filters**. For user-generated content, [DOMPurify](https://github.com/cure53/DOMPurify) is recommended. See the [Security Guide](./SECURITY.md) for integration patterns.
 
@@ -258,6 +262,7 @@ packages/jquery/src/
   registry.ts       — WeakMap-based binding registry + MutationObserver cleanup
   jquery-patch.ts   — jQuery method patches (.on batch, .remove cleanup)
   debug.ts          — Debug mode logging and visual highlighting
-  utils.ts          — Selectors, type checks, sanitization helpers
+  sanitize.ts       — Regex-based HTML sanitization and URL protocol security guards
+  utils.ts          — Selectors and type classification helpers
   types.ts          — TypeScript type definitions
 ```

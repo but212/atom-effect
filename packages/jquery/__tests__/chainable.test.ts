@@ -319,7 +319,8 @@ describe('atomBind', () => {
     const isActive = $.atom(false);
     const $el = $('<div>').appendTo(document.body);
 
-    $el.atomClass('bg-red-500 font-bold', isActive);
+    // Testing with spaces, tabs, and newlines
+    $el.atomClass('  bg-red-500 \t font-bold \n ', isActive);
     await $.nextTick();
     expect($el.hasClass('bg-red-500')).toBe(false);
     expect($el.hasClass('font-bold')).toBe(false);

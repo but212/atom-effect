@@ -366,7 +366,7 @@ function placeItems<T>(
         const $el = $(el);
         itemMap.set(k, { $el, item, state: undefined });
         removingKeys.delete(k);
-        debug.domUpdated(LOG_PREFIXES.LIST, $el, 'list.add', item);
+        if (debug.enabled) debug.domUpdated(LOG_PREFIXES.LIST, $el, 'list.add', item);
       }
     }
     return;
@@ -420,7 +420,7 @@ function placeItems<T>(
     if (state === 'new') {
       if (onAdd) onAdd(entry.$el);
       removingKeys.delete(k);
-      debug.domUpdated(LOG_PREFIXES.LIST, entry.$el, 'list.add', item);
+      if (debug.enabled) debug.domUpdated(LOG_PREFIXES.LIST, entry.$el, 'list.add', item);
     }
   }
 }
