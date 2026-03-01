@@ -141,28 +141,27 @@ export function bindClass(
     if (hasOwn.call(classMap, className)) {
       const source = classMap[className]!;
       // FIX 1: Support space-separated multiple classes (e.g. Tailwind) without DOMException
-      if (className.includes(' ')) {
-        const tokens = className.trim().split(/\s+/).filter(Boolean);
-        if (tokens.length > 0) {
-          registerReactiveEffect(
-            ctx.el,
-            source,
-            (val) => {
-              if (val) {
-                ctx.el.classList.add(...tokens);
-              } else {
-                ctx.el.classList.remove(...tokens);
-              }
-            },
-            `class.${className}`
-          );
-        }
-      } else {
+      const tokens = className.trim().split(/\s+/).filter(Boolean);
+
+      if (tokens.length > 1) {
         registerReactiveEffect(
           ctx.el,
           source,
           (val) => {
-            ctx.el.classList.toggle(className, !!val);
+            if (val) {
+              ctx.el.classList.add(...tokens);
+            } else {
+              ctx.el.classList.remove(...tokens);
+            }
+          },
+          `class.${className}`
+        );
+      } else if (tokens.length === 1) {
+        registerReactiveEffect(
+          ctx.el,
+          source,
+          (val) => {
+            ctx.el.classList.toggle(tokens[0]!, !!val);
           },
           `class.${className}`
         );
