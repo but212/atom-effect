@@ -8,7 +8,8 @@ import type { ComputedAtom, FetchError, FetchOptions } from './types';
 
 class FetchContext<T> {
   private abortController: AbortController | null = null;
-  private readonly baseOptions: JQuery.AjaxSettings;
+  private readonly ajaxOptionsFn?: () => JQuery.AjaxSettings;
+  private readonly staticOptions: JQuery.AjaxSettings;
   private readonly isStaticUrl: boolean;
   private readonly staticUrl?: string;
   private readonly getUrl?: () => string;
@@ -23,9 +24,15 @@ class FetchContext<T> {
       this.getUrl = urlOrFn as () => string;
     }
 
-    this.baseOptions = Object.assign({}, options.ajaxOptions);
-    if (options.method !== undefined) this.baseOptions.method = options.method;
-    if (options.headers !== undefined) this.baseOptions.headers = options.headers;
+    if (typeof options.ajaxOptions === 'function') {
+      this.ajaxOptionsFn = options.ajaxOptions;
+      this.staticOptions = {};
+    } else {
+      this.staticOptions = { ...options.ajaxOptions };
+    }
+    if (options.method !== undefined) this.staticOptions.method = options.method;
+    if (options.headers !== undefined)
+      this.staticOptions.headers = { ...this.staticOptions.headers, ...options.headers };
 
     this.transformFn = options.transform;
     this.onErrorFn = options.onError;
@@ -42,8 +49,18 @@ class FetchContext<T> {
     this.abortController = new AbortController();
     const signal = this.abortController.signal;
 
-    // Create a fresh options object for each request to prevent jQuery from mutating the shared object
-    const reqOptions: JQuery.AjaxSettings = { ...this.baseOptions };
+    // Evaluate ajaxOptionsFn each time to track reactive atoms inside it.
+    // Merge order: staticOptions (method, headers, …) as base, then ajaxOptionsFn()
+    // on top so dynamic values can override statics but statics are never lost.
+    const dynamicOpts = this.ajaxOptionsFn ? this.ajaxOptionsFn() : {};
+    // Deep clone to prevent jQuery from mutating shared objects
+    const reqOptions: JQuery.AjaxSettings = $.extend(true, {}, this.staticOptions, dynamicOpts);
+
+    // Block jQuery legacy callbacks to prevent fake errors on internal Abort
+    reqOptions.success = undefined;
+    reqOptions.error = undefined;
+    reqOptions.complete = undefined;
+
     reqOptions.url = this.isStaticUrl ? this.staticUrl : this.getUrl!();
 
     const xhr = $.ajax(reqOptions);
@@ -89,8 +106,27 @@ class FetchContext<T> {
       if (this.abortController?.signal === signal) this.abortController = null;
     }
 
+    // Transform runs synchronously after await, so atoms read here won't be tracked.
+    // This is an inherent limitation of async computed.
+    // Users who need reactive transform should use a separate synchronous computed.
     const transform = this.transformFn;
-    return transform ? transform(raw) : (raw as T);
+    if (transform) {
+      try {
+        return transform(raw);
+      } catch (err) {
+        // Surface transform errors via onError callback
+        const onError = this.onErrorFn;
+        if (onError) {
+          try {
+            onError(err);
+          } catch {
+            // Ignore errors thrown by onError itself.
+          }
+        }
+        throw err;
+      }
+    }
+    return raw as T;
   }
 }
 

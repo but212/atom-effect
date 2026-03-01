@@ -177,8 +177,8 @@ export interface FetchOptions<T> {
   headers?: Record<string, string>;
   /** Transforms the raw response into T. */
   transform?: (raw: unknown) => T;
-  /** Additional `$.ajax` settings. */
-  ajaxOptions?: JQuery.AjaxSettings;
+  /** Additional `$.ajax` settings. Can be a getter function for reactive data tracking. */
+  ajaxOptions?: JQuery.AjaxSettings | (() => JQuery.AjaxSettings);
   /** Error callback. */
   onError?: (err: unknown) => void;
   /** Whether to fetch immediately (default: true). */
