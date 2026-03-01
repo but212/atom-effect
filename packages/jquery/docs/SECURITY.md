@@ -18,7 +18,8 @@ This guide explains the built-in sanitization layer and how to integrate [DOMPur
 | `onclick`, `onerror`, etc. (`on*` attributes) | Replaced with `data-unsafe-attr=` |
 | `javascript:`, `vbscript:` protocols | Replaced with `data-unsafe-protocol:` |
 | Dangerous data URIs (`text/html`, `application/javascript`, `image/svg+xml`, etc.) | Replaced with `data-unsafe-protocol:` |
-| CSS `expression()`, `behavior:`, obfuscated protocol sequences | Replaced with `data-unsafe-css:` |
+| CSS `expression()`, `behavior:`, `-moz-binding:`, obfuscated protocol sequences | Replaced with `data-unsafe-css:` |
+| Entities (`&#NNN;`, `&#xHH;`, `&colon;`, `&Tab;`, `&NewLine;`) | Decoded to literals first to prevent protocol smuggling |
 | Null bytes / control characters | Stripped |
 | XML processing instructions (`<?...?>`) | Stripped |
 
@@ -41,11 +42,12 @@ This guide explains the built-in sanitization layer and how to integrate [DOMPur
 | ------ | ------ |
 | `innerHTML`, `outerHTML`, `srcdoc` (HTML injection sinks) | Silently blocked |
 | `__proto__`, `constructor`, `prototype` (prototype pollution) | Silently blocked |
+| `on*` property names (e.g., `onclick`) | Silently blocked |
+| `javascript:` / `vbscript:` in mapped URL properties (e.g., `src`, `href`) | Silently blocked |
 
 ### What it does NOT block
 
 - Attribute-based injection via lesser-known tags (e.g., `<svg>`, `<math>` event handlers beyond `on*` pattern)
-- HTML entity obfuscation (`&#106;avascript:`)
 - Mutation-based XSS (mXSS)
 - CSS-based data exfiltration
 

@@ -219,6 +219,10 @@ $('#price-input').atomVal(price, {
 // Checkbox/radio
 const isAgreed = $.atom(false);
 $('#agree').atomChecked(isAgreed);
+
+// Select Multiple
+const selectedTags = $.atom(['javascript', 'reactive']);
+$('#tags-multi').atomVal(selectedTags);
 ```
 
 > See [`.atomVal`](./API.md#atomvalatom-options) and [`.atomChecked`](./API.md#atomcheckedatom) for the full options reference.
@@ -302,3 +306,4 @@ $('#card-root').atomUnmount();
 > See [`.atomMount`](./API.md#atommountcomponent-props) and [`.atomUnmount`](./API.md#atomUnmount) in the API reference.
 > For component lifecycle internals, see [Architecture §6](./ARCHITECTURE.md#6-component-mounting).
 > When rendering user-supplied HTML inside a component, see the [Security Guide](./SECURITY.md) for DOMPurify integration.
+> **Shadow DOM:** If your component mounts into a Shadow Root, the automatic `MutationObserver` cannot detect when descendants inside the shadow tree are removed. You must manually call `registry.cleanupTree(shadowRoot)` in your component's cleanup function.

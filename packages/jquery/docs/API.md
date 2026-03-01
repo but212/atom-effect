@@ -79,6 +79,7 @@ Updates an HTML attribute.
 
 - **Security Guards**: Automatically blocks `on*` event handlers and dangerous protocols (`javascript:`) to prevent injection.
 - **Constraints**: Accepts `PrimitiveValue` (string, number, boolean, null, undefined).
+- **WAI-ARIA**: Boolean `false` is preserved as the string `"false"` for `aria-*` attributes (e.g., `aria-expanded="false"`), not removed. Other attributes treat `false` as removal.
 
 ```javascript
 $('img').atomAttr('src', imageUrl);
@@ -144,6 +145,8 @@ $('ul').atomList(usersAtom, {
 
 Two-way binding for `<input>`, `<textarea>`, and `<select>`.
 
+Natively supports `<select multiple>` — the atom value is synchronized as a `string[]` array with shallow equality checks.
+
 **Options**:
 
 - `debounce`: number (ms) - Delay updates to the atom.
@@ -154,6 +157,10 @@ Two-way binding for `<input>`, `<textarea>`, and `<select>`.
 
 ```javascript
 $('#search').atomVal(queryAtom, { debounce: 300 });
+
+// <select multiple> — atom holds string[]
+const selected = $.atom([]);
+$('#multi-select').atomVal(selected);
 ```
 
 ### `.atomChecked(atom)`
@@ -277,7 +284,7 @@ Declarative AJAX primitive. Wraps core's async `computed` with jQuery's `$.ajax`
   - `method`: `string` — HTTP method (default: `'GET'`).
   - `headers`: `Record<string, string>` — Request headers.
   - `transform`: `(raw: unknown) => T` — Response transformer.
-  - `ajaxOptions`: `JQuery.AjaxSettings` — Full `$.ajax` passthrough.
+  - `ajaxOptions`: `JQuery.AjaxSettings | () => JQuery.AjaxSettings` — Full `$.ajax` passthrough. When a **function** is provided, it is called on every request and its atom reads are automatically tracked, enabling reactive request payloads (e.g., dynamic headers or body). Static options (`method`, `headers`) are merged as the base, with dynamic values on top.
 
 **Returns**: `ComputedAtom<T>` — reactive value with:
 
