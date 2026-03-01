@@ -1,4 +1,4 @@
-import { effect, untracked } from '@but212/atom-effect';
+import { computed, effect, isAtom, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
 import {
   DANGEROUS_PROPS,
@@ -41,9 +41,26 @@ function getCamelCase(prop: string): string {
   return cached;
 }
 
-// Removed `htmlSanitizeCache` completely as it causes a serious Memory/CPU leak.
-// Wrapping strings in a global `ComputedAtom` creates zombie subscribers that
-// never un-track when the target DOM elements are unmounted.
+/**
+ * Cache for sanitized versions of reactive strings.
+ * Ensures that if 100 elements are bound to the same atom, sanitizeHtml() is
+ * called only once per update instead of 100 times.
+ */
+const htmlSanitizeCache = new WeakMap<
+  import('@but212/atom-effect').ReadonlyAtom<string>,
+  import('@but212/atom-effect').ComputedAtom<string>
+>();
+
+function getSanitizedHtml(
+  source: import('@but212/atom-effect').ReadonlyAtom<string>
+): import('@but212/atom-effect').ComputedAtom<string> {
+  let cached = htmlSanitizeCache.get(source);
+  if (!cached) {
+    cached = computed(() => sanitizeHtml(source.value));
+    htmlSanitizeCache.set(source, cached);
+  }
+  return cached;
+}
 
 // ============================================================================
 // Binding Context Factory
@@ -93,11 +110,16 @@ export function bindText<T = unknown>(
 export function bindHtml(ctx: BindingContext, value: ReactiveValue<string>): void {
   const el = ctx.el;
 
+  // Optimization: If the source is reactive, use a cached computed atom to
+  // ensure sanitization runs exactly once per atom change for all observers.
+  const reactiveSource = isAtom(value)
+    ? getSanitizedHtml(value as import('@but212/atom-effect').ReadonlyAtom<string>)
+    : value;
+
   registerReactiveEffect(
     el,
-    value,
-    (rawHtml) => {
-      const sanitized = sanitizeHtml(rawHtml);
+    reactiveSource,
+    (sanitized) => {
       if (el.innerHTML !== sanitized) {
         // Dispose child bindings before the nodes are removed from the DOM.
         registry.cleanupDescendants(el);
@@ -119,18 +141,32 @@ export function bindClass(
     if (hasOwn.call(classMap, className)) {
       const source = classMap[className]!;
       // FIX 1: Support space-separated multiple classes (e.g. Tailwind) without DOMException
-      const tokens = className.trim().split(/\s+/).filter(Boolean);
-
-      registerReactiveEffect(
-        ctx.el,
-        source,
-        (val) => {
-          for (const token of tokens) {
-            ctx.el.classList.toggle(token, !!val);
-          }
-        },
-        `class.${className}`
-      );
+      if (className.includes(' ')) {
+        const tokens = className.trim().split(/\s+/).filter(Boolean);
+        if (tokens.length > 0) {
+          registerReactiveEffect(
+            ctx.el,
+            source,
+            (val) => {
+              if (val) {
+                ctx.el.classList.add(...tokens);
+              } else {
+                ctx.el.classList.remove(...tokens);
+              }
+            },
+            `class.${className}`
+          );
+        }
+      } else {
+        registerReactiveEffect(
+          ctx.el,
+          source,
+          (val) => {
+            ctx.el.classList.toggle(className, !!val);
+          },
+          `class.${className}`
+        );
+      }
     }
   }
 }
@@ -152,7 +188,7 @@ export function bindCss(ctx: BindingContext, cssMap: Record<string, CssValue>): 
         el,
         source,
         (v) => {
-          const strVal = unit ? `${v}${unit}` : String(v);
+          const strVal = unit ? String(v) + unit : String(v);
           if (!isDangerousCssValue(strVal)) {
             style[camel] = strVal;
           }
@@ -182,15 +218,16 @@ export function bindAttr(
         continue;
       }
 
+      const isAria = lowerName.startsWith('aria-');
+
       registerReactiveEffect(
         el,
         attrMap[name]!,
         (v) => {
-          if (v === null || v === undefined) {
+          if (v == null) {
             el.removeAttribute(name);
             return;
           }
-          const isAria = lowerName.startsWith('aria-');
           // FIX 3: Preserve boolean 'false' for ARIA attributes instead of removing them.
           if (v === false && !isAria) {
             el.removeAttribute(name);
@@ -226,7 +263,7 @@ export function bindProp(
     if (hasOwn.call(propMap, name)) {
       const lowerName = name.toLowerCase();
 
-      // 1. Block dangerous event handler properties.
+      // Block dangerous event handler properties.
       if (lowerName.startsWith('on')) {
         console.warn(
           `${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_EVENT_HANDLER(name)}`
@@ -234,28 +271,27 @@ export function bindProp(
         continue;
       }
 
-      // 2. Block properties that can inject raw HTML or pollute prototype.
+      // Block dangerous DOM properties that can inject raw HTML (e.g., innerHTML)
       if (DANGEROUS_PROPS.has(name)) {
         console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_PROP(name)}`);
         continue;
       }
 
+      const isUrlProp = URL_PROPS.has(lowerName);
+
       registerReactiveEffect(
         ctx.el,
         propMap[name]!,
         (val) => {
-          // 3. Block dangerous protocols in property values (src, href, etc.).
-          // Even when set via .prop(), javascript: protocols can execute.
-          if (URL_PROPS.has(lowerName) && typeof val === 'string') {
-            if (isDangerousUrl(name, val)) {
-              console.warn(
-                `${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_PROTOCOL(name)}`
-              );
-              return;
-            }
+          // Block dangerous protocols in property values (src, href, etc.).
+          if (isUrlProp && typeof val === 'string' && isDangerousUrl(name, val)) {
+            console.warn(
+              `${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_PROTOCOL(name)}`
+            );
+            return;
           }
 
-          // Strict write guard
+          // Redundancy check specifically for DOM properties
           if (el[name] !== val) {
             el[name] = val;
           }
@@ -274,16 +310,16 @@ export function bindVisibility(
   condition: ReactiveValue<boolean>,
   invert: boolean
 ): void {
-  const $el = ctx.$el;
+  const el = ctx.el;
   const label: BindingDebugType = invert ? 'hide' : 'show';
+  const originalDisplay = el.style.display;
+  const showDisplay = originalDisplay === 'none' ? '' : originalDisplay;
+
   registerReactiveEffect(
-    ctx.el,
+    el,
     condition,
     (val) => {
-      const visible = invert !== !!val;
-      // Using jQuery's .toggle() preserves original inline display styles
-      // (e.g. display: flex) instead of simply clearing it to ''.
-      $el.toggle(visible);
+      el.style.display = invert !== !!val ? showDisplay : 'none';
     },
     label
   );
@@ -324,18 +360,18 @@ export function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): v
     const current = el.checked;
     if (atom.value !== current) {
       atom.value = current;
-    }
-    // FIX 2: Radio buttons do not fire 'change' when unchecked by selecting another radio.
-    // Trigger a custom event on sibling radios so they can sync their newly unchecked state.
-    // FIX 2 follow-up: Scope to the containing <form> to avoid cross-form interference.
-    // Falls back to document for radios outside any form.
-    if (isRadio && current && el.name) {
-      const escapedName = el.name.replace(/"/g, '\\"');
-      const $scope = el.form ? $(el.form) : $(document);
-      $scope
-        .find(`input[type="radio"][name="${escapedName}"]`)
-        .not(el)
-        .trigger('change.atomRadioSync');
+      // FIX 2: Radio buttons do not fire 'change' when unchecked by selecting another radio.
+      // Trigger a custom event on sibling radios so they can sync their newly unchecked state.
+      // FIX 2 follow-up: Scope to the containing <form> to avoid cross-form interference.
+      // Falls back to document for radios outside any form.
+      if (isRadio && current && el.name) {
+        const escapedName = el.name.replace(/"/g, '\\"');
+        const $scope = el.form ? $(el.form) : $(document);
+        $scope
+          .find(`input[type="radio"][name="${escapedName}"]`)
+          .not(el)
+          .trigger('change.atomRadioSync');
+      }
     }
   };
   // Internal handler — skip batch() wrapping in the jQuery patch.
@@ -354,7 +390,7 @@ export function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): v
     untracked(() => {
       if (el.checked !== val) {
         el.checked = val;
-        debug.domUpdated(LOG_PREFIXES.BINDING, $el, 'checked', val);
+        if (debug.enabled) debug.domUpdated(LOG_PREFIXES.BINDING, $el, 'checked', val);
       }
     });
   });
