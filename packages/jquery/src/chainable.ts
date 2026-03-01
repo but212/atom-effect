@@ -1,5 +1,6 @@
 import $ from 'jquery';
 import { ERROR_MESSAGES, LOG_PREFIXES } from './constants';
+import { debug } from './debug';
 import type {
   BindingOptions,
   CssBindings,
@@ -25,6 +26,16 @@ import {
 } from './unified';
 
 /**
+ * Logs a debug-mode warning when a non-Element node is encountered
+ * in a jQuery set during a binding call.  Completely inert in production.
+ */
+function warnNonElement(nodeType: number): void {
+  if (debug.enabled) {
+    debug.log(LOG_PREFIXES.BINDING, `Skipping non-Element node (nodeType=${nodeType})`);
+  }
+}
+
+/**
  * Binds element `textContent` to a reactive source.
  *
  * @param source - Reactive or static value to display.
@@ -33,7 +44,9 @@ import {
  */
 $.fn.atomText = function <T>(source: ReactiveValue<T>, formatter?: (v: T) => string): JQuery {
   for (let i = 0, len = this.length; i < len; i++) {
-    bindText(createContext(this[i]!), source, formatter);
+    const el = this[i]!;
+    if (el.nodeType === 1) bindText(createContext(el as HTMLElement), source, formatter);
+    else warnNonElement(el.nodeType);
   }
   return this;
 };
@@ -44,7 +57,9 @@ $.fn.atomText = function <T>(source: ReactiveValue<T>, formatter?: (v: T) => str
  */
 $.fn.atomHtml = function (source: ReactiveValue<string>): JQuery {
   for (let i = 0, len = this.length; i < len; i++) {
-    bindHtml(createContext(this[i]!), source);
+    const el = this[i]!;
+    if (el.nodeType === 1) bindHtml(createContext(el as HTMLElement), source);
+    else warnNonElement(el.nodeType);
   }
   return this;
 };
@@ -70,7 +85,9 @@ $.fn.atomClass = function (
   const classMap =
     typeof classNameOrMap === 'string' ? { [classNameOrMap]: condition! } : classNameOrMap;
   for (let i = 0, len = this.length; i < len; i++) {
-    bindClass(createContext(this[i]!), classMap);
+    const el = this[i]!;
+    if (el.nodeType === 1) bindClass(createContext(el as HTMLElement), classMap);
+    else warnNonElement(el.nodeType);
   }
   return this;
 };
@@ -97,7 +114,9 @@ $.fn.atomCss = function (
       ? { [propOrMap]: unit ? [source as ReactiveValue<number>, unit] : source! }
       : propOrMap;
   for (let i = 0, len = this.length; i < len; i++) {
-    bindCss(createContext(this[i]!), cssMap);
+    const el = this[i]!;
+    if (el.nodeType === 1) bindCss(createContext(el as HTMLElement), cssMap);
+    else warnNonElement(el.nodeType);
   }
   return this;
 };
@@ -123,7 +142,9 @@ $.fn.atomAttr = function (
     ? { [nameOrMap]: source! }
     : nameOrMap;
   for (let i = 0, len = this.length; i < len; i++) {
-    bindAttr(createContext(this[i]!), attrMap);
+    const el = this[i]!;
+    if (el.nodeType === 1) bindAttr(createContext(el as HTMLElement), attrMap);
+    else warnNonElement(el.nodeType);
   }
   return this;
 };
@@ -149,7 +170,9 @@ $.fn.atomProp = function <T>(
     ? { [nameOrMap]: source as ReactiveValue<unknown> }
     : (nameOrMap as Record<string, ReactiveValue<unknown>>);
   for (let i = 0, len = this.length; i < len; i++) {
-    bindProp(createContext(this[i]!), propMap);
+    const el = this[i]!;
+    if (el.nodeType === 1) bindProp(createContext(el as HTMLElement), propMap);
+    else warnNonElement(el.nodeType);
   }
   return this;
 };
@@ -159,7 +182,9 @@ $.fn.atomProp = function <T>(
  */
 $.fn.atomShow = function (condition: ReactiveValue<boolean>): JQuery {
   for (let i = 0, len = this.length; i < len; i++) {
-    bindVisibility(createContext(this[i]!), condition, false);
+    const el = this[i]!;
+    if (el.nodeType === 1) bindVisibility(createContext(el as HTMLElement), condition, false);
+    else warnNonElement(el.nodeType);
   }
   return this;
 };
@@ -170,7 +195,9 @@ $.fn.atomShow = function (condition: ReactiveValue<boolean>): JQuery {
  */
 $.fn.atomHide = function (condition: ReactiveValue<boolean>): JQuery {
   for (let i = 0, len = this.length; i < len; i++) {
-    bindVisibility(createContext(this[i]!), condition, true);
+    const el = this[i]!;
+    if (el.nodeType === 1) bindVisibility(createContext(el as HTMLElement), condition, true);
+    else warnNonElement(el.nodeType);
   }
   return this;
 };
@@ -185,7 +212,14 @@ $.fn.atomHide = function (condition: ReactiveValue<boolean>): JQuery {
  */
 $.fn.atomVal = function <T>(atom: WritableAtom<T>, options: ValOptions<T> = {}): JQuery {
   for (let i = 0, len = this.length; i < len; i++) {
-    bindVal(createContext(this[i]!), atom as WritableAtom<unknown>, options as ValOptions<unknown>);
+    const el = this[i]!;
+    if (el.nodeType === 1)
+      bindVal(
+        createContext(el as HTMLElement),
+        atom as WritableAtom<unknown>,
+        options as ValOptions<unknown>
+      );
+    else warnNonElement(el.nodeType);
   }
   return this;
 };
@@ -196,7 +230,9 @@ $.fn.atomVal = function <T>(atom: WritableAtom<T>, options: ValOptions<T> = {}):
  */
 $.fn.atomChecked = function (atom: WritableAtom<boolean>): JQuery {
   for (let i = 0, len = this.length; i < len; i++) {
-    bindChecked(createContext(this[i]!), atom);
+    const el = this[i]!;
+    if (el.nodeType === 1) bindChecked(createContext(el as HTMLElement), atom);
+    else warnNonElement(el.nodeType);
   }
   return this;
 };
@@ -210,7 +246,9 @@ $.fn.atomChecked = function (atom: WritableAtom<boolean>): JQuery {
  */
 $.fn.atomOn = function (event: string, handler: (e: JQuery.Event) => void): JQuery {
   for (let i = 0, len = this.length; i < len; i++) {
-    bindOn(createContext(this[i]!), event, handler);
+    const el = this[i]!;
+    if (el.nodeType === 1) bindOn(createContext(el as HTMLElement), event, handler);
+    else warnNonElement(el.nodeType);
   }
   return this;
 };
@@ -238,7 +276,12 @@ $.fn.atomBind = function <T = unknown>(options: BindingOptions<T>): JQuery {
         : { atom: val as WritableAtom<unknown>, opts: undefined };
 
   for (let i = 0, len = this.length; i < len; i++) {
-    const ctx = createContext(this[i]!);
+    const el = this[i]!;
+    if (el.nodeType !== 1) {
+      warnNonElement(el.nodeType);
+      continue;
+    }
+    const ctx = createContext(el as HTMLElement);
 
     if (text !== undefined) bindText(ctx, text);
     if (html !== undefined) bindHtml(ctx, html);
@@ -265,7 +308,9 @@ $.fn.atomBind = function <T = unknown>(options: BindingOptions<T>): JQuery {
  */
 $.fn.atomUnbind = function (): JQuery {
   for (let i = 0, len = this.length; i < len; i++) {
-    bindUnbind(this[i]!);
+    const el = this[i]!;
+    if (el.nodeType === 1) bindUnbind(el as HTMLElement);
+    else warnNonElement(el.nodeType);
   }
   return this;
 };

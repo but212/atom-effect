@@ -16,9 +16,13 @@
 
 ### jQuery
 
-- **Router**: Improved JSDoc clarity, error handling, and fixed destroy loop issues.
-- **Input & Binding**: Unified handlers, fixed debounce data loss, and improved event delegation.
-- **atomFetch**: Fixed memory leaks on aborted requests and improved error normalization (`FetchError`).
+- **atomFetch**: Overhauled with reactive `ajaxOptions` support via function getters, enabling dynamic request payloads. Improved error normalization and ensured `onError` callbacks trigger for both network and `transform` failures. Implemented deep-cloning and legacy callback stripping to prevent jQuery-driven state mutations.
+- **Input Binding Fixes**:
+  - Fixed `InvalidStateError` when accessing `selectionStart` on restricted input types (e.g., `number`).
+  - Corrected multi-event namespacing to ensure complete cleanup and prevent memory leaks.
+  - Added native support for `<select multiple>` with array-based synchronization and shallow equality.
+  - Implemented forced sync on `blur` during active IME composition to prevent data loss when `debounce: 0`.
+- **Internal Optimization**: Cached `isMultipleSelect` status and restored strict generic type signatures for `parse`, `format`, and `equal` to improve type safety and performance.
 - **atomList**: Refactored reconciliation, fixed DOM insertion lifecycle bugs, and enhanced sanitization robustness; exposed `containerSelector` as `@internal readonly` for better debug visibility.
 - **Internal**: Narrowed types for stricter type safety, optimized iterations (`for...in`), and cleaned up comments/logging.
 - **Micro-Frontends**: Scaled `enableAutoCleanup` to support multiple concurrent `observedRoot` environments via a tracking `Map`, resolving edge-cases in MFEs or independent plugin spaces.

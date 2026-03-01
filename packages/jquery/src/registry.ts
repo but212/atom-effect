@@ -109,7 +109,7 @@ class BindingRegistry {
       // Already cleaned up or never bound.
       // Ensure specific class is removed unconditionally just in case of stale DOM state
       // (e.g. detached node being re-inserted).
-      if (el instanceof Element) el.classList.remove(AES_BOUND);
+      if (el.nodeType === 1) (el as Element).classList.remove(AES_BOUND);
       this.preservedNodes.delete(el);
       this.ignoredNodes.delete(el);
       return;
@@ -124,10 +124,10 @@ class BindingRegistry {
     // If a detached node is cached by the user and re-inserted into the DOM later,
     // leaving the class would cause false-positive lookups during subtree cleanups.
     // (classList.remove on detached nodes is virtually free).
-    if (el instanceof Element) el.classList.remove(AES_BOUND);
+    if (el.nodeType === 1) (el as Element).classList.remove(AES_BOUND);
 
     if (debug.enabled) {
-      const info = el instanceof Element ? getSelector(el) : el.nodeName || 'Node';
+      const info = el.nodeType === 1 ? getSelector(el as Element) : el.nodeName || 'Node';
       debug.cleanup(LOG_PREFIXES.BINDING, info);
     }
 
@@ -137,7 +137,7 @@ class BindingRegistry {
       try {
         record.componentCleanup();
       } catch (e) {
-        const selector = el instanceof Element ? getSelector(el) : 'Node';
+        const selector = el.nodeType === 1 ? getSelector(el as Element) : 'Node';
         debug.error(LOG_PREFIXES.MOUNT, ERROR_MESSAGES.MOUNT.CLEANUP_ERROR(selector), e);
       }
     }
@@ -149,7 +149,7 @@ class BindingRegistry {
         try {
           effects[i]!.dispose();
         } catch (e) {
-          const selector = el instanceof Element ? getSelector(el) : 'Node';
+          const selector = el.nodeType === 1 ? getSelector(el as Element) : 'Node';
           debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.CORE.EFFECT_DISPOSE_ERROR(selector), e);
         }
       }
@@ -162,7 +162,7 @@ class BindingRegistry {
         try {
           cleanups[i]!();
         } catch (e) {
-          const selector = el instanceof Element ? getSelector(el) : 'Node';
+          const selector = el.nodeType === 1 ? getSelector(el as Element) : 'Node';
           debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.CLEANUP_ERROR(selector), e);
         }
       }
@@ -203,8 +203,9 @@ class BindingRegistry {
   }
 
   cleanupTree(el: Element | Node): void {
-    if (el instanceof Element || el instanceof ShadowRoot || el instanceof DocumentFragment) {
-      this.cleanupDescendants(el);
+    // 1: Element, 11: DocumentFragment or ShadowRoot
+    if (el.nodeType === 1 || el.nodeType === 11) {
+      this.cleanupDescendants(el as Element | DocumentFragment | ShadowRoot);
     }
     this.cleanup(el);
   }
