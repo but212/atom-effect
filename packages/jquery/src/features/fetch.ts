@@ -1,6 +1,6 @@
 import { computed } from '@but212/atom-effect';
 import $ from 'jquery';
-import type { ComputedAtom, FetchError, FetchOptions } from '../types';
+import type { ComputedAtom, FetchError, FetchOptions } from '@/types';
 
 // ============================================================================
 // atomFetch

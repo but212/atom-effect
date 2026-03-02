@@ -1,16 +1,16 @@
 import { computed, effect, isAtom, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
-import { applyInputBinding } from '../bindings/input-binding';
+import { applyInputBinding } from '@/bindings/input-binding';
 import {
   DANGEROUS_PROPS,
   ERROR_MESSAGES,
   LOG_PREFIXES,
   URL_PROPS,
   VALID_INPUT_TAGS,
-} from '../constants';
-import { type BindingDebugType, registerReactiveEffect } from '../core/effect-factory';
-import { INTERNAL_HANDLER } from '../core/jquery-patch';
-import { registry } from '../core/registry';
+} from '@/constants';
+import { type BindingDebugType, registerReactiveEffect } from '@/core/effect-factory';
+import { INTERNAL_HANDLER } from '@/core/jquery-patch';
+import { registry } from '@/core/registry';
 import type {
   BindingContext,
   BindingOptions,
@@ -19,13 +19,13 @@ import type {
   ReactiveValue,
   ValOptions,
   WritableAtom,
-} from '../types';
-import { debug } from '../utils/debug';
+} from '@/types';
+import { debug } from '@/utils/debug';
 
 export type { BindingContext };
 
-import { hasOwn } from '../utils';
-import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '../utils/sanitize';
+import { hasOwn } from '@/utils';
+import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '@/utils/sanitize';
 
 // Cache for CSS property camelization to avoid repeated regex overhead.
 // Uses Map instead of a plain object to avoid prototype pollution risk and

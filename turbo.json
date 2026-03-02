@@ -28,6 +28,9 @@
     "bench": {
       "dependsOn": ["^build"],
       "cache": false
+    },
+    "clean": {
+      "cache": false
     }
   }
 }

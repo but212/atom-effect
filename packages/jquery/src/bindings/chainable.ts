@@ -13,8 +13,8 @@ import {
   bindVal,
   bindVisibility,
   createContext,
-} from '../bindings/unified';
-import { ERROR_MESSAGES, LOG_PREFIXES } from '../constants';
+} from '@/bindings/unified';
+import { ERROR_MESSAGES, LOG_PREFIXES } from '@/constants';
 import type {
   BindingOptions,
   CssBindings,
@@ -22,8 +22,8 @@ import type {
   ReactiveValue,
   ValOptions,
   WritableAtom,
-} from '../types';
-import { debug } from '../utils/debug';
+} from '@/types';
+import { debug } from '@/utils/debug';
 
 /**
  * Logs a debug-mode warning when a non-Element node is encountered

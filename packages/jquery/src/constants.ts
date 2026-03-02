@@ -2,7 +2,7 @@
  * Constants for atom-effect-jquery
  */
 
-import type { RouteConfig } from './types';
+import type { RouteConfig } from '@/types';
 
 // ============================================================================
 // Log Prefixes

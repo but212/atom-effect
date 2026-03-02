@@ -14,7 +14,7 @@
     "format": "biome format --write .",
     "typecheck": "turbo run typecheck",
     "bench": "turbo run bench",
-    "clean": "rimraf packages/*/dist .turbo node_modules/.cache"
+    "clean": "turbo run clean && rimraf .turbo node_modules/.cache"
   },
   "keywords": [
     "reactive",

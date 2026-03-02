@@ -1,10 +1,10 @@
 import { untracked } from '@but212/atom-effect';
 import $ from 'jquery';
-import { bindUnbind } from '../bindings/unified';
-import { ERROR_MESSAGES, LOG_PREFIXES } from '../constants';
-import { registry } from '../core/registry';
-import type { ComponentFn } from '../types';
-import { debug } from '../utils/debug';
+import { bindUnbind } from '@/bindings/unified';
+import { ERROR_MESSAGES, LOG_PREFIXES } from '@/constants';
+import { registry } from '@/core/registry';
+import type { ComponentFn } from '@/types';
+import { debug } from '@/utils/debug';
 
 // ============================================================================
 // Internal helpers

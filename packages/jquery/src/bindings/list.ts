@@ -1,7 +1,7 @@
 import { effect, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
-import { ERROR_MESSAGES, LOG_PREFIXES } from '../constants';
-import { registry } from '../core/registry';
+import { ERROR_MESSAGES, LOG_PREFIXES } from '@/constants';
+import { registry } from '@/core/registry';
 import type {
   EffectObject,
   ListItemEntry,
@@ -10,10 +10,10 @@ import type {
   ListKeyFn,
   ListOptions,
   ReadonlyAtom,
-} from '../types';
-import { getLIS, getSelector, hasOwn, shallowEqual } from '../utils';
-import { debug } from '../utils/debug';
-import { sanitizeHtml } from '../utils/sanitize';
+} from '@/types';
+import { getLIS, getSelector, hasOwn, shallowEqual } from '@/utils';
+import { debug } from '@/utils/debug';
+import { sanitizeHtml } from '@/utils/sanitize';
 
 // ============================================================================
 // Helpers

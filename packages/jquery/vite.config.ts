@@ -1,6 +1,7 @@
 // vite.config.ts
 
 import dts from 'vite-plugin-dts';
+import tsconfigPaths from 'vite-tsconfig-paths';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
@@ -14,18 +15,21 @@ export default defineConfig({
         format === 'umd' ? 'atom-effect-jquery.min.js' : `index.${format === 'es' ? 'mjs' : 'cjs'}`,
     },
     rollupOptions: {
-      // jQuery is external, but atom-effect is bundled
-      external: ['jquery'],
+      external: ['jquery', '@but212/atom-effect'],
       output: {
         globals: {
           jquery: 'jQuery',
+          '@but212/atom-effect': 'AtomEffect',
         },
         exports: 'named',
       },
     },
     sourcemap: true,
   },
-  plugins: [dts({ rollupTypes: true })],
+  plugins: [
+    tsconfigPaths(),
+    dts({ rollupTypes: true, exclude: ['src/**/*.test.ts', '__tests__/**/*'] }),
+  ],
   test: {
     environment: 'jsdom',
     setupFiles: ['./__tests__/setup.ts'],

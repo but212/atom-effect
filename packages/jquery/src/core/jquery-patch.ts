@@ -1,6 +1,6 @@
 import { batch } from '@but212/atom-effect';
 import $ from 'jquery';
-import { registry } from '../core/registry';
+import { registry } from '@/core/registry';
 
 /** Generic event handler type matching jQuery's internal handler signature. */
 type EventHandler = JQuery.EventHandlerBase<unknown, JQuery.TriggeredEvent>;

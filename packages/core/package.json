@@ -13,6 +13,7 @@
   ],
   "scripts": {
     "build": "vite build",
+    "clean": "rimraf dist",
     "test": "vitest",
     "test:run": "vitest run",
     "test:unit": "vitest __tests__/unit",
