@@ -1,10 +1,10 @@
 import type { ReadonlyAtom } from '@but212/atom-effect';
 import { computed, atom as createAtom, effect, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
-import { ERROR_MESSAGES, LOG_PREFIXES, ROUTE_DEFAULTS } from './constants';
-import { debug } from './debug';
-import { registry } from './registry';
-import type { RouteConfig, RouteDefinition, Router, WritableAtom } from './types';
+import { ERROR_MESSAGES, LOG_PREFIXES, ROUTE_DEFAULTS } from '../constants';
+import { debug } from '../utils/debug';
+import { registry } from '../core/registry';
+import type { RouteConfig, RouteDefinition, Router, WritableAtom } from '../types';
 
 // --- Helper: Safe History API Wrappers ---
 function safePushState(data: unknown, url: string | URL | null): boolean {

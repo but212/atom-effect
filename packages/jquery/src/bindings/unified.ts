@@ -6,12 +6,12 @@ import {
   LOG_PREFIXES,
   URL_PROPS,
   VALID_INPUT_TAGS,
-} from './constants';
-import { debug } from './debug';
-import { type BindingDebugType, registerReactiveEffect } from './effect-factory';
-import { applyInputBinding } from './input-binding';
-import { INTERNAL_HANDLER } from './jquery-patch';
-import { registry } from './registry';
+} from '../constants';
+import { debug } from '../utils/debug';
+import { type BindingDebugType, registerReactiveEffect } from '../core/effect-factory';
+import { applyInputBinding } from '../bindings/input-binding';
+import { INTERNAL_HANDLER } from '../core/jquery-patch';
+import { registry } from '../core/registry';
 import type {
   BindingContext,
   BindingOptions,
@@ -20,12 +20,12 @@ import type {
   ReactiveValue,
   ValOptions,
   WritableAtom,
-} from './types';
+} from '../types';
 
 export type { BindingContext };
 
-import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from './sanitize';
-import { hasOwn } from './utils';
+import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '../utils/sanitize';
+import { hasOwn } from '../utils';
 
 // Cache for CSS property camelization to avoid repeated regex overhead.
 // Uses Map instead of a plain object to avoid prototype pollution risk and

@@ -13,8 +13,8 @@
  * polluting the console without explicit opt-in.
  */
 
-import { DEBUG_DEFAULTS } from './constants';
-import { getSelector } from './utils';
+import { DEBUG_DEFAULTS } from '../constants';
+import { getSelector } from '../utils';
 
 // ============================================================================
 // Timing constants — HIGHLIGHT_TRANSITION is derived from HIGHLIGHT_DEFAULTS

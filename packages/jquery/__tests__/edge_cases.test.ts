@@ -1,6 +1,6 @@
 import $ from 'jquery';
 import { describe, expect, it, vi } from 'vitest';
-import { debug } from '../src/debug';
+import { debug } from '../src/utils/debug';
 import '../src/index';
 
 describe('Atom List Edge Cases', () => {

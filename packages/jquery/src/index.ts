@@ -23,29 +23,29 @@ import $ from 'jquery';
 
 // Registers $.atom, $.computed, $.effect, $.batch, $.untracked,
 // $.isAtom, $.isComputed, $.isReactive, $.nextTick
-import './namespace';
+import './core/namespace';
 
 // Registers $.fn.atomText/Html/Class/Css/Attr/Prop/Show/Hide/Val/Checked/On/Bind/Unbind.
-import './chainable';
+import './bindings/chainable';
 
 // Registers $.fn.atomList
-import './list';
+import './bindings/list';
 
 // Registers $.fn.atomMount / $.fn.atomUnmount
-import './mount';
+import './bindings/mount';
 
 // Registers $.route
-import './route';
+import './features/route';
 
 // Registers $.atomFetch
-import './fetch';
+import './features/fetch';
 
 // ============================================================================
 // Runtime initialisation (browser only)
 // ============================================================================
 
-import { enablejQueryOverrides } from './jquery-patch';
-import { disableAutoCleanup, enableAutoCleanup, registry } from './registry';
+import { enablejQueryOverrides } from './core/jquery-patch';
+import { disableAutoCleanup, enableAutoCleanup, registry } from './core/registry';
 
 // $() runs after DOMContentLoaded, so document.body is guaranteed non-null here.
 // In JSDOM/test environments jQuery calls the callback synchronously.
@@ -79,12 +79,12 @@ export {
 // jQuery override controls — called automatically on DOM ready, but exposed
 // here for consumers who manage initialisation themselves (e.g. custom roots,
 // shadow DOMs, or environments where the automatic call is not appropriate).
-export { disablejQueryOverrides, enablejQueryOverrides } from './jquery-patch';
+export { disablejQueryOverrides, enablejQueryOverrides } from './core/jquery-patch';
 
 // nextTick is registered on $ via namespace.ts and exported here so ESM
 // consumers can import it without touching $.
 // isReactive is defined in utils.ts and also registered on $ via namespace.ts.
-export { nextTick } from './namespace';
+export { nextTick } from './core/namespace';
 export { isReactive } from './utils';
 
 // Registry API — for advanced lifecycle control (custom roots, manual cleanup).

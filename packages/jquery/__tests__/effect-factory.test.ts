@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { debug } from '../src/debug';
-import { registerReactiveEffect } from '../src/effect-factory';
+import { debug } from '../src/utils/debug';
+import { registerReactiveEffect } from '../src/core/effect-factory';
 import $ from '../src/index';
 
 describe('Effect Factory', () => {

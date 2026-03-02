@@ -1,6 +1,6 @@
 import type { ReadonlyAtom } from '@but212/atom-effect';
 import { isAtom } from '@but212/atom-effect';
-import type { RenderRoute, RouteDefinition, TemplateRoute } from './types';
+import type { RenderRoute, RouteDefinition, TemplateRoute } from '../types';
 
 // ============================================================================
 // Reactive helpers

@@ -1,9 +1,9 @@
 import { effect, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
-import { ERROR_MESSAGES, LOG_PREFIXES } from './constants';
-import { debug } from './debug';
-import { registry } from './registry';
-import { sanitizeHtml } from './sanitize';
+import { ERROR_MESSAGES, LOG_PREFIXES } from '../constants';
+import { debug } from '../utils/debug';
+import { registry } from '../core/registry';
+import { sanitizeHtml } from '../utils/sanitize';
 import type {
   EffectObject,
   ListItemEntry,
@@ -12,8 +12,8 @@ import type {
   ListKeyFn,
   ListOptions,
   ReadonlyAtom,
-} from './types';
-import { getLIS, getSelector, hasOwn, shallowEqual } from './utils';
+} from '../types';
+import { getLIS, getSelector, hasOwn, shallowEqual } from '../utils';
 
 // ============================================================================
 // Helpers
@@ -184,7 +184,8 @@ function buildIndices<T>(
   items: T[],
   itemCount: number,
   getKey: ListKeyFn<T>,
-  update: ListOptions<T>['update']
+  update: ListOptions<T>['update'],
+  isEqual: ListOptions<T>['isEqual']
 ): PreparedDiff<T> {
   const { oldKeys, itemMap, removingKeys } = ctx;
   const oldIndexMap = new Map<ListKey, number>();
@@ -223,7 +224,8 @@ function buildIndices<T>(
     }
 
     const oldItem = entry.item;
-    if (!update && oldItem !== item && !shallowEqual(oldItem, item)) {
+    const isSame = isEqual ? isEqual(oldItem, item) : shallowEqual(oldItem, item);
+    if (!update && oldItem !== item && !isSame) {
       trKeys.push(k);
       trItems.push(item);
       trIdxs.push(i);
@@ -468,7 +470,7 @@ function syncEventIndices<T>(ctx: ListContext<T>, diff: PreparedDiff<T>): void {
  * unexpected key collisions.
  */
 $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>): JQuery {
-  const { key, bind, update, onAdd, onRemove, empty, events } = options;
+  const { key, bind, update, onAdd, onRemove, empty, events, isEqual } = options;
 
   const getKey: ListKeyFn<T> =
     typeof key === 'function'
@@ -511,7 +513,7 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
 
         debug.log(LOG_PREFIXES.LIST, `${containerSelector} updating with ${itemCount} items`);
 
-        const diff = buildIndices(ctx, items, itemCount, getKey, update);
+        const diff = buildIndices(ctx, items, itemCount, getKey, update, isEqual);
         const isInitial = ctx.oldKeys.length === 0;
 
         const innerHtmlFragments = renderItems(ctx, diff, options, isInitial);

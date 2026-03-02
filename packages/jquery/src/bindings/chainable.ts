@@ -1,6 +1,6 @@
 import $ from 'jquery';
-import { ERROR_MESSAGES, LOG_PREFIXES } from './constants';
-import { debug } from './debug';
+import { ERROR_MESSAGES, LOG_PREFIXES } from '../constants';
+import { debug } from '../utils/debug';
 import type {
   BindingOptions,
   CssBindings,
@@ -8,7 +8,7 @@ import type {
   ReactiveValue,
   ValOptions,
   WritableAtom,
-} from './types';
+} from '../types';
 import {
   bindAttr,
   bindChecked,
@@ -23,7 +23,7 @@ import {
   bindVal,
   bindVisibility,
   createContext,
-} from './unified';
+} from '../bindings/unified';
 
 /**
  * Logs a debug-mode warning when a non-Element node is encountered

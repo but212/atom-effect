@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+### jQuery
+
+#### Changed
+
+- **Architecture**: Reorganized `jquery/src` into logical domains (`bindings/`, `core/`, `features/`, `utils/`) for improved modularity and maintainability.
+- **Lists (`atomList`)**: Fixed a bug where mutating nested properties behind a shallow copy failed to trigger a re-render. Added `isEqual` option to `ListOptions` for custom equality checks.
+
 ## [0.23.0]
 
 ### Core

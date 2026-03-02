@@ -2,8 +2,8 @@ import { atom, effect } from '@but212/atom-effect';
 import $ from 'jquery';
 import { afterEach, describe, expect, it } from 'vitest';
 import '../src/index'; // Register all plugins including $.nextTick
-import { registry } from '../src/registry';
-import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '../src/sanitize';
+import { registry } from '../src/core/registry';
+import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '../src/utils/sanitize';
 
 // ============================================================================
 // PART 1: Unit Tests — sanitizeHtml core logic

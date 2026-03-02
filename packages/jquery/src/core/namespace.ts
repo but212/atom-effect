@@ -8,11 +8,11 @@ import {
   untracked,
 } from '@but212/atom-effect';
 import $ from 'jquery';
-import { debug } from './debug';
-import type { AtomOptions, WritableAtom } from './types';
+import { debug } from '../utils/debug';
+import type { AtomOptions, WritableAtom } from '../types';
 // isReactive is defined in utils.ts because core's isAtom already covers computed
 // atoms (ComputedAtom carries ATOM_BRAND), making a separate isComputed check redundant.
-import { isReactive } from './utils';
+import { isReactive } from '../utils';
 
 // ============================================================================
 // atom factory + debug namespace

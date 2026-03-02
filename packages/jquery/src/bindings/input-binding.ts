@@ -1,9 +1,9 @@
 import { effect, untracked } from '@but212/atom-effect';
-import { ERROR_MESSAGES, INPUT_DEFAULTS, LOG_PREFIXES } from './constants';
-import { debug } from './debug';
-import { INTERNAL_HANDLER } from './jquery-patch';
-import type { EffectObject, ValOptions, WritableAtom } from './types';
-import { BindingFlags } from './types';
+import { ERROR_MESSAGES, INPUT_DEFAULTS, LOG_PREFIXES } from '../constants';
+import { debug } from '../utils/debug';
+import { INTERNAL_HANDLER } from '../core/jquery-patch';
+import type { EffectObject, ValOptions, WritableAtom } from '../types';
+import { BindingFlags } from '../types';
 
 // Monotonically increasing counter used to generate per-instance event
 // namespaces, preventing cleanup of sibling bindings on the same element.

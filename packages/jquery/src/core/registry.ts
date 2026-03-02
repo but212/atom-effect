@@ -1,7 +1,7 @@
-import { ERROR_MESSAGES, LOG_PREFIXES } from './constants';
-import { debug } from './debug';
-import type { EffectObject } from './types';
-import { getSelector } from './utils';
+import { ERROR_MESSAGES, LOG_PREFIXES } from '../constants';
+import { debug } from '../utils/debug';
+import type { EffectObject } from '../types';
+import { getSelector } from '../utils';
 
 /**
  * CSS class added to every element that has at least one active binding.

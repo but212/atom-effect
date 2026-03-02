@@ -10,7 +10,7 @@ describe('$.atomList (Integration)', () => {
     const $container = $('<div>').appendTo(document.body);
 
     $container.atomList(list, {
-      key: (item) => item,
+      key: (item: string) => item,
       render: (item) => `<span>${item}</span>`,
       empty: '<p>Empty</p>',
     });
@@ -76,7 +76,7 @@ describe('$.atomList (Integration)', () => {
     const $ul = $('<ul>').appendTo(document.body);
 
     $ul.atomList(items, {
-      key: (i) => i,
+      key: (i: number) => i,
       render: (i) => `<li>${i}</li>`,
     });
 
@@ -276,7 +276,7 @@ describe('$.atomList (Integration)', () => {
     const $container = $('<ul>').appendTo(document.body);
 
     $container.atomList(items, {
-      key: (item) => item,
+      key: (item: number) => item,
       render: (item) => `<li><!-- comment -->Item ${item}</li>`,
     });
 
@@ -338,7 +338,7 @@ describe('$.atomList (Integration)', () => {
     let render1Count = 0;
 
     $container.atomList(list1, {
-      key: (i) => i,
+      key: (i: number) => i,
       render: (i) => {
         render1Count++;
         return `<li>${i}</li>`;
@@ -350,7 +350,7 @@ describe('$.atomList (Integration)', () => {
 
     // Second atomList call on the same container
     $container.atomList(list2, {
-      key: (i) => i,
+      key: (i: string) => i,
       render: (i) => `<li>${i}</li>`,
     });
 
@@ -411,5 +411,40 @@ describe('$.atomList (Integration)', () => {
     await new Promise((r) => setTimeout(r, 10));
 
     $container.remove();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Shallow Copy 
+  // ---------------------------------------------------------------------------
+
+  it('should re-render when an item is shallow-copied after deep mutation (Demonstrating shallowEqual issue)', async () => {
+    // This test demonstrates that `shallowEqual` prevents re-rendering when
+    // an item is shallow-copied (`{...item}`) but a nested property is mutated.
+    // Because the top-level references remain the same, `shallowEqual` returns true.
+    // By providing a custom `isEqual` function, we force re-render.
+    const items = $.atom([{ id: 1, nested: { val: 1 } }]);
+    const $ul = $('<ul>').appendTo(document.body);
+
+    $ul.atomList(items, {
+      key: 'id',
+      render: (item) => `<li id="item-${item.id}">${item.nested.val}</li>`,
+      isEqual: () => false, // Force re-render on any new reference
+    });
+
+    await $.nextTick();
+    expect($ul.find('li').text()).toBe('1');
+
+    // 1. Mutate nested property
+    const item = items.value[0]!;
+    item.nested.val = 2;
+    // 2. Shallow copy the array and the item
+    items.value = [{ ...item }];
+    await $.nextTick();
+
+    // The atomList should re-render it because oldItem !== item
+    // AND `isEqual` returns false, so `isSame === false`.
+    expect($ul.find('li').text()).toBe('2');
+
+    $ul.remove();
   });
 });

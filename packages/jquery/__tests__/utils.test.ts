@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import $ from '../src/index'; // Register plugins ($.atom)
-import { sanitizeHtml } from '../src/sanitize';
+import { sanitizeHtml } from '../src/utils/sanitize';
 import { getLIS, getSelector, isReactive, shallowEqual } from '../src/utils';
 
 describe('Utils', () => {

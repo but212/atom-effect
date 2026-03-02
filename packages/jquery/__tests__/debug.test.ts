@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LOG_PREFIXES } from '../src/constants';
-import { debug } from '../src/debug';
+import { debug } from '../src/utils/debug';
 
 describe('Debug Module', () => {
   const logSpy = vi.fn();
