@@ -1,9 +1,9 @@
 import { effect, type ReadonlyAtom, untracked } from '@but212/atom-effect';
 import { ERROR_MESSAGES, LOG_PREFIXES } from '../constants';
-import { debug } from '../utils/debug';
 import { registry } from '../core/registry';
 import type { ReactiveValue } from '../types';
 import { isReactive } from '../utils';
+import { debug } from '../utils/debug';
 
 // ============================================================================
 // Debug type

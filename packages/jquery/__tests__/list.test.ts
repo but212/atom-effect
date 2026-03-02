@@ -414,7 +414,7 @@ describe('$.atomList (Integration)', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // Shallow Copy 
+  // Shallow Copy
   // ---------------------------------------------------------------------------
 
   it('should re-render when an item is shallow-copied after deep mutation (Demonstrating shallowEqual issue)', async () => {

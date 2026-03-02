@@ -1,9 +1,7 @@
 import { effect, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
 import { ERROR_MESSAGES, LOG_PREFIXES } from '../constants';
-import { debug } from '../utils/debug';
 import { registry } from '../core/registry';
-import { sanitizeHtml } from '../utils/sanitize';
 import type {
   EffectObject,
   ListItemEntry,
@@ -14,6 +12,8 @@ import type {
   ReadonlyAtom,
 } from '../types';
 import { getLIS, getSelector, hasOwn, shallowEqual } from '../utils';
+import { debug } from '../utils/debug';
+import { sanitizeHtml } from '../utils/sanitize';
 
 // ============================================================================
 // Helpers

@@ -1,5 +1,6 @@
 import { computed, effect, isAtom, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
+import { applyInputBinding } from '../bindings/input-binding';
 import {
   DANGEROUS_PROPS,
   ERROR_MESSAGES,
@@ -7,9 +8,7 @@ import {
   URL_PROPS,
   VALID_INPUT_TAGS,
 } from '../constants';
-import { debug } from '../utils/debug';
 import { type BindingDebugType, registerReactiveEffect } from '../core/effect-factory';
-import { applyInputBinding } from '../bindings/input-binding';
 import { INTERNAL_HANDLER } from '../core/jquery-patch';
 import { registry } from '../core/registry';
 import type {
@@ -21,11 +20,12 @@ import type {
   ValOptions,
   WritableAtom,
 } from '../types';
+import { debug } from '../utils/debug';
 
 export type { BindingContext };
 
-import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '../utils/sanitize';
 import { hasOwn } from '../utils';
+import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '../utils/sanitize';
 
 // Cache for CSS property camelization to avoid repeated regex overhead.
 // Uses Map instead of a plain object to avoid prototype pollution risk and
