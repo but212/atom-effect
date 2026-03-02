@@ -31,12 +31,10 @@ export function syncDependencies(
       // Re-link: reclaim subscription from previous set
       nextLink.unsub = existingUnsub;
       parked.delete(node);
-    } else {
+    } else if (!nextLink.unsub) {
       // New link: subscribe afresh
       // Protect against double-subscription if unsub is somehow already set
-      if (!nextLink.unsub) {
-        nextLink.unsub = node.subscribe(tracker);
-      }
+      nextLink.unsub = node.subscribe(tracker);
     }
   }
 
