@@ -54,8 +54,10 @@
     "directory": "packages/jquery"
   },
   "peerDependencies": {
-    "@but212/atom-effect": "workspace:*",
     "jquery": ">=3.0.0"
+  },
+  "dependencies": {
+    "@but212/atom-effect": "workspace:*"
   },
   "devDependencies": {
     "@but212/atom-effect": "workspace:*",

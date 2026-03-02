@@ -15,11 +15,10 @@ export default defineConfig({
         format === 'umd' ? 'atom-effect-jquery.min.js' : `index.${format === 'es' ? 'mjs' : 'cjs'}`,
     },
     rollupOptions: {
-      external: ['jquery', '@but212/atom-effect'],
+      external: ['jquery'],
       output: {
         globals: {
           jquery: 'jQuery',
-          '@but212/atom-effect': 'AtomEffect',
         },
         exports: 'named',
       },
