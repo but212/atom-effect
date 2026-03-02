@@ -12,7 +12,7 @@
 #### Changed
 
 - **Performance**: Implemented "Deps-Stable Skip" to achieve zero-allocation O(1) performance when dependencies do not change.
-- **Performance**: Resolved severely degraded performance (O(N^2) cliff) in complex dependency graphs, rocketing Fan-In speed by over 3,000%.
+- **Performance**: Resolved severely degraded performance (O(N^2) cliff) in complex dependency graphs.
 - **Performance**: Applied extensive engine-level micro-optimizations (array reuse, duck-typing hints) to lower GC pressure and improve JIT compiler execution.
 - **Types**: Simplified generic typings and removed redundant defensive type-casting on critical hot paths.
 
