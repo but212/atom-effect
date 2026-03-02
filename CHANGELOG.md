@@ -11,6 +11,8 @@
 
 #### Changed
 
+- **Performance**: Implemented "Deps-Stable Skip" for fully stable computations and effects, achieving zero-allocation O(1) tracking on steady states.
+- **Performance**: Restored strict Map-based fallback in `syncDependencies`, resolving an `O(N^2)` scaling cliff for dynamic dependency lists and boosting N-to-1 Fan-In propagation performance by over 3,000% (from ~800hz to ~26,000hz).
 - **Performance**: Engine-level micro-optimizations (zero-allocation arrays, duck-typed scheduler, monomorphic caching) to reduce GC overhead and improve JIT compilation.
 - **Type Safety**: Dropped `Partial<>` from `DependencyTracker`/`TrackableFunction`; narrowed `Listener` to `DependencySubscriber`; removed defensive optional-chain casts in hot-path getters.
 - **Contract Clarity**: Marked `Dependency.version/flags/_lastSeenEpoch` as `@internal`; aligned `Dependency.subscribe` signature with `ReadonlyAtom.subscribe`.

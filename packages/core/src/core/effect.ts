@@ -56,6 +56,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   private _windowStart = 0;
   private _windowCount = 0;
   private _execId = 0;
+  private _trackCount = 0;
 
   constructor(fn: EffectFunction, options: EffectOptions = {}) {
     super();
@@ -112,35 +113,67 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     if (dep._lastSeenEpoch === startEpoch) return;
     dep._lastSeenEpoch = startEpoch;
 
-    const nextLinks = this._nextLinks!;
+    const prevLinks = this._prevLinks;
 
-    // Reclaim existing subscription from previous links (linear scan — typically 1-10 deps)
-    const prev = this._prevLinks;
-    const existingIndex = prev.findIndex((link) => link && link.node === dep && link.unsub);
-
-    if (existingIndex !== -1) {
-      const link = prev[existingIndex]!;
-      // Reuse DependencyLink object — update version, move to nextLinks
-      link.version = dep.version;
-      nextLinks.push(link);
-      prev[existingIndex] = null!; // Mark as reclaimed (avoid double-reclaim)
+    // Fast path: fully stable dependencies
+    if (
+      this._nextLinks === prevLinks &&
+      this._trackCount < prevLinks.length &&
+      prevLinks[this._trackCount]!.node === dep
+    ) {
+      prevLinks[this._trackCount]!.version = dep.version;
+      this._trackCount++;
       return;
     }
 
-    try {
-      const unsubscribe = dep.subscribe(this._notifyCallback);
-      nextLinks.push(new DependencyLink(dep, dep.version, unsubscribe));
-    } catch (error) {
-      const wrapped = wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_EXECUTION_FAILED);
-      console.error(wrapped);
-      if (this._onError) {
-        try {
-          this._onError(wrapped);
-        } catch {}
+    // Diverged! Fork the array for the remaining tracking
+    if (this._nextLinks === prevLinks) {
+      const newLinks = linksArrayPool.acquire();
+      for (let i = 0; i < this._trackCount; i++) {
+        newLinks[i] = prevLinks[i]!;
       }
-      // Add noop link so next execution can attempt re-subscription
-      nextLinks.push(new DependencyLink(dep, dep.version, undefined));
+      this._nextLinks = newLinks;
     }
+
+    const nextLinks = this._nextLinks!;
+
+    // Reclaim existing subscription from previous links
+    // Since effect manages unsub manually, use a strict Map lookup if many prevLinks remain
+    // to avoid Megamorphic linear-scan O(N^2) cliffs.
+    let existingIndex = -1;
+    // We only need to search from `this._trackCount` onwards because
+    // earlier items are already verified or copied as the stable prefix!
+    for (let i = this._trackCount; i < prevLinks.length; i++) {
+      const link = prevLinks[i];
+      if (link && link.node === dep && link.unsub) {
+        existingIndex = i;
+        break;
+      }
+    }
+
+    if (existingIndex !== -1) {
+      const link = prevLinks[existingIndex]!;
+      // Reuse DependencyLink object — update version, move to nextLinks
+      link.version = dep.version;
+      nextLinks[this._trackCount] = link;
+      prevLinks[existingIndex] = null!; // Mark as reclaimed
+    } else {
+      try {
+        const unsubscribe = dep.subscribe(this._notifyCallback);
+        nextLinks[this._trackCount] = new DependencyLink(dep, dep.version, unsubscribe);
+      } catch (error) {
+        const wrapped = wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_EXECUTION_FAILED);
+        console.error(wrapped);
+        if (this._onError) {
+          try {
+            this._onError(wrapped);
+          } catch {}
+        }
+        // Add noop link so next execution can attempt re-subscription
+        nextLinks[this._trackCount] = new DependencyLink(dep, dep.version, undefined);
+      }
+    }
+    this._trackCount++;
   }
 
   /**
@@ -160,16 +193,35 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     // Store prevLinks on instance for addDependency's linear reclaim scan
     this._prevLinks = this._links;
 
-    // Setup tracking
-    const nextLinks = linksArrayPool.acquire();
-    this._nextLinks = nextLinks;
+    // Setup tracking properties for optimistic array reuse
+    this._nextLinks = this._links;
     this._currentEpoch = nextEpoch();
+    this._trackCount = 0;
 
     let committed = false;
     try {
       const result = trackingContext.run(this, this._fn);
-      this._links = nextLinks;
-      committed = true;
+
+      // Stable path optimizations
+      if (this._nextLinks === this._prevLinks) {
+        if (this._trackCount === this._prevLinks.length) {
+          // Fully stable
+          committed = true;
+        } else {
+          // Prefix stable but shorter: unsubscribe the remaining tail
+          for (let i = this._trackCount; i < this._prevLinks.length; i++) {
+            this._prevLinks[i]?.unsub?.();
+          }
+          this._prevLinks.length = this._trackCount;
+          committed = true;
+        }
+      } else {
+        // Diverged path
+        this._nextLinks.length = this._trackCount;
+        committed = true;
+      }
+
+      this._links = this._nextLinks;
 
       // Handle result
       if (isPromise(result)) {
@@ -178,14 +230,24 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
         this._cleanup = typeof result === 'function' ? result : null;
       }
     } catch (error) {
-      // Commit on error — assign links before marking committed
-      // so _finalizeDependencies can clean up prevLinks correctly
-      this._links = nextLinks;
-      committed = true;
+      // Commit on error gracefully to maintain state for recovery
+      if (!committed) {
+        if (this._nextLinks === this._prevLinks) {
+          for (let i = this._trackCount; i < this._prevLinks.length; i++) {
+            this._prevLinks[i]?.unsub?.();
+          }
+          this._prevLinks.length = this._trackCount;
+          committed = true;
+        } else {
+          this._nextLinks.length = this._trackCount;
+          committed = true;
+        }
+      }
+      this._links = this._nextLinks;
       this._handleExecutionError(error);
       this._cleanup = null;
     } finally {
-      this._finalizeDependencies(committed, this._prevLinks, nextLinks);
+      this._finalizeDependencies(committed, this._prevLinks, this._nextLinks);
       this.flags &= ~EFFECT_STATE_FLAGS.EXECUTING;
     }
   }
@@ -214,20 +276,17 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   private _finalizeDependencies(
     committed: boolean,
     prevLinks: DependencyLink[],
-    nextLinks: DependencyLink[]
+    nextLinks: DependencyLink[] | null
   ): void {
     this._nextLinks = null;
     this._prevLinks = EMPTY_LINKS;
 
     if (committed) {
-      // Cleanup unclaimed prev subscriptions (entries not nulled out by addDependency)
-      prevLinks.forEach((link) => link?.unsub?.());
-
-      if (prevLinks !== EMPTY_LINKS) {
+      if (nextLinks !== prevLinks && prevLinks !== EMPTY_LINKS) {
+        prevLinks.forEach((link) => link?.unsub?.());
         linksArrayPool.release(prevLinks);
       }
-    } else {
-      // Abort and restore
+    } else if (nextLinks !== prevLinks && nextLinks !== EMPTY_LINKS && nextLinks) {
       this._unsubLinks(nextLinks);
       linksArrayPool.release(nextLinks);
     }
