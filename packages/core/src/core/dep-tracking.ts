@@ -10,37 +10,39 @@ export function syncDependencies(
   prevLinks: DependencyLink[],
   tracker: Subscriber
 ): void {
+  // Park: collect previous subscriptions into a local Map
+  const parked = new Map<Dependency, () => void>();
+  for (let i = 0; i < prevLinks.length; i++) {
+    const link = prevLinks[i];
+    if (link?.unsub) {
+      parked.set(link.node, link.unsub);
+    }
+  }
+
   // Reclaim or subscribe
   for (let i = 0; i < nextLinks.length; i++) {
     const nextLink = nextLinks[i];
     if (!nextLink) continue;
 
     const node = nextLink.node;
-    let reclaimed = false;
+    const existingUnsub = parked.get(node);
 
-    // Linear scan for previous link (Zero-allocation Map)
-    for (let j = 0; j < prevLinks.length; j++) {
-      const prevLink = prevLinks[j];
-      if (prevLink && prevLink.node === node && prevLink.unsub) {
-        nextLink.unsub = prevLink.unsub;
-        prevLinks[j] = null!; // Mark as reclaimed
-        reclaimed = true;
-        break;
-      }
-    }
-
-    if (!reclaimed) {
+    if (existingUnsub !== undefined) {
+      // Re-link: reclaim subscription from previous set
+      nextLink.unsub = existingUnsub;
+      parked.delete(node);
+    } else {
       // New link: subscribe afresh
-      nextLink.unsub = node.subscribe(tracker);
+      // Protect against double-subscription if unsub is somehow already set
+      if (!nextLink.unsub) {
+        nextLink.unsub = node.subscribe(tracker);
+      }
     }
   }
 
   // Cleanup: release unused subscriptions
-  for (let j = 0; j < prevLinks.length; j++) {
-    const prevLink = prevLinks[j];
-    if (prevLink?.unsub) {
-      prevLink.unsub();
-    }
+  for (const unsub of parked.values()) {
+    unsub();
   }
 }
 

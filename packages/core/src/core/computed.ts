@@ -228,11 +228,29 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     if (dep._lastSeenEpoch === this._trackEpoch) return;
     dep._lastSeenEpoch = this._trackEpoch;
 
-    // Resize array if needed
+    // Fast path: fully stable dependencies
+    if (
+      this._trackLinks === this._links &&
+      this._trackCount < this._links.length &&
+      this._links[this._trackCount]!.node === dep
+    ) {
+      this._links[this._trackCount]!.version = dep.version;
+      this._trackCount++;
+      return;
+    }
+
+    // Diverged! Fork the array for the remaining tracking
+    if (this._trackLinks === this._links) {
+      const newLinks = linksArrayPool.acquire();
+      for (let i = 0; i < this._trackCount; i++) {
+        newLinks[i] = this._links[i]!;
+      }
+      this._trackLinks = newLinks;
+    }
+
+    // Add the new dependency
     if (this._trackCount < this._trackLinks.length) {
-      const link = this._trackLinks[this._trackCount]!;
-      link.node = dep;
-      link.version = dep.version;
+      this._trackLinks[this._trackCount] = new DependencyLink(dep, dep.version);
     } else {
       this._trackLinks.push(new DependencyLink(dep, dep.version));
     }
@@ -245,7 +263,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
 
     const prevLinks = this._links;
     this._trackEpoch = nextEpoch();
-    this._trackLinks = linksArrayPool.acquire();
+    this._trackLinks = prevLinks; // Optimistic reuse
     this._trackCount = 0;
 
     let committed = false;
@@ -253,11 +271,26 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       // Execute function
       const result = trackingContext.run(this, this._fn);
 
-      // Inline _commitDeps
-      this._trackLinks.length = this._trackCount;
-      syncDependencies(this._trackLinks, prevLinks, this);
-      this._links = this._trackLinks;
-      committed = true;
+      // Stable path optimizations
+      if (this._trackLinks === prevLinks) {
+        if (this._trackCount === prevLinks.length) {
+          // Fully stable: do nothing
+          committed = true;
+        } else {
+          // Prefix stable but shorter: unsubscribe the remaining tail
+          for (let i = this._trackCount; i < prevLinks.length; i++) {
+            prevLinks[i]!.unsub?.();
+          }
+          prevLinks.length = this._trackCount;
+          committed = true;
+        }
+      } else {
+        // Diverged path: run syncDependencies with Map fallback for the new array
+        this._trackLinks.length = this._trackCount;
+        syncDependencies(this._trackLinks, prevLinks, this);
+        this._links = this._trackLinks;
+        committed = true;
+      }
 
       // Handle Result
       if (isPromise(result)) {
@@ -266,13 +299,21 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
         this._finalizeResolution(result);
       }
     } catch (e) {
-      // Commit dependencies on error
+      // Commit dependencies on error gracefully
       if (!committed) {
         try {
-          this._trackLinks.length = this._trackCount;
-          syncDependencies(this._trackLinks, prevLinks, this);
-          this._links = this._trackLinks;
-          committed = true;
+          if (this._trackLinks === prevLinks) {
+            for (let i = this._trackCount; i < prevLinks.length; i++) {
+              prevLinks[i]!.unsub?.();
+            }
+            prevLinks.length = this._trackCount;
+            committed = true;
+          } else {
+            this._trackLinks.length = this._trackCount;
+            syncDependencies(this._trackLinks, prevLinks, this);
+            this._links = this._trackLinks;
+            committed = true;
+          }
         } catch (commitErr) {
           if (IS_DEV) {
             console.warn('[atom-effect] _commitDeps failed during error recovery:', commitErr);
@@ -281,10 +322,12 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       }
       this._handleError(e as Error, ERROR_MESSAGES.COMPUTED_COMPUTATION_FAILED, true);
     } finally {
-      // Release pool
-      if (committed && prevLinks !== EMPTY_LINKS) {
-        linksArrayPool.release(prevLinks);
-      } else if (!committed) {
+      // Pool Release
+      if (committed) {
+        if (this._links !== prevLinks && prevLinks !== EMPTY_LINKS) {
+          linksArrayPool.release(prevLinks);
+        }
+      } else if (this._trackLinks !== prevLinks && this._trackLinks !== EMPTY_LINKS) {
         linksArrayPool.release(this._trackLinks);
       }
 
