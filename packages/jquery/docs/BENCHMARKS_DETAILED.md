@@ -1,7 +1,7 @@
 # Benchmark Results - Detailed (jQuery Bindings)
 
-**Last Updated**: 2026-02-23
-**Version**: v0.22.2
+**Last Updated**: 2026-03-02
+**Version**: v0.23.0
 **Environment**:
 
 - **Node.js**: v20.x
@@ -15,106 +15,106 @@
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Create 100 text bindings | 123 | 8.6874 | 19.3341 |
-| Update text propagation (100el × 50) | 136 | 8.1561 | 12.5412 |
-| Text binding with formatter (100el × 50) | 134 | 8.2192 | 13.8343 |
+| Create 100 text bindings | 124 | 8.0108 | 21.6031 |
+| Update text propagation (100el × 50) | 137 | 7.2955 | 12.6882 |
+| Text binding with formatter (100el × 50) | 133 | 7.5110 | 21.6936 |
 
 ### atomHtml Binding
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Create 100 html bindings | 66 | 15.6171 | 22.3024 |
-| Update html propagation (100el × 50) | 69 | 15.3514 | 21.8383 |
+| Create 100 html bindings | 64 | 15.4262 | 35.8189 |
+| Update html propagation (100el × 50) | 67 | 14.9130 | 31.0772 |
 
 ### atomClass Binding
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Create 100 class bindings | 157 | 7.0969 | 9.6191 |
-| Toggle class (100el × 100) | 156 | 6.1783 | 10.8227 |
+| Create 100 class bindings | 155 | 6.4360 | 10.1864 |
+| Toggle class (100el × 100) | 152 | 6.5400 | 16.2827 |
 
 ### atomCss Binding
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Create 100 css bindings | 134 | 8.5201 | 9.4834 |
-| Update css (100el × 100) | 137 | 8.1300 | 9.5752 |
+| Create 100 css bindings | 133 | 7.5081 | 10.7570 |
+| Update css (100el × 100) | 134 | 7.4078 | 12.2815 |
 
 ### atomAttr Binding
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Create + update attr (100el × 100) | 139 | 7.7974 | 14.3531 |
+| Create + update attr (100el × 100) | 138 | 7.2028 | 19.9600 |
 
 ### atomProp Binding
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Create + update prop (100el × 100) | 144 | 7.7466 | 12.7549 |
+| Create + update prop (100el × 100) | 147 | 6.7867 | 16.7909 |
 
 ### atomShow / atomHide Binding
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Show toggle (100el × 100) | 75 | 13.7473 | 20.1910 |
-| Hide toggle (100el × 100) | 76 | 13.5278 | 19.2196 |
+| Show toggle (100el × 100) | 73 | 13.6352 | 22.2196 |
+| Hide toggle (100el × 100) | 74 | 13.3655 | 33.8135 |
 
 ### atomBind (unified)
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Create composite (text+class+css+show) × 100 | 91 | 11.6315 | 14.8285 |
-| Update composite (100el × 50) | 92 | 11.5919 | 15.4410 |
+| Create composite (text+class+css+show) × 100 | 91 | 10.9358 | 28.2141 |
+| Update composite (100el × 50) | 92 | 10.7845 | 23.4913 |
 
 ### sanitizeHtml
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Clean small | 833,884 | 0.0012 | 0.0020 |
-| Clean large | 42,334 | 0.0234 | 0.0315 |
-| Single dangerous tag | 639,357 | 0.0016 | 0.0021 |
-| Multiple dangerous tags | 330,712 | 0.0030 | 0.0050 |
-| Event-handler attrs | 151,264 | 0.0064 | 0.0149 |
-| Mixed attr profile | 150,605 | 0.0064 | 0.0148 |
-| 100 × clean small | 9,519 | 0.1046 | 0.1245 |
-| 100 × mixed attr profile | 1,579 | 0.6338 | 0.7905 |
-| 100 × multi dangerous tags | 3,484 | 0.2902 | 0.3488 |
+| Clean small | 865,538 | 0.0012 | 0.0096 |
+| Clean large | 42,321 | 0.0236 | 0.0460 |
+| Single dangerous tag | 642,585 | 0.0016 | 0.0104 |
+| Multiple dangerous tags | 326,009 | 0.0031 | 0.0124 |
+| Event-handler attrs | 150,366 | 0.0067 | 0.0220 |
+| Mixed attr profile | 152,387 | 0.0066 | 0.0175 |
+| 100 × clean small | 10,083 | 0.0992 | 0.1824 |
+| 100 × mixed attr profile | 1,575 | 0.6349 | 0.9041 |
+| 100 × multi dangerous tags | 3,528 | 0.2834 | 0.4814 |
 
 ### atomList
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Render 100 items | 105 | 9.6090 | 23.0928 |
-| Render 500 items | 22 | 44.8550 | 68.9342 |
-| Render 1000 items | 11 | 91.9219 | 121.4200 |
-| Append 10 items to 100 | 112 | 9.4430 | 15.1255 |
-| Remove 10 items from 100 | 114 | 9.4058 | 10.9807 |
-| Full shuffle 100 items | 117 | 8.8766 | 10.0514 |
-| Update 10 of 100 items content | 118 | 8.8288 | 10.4639 |
-| Render 100 with bind callback | 51 | 19.4092 | 35.4087 |
+| Render 100 items | 254 | 3.9324 | 11.1525 |
+| Render 500 items | 61 | 16.2799 | 32.3712 |
+| Render 1000 items | 30 | 32.9649 | 52.3413 |
+| Append 10 items to 100 | 279 | 3.5842 | 9.4385 |
+| Remove 10 items from 100 | 284 | 3.5144 | 9.9272 |
+| Full shuffle 100 items | 284 | 3.5096 | 9.0301 |
+| Update 10 of 100 items content | 289 | 3.4512 | 10.2309 |
+| Render 100 with bind callback | 51 | 19.4522 | 34.3418 |
 
 ### atomVal Binding
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Create 100 input val bindings | 45 | 21.8966 | 42.5437 |
-| Atom → DOM propagation (100 × 100) | 48 | 21.4250 | 22.2253 |
-| DOM → Atom propagation (100 events) | 901 | 1.0843 | 2.1711 |
+| Create 100 input val bindings | 43 | 22.8860 | 40.8136 |
+| Atom → DOM propagation (100 × 100) | 46 | 21.4890 | 25.4605 |
+| DOM → Atom propagation (100 events) | 903 | 1.1072 | 2.1648 |
 
 ### atomChecked Binding
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Create 100 checkbox bindings | 78 | 13.1468 | 19.5703 |
-| Toggle checkbox (atom → DOM) × 100 | 78 | 13.4456 | 14.1478 |
-| Toggle checkbox via DOM event × 100 | 1,107 | 0.8839 | 1.9778 |
+| Create 100 checkbox bindings | 73 | 13.5534 | 21.0946 |
+| Toggle checkbox (atom → DOM) × 100 | 74 | 13.3466 | 15.2351 |
+| Toggle checkbox via DOM event × 100 | 1,075 | 0.9298 | 1.9393 |
 
 ### atomVal with Debounce
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Without debounce (baseline) | 962 | 1.0177 | 2.1706 |
-| With debounce option | 928 | 1.0517 | 2.0656 |
+| Without debounce (baseline) | 984 | 1.0160 | 2.0687 |
+| With debounce option | 948 | 1.0548 | 2.1004 |
 
 ## 2. Macro-Benchmarks
 
@@ -122,34 +122,34 @@
 
 | Scenario | ops/sec | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Add 50 todos (atomList + render) | 4,510 | 0.2195 | 1.3816 |
-| Toggle 50 todos (update callback) | 142 | 8.0711 | 15.9853 |
-| Filter switch (computed → atomList) | 112 | 9.3578 | 31.1479 |
-| Full workflow: add → toggle → filter → delete | 2,403 | 0.3990 | 2.0262 |
+| Add 50 todos (atomList + render) | 4,506 | 0.2219 | 1.2298 |
+| Toggle 50 todos (update callback) | 340 | 2.9362 | 8.5252 |
+| Filter switch (computed → atomList) | 318 | 3.1396 | 8.1117 |
+| Full workflow: add → toggle → filter → delete | 2,388 | 0.4186 | 2.0483 |
 
 ### Todo App — Stats with Effects
 
 | Scenario | ops/sec | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Todo stats auto-update (add 100 items) | 1,585 | 0.5883 | 2.1786 |
+| Todo stats auto-update (add 100 items) | 1,620 | 0.6170 | 1.9577 |
 
 ### Dashboard — Multi-Widget Binding
 
 | Scenario | ops/sec | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| 20 widgets with atomText + atomCss (creation) | 197 | 5.5306 | 13.2639 |
-| 20 widgets batch update (50 rounds) | 55 | 18.0576 | 22.9207 |
+| 20 widgets with atomText + atomCss (creation) | 202 | 4.9358 | 13.3935 |
+| 20 widgets batch update (50 rounds) | 56 | 17.6974 | 22.4105 |
 
 ### Dashboard — Mount/Unmount Cycles
 
 | Scenario | ops/sec | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Mount and unmount 20 components (10 cycles) | 24 | 42.7046 | 48.5798 |
+| Mount and unmount 20 components (10 cycles) | 24 | 41.6593 | 62.8244 |
 
 ### Dashboard — Computed → DOM Chain
 
 | Scenario | ops/sec | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Deep computed chain (5 levels) → atomText (20 widgets) | 634 | 1.4463 | 4.0631 |
-| Fan-out: 1 atom → 20 computed → 20 DOM bindings | 650 | 1.4231 | 3.8226 |
-| Fan-in: 20 atoms → 1 computed → 1 DOM binding | 1,187 | 0.8068 | 1.7042 |
+| Deep computed chain (5 levels) → atomText (20 widgets) | 635 | 1.5740 | 4.0533 |
+| Fan-out: 1 atom → 20 computed → 20 DOM bindings | 661 | 1.5124 | 3.9904 |
+| Fan-in: 20 atoms → 1 computed → 1 DOM binding | 1,496 | 0.6684 | 1.5628 |
