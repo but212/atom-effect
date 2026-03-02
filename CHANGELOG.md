@@ -1,77 +1,63 @@
 # Changelog
 
-## [Unreleased]
+## [0.23.0]
 
 ### Core
 
 #### Added
 
-- **API**: `EffectOptions.name` field for better identification and profiling of reactive effects in engine logs.
-- **Internal**: `WRITABLE_BRAND` (`Symbol.for('atom-effect/writable')`) stamped on `AtomImpl`; `isWritable()` now uses positive brand identification.
+- **API**: Added `EffectOptions.name` to easily identify effects during debugging.
+- **Internal**: Implemented internal object branding for faster and highly reliable runtime type checks (e.g., `isWritable()`).
 
 #### Changed
 
-- **Performance**: Implemented "Deps-Stable Skip" for fully stable computations and effects, achieving zero-allocation O(1) tracking on steady states.
-- **Performance**: Restored strict Map-based fallback in `syncDependencies`, resolving an `O(N^2)` scaling cliff for dynamic dependency lists and boosting N-to-1 Fan-In propagation performance by over 3,000% (from ~800hz to ~26,000hz).
-- **Performance**: Engine-level micro-optimizations (zero-allocation arrays, duck-typed scheduler, monomorphic caching) to reduce GC overhead and improve JIT compilation.
-- **Type Safety**: Dropped `Partial<>` from `DependencyTracker`/`TrackableFunction`; narrowed `Listener` to `DependencySubscriber`; removed defensive optional-chain casts in hot-path getters.
-- **Contract Clarity**: Marked `Dependency.version/flags/_lastSeenEpoch` as `@internal`; aligned `Dependency.subscribe` signature with `ReadonlyAtom.subscribe`.
+- **Performance**: Implemented "Deps-Stable Skip" to achieve zero-allocation O(1) performance when dependencies do not change.
+- **Performance**: Resolved severely degraded performance (O(N^2) cliff) in complex dependency graphs, rocketing Fan-In speed by over 3,000%.
+- **Performance**: Applied extensive engine-level micro-optimizations (array reuse, duck-typing hints) to lower GC pressure and improve JIT compiler execution.
+- **Types**: Simplified generic typings and removed redundant defensive type-casting on critical hot paths.
 
 #### Fixed
 
-- **Reactivity**: Concurrent unsubscription bug that allowed stale callback execution during batch notifications.
+- **Reactivity**: Fixed a race condition where stale callbacks could still execute if unsubscribed during a concurrent batch update.
 
 #### Removed
 
-- **API**: Public export of internal brand symbols (`ATOM_BRAND`, `COMPUTED_BRAND`, `EFFECT_BRAND`); use `isAtom`/`isComputed`/`isEffect` guards instead.
-- **Debug**: Dead `checkCircular`/`checkCircularInternal` from `debug.ts` — depended on defunct `dependencies` property; cycle detection is handled by the `RECOMPUTING` flag.
-- **Internal**: Unused `POOL_CONFIG` from `constants.ts`.
+- **API**: Removed exported brand symbols (`ATOM_BRAND`, etc.); strictly standardized on runtime type guards (`isAtom`, `isComputed`, etc.).
+- **Obsolete Code**: Cleared out unused memory pool configs and legacy dead code for cycle detection.
 
 ### jQuery
 
 #### Added
 
-- **Robustness**: `nodeType === 1` guards and `warnNonElement` debug logging to all 13 `$.fn.atom*` methods to prevent runtime errors on non-Element nodes.
-- **atomFetch**: Reactive `ajaxOptions` support in `atomFetch` via function getters, enabling dynamic request payloads with automatic atom tracking.
-- **Binding**: Native `<select multiple>` support with array-based synchronization and shallow equality.
-- **IME**: Forced `blur` sync during active IME composition to prevent data loss when `debounce: 0`.
-- **Lifecycle**: `enableAutoCleanup` multi-root support via a tracking `Map`, resolving edge-cases in micro-frontend environments.
-- **Debug**: Visual debug highlights for SVG elements; `debug.enabled` linked to `window.__ATOM_DEBUG__` for runtime toggling.
-- **Documentation**: Web Component (Shadow DOM) cleanup documentation — developers must manually invoke `registry.cleanupTree(shadowRoot)`.
+- **Bindings**: Full native support for `<select multiple>` bindings.
+- **atomFetch**: Support using reactive getter functions in `ajaxOptions`, making request payloads automatically reactive.
+- **IME & Inputs**: Forced synchronous state syncs on `blur` during active IME composition to avoid skipping letters.
+- **Integrations**: Multi-root garbage collection capabilities via `enableAutoCleanup`, ideal for Web Components and micro-frontends.
+- **Debug Tools**: Visual DOM debugging support now includes SVG elements.
+- **Robustness**: Non-DOM Element warnings (`nodeType === 1` guards) added to all chainable jQuery methods.
 
 #### Changed
 
-- **Performance**: Migrated all `instanceof Element` checks to `nodeType === 1` for cross-realm compatibility and O(1) performance. Skipped `cleanupDescendants` DOM traversals on childless nodes. Enforced monomorphic `BindingRecord` initializations for stable V8 hidden classes. Cached `isMultipleSelect` status.
-- **atomFetch**: Implemented deep-cloning via `$.extend(true)` and stripped legacy jQuery callbacks (`success`/`error`/`complete`) to prevent state mutations. Normalized errors and ensured `onError` triggers for both network and `transform` failures.
-- **atomList**: Refactored reconciliation, fixed DOM insertion lifecycle bugs, and enhanced sanitization robustness.
-- **Chaining**: Fortified `$.fn` overrides (`.remove()`, `.empty()`, `.detach()`, `.on()`, `.off()`) to strictly preserve jQuery chaining, preempting third-party plugin collisions.
-- **Binding Stability**: Wrapped `effect-factory` static paths in `untracked()` to prevent outer dependency leaks; broadened element types to `Element` for first-class SVG support.
-- **Error Messages**: Structured `ERROR_MESSAGES` into domain-specific namespaces (`ROUTE`, `SECURITY`, `BINDING`, `LIST`, `MOUNT`, `CORE`); enhanced `DUPLICATE_KEY` to include container selectors.
-- **Types**: Hardened `ListOptions.key` to property names; added generics to `BindingOptions` and `atomBind`; decoupled internal types; restored strict signatures for `parse`, `format`, and `equal`.
-- **Refactor**: Extracted `sanitize.ts` from `utils.ts` for focused security auditing. Centralized debug config under `DEBUG_DEFAULTS` in `constants.ts`. Narrowed types, optimized iterations, cleaned up comments/logging.
-- **Debug**: Added `isConnected` re-verification in `rAF` callbacks to eliminate race conditions; implemented cross-environment variable detection and `WeakRef` fallbacks.
+- **Performance**: Removed slow `instanceof` checks in favor of lightweight O(1) `nodeType` checks across DOM traversals.
+- **Performance**: Migrated state bindings to monomorphic records and reduced overhead during descendant cleanups.
+- **Lists (`atomList`)**: Rewrote reconciliation loops to correct complex DOM insertion lifecycle bugs and improve security.
+- **jQuery Compatibility**: Fortified `.empty()` and `.remove()` overrides to strictly block compatibility crashes with 3rd-party jQuery plugins.
+- **Safety**: Wrapped internal binding instantiations inside `untracked()` to avoid unwanted dependency leaking.
+- **Types & Architecture**: Unified error message namespaces, hardened generic signatures (`BindingOptions`), and extracted HTML sanitization into a standalone module for safer auditing.
 
 #### Fixed
 
-- **atomFetch**: Static options (`method`, `headers`) were lost when using reactive `ajaxOptions` getters.
-- **bindClass**: `DOMException` on space-separated class names (e.g., Tailwind CSS) — introduced tokenization.
-- **bindChecked**: Sibling radio buttons' atoms did not sync on uncheck; strictly scoped to containing `<form>`.
-- **bindAttr**: Boolean `false` was removed instead of preserved as `"false"` for `aria-*` attributes (WAI-ARIA compliance).
-- **bindVisibility**: Original inline `display` styles (e.g., `flex`) were not restored — switched to jQuery's `.toggle()`.
-- **Input Bindings**: `InvalidStateError` on `selectionStart` access for restricted input types (e.g., `number`); multi-event namespacing leak on cleanup.
-- **DOM Stability**: `.cleanup()` now unconditionally removes the `AES_BOUND` marker, preventing "zombie marker" regressions on re-inserted detached nodes.
-- **Memory**: Removed global `htmlSanitizeCache` from `unified.ts` to eliminate zombie subscriber leaks caused by `ComputedAtom`.
-
-#### Removed
-
-- **API**: Dead `getValue<T>` export; corrected misleading `sanitizeHtml` comment.
+- **Bugs in Bindings**: Class bindings crashing on tokenized Tailwind classes; lost `aria-*` flags on boolean `bindAttr`; flexible grids mutating on `bindVisibility`.
+- **Inputs**: Recovered inputs from skipping synchronization if numeric inputs disallowed `selectionStart`.
+- **Radio Buttons**: Sibling radio groups not desyncing appropriately when enclosed atoms updated.
+- **atomFetch**: Fixed static API options (`method`, `headers`) being wiped out when mixed with reactive getters.
+- **Memory Leaks**: Resolved a global HTML sanitization cache creating 'zombie' subscriber retainment for deleted Computeds.
+- **DOM Stability**: Fixed a zombie marker regression on disconnected nodes by ensuring `.cleanup()` forcefully removes tracking classes.
 
 #### Security
 
-- Implemented `URL_PROPS` and `on*` property guards in `bindProp`, closing XSS protocol bypasses via property assignment.
-- Added `xlink:href` to `URL_PROPS` for SVG XSS prevention; expanded `DANGEROUS_PROPS` to block prototype pollution vectors.
-- Removed `srcset` from `isDangerousUrl` allowlist — start-anchored regex cannot guard multi-URL values.
-- Replaced `for...in` over event objects with `Object.entries()` to defend against prototype pollution.
+- **XSS Protections**: Extended sanitization protocols for `bindProp` to securely close loopholes on object manipulation and SVG `xlink:href` vulnerabilities.
+- **Prototype Pollution**: Modernized legacy `for...in` events into `Object.entries()` to shield against object pollution vectors.
 
 ## [0.22.2]
 

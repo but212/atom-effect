@@ -6,11 +6,11 @@ Comprehensive benchmarking suite for `atom-effect` to measure performance and de
 
 | Category | Key Metric | Value | Context |
 | ---------- | ---------- | ----- | ------- |
-| **Atom** | Read (peek) | 624K ops/sec | Near-native array access speed |
-| **Computed** | Recompute (cached) | 966K ops/sec | Cached reads are nearly free |
-| **Effect** | Re-runs | 1,146K ops/sec | Efficient change propagation |
-| **Real-world** | Todo App (Create 100 items) | 797K ops/sec | Production-ready performance |
-| **Frame Budget** | 100 atom updates | 0.011ms | Well under 16ms budget |
+| **Atom** | Read (peek) | 605K ops/sec | Near-native array access speed |
+| **Computed** | Recompute (cached) | 1,698K ops/sec | Cached reads are nearly free |
+| **Effect** | Re-runs | 1,127K ops/sec | Efficient change propagation |
+| **Real-world** | Todo App (Create 100 items) | 832K ops/sec | Production-ready performance |
+| **Frame Budget** | 100 atom updates | 0.012ms | Well under 16ms budget |
 
 ## Running Benchmarks
 
@@ -97,8 +97,8 @@ Production-like scenarios:
 
 ## Latest Results
 
-**Version**: v0.22.2
-**Last Updated**: 2026-02-23
+**Version**: v0.23.0
+**Last Updated**: 2026-03-02
 **Environment**:
 
 - **Node.js**: v20.x
@@ -110,12 +110,12 @@ Production-like scenarios:
 
 | Benchmark | Result | Analysis |
 | ---------- | ------ | -------- |
-| Atom peek (1000x) | 624K ops/sec | Near-native performance |
-| Computed recompute | 966K ops/sec | Cached reads are virtually free |
-| Effect re-runs (10x) | 1,146K ops/sec | Efficient propagation |
-| Todo App workflow | 183K ops/sec | Production-ready (Complete workflow) |
-| Frame Budget (100 atoms) | 0.011ms | Well under 16ms |
-| Data Grid Sort (1000 rows) | 0.50ms | Real-time filtering |
+| Atom peek (1000x) | 605K ops/sec | Near-native performance |
+| Computed recompute | 1,698K ops/sec | Cached reads are virtually free |
+| Effect re-runs (10x) | 1,127K ops/sec | Efficient propagation |
+| Todo App workflow | 97K ops/sec | Production-ready (Complete workflow) |
+| Frame Budget (100 atoms) | 0.012ms | Well under 16ms |
+| Data Grid Sort (1000 rows) | 0.41ms | Real-time filtering |
 
 ## Contributing Benchmarks
 
