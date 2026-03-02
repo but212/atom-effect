@@ -1,7 +1,7 @@
 import $ from 'jquery';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import '../src/index';
-import type { FetchError } from '../src/types';
+import '../../src/index';
+import type { FetchError } from '../../src/types';
 
 // ---------------------------------------------------------------------------
 // Integration Suite: atomFetch
@@ -272,7 +272,7 @@ describe('$.atomFetch (Reactivity and Atom State)', () => {
       expect(priceEur.value).toBe(120);
 
       // Changing currencyRate does NOT trigger re-fetch because transform runs
-      // after `await xhr` — outside the synchronous tracking window of computed.
+      // after `await xhr` ??outside the synchronous tracking window of computed.
       // This is a known limitation of async computed.
       currencyRate.value = 1.5;
 

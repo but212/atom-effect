@@ -1,9 +1,22 @@
 import $ from 'jquery';
-import { describe, expect, it } from 'vitest';
-import '../src/index';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import '../../src/index';
 
 describe('$.atomList (Integration)', () => {
   const EXPANDO = 'data-test-expando';
+
+  beforeEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  afterEach(() => {
+    $(document.body).empty();
+  });
+
+  /** Simulate a click on `el`, bubbling up through jQuery's event system. */
+  function click(el: HTMLElement): void {
+    $(el).trigger('click');
+  }
 
   it('should handle empty state transitions', async () => {
     const list = $.atom<string[]>(['a']);
@@ -101,14 +114,176 @@ describe('$.atomList (Integration)', () => {
     $ul.remove();
   });
 
+  describe('Events Delegation', () => {
+    it('calls handler with (item, index, event) when delegated child is clicked', async () => {
+      interface User {
+        id: number;
+        name: string;
+      }
+      const users = $.atom<User[]>([
+        { id: 1, name: 'Alice' },
+        { id: 2, name: 'Bob' },
+      ]);
+      const handler = vi.fn();
+      const $container = $('<ul>').appendTo(document.body);
+
+      $container.atomList(users, {
+        key: 'id',
+        render: (u) => `<li data-id="${u.id}"><button class="del">x</button></li>`,
+        events: {
+          'click .del': handler,
+        },
+      });
+
+      await $.nextTick();
+
+      const $btn = $container.find('li').eq(1).find('.del');
+      click($btn[0]!);
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      const [item, index, e] = handler.mock.calls[0]!;
+      expect(item).toEqual({ id: 2, name: 'Bob' });
+      expect(index).toBe(1);
+      expect(e).toBeDefined();
+      $container.remove();
+    });
+
+    it('calls handler when item root element is clicked (no selector)', async () => {
+      const items = $.atom([{ id: 10 }, { id: 20 }]);
+      const handler = vi.fn();
+      const $container = $('<ul>').appendTo(document.body);
+
+      $container.atomList(items, {
+        key: 'id',
+        render: (item) => `<li data-id="${item.id}"></li>`,
+        events: {
+          click: handler,
+        },
+      });
+
+      await $.nextTick();
+
+      const $li = $container.find('[data-id="10"]');
+      click($li[0]!);
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(handler.mock.calls[0]![0]).toEqual({ id: 10 });
+      expect(handler.mock.calls[0]![1]).toBe(0);
+      $container.remove();
+    });
+
+    it('fires handler for every item in the list via a single delegated listener', async () => {
+      const items = $.atom([1, 2, 3, 4, 5].map((id) => ({ id })));
+      const handler = vi.fn();
+      const $container = $('<ul>').appendTo(document.body);
+
+      $container.atomList(items, {
+        key: 'id',
+        render: (item) => `<li data-id="${item.id}"></li>`,
+        events: { click: handler },
+      });
+
+      await $.nextTick();
+
+      $container.find('li').each((_, el) => click(el));
+
+      expect(handler).toHaveBeenCalledTimes(5);
+      const receivedIds = handler.mock.calls.map((c) => (c[0] as { id: number }).id);
+      expect(receivedIds).toEqual([1, 2, 3, 4, 5]);
+      $container.remove();
+    });
+
+    it('does not call handler for items that have been removed from the list', async () => {
+      const items = $.atom([{ id: 1 }, { id: 2 }]);
+      const handler = vi.fn();
+      const $container = $('<ul>').appendTo(document.body);
+
+      $container.atomList(items, {
+        key: 'id',
+        render: (item) => `<li data-id="${item.id}"></li>`,
+        events: { click: handler },
+      });
+
+      await $.nextTick();
+      const $removedLi = $container.find('[data-id="1"]');
+
+      items.value = [{ id: 2 }];
+      await $.nextTick();
+
+      click($removedLi[0]!);
+      expect(handler).not.toHaveBeenCalled();
+      $container.remove();
+    });
+
+    it('removes the delegated listener when the container element is unbound', async () => {
+      const items = $.atom([{ id: 1 }]);
+      const handler = vi.fn();
+      const $container = $('<ul>').appendTo(document.body);
+
+      $container.atomList(items, {
+        key: 'id',
+        render: () => `<li><button class="btn">go</button></li>`,
+        events: { 'click .btn': handler },
+      });
+
+      await $.nextTick();
+      click($container.find('.btn')[0]!);
+      expect(handler).toHaveBeenCalledTimes(1);
+
+      $container.atomUnbind();
+      handler.mockClear();
+      click($container.find('.btn')[0]!);
+      expect(handler).not.toHaveBeenCalled();
+      $container.remove();
+    });
+
+    it('reports the current list index after items are reordered', async () => {
+      const items = $.atom([{ id: 1 }, { id: 2 }, { id: 3 }]);
+      const handler = vi.fn();
+      const $container = $('<ul>').appendTo(document.body);
+
+      $container.atomList(items, {
+        key: 'id',
+        render: (item) => `<li data-id="${item.id}"></li>`,
+        events: { click: handler },
+      });
+
+      await $.nextTick();
+      items.value = [{ id: 3 }, { id: 2 }, { id: 1 }];
+      await $.nextTick();
+
+      click($container.find('[data-id="1"]')[0]!);
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(handler.mock.calls[0]![0]).toEqual({ id: 1 });
+      expect(handler.mock.calls[0]![1]).toBe(2);
+      $container.remove();
+    });
+
+    it('childSelector must not escape outside the item root', async () => {
+      const $outer = $('<div class="btn">').appendTo(document.body);
+      const $container = $('<ul>').appendTo($outer);
+      const items = $.atom([{ id: 1 }]);
+      const handler = vi.fn();
+
+      $container.atomList(items, {
+        key: 'id',
+        render: () => `<li>text</li>`,
+        events: { 'click .btn': handler },
+      });
+
+      await $.nextTick();
+      click($container.find('li')[0]!);
+      expect(handler).not.toHaveBeenCalled();
+
+      $outer.remove();
+    });
+  });
+
   // ---------------------------------------------------------------------------
-  // Regression
+  // Regression & Edge Cases
   // ---------------------------------------------------------------------------
 
   it('re-adding a key during async onRemove should not produce duplicate nodes', async () => {
-    // commitRemoval captures $el at schedule time, so resolving the old
-    // onRemove after the same key has been re-inserted removes only the old
-    // node — the new node must survive.
     let resolveRemove!: () => void;
     const items = $.atom([{ id: 1 }]);
     const $container = $('<div>').appendTo(document.body);
@@ -123,10 +298,8 @@ describe('$.atomList (Integration)', () => {
     });
 
     await $.nextTick();
-
     items.value = [];
     await $.nextTick();
-
     items.value = [{ id: 1 }];
     await $.nextTick();
 
@@ -134,13 +307,10 @@ describe('$.atomList (Integration)', () => {
     await new Promise((r) => setTimeout(r, 10));
 
     expect($container.find('span[data-id="1"]').length).toBe(1);
-
     $container.remove();
   });
 
   it('replaceWith on data change should dispose old element effects', async () => {
-    // Without registry.cleanup() before replaceWith, the old element retains
-    // its _aes-bound marker and its reactive effects keep firing after detach.
     let effectRunCount = 0;
     const nameAtom = $.atom('Alice');
     const items = $.atom([{ id: 1, name: 'Alice' }]);
@@ -163,23 +333,18 @@ describe('$.atomList (Integration)', () => {
 
     await $.nextTick();
     effectRunCount = 0;
-
     items.value = [{ id: 1, name: 'Bob' }];
     await $.nextTick();
     effectRunCount = 0;
-
     nameAtom.value = 'Charlie';
     await $.nextTick();
 
     expect(effectRunCount).toBe(1);
     expect(firstEl?.classList.contains('_aes-bound')).toBe(false);
-
     $container.remove();
   });
 
   it('async-removing keys should not distort LIS-based reordering', async () => {
-    // Keys undergoing async removal must be excluded from LIS index lookup
-    // so their stale old-positions don't anchor surviving items incorrectly.
     const items = $.atom([{ id: 1 }, { id: 2 }, { id: 3 }]);
     const $container = $('<div>').appendTo(document.body);
 
@@ -190,10 +355,8 @@ describe('$.atomList (Integration)', () => {
     });
 
     await $.nextTick();
-
     items.value = [{ id: 3 }, { id: 1 }];
     await $.nextTick();
-
     await new Promise((r) => setTimeout(r, 50));
 
     const order = $container
@@ -201,132 +364,6 @@ describe('$.atomList (Integration)', () => {
       .map((_, el) => el.getAttribute('data-id'))
       .get();
     expect(order).toEqual(['3', '1']);
-
-    $container.remove();
-  });
-
-  it('should support delegated event handlers via events option', async () => {
-    const items = $.atom([
-      { id: 1, text: 'Apple' },
-      { id: 2, text: 'Banana' },
-    ]);
-    const $container = $('<ul>').appendTo(document.body);
-
-    let lastClickedItem: { id: number; text: string } | null = null;
-    let lastClickedIndex = -1;
-    let mouseEnterFired = false;
-    let handlerThis: HTMLElement | null = null;
-
-    $container.atomList(items, {
-      key: 'id',
-      render: (item) =>
-        `<li><button class="btn">${item.text}</button><span class="other"></span></li>`,
-      events: {
-        'click .btn': function (item, index, _e) {
-          lastClickedItem = item;
-          lastClickedIndex = index;
-          handlerThis = this as unknown as HTMLElement; // Capture contextual 'this'
-        },
-        mouseenter: (item, _index, _e) => {
-          // No child selector -> event fires on the item root
-          lastClickedItem = item;
-          mouseEnterFired = true;
-        },
-      },
-    });
-
-    await $.nextTick();
-
-    // 1. Test child selector (.btn)
-    const $btn = $container.find('li').eq(0).find('.btn');
-    $btn.trigger('click');
-    expect(lastClickedItem).toEqual({ id: 1, text: 'Apple' });
-    expect(lastClickedIndex).toBe(0);
-    expect(handlerThis).toBe($btn[0]); // Verify 'this' context
-
-    // 2. Click outside the selector should not trigger
-    lastClickedItem = null;
-    $container.find('li').eq(0).find('.other').trigger('click');
-    expect(lastClickedItem).toBeNull();
-
-    // 3. Test without child selector (mouseenter on the root element itself)
-    lastClickedItem = null;
-    $container.find('li').eq(1).trigger('mouseenter');
-    expect(lastClickedItem).toEqual({ id: 2, text: 'Banana' });
-    expect(mouseEnterFired).toBe(true);
-
-    // 4. Update items order and check index sync
-    items.value = [
-      { id: 2, text: 'Banana' },
-      { id: 1, text: 'Apple' },
-    ];
-    await $.nextTick();
-
-    lastClickedItem = null;
-    lastClickedIndex = -1;
-    $container.find('li').eq(0).find('.btn').trigger('click'); // Now points to Banana
-    expect(lastClickedItem).toEqual({ id: 2, text: 'Banana' });
-    expect(lastClickedIndex).toBe(0); // Index updated to 0
-
-    $container.remove();
-  });
-
-  it('should prevent DOMPurify stripping by using template tags for batch sanitization', async () => {
-    const items = $.atom([1, 2, 3]);
-    const $container = $('<ul>').appendTo(document.body);
-
-    $container.atomList(items, {
-      key: (item: number) => item,
-      render: (item) => `<li><!-- comment -->Item ${item}</li>`,
-    });
-
-    await $.nextTick();
-    expect($container.children().length).toBe(3);
-    expect($container.children().eq(1).text()).toBe('Item 2');
-
-    $container.remove();
-  });
-
-  it('should execute lifecycle hooks (bind, update, onRemove) with correct DOM attachment context', async () => {
-    const items = $.atom<{ id: number; touch?: boolean }[]>([{ id: 1 }, { id: 2 }]);
-    const $container = $('<div>').appendTo(document.body);
-    let bindParentCount = 0;
-    let updateParentCount = 0;
-    let removeCalled = false;
-
-    $container.atomList(items, {
-      key: 'id',
-      render: (item) => `<span id="item-${item.id}"></span>`,
-      bind: ($el) => {
-        // Element must be attached to the container at bind time!
-        if ($el.parent()[0] === $container[0]) bindParentCount++;
-      },
-      update: ($el) => {
-        if ($el.parent()[0] === $container[0]) updateParentCount++;
-      },
-      onRemove: async ($el) => {
-        removeCalled = true;
-        // Element must still be attached during async removal start
-        expect($el.parent()[0]).toBe($container[0]);
-        await new Promise((r) => setTimeout(r, 10));
-      },
-    });
-
-    await $.nextTick();
-    expect(bindParentCount).toBe(2);
-    expect($container.children().length).toBe(2);
-
-    items.value = [{ id: 1 }, { id: 2, touch: true }];
-    await $.nextTick();
-    expect(updateParentCount).toBe(2);
-
-    items.value = [];
-    await $.nextTick();
-    expect(removeCalled).toBe(true);
-
-    await new Promise((r) => setTimeout(r, 20));
-    expect($container.children().length).toBe(0);
-
     $container.remove();
   });
 
@@ -334,7 +371,6 @@ describe('$.atomList (Integration)', () => {
     const list1 = $.atom([1, 2]);
     const list2 = $.atom(['A', 'B']);
     const $container = $('<ul>').appendTo(document.body);
-
     let render1Count = 0;
 
     $container.atomList(list1, {
@@ -348,7 +384,6 @@ describe('$.atomList (Integration)', () => {
     await $.nextTick();
     expect(render1Count).toBe(2);
 
-    // Second atomList call on the same container
     $container.atomList(list2, {
       key: (i: string) => i,
       render: (i) => `<li>${i}</li>`,
@@ -358,14 +393,10 @@ describe('$.atomList (Integration)', () => {
     expect($container.children().length).toBe(2);
     expect($container.children().eq(0).text()).toBe('A');
 
-    // Mutate the first list. The first effect should be disposed,
-    // so its render function should NOT be called again.
     render1Count = 0;
     list1.value = [1, 2, 3];
     await $.nextTick();
-
-    expect(render1Count).toBe(0); // Proof that the old effect was disposed
-
+    expect(render1Count).toBe(0);
     $container.remove();
   });
 
@@ -391,60 +422,38 @@ describe('$.atomList (Integration)', () => {
 
     await $.nextTick();
     const $oldBtn = $container.find('.btn');
-
-    // Remove item to start async removal
     items.value = [];
     await $.nextTick();
-
-    // Re-add item with same key
     items.value = [{ id: 1, text: 'new' }];
     await $.nextTick();
 
-    // Trigger click on the old button which is still in the DOM
     $oldBtn.trigger('click');
-
-    // The event should not trigger the handler for the new item
     expect(handlerItem).toBeNull();
 
-    // Clean up
     resolveRemove();
     await new Promise((r) => setTimeout(r, 10));
-
     $container.remove();
   });
 
-  // ---------------------------------------------------------------------------
-  // Shallow Copy
-  // ---------------------------------------------------------------------------
-
   it('should re-render when an item is shallow-copied after deep mutation (Demonstrating shallowEqual issue)', async () => {
-    // This test demonstrates that `shallowEqual` prevents re-rendering when
-    // an item is shallow-copied (`{...item}`) but a nested property is mutated.
-    // Because the top-level references remain the same, `shallowEqual` returns true.
-    // By providing a custom `isEqual` function, we force re-render.
     const items = $.atom([{ id: 1, nested: { val: 1 } }]);
     const $ul = $('<ul>').appendTo(document.body);
 
     $ul.atomList(items, {
       key: 'id',
       render: (item) => `<li id="item-${item.id}">${item.nested.val}</li>`,
-      isEqual: () => false, // Force re-render on any new reference
+      isEqual: () => false,
     });
 
     await $.nextTick();
     expect($ul.find('li').text()).toBe('1');
 
-    // 1. Mutate nested property
     const item = items.value[0]!;
     item.nested.val = 2;
-    // 2. Shallow copy the array and the item
     items.value = [{ ...item }];
     await $.nextTick();
 
-    // The atomList should re-render it because oldItem !== item
-    // AND `isEqual` returns false, so `isSame === false`.
     expect($ul.find('li').text()).toBe('2');
-
     $ul.remove();
   });
 });

@@ -1,12 +1,12 @@
 import { atom, effect } from '@but212/atom-effect';
 import $ from 'jquery';
 import { afterEach, describe, expect, it } from 'vitest';
-import '../src/index'; // Register all plugins including $.nextTick
-import { registry } from '../src/core/registry';
-import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '../src/utils/sanitize';
+import '../../src/index'; // Register all plugins including $.nextTick
+import { registry } from '../../src/core/registry';
+import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '../../src/utils/sanitize';
 
 // ============================================================================
-// PART 1: Unit Tests — sanitizeHtml core logic
+// PART 1: Unit Tests ??sanitizeHtml core logic
 // One test per distinct defense mechanism. Vectors within a test share the
 // same code path; distinct mechanisms get their own test.
 // ============================================================================
@@ -176,7 +176,7 @@ describe('Unit: isDangerousCssValue', () => {
 // PART 2: API Attack Surface Tests
 // One describe per method. Each test covers a distinct attack category.
 // Structurally safe methods (textContent / el.value / boolean sinks) get
-// one test each confirming the safe sink — not an exhaustive attack suite.
+// one test each confirming the safe sink ??not an exhaustive attack suite.
 // ============================================================================
 
 describe('atomHtml: XSS attack surface', () => {
@@ -273,7 +273,7 @@ describe('atomAttr: XSS attack surface', () => {
     document.body.innerHTML = '';
   });
 
-  it('blocks javascript:/vbscript: in URL attributes (href, src, action, formaction, xlink:href — any case, with whitespace)', () => {
+  it('blocks javascript:/vbscript: in URL attributes (href, src, action, formaction, xlink:href ??any case, with whitespace)', () => {
     const blocked: [string, string, string][] = [
       ['a', 'href', 'javascript:alert(1)'],
       ['a', 'href', 'vbscript:msgbox(1)'],
@@ -428,7 +428,7 @@ describe('atomVal / atomText / atomChecked / atomShow / atomClass: structural sa
     document.body.innerHTML = '';
   });
 
-  it('atomVal: writes to el.value — HTML never parsed', async () => {
+  it('atomVal: writes to el.value ??HTML never parsed', async () => {
     const input = $('<input>').appendTo(document.body);
     input.atomVal(atom('<script>alert(1)</script>'));
     await $.nextTick();
@@ -436,7 +436,7 @@ describe('atomVal / atomText / atomChecked / atomShow / atomClass: structural sa
     expect(input.find('script').length).toBe(0);
   });
 
-  it('atomText: writes to textContent — HTML never parsed', async () => {
+  it('atomText: writes to textContent ??HTML never parsed', async () => {
     const span = $('<span>').appendTo(document.body);
     span.atomText(atom('<script>alert(1)</script>'));
     await $.nextTick();
@@ -444,7 +444,7 @@ describe('atomVal / atomText / atomChecked / atomShow / atomClass: structural sa
     expect(span.find('script').length).toBe(0);
   });
 
-  it('atomChecked/atomShow/atomClass: boolean/display/classList sinks — no HTML path', async () => {
+  it('atomChecked/atomShow/atomClass: boolean/display/classList sinks ??no HTML path', async () => {
     const cb = $('<input type="checkbox">').appendTo(document.body);
     const checked = atom(false);
     cb.atomChecked(checked);
@@ -468,7 +468,7 @@ describe('atomVal / atomText / atomChecked / atomShow / atomClass: structural sa
 });
 
 // ============================================================================
-// PART 3: Allowed / Practicality — safe content must not be blocked
+// PART 3: Allowed / Practicality ??safe content must not be blocked
 // ============================================================================
 
 describe('Policy: Allowed / Practicality', () => {

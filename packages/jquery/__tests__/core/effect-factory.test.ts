@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { registerReactiveEffect } from '../src/core/effect-factory';
-import $ from '../src/index';
-import { debug } from '../src/utils/debug';
+import { registerReactiveEffect } from '../../src/core/effect-factory';
+import $ from '../../src/index';
+import { debug } from '../../src/utils/debug';
 
 describe('Effect Factory', () => {
   it('executes updater immediately for static values', () => {
