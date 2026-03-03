@@ -1,6 +1,6 @@
 import $ from 'jquery';
 import { describe, expect, it } from 'vitest';
-import '../../src/index';
+import '@/index';
 
 describe('SVG Support', () => {
   it('should handle SVG attributes correctly', async () => {
@@ -89,7 +89,7 @@ describe('SVG Support', () => {
     const items = $.atom([1, 2, 3]);
 
     $g.atomList(items, {
-      key: (i) => i,
+      key: (i: number) => i,
       render: (i) => {
         const el = document.createElementNS(SVG_NS, 'circle');
         el.setAttribute('cx', String(i * 10));

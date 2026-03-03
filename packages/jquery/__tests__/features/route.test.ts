@@ -1,8 +1,8 @@
 import $ from 'jquery';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import '../../src/index';
-import { ERROR_MESSAGES, LOG_PREFIXES } from '../../src/constants';
-import { debug } from '../../src/utils/debug';
+import '@/index';
+import { ERROR_MESSAGES, LOG_PREFIXES } from '@/constants';
+import { debug } from '@/utils/debug';
 
 describe('$.route() - SPA Routing', () => {
   beforeEach(() => {

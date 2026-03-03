@@ -1,7 +1,7 @@
 import $ from 'jquery';
 import { describe, expect, it } from 'vitest';
-import type { WritableAtom } from '../../src/types';
-import '../../src/index';
+import type { WritableAtom } from '@/types';
+import '@/index';
 
 describe('Integration & Core API', () => {
   it('should handle Todo List with Search (synergy between atomList, atomVal, and computed)', async () => {

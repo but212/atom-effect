@@ -1,5 +1,5 @@
 import { bench, describe } from 'vitest';
-import { atom, computed, effect } from '../../src/index.js';
+import { atom, computed, effect } from '@/index.js';
 
 describe('Memory Stability', () => {
   bench('memory usage after component churn', () => {

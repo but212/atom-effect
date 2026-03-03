@@ -1,6 +1,6 @@
 import $ from 'jquery';
 import { describe, expect, it, vi } from 'vitest';
-import '../../src/index';
+import '@/index';
 
 describe('Chainable Methods (Surface)', () => {
   it('smoke: reactive chain with update', async () => {

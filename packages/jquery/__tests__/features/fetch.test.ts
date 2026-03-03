@@ -1,7 +1,7 @@
 import $ from 'jquery';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import '../../src/index';
-import type { FetchError } from '../../src/types';
+import '@/index';
+import type { FetchError } from '@/types';
 
 // ---------------------------------------------------------------------------
 // Integration Suite: atomFetch
@@ -180,7 +180,7 @@ describe('$.atomFetch (Reactivity and Atom State)', () => {
     expect(data.lastError?.message).toContain('Network Error: Internal Server Error (500)');
 
     expect(onError).toHaveBeenCalledWith(expect.any(Error));
-    const capturedErr = onError.mock.calls[0][0] as FetchError;
+    const capturedErr = onError.mock.calls[0]![0] as FetchError;
     expect(capturedErr.message).toBe('Network Error: Internal Server Error (500)');
     expect(capturedErr.jqXHR).toBe(jqXhrError);
   });
@@ -218,7 +218,7 @@ describe('$.atomFetch (Reactivity and Atom State)', () => {
       await $.nextTick();
 
       expect(onError).toHaveBeenCalledTimes(1);
-      expect(onError.mock.calls[0][0].message).toContain('transform parse error');
+      expect((onError.mock.calls[0]![0] as Error).message).toContain('transform parse error');
     });
 
     it('2. Static Payload Trap: ajaxOptions should reflect updated atom values upon refetch', async () => {

@@ -1,7 +1,7 @@
 import $ from 'jquery';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import '../../src/index';
-import { registry } from '../../src/core/registry';
+import '@/index';
+import { registry } from '@/core/registry';
 
 describe('Atom Mount (Component Lifecycle)', () => {
   beforeEach(() => {

@@ -1,6 +1,6 @@
 import $ from 'jquery';
 import { beforeEach, describe, expect, it } from 'vitest';
-import '../../src/index';
+import '@/index';
 import { atom } from '@but212/atom-effect';
 
 describe('jQuery Batching Documentation Verification', () => {

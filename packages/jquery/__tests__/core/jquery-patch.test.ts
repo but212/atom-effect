@@ -1,9 +1,9 @@
 import $ from 'jquery';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import '../../src/index';
+import '@/index';
 import { atom } from '@but212/atom-effect';
-import { enablejQueryOverrides } from '../../src/core/jquery-patch';
-import { disableAutoCleanup, enableAutoCleanup, registry } from '../../src/core/registry';
+import { enablejQueryOverrides } from '@/core/jquery-patch';
+import { disableAutoCleanup, enableAutoCleanup, registry } from '@/core/registry';
 
 describe('jQuery Patch (Lifecycle & Events)', () => {
   beforeEach(() => {

@@ -4,7 +4,7 @@
  */
 
 import { bench, describe } from 'vitest';
-import $ from '../../src/index';
+import $ from '@/index';
 import { cleanupContainer, createContainer, microBenchOptions } from '../utils/setup';
 
 describe('atomVal Binding', () => {

@@ -1,9 +1,9 @@
 import { atom, effect } from '@but212/atom-effect';
 import $ from 'jquery';
 import { afterEach, describe, expect, it } from 'vitest';
-import '../../src/index'; // Register all plugins including $.nextTick
-import { registry } from '../../src/core/registry';
-import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '../../src/utils/sanitize';
+import '@/index'; // Register all plugins including $.nextTick
+import { registry } from '@/core/registry';
+import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '@/utils/sanitize';
 
 // ============================================================================
 // PART 1: Unit Tests ??sanitizeHtml core logic
@@ -408,7 +408,7 @@ describe('atomList: XSS attack surface', () => {
     const div = $('<div>').appendTo(document.body);
     const items = atom<string[]>([]);
     div.atomList(items, {
-      key: (_i, idx) => idx,
+      key: (_i: string, idx: number) => idx,
       render: (i) => `<span>${i}</span>`,
       empty: '<script>alert(1)</script><p>empty</p>',
     });

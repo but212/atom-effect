@@ -1,7 +1,7 @@
 import $ from 'jquery';
 import { describe, expect, it, vi } from 'vitest';
-import { debug } from '../../src/utils/debug';
-import '../../src/index';
+import { debug } from '@/utils/debug';
+import '@/index';
 
 describe('Atom List Edge Cases', () => {
   it('should visually collapse items with duplicate keys', async () => {

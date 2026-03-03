@@ -10,6 +10,6 @@
     "outDir": "./dist",
     "noImplicitAny": true
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts"]
+  "include": ["src/**/*.ts", "__tests__/**/*.ts", "__benchmarks__/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
 }

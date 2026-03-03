@@ -1,7 +1,7 @@
 import $ from 'jquery';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import '../../src/index';
-import { disableAutoCleanup, enableAutoCleanup, registry } from '../../src/core/registry';
+import '@/index';
+import { disableAutoCleanup, enableAutoCleanup, registry } from '@/core/registry';
 
 describe('Binding Registry', () => {
   beforeEach(() => {

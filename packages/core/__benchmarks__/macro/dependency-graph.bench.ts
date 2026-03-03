@@ -4,7 +4,7 @@
  */
 
 import { bench, describe } from 'vitest';
-import { atom, computed } from '../../src/index.js';
+import { atom, computed } from '@/index.js';
 import { macroBenchOptions } from '../utils/setup.js';
 
 describe('Dependency Chain Patterns', () => {

@@ -1,6 +1,6 @@
 import $ from 'jquery';
 import { describe, expect, it } from 'vitest';
-import '../../src/index';
+import '@/index';
 
 describe('Input Bindings (Two-way)', () => {
   it('atomVal should sync Atom <-> DOM with IME and focus support', async () => {

@@ -1,6 +1,6 @@
 import $ from 'jquery';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import '../../src/index';
+import '@/index';
 
 describe('$.atomList (Integration)', () => {
   const EXPANDO = 'data-test-expando';
