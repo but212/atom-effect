@@ -4,7 +4,7 @@
  */
 
 import { bench, describe } from 'vitest';
-import $ from '../../src/index';
+import $ from '@/index';
 import { cleanupContainer, createContainer, macroBenchOptions } from '../utils/setup';
 
 interface Todo {

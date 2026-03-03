@@ -7,7 +7,7 @@
  */
 
 import { bench, describe } from 'vitest';
-import { sanitizeHtml } from '../../src/sanitize';
+import { sanitizeHtml } from '@/utils/sanitize';
 import { microBenchOptions } from '../utils/setup';
 
 // ============================================================================

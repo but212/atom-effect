@@ -4,7 +4,7 @@
  */
 
 import { bench, describe } from 'vitest';
-import { atom, computed, effect } from '../../src/index.js';
+import { atom, computed, effect } from '@/index.js';
 import { benchEffectOptions, microBenchOptions } from '../utils/setup.js';
 
 const REPEATS = 1000;

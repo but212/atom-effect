@@ -139,6 +139,11 @@ export interface ListOptions<T> {
   empty?: ListRenderResult;
   /** Delegated event handlers attached to the container. */
   events?: Record<string, (item: T, index: number, e: JQuery.TriggeredEvent) => void>;
+  /**
+   * Custom equality checker to determine if an item has changed.
+   * Defaults to `shallowEqual`. If it returns false, the item is re-rendered (unless `update` is provided).
+   */
+  isEqual?: (a: T, b: T) => boolean;
 }
 
 // ============================================================================

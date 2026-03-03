@@ -1,5 +1,5 @@
 import { bench, describe } from 'vitest';
-import { atom, batch, computed, effect } from '../../src/index.js';
+import { atom, batch, computed, effect } from '@/index.js';
 import { benchEffectOptions } from '../utils/setup.js';
 
 describe('Frame Budget (16ms)', () => {
