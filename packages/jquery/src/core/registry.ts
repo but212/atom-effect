@@ -1,4 +1,10 @@
 import { ERROR_MESSAGES, LOG_PREFIXES } from '@/constants';
+import {
+  type BindingRecord,
+  bindingRecordPool,
+  cleanupsArrayPool,
+  effectsArrayPool,
+} from '@/internal/pool';
 import type { EffectObject } from '@/types';
 import { getSelector } from '@/utils';
 import { debug } from '@/utils/debug';
@@ -10,16 +16,7 @@ import { debug } from '@/utils/debug';
  */
 const AES_BOUND = '_aes-bound';
 
-/**
- * Per-element record of all reactive resources that must be released on cleanup.
- * Fields are optional to avoid allocating arrays for the common case where only
- * one resource type is used.
- */
-interface BindingRecord {
-  effects?: EffectObject[] | undefined;
-  cleanups?: Array<() => void> | undefined;
-  componentCleanup?: (() => void) | undefined;
-}
+// BindingRecord type is defined in @/internal/pool to co-locate with its ObjectPool.
 
 // ============================================================================
 // BindingRegistry
@@ -69,8 +66,8 @@ class BindingRegistry {
   private getOrCreateRecord(el: Element): BindingRecord {
     let res = this.records.get(el);
     if (!res) {
-      // V8 Optimization: Enforce monomorphic object shape from creation time.
-      res = { effects: undefined, cleanups: undefined, componentCleanup: undefined };
+      // Acquire from ObjectPool — monomorphic shape guaranteed by the pool factory.
+      res = bindingRecordPool.acquire();
       this.records.set(el, res);
       el.classList.add(AES_BOUND);
     }
@@ -79,13 +76,13 @@ class BindingRegistry {
 
   trackEffect(el: Element, fx: EffectObject): void {
     const record = this.getOrCreateRecord(el);
-    record.effects ??= [];
+    record.effects ??= effectsArrayPool.acquire();
     record.effects.push(fx);
   }
 
   trackCleanup(el: Element, fn: () => void): void {
     const record = this.getOrCreateRecord(el);
-    record.cleanups ??= [];
+    record.cleanups ??= cleanupsArrayPool.acquire();
     record.cleanups.push(fn);
   }
 
@@ -153,6 +150,8 @@ class BindingRegistry {
           debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.CORE.EFFECT_DISPOSE_ERROR(selector), e);
         }
       }
+      effectsArrayPool.release(effects);
+      record.effects = undefined;
     }
 
     // Step 2 — Run general-purpose cleanup callbacks.
@@ -166,7 +165,12 @@ class BindingRegistry {
           debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.CLEANUP_ERROR(selector), e);
         }
       }
+      cleanupsArrayPool.release(cleanups);
+      record.cleanups = undefined;
     }
+
+    // Return the record to the pool for reuse.
+    bindingRecordPool.release(record);
   }
 
   cleanupDescendants(el: Element | DocumentFragment | ShadowRoot): void {

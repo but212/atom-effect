@@ -2,6 +2,7 @@ import { effect, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
 import { ERROR_MESSAGES, LOG_PREFIXES } from '@/constants';
 import { registry } from '@/core/registry';
+import { listItemEntryPool } from '@/internal/pool';
 import type {
   EffectObject,
   ListItemEntry,
@@ -78,10 +79,10 @@ class ListContext<T> {
     private readonly onRemove: (($el: JQuery) => Promise<void> | void) | undefined
   ) {}
 
-  scheduleRemoval(k: ListKey, entry: ListItemEntry<T>): void {
+  scheduleRemoval(k: ListKey, $el: JQuery): void {
     const commitRemoval = () => {
       if (this.fx?.isDisposed) return;
-      entry.$el.remove();
+      $el.remove();
       this.removingKeys.delete(k);
       debug.log(LOG_PREFIXES.LIST, `${this.containerSelector} removed item:`, k);
     };
@@ -89,7 +90,7 @@ class ListContext<T> {
       commitRemoval();
       return;
     }
-    const result = this.onRemove(entry.$el);
+    const result = this.onRemove($el);
     if (result instanceof Promise) {
       result.then(commitRemoval, commitRemoval);
     } else {
@@ -98,13 +99,17 @@ class ListContext<T> {
   }
 
   removeItem(k: ListKey, entry: ListItemEntry<T>): void {
-    for (let j = 0; j < entry.$el.length; j++) {
-      const el = entry.$el[j];
+    // Capture $el before releasing entry to pool — scheduleRemoval and
+    // its async callbacks use $el after the entry object is recycled.
+    const $el = entry.$el;
+    for (let j = 0; j < $el.length; j++) {
+      const el = $el[j];
       if (el) this.elToKey.delete(el);
     }
     this.itemMap.delete(k);
     this.removingKeys.add(k);
-    this.scheduleRemoval(k, entry);
+    this.scheduleRemoval(k, $el);
+    listItemEntryPool.release(entry as ListItemEntry<unknown>);
   }
 
   dispose(): void {
@@ -298,7 +303,11 @@ function renderItems<T>(
     const entry = itemMap.get(k);
 
     if (!entry) {
-      itemMap.set(k, { $el, item: null as unknown as T, state: 'new' });
+      const pooled = listItemEntryPool.acquire() as ListItemEntry<T>;
+      pooled.$el = $el;
+      pooled.item = null as unknown as T;
+      pooled.state = 'new';
+      itemMap.set(k, pooled);
       continue;
     }
 
@@ -366,7 +375,11 @@ function placeItems<T>(
       const el = rawContainer.children[childIdx++] as HTMLElement | undefined;
       if (el) {
         const $el = $(el);
-        itemMap.set(k, { $el, item, state: undefined });
+        const pooled = listItemEntryPool.acquire() as ListItemEntry<T>;
+        pooled.$el = $el;
+        pooled.item = item;
+        pooled.state = undefined;
+        itemMap.set(k, pooled);
         removingKeys.delete(k);
         if (debug.enabled) debug.domUpdated(LOG_PREFIXES.LIST, $el, 'list.add', item);
       }

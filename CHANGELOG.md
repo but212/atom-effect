@@ -4,10 +4,18 @@
 
 ### jQuery
 
+#### Added
+
+- **Performance**: Introduced `ObjectPool` and `ArrayPool` to recycle `BindingRecord` and `ListItemEntry` objects, significantly reducing GC pressure in dynamic UI scenarios.
+
 #### Changed
 
 - **Architecture**: Reorganized `jquery/src` into logical domains (`bindings/`, `core/`, `features/`, `utils/`) for improved modularity and maintainability.
 - **Lists (`atomList`)**: Fixed a bug where mutating nested properties behind a shallow copy failed to trigger a re-render. Added `isEqual` option to `ListOptions` for custom equality checks.
+
+#### Fixed
+
+- **Lists (`atomList`)**: Resolved a race condition where `ListItemEntry` objects were returned to the pool before their DOM elements finished asynchronous removal.
 
 ## [0.23.0]
 
