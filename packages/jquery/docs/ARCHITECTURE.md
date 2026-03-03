@@ -83,7 +83,7 @@ The `BindingRegistry` (`registry.ts`) is the central lifecycle manager. It track
 - **Effects**: Core `effect` instances bound to DOM elements.
 - **Cleanups**: Arbitrary cleanup functions (event listeners, timers, etc.).
 
-Storage uses **WeakMap/WeakSet** to prevent memory leaks — if a DOM element is garbage collected, its bindings are automatically released.
+Storage uses **WeakMap/WeakSet** to prevent memory leaks. To reduce GC pressure, the `BindingRecord` objects used to store these resources are acquired from and released to a **LIFO Object Pool**.
 
 ### 3.2 Marker Class Optimization
 
@@ -158,7 +158,9 @@ $btn.on('click', () => {
 3. **LIS**: Finds the longest subsequence of items that are already in correct order.
 4. **Patch**: Only moves/creates/removes elements that changed position.
 
-This ensures O(N log N) DOM operations instead of O(N) recreations.
+### 5.1 Memory Efficiency (Pooling)
+
+In dynamic lists with high item churn (e.g., infinite scroll), the library uses a `ListItemEntry` pool. Instead of allocating a new entry object for every rendered item, it acquires one from the pool and resets it upon removal. This significantly lowers the heap allocation rate during rapid list updates.
 
 ### Lifecycle Hooks
 
@@ -250,19 +252,52 @@ These are **first-pass filters**. For user-generated content, [DOMPurify](https:
 ```text
 packages/jquery/src/
   index.ts          — Entry point, plugin registration, auto-init
-  namespace.ts      — $.atom, $.computed, $.effect, $.nextTick statics
-  chainable.ts      — $.fn.atomText, $.fn.atomVal, etc. (jQuery methods)
-  unified.ts        — Binding handler implementations + atomBind
-  effect-factory.ts — registerReactiveEffect (creates and registers effects)
-  input-binding.ts  — Two-way input binding with IME/debounce/cursor support
-  list.ts           — atomList with keyed LIS-based reconciliation
-  mount.ts          — atomMount / atomUnmount component lifecycle
-  route.ts          — SPA router (hash + history mode) with reactive state
-  fetch.ts          — $.atomFetch declarative AJAX primitive
-  registry.ts       — WeakMap-based binding registry + MutationObserver cleanup
-  jquery-patch.ts   — jQuery method patches (.on batch, .remove cleanup)
-  debug.ts          — Debug mode logging and visual highlighting
-  sanitize.ts       — Regex-based HTML sanitization and URL protocol security guards
-  utils.ts          — Selectors and type classification helpers
-  types.ts          — TypeScript type definitions
+  constants.ts      — Internal constants and log prefixes
+  types.ts          — TypeScript global and internal type definitions
+  core/
+    namespace.ts      — $.atom, $.computed, $.effect, $.nextTick statics
+    effect-factory.ts — registerReactiveEffect (creates and registers effects)
+    registry.ts       — WeakMap-based binding registry + MutationObserver cleanup
+    jquery-patch.ts   — jQuery method patches (.on batch, .remove cleanup)
+  bindings/
+    chainable.ts      — $.fn.atomText, $.fn.atomVal, etc. (jQuery methods)
+    unified.ts        — Binding handler implementations + atomBind
+    input-binding.ts  — Two-way input binding with IME/debounce/cursor support
+    list.ts           — atomList with keyed LIS-based reconciliation
+    mount.ts          — atomMount / atomUnmount component lifecycle
+  features/
+    route.ts          — SPA router (hash + history mode) with reactive state
+    fetch.ts          — $.atomFetch declarative AJAX primitive
+  internal/
+    pool.ts           — Centralized Object/Array pools for low-latency memory reuse
+  utils/
+    index.ts          — DOM selectors, type classification, and LIS algorithm
+    debug.ts          — Debug mode logging and visual highlighting
+    sanitize.ts       — Regex-based HTML sanitization and URL protocol security
+    array-pool.ts     — LIFO array pooling utility
+    object-pool.ts    — Monomorphic object pooling utility
 ```
+
+## 10. Performance & Memory Management
+
+### 10.1 Object & Array Pooling
+
+To minimize Garbage Collection (GC) pressure in highly dynamic applications (e.g., large lists, frequent component mounting), the library implements structured pooling for short-lived objects and arrays.
+
+#### 10.1.1 `ObjectPool<T>`
+
+The `ObjectPool` utility (`utils/object-pool.ts`) manages a stack of reusable plain objects.
+
+- **Monomorphic Shape**: The pool factory ensures all created objects share the same "hidden class" in V8.
+- **LIFO Strategy**: Uses a Last-In-First-Out (stack) approach to improve CPU cache locality.
+- **Strict Reset**: Every object is passed through a `reset` callback before being returned to the pool to prevent stale data/reference leaks.
+
+#### 10.1.2 Reused Structures
+
+1. **`BindingRecord`**: Created per bound element. Pooling these avoids thousands of micro-allocations during initial page hydration or route transitions.
+2. **`ListItemEntry`**: Created per item in `atomList`. In lists with high churn (sorting, filtering, infinite scroll), pooling entries reduces memory fragmentation and the frequency of "Stop-the-world" GC cycles.
+3. **`ArrayPool`**: Reuses arrays used for `effects` and `cleanups` lists within a `BindingRecord`.
+
+### 10.2 Monomorphic Records
+
+All internal state records are initialized with a fixed set of fields. By avoiding "shape transitions" (adding properties after creation), the objects remain **Monomorphic**. This allows V8 to use **Inline Caching (IC)** for property access, resulting in near-native lookup speeds.
