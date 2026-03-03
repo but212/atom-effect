@@ -4,7 +4,7 @@
  */
 
 import { bench, describe } from 'vitest';
-import { atom, computed, effect } from '@/index.js';
+import { atom, computed, effect } from '@/index';
 import { benchEffectOptions, forceGC, getMemoryUsage, memoryBenchOptions } from '../utils/setup.js';
 
 describe('Memory Allocation', () => {
