@@ -81,7 +81,7 @@ describe('Input Bindings (Two-way)', () => {
     const el = $el[0] as HTMLInputElement;
     el.setSelectionRange(3, 3);
 
-    // Update atom while focused ??should preserve cursor position (lines 115-120)
+    // Update atom while focused - should preserve cursor position (lines 115-120)
     val.value = 'world';
     await $.nextTick();
 

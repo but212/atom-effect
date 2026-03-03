@@ -60,7 +60,6 @@
     "@but212/atom-effect": "workspace:*"
   },
   "devDependencies": {
-    "@but212/atom-effect": "workspace:*",
     "@types/jquery": "^4.0.0",
     "vite-tsconfig-paths": "^6.1.1",
     "@vitest/coverage-v8": "^4.0.18",

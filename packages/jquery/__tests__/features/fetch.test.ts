@@ -272,7 +272,7 @@ describe('$.atomFetch (Reactivity and Atom State)', () => {
       expect(priceEur.value).toBe(120);
 
       // Changing currencyRate does NOT trigger re-fetch because transform runs
-      // after `await xhr` ??outside the synchronous tracking window of computed.
+      // after `await xhr` outside the synchronous tracking window of computed.
       // This is a known limitation of async computed.
       currencyRate.value = 1.5;
 

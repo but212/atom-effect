@@ -6,7 +6,7 @@ import { registry } from '@/core/registry';
 import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '@/utils/sanitize';
 
 // ============================================================================
-// PART 1: Unit Tests ??sanitizeHtml core logic
+// PART 1: Unit Tests sanitizeHtml core logic
 // One test per distinct defense mechanism. Vectors within a test share the
 // same code path; distinct mechanisms get their own test.
 // ============================================================================
