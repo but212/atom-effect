@@ -38,7 +38,7 @@ jobs:
         run: pnpm bench:macro | tee ../../benchmark-jquery-macro.txt
 
       - name: Upload benchmark results
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: benchmark-results
           path: |
