@@ -33,10 +33,10 @@ describe('Batch Operations', () => {
     `batch update 10 atoms (x${REPEATS})`,
     () => {
       for (let j = 0; j < REPEATS; j++) {
-        const val = atoms10[0].value === 0 ? 1 : 0;
+        const val = atoms10[0]!.value === 0 ? 1 : 0;
         batch(() => {
           for (let i = 0; i < 10; i++) {
-            atoms10[i].value = val;
+            atoms10[i]!.value = val;
           }
         });
       }
@@ -48,10 +48,10 @@ describe('Batch Operations', () => {
   bench(
     'batch update 100 atoms',
     () => {
-      const val = atoms100[0].value === 0 ? 1 : 0;
+      const val = atoms100[0]!.value === 0 ? 1 : 0;
       batch(() => {
         for (let i = 0; i < 100; i++) {
-          atoms100[i].value = val;
+          atoms100[i]!.value = val;
         }
       });
     },
@@ -71,9 +71,9 @@ describe('Batch vs Non-Batch', () => {
   bench(
     'without batch: update 10 atoms',
     () => {
-      const val = atomsNoBatch[0].value === 0 ? 1 : 0;
+      const val = atomsNoBatch[0]!.value === 0 ? 1 : 0;
       for (let i = 0; i < 10; i++) {
-        atomsNoBatch[i].value = val;
+        atomsNoBatch[i]!.value = val;
       }
     },
     microBenchOptions
@@ -90,10 +90,10 @@ describe('Batch vs Non-Batch', () => {
   bench(
     'with batch: update 10 atoms',
     () => {
-      const val = atomsBatch[0].value === 0 ? 1 : 0;
+      const val = atomsBatch[0]!.value === 0 ? 1 : 0;
       batch(() => {
         for (let i = 0; i < 10; i++) {
-          atomsBatch[i].value = val;
+          atomsBatch[i]!.value = val;
         }
       });
     },
@@ -127,17 +127,17 @@ describe('Nested Batches', () => {
     `nested batch (5 levels) (x${REPEATS})`,
     () => {
       for (let j = 0; j < REPEATS; j++) {
-        const val = atomsNested[0].value === 0 ? 1 : 0;
+        const val = atomsNested[0]!.value === 0 ? 1 : 0;
         batch(() => {
-          atomsNested[0].value = val;
+          atomsNested[0]!.value = val;
           batch(() => {
-            atomsNested[1].value = val;
+            atomsNested[1]!.value = val;
             batch(() => {
-              atomsNested[2].value = val;
+              atomsNested[2]!.value = val;
               batch(() => {
-                atomsNested[3].value = val;
+                atomsNested[3]!.value = val;
                 batch(() => {
-                  atomsNested[4].value = val;
+                  atomsNested[4]!.value = val;
                 });
               });
             });

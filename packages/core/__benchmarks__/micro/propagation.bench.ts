@@ -34,7 +34,7 @@ describe('Propagation Performance', () => {
   fanInTarget.value; // Initial computation
 
   bench('N to 1 (Fan In 1000)', () => {
-    fanInSources[0].value++;
+    fanInSources[0]!.value++;
     fanInTarget.value;
   });
 });

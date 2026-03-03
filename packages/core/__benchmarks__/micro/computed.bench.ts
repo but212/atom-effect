@@ -220,7 +220,7 @@ describe('Computed Disposal', () => {
       const a = atom(0);
       const computeds = [computed(() => a.value)];
       for (let i = 0; i < 9; i++) {
-        const prev = computeds[i];
+        const prev = computeds[i]!;
         computeds.push(computed(() => prev.value + 1));
       }
       computeds.forEach((c) => c.dispose());

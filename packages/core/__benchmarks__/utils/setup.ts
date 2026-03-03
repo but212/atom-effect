@@ -111,13 +111,13 @@ export function calculateStatistics(values: number[]): Statistics {
   };
 
   return {
-    min: sorted[0],
-    max: sorted[len - 1],
+    min: sorted[0]!,
+    max: sorted[len - 1]!,
     mean,
-    median: percentile(50),
-    p75: percentile(75),
-    p95: percentile(95),
-    p99: percentile(99),
+    median: percentile(50)!,
+    p75: percentile(75)!,
+    p95: percentile(95)!,
+    p99: percentile(99)!,
     stdDev,
   };
 }
