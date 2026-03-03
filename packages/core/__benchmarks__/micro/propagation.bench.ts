@@ -1,5 +1,5 @@
 import { bench, describe } from 'vitest';
-import { atom, computed } from '@/index.js';
+import { atom, computed } from '@/index';
 
 describe('Propagation Performance', () => {
   // 1 to 1 (Depth 1000)
@@ -34,7 +34,7 @@ describe('Propagation Performance', () => {
   fanInTarget.value; // Initial computation
 
   bench('N to 1 (Fan In 1000)', () => {
-    fanInSources[0].value++;
+    fanInSources[0]!.value++;
     fanInTarget.value;
   });
 });

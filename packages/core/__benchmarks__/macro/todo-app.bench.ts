@@ -4,7 +4,7 @@
  */
 
 import { bench, describe } from 'vitest';
-import { atom, computed, effect } from '@/index.js';
+import { atom, computed, effect } from '@/index';
 import type { TodoItem } from '../fixtures/index.js';
 import { benchEffectOptions, macroBenchOptions } from '../utils/setup.js';
 
@@ -102,7 +102,7 @@ describe('Todo App Scenarios', () => {
       const _current = todosDelete.value;
       for (let i = 0; i < 50; i++) {
         if (todosDelete.value.length > 0) {
-          const idToRemove = todosDelete.value[0].id; // remove first
+          const idToRemove = todosDelete.value[0]!.id; // remove first
           todosDelete.value = todosDelete.value.filter((t: TodoItem) => t.id !== idToRemove);
         }
       }
@@ -137,7 +137,7 @@ describe('Todo App Scenarios', () => {
 
       // 2. Toggle (Trigger Effect)
       if (todosWorkflow.value.length > 0) {
-        const first = todosWorkflow.value[0];
+        const first = todosWorkflow.value[0]!;
         todosWorkflow.value = [
           { ...first, completed: !first.completed },
           ...todosWorkflow.value.slice(1),

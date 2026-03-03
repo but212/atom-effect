@@ -4,7 +4,7 @@
  */
 
 import { bench, describe } from 'vitest';
-import { atom, untracked } from '@/index.js';
+import { atom, untracked } from '@/index';
 import { microBenchOptions } from '../utils/setup.js';
 
 describe('Atom Creation (x1000)', () => {
@@ -39,7 +39,7 @@ describe('Atom Read Operations (x1000)', () => {
     () => {
       let sum = 0;
       for (let i = 0; i < 1000; i++) {
-        sum += atoms[i].value;
+        sum += atoms[i]!.value;
       }
       void sum;
     },
@@ -51,7 +51,7 @@ describe('Atom Read Operations (x1000)', () => {
     () => {
       let sum = 0;
       for (let i = 0; i < 1000; i++) {
-        sum += atoms[i].peek();
+        sum += atoms[i]!.peek();
       }
       void sum;
     },
@@ -66,7 +66,7 @@ describe('Atom Write Operations (x1000)', () => {
     'write 1000 atoms value',
     () => {
       for (let i = 0; i < 1000; i++) {
-        atoms[i].value = i;
+        atoms[i]!.value = i;
       }
     },
     microBenchOptions
@@ -110,7 +110,7 @@ describe('Atom Untracked Operations (x1000)', () => {
       untracked(() => {
         let sum = 0;
         for (let i = 0; i < 1000; i++) {
-          sum += atoms[i].value;
+          sum += atoms[i]!.value;
         }
         void sum;
       });

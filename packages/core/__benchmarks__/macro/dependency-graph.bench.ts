@@ -4,7 +4,7 @@
  */
 
 import { bench, describe } from 'vitest';
-import { atom, computed } from '@/index.js';
+import { atom, computed } from '@/index';
 import { macroBenchOptions } from '../utils/setup.js';
 
 describe('Dependency Chain Patterns', () => {
@@ -25,7 +25,7 @@ describe('Dependency Chain Patterns', () => {
     computed(() => diamondSource.value * (i + 1))
   );
   const diamondLevel2 = Array.from({ length: 10 }, (_, i) =>
-    computed(() => diamondLevel1[i].value * 2)
+    computed(() => diamondLevel1[i]!.value * 2)
   );
   const diamondSink = computed(() => diamondLevel2.reduce((sum, c) => sum + c.value, 0));
 
@@ -38,8 +38,8 @@ describe('Dependency Chain Patterns', () => {
     for (let level = 1; level < 50; level++) {
       const nextLevel: ReturnType<typeof computed<number>>[] = [];
       for (let i = 0; i < currentLevel.length - 1; i++) {
-        const left = currentLevel[i];
-        const right = currentLevel[i + 1];
+        const left = currentLevel[i]!;
+        const right = currentLevel[i + 1]!;
         nextLevel.push(computed(() => left.value + right.value));
       }
       currentLevel = nextLevel;
@@ -82,8 +82,8 @@ describe('Dependency Chain Patterns', () => {
   bench(
     'pyramid dependency pattern (50 levels)',
     () => {
-      pyramidBase[0].value += 1;
-      const _ = pyramidApex.value;
+      pyramidBase[0]!.value += 1;
+      const _ = pyramidApex!.value;
     },
     macroBenchOptions
   );
@@ -94,7 +94,7 @@ describe('Complex Graph Patterns', () => {
   const mixedComputeds = Array.from({ length: 200 }, (_, i) => {
     const idx1 = i % mixedAtoms.length;
     const idx2 = (i + 1) % mixedAtoms.length;
-    return computed(() => mixedAtoms[idx1].value + mixedAtoms[idx2].value);
+    return computed(() => mixedAtoms[idx1]!.value + mixedAtoms[idx2]!.value);
   });
 
   const circA = atom(1);
@@ -110,7 +110,7 @@ describe('Complex Graph Patterns', () => {
     'mixed dependencies (100 atoms, 200 computeds)',
     () => {
       // Update one atom, check all
-      mixedAtoms[0].value += 1;
+      mixedAtoms[0]!.value += 1;
       mixedComputeds.forEach((c) => {
         const _ = c.value;
       });
@@ -136,7 +136,7 @@ describe('Dynamic Dependency Patterns', () => {
 
   const idxAtom = atom(0);
   const arrValues = Array.from({ length: 10 }, (_, i) => atom(i));
-  const arrSelected = computed(() => arrValues[idxAtom.value].value);
+  const arrSelected = computed(() => arrValues[idxAtom.value]!.value);
 
   bench(
     'conditional dependencies',
@@ -164,7 +164,7 @@ describe('Dynamic Dependency Patterns', () => {
       const _ = arrSelected.value;
 
       // Update underlying value
-      arrValues[idxAtom.value].value++;
+      arrValues[idxAtom.value]!.value++;
       const __ = arrSelected.value;
     },
     macroBenchOptions

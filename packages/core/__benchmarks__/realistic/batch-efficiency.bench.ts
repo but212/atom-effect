@@ -1,5 +1,5 @@
 import { bench, describe } from 'vitest';
-import { atom, batch, computed, effect } from '@/index.js';
+import { atom, batch, computed, effect } from '@/index';
 import { benchEffectOptions } from '../utils/setup.js';
 
 describe('Batch Efficiency', () => {
@@ -13,11 +13,11 @@ describe('Batch Efficiency', () => {
   }, benchEffectOptions);
 
   bench('form reset overhead (batch)', () => {
-    const nextVal = formFieldsBatch[0].value === '' ? 'initial' : '';
+    const nextVal = formFieldsBatch[0]!.value === '' ? 'initial' : '';
 
     batch(() => {
       for (let i = 0; i < 20; i++) {
-        formFieldsBatch[i].value = nextVal;
+        formFieldsBatch[i]!.value = nextVal;
       }
     });
   });
@@ -32,10 +32,10 @@ describe('Batch Efficiency', () => {
   }, benchEffectOptions);
 
   bench('form reset overhead (no batch)', () => {
-    const nextVal = formFieldsNoBatch[0].value === '' ? 'initial' : '';
+    const nextVal = formFieldsNoBatch[0]!.value === '' ? 'initial' : '';
 
     for (let i = 0; i < 20; i++) {
-      formFieldsNoBatch[i].value = nextVal;
+      formFieldsNoBatch[i]!.value = nextVal;
     }
   });
 });

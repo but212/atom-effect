@@ -4,7 +4,7 @@
  */
 
 import { bench, describe } from 'vitest';
-import { atom, computed } from '@/index.js';
+import { atom, computed } from '@/index';
 import { microBenchOptions } from '../utils/setup.js';
 
 const REPEATS = 1000;
@@ -220,7 +220,7 @@ describe('Computed Disposal', () => {
       const a = atom(0);
       const computeds = [computed(() => a.value)];
       for (let i = 0; i < 9; i++) {
-        const prev = computeds[i];
+        const prev = computeds[i]!;
         computeds.push(computed(() => prev.value + 1));
       }
       computeds.forEach((c) => c.dispose());

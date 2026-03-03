@@ -1,5 +1,5 @@
 import { bench, describe } from 'vitest';
-import { atom, batch, computed, effect } from '@/index.js';
+import { atom, batch, computed, effect } from '@/index';
 import { benchEffectOptions } from '../utils/setup.js';
 
 describe('Frame Budget (16ms)', () => {
@@ -16,7 +16,7 @@ describe('Frame Budget (16ms)', () => {
     // Perform 100 updates. In a non-batched system, this might trigger 100 re-evals (or at least 100 propagations).
     // In optimized systems, it should be faster.
     for (let i = 0; i < 100; i++) {
-      atoms[i].value++;
+      atoms[i]!.value++;
     }
     // Read final value to ensure propagation
     void heavyComputed.value;
@@ -25,7 +25,7 @@ describe('Frame Budget (16ms)', () => {
   bench('updates per frame (100 atoms, batched)', () => {
     batch(() => {
       for (let i = 0; i < 100; i++) {
-        atoms[i].value++;
+        atoms[i]!.value++;
       }
     });
     void heavyComputed.value;

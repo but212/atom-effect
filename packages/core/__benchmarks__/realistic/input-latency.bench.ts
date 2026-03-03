@@ -1,5 +1,5 @@
 import { beforeEach, bench, describe } from 'vitest';
-import { atom, computed, effect } from '@/index.js';
+import { atom, computed, effect } from '@/index';
 import { benchEffectOptions } from '../utils/setup.js';
 
 describe('Input Latency', () => {
