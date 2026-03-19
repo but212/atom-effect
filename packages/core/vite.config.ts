@@ -16,7 +16,7 @@ export default defineConfig(({ mode }) => ({
     lib: {
       entry: resolve(__dirname, 'src/index.ts'),
       name: 'AtomEffect',
-      fileName: (format) => {
+      fileName: (format: string) => {
         if (format === 'umd') return 'atom-effect.min.js';
         return `index.${format === 'es' ? 'mjs' : 'cjs'}`;
       },

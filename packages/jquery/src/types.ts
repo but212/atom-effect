@@ -339,4 +339,4 @@ declare global {
   }
 }
 
-export type { WritableAtom, ReadonlyAtom, ComputedAtom, EffectObject, ComputedOptions };
+export type { ComputedAtom, ComputedOptions, EffectObject, ReadonlyAtom, WritableAtom };
