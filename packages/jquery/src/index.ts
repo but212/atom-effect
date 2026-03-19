@@ -90,7 +90,7 @@ export { isReactive } from '@/utils';
 // Registry API — for advanced lifecycle control (custom roots, manual cleanup).
 // Note: enableAutoCleanup is called automatically on DOM ready with document.body.
 // Call it again only if you need a different root or want to re-initialise.
-export { registry, enableAutoCleanup, disableAutoCleanup };
+export { disableAutoCleanup, enableAutoCleanup, registry };
 
 // ============================================================================
 // ESM exports — types
