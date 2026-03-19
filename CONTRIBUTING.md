@@ -4,7 +4,7 @@ Contributions to `@but212/atom-effect` are welcome. This guide will help you get
 
 ## Prerequisites
 
-- **Node.js**: v20.x or higher.
+- **Node.js**: v22.x or higher.
 - **pnpm**: This project uses `pnpm` for package management. Do not use `npm` or `yarn`.
 
 ## Getting Started
