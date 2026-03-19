@@ -1,0 +1,133 @@
+/* ==========================================================
+   Page: Async Computed
+   Shared by: core/async.html, jquery/async.html
+   ========================================================== */
+
+/* Card Style Overrides */
+.card-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Results */
+.user-list {
+  display: grid;
+  gap: 15px;
+}
+
+.user-item {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 15px;
+  border: 2px solid var(--black);
+  transition: background 0.2s;
+}
+
+.user-item:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.user-avatar {
+  width: 48px;
+  height: 48px;
+  background: var(--black);
+  border: 2px solid var(--black);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--white);
+  font-weight: 900;
+  font-size: 1.25rem;
+}
+
+.user-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.user-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.user-name {
+  font-weight: 900;
+  text-transform: uppercase;
+  font-size: 1rem;
+}
+
+.user-email a {
+  font-size: 0.85rem;
+  color: #666;
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.user-email a:hover {
+  color: var(--primary-blue);
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px;
+  border: 2px dashed var(--black);
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #666;
+}
+
+.error-message {
+  padding: 20px;
+  background: var(--primary-red);
+  color: var(--white);
+  font-weight: 900;
+  text-transform: uppercase;
+  border: 3px solid var(--black);
+}
+
+/* Stats */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.stat-item {
+  padding: 15px;
+  border: 2px solid var(--black);
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 2rem;
+  font-weight: 900;
+  margin-bottom: 5px;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #666;
+}
+
+/* Layout Grid Columns */
+.grid-main {
+  grid-column: 1 / 8;
+}
+.grid-side {
+  grid-column: 8 / 13;
+}
+
+@media (max-width: 900px) {
+  .grid-main,
+  .grid-side,
+  .info-card {
+    grid-column: 1 / -1;
+  }
+}
