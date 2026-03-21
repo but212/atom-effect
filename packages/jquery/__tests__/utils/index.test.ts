@@ -84,6 +84,4 @@ describe('Utils', () => {
       expect(fragments[2]).toContain('OK');
     });
   });
-
-
 });
