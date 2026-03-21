@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Core
+
+#### Changed
+
+- **Performance**: Introduced `SlotBuffer` and `DepSlotBuffer`, replacing `ArrayPool` for dependency tracking to achieve zero allocation for atoms with <= 4 subscribers.
+- **Performance**: Implemented a Hybrid O(1) Map Fallback to prevent O(N^2) mega-node performance cliffs during dependency tracking.
+- **Memory**: Adopted lazy initialization for reactive subscriber slots, significantly reducing the base memory footprint.
+
+#### Removed
+
+- **Internal**: Removed `ArrayPool` and legacy array pooling mechanisms (`linksArrayPool`, `syncDependencies`).
+
 ### jQuery
 
 #### Added

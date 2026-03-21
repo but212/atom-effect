@@ -8,11 +8,11 @@ import {
   SMI_MAX,
 } from '@/constants';
 import { ReactiveDependency } from '@/core/base';
-import { DependencyLink, type Subscription, syncDependencies } from '@/core/dep-tracking';
+import { DepSlotBuffer } from '@/core/dep-slot-buffer';
+import { DependencyLink } from '@/core/dep-tracking';
 import { ComputedError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
 import { currentFlushEpoch, nextEpoch, nextVersion } from '@/internal/epoch';
-import { EMPTY_LINKS, linksArrayPool } from '@/internal/pool';
 import { ATOM_BRAND, COMPUTED_BRAND } from '@/symbols';
 import { trackingContext } from '@/tracking';
 import type {
@@ -56,8 +56,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   private readonly _onError: ((error: Error) => void) | null;
   private readonly _maxAsyncRetries: number;
 
-  protected _subscribers: (Subscription<T> | null)[] = [];
-  private _links: DependencyLink[] = EMPTY_LINKS;
+  private _deps = new DepSlotBuffer();
 
   // Async state
   private _asyncStartAggregateVersion = 0;
@@ -66,7 +65,6 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
 
   // Dependency collection state
   private _trackEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
-  private _trackLinks: DependencyLink[] = EMPTY_LINKS;
   private _trackCount = 0;
 
   constructor(fn: () => T | Promise<T>, options: ComputedOptions<T> = {}) {
@@ -153,7 +151,11 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     if (this.flags & (REJECTED | HAS_ERROR)) return true;
 
     // Live scan: deps may have changed error state asynchronously
-    return this._links.some((link) => link?.node?.flags & HAS_ERROR);
+    for (let i = 0; i < this._deps.size; i++) {
+      const link = this._deps.getAt(i);
+      if (link && link.node.flags & HAS_ERROR) return true;
+    }
+    return false;
   }
 
   get isValid(): boolean {
@@ -168,8 +170,9 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     const collected: Error[] = [];
     if (this._error) collected.push(this._error);
 
-    const links = this._links;
-    links.forEach((link) => {
+    for (let i = 0; i < this._deps.size; i++) {
+      const link = this._deps.getAt(i);
+      if (!link) continue;
       const dep = link.node;
       if (dep.flags & HAS_ERROR) {
         const computedDep = dep as unknown as ComputedAtom<unknown>;
@@ -177,7 +180,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
           if (err && !collected.includes(err)) collected.push(err);
         });
       }
-    });
+    }
 
     return Object.freeze(collected);
   }
@@ -204,14 +207,9 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   dispose(): void {
     if (this.flags & DISPOSED) return;
 
-    const links = this._links;
-    if (links !== EMPTY_LINKS) {
-      links.forEach((link) => link!.unsub?.());
-      linksArrayPool.release(links);
-      this._links = EMPTY_LINKS;
-    }
+    this._deps.disposeAll();
 
-    this._subscribers.length = 0;
+    this._slots?.clear();
     this.flags = DISPOSED | DIRTY | IDLE;
 
     // Release Memory
@@ -228,32 +226,22 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     if (dep._lastSeenEpoch === this._trackEpoch) return;
     dep._lastSeenEpoch = this._trackEpoch;
 
+    const existing = this._deps.getAt(this._trackCount);
     // Fast path: fully stable dependencies
-    if (
-      this._trackLinks === this._links &&
-      this._trackCount < this._links.length &&
-      this._links[this._trackCount]!.node === dep
-    ) {
-      this._links[this._trackCount]!.version = dep.version;
+    if (existing && existing.node === dep) {
+      existing.version = dep.version;
       this._trackCount++;
       return;
     }
 
-    // Diverged! Fork the array for the remaining tracking
-    if (this._trackLinks === this._links) {
-      const newLinks = linksArrayPool.acquire();
-      for (let i = 0; i < this._trackCount; i++) {
-        newLinks[i] = this._links[i]!;
-      }
-      this._trackLinks = newLinks;
+    // Diverged path
+    if (this._deps.claimExisting(dep, this._trackCount)) {
+      this._trackCount++;
+      return;
     }
 
-    // Add the new dependency
-    if (this._trackCount < this._trackLinks.length) {
-      this._trackLinks[this._trackCount] = new DependencyLink(dep, dep.version);
-    } else {
-      this._trackLinks.push(new DependencyLink(dep, dep.version));
-    }
+    const link = new DependencyLink(dep, dep.version, dep.subscribe(this));
+    this._deps.insertNew(this._trackCount, link);
     this._trackCount++;
   }
 
@@ -261,9 +249,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     if (this.flags & RECOMPUTING) return;
     this.flags |= RECOMPUTING;
 
-    const prevLinks = this._links;
     this._trackEpoch = nextEpoch();
-    this._trackLinks = prevLinks; // Optimistic reuse
     this._trackCount = 0;
 
     let committed = false;
@@ -271,26 +257,9 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       // Execute function
       const result = trackingContext.run(this, this._fn);
 
-      // Stable path optimizations
-      if (this._trackLinks === prevLinks) {
-        if (this._trackCount === prevLinks.length) {
-          // Fully stable: do nothing
-          committed = true;
-        } else {
-          // Prefix stable but shorter: unsubscribe the remaining tail
-          for (let i = this._trackCount; i < prevLinks.length; i++) {
-            prevLinks[i]!.unsub?.();
-          }
-          prevLinks.length = this._trackCount;
-          committed = true;
-        }
-      } else {
-        // Diverged path: run syncDependencies with Map fallback for the new array
-        this._trackLinks.length = this._trackCount;
-        syncDependencies(this._trackLinks, prevLinks, this);
-        this._links = this._trackLinks;
-        committed = true;
-      }
+      // Clean up any remaining trailing dependencies
+      this._deps.truncateFrom(this._trackCount);
+      committed = true;
 
       // Handle Result
       if (isPromise(result)) {
@@ -302,18 +271,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       // Commit dependencies on error gracefully
       if (!committed) {
         try {
-          if (this._trackLinks === prevLinks) {
-            for (let i = this._trackCount; i < prevLinks.length; i++) {
-              prevLinks[i]!.unsub?.();
-            }
-            prevLinks.length = this._trackCount;
-            committed = true;
-          } else {
-            this._trackLinks.length = this._trackCount;
-            syncDependencies(this._trackLinks, prevLinks, this);
-            this._links = this._trackLinks;
-            committed = true;
-          }
+          this._deps.truncateFrom(this._trackCount);
         } catch (commitErr) {
           if (IS_DEV) {
             console.warn('[atom-effect] _commitDeps failed during error recovery:', commitErr);
@@ -322,18 +280,8 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       }
       this._handleError(e as Error, ERROR_MESSAGES.COMPUTED_COMPUTATION_FAILED, true);
     } finally {
-      // Pool Release
-      if (committed) {
-        if (this._links !== prevLinks && prevLinks !== EMPTY_LINKS) {
-          linksArrayPool.release(prevLinks);
-        }
-      } else if (this._trackLinks !== prevLinks && this._trackLinks !== EMPTY_LINKS) {
-        linksArrayPool.release(this._trackLinks);
-      }
-
       // Reset transient state
       this._trackEpoch = EPOCH_CONSTANTS.UNINITIALIZED;
-      this._trackLinks = EMPTY_LINKS;
       this._trackCount = 0;
       this.flags &= ~RECOMPUTING;
     }
@@ -385,9 +333,11 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
 
   private _captureVersionSnapshot(): number {
     let hash = 0;
-    const links = this._links;
-    for (let i = 0, len = links.length; i < len; i++) {
-      hash = ((hash << 5) - hash + links[i]!.node.version) | 0;
+    for (let i = 0; i < this._deps.size; i++) {
+      const link = this._deps.getAt(i);
+      if (link) {
+        hash = ((hash << 5) - hash + link.node.version) | 0;
+      }
     }
     return hash;
   }
