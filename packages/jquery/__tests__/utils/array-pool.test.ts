@@ -111,10 +111,10 @@ describe('ArrayPool', () => {
   });
 
   // --------------------------------------------------------------------------
-  // Integration: acquire–release cycle
+  // Integration: acquire-release cycle
   // --------------------------------------------------------------------------
 
-  describe('acquire–release cycle', () => {
+  describe('acquire-release cycle', () => {
     it('should reuse arrays across multiple cycles', () => {
       const refs = new Set<number[]>();
 

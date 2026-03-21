@@ -206,11 +206,11 @@ describe('Pool Integration', () => {
   });
 
   // --------------------------------------------------------------------------
-  // Stress: many bind–unbind cycles
+  // Stress: many bind-unbind cycles
   // --------------------------------------------------------------------------
 
   describe('stress', () => {
-    it('should handle rapid bind–cleanup cycles without leaks', () => {
+    it('should handle rapid bind-cleanup cycles without leaks', () => {
       const CYCLES = 50;
 
       for (let i = 0; i < CYCLES; i++) {
