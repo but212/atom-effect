@@ -1,4 +1,4 @@
-import type { EffectObject, ListItemEntry } from '@/types';
+import type { EffectObject } from '@/types';
 import { ArrayPool } from '../utils/array-pool';
 import { ObjectPool } from '../utils/object-pool';
 
@@ -41,26 +41,4 @@ export const bindingRecordPool = new ObjectPool<BindingRecord>(
     r.componentCleanup = undefined;
   },
   128 // SPA pages routinely bind hundreds of elements
-);
-
-/**
- * Pool for ListItemEntry objects.
- *
- * ListItemEntry<T> is created per list item in renderItems() and placeItems()
- * and destroyed when items are removed via removeItem(). In dynamic lists that
- * add/remove items frequently (e.g. chat feeds, infinite scroll, live tables),
- * pooling avoids a significant number of micro-allocations per update cycle.
- *
- * Since ListItemEntry is generic over <T>, the pool stores entries typed as
- * `ListItemEntry<unknown>`. Callers cast as needed — this is safe because
- * the ObjectPool only manages the object shell, not the `item` payload.
- */
-export const listItemEntryPool = new ObjectPool<ListItemEntry<unknown>>(
-  () => ({ $el: null!, item: null, state: undefined }),
-  (e) => {
-    e.$el = null!;
-    e.item = null;
-    e.state = undefined;
-  },
-  256 // Lists can have hundreds of items churning
 );

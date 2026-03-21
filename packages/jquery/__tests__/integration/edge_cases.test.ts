@@ -30,10 +30,11 @@ describe('Atom List Edge Cases', () => {
       // Expectation: Only 1 element exists because of key collision in Map
       expect($container.children().length).toBe(1);
 
-      // The element likely reflects the LAST item processed in the loop (index 0 or last depending on loop order)
-      // Loop is backwards: i = 1 (Second) -> Updates Map Entry (Create new)
-      // i = 0 (First) -> Updates Map Entry (Reuse) -> text becomes "First"
-      // So final text should be 'First'
+      // Expected Behavior under 1D Array Architecture:
+      // buildIndices scans forward. The first item creates the index entry.
+      // The second duplicate is skipped entirely (newIndices[i] = -1).
+      // During placeItems, the undefined slot for the duplicate is ignored.
+      // Therefore, ONLY the first item is rendered.
       expect($container.find('#item-1').text()).toBe('First');
 
       expect(consoleWarnSpy).toHaveBeenCalled();

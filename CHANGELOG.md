@@ -18,12 +18,17 @@
 
 #### Added
 
-- **Performance**: Introduced `ObjectPool` and `ArrayPool` to recycle `BindingRecord` and `ListItemEntry` objects, significantly reducing GC pressure in dynamic UI scenarios.
+- **Performance**: Introduced `ObjectPool` and `ArrayPool` to recycle `BindingRecord` objects, significantly reducing GC pressure in dynamic UI scenarios.
 
 #### Changed
 
+- **Performance**: Rewrote `atomList` reconciliation using a 1D Flat Buffer (Structure of Arrays) and $O(N)$ linear scanning algorithm, eliminating the need for LIS and object pooling to achieve zero-allocation steady-state rendering and maximum cache locality.
 - **Architecture**: Reorganized `jquery/src` into logical domains (`bindings/`, `core/`, `features/`, `utils/`) for improved modularity and maintainability.
 - **Lists (`atomList`)**: Fixed a bug where mutating nested properties behind a shallow copy failed to trigger a re-render. Added `isEqual` option to `ListOptions` for custom equality checks.
+
+#### Removed
+
+- **Internal**: Removed `getLIS` utility as the engine migrated away from Longest Increasing Subsequence reconciliation.
 
 #### Fixed
 

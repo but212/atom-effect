@@ -107,9 +107,6 @@ export interface BindingOptions<T = unknown> {
 /** Key type for Map/Set inside list.ts */
 export type ListKey = string | number;
 
-/** Lifecycle state of the itemMap entry */
-export type ListItemState = 'new' | 'replaced';
-
 /** Possible return types for render() / empty */
 export type ListRenderResult = string | Element | DocumentFragment | JQuery;
 
@@ -272,16 +269,6 @@ export interface BindingContext {
   readonly $el: JQuery;
   readonly el: HTMLElement;
   readonly trackCleanup: (fn: EffectCleanup) => void;
-}
-
-/**
- * Item record stored in itemMap.
- * @internal
- */
-export interface ListItemEntry<T> {
-  $el: JQuery;
-  item: T;
-  state?: ListItemState | undefined;
 }
 
 // ============================================================================

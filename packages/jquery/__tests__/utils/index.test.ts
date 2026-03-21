@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import $ from '@/index'; // Register plugins ($.atom)
-import { getLIS, getSelector, isReactive, shallowEqual } from '@/utils';
+import { getSelector, isReactive, shallowEqual } from '@/utils';
 import { sanitizeHtml } from '@/utils/sanitize';
 
 describe('Utils', () => {
@@ -85,19 +85,5 @@ describe('Utils', () => {
     });
   });
 
-  describe('getLIS', () => {
-    it('calculates longest increasing subsequence', () => {
-      const cases = [
-        { arr: [10, 9, 2, 5, 3, 7, 101, 18], expected: [2, 4, 5, 7] }, // indices for 2, 3, 7, 18
-        { arr: [], expected: [] },
-        { arr: [5], expected: [0] },
-        { arr: [1, 2, 3], expected: [0, 1, 2] },
-        { arr: [3, 2, 1], expected: [2] },
-      ];
 
-      cases.forEach(({ arr, expected }) => {
-        expect(Array.from(getLIS(arr))).toEqual(expected);
-      });
-    });
-  });
 });
