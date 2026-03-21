@@ -49,7 +49,7 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
               this.setAt(existingIndex, occupant);
               if (occupant.unsub) this._map.set(occupant.node, existingIndex);
             } else {
-              this.setAt(existingIndex, null as unknown as DependencyLink);
+              this.setAt(existingIndex, null);
             }
             this.setAt(trackIndex, link);
           }

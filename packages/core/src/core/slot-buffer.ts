@@ -57,7 +57,7 @@ export class SlotBuffer<T> {
   }
 
   /** Overwrites an item at a specific index. */
-  setAt(index: number, item: T): void {
+  setAt(index: number, item: T | null): void {
     if (index === 0) {
       this._s0 = item;
     } else if (index === 1) {
@@ -203,7 +203,7 @@ export class SlotBuffer<T> {
     if (ov !== null) {
       for (let i = 0; i < ov.length; i++) {
         if (ov[i] === item) {
-          ov[i] = null!;
+          ov[i] = null;
           this._count--;
           return true;
         }
