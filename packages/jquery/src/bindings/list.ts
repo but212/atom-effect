@@ -338,7 +338,6 @@ function placeItems<T>(
     }
     rawContainer.appendChild(fragment);
   } else {
-    // ── Incremental update: 1D React-style linear scan ──────────────────
     let nextNode: Node | null = null;
     let minOldIndexSeen = 2147483647; // Max Int32
 
