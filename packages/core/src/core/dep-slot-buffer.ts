@@ -128,7 +128,9 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
    * Always use truncateFrom() to remove items.
    */
   override remove(_item: DependencyLink): boolean {
-    throw new Error('remove() is strictly prohibited in DepSlotBuffer to preserve sequential cache paths.');
+    throw new Error(
+      'remove() is strictly prohibited in DepSlotBuffer to preserve sequential cache paths.'
+    );
   }
 
   /**
