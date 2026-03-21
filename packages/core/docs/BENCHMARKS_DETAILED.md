@@ -4,7 +4,7 @@
 **Version**: v0.23.0
 **Environment**:
 
-- **Node.js**: v20.x
+- **Node.js**: v22.x
 - **OS**: ubuntu-latest (GitHub Actions)
 
 > *Note: These numbers represent pure engine throughput in isolation. Actual app performance often depends on external factors like DOM updates and layout.*

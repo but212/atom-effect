@@ -101,7 +101,7 @@ Production-like scenarios:
 **Last Updated**: 2026-03-02
 **Environment**:
 
-- **Node.js**: v20.x
+- **Node.js**: v22.x
 - **OS**: ubuntu-latest (GitHub Actions)
 
 > **[View Detailed Results](./BENCHMARKS_DETAILED.md)**

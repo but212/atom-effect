@@ -4,7 +4,7 @@ description: "Setup pnpm, Node.js, and install dependencies"
 inputs:
   node-version:
     description: "Node.js version"
-    default: "20.x"
+    default: "22.x"
   registry-url:
     description: "NPM registry URL for publishing"
     default: ""

@@ -34,7 +34,7 @@ export const getNodeVersion = (node: any): number => node.version;
 
 // biome-ignore lint/suspicious/noExplicitAny: Internal tests need access to private properties
 export const getSubscriberCount = (node: any): number => {
-  return node._subscribers?.length ?? 0;
+  return node._slots?.size ?? 0;
 };
 
 export interface FuzzConfig {

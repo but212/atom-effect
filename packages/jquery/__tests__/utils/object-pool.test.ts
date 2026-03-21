@@ -211,10 +211,10 @@ describe('ObjectPool', () => {
   });
 
   // --------------------------------------------------------------------------
-  // Integration: acquire–release cycle
+  // Integration: acquire-release cycle
   // --------------------------------------------------------------------------
 
-  describe('acquire–release cycle', () => {
+  describe('acquire-release cycle', () => {
     it('should reuse objects across multiple cycles without leaking state', () => {
       const cycle1: TestObj[] = [];
 

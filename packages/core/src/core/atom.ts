@@ -1,6 +1,5 @@
 import { ATOM_STATE_FLAGS } from '@/constants';
 import { ReactiveDependency } from '@/core/base';
-import type { Subscription } from '@/core/dep-tracking';
 import { nextVersion } from '@/internal/epoch';
 import { scheduler } from '@/internal/scheduler';
 import { ATOM_BRAND, WRITABLE_BRAND } from '@/symbols';
@@ -15,7 +14,6 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
   private _value: T;
   /** Old value for notifications */
   private _pendingOldValue: T | undefined = undefined;
-  protected _subscribers: (Subscription<T> | null)[] = [];
 
   /** @internal */
   readonly [ATOM_BRAND] = true;
@@ -42,7 +40,7 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
     this.version = nextVersion(this.version);
 
     const flags = this.flags;
-    if (this._subscribers.length === 0 || flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED) {
+    if (!this._slots || this._slots.size === 0 || flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED) {
       return;
     }
 
@@ -91,7 +89,7 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
   dispose(): void {
     if (this.flags & ATOM_STATE_FLAGS.DISPOSED) return;
 
-    this._subscribers.length = 0;
+    this._slots?.clear();
     this.flags |= ATOM_STATE_FLAGS.DISPOSED;
     // Release references
     this._value = undefined as T;
