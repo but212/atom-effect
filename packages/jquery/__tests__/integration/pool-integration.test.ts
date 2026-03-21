@@ -1,13 +1,7 @@
-import $ from 'jquery';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '@/index';
 import { disableAutoCleanup, enableAutoCleanup, registry } from '@/core/registry';
-import {
-  bindingRecordPool,
-  cleanupsArrayPool,
-  effectsArrayPool,
-  listItemEntryPool,
-} from '@/internal/pool';
+import { bindingRecordPool, cleanupsArrayPool, effectsArrayPool } from '@/internal/pool';
 
 describe('Pool Integration', () => {
   beforeEach(() => {
@@ -22,7 +16,6 @@ describe('Pool Integration', () => {
     bindingRecordPool.drain();
     effectsArrayPool.reset();
     cleanupsArrayPool.reset();
-    listItemEntryPool.drain();
   });
 
   // --------------------------------------------------------------------------
@@ -123,85 +116,6 @@ describe('Pool Integration', () => {
       const reused = cleanupsArrayPool.acquire();
       expect(reused).toBeInstanceOf(Array);
       expect(reused.length).toBe(0);
-    });
-  });
-
-  // --------------------------------------------------------------------------
-  // ListItemEntry pool integration
-  // --------------------------------------------------------------------------
-
-  describe('ListItemEntry pool', () => {
-    it('should recycle entries when list items are removed', async () => {
-      const $container = $('<div>').appendTo(document.body);
-      const items = $.atom([
-        { id: 1, text: 'A' },
-        { id: 2, text: 'B' },
-        { id: 3, text: 'C' },
-      ]);
-
-      $container.atomList(items, {
-        key: 'id',
-        render: (item: { id: number; text: string }) => `<div>${item.text}</div>`,
-      });
-
-      expect($container.children().length).toBe(3);
-
-      // Remove items — entries should be released to pool
-      items.value = [{ id: 1, text: 'A' }];
-      // Wait for reactive update
-      await new Promise((r) => setTimeout(r, 50));
-
-      // 2 items removed → 2 entries released to pool
-      expect(listItemEntryPool.size).toBeGreaterThanOrEqual(2);
-    });
-
-    it('should reuse entries when new items are added after removal', async () => {
-      const $container = $('<div>').appendTo(document.body);
-      const items = $.atom([
-        { id: 1, text: 'A' },
-        { id: 2, text: 'B' },
-      ]);
-
-      $container.atomList(items, {
-        key: 'id',
-        render: (item: { id: number; text: string }) => `<div>${item.text}</div>`,
-      });
-
-      // Remove both
-      items.value = [];
-      await new Promise((r) => setTimeout(r, 50));
-
-      const poolSizeAfterRemoval = listItemEntryPool.size;
-      expect(poolSizeAfterRemoval).toBeGreaterThanOrEqual(2);
-
-      // Add new items — should acquire from pool
-      items.value = [
-        { id: 10, text: 'X' },
-        { id: 20, text: 'Y' },
-      ];
-      await new Promise((r) => setTimeout(r, 50));
-
-      expect(listItemEntryPool.size).toBeLessThan(poolSizeAfterRemoval);
-      expect($container.children().length).toBe(2);
-    });
-
-    it('should release entries with clean state', async () => {
-      const $container = $('<div>').appendTo(document.body);
-      const items = $.atom([{ id: 1, text: 'Hello' }]);
-
-      $container.atomList(items, {
-        key: 'id',
-        render: (item: { id: number; text: string }) => `<div>${item.text}</div>`,
-      });
-
-      items.value = [];
-      await new Promise((r) => setTimeout(r, 50));
-
-      // Acquire the recycled entry and verify it's been cleaned
-      const recycled = listItemEntryPool.acquire();
-      expect(recycled.$el).toBe(null);
-      expect(recycled.item).toBe(null);
-      expect(recycled.state).toBe(undefined);
     });
   });
 
