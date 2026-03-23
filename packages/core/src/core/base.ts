@@ -9,39 +9,50 @@ import { generateId } from '@/utils/debug';
 import { wrapError } from '@/utils/error';
 
 /**
- * Base class for all reactive nodes.
- */
-export class ReactiveNode {
-  /** State flags */
-  flags = 0;
-  /** Version counter */
-  version = 0;
-  /** Last access epoch */
-  _lastSeenEpoch = EPOCH_CONSTANTS.UNINITIALIZED;
-  /** Scheduler epoch tag */
-  _nextEpoch?: number;
-  /** Debug ID */
-  readonly id: DependencyId = generateId() & SMI_MAX;
-}
-
-/**
- * Reactive producer base class (formerly ReactiveDependency).
- * Provides subscriber management for nodes that can be observed.
+ * Unified base class for all reactive nodes (Atoms, Computeds, Effects).
  *
- * Subscribers are stored in a {@link SlotBuffer} — an inline-4-slot
- * container that avoids array allocation for the common case (≤4 subscribers)
- * and spills to an overflow array only when needed.
+ * Optimized for V8 Hidden Class Monomorphism by having a single, consistent
+ * object shape for all reactive logic.
+ *
+ * @template T - The type of value produced by this node (used for subscriptions).
  */
-export abstract class ReactiveProducer<T> extends ReactiveNode {
-  protected _slots: SlotBuffer<Subscription<T>> | null = null;
-  private _notifying = 0;
+export abstract class ReactiveNode<T> {
+  /** [Producer/Consumer] State flags */
+  flags = 0;
+  /** [Producer/Consumer] Version counter */
+  version = 0;
+  /** [Producer/Consumer] Last access epoch */
+  _lastSeenEpoch = EPOCH_CONSTANTS.UNINITIALIZED;
+  /** [Context] Scheduler epoch tag */
+  _nextEpoch?: number;
+  /** [Debug] Unique ID for identify node in tracking maps */
+  readonly id: DependencyId = generateId() & SMI_MAX;
 
   /**
-   * Adds subscriber.
+   * [Producer] Managed subscribers.
+   * Nullable to save memory in pure-consumer nodes (Effects).
+   */
+  _slots: SlotBuffer<Subscription<T>> | null = null;
+  /** [Producer] Re-entry guard for notification loop. */
+  _notifying = 0;
+
+  /**
+   * [Consumer] Managed dependencies.
+   * Nullable to save memory in pure-producers (Atoms).
+   */
+  _deps: DepSlotBuffer | null = null;
+  /** [Consumer] O(1) Hot-path dependency index for rapid dirty checks. */
+  _hotIndex = -1;
+
+  // ============================================================================
+  // Producer Logic (Subscriber Management)
+  // ============================================================================
+
+  /**
+   * Adds subscriber for notifications.
    */
   subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
     const isFn = typeof listener === 'function';
-    // Validate subscriber
     if (!isFn && (!listener || typeof (listener as Subscriber).execute !== 'function')) {
       throw wrapError(
         new TypeError('Invalid subscriber'),
@@ -65,7 +76,7 @@ export abstract class ReactiveProducer<T> extends ReactiveNode {
     });
 
     if (duplicate) {
-      if (IS_DEV) console.warn('Duplicate subscription ignored.');
+      if (IS_DEV) console.warn(`[atom-effect] Duplicate subscription ignored on node ${this.id}`);
       return () => {};
     }
 
@@ -75,70 +86,66 @@ export abstract class ReactiveProducer<T> extends ReactiveNode {
     );
 
     slots.add(link);
-
     return () => this._unsubscribe(link);
   }
 
-  private _unsubscribe(link: Subscription<T>): void {
+  protected _unsubscribe(link: Subscription<T>): void {
     if (!this._slots) return;
 
     if (this._notifying > 0) {
-      // Tombstone: null the slot, defer compaction
       this._slots.remove(link);
       return;
     }
 
-    // Direct removal + compact
     this._slots.remove(link);
     this._slots.compact();
   }
 
+  /**
+   * Returns current subscriber count.
+   */
   subscriberCount(): number {
     return this._slots ? this._slots.size : 0;
   }
 
+  /**
+   * Notifies all subscribers about a value update.
+   */
   protected _notifySubscribers(newValue: T | undefined, oldValue: T | undefined): void {
-    if (!this._slots || this._slots.size === 0) return;
+    const slots = this._slots;
+    if (!slots || slots.size === 0) return;
 
     this._notifying++;
     try {
-      this._slots.forEach((s) => {
+      slots.forEach((s) => {
         try {
           s.notify(newValue, oldValue);
         } catch (err) {
-          this._handleNotifyError(err);
+          console.error(
+            wrapError(err, AtomError, ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED)
+          );
         }
       });
     } finally {
       this._notifying--;
       if (this._notifying === 0) {
-        this._slots.compact();
+        slots.compact();
       }
     }
   }
 
-  private _handleNotifyError(err: unknown): void {
-    console.error(wrapError(err, AtomError, ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED));
-  }
-}
-
-/**
- * Reactive consumer base class.
- * Provides dependency tracking logic for nodes that observe other nodes.
- */
-export abstract class ReactiveConsumer extends ReactiveNode {
-  protected abstract _deps: DepSlotBuffer;
+  // ============================================================================
+  // Consumer Logic (Dependency Validation)
+  // ============================================================================
 
   /**
-   * [Hot-path Optimization]
-   * Caches the index of the last dependency that caused a dirty state.
+   * Determines if the node is dirty by checking its dependency chain.
+   * Optimized with O(1) hot-path check.
    */
-  protected _hotIndex = -1;
+  protected _isDirty(): boolean {
+    const deps = this._deps;
+    if (!deps || deps.size === 0) return false;
 
-  /**
-   * Two-phase dirty check.
-   */
-  protected _isDirty(deps: DepSlotBuffer): boolean {
     // Phase 1: Hot-path Check - O(1)
     if (this._hotIndex !== -1) {
       const hotLink = deps.getAt(this._hotIndex);
@@ -151,8 +158,11 @@ export abstract class ReactiveConsumer extends ReactiveNode {
     if (!deps.hasComputeds && !deps.isDirtyFast()) return false;
 
     // Deep check for computeds
-    return this._deepDirtyCheck(deps);
+    return this._deepDirtyCheck();
   }
 
-  protected abstract _deepDirtyCheck(deps: DepSlotBuffer): boolean;
+  /**
+   * Deeply validates dependency versions.
+   */
+  protected abstract _deepDirtyCheck(): boolean;
 }

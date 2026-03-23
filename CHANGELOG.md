@@ -9,8 +9,8 @@
 - **Performance**: Implemented O(1) **Bit-Packed Versioned Slot Buffers** using 32-bit additive hashing, loop unrolling for inline slots, and `hasComputeds` safety-gating for zero-overhead Atom-heavy graphs.
 - **Performance**: Implemented **Deps-Stable Skip** for `Computed` atoms. Computed atoms now verify dependency versions via O(1) hashing (`_isDirty`) before executing their computation function, completely bypassing unnecessary re-evaluations (Diamond Dependency Problem).
 - **Performance**: Implemented **Hot-path dependency caching** in `Computed` atoms. By checking the last modified dependency first, the engine can now detect dirty states in O(1) for high-frequency updates (e.g., animations or scrolls), reducing validation overhead in complex dependency graphs.
-- **Architecture**: Introduced `ReactiveProducer` and `ReactiveConsumer` base classes to consolidate dependency tracking and subscriber management logic, improving inheritance and code reuse.
-- **Refactor**: Simplified `Computed` and `Effect` implementations by leveraging the new reactive base classes.
+- **Refactor**: Simplified `Computed` implementation by removing redundant dependency tracking logic and leveraging the unified heirarchy.
+- **Types**: Replaced `any` with generics in `ReactiveNode` for strict type safety in subscription and notification paths.
 - **Optimization**: Optimized `DepSlotBuffer` for V8 Hidden Classes and eliminated closure allocations in dependency tracking paths via `_onItemRemoved` hooks.
 - **Feature**: Added `FORCE_COMPUTE` flag to `COMPUTED_STATE_FLAGS` so that manual `invalidate()` calls safely bypass the Deps-Stable Skip optimization.
 - **Infrastructure**: Replaced `vite-tsconfig-paths` with native Vite `resolve.tsconfigPaths` support across all packages.
