@@ -1,7 +1,7 @@
 import { BITPACK } from '@/constants';
 import type { DependencyLink } from '@/core/dep-tracking';
-import { SlotBuffer } from './slot-buffer';
 import type { Dependency } from '@/types';
+import { SlotBuffer } from './slot-buffer';
 
 /**
  * Specialized inline-slot container for dependency tracking.
