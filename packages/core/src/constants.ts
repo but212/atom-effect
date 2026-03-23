@@ -30,6 +30,8 @@ export const COMPUTED_STATE_FLAGS = {
   REJECTED: 1 << 7,
   RECOMPUTING: 1 << 8,
   HAS_ERROR: 1 << 9,
+  /** Flagged when explicitly invalidated. Bypasses fast-path dirty checks. */
+  FORCE_COMPUTE: 1 << 10,
 } as const;
 
 /**
@@ -88,6 +90,15 @@ export const EPOCH_CONSTANTS = {
  * V8 Small Integer (SMI) max value.
  */
 export const SMI_MAX = 0x3fffffff;
+
+/**
+ * Bit-packing constants for versioned slot operations.
+ * Used by DepSlotBuffer for O(1) snapshot hashing.
+ */
+export const BITPACK = {
+  /** Bits allocated for version in a packed slot value. */
+  VERSION_BITS: 16,
+} as const;
 
 /**
  * Development environment flag.

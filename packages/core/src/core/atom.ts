@@ -28,7 +28,8 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
   }
 
   get value(): T {
-    trackingContext.current?.addDependency(this);
+    const context = trackingContext.current;
+    if (context != null) context.addDependency(this);
     return this._value;
   }
 
@@ -39,21 +40,23 @@ class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
     this._value = newValue;
     this.version = nextVersion(this.version);
 
+    // 1. Check if notifications are needed
+    const slots = this._slots;
     const flags = this.flags;
-    if (!this._slots || this._slots.size === 0 || flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED) {
+    if (slots == null || slots.size === 0 || flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED) {
       return;
     }
 
     this._pendingOldValue = oldValue;
-    this.flags = flags | ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
+    const nextFlags = flags | ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
+    this.flags = nextFlags;
 
-    // Sync handling
-    if (flags & ATOM_STATE_FLAGS.SYNC && !scheduler.isBatching) {
+    // 2. Schedule or flush
+    if ((nextFlags & ATOM_STATE_FLAGS.SYNC) !== 0 && !scheduler.isBatching) {
       this._flushNotifications();
       return;
     }
 
-    // Async scheduling
     scheduler.schedule(this);
   }
 

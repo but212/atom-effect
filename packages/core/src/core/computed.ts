@@ -8,10 +8,10 @@ import {
   SMI_MAX,
 } from '@/constants';
 import { ReactiveDependency } from '@/core/base';
-import { DepSlotBuffer } from '@/core/dep-slot-buffer';
 import { DependencyLink } from '@/core/dep-tracking';
 import { ComputedError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
+import { DepSlotBuffer } from '@/internal/dep-slot-buffer';
 import { currentFlushEpoch, nextEpoch, nextVersion } from '@/internal/epoch';
 import { ATOM_BRAND, COMPUTED_BRAND } from '@/symbols';
 import { trackingContext } from '@/tracking';
@@ -26,15 +26,18 @@ import { debug, NO_DEFAULT_VALUE } from '@/utils/debug';
 import { wrapError } from '@/utils/error';
 import { isPromise } from '@/utils/type-guards';
 
-const { IDLE, DIRTY, PENDING, RESOLVED, REJECTED, HAS_ERROR, RECOMPUTING, DISPOSED, IS_COMPUTED } =
-  COMPUTED_STATE_FLAGS;
-
-function getAsyncState(flags: number): AsyncStateType {
-  if (flags & RESOLVED) return AsyncState.RESOLVED;
-  if (flags & PENDING) return AsyncState.PENDING;
-  if (flags & REJECTED) return AsyncState.REJECTED;
-  return AsyncState.IDLE;
-}
+const {
+  IDLE,
+  DIRTY,
+  PENDING,
+  RESOLVED,
+  REJECTED,
+  HAS_ERROR,
+  RECOMPUTING,
+  DISPOSED,
+  IS_COMPUTED,
+  FORCE_COMPUTE,
+} = COMPUTED_STATE_FLAGS;
 
 /**
  * Computed atom implementation.
@@ -115,7 +118,17 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     }
 
     if (flags & (DIRTY | IDLE)) {
-      this._recompute();
+      if (
+        (flags & IDLE) === 0 &&
+        (flags & FORCE_COMPUTE) === 0 &&
+        this._deps.size > 0 &&
+        !this._isDirty()
+      ) {
+        // Deps-stable skip: dependencies haven't changed, output remains the same
+        this.flags &= ~DIRTY;
+      } else {
+        this._recompute();
+      }
       // Re-read flags after update
       if (this.flags & RESOLVED) return this._value;
     }
@@ -143,17 +156,23 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
 
   get state(): AsyncStateType {
     this._track();
-    return getAsyncState(this.flags);
+    const flags = this.flags;
+    if (flags & RESOLVED) return AsyncState.RESOLVED;
+    if (flags & PENDING) return AsyncState.PENDING;
+    if (flags & REJECTED) return AsyncState.REJECTED;
+    return AsyncState.IDLE;
   }
 
   get hasError(): boolean {
     this._track();
-    if (this.flags & (REJECTED | HAS_ERROR)) return true;
+    const flags = this.flags;
+    if (flags & (REJECTED | HAS_ERROR)) return true;
 
-    // Live scan: deps may have changed error state asynchronously
-    for (let i = 0; i < this._deps.size; i++) {
-      const link = this._deps.getAt(i);
-      if (link && link.node.flags & HAS_ERROR) return true;
+    const deps = this._deps;
+    const size = deps.size;
+    for (let i = 0; i < size; i++) {
+      const link = deps.getAt(i);
+      if (link != null && link.node.flags & HAS_ERROR) return true;
     }
     return false;
   }
@@ -164,25 +183,35 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
 
   get errors(): readonly Error[] {
     this._track();
-    if (!this.hasError) return EMPTY_ERROR_ARRAY;
 
-    // Collect errors directly into array, dedupe via indexOf (avoids Set allocation)
+    // 1. Collect errors
     const collected: Error[] = [];
     if (this._error) collected.push(this._error);
 
-    for (let i = 0; i < this._deps.size; i++) {
-      const link = this._deps.getAt(i);
-      if (!link) continue;
+    const deps = this._deps;
+    const size = deps.size;
+    for (let i = 0; i < size; i++) {
+      const link = deps.getAt(i);
+      if (link == null) continue;
+
       const dep = link.node;
       if (dep.flags & HAS_ERROR) {
-        const computedDep = dep as unknown as ComputedAtom<unknown>;
-        computedDep.errors.forEach((err) => {
-          if (err && !collected.includes(err)) collected.push(err);
-        });
+        this._collectErrorsFromDep(dep as unknown as ComputedAtom<unknown>, collected);
       }
     }
 
-    return Object.freeze(collected);
+    return collected.length === 0 ? EMPTY_ERROR_ARRAY : Object.freeze(collected);
+  }
+
+  private _collectErrorsFromDep(computedDep: ComputedAtom<unknown>, collected: Error[]): void {
+    const errs = computedDep.errors;
+    const len = errs.length;
+    for (let j = 0; j < len; j++) {
+      const err = errs[j];
+      if (err != null && !collected.includes(err)) {
+        collected.push(err);
+      }
+    }
   }
 
   get lastError(): Error | null {
@@ -201,6 +230,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   }
 
   invalidate(): void {
+    this.flags |= FORCE_COMPUTE;
     this._markDirty();
   }
 
@@ -222,35 +252,39 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   }
 
   addDependency(dep: Dependency): void {
-    // Deduplicate dependencies
     if (dep._lastSeenEpoch === this._trackEpoch) return;
     dep._lastSeenEpoch = this._trackEpoch;
 
-    const existing = this._deps.getAt(this._trackCount);
-    // Fast path: fully stable dependencies
-    if (existing && existing.node === dep) {
+    const trackIndex = this._trackCount;
+    const existing = this._deps.getAt(trackIndex);
+
+    // 1. Stable Path: dependency index remains the same
+    if (existing != null && existing.node === dep) {
       existing.version = dep.version;
-      this._trackCount++;
-      return;
+    }
+    // 2. Diverged Path: lookup or insert
+    else if (this._deps.claimExisting(dep, trackIndex)) {
+      // Version updated inside claimExisting
+    }
+    // 3. New dependency
+    else {
+      const link = new DependencyLink(dep, dep.version, dep.subscribe(this));
+      this._deps.insertNew(trackIndex, link);
     }
 
-    // Diverged path
-    if (this._deps.claimExisting(dep, this._trackCount)) {
-      this._trackCount++;
-      return;
+    if (dep.flags & IS_COMPUTED) {
+      this._deps.hasComputeds = true;
     }
-
-    const link = new DependencyLink(dep, dep.version, dep.subscribe(this));
-    this._deps.insertNew(this._trackCount, link);
-    this._trackCount++;
+    this._trackCount = trackIndex + 1;
   }
 
   private _recompute(): void {
     if (this.flags & RECOMPUTING) return;
-    this.flags |= RECOMPUTING;
+    this.flags = (this.flags | RECOMPUTING) & ~FORCE_COMPUTE;
 
     this._trackEpoch = nextEpoch();
     this._trackCount = 0;
+    this._deps.prepareTracking();
 
     let committed = false;
     try {
@@ -259,6 +293,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
 
       // Clean up any remaining trailing dependencies
       this._deps.truncateFrom(this._trackCount);
+      this._deps.seal();
       committed = true;
 
       // Handle Result
@@ -332,14 +367,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   }
 
   private _captureVersionSnapshot(): number {
-    let hash = 0;
-    for (let i = 0; i < this._deps.size; i++) {
-      const link = this._deps.getAt(i);
-      if (link) {
-        hash = ((hash << 5) - hash + link.node.version) | 0;
-      }
-    }
-    return hash;
+    return this._deps.captureVersionSnapshot();
   }
 
   private _handleError(err: unknown, msg: string, throwErr = false): void {
@@ -387,6 +415,44 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     if (this.flags & (RECOMPUTING | DIRTY)) return;
     this.flags |= DIRTY;
     this._notifySubscribers(undefined, undefined);
+  }
+
+  private _isDirty(): boolean {
+    const deps = this._deps;
+    if (!deps.hasComputeds && !deps.isDirtyFast()) return false;
+
+    const prevContext = trackingContext.current;
+    trackingContext.current = null;
+
+    try {
+      const size = deps.size;
+      for (let i = 0; i < size; i++) {
+        const link = deps.getAt(i);
+        if (link == null) continue;
+
+        const dep = link.node;
+        if (dep.flags & IS_COMPUTED) {
+          this._tryPullComputed(dep);
+        }
+
+        if (dep.version !== link.version) return true;
+      }
+      return false;
+    } finally {
+      trackingContext.current = prevContext;
+    }
+  }
+
+  private _tryPullComputed(dep: Dependency): void {
+    try {
+      // Force computed to re-evaluate so version reflects latest state
+      void (dep as { value: unknown }).value;
+    } catch {
+      if (IS_DEV) {
+        console.warn(`[atom-effect] Dependency #${dep.id} threw during dirty check`);
+      }
+      // Swallow error: rely strictly on version check to prevent permanent fast-path bypass
+    }
   }
 }
 

@@ -7,10 +7,10 @@ import {
   SCHEDULER_CONFIG,
 } from '@/constants';
 import { ReactiveNode } from '@/core/base';
-import { DepSlotBuffer } from '@/core/dep-slot-buffer';
 import { DependencyLink } from '@/core/dep-tracking';
 import { EffectError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
+import { DepSlotBuffer } from '@/internal/dep-slot-buffer';
 import {
   currentFlushEpoch,
   flushExecutionCount,
@@ -95,29 +95,35 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   }
 
   public addDependency(dep: Dependency): void {
-    // Only track if currently executing (double check)
     if (!(this.flags & EFFECT_STATE_FLAGS.EXECUTING)) return;
 
     const startEpoch = this._currentEpoch;
-
-    // Deduplicate in current epoch
     if (dep._lastSeenEpoch === startEpoch) return;
     dep._lastSeenEpoch = startEpoch;
 
-    const existing = this._deps.getAt(this._trackCount);
-    // Fast path: fully stable dependencies
-    if (existing && existing.node === dep) {
+    const trackIndex = this._trackCount;
+    const existing = this._deps.getAt(trackIndex);
+
+    // 1. Stable Path: dependency index remains the same
+    if (existing != null && existing.node === dep) {
       existing.version = dep.version;
-      this._trackCount++;
-      return;
+    }
+    // 2. Diverged Path: lookup or insert
+    else if (this._deps.claimExisting(dep, trackIndex)) {
+      // Version updated in claimExisting
+    }
+    // 3. New dependency
+    else {
+      this._insertNewDependency(dep, trackIndex);
     }
 
-    // Diverged path
-    if (this._deps.claimExisting(dep, this._trackCount)) {
-      this._trackCount++;
-      return;
+    if (dep.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) {
+      this._deps.hasComputeds = true;
     }
+    this._trackCount = trackIndex + 1;
+  }
 
+  private _insertNewDependency(dep: Dependency, trackIndex: number): void {
     let link: DependencyLink;
     try {
       const unsubscribe = dep.subscribe(this._notifyCallback);
@@ -130,12 +136,10 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
           this._onError(wrapped);
         } catch {}
       }
-      // Add noop link so next execution can attempt re-subscription
       link = new DependencyLink(dep, dep.version, undefined);
     }
 
-    this._deps.insertNew(this._trackCount, link);
-    this._trackCount++;
+    this._deps.insertNew(trackIndex, link);
   }
 
   /**
@@ -154,6 +158,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 
     this._currentEpoch = nextEpoch();
     this._trackCount = 0;
+    this._deps.prepareTracking();
 
     let committed = false;
     try {
@@ -161,6 +166,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 
       // Clean up any remaining trailing dependencies
       this._deps.truncateFrom(this._trackCount);
+      this._deps.seal();
       committed = true;
 
       // Handle result
@@ -209,35 +215,39 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   }
 
   private _isDirty(): boolean {
-    // Save tracking context once, restore at end (avoids per-iteration function allocation)
+    const deps = this._deps;
+    if (!deps.hasComputeds && !deps.isDirtyFast()) return false;
+
     const prevContext = trackingContext.current;
     trackingContext.current = null;
 
     try {
-      for (let i = 0; i < this._deps.size; i++) {
-        const link = this._deps.getAt(i);
-        if (!link) continue;
-        const dep = link.node;
+      const size = deps.size;
+      for (let i = 0; i < size; i++) {
+        const link = deps.getAt(i);
+        if (link == null) continue;
 
-        // Trigger recomputation for computed dependencies
+        const dep = link.node;
         if (dep.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) {
-          try {
-            // Force computed to re-evaluate so version reflects latest state
-            void (dep as { value: unknown }).value;
-          } catch {
-            if (IS_DEV) {
-              console.warn(`[atom-effect] Dependency #${dep.id} threw during dirty check`);
-            }
-            return true; // Error usually implies dirty/re-eval needed
-          }
+          this._tryPullComputed(dep);
         }
 
-        // Version Check
         if (dep.version !== link.version) return true;
       }
       return false;
     } finally {
       trackingContext.current = prevContext;
+    }
+  }
+
+  private _tryPullComputed(dep: Dependency): void {
+    try {
+      // Force computed to re-evaluate so version reflects latest state
+      void (dep as { value: unknown }).value;
+    } catch {
+      if (IS_DEV) {
+        console.warn(`[atom-effect] Dependency #${dep.id} threw during dirty check`);
+      }
     }
   }
 
@@ -258,25 +268,34 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       this._executionsInEpoch = 0;
     }
 
-    if (++this._executionsInEpoch > this._maxExecutionsPerFlush)
-      this._throwInfiniteLoopError('per-effect');
-    if (incrementFlushExecutionCount() > SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH)
+    const executions = ++this._executionsInEpoch;
+    if (executions > this._maxExecutionsPerFlush) this._throwInfiniteLoopError('per-effect');
+
+    const globalExecutions = incrementFlushExecutionCount();
+    if (globalExecutions > SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH) {
       this._throwInfiniteLoopError('global');
+    }
 
     this._executionCount++;
 
-    // Frequency check (dev only)
-    if (IS_DEV && Number.isFinite(this._maxExecutions)) {
-      const now = Date.now();
-      if (now - this._windowStart >= DEBUG_CONFIG.EFFECT_FREQUENCY_WINDOW) {
-        this._windowStart = now;
-        this._windowCount = 1;
-      } else if (++this._windowCount > this._maxExecutions) {
-        const err = new EffectError(ERROR_MESSAGES.EFFECT_FREQUENCY_LIMIT_EXCEEDED);
-        this.dispose();
-        this._handleExecutionError(err);
-        throw err;
-      }
+    if (IS_DEV) this._checkFrequencyLimit();
+  }
+
+  private _checkFrequencyLimit(): void {
+    if (!Number.isFinite(this._maxExecutions)) return;
+
+    const now = Date.now();
+    if (now - this._windowStart >= DEBUG_CONFIG.EFFECT_FREQUENCY_WINDOW) {
+      this._windowStart = now;
+      this._windowCount = 1;
+      return;
+    }
+
+    if (++this._windowCount > this._maxExecutions) {
+      const err = new EffectError(ERROR_MESSAGES.EFFECT_FREQUENCY_LIMIT_EXCEEDED);
+      this.dispose();
+      this._handleExecutionError(err);
+      throw err;
     }
   }
 

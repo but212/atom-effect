@@ -6,13 +6,15 @@
 
 #### Changed
 
-- **Performance**: Introduced `SlotBuffer` and `DepSlotBuffer`, replacing `ArrayPool` for dependency tracking to achieve zero allocation for atoms with <= 4 subscribers.
-- **Performance**: Implemented a Hybrid O(1) Map Fallback to prevent O(N^2) mega-node performance cliffs during dependency tracking.
-- **Memory**: Adopted lazy initialization for reactive subscriber slots, significantly reducing the base memory footprint.
+- **Performance**: Implemented O(1) **Bit-Packed Versioned Slot Buffers** using 32-bit additive hashing, loop unrolling for inline slots, and `hasComputeds` safety-gating for zero-overhead Atom-heavy graphs.
+- **Performance**: Implemented **Deps-Stable Skip** for `Computed` atoms. Computed atoms now verify dependency versions via O(1) hashing (`_isDirty`) before executing their computation function, completely bypassing unnecessary re-evaluations (Diamond Dependency Problem).
+- **Optimization**: Optimized `DepSlotBuffer` for V8 Hidden Classes and eliminated closure allocations in dependency tracking paths via `_onItemRemoved` hooks.
+- **Feature**: Added `FORCE_COMPUTE` flag to `COMPUTED_STATE_FLAGS` so that manual `invalidate()` calls safely bypass the Deps-Stable Skip optimization.
+- **Infrastructure**: Replaced `vite-tsconfig-paths` with native Vite `resolve.tsconfigPaths` support across all packages.
 
 #### Removed
 
-- **Internal**: Removed `ArrayPool` and legacy array pooling mechanisms (`linksArrayPool`, `syncDependencies`).
+- **Internal**: `ArrayPool`, legacy pooling mechanisms, and `vite-tsconfig-paths` dependency.
 
 ### jQuery
 
