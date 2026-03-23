@@ -40,10 +40,10 @@ To reduce unnecessary work, a **Notify-and-Check** approach is used.
 1. **Phase 1: Notification**: When an atom changes, it notifies its immediate subscribers. For **Computed** nodes, this sets the `DIRTY` flag. For **Effects**, this schedules an execution check via the scheduler.
 2. **Phase 2: Evaluation (Sweep)**: The check differs by node type:
    - **Computed**: On `.value` access, evaluates lazily only if the `DIRTY` flag is set.
-   - **Effect**: Before re-executing, `_isDirty()` is called. This first performs a **Fast Dirty Check** (O(1) version hash comparison). If the hash is stable, it skips re-evaluation. If not, it accesses each computed dependency's `.value` to force re-evaluation and compares `dep.version`.
+   - **Effect**: Before re-executing, `_isDirty()` is called. This first performs a **Fast Dirty Check** (efficient O(N) version hash calculation and comparison). If the hash is stable, it skips re-evaluation. If not, it accesses each computed dependency's `.value` to force re-evaluation and compares `dep.version`.
 
-**Trade-off: Hash Collisions vs. Full Walk**
-The version hash acts as a fast heuristic. While theoretically prone to collisions, the additive combination of version and node ID makes it extremely reliable for skipping unnecessary full dependency walks.
+**Trade-off: Cheap O(N) vs. Full Walk**
+The version hash acts as a fast heuristic. While calculating the hash is O(N) relative to the number of direct dependencies, it avoids an expensive recursive structural walk (which would involve executing computed values). The additive combination of version and node ID makes it extremely reliable for skipping unnecessary full checks.
 
 ---
 
@@ -65,7 +65,7 @@ Reactivity systems are prone to memory leaks if subscriptions are not cleaned up
 - **SlotBuffer (Inline Slots)**: A zero-allocation (for up to 4 items) container for subscribers/dependencies. It uses inline object properties (`_s0`...`_s3`) to ensure cache locality and stable V8 hidden classes, only spilling to a lazy overflow array when the inline slots are exhausted.
 - **DepSlotBuffer (Dependency Tracking)**: A specialized `SlotBuffer` for dependency links. It features:
   - **Mega-Node Optimization**: A hybrid O(1) `Map` fallback when dependencies exceed 32, ensuring performance even for extremely large graphs.
-  - **Fast Dirty Checking**: An O(1) version hash check (`isDirtyFast`) using an additive hash of all dependency versions and IDs to quickly determine if a node *might* be dirty before performing a full structural walk.
+  - **Fast Dirty Checking**: An efficient O(N) version hash check (`isDirtyFast`) using an additive hash of all dependency versions and IDs to quickly determine if a node *might* be dirty before performing a full structural walk.
   - **Safe Retrieval**: Implements `claimExisting` to reuse existing dependency links during re-evaluation, minimizing churn.
 
 **Trade-off: Complexity vs. Zero-Allocation**
