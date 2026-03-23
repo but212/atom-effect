@@ -6,7 +6,7 @@ import {
   IS_DEV,
   SCHEDULER_CONFIG,
 } from '@/constants';
-import { ReactiveConsumer } from '@/core/base';
+import { ReactiveNode } from '@/core/base';
 import { DependencyLink } from '@/core/dep-tracking';
 import { EffectError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
@@ -28,12 +28,13 @@ import { isPromise } from '@/utils/type-guards';
 /**
  * Effect implementation.
  */
-class EffectImpl extends ReactiveConsumer implements EffectObject, DependencyTracker {
+class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyTracker {
   /** @internal */
   readonly [EFFECT_BRAND] = true;
 
   private _cleanup: (() => void) | null = null;
-  protected override _deps = new DepSlotBuffer();
+  /** Initialized in constructor to maintain God Class object shape */
+  _deps = new DepSlotBuffer();
 
   /** Pre-allocated notify callback shared by all subscriptions */
   private readonly _notifyCallback: () => void;
@@ -87,7 +88,7 @@ class EffectImpl extends ReactiveConsumer implements EffectObject, DependencyTra
     this.flags |= EFFECT_STATE_FLAGS.DISPOSED;
 
     this._execCleanup();
-    this._deps.disposeAll();
+    this._deps?.disposeAll();
   }
 
   [Symbol.dispose](): void {
@@ -102,14 +103,15 @@ class EffectImpl extends ReactiveConsumer implements EffectObject, DependencyTra
     dep._lastSeenEpoch = startEpoch;
 
     const trackIndex = this._trackCount;
-    const existing = this._deps.getAt(trackIndex);
+    const deps = this._deps!;
+    const existing = deps.getAt(trackIndex);
 
     // 1. Stable Path: dependency index remains the same
     if (existing != null && existing.node === dep) {
       existing.version = dep.version;
     }
     // 2. Diverged Path: lookup or insert
-    else if (this._deps.claimExisting(dep, trackIndex)) {
+    else if (deps.claimExisting(dep, trackIndex)) {
       // Version updated in claimExisting
     }
     // 3. New dependency
@@ -118,7 +120,7 @@ class EffectImpl extends ReactiveConsumer implements EffectObject, DependencyTra
     }
 
     if (dep.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) {
-      this._deps.hasComputeds = true;
+      deps.hasComputeds = true;
     }
     this._trackCount = trackIndex + 1;
   }
@@ -139,7 +141,7 @@ class EffectImpl extends ReactiveConsumer implements EffectObject, DependencyTra
       link = new DependencyLink(dep, dep.version, undefined);
     }
 
-    this._deps.insertNew(trackIndex, link);
+    this._deps!.insertNew(trackIndex, link);
   }
 
   /**
@@ -149,7 +151,8 @@ class EffectImpl extends ReactiveConsumer implements EffectObject, DependencyTra
     if (this.flags & (EFFECT_STATE_FLAGS.DISPOSED | EFFECT_STATE_FLAGS.EXECUTING)) return;
 
     // Skip if not dirty
-    if (!force && this._deps.size > 0 && !this._isDirty(this._deps)) return;
+    const deps = this._deps!;
+    if (!force && deps.size > 0 && !this._isDirty()) return;
 
     this._checkInfiniteLoops();
 
@@ -158,7 +161,7 @@ class EffectImpl extends ReactiveConsumer implements EffectObject, DependencyTra
 
     this._currentEpoch = nextEpoch();
     this._trackCount = 0;
-    this._deps.prepareTracking();
+    deps.prepareTracking();
     this._hotIndex = -1;
 
     let committed = false;
@@ -166,8 +169,8 @@ class EffectImpl extends ReactiveConsumer implements EffectObject, DependencyTra
       const result = trackingContext.run(this, this._fn);
 
       // Clean up any remaining trailing dependencies
-      this._deps.truncateFrom(this._trackCount);
-      this._deps.seal();
+      deps.truncateFrom(this._trackCount);
+      deps.seal();
       committed = true;
 
       // Handle result
@@ -180,7 +183,7 @@ class EffectImpl extends ReactiveConsumer implements EffectObject, DependencyTra
       // Commit on error gracefully to maintain state for recovery
       if (!committed) {
         try {
-          this._deps.truncateFrom(this._trackCount);
+          deps.truncateFrom(this._trackCount);
         } catch (commitErr) {
           if (IS_DEV) {
             console.warn('[atom-effect] _commitDeps failed during error recovery:', commitErr);
@@ -215,9 +218,10 @@ class EffectImpl extends ReactiveConsumer implements EffectObject, DependencyTra
     );
   }
 
-  protected _deepDirtyCheck(deps: DepSlotBuffer): boolean {
+  protected override _deepDirtyCheck(): boolean {
     const prevContext = trackingContext.current;
     trackingContext.current = null;
+    const deps = this._deps!;
 
     try {
       const size = deps.size;

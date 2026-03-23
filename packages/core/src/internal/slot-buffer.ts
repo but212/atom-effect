@@ -282,19 +282,19 @@ export class SlotBuffer<T> {
    * during iteration follow the same snapshot semantics as the old
    * array-based approach (length captured upfront for overflow).
    */
-  forEach(fn: (item: T) => void): void {
+  forEach(fn: (item: T, index: number) => void): void {
     const count = this._count;
     if (count === 0) return;
 
     // 1. Inline slots (Deterministic scan)
     const s0 = this._s0;
-    if (s0 != null) fn(s0);
+    if (s0 != null) fn(s0, 0);
     const s1 = this._s1;
-    if (s1 != null) fn(s1);
+    if (s1 != null) fn(s1, 1);
     const s2 = this._s2;
-    if (s2 != null) fn(s2);
+    if (s2 != null) fn(s2, 2);
     const s3 = this._s3;
-    if (s3 != null) fn(s3);
+    if (s3 != null) fn(s3, 3);
 
     // Fast exit
     if (count <= 4) return;
@@ -311,7 +311,7 @@ export class SlotBuffer<T> {
       for (let i = 0, len = ov.length; i < len; i++) {
         const el = ov[i];
         if (el != null) {
-          fn(el);
+          fn(el, i + 4);
           if (++processed === count) return;
         }
       }

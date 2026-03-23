@@ -7,7 +7,7 @@ import {
   IS_DEV,
   SMI_MAX,
 } from '@/constants';
-import { ReactiveProducer } from '@/core/base';
+import { ReactiveNode } from '@/core/base';
 import { DependencyLink } from '@/core/dep-tracking';
 import { ComputedError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
@@ -42,7 +42,7 @@ const {
 /**
  * Computed atom implementation.
  */
-class ComputedAtomImpl<T> extends ReactiveProducer<T> implements ComputedAtom<T>, Subscriber {
+class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Subscriber {
   /** @internal */
   readonly [ATOM_BRAND] = true;
   /** @internal */
@@ -59,7 +59,8 @@ class ComputedAtomImpl<T> extends ReactiveProducer<T> implements ComputedAtom<T>
   private readonly _onError: ((error: Error) => void) | null;
   private readonly _maxAsyncRetries: number;
 
-  private _deps = new DepSlotBuffer();
+  /** Initialized in constructor. Unified node property. */
+  _deps = new DepSlotBuffer();
 
   // Async state
   private _asyncStartAggregateVersion = 0;
@@ -69,11 +70,6 @@ class ComputedAtomImpl<T> extends ReactiveProducer<T> implements ComputedAtom<T>
   // Dependency collection state
   private _trackEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
   private _trackCount = 0;
-  /**
-   * [Hot-path Optimization]
-   * Caches the index of the last dependency that caused a dirty state.
-   */
-  private _hotIndex = -1;
 
   constructor(fn: () => T | Promise<T>, options: ComputedOptions<T> = {}) {
     if (typeof fn !== 'function') throw new ComputedError(ERROR_MESSAGES.COMPUTED_MUST_BE_FUNCTION);
@@ -425,23 +421,10 @@ class ComputedAtomImpl<T> extends ReactiveProducer<T> implements ComputedAtom<T>
   }
 
   /**
-   * Two-phase dirty check
+   * Deep dirty check for computations.
    */
-  private _isDirty(): boolean {
+  protected override _deepDirtyCheck(): boolean {
     const deps = this._deps;
-
-    // Phase 1: Hot-path Check - O(1)
-    if (this._hotIndex !== -1) {
-      const hotLink = deps.getAt(this._hotIndex);
-      if (hotLink != null && hotLink.node.version !== hotLink.version) {
-        return true;
-      }
-    }
-
-    // Phase 2: Standard Validation - O(N)
-    if (!deps.hasComputeds && !deps.isDirtyFast()) return false;
-
-    // Deep check for computeds
     const prevContext = trackingContext.current;
     trackingContext.current = null;
 

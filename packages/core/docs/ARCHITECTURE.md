@@ -16,12 +16,15 @@ The core design focuses on **decentralized responsibility**. Truth is not manage
 
 ### Core Class Hierarchy
 
-To maintain consistent behavior while minimizing code duplication, the engine uses a layered inheritance structure:
+To maximize performance and maintain consistent behavior, the engine uses a unified inheritance structure optimized for **V8 Hidden Class Monomorphism**:
 
-- **`ReactiveNode`**: The base class for all reactive primitives. It manages identity (`id`), state flags (`flags`), and versioning (`version`).
-- **`ReactiveProducer<T>`**: Extends `ReactiveNode` to add **Subscriber Management**. It provides `subscribe()` and `notify()` capabilities. **Atoms** and **Computeds** inherit from this.
-- **`ReactiveConsumer`**: Extends `ReactiveNode` to add **Dependency Tracking**. It manages a `DepSlotBuffer` and provides consolidated dirty checking logic (`_isDirty`). **Effects** inherit from this.
-- **`ComputedAtom<T>`**: A hybrid node that inherits from `ReactiveProducer` and implements the consumer pattern. It is both a producer (can be observed) and a consumer (tracks dependencies).
+- **`ReactiveNode<T>`**: The single, unified base class for all reactive primitives (**Atoms**, **Computeds**, **Effects**). By merging the roles of **Producer** (observable) and **Consumer** (observer) into a single "God Class", the engine ensures that every reactive object shares a consistent memory layout.
+  - **Subscriber Management**: Provides `subscribe()` and `_notifySubscribers()` capabilities.
+  - **Dependency Tracking**: Manages a `DepSlotBuffer` and provides optimized dirty checking logic (`_isDirty`).
+  - **Type Safety**: Uses generic type `T` to ensure type-safe notifications for subscribers.
+- **`AtomImpl<T>`**: A pure producer node that holds mutable state. It extends `ReactiveNode<T>` but keeps its dependency list (`_deps`) null to save memory.
+- **`ComputedAtomImpl<T>`**: A hybrid node that both consumes dependencies and produces a derived value. It fully leverages both producer and consumer facets of `ReactiveNode<T>`.
+- **`EffectImpl`**: A pure consumer node that performs side effects. It extends `ReactiveNode<void>` and keeps its subscriber list (`_slots`) null.
 
 ### The Fundamental Trade-off: Local vs. Global
 
