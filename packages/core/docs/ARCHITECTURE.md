@@ -14,6 +14,15 @@ The core design focuses on **decentralized responsibility**. Truth is not manage
 2. **Implicit Subscriptions**: Relationships are formed through usage. Reading a `.value` registers the caller as a dependency automatically via `trackingContext`.
 3. **Lifecycle Snapshots**: For asynchronous tasks, nodes capture a hash of their dependencies' versions (`_asyncStartAggregateVersion`). This allows a node to detect if the "world" has moved on during its execution.
 
+### Core Class Hierarchy
+
+To maintain consistent behavior while minimizing code duplication, the engine uses a layered inheritance structure:
+
+- **`ReactiveNode`**: The base class for all reactive primitives. It manages identity (`id`), state flags (`flags`), and versioning (`version`).
+- **`ReactiveProducer<T>`**: Extends `ReactiveNode` to add **Subscriber Management**. It provides `subscribe()` and `notify()` capabilities. **Atoms** and **Computeds** inherit from this.
+- **`ReactiveConsumer`**: Extends `ReactiveNode` to add **Dependency Tracking**. It manages a `DepSlotBuffer` and provides consolidated dirty checking logic (`_isDirty`). **Effects** inherit from this.
+- **`ComputedAtom<T>`**: A hybrid node that inherits from `ReactiveProducer` and implements the consumer pattern. It is both a producer (can be observed) and a consumer (tracks dependencies).
+
 ### The Fundamental Trade-off: Local vs. Global
 
 To make autonomous judgment possible, a **Global Epoch** is accepted. While each node makes its own decision, it does so based on a shared "pulse" of time. Absolute decentralization is traded for the performance and consistency of a single global counter.
@@ -39,11 +48,11 @@ To reduce unnecessary work, a **Notify-and-Check** approach is used.
 
 1. **Phase 1: Notification**: When an atom changes, it notifies its immediate subscribers. For **Computed** nodes, this sets the `DIRTY` flag. For **Effects**, this schedules an execution check via the scheduler.
 2. **Phase 2: Evaluation (Sweep)**: The check differs by node type:
-   - **Computed**: On `.value` access, evaluates lazily only if the `DIRTY` flag is set.
-   - **Effect**: Before re-executing, `_isDirty()` is called. This first performs a **Fast Dirty Check** (efficient O(N) version hash calculation and comparison). If the hash is stable, it skips re-evaluation. If not, it accesses each computed dependency's `.value` to force re-evaluation and compares `dep.version`.
+   - **Computed**: On `.value` access, it calls `_isDirty()` to determine if re-computation is needed. This uses a **Hot-path Check**: it first checks the last known dependency that caused a change. If that dependency is still updating, the node is known to be dirty in $O(1)$.
+   - **Effect**: Before re-executing, `_isDirty()` is called. This performs a **Fast Dirty Check** (efficient O(N) version hash calculation). If the hash is stable, it skips re-evaluation. If not, it performs a full structural walk.
 
-**Trade-off: Cheap O(N) vs. Full Walk**
-The version hash acts as a fast heuristic. While calculating the hash is O(N) relative to the number of direct dependencies, it avoids an expensive recursive structural walk (which would involve executing computed values). The additive combination of version and node ID makes it extremely reliable for skipping unnecessary full checks.
+**Trade-off: Fast Path (O(1)/O(N)) vs. Full Walk**
+The validation process uses layered heuristics to minimize expensive work. The **Hot-path Check (O(1))** provides instant dirty detection for recurring updates. If that misses, the **Version Hash (O(N))** provides a fast heuristic to avoid a full structural walk. Only if the hash differs does the engine perform a recursive pull of dependencies.
 
 ---
 
@@ -62,11 +71,12 @@ Async computed nodes are treated as state machines, using **version snapshots** 
 
 Reactivity systems are prone to memory leaks if subscriptions are not cleaned up. Two mechanisms are used to manage memory efficiently: **Subscriber Management** and **Array Pooling**.
 
-- **SlotBuffer (Inline Slots)**: A zero-allocation (for up to 4 items) container for subscribers/dependencies. It uses inline object properties (`_s0`...`_s3`) to ensure cache locality and stable V8 hidden classes, only spilling to a lazy overflow array when the inline slots are exhausted.
 - **DepSlotBuffer (Dependency Tracking)**: A specialized `SlotBuffer` for dependency links. It features:
   - **Mega-Node Optimization**: A hybrid O(1) `Map` fallback when dependencies exceed 32, ensuring performance even for extremely large graphs.
   - **Fast Dirty Checking**: An efficient O(N) version hash check (`isDirtyFast`) using an additive hash of all dependency versions and IDs to quickly determine if a node *might* be dirty before performing a full structural walk.
   - **Safe Retrieval**: Implements `claimExisting` to reuse existing dependency links during re-evaluation, minimizing churn.
+- **Computed Optimizations**:
+  - **Hot-path Check**: Caches the index of the last dirty dependency (`_hotIndex`) to provide $O(1)$ dirty detection for recurring state changes (e.g., animations, scrolls).
 
 **Trade-off: Complexity vs. Zero-Allocation**
 Managing inline slots and hybrid lookups adds internal complexity, but it significantly reduces Garbage Collection (GC) pressure and improves performance in high-frequency update scenarios.

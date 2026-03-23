@@ -1,5 +1,5 @@
 import { ATOM_STATE_FLAGS } from '@/constants';
-import { ReactiveDependency } from '@/core/base';
+import { ReactiveProducer } from '@/core/base';
 import { nextVersion } from '@/internal/epoch';
 import { scheduler } from '@/internal/scheduler';
 import { ATOM_BRAND, WRITABLE_BRAND } from '@/symbols';
@@ -10,7 +10,7 @@ import { debug } from '@/utils/debug';
 /**
  * Internal {@link WritableAtom} implementation.
  */
-class AtomImpl<T> extends ReactiveDependency<T> implements WritableAtom<T> {
+class AtomImpl<T> extends ReactiveProducer<T> implements WritableAtom<T> {
   private _value: T;
   /** Old value for notifications */
   private _pendingOldValue: T | undefined = undefined;

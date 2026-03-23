@@ -8,7 +8,11 @@ import {
   URL_PROPS,
   VALID_INPUT_TAGS,
 } from '@/constants';
-import { type BindingDebugType, registerReactiveEffect } from '@/core/effect-factory';
+import {
+  type BindingDebugType,
+  registerMapEffect,
+  registerReactiveEffect,
+} from '@/core/effect-factory';
 import { INTERNAL_HANDLER } from '@/core/jquery-patch';
 import { registry } from '@/core/registry';
 import type {
@@ -68,7 +72,6 @@ function getSanitizedHtml(
 
 export function createContext(el: HTMLElement): BindingContext {
   return {
-    $el: $(el),
     el,
     trackCleanup: (fn) => registry.trackCleanup(el, fn),
   };
@@ -79,7 +82,7 @@ export function createContext(el: HTMLElement): BindingContext {
 // ============================================================================
 
 /**
- * Updates element text content. Decoupled from generic T for flexibility with any reactive source.
+ * Updates element text content.
  */
 export function bindText<T = unknown>(
   ctx: BindingContext,
@@ -92,7 +95,6 @@ export function bindText<T = unknown>(
     value,
     (val) => {
       const newVal = formatter ? formatter(val) : typeof val === 'string' ? val : String(val ?? '');
-      // Guard against redundant DOM writes which trigger browser reflows
       if (el.textContent !== newVal) {
         el.textContent = newVal;
       }
@@ -103,15 +105,10 @@ export function bindText<T = unknown>(
 
 /**
  * Updates element inner HTML with XSS sanitization.
- * Calls `registry.cleanupDescendants` before replacing innerHTML so that any
- * reactive bindings on outgoing child nodes are disposed before they are removed —
- * preventing the MutationObserver auto-cleanup path from firing a redundant cleanup.
  */
 export function bindHtml(ctx: BindingContext, value: ReactiveValue<string>): void {
   const el = ctx.el;
 
-  // Optimization: If the source is reactive, use a cached computed atom to
-  // ensure sanitization runs exactly once per atom change for all observers.
   const reactiveSource = isAtom(value)
     ? getSanitizedHtml(value as import('@but212/atom-effect').ReadonlyAtom<string>)
     : value;
@@ -121,7 +118,6 @@ export function bindHtml(ctx: BindingContext, value: ReactiveValue<string>): voi
     reactiveSource,
     (sanitized) => {
       if (el.innerHTML !== sanitized) {
-        // Dispose child bindings before the nodes are removed from the DOM.
         registry.cleanupDescendants(el);
         el.innerHTML = sanitized;
       }
@@ -132,70 +128,68 @@ export function bindHtml(ctx: BindingContext, value: ReactiveValue<string>): voi
 
 /**
  * Toggles multiple CSS classes based on reactive boolean conditions.
+ * Grouped into a single effect per element to reduce subscription overhead.
  */
 export function bindClass(
   ctx: BindingContext,
   classMap: Record<string, ReactiveValue<boolean>>
 ): void {
-  for (const className in classMap) {
-    if (hasOwn.call(classMap, className)) {
-      const source = classMap[className]!;
-      // FIX 1: Support space-separated multiple classes (e.g. Tailwind) without DOMException
-      const tokens = className.trim().split(/\s+/).filter(Boolean);
-
-      if (tokens.length > 1) {
-        registerReactiveEffect(
-          ctx.el,
-          source,
-          (val) => {
-            if (val) {
-              ctx.el.classList.add(...tokens);
-            } else {
-              ctx.el.classList.remove(...tokens);
-            }
-          },
-          `class.${className}`
-        );
-      } else if (tokens.length === 1) {
-        registerReactiveEffect(
-          ctx.el,
-          source,
-          (val) => {
-            ctx.el.classList.toggle(tokens[0]!, !!val);
-          },
-          `class.${className}`
-        );
+  const el = ctx.el;
+  registerMapEffect(
+    el,
+    classMap,
+    (states: Record<string, boolean>) => {
+      for (const className in states) {
+        const val = states[className];
+        const tokens = className.trim().split(/\s+/).filter(Boolean);
+        if (val) {
+          el.classList.add(...tokens);
+        } else {
+          el.classList.remove(...tokens);
+        }
       }
-    }
-  }
+    },
+    'class'
+  );
 }
 
 /**
- * Updates multiple CSS style properties. Supports units (e.g., [source, 'px']).
+ * Updates multiple CSS style properties.
+ * Grouped into a single effect per element to reduce subscription overhead.
  */
 export function bindCss(ctx: BindingContext, cssMap: Record<string, CssValue>): void {
   const el = ctx.el;
   const style = el.style as unknown as Record<string, string>;
-  for (const prop in cssMap) {
-    if (hasOwn.call(cssMap, prop)) {
-      const val = cssMap[prop]!;
-      const camel = getCamelCase(prop);
-      // Destructure the tuple form explicitly so TypeScript can narrow each branch.
-      const [source, unit] = Array.isArray(val) ? val : ([val, ''] as const);
 
-      registerReactiveEffect(
-        el,
-        source,
-        (v) => {
-          const strVal = unit ? String(v) + unit : String(v);
-          if (!isDangerousCssValue(strVal)) {
-            style[camel] = strVal;
+  registry.trackEffect(
+    el,
+    effect(
+      () => {
+        for (const prop in cssMap) {
+          if (hasOwn.call(cssMap, prop)) {
+            const val = cssMap[prop]!;
+            const camel = getCamelCase(prop);
+            const [source, unit] = Array.isArray(val) ? val : ([val, ''] as const);
+
+            // Access the value to establish dependency
+            const current = isAtom(source)
+              ? (source as import('@but212/atom-effect').ReadonlyAtom<unknown>).value
+              : source;
+
+            untracked(() => {
+              const strVal = unit ? String(current) + unit : String(current);
+              if (!isDangerousCssValue(strVal)) {
+                if (style[camel] !== strVal) {
+                  style[camel] = strVal;
+                }
+              }
+            });
           }
-        },
-        `css.${prop}`
-      );
-    }
-  }
+        }
+      },
+      { name: 'css' }
+    )
+  );
 }
 
 /**
@@ -206,48 +200,48 @@ export function bindAttr(
   attrMap: Record<string, ReactiveValue<PrimitiveValue>>
 ): void {
   const el = ctx.el;
+
+  // Filter out dangerous attributes once at registration time
+  const safeMap: Record<string, ReactiveValue<PrimitiveValue>> = {};
   for (const name in attrMap) {
     if (hasOwn.call(attrMap, name)) {
-      const lowerName = name.toLowerCase();
-      // Block event handler attributes (on*) to prevent inline JS injection.
-      if (lowerName.startsWith('on')) {
+      if (name.toLowerCase().startsWith('on')) {
         console.warn(
           `${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_EVENT_HANDLER(name)}`
         );
         continue;
       }
-
-      const isAria = lowerName.startsWith('aria-');
-
-      registerReactiveEffect(
-        el,
-        attrMap[name]!,
-        (v) => {
-          if (v == null) {
-            el.removeAttribute(name);
-            return;
-          }
-          // FIX 3: Preserve boolean 'false' for ARIA attributes instead of removing them.
-          if (v === false && !isAria) {
-            el.removeAttribute(name);
-            return;
-          }
-          const newVal = v === true ? (isAria ? 'true' : name) : String(v);
-          if (isDangerousUrl(name, newVal)) {
-            console.warn(
-              `${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_PROTOCOL(name)}`
-            );
-            return;
-          }
-          // Attribute write guard
-          if (el.getAttribute(name) !== newVal) {
-            el.setAttribute(name, newVal);
-          }
-        },
-        `attr.${name}`
-      );
+      safeMap[name] = attrMap[name]!;
     }
   }
+
+  registerMapEffect(
+    el,
+    safeMap,
+    (states: Record<string, PrimitiveValue>) => {
+      for (const name in states) {
+        const v = states[name] as PrimitiveValue;
+        const lowerName = name.toLowerCase();
+        const isAria = lowerName.startsWith('aria-');
+
+        if (v == null || (v === false && !isAria)) {
+          el.removeAttribute(name);
+          continue;
+        }
+
+        const newVal = v === true ? (isAria ? 'true' : name) : String(v);
+        if (isDangerousUrl(name, newVal)) {
+          console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_PROTOCOL(name)}`);
+          continue;
+        }
+
+        if (el.getAttribute(name) !== newVal) {
+          el.setAttribute(name, newVal);
+        }
+      }
+    },
+    'attr'
+  );
 }
 
 /**
@@ -258,47 +252,44 @@ export function bindProp(
   propMap: Record<string, ReactiveValue<unknown>>
 ): void {
   const el = ctx.el as unknown as Record<string, unknown>;
+
+  // Filter out dangerous properties once at registration time
+  const safeMap: Record<string, ReactiveValue<unknown>> = {};
   for (const name in propMap) {
     if (hasOwn.call(propMap, name)) {
-      const lowerName = name.toLowerCase();
-
-      // Block dangerous event handler properties.
-      if (lowerName.startsWith('on')) {
+      if (name.toLowerCase().startsWith('on')) {
         console.warn(
           `${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_EVENT_HANDLER(name)}`
         );
         continue;
       }
-
-      // Block dangerous DOM properties that can inject raw HTML (e.g., innerHTML)
       if (DANGEROUS_PROPS.has(name)) {
         console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_PROP(name)}`);
         continue;
       }
-
-      const isUrlProp = URL_PROPS.has(lowerName);
-
-      registerReactiveEffect(
-        ctx.el,
-        propMap[name]!,
-        (val) => {
-          // Block dangerous protocols in property values (src, href, etc.).
-          if (isUrlProp && typeof val === 'string' && isDangerousUrl(name, val)) {
-            console.warn(
-              `${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_PROTOCOL(name)}`
-            );
-            return;
-          }
-
-          // Redundancy check specifically for DOM properties
-          if (el[name] !== val) {
-            el[name] = val;
-          }
-        },
-        `prop.${name}`
-      );
+      safeMap[name] = propMap[name]!;
     }
   }
+
+  registerMapEffect(
+    ctx.el,
+    safeMap,
+    (states: Record<string, unknown>) => {
+      for (const name in states) {
+        const val = states[name];
+        const lowerName = name.toLowerCase();
+        if (URL_PROPS.has(lowerName) && typeof val === 'string' && isDangerousUrl(name, val)) {
+          console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_PROTOCOL(name)}`);
+          continue;
+        }
+
+        if (el[name] !== val) {
+          el[name] = val;
+        }
+      }
+    },
+    'prop'
+  );
 }
 
 /**
@@ -318,7 +309,10 @@ export function bindVisibility(
     el,
     condition,
     (val) => {
-      el.style.display = invert !== !!val ? showDisplay : 'none';
+      const target = invert !== !!val ? showDisplay : 'none';
+      if (el.style.display !== target) {
+        el.style.display = target;
+      }
     },
     label
   );
@@ -326,7 +320,6 @@ export function bindVisibility(
 
 /**
  * Two-way value binding with full feature parity to $.fn.atomVal.
- * Supports parse/format options, debouncing, IME composition, and focus-aware updates.
  */
 export function bindVal(
   ctx: BindingContext,
@@ -340,7 +333,8 @@ export function bindVal(
     );
     return;
   }
-  const { fx, cleanup } = applyInputBinding(ctx.$el, atom, options);
+  // Wrap raw element only when needed for complex input binding logic
+  const { fx, cleanup } = applyInputBinding($(ctx.el), atom, options);
 
   registry.trackEffect(ctx.el, fx);
   ctx.trackCleanup(cleanup);
@@ -351,18 +345,13 @@ export function bindVal(
  */
 export function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): void {
   const el = ctx.el as HTMLInputElement;
-  const $el = ctx.$el;
+  const $el = $(el);
   const isRadio = el.type === 'radio';
 
-  // DOM → Atom (jQuery events for .trigger() compatibility)
   const handler = () => {
     const current = el.checked;
     if (atom.value !== current) {
       atom.value = current;
-      // FIX 2: Radio buttons do not fire 'change' when unchecked by selecting another radio.
-      // Trigger a custom event on sibling radios so they can sync their newly unchecked state.
-      // FIX 2 follow-up: Scope to the containing <form> to avoid cross-form interference.
-      // Falls back to document for radios outside any form.
       if (isRadio && current && el.name) {
         const escapedName = el.name.replace(/"/g, '\\"');
         const $scope = el.form ? $(el.form) : $(document);
@@ -373,23 +362,17 @@ export function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): v
       }
     }
   };
-  // Internal handler — skip batch() wrapping in the jQuery patch.
   (handler as unknown as Record<symbol, true>)[INTERNAL_HANDLER] = true;
 
-  // DOM → Atom cleanup goes through ctx.trackCleanup (element lifecycle).
-  // Atom → DOM cleanup goes through registry.trackEffect (reactive effect lifecycle).
-  // The split is intentional: effects are disposed by the registry's effect tracker;
-  // plain event listeners have no registry counterpart and need manual teardown.
   $el.on('change change.atomRadioSync', handler);
   ctx.trackCleanup(() => $el.off('change change.atomRadioSync', handler));
 
-  // Atom → DOM
   const fx = effect(() => {
     const val = !!atom.value;
     untracked(() => {
       if (el.checked !== val) {
         el.checked = val;
-        if (debug.enabled) debug.domUpdated(LOG_PREFIXES.BINDING, $el, 'checked', val);
+        if (debug.enabled) debug.domUpdated(LOG_PREFIXES.BINDING, el, 'checked', val);
       }
     });
   });
@@ -401,28 +384,26 @@ export function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): v
 // ============================================================================
 
 export function bindEvents(ctx: BindingContext, eventMap: NonNullable<BindingOptions['on']>): void {
-  const $el = ctx.$el;
+  const $el = $(ctx.el);
   $el.on(eventMap);
   ctx.trackCleanup(() => $el.off(eventMap));
 }
 
 /**
  * Binds a single event handler using jQuery's event system for compatibility.
- * Optimized to avoid creating jQuery wrapper objects repeatedly during setup/teardown.
  */
 export function bindOn(
   ctx: BindingContext,
   event: string,
   handler: (e: JQuery.Event) => void
 ): void {
-  const $el = ctx.$el;
+  const $el = $(ctx.el);
   $el.on(event, handler);
   ctx.trackCleanup(() => $el.off(event, handler));
 }
 
 /**
  * Disposes all reactive bindings on an element and its descendants.
- * Centralised here so `chainable.ts` does not need to import `registry` directly.
  */
 export function bindUnbind(el: HTMLElement): void {
   registry.cleanupTree(el);
