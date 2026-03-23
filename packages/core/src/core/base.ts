@@ -1,6 +1,6 @@
 import { EPOCH_CONSTANTS, IS_DEV, SMI_MAX } from '@/constants';
 import { Subscription } from '@/core/dep-tracking';
-import { SlotBuffer } from '@/core/slot-buffer';
+import { SlotBuffer } from '@/internal/slot-buffer';
 import { AtomError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
 import type { DependencyId, Subscriber } from '@/types';

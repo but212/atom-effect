@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { DepSlotBuffer } from '@/core/dep-slot-buffer';
+import { DepSlotBuffer } from '@/internal/dep-slot-buffer';
 import { DependencyLink } from '@/core/dep-tracking';
 import type { Dependency } from '@/types';
 

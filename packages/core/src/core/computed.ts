@@ -8,7 +8,7 @@ import {
   SMI_MAX,
 } from '@/constants';
 import { ReactiveDependency } from '@/core/base';
-import { DepSlotBuffer } from '@/core/dep-slot-buffer';
+import { DepSlotBuffer } from '@/internal/dep-slot-buffer';
 import { DependencyLink } from '@/core/dep-tracking';
 import { ComputedError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';

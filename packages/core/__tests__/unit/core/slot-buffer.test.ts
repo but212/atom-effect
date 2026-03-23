@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { SlotBuffer } from '@/core/slot-buffer';
+import { SlotBuffer } from '@/internal/slot-buffer';
 
 describe('SlotBuffer', () => {
   describe('Inline Slot Storage (0-4 items)', () => {

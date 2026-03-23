@@ -1,6 +1,6 @@
 import { BITPACK } from '@/constants';
 import type { DependencyLink } from '@/core/dep-tracking';
-import { SlotBuffer } from '@/core/slot-buffer';
+import { SlotBuffer } from './slot-buffer';
 import type { Dependency } from '@/types';
 
 /**
