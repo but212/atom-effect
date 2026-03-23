@@ -417,6 +417,11 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._notifySubscribers(undefined, undefined);
   }
 
+  /**
+   * Two-phase dirty check:
+   * 1. Fast path (O(N)): Check if any direct dependency's version hash has changed.
+   * 2. Full path: Recursively pull and verify each computed dependency.
+   */
   private _isDirty(): boolean {
     const deps = this._deps;
     if (!deps.hasComputeds && !deps.isDirtyFast()) return false;

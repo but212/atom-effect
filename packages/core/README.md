@@ -35,7 +35,7 @@ count.value = 1;
 // Output: "Count: 1, Doubled: 2"
 
 // 5. Cleanup
-e.dispose();
+effectHandle.dispose();
 ```
 
 ## Documentation

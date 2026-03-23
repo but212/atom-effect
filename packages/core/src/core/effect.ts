@@ -214,6 +214,11 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     );
   }
 
+  /**
+   * Check if any dependencies have changed since last execution.
+   * Performs an efficient O(N) version check before falling back to
+   * a deeper structural walk for computed dependencies.
+   */
   private _isDirty(): boolean {
     const deps = this._deps;
     if (!deps.hasComputeds && !deps.isDirtyFast()) return false;

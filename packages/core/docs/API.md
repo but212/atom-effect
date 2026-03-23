@@ -51,6 +51,19 @@ const double = computed(() => count.value * 2);
 console.log(double.value); // 2
 ```
 
+### Properties - computed
+
+A `ComputedAtom` instance provides the following reactive properties:
+
+- `value`: Returns the current value.
+- `state`: Returns `AsyncState` (`IDLE`, `PENDING`, `RESOLVED`, `REJECTED`).
+- `hasError`: Boolean indicating if the computation (or its dependencies) failed.
+- `isValid`: Shortcut for `!hasError`.
+- `errors`: A read-only array of all errors in the local dependency sub-graph.
+- `lastError`: The specific error thrown by this node's computation.
+- `isPending`: Shortcut for `state === AsyncState.PENDING`.
+- `isResolved`: Shortcut for `state === AsyncState.RESOLVED`.
+
 ### Async Example - computed
 
 ```typescript
@@ -105,6 +118,7 @@ effectHandle.dispose();
 - `dispose()`: Stops the effect and runs cleanup.
 - `run()`: Manually re-executes the effect.
 - `isDisposed`: Whether the effect has been disposed.
+- `isExecuting`: Whether the effect is currently running.
 - `executionCount`: Number of times the effect has executed.
 
 ### Options - effect

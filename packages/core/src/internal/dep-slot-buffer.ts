@@ -251,7 +251,7 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
   }
 
   /**
-   * O(1) fast-path dirty check using the sealed version hash.
+   * Efficient O(N) fast-path dirty check using the sealed version hash.
    */
   isDirtyFast(): boolean {
     const count = this._count;

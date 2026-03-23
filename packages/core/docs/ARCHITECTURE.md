@@ -40,10 +40,10 @@ To reduce unnecessary work, a **Notify-and-Check** approach is used.
 1. **Phase 1: Notification**: When an atom changes, it notifies its immediate subscribers. For **Computed** nodes, this sets the `DIRTY` flag. For **Effects**, this schedules an execution check via the scheduler.
 2. **Phase 2: Evaluation (Sweep)**: The check differs by node type:
    - **Computed**: On `.value` access, evaluates lazily only if the `DIRTY` flag is set.
-   - **Effect**: Before re-executing, `_isDirty()` is called, which accesses each computed dependency's `.value` to force re-evaluation, then compares `dep.version` against the stored `link.version`. The effect only re-runs if any version has changed.
+   - **Effect**: Before re-executing, `_isDirty()` is called. This first performs a **Fast Dirty Check** (efficient O(N) version hash calculation and comparison). If the hash is stable, it skips re-evaluation. If not, it accesses each computed dependency's `.value` to force re-evaluation and compares `dep.version`.
 
-**Trade-off: Runtime Overhead vs. Eager Memory**
-This "pull-based" evaluation requires a version check walk, which has a small runtime cost. The benefit is that it avoids "ghost updates" where values are calculated but never consumed.
+**Trade-off: Cheap O(N) vs. Full Walk**
+The version hash acts as a fast heuristic. While calculating the hash is O(N) relative to the number of direct dependencies, it avoids an expensive recursive structural walk (which would involve executing computed values). The additive combination of version and node ID makes it extremely reliable for skipping unnecessary full checks.
 
 ---
 
@@ -51,7 +51,7 @@ This "pull-based" evaluation requires a version check walk, which has a small ru
 
 Async computed nodes are treated as state machines, using **version snapshots** to guard against race conditions.
 
-- **Async Drift Detection**: If dependency versions change between a Promise's start and resolution, the result is discarded and the node re-evaluates.
+- **Async Drift Detection**: If dependency versions change between a Promise's start and resolution (detected via a DJB2-based version snapshot), the result is discarded and the node re-evaluates.
 - **Cancellation**: Only the latest "Promise ID" is allowed to resolve. This prevents slow, stale responses from overwriting newer results.
 
 **Implementation Detail**: Bitwise flags (e.g., `PENDING`, `RESOLVED`, `RECOMPUTING`) are used to keep state transitions fast and memory-efficient.
@@ -62,11 +62,14 @@ Async computed nodes are treated as state machines, using **version snapshots** 
 
 Reactivity systems are prone to memory leaks if subscriptions are not cleaned up. Two mechanisms are used to manage memory efficiently: **Subscriber Management** and **Array Pooling**.
 
-- **Subscriber Management**: A linked relationship between dependencies and subscribers is maintained. To minimize memory overhead from managing complex pointers (like double-linked lists), subscriptions are stored in arrays. Cleanup uses a fast $O(1)$ pop-and-swap technique, trading a minor $O(n)$ linear search (acceptable for typically small subscriber lists) for a reduced memory footprint.
-- **Dependency Array Pooling**: Instead of allocating new arrays for every evaluation cycle, dependency tracking arrays (`DependencyLink[]`) are acquired from and released back to a pre-allocated global `ArrayPool`. Single link objects can also be reused during effect evaluation to save allocations.
+- **SlotBuffer (Inline Slots)**: A zero-allocation (for up to 4 items) container for subscribers/dependencies. It uses inline object properties (`_s0`...`_s3`) to ensure cache locality and stable V8 hidden classes, only spilling to a lazy overflow array when the inline slots are exhausted.
+- **DepSlotBuffer (Dependency Tracking)**: A specialized `SlotBuffer` for dependency links. It features:
+  - **Mega-Node Optimization**: A hybrid O(1) `Map` fallback when dependencies exceed 32, ensuring performance even for extremely large graphs.
+  - **Fast Dirty Checking**: An efficient O(N) version hash check (`isDirtyFast`) using an additive hash of all dependency versions and IDs to quickly determine if a node *might* be dirty before performing a full structural walk.
+  - **Safe Retrieval**: Implements `claimExisting` to reuse existing dependency links during re-evaluation, minimizing churn.
 
-**Trade-off: Complexity vs. GC Pauses**
-Managing array lifecycles manually via pooling adds complexity to the internal code, but it is necessary to reduce Garbage Collection (GC) pauses in data-intensive, high-frequency update scenarios.
+**Trade-off: Complexity vs. Zero-Allocation**
+Managing inline slots and hybrid lookups adds internal complexity, but it significantly reduces Garbage Collection (GC) pressure and improves performance in high-frequency update scenarios.
 
 ---
 
