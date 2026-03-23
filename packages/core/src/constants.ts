@@ -30,6 +30,8 @@ export const COMPUTED_STATE_FLAGS = {
   REJECTED: 1 << 7,
   RECOMPUTING: 1 << 8,
   HAS_ERROR: 1 << 9,
+  /** Flagged when explicitly invalidated. Bypasses fast-path dirty checks. */
+  FORCE_COMPUTE: 1 << 10,
 } as const;
 
 /**
