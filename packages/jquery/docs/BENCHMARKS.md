@@ -6,12 +6,12 @@ Benchmarking suite for `@but212/atom-effect-jquery` to measure DOM binding perfo
 
 | Category | Key Metric | Value | Context |
 | ---------- | ---------- | ----- | ------- |
-| **Text Binding** | Propagation (100el × 50) | 137 ops/sec | ~7.3ms per round |
-| **Class Binding** | Toggle (100el × 100) | 152 ops/sec | ~6.5ms per round |
-| **List Render** | 100 items | 254 ops/sec | ~3.9ms per render |
-| **Input (DOM→Atom)** | 100 events | 903 ops/sec | ~1.1ms per round |
-| **Todo App** | Full workflow | 2,388 ops/sec | ~0.41ms per cycle |
-| **Dashboard** | Fan-in chain | 1,496 ops/sec | ~0.66ms per update |
+| **Text Binding** | Propagation (100el × 50) | 131 ops/sec | ~7.6ms per round |
+| **Class Binding** | Toggle (100el × 100) | 152 ops/sec | ~6.6ms per round |
+| **List Render** | 100 items | 246 ops/sec | ~4.1ms per render |
+| **Input (DOM→Atom)** | 100 events | 833 ops/sec | ~1.2ms per round |
+| **Todo App** | Full workflow | 2,356 ops/sec | ~0.42ms per cycle |
+| **Dashboard** | Fan-in chain | 1,488 ops/sec | ~0.67ms per update |
 
 ## Running Benchmarks
 
@@ -71,7 +71,7 @@ Located in `__benchmarks__/macro/`, these test real-world DOM scenarios:
 ## Latest Results
 
 **Version**: v0.23.0
-**Last Updated**: 2026-03-02
+**Last Updated**: 2026-03-21
 **Environment**:
 
 - **Node.js**: v22.x
@@ -83,12 +83,12 @@ Located in `__benchmarks__/macro/`, these test real-world DOM scenarios:
 
 | Benchmark | Result | Analysis |
 | ---------- | ------ | -------- |
-| atomText propagation | 137 ops/sec | Consistent DOM text updates |
+| atomText propagation | 131 ops/sec | Consistent DOM text updates |
 | atomClass toggle | 152 ops/sec | Fast class manipulation |
-| atomList render (100) | 254 ops/sec | Efficient list reconciliation |
-| atomVal DOM→Atom | 903 ops/sec | Near-instant input sync |
-| Todo full workflow | 2,388 ops/sec | Production-ready |
-| Dashboard fan-in | 1,496 ops/sec | Efficient computed→DOM chain |
+| atomList render (100) | 246 ops/sec | Efficient list reconciliation |
+| atomVal DOM→Atom | 833 ops/sec | Near-instant input sync |
+| Todo full workflow | 2,356 ops/sec | Production-ready |
+| Dashboard fan-in | 1,488 ops/sec | Efficient computed→DOM chain |
 
 ## Contributing Benchmarks
 
