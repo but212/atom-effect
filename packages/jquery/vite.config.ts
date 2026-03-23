@@ -1,7 +1,6 @@
 // vite.config.ts
 
 import dts from 'vite-plugin-dts';
-import tsconfigPaths from 'vite-tsconfig-paths';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
@@ -25,10 +24,10 @@ export default defineConfig({
     },
     sourcemap: true,
   },
-  plugins: [
-    tsconfigPaths(),
-    dts({ rollupTypes: true, exclude: ['src/**/*.test.ts', '__tests__/**/*'] }),
-  ],
+  resolve: {
+    tsconfigPaths: true,
+  },
+  plugins: [dts({ rollupTypes: true, exclude: ['src/**/*.test.ts', '__tests__/**/*'] })],
   test: {
     environment: 'jsdom',
     setupFiles: ['./__tests__/setup.ts'],
