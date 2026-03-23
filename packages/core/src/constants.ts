@@ -98,10 +98,6 @@ export const SMI_MAX = 0x3fffffff;
 export const BITPACK = {
   /** Bits allocated for version in a packed slot value. */
   VERSION_BITS: 16,
-  /** Mask to extract the lower 16 bits (node ID / value). */
-  LO_MASK: 0xffff,
-  /** Maximum value representable in 16 bits. */
-  MAX_16: 0xffff,
 } as const;
 
 /**
