@@ -70,7 +70,7 @@ export abstract class ReactiveNode<T> {
     // Duplicate check
     let duplicate = false;
     slots.forEach((sub) => {
-      if (isFn ? sub.fn === (listener as Function) : sub.sub === listener) {
+      if (isFn ? sub.fn === listener : sub.sub === listener) {
         duplicate = true;
       }
     });
