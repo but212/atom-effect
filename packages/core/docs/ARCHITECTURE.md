@@ -14,6 +14,15 @@ The core design focuses on **decentralized responsibility**. Truth is not manage
 2. **Implicit Subscriptions**: Relationships are formed through usage. Reading a `.value` registers the caller as a dependency automatically via `trackingContext`.
 3. **Lifecycle Snapshots**: For asynchronous tasks, nodes capture a hash of their dependencies' versions (`_asyncStartAggregateVersion`). This allows a node to detect if the "world" has moved on during its execution.
 
+### Core Class Hierarchy
+
+To maintain consistent behavior while minimizing code duplication, the engine uses a layered inheritance structure:
+
+- **`ReactiveNode`**: The base class for all reactive primitives. It manages identity (`id`), state flags (`flags`), and versioning (`version`).
+- **`ReactiveProducer<T>`**: Extends `ReactiveNode` to add **Subscriber Management**. It provides `subscribe()` and `notify()` capabilities. **Atoms** and **Computeds** inherit from this.
+- **`ReactiveConsumer`**: Extends `ReactiveNode` to add **Dependency Tracking**. It manages a `DepSlotBuffer` and provides consolidated dirty checking logic (`_isDirty`). **Effects** inherit from this.
+- **`ComputedAtom<T>`**: A hybrid node that inherits from `ReactiveProducer` and implements the consumer pattern. It is both a producer (can be observed) and a consumer (tracks dependencies).
+
 ### The Fundamental Trade-off: Local vs. Global
 
 To make autonomous judgment possible, a **Global Epoch** is accepted. While each node makes its own decision, it does so based on a shared "pulse" of time. Absolute decentralization is traded for the performance and consistency of a single global counter.
@@ -62,13 +71,12 @@ Async computed nodes are treated as state machines, using **version snapshots** 
 
 Reactivity systems are prone to memory leaks if subscriptions are not cleaned up. Two mechanisms are used to manage memory efficiently: **Subscriber Management** and **Array Pooling**.
 
-- **SlotBuffer (Inline Slots)**: A zero-allocation (for up to 4 items) container for subscribers/dependencies. It uses inline object properties (`_s0`...`_s3`) to ensure cache locality and stable V8 hidden classes, only spilling to a lazy overflow array when the inline slots are exhausted.
 - **DepSlotBuffer (Dependency Tracking)**: A specialized `SlotBuffer` for dependency links. It features:
   - **Mega-Node Optimization**: A hybrid O(1) `Map` fallback when dependencies exceed 32, ensuring performance even for extremely large graphs.
   - **Fast Dirty Checking**: An efficient O(N) version hash check (`isDirtyFast`) using an additive hash of all dependency versions and IDs to quickly determine if a node *might* be dirty before performing a full structural walk.
+  - **Safe Retrieval**: Implements `claimExisting` to reuse existing dependency links during re-evaluation, minimizing churn.
 - **Computed Optimizations**:
   - **Hot-path Check**: Caches the index of the last dirty dependency (`_hotIndex`) to provide $O(1)$ dirty detection for recurring state changes (e.g., animations, scrolls).
-  - **Safe Retrieval**: Implements `claimExisting` to reuse existing dependency links during re-evaluation, minimizing churn.
 
 **Trade-off: Complexity vs. Zero-Allocation**
 Managing inline slots and hybrid lookups adds internal complexity, but it significantly reduces Garbage Collection (GC) pressure and improves performance in high-frequency update scenarios.

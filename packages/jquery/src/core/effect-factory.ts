@@ -105,3 +105,73 @@ export function registerReactiveEffect<T>(
     });
   }
 }
+
+/**
+ * Registers a single reactive effect that observes multiple sources in a map.
+ * When any source changes, the entire map is re-processed via the updater.
+ *
+ * This optimization reduces the number of Effect objects created for complex
+ * bindings like atomClass({ ... }) or atomCss({ ... }).
+ *
+ * @param el        DOM element.
+ * @param map       Dictionary of reactive or static values.
+ * @param updater   Function that applies the entire map state to the DOM.
+ * @param debugType Base label for debugging.
+ */
+export function registerMapEffect<T>(
+  el: Element,
+  map: Record<string, ReactiveValue<T>>,
+  updater: (map: Record<string, T>) => void,
+  debugType: BindingDebugType
+): void {
+  const keys = Object.keys(map);
+  const reactiveKeys: string[] = [];
+  const staticValues: Record<string, T> = {};
+
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[i]!;
+    const val = map[key]!;
+    if (isReactive(val)) {
+      reactiveKeys.push(key);
+    } else {
+      staticValues[key] = val as T;
+    }
+  }
+
+  if (reactiveKeys.length > 0) {
+    registry.trackEffect(
+      el,
+      effect(
+        () => {
+          const currentMap: Record<string, T> = { ...staticValues };
+          for (let i = 0; i < reactiveKeys.length; i++) {
+            const key = reactiveKeys[i]!;
+            currentMap[key] = (map[key] as ReadonlyAtom<T>).value;
+          }
+
+          untracked(() => {
+            try {
+              updater(currentMap);
+            } catch (e) {
+              debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType), e);
+              return;
+            }
+            if (debug.enabled) debug.domUpdated(LOG_PREFIXES.BINDING, el, debugType, currentMap);
+          });
+        },
+        { name: debugType }
+      )
+    );
+  } else {
+    // Purely static map
+    untracked(() => {
+      try {
+        updater(staticValues);
+      } catch (e) {
+        debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType, true), e);
+        return;
+      }
+      if (debug.enabled) debug.domUpdated(LOG_PREFIXES.BINDING, el, debugType, staticValues);
+    });
+  }
+}

@@ -6,7 +6,7 @@ import {
   IS_DEV,
   SCHEDULER_CONFIG,
 } from '@/constants';
-import { ReactiveNode } from '@/core/base';
+import { ReactiveConsumer } from '@/core/base';
 import { DependencyLink } from '@/core/dep-tracking';
 import { EffectError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
@@ -28,12 +28,12 @@ import { isPromise } from '@/utils/type-guards';
 /**
  * Effect implementation.
  */
-class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker {
+class EffectImpl extends ReactiveConsumer implements EffectObject, DependencyTracker {
   /** @internal */
   readonly [EFFECT_BRAND] = true;
 
   private _cleanup: (() => void) | null = null;
-  private _deps = new DepSlotBuffer();
+  protected override _deps = new DepSlotBuffer();
 
   /** Pre-allocated notify callback shared by all subscriptions */
   private readonly _notifyCallback: () => void;
@@ -149,7 +149,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     if (this.flags & (EFFECT_STATE_FLAGS.DISPOSED | EFFECT_STATE_FLAGS.EXECUTING)) return;
 
     // Skip if not dirty
-    if (!force && this._deps.size > 0 && !this._isDirty()) return;
+    if (!force && this._deps.size > 0 && !this._isDirty(this._deps)) return;
 
     this._checkInfiniteLoops();
 
@@ -159,6 +159,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     this._currentEpoch = nextEpoch();
     this._trackCount = 0;
     this._deps.prepareTracking();
+    this._hotIndex = -1;
 
     let committed = false;
     try {
@@ -214,15 +215,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     );
   }
 
-  /**
-   * Check if any dependencies have changed since last execution.
-   * Performs an efficient O(N) version check before falling back to
-   * a deeper structural walk for computed dependencies.
-   */
-  private _isDirty(): boolean {
-    const deps = this._deps;
-    if (!deps.hasComputeds && !deps.isDirtyFast()) return false;
-
+  protected _deepDirtyCheck(deps: DepSlotBuffer): boolean {
     const prevContext = trackingContext.current;
     trackingContext.current = null;
 
@@ -237,7 +230,10 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
           this._tryPullComputed(dep);
         }
 
-        if (dep.version !== link.version) return true;
+        if (dep.version !== link.version) {
+          this._hotIndex = i;
+          return true;
+        }
       }
       return false;
     } finally {

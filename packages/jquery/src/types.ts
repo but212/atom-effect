@@ -266,7 +266,6 @@ export enum BindingFlags {
  * @internal
  */
 export interface BindingContext {
-  readonly $el: JQuery;
   readonly el: HTMLElement;
   readonly trackCleanup: (fn: EffectCleanup) => void;
 }

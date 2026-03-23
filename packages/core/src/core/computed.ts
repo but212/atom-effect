@@ -7,7 +7,7 @@ import {
   IS_DEV,
   SMI_MAX,
 } from '@/constants';
-import { ReactiveDependency } from '@/core/base';
+import { ReactiveProducer } from '@/core/base';
 import { DependencyLink } from '@/core/dep-tracking';
 import { ComputedError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
@@ -42,7 +42,7 @@ const {
 /**
  * Computed atom implementation.
  */
-class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<T>, Subscriber {
+class ComputedAtomImpl<T> extends ReactiveProducer<T> implements ComputedAtom<T>, Subscriber {
   /** @internal */
   readonly [ATOM_BRAND] = true;
   /** @internal */
@@ -72,7 +72,6 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   /**
    * [Hot-path Optimization]
    * Caches the index of the last dependency that caused a dirty state.
-   * Provides O(1) dirty detection for recurring updates from the same source.
    */
   private _hotIndex = -1;
 
@@ -432,8 +431,6 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     const deps = this._deps;
 
     // Phase 1: Hot-path Check - O(1)
-    // By checking the last known "hot" dependency first, we can detect
-    // a dirty state in O(1) for high-frequency recurring updates.
     if (this._hotIndex !== -1) {
       const hotLink = deps.getAt(this._hotIndex);
       if (hotLink != null && hotLink.node.version !== hotLink.version) {
@@ -444,6 +441,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     // Phase 2: Standard Validation - O(N)
     if (!deps.hasComputeds && !deps.isDirtyFast()) return false;
 
+    // Deep check for computeds
     const prevContext = trackingContext.current;
     trackingContext.current = null;
 
@@ -455,7 +453,13 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
 
         const dep = link.node;
         if (dep.flags & IS_COMPUTED) {
-          this._tryPullComputed(dep);
+          try {
+            // Force computed to re-evaluate so version reflects latest state
+            void (dep as { value: unknown }).value;
+          } catch {
+            if (IS_DEV)
+              console.warn(`[atom-effect] Dependency #${dep.id} threw during dirty check`);
+          }
         }
 
         if (dep.version !== link.version) {
@@ -468,18 +472,6 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
       return false;
     } finally {
       trackingContext.current = prevContext;
-    }
-  }
-
-  private _tryPullComputed(dep: Dependency): void {
-    try {
-      // Force computed to re-evaluate so version reflects latest state
-      void (dep as { value: unknown }).value;
-    } catch {
-      if (IS_DEV) {
-        console.warn(`[atom-effect] Dependency #${dep.id} threw during dirty check`);
-      }
-      // Swallow error: rely strictly on version check to prevent permanent fast-path bypass
     }
   }
 }
