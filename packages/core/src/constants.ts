@@ -90,6 +90,19 @@ export const EPOCH_CONSTANTS = {
 export const SMI_MAX = 0x3fffffff;
 
 /**
+ * Bit-packing constants for versioned slot operations.
+ * Used by DepSlotBuffer for O(1) snapshot hashing.
+ */
+export const BITPACK = {
+  /** Bits allocated for version in a packed slot value. */
+  VERSION_BITS: 16,
+  /** Mask to extract the lower 16 bits (node ID / value). */
+  LO_MASK: 0xffff,
+  /** Maximum value representable in 16 bits. */
+  MAX_16: 0xffff,
+} as const;
+
+/**
  * Development environment flag.
  */
 export const IS_DEV =

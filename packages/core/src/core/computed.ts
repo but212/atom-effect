@@ -230,17 +230,20 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     // Fast path: fully stable dependencies
     if (existing && existing.node === dep) {
       existing.version = dep.version;
+      if (dep.flags & IS_COMPUTED) this._deps.hasComputeds = true;
       this._trackCount++;
       return;
     }
 
     // Diverged path
     if (this._deps.claimExisting(dep, this._trackCount)) {
+      if (dep.flags & IS_COMPUTED) this._deps.hasComputeds = true;
       this._trackCount++;
       return;
     }
 
     const link = new DependencyLink(dep, dep.version, dep.subscribe(this));
+    if (dep.flags & IS_COMPUTED) this._deps.hasComputeds = true;
     this._deps.insertNew(this._trackCount, link);
     this._trackCount++;
   }
@@ -259,6 +262,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
 
       // Clean up any remaining trailing dependencies
       this._deps.truncateFrom(this._trackCount);
+      this._deps.seal();
       committed = true;
 
       // Handle Result
@@ -332,14 +336,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   }
 
   private _captureVersionSnapshot(): number {
-    let hash = 0;
-    for (let i = 0; i < this._deps.size; i++) {
-      const link = this._deps.getAt(i);
-      if (link) {
-        hash = ((hash << 5) - hash + link.node.version) | 0;
-      }
-    }
-    return hash;
+    return this._deps.captureVersionSnapshot();
   }
 
   private _handleError(err: unknown, msg: string, throwErr = false): void {

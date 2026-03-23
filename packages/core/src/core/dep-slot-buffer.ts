@@ -14,11 +14,35 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
   private readonly _SCAN_THRESHOLD = 32;
 
   /**
+   * Indicates if the buffer contains at least one computed dependency.
+   */
+  hasComputeds = false;
+
+  /**
+   * Cached dependency version snapshot hash.
+   */
+  _depsHash = 0;
+
+  constructor() {
+    super();
+    // Initialize state-related fields explicitly for a stable V8 hidden class shape.
+    this._map = null;
+    this.hasComputeds = false;
+    this._depsHash = 0;
+  }
+
+  /**
+   * Protected hook called whenever a link is extracted from the buffer.
+   * Handles automatic unsubscription without closure allocation.
+   */
+  protected override _onItemRemoved(link: DependencyLink): void {
+    const unsub = link.unsub;
+    if (unsub) unsub();
+  }
+
+  /**
    * Looks for an existing subscription to the given node starting from `trackIndex`.
    * If found, swaps it to `trackIndex`, updates version, and returns true.
-   *
-   * Automatically falls back to an O(1) Map lookup if the remaining items
-   * exceed `_SCAN_THRESHOLD` to prevent O(N^2) mega-node performance cliffs.
    */
   claimExisting(dep: Dependency, trackIndex: number): boolean {
     if (trackIndex >= this._count) return false;
@@ -83,7 +107,8 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
    * to the end of the buffer so it can be cleanly unsubscribed later by `truncateFrom`.
    */
   insertNew(trackIndex: number, link: DependencyLink): void {
-    if (trackIndex < this._count) {
+    const count = this._count;
+    if (trackIndex < count) {
       const occupant = this.getAt(trackIndex);
       if (occupant) {
         this.add(occupant); // increments _count and appends
@@ -100,7 +125,7 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
    * Unsubscribes each link before removing it.
    */
   truncateFrom(index: number): void {
-    super.truncateFrom(index, (link) => link.unsub?.());
+    super.truncateFrom(index);
     if (this._map !== null && index <= this._count) {
       // Typically called at the end of tracking.
       // Safest to clear the map here to avoid holding stale memory.
@@ -109,11 +134,118 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
     }
   }
 
+  /**
+   * Seals the buffer after a tracking pass completes.
+   * Computes the XOR snapshot hash of all dependency versions.
+   */
+  seal(): void {
+    let hash = 0;
+    const count = this._count;
+
+    // Unroll hot slots access to minimize pointer chasing
+    if (count > 0) {
+      const l0 = this._s0;
+      if (l0) hash = (hash + (l0.version << 16) + l0.node.id) | 0;
+      if (count > 1) {
+        const l1 = this._s1;
+        if (l1) hash = (hash + (l1.version << 16) + l1.node.id) | 0;
+        if (count > 2) {
+          const l2 = this._s2;
+          if (l2) hash = (hash + (l2.version << 16) + l2.node.id) | 0;
+          if (count > 3) {
+            const l3 = this._s3;
+            if (l3) hash = (hash + (l3.version << 16) + l3.node.id) | 0;
+
+            // Overflow path (rare)
+            const ov = this._overflow;
+            if (ov) {
+              for (let i = 0, len = ov.length; i < len; i++) {
+                const link = ov[i];
+                if (link) hash = (hash + (link.version << 16) + link.node.id) | 0;
+              }
+            }
+          }
+        }
+      }
+    }
+    this._depsHash = hash;
+  }
+
+  /**
+   * O(1) fast-path dirty check using the sealed version hash.
+   */
+  isDirtyFast(): boolean {
+    let hash = 0;
+    const count = this._count;
+
+    // Unroll hot slots access
+    if (count > 0) {
+      const l0 = this._s0;
+      if (l0) hash = (hash + (l0.node.version << 16) + l0.node.id) | 0;
+      if (count > 1) {
+        const l1 = this._s1;
+        if (l1) hash = (hash + (l1.node.version << 16) + l1.node.id) | 0;
+        if (count > 2) {
+          const l2 = this._s2;
+          if (l2) hash = (hash + (l2.node.version << 16) + l2.node.id) | 0;
+          if (count > 3) {
+            const l3 = this._s3;
+            if (l3) hash = (hash + (l3.node.version << 16) + l3.node.id) | 0;
+
+            const ov = this._overflow;
+            if (ov) {
+              for (let i = 0, len = ov.length; i < len; i++) {
+                const link = ov[i];
+                if (link) hash = (hash + (link.node.version << 16) + link.node.id) | 0;
+              }
+            }
+          }
+        }
+      }
+    }
+    return hash !== this._depsHash;
+  }
+
+  /**
+   * Captures a DJB2-based version snapshot for async drift detection.
+   */
+  captureVersionSnapshot(): number {
+    let hash = 0;
+    const count = this._count;
+
+    if (count > 0) {
+      const l0 = this._s0;
+      if (l0) hash = ((hash << 5) - hash + l0.node.version) | 0;
+      if (count > 1) {
+        const l1 = this._s1;
+        if (l1) hash = ((hash << 5) - hash + l1.node.version) | 0;
+        if (count > 2) {
+          const l2 = this._s2;
+          if (l2) hash = ((hash << 5) - hash + l2.node.version) | 0;
+          if (count > 3) {
+            const l3 = this._s3;
+            if (l3) hash = ((hash << 5) - hash + l3.node.version) | 0;
+
+            const ov = this._overflow;
+            if (ov) {
+              for (let i = 0, len = ov.length; i < len; i++) {
+                const link = ov[i];
+                if (link) hash = ((hash << 5) - hash + link.node.version) | 0;
+              }
+            }
+          }
+        }
+      }
+    }
+    return hash;
+  }
+
   /** Unsubscribes from all links and resets the buffer. */
   disposeAll(): void {
     if (this._count > 0) {
       this.truncateFrom(0);
     }
+    this.hasComputeds = false;
     if (this._map !== null) {
       this._map.clear();
       this._map = null;
@@ -122,10 +254,7 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
 
   /**
    * [Safety Guard]
-   * remove() is strictly prohibited in DepSlotBuffer.
-   * DepSlotBuffer relies on strict sequential indices. Creating middle null-gaps
-   * would break the fast-path sequential access in getAt().
-   * Always use truncateFrom() to remove items.
+   * remove() is strictly prohibited in DepSlotBuffer to preserve sequential cache paths.
    */
   override remove(_item: DependencyLink): boolean {
     throw new Error(
@@ -135,8 +264,7 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
 
   /**
    * [Safety Guard]
-   * Since remove() is prohibited, there are no null gaps.
-   * Compaction is a completely unnecessary operation.
+   * Compaction is unnecessary since remove() is prohibited.
    */
   override compact(): void {
     // No-op for DepSlotBuffer

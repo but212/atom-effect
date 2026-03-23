@@ -108,12 +108,14 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     // Fast path: fully stable dependencies
     if (existing && existing.node === dep) {
       existing.version = dep.version;
+      if (dep.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) this._deps.hasComputeds = true;
       this._trackCount++;
       return;
     }
 
     // Diverged path
     if (this._deps.claimExisting(dep, this._trackCount)) {
+      if (dep.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) this._deps.hasComputeds = true;
       this._trackCount++;
       return;
     }
@@ -134,6 +136,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       link = new DependencyLink(dep, dep.version, undefined);
     }
 
+    if (dep.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) this._deps.hasComputeds = true;
     this._deps.insertNew(this._trackCount, link);
     this._trackCount++;
   }
@@ -161,6 +164,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
 
       // Clean up any remaining trailing dependencies
       this._deps.truncateFrom(this._trackCount);
+      this._deps.seal();
       committed = true;
 
       // Handle result
@@ -209,6 +213,10 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
   }
 
   private _isDirty(): boolean {
+    // O(1) fast-path: Only safe if there are no computed dependencies.
+    // XOR/Sum hash checks versions eagerly, but computeds need lazy pulling.
+    if (!this._deps.hasComputeds && !this._deps.isDirtyFast()) return false;
+
     // Save tracking context once, restore at end (avoids per-iteration function allocation)
     const prevContext = trackingContext.current;
     trackingContext.current = null;

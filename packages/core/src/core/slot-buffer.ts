@@ -81,7 +81,7 @@ export class SlotBuffer<T> {
    * Discards all items from the given index onwards.
    * Equivalent to resetting the length of an array.
    */
-  truncateFrom(index: number, onRemove?: (item: T) => void): void {
+  truncateFrom(index: number): void {
     if (index >= this._count) return;
 
     for (let i = index; i < this._count; i++) {
@@ -100,11 +100,10 @@ export class SlotBuffer<T> {
         this._s3 = null;
       } else if (i >= 4 && this._overflow !== null) {
         item = this._overflow[i - 4] ?? null;
-        // Overflow elements aren't individually nulled here because length gets adjusted
       }
 
-      if (item !== null && onRemove) {
-        onRemove(item);
+      if (item !== null) {
+        this._onItemRemoved(item);
       }
     }
 
@@ -118,6 +117,15 @@ export class SlotBuffer<T> {
     }
 
     this._count = index;
+  }
+
+  /**
+   * Protected hook called whenever an item is logically removed from the buffer.
+   * Allows subclasses (like DepSlotBuffer) to perform cleanup (unsubscribing)
+   * without allocating temporary closures in hot paths.
+   */
+  protected _onItemRemoved(_item: T): void {
+    // Base implementation does nothing
   }
 
   /**

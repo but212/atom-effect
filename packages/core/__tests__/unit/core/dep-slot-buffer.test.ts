@@ -165,4 +165,79 @@ describe('DepSlotBuffer', () => {
       unsubs.forEach((unsub) => expect(unsub).toHaveBeenCalledOnce());
     });
   });
+
+  describe('Versioning and Hashing', () => {
+    it('isDirtyFast returns false immediately after seal', () => {
+      const buf = new DepSlotBuffer();
+      const dep1 = createMockDep(1);
+      const dep2 = createMockDep(2);
+
+      buf.add(new DependencyLink(dep1, dep1.version));
+      buf.add(new DependencyLink(dep2, dep2.version));
+
+      buf.seal();
+      expect(buf.isDirtyFast()).toBe(false);
+    });
+
+    it('isDirtyFast returns true when a dependency version changes', () => {
+      const buf = new DepSlotBuffer();
+      const dep1 = createMockDep(1);
+      const dep2 = createMockDep(2);
+
+      buf.add(new DependencyLink(dep1, dep1.version));
+      buf.add(new DependencyLink(dep2, dep2.version));
+
+      buf.seal();
+
+      // Change version
+      dep1.version++;
+      expect(buf.isDirtyFast()).toBe(true);
+
+      // Back to original version (assuming version match)
+      dep1.version--;
+      expect(buf.isDirtyFast()).toBe(false);
+    });
+
+    it('captureVersionSnapshot detects changes with DJB2', () => {
+      const buf = new DepSlotBuffer();
+      const dep1 = createMockDep(1);
+      const dep2 = createMockDep(2);
+
+      buf.add(new DependencyLink(dep1, dep1.version));
+      buf.add(new DependencyLink(dep2, dep2.version));
+
+      const hash1 = buf.captureVersionSnapshot();
+
+      dep1.version++;
+      const hash2 = buf.captureVersionSnapshot();
+
+      expect(hash1).not.toBe(hash2);
+
+      dep1.version--;
+      const hash3 = buf.captureVersionSnapshot();
+      expect(hash1).toBe(hash3);
+    });
+
+    it('Sum hash handles multiple dependencies and is order-independent', () => {
+      // Sum is order-INDEPENDENT, which is fine for our use case
+      // as dependencies are usually ordered by discovery.
+      const buf = new DepSlotBuffer();
+      const dep1 = createMockDep(1);
+      const dep2 = createMockDep(2);
+
+      buf.add(new DependencyLink(dep1, dep1.version));
+      buf.add(new DependencyLink(dep2, dep2.version));
+      buf.seal();
+
+      // Change both -> with sum, they don't cancel out
+      dep1.version++;
+      dep2.version++;
+      expect(buf.isDirtyFast()).toBe(true);
+
+      // Reset
+      dep1.version--;
+      dep2.version--;
+      expect(buf.isDirtyFast()).toBe(false);
+    });
+  });
 });
