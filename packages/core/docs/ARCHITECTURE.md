@@ -39,11 +39,11 @@ To reduce unnecessary work, a **Notify-and-Check** approach is used.
 
 1. **Phase 1: Notification**: When an atom changes, it notifies its immediate subscribers. For **Computed** nodes, this sets the `DIRTY` flag. For **Effects**, this schedules an execution check via the scheduler.
 2. **Phase 2: Evaluation (Sweep)**: The check differs by node type:
-   - **Computed**: On `.value` access, evaluates lazily only if the `DIRTY` flag is set.
-   - **Effect**: Before re-executing, `_isDirty()` is called. This first performs a **Fast Dirty Check** (efficient O(N) version hash calculation and comparison). If the hash is stable, it skips re-evaluation. If not, it accesses each computed dependency's `.value` to force re-evaluation and compares `dep.version`.
+   - **Computed**: On `.value` access, it calls `_isDirty()` to determine if re-computation is needed. This uses a **Hot-path Check**: it first checks the last known dependency that caused a change. If that dependency is still updating, the node is known to be dirty in $O(1)$.
+   - **Effect**: Before re-executing, `_isDirty()` is called. This performs a **Fast Dirty Check** (efficient O(N) version hash calculation). If the hash is stable, it skips re-evaluation. If not, it performs a full structural walk.
 
-**Trade-off: Cheap O(N) vs. Full Walk**
-The version hash acts as a fast heuristic. While calculating the hash is O(N) relative to the number of direct dependencies, it avoids an expensive recursive structural walk (which would involve executing computed values). The additive combination of version and node ID makes it extremely reliable for skipping unnecessary full checks.
+**Trade-off: Fast Path (O(1)/O(N)) vs. Full Walk**
+The validation process uses layered heuristics to minimize expensive work. The **Hot-path Check (O(1))** provides instant dirty detection for recurring updates. If that misses, the **Version Hash (O(N))** provides a fast heuristic to avoid a full structural walk. Only if the hash differs does the engine perform a recursive pull of dependencies.
 
 ---
 
@@ -66,6 +66,8 @@ Reactivity systems are prone to memory leaks if subscriptions are not cleaned up
 - **DepSlotBuffer (Dependency Tracking)**: A specialized `SlotBuffer` for dependency links. It features:
   - **Mega-Node Optimization**: A hybrid O(1) `Map` fallback when dependencies exceed 32, ensuring performance even for extremely large graphs.
   - **Fast Dirty Checking**: An efficient O(N) version hash check (`isDirtyFast`) using an additive hash of all dependency versions and IDs to quickly determine if a node *might* be dirty before performing a full structural walk.
+- **Computed Optimizations**:
+  - **Hot-path Check**: Caches the index of the last dirty dependency (`_hotIndex`) to provide $O(1)$ dirty detection for recurring state changes (e.g., animations, scrolls).
   - **Safe Retrieval**: Implements `claimExisting` to reuse existing dependency links during re-evaluation, minimizing churn.
 
 **Trade-off: Complexity vs. Zero-Allocation**

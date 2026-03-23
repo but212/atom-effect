@@ -69,6 +69,12 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   // Dependency collection state
   private _trackEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
   private _trackCount = 0;
+  /**
+   * [Hot-path Optimization]
+   * Caches the index of the last dependency that caused a dirty state.
+   * Provides O(1) dirty detection for recurring updates from the same source.
+   */
+  private _hotIndex = -1;
 
   constructor(fn: () => T | Promise<T>, options: ComputedOptions<T> = {}) {
     if (typeof fn !== 'function') throw new ComputedError(ERROR_MESSAGES.COMPUTED_MUST_BE_FUNCTION);
@@ -245,6 +251,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     // Release Memory
     this._error = null;
     this._value = undefined as T;
+    this._hotIndex = -1;
   }
 
   [Symbol.dispose](): void {
@@ -285,6 +292,7 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     this._trackEpoch = nextEpoch();
     this._trackCount = 0;
     this._deps.prepareTracking();
+    this._hotIndex = -1;
 
     let committed = false;
     try {
@@ -418,12 +426,22 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
   }
 
   /**
-   * Two-phase dirty check:
-   * 1. Fast path (O(N)): Check if any direct dependency's version hash has changed.
-   * 2. Full path: Recursively pull and verify each computed dependency.
+   * Two-phase dirty check
    */
   private _isDirty(): boolean {
     const deps = this._deps;
+
+    // Phase 1: Hot-path Check - O(1)
+    // By checking the last known "hot" dependency first, we can detect
+    // a dirty state in O(1) for high-frequency recurring updates.
+    if (this._hotIndex !== -1) {
+      const hotLink = deps.getAt(this._hotIndex);
+      if (hotLink != null && hotLink.node.version !== hotLink.version) {
+        return true;
+      }
+    }
+
+    // Phase 2: Standard Validation - O(N)
     if (!deps.hasComputeds && !deps.isDirtyFast()) return false;
 
     const prevContext = trackingContext.current;
@@ -440,8 +458,13 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
           this._tryPullComputed(dep);
         }
 
-        if (dep.version !== link.version) return true;
+        if (dep.version !== link.version) {
+          this._hotIndex = i;
+          return true;
+        }
       }
+
+      this._hotIndex = -1;
       return false;
     } finally {
       trackingContext.current = prevContext;
