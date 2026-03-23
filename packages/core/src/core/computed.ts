@@ -261,21 +261,20 @@ class ComputedAtomImpl<T> extends ReactiveDependency<T> implements ComputedAtom<
     // 1. Stable Path: dependency index remains the same
     if (existing != null && existing.node === dep) {
       existing.version = dep.version;
-      if (dep.flags & IS_COMPUTED) this._deps.hasComputeds = true;
-      this._trackCount = trackIndex + 1;
-      return;
     }
-
     // 2. Diverged Path: lookup or insert
-    if (this._deps.claimExisting(dep, trackIndex)) {
-      if (dep.flags & IS_COMPUTED) this._deps.hasComputeds = true;
-      this._trackCount = trackIndex + 1;
-      return;
+    else if (this._deps.claimExisting(dep, trackIndex)) {
+      // Version updated inside claimExisting
+    }
+    // 3. New dependency
+    else {
+      const link = new DependencyLink(dep, dep.version, dep.subscribe(this));
+      this._deps.insertNew(trackIndex, link);
     }
 
-    const link = new DependencyLink(dep, dep.version, dep.subscribe(this));
-    if (dep.flags & IS_COMPUTED) this._deps.hasComputeds = true;
-    this._deps.insertNew(trackIndex, link);
+    if (dep.flags & IS_COMPUTED) {
+      this._deps.hasComputeds = true;
+    }
     this._trackCount = trackIndex + 1;
   }
 

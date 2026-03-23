@@ -107,19 +107,20 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
     // 1. Stable Path: dependency index remains the same
     if (existing != null && existing.node === dep) {
       existing.version = dep.version;
-      if (dep.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) this._deps.hasComputeds = true;
-      this._trackCount = trackIndex + 1;
-      return;
     }
-
     // 2. Diverged Path: lookup or insert
-    if (this._deps.claimExisting(dep, trackIndex)) {
-      if (dep.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) this._deps.hasComputeds = true;
-      this._trackCount = trackIndex + 1;
-      return;
+    else if (this._deps.claimExisting(dep, trackIndex)) {
+      // Version updated in claimExisting
+    }
+    // 3. New dependency
+    else {
+      this._insertNewDependency(dep, trackIndex);
     }
 
-    this._insertNewDependency(dep, trackIndex);
+    if (dep.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) {
+      this._deps.hasComputeds = true;
+    }
+    this._trackCount = trackIndex + 1;
   }
 
   private _insertNewDependency(dep: Dependency, trackIndex: number): void {
@@ -138,9 +139,7 @@ class EffectImpl extends ReactiveNode implements EffectObject, DependencyTracker
       link = new DependencyLink(dep, dep.version, undefined);
     }
 
-    if (dep.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) this._deps.hasComputeds = true;
     this._deps.insertNew(trackIndex, link);
-    this._trackCount = trackIndex + 1;
   }
 
   /**
