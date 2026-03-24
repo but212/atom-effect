@@ -115,16 +115,17 @@ class RouterImpl implements Router {
     const renderEffect = effect(() => {
       const routeName = this.currentRouteAtom.value; // primary tracked dependency
 
-      // 폭파: Cleanup headless effects from previous route render
+      // Cleanup headless effects from previous route render
       untracked(() => {
-        this.routeCleanups.forEach((fn) => {
+        const cleanups = this.routeCleanups;
+        for (let i = 0, len = cleanups.length; i < len; i++) {
           try {
-            fn();
+            cleanups[i]!();
           } catch (e) {
             debug.warn(LOG_PREFIXES.ROUTE, 'Cleanup error during route transition:', e);
           }
-        });
-        this.routeCleanups = [];
+        }
+        cleanups.length = 0;
       });
 
       this.renderRoute(routeName); // user hooks run TRACKED
@@ -147,22 +148,30 @@ class RouterImpl implements Router {
    * Uses `normalizedBasePath` for consistent stripping in history mode.
    */
   private getRouteName(): string {
-    const { default: defaultRoute } = this.config;
+    const defaultRoute = this.config.default;
 
     if (this.isHistoryMode) {
-      let pathname = window.location.pathname;
-      // Strip the pre-normalized base path prefix.
-      if (this.normalizedBasePath && pathname.startsWith(this.normalizedBasePath)) {
-        pathname = pathname.substring(this.normalizedBasePath.length);
+      const pathname = window.location.pathname;
+      let start = 0;
+
+      const base = this.normalizedBasePath;
+      if (base && pathname.startsWith(base)) {
+        start = base.length;
       }
+
       // Remove leading slash (optimized: charCodeAt avoids substring allocation)
-      if (pathname.charCodeAt(0) === 47) {
-        pathname = pathname.slice(1);
+      if (pathname.charCodeAt(start) === 47) {
+        start++;
       }
-      return pathname || defaultRoute;
+
+      const route = start === 0 ? pathname : pathname.substring(start);
+      return route || defaultRoute;
     }
+
     // Hash mode
     const hash = window.location.hash;
+    if (hash.length <= 1) return defaultRoute;
+
     const qIndex = hash.indexOf('?');
     const routeName = qIndex === -1 ? hash.substring(1) : hash.substring(1, qIndex);
     return routeName || defaultRoute;
@@ -202,15 +211,16 @@ class RouterImpl implements Router {
     const newParams: Record<string, string> = {};
     if (raw) {
       const sp = new URLSearchParams(raw);
-      // Fast path avoiding Object.fromEntries allocation if possible
-      for (const [key, val] of sp.entries()) {
+      // forEach is faster than entries iterator for building the record
+      sp.forEach((val, key) => {
         newParams[key] = val;
-      }
+      });
     }
 
     // Compare newParams with this.cachedParams to mutate only if changed.
     let changed = false;
-    const oldKeys = Object.keys(this.cachedParams);
+    const oldParams = this.cachedParams;
+    const oldKeys = Object.keys(oldParams);
     const newKeys = Object.keys(newParams);
 
     if (oldKeys.length !== newKeys.length) {
@@ -218,7 +228,7 @@ class RouterImpl implements Router {
     } else {
       for (let i = 0, len = newKeys.length; i < len; i++) {
         const key = newKeys[i]!;
-        if (this.cachedParams[key] !== newParams[key]) {
+        if (oldParams[key] !== newParams[key]) {
           changed = true;
           break;
         }
@@ -362,14 +372,13 @@ class RouterImpl implements Router {
 
     // Parse query parameters
     const params = this.getQueryParams();
-
-    // `previousRoute` is '' on first render, so from !== to in all cases.
     const fromRoute = this.previousRoute;
 
     // Call beforeTransition hook.
     // Untracked to prevent hooks from accidentally subscribing to renderEffect
-    if (this.config.beforeTransition) {
-      untracked(() => this.config.beforeTransition!(fromRoute, routeName));
+    const { beforeTransition, afterTransition } = this.config;
+    if (beforeTransition) {
+      untracked(() => beforeTransition(fromRoute, routeName));
     }
 
     // Dispose reactive bindings on outgoing content before clearing the DOM.
@@ -378,9 +387,11 @@ class RouterImpl implements Router {
 
     // Call onEnter hook and merge params
     let routeParams = params;
-    if (routeConfig.onEnter) {
+    const { onEnter } = routeConfig;
+
+    if (onEnter) {
       // Untracked to prevent onEnter from creating unintended dependencies
-      const result = untracked(() => routeConfig.onEnter!(params, this));
+      const result = untracked(() => onEnter!(params, this));
       if (result !== undefined) {
         routeParams = { ...params, ...result };
       }
@@ -403,8 +414,8 @@ class RouterImpl implements Router {
 
     // Call afterTransition hook
     // Untracked to prevent hooks from accidentally subscribing to renderEffect
-    if (this.config.afterTransition) {
-      untracked(() => this.config.afterTransition!(fromRoute, routeName));
+    if (afterTransition) {
+      untracked(() => afterTransition(fromRoute, routeName));
     }
 
     // Update previous route for next transition
@@ -499,17 +510,18 @@ class RouterImpl implements Router {
         // 2. Exact match the new target links and turn on
         try {
           const safeSelector = current.replace(/"/g, '\\"');
-          const newLinks = Array.from(
-            document.querySelectorAll<HTMLElement>(`[data-route="${safeSelector}"]`)
-          );
+          const nodes = document.querySelectorAll<HTMLElement>(`[data-route="${safeSelector}"]`);
+          const count = nodes.length;
+          const nextLinks = new Array<HTMLElement>(count);
 
-          for (let i = 0, len = newLinks.length; i < len; i++) {
-            const el = newLinks[i]!;
+          for (let i = 0; i < count; i++) {
+            const el = nodes[i]!;
             el.classList.add(activeClass);
             el.setAttribute('aria-current', 'page');
+            nextLinks[i] = el;
           }
 
-          prevActiveLinks = newLinks;
+          prevActiveLinks = nextLinks;
         } catch (_e) {
           prevActiveLinks = [];
         }
