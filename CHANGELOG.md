@@ -28,7 +28,8 @@
 #### Changed
 
 - **Routing**: Refactored `$.route` to deeply align with the reactive core. Replaced O(N) DOM link queries with O(1) micro-patching; removed manual `onParamsChange` lifecycle hook in favor of tracked reactivity directly from `render` hooks; resolved headless effect memory leaks via injected `onUnmount` garbage collection array; optimized `getQueryParams` to dramatically reduce garbage collection allocations using a fast query string cache.
-- **Performance**: Rewrote `atomList` reconciliation using a 1D Flat Buffer (Structure of Arrays) and $O(N)$ linear scanning algorithm, eliminating the need for LIS and object pooling to achieve zero-allocation steady-state rendering and maximum cache locality.
+- **Performance**: Optimized `atomList` with a highly efficient reconciliation engine featuring Prefix/Suffix trimming ($O(1)$ fast-path), 1D Flat Buffer (Structure of Arrays) diffing, and aggressive GC pressure reduction using `ObjectPool` and `ArrayPool` for all temporary data structures.
+- **Architecture**: Replaced `WeakMap` element-to-key tracking with `data-atom-key` DOM attributes for $O(1)$ event delegation and reduced memory overhead in large list scenarios.
 - **Optimization**: Introduced `atomEachElement` helper to eliminate code duplication in chainable jQuery methods (`atomText`, `atomClass`, etc.).
 - **Performance**: Implemented `registerMapEffect` to group multiple reactive updates (classes, styles, attributes) into a single effect per element, reducing reactive node overhead and memory usage.
 - **Architecture**: Refactored `BindingContext` to use lazy jQuery wrapping, reducing unnecessary object allocations during binding initialization.
