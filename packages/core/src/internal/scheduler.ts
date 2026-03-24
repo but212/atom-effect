@@ -151,22 +151,23 @@ class Scheduler {
     const targetBuffer = this._queueBuffer[this._bufferIndex]!;
     let currentSize = this._size;
 
-    // Merge batch
-    bQueue.slice(0, this._batchQueueSize).forEach((job) => {
+    // Merge batch using a simple for-loop to avoid slice() allocation and forEach() overhead
+    for (let i = 0; i < this._batchQueueSize; i++) {
+      const job = bQueue[i]!;
       // Retag jobs
       if (job._nextEpoch !== epoch) {
         job._nextEpoch = epoch;
         targetBuffer[currentSize++] = job;
       }
-    });
+    }
 
     this._size = currentSize;
     this._batchQueueSize = 0;
 
-    // Resize batch queue
-    if (bQueue.length > SCHEDULER_CONFIG.BATCH_QUEUE_SHRINK_THRESHOLD) {
-      bQueue.length = 0;
-    }
+    // Hard reset length to 0 to release references for GC immediately.
+    // In V8, this is an O(1) operation that keeps the capacity if the array is small,
+    // or reclaims it if it exceeds a threshold.
+    bQueue.length = 0;
   }
 
   _drainQueue(): void {

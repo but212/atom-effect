@@ -64,49 +64,72 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
     }
 
     // 2. Unrolled Fast Path for Inline Slots (0..3)
-    // Minimizes GetAt/SetAt overhead by accessing properties directly.
+    // Avoids overhead of getAt/setAt by using switch-fallthrough and direct access.
     if (trackIndex < 4) {
-      // Slot 0
-      if (trackIndex <= 0) {
-        const l = this._s0;
-        if (l && l.node === dep && l.unsub) {
-          l.version = dep.version;
-          return true;
-        }
-      }
-      // Slot 1
-      if (trackIndex <= 1 && count > 1) {
-        const l = this._s1;
-        if (l && l.node === dep && l.unsub) {
-          l.version = dep.version;
-          if (trackIndex !== 1) {
-            const occ = this._s0;
-            this._s1 = occ;
-            this._s0 = l;
+      switch (trackIndex) {
+        // biome-ignore lint/suspicious/noFallthroughSwitchClause: intentional fallthrough for sequential search
+        case 0: {
+          const l = this._s0;
+          if (l && l.node === dep && l.unsub) {
+            l.version = dep.version;
+            return true;
           }
-          return true;
         }
-      }
-      // Slot 2
-      if (trackIndex <= 2 && count > 2) {
-        const l = this._s2;
-        if (l && l.node === dep && l.unsub) {
-          l.version = dep.version;
-          if (trackIndex !== 2) {
-            this._swapInline(2, trackIndex, l);
+        // biome-ignore lint/suspicious/noFallthroughSwitchClause: intentional fallthrough for sequential search
+        case 1: {
+          if (count > 1) {
+            const l = this._s1;
+            if (l && l.node === dep && l.unsub) {
+              l.version = dep.version;
+              if (trackIndex !== 1) {
+                // we know trackIndex is 0 here
+                this._s1 = this._s0;
+                this._s0 = l;
+              }
+              return true;
+            }
           }
-          return true;
         }
-      }
-      // Slot 3
-      if (trackIndex <= 3 && count > 3) {
-        const l = this._s3;
-        if (l && l.node === dep && l.unsub) {
-          l.version = dep.version;
-          if (trackIndex !== 3) {
-            this._swapInline(3, trackIndex, l);
+        // biome-ignore lint/suspicious/noFallthroughSwitchClause: intentional fallthrough for sequential search
+        case 2: {
+          if (count > 2) {
+            const l = this._s2;
+            if (l && l.node === dep && l.unsub) {
+              l.version = dep.version;
+              if (trackIndex !== 2) {
+                // swap with trackIndex (0 or 1)
+                const occ = trackIndex === 0 ? this._s0 : this._s1;
+                if (trackIndex === 0) this._s0 = l;
+                else this._s1 = l;
+                this._s2 = occ;
+              }
+              return true;
+            }
           }
-          return true;
+        }
+        case 3: {
+          if (count > 3) {
+            const l = this._s3;
+            if (l && l.node === dep && l.unsub) {
+              l.version = dep.version;
+              if (trackIndex !== 3) {
+                // swap with trackIndex (0, 1, or 2)
+                let occ: DependencyLink | null;
+                if (trackIndex === 0) {
+                  occ = this._s0;
+                  this._s0 = l;
+                } else if (trackIndex === 1) {
+                  occ = this._s1;
+                  this._s1 = l;
+                } else {
+                  occ = this._s2;
+                  this._s2 = l;
+                }
+                this._s3 = occ;
+              }
+              return true;
+            }
+          }
         }
       }
     }
@@ -132,9 +155,20 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
     if (this._map === null) {
       this._map = new Map();
       const count = this._count;
-      for (let i = trackIndex; i < count; i++) {
-        const link = this.getAt(i);
-        if (link?.unsub) this._map.set(link.node, i);
+      // Partitioned scan to avoid getAt() dispatch in loop
+      if (trackIndex < 4) {
+        if (trackIndex <= 0 && this._s0?.unsub) this._map.set(this._s0.node, 0);
+        if (trackIndex <= 1 && this._s1?.unsub) this._map.set(this._s1.node, 1);
+        if (trackIndex <= 2 && this._s2?.unsub) this._map.set(this._s2.node, 2);
+        if (trackIndex <= 3 && this._s3?.unsub) this._map.set(this._s3.node, 3);
+      }
+      const ov = this._overflow;
+      if (ov && count > 4) {
+        const start = trackIndex > 4 ? trackIndex : 4;
+        for (let i = start - 4, len = ov.length; i < len; i++) {
+          const link = ov[i];
+          if (link?.unsub) this._map.set(link.node, i + 4);
+        }
       }
     }
 
@@ -146,6 +180,7 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
 
     link.version = dep.version;
     if (existingIndex !== trackIndex) {
+      // Inlined swap to avoid dispatch overhead
       const occupant = this.getAt(trackIndex);
       this.setAt(trackIndex, link);
       this.setAt(existingIndex, occupant);
@@ -163,9 +198,19 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
 
   private _swapGeneral(idx: number, trackIndex: number, link: DependencyLink): void {
     if (idx === trackIndex) return;
+
+    // Use direct access for the likely case where idx is in overflow
     const occupant = this.getAt(trackIndex);
     this.setAt(trackIndex, link);
-    this.setAt(idx, occupant);
+
+    if (idx === 0) this._s0 = occupant;
+    else if (idx === 1) this._s1 = occupant;
+    else if (idx === 2) this._s2 = occupant;
+    else if (idx === 3) this._s3 = occupant;
+    else {
+      const ov = this._overflow!;
+      ov[idx - 4] = occupant;
+    }
   }
 
   /**
@@ -188,7 +233,14 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
     else if (trackIndex === 1) this._s1 = link;
     else if (trackIndex === 2) this._s2 = link;
     else if (trackIndex === 3) this._s3 = link;
-    else this.setAt(trackIndex, link);
+    else {
+      let ov = this._overflow;
+      if (!ov) {
+        ov = [];
+        this._overflow = ov;
+      }
+      ov[trackIndex - 4] = link;
+    }
 
     if (trackIndex >= count) {
       this._count = trackIndex + 1;

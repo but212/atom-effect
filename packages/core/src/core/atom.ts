@@ -13,7 +13,7 @@ import { debug } from '@/utils/debug';
 class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
   private _value: T;
   /** Old value for notifications */
-  private _pendingOldValue: T | undefined = undefined;
+  private _pendingOldValue: T | undefined;
 
   /** @internal */
   readonly [ATOM_BRAND] = true;
@@ -23,7 +23,12 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
   constructor(initialValue: T, sync: boolean) {
     super();
     this._value = initialValue;
-    if (sync) this.flags |= ATOM_STATE_FLAGS.SYNC;
+    this._pendingOldValue = undefined;
+
+    if (sync) {
+      this.flags |= ATOM_STATE_FLAGS.SYNC;
+    }
+
     debug.attachDebugInfo(this, 'atom', this.id);
   }
 

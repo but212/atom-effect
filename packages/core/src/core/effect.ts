@@ -44,18 +44,18 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
   // Cycle detection
   private _currentEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
   private _lastFlushEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
-  private _executionsInEpoch = 0;
+  private _executionsInEpoch: number;
 
   private readonly _fn: EffectFunction;
   private readonly _sync: boolean;
   private readonly _maxExecutions: number;
   private readonly _maxExecutionsPerFlush: number;
   // Frequency tracking (Dev)
-  private _executionCount = 0;
-  private _windowStart = 0;
-  private _windowCount = 0;
-  private _execId = 0;
-  private _trackCount = 0;
+  private _executionCount: number;
+  private _windowStart: number;
+  private _windowCount: number;
+  private _execId: number;
+  private _trackCount: number;
 
   constructor(fn: EffectFunction, options: EffectOptions = {}) {
     super();
@@ -66,6 +66,18 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
       options.maxExecutionsPerSecond ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_SECOND;
     this._maxExecutionsPerFlush =
       options.maxExecutionsPerFlush ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_EFFECT;
+
+    this._cleanup = null;
+    this._deps = new DepSlotBuffer();
+    this._currentEpoch = EPOCH_CONSTANTS.UNINITIALIZED;
+    this._lastFlushEpoch = EPOCH_CONSTANTS.UNINITIALIZED;
+    this._executionsInEpoch = 0;
+    this._executionCount = 0;
+    this._windowStart = 0;
+    this._windowCount = 0;
+    this._execId = 0;
+    this._trackCount = 0;
+
     // Pre-allocate callbacks once — eliminates per-dependency closure allocation
     if (this._sync) {
       this._notifyCallback = () => this.execute();
@@ -104,7 +116,14 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
 
     const trackIndex = this._trackCount;
     const deps = this._deps!;
-    const existing = deps.getAt(trackIndex);
+
+    // Optimized: Direct access to inline slots for the hottest 4 dependencies
+    let existing: DependencyLink | null;
+    if (trackIndex === 0) existing = deps._s0;
+    else if (trackIndex === 1) existing = deps._s1;
+    else if (trackIndex === 2) existing = deps._s2;
+    else if (trackIndex === 3) existing = deps._s3;
+    else existing = deps.getAt(trackIndex);
 
     // 1. Stable Path: dependency index remains the same
     if (existing != null && existing.node === dep) {
@@ -195,6 +214,15 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     } finally {
       this.flags &= ~EFFECT_STATE_FLAGS.EXECUTING;
     }
+  }
+
+  /**
+   * Optimized dirty check. Bypasses deep scan if only Atoms are involved.
+   */
+  protected override _isDirty(): boolean {
+    const deps = this._deps;
+    if (deps.hasComputeds) return this._deepDirtyCheck();
+    return deps.isDirtyFast();
   }
 
   private _handleAsyncResult(promise: Promise<unknown>): void {

@@ -6,7 +6,11 @@
 
 #### Changed
 
-- **Performance**: Optimized `DepSlotBuffer` hot-paths (`isDirtyFast`, `seal`, `captureVersionSnapshot`) with `switch`-based dispatch for inline slots (0-4) to leverage V8 jump tables and improve branch prediction.
+- **Performance**: Optimized `DepSlotBuffer`, `SlotBuffer`, and `ReactiveNode` hot-paths with `switch`-based dispatch and direct property access to leverage V8 jump tables and improve branch prediction.
+- **Performance**: Standardized all core reactive classes (`Atom`, `Computed`, `Effect`, `ReactiveNode`) to use explicit constructor-based field initialization for V8 hidden class stability (Monomorphism).
+- **Performance**: Optimized `ComputedAtom` and `Effect` dirty-checking with fast-path guards (`hasComputeds`) to skip O(N) dependency scans when only Atoms are involved.
+- **Performance**: Bypassed redundant `getAt`/`setAt` dispatch in the hottest core loops (dependency collection and update notification) for significant overhead reduction.
+- **Performance**: Refactored `Scheduler` batch merging to eliminate temporary array allocations (`slice`) and closure overhead, significantly reducing GC pressure during high-frequency updates.
 - **Performance**: Removed redundant null-checks in `DepSlotBuffer` by leveraging the dense invariant (no holes) of the dependency container.
 
 ## [0.24.0]
