@@ -2,6 +2,7 @@ import $ from 'jquery';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '@/index';
 import { ERROR_MESSAGES, LOG_PREFIXES } from '@/constants';
+import type { Router } from '@/types';
 import { debug } from '@/utils/debug';
 
 describe('$.route() - SPA Routing', () => {
@@ -130,8 +131,16 @@ describe('$.route() - SPA Routing', () => {
   describe('Custom Rendering & Params', () => {
     it('should support custom render functions with parameters', async () => {
       const renderSpy = vi.fn(
-        (container: HTMLElement, route: string, params: Record<string, string>) => {
-          container.innerHTML = `Route: ${route}, ID: ${params.id}`;
+        (
+          container: HTMLElement,
+          route: string,
+          params: Record<string, string>,
+          _unmount: (cleanupFn: () => void) => void,
+          router: Router
+        ) => {
+          const currentParams = router.queryParams.value;
+          // Reactivity comes from reading currentParams
+          container.innerHTML = `Route: ${route}, ID: ${currentParams.id}, Extra: ${params.extra}`;
         }
       );
 
@@ -151,9 +160,9 @@ describe('$.route() - SPA Routing', () => {
       await $.nextTick();
 
       expect(renderSpy).toHaveBeenCalledTimes(2);
-      const args = renderSpy.mock.calls[1]!;
-      expect(args[2]).toEqual({ id: '42', extra: 'injected' });
-      expect(document.querySelector('#app')?.innerHTML).toContain('Route: home, ID: 42');
+      expect(document.querySelector('#app')?.innerHTML).toContain(
+        'Route: home, ID: 42, Extra: injected'
+      );
     });
   });
 
@@ -532,7 +541,13 @@ describe('$.route() - SPA Routing', () => {
 
     it('should parse query params from window.location.search', async () => {
       const renderSpy = vi.fn(
-        (container: HTMLElement, _route: string, params: Record<string, string>) => {
+        (
+          container: HTMLElement,
+          _route: string,
+          params: Record<string, string>,
+          _unmount: (cleanupFn: () => void) => void,
+          _router: Router
+        ) => {
           container.innerHTML = `ID: ${params.id}`;
         }
       );
@@ -647,63 +662,46 @@ describe('$.route() - SPA Routing', () => {
     });
   });
 
-  describe('Same-route param change: onParamsChange', () => {
-    it('should call onParamsChange instead of render when only params change', async () => {
-      const renderSpy = vi.fn((el: HTMLElement) => {
-        el.innerHTML = '<div>Rendered</div>';
-      });
-      const onParamsChangeSpy = vi.fn((_params: Record<string, string>) => {});
+  describe('Same-route param change: Core Reactivity', () => {
+    it('should re-render seamlessly when query params change IF they are read inside render (tracked)', async () => {
+      const renderSpy = vi.fn(
+        (
+          el: HTMLElement,
+          _route: string,
+          _params: Record<string, string>,
+          _unmount: (cleanupFn: () => void) => void,
+          router: Router
+        ) => {
+          // Read the reactive atom to subscribe
+          const queryParams = router.queryParams.value;
+          el.innerHTML = `<div>Rendered ${queryParams.id}</div>`;
+        }
+      );
 
       const router = $.route({
         target: '#app',
         default: 'home',
         routes: {
-          home: { render: renderSpy, onParamsChange: onParamsChangeSpy },
+          home: { render: renderSpy },
         },
       });
 
       await $.nextTick();
       expect(renderSpy).toHaveBeenCalledTimes(1);
+      expect(document.querySelector('#app')?.innerHTML).toContain('Rendered undefined');
 
       window.location.hash = '#home?id=42';
       window.dispatchEvent(new window.Event('hashchange'));
       await $.nextTick();
 
-      expect(renderSpy).toHaveBeenCalledTimes(1);
-      expect(onParamsChangeSpy).toHaveBeenCalledWith({ id: '42' });
+      // Because renderEffect tracked queryParams, it re-runs renderRoute
+      expect(renderSpy).toHaveBeenCalledTimes(2);
+      expect(document.querySelector('#app')?.innerHTML).toContain('Rendered 42');
 
       router.destroy();
     });
 
-    it('should call render (not onParamsChange) when navigating to a different route', async () => {
-      const homeRenderSpy = vi.fn((el: HTMLElement) => {
-        el.innerHTML = 'Home';
-      });
-      const onParamsChangeSpy = vi.fn((_params: Record<string, string>) => {});
-
-      const router = $.route({
-        target: '#app',
-        default: 'home',
-        routes: {
-          home: { render: homeRenderSpy, onParamsChange: onParamsChangeSpy },
-          about: { template: '#tmpl-about' },
-        },
-      });
-
-      await $.nextTick();
-
-      router.navigate('about');
-      await $.nextTick();
-      router.navigate('home');
-      await $.nextTick();
-
-      expect(homeRenderSpy).toHaveBeenCalledTimes(2);
-      expect(onParamsChangeSpy).not.toHaveBeenCalled();
-
-      router.destroy();
-    });
-
-    it('should NOT clear DOM on param-only change (preserve DOM reference)', async () => {
+    it('should NOT re-render when only params change IF params are not read inside render', async () => {
       let capturedEl: HTMLElement | null = null;
       const renderSpy = vi.fn((el: HTMLElement) => {
         const div = document.createElement('div');
@@ -717,21 +715,51 @@ describe('$.route() - SPA Routing', () => {
         target: '#app',
         default: 'home',
         routes: {
-          home: {
-            render: renderSpy,
-            onParamsChange: (_params: Record<string, string>) => {},
-          },
+          home: { render: renderSpy },
         },
       });
 
       await $.nextTick();
+      expect(renderSpy).toHaveBeenCalledTimes(1);
       expect(capturedEl).not.toBeNull();
 
       window.location.hash = '#home?v=2';
       window.dispatchEvent(new window.Event('hashchange'));
       await $.nextTick();
 
+      // Still 1 time because render didn't track queryParams
+      expect(renderSpy).toHaveBeenCalledTimes(1);
       expect(document.getElementById('persistent-element')).toBe(capturedEl);
+
+      router.destroy();
+    });
+  });
+
+  describe('Headless Effect Cleanup', () => {
+    it('should call registered onUnmount cleanups when transitioning routes', async () => {
+      const cleanupSpy = vi.fn();
+
+      const router = $.route({
+        target: '#app',
+        default: 'home',
+        routes: {
+          home: {
+            render: (el, _route, _params, onUnmount) => {
+              el.innerHTML = 'Home';
+              onUnmount(cleanupSpy);
+            },
+          },
+          about: { template: '#tmpl-about' },
+        },
+      });
+
+      await $.nextTick();
+      expect(cleanupSpy).not.toHaveBeenCalled();
+
+      router.navigate('about');
+      await $.nextTick();
+
+      expect(cleanupSpy).toHaveBeenCalledTimes(1);
 
       router.destroy();
     });

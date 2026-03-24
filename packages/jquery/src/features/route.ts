@@ -62,6 +62,10 @@ class RouterImpl implements Router {
    */
   private activeClass: string;
 
+  private routeCleanups: Array<() => void> = [];
+  private lastRawQuery: string = '';
+  private cachedParams: Record<string, string> = {};
+
   constructor(config: RouteConfig) {
     // Destructure configuration with defaults for internal use
     this.config = {
@@ -101,19 +105,29 @@ class RouterImpl implements Router {
   }
 
   private init() {
-    // Set up URL change listener
     const eventName = this.isHistoryMode ? 'popstate' : 'hashchange';
     window.addEventListener(eventName, this.handleUrlChange);
     this.cleanups.push(() => window.removeEventListener(eventName, this.handleUrlChange));
 
     // Set up reactive rendering effect.
-    // Only currentRouteAtom.value is the intended reactive dependency.
-    // renderRoute calls user lifecycle hooks (beforeTransition, onEnter, render,
-    // onMount, afterTransition) that may read atoms — those reads must not
-    // subscribe this effect to extra dependencies.
+    // The renderRoute call is now TRACKED. If user hooks (like render) read
+    // atoms, this effect will automatically re-run and seamlessly update the route.
     const renderEffect = effect(() => {
-      const routeName = this.currentRouteAtom.value; // sole tracked dependency
-      untracked(() => this.renderRoute(routeName)); // user hooks run untracked
+      const routeName = this.currentRouteAtom.value; // primary tracked dependency
+
+      // 폭파: Cleanup headless effects from previous route render
+      untracked(() => {
+        this.routeCleanups.forEach((fn) => {
+          try {
+            fn();
+          } catch (e) {
+            debug.warn(LOG_PREFIXES.ROUTE, 'Cleanup error during route transition:', e);
+          }
+        });
+        this.routeCleanups = [];
+      });
+
+      this.renderRoute(routeName); // user hooks run TRACKED
     });
     this.cleanups.push(() => renderEffect.dispose());
 
@@ -169,20 +183,52 @@ class RouterImpl implements Router {
    * is still returned.
    */
   private getQueryParams(): Record<string, string> {
-    let raw: string;
+    let raw: string = '';
 
     if (this.isHistoryMode) {
       raw = window.location.search.substring(1); // Remove leading '?'
-      if (!raw) return {};
     } else {
       const hash = window.location.hash;
       const qIndex = hash.indexOf('?');
-      if (qIndex === -1) return {};
-      raw = hash.substring(qIndex + 1);
+      if (qIndex !== -1) {
+        raw = hash.substring(qIndex + 1);
+      }
     }
 
-    const sp = new URLSearchParams(raw);
-    const params: Record<string, string> = Object.fromEntries(sp);
+    if (raw === this.lastRawQuery) {
+      return this.cachedParams;
+    }
+
+    const newParams: Record<string, string> = {};
+    if (raw) {
+      const sp = new URLSearchParams(raw);
+      // Fast path avoiding Object.fromEntries allocation if possible
+      for (const [key, val] of sp.entries()) {
+        newParams[key] = val;
+      }
+    }
+
+    // Compare newParams with this.cachedParams to mutate only if changed.
+    let changed = false;
+    const oldKeys = Object.keys(this.cachedParams);
+    const newKeys = Object.keys(newParams);
+
+    if (oldKeys.length !== newKeys.length) {
+      changed = true;
+    } else {
+      for (let i = 0, len = newKeys.length; i < len; i++) {
+        const key = newKeys[i]!;
+        if (this.cachedParams[key] !== newParams[key]) {
+          changed = true;
+          break;
+        }
+      }
+    }
+
+    if (changed) {
+      this.cachedParams = newParams;
+    }
+    this.lastRawQuery = raw;
 
     // Warn about malformed percent-encoded sequences
     if (raw.includes('%')) {
@@ -193,7 +239,7 @@ class RouterImpl implements Router {
       }
     }
 
-    return params;
+    return this.cachedParams;
   }
 
   /**
@@ -321,9 +367,9 @@ class RouterImpl implements Router {
     const fromRoute = this.previousRoute;
 
     // Call beforeTransition hook.
-    // If it throws, the render is aborted — outgoing content stays in the DOM.
+    // Untracked to prevent hooks from accidentally subscribing to renderEffect
     if (this.config.beforeTransition) {
-      this.config.beforeTransition(fromRoute, routeName);
+      untracked(() => this.config.beforeTransition!(fromRoute, routeName));
     }
 
     // Dispose reactive bindings on outgoing content before clearing the DOM.
@@ -333,26 +379,32 @@ class RouterImpl implements Router {
     // Call onEnter hook and merge params
     let routeParams = params;
     if (routeConfig.onEnter) {
-      const result = routeConfig.onEnter(params);
+      // Untracked to prevent onEnter from creating unintended dependencies
+      const result = untracked(() => routeConfig.onEnter!(params, this));
       if (result !== undefined) {
         routeParams = { ...params, ...result };
       }
     }
 
+    const onUnmount = (cleanupFn: () => void) => {
+      this.routeCleanups.push(cleanupFn);
+    };
+
     // Render content (custom render or template)
     if (routeConfig.render) {
-      routeConfig.render(container, routeName, routeParams);
+      routeConfig.render(container, routeName, routeParams, onUnmount, this);
     } else if (routeConfig.template) {
       if (this.renderTemplate(routeConfig.template)) {
         if (routeConfig.onMount) {
-          routeConfig.onMount(this.$target.children());
+          routeConfig.onMount(this.$target.children(), onUnmount, this);
         }
       }
     }
 
     // Call afterTransition hook
+    // Untracked to prevent hooks from accidentally subscribing to renderEffect
     if (this.config.afterTransition) {
-      this.config.afterTransition(fromRoute, routeName);
+      untracked(() => this.config.afterTransition!(fromRoute, routeName));
     }
 
     // Update previous route for next transition
@@ -378,7 +430,7 @@ class RouterImpl implements Router {
       // Check onLeave guard for user-driven navigation
       const oldRouteConfig = this.config.routes[oldRouteName];
       if (oldRouteConfig?.onLeave) {
-        if (oldRouteConfig.onLeave() === false) {
+        if (untracked(() => oldRouteConfig.onLeave!(this)) === false) {
           // Navigation blocked — restore the URL without updating previousUrl,
           // so the next real navigation is still detected correctly.
           this.restoreUrl();
@@ -388,19 +440,14 @@ class RouterImpl implements Router {
       // Two separate writes — the scheduler's automatic microtask batching
       // guarantees they are flushed together in the next microtask tick,
       // so subscribers always see a consistent snapshot of the (route, params) pair.
-      // renderRoute reads getQueryParams() directly from the URL, so there
-      // is no double-write risk from the queryParamsAtom update.
       this.currentRouteAtom.value = newRoute;
       this.queryParamsAtom.value = params;
     } else {
       // Same route but URL changed (e.g., query params only)
+      // Since renderRoute is now tracked, the atom engine natively handles
+      // re-renders if the route's render function accessed queryParamsAtom.value.
+      // We don't need onParamsChange or manual renderRoute calls here.
       this.queryParamsAtom.value = params;
-      const routeConfig = this.config.routes[oldRouteName];
-      if (routeConfig?.onParamsChange) {
-        routeConfig.onParamsChange(params);
-      } else {
-        this.renderRoute(newRoute);
-      }
     }
 
     // Commit the new URL only after a successful (unblocked) transition.
@@ -435,25 +482,36 @@ class RouterImpl implements Router {
 
     // 2. Active state management — re-runs only when currentRoute changes.
     const activeClass = this.activeClass;
+    let prevActiveLinks: HTMLElement[] = [];
 
     const activeLinksEffect = effect(() => {
       const current = this.currentRouteAtom.value; // sole tracked dependency
       // DOM queries and class manipulations run untracked: they must not
       // subscribe the effect to anything beyond currentRouteAtom.
       untracked(() => {
-        const links = document.querySelectorAll<HTMLElement>('[data-route]');
+        // 1. Turn off previous active links
+        for (let i = 0, len = prevActiveLinks.length; i < len; i++) {
+          const el = prevActiveLinks[i]!;
+          el.classList.remove(activeClass);
+          el.removeAttribute('aria-current');
+        }
 
-        for (let i = 0, len = links.length; i < len; i++) {
-          const el = links[i]!;
-          const routeAttr = el.dataset.route!;
-          const isActive = current === routeAttr;
+        // 2. Exact match the new target links and turn on
+        try {
+          const safeSelector = current.replace(/"/g, '\\"');
+          const newLinks = Array.from(
+            document.querySelectorAll<HTMLElement>(`[data-route="${safeSelector}"]`)
+          );
 
-          el.classList.toggle(activeClass, isActive);
-          if (isActive) {
+          for (let i = 0, len = newLinks.length; i < len; i++) {
+            const el = newLinks[i]!;
+            el.classList.add(activeClass);
             el.setAttribute('aria-current', 'page');
-          } else {
-            el.removeAttribute('aria-current');
           }
+
+          prevActiveLinks = newLinks;
+        } catch (_e) {
+          prevActiveLinks = [];
         }
       });
     });
@@ -478,7 +536,7 @@ class RouterImpl implements Router {
     const currentRouteConfig = this.config.routes[currentRouteName];
 
     if (currentRouteConfig?.onLeave) {
-      const canLeave = currentRouteConfig.onLeave();
+      const canLeave = currentRouteConfig.onLeave(this);
       if (canLeave === false) return; // Navigation blocked
     }
 
