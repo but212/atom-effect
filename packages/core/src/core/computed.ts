@@ -167,9 +167,13 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
   get hasError(): boolean {
     this._track();
     const flags = this.flags;
+    // Fast path: self has error
     if (flags & (REJECTED | HAS_ERROR)) return true;
 
+    // Fast path: if no computed dependencies, none can have errors
     const deps = this._deps;
+    if (!deps.hasComputeds) return false;
+
     const size = deps.size;
     for (let i = 0; i < size; i++) {
       const link = deps.getAt(i);
@@ -190,6 +194,11 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     if (this._error) collected.push(this._error);
 
     const deps = this._deps;
+    // Early exit: no computed dependencies means no bubbling errors
+    if (!deps.hasComputeds) {
+      return collected.length === 0 ? EMPTY_ERROR_ARRAY : Object.freeze(collected);
+    }
+
     const size = deps.size;
     for (let i = 0; i < size; i++) {
       const link = deps.getAt(i);
@@ -418,6 +427,15 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     if (this.flags & (RECOMPUTING | DIRTY)) return;
     this.flags |= DIRTY;
     this._notifySubscribers(undefined, undefined);
+  }
+
+  /**
+   * Optimized dirty check. Bypasses deep scan if only Atoms are involved.
+   */
+  protected override _isDirty(): boolean {
+    const deps = this._deps;
+    if (deps.hasComputeds) return this._deepDirtyCheck();
+    return deps.isDirtyFast();
   }
 
   /**

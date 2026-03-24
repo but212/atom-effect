@@ -18,31 +18,41 @@ import { wrapError } from '@/utils/error';
  */
 export abstract class ReactiveNode<T> {
   /** [Producer/Consumer] State flags */
-  flags = 0;
+  flags: number;
   /** [Producer/Consumer] Version counter */
-  version = 0;
+  version: number;
   /** [Producer/Consumer] Last access epoch */
-  _lastSeenEpoch = EPOCH_CONSTANTS.UNINITIALIZED;
+  _lastSeenEpoch: number;
   /** [Context] Scheduler epoch tag */
   _nextEpoch?: number;
   /** [Debug] Unique ID for identify node in tracking maps */
-  readonly id: DependencyId = generateId() & SMI_MAX;
+  readonly id: DependencyId;
 
   /**
    * [Producer] Managed subscribers.
-   * Nullable to save memory in pure-consumer nodes (Effects).
    */
-  _slots: SlotBuffer<Subscription<T>> | null = null;
+  _slots: SlotBuffer<Subscription<T>> | null;
+
   /** [Producer] Re-entry guard for notification loop. */
-  _notifying = 0;
+  _notifying: number;
 
   /**
    * [Consumer] Managed dependencies.
-   * Nullable to save memory in pure-producers (Atoms).
    */
-  _deps: DepSlotBuffer | null = null;
+  _deps: DepSlotBuffer | null;
   /** [Consumer] O(1) Hot-path dependency index for rapid dirty checks. */
-  _hotIndex = -1;
+  _hotIndex: number;
+
+  constructor() {
+    this.flags = 0;
+    this.version = 0;
+    this._lastSeenEpoch = EPOCH_CONSTANTS.UNINITIALIZED;
+    this._notifying = 0;
+    this._hotIndex = -1;
+    this._slots = null;
+    this._deps = null;
+    this.id = generateId() & SMI_MAX;
+  }
 
   // ============================================================================
   // Producer Logic (Subscriber Management)

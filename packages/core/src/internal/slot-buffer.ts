@@ -45,33 +45,46 @@ export class SlotBuffer<T> {
 
   /** Gets the item at a specific logical index. */
   getAt(index: number): T | null {
-    if (index === 0) return this._s0;
-    if (index === 1) return this._s1;
-    if (index === 2) return this._s2;
-    if (index === 3) return this._s3;
-
-    const ov = this._overflow;
-    if (ov !== null && index >= 4) {
-      const ovIdx = index - 4;
-      if (ovIdx < ov.length) return ov[ovIdx] || null;
+    switch (index) {
+      case 0:
+        return this._s0;
+      case 1:
+        return this._s1;
+      case 2:
+        return this._s2;
+      case 3:
+        return this._s3;
+      default: {
+        const ov = this._overflow;
+        if (ov !== null && index >= 4) {
+          const ovIdx = index - 4;
+          if (ovIdx < ov.length) return ov[ovIdx] ?? null;
+        }
+        return null;
+      }
     }
-    return null;
   }
 
   /** Overwrites an item at a specific index. */
   setAt(index: number, item: T | null): void {
-    if (index === 0) {
-      this._s0 = item;
-    } else if (index === 1) {
-      this._s1 = item;
-    } else if (index === 2) {
-      this._s2 = item;
-    } else if (index === 3) {
-      this._s3 = item;
-    } else {
-      this._overflow ??= [];
-      const ov = this._overflow;
-      ov[index - 4] = item;
+    switch (index) {
+      case 0:
+        this._s0 = item;
+        break;
+      case 1:
+        this._s1 = item;
+        break;
+      case 2:
+        this._s2 = item;
+        break;
+      case 3:
+        this._s3 = item;
+        break;
+      default: {
+        this._overflow ??= [];
+        const ov = this._overflow;
+        ov[index - 4] = item;
+      }
     }
 
     if (index >= this._count) {
@@ -88,32 +101,40 @@ export class SlotBuffer<T> {
     if (index >= count) return;
 
     // 1. Unroll Inline Slots Cleanup
-    if (index <= 0) {
-      const s = this._s0;
-      if (s != null) {
-        this._onItemRemoved(s);
-        this._s0 = null;
-      }
-    }
-    if (index <= 1) {
-      const s = this._s1;
-      if (s != null) {
-        this._onItemRemoved(s);
-        this._s1 = null;
-      }
-    }
-    if (index <= 2) {
-      const s = this._s2;
-      if (s != null) {
-        this._onItemRemoved(s);
-        this._s2 = null;
-      }
-    }
+    // Uses fallthrough logic to clean up all slots from the given index onwards.
     if (index <= 3) {
-      const s = this._s3;
-      if (s != null) {
-        this._onItemRemoved(s);
-        this._s3 = null;
+      switch (index) {
+        // biome-ignore lint/suspicious/noFallthroughSwitchClause: intentional fallthrough for range cleanup
+        case 0: {
+          const s = this._s0;
+          if (s != null) {
+            this._onItemRemoved(s);
+            this._s0 = null;
+          }
+        }
+        // biome-ignore lint/suspicious/noFallthroughSwitchClause: intentional fallthrough for range cleanup
+        case 1: {
+          const s = this._s1;
+          if (s != null) {
+            this._onItemRemoved(s);
+            this._s1 = null;
+          }
+        }
+        // biome-ignore lint/suspicious/noFallthroughSwitchClause: intentional fallthrough for range cleanup
+        case 2: {
+          const s = this._s2;
+          if (s != null) {
+            this._onItemRemoved(s);
+            this._s2 = null;
+          }
+        }
+        case 3: {
+          const s = this._s3;
+          if (s != null) {
+            this._onItemRemoved(s);
+            this._s3 = null;
+          }
+        }
       }
     }
 

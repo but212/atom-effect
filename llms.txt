@@ -1,0 +1,71 @@
+# atom-effect
+
+atom-effect is a high-performance reactive state management library designed for ES2021+ environments. It features a decentralized, epoch-based propagation engine with first-class support for asynchronous computations and automatic memory management.
+
+## Packages
+
+- `@but212/atom-effect`: The core reactive engine. Provides primitives like `atom`, `computed`, and `effect`.
+- `@but212/atom-effect-jquery`: Reactive bindings for jQuery. Enables declarative UI synchronization, two-way form binding, high-performance list rendering, and reactive SPA routing.
+
+## Core Features (@but212/atom-effect)
+
+- **Reactive Primitives**:
+  - `atom(value)`: Mutable state container.
+  - `computed(fn)`: Derived state with lazy evaluation, caching, and native `async/await` support.
+  - `effect(fn)`: Immediate and reactive side effects with automatic dependency tracking.
+- **Engine Architecture**:
+  - **Epoch-based Propagation**: Uses a global epoch and local versions to ensure glitch-free updates and avoid unnecessary re-calculations.
+  - **V8 Monomorphism**: Optimized internal `ReactiveNode` base class for near-native property access speeds.
+  - **Async Integrity**: DJB2-based version snapshots prevent race conditions and "dependency drift" in async computed nodes.
+  - **Memory Efficiency**: Employs `DepSlotBuffer` with hybrid O(1) Map fallback and internal array pooling for zero-allocation dependency tracking.
+  - **Safety**: Built-in infinite loop detection and circular dependency guards.
+
+## jQuery Bindings (@but212/atom-effect-jquery)
+
+- **Declarative UI**: `atomBind`, `atomText`, `atomHtml`, `atomClass`, `atomCss`, `atomAttr`, `atomProp`, `atomShow`, `atomHide`.
+- **Two-way Form Binding**: `atomVal` (supports CJK IME, debouncing, and cursor preservation) and `atomChecked`.
+- **List Rendering (`atomList`)**: High-performance 1D flat buffer reconciliation with memory pooling and delegated event listeners.
+- **Component Lifecycle**: `atomMount` and `atomUnmount` for functional component orchestration.
+- **Reactive Navigation**: `$.route` with support for both Hash and History (pushState) modes.
+- **Reactive AJAX**: `$.atomFetch` for declarative data fetching with automatic request cancellation.
+- **Reliability**: 
+  - **Auto-cleanup**: Uses `MutationObserver` to automatically dispose of reactive bindings when DOM elements are removed.
+  - **Security**: Built-in regex-based sanitization for HTML, attributes, and CSS to prevent XSS.
+
+## Quick Start (Core)
+
+```typescript
+import { atom, computed, effect } from '@but212/atom-effect';
+
+const count = atom(0);
+const double = computed(() => count.value * 2);
+
+effect(() => {
+  console.log(`Count: ${count.value}, Double: ${double.value}`);
+});
+
+count.value++; // Auto-triggers effect
+```
+
+## Quick Start (jQuery)
+
+```javascript
+import $ from '@but212/atom-effect-jquery';
+
+const timer = $.atom(0);
+setInterval(() => timer.value++, 1000);
+
+$('#display').atomText(timer, t => `Elapsed: ${t}s`);
+$('#reset').on('click', () => timer.value = 0);
+```
+
+## Documentation
+
+- **Core**:
+  - [API Reference](packages/core/docs/API.md)
+  - [Architecture](packages/core/docs/ARCHITECTURE.md)
+  - [Onboarding](packages/core/docs/ONBOARDING.md)
+- **jQuery**:
+  - [API Reference](packages/jquery/docs/API.md)
+  - [Architecture](packages/jquery/docs/ARCHITECTURE.md)
+  - [Security Guide](packages/jquery/docs/SECURITY.md)
