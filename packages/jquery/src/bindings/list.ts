@@ -169,21 +169,10 @@ function handleEmpty<T>(
 
   const { oldKeys, oldNodes, onRemove } = ctx;
   if (!onRemove) {
-    // Fast path: bulk remove
+    // Fast path: bulk remove. Since $container.empty() is called below,
+    // we don't need to manually remove 'data-atom-key' from each element.
     for (let i = 0, len = oldKeys.length; i < len; i++) {
-      const k = oldKeys[i]!;
-      const $el = oldNodes[i];
-      if ($el) {
-        if ($el instanceof Element) {
-          $el.removeAttribute('data-atom-key');
-        } else {
-          for (let j = 0; j < $el.length; j++) {
-            const el = $el[j];
-            if (el instanceof Element) el.removeAttribute('data-atom-key');
-          }
-        }
-      }
-      ctx.removingKeys.delete(k);
+      ctx.removingKeys.delete(oldKeys[i]!);
     }
     $container.empty();
   } else {
@@ -427,8 +416,10 @@ function renderItems<T>(
       const oldEl = newNodes[targetIdx];
       if (oldEl) {
         const $old = wrap(oldEl);
-        const node = $old[0];
-        if (node) registry.cleanupTree(node as Element);
+        for (let j = 0, oldLen = $old.length; j < oldLen; j++) {
+          const node = $old[j];
+          if (node) registry.cleanupTree(node as Element);
+        }
         $old.replaceWith($el);
       }
     }
