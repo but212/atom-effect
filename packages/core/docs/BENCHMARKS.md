@@ -6,11 +6,11 @@ Comprehensive benchmarking suite for `atom-effect` to measure performance and de
 
 | Category | Key Metric | Value | Context |
 | ---------- | ---------- | ----- | ------- |
-| **Atom** | Read 1000x (peek) | 610K ops/sec | Near-native array access speed |
-| **Computed** | Recompute (cached) | 1,373K ops/sec | Cached reads are nearly free |
-| **Effect** | Re-runs | 1,110K ops/sec | Efficient change propagation |
-| **Real-world** | Todo App (Create 100 items) | 687K ops/sec | Production-ready performance |
-| **Frame Budget** | 100 atom updates | 0.013ms | Well under 16ms budget |
+| **Atom** | Read 1000x (peek) | 670K ops/sec | Near-native array access speed |
+| **Computed** | Recompute (cached) | 1,451K ops/sec | Cached reads are nearly free |
+| **Effect** | Re-runs | 1,114K ops/sec | Efficient change propagation |
+| **Real-world** | Todo App (Create 100 items) | 789K ops/sec | Production-ready performance |
+| **Frame Budget** | 100 atom updates | 0.014ms | Well under 16ms budget |
 
 ## Running Benchmarks
 
@@ -97,8 +97,8 @@ Production-like scenarios:
 
 ## Latest Results
 
-**Version**: v0.23.0
-**Last Updated**: 2026-03-23
+**Version**: v0.24.0
+**Last Updated**: 2026-03-24
 **Environment**:
 
 - **Node.js**: v22.x
@@ -110,12 +110,12 @@ Production-like scenarios:
 
 | Benchmark | Result | Analysis |
 | ---------- | ------ | -------- |
-| Atom peek (1000x) | 610K ops/sec | Near-native performance |
-| Computed recompute | 1,373K ops/sec | Cached reads are virtually free |
-| Effect re-runs (10x) | 1,110K ops/sec | Efficient propagation |
-| Todo App workflow | 175K ops/sec | Production-ready (Complete workflow) |
-| Frame Budget (100 atoms) | 0.013ms | Well under 16ms |
-| Data Grid Sort (1000 rows) | 0.40ms | Real-time sorting |
+| Atom peek (1000x) | 670K ops/sec | Near-native performance |
+| Computed recompute | 1,451K ops/sec | Cached reads are virtually free |
+| Effect re-runs (10x) | 1,114K ops/sec | Efficient propagation |
+| Todo App workflow | 190K ops/sec | Production-ready (Complete workflow) |
+| Frame Budget (100 atoms) | 0.014ms | Well under 16ms |
+| Data Grid Sort (1000 rows) | 0.42ms | Real-time sorting |
 
 ## Contributing Benchmarks
 
