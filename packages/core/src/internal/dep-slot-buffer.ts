@@ -296,17 +296,6 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
         hash = (hash + (l2.version << vbits) + l2.node.id) | 0;
         break;
       }
-      case 4: {
-        const l0 = this._s0!;
-        const l1 = this._s1!;
-        const l2 = this._s2!;
-        const l3 = this._s3!;
-        hash = (hash + (l0.version << vbits) + l0.node.id) | 0;
-        hash = (hash + (l1.version << vbits) + l1.node.id) | 0;
-        hash = (hash + (l2.version << vbits) + l2.node.id) | 0;
-        hash = (hash + (l3.version << vbits) + l3.node.id) | 0;
-        break;
-      }
       default: {
         const l0 = this._s0!;
         const l1 = this._s1!;
@@ -317,10 +306,12 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
         hash = (hash + (l2.version << vbits) + l2.node.id) | 0;
         hash = (hash + (l3.version << vbits) + l3.node.id) | 0;
 
-        const ov = this._overflow!;
-        for (let i = 0, len = ov.length; i < len; i++) {
-          const l = ov[i]!;
-          hash = (hash + (l.version << vbits) + l.node.id) | 0;
+        if (count > 4) {
+          const ov = this._overflow!;
+          for (let i = 0, len = ov.length; i < len; i++) {
+            const l = ov[i]!;
+            hash = (hash + (l.version << vbits) + l.node.id) | 0;
+          }
         }
       }
     }
@@ -359,17 +350,6 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
         hash = (hash + (n2.version << vbits) + n2.id) | 0;
         break;
       }
-      case 4: {
-        const n0 = this._s0!.node;
-        const n1 = this._s1!.node;
-        const n2 = this._s2!.node;
-        const n3 = this._s3!.node;
-        hash = (hash + (n0.version << vbits) + n0.id) | 0;
-        hash = (hash + (n1.version << vbits) + n1.id) | 0;
-        hash = (hash + (n2.version << vbits) + n2.id) | 0;
-        hash = (hash + (n3.version << vbits) + n3.id) | 0;
-        break;
-      }
       default: {
         const n0 = this._s0!.node;
         const n1 = this._s1!.node;
@@ -380,10 +360,12 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
         hash = (hash + (n2.version << vbits) + n2.id) | 0;
         hash = (hash + (n3.version << vbits) + n3.id) | 0;
 
-        const ov = this._overflow!;
-        for (let i = 0, len = ov.length; i < len; i++) {
-          const n = ov[i]!.node;
-          hash = (hash + (n.version << vbits) + n.id) | 0;
+        if (count > 4) {
+          const ov = this._overflow!;
+          for (let i = 0, len = ov.length; i < len; i++) {
+            const n = ov[i]!.node;
+            hash = (hash + (n.version << vbits) + n.id) | 0;
+          }
         }
       }
     }
@@ -415,22 +397,17 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
         hash = ((hash << 5) - hash + this._s2!.node.version) | 0;
         break;
       }
-      case 4: {
-        hash = ((hash << 5) - hash + this._s0!.node.version) | 0;
-        hash = ((hash << 5) - hash + this._s1!.node.version) | 0;
-        hash = ((hash << 5) - hash + this._s2!.node.version) | 0;
-        hash = ((hash << 5) - hash + this._s3!.node.version) | 0;
-        break;
-      }
       default: {
         hash = ((hash << 5) - hash + this._s0!.node.version) | 0;
         hash = ((hash << 5) - hash + this._s1!.node.version) | 0;
         hash = ((hash << 5) - hash + this._s2!.node.version) | 0;
         hash = ((hash << 5) - hash + this._s3!.node.version) | 0;
 
-        const ov = this._overflow!;
-        for (let i = 0, len = ov.length; i < len; i++) {
-          hash = ((hash << 5) - hash + ov[i]!.node.version) | 0;
+        if (count > 4) {
+          const ov = this._overflow!;
+          for (let i = 0, len = ov.length; i < len; i++) {
+            hash = ((hash << 5) - hash + ov[i]!.node.version) | 0;
+          }
         }
       }
     }
