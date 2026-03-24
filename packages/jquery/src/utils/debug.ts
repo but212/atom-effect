@@ -105,7 +105,7 @@ export const debug = {
   /**
    * Logs a DOM update and triggers a visual highlight flash.
    */
-  domUpdated(prefix: string, target: Element | JQuery, type: string, value: unknown) {
+  domUpdated(prefix: string, target: Element | JQuery<Element>, type: string, value: unknown) {
     if (!this.enabled) return;
 
     const el: Element | undefined =

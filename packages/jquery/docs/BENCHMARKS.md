@@ -6,12 +6,12 @@ Benchmarking suite for `@but212/atom-effect-jquery` to measure DOM binding perfo
 
 | Category | Key Metric | Value | Context |
 | ---------- | ---------- | ----- | ------- |
-| **Text Binding** | Propagation (100el × 50) | 125 ops/sec | ~7.9ms per round |
-| **Class Binding** | Toggle (100el × 100) | 148 ops/sec | ~6.7ms per round |
-| **List Render** | 100 items | 212 ops/sec | ~4.7ms per render |
-| **Input (DOM→Atom)** | 100 events | 820 ops/sec | ~1.2ms per round |
-| **Todo App** | Full workflow | 2,237 ops/sec | ~0.44ms per cycle |
-| **Dashboard** | Fan-in chain | 1,338 ops/sec | ~0.74ms per update |
+| **Text Binding** | Propagation (100el × 50) | 130 ops/sec | ~7.7ms per round |
+| **Class Binding** | Toggle (100el × 100) | 147 ops/sec | ~6.8ms per round |
+| **List Render** | 100 items | 188 ops/sec | ~5.3ms per render |
+| **Input (DOM→Atom)** | 100 events | 830 ops/sec | ~1.2ms per round |
+| **Todo App** | Full workflow | 2,152 ops/sec | ~0.46ms per cycle |
+| **Dashboard** | Fan-in chain | 1,363 ops/sec | ~0.73ms per update |
 
 ## Running Benchmarks
 
@@ -56,8 +56,8 @@ Located in `__benchmarks__/macro/`, these test real-world DOM scenarios:
 
 | Metric | Good Performance | Why It Matters |
 | -------- | ---------------- | -------------- |
-| **Text propagation** | >80 ops/sec | Smooth text updates at 60fps |
-| **List render (100)** | >50 ops/sec | Responsive list operations |
+| **Text propagation** | >100 ops/sec | Smooth text updates at 60fps |
+| **List render (100)** | >150 ops/sec | Responsive list operations |
 | **DOM→Atom events** | >500 ops/sec | Low-latency input handling |
 | **Full workflow** | >1K ops/sec | Production-ready throughput |
 
@@ -70,8 +70,8 @@ Located in `__benchmarks__/macro/`, these test real-world DOM scenarios:
 
 ## Latest Results
 
-**Version**: v0.23.0
-**Last Updated**: 2026-03-23
+**Version**: v0.24.0
+**Last Updated**: 2026-03-24
 **Environment**:
 
 - **Node.js**: v22.x
@@ -83,12 +83,12 @@ Located in `__benchmarks__/macro/`, these test real-world DOM scenarios:
 
 | Benchmark | Result | Analysis |
 | ---------- | ------ | -------- |
-| atomText propagation | 125 ops/sec | Consistent DOM text updates |
-| atomClass toggle | 148 ops/sec | Fast class manipulation |
-| atomList render (100) | 212 ops/sec | Efficient list reconciliation |
-| atomVal DOM→Atom | 820 ops/sec | Near-instant input sync |
-| Todo full workflow | 2,237 ops/sec | Production-ready |
-| Dashboard fan-in | 1,338 ops/sec | Efficient computed→DOM chain |
+| atomText propagation | 130 ops/sec | Consistent DOM text updates |
+| atomClass toggle | 147 ops/sec | Fast class manipulation |
+| atomList render (100) | 188 ops/sec | Efficient list reconciliation |
+| atomVal DOM→Atom | 830 ops/sec | Near-instant input sync |
+| Todo full workflow | 2,152 ops/sec | Production-ready |
+| Dashboard fan-in | 1,363 ops/sec | Efficient computed→DOM chain |
 
 ## Contributing Benchmarks
 

@@ -1,48 +1,56 @@
 # Changelog
 
-## [Unreleased]
+## [0.24.0]
 
 ### Core
 
 #### Changed
 
-- **Performance**: Implemented O(1) **Bit-Packed Versioned Slot Buffers** using 32-bit additive hashing, loop unrolling for inline slots, and `hasComputeds` safety-gating for zero-overhead Atom-heavy graphs.
-- **Performance**: Implemented **Deps-Stable Skip** for `Computed` atoms. Computed atoms now verify dependency versions via O(1) hashing (`_isDirty`) before executing their computation function, completely bypassing unnecessary re-evaluations (Diamond Dependency Problem).
-- **Performance**: Implemented **Hot-path dependency caching** in `Computed` atoms. By checking the last modified dependency first, the engine can now detect dirty states in O(1) for high-frequency updates (e.g., animations or scrolls), reducing validation overhead in complex dependency graphs.
-- **Refactor**: Simplified `Computed` implementation by removing redundant dependency tracking logic and leveraging the unified heirarchy.
-- **Types**: Replaced `any` with generics in `ReactiveNode` for strict type safety in subscription and notification paths.
-- **Optimization**: Optimized `DepSlotBuffer` for V8 Hidden Classes and eliminated closure allocations in dependency tracking paths via `_onItemRemoved` hooks.
-- **Feature**: Added `FORCE_COMPUTE` flag to `COMPUTED_STATE_FLAGS` so that manual `invalidate()` calls safely bypass the Deps-Stable Skip optimization.
-- **Infrastructure**: Replaced `vite-tsconfig-paths` with native Vite `resolve.tsconfigPaths` support across all packages.
+- **Performance**: Implemented **O(1) Bit-Packed Versioned Slot Buffers** using 32-bit additive hashing and loop unrolling for zero-overhead Atom-heavy graphs.
+- **Performance**: Implemented **Deps-Stable Skip** for `Computed` atoms; re-evaluations are bypassed via O(1) version hashing (resolves the Diamond Dependency Problem).
+- **Performance**: Added **Hot-path Dependency Caching** in `Computed` atoms, enabling O(1) dirty-state detection for high-frequency updates (scroll/animation).
+- **Refactor**: Simplified `Computed` implementation by consolidating dependency tracking logic into the unified `ReactiveNode` hierarchy.
+- **Optimization**: Optimized `DepSlotBuffer` for V8 Hidden Classes and eliminated closure allocations in dependency tracking paths.
+- **Types**: Replaced `any` with strict generics in `ReactiveNode` for type-safe subscription and notification paths.
+- **Feature**: Added `FORCE_COMPUTE` flag to allow manual `invalidate()` calls to bypass stable-skip optimizations.
+- **Infrastructure**: Replaced `vite-tsconfig-paths` with native Vite `resolve.tsconfigPaths` support.
 
 #### Removed
 
-- **Internal**: `ArrayPool`, legacy pooling mechanisms, and `vite-tsconfig-paths` dependency.
+- **Internal**: Legacy `ArrayPool` and manual pooling mechanisms.
+- **Dependencies**: `vite-tsconfig-paths`.
 
 ### jQuery
 
 #### Added
 
-- **Performance**: Introduced `ObjectPool` and `ArrayPool` to recycle `BindingRecord` objects, significantly reducing GC pressure in dynamic UI scenarios.
+- **API**: `isEqual` option in `atomList` for granular re-render control.
+- **API**: `onUnmount` hook injected into `render` and `onMount` (Router) for automated per-route lifecycle cleanup.
+- **Optimization**: Introduced `ObjectPool` and `ArrayPool` to recycle `BindingRecord` objects, significantly lowering GC pressure.
 
 #### Changed
 
-- **Routing**: Refactored `$.route` to deeply align with the reactive core. Replaced O(N) DOM link queries with O(1) micro-patching; removed manual `onParamsChange` lifecycle hook in favor of tracked reactivity directly from `render` hooks; resolved headless effect memory leaks via injected `onUnmount` garbage collection array; optimized `getQueryParams` to dramatically reduce garbage collection allocations using a fast query string cache.
-- **Performance**: Optimized `atomList` with a highly efficient reconciliation engine featuring Prefix/Suffix trimming ($O(1)$ fast-path), 1D Flat Buffer (Structure of Arrays) diffing, and aggressive GC pressure reduction using `ObjectPool` and `ArrayPool` for all temporary data structures.
-- **Architecture**: Replaced `WeakMap` element-to-key tracking with `data-atom-key` DOM attributes for $O(1)$ event delegation and reduced memory overhead in large list scenarios.
-- **Optimization**: Introduced `atomEachElement` helper to eliminate code duplication in chainable jQuery methods (`atomText`, `atomClass`, etc.).
-- **Performance**: Implemented `registerMapEffect` to group multiple reactive updates (classes, styles, attributes) into a single effect per element, reducing reactive node overhead and memory usage.
-- **Architecture**: Refactored `BindingContext` to use lazy jQuery wrapping, reducing unnecessary object allocations during binding initialization.
-- **Architecture**: Reorganized `jquery/src` into logical domains (`bindings/`, `core/`, `features/`, `utils/`) for improved modularity and maintainability.
-- **Lists (`atomList`)**: Fixed a bug where mutating nested properties behind a shallow copy failed to trigger a re-render. Added `isEqual` option to `ListOptions` for custom equality checks.
-
-#### Removed
-
-- **Internal**: Removed `getLIS` utility as the engine migrated away from Longest Increasing Subsequence reconciliation.
+- **List Rendering (`atomList`)**: Overhauled the reconciliation engine with a high-performance **1D Flat Buffer** strategy.
+  - **O(1) Fast-path**: Implemented Prefix/Suffix trimming to skip unchanged items at the head and tail.
+  - **Flat Buffer Diffing**: Transitioned reconciliation state to typed arrays (`Uint8Array`, `Int32Array`) to eliminate "GC hum" in large list updates.
+  - **Bulk Removal**: Optimized clearing empty lists by bypassing item-by-item teardown when no async removal hooks are present.
+  - **Attribute-based Keying**: Replaced `WeakMap` tracking with `data-atom-key` attributes for O(1) event delegation and reduced memory footprint.
+- **Routing Engine (`$.route`)**: Refactored to be natively reactive, aligning deeply with the core engine.
+  - **Reactive Rendering**: Removed manual `onParamsChange` in favor of tracked reactivity directly within `render` hooks.
+  - **O(1) Link Patching**: Replaced O(N) DOM link queries with reactive link-state patching via a single shared effect.
+  - **Memory Safety**: Resolved headless effect leaks via injected `onUnmount` garbage collection handlers.
+  - **Performance**: Optimized `getQueryParams` with a query string cache to reduce allocation overhead.
+- **Architecture**: Refactored `BindingContext` with lazy jQuery wrapping to avoid unnecessary object allocations during initialization.
+- **Modularization**: Reordered `jquery/src` into logical domains (`bindings/`, `core/`, `features/`, `utils/`) for improved maintainability.
 
 #### Fixed
 
-- **Lists (`atomList`)**: Resolved a race condition where `ListItemEntry` objects were returned to the pool before their DOM elements finished asynchronous removal.
+- **Reactivity**: Fixed a bug where mutating nested properties behind a shallow copy in `atomList` failed to trigger a re-render.
+- **Race Condition**: Resolved a race condition where `ListItemEntry` objects were returned to the pool before their DOM elements finished asynchronous removal.
+
+#### Removed
+
+- **Legacy Logic**: Removed `getLIS` utility (Longest Increasing Subsequence) as the engine migrated to a flat-buffer move strategy.
 
 ## [0.23.0]
 
