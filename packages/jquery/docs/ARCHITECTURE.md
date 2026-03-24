@@ -151,16 +151,21 @@ $btn.on('click', () => {
 
 ## 5. List Reconciliation
 
-`atomList` (`list.ts`) renders reactive arrays using **keyed diffing** based on the Longest Increasing Subsequence (LIS) algorithm:
+`atomList` (`list.ts`) renders reactive arrays using a high-performance **1D flat buffer reconciliation** algorithm:
 
-1. **Key Mapping**: Each item gets a unique key via the `key` function.
-2. **Diff**: Compares old and new key arrays.
-3. **LIS**: Finds the longest subsequence of items that are already in correct order.
-4. **Patch**: Only moves/creates/removes elements that changed position.
+1. **Prefix/Suffix Trimming**: Identifies and skips common items at the start and end of the list.
+2. **Key Mapping**: Maps remaining items to unique keys for diffing.
+3. **Flat Buffer Diffing**: Uses typed arrays (`Uint8Array` for states, `Int32Array` for moves) instead of intermediate objects to track transitions (added, removed, replaced, moved). Items with identical keys but different contents are marked for `update`.
+4. **Patching**: Synchronizes the DOM using the calculated transition map with minimal moves and removals.
+5. **Fast Initial Render**: When possible, it uses `innerHTML` with bulk-sanitized fragments for the first render to maximize hydration speed.
 
 ### 5.1 Memory Efficiency (Pooling)
 
-In dynamic lists with high item churn (e.g., infinite scroll), the library uses a `ListItemEntry` pool. Instead of allocating a new entry object for every rendered item, it acquires one from the pool and resets it upon removal. This significantly lowers the heap allocation rate during rapid list updates.
+In dynamic lists with high item churn, the library uses centralized pools (`internal/pool.ts`):
+
+- `ObjectPool`: Reuses `Map` and `Set` instances used for indexing during diffing.
+- `ArrayPool`: Reuses arrays for keys, items, and DOM nodes returned by the reaper.
+- `Buffer Recovery`: Pre-allocated `Uint8Array` and `Int32Array` buffers are grown dynamically and reused across update cycles to eliminate per-update allocations.
 
 ### Lifecycle Hooks
 
@@ -210,11 +215,13 @@ $el.atomMount((el, props) => {
 `$.route()` (`route.ts`) provides SPA routing with reactive state. Supports both **hash** (`location.hash` / `hashchange`) and **history** (`pushState` / `popstate`) modes.
 
 ```text
-Hash mode:    window.location.hash  ──▶  currentRoute (atom)  ──▶  renderRoute()
-History mode: window.location.pathname ──▶  currentRoute (atom)  ──▶  renderRoute()
+Hash mode:    window.location.hash  ──▶  currentRoute (atom)  ──▶  renderEffect (effect)
+History mode: window.location.pathname ──▶  queryParams (atom)   ──▶  renderRoute()
                                                                        ├── template cloning
                                                                        └── custom render fn
 ```
+
+The router is entirely **reactive**. Navigation (`navigate()` or URL change) updates the `currentRoute` and `queryParams` atoms. A single core `effect` (`renderEffect`) observes these atoms and triggers `renderRoute()` when they change.
 
 ### Mode Abstraction
 
@@ -301,3 +308,7 @@ The `ObjectPool` utility (`utils/object-pool.ts`) manages a stack of reusable pl
 ### 10.2 Monomorphic Records
 
 All internal state records are initialized with a fixed set of fields. By avoiding "shape transitions" (adding properties after creation), the objects remain **Monomorphic**. This allows V8 to use **Inline Caching (IC)** for property access, resulting in near-native lookup speeds.
+
+### 10.3 Flat Buffer Reconciliation
+
+By using `Uint8Array` and `Int32Array` for diffing state tracking, `atomList` eliminates the "GC hum" commonly associated with virtual DOM diffing in large lists. The reconciliation state is stored in a continuous memory block, maximizing CPU cache efficiency and minimizing allocation-time overhead.
