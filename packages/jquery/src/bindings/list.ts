@@ -187,6 +187,9 @@ function handleEmpty<T>(
     ctx.$emptyEl = ($(safeEmpty as string) as JQuery).appendTo($container);
   }
 
+  arrayPool.release(ctx.oldKeys);
+  arrayPool.release(ctx.oldItems);
+  arrayPool.release(ctx.oldNodes);
   ctx.oldKeys = [];
   ctx.oldItems = [];
   ctx.oldNodes = [];
