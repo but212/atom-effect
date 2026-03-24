@@ -350,7 +350,8 @@ export function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): v
 
   const handler = () => {
     const current = el.checked;
-    if (atom.value !== current) {
+    // peek(): equality check in an event handler must not register a dependency.
+    if (atom.peek() !== current) {
       atom.value = current;
       if (isRadio && current && el.name) {
         const escapedName = el.name.replace(/"/g, '\\"');
