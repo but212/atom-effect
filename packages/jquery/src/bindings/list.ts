@@ -4,7 +4,9 @@ import { ERROR_MESSAGES, LOG_PREFIXES } from '@/constants';
 import { registry } from '@/core/registry';
 import type { EffectObject, ListKey, ListKeyFn, ListOptions, ReadonlyAtom } from '@/types';
 import { getSelector, hasOwn, shallowEqual } from '@/utils';
+import { ArrayPool } from '@/utils/array-pool';
 import { debug } from '@/utils/debug';
+import { ObjectPool } from '@/utils/object-pool';
 import { sanitizeHtml } from '@/utils/sanitize';
 
 // ============================================================================
@@ -14,25 +16,20 @@ import { sanitizeHtml } from '@/utils/sanitize';
 const listInstances = new WeakMap<Element, { fx: EffectObject; ctx: ListContext<unknown> }>();
 let listBatchIdCounter = 0;
 
+// Pools for avoiding GC pressure during buildIndices
+const mapPool = new ObjectPool<Map<ListKey, number>>(
+  () => new Map(),
+  (m) => m.clear()
+);
+const setPool = new ObjectPool<Set<ListKey>>(
+  () => new Set(),
+  (s) => s.clear()
+);
+const arrayPool = new ArrayPool<unknown>(100, 1024);
+
 function insertOrAppend($el: JQuery, nextNode: Node | null, $container: JQuery): void {
   if (nextNode?.isConnected) $el.insertBefore(nextNode);
   else $el.appendTo($container);
-}
-
-function applyItemCallbacks<T>(
-  state: number,
-  $el: JQuery,
-  item: T,
-  index: number,
-  bind: ListOptions<T>['bind'],
-  update: ListOptions<T>['update']
-): void {
-  if (!$el[0]) return;
-  if (state === 0) {
-    if (update) update($el, item, index);
-  } else if (bind) {
-    bind($el, item, index);
-  }
 }
 
 // ============================================================================
@@ -46,15 +43,18 @@ class ListContext<T> {
 
   readonly removingKeys = new Set<ListKey>();
   $emptyEl: JQuery | null = null;
-  readonly elToKey = new WeakMap<Element, ListKey>();
   readonly keyToIndex = new Map<ListKey, number>();
   fx?: EffectObject;
+
+  // Recycled buffers
+  statesBuffer = new Uint8Array(256);
+  indicesBuffer = new Int32Array(256);
 
   constructor(
     public readonly $container: JQuery,
     /** @internal */
     public readonly containerSelector: string,
-    private readonly onRemove: (($el: JQuery) => Promise<void> | void) | undefined
+    public readonly onRemove: (($el: JQuery) => Promise<void> | void) | undefined
   ) {}
 
   scheduleRemoval(k: ListKey, $el: JQuery): void {
@@ -79,7 +79,9 @@ class ListContext<T> {
   removeItem(k: ListKey, $el: JQuery): void {
     for (let j = 0; j < $el.length; j++) {
       const el = $el[j];
-      if (el) this.elToKey.delete(el);
+      if (el instanceof HTMLElement) {
+        el.removeAttribute('data-atom-key');
+      }
     }
     this.removingKeys.add(k);
     this.scheduleRemoval(k, $el);
@@ -93,6 +95,21 @@ class ListContext<T> {
     this.keyToIndex.clear();
     this.$emptyEl?.remove();
     this.$container.off('.atomList');
+
+    // Help GC
+    const emptyUint = new Uint8Array(0);
+    const emptyInt = new Int32Array(0);
+    this.statesBuffer = emptyUint;
+    this.indicesBuffer = emptyInt;
+  }
+
+  ensureBuffers(size: number): void {
+    if (this.statesBuffer.length < size) {
+      this.statesBuffer = new Uint8Array(Math.max(size, this.statesBuffer.length * 2));
+    }
+    if (this.indicesBuffer.length < size) {
+      this.indicesBuffer = new Int32Array(Math.max(size, this.indicesBuffer.length * 2));
+    }
   }
 }
 
@@ -110,6 +127,11 @@ interface PreparedDiff<T> {
   trKeys: ListKey[];
   trItems: T[];
   trIdxs: number[];
+
+  // Trim hints
+  startIndex: number;
+  oldEndIndex: number;
+  newEndIndex: number;
 }
 
 interface PlaceCallbacks<T> {
@@ -137,17 +159,37 @@ function handleEmpty<T>(
 
   if (itemCount !== 0) return;
 
+  const { oldKeys, oldNodes, onRemove } = ctx;
+  if (!onRemove) {
+    // Fast path: bulk remove
+    for (let i = 0, len = oldKeys.length; i < len; i++) {
+      const k = oldKeys[i]!;
+      const $el = oldNodes[i];
+      if ($el) {
+        for (let j = 0; j < $el.length; j++) {
+          const el = $el[j];
+          if (el instanceof HTMLElement) el.removeAttribute('data-atom-key');
+        }
+      }
+      ctx.removingKeys.delete(k);
+    }
+    $container.empty();
+  } else {
+    for (let i = 0, len = oldKeys.length; i < len; i++) {
+      const k = oldKeys[i]!;
+      const $el = oldNodes[i];
+      if ($el) ctx.removeItem(k, $el);
+    }
+  }
+
   if (empty && !ctx.$emptyEl) {
     const safeEmpty = typeof empty === 'string' ? sanitizeHtml(empty) : empty;
     ctx.$emptyEl = ($(safeEmpty as string) as JQuery).appendTo($container);
   }
 
-  const { oldKeys, oldNodes } = ctx;
-  for (let i = 0, len = oldKeys.length; i < len; i++) {
-    const k = oldKeys[i]!;
-    const $el = oldNodes[i];
-    if ($el) ctx.removeItem(k, $el);
-  }
+  arrayPool.release(ctx.oldKeys);
+  arrayPool.release(ctx.oldItems);
+  arrayPool.release(ctx.oldNodes);
   ctx.oldKeys = [];
   ctx.oldItems = [];
   ctx.oldNodes = [];
@@ -162,24 +204,86 @@ function buildIndices<T>(
   isEqual: ListOptions<T>['isEqual']
 ): PreparedDiff<T> {
   const { oldKeys, oldItems, oldNodes, removingKeys } = ctx;
-  const oldIndexMap = new Map<ListKey, number>();
-  for (let i = 0, len = oldKeys.length; i < len; i++) {
+  const oldLen = oldKeys.length;
+
+  // 1. Prefix/Suffix Trimming (Fast-path)
+  let startIndex = 0;
+  let oldEndIndex = oldLen - 1;
+  let newEndIndex = itemCount - 1;
+
+  // Skip common prefix
+  while (startIndex <= oldEndIndex && startIndex <= newEndIndex) {
+    const item = items[startIndex]!;
+    const k = getKey(item, startIndex);
+    if (oldKeys[startIndex] !== k) break;
+
+    // Must also check for equality to skip update
+    const oldItem = oldItems[startIndex]!;
+    const isSame = isEqual ? isEqual(oldItem, item) : shallowEqual(oldItem, item);
+    if (!isSame) break;
+
+    startIndex++;
+  }
+
+  // Skip common suffix
+  while (oldEndIndex >= startIndex && newEndIndex >= startIndex) {
+    const item = items[newEndIndex]!;
+    const k = getKey(item, newEndIndex);
+    if (oldKeys[oldEndIndex] !== k) break;
+
+    const oldItem = oldItems[oldEndIndex]!;
+    const isSame = isEqual ? isEqual(oldItem, item) : shallowEqual(oldItem, item);
+    if (!isSame) break;
+
+    oldEndIndex--;
+    newEndIndex--;
+  }
+
+  // 2. Allocation & Pooling
+  const oldIndexMap = mapPool.acquire();
+  for (let i = startIndex; i <= oldEndIndex; i++) {
     oldIndexMap.set(oldKeys[i]!, i);
   }
 
-  const newKeys: ListKey[] = new Array(itemCount);
-  const newKeySet = new Set<ListKey>();
-  const newIndices = new Int32Array(itemCount);
+  const newKeys = arrayPool.acquire() as ListKey[];
+  newKeys.length = itemCount;
 
-  const newItems: T[] = new Array(itemCount);
-  const newNodes: JQuery[] = new Array(itemCount);
-  const newStates = new Uint8Array(itemCount); // 0=idle, 1=new, 2=replaced
+  const newKeySet = setPool.acquire();
+  ctx.ensureBuffers(itemCount);
 
-  const trKeys: ListKey[] = [];
-  const trItems: T[] = [];
-  const trIdxs: number[] = [];
+  const newItems = arrayPool.acquire() as T[];
+  newItems.length = itemCount;
 
-  for (let i = 0; i < itemCount; i++) {
+  const newNodes = arrayPool.acquire() as JQuery[];
+  newNodes.length = itemCount;
+
+  const newStates = ctx.statesBuffer; // 0=idle, 1=new, 2=replaced
+  const newIndices = ctx.indicesBuffer;
+
+  const trKeys = arrayPool.acquire() as ListKey[];
+  const trItems = arrayPool.acquire() as T[];
+  const trIdxs = arrayPool.acquire() as number[];
+
+  // 3. Process Trimmed Zones
+  // Prefix
+  for (let i = 0; i < startIndex; i++) {
+    newKeys[i] = oldKeys[i]!;
+    newItems[i] = items[i]!;
+    newNodes[i] = oldNodes[i]!;
+    newStates[i] = 3; // 3=trimmed (fast skip)
+    newIndices[i] = i;
+  }
+  // Suffix
+  for (let j = oldLen - 1, i = itemCount - 1; i > newEndIndex; i--, j--) {
+    newKeys[i] = oldKeys[j]!;
+    newItems[i] = items[i]!;
+    newNodes[i] = oldNodes[j]!;
+    newStates[i] = 3; // 3=trimmed (fast skip)
+    newIndices[i] = j;
+  }
+
+  // 4. Process Middle Zone (Diffing)
+  for (let i = startIndex; i <= newEndIndex; i++) {
     const item = items[i]!;
     const k = getKey(item, i);
     newKeys[i] = k;
@@ -211,11 +315,29 @@ function buildIndices<T>(
       trItems.push(item);
       trIdxs.push(i);
       newStates[i] = 2;
+    } else {
+      newStates[i] = 0;
     }
     newIndices[i] = removingKeys.has(k) ? -1 : oldIdx;
   }
 
-  return { newKeys, newKeySet, newItems, newNodes, newStates, newIndices, trKeys, trItems, trIdxs };
+  // Clean up pools
+  mapPool.release(oldIndexMap);
+
+  return {
+    newKeys,
+    newKeySet,
+    newItems,
+    newNodes,
+    newStates,
+    newIndices,
+    trKeys,
+    trItems,
+    trIdxs,
+    startIndex,
+    oldEndIndex,
+    newEndIndex,
+  };
 }
 
 function renderItems<T>(
@@ -242,17 +364,19 @@ function renderItems<T>(
 
   let sanitizedFragments: string[] | null = null;
   const htmlPartCount = htmlParts.length;
-  if (htmlPartCount === 1) {
-    sanitizedFragments = [sanitizeHtml(htmlParts[0]!)];
-  } else if (htmlPartCount > 1) {
-    const batchId = (listBatchIdCounter++).toString(36);
-    const batchSeparator = `<template data-atom-sep="${batchId}"></template>`;
-    sanitizedFragments = sanitizeHtml(htmlParts.join(batchSeparator)).split(batchSeparator);
+  if (htmlPartCount > 0) {
+    if (htmlPartCount === 1) {
+      sanitizedFragments = [sanitizeHtml(htmlParts[0]!)];
+    } else {
+      const batchId = (listBatchIdCounter++).toString(36);
+      const batchSeparator = `<template data-atom-sep="${batchId}"></template>`;
+      sanitizedFragments = sanitizeHtml(htmlParts.join(batchSeparator)).split(batchSeparator);
+    }
   }
 
   const useInnerHtml =
     isInitial &&
-    sanitizedFragments !== null &&
+    sanitizedFragments &&
     stringRenderCount === renderCount &&
     !options.bind &&
     !options.onAdd &&
@@ -271,6 +395,15 @@ function renderItems<T>(
 
     const targetIdx = trIdxs[t]!;
     const state = newStates[targetIdx]!;
+    const key = trKeys[t]!;
+
+    // Attach key for efficient event delegation
+    for (let j = 0; j < $el.length; j++) {
+      const node = $el[j];
+      if (node instanceof HTMLElement) {
+        node.setAttribute('data-atom-key', String(key));
+      }
+    }
 
     if (state === 2) {
       const oldEl = newNodes[targetIdx]![0];
@@ -284,9 +417,12 @@ function renderItems<T>(
   return null;
 }
 
-function cleanupRemoved<T>(ctx: ListContext<T>, newKeySet: Set<ListKey>): void {
+function cleanupRemoved<T>(ctx: ListContext<T>, diff: PreparedDiff<T>): void {
+  const { startIndex, oldEndIndex, newKeySet } = diff;
   const { oldKeys, oldNodes } = ctx;
-  for (let i = 0, len = oldKeys.length; i < len; i++) {
+
+  // Prefix and Suffix are structural matches, no need to check them for removal.
+  for (let i = startIndex; i <= oldEndIndex; i++) {
     const k = oldKeys[i]!;
     if (newKeySet.has(k)) continue;
 
@@ -317,9 +453,11 @@ function placeItems<T>(
       const el = rawContainer.children[childIdx++] as HTMLElement | undefined;
       if (el) {
         const $el = $(el);
+        const k = newKeys[i]!;
+        el.setAttribute('data-atom-key', String(k)); // Ensure key exists on fast path
         newNodes[i] = $el;
         newStates[i] = 0;
-        ctx.removingKeys.delete(newKeys[i]!);
+        ctx.removingKeys.delete(k);
         if (debug.enabled) debug.domUpdated(LOG_PREFIXES.LIST, $el, 'list.add', newItems[i]);
       }
     }
@@ -357,44 +495,44 @@ function placeItems<T>(
 
   // ── Post-DOM insertion: apply callbacks ───────────────────────────
   for (let i = 0; i < itemCount; i++) {
-    const k = newKeys[i]!;
-    const item = newItems[i]!;
     const $el = newNodes[i];
-    if (!$el) continue;
+    if (!$el?.[0]) continue;
 
     const state = newStates[i]!;
-    applyItemCallbacks(state, $el, item, i, bind, update);
+    if (state !== 3) {
+      const item = newItems[i]!;
+      if (state === 0) {
+        update?.($el, item, i);
+      } else {
+        bind?.($el, item, i);
+      }
+    }
 
     if (state === 1) {
-      // new
-      if (onAdd) onAdd($el);
+      onAdd?.($el);
+      const k = newKeys[i]!;
       ctx.removingKeys.delete(k);
-      if (debug.enabled) debug.domUpdated(LOG_PREFIXES.LIST, $el, 'list.add', item);
+      if (debug.enabled) debug.domUpdated(LOG_PREFIXES.LIST, $el, 'list.add', newItems[i]);
     }
   }
 }
 
 function syncEventIndices<T>(ctx: ListContext<T>, diff: PreparedDiff<T>): void {
-  const { newKeys, newKeySet, newNodes } = diff;
+  const { newKeys, newKeySet, startIndex, oldEndIndex } = diff;
   const itemCount = newKeys.length;
-  const { oldKeys, elToKey, keyToIndex } = ctx;
+  const { keyToIndex } = ctx;
 
-  for (let i = 0, len = oldKeys.length; i < len; i++) {
-    const k = oldKeys[i]!;
+  // 1. Remove deleted keys from middle section
+  for (let i = startIndex; i <= oldEndIndex; i++) {
+    const k = ctx.oldKeys[i]!;
     if (!newKeySet.has(k)) {
       keyToIndex.delete(k);
     }
   }
-  for (let i = 0; i < itemCount; i++) {
+  // 2. Refresh middle and suffix indices. Prefix indices are unchanged.
+  for (let i = startIndex; i < itemCount; i++) {
     const k = newKeys[i]!;
-    const $el = newNodes[i];
-    if ($el) {
-      for (let j = 0; j < $el.length; j++) {
-        const rootEl = $el[j];
-        if (rootEl) elToKey.set(rootEl, k);
-      }
-      keyToIndex.set(k, i);
-    }
+    keyToIndex.set(k, i);
   }
 }
 
@@ -444,14 +582,25 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
         const isInitial = ctx.oldKeys.length === 0;
 
         const innerHtmlFragments = renderItems(diff, options, isInitial);
-        cleanupRemoved(ctx, diff.newKeySet);
+        cleanupRemoved(ctx, diff);
         placeItems(ctx, diff, rawContainer, $container, callbacks, innerHtmlFragments);
 
         if (events) syncEventIndices(ctx, diff);
 
+        // Recycle old arrays
+        arrayPool.release(ctx.oldKeys);
+        arrayPool.release(ctx.oldItems);
+        arrayPool.release(ctx.oldNodes);
+
         ctx.oldKeys = diff.newKeys;
         ctx.oldItems = diff.newItems;
         ctx.oldNodes = diff.newNodes;
+
+        // Release temporary diff resources
+        setPool.release(diff.newKeySet);
+        arrayPool.release(diff.trKeys);
+        arrayPool.release(diff.trItems);
+        arrayPool.release(diff.trIdxs);
       });
     });
 
@@ -468,17 +617,24 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
         const actualSelector = childSelector ? childSelector : '> *';
 
         const delegateHandler = function (this: Element, e: JQuery.TriggeredEvent) {
-          let node: HTMLElement | null = this as HTMLElement | null;
-          while (node && node !== rawContainer) {
-            const k = ctx.elToKey.get(node);
-            if (k !== undefined) {
-              const idx = ctx.keyToIndex.get(k);
-              if (idx !== undefined) {
-                handler.call(this as HTMLElement, ctx.oldItems[idx]!, idx, e);
-              }
-              return;
+          const itemEl = (e.target as Element).closest?.('[data-atom-key]') as HTMLElement | null;
+          if (!itemEl) return;
+
+          const rawKey = itemEl.getAttribute('data-atom-key');
+          if (rawKey === null) return;
+
+          // Convert back to number if it was number (ListKey can be string | number)
+          let key: ListKey = rawKey;
+          if (!ctx.keyToIndex.has(rawKey)) {
+            const numKey = Number(rawKey);
+            if (!Number.isNaN(numKey) && ctx.keyToIndex.has(numKey)) {
+              key = numKey;
             }
-            node = node.parentElement;
+          }
+
+          const idx = ctx.keyToIndex.get(key);
+          if (idx !== undefined) {
+            handler.call(itemEl as HTMLElement, ctx.oldItems[idx]!, idx, e);
           }
         };
 

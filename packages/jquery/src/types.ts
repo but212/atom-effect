@@ -206,19 +206,24 @@ export type ComponentFn<P = Record<string, unknown>> = ($el: JQuery, props: P) =
 
 /** Shared route lifecycle hooks. */
 export interface RouteLifecycle {
-  onEnter?: (params: Record<string, string>) => Record<string, string> | undefined;
-  onLeave?: () => boolean | undefined;
-  onParamsChange?: (params: Record<string, string>) => void;
+  onEnter?: (params: Record<string, string>, router: Router) => Record<string, string> | undefined;
+  onLeave?: (router: Router) => boolean | undefined;
 }
 
 export interface TemplateRoute extends RouteLifecycle {
   template: string;
   render?: never;
-  onMount?: ($content: JQuery) => void;
+  onMount?: ($content: JQuery, onUnmount: (cleanupFn: () => void) => void, router: Router) => void;
 }
 
 export interface RenderRoute extends RouteLifecycle {
-  render: (container: HTMLElement, route: string, params: Record<string, string>) => void;
+  render: (
+    container: HTMLElement,
+    route: string,
+    params: Record<string, string>,
+    onUnmount: (cleanupFn: () => void) => void,
+    router: Router
+  ) => void;
   template?: never;
 }
 

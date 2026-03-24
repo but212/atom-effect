@@ -116,12 +116,13 @@ Efficiently renders a list of items using keyed diffing.
 
 - `key`: `keyof T | (item, index) => string | number` (Required) - Property name or function returning a unique ID for diffing.
 - `render`: `(item, index) => string | Element | DocumentFragment | JQuery` - HTML string, DOM element, DocumentFragment, or jQuery object for new items.
-- `bind`: `($el, item, index) => void` - Bind events/atoms to the created element.
-- `update`: `($el, item, index) => void` - Manually update existing elements (optimization).
-- `onAdd`: `($el) => void` - Called when an item is added to the DOM.
+- `bind`: `($el, item, index) => void` - Bind events/atoms to the created element. Runs once when the item is first added.
+- `update`: `($el, item, index) => void` - Manually update existing elements when data changes but the key remains the same (optimization to avoid re-rendering).
+- `onAdd`: `($el) => void` - Called after an item is added to the DOM.
 - `onRemove`: `($el) => Promise<void> | void` - Called before removal (supports async exit animations).
 - `empty`: `string | Element | DocumentFragment | JQuery` - Content to show when the list is empty.
-- `events`: `Record<string, (item, index, e) => void>` - Delegated event handlers attached to the container. One listener per event type regardless of item count. Key format: `'eventType'` or `'eventType selector'`.
+- `isEqual`: `(oldItem, newItem) => boolean` - Custom equality check for item updates (defaults to shallow comparison).
+- `events`: `Record<string, (item, index, e) => void>` - Delegated event handlers attached to the container. One listener per event type regardless of item count. Key format: `'eventType'` or `'eventType selector'`. Handler receives the original item and its current index.
 
 ```javascript
 $('ul').atomList(usersAtom, {
@@ -338,11 +339,11 @@ Creates an SPA router with reactive state management. Supports both hash-based a
 - `default`: Name of the default route to load if the URL is empty.
 - `routes`: Object mapping route names to definitions. Each route must specify **either** `template` **or** `render`, but not both (mutually exclusive).
   - `template`: Selector for a `<template>` element to clone.
-  - `render`: Custom function `(container, route, params) => void`.
-  - `onEnter`: Hook called before rendering. Can return additional params to merge.
+  - `render`: Custom function `(container, name, params, onUnmount, router) => void`.
+    - `onUnmount`: Callback `(cleanupFn) => void` to register side-effect cleanups for the route.
+  - `onEnter`: Hook called before rendering. Can return an object to merge into `params`.
   - `onLeave`: Hook called before navigating away. Return `false` to cancel.
-  - `onParamsChange`: Called when the same route is re-activated with new query parameters (instead of re-rendering).
-  - `onMount`: `($content: JQuery) => void` — **Template routes only.** Called after template content is appended to the container.
+  - `onMount`: `($content: JQuery, onUnmount, router) => void` — **Template routes only.** Called after template content is appended.
 - `mode`: (Optional) `'hash'` (default) or `'history'`. Hash mode uses `location.hash` and `hashchange`; history mode uses `pushState`/`popstate`.
 - `basePath`: (Optional) Base path prefix for history mode (e.g., `'/app'`). Ignored in hash mode. Default: `''`.
 - `notFound`: (Optional) Route name to use when no match is found.
@@ -355,10 +356,10 @@ Creates an SPA router with reactive state management. Supports both hash-based a
 
 A `Router` object with:
 
-- `currentRoute`: `ReadonlyAtom<string>` containing the active route name. Use `navigate()` to change routes.
+- `currentRoute`: `ReadonlyAtom<string>` containing the active route name.
 - `queryParams`: `ReadonlyAtom<Record<string, string>>` reactive map of URL parameters.
-- `navigate(route)`: Programmatically change route.
-- `destroy()`: Cleanup listeners and effects.
+- `navigate(route)`: Programmatically change route. Empty string navigates to `default`.
+- `destroy()`: Cleanup listeners, effects, and template cache.
 
 **Example**:
 
