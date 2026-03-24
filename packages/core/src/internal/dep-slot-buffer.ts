@@ -216,34 +216,59 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
    */
   seal(): void {
     const count = this._count;
-    if (count <= 0) {
-      this._depsHash = 0;
-      return;
-    }
-
-    let hash = 0;
     const vbits = BITPACK.VERSION_BITS;
+    let hash = 0;
 
-    const l0 = this._s0;
-    if (l0) hash = (hash + (l0.version << vbits) + l0.node.id) | 0;
+    switch (count) {
+      case 0:
+        this._depsHash = 0;
+        return;
+      case 1: {
+        const l0 = this._s0!;
+        hash = (hash + (l0.version << vbits) + l0.node.id) | 0;
+        break;
+      }
+      case 2: {
+        const l0 = this._s0!;
+        const l1 = this._s1!;
+        hash = (hash + (l0.version << vbits) + l0.node.id) | 0;
+        hash = (hash + (l1.version << vbits) + l1.node.id) | 0;
+        break;
+      }
+      case 3: {
+        const l0 = this._s0!;
+        const l1 = this._s1!;
+        const l2 = this._s2!;
+        hash = (hash + (l0.version << vbits) + l0.node.id) | 0;
+        hash = (hash + (l1.version << vbits) + l1.node.id) | 0;
+        hash = (hash + (l2.version << vbits) + l2.node.id) | 0;
+        break;
+      }
+      case 4: {
+        const l0 = this._s0!;
+        const l1 = this._s1!;
+        const l2 = this._s2!;
+        const l3 = this._s3!;
+        hash = (hash + (l0.version << vbits) + l0.node.id) | 0;
+        hash = (hash + (l1.version << vbits) + l1.node.id) | 0;
+        hash = (hash + (l2.version << vbits) + l2.node.id) | 0;
+        hash = (hash + (l3.version << vbits) + l3.node.id) | 0;
+        break;
+      }
+      default: {
+        const l0 = this._s0!;
+        const l1 = this._s1!;
+        const l2 = this._s2!;
+        const l3 = this._s3!;
+        hash = (hash + (l0.version << vbits) + l0.node.id) | 0;
+        hash = (hash + (l1.version << vbits) + l1.node.id) | 0;
+        hash = (hash + (l2.version << vbits) + l2.node.id) | 0;
+        hash = (hash + (l3.version << vbits) + l3.node.id) | 0;
 
-    if (count > 1) {
-      const l1 = this._s1;
-      if (l1) hash = (hash + (l1.version << vbits) + l1.node.id) | 0;
-    }
-    if (count > 2) {
-      const l2 = this._s2;
-      if (l2) hash = (hash + (l2.version << vbits) + l2.node.id) | 0;
-    }
-    if (count > 3) {
-      const l3 = this._s3;
-      if (l3) hash = (hash + (l3.version << vbits) + l3.node.id) | 0;
-
-      const ov = this._overflow;
-      if (ov) {
+        const ov = this._overflow!;
         for (let i = 0, len = ov.length; i < len; i++) {
-          const l = ov[i];
-          if (l) hash = (hash + (l.version << vbits) + l.node.id) | 0;
+          const l = ov[i]!;
+          hash = (hash + (l.version << vbits) + l.node.id) | 0;
         }
       }
     }
@@ -255,47 +280,58 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
    */
   isDirtyFast(): boolean {
     const count = this._count;
-    if (count <= 0) return false;
-
-    let hash = 0;
     const vbits = BITPACK.VERSION_BITS;
+    let hash = 0;
 
-    // Flattened unrolling with node-destructuring for locality
-    const l0 = this._s0;
-    if (l0) {
-      const n = l0.node;
-      hash = (hash + (n.version << vbits) + n.id) | 0;
-    }
+    switch (count) {
+      case 0:
+        return false;
+      case 1: {
+        const n = this._s0!.node;
+        hash = (hash + (n.version << vbits) + n.id) | 0;
+        break;
+      }
+      case 2: {
+        const n0 = this._s0!.node;
+        const n1 = this._s1!.node;
+        hash = (hash + (n0.version << vbits) + n0.id) | 0;
+        hash = (hash + (n1.version << vbits) + n1.id) | 0;
+        break;
+      }
+      case 3: {
+        const n0 = this._s0!.node;
+        const n1 = this._s1!.node;
+        const n2 = this._s2!.node;
+        hash = (hash + (n0.version << vbits) + n0.id) | 0;
+        hash = (hash + (n1.version << vbits) + n1.id) | 0;
+        hash = (hash + (n2.version << vbits) + n2.id) | 0;
+        break;
+      }
+      case 4: {
+        const n0 = this._s0!.node;
+        const n1 = this._s1!.node;
+        const n2 = this._s2!.node;
+        const n3 = this._s3!.node;
+        hash = (hash + (n0.version << vbits) + n0.id) | 0;
+        hash = (hash + (n1.version << vbits) + n1.id) | 0;
+        hash = (hash + (n2.version << vbits) + n2.id) | 0;
+        hash = (hash + (n3.version << vbits) + n3.id) | 0;
+        break;
+      }
+      default: {
+        const n0 = this._s0!.node;
+        const n1 = this._s1!.node;
+        const n2 = this._s2!.node;
+        const n3 = this._s3!.node;
+        hash = (hash + (n0.version << vbits) + n0.id) | 0;
+        hash = (hash + (n1.version << vbits) + n1.id) | 0;
+        hash = (hash + (n2.version << vbits) + n2.id) | 0;
+        hash = (hash + (n3.version << vbits) + n3.id) | 0;
 
-    if (count > 1) {
-      const l = this._s1;
-      if (l) {
-        const n = l.node;
-        hash = (hash + (n.version << vbits) + n.id) | 0;
-      }
-    }
-    if (count > 2) {
-      const l = this._s2;
-      if (l) {
-        const n = l.node;
-        hash = (hash + (n.version << vbits) + n.id) | 0;
-      }
-    }
-    if (count > 3) {
-      const l = this._s3;
-      if (l) {
-        const n = l.node;
-        hash = (hash + (n.version << vbits) + n.id) | 0;
-      }
-
-      const ov = this._overflow;
-      if (ov) {
+        const ov = this._overflow!;
         for (let i = 0, len = ov.length; i < len; i++) {
-          const l = ov[i];
-          if (l) {
-            const n = l.node;
-            hash = (hash + (n.version << vbits) + n.id) | 0;
-          }
+          const n = ov[i]!.node;
+          hash = (hash + (n.version << vbits) + n.id) | 0;
         }
       }
     }
@@ -307,29 +343,42 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
    */
   captureVersionSnapshot(): number {
     const count = this._count;
-    if (count <= 0) return 0;
-
     let hash = 0;
-    const l0 = this._s0;
-    if (l0) hash = ((hash << 5) - hash + l0.node.version) | 0;
 
-    if (count > 1) {
-      const l1 = this._s1;
-      if (l1) hash = ((hash << 5) - hash + l1.node.version) | 0;
-    }
-    if (count > 2) {
-      const l2 = this._s2;
-      if (l2) hash = ((hash << 5) - hash + l2.node.version) | 0;
-    }
-    if (count > 3) {
-      const l3 = this._s3;
-      if (l3) hash = ((hash << 5) - hash + l3.node.version) | 0;
+    switch (count) {
+      case 0:
+        return 0;
+      case 1: {
+        hash = ((hash << 5) - hash + this._s0!.node.version) | 0;
+        break;
+      }
+      case 2: {
+        hash = ((hash << 5) - hash + this._s0!.node.version) | 0;
+        hash = ((hash << 5) - hash + this._s1!.node.version) | 0;
+        break;
+      }
+      case 3: {
+        hash = ((hash << 5) - hash + this._s0!.node.version) | 0;
+        hash = ((hash << 5) - hash + this._s1!.node.version) | 0;
+        hash = ((hash << 5) - hash + this._s2!.node.version) | 0;
+        break;
+      }
+      case 4: {
+        hash = ((hash << 5) - hash + this._s0!.node.version) | 0;
+        hash = ((hash << 5) - hash + this._s1!.node.version) | 0;
+        hash = ((hash << 5) - hash + this._s2!.node.version) | 0;
+        hash = ((hash << 5) - hash + this._s3!.node.version) | 0;
+        break;
+      }
+      default: {
+        hash = ((hash << 5) - hash + this._s0!.node.version) | 0;
+        hash = ((hash << 5) - hash + this._s1!.node.version) | 0;
+        hash = ((hash << 5) - hash + this._s2!.node.version) | 0;
+        hash = ((hash << 5) - hash + this._s3!.node.version) | 0;
 
-      const ov = this._overflow;
-      if (ov) {
+        const ov = this._overflow!;
         for (let i = 0, len = ov.length; i < len; i++) {
-          const l = ov[i];
-          if (l) hash = ((hash << 5) - hash + l.node.version) | 0;
+          hash = ((hash << 5) - hash + ov[i]!.node.version) | 0;
         }
       }
     }

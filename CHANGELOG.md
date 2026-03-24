@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+### Core
+
+#### Changed
+
+- **Performance**: Optimized `DepSlotBuffer` hot-paths (`isDirtyFast`, `seal`, `captureVersionSnapshot`) with `switch`-based dispatch for inline slots (0-4) to leverage V8 jump tables and improve branch prediction.
+- **Performance**: Removed redundant null-checks in `DepSlotBuffer` by leveraging the dense invariant (no holes) of the dependency container.
+
 ## [0.24.0]
 
 ### Core
