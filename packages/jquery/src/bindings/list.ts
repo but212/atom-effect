@@ -27,13 +27,17 @@ const setPool = new ObjectPool<Set<ListKey>>(
 );
 const arrayPool = new ArrayPool<unknown>(100, 1024);
 
-function insertOrAppend($el: JQuery<any>, nextNode: Node | null, $container: JQuery<any>): void {
-  if (nextNode?.isConnected) $el.insertBefore(nextNode);
-  else $el.appendTo($container);
+function insertOrAppend(
+  $el: JQuery<Element>,
+  nextNode: Node | null,
+  $container: JQuery<Element>
+): void {
+  if (nextNode?.isConnected) ($el as unknown as JQuery).insertBefore(nextNode);
+  else ($el as unknown as JQuery).appendTo($container as unknown as JQuery);
 }
 
-function wrap($el: Element | JQuery<any>): JQuery {
-  return ($el instanceof Element ? $($el) : $el) as JQuery;
+function wrap($el: Element | JQuery<Element>): JQuery {
+  return ($el instanceof Element ? $($el) : $el) as unknown as JQuery;
 }
 
 // ============================================================================
@@ -353,7 +357,6 @@ function buildIndices<T>(
 }
 
 function renderItems<T>(
-  ctx: ListContext<T>,
   diff: PreparedDiff<T>,
   options: ListOptions<T>,
   isInitial: boolean
@@ -475,7 +478,8 @@ function placeItems<T>(
       newNodes[i] = el;
       newStates[i] = 0;
       ctx.removingKeys.delete(k);
-      if (debug.enabled) debug.domUpdated(LOG_PREFIXES.LIST, $(el) as any, 'list.add', newItems[i]);
+      if (debug.enabled)
+        debug.domUpdated(LOG_PREFIXES.LIST, $(el) as unknown as JQuery, 'list.add', newItems[i]);
       el = el.nextElementSibling as Element | null;
     }
     return;
@@ -507,9 +511,13 @@ function placeItems<T>(
         minOldIndexSeen = oldIndex;
       } else {
         const $el = wrap(nodeOrJosh);
-        insertOrAppend($el, nextNode, $container as any);
+        insertOrAppend(
+          $el as unknown as JQuery<Element>,
+          nextNode,
+          $container as unknown as JQuery<Element>
+        );
       }
-      nextNode = nodeOrJosh instanceof Element ? nodeOrJosh : nodeOrJosh[0] ?? null;
+      nextNode = nodeOrJosh instanceof Element ? nodeOrJosh : (nodeOrJosh[0] ?? null);
     }
   }
 
@@ -534,11 +542,6 @@ function placeItems<T>(
       }
     }
   }
-}
-
-function syncEventIndices<T>(_ctx: ListContext<T>, _diff: PreparedDiff<T>): void {
-  // Logic merged into buildIndices for performance.
-  // This is now a no-op to maintain function signature compatibility if needed elsewhere.
 }
 
 // ============================================================================
@@ -586,7 +589,7 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
         const diff = buildIndices(ctx, items, itemCount, getKey, update, isEqual);
         const isInitial = ctx.oldKeys.length === 0;
 
-        const innerHtmlFragments = renderItems(ctx, diff, options, isInitial);
+        const innerHtmlFragments = renderItems(diff, options, isInitial);
         cleanupRemoved(ctx, diff);
         placeItems(ctx, diff, rawContainer, $container, callbacks, innerHtmlFragments);
 
