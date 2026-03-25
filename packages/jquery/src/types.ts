@@ -96,6 +96,8 @@ export interface BindingOptions<T = unknown> {
   val?: WritableAtom<T> | [atom: WritableAtom<T>, options: ValOptions<T>];
   /** Two-way binding for checkboxes and radio buttons. */
   checked?: WritableAtom<boolean>;
+  /** Fully automated two-way form binding using name attributes. */
+  form?: WritableAtom<T extends object ? T : unknown>;
   /** Event listeners with automatic batched execution and lifecycle-bound cleanup. */
   on?: Record<string, (e: JQuery.Event) => void>;
 }
@@ -319,6 +321,7 @@ declare global {
     atomHide(condition: ReactiveValue<boolean>): this;
     atomVal<T>(atom: WritableAtom<T>, options?: ValOptions<T>): this;
     atomChecked(atom: WritableAtom<boolean>): this;
+    atomForm<T extends object>(atom: WritableAtom<T>, options?: ValOptions<unknown>): this;
     atomOn(event: string, handler: (e: JQuery.Event) => void): this;
 
     atomBind<T = unknown>(options: BindingOptions<T>): this;

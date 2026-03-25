@@ -14,6 +14,12 @@
 - **Performance**: Refactored `Scheduler` batch merging to eliminate temporary array allocations (`slice`) and closure overhead, significantly reducing GC pressure during high-frequency updates.
 - **Performance**: Removed redundant null-checks in `DepSlotBuffer` by leveraging the dense invariant (no holes) of the dependency container.
 
+### jQuery
+
+#### Added
+
+- **API**: `$.fn.atomForm`: Fully automated two-way form binding using `name` attributes. Supports nested property paths (e.g., `name="profile.firstName"`) via optimized "lens" atoms and dynamic DOM changes via `MutationObserver`.
+
 ## [0.24.0]
 
 ### Core

@@ -270,6 +270,7 @@ packages/jquery/src/
     chainable.ts      — $.fn.atomText, $.fn.atomVal, etc. (jQuery methods)
     unified.ts        — Binding handler implementations + atomBind
     input-binding.ts  — Two-way input binding with IME/debounce/cursor support
+    form.ts           — Fully automated form binding with lens-based deep paths
     list.ts           — atomList with keyed LIS-based reconciliation
     mount.ts          — atomMount / atomUnmount component lifecycle
   features/
