@@ -1,13 +1,8 @@
-import { computed, effect, isAtom, untracked } from '@but212/atom-effect';
+import { computed, effect, isAtom, type ReadonlyAtom, untracked } from '@but212/atom-effect';
+
 import $ from 'jquery';
 import { applyInputBinding } from '@/bindings/input-binding';
-import {
-  DANGEROUS_PROPS,
-  ERROR_MESSAGES,
-  LOG_PREFIXES,
-  URL_PROPS,
-  VALID_INPUT_TAGS,
-} from '@/constants';
+import { DANGEROUS_PROPS, ERROR_MESSAGES, LOG_PREFIXES, VALID_INPUT_TAGS } from '@/constants';
 import {
   type BindingDebugType,
   registerMapEffect,
@@ -16,6 +11,7 @@ import {
 import { INTERNAL_HANDLER } from '@/core/jquery-patch';
 import { registry } from '@/core/registry';
 import type {
+  AsyncReactiveValue,
   BindingContext,
   BindingOptions,
   CssValue,
@@ -28,8 +24,14 @@ import { debug } from '@/utils/debug';
 
 export type { BindingContext };
 
-import { hasOwn } from '@/utils';
-import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '@/utils/sanitize';
+import { hasOwn, isPromise } from '@/utils';
+
+import {
+  DANGEROUS_PROTOCOL_RE,
+  isDangerousCssValue,
+  sanitizeHtml,
+  URL_ATTRS,
+} from '@/utils/sanitize';
 
 // Cache for CSS property camelization to avoid repeated regex overhead.
 // Uses Map instead of a plain object to avoid prototype pollution risk and
@@ -51,16 +53,22 @@ function getCamelCase(prop: string): string {
  * called only once per update instead of 100 times.
  */
 const htmlSanitizeCache = new WeakMap<
-  import('@but212/atom-effect').ReadonlyAtom<string>,
-  import('@but212/atom-effect').ComputedAtom<string>
+  ReadonlyAtom<string | Promise<string>>,
+  ReadonlyAtom<string | Promise<string>>
 >();
 
 function getSanitizedHtml(
-  source: import('@but212/atom-effect').ReadonlyAtom<string>
-): import('@but212/atom-effect').ComputedAtom<string> {
+  source: ReadonlyAtom<string | Promise<string>>
+): ReadonlyAtom<string | Promise<string>> {
   let cached = htmlSanitizeCache.get(source);
   if (!cached) {
-    cached = computed(() => sanitizeHtml(source.value));
+    cached = computed(() => {
+      const val = source.value;
+      if (isPromise(val)) {
+        return val.then((v: string) => sanitizeHtml(v));
+      }
+      return sanitizeHtml(val);
+    });
     htmlSanitizeCache.set(source, cached);
   }
   return cached;
@@ -86,7 +94,7 @@ export function createContext(el: HTMLElement): BindingContext {
  */
 export function bindText<T = unknown>(
   ctx: BindingContext,
-  value: ReactiveValue<T>,
+  value: AsyncReactiveValue<T>,
   formatter?: (val: T) => string
 ): void {
   const el = ctx.el;
@@ -106,17 +114,18 @@ export function bindText<T = unknown>(
 /**
  * Updates element inner HTML with XSS sanitization.
  */
-export function bindHtml(ctx: BindingContext, value: ReactiveValue<string>): void {
+export function bindHtml(ctx: BindingContext, value: AsyncReactiveValue<string>): void {
   const el = ctx.el;
 
   const reactiveSource = isAtom(value)
-    ? getSanitizedHtml(value as import('@but212/atom-effect').ReadonlyAtom<string>)
+    ? getSanitizedHtml(value as ReadonlyAtom<string | Promise<string>>)
     : value;
 
   registerReactiveEffect(
     el,
     reactiveSource,
-    (sanitized) => {
+    (val) => {
+      const sanitized = reactiveSource === value ? sanitizeHtml(val) : val;
       if (el.innerHTML !== sanitized) {
         registry.cleanupDescendants(el);
         el.innerHTML = sanitized;
@@ -132,16 +141,26 @@ export function bindHtml(ctx: BindingContext, value: ReactiveValue<string>): voi
  */
 export function bindClass(
   ctx: BindingContext,
-  classMap: Record<string, ReactiveValue<boolean>>
+  classMap: Record<string, AsyncReactiveValue<boolean>>
 ): void {
   const el = ctx.el;
+
+  // Pre-calculate whitespace-split tokens for each class name once at
+  // registration to avoid repeated string manipulation in the update loop.
+  const tokenMap: Record<string, string[]> = {};
+  for (const className in classMap) {
+    if (hasOwn.call(classMap, className)) {
+      tokenMap[className] = className.trim().split(/\s+/).filter(Boolean);
+    }
+  }
+
   registerMapEffect(
     el,
     classMap,
     (states: Record<string, boolean>) => {
       for (const className in states) {
         const val = states[className];
-        const tokens = className.trim().split(/\s+/).filter(Boolean);
+        const tokens = tokenMap[className]!;
         if (val) {
           el.classList.add(...tokens);
         } else {
@@ -161,34 +180,41 @@ export function bindCss(ctx: BindingContext, cssMap: Record<string, CssValue>): 
   const el = ctx.el;
   const style = el.style as unknown as Record<string, string>;
 
-  registry.trackEffect(
+  // Metadata cache: pre-calculate camelCase names and extraction logic
+  // to minimize overhead inside the reactive loop.
+  const reactiveMap: Record<string, ReactiveValue<unknown>> = {};
+  const meta: Record<string, { camel: string; unit: string }> = {};
+
+  for (const prop in cssMap) {
+    if (hasOwn.call(cssMap, prop)) {
+      const val = cssMap[prop]!;
+      const [source, unit] = Array.isArray(val) ? val : ([val, ''] as const);
+
+      reactiveMap[prop] = source;
+      meta[prop] = {
+        camel: getCamelCase(prop),
+        unit,
+      };
+    }
+  }
+
+  registerMapEffect(
     el,
-    effect(
-      () => {
-        for (const prop in cssMap) {
-          if (hasOwn.call(cssMap, prop)) {
-            const val = cssMap[prop]!;
-            const camel = getCamelCase(prop);
-            const [source, unit] = Array.isArray(val) ? val : ([val, ''] as const);
+    reactiveMap,
+    (states: Record<string, unknown>) => {
+      for (const prop in states) {
+        const current = states[prop];
+        const { camel, unit } = meta[prop]!;
+        const strVal = unit ? String(current) + unit : String(current);
 
-            // Access the value to establish dependency
-            const current = isAtom(source)
-              ? (source as import('@but212/atom-effect').ReadonlyAtom<unknown>).value
-              : source;
-
-            untracked(() => {
-              const strVal = unit ? String(current) + unit : String(current);
-              if (!isDangerousCssValue(strVal)) {
-                if (style[camel] !== strVal) {
-                  style[camel] = strVal;
-                }
-              }
-            });
+        if (!isDangerousCssValue(strVal)) {
+          if (style[camel] !== strVal) {
+            style[camel] = strVal;
           }
         }
-      },
-      { name: 'css' }
-    )
+      }
+    },
+    'css'
   );
 }
 
@@ -197,22 +223,38 @@ export function bindCss(ctx: BindingContext, cssMap: Record<string, CssValue>): 
  */
 export function bindAttr(
   ctx: BindingContext,
-  attrMap: Record<string, ReactiveValue<PrimitiveValue>>
+  attrMap: Record<string, AsyncReactiveValue<PrimitiveValue>>
 ): void {
   const el = ctx.el;
 
-  // Filter out dangerous attributes once at registration time
-  const safeMap: Record<string, ReactiveValue<PrimitiveValue>> = {};
+  // Metadata cache for performance: pre-calculate attribute properties once
+  // at registration time to avoid repeated string operations in the update loop.
+  const safeMap: Record<string, AsyncReactiveValue<PrimitiveValue>> = {};
+
+  const metadataMap: Record<string, { isAria: boolean; isUrl: boolean }> = {};
+
   for (const name in attrMap) {
     if (hasOwn.call(attrMap, name)) {
-      if (name.toLowerCase().startsWith('on')) {
+      const lower = name.toLowerCase();
+      if (lower.startsWith('on')) {
         console.warn(
           `${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_EVENT_HANDLER(name)}`
         );
         continue;
       }
       safeMap[name] = attrMap[name]!;
+      metadataMap[name] = {
+        isAria: lower.startsWith('aria-'),
+        isUrl: URL_ATTRS.has(lower),
+      };
     }
+  }
+
+  // Last written value cache to avoid expensive DOM reads (getAttribute) during updates.
+  // Using JS memory is significantly faster than crossing the DOM boundary in benchmarks.
+  const valueCache: Record<string, string | null> = {};
+  for (const name in safeMap) {
+    valueCache[name] = el.getAttribute(name);
   }
 
   registerMapEffect(
@@ -220,23 +262,33 @@ export function bindAttr(
     safeMap,
     (states: Record<string, PrimitiveValue>) => {
       for (const name in states) {
-        const v = states[name] as PrimitiveValue;
-        const lowerName = name.toLowerCase();
-        const isAria = lowerName.startsWith('aria-');
+        const value = states[name] as PrimitiveValue;
+        const meta = metadataMap[name]!;
+        const isAria = meta.isAria;
 
-        if (v == null || (v === false && !isAria)) {
-          el.removeAttribute(name);
+        // Skip removal and dangerous checks for null/undefined/false (except ARIA)
+        if (value == null || (value === false && !isAria)) {
+          if (valueCache[name] !== null) {
+            el.removeAttribute(name);
+            valueCache[name] = null;
+          }
           continue;
         }
 
-        const newVal = v === true ? (isAria ? 'true' : name) : String(v);
-        if (isDangerousUrl(name, newVal)) {
+        // Standardize value based on attribute type
+        const newVal = value === true ? (isAria ? 'true' : name) : String(value);
+
+        // Security check: Only run regex on URL-bearing attributes
+        if (meta.isUrl && DANGEROUS_PROTOCOL_RE.test(newVal)) {
           console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_PROTOCOL(name)}`);
           continue;
         }
 
-        if (el.getAttribute(name) !== newVal) {
+        // JS cache check: Only write to DOM if value changed since last write/registration.
+        // This bypasses the expensive getAttribute call identified as a bottleneck.
+        if (valueCache[name] !== newVal) {
           el.setAttribute(name, newVal);
+          valueCache[name] = newVal;
         }
       }
     },
@@ -249,15 +301,20 @@ export function bindAttr(
  */
 export function bindProp(
   ctx: BindingContext,
-  propMap: Record<string, ReactiveValue<unknown>>
+  propMap: Record<string, AsyncReactiveValue<unknown>>
 ): void {
   const el = ctx.el as unknown as Record<string, unknown>;
 
-  // Filter out dangerous properties once at registration time
-  const safeMap: Record<string, ReactiveValue<unknown>> = {};
+  // Metadata cache for performance: pre-calculate whether a property carries a
+  // URL once at registration time to avoid repeated string operations.
+  const safeMap: Record<string, AsyncReactiveValue<unknown>> = {};
+
+  const metadataMap: Record<string, { isUrl: boolean }> = {};
+
   for (const name in propMap) {
     if (hasOwn.call(propMap, name)) {
-      if (name.toLowerCase().startsWith('on')) {
+      const lower = name.toLowerCase();
+      if (lower.startsWith('on')) {
         console.warn(
           `${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_EVENT_HANDLER(name)}`
         );
@@ -268,6 +325,9 @@ export function bindProp(
         continue;
       }
       safeMap[name] = propMap[name]!;
+      metadataMap[name] = {
+        isUrl: URL_ATTRS.has(lower),
+      };
     }
   }
 
@@ -277,12 +337,15 @@ export function bindProp(
     (states: Record<string, unknown>) => {
       for (const name in states) {
         const val = states[name];
-        const lowerName = name.toLowerCase();
-        if (URL_PROPS.has(lowerName) && typeof val === 'string' && isDangerousUrl(name, val)) {
+        const isUrl = metadataMap[name]!.isUrl;
+
+        // Security check: Only run regex on URL-bearing properties
+        if (isUrl && typeof val === 'string' && DANGEROUS_PROTOCOL_RE.test(val)) {
           console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_PROTOCOL(name)}`);
           continue;
         }
 
+        // Write guard: only update if the value has actually changed
         if (el[name] !== val) {
           el[name] = val;
         }
@@ -297,7 +360,7 @@ export function bindProp(
  */
 export function bindVisibility(
   ctx: BindingContext,
-  condition: ReactiveValue<boolean>,
+  condition: AsyncReactiveValue<boolean>,
   invert: boolean
 ): void {
   const el = ctx.el;

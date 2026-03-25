@@ -45,8 +45,9 @@ $.fn.atomText(atom)
 
 - If the source is **reactive** (atom/computed): creates an `effect` that reads `.value` and calls the updater.
 - If the source is **static**: calls the updater once immediately (no effect created).
+- **Async Support**: If the value (from atom or static source) is a **Promise**, `registerReactiveEffect` handles the resolution automatically. It includes race condition protection using `latestPromise` tracking to ensure only the most recently assigned promise's result is applied to the DOM.
 
-This eliminates boilerplate across all binding types.
+This eliminates boilerplate across all binding types and ensures robust async behavior.
 
 ### 2.2 Binding Context
 
@@ -73,6 +74,14 @@ atomBind({ text, html, class, css, attr, prop, show, hide, val, checked, on })
 ```
 
 Each handler is a standalone function that receives a `BindingContext` and the reactive value. This decomposition keeps cyclomatic complexity low and enables tree-shaking.
+
+#### 2.3.1 Performance Optimizations in Bindings
+
+To achieve maximum performance during high-frequency updates (e.g., animations or rapid state changes), `unified.ts` implements several optimizations:
+
+- **Metadata Caching**: Complex bindings like `atomClass`, `atomCss`, `atomAttr`, and `atomProp` pre-calculate metadata (e.g., camelCase property names, ARIA flags, URL-bearing status) during the initial registration. This avoids repeated string manipulations and regex checks inside the reactive update loop.
+- **JS-Level Value Caching**: `bindAttr` maintains a JS-side cache of the last written attribute value. This allows it to skip expensive `getAttribute` DOM calls (which require crossing the DOM boundary) to determine if a write is necessary.
+- **Batched Map Updates**: `registerMapEffect` processes entire dictionaries of reactive values in a single effect, reducing the number of total `Effect` objects and improving subscription efficiency.
 
 ## 3. Lifecycle Management
 
@@ -270,6 +279,7 @@ packages/jquery/src/
     chainable.ts      — $.fn.atomText, $.fn.atomVal, etc. (jQuery methods)
     unified.ts        — Binding handler implementations + atomBind
     input-binding.ts  — Two-way input binding with IME/debounce/cursor support
+    form.ts           — Fully automated form binding with lens-based deep paths
     list.ts           — atomList with keyed LIS-based reconciliation
     mount.ts          — atomMount / atomUnmount component lifecycle
   features/

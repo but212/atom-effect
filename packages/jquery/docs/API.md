@@ -10,16 +10,17 @@ The preferred way to apply multiple bindings at once.
 
 ```javascript
 $('.user-card').atomBind({
-  text: nameAtom,                 // Binds textContent (any reactive source)
-  html: bioAtom,                  // Binds sanitized innerHTML
-  class: { 'active': isActive },  // Toggles class
-  css: { 'color': colorAtom },    // Style property
-  attr: { 'data-id': idAtom },    // Attribute (PrimitiveValue)
-  prop: { 'disabled': isDisabled },// DOM property (any type)
-  show: isVisible,                // show/hide
+  text: nameAtom,                 // Binds textContent (any reactive source or Promise)
+  html: bioAtom,                  // Binds sanitized innerHTML (yields or is string|Promise)
+  class: { 'active': isActive },  // Toggles class (yields or is boolean|Promise)
+  css: { 'color': colorAtom },    // Style property (yields or is string|number|Promise)
+  attr: { 'data-id': idAtom },    // Attribute (yielding PrimitiveValue|Promise)
+  prop: { 'disabled': isDisabled },// DOM property (yielding any|Promise)
+  show: isVisible,                // show/hide (yielding boolean|Promise)
   hide: isHidden,                 // Inverse of show
   val: inputAtom,                 // Two-way binding: atom or [atom, options]
   checked: isChecked,             // Two-way binding for checkbox/radio
+  form: userAtom,                 // Fully automated two-way form binding
   on: { click: handleClick }      // Event handler
 });
 ```
@@ -30,7 +31,7 @@ $('.user-card').atomBind({
 
 ### `.atomText(atom, formatter?)`
 
-Updates `textContent`.
+Updates `textContent`. Supports `AsyncReactiveValue` (direct Promise or atom yielding Promise).
 
 - **formatter**: optional function `(val) => string`.
 
@@ -172,6 +173,21 @@ Two-way binding for `<input type="checkbox">` and `<input type="radio">` element
 
 ```javascript
 $('#agree').atomChecked(isAgreedAtom);
+```
+
+### `.atomForm(atom, options?)`
+
+Fully automated two-way binding for an entire form. Binds every input, select, and textarea inside the form to a property of the atom based on their `name` attribute.
+
+- **Deep Paths**: Supports dot-notation in `name` attributes (e.g., `name="user.profile.name"`) to bind to nested object properties.
+- **Dynamic DOM**: Automatically detects and binds new form controls added to the DOM after the initial call.
+- **Optimized**: Uses `form.elements` for O(1) element access and lens-based atoms to minimize re-renders.
+
+```javascript
+const user = $.atom({ name: 'Alice', role: 'admin' });
+
+// Every input with a 'name' attribute is automatically bound
+$('form').atomForm(user);
 ```
 
 ### `.atomOn(event, handler)`

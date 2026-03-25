@@ -22,7 +22,7 @@
  * reliably detect a dangerous protocol buried after the first comma. Callers
  * that need to validate srcset should parse each URL individually.
  */
-const URL_ATTRS = new Set([
+export const URL_ATTRS = new Set([
   'href',
   'src',
   'action',
@@ -43,7 +43,7 @@ const URL_ATTRS = new Set([
 // Pre-compiled regex constants
 // ============================================================================
 
-const DANGEROUS_PROTOCOL_RE = /^\s*(?:javascript|vbscript)\s*:/i;
+export const DANGEROUS_PROTOCOL_RE = /^\s*(?:javascript|vbscript)\s*:/i;
 
 const DANGEROUS_CSS_RE =
   // biome-ignore lint/suspicious/noControlCharactersInRegex: Intentionally matching control characters for XSS sanitization

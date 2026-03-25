@@ -69,6 +69,9 @@ describe('Binding Registry', () => {
         dispose: () => {
           throw new Error('dispose fail');
         },
+        [Symbol.dispose]() {
+          this.dispose();
+        },
         run: () => {},
         isDisposed: false,
         isExecuting: false,

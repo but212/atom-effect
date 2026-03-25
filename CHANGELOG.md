@@ -1,5 +1,20 @@
 # Changelog
 
+## [Unreleased]
+
+### jQuery
+
+#### Added
+
+- **API**: Native `Promise` support and `AsyncReactiveValue` in all content and attribute bindings (`atomText`, `atomHtml`, `atomClass`, `atomCss`, `atomAttr`, `atomProp`, `atomShow`, `atomHide`). Bindings now automatically resolve `Promise` values and reactive atoms yielding `Promise` values.
+- **Testing**: Added comprehensive integration tests for async bindings and race condition scenarios.
+
+#### Changed
+
+- **Performance**: Implemented high-performance metadata caching (camelCase names, attribute properties) for `atomClass`, `atomCss`, `atomAttr`, and `atomProp` to minimize string operation overhead inside reactive loops.
+- **Performance**: Introduced JS-level value caching for `atomAttr` to bypass expensive `getAttribute` DOM calls, significantly improving update performance for large attribute sets.
+- **Race Condition**: Implemented `latestPromise` and `latestPromiseId` tracking in `effect-factory.ts` to ensure only the result of the most recently assigned `Promise` is applied to the DOM.
+
 ## [0.24.1]
 
 ### Core
@@ -13,6 +28,12 @@
 - **Performance**: Bypassed redundant `getAt`/`setAt` dispatch in the hottest core loops (dependency collection and update notification) for significant overhead reduction.
 - **Performance**: Refactored `Scheduler` batch merging to eliminate temporary array allocations (`slice`) and closure overhead, significantly reducing GC pressure during high-frequency updates.
 - **Performance**: Removed redundant null-checks in `DepSlotBuffer` by leveraging the dense invariant (no holes) of the dependency container.
+
+### jQuery
+
+#### Added
+
+- **API**: `$.fn.atomForm`: Fully automated two-way form binding using `name` attributes. Supports nested property paths (e.g., `name="profile.firstName"`) via optimized "lens" atoms and dynamic DOM changes via `MutationObserver`.
 
 ## [0.24.0]
 
