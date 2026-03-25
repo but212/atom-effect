@@ -63,8 +63,7 @@ function createLens<T extends object>(atom: WritableAtom<T>, path: string): Writ
       return atom.subscriberCount();
     },
     dispose() {},
-    // @ts-expect-error
-    [Symbol.dispose || Symbol.for('dispose')]() {},
+    [Symbol.dispose]() {},
     [ATOM_BRAND]: true,
     [WRITABLE_BRAND]: true,
   } as unknown as WritableAtom<unknown>;

@@ -57,8 +57,7 @@ describe('Form Binding (atomForm)', () => {
     $form.remove();
   });
 
-  it('should handle nested property paths (optional/future)', async () => {
-    // Basic implementation might not support this yet, but good to have as a target
+  it('should handle nested property paths', async () => {
     const data = $.atom({
       profile: { firstName: 'John' },
     });
