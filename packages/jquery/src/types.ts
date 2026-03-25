@@ -46,6 +46,12 @@ export interface AtomOptions extends BaseAtomOptions {
 export type ReactiveValue<T> = T | ReadonlyAtom<T>;
 
 /**
+ * Represents a value that can be a synchronous `ReactiveValue<T>`,
+ * a `Promise<T>`, or an Atom yielding `T | Promise<T>`.
+ */
+export type AsyncReactiveValue<T> = T | ReadonlyAtom<T | Promise<T>> | Promise<T>;
+
+/**
  * Values allowed for DOM properties and attributes.
  */
 export type PrimitiveValue = string | number | boolean | null | undefined;
@@ -60,8 +66,8 @@ type KeysOfType<T, V> = { [K in keyof T]: T[K] extends V ? K : never }[keyof T];
  * CSS value: either a direct reactive value or a numeric tuple of [source, unit].
  */
 export type CssValue =
-  | ReactiveValue<string | number>
-  | [source: ReactiveValue<number>, unit: string];
+  | AsyncReactiveValue<string | number>
+  | [source: AsyncReactiveValue<number>, unit: string];
 
 /**
  * CSS bindings map property names to CSS values.
@@ -74,21 +80,22 @@ export type CssBindings = Record<string, CssValue>;
  */
 export interface BindingOptions<T = unknown> {
   /** Binds textContent to any reactive source. */
-  text?: ReactiveValue<unknown>;
+  text?: AsyncReactiveValue<unknown>;
   /** Binds innerHTML to a reactive string source (sanitized). */
-  html?: ReactiveValue<string>;
+  html?: AsyncReactiveValue<string>;
   /** Map of class names to reactive boolean conditions. */
-  class?: Record<string, ReactiveValue<boolean>>;
+  class?: Record<string, AsyncReactiveValue<boolean>>;
   /** Map of CSS properties to reactive values or [value, unit] tuples. */
   css?: CssBindings;
   /** Binds attributes with consistent primitive constraints. */
-  attr?: Record<string, ReactiveValue<PrimitiveValue>>;
+  attr?: Record<string, AsyncReactiveValue<PrimitiveValue>>;
   /** Binds DOM properties. */
-  prop?: Record<string, ReactiveValue<unknown>>;
+  prop?: Record<string, AsyncReactiveValue<unknown>>;
   /** Direct visibility control (display: none). */
-  show?: ReactiveValue<boolean>;
+  show?: AsyncReactiveValue<boolean>;
   /** Inverse visibility control. */
-  hide?: ReactiveValue<boolean>;
+  hide?: AsyncReactiveValue<boolean>;
+
   /**
    * Two-way binding for input values.
    * Pass an atom or a `[atom, options]` tuple.
@@ -307,18 +314,19 @@ declare global {
   }
 
   interface JQuery {
-    atomText<T>(source: ReactiveValue<T>, formatter?: (v: T) => string): this;
-    atomHtml(source: ReactiveValue<string>): this;
-    atomClass(className: string, condition: ReactiveValue<boolean>): this;
-    atomClass(classMap: Record<string, ReactiveValue<boolean>>): this;
-    atomCss(prop: string, source: ReactiveValue<string | number>, unit?: string): this;
+    atomText<T>(source: AsyncReactiveValue<T>, formatter?: (v: T) => string): this;
+    atomHtml(source: AsyncReactiveValue<string>): this;
+    atomClass(className: string, condition: AsyncReactiveValue<boolean>): this;
+    atomClass(classMap: Record<string, AsyncReactiveValue<boolean>>): this;
+    atomCss(prop: string, source: AsyncReactiveValue<string | number>, unit?: string): this;
     atomCss(cssMap: CssBindings): this;
-    atomAttr(name: string, source: ReactiveValue<PrimitiveValue>): this;
-    atomAttr(attrMap: Record<string, ReactiveValue<PrimitiveValue>>): this;
-    atomProp<T>(name: string, source: ReactiveValue<T>): this;
-    atomProp<T>(propMap: Record<string, ReactiveValue<T>>): this;
-    atomShow(condition: ReactiveValue<boolean>): this;
-    atomHide(condition: ReactiveValue<boolean>): this;
+    atomAttr(name: string, source: AsyncReactiveValue<PrimitiveValue>): this;
+    atomAttr(attrMap: Record<string, AsyncReactiveValue<PrimitiveValue>>): this;
+    atomProp<T>(name: string, source: AsyncReactiveValue<T>): this;
+    atomProp<T>(propMap: Record<string, AsyncReactiveValue<T>>): this;
+    atomShow(condition: AsyncReactiveValue<boolean>): this;
+    atomHide(condition: AsyncReactiveValue<boolean>): this;
+
     atomVal<T>(atom: WritableAtom<T>, options?: ValOptions<T>): this;
     atomChecked(atom: WritableAtom<boolean>): this;
     atomForm<T extends object>(atom: WritableAtom<T>, options?: ValOptions<unknown>): this;

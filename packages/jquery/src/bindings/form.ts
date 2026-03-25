@@ -1,7 +1,7 @@
 import type { WritableAtom } from '@but212/atom-effect';
+import { registry } from '@/core/registry';
 import type { ValOptions } from '@/types';
 import { bindChecked, bindVal, createContext } from './unified';
-import { registry } from '@/core/registry';
 
 /**
  * Creates a two-way "lens" for a specific property path on an object-based atom.
@@ -69,13 +69,19 @@ export function bindForm<T extends object>(
   atom: WritableAtom<T>,
   options: ValOptions<unknown> = {}
 ): void {
-  // Optimization: use the native form.elements collection which is significantly faster 
+  // Optimization: use the native form.elements collection which is significantly faster
   // than selector-based find('[name]') on large forms.
   const elements = form.elements;
 
   const bindElement = (el: Element) => {
     // Only bind form controls that have a name attribute and haven't been bound yet.
-    if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement)) {
+    if (
+      !(
+        el instanceof HTMLInputElement ||
+        el instanceof HTMLTextAreaElement ||
+        el instanceof HTMLSelectElement
+      )
+    ) {
       return;
     }
     const name = el.name;
@@ -106,7 +112,8 @@ export function bindForm<T extends object>(
         const added = mutation.addedNodes;
         for (let j = 0, aLen = added.length; j < aLen; j++) {
           const node = added[j]!;
-          if (node.nodeType === 1) { // Element
+          if (node.nodeType === 1) {
+            // Element
             const el = node as Element;
             bindElement(el);
             // Scan subtree for new controls.
@@ -126,7 +133,7 @@ export function bindForm<T extends object>(
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ['name']
+    attributeFilter: ['name'],
   });
 
   // Track the observer for automatic cleanup when the form is removed or unbound.

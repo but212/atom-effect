@@ -10,13 +10,13 @@ The preferred way to apply multiple bindings at once.
 
 ```javascript
 $('.user-card').atomBind({
-  text: nameAtom,                 // Binds textContent (any reactive source)
-  html: bioAtom,                  // Binds sanitized innerHTML
-  class: { 'active': isActive },  // Toggles class
-  css: { 'color': colorAtom },    // Style property
-  attr: { 'data-id': idAtom },    // Attribute (PrimitiveValue)
-  prop: { 'disabled': isDisabled },// DOM property (any type)
-  show: isVisible,                // show/hide
+  text: nameAtom,                 // Binds textContent (any reactive source or Promise)
+  html: bioAtom,                  // Binds sanitized innerHTML (yields or is string|Promise)
+  class: { 'active': isActive },  // Toggles class (yields or is boolean|Promise)
+  css: { 'color': colorAtom },    // Style property (yields or is string|number|Promise)
+  attr: { 'data-id': idAtom },    // Attribute (yielding PrimitiveValue|Promise)
+  prop: { 'disabled': isDisabled },// DOM property (yielding any|Promise)
+  show: isVisible,                // show/hide (yielding boolean|Promise)
   hide: isHidden,                 // Inverse of show
   val: inputAtom,                 // Two-way binding: atom or [atom, options]
   checked: isChecked,             // Two-way binding for checkbox/radio
@@ -31,7 +31,7 @@ $('.user-card').atomBind({
 
 ### `.atomText(atom, formatter?)`
 
-Updates `textContent`.
+Updates `textContent`. Supports `AsyncReactiveValue` (direct Promise or atom yielding Promise).
 
 - **formatter**: optional function `(val) => string`.
 
