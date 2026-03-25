@@ -6,12 +6,12 @@ Benchmarking suite for `@but212/atom-effect-jquery` to measure DOM binding perfo
 
 | Category | Key Metric | Value | Context |
 | ---------- | ---------- | ----- | ------- |
-| **Text Binding** | Propagation (100el × 50) | 131 ops/sec | ~7.6ms per round |
-| **Class Binding** | Toggle (100el × 100) | 149 ops/sec | ~6.7ms per round |
-| **List Render** | 100 items | 213 ops/sec | ~4.7ms per render |
-| **Input (DOM→Atom)** | 100 events | 826 ops/sec | ~1.2ms per round |
-| **Todo App** | Full workflow | 2,232 ops/sec | ~0.45ms per cycle |
-| **Dashboard** | Fan-in chain | 1,370 ops/sec | ~0.73ms per update |
+| **Text Binding** | Propagation (100el × 50) | 134 ops/sec | ~7.4ms per round |
+| **Class Binding** | Toggle (100el × 100) | 153 ops/sec | ~6.5ms per round |
+| **List Render** | 100 items | 225 ops/sec | ~4.4ms per render |
+| **Input (DOM→Atom)** | 100 events | 866 ops/sec | ~1.2ms per round |
+| **Todo App** | Full workflow | 2,236 ops/sec | ~0.45ms per cycle |
+| **Dashboard** | Fan-in chain | 1,479 ops/sec | ~0.68ms per update |
 
 ## Running Benchmarks
 
@@ -70,8 +70,8 @@ Located in `__benchmarks__/macro/`, these test real-world DOM scenarios:
 
 ## Latest Results
 
-**Version**: v0.24.0
-**Last Updated**: 2026-03-24
+**Version**: v0.24.1
+**Last Updated**: 2026-03-25
 **Environment**:
 
 - **Node.js**: v22.x
@@ -83,12 +83,12 @@ Located in `__benchmarks__/macro/`, these test real-world DOM scenarios:
 
 | Benchmark | Result | Analysis |
 | ---------- | ------ | -------- |
-| atomText propagation | 131 ops/sec | Consistent DOM text updates |
-| atomClass toggle | 149 ops/sec | Fast class manipulation |
-| atomList render (100) | 213 ops/sec | Efficient list reconciliation (Recovered) |
-| atomVal DOM→Atom | 826 ops/sec | Near-instant input sync |
-| Todo full workflow | 2,232 ops/sec | Production-ready performance |
-| Dashboard fan-in | 1,370 ops/sec | Efficient computed→DOM chain |
+| atomText propagation | 134 ops/sec | Consistent DOM text updates |
+| atomClass toggle | 153 ops/sec | Fast class manipulation |
+| atomList render (100) | 225 ops/sec | Efficient list reconciliation |
+| atomVal DOM→Atom | 866 ops/sec | Near-instant input sync |
+| Todo full workflow | 2,236 ops/sec | Production-ready performance |
+| Dashboard fan-in | 1,479 ops/sec | Efficient computed→DOM chain |
 
 ## Contributing Benchmarks
 
