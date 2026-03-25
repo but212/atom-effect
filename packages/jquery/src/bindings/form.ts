@@ -4,47 +4,57 @@ import type { ValOptions } from '@/types';
 import { bindChecked, bindVal, createContext } from './unified';
 
 /**
+ * Internal recursive helper for creating deep immutable copies with structural sharing.
+ * Only clones nodes along the path where changes occur.
+ */
+function setDeepValue(obj: unknown, keys: string[], index: number, value: unknown): unknown {
+  if (index === keys.length) return value;
+
+  const key = keys[index]!;
+  const currentLevel = obj && typeof obj === 'object' ? obj : {};
+  const oldValue = (currentLevel as Record<string, unknown>)[key];
+
+  const newValue = setDeepValue(oldValue, keys, index + 1, value);
+
+  // Structural Sharing: If the value didn't change, return the original object
+  // to avoid unnecessary allocations and downstream effect triggers.
+  if (Object.is(oldValue, newValue)) return obj;
+
+  return { ...currentLevel, [key]: newValue };
+}
+
+/**
  * Creates a two-way "lens" for a specific property path on an object-based atom.
- * Pre-splits the path for better performance during reactive updates.
+ * Optimized for performance using structural sharing and equality guards.
  */
 function createLens<T extends object>(atom: WritableAtom<T>, path: string): WritableAtom<unknown> {
   const ATOM_BRAND = Symbol.for('atom-effect/atom');
   const WRITABLE_BRAND = Symbol.for('atom-effect/writable');
   const parts = path.includes('.') ? path.split('.') : [path];
 
+  const getPathValue = (source: unknown) => {
+    let result = source;
+    for (let i = 0, len = parts.length; i < len && result != null; i++) {
+      result = (result as Record<string, unknown>)[parts[i]!];
+    }
+    return result;
+  };
+
   return {
     get value() {
-      const val = atom.value;
-      if (parts.length > 1) {
-        return parts.reduce<unknown>((acc, part) => (acc as Record<string, unknown>)?.[part], val);
-      }
-      return (val as Record<string, unknown>)[path];
+      return getPathValue(atom.value);
     },
     set value(newVal: unknown) {
       const current = atom.peek();
-      let next: T;
+      const next = setDeepValue(current, parts, 0, newVal);
 
-      if (parts.length > 1) {
-        const p = [...parts];
-        const last = p.pop()!;
-        next = { ...current };
-        let target = next as Record<string, unknown>;
-        for (const part of p) {
-          target[part] = { ...((target[part] as Record<string, unknown>) || {}) };
-          target = target[part] as Record<string, unknown>;
-        }
-        target[last] = newVal;
-      } else {
-        next = { ...current, [path]: newVal } as T;
+      // Only write back to the atom if a change actually occurred.
+      if (next !== current) {
+        atom.value = next as T;
       }
-      atom.value = next;
     },
     peek() {
-      const val = atom.peek();
-      if (parts.length > 1) {
-        return parts.reduce<unknown>((acc, part) => (acc as Record<string, unknown>)?.[part], val);
-      }
-      return (val as Record<string, unknown>)[path];
+      return getPathValue(atom.peek());
     },
     subscribe(listener: Parameters<WritableAtom<T>['subscribe']>[0]) {
       return atom.subscribe(listener);
