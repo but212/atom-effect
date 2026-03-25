@@ -244,7 +244,6 @@ describe('DepSlotBuffer', () => {
       buf.add(new DependencyLink(deps[0]!, deps[0]!.version));
       buf.seal();
       expect(buf.isDirtyFast()).toBe(false);
-      expect(buf.captureVersionSnapshot()).not.toBe(0);
 
       // 2 items
       buf.add(new DependencyLink(deps[1]!, deps[1]!.version));
@@ -269,7 +268,6 @@ describe('DepSlotBuffer', () => {
       // Verify dirty detection in overflow
       deps[4]!.version++;
       expect(buf.isDirtyFast()).toBe(true);
-      expect(buf.captureVersionSnapshot()).not.toBe(0);
     });
 
     it('seal and isDirtyFast handle empty buffer gracefully', () => {
@@ -277,7 +275,6 @@ describe('DepSlotBuffer', () => {
       buf.seal();
       expect((buf as unknown as TestInternalDepSlotBuffer)._depsHash).toBe(0);
       expect(buf.isDirtyFast()).toBe(false);
-      expect(buf.captureVersionSnapshot()).toBe(0);
     });
 
     it('Sum hash handles multiple dependencies and is order-independent', () => {

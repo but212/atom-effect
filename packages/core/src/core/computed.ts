@@ -63,7 +63,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
   _deps = new DepSlotBuffer();
 
   // Async state
-  private _asyncStartAggregateVersion = 0;
+
   private _asyncRetryCount = 0;
   private _lastDriftEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
 
@@ -340,7 +340,6 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     // Notify pending
     this._notifySubscribers(undefined, undefined);
 
-    this._asyncStartAggregateVersion = this._captureVersionSnapshot();
     this._asyncRetryCount = 0;
     // Invalidate old promises
     this._promiseId = (this._promiseId + 1) % COMPUTED_CONFIG.MAX_PROMISE_ID;
@@ -350,7 +349,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
       (res) => {
         if (promiseId !== this._promiseId) return; // Stale
 
-        if (this._captureVersionSnapshot() !== this._asyncStartAggregateVersion) {
+        if (this._isDirty()) {
           // Reset retry counter when flush epoch changes — drifts across different
           // scheduler flushes are independent bursts, not a continuous failure streak.
           const epoch = currentFlushEpoch();
@@ -376,10 +375,6 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
         promiseId === this._promiseId &&
         this._handleError(err, ERROR_MESSAGES.COMPUTED_ASYNC_COMPUTATION_FAILED)
     );
-  }
-
-  private _captureVersionSnapshot(): number {
-    return this._deps.captureVersionSnapshot();
   }
 
   private _handleError(err: unknown, msg: string, throwErr = false): void {

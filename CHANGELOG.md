@@ -7,6 +7,7 @@
 #### Changed
 
 - **Performance**: Optimized `DepSlotBuffer`, `SlotBuffer`, and `ReactiveNode` hot-paths with `switch`-based dispatch and direct property access to leverage V8 jump tables and improve branch prediction.
+- **Performance**: Removed redundant DJB2-based `captureVersionSnapshot()` hashing. Async drift detection now leverages the more accurate, unified `_isDirty()` mechanism, eliminating extra hashing overhead and improving consistency with the reactive engine's state tracking.
 - **Performance**: Standardized all core reactive classes (`Atom`, `Computed`, `Effect`, `ReactiveNode`) to use explicit constructor-based field initialization for V8 hidden class stability (Monomorphism).
 - **Performance**: Optimized `ComputedAtom` and `Effect` dirty-checking with fast-path guards (`hasComputeds`) to skip O(N) dependency scans when only Atoms are involved.
 - **Performance**: Bypassed redundant `getAt`/`setAt` dispatch in the hottest core loops (dependency collection and update notification) for significant overhead reduction.
