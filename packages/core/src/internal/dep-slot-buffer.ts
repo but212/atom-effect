@@ -372,48 +372,6 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
     return hash !== this._depsHash;
   }
 
-  /**
-   * Captures a DJB2-based version snapshot for async drift detection.
-   */
-  captureVersionSnapshot(): number {
-    const count = this._count;
-    let hash = 0;
-
-    switch (count) {
-      case 0:
-        return 0;
-      case 1: {
-        hash = ((hash << 5) - hash + this._s0!.node.version) | 0;
-        break;
-      }
-      case 2: {
-        hash = ((hash << 5) - hash + this._s0!.node.version) | 0;
-        hash = ((hash << 5) - hash + this._s1!.node.version) | 0;
-        break;
-      }
-      case 3: {
-        hash = ((hash << 5) - hash + this._s0!.node.version) | 0;
-        hash = ((hash << 5) - hash + this._s1!.node.version) | 0;
-        hash = ((hash << 5) - hash + this._s2!.node.version) | 0;
-        break;
-      }
-      default: {
-        hash = ((hash << 5) - hash + this._s0!.node.version) | 0;
-        hash = ((hash << 5) - hash + this._s1!.node.version) | 0;
-        hash = ((hash << 5) - hash + this._s2!.node.version) | 0;
-        hash = ((hash << 5) - hash + this._s3!.node.version) | 0;
-
-        if (count > 4) {
-          const ov = this._overflow!;
-          for (let i = 0, len = ov.length; i < len; i++) {
-            hash = ((hash << 5) - hash + ov[i]!.node.version) | 0;
-          }
-        }
-      }
-    }
-    return hash;
-  }
-
   /** Unsubscribes from all links and resets the buffer. */
   disposeAll(): void {
     if (this._count > 0) {
