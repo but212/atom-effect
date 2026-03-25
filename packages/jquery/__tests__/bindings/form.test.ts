@@ -23,7 +23,6 @@ describe('Form Binding (atomForm)', () => {
       </form>
     `).appendTo(document.body);
 
-    // This method doesn't exist yet - TDD Phase 1
     $form.atomForm(user);
     await $.nextTick();
 

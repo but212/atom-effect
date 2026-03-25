@@ -2,7 +2,7 @@ import $ from 'jquery';
 import { describe, expect, it, vi } from 'vitest';
 import '@/index';
 
-describe('Async Binding Integration (TDD)', () => {
+describe('Async Binding Integration', () => {
   it('atomText: should automatically resolve Promise and update DOM', async () => {
     const $el = $('<div>');
     const promise = Promise.resolve('Hello Async');
