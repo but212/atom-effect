@@ -88,7 +88,8 @@ Reactivity systems are prone to memory leaks if subscriptions are not cleaned up
 
 - **DepSlotBuffer (Dependency Tracking)**: A specialized `SlotBuffer` for dependency links. It features:
   - **Mega-Node Optimization**: A hybrid O(1) `Map` fallback when dependencies exceed 32, ensuring performance even for extremely large graphs.
-  - **Fast Dirty Checking**: An efficient O(N) version hash check (`isDirtyFast`) using an additive hash of all dependency versions and IDs to quickly determine if a node *might* be dirty before performing a full structural walk.
+  - **O(1) Free-Index Slot Reuse**: Uses a stack-based index reuse strategy to reclaim nulled slots in $O(1)$ time, eliminating linear scans during subscriber/dependency churn.
+  - **Fast Dirty Checking**: An efficient version hash check (`isDirtyFast`) using an unrolled additive hash of all dependency versions. The logic is optimized for monochromatic V8 hidden classes and avoids branching overhead.
   - **Safe Retrieval**: Implements `claimExisting` to reuse existing dependency links during re-evaluation, minimizing churn.
 - **Computed Optimizations**:
   - **Hot-path Check**: Caches the index of the last dirty dependency (`_hotIndex`) to provide $O(1)$ dirty detection for recurring state changes (e.g., animations, scrolls).

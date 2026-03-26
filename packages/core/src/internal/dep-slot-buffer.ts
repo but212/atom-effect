@@ -190,12 +190,6 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
     return true;
   }
 
-  private _swapInline(idx: number, trackIndex: number, link: DependencyLink): void {
-    const occupant = this.getAt(trackIndex);
-    this.setAt(trackIndex, link);
-    this.setAt(idx, occupant);
-  }
-
   private _swapGeneral(idx: number, trackIndex: number, link: DependencyLink): void {
     if (idx === trackIndex) return;
 
@@ -222,7 +216,21 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
     if (trackIndex < count) {
       const occupant = this.getAt(trackIndex);
       if (occupant != null) {
-        this.add(occupant);
+        // Direct overflow append avoids inline gap-scan overhead in add()
+        // since we know all inline slots are occupied when trackIndex < count.
+        let ov = this._overflow;
+        if (!ov) {
+          ov = [occupant];
+          this._overflow = ov;
+        } else {
+          const free = this._freeIndices;
+          if (free !== null && free.length > 0) {
+            ov[free.pop()!] = occupant;
+          } else {
+            ov.push(occupant);
+          }
+        }
+        this._count++;
         if (this._map !== null && occupant.unsub) {
           this._map.set(occupant.node, this._count - 1);
         }
@@ -265,110 +273,89 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
   /**
    * Seals the buffer after a tracking pass completes.
    * Computes the additive snapshot hash of all dependency versions.
+   *
+   * Uses link.version (snapshot at tracking time) — NOT node.version.
    */
   seal(): void {
     const count = this._count;
+    if (count === 0) {
+      this._depsHash = 0;
+      return;
+    }
+
     const vbits = BITPACK.VERSION_BITS;
     let hash = 0;
 
-    switch (count) {
-      case 0:
-        this._depsHash = 0;
-        return;
-      case 1: {
-        const l0 = this._s0!;
-        hash = (hash + (l0.version << vbits) + l0.node.id) | 0;
-        break;
-      }
-      case 2: {
-        const l0 = this._s0!;
-        const l1 = this._s1!;
-        hash = (hash + (l0.version << vbits) + l0.node.id) | 0;
-        hash = (hash + (l1.version << vbits) + l1.node.id) | 0;
-        break;
-      }
-      case 3: {
-        const l0 = this._s0!;
-        const l1 = this._s1!;
-        const l2 = this._s2!;
-        hash = (hash + (l0.version << vbits) + l0.node.id) | 0;
-        hash = (hash + (l1.version << vbits) + l1.node.id) | 0;
-        hash = (hash + (l2.version << vbits) + l2.node.id) | 0;
-        break;
-      }
-      default: {
-        const l0 = this._s0!;
-        const l1 = this._s1!;
-        const l2 = this._s2!;
-        const l3 = this._s3!;
-        hash = (hash + (l0.version << vbits) + l0.node.id) | 0;
-        hash = (hash + (l1.version << vbits) + l1.node.id) | 0;
-        hash = (hash + (l2.version << vbits) + l2.node.id) | 0;
-        hash = (hash + (l3.version << vbits) + l3.node.id) | 0;
+    // Inline slots (unrolled)
+    if (count >= 1) {
+      const l = this._s0!;
+      hash = (hash + (l.version << vbits) + l.node.id) | 0;
+    }
+    if (count >= 2) {
+      const l = this._s1!;
+      hash = (hash + (l.version << vbits) + l.node.id) | 0;
+    }
+    if (count >= 3) {
+      const l = this._s2!;
+      hash = (hash + (l.version << vbits) + l.node.id) | 0;
+    }
+    if (count >= 4) {
+      const l = this._s3!;
+      hash = (hash + (l.version << vbits) + l.node.id) | 0;
+    }
 
-        if (count > 4) {
-          const ov = this._overflow!;
-          for (let i = 0, len = ov.length; i < len; i++) {
-            const l = ov[i]!;
-            hash = (hash + (l.version << vbits) + l.node.id) | 0;
-          }
-        }
+    // Overflow
+    if (count > 4) {
+      const ov = this._overflow!;
+      for (let i = 0, len = ov.length; i < len; i++) {
+        const l = ov[i]!;
+        hash = (hash + (l.version << vbits) + l.node.id) | 0;
       }
     }
+
     this._depsHash = hash;
   }
 
   /**
    * Efficient O(N) fast-path dirty check using the sealed version hash.
+   *
+   * Uses node.version (current live version) to detect drift from
+   * the sealed snapshot.
    */
   isDirtyFast(): boolean {
     const count = this._count;
+    if (count === 0) return false;
+
     const vbits = BITPACK.VERSION_BITS;
     let hash = 0;
 
-    switch (count) {
-      case 0:
-        return false;
-      case 1: {
-        const n = this._s0!.node;
-        hash = (hash + (n.version << vbits) + n.id) | 0;
-        break;
-      }
-      case 2: {
-        const n0 = this._s0!.node;
-        const n1 = this._s1!.node;
-        hash = (hash + (n0.version << vbits) + n0.id) | 0;
-        hash = (hash + (n1.version << vbits) + n1.id) | 0;
-        break;
-      }
-      case 3: {
-        const n0 = this._s0!.node;
-        const n1 = this._s1!.node;
-        const n2 = this._s2!.node;
-        hash = (hash + (n0.version << vbits) + n0.id) | 0;
-        hash = (hash + (n1.version << vbits) + n1.id) | 0;
-        hash = (hash + (n2.version << vbits) + n2.id) | 0;
-        break;
-      }
-      default: {
-        const n0 = this._s0!.node;
-        const n1 = this._s1!.node;
-        const n2 = this._s2!.node;
-        const n3 = this._s3!.node;
-        hash = (hash + (n0.version << vbits) + n0.id) | 0;
-        hash = (hash + (n1.version << vbits) + n1.id) | 0;
-        hash = (hash + (n2.version << vbits) + n2.id) | 0;
-        hash = (hash + (n3.version << vbits) + n3.id) | 0;
+    // Inline slots (unrolled)
+    if (count >= 1) {
+      const n = this._s0!.node;
+      hash = (hash + (n.version << vbits) + n.id) | 0;
+    }
+    if (count >= 2) {
+      const n = this._s1!.node;
+      hash = (hash + (n.version << vbits) + n.id) | 0;
+    }
+    if (count >= 3) {
+      const n = this._s2!.node;
+      hash = (hash + (n.version << vbits) + n.id) | 0;
+    }
+    if (count >= 4) {
+      const n = this._s3!.node;
+      hash = (hash + (n.version << vbits) + n.id) | 0;
+    }
 
-        if (count > 4) {
-          const ov = this._overflow!;
-          for (let i = 0, len = ov.length; i < len; i++) {
-            const n = ov[i]!.node;
-            hash = (hash + (n.version << vbits) + n.id) | 0;
-          }
-        }
+    // Overflow
+    if (count > 4) {
+      const ov = this._overflow!;
+      for (let i = 0, len = ov.length; i < len; i++) {
+        const n = ov[i]!.node;
+        hash = (hash + (n.version << vbits) + n.id) | 0;
       }
     }
+
     return hash !== this._depsHash;
   }
 
