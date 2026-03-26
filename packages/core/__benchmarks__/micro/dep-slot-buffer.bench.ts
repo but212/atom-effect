@@ -4,6 +4,8 @@ import { DepSlotBuffer } from '@/internal/dep-slot-buffer';
 import type { Dependency } from '@/types';
 import { microBenchOptions } from '../utils/setup.js';
 
+const BATCH_SIZE = 1000;
+
 // Mock dependency for benchmarking
 class MockDep implements Dependency {
   _lastSeenEpoch = 0;
@@ -27,20 +29,24 @@ describe('DepSlotBuffer: Claiming (Cache Hits)', () => {
   deps16.forEach((d) => buf16.insertNew(buf16.size, new DependencyLink(d, d.version)));
 
   bench(
-    'claimExisting 4 items (Inline hit)',
+    'claimExisting 4 items (Inline hit) x1000',
     () => {
-      for (let i = 0; i < 4; i++) {
-        buf4.claimExisting(deps4[i]!, i);
+      for (let i = 0; i < BATCH_SIZE; i++) {
+        for (let j = 0; j < 4; j++) {
+          buf4.claimExisting(deps4[j]!, j);
+        }
       }
     },
     microBenchOptions
   );
 
   bench(
-    'claimExisting 16 items (Overflow hit)',
+    'claimExisting 16 items (Overflow hit) x1000',
     () => {
-      for (let i = 0; i < 16; i++) {
-        buf16.claimExisting(deps16[i]!, i);
+      for (let i = 0; i < BATCH_SIZE; i++) {
+        for (let j = 0; j < 16; j++) {
+          buf16.claimExisting(deps16[j]!, j);
+        }
       }
     },
     microBenchOptions
@@ -59,19 +65,23 @@ describe('DepSlotBuffer: Hashing (seal vs isDirty)', () => {
   buf16.seal();
 
   bench(
-    'seal() + isDirtyFast() - 4 items',
+    'seal() + isDirtyFast() - 4 items x1000',
     () => {
-      buf4.seal();
-      buf4.isDirtyFast();
+      for (let i = 0; i < BATCH_SIZE; i++) {
+        buf4.seal();
+        buf4.isDirtyFast();
+      }
     },
     microBenchOptions
   );
 
   bench(
-    'seal() + isDirtyFast() - 16 items',
+    'seal() + isDirtyFast() - 16 items x1000',
     () => {
-      buf16.seal();
-      buf16.isDirtyFast();
+      for (let i = 0; i < BATCH_SIZE; i++) {
+        buf16.seal();
+        buf16.isDirtyFast();
+      }
     },
     microBenchOptions
   );
@@ -83,10 +93,12 @@ describe('DepSlotBuffer: Mega-node Threshold (Map Fallback)', () => {
   deps64.forEach((d) => buf64.insertNew(buf64.size, new DependencyLink(d, d.version)));
 
   bench(
-    'claimExisting 64 items (Map fallback)',
+    'claimExisting 64 items (Map fallback) x1000',
     () => {
-      for (let i = 0; i < 64; i++) {
-        buf64.claimExisting(deps64[i]!, i);
+      for (let i = 0; i < BATCH_SIZE; i++) {
+        for (let j = 0; j < 64; j++) {
+          buf64.claimExisting(deps64[j]!, j);
+        }
       }
     },
     microBenchOptions
@@ -95,14 +107,17 @@ describe('DepSlotBuffer: Mega-node Threshold (Map Fallback)', () => {
 
 describe('DepSlotBuffer: Truncation', () => {
   bench(
-    'truncateFrom(0) with 16 items',
+    'truncateFrom(0) with 16 items x1000',
     () => {
-      const buf = new DepSlotBuffer();
-      for (let i = 0; i < 16; i++) {
-        const d = new MockDep(i, 1);
-        buf.insertNew(i, new DependencyLink(d, d.version));
+      for (let i = 0; i < BATCH_SIZE; i++) {
+        const buf = new DepSlotBuffer();
+        for (let j = 0; j < 16; j++) {
+          const d = new MockDep(j, 1);
+          buf.insertNew(j, new DependencyLink(d, d.version));
+        }
+        buf.truncateFrom(0);
+        void buf;
       }
-      buf.truncateFrom(0);
     },
     microBenchOptions
   );
