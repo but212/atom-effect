@@ -34,6 +34,21 @@ export function setDeepValue(obj: unknown, keys: string[], index: number, value:
 }
 
 /**
+ * Helper to retrieve a nested value from an object/array at a given path.
+ * 
+ * @param source The source object.
+ * @param parts Array of path parts.
+ * @returns The value at the path or undefined if not found.
+ */
+export function getPathValue(source: unknown, parts: string[]): unknown {
+  let result = source;
+  for (let i = 0, len = parts.length; i < len && result != null; i++) {
+    result = (result as Record<string, unknown>)[parts[i]!];
+  }
+  return result;
+}
+
+/**
  * Creates a two-way "lens" for a specific property path on an object-based atom.
  * Optimized for performance using structural sharing and equality guards.
  *
@@ -50,17 +65,9 @@ export function atomLens<T extends object, U = unknown>(
 ): WritableAtom<U> {
   const parts = path.includes('.') ? path.split('.') : [path];
 
-  const getPathValue = (source: unknown) => {
-    let result = source;
-    for (let i = 0, len = parts.length; i < len && result != null; i++) {
-      result = (result as Record<string, unknown>)[parts[i]!];
-    }
-    return result;
-  };
-
   return {
     get value() {
-      return getPathValue(atom.value) as U;
+      return getPathValue(atom.value, parts) as U;
     },
     set value(newVal: U) {
       const current = atom.peek();
@@ -72,12 +79,12 @@ export function atomLens<T extends object, U = unknown>(
       }
     },
     peek() {
-      return getPathValue(atom.peek()) as U;
+      return getPathValue(atom.peek(), parts) as U;
     },
     subscribe(listener: (newValue: U, oldValue: U) => void) {
       return atom.subscribe((newParent, oldParent) => {
-        const newValue = getPathValue(newParent) as U;
-        const oldValue = getPathValue(oldParent) as U;
+        const newValue = getPathValue(newParent, parts) as U;
+        const oldValue = getPathValue(oldParent, parts) as U;
         if (!Object.is(newValue, oldValue)) {
           listener(newValue, oldValue);
         }

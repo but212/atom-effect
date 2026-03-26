@@ -339,4 +339,9 @@ This "Structural Sharing" approach ensures that:
 
 ### 11.2 Integration with `atomForm`
 
-`atomForm` leverages lenses internally to bind individual form fields to deep state paths. This allows a single large state atom to drive a complex form without requiring the developer to manually create hundreds of computed atoms or sub-atoms.
+`atomForm` leverages leaf-level atoms and a centralized dispatcher for O(1) performance on large forms:
+
+1. **Field-Level Atoms**: Instead of binding each input directly to a lens of the root atom (which would create N effects subscribing to the root), `atomForm` creates individual "leaf atoms" for each field.
+2. **Centralized Dispatcher**: A single `effect` watches the root atom and dispatches updates only to the leaf atoms whose values have actually changed. This eliminates the O(N) effect fan-out overhead.
+3. **Local Sync**: Each leaf atom has a dedicated effect to sync its local changes back to the root atom. Since this effect only tracks the leaf atom, typing in one field does not wake up or re-evaluate other fields.
+4. **Deep Paths**: Supports dot-notation in `name` attributes via the shared `getPathValue` and `setDeepValue` utilities.

@@ -11,6 +11,8 @@
   - Implements **Structural Sharing** to minimize re-renders and memory allocations.
   - Automatically compatible with all jQuery bindings like `atomVal` and `atomForm`.
   - Optimized with equality guards to skip redundant parent atom updates.
+- **Performance**: Optimized `$.fn.atomForm` for O(1) performance on large forms. Replaced O(N) effect fan-out with a centralized dispatcher and leaf-level atoms to eliminate redundant effect executions.
+- **Internal**: Extracted `getPathValue` utility to `core/lens` for unified and efficient path traversal across lenses and form bindings.
 
 ## [0.25.0]
 
