@@ -27,7 +27,12 @@ export function setDeepValue(obj: unknown, keys: string[], index: number, value:
 
   if (Array.isArray(currentLevel)) {
     const newArray = [...currentLevel];
-    Object.assign(newArray, { [key]: newValue });
+    const idx = Number.parseInt(key, 10);
+    if (!Number.isNaN(idx)) {
+      newArray[idx] = newValue;
+    } else {
+      ((newArray as unknown) as Record<string, unknown>)[key] = newValue;
+    }
     return newArray;
   }
   return { ...currentLevel, [key]: newValue };
