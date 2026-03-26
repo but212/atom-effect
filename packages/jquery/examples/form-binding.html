@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Form Binding | atom-effect-jquery</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap"
+      rel="stylesheet"
+    />
+    <!-- jQuery First -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <!-- atom-effect-jquery -->
+    <script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.25.0"></script>
+    <link rel="stylesheet" href="./styles.css" />
+    <style>
+      /* Page-specific overrides and additions */
+      .grid-main {
+        grid-column: 1 / 8;
+      }
+      .grid-side {
+        grid-column: 8 / 13;
+        position: sticky;
+        top: 40px;
+        height: min-content;
+      }
+
+      .form-group {
+        margin-bottom: 24px;
+      }
+
+      .form-label {
+        display: block;
+        font-weight: 900;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 1px;
+        margin-bottom: 10px;
+        color: #666;
+      }
+
+      input[type="text"],
+      input[type="number"],
+      input[type="email"],
+      select,
+      textarea {
+        width: 100%;
+        padding: 15px;
+        border: 3px solid var(--black);
+        font-family: inherit;
+        font-size: 1rem;
+        font-weight: 700;
+        outline: none;
+        transition:
+          transform 0.2s,
+          box-shadow 0.2s;
+      }
+
+      input:focus,
+      select:focus,
+      textarea:focus {
+        transform: translate(-2px, -2px);
+        box-shadow: 4px 4px 0px var(--primary-blue);
+      }
+
+      .checkbox-group,
+      .radio-group {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-top: 10px;
+      }
+
+      .checkbox-item,
+      .radio-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        cursor: pointer;
+        font-weight: 700;
+      }
+
+      input[type="checkbox"],
+      input[type="radio"] {
+        width: 20px;
+        height: 20px;
+        accent-color: var(--primary-blue);
+        cursor: pointer;
+      }
+
+      .json-preview {
+        background: #1e1e1e;
+        color: #dcdcdc;
+        padding: 20px;
+        border: 3px solid var(--black);
+        font-family: var(--font-mono);
+        font-size: 0.9rem;
+        line-height: 1.4;
+        white-space: pre-wrap;
+        box-shadow: 8px 8px 0px var(--black);
+      }
+
+      .feature-list {
+        margin-top: 30px;
+        padding-left: 20px;
+        list-style: square;
+        font-weight: 700;
+        line-height: 1.6;
+      }
+
+      .hero-section {
+        grid-column: 1 / -1;
+        margin-bottom: 40px;
+      }
+
+      .hero-title {
+        font-size: 5rem;
+        font-weight: 900;
+        letter-spacing: -4px;
+        line-height: 0.85;
+        text-transform: uppercase;
+        margin-bottom: 30px;
+      }
+
+      .hero-description {
+        font-size: 1.25rem;
+        font-weight: 700;
+        max-width: 600px;
+        line-height: 1.4;
+      }
+
+      @media (max-width: 900px) {
+        .grid-main,
+        .grid-side {
+          grid-column: 1 / -1;
+        }
+        .grid-side {
+          position: static;
+        }
+        .hero-title {
+          font-size: 3.5rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <div class="logo">FORM<br />BINDING<span>.</span></div>
+        <div class="badge">atom-effect-jquery</div>
+      </header>
+
+      <main>
+        <section class="hero-section">
+          <h1 class="hero-title">Recursive<br />Two-Way Sync.</h1>
+          <p class="hero-description">
+            Bind an entire form to a single object-based atom. Supports deep
+            nested objects, structural sharing for performance, and dynamic form
+            manipulation.
+          </p>
+        </section>
+
+        <!-- Form Section -->
+        <div class="grid-main">
+          <div class="card card-blue">
+            <div class="card-title">
+              <span>01 / Configuration</span>
+              <div class="status status-resolved">Active</div>
+            </div>
+
+            <form id="user-form">
+              <!-- Submission Status Box -->
+              <div
+                id="submission-status"
+                style="margin-bottom: 24px; display: none"
+              >
+                <div
+                  class="card"
+                  style="
+                    padding: 15px;
+                    box-shadow: 4px 4px 0px var(--black);
+                    margin-bottom: 0;
+                  "
+                >
+                  <div id="status-content"></div>
+                </div>
+              </div>
+
+              <div
+                style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px"
+              >
+                <div class="form-group">
+                  <label class="form-label">First Name</label>
+                  <input type="text" name="user.firstName" placeholder="Jean" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Last Name</label>
+                  <input
+                    type="text"
+                    name="user.lastName"
+                    placeholder="Gravity"
+                  />
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Email Address</label>
+                <input
+                  type="email"
+                  name="user.email"
+                  placeholder="jean@example.com"
+                />
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Age</label>
+                <input type="number" name="user.age" min="0" max="120" />
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Role</label>
+                <select name="user.role">
+                  <option value="user">Standard User</option>
+                  <option value="admin">Administrator</option>
+                  <option value="editor">Editor</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Bio</label>
+                <textarea
+                  name="user.bio"
+                  rows="4"
+                  placeholder="Tell us about yourself..."
+                ></textarea>
+              </div>
+
+              <hr
+                style="
+                  margin: 40px 0;
+                  border: none;
+                  border-top: 3px solid var(--black);
+                "
+              />
+
+              <div
+                style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px"
+              >
+                <div class="form-group">
+                  <label class="form-label">Theme Preference</label>
+                  <div class="radio-group">
+                    <label class="radio-item">
+                      <input
+                        type="radio"
+                        name="preferences.theme"
+                        value="light"
+                      />
+                      Light
+                    </label>
+                    <label class="radio-item">
+                      <input
+                        type="radio"
+                        name="preferences.theme"
+                        value="dark"
+                      />
+                      Dark
+                    </label>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Newsletter</label>
+                  <div class="checkbox-group">
+                    <label class="checkbox-item">
+                      <input type="checkbox" name="preferences.newsletter" />
+                      Subscribe for updates
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div id="dynamic-container" style="margin-top: 20px">
+                <!-- Dynamic fields will appear here -->
+              </div>
+
+              <div style="display: flex; gap: 15px; margin-top: 40px">
+                <button
+                  type="submit"
+                  id="submitBtn"
+                  class="btn btn-success"
+                  style="flex: 2"
+                >
+                  Save Profiles
+                </button>
+                <button type="button" id="addField" class="btn" style="flex: 1">
+                  + Field
+                </button>
+                <button
+                  type="button"
+                  id="resetForm"
+                  class="btn"
+                  style="flex: 1"
+                >
+                  Reset
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <!-- Preview Section -->
+        <div class="grid-side">
+          <div class="card card-yellow">
+            <div class="card-title">02 / Live State</div>
+            <pre id="json-preview" class="json-preview">{}</pre>
+
+            <ul class="feature-list">
+              <li>Lens: Path-based binding</li>
+              <li>Structural Sharing</li>
+              <li>Auto-Mutation Tracking</li>
+              <li><strong>Async Integration:</strong> Loading/Error/Success</li>
+            </ul>
+          </div>
+        </div>
+      </main>
+
+      <footer>
+        <div class="footer-brand">
+          <div>ATOM EFFECT / FORM BINDING</div>
+        </div>
+        <address style="font-style: normal">
+          CORE REACTIVE ENGINE<br />
+          © 2026 Jeong Il Suk
+        </address>
+      </footer>
+    </div>
+
+    <script>
+      // 1. Initial State Definition
+      const initialState = {
+        user: {
+          firstName: "Jean",
+          lastName: "Gravity",
+          email: "jean.gravity@example.com",
+          age: 28,
+          role: "admin",
+          bio: "Building the future of reactive jQuery interfaces.",
+        },
+        preferences: {
+          theme: "dark",
+          newsletter: true,
+        },
+        extra: {},
+      };
+
+      // 2. State & Triggers
+      const formState = $.atom(JSON.parse(JSON.stringify(initialState)));
+      const submitTrigger = $.atom(0);
+
+      // 3. Async Submission Logic (Fake API)
+      const submission = $.computed(
+        async () => {
+          const id = submitTrigger.value;
+          if (id === 0) return null; // Initial state
+
+          // Simulate Network Delay
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+
+          // Randomly simulate error for demonstration
+          if (Math.random() > 0.7) {
+            throw new Error("DATABASE_TIMEOUT: Failed to persist changes.");
+          }
+
+          return { success: true, timestamp: new Date().toISOString() };
+        },
+        { defaultValue: null },
+      );
+
+      // 4. Bind the Entire Form
+      $("#user-form").atomForm(formState);
+
+      // 5. Reactive UI: Live Preview
+      $.effect(() => {
+        $("#json-preview").text(JSON.stringify(formState.value, null, 2));
+      });
+
+      // 6. Reactive UI: Submission Status
+      $.effect(() => {
+        const $status = $("#submission-status");
+        const $content = $("#status-content");
+        const $btn = $("#submitBtn");
+
+        const state = submission.state;
+        const error = submission.lastError;
+
+        if (state === "idle") {
+          $status.hide();
+          $btn.prop("disabled", false).html("Save Profiles");
+          return;
+        }
+
+        $status.show();
+
+        if (state === "pending") {
+          $btn
+            .prop("disabled", true)
+            .html('<div class="spinner"></div> SAVING...');
+          $content.html(`
+            <div class="status status-pending">SYNCRONIZING WITH CLOUD...</div>
+          `);
+        } else if (state === "rejected") {
+          $btn.prop("disabled", false).html("Retry Save");
+          $content.html(`
+            <div class="status status-rejected" style="color:var(--primary-red)">ERROR: ${error.message}</div>
+          `);
+        } else if (state === "resolved") {
+          const result = submission.value;
+          if (!result) {
+            $status.hide();
+            return;
+          }
+          $btn.prop("disabled", false).html("Save Profiles");
+          $content.html(`
+            <div class="status status-resolved">SUCCESS: Profile updated at ${result.timestamp.split("T")[1].split(".")[0]}</div>
+          `);
+          // Auto-hide success message after 3 seconds
+          setTimeout(() => {
+            if (submission.state === "resolved") submitTrigger.value = 0;
+          }, 3000);
+        }
+      });
+
+      // 7. Event Handlers
+      $("#user-form").on("submit", (e) => {
+        e.preventDefault();
+        submitTrigger.value++;
+      });
+
+      let customFieldCount = 0;
+      $("#addField").on("click", () => {
+        customFieldCount++;
+        const name = `extra.field${customFieldCount}`;
+        $("#dynamic-container").append(`
+          <div class="form-group dynamic-field">
+            <label class="form-label">Custom Field #${customFieldCount} (${name})</label>
+            <input type="text" name="${name}" placeholder="Type something..." />
+          </div>
+        `);
+      });
+
+      $("#resetForm").on("click", () => {
+        formState.value = JSON.parse(JSON.stringify(initialState));
+        $("#dynamic-container").empty();
+        submitTrigger.value = 0;
+        customFieldCount = 0;
+      });
+    </script>
+  </body>
+</html>
