@@ -12,14 +12,21 @@ import type {
 // ============================================================================
 
 /**
- * Recursive type to traverse property paths and extract the value type.
+ * Helper to convert a numeric string to a number type, otherwise returns the string.
+ * Used for array indexing in paths.
+ */
+type StringKeyToNumber<S extends string> = S extends `${infer N extends number}` ? N : S;
+
+/**
+ * Recursive type to infer the value type at a given dot-separated path.
+ * Supports numeric indices for array paths.
  */
 export type DeepPath<T, P extends string> = P extends `${infer K}.${infer Rest}`
-  ? K extends keyof T
-    ? DeepPath<T[K], Rest>
+  ? StringKeyToNumber<K> extends keyof T
+    ? DeepPath<T[StringKeyToNumber<K> & keyof T], Rest>
     : unknown
-  : P extends keyof T
-    ? T[P]
+  : StringKeyToNumber<P> extends keyof T
+    ? T[StringKeyToNumber<P> & keyof T]
     : unknown;
 
 /**

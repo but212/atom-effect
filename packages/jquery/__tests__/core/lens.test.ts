@@ -223,4 +223,20 @@ describe('$.atomLens', () => {
     await $.nextTick();
     expect(callCount).toBe(1); // Should not increase
   });
+
+  it('should return its own subscriber count', () => {
+    const store = $.atom({ name: 'Alice' });
+    const lens = $.atomLens(store, 'name');
+
+    expect(lens.subscriberCount()).toBe(0);
+    expect(store.subscriberCount()).toBe(0); // Lens doesn't subscribe until it has its own subscribers
+
+    const unsub = lens.subscribe(() => {});
+    expect(lens.subscriberCount()).toBe(1);
+    expect(store.subscriberCount()).toBe(1); // Now lens is subscribed to parent
+
+    unsub();
+    expect(lens.subscriberCount()).toBe(0);
+    expect(store.subscriberCount()).toBe(0); // Lens unsubscribed from parent
+  });
 });

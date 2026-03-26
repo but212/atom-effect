@@ -105,7 +105,7 @@ export function atomLens<T extends object, P extends string>(
       };
     },
     subscriberCount() {
-      return atom.subscriberCount();
+      return unsubscribers.size;
     },
     dispose,
     [Symbol.dispose]: dispose,
