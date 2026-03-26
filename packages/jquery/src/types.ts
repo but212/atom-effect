@@ -310,6 +310,7 @@ declare global {
     isComputed(v: unknown): boolean;
     isReactive(v: unknown): boolean;
     nextTick(): Promise<void>;
+    atomLens<T extends object, U = unknown>(atom: WritableAtom<T>, path: string): WritableAtom<U>;
     route(config: RouteConfig): Router;
     atomFetch<T>(
       urlOrFn: string | (() => string),

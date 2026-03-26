@@ -322,3 +322,21 @@ All internal state records are initialized with a fixed set of fields. By avoidi
 ### 10.3 Flat Buffer Reconciliation
 
 By using `Uint8Array` and `Int32Array` for diffing state tracking, `atomList` eliminates the "GC hum" commonly associated with virtual DOM diffing in large lists. The reconciliation state is stored in a continuous memory block, maximizing CPU cache efficiency and minimizing allocation-time overhead.
+
+## 11. Lenses & Structural Sharing
+
+`$.atomLens` (`core/lens.ts`) provides a mechanism for fine-grained reactivity over monolithic state objects. It creates a "virtual atom" that points to a specific path within a parent atom.
+
+### 11.1 Structural Sharing
+
+When a value is updated through a lens, the lens implementation uses a recursive helper (`setDeepValue`) to create a new object tree. It only clones the objects along the path to the changed property, while preserving references to all other parts of the object tree.
+
+This "Structural Sharing" approach ensures that:
+
+1. **Minimal Re-renders**: Unrelated parts of the state tree remain reference-equal (`===`), so effects watching those parts do not re-trigger.
+2. **Memory Efficiency**: Avoids deep cloning the entire state object on every small change.
+3. **Equality Guards**: If the new value is identical to the current value (via `Object.is`), the parent atom is not updated at all, preventing unnecessary reactive propagation.
+
+### 11.2 Integration with `atomForm`
+
+`atomForm` leverages lenses internally to bind individual form fields to deep state paths. This allows a single large state atom to drive a complex form without requiring the developer to manually create hundreds of computed atoms or sub-atoms.

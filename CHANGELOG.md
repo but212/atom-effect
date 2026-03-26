@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased]
+
+### jQuery
+
+#### Added
+
+- **API**: `$.atomLens(atom, path)`: Creates a two-way reactive "lens" for a specific property path on an object-based atom.
+  - Supports deep nested paths (e.g., `$.atomLens(user, 'settings.notifications.email')`).
+  - Implements **Structural Sharing** to minimize re-renders and memory allocations.
+  - Automatically compatible with all jQuery bindings like `atomVal` and `atomForm`.
+  - Optimized with equality guards to skip redundant parent atom updates.
+
 ## [0.25.0]
 
 ### jQuery

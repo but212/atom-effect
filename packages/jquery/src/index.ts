@@ -80,10 +80,7 @@ export {
 // here for consumers who manage initialisation themselves (e.g. custom roots,
 // shadow DOMs, or environments where the automatic call is not appropriate).
 export { disablejQueryOverrides, enablejQueryOverrides } from '@/core/jquery-patch';
-
-// nextTick is registered on $ via namespace.ts and exported here so ESM
-// consumers can import it without touching $.
-// isReactive is defined in utils.ts and also registered on $ via namespace.ts.
+export { atomLens } from '@/core/lens';
 export { nextTick } from '@/core/namespace';
 export { isReactive } from '@/utils';
 
