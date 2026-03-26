@@ -6,13 +6,29 @@ describe('First-class Asynchronous Objects (AEJ)', () => {
   let $fixture: JQuery;
 
   beforeEach(() => {
+    vi.useFakeTimers();
     $fixture = $('<div id="fixture"></div>').appendTo('body');
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     $fixture.remove();
     vi.restoreAllMocks();
   });
+
+  /**
+   * Robustly flushes all pending reactive effects and microtasks.
+   * Advances fake timers by 0ms multiple times to trigger $.nextTick's
+   * macrotask-based scheduler without advancing real-time simulations
+   * (like network delays) unless explicitly requested via vi.runAllTimers().
+   */
+  async function flushEffects() {
+    for (let i = 0; i < 2; i++) {
+      const p = $.nextTick();
+      vi.advanceTimersByTime(0);
+      await p;
+    }
+  }
 
   describe('Scenario 1: Temporal Awareness (Metadata Binding)', () => {
     it('should react to isPending and hasError state in atomBind', async () => {
@@ -44,15 +60,14 @@ describe('First-class Asynchronous Objects (AEJ)', () => {
         .atomText(() => `에러: ${searchResult.errors?.[0]?.message}`);
 
       // Initial state: Pending
-      await $.nextTick();
+      await flushEffects();
       expect($('#resultBox').hasClass('is-loading')).toBe(true);
       expect($('#resultBox').hasClass('is-error')).toBe(false);
       expect($('#errorMessage').is(':visible')).toBe(false);
 
       // Resolve state: Not Pending
       resolveAjax([{ name: 'Item 1' }]);
-      await $.nextTick();
-      await $.nextTick();
+      await flushEffects();
       expect($('#resultBox').hasClass('is-loading')).toBe(false);
       expect($('#resultBox').hasClass('is-error')).toBe(false);
       expect($('#errorMessage').is(':visible')).toBe(false);
@@ -69,11 +84,9 @@ describe('First-class Asynchronous Objects (AEJ)', () => {
         .atomShow(() => searchResult.hasError)
         .atomText(() => `에러: ${searchResult.errors?.[0]?.message}`);
 
-      await $.nextTick();
-      await $.nextTick();
-      await $.nextTick();
-      await $.nextTick(); // Wait for one more tick just in case
-      await new Promise((r) => setTimeout(r, 10)); // Brief delay for any async settling
+      // Wait for all async operations to settle
+      vi.runAllTimers();
+      await flushEffects();
 
       expect($('#errorMessage').text()).toContain('Network Failure');
       expect($('#errorMessage').css('display')).not.toBe('none');
@@ -109,38 +122,33 @@ describe('First-class Asynchronous Objects (AEJ)', () => {
       });
 
       // Lazy atomFetch triggers ajax when atomList reads its value.
-      await $.nextTick();
-      await $.nextTick();
+      await flushEffects();
       vi.clearAllMocks();
       abortSpies.length = 0;
 
       // 1. First trigger
       keyword.value = 'a';
-      await $.nextTick(); // Wait for effect to trigger keyword read
-      await $.nextTick(); // Wait for atomFetch to trigger ajax
+      await flushEffects();
       expect($.ajax).toHaveBeenCalledTimes(1);
       expect(abortSpies.length).toBe(1);
 
       // 2. Rapid second trigger
       keyword.value = 'ab';
-      await $.nextTick();
-      await $.nextTick();
+      await flushEffects();
       expect($.ajax).toHaveBeenCalledTimes(2);
       expect(abortSpies.length).toBe(2);
       expect(abortSpies[0]).toHaveBeenCalled(); // Previous request should be aborted
 
       // 3. Final third trigger
       keyword.value = 'abc';
-      await $.nextTick();
-      await $.nextTick();
+      await flushEffects();
       expect($.ajax).toHaveBeenCalledTimes(3);
       expect(abortSpies.length).toBe(3);
       expect(abortSpies[1]).toHaveBeenCalled(); // Previous request should be aborted
 
       // Wait for the final request to resolve
-      await new Promise((r) => setTimeout(r, 100));
-      await $.nextTick();
-      await $.nextTick();
+      vi.runAllTimers();
+      await flushEffects();
 
       expect($('#resultList li').length).toBe(1);
       expect($('#resultList li').text()).toBe('Result for /api/search?q=abc');
@@ -156,7 +164,7 @@ describe('First-class Asynchronous Objects (AEJ)', () => {
       expect($('#searchInput').val()).toBe('initial');
 
       keyword.value = 'updated';
-      await $.nextTick();
+      await flushEffects();
       expect($('#searchInput').val()).toBe('updated');
 
       // Note: atomVal is two-way for writeable atoms. atomFetch is Readonly, so it won't be two-way.
@@ -180,8 +188,7 @@ describe('First-class Asynchronous Objects (AEJ)', () => {
         render: (item: { name: string }) => `<li>${item.name}</li>`,
       });
 
-      await $.nextTick();
-      await $.nextTick();
+      await flushEffects();
       expect($('#asyncList li').text()).toBe('Async');
     });
   });
