@@ -80,7 +80,7 @@ export {
 // here for consumers who manage initialisation themselves (e.g. custom roots,
 // shadow DOMs, or environments where the automatic call is not appropriate).
 export { disablejQueryOverrides, enablejQueryOverrides } from '@/core/jquery-patch';
-export { atomLens } from '@/core/lens';
+export { atomLens, composeLens } from '@/core/lens';
 export { nextTick } from '@/core/namespace';
 export { isReactive } from '@/utils';
 
@@ -103,6 +103,7 @@ export type {
   ComputedAtom,
   CssBindings,
   CssValue,
+  DeepPath,
   EffectCleanup,
   EffectResult,
   EqualFn,

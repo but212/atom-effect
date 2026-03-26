@@ -155,4 +155,88 @@ describe('$.atomLens', () => {
     expect(store.value.items[1]!.text).toBe('Updated Second');
     expect(store.value.items[0]!.id).toBe(1); // Structural sharing check
   });
+
+  it('should compose two lenses', async () => {
+    const store = $.atom({ user: { profile: { name: 'Alice' } } });
+    const userLens = $.atomLens(store, 'user');
+    const nameLens = $.composeLens(userLens, 'profile.name');
+
+    expect(nameLens.value).toBe('Alice');
+
+    nameLens.value = 'Bob';
+    await $.nextTick();
+    expect(store.value.user.profile.name).toBe('Bob');
+
+    userLens.value = { profile: { name: 'Charlie' } };
+    await $.nextTick();
+    expect(nameLens.value).toBe('Charlie');
+  });
+
+  it('should compose lenses multi-tier', async () => {
+    const store = $.atom({ a: { b: { c: { d: 11 } } } });
+    const ab = $.atomLens(store, 'a.b');
+    const abc = $.composeLens(ab, 'c');
+    const abcd = $.composeLens(abc, 'd');
+
+    expect(abcd.value).toBe(11);
+    abcd.value = 22;
+    await $.nextTick();
+    expect(store.value.a.b.c.d).toBe(22);
+    expect(abc.value.d).toBe(22);
+    expect(ab.value.c.d).toBe(22);
+  });
+
+  it('should compose with array indexing', async () => {
+    const store = $.atom({
+      items: [
+        { id: 1, text: 'First' },
+        { id: 2, text: 'Second' },
+      ],
+    });
+    const itemsLens = $.atomLens(store, 'items');
+    const firstTextLens = $.composeLens(itemsLens, '0.text');
+
+    expect(firstTextLens.value).toBe('First');
+
+    firstTextLens.value = 'Updated First';
+    await $.nextTick();
+    expect(store.value.items[0]!.text).toBe('Updated First');
+  });
+
+  it('should clean up subscriptions on dispose', async () => {
+    const store = $.atom({ name: 'Alice' });
+    const lens = $.atomLens(store, 'name');
+
+    let callCount = 0;
+    lens.subscribe(() => {
+      callCount++;
+    });
+
+    // Initial update
+    store.value = { name: 'Bob' };
+    await $.nextTick();
+    expect(callCount).toBe(1);
+
+    // Dispose and update
+    lens.dispose();
+    store.value = { name: 'Charlie' };
+    await $.nextTick();
+    expect(callCount).toBe(1); // Should not increase
+  });
+
+  it('should return its own subscriber count', () => {
+    const store = $.atom({ name: 'Alice' });
+    const lens = $.atomLens(store, 'name');
+
+    expect(lens.subscriberCount()).toBe(0);
+    expect(store.subscriberCount()).toBe(0); // Lens doesn't subscribe until it has its own subscribers
+
+    const unsub = lens.subscribe(() => {});
+    expect(lens.subscriberCount()).toBe(1);
+    expect(store.subscriberCount()).toBe(1); // Now lens is subscribed to parent
+
+    unsub();
+    expect(lens.subscriberCount()).toBe(0);
+    expect(store.subscriberCount()).toBe(0); // Lens unsubscribed from parent
+  });
 });

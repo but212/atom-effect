@@ -12,6 +12,24 @@ import type {
 // ============================================================================
 
 /**
+ * Helper to convert a numeric string to a number type, otherwise returns the string.
+ * Used for array indexing in paths.
+ */
+type StringKeyToNumber<S extends string> = S extends `${infer N extends number}` ? N : S;
+
+/**
+ * Recursive type to infer the value type at a given dot-separated path.
+ * Supports numeric indices for array paths.
+ */
+export type DeepPath<T, P extends string> = P extends `${infer K}.${infer Rest}`
+  ? StringKeyToNumber<K> extends keyof T
+    ? DeepPath<T[StringKeyToNumber<K> & keyof T], Rest>
+    : unknown
+  : StringKeyToNumber<P> extends keyof T
+    ? T[StringKeyToNumber<P> & keyof T]
+    : unknown;
+
+/**
  * Cleanup function returned by effects or components.
  */
 export type EffectCleanup = () => void;
@@ -310,7 +328,14 @@ declare global {
     isComputed(v: unknown): boolean;
     isReactive(v: unknown): boolean;
     nextTick(): Promise<void>;
-    atomLens<T extends object, U = unknown>(atom: WritableAtom<T>, path: string): WritableAtom<U>;
+    atomLens<T extends object, P extends string>(
+      atom: WritableAtom<T>,
+      path: P
+    ): WritableAtom<DeepPath<T, P>>;
+    composeLens<T extends object, P extends string>(
+      lens: WritableAtom<T>,
+      path: P
+    ): WritableAtom<DeepPath<T, P>>;
     route(config: RouteConfig): Router;
     atomFetch<T>(
       urlOrFn: string | (() => string),
