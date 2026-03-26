@@ -47,7 +47,7 @@ export function bindForm<T extends object>(
       fAtom = createAtom(getPathValue(atom.peek(), parts));
 
       // Separate effect to sync changes from the field atom back to the root atom.
-      // This effect only tracks its specific fAtom, so typing in one field 
+      // This effect only tracks its specific fAtom, so typing in one field
       // does not wake up other field effects.
       const syncToRoot = effect(() => {
         const newVal = fAtom!.value;

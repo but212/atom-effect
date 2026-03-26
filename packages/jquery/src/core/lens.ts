@@ -27,7 +27,7 @@ export function setDeepValue(obj: unknown, keys: string[], index: number, value:
 
   if (Array.isArray(currentLevel)) {
     const newArray = [...currentLevel];
-    (newArray as any)[key] = newValue;
+    Object.assign(newArray, { [key]: newValue });
     return newArray;
   }
   return { ...currentLevel, [key]: newValue };
@@ -35,7 +35,7 @@ export function setDeepValue(obj: unknown, keys: string[], index: number, value:
 
 /**
  * Helper to retrieve a nested value from an object/array at a given path.
- * 
+ *
  * @param source The source object.
  * @param parts Array of path parts.
  * @returns The value at the path or undefined if not found.

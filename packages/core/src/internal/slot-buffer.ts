@@ -254,7 +254,8 @@ export class SlotBuffer<T> {
         ov[i] = null;
         this._count--;
         // Track freed index for O(1) reuse
-        (this._freeIndices ??= []).push(i);
+        if (this._freeIndices === null) this._freeIndices = [];
+        this._freeIndices.push(i);
         return true;
       }
     }
