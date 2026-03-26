@@ -4,30 +4,6 @@ import { microBenchOptions } from '../utils/setup.js';
 
 const BATCH_SIZE = 1000;
 
-describe('SlotBuffer: Creation', () => {
-  bench(
-    'new SlotBuffer() x1000',
-    () => {
-      for (let i = 0; i < BATCH_SIZE; i++) {
-        const buf = new SlotBuffer<number>();
-        void buf;
-      }
-    },
-    microBenchOptions
-  );
-
-  bench(
-    'new Array() baseline x1000',
-    () => {
-      for (let i = 0; i < BATCH_SIZE; i++) {
-        const arr: number[] = [];
-        void arr;
-      }
-    },
-    microBenchOptions
-  );
-});
-
 describe('SlotBuffer: Addition (Inline <= 4)', () => {
   bench(
     'add 4 items (SlotBuffer) x1000',
