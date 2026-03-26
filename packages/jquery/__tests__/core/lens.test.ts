@@ -106,4 +106,53 @@ describe('$.atomLens', () => {
 
     $input.remove();
   });
+
+  it('should correctly filter and map subscription values', async () => {
+    const store = $.atom({ profile: { name: 'Alice', age: 25 } });
+    const nameLens = $.atomLens(store, 'profile.name');
+
+    let callCount = 0;
+    let lastValue: string | undefined;
+    let oldVal: string | undefined;
+
+    nameLens.subscribe((v, o) => {
+      callCount++;
+      lastValue = v as string;
+      oldVal = o as string;
+    });
+
+    // 1. Update unrelated sibling property in parent atom
+    store.value = { ...store.value, profile: { ...store.value.profile, age: 26 } };
+    expect(callCount).toBe(0); // Should NOT notify because 'name' didn't change
+
+    // 2. Update the lensed property directly
+    nameLens.value = 'Bob';
+    await $.nextTick();
+    expect(callCount).toBe(1);
+    expect(lastValue).toBe('Bob');
+    expect(oldVal).toBe('Alice');
+
+    // 3. Update parent atom with same lensed value
+    store.value = { ...store.value, profile: { ...store.value.profile, name: 'Bob' } };
+    await $.nextTick();
+    expect(callCount).toBe(1); // Should NOT notify (Object.is check)
+  });
+
+  it('should maintain array type when property path traverses an array', () => {
+    const store = $.atom({
+      items: [
+        { id: 1, text: 'First' },
+        { id: 2, text: 'Second' },
+      ],
+    });
+
+    const secondTextLens = $.atomLens(store, 'items.1.text');
+    expect(secondTextLens.value).toBe('Second');
+
+    secondTextLens.value = 'Updated Second';
+
+    expect(Array.isArray(store.value.items)).toBe(true);
+    expect(store.value.items[1]!.text).toBe('Updated Second');
+    expect(store.value.items[0]!.id).toBe(1); // Structural sharing check
+  });
 });

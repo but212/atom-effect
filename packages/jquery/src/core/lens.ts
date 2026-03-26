@@ -25,6 +25,11 @@ export function setDeepValue(obj: unknown, keys: string[], index: number, value:
   // to avoid unnecessary allocations and downstream effect triggers.
   if (Object.is(oldValue, newValue)) return obj;
 
+  if (Array.isArray(currentLevel)) {
+    const newArray = [...currentLevel];
+    (newArray as any)[key] = newValue;
+    return newArray;
+  }
   return { ...currentLevel, [key]: newValue };
 }
 
@@ -69,8 +74,14 @@ export function atomLens<T extends object, U = unknown>(
     peek() {
       return getPathValue(atom.peek()) as U;
     },
-    subscribe(listener: Parameters<WritableAtom<T>['subscribe']>[0]) {
-      return atom.subscribe(listener);
+    subscribe(listener: (newValue: U, oldValue: U) => void) {
+      return atom.subscribe((newParent, oldParent) => {
+        const newValue = getPathValue(newParent) as U;
+        const oldValue = getPathValue(oldParent) as U;
+        if (!Object.is(newValue, oldValue)) {
+          listener(newValue, oldValue);
+        }
+      });
     },
     subscriberCount() {
       return atom.subscriberCount();
