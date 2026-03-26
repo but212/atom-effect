@@ -2,21 +2,27 @@ import { bench, describe } from 'vitest';
 import { SlotBuffer } from '@/internal/slot-buffer';
 import { microBenchOptions } from '../utils/setup.js';
 
+const BATCH_SIZE = 1000;
+
 describe('SlotBuffer: Creation', () => {
   bench(
-    'new SlotBuffer()',
+    'new SlotBuffer() x1000',
     () => {
-      const buf = new SlotBuffer<number>();
-      void buf;
+      for (let i = 0; i < BATCH_SIZE; i++) {
+        const buf = new SlotBuffer<number>();
+        void buf;
+      }
     },
     microBenchOptions
   );
 
   bench(
-    'new Array() baseline',
+    'new Array() baseline x1000',
     () => {
-      const arr: number[] = [];
-      void arr;
+      for (let i = 0; i < BATCH_SIZE; i++) {
+        const arr: number[] = [];
+        void arr;
+      }
     },
     microBenchOptions
   );
@@ -24,25 +30,31 @@ describe('SlotBuffer: Creation', () => {
 
 describe('SlotBuffer: Addition (Inline <= 4)', () => {
   bench(
-    'add 4 items (SlotBuffer)',
+    'add 4 items (SlotBuffer) x1000',
     () => {
-      const buf = new SlotBuffer<number>();
-      buf.add(1);
-      buf.add(2);
-      buf.add(3);
-      buf.add(4);
+      for (let i = 0; i < BATCH_SIZE; i++) {
+        const buf = new SlotBuffer<number>();
+        buf.add(1);
+        buf.add(2);
+        buf.add(3);
+        buf.add(4);
+        void buf;
+      }
     },
     microBenchOptions
   );
 
   bench(
-    'push 4 items (Array baseline)',
+    'push 4 items (Array baseline) x1000',
     () => {
-      const arr = [];
-      arr.push(1);
-      arr.push(2);
-      arr.push(3);
-      arr.push(4);
+      for (let i = 0; i < BATCH_SIZE; i++) {
+        const arr: number[] = [];
+        arr.push(1);
+        arr.push(2);
+        arr.push(3);
+        arr.push(4);
+        void arr;
+      }
     },
     microBenchOptions
   );
@@ -50,22 +62,28 @@ describe('SlotBuffer: Addition (Inline <= 4)', () => {
 
 describe('SlotBuffer: Addition (Overflow > 4)', () => {
   bench(
-    'add 16 items (SlotBuffer spill)',
+    'add 16 items (SlotBuffer spill) x1000',
     () => {
-      const buf = new SlotBuffer<number>();
-      for (let i = 0; i < 16; i++) {
-        buf.add(i);
+      for (let i = 0; i < BATCH_SIZE; i++) {
+        const buf = new SlotBuffer<number>();
+        for (let j = 0; j < 16; j++) {
+          buf.add(j);
+        }
+        void buf;
       }
     },
     microBenchOptions
   );
 
   bench(
-    'push 16 items (Array baseline)',
+    'push 16 items (Array baseline) x1000',
     () => {
-      const arr = [];
-      for (let i = 0; i < 16; i++) {
-        arr.push(i);
+      for (let i = 0; i < BATCH_SIZE; i++) {
+        const arr: number[] = [];
+        for (let j = 0; j < 16; j++) {
+          arr.push(j);
+        }
+        void arr;
       }
     },
     microBenchOptions
@@ -73,36 +91,42 @@ describe('SlotBuffer: Addition (Overflow > 4)', () => {
 });
 
 describe('SlotBuffer: Churn (Gap Reuse)', () => {
-  const buf = new SlotBuffer<number>();
-  for (let i = 0; i < 16; i++) buf.add(i);
-
-  const arr: number[] = [];
-  for (let i = 0; i < 16; i++) arr.push(i);
-
   bench(
-    'remove 8 and add 8 (SlotBuffer O(1) reuse)',
+    'remove 8 and add 8 (SlotBuffer O(1) reuse) x1000',
     () => {
-      // Remove even indices (some inline, some overflow)
-      for (let i = 0; i < 16; i += 2) {
-        buf.remove(i);
-      }
-      // Re-add them
-      for (let i = 0; i < 16; i += 2) {
-        buf.add(i);
+      for (let i = 0; i < BATCH_SIZE; i++) {
+        const buf = new SlotBuffer<number>();
+        for (let j = 0; j < 16; j++) buf.add(j);
+
+        // Remove 8
+        for (let j = 0; j < 16; j += 2) {
+          buf.remove(j);
+        }
+        // Re-add 8
+        for (let j = 0; j < 16; j += 2) {
+          buf.add(j);
+        }
+        void buf;
       }
     },
     microBenchOptions
   );
 
   bench(
-    'splice 8 and push 8 (Array baseline)',
+    'splice 8 and push 8 (Array baseline) x1000',
     () => {
-      // Array removal is O(N), simulating comparable churn
-      for (let i = 0; i < 8; i++) {
-        arr.splice(i, 1);
-      }
-      for (let i = 0; i < 16; i += 2) {
-        arr.push(i);
+      for (let i = 0; i < BATCH_SIZE; i++) {
+        const arr: number[] = [];
+        for (let j = 0; j < 16; j++) arr.push(j);
+
+        // Array removal
+        for (let j = 0; j < 8; j++) {
+          arr.splice(j, 1);
+        }
+        for (let j = 0; j < 16; j += 2) {
+          arr.push(j);
+        }
+        void arr;
       }
     },
     microBenchOptions
@@ -120,49 +144,57 @@ describe('SlotBuffer: Iteration', () => {
   const overflowArr = Array.from({ length: 16 }, (_, i) => i);
 
   bench(
-    'forEach 4 items (SlotBuffer)',
+    'forEach 4 items (SlotBuffer) x1000',
     () => {
-      let sum = 0;
-      inlineBuf.forEach((item) => {
-        sum += item;
-      });
-      void sum;
+      for (let i = 0; i < BATCH_SIZE; i++) {
+        let sum = 0;
+        inlineBuf.forEach((item) => {
+          sum += item;
+        });
+        void sum;
+      }
     },
     microBenchOptions
   );
 
   bench(
-    'forEach 4 items (Array)',
+    'forEach 4 items (Array) x1000',
     () => {
-      let sum = 0;
-      inlineArr.forEach((item) => {
-        sum += item;
-      });
-      void sum;
+      for (let i = 0; i < BATCH_SIZE; i++) {
+        let sum = 0;
+        inlineArr.forEach((item) => {
+          sum += item;
+        });
+        void sum;
+      }
     },
     microBenchOptions
   );
 
   bench(
-    'forEach 16 items (SlotBuffer)',
+    'forEach 16 items (SlotBuffer) x1000',
     () => {
-      let sum = 0;
-      overflowBuf.forEach((item) => {
-        sum += item;
-      });
-      void sum;
+      for (let i = 0; i < BATCH_SIZE; i++) {
+        let sum = 0;
+        overflowBuf.forEach((item) => {
+          sum += item;
+        });
+        void sum;
+      }
     },
     microBenchOptions
   );
 
   bench(
-    'forEach 16 items (Array)',
+    'forEach 16 items (Array) x1000',
     () => {
-      let sum = 0;
-      overflowArr.forEach((item) => {
-        sum += item;
-      });
-      void sum;
+      for (let i = 0; i < BATCH_SIZE; i++) {
+        let sum = 0;
+        overflowArr.forEach((item) => {
+          sum += item;
+        });
+        void sum;
+      }
     },
     microBenchOptions
   );
@@ -170,23 +202,29 @@ describe('SlotBuffer: Iteration', () => {
 
 describe('SlotBuffer: Compaction', () => {
   bench(
-    'compact 16 items with 8 gaps (SlotBuffer)',
+    'compact 16 items with 8 gaps (SlotBuffer) x1000',
     () => {
-      const buf = new SlotBuffer<number>();
-      for (let i = 0; i < 16; i++) buf.add(i);
-      for (let i = 0; i < 16; i += 2) buf.remove(i);
-      buf.compact();
+      for (let i = 0; i < BATCH_SIZE; i++) {
+        const buf = new SlotBuffer<number>();
+        for (let j = 0; j < 16; j++) buf.add(j);
+        for (let j = 0; j < 16; j += 2) buf.remove(j);
+        buf.compact();
+        void buf;
+      }
     },
     microBenchOptions
   );
 
   bench(
-    'filter nulls (Array baseline equivalent)',
+    'filter nulls (Array baseline equivalent) x1000',
     () => {
-      let arr: (number | null)[] = [];
-      for (let i = 0; i < 16; i++) arr.push(i);
-      for (let i = 0; i < 16; i += 2) arr[i] = null;
-      arr = arr.filter((x) => x !== null);
+      for (let i = 0; i < BATCH_SIZE; i++) {
+        let arr: (number | null)[] = [];
+        for (let j = 0; j < 16; j++) arr.push(j);
+        for (let j = 0; j < 16; j += 2) arr[j] = null;
+        arr = arr.filter((x) => x !== null);
+        void arr;
+      }
     },
     microBenchOptions
   );
