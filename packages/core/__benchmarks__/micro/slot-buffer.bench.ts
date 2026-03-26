@@ -101,7 +101,7 @@ describe('SlotBuffer: Churn (Gap Reuse)', () => {
       for (let i = 0; i < 8; i++) {
         arr.splice(i, 1);
       }
-      for (let i = 0; i < 8; i++) {
+      for (let i = 0; i < 16; i += 2) {
         arr.push(i);
       }
     },

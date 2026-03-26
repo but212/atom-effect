@@ -202,12 +202,21 @@ export class SlotBuffer<T> {
     }
 
     // Overflow path with O(1) free-index reuse
+    this._addToOverflow(item);
+  }
+
+  /**
+   * Internal helper to add an item directly to the overflow array,
+   * bypassing inline slot checks. Used by DepSlotBuffer for relocation.
+   *
+   * @internal
+   */
+  protected _addToOverflow(item: T): void {
     if (this._overflow === null) {
       this._overflow = [item];
     } else {
       const free = this._freeIndices;
       if (free !== null && free.length > 0) {
-        // O(1) reuse of a previously-freed overflow slot
         this._overflow[free.pop()!] = item;
       } else {
         this._overflow.push(item);

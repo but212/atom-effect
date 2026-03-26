@@ -218,19 +218,7 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
       if (occupant != null) {
         // Direct overflow append avoids inline gap-scan overhead in add()
         // since we know all inline slots are occupied when trackIndex < count.
-        let ov = this._overflow;
-        if (!ov) {
-          ov = [occupant];
-          this._overflow = ov;
-        } else {
-          const free = this._freeIndices;
-          if (free !== null && free.length > 0) {
-            ov[free.pop()!] = occupant;
-          } else {
-            ov.push(occupant);
-          }
-        }
-        this._count++;
+        this._addToOverflow(occupant);
         if (this._map !== null && occupant.unsub) {
           this._map.set(occupant.node, this._count - 1);
         }
