@@ -119,9 +119,11 @@ describe('SlotBuffer: Churn (Gap Reuse)', () => {
         const arr: number[] = [];
         for (let j = 0; j < 16; j++) arr.push(j);
 
-        // Array removal
-        for (let j = 0; j < 8; j++) {
-          arr.splice(j, 1);
+        // Array removal (accurate baseline by removing even-valued elements)
+        for (let j = arr.length - 1; j >= 0; j--) {
+          if (arr[j]! % 2 === 0) {
+            arr.splice(j, 1);
+          }
         }
         for (let j = 0; j < 16; j += 2) {
           arr.push(j);
