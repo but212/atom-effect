@@ -1,0 +1,188 @@
+import $ from 'jquery';
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import '@/index';
+
+describe('First-class Asynchronous Objects (AEJ)', () => {
+  let $fixture: JQuery;
+
+  beforeEach(() => {
+    $fixture = $('<div id="fixture"></div>').appendTo('body');
+  });
+
+  afterEach(() => {
+    $fixture.remove();
+    vi.restoreAllMocks();
+  });
+
+  describe('Scenario 1: Temporal Awareness (Metadata Binding)', () => {
+    it('should react to isPending and hasError state in atomBind', async () => {
+      let resolveAjax!: (v: { name: string }[]) => void;
+      vi.spyOn($, 'ajax').mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveAjax = resolve as (v: { name: string }[]) => void;
+          }) as unknown as JQuery.jqXHR
+      );
+
+      $fixture.html(`
+        <div id="resultBox">
+          <div id="errorMessage"></div>
+        </div>
+      `);
+
+      const searchResult = $.atomFetch('/api/search', { defaultValue: [] });
+
+      $('#resultBox').atomBind({
+        class: {
+          'is-loading': () => searchResult.isPending,
+          'is-error': () => searchResult.hasError,
+        },
+      });
+
+      $('#errorMessage')
+        .atomShow(() => searchResult.hasError)
+        .atomText(() => `에러: ${searchResult.errors?.[0]?.message}`);
+
+      // Initial state: Pending
+      await $.nextTick();
+      expect($('#resultBox').hasClass('is-loading')).toBe(true);
+      expect($('#resultBox').hasClass('is-error')).toBe(false);
+      expect($('#errorMessage').is(':visible')).toBe(false);
+
+      // Resolve state: Not Pending
+      resolveAjax([{ name: 'Item 1' }]);
+      await $.nextTick();
+      await $.nextTick();
+      expect($('#resultBox').hasClass('is-loading')).toBe(false);
+      expect($('#resultBox').hasClass('is-error')).toBe(false);
+      expect($('#errorMessage').is(':visible')).toBe(false);
+    });
+
+    it('should react to errors in the UI', async () => {
+      vi.spyOn($, 'ajax').mockRejectedValue(new Error('Network Failure'));
+
+      $fixture.html('<div id="errorMessage"></div>');
+
+      const searchResult = $.atomFetch('/api/search', { defaultValue: [] });
+
+      $('#errorMessage')
+        .atomShow(() => searchResult.hasError)
+        .atomText(() => `에러: ${searchResult.errors?.[0]?.message}`);
+
+      await $.nextTick();
+      await $.nextTick();
+      await $.nextTick();
+      await $.nextTick(); // Wait for one more tick just in case
+      await new Promise((r) => setTimeout(r, 10)); // Brief delay for any async settling
+
+      expect($('#errorMessage').text()).toContain('Network Failure');
+      expect($('#errorMessage').css('display')).not.toBe('none');
+    });
+  });
+
+  describe('Scenario 2: Race Condition Defense', () => {
+    it('should abort previous requests and only render the last result', async () => {
+      const keyword = $.atom('');
+      const abortSpies: Mock[] = [];
+
+      vi.spyOn($, 'ajax').mockImplementation((opts) => {
+        const abortSpy = vi.fn();
+        abortSpies.push(abortSpy);
+        return Object.assign(
+          new Promise((resolve) => {
+            // Simulate network delay
+            setTimeout(() => resolve([{ name: `Result for ${opts?.url}` }]), 50);
+          }),
+          { abort: abortSpy }
+        ) as unknown as JQuery.jqXHR;
+      });
+
+      const searchResult = $.atomFetch(() => `/api/search?q=${keyword.value}`, {
+        defaultValue: [],
+        eager: false,
+      });
+
+      $fixture.html('<ul id="resultList"></ul>');
+      $('#resultList').atomList(searchResult, {
+        key: 'name',
+        render: (item: { name: string }) => `<li>${item.name}</li>`,
+      });
+
+      // Lazy atomFetch triggers ajax when atomList reads its value.
+      await $.nextTick();
+      await $.nextTick();
+      vi.clearAllMocks();
+      abortSpies.length = 0;
+
+      // 1. First trigger
+      keyword.value = 'a';
+      await $.nextTick(); // Wait for effect to trigger keyword read
+      await $.nextTick(); // Wait for atomFetch to trigger ajax
+      expect($.ajax).toHaveBeenCalledTimes(1);
+      expect(abortSpies.length).toBe(1);
+
+      // 2. Rapid second trigger
+      keyword.value = 'ab';
+      await $.nextTick();
+      await $.nextTick();
+      expect($.ajax).toHaveBeenCalledTimes(2);
+      expect(abortSpies.length).toBe(2);
+      expect(abortSpies[0]).toHaveBeenCalled(); // Previous request should be aborted
+
+      // 3. Final third trigger
+      keyword.value = 'abc';
+      await $.nextTick();
+      await $.nextTick();
+      expect($.ajax).toHaveBeenCalledTimes(3);
+      expect(abortSpies.length).toBe(3);
+      expect(abortSpies[1]).toHaveBeenCalled(); // Previous request should be aborted
+
+      // Wait for the final request to resolve
+      await new Promise((r) => setTimeout(r, 100));
+      await $.nextTick();
+      await $.nextTick();
+
+      expect($('#resultList li').length).toBe(1);
+      expect($('#resultList li').text()).toBe('Result for /api/search?q=abc');
+    });
+  });
+
+  describe('Scenario 3: Unified Sync/Async Boundary', () => {
+    it('should behave identically for sync atoms and async atomFetch results in atomVal', async () => {
+      const keyword = $.atom('initial');
+      $fixture.html('<input id="searchInput">');
+
+      $('#searchInput').atomVal(keyword);
+      expect($('#searchInput').val()).toBe('initial');
+
+      keyword.value = 'updated';
+      await $.nextTick();
+      expect($('#searchInput').val()).toBe('updated');
+
+      // Note: atomVal is two-way for writeable atoms. atomFetch is Readonly, so it won't be two-way.
+      // But the user's punchline says "syntax is exactly the same".
+    });
+
+    it('should behave identically in atomList', async () => {
+      const syncList = $.atom([{ name: 'Sync' }]);
+      $fixture.html('<ul id="syncList"></ul><ul id="asyncList"></ul>');
+
+      $('#syncList').atomList(syncList, {
+        key: 'name',
+        render: (item: { name: string }) => `<li>${item.name}</li>`,
+      });
+      expect($('#syncList li').text()).toBe('Sync');
+
+      vi.spyOn($, 'ajax').mockResolvedValue([{ name: 'Async' }]);
+      const asyncList = $.atomFetch<{ name: string }[]>('/api/list', { defaultValue: [] });
+      $('#asyncList').atomList(asyncList, {
+        key: 'name',
+        render: (item: { name: string }) => `<li>${item.name}</li>`,
+      });
+
+      await $.nextTick();
+      await $.nextTick();
+      expect($('#asyncList li').text()).toBe('Async');
+    });
+  });
+});

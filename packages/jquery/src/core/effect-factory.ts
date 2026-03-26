@@ -106,6 +106,17 @@ export function registerReactiveEffect<T>(
         { name: debugType }
       )
     );
+  } else if (typeof source === 'function') {
+    registry.trackEffect(
+      el,
+      effect(
+        () => {
+          const value = (source as () => T | Promise<T>)();
+          untracked(() => runUpdater(value));
+        },
+        { name: debugType }
+      )
+    );
   } else {
     untracked(() => runUpdater(source as T | Promise<T>));
   }
@@ -136,7 +147,7 @@ export function registerMapEffect<T>(
   for (let i = 0; i < keys.length; i++) {
     const key = keys[i]!;
     const val = map[key]!;
-    if (isReactive(val)) {
+    if (isReactive(val) || typeof val === 'function') {
       reactiveKeys.push(key);
     } else {
       staticValues[key] = val as T | Promise<T>;
@@ -198,7 +209,10 @@ export function registerMapEffect<T>(
           const currentMap: Record<string, T | Promise<T>> = { ...staticValues };
           for (let i = 0; i < reactiveKeys.length; i++) {
             const key = reactiveKeys[i]!;
-            currentMap[key] = (map[key] as ReadonlyAtom<T | Promise<T>>).value;
+            const source = map[key]!;
+            currentMap[key] = isReactive(source)
+              ? (source as ReadonlyAtom<T | Promise<T>>).value
+              : (source as () => T | Promise<T>)();
           }
 
           untracked(() => runUpdater(currentMap));
