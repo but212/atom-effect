@@ -43,13 +43,17 @@ export interface AtomOptions extends BaseAtomOptions {
  * `ComputedAtom<T>` is a structural sub-type of `ReadonlyAtom<T>`, so it is
  * already covered by `ReadonlyAtom<T>`.
  */
-export type ReactiveValue<T> = T | ReadonlyAtom<T>;
+export type ReactiveValue<T> = T | ReadonlyAtom<T> | (() => T);
 
 /**
  * Represents a value that can be a synchronous `ReactiveValue<T>`,
  * a `Promise<T>`, or an Atom yielding `T | Promise<T>`.
  */
-export type AsyncReactiveValue<T> = T | ReadonlyAtom<T | Promise<T>> | Promise<T>;
+export type AsyncReactiveValue<T> =
+  | T
+  | ReadonlyAtom<T | Promise<T>>
+  | Promise<T>
+  | (() => T | Promise<T>);
 
 /**
  * Values allowed for DOM properties and attributes.

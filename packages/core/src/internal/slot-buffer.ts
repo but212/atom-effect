@@ -1,11 +1,7 @@
-import { EPOCH_CONSTANTS } from '@/constants';
-
-const _SLOT_CAPACITY = 4;
-
 /**
  * Inline-slot subscriber container.
  *
- * Stores up to {@link _SLOT_CAPACITY} items directly as object properties
+ * Stores up to 4 items directly as object properties
  * (zero array allocation). Spills to an overflow array only when the
  * inline slots are exhausted.
  *
@@ -13,8 +9,6 @@ const _SLOT_CAPACITY = 4;
  * - **Cache locality**: hot-path data lives on the same V8 object.
  * - **Logical deletion**: `remove()` nulls a slot and decrements `_count`.
  *   Physical compaction is deferred to `compact()`.
- * - **Epoch-aware reuse**: `clear()` resets `_count` to 0 without touching
- *   slot references; new `add()` calls overwrite stale pointers in-place.
  *
  * @template T - Slot element type (e.g. `Subscription<V>`).
  */
@@ -29,9 +23,6 @@ export class SlotBuffer<T> {
   // ── Bookkeeping ───────────────────────────────────────────────────────
   /** Active (non-null) element count across slots + overflow. */
   _count = 0;
-
-  /** Last mutation epoch — used for staleness detection in `clear()`. */
-  _epoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
 
   /** Lazy-allocated overflow array for subscribers beyond {@link SLOT_CAPACITY}. */
   _overflow: (T | null)[] | null = null;
@@ -419,12 +410,7 @@ export class SlotBuffer<T> {
   }
 
   /**
-   * Logical clear — resets count without zeroing slot references.
-   *
-   * The stale references become invisible (count is 0, forEach yields
-   * nothing after clear). Next `add()` overwrites them in-place.
-   *
-   * For a hard release (e.g. `dispose()`), use {@link dispose} instead.
+   * Clears the buffer and releases all item references for GC.
    */
   clear(): void {
     this._s0 = null;
