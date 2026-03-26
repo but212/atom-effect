@@ -41,7 +41,7 @@ Creates a derived signal that updates automatically when its dependencies change
 - **Lazy**: Only recalculates when read or when needed by an active effect.
 - **Cached**: Returns the cached value if dependencies haven't changed.
 - **Async-Aware**: Natively handles Promises.
-- **Hot-path Optimized**: Uses a temporal hint to provide $O(1)$ dirty detection for recurring updates.
+- **Hot-path Optimized**: Uses a temporal hint to provide $O(1)$ dirty detection for recurring updates and O(1) slot reuse for zero-allocation dependency churn.
 
 ### Synchronous Example - computed
 

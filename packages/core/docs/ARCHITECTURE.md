@@ -4,7 +4,19 @@ This document explains the internal mechanics of `@but212/atom-effect`. It bridg
 
 ---
 
-## 0. Atomic Principles: Autonomous Nodes
+## 0. The Conceptual Bridge: From Usage to Internals
+
+Before diving into the bitwise flags and version hashing, it is helpful to understand how the high-level API maps to the internal engine.
+
+- **Unified Surface**: While you use `atom`, `computed`, and `effect`, they are all specialized instances of a single internal class: **`ReactiveNode`**. This ensures consistent memory layout (Monomorphism) for V8 optimization.
+- **Push-Pull Hybrid**:
+  - **Push (Notification Phase)**: When an atom changes, it "pushes" a dirty signal to its immediate subscribers. No calculation happens yet.
+  - **Pull (Evaluation Phase)**: When you read a `.value` or when an effect runs, the node "pulls" the latest versions from its dependencies to see if it actually needs to re-compute.
+- **The Scheduler's Role**: Effects don't run immediately. They are queued in a **Scheduler**. This allows the library to "coalesce" multiple atom updates into a single effect execution, ensuring efficiency.
+
+---
+
+## 1. Atomic Principles: Autonomous Nodes
 
 The core design focuses on **decentralized responsibility**. Truth is not managed by an external orchestrator; instead, each node is intended to remain the source of truth for its own state.
 
@@ -32,7 +44,7 @@ To make autonomous judgment possible, a **Global Epoch** is accepted. While each
 
 ---
 
-## 1. The Glitch-Free Guarantee: Epoch & Version
+## 2. The Glitch-Free Guarantee: Epoch & Version
 
 A "glitch" occurs when an inconsistent intermediate state is observed. The approach is to separate the **Moment of Change (Epoch)** from the **Result of Change (Version)**.
 
@@ -45,7 +57,7 @@ By comparing `version` instead of just reacting to `epoch`, unnecessary re-calcu
 
 ---
 
-## 2. Efficiency through Deferral: Two-Phase Propagation
+## 3. Efficiency through Deferral: Two-Phase Propagation
 
 To reduce unnecessary work, a **Notify-and-Check** approach is used.
 
@@ -59,7 +71,7 @@ The validation process uses layered heuristics to minimize expensive work. The *
 
 ---
 
-## 3. Integrity at the Async Boundary
+## 4. Integrity at the Async Boundary
 
 Async computed nodes are treated as state machines, using **version snapshots** to guard against race conditions.
 
@@ -70,13 +82,14 @@ Async computed nodes are treated as state machines, using **version snapshots** 
 
 ---
 
-## 4. Resource Stewardship: Memory Management
+## 5. Resource Stewardship: Memory Management
 
 Reactivity systems are prone to memory leaks if subscriptions are not cleaned up. Two mechanisms are used to manage memory efficiently: **Subscriber Management** and **Array Pooling**.
 
 - **DepSlotBuffer (Dependency Tracking)**: A specialized `SlotBuffer` for dependency links. It features:
   - **Mega-Node Optimization**: A hybrid O(1) `Map` fallback when dependencies exceed 32, ensuring performance even for extremely large graphs.
-  - **Fast Dirty Checking**: An efficient O(N) version hash check (`isDirtyFast`) using an additive hash of all dependency versions and IDs to quickly determine if a node *might* be dirty before performing a full structural walk.
+  - **O(1) Free-Index Slot Reuse**: Uses a stack-based index reuse strategy to reclaim nulled slots in $O(1)$ time, eliminating linear scans during subscriber/dependency churn.
+  - **Fast Dirty Checking**: An efficient version hash check (`isDirtyFast`) using an unrolled additive hash of all dependency versions. The logic is optimized for monochromatic V8 hidden classes and avoids branching overhead.
   - **Safe Retrieval**: Implements `claimExisting` to reuse existing dependency links during re-evaluation, minimizing churn.
 - **Computed Optimizations**:
   - **Hot-path Check**: Caches the index of the last dirty dependency (`_hotIndex`) to provide $O(1)$ dirty detection for recurring state changes (e.g., animations, scrolls).
@@ -86,7 +99,7 @@ Managing inline slots and hybrid lookups adds internal complexity, but it signif
 
 ---
 
-## 5. Security & Boundaries
+## 6. Security & Boundaries
 
 A **Symmetric Boundary** is enforced between production and consumption.
 

@@ -9,6 +9,7 @@
  * - **Cache locality**: hot-path data lives on the same V8 object.
  * - **Logical deletion**: `remove()` nulls a slot and decrements `_count`.
  *   Physical compaction is deferred to `compact()`.
+ * - **O(1) overflow reuse**: free-index stack avoids linear gap scan.
  *
  * @template T - Slot element type (e.g. `Subscription<V>`).
  */
@@ -24,8 +25,11 @@ export class SlotBuffer<T> {
   /** Active (non-null) element count across slots + overflow. */
   _count = 0;
 
-  /** Lazy-allocated overflow array for subscribers beyond {@link SLOT_CAPACITY}. */
+  /** Lazy-allocated overflow array for subscribers beyond inline capacity. */
   _overflow: (T | null)[] | null = null;
+
+  /** Free overflow indices for O(1) gap reuse (lazy-allocated). */
+  _freeIndices: number[] | null = null;
 
   // ── Public API ────────────────────────────────────────────────────────
 
@@ -150,6 +154,11 @@ export class SlotBuffer<T> {
       }
     }
 
+    // 3. Invalidate free indices (they may point to truncated positions)
+    if (this._freeIndices !== null) {
+      this._freeIndices = null;
+    }
+
     this._count = index;
   }
 
@@ -166,7 +175,8 @@ export class SlotBuffer<T> {
    * Adds an item.
    *
    * Prefers filling a null inline slot (including previously-cleared ones)
-   * before spilling to the overflow array.
+   * before spilling to the overflow array. Uses O(1) free-index stack
+   * for overflow gap reuse.
    */
   add(item: T): void {
     // Fast path: fill inline slots first
@@ -191,20 +201,26 @@ export class SlotBuffer<T> {
       return;
     }
 
-    // Overflow path
+    // Overflow path with O(1) free-index reuse
+    this._addToOverflow(item);
+  }
+
+  /**
+   * Internal helper to add an item directly to the overflow array,
+   * bypassing inline slot checks. Used by DepSlotBuffer for relocation.
+   *
+   * @internal
+   */
+  protected _addToOverflow(item: T): void {
     if (this._overflow === null) {
       this._overflow = [item];
     } else {
-      // Try to reuse a null gap in overflow before pushing
-      const ov = this._overflow;
-      for (let i = 0, len = ov.length; i < len; i++) {
-        if (ov[i] === null) {
-          ov[i] = item;
-          this._count++;
-          return;
-        }
+      const free = this._freeIndices;
+      if (free !== null && free.length > 0) {
+        this._overflow[free.pop()!] = item;
+      } else {
+        this._overflow.push(item);
       }
-      ov.push(item);
     }
     this._count++;
   }
@@ -246,6 +262,9 @@ export class SlotBuffer<T> {
       if (ov[i] === item) {
         ov[i] = null;
         this._count--;
+        // Track freed index for O(1) reuse
+        if (this._freeIndices === null) this._freeIndices = [];
+        this._freeIndices.push(i);
         return true;
       }
     }
@@ -256,32 +275,18 @@ export class SlotBuffer<T> {
    * Checks whether {@link item} exists in the buffer (identity comparison).
    */
   has(item: T): boolean {
-    const count = this._count;
-    if (count === 0) return false;
+    if (this._count === 0) return false;
 
-    // 1. Inline Slots (Deterministic scan for safety against null holes)
+    // 1. Inline Slots
     if (this._s0 === item || this._s1 === item || this._s2 === item || this._s3 === item) {
       return true;
     }
 
-    // Fast exit if all active items are confirmed to be in inline slots
-    if (count <= 4) return false;
-
-    // 2. Overflow Scan (Early exit enabled for large sparse arrays)
+    // 2. Overflow Scan
     const ov = this._overflow;
     if (ov != null) {
-      let processed = 0;
-      if (this._s0 != null) processed++;
-      if (this._s1 != null) processed++;
-      if (this._s2 != null) processed++;
-      if (this._s3 != null) processed++;
-
       for (let i = 0, len = ov.length; i < len; i++) {
-        const el = ov[i];
-        if (el != null) {
-          if (el === item) return true;
-          if (++processed === count) break;
-        }
+        if (ov[i] === item) return true;
       }
     }
     return false;
@@ -295,10 +300,9 @@ export class SlotBuffer<T> {
    * array-based approach (length captured upfront for overflow).
    */
   forEach(fn: (item: T) => void): void {
-    const count = this._count;
-    if (count === 0) return;
+    if (this._count === 0) return;
 
-    // 1. Inline slots (Deterministic scan)
+    // 1. Inline slots
     const s0 = this._s0;
     if (s0 != null) fn(s0);
     const s1 = this._s1;
@@ -308,24 +312,12 @@ export class SlotBuffer<T> {
     const s3 = this._s3;
     if (s3 != null) fn(s3);
 
-    // Fast exit
-    if (count <= 4) return;
-
     // 2. Overflow
     const ov = this._overflow;
     if (ov != null) {
-      let processed = 0;
-      if (s0 != null) processed++;
-      if (s1 != null) processed++;
-      if (s2 != null) processed++;
-      if (s3 != null) processed++;
-
       for (let i = 0, len = ov.length; i < len; i++) {
         const el = ov[i];
-        if (el != null) {
-          fn(el);
-          if (++processed === count) return;
-        }
+        if (el != null) fn(el);
       }
     }
   }
@@ -364,7 +356,7 @@ export class SlotBuffer<T> {
     }
 
     // Fast exit
-    if (count <= 4 || executed === count) return executed;
+    if (executed === count) return executed;
 
     // 2. Overflow
     const ov = this._overflow;
@@ -373,7 +365,7 @@ export class SlotBuffer<T> {
         const el = ov[i];
         if (el != null) {
           fn(el);
-          if (++executed === count) break;
+          executed++;
         }
       }
     }
@@ -390,18 +382,26 @@ export class SlotBuffer<T> {
     const ov = this._overflow;
     if (ov === null || ov.length === 0) return;
 
-    // Pop-and-swap compaction (matches original _cleanupTombstones logic)
+    // Pop-and-swap compaction with proper null handling
     let i = 0;
     while (i < ov.length) {
       if (ov[i] === null) {
-        const last = ov.pop() as T;
-        if (i < ov.length && last != null) {
-          ov[i] = last;
+        // Pop trailing nulls first to find a valid swap candidate
+        while (ov.length > i && ov[ov.length - 1] === null) {
+          ov.pop();
+        }
+        // If there's still a valid element beyond i, swap it in
+        if (ov.length > i) {
+          ov[i] = ov.pop()!;
+          i++;
         }
       } else {
         i++;
       }
     }
+
+    // Invalidate free indices after compaction (positions have shifted)
+    this._freeIndices = null;
 
     // Release overflow array when empty
     if (ov.length === 0) {
@@ -423,6 +423,7 @@ export class SlotBuffer<T> {
       this._overflow.length = 0;
       this._overflow = null;
     }
+    this._freeIndices = null;
   }
 
   /**

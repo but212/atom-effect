@@ -265,5 +265,10 @@ packages/core/src/
 
 ## Next Steps
 
-- [**API Reference**](./API.md): Full API documentation with options.
-- [**Architecture**](./ARCHITECTURE.md): Deep dive into epoch-based propagation, bitwise flags, and memory management.
+To become a power user or contributor, explore the following:
+
+- [**Architecture & Design**](./ARCHITECTURE.md):
+  - **The Life of a Change**: How updates flow through the engine.
+  - **Glitch-Free Guarantee**: How the library avoids inconsistent states.
+  - **V8 Optimizations**: How we use bitwise flags and memory pooling for performance.
+- [**API Reference**](./API.md): Full documentation of options, configuration, and advanced error handling.

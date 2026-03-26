@@ -181,7 +181,7 @@ Fully automated two-way binding for an entire form. Binds every input, select, a
 
 - **Deep Paths**: Supports dot-notation in `name` attributes (e.g., `name="user.profile.name"`) to bind to nested object properties.
 - **Dynamic DOM**: Automatically detects and binds new form controls added to the DOM after the initial call.
-- **Optimized**: Uses `form.elements` for O(1) element access and lens-based atoms to minimize re-renders.
+- **Optimized**: Uses `form.elements` for O(1) element access and a centralized dispatcher to avoid O(N) effect fan-out on large forms, ensuring typing performance remains constant regardless of form size.
 
 ```javascript
 const user = $.atom({ name: 'Alice', role: 'admin' });
