@@ -13,6 +13,7 @@ import type { AtomOptions, WritableAtom } from '@/types';
 // atoms (ComputedAtom carries ATOM_BRAND), making a separate isComputed check redundant.
 import { isReactive } from '@/utils';
 import { debug } from '@/utils/debug';
+import { atomLens } from './lens';
 
 // ============================================================================
 // atom factory + debug namespace
@@ -105,6 +106,7 @@ type NamespaceExtensions = Pick<
   | 'isComputed'
   | 'isReactive'
   | 'nextTick'
+  | 'atomLens'
 >;
 
 const staticExtensions: NamespaceExtensions = {
@@ -120,6 +122,7 @@ const staticExtensions: NamespaceExtensions = {
   isComputed,
   isReactive,
   nextTick,
+  atomLens,
 };
 
 // $.extend(obj) merges into JQueryStatic (i.e. the $ function itself).

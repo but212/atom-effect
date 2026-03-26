@@ -238,6 +238,31 @@ Aliases to the core functions, exposed for convenience.
 
 `$.atom` also exposes a **`$.atom.debug`** boolean accessor. Setting it to `true` enables internal debug logging across the reactive system.
 
+### `$.atomLens(atom, path)`
+
+Creates a two-way reactive "lens" for a specific property path on an object-based atom. This "fake" atom allows fine-grained binding to deep properties of a monolithic state atom without extra memory or complex computed logic.
+
+- **atom**: The source `WritableAtom` containing an object.
+- **path**: Dot-separated string path (e.g., `'profile.settings.theme'`).
+
+**Returns**: A `WritableAtom` that reads from and writes to the specified path.
+
+```javascript
+const store = $.atom({
+  user: {
+    profile: { name: 'Alice' }
+  }
+});
+
+const nameLens = $.atomLens(store, 'user.profile.name');
+
+nameLens.value = 'Bob';
+console.log(store.value.user.profile.name); // 'Bob'
+
+// Works with bindings
+$('#name-input').atomVal(nameLens);
+```
+
 ### `$.batch(fn)`
 
 Groups multiple atom writes into a single synchronous notification cycle, preventing intermediate re-renders.
