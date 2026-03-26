@@ -245,7 +245,11 @@ Creates a two-way reactive "lens" for a specific property path on an object-base
 - **atom**: The source `WritableAtom` containing an object.
 - **path**: Dot-separated string path (e.g., `'profile.settings.theme'`).
 
-**Returns**: A `WritableAtom` that reads from and writes to the specified path.
+**Returns**: A `WritableAtom` that:
+
+1. **Read/Write**: Directly updates the parent atom at the specified path using structural sharing.
+2. **Type Safety**: Uses the `DeepPath<T, P>` recursive type for compile-time path validation and automatic return type inference.
+3. **Memory Management**: Implements a `.dispose()` method to automatically clean up internal parent atom subscriptions.
 
 ```javascript
 const store = $.atom({
@@ -261,6 +265,22 @@ console.log(store.value.user.profile.name); // 'Bob'
 
 // Works with bindings
 $('#name-input').atomVal(nameLens);
+
+// Manual cleanup (optional, auto-cleaned up if bound via $.fn methods)
+nameLens.dispose();
+```
+
+### `$.composeLens(lens, path)`
+
+Composes an existing lens with a sub-path to create a deeper, targeted lens. This is functionally equivalent to `$.atomLens(lens, path)` but is named for better clarity in modular designs.
+
+- **lens**: An existing `WritableAtom` (typically created via `$.atom()`, `$.atomLens()`, or `$.composeLens()`).
+- **path**: Sub-path string relative to the parent lens.
+
+```javascript
+const userLens = $.atomLens(store, 'user');
+const profileLens = $.composeLens(userLens, 'profile');
+const nameLens = $.composeLens(profileLens, 'name'); // Pointing to store.user.profile.name
 ```
 
 ### `$.batch(fn)`

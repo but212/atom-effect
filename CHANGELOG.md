@@ -17,10 +17,13 @@
 #### Added
 
 - **API**: `$.atomLens(atom, path)`: Creates a two-way reactive "lens" for a specific property path on an object-based atom.
+  - **Type Safety**: Implemented `DeepPath<T, P>` recursive type for compile-time path validation and automatic return type inference.
+  - **Memory Safety**: Added subscription tracking and a `.dispose()` method to automatically clean up internal parent atom subscriptions.
   - Supports deep nested paths (e.g., `$.atomLens(user, 'settings.notifications.email')`).
   - Implements **Structural Sharing** to minimize re-renders and memory allocations.
   - Automatically compatible with all jQuery bindings like `atomVal` and `atomForm`.
   - Optimized with equality guards to skip redundant parent atom updates.
+- **API**: `$.composeLens(lens, path)`: Composes an existing lens with a sub-path to create a deeper, targeted lens.
 - **Performance**: Optimized `$.fn.atomForm` for O(1) performance on large forms. Replaced O(N) effect fan-out with a centralized dispatcher and leaf-level atoms to eliminate redundant effect executions.
 - **Internal**: Extracted `getPathValue` utility to `core/lens` for unified and efficient path traversal across lenses and form bindings.
 

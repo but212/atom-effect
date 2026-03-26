@@ -12,6 +12,17 @@ import type {
 // ============================================================================
 
 /**
+ * Recursive type to traverse property paths and extract the value type.
+ */
+export type DeepPath<T, P extends string> = P extends `${infer K}.${infer Rest}`
+  ? K extends keyof T
+    ? DeepPath<T[K], Rest>
+    : unknown
+  : P extends keyof T
+    ? T[P]
+    : unknown;
+
+/**
  * Cleanup function returned by effects or components.
  */
 export type EffectCleanup = () => void;
@@ -310,7 +321,14 @@ declare global {
     isComputed(v: unknown): boolean;
     isReactive(v: unknown): boolean;
     nextTick(): Promise<void>;
-    atomLens<T extends object, U = unknown>(atom: WritableAtom<T>, path: string): WritableAtom<U>;
+    atomLens<T extends object, P extends string>(
+      atom: WritableAtom<T>,
+      path: P
+    ): WritableAtom<DeepPath<T, P>>;
+    composeLens<T extends object, P extends string>(
+      lens: WritableAtom<T>,
+      path: P
+    ): WritableAtom<DeepPath<T, P>>;
     route(config: RouteConfig): Router;
     atomFetch<T>(
       urlOrFn: string | (() => string),

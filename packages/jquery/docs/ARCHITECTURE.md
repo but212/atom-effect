@@ -345,3 +345,11 @@ This "Structural Sharing" approach ensures that:
 2. **Centralized Dispatcher**: A single `effect` watches the root atom and dispatches updates only to the leaf atoms whose values have actually changed. This eliminates the O(N) effect fan-out overhead.
 3. **Local Sync**: Each leaf atom has a dedicated effect to sync its local changes back to the root atom. Since this effect only tracks the leaf atom, typing in one field does not wake up or re-evaluate other fields.
 4. **Deep Paths**: Supports dot-notation in `name` attributes via the shared `getPathValue` and `setDeepValue` utilities.
+
+### 11.3 Type-Level Safety with `DeepPath`
+
+`$.atomLens` and `$.composeLens` utilize a recursive utility type `DeepPath<T, P>`. This type decomposes the path string `P` at compile-time to resolve the correct value type from the object `T`. This ensures that lenses are fully typed and prevents runtime errors from accessing invalid paths during development.
+
+### 11.4 Memory Safety & Subscription Tracking
+
+Lenses act as bridges between a parent atom and a consumer. To prevent memory leaks when lenses are created dynamically without being bound to a DOM element, every lens maintains an internal `Set` of parent atom subscriptions. Calling `lens.dispose()` (supported via `[Symbol.dispose]`) clears all internal subscriptions, ensuring zero-overhead cleanup for high-churn state management patterns.

@@ -1,4 +1,4 @@
-import type { WritableAtom } from '@but212/atom-effect';
+import type { DeepPath, WritableAtom } from '@/types';
 
 // Note: atom-effect brands are based on Symbol.for, which works across realms
 // and library copies. This allows the lens to behave as a first-class atom
@@ -59,17 +59,25 @@ export function getPathValue(source: unknown, parts: string[]): unknown {
  * @param path Dot-separated path to the property (e.g. 'user.profile.name').
  * @returns A WritableAtom that reads from and writes to the specified path.
  */
-export function atomLens<T extends object, U = unknown>(
+export function atomLens<T extends object, P extends string>(
   atom: WritableAtom<T>,
-  path: string
-): WritableAtom<U> {
+  path: P
+): WritableAtom<DeepPath<T, P>> {
   const parts = path.includes('.') ? path.split('.') : [path];
+  const unsubscribers = new Set<() => void>();
+
+  const dispose = () => {
+    for (const unsub of unsubscribers) {
+      unsub();
+    }
+    unsubscribers.clear();
+  };
 
   return {
     get value() {
-      return getPathValue(atom.value, parts) as U;
+      return getPathValue(atom.value, parts) as DeepPath<T, P>;
     },
-    set value(newVal: U) {
+    set value(newVal: DeepPath<T, P>) {
       const current = atom.peek();
       const next = setDeepValue(current, parts, 0, newVal);
 
@@ -79,23 +87,43 @@ export function atomLens<T extends object, U = unknown>(
       }
     },
     peek() {
-      return getPathValue(atom.peek(), parts) as U;
+      return getPathValue(atom.peek(), parts) as DeepPath<T, P>;
     },
-    subscribe(listener: (newValue: U, oldValue: U) => void) {
-      return atom.subscribe((newParent, oldParent) => {
-        const newValue = getPathValue(newParent, parts) as U;
-        const oldValue = getPathValue(oldParent, parts) as U;
+    subscribe(listener: (newValue: DeepPath<T, P>, oldValue: DeepPath<T, P>) => void) {
+      const unsub = atom.subscribe((newParent, oldParent) => {
+        const newValue = getPathValue(newParent, parts) as DeepPath<T, P>;
+        const oldValue = getPathValue(oldParent, parts) as DeepPath<T, P>;
         if (!Object.is(newValue, oldValue)) {
           listener(newValue, oldValue);
         }
       });
+
+      unsubscribers.add(unsub);
+      return () => {
+        unsub();
+        unsubscribers.delete(unsub);
+      };
     },
     subscriberCount() {
       return atom.subscriberCount();
     },
-    dispose() {},
-    [Symbol.dispose]() {},
+    dispose,
+    [Symbol.dispose]: dispose,
     [ATOM_BRAND]: true,
     [WRITABLE_BRAND]: true,
-  } as unknown as WritableAtom<U>;
+  } as unknown as WritableAtom<DeepPath<T, P>>;
+}
+
+/**
+ * Composes an existing lens with a sub-path to create a deeper lens.
+ *
+ * @param lens The parent lens.
+ * @param path Sub-path relative to the parent lens.
+ * @returns A new lens pointing to the deeper path.
+ */
+export function composeLens<T extends object, P extends string>(
+  lens: WritableAtom<T>,
+  path: P
+): WritableAtom<DeepPath<T, P>> {
+  return atomLens(lens, path);
 }
