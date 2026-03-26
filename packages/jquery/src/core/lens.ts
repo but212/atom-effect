@@ -31,7 +31,7 @@ export function setDeepValue(obj: unknown, keys: string[], index: number, value:
     if (!Number.isNaN(idx)) {
       newArray[idx] = newValue;
     } else {
-      ((newArray as unknown) as Record<string, unknown>)[key] = newValue;
+      (newArray as unknown as Record<string, unknown>)[key] = newValue;
     }
     return newArray;
   }
