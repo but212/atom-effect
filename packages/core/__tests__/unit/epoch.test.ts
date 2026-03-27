@@ -8,6 +8,7 @@ import {
   nextEpoch,
   nextVersion,
   resetFlushState,
+  runInFlushScope,
   startFlush,
 } from '@/internal/epoch';
 
@@ -21,9 +22,9 @@ describe('epoch', () => {
     expect(next).toBeLessThanOrEqual(SMI_MAX);
   });
 
-  it('calculates next version with wrap-around', () => {
+  it('calculates next version with wrap-around (avoids 0)', () => {
     expect(nextVersion(0)).toBe(1);
-    expect(nextVersion(SMI_MAX)).toBe(0);
+    expect(nextVersion(SMI_MAX)).toBe(1);
   });
 
   it('manages flush lifecycle and state', () => {
@@ -51,5 +52,34 @@ describe('epoch', () => {
 
     endFlush();
     consoleWarn.mockRestore();
+  });
+});
+
+describe('epoch improvements', () => {
+  it('runInFlushScope ensures endFlush is called', () => {
+    resetFlushState();
+    expect(() =>
+      runInFlushScope(() => {
+        throw new Error('fail');
+      })
+    ).toThrow('fail');
+
+    // Should be able to start flush again because endFlush was called in finally
+    expect(startFlush()).toBe(true);
+    endFlush();
+  });
+
+  it('detects infinite loops in incrementFlushExecutionCount', () => {
+    resetFlushState();
+    startFlush();
+
+    // Fabricate a very high count to avoid 10000 increments in test
+    // (Actually incrementFlushExecutionCount uses a local variable but let's just do it)
+    for (let i = 0; i < 10000; i++) {
+      incrementFlushExecutionCount();
+    }
+
+    expect(() => incrementFlushExecutionCount()).toThrow(/Infinite loop detected/);
+    endFlush();
   });
 });

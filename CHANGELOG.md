@@ -9,6 +9,9 @@
 - **Performance**: Implemented **O(1) Free-Index Slot Reuse** for `SlotBuffer`. Replaces O(N) linear gap-scans with a zero-overhead stack-based index reuse strategy, resulting in **+66% performance gain** in high-churn subscriber/dependency scenarios.
 - **Performance**: Optimized `SlotBuffer` hot-paths by removing redundant processed-item counters and simplifying loop-exit conditions for better V8 JIT inlining.
 - **Performance**: Enhanced `DepSlotBuffer` with direct-path occupant relocation in `insertNew()`, bypassing unnecessary inline slot checks during dependency re-tracking.
+- **Reliability**: Implemented **Infinite Loop Detection** in `incrementFlushExecutionCount()`. Throws an error if the flush execution count exceeds `SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH` (10,000) to prevent browser-freezing reactive loops.
+- **Reliability**: Introduced `runInFlushScope(fn)` to provide an exception-safe wrapper for flush cycles, ensuring `endFlush()` is always called even if errors occur.
+- **Consistency**: Updated `nextVersion()` to avoid returning `0` (`(v + 1) & SMI_MAX || 1`). This ensures `version: 0` is strictly reserved for "uninitialized" reactive nodes, matching `nextEpoch()` behavior.
 - **Fixed**: Resolved a subtle `compact()` edge case where trailing null slots could trigger redundant swap operations.
 - **Testing**: Added a dedicated micro-benchmark suite for `SlotBuffer` and `DepSlotBuffer` to quantify SVO (Small Vector Optimization) efficiency.
 
