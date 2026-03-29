@@ -149,6 +149,14 @@ export interface BindingOptions<T = unknown> {
   on?: Record<string, (e: JQuery.Event) => void>;
 }
 
+/**
+ * A WritableAtom that can be disposed to clean up internal subscriptions.
+ * Returned by $.atomLens, $.composeLens, and $.lensFor().
+ */
+export interface DisposableWritableAtom<T> extends WritableAtom<T>, Disposable {
+  dispose(): void;
+}
+
 // ============================================================================
 // List API Types
 // ============================================================================
@@ -349,14 +357,14 @@ declare global {
     atomLens<T extends object, P extends Paths<T>>(
       atom: WritableAtom<T>,
       path: P
-    ): WritableAtom<PathValue<T, P>>;
+    ): DisposableWritableAtom<PathValue<T, P>>;
     composeLens<T extends object, P extends Paths<T>>(
       lens: WritableAtom<T>,
       path: P
-    ): WritableAtom<PathValue<T, P>>;
+    ): DisposableWritableAtom<PathValue<T, P>>;
     lensFor<T extends object>(
       atom: WritableAtom<T>
-    ): <P extends Paths<T>>(path: P) => WritableAtom<PathValue<T, P>>;
+    ): <P extends Paths<T>>(path: P) => DisposableWritableAtom<PathValue<T, P>>;
     route(config: RouteConfig): Router;
     atomFetch<T>(
       urlOrFn: string | (() => string),

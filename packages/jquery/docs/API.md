@@ -366,6 +366,7 @@ Declarative AJAX primitive. Wraps core's async `computed` with jQuery's `$.ajax`
 - `.value` — Resolved data (or `defaultValue` while pending).
 - `.isPending` — `true` during fetch.
 - `.hasError` / `.lastError` — Error state. Only set for real network/server errors; cancellations via abort are not treated as errors.
+- `.abort()` — Cancels the current pending request.
 - `.invalidate()` — Triggers refetch.
 
 **Additional Options**:
@@ -447,8 +448,9 @@ const router = $.route({
     home: { template: '#tmpl-home' },
     about: { template: '#tmpl-about' },
     user: {
-      render: (el, route, params) => {
-        el.innerHTML = `User ID: ${params.id}`;
+      render: (el, route, params, onUnmount) => {
+        // Use reactive bindings inside render for full capability
+        $(el).atomText($.computed(() => `User ID: ${params.id}`));
       }
     }
   }

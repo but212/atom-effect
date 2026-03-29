@@ -55,8 +55,7 @@ This eliminates boilerplate across all binding types and ensures robust async be
 
 ```typescript
 interface BindingContext {
-  $el: JQuery;        // Lazy jQuery wrapper (allocated only when needed)
-  el: HTMLElement;     // Raw DOM element (fast path)
+  el: HTMLElement;         // Raw DOM element (fast path)
   trackCleanup(fn): void;  // Registers cleanup with registry
 }
 ```
@@ -193,14 +192,13 @@ events: { 'click .del': handler }
   → $container.on('click', delegateHandler)     // 1 listener total
 
 delegateHandler(e):
-  walk e.target → parentElement chain
-    → elToKey (WeakMap<Element, key>)           // O(1) root lookup
-    → itemMap.get(key)                          // O(1) entry lookup
+  walk e.target → childElement chain
+    → dataset.atomKey (DOM lookup)              // O(1) key extraction
     → keyToIndex.get(key)                       // O(1) index lookup
     → handler(item, index, e)
 ```
 
-Both indexes (`elToKey`, `keyToIndex`) are kept in sync at the end of every effect run and cleared via `registry.trackCleanup` on container teardown.
+The `keyToIndex` map is kept in sync at the end of every effect run and cleared via `registry.trackCleanup` on container teardown.
 
 ## 6. Component Mounting
 
@@ -225,9 +223,8 @@ $el.atomMount((el, props) => {
 
 ```text
 Hash mode:    window.location.hash  ──▶  currentRoute (atom)  ──▶  renderEffect (effect)
-History mode: window.location.pathname ──▶  queryParams (atom)   ──▶  renderRoute()
-                                                                       ├── template cloning
-                                                                       └── custom render fn
+History mode: window.location.pathname ──▶  currentRoute (atom)   ──▶  renderRoute()
+              window.location.search   ──▶  queryParams (atom)
 ```
 
 The router is entirely **reactive**. Navigation (`navigate()` or URL change) updates the `currentRoute` and `queryParams` atoms. A single core `effect` (`renderEffect`) observes these atoms and triggers `renderRoute()` when they change.
@@ -280,7 +277,7 @@ packages/jquery/src/
     unified.ts        — Binding handler implementations + atomBind
     input-binding.ts  — Two-way input binding with IME/debounce/cursor support
     form.ts           — Fully automated form binding with lens-based deep paths
-    list.ts           — atomList with keyed LIS-based reconciliation
+    list.ts           — atomList with high-performance 1D flat buffer reconciliation
     mount.ts          — atomMount / atomUnmount component lifecycle
   features/
     route.ts          — SPA router (hash + history mode) with reactive state
@@ -288,7 +285,7 @@ packages/jquery/src/
   internal/
     pool.ts           — Centralized Object/Array pools for low-latency memory reuse
   utils/
-    index.ts          — DOM selectors, type classification, and LIS algorithm
+    index.ts          — DOM selectors, type classification, and identity helpers
     debug.ts          — Debug mode logging and visual highlighting
     sanitize.ts       — Regex-based HTML sanitization and URL protocol security
     array-pool.ts     — LIFO array pooling utility
@@ -312,7 +309,7 @@ The `ObjectPool` utility (`utils/object-pool.ts`) manages a stack of reusable pl
 #### 10.1.2 Reused Structures
 
 1. **`BindingRecord`**: Created per bound element. Pooling these avoids thousands of micro-allocations during initial page hydration or route transitions.
-2. **`ListItemEntry`**: Created per item in `atomList`. In lists with high churn (sorting, filtering, infinite scroll), pooling entries reduces memory fragmentation and the frequency of "Stop-the-world" GC cycles.
+2. **Reused Buffers**: Pre-allocated `Uint8Array` and `Int32Array` buffers are grown dynamically and reused across `atomList` update cycles to eliminate per-update allocations.
 3. **`ArrayPool`**: Reuses arrays used for `effects` and `cleanups` lists within a `BindingRecord`.
 
 ### 10.2 Monomorphic Records
