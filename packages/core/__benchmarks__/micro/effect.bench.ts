@@ -130,10 +130,12 @@ describe('Effect Re-execution', () => {
   }, benchEffectOptions);
 
   bench(
-    'effect re-runs 10 times',
+    `effect re-runs 10 times (x${REPEATS})`,
     () => {
-      for (let i = 0; i < 10; i++) {
-        a.value += 1;
+      for (let i = 0; i < REPEATS; i++) {
+        for (let j = 0; j < 10; j++) {
+          a.value += 1;
+        }
       }
     },
     microBenchOptions

@@ -108,10 +108,12 @@ describe('Computed Recomputation', () => {
   const cNoChange = computed(() => aNoChange.value * 2);
 
   bench(
-    'trigger recomputation (single dependency)',
+    `trigger recomputation (single dependency) (x${REPEATS})`,
     () => {
-      a.value += 1;
-      void c.value;
+      for (let i = 0; i < REPEATS; i++) {
+        a.value += 1;
+        void c.value;
+      }
     },
     microBenchOptions
   );
@@ -182,10 +184,12 @@ describe('Computed Cache Invalidation', () => {
   const dDiamond = computed(() => bDiamond.value + cDiamond.value);
 
   bench(
-    'invalidate cache (single dependency)',
+    `invalidate cache (single dependency) (x${REPEATS})`,
     () => {
-      a.value += 1;
-      void c.value; // Force re-eval
+      for (let i = 0; i < REPEATS; i++) {
+        a.value += 1;
+        void c.value; // Force re-eval
+      }
     },
     microBenchOptions
   );
