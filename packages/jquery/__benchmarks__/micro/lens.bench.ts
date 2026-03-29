@@ -74,7 +74,6 @@ describe('Lens Performance', () => {
     },
   });
 
-  const _nameLens = atomLens(source, 'user.profile.name');
   const themeLens = atomLens(source, 'user.profile.settings.theme');
   const postLens = atomLens(source, 'user.posts.0.title');
 
