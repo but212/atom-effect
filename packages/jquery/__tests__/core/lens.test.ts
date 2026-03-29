@@ -239,4 +239,19 @@ describe('$.atomLens', () => {
     expect(lens.subscriberCount()).toBe(0);
     expect(store.subscriberCount()).toBe(0); // Lens unsubscribed from parent
   });
+
+  it('should create a factory using lensFor', () => {
+    const user = $.atom({ profile: { name: 'Alice', email: 'alice@example.com' } });
+    const lens = $.lensFor(user);
+
+    const nameLens = lens('profile.name');
+    const emailLens = lens('profile.email');
+
+    expect(nameLens.value).toBe('Alice');
+    expect(emailLens.value).toBe('alice@example.com');
+
+    nameLens.value = 'Bob';
+    expect(user.value.profile.name).toBe('Bob');
+    expect(nameLens.value).toBe('Bob');
+  });
 });

@@ -238,6 +238,19 @@ Aliases to the core functions, exposed for convenience.
 
 `$.atom` also exposes a **`$.atom.debug`** boolean accessor. Setting it to `true` enables internal debug logging across the reactive system.
 
+### `$.lensFor(atom)`
+
+Creates a lens factory bound to a specific atom, which eliminates the need to pass the atom reference on every call.
+
+```javascript
+const user = $.atom({ profile: { name: 'Alice', email: 'alice@example.com' } });
+const lens = $.lensFor(user); // Factory bound to 'user'
+
+// IDE will autocomplete 'profile.name' and 'profile.email'
+const nameLens = lens('profile.name'); // WritableAtom<string>
+const emailLens = lens('profile.email'); // WritableAtom<string>
+```
+
 ### `$.atomLens(atom, path)`
 
 Creates a two-way reactive "lens" for a specific property path on an object-based atom. This "fake" atom allows fine-grained binding to deep properties of a monolithic state atom without extra memory or complex computed logic.
@@ -248,7 +261,7 @@ Creates a two-way reactive "lens" for a specific property path on an object-base
 **Returns**: A `WritableAtom` that:
 
 1. **Read/Write**: Directly updates the parent atom at the specified path using structural sharing.
-2. **Type Safety**: Uses the `DeepPath<T, P>` recursive type for compile-time path validation and automatic return type inference.
+2. **Type Safety**: Uses the `Paths<T>` and `PathValue<T, P>` recursive types for exact compile-time path validation, IDE path autocomplete (up to 8 levels deep), and precise return type inference without `unknown` fallbacks.
 3. **Memory Management**: Implements a `.dispose()` method to automatically clean up internal parent atom subscriptions.
 
 ```javascript
@@ -353,6 +366,7 @@ Declarative AJAX primitive. Wraps core's async `computed` with jQuery's `$.ajax`
 - `.value` — Resolved data (or `defaultValue` while pending).
 - `.isPending` — `true` during fetch.
 - `.hasError` / `.lastError` — Error state. Only set for real network/server errors; cancellations via abort are not treated as errors.
+- `.abort()` — Cancels the current pending request.
 - `.invalidate()` — Triggers refetch.
 
 **Additional Options**:
@@ -434,8 +448,9 @@ const router = $.route({
     home: { template: '#tmpl-home' },
     about: { template: '#tmpl-about' },
     user: {
-      render: (el, route, params) => {
-        el.innerHTML = `User ID: ${params.id}`;
+      render: (el, route, params, onUnmount) => {
+        // Use reactive bindings inside render for full capability
+        $(el).atomText($.computed(() => `User ID: ${params.id}`));
       }
     }
   }

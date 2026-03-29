@@ -50,6 +50,7 @@ A "glitch" occurs when an inconsistent intermediate state is observed. The appro
 
 - **Global Epoch**: Incremented whenever a mutation starts. It acts as a "logical clock" to identify *when* something happened across the entire system.
 - **Local Version**: Incremented only when a node's *value* actually changes.
+  - **Sentinel Value**: Both Epoch and Version avoid `0` (wrapping to `1`). This ensures `0` can be used as a reliable "uninitialized" or "never seen" marker across the engine.
 
 ### Rationale
 
@@ -115,7 +116,7 @@ Effects can inadvertently create feedback loops (e.g., an effect that writes to 
 | Limit | Threshold | Scope |
 | :--- | :--- | :--- |
 | `MAX_EXECUTIONS_PER_EFFECT` | 100 per flush | Per individual effect |
-| `MAX_EXECUTIONS_PER_FLUSH` | 10,000 per flush | Global across all effects |
+| `MAX_EXECUTIONS_PER_FLUSH` | 10,000 per flush | Global across all effects (Checked in `incrementFlushExecutionCount`) |
 | `MAX_EXECUTIONS_PER_SECOND` | 1,000 / sec (dev only) | Frequency guard per effect |
 
 When a threshold is crossed, an `EffectError` is thrown and the offending effect is disposed to avoid blocking the main thread indefinitely.

@@ -4,26 +4,39 @@
 
 ### Core
 
+#### Added
+
+- **Reliability**: Implemented **Infinite Loop Detection** in `incrementFlushExecutionCount()`. Throws an error if the flush execution count exceeds `SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH` (10,000) to prevent browser-freezing reactive loops.
+- **Reliability**: Introduced `runInFlushScope(fn)` to provide an exception-safe wrapper for flush cycles, ensuring `endFlush()` is always called even if errors occur.
+- **Testing**: Added a dedicated micro-benchmark suite for `SlotBuffer` and `DepSlotBuffer` to quantify SVO (Small Vector Optimization) efficiency.
+
 #### Changed
 
 - **Performance**: Implemented **O(1) Free-Index Slot Reuse** for `SlotBuffer`. Replaces O(N) linear gap-scans with a zero-overhead stack-based index reuse strategy, resulting in **+66% performance gain** in high-churn subscriber/dependency scenarios.
 - **Performance**: Optimized `SlotBuffer` hot-paths by removing redundant processed-item counters and simplifying loop-exit conditions for better V8 JIT inlining.
 - **Performance**: Enhanced `DepSlotBuffer` with direct-path occupant relocation in `insertNew()`, bypassing unnecessary inline slot checks during dependency re-tracking.
-- **Fixed**: Resolved a subtle `compact()` edge case where trailing null slots could trigger redundant swap operations.
-- **Testing**: Added a dedicated micro-benchmark suite for `SlotBuffer` and `DepSlotBuffer` to quantify SVO (Small Vector Optimization) efficiency.
+- **Consistency**: Updated `nextVersion()` to avoid returning `0` (`(v + 1) & SMI_MAX || 1`). This ensures `version: 0` is strictly reserved for "uninitialized" reactive nodes, matching `nextEpoch()` behavior.
+
+#### Fixed
+
+- **Core**: Resolved a subtle `compact()` edge case where trailing null slots could trigger redundant swap operations.
 
 ### jQuery
 
 #### Added
 
+- **API**: `$.lensFor(atom)`: Creates a lens factory bound to a specific atom, simplifying deep path extraction without repeatedly passing the atom reference.
 - **API**: `$.atomLens(atom, path)`: Creates a two-way reactive "lens" for a specific property path on an object-based atom.
-  - **Type Safety**: Implemented `DeepPath<T, P>` recursive type for compile-time path validation and automatic return type inference.
+  - **Type Safety**: Implemented `Paths<T>` (depth 8) and `PathValue<T, P>` recursive types for precise compile-time path validation, IDE autocomplete, and strict zero-`unknown` return type inference.
   - **Memory Safety**: Added subscription tracking and a `.dispose()` method to automatically clean up internal parent atom subscriptions.
   - Supports deep nested paths (e.g., `$.atomLens(user, 'settings.notifications.email')`).
   - Implements **Structural Sharing** to minimize re-renders and memory allocations.
   - Automatically compatible with all jQuery bindings like `atomVal` and `atomForm`.
   - Optimized with equality guards to skip redundant parent atom updates.
 - **API**: `$.composeLens(lens, path)`: Composes an existing lens with a sub-path to create a deeper, targeted lens.
+
+#### Changed
+
 - **Performance**: Optimized `$.fn.atomForm` for O(1) performance on large forms. Replaced O(N) effect fan-out with a centralized dispatcher and leaf-level atoms to eliminate redundant effect executions.
 - **Internal**: Extracted `getPathValue` utility to `core/lens` for unified and efficient path traversal across lenses and form bindings.
 
