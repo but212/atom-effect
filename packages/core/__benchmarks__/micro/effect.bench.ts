@@ -215,9 +215,9 @@ describe('Effect Disposal', () => {
   bench(
     `dispose effect with cleanup (x${REPEATS})`,
     () => {
+      let _cleaned = false;
       for (let i = 0; i < REPEATS; i++) {
         const a = atom(0);
-        let _cleaned = false;
         const effectHandle = effect(() => {
           const _ = a.value;
           return () => {
