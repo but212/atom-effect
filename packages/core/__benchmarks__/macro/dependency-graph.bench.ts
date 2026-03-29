@@ -5,7 +5,9 @@
 
 import { bench, describe } from 'vitest';
 import { atom, computed } from '@/index';
-import { macroBenchOptions } from '../utils/setup.js';
+import { macroBenchOptions, microBenchOptions } from '../utils/setup.js';
+
+const REPEATS = 1000;
 
 describe('Dependency Chain Patterns', () => {
   const chainSource = atom(0);
@@ -139,34 +141,38 @@ describe('Dynamic Dependency Patterns', () => {
   const arrSelected = computed(() => arrValues[idxAtom.value]!.value);
 
   bench(
-    'conditional dependencies',
+    `conditional dependencies (x${REPEATS})`,
     () => {
-      // Toggle condition to switch dependency leg
-      condAtom.value = !condAtom.value;
-      const _ = condResult.value;
+      for (let i = 0; i < REPEATS; i++) {
+        // Toggle condition to switch dependency leg
+        condAtom.value = !condAtom.value;
+        const _ = condResult.value;
 
-      // Update active branch
-      if (condAtom.value) {
-        condA.value++;
-      } else {
-        condB.value++;
+        // Update active branch
+        if (condAtom.value) {
+          condA.value++;
+        } else {
+          condB.value++;
+        }
+        const __ = condResult.value;
       }
-      const __ = condResult.value;
     },
-    macroBenchOptions
+    microBenchOptions
   );
 
   bench(
-    'array-based dynamic dependencies',
+    `array-based dynamic dependencies (x${REPEATS})`,
     () => {
-      // Change index
-      idxAtom.value = (idxAtom.value + 1) % 10;
-      const _ = arrSelected.value;
+      for (let i = 0; i < REPEATS; i++) {
+        // Change index
+        idxAtom.value = (idxAtom.value + 1) % 10;
+        const _ = arrSelected.value;
 
-      // Update underlying value
-      arrValues[idxAtom.value]!.value++;
-      const __ = arrSelected.value;
+        // Update underlying value
+        arrValues[idxAtom.value]!.value++;
+        const __ = arrSelected.value;
+      }
     },
-    macroBenchOptions
+    microBenchOptions
   );
 });

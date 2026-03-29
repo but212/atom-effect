@@ -1,6 +1,8 @@
 import { beforeEach, bench, describe } from 'vitest';
 import { atom, computed, effect } from '@/index';
-import { benchEffectOptions } from '../utils/setup.js';
+import { benchEffectOptions, microBenchOptions } from '../utils/setup.js';
+
+const REPEATS = 1000;
 
 describe('Input Latency', () => {
   const mockData = Array.from({ length: 1000 }, (_, i) => `Item ${i}`);
@@ -21,11 +23,19 @@ describe('Input Latency', () => {
     // Reset state before each run
     searchQuery.value = '';
   });
-  bench('input to render latency (pure propagation)', () => {
-    // Simulate typing "Item 1"
-    const input = 'Item 1';
-    for (const char of input) {
-      searchQuery.value += char;
-    }
-  });
+  bench(
+    `input to render latency (pure propagation) (x${REPEATS})`,
+    () => {
+      for (let i = 0; i < REPEATS; i++) {
+        // Simulate typing "Item 1"
+        const input = 'Item 1';
+        for (const char of input) {
+          searchQuery.value += char;
+        }
+        // Reset for next repeat within the same bench iteration
+        searchQuery.value = '';
+      }
+    },
+    microBenchOptions
+  );
 });
