@@ -1,4 +1,4 @@
-import type { DeepPath, WritableAtom } from '@/types';
+import type { Paths, PathValue, WritableAtom } from '@/types';
 
 // Note: atom-effect brands are based on Symbol.for, which works across realms
 // and library copies. This allows the lens to behave as a first-class atom
@@ -64,10 +64,10 @@ export function getPathValue(source: unknown, parts: string[]): unknown {
  * @param path Dot-separated path to the property (e.g. 'user.profile.name').
  * @returns A WritableAtom that reads from and writes to the specified path.
  */
-export function atomLens<T extends object, P extends string>(
+export function atomLens<T extends object, P extends Paths<T>>(
   atom: WritableAtom<T>,
   path: P
-): WritableAtom<DeepPath<T, P>> {
+): WritableAtom<PathValue<T, P>> {
   const parts = path.includes('.') ? path.split('.') : [path];
   const unsubscribers = new Set<() => void>();
 
@@ -80,9 +80,9 @@ export function atomLens<T extends object, P extends string>(
 
   return {
     get value() {
-      return getPathValue(atom.value, parts) as DeepPath<T, P>;
+      return getPathValue(atom.value, parts) as PathValue<T, P>;
     },
-    set value(newVal: DeepPath<T, P>) {
+    set value(newVal: PathValue<T, P>) {
       const current = atom.peek();
       const next = setDeepValue(current, parts, 0, newVal);
 
@@ -92,12 +92,12 @@ export function atomLens<T extends object, P extends string>(
       }
     },
     peek() {
-      return getPathValue(atom.peek(), parts) as DeepPath<T, P>;
+      return getPathValue(atom.peek(), parts) as PathValue<T, P>;
     },
-    subscribe(listener: (newValue: DeepPath<T, P>, oldValue: DeepPath<T, P>) => void) {
+    subscribe(listener: (newValue: PathValue<T, P>, oldValue: PathValue<T, P>) => void) {
       const unsub = atom.subscribe((newParent, oldParent) => {
-        const newValue = getPathValue(newParent, parts) as DeepPath<T, P>;
-        const oldValue = getPathValue(oldParent, parts) as DeepPath<T, P>;
+        const newValue = getPathValue(newParent, parts) as PathValue<T, P>;
+        const oldValue = getPathValue(oldParent, parts) as PathValue<T, P>;
         if (!Object.is(newValue, oldValue)) {
           listener(newValue, oldValue);
         }
@@ -116,7 +116,7 @@ export function atomLens<T extends object, P extends string>(
     [Symbol.dispose]: dispose,
     [ATOM_BRAND]: true,
     [WRITABLE_BRAND]: true,
-  } as unknown as WritableAtom<DeepPath<T, P>>;
+  } as unknown as WritableAtom<PathValue<T, P>>;
 }
 
 /**
@@ -126,9 +126,21 @@ export function atomLens<T extends object, P extends string>(
  * @param path Sub-path relative to the parent lens.
  * @returns A new lens pointing to the deeper path.
  */
-export function composeLens<T extends object, P extends string>(
+export function composeLens<T extends object, P extends Paths<T>>(
   lens: WritableAtom<T>,
   path: P
-): WritableAtom<DeepPath<T, P>> {
+): WritableAtom<PathValue<T, P>> {
   return atomLens(lens, path);
+}
+
+/**
+ * Creates a lens factory bound to a specific atom.
+ * Eliminates the need to pass the atom reference on every call.
+ *
+ * @example
+ * const lens = lensFor(userAtom);
+ * const email = lens('settings.notifications.email'); // WritableAtom<boolean>
+ */
+export function lensFor<T extends object>(atom: WritableAtom<T>) {
+  return <P extends Paths<T>>(path: P) => atomLens(atom, path);
 }

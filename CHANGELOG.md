@@ -19,8 +19,9 @@
 
 #### Added
 
+- **API**: `$.lensFor(atom)`: Creates a lens factory bound to a specific atom, simplifying deep path extraction without repeatedly passing the atom reference.
 - **API**: `$.atomLens(atom, path)`: Creates a two-way reactive "lens" for a specific property path on an object-based atom.
-  - **Type Safety**: Implemented `DeepPath<T, P>` recursive type for compile-time path validation and automatic return type inference.
+  - **Type Safety**: Implemented `Paths<T>` (depth 8) and `PathValue<T, P>` recursive types for precise compile-time path validation, IDE autocomplete, and strict zero-`unknown` return type inference.
   - **Memory Safety**: Added subscription tracking and a `.dispose()` method to automatically clean up internal parent atom subscriptions.
   - Supports deep nested paths (e.g., `$.atomLens(user, 'settings.notifications.email')`).
   - Implements **Structural Sharing** to minimize re-renders and memory allocations.

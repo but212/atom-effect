@@ -18,16 +18,34 @@ import type {
 type StringKeyToNumber<S extends string> = S extends `${infer N extends number}` ? N : S;
 
 /**
- * Recursive type to infer the value type at a given dot-separated path.
- * Supports numeric indices for array paths.
+ * Maximum recursion depth for path generation.
+ * Prevents TypeScript compiler from hitting recursion limits on deeply nested types.
  */
-export type DeepPath<T, P extends string> = P extends `${infer K}.${infer Rest}`
+type MaxDepth = 8;
+
+/**
+ * Generates a union of all valid dot-separated paths for type T.
+ */
+export type Paths<T, D extends unknown[] = []> = D['length'] extends MaxDepth
+  ? never
+  : T extends object
+    ? {
+        [K in keyof T & (string | number)]-?:
+          | `${K}`
+          | (T[K] extends object ? `${K}.${Paths<T[K], [...D, 1]>}` : never);
+      }[keyof T & (string | number)]
+    : never;
+
+/**
+ * Extracts the value type at path P within type T.
+ */
+export type PathValue<T, P extends string> = P extends `${infer K}.${infer Rest}`
   ? StringKeyToNumber<K> extends keyof T
-    ? DeepPath<T[StringKeyToNumber<K> & keyof T], Rest>
-    : unknown
+    ? PathValue<T[StringKeyToNumber<K> & keyof T], Rest>
+    : never
   : StringKeyToNumber<P> extends keyof T
     ? T[StringKeyToNumber<P> & keyof T]
-    : unknown;
+    : never;
 
 /**
  * Cleanup function returned by effects or components.
@@ -328,14 +346,17 @@ declare global {
     isComputed(v: unknown): boolean;
     isReactive(v: unknown): boolean;
     nextTick(): Promise<void>;
-    atomLens<T extends object, P extends string>(
+    atomLens<T extends object, P extends Paths<T>>(
       atom: WritableAtom<T>,
       path: P
-    ): WritableAtom<DeepPath<T, P>>;
-    composeLens<T extends object, P extends string>(
+    ): WritableAtom<PathValue<T, P>>;
+    composeLens<T extends object, P extends Paths<T>>(
       lens: WritableAtom<T>,
       path: P
-    ): WritableAtom<DeepPath<T, P>>;
+    ): WritableAtom<PathValue<T, P>>;
+    lensFor<T extends object>(
+      atom: WritableAtom<T>
+    ): <P extends Paths<T>>(path: P) => WritableAtom<PathValue<T, P>>;
     route(config: RouteConfig): Router;
     atomFetch<T>(
       urlOrFn: string | (() => string),

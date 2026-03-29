@@ -164,6 +164,9 @@ $.fn.atomChecked = function (atom: WritableAtom<boolean>): JQuery {
 
 /**
  * Two-way binding for an entire form.
+ *
+ * Note: While this API cannot check nested properties from HTML string elements statically,
+ * if you know the form structure, the parameter `atom` supports deep-dotted structural paths matching `Paths<T>`.
  */
 $.fn.atomForm = function <T extends object>(
   atom: WritableAtom<T>,

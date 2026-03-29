@@ -346,9 +346,9 @@ This "Structural Sharing" approach ensures that:
 3. **Local Sync**: Each leaf atom has a dedicated effect to sync its local changes back to the root atom. Since this effect only tracks the leaf atom, typing in one field does not wake up or re-evaluate other fields.
 4. **Deep Paths**: Supports dot-notation in `name` attributes via the shared `getPathValue` and `setDeepValue` utilities.
 
-### 11.3 Type-Level Safety with `DeepPath`
+### 11.3 Type-Level Safety with `Paths<T>`
 
-`$.atomLens` and `$.composeLens` utilize a recursive utility type `DeepPath<T, P>`. This type decomposes the path string `P` at compile-time to resolve the correct value type from the object `T`. This ensures that lenses are fully typed and prevents runtime errors from accessing invalid paths during development.
+`$.atomLens`, `$.composeLens` and `$.lensFor` utilize the generic utility types `Paths<T>` and `PathValue<T, P>`. `Paths<T>` enumerates all valid dot-separated nested paths of a state object recursively (up to 8 levels deep) providing rich IDE autocompletion for deep properties. `PathValue<T, P>` precisely extracts the corresponding type at that valid path. This structurally eliminates runtime errors and invalid fallbacks (`unknown`) during development.
 
 ### 11.4 Memory Safety & Subscription Tracking
 
