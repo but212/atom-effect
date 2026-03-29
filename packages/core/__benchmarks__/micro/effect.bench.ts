@@ -11,29 +11,33 @@ const REPEATS = 1000;
 
 describe('Effect Creation', () => {
   bench(
-    'create effect (single dependency)',
+    `create effect (single dependency) (x${REPEATS})`,
     () => {
-      const a = atom(0);
       let _value = 0;
-      const effectHandle = effect(() => {
-        _value = a.value;
-      });
-      effectHandle.dispose();
+      for (let i = 0; i < REPEATS; i++) {
+        const a = atom(0);
+        const effectHandle = effect(() => {
+          _value = a.value;
+        });
+        effectHandle.dispose();
+      }
     },
     microBenchOptions
   );
 
   bench(
-    'create effect (multiple dependencies)',
+    `create effect (multiple dependencies) (x${REPEATS})`,
     () => {
-      const a = atom(1);
-      const b = atom(2);
-      const c = atom(3);
       let _sum = 0;
-      const effectHandle = effect(() => {
-        _sum = a.value + b.value + c.value;
-      });
-      effectHandle.dispose();
+      for (let i = 0; i < REPEATS; i++) {
+        const a = atom(1);
+        const b = atom(2);
+        const c = atom(3);
+        const effectHandle = effect(() => {
+          _sum = a.value + b.value + c.value;
+        });
+        effectHandle.dispose();
+      }
     },
     microBenchOptions
   );
@@ -163,18 +167,20 @@ describe('Effect Cleanup', () => {
   }, benchEffectOptions);
 
   bench(
-    'effect with cleanup function (creation/disposal)',
+    `effect with cleanup function (creation/disposal) (x${REPEATS})`,
     () => {
-      const a = atom(0);
       let _cleaned = false;
-      const effectHandle = effect(() => {
-        const _ = a.value;
-        return () => {
-          _cleaned = true;
-        };
-      });
-      a.value = 1; // Triggers cleanup
-      effectHandle.dispose(); // Triggers final cleanup
+      for (let i = 0; i < REPEATS; i++) {
+        const a = atom(0);
+        const effectHandle = effect(() => {
+          const _ = a.value;
+          return () => {
+            _cleaned = true;
+          };
+        });
+        a.value = 1; // Triggers cleanup
+        effectHandle.dispose(); // Triggers final cleanup
+      }
     },
     microBenchOptions
   );
@@ -192,30 +198,34 @@ describe('Effect Cleanup', () => {
 
 describe('Effect Disposal', () => {
   bench(
-    'dispose effect',
+    `dispose effect (x${REPEATS})`,
     () => {
-      const a = atom(0);
       let _value = 0;
-      const effectHandle = effect(() => {
-        _value = a.value;
-      });
-      effectHandle.dispose();
+      for (let i = 0; i < REPEATS; i++) {
+        const a = atom(0);
+        const effectHandle = effect(() => {
+          _value = a.value;
+        });
+        effectHandle.dispose();
+      }
     },
     microBenchOptions
   );
 
   bench(
-    'dispose effect with cleanup',
+    `dispose effect with cleanup (x${REPEATS})`,
     () => {
-      const a = atom(0);
       let _cleaned = false;
-      const effectHandle = effect(() => {
-        const _ = a.value;
-        return () => {
-          _cleaned = true;
-        };
-      });
-      effectHandle.dispose();
+      for (let i = 0; i < REPEATS; i++) {
+        const a = atom(0);
+        const effectHandle = effect(() => {
+          const _ = a.value;
+          return () => {
+            _cleaned = true;
+          };
+        });
+        effectHandle.dispose();
+      }
     },
     microBenchOptions
   );

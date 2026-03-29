@@ -152,23 +152,27 @@ describe('Computed Lazy Evaluation', () => {
   );
 
   bench(
-    'lazy computed (accessed once)',
+    `lazy computed (accessed once) (x${REPEATS})`,
     () => {
-      const a = atom(0);
-      const c = computed(() => a.value * 2, { lazy: true });
-      void c.value;
+      for (let i = 0; i < REPEATS; i++) {
+        const a = atom(0);
+        const c = computed(() => a.value * 2, { lazy: true });
+        void c.value;
+      }
     },
     microBenchOptions
   );
 
   bench(
-    'lazy computed (accessed multiple times)',
+    `lazy computed (accessed multiple times) (x${REPEATS})`,
     () => {
-      const a = atom(0);
-      const c = computed(() => a.value * 2, { lazy: true });
-      void c.value;
-      void c.value;
-      void c.value;
+      for (let i = 0; i < REPEATS; i++) {
+        const a = atom(0);
+        const c = computed(() => a.value * 2, { lazy: true });
+        void c.value;
+        void c.value;
+        void c.value;
+      }
     },
     microBenchOptions
   );
@@ -195,10 +199,12 @@ describe('Computed Cache Invalidation', () => {
   );
 
   bench(
-    'partial invalidation (diamond dependency)',
+    `partial invalidation (diamond dependency) (x${REPEATS})`,
     () => {
-      aDiamond.value += 1;
-      void dDiamond.value;
+      for (let i = 0; i < REPEATS; i++) {
+        aDiamond.value += 1;
+        void dDiamond.value;
+      }
     },
     microBenchOptions
   );
