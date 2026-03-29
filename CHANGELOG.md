@@ -16,7 +16,7 @@
 - **Performance**: Optimized `atomList` (list rendering) by migrating hot-path DOM manipulation to native APIs.
   - Replaced jQuery's `.insertBefore()` and `.appendTo()` with native `insertBefore()` and `appendChild()` within the reconciliation loop.
   - Eliminated redundant jQuery object wrapping (`$(el)`) for list items, reducing object allocation overhead.
-  - Refactored `placeItems` to use raw `Element` references for structural changes, achieving $O(N)$ performance gains in large lists.
+  - Refactored `placeItems` to use raw `Element` references for structural changes, achieving O(N) performance gains in large lists.
 - **Memory Safety**: Hardened memory management against orphan subscriptions during external non-standard DOM removal.
   - Implemented lazy auto-cleanup initialization to guarantee the `MutationObserver` activates immediately upon the first binding, even before `DOMContentLoaded`.
   - Refactored `InputBinding` teardown pattern to release internal closure references, enabling faster garbage collection.
