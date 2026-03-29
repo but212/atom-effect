@@ -32,6 +32,21 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
     debug.attachDebugInfo(this, 'atom', this.id);
   }
 
+  /** @internal */
+  get isDisposed(): boolean {
+    return (this.flags & ATOM_STATE_FLAGS.DISPOSED) !== 0;
+  }
+
+  /** @internal */
+  get isNotificationScheduled(): boolean {
+    return (this.flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED) !== 0;
+  }
+
+  /** @internal */
+  get isSync(): boolean {
+    return (this.flags & ATOM_STATE_FLAGS.SYNC) !== 0;
+  }
+
   get value(): T {
     const context = trackingContext.current;
     if (context != null) context.addDependency(this);
@@ -47,17 +62,15 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
 
     // 1. Check if notifications are needed
     const slots = this._slots;
-    const flags = this.flags;
-    if (slots == null || slots.size === 0 || flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED) {
+    if (slots == null || slots.size === 0 || this.isNotificationScheduled) {
       return;
     }
 
     this._pendingOldValue = oldValue;
-    const nextFlags = flags | ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
-    this.flags = nextFlags;
+    this.flags |= ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
 
     // 2. Schedule or flush
-    if ((nextFlags & ATOM_STATE_FLAGS.SYNC) !== 0 && !scheduler.isBatching) {
+    if (this.isSync && !scheduler.isBatching) {
       this._flushNotifications();
       return;
     }
@@ -77,9 +90,8 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
    * Triggers subscribers.
    */
   private _flushNotifications(): void {
-    const flags = this.flags;
     // Guard: Spurious flush or already disposed
-    if (!(flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED) || flags & ATOM_STATE_FLAGS.DISPOSED) {
+    if (!this.isNotificationScheduled || this.isDisposed) {
       return;
     }
 
@@ -95,7 +107,7 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
   }
 
   dispose(): void {
-    if (this.flags & ATOM_STATE_FLAGS.DISPOSED) return;
+    if (this.isDisposed) return;
 
     this._slots?.clear();
     this.flags |= ATOM_STATE_FLAGS.DISPOSED;

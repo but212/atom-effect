@@ -340,6 +340,16 @@ export function applyInputBinding<T>(
   atom: WritableAtom<T>,
   options: ValOptions<T>
 ): { fx: EffectObject; cleanup: () => void } {
-  const binding = new InputBinding($el, atom, options);
-  return { fx: effect(binding.syncDomFromAtom), cleanup: binding.cleanup };
+  let binding: InputBinding<T> | null = new InputBinding($el, atom, options);
+  const fx = effect(binding.syncDomFromAtom);
+
+  return {
+    fx,
+    cleanup: () => {
+      if (binding) {
+        binding.cleanup();
+        binding = null; // Release closure reference to allow GC
+      }
+    },
+  };
 }

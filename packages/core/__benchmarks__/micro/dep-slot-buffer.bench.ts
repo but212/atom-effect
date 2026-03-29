@@ -10,6 +10,8 @@ const BATCH_SIZE = 1000;
 class MockDep implements Dependency {
   _lastSeenEpoch = 0;
   flags = 0;
+  isComputed = false;
+  hasError = false;
   constructor(
     public id: number,
     public version: number

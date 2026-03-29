@@ -84,6 +84,18 @@ export interface Dependency {
   _lastSeenEpoch: number;
 
   /**
+   * Whether the dependency is a computed atom.
+   * @internal
+   */
+  readonly isComputed: boolean;
+
+  /**
+   * Whether the dependency currently has an error.
+   * @internal
+   */
+  readonly hasError: boolean;
+
+  /**
    * Adds a subscriber to this dependency.
    * The listener may optionally receive the new and previous values.
    * @param listener - A callback or Subscriber object.

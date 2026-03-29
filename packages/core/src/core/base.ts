@@ -1,4 +1,4 @@
-import { EPOCH_CONSTANTS, IS_DEV, SMI_MAX } from '@/constants';
+import { COMPUTED_STATE_FLAGS, EPOCH_CONSTANTS, IS_DEV, SMI_MAX } from '@/constants';
 import { Subscription } from '@/core/dep-tracking';
 import { AtomError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
@@ -52,6 +52,30 @@ export abstract class ReactiveNode<T> {
     this._slots = null;
     this._deps = null;
     this.id = generateId() & SMI_MAX;
+  }
+
+  /**
+   * Whether the node has been disposed.
+   * @internal
+   */
+  get isDisposed(): boolean {
+    return (this.flags & COMPUTED_STATE_FLAGS.DISPOSED) !== 0; // Bit 0: DISPOSED
+  }
+
+  /**
+   * Whether the node is a computed atom.
+   * @internal
+   */
+  get isComputed(): boolean {
+    return (this.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) !== 0; // Bit 1: IS_COMPUTED
+  }
+
+  /**
+   * Whether the node currently has an error.
+   * @internal
+   */
+  get hasError(): boolean {
+    return false;
   }
 
   // ============================================================================

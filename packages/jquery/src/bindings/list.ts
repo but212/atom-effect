@@ -68,7 +68,11 @@ class ListContext<T> {
   scheduleRemoval(k: ListKey, $el: JQuery): void {
     const commitRemoval = () => {
       if (this.fx?.isDisposed) return;
-      $el.remove();
+      // If the parent container was already removed, $el is already disconnected.
+      // Skipping .remove() here prevents redundant cleanup warning from the jQuery patch.
+      if ($el[0]?.isConnected) {
+        $el.remove();
+      }
       this.removingKeys.delete(k);
       debug.log(LOG_PREFIXES.LIST, `${this.containerSelector} removed item:`, k);
     };

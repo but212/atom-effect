@@ -1,5 +1,23 @@
 # Changelog
 
+## [Unreleased]
+
+### Core
+
+#### Changed
+
+- **Refactor**: Abstracted bitwise flag operations into semantic internal accessors (e.g., `isDisposed`, `isDirty`, `isExecuting`) across all core reactive classes. This significantly improves internal maintainability and readability with zero performance overhead due to V8's ability to inline simple getters.
+- **Refactor**: Unified common reactive state properties (`isDisposed`, `isComputed`, `hasError`) into the `ReactiveNode` base class and updated the internal `Dependency` contract to ensure consistent engine-level interactions.
+
+### jQuery
+
+#### Fixed
+
+- **Memory Safety**: Hardened memory management against orphan subscriptions during external non-standard DOM removal.
+  - Implemented lazy auto-cleanup initialization to guarantee the `MutationObserver` activates immediately upon the first binding, even before `DOMContentLoaded`.
+  - Refactored `InputBinding` teardown pattern to release internal closure references, enabling faster garbage collection.
+  - Added strict `isConnected` guards during list container deletions to prevent redundant jQuery detachment warnings.
+
 ## [0.26.0]
 
 ### Core
