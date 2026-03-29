@@ -13,19 +13,22 @@ const REPEATS = 1000;
 describe('Todo App Scenarios', () => {
   const todosCreate = atom<TodoItem[]>([]);
   bench(
-    'create 100 todos',
+    'create 100 todos (bulk update)',
     () => {
-      if (todosCreate.value.length > 1000) todosCreate.value = [];
       const currentLen = todosCreate.value.length;
-      todosCreate.value = [
-        ...todosCreate.value,
-        {
-          id: currentLen + 1,
-          text: `Todo ${currentLen + 1}`,
+      if (currentLen > 5000) todosCreate.value = [];
+
+      const newBatch: TodoItem[] = [...todosCreate.value];
+      for (let i = 0; i < 100; i++) {
+        const id = currentLen + i + 1;
+        newBatch.push({
+          id,
+          text: `Todo ${id}`,
           completed: false,
           createdAt: new Date(),
-        },
-      ];
+        });
+      }
+      todosCreate.value = newBatch;
     },
     macroBenchOptions
   );
@@ -42,11 +45,11 @@ describe('Todo App Scenarios', () => {
   bench(
     'toggle completion status (100 todos)',
     () => {
-      for (let i = 0; i < 100; i++) {
-        todosToggle.value = todosToggle.value.map((todo: TodoItem) =>
-          todo.id === i + 1 ? { ...todo, completed: !todo.completed } : todo
-        );
-      }
+      // Toggle all items in the list
+      todosToggle.value = todosToggle.value.map((todo: TodoItem) => ({
+        ...todo,
+        completed: !todo.completed,
+      }));
     },
     macroBenchOptions
   );
@@ -68,41 +71,27 @@ describe('Todo App Scenarios', () => {
   });
 
   bench(
-    `filter todos (active/completed) (x${REPEATS})`,
+    `filter switch (x${REPEATS})`,
     () => {
       for (let i = 0; i < REPEATS; i++) {
         // Cycle filters
-        switch (filterAtom.value) {
-          case 'all':
-            filterAtom.value = 'active';
-            break;
-          case 'active':
-            filterAtom.value = 'completed';
-            break;
-          case 'completed':
-            filterAtom.value = 'all';
-            break;
-        }
-
-        const _ = filteredTodos.value;
+        filterAtom.value = 'active';
+        const _1 = filteredTodos.value;
+        filterAtom.value = 'completed';
+        const _2 = filteredTodos.value;
+        filterAtom.value = 'all';
+        const _3 = filteredTodos.value;
       }
     },
     macroBenchOptions
   );
 
-  const todosDelete = atom<TodoItem[]>(
-    Array.from({ length: 100 }, (_, i) => ({
-      id: i + 1,
-      text: `Todo ${i + 1}`,
-      completed: i % 2 === 0,
-      createdAt: new Date(),
-    }))
-  );
+  const todosDelete = atom<TodoItem[]>([]);
 
   bench(
-    'delete todos (remove 50 from 100)',
+    'delete todos (50 items)',
     () => {
-      // Reset if empty
+      // Reset to 100 items if we've deleted too many
       if (todosDelete.value.length < 50) {
         todosDelete.value = Array.from({ length: 100 }, (_, i) => ({
           id: i + 1,
@@ -111,13 +100,9 @@ describe('Todo App Scenarios', () => {
           createdAt: new Date(),
         }));
       }
-      const _current = todosDelete.value;
-      for (let i = 0; i < 50; i++) {
-        if (todosDelete.value.length > 0) {
-          const idToRemove = todosDelete.value[0]!.id; // remove first
-          todosDelete.value = todosDelete.value.filter((t: TodoItem) => t.id !== idToRemove);
-        }
-      }
+
+      // Delete top 50
+      todosDelete.value = todosDelete.value.slice(50);
     },
     macroBenchOptions
   );
@@ -136,34 +121,38 @@ describe('Todo App Scenarios', () => {
   }, benchEffectOptions);
 
   bench(
-    'complete todo app workflow',
+    'full workflow: add → toggle → filter → delete',
     () => {
-      // Reset state periodically to keep it stable
-      if (todosWorkflow.value.length > 1000) todosWorkflow.value = [];
+      // 1. Reset
+      todosWorkflow.value = [];
+      filterWorkflow.value = 'all';
 
-      // 1. Add (Trigger Effect)
-      todosWorkflow.value = [
-        ...todosWorkflow.value,
-        { id: Date.now(), text: 'New', completed: false, createdAt: new Date() },
-      ];
-
-      // 2. Toggle (Trigger Effect)
-      if (todosWorkflow.value.length > 0) {
-        const first = todosWorkflow.value[0]!;
-        todosWorkflow.value = [
-          { ...first, completed: !first.completed },
-          ...todosWorkflow.value.slice(1),
-        ];
+      // 2. Add 20
+      const nextBatch: TodoItem[] = [];
+      for (let i = 0; i < 20; i++) {
+        nextBatch.push({ id: i, text: 'New', completed: false, createdAt: new Date() });
       }
+      todosWorkflow.value = nextBatch;
 
-      // 3. Filter change (Trigger Effect)
-      filterWorkflow.value = filterWorkflow.value === 'all' ? 'active' : 'all';
+      // 3. Toggle 10
+      todosWorkflow.value = todosWorkflow.value.map((t, i) =>
+        i < 10 ? { ...t, completed: true } : t
+      );
+
+      // 4. Filter
+      filterWorkflow.value = 'active';
+
+      // 5. Delete 5
+      todosWorkflow.value = todosWorkflow.value.slice(5);
+
+      // 6. Back to all
+      filterWorkflow.value = 'all';
     },
     macroBenchOptions
   );
 });
 
-describe('Todo App with Effects', () => {
+describe('Todo App Stats Architecture', () => {
   const todosStats = atom<TodoItem[]>([]);
   const totalCount = computed(() => todosStats.value.length);
   const completedCount = computed(
@@ -173,21 +162,19 @@ describe('Todo App with Effects', () => {
     totalCount.value === 0 ? 0 : (completedCount.value / totalCount.value) * 100
   );
 
-  let _statsUpdates = 0;
+  let _rate = 0;
   effect(() => {
-    _statsUpdates++;
-    const _ = completionRate.value;
+    _rate = completionRate.value;
   }, benchEffectOptions);
 
   bench(
-    'todo stats with auto-update',
+    'stat propagation (add 100 items)',
     () => {
-      // Simulate adding todos triggering stats updates
-      if (todosStats.value.length > 1000) todosStats.value = [];
-      todosStats.value = [
-        ...todosStats.value,
-        { id: Date.now(), text: 'Item', completed: Math.random() > 0.5, createdAt: new Date() },
-      ];
+      const items: TodoItem[] = [];
+      for (let i = 0; i < 100; i++) {
+        items.push({ id: i + 1, text: 'Item', completed: i % 2 === 0, createdAt: new Date() });
+      }
+      todosStats.value = items;
     },
     macroBenchOptions
   );

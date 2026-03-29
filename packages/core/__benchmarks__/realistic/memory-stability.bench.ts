@@ -1,33 +1,40 @@
 import { bench, describe } from 'vitest';
 import { atom, computed, effect } from '@/index';
+import { benchEffectOptions, forceGC, memoryBenchOptions } from '../utils/setup';
 
 describe('Memory Stability', () => {
-  bench('memory usage after component churn', () => {
-    // Simulate creating and destroying components
-    const createComponent = () => {
-      const state = atom({ data: 'some data' });
-      const derived = computed(() => state.value.data.toUpperCase());
-      const stop = effect(() => {
-        const _ = derived.value;
-      });
-      return { state, derived, stop };
-    };
+  bench(
+    'heavy component churn (1000 items)',
+    () => {
+      const createComponent = (id: number) => {
+        const state = atom({ id, data: 'some data' });
+        const derived = computed(() => `ID: ${state.value.id} - ${state.value.data.toUpperCase()}`);
+        const stop = effect(() => {
+          const _ = derived.value;
+        }, benchEffectOptions);
+        return { state, derived, stop };
+      };
 
-    const components: ReturnType<typeof createComponent>[] = [];
+      const components: ReturnType<typeof createComponent>[] = [];
 
-    // Mount 50 components
-    for (let i = 0; i < 50; i++) {
-      components.push(createComponent());
-    }
+      // Mount 1000 components
+      for (let i = 0; i < 1000; i++) {
+        components.push(createComponent(i));
+      }
 
-    // Update them
-    for (const comp of components) {
-      comp.state.value = { data: 'updated data' };
-    }
+      // Update them
+      for (let i = 0; i < 1000; i++) {
+        components[i]!.state.value = { id: i, data: 'updated data' };
+      }
 
-    // Unmount them
-    for (const comp of components) {
-      comp.stop.dispose();
-    }
-  });
+      // Unmount them
+      for (let i = 0; i < 1000; i++) {
+        components[i]!.stop.dispose();
+      }
+
+      // Force GC to allow cleanup observation if --expose-gc is enabled
+      forceGC();
+    },
+    memoryBenchOptions
+  );
 });

@@ -118,6 +118,58 @@ describe('Lens Performance', () => {
   );
 });
 
+describe('Lens Depth: Chained vs. Deep Path', () => {
+  const source = atom<SimpleSchema>({ a: { b: { c: 1 } } });
+
+  // 1-level deep path lens
+  const deepPathLens = atomLens(source, 'a.b.c');
+
+  // 3-level chained lens
+  const lensA = atomLens(source, 'a');
+  const lensB = composeLens(lensA, 'b');
+  const lensC = composeLens(lensB, 'c');
+
+  bench(
+    `read: 1-level deep path (a.b.c) (x${REPEATS})`,
+    () => {
+      for (let i = 0; i < REPEATS; i++) {
+        void deepPathLens.value;
+      }
+    },
+    microBenchOptions
+  );
+
+  bench(
+    `read: 3-level chained (a->b->c) (x${REPEATS})`,
+    () => {
+      for (let i = 0; i < REPEATS; i++) {
+        void lensC.value;
+      }
+    },
+    microBenchOptions
+  );
+
+  bench(
+    `write: 1-level deep path (a.b.c) (x${REPEATS})`,
+    () => {
+      for (let i = 0; i < REPEATS; i++) {
+        deepPathLens.value = i;
+      }
+    },
+    microBenchOptions
+  );
+
+  bench(
+    `write: 3-level chained (a->b->c) (x${REPEATS})`,
+    () => {
+      for (let i = 0; i < REPEATS; i++) {
+        lensC.value = i;
+      }
+    },
+    microBenchOptions
+  );
+});
+
 describe('Lens Subscription Propagation', () => {
   const source = atom({ a: { b: { c: 1 } } });
   const lens = atomLens(source, 'a.b.c');
