@@ -12,7 +12,7 @@
 
 #### Changed
 
-- **Performance**: Implemented **O(1) Free-Index Slot Reuse** for `SlotBuffer`. Replaces O(N) linear gap-scans with a zero-overhead stack-based index reuse strategy, resulting in **+66% performance gain** in high-churn subscriber/dependency scenarios.
+- **Performance**: Implemented **O(1) Free-Index Slot Reuse** for `SlotBuffer`. Replaces O(N) linear gap-scans with a zero-overhead stack-based index reuse strategy.
 - **Performance**: Optimized `SlotBuffer` hot-paths by removing redundant processed-item counters and simplifying loop-exit conditions for better V8 JIT inlining.
 - **Performance**: Enhanced `DepSlotBuffer` with direct-path occupant relocation in `insertNew()`, bypassing unnecessary inline slot checks during dependency re-tracking.
 - **Consistency**: Updated `nextVersion()` to avoid returning `0` (`(v + 1) & SMI_MAX || 1`). This ensures `version: 0` is strictly reserved for "uninitialized" reactive nodes, matching `nextEpoch()` behavior.
