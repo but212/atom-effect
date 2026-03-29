@@ -28,15 +28,17 @@ const setPool = new ObjectPool<Set<ListKey>>(
 const arrayPool = new ArrayPool<unknown>(100, 1024);
 
 function insertOrAppend(elOrJq: Element | JQuery, nextNode: Node | null, container: Element): void {
+  const insert = nextNode?.isConnected
+    ? (el: Element) => container.insertBefore(el, nextNode)
+    : (el: Element) => container.appendChild(el);
+
   if (elOrJq instanceof Element) {
-    if (nextNode?.isConnected) container.insertBefore(elOrJq, nextNode);
-    else container.appendChild(elOrJq);
+    insert(elOrJq);
   } else {
     for (let i = 0, len = elOrJq.length; i < len; i++) {
       const el = elOrJq[i];
       if (el) {
-        if (nextNode?.isConnected) container.insertBefore(el, nextNode);
-        else container.appendChild(el);
+        insert(el);
       }
     }
   }
