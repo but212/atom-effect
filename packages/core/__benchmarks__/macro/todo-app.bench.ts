@@ -8,6 +8,8 @@ import { atom, computed, effect } from '@/index';
 import type { TodoItem } from '../fixtures/index.js';
 import { benchEffectOptions, macroBenchOptions } from '../utils/setup.js';
 
+const REPEATS = 1000;
+
 describe('Todo App Scenarios', () => {
   const todosCreate = atom<TodoItem[]>([]);
   bench(
@@ -66,14 +68,16 @@ describe('Todo App Scenarios', () => {
   });
 
   bench(
-    'filter todos (active/completed)',
+    `filter todos (active/completed) (x${REPEATS})`,
     () => {
-      // Cycle filters
-      if (filterAtom.value === 'all') filterAtom.value = 'active';
-      else if (filterAtom.value === 'active') filterAtom.value = 'completed';
-      else filterAtom.value = 'all';
+      for (let i = 0; i < REPEATS; i++) {
+        // Cycle filters
+        if (filterAtom.value === 'all') filterAtom.value = 'active';
+        else if (filterAtom.value === 'active') filterAtom.value = 'completed';
+        else filterAtom.value = 'all';
 
-      const _ = filteredTodos.value;
+        const _ = filteredTodos.value;
+      }
     },
     macroBenchOptions
   );
