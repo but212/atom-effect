@@ -74,7 +74,6 @@ describe('epoch improvements', () => {
     startFlush();
 
     // Fabricate a very high count to avoid 10000 increments in test
-    // (Actually incrementFlushExecutionCount uses a local variable but let's just do it)
     for (let i = 0; i < 10000; i++) {
       incrementFlushExecutionCount();
     }

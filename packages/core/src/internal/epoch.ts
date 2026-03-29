@@ -48,8 +48,8 @@ export const endFlush = () => {
  * Runs a function within a flush scope.
  * Ensures endFlush() is called even if an error occurs.
  */
-export function runInFlushScope<T>(fn: () => T): T {
-  if (!startFlush()) return undefined as T;
+export function runInFlushScope<T>(fn: () => T): T | undefined {
+  if (!startFlush()) return undefined;
   try {
     return fn();
   } finally {
