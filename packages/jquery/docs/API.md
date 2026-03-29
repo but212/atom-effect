@@ -141,6 +141,12 @@ $('ul').atomList(usersAtom, {
 
 ---
 
+### Internal Performance Note
+
+The `atomList` reconciliation engine uses a **1D flat buffer strategy** combined with native DOM APIs (`insertBefore`, `appendChild`) for structural updates. This bypasses jQuery's internal overhead (script scanning, context normalization) during the rendering hot path, ensuring O(N) performance even for lists with thousands of items.
+
+---
+
 ## Form Bindings
 
 ### `.atomVal(atom, options?)`

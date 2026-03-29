@@ -166,7 +166,7 @@ The binding maintains closure references internally, but utilizes a strict teard
 1. **Prefix/Suffix Trimming**: Identifies and skips common items at the start and end of the list.
 2. **Key Mapping**: Maps remaining items to unique keys for diffing.
 3. **Flat Buffer Diffing**: Uses typed arrays (`Uint8Array` for states, `Int32Array` for moves) instead of intermediate objects to track transitions (added, removed, replaced, moved). Items with identical keys but different contents are marked for `update`.
-4. **Patching**: Synchronizes the DOM using the calculated transition map with minimal moves and removals.
+4. **Patching**: Synchronizes the DOM using the calculated transition map with minimal moves and removals. Uses **pure DOM APIs** (`target.insertBefore`, `target.appendChild`) for structural changes during the reconciliation loop to bypass jQuery's internal overhead and achieving O(N) performance for large datasets.
 5. **Fast Initial Render**: When possible, it uses `innerHTML` with bulk-sanitized fragments for the first render to maximize hydration speed.
 
 ### 5.1 Memory Efficiency (Pooling)

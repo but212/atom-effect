@@ -27,13 +27,21 @@ const setPool = new ObjectPool<Set<ListKey>>(
 );
 const arrayPool = new ArrayPool<unknown>(100, 1024);
 
-function insertOrAppend(
-  $el: JQuery<Element>,
-  nextNode: Node | null,
-  $container: JQuery<Element>
-): void {
-  if (nextNode?.isConnected) ($el as unknown as JQuery).insertBefore(nextNode);
-  else ($el as unknown as JQuery).appendTo($container as unknown as JQuery);
+function insertOrAppend(elOrJq: Element | JQuery, nextNode: Node | null, container: Element): void {
+  const insert = nextNode?.isConnected
+    ? (el: Element) => container.insertBefore(el, nextNode)
+    : (el: Element) => container.appendChild(el);
+
+  if (elOrJq instanceof Element) {
+    insert(elOrJq);
+  } else {
+    for (let i = 0, len = elOrJq.length; i < len; i++) {
+      const el = elOrJq[i];
+      if (el) {
+        insert(el);
+      }
+    }
+  }
 }
 
 function wrap($el: Element | JQuery<Element>): JQuery {
@@ -452,7 +460,6 @@ function placeItems<T>(
   ctx: ListContext<T>,
   diff: PreparedDiff<T>,
   rawContainer: Element,
-  $container: JQuery,
   callbacks: PlaceCallbacks<T>,
   innerHtmlFragments: string[] | null
 ): void {
@@ -505,12 +512,7 @@ function placeItems<T>(
       if (oldIndex !== -1 && oldIndex < minOldIndexSeen) {
         minOldIndexSeen = oldIndex;
       } else {
-        const $el = wrap(nodeOrJosh);
-        insertOrAppend(
-          $el as unknown as JQuery<Element>,
-          nextNode,
-          $container as unknown as JQuery<Element>
-        );
+        insertOrAppend(nodeOrJosh, nextNode, rawContainer);
       }
       nextNode = nodeOrJosh instanceof Element ? nodeOrJosh : (nodeOrJosh[0] ?? null);
     }
@@ -586,7 +588,7 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
 
         const innerHtmlFragments = renderItems(diff, options, isInitial);
         cleanupRemoved(ctx, diff);
-        placeItems(ctx, diff, rawContainer, $container, callbacks, innerHtmlFragments);
+        placeItems(ctx, diff, rawContainer, callbacks, innerHtmlFragments);
 
         if (events) {
           // Sync keys that were removed (not handled in buildIndices)
