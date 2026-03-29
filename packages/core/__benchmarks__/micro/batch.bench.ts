@@ -46,14 +46,16 @@ describe('Batch Operations', () => {
 
   const atoms100 = Array.from({ length: 100 }, () => atom(0));
   bench(
-    'batch update 100 atoms',
+    `batch update 100 atoms (x${REPEATS})`,
     () => {
-      const val = atoms100[0]!.value === 0 ? 1 : 0;
-      batch(() => {
-        for (let i = 0; i < 100; i++) {
-          atoms100[i]!.value = val;
-        }
-      });
+      for (let j = 0; j < REPEATS; j++) {
+        const val = atoms100[0]!.value === 0 ? 1 : 0;
+        batch(() => {
+          for (let i = 0; i < 100; i++) {
+            atoms100[i]!.value = val;
+          }
+        });
+      }
     },
     microBenchOptions
   );
@@ -69,11 +71,13 @@ describe('Batch vs Non-Batch', () => {
   }, benchEffectOptions);
 
   bench(
-    'without batch: update 10 atoms',
+    `without batch: update 10 atoms (x${REPEATS})`,
     () => {
-      const val = atomsNoBatch[0]!.value === 0 ? 1 : 0;
-      for (let i = 0; i < 10; i++) {
-        atomsNoBatch[i]!.value = val;
+      for (let j = 0; j < REPEATS; j++) {
+        const val = atomsNoBatch[0]!.value === 0 ? 1 : 0;
+        for (let i = 0; i < 10; i++) {
+          atomsNoBatch[i]!.value = val;
+        }
       }
     },
     microBenchOptions
@@ -88,14 +92,16 @@ describe('Batch vs Non-Batch', () => {
   }, benchEffectOptions);
 
   bench(
-    'with batch: update 10 atoms',
+    `with batch: update 10 atoms (x${REPEATS})`,
     () => {
-      const val = atomsBatch[0]!.value === 0 ? 1 : 0;
-      batch(() => {
-        for (let i = 0; i < 10; i++) {
-          atomsBatch[i]!.value = val;
-        }
-      });
+      for (let j = 0; j < REPEATS; j++) {
+        const val = atomsBatch[0]!.value === 0 ? 1 : 0;
+        batch(() => {
+          for (let i = 0; i < 10; i++) {
+            atomsBatch[i]!.value = val;
+          }
+        });
+      }
     },
     microBenchOptions
   );
@@ -157,15 +163,17 @@ describe('Batch with Computed', () => {
   const doubled = computed(() => sum.value * 2);
 
   bench(
-    'batch update atoms with computed chain',
+    `batch update atoms with computed chain (x${REPEATS})`,
     () => {
-      // Use increment to ensure value change
-      batch(() => {
-        a.value++;
-        b.value++;
-        c.value++;
-      });
-      const _ = doubled.value;
+      for (let i = 0; i < REPEATS; i++) {
+        // Use increment to ensure value change
+        batch(() => {
+          a.value++;
+          b.value++;
+          c.value++;
+        });
+        const _ = doubled.value;
+      }
     },
     microBenchOptions
   );
@@ -176,12 +184,14 @@ describe('Batch with Computed', () => {
   const dd = computed(() => db.value + dc.value);
 
   bench(
-    'batch with diamond dependency',
+    `batch with diamond dependency (x${REPEATS})`,
     () => {
-      batch(() => {
-        da.value++;
-      });
-      const _ = dd.value;
+      for (let i = 0; i < REPEATS; i++) {
+        batch(() => {
+          da.value++;
+        });
+        const _ = dd.value;
+      }
     },
     microBenchOptions
   );
