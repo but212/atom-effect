@@ -97,7 +97,7 @@ Production-like scenarios:
 
 ## Latest Results
 
-**Version**: v0.25.0
+**Version**: v0.26.0
 **Last Updated**: 2026-03-29
 **Environment**:
 
