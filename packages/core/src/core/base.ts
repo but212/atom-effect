@@ -54,6 +54,30 @@ export abstract class ReactiveNode<T> {
     this.id = generateId() & SMI_MAX;
   }
 
+  /**
+   * Whether the node has been disposed.
+   * @internal
+   */
+  get isDisposed(): boolean {
+    return (this.flags & 1) !== 0; // Bit 0: DISPOSED
+  }
+
+  /**
+   * Whether the node is a computed atom.
+   * @internal
+   */
+  get isComputed(): boolean {
+    return (this.flags & 2) !== 0; // Bit 1: IS_COMPUTED
+  }
+
+  /**
+   * Whether the node currently has an error.
+   * @internal
+   */
+  get hasError(): boolean {
+    return false;
+  }
+
   // ============================================================================
   // Producer Logic (Subscriber Management)
   // ============================================================================

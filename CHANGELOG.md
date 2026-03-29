@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+### Core
+
+#### Changed
+
+- **Refactor**: Abstracted bitwise flag operations into semantic internal accessors (e.g., `isDisposed`, `isDirty`, `isExecuting`) across all core reactive classes. This significantly improves internal maintainability and readability with zero performance overhead due to V8's ability to inline simple getters.
+- **Refactor**: Unified common reactive state properties (`isDisposed`, `isComputed`, `hasError`) into the `ReactiveNode` base class and updated the internal `Dependency` contract to ensure consistent engine-level interactions.
+
 ## [0.26.0]
 
 ### Core

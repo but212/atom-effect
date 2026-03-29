@@ -1,5 +1,4 @@
 import {
-  COMPUTED_STATE_FLAGS,
   DEBUG_CONFIG,
   EFFECT_STATE_FLAGS,
   EPOCH_CONSTANTS,
@@ -89,14 +88,14 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
   }
 
   public run(): void {
-    if (this.flags & EFFECT_STATE_FLAGS.DISPOSED) {
+    if (this.isDisposed) {
       throw new EffectError(ERROR_MESSAGES.EFFECT_DISPOSED);
     }
     this.execute(true);
   }
 
   public dispose(): void {
-    if (this.flags & EFFECT_STATE_FLAGS.DISPOSED) return;
+    if (this.isDisposed) return;
     this.flags |= EFFECT_STATE_FLAGS.DISPOSED;
 
     this._execCleanup();
@@ -108,7 +107,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
   }
 
   public addDependency(dep: Dependency): void {
-    if (!(this.flags & EFFECT_STATE_FLAGS.EXECUTING)) return;
+    if (!this.isExecuting) return;
 
     const startEpoch = this._currentEpoch;
     if (dep._lastSeenEpoch === startEpoch) return;
@@ -138,7 +137,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
       this._insertNewDependency(dep, trackIndex);
     }
 
-    if (dep.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) {
+    if (dep.isComputed) {
       deps.hasComputeds = true;
     }
     this._trackCount = trackIndex + 1;
@@ -167,7 +166,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
    * Executes effect with tracking.
    */
   public execute(force = false): void {
-    if (this.flags & (EFFECT_STATE_FLAGS.DISPOSED | EFFECT_STATE_FLAGS.EXECUTING)) return;
+    if (this.isDisposed || this.isExecuting) return;
 
     // Skip if not dirty
     const deps = this._deps!;
@@ -230,7 +229,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     promise.then(
       (cleanup) => {
         // Guard against race conditions (new execution or disposal happened)
-        if (execId !== this._execId || this.flags & EFFECT_STATE_FLAGS.DISPOSED) {
+        if (execId !== this._execId || this.isDisposed) {
           if (typeof cleanup === 'function') {
             try {
               cleanup();
@@ -258,7 +257,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
         if (link == null) continue;
 
         const dep = link.node;
-        if (dep.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) {
+        if (dep.isComputed) {
           this._tryPullComputed(dep);
         }
 
