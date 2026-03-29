@@ -169,9 +169,9 @@ describe('Effect Cleanup', () => {
   bench(
     `effect with cleanup function (creation/disposal) (x${REPEATS})`,
     () => {
+      let _cleaned = false;
       for (let i = 0; i < REPEATS; i++) {
         const a = atom(0);
-        let _cleaned = false;
         const effectHandle = effect(() => {
           const _ = a.value;
           return () => {
