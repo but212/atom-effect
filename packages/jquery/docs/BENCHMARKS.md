@@ -6,12 +6,12 @@ Benchmarking suite for `@but212/atom-effect-jquery` to measure DOM binding perfo
 
 | Category | Key Metric | Value | Context |
 | ---------- | ---------- | ----- | ------- |
-| **Text Binding** | Propagation (100el × 50) | 131 ops/sec | ~7.6ms per round |
-| **Class Binding** | Toggle (100el × 100) | 150 ops/sec | ~6.6ms per round |
-| **List Render** | 100 items | 217 ops/sec | ~4.6ms per render |
-| **Input (DOM→Atom)** | 100 events | 848 ops/sec | ~1.1ms per round |
-| **Todo App** | Full workflow | 2,168 ops/sec | ~0.46ms per cycle |
-| **Dashboard** | Fan-in chain | 1,447 ops/sec | ~0.69ms per update |
+| **Text Binding** | Propagation (100el × 50) | 157 ops/sec | ~6.3ms per round |
+| **Class Binding** | Toggle (100el × 100) | 180 ops/sec | ~5.5ms per round |
+| **List Render** | 100 items | 226 ops/sec | ~4.4ms per render |
+| **Input (DOM→Atom)** | 100 events | 861 ops/sec | ~1.1ms per round |
+| **Todo App** | Full workflow | 2,540 ops/sec | ~0.39ms per cycle |
+| **Dashboard** | Fan-in chain | 1,522 ops/sec | ~0.65ms per update |
 
 ## Running Benchmarks
 
@@ -84,13 +84,14 @@ Located in `__benchmarks__/macro/`, these test real-world DOM scenarios:
 
 | Benchmark | Result | Analysis |
 | ---------- | ------ | -------- |
-| atomText propagation | 131 ops/sec | Consistent DOM text updates |
-| atomClass toggle | 150 ops/sec | Fast class manipulation |
-| atomList render (100) | 217 ops/sec | Efficient list reconciliation |
-| atomVal DOM→Atom | 848 ops/sec | Near-instant input sync |
-| Todo full workflow | 2,168 ops/sec | Production-ready performance |
-| Dashboard fan-in | 1,447 ops/sec | Efficient computed→DOM chain |
-| Lens (shallow) (x1000) | 930 ops/sec | Low-overhead reactive lenses |
+| atomText propagation | 157 ops/sec | Consistent DOM text updates |
+| atomClass toggle | 180 ops/sec | Fast class manipulation |
+| atomList render (100) | 226 ops/sec | Efficient list reconciliation |
+| atomVal DOM→Atom | 861 ops/sec | Near-instant input sync |
+| Todo full workflow | 2,540 ops/sec | Production-ready performance |
+| Dashboard fan-in | 1,522 ops/sec | Efficient computed→DOM chain |
+| atomForm O(1) Scaling | 50.4K ops/sec | O(1) field dispatch validated |
+| Lens (shallow) (x1000) | 783 ops/sec | Low-overhead reactive lenses |
 
 ## Contributing Benchmarks
 
