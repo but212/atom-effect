@@ -6,12 +6,12 @@ Benchmarking suite for `@but212/atom-effect-jquery` to measure DOM binding perfo
 
 | Category | Key Metric | Value | Context |
 | ---------- | ---------- | ----- | ------- |
-| **Text Binding** | Propagation (100el × 50) | 134 ops/sec | ~7.5ms per round |
-| **Class Binding** | Toggle (100el × 100) | 152 ops/sec | ~6.6ms per round |
-| **List Render** | 100 items | 223 ops/sec | ~4.5ms per render |
-| **Input (DOM→Atom)** | 100 events | 860 ops/sec | ~1.2ms per round |
-| **Todo App** | Full workflow | 2,218 ops/sec | ~0.45ms per cycle |
-| **Dashboard** | Fan-in chain | 1,442 ops/sec | ~0.69ms per update |
+| **Text Binding** | Propagation (100el × 50) | 131 ops/sec | ~7.6ms per round |
+| **Class Binding** | Toggle (100el × 100) | 150 ops/sec | ~6.6ms per round |
+| **List Render** | 100 items | 217 ops/sec | ~4.6ms per render |
+| **Input (DOM→Atom)** | 100 events | 848 ops/sec | ~1.1ms per round |
+| **Todo App** | Full workflow | 2,168 ops/sec | ~0.46ms per cycle |
+| **Dashboard** | Fan-in chain | 1,447 ops/sec | ~0.69ms per update |
 
 ## Running Benchmarks
 
@@ -36,6 +36,7 @@ Located in `__benchmarks__/micro/`, these test individual binding operations:
 - **List**: atomList render, append, remove, shuffle, partial update, bind callback
 - **Input**: atomVal, atomChecked, debounce
 - **Sanitize**: sanitizeHtml with different profiles and batch sizes
+- **Lens**: atomLens creation, reading, writing, and propagation
 
 ### Macro-Benchmarks
 
@@ -70,8 +71,8 @@ Located in `__benchmarks__/macro/`, these test real-world DOM scenarios:
 
 ## Latest Results
 
-**Version**: v0.25.0
-**Last Updated**: 2026-03-26
+**Version**: v0.26.0
+**Last Updated**: 2026-03-29
 **Environment**:
 
 - **Node.js**: v22.x
@@ -83,12 +84,13 @@ Located in `__benchmarks__/macro/`, these test real-world DOM scenarios:
 
 | Benchmark | Result | Analysis |
 | ---------- | ------ | -------- |
-| atomText propagation | 134 ops/sec | Consistent DOM text updates |
-| atomClass toggle | 152 ops/sec | Fast class manipulation |
-| atomList render (100) | 223 ops/sec | Efficient list reconciliation |
-| atomVal DOM→Atom | 860 ops/sec | Near-instant input sync |
-| Todo full workflow | 2,218 ops/sec | Production-ready performance |
-| Dashboard fan-in | 1,442 ops/sec | Efficient computed→DOM chain |
+| atomText propagation | 131 ops/sec | Consistent DOM text updates |
+| atomClass toggle | 150 ops/sec | Fast class manipulation |
+| atomList render (100) | 217 ops/sec | Efficient list reconciliation |
+| atomVal DOM→Atom | 848 ops/sec | Near-instant input sync |
+| Todo full workflow | 2,168 ops/sec | Production-ready performance |
+| Dashboard fan-in | 1,447 ops/sec | Efficient computed→DOM chain |
+| Lens (shallow) (x1000) | 930 ops/sec | Low-overhead reactive lenses |
 
 ## Contributing Benchmarks
 

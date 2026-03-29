@@ -20,7 +20,7 @@ npm install @but212/atom-effect-jquery jquery
 <!-- jquery -->
 <script src="https://code.jquery.com/jquery-4.0.0.min.js"></script>
 <!-- atom-effect-jquery -->
-<script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.25.0"></script>
+<script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.26.0"></script>
 ```
 
 ### Usage
