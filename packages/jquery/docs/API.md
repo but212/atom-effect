@@ -228,6 +228,8 @@ Triggers the unmount sequence: executes the component's cleanup function and dis
 
 Manually disposes all reactive effects and cleanups registered on the selected elements and their descendants. Does not invoke the component cleanup function — use `.atomUnmount()` for full component teardown.
 
+> **💡 Note**: You generally do not need to call `.atomUnbind()` manually. The library heavily leverages `MutationObserver` to automatically perform memory cleanup when elements are removed from the DOM, even if they are forcibly deleted by external, non-jQuery libraries (e.g. React or vanilla JS `replaceChildren()`).
+
 ---
 
 ## Static Methods

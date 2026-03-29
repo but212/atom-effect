@@ -99,7 +99,7 @@ Bound elements receive a `_aes-bound` CSS class marker. This enables O(M) cleanu
 
 ### 3.3 Auto-Cleanup via MutationObserver
 
-`enableAutoCleanup(root)` installs a `MutationObserver` on the specified `root` element that watches for removed nodes. Multiple roots can be observed concurrently (e.g., for micro-frontends).
+`enableAutoCleanup(root)` installs a `MutationObserver` on the specified `root` element that watches for removed nodes. For the global DOM, this is lazily initialized via `ensureAutoCleanup()` upon registering the very first reactive binding, ensuring protection even if bindings occur prior to `DOMContentLoaded`. Multiple roots can be observed concurrently (e.g., for micro-frontends).
 
 ```text
 DOM Removal Detected
@@ -148,6 +148,8 @@ $btn.on('click', () => {
 │          │  ◀───────────────── │          │
 └──────────┘    effect (Atom→DOM) └──────────┘
 ```
+
+The binding maintains closure references internally, but utilizes a strict teardown sequence during cleanup (`binding = null`) to proactively release objects for V8's garbage collector.
 
 ### Features
 

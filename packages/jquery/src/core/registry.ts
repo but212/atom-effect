@@ -9,6 +9,20 @@ import type { EffectObject } from '@/types';
 import { getSelector } from '@/utils';
 import { debug } from '@/utils/debug';
 
+let autoCleanupScheduled = false;
+
+/**
+ * Ensures that the MutationObserver for automatic cleanup is active.
+ * Lazily triggered on the first reactive binding registration.
+ */
+function ensureAutoCleanup(): void {
+  if (autoCleanupScheduled) return;
+  autoCleanupScheduled = true;
+  if (typeof document !== 'undefined' && document.body) {
+    enableAutoCleanup(document.body);
+  }
+}
+
 /**
  * CSS class added to every element that has at least one active binding.
  * Used by `querySelectorAll` in `cleanupDescendants` for efficient subtree traversal.
@@ -75,18 +89,21 @@ class BindingRegistry {
   }
 
   trackEffect(el: Element, fx: EffectObject): void {
+    ensureAutoCleanup();
     const record = this.getOrCreateRecord(el);
     record.effects ??= effectsArrayPool.acquire();
     record.effects.push(fx);
   }
 
   trackCleanup(el: Element, fn: () => void): void {
+    ensureAutoCleanup();
     const record = this.getOrCreateRecord(el);
     record.cleanups ??= cleanupsArrayPool.acquire();
     record.cleanups.push(fn);
   }
 
   setComponentCleanup(el: Element, fn: (() => void) | undefined): void {
+    ensureAutoCleanup();
     const record = this.getOrCreateRecord(el);
     record.componentCleanup = fn;
   }
@@ -264,6 +281,14 @@ export function enableAutoCleanup(root: Element): void {
 
   observer.observe(root, { childList: true, subtree: true });
   observers.set(root, observer);
+}
+
+/**
+ * Marks the auto-cleanup as scheduled or already running.
+ * Used internally and by reset helpers in tests.
+ */
+export function setAutoCleanupScheduled(scheduled: boolean): void {
+  autoCleanupScheduled = scheduled;
 }
 
 /**
