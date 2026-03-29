@@ -200,9 +200,9 @@ describe('Effect Disposal', () => {
   bench(
     `dispose effect (x${REPEATS})`,
     () => {
+      let _value = 0;
       for (let i = 0; i < REPEATS; i++) {
         const a = atom(0);
-        let _value = 0;
         const effectHandle = effect(() => {
           _value = a.value;
         });
