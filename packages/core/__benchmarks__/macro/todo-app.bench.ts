@@ -72,9 +72,17 @@ describe('Todo App Scenarios', () => {
     () => {
       for (let i = 0; i < REPEATS; i++) {
         // Cycle filters
-        if (filterAtom.value === 'all') filterAtom.value = 'active';
-        else if (filterAtom.value === 'active') filterAtom.value = 'completed';
-        else filterAtom.value = 'all';
+        switch (filterAtom.value) {
+          case 'all':
+            filterAtom.value = 'active';
+            break;
+          case 'active':
+            filterAtom.value = 'completed';
+            break;
+          case 'completed':
+            filterAtom.value = 'all';
+            break;
+        }
 
         const _ = filteredTodos.value;
       }
