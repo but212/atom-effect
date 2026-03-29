@@ -25,7 +25,7 @@ export const microBenchOptions: BenchOptions = {
  */
 export const macroBenchOptions: BenchOptions = {
   time: 2000, // 2 seconds per benchmark
-  iterations: 100, // Minimum 100 iterations
+  iterations: 20, // Minimum 20 iterations
   warmupTime: 200, // 200ms warmup
   warmupIterations: 5,
   throws: true,
@@ -146,4 +146,11 @@ export function forceGC(): void {
   if (globalThis.gc) {
     globalThis.gc();
   }
+}
+
+/**
+ * Resolves after all pending microtask-scheduled reactive effects have flushed.
+ */
+export function nextTick(): Promise<void> {
+  return new Promise<void>((resolve) => setTimeout(resolve, 0));
 }
