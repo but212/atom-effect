@@ -29,12 +29,27 @@ describe('atomForm: O(1) Scaling', () => {
 
   const REPEATS = 1000;
 
+  // Use two object references to alternate and trigger updates without O(N) spreading
+  const createUpdater = (form: ReturnType<typeof createForm>) => {
+    const refA = { ...form.formAtom.peek() };
+    const refB = { ...form.formAtom.peek() };
+    let toggle = true;
+    return (i: number) => {
+      const target = toggle ? refA : refB;
+      target.field0 = `v${i}`;
+      form.formAtom.value = target;
+      toggle = !toggle;
+    };
+  };
+
+  const update10 = createUpdater(form10);
+  const update100 = createUpdater(form100);
+
   bench(
     `Update 1 field in 10-field form (x${REPEATS})`,
     () => {
-      const { formAtom } = form10;
       for (let i = 0; i < REPEATS; i++) {
-        formAtom.value = { ...formAtom.peek(), field0: `v${i}` };
+        update10(i);
       }
     },
     macroBenchOptions
@@ -43,9 +58,8 @@ describe('atomForm: O(1) Scaling', () => {
   bench(
     `Update 1 field in 100-field form (O(1) comparison) (x${REPEATS})`,
     () => {
-      const { formAtom } = form100;
       for (let i = 0; i < REPEATS; i++) {
-        formAtom.value = { ...formAtom.peek(), field0: `v${i}` };
+        update100(i);
       }
     },
     macroBenchOptions

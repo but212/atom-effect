@@ -30,11 +30,11 @@ describe('Todo App — DOM Scenarios', () => {
           `<li class="todo-item"><span class="text">${todo.text}</span><button class="delete">x</button></li>`,
       });
 
-      $.batch(() => {
-        for (let i = 0; i < 50; i++) {
-          todos.value = [...todos.value, createTodo(`Task ${i}`)];
-        }
-      });
+      const newTodos: Todo[] = [];
+      for (let i = 0; i < 50; i++) {
+        newTodos.push(createTodo(`Task ${i}`));
+      }
+      todos.value = newTodos;
       cleanupContainer($c);
     },
     macroBenchOptions
@@ -123,11 +123,11 @@ describe('Todo App — DOM Scenarios', () => {
       });
 
       // 1. Add 20 todos
-      $.batch(() => {
-        for (let i = 0; i < 20; i++) {
-          todos.value = [...todos.value, createTodo(`Task ${i}`)];
-        }
-      });
+      const nextBatch: Todo[] = [];
+      for (let i = 0; i < 20; i++) {
+        nextBatch.push(createTodo(`Task ${i}`));
+      }
+      todos.value = nextBatch;
 
       // 2. Toggle first 10
       todos.value = todos.value.map((t, i) => (i < 10 ? { ...t, completed: true } : t));
@@ -163,14 +163,11 @@ describe('Todo App — Stats with Effects', () => {
         .appendTo($c)
         .atomText(rate, (v) => `${v.toFixed(1)}%`);
 
-      $.batch(() => {
-        for (let i = 0; i < 100; i++) {
-          todos.value = [
-            ...todos.value,
-            { ...createTodo(`Item ${i}`), completed: Math.random() > 0.5 },
-          ];
-        }
-      });
+      const items: Todo[] = [];
+      for (let i = 0; i < 100; i++) {
+        items.push({ ...createTodo(`Item ${i}`), completed: Math.random() > 0.5 });
+      }
+      todos.value = items;
       cleanupContainer($c);
     },
     macroBenchOptions
