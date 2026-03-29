@@ -28,11 +28,11 @@ describe('Effect Creation', () => {
   bench(
     `create effect (multiple dependencies) (x${REPEATS})`,
     () => {
+      let _sum = 0;
       for (let i = 0; i < REPEATS; i++) {
         const a = atom(1);
         const b = atom(2);
         const c = atom(3);
-        let _sum = 0;
         const effectHandle = effect(() => {
           _sum = a.value + b.value + c.value;
         });
