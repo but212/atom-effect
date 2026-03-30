@@ -22,45 +22,30 @@ export type SchedulerJob = SchedulerJobFunction | SchedulerJobObject;
  */
 class Scheduler {
   /** Queue buffer */
-  _queueBuffer: [SchedulerJob[], SchedulerJob[]];
-  _bufferIndex: number;
-  _size: number;
+  _queueBuffer: [SchedulerJob[], SchedulerJob[]] = [[], []];
+  _bufferIndex = 0;
+  _size = 0;
 
   /** Epoch counter */
-  _epoch: number;
+  _epoch = 0;
 
   /** State flags */
-  _isProcessing: boolean;
-  _isFlushingSync: boolean;
+  _isProcessing = false;
+  _isFlushingSync = false;
 
   /** Batching state */
-  _batchDepth: number;
-  _batchQueue: SchedulerJob[];
-  _batchQueueSize: number;
+  _batchDepth = 0;
+  _batchQueue: SchedulerJob[] = [];
+  _batchQueueSize = 0;
 
   /** Config */
-  _maxFlushIterations: number;
+  _maxFlushIterations: number = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
 
   /** Overflow callback */
-  onOverflow: ((droppedCount: number) => void) | null;
+  onOverflow: ((droppedCount: number) => void) | null = null;
 
   /** Bound run loop for microtask */
-  private readonly _boundRunLoop: () => void;
-
-  constructor() {
-    this._queueBuffer = [[], []];
-    this._bufferIndex = 0;
-    this._size = 0;
-    this._epoch = 0;
-    this._isProcessing = false;
-    this._isFlushingSync = false;
-    this._batchDepth = 0;
-    this._batchQueue = [];
-    this._batchQueueSize = 0;
-    this._maxFlushIterations = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
-    this.onOverflow = null;
-    this._boundRunLoop = this._runLoop.bind(this);
-  }
+  private readonly _boundRunLoop = this._runLoop.bind(this);
 
   get queueSize(): number {
     return this._size;
