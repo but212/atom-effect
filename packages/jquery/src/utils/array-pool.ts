@@ -7,48 +7,25 @@
 export class ArrayPool<T> {
   private readonly pool: T[][] = [];
 
-  /**
-   * @param limit - Max unique arrays to hold (default: 50). Prevents the pool itself from consuming too much memory.
-   * @param capacity - Max length of an array to accept (default: 256).
-   */
   constructor(
     private readonly limit = 50,
     private readonly capacity = 256
   ) {}
 
-  /**
-   * Acquires array.
-   */
+  /** Acquires array from pool or returns a new one. */
   acquire(): T[] {
-    // LIFO reuse for better cache locality
     return this.pool.pop() ?? [];
   }
 
-  /**
-   * Releases array.
-   *
-   * @param arr - Array to release.
-   */
+  /** Releases array back to pool if within capacity and limit. */
   release(arr: T[]): void {
-    if (arr.length > this.capacity) {
+    if (arr.length > this.capacity || this.pool.length >= this.limit || Object.isFrozen(arr))
       return;
-    }
-
-    if (this.pool.length >= this.limit) {
-      return;
-    }
-
-    if (Object.isFrozen(arr)) {
-      return;
-    }
-
     arr.length = 0;
     this.pool.push(arr);
   }
 
-  /**
-   * Resets pool.
-   */
+  /** Clears the pool. */
   reset(): void {
     this.pool.length = 0;
   }

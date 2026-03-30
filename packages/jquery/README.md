@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![ES2021+](https://img.shields.io/badge/target-ES2021%2B-blue)
 
-> **Browser Support**: Targets ES2021+ environments. Legacy browsers (IE11) are **NOT** supported. Use generic jQuery for them.
+> **High-Density, Type-Safe Reactivity for jQuery.** This package provides a strictly typed, zero-overhead binding layer on top of `atom-effect`. Targets ES2021+ environments. Legacy browsers (IE11) are **NOT** supported.
 
 ## Quick Start
 

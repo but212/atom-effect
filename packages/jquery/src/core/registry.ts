@@ -46,41 +46,26 @@ const AES_BOUND = '_aes-bound';
  */
 class BindingRegistry {
   private records = new WeakMap<Element, BindingRecord>();
-
-  // boundElements removed: records is now the Single Source of Truth.
-  // WeakMap.has() provides the existence check.
-
   private preservedNodes = new WeakSet<Node>();
   private ignoredNodes = new WeakSet<Node>();
-
-  // --------------------------------------------------------------------------
-  // Lifecycle flags
-  // --------------------------------------------------------------------------
 
   keep(node: Node): void {
     this.preservedNodes.add(node);
   }
-
   isKept(node: Node): boolean {
     return this.preservedNodes.has(node);
   }
-
   markIgnored(node: Node): void {
     this.ignoredNodes.add(node);
   }
-
   isIgnored(node: Node): boolean {
     return this.ignoredNodes.has(node);
   }
 
-  // --------------------------------------------------------------------------
-  // Tracking
-  // --------------------------------------------------------------------------
-
   private getOrCreateRecord(el: Element): BindingRecord {
+    ensureAutoCleanup();
     let res = this.records.get(el);
     if (!res) {
-      // Acquire from ObjectPool — monomorphic shape guaranteed by the pool factory.
       res = bindingRecordPool.acquire();
       this.records.set(el, res);
       el.classList.add(AES_BOUND);
@@ -89,142 +74,91 @@ class BindingRegistry {
   }
 
   trackEffect(el: Element, fx: EffectObject): void {
-    ensureAutoCleanup();
-    const record = this.getOrCreateRecord(el);
-    record.effects ??= effectsArrayPool.acquire();
-    record.effects.push(fx);
+    const r = this.getOrCreateRecord(el);
+    if (!r.effects) r.effects = effectsArrayPool.acquire();
+    r.effects.push(fx);
   }
 
   trackCleanup(el: Element, fn: () => void): void {
-    ensureAutoCleanup();
-    const record = this.getOrCreateRecord(el);
-    record.cleanups ??= cleanupsArrayPool.acquire();
-    record.cleanups.push(fn);
+    const r = this.getOrCreateRecord(el);
+    if (!r.cleanups) r.cleanups = cleanupsArrayPool.acquire();
+    r.cleanups.push(fn);
   }
 
   setComponentCleanup(el: Element, fn: (() => void) | undefined): void {
-    ensureAutoCleanup();
-    const record = this.getOrCreateRecord(el);
-    record.componentCleanup = fn;
+    this.getOrCreateRecord(el).componentCleanup = fn;
   }
 
   hasBind(el: Element): boolean {
     return this.records.has(el);
   }
 
-  // --------------------------------------------------------------------------
-  // Cleanup
-  // --------------------------------------------------------------------------
-
   cleanup(el: Element | Node): void {
-    // Optimization: Single lookup + delete.
     const record = this.records.get(el as Element);
+    this.preservedNodes.delete(el);
+    this.ignoredNodes.delete(el);
     if (!record) {
-      // Already cleaned up or never bound.
-      // Ensure specific class is removed unconditionally just in case of stale DOM state
-      // (e.g. detached node being re-inserted).
       if (el.nodeType === 1) (el as Element).classList.remove(AES_BOUND);
-      this.preservedNodes.delete(el);
-      this.ignoredNodes.delete(el);
       return;
     }
 
-    // Atomic deletion doubles as a re-entry guard.
     this.records.delete(el as Element);
-    this.preservedNodes.delete(el);
-    this.ignoredNodes.delete(el);
-
-    // Unconditionally remove the class to prevent "zombie markers".
-    // If a detached node is cached by the user and re-inserted into the DOM later,
-    // leaving the class would cause false-positive lookups during subtree cleanups.
-    // (classList.remove on detached nodes is virtually free).
     if (el.nodeType === 1) (el as Element).classList.remove(AES_BOUND);
 
-    if (debug.enabled) {
-      const info = el.nodeType === 1 ? getSelector(el as Element) : el.nodeName || 'Node';
-      debug.cleanup(LOG_PREFIXES.BINDING, info);
-    }
+    if (debug.enabled)
+      debug.cleanup(
+        LOG_PREFIXES.BINDING,
+        el.nodeType === 1 ? getSelector(el as Element) : el.nodeName || 'Node'
+      );
 
-    // Step 0 — Component cleanup runs first so the component can unmount
-    // gracefully before its reactive effects are severed.
+    const selector = el.nodeType === 1 ? getSelector(el as Element) : 'Node';
     if (record.componentCleanup) {
       try {
         record.componentCleanup();
       } catch (e) {
-        const selector = el.nodeType === 1 ? getSelector(el as Element) : 'Node';
         debug.error(LOG_PREFIXES.MOUNT, ERROR_MESSAGES.MOUNT.CLEANUP_ERROR(selector), e);
       }
     }
 
-    // Step 1 — Sever atom → effect subscriptions.
     if (record.effects) {
-      const effects = record.effects;
-      for (let i = 0, len = effects.length; i < len; i++) {
+      for (const fx of record.effects) {
         try {
-          effects[i]!.dispose();
+          fx.dispose();
         } catch (e) {
-          const selector = el.nodeType === 1 ? getSelector(el as Element) : 'Node';
           debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.CORE.EFFECT_DISPOSE_ERROR(selector), e);
         }
       }
-      effectsArrayPool.release(effects);
+      effectsArrayPool.release(record.effects);
       record.effects = undefined;
     }
 
-    // Step 2 — Run general-purpose cleanup callbacks.
     if (record.cleanups) {
-      const cleanups = record.cleanups;
-      for (let i = 0, len = cleanups.length; i < len; i++) {
+      for (const fn of record.cleanups) {
         try {
-          cleanups[i]!();
+          fn();
         } catch (e) {
-          const selector = el.nodeType === 1 ? getSelector(el as Element) : 'Node';
           debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.CLEANUP_ERROR(selector), e);
         }
       }
-      cleanupsArrayPool.release(cleanups);
+      cleanupsArrayPool.release(record.cleanups);
       record.cleanups = undefined;
     }
-
-    // Return the record to the pool for reuse.
     bindingRecordPool.release(record);
   }
 
   cleanupDescendants(el: Element | DocumentFragment | ShadowRoot): void {
-    // ⚠ Blind Spot Notice: Web Components & Shadow DOM
-    // getElementsByClassName only traverses the Light DOM. If reactive elements
-    // are placed inside a ShadowRoot, they will NOT be discovered or cleaned up
-    // automatically by a parent's removal. Users must explicitly track and call
-    // `registry.cleanupTree(shadowRoot)` to avoid memory leaks in Shadow DOMs.
-
-    // is not available on ShadowRoot.
     const descendants =
       'getElementsByClassName' in el && typeof el.getElementsByClassName === 'function'
         ? el.getElementsByClassName(AES_BOUND)
         : el.querySelectorAll(`.${AES_BOUND}`);
     for (let i = descendants.length - 1; i >= 0; i--) {
-      const child = descendants[i];
-      if (!child) continue;
-
-      if (this.records.has(child)) {
-        this.cleanup(child);
-      } else {
-        // The AES_BOUND class is present but the registry has no record.
-        // Remove the stale class and warn so it surfaces in debug mode.
-        child.classList.remove(AES_BOUND);
-        if (debug.enabled) {
-          debug.warn(
-            LOG_PREFIXES.BINDING,
-            `${AES_BOUND} class found on unregistered element:`,
-            child
-          );
-        }
-      }
+      const child = descendants[i] as Element;
+      if (this.records.has(child)) this.cleanup(child);
+      else child.classList.remove(AES_BOUND);
     }
   }
 
   cleanupTree(el: Element | Node): void {
-    // 1: Element, 11: DocumentFragment or ShadowRoot
     if (el.nodeType === 1 || el.nodeType === 11) {
       this.cleanupDescendants(el as Element | DocumentFragment | ShadowRoot);
     }

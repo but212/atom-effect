@@ -2,8 +2,6 @@
  * Constants for atom-effect-jquery
  */
 
-import type { RouteConfig } from '@/types';
-
 // ============================================================================
 // Log Prefixes
 // ============================================================================
@@ -14,81 +12,24 @@ import type { RouteConfig } from '@/types';
  * console output is unambiguous regardless of which binding triggered it.
  */
 export const LOG_PREFIXES = {
-  /** Used by the SPA router ($.route). */
   ROUTE: '[atom-route]',
-  /** Used by all reactive binding helpers (bindText, bindCss, bindAttr, …). */
   BINDING: '[atom-binding]',
-  /** Used by atomList reactive list rendering. */
   LIST: '[atom-list]',
-  /** Used by mount/unmount lifecycle helpers. */
   MOUNT: '[atom-mount]',
 } as const;
 
-// ============================================================================
-// Route Defaults
-// ============================================================================
-
-/**
- * Subset of RouteConfig fields that have default values.
- * Extracted as a named type so the annotation on ROUTE_DEFAULTS stays concise.
- */
-type RouteDefaults = Readonly<
-  Required<Pick<RouteConfig, 'mode' | 'basePath' | 'autoBindLinks' | 'activeClass'>>
->;
-
-/**
- * Default values for RouteConfig optional fields.
- */
-export const ROUTE_DEFAULTS: RouteDefaults = Object.freeze({
+export const ROUTE_DEFAULTS = Object.freeze({
   mode: 'hash',
   basePath: '',
   autoBindLinks: false,
   activeClass: 'active',
-});
+} as const);
 
-// ============================================================================
-// Input & Binding Defaults
-// ============================================================================
+export const INPUT_DEFAULTS = { EVENT: 'input', DEBOUNCE: 0 } as const;
+export const DEBUG_DEFAULTS = { HIGHLIGHT_DURATION_MS: 500 } as const;
 
-/**
- * Default values for input binding options.
- */
-export const INPUT_DEFAULTS = {
-  /** Default DOM event to trigger synchronization. */
-  EVENT: 'input',
-  /** Default debounce delay in milliseconds. */
-  DEBOUNCE: 0,
-} as const;
-
-// ============================================================================
-// Debug Defaults
-// ============================================================================
-
-/**
- * Default values for debug mode.
- */
-export const DEBUG_DEFAULTS = {
-  /** Default duration in ms for visual highlighting during DOM updates. */
-  HIGHLIGHT_DURATION_MS: 500,
-} as const;
-
-// ============================================================================
-// Security-Sensitive DOM Elements & Properties
-// ============================================================================
-
-/**
- * Valid input-like tag names for val binding.
- * Internal comparisons MUST use `.toLowerCase()` on the element's tagName.
- */
 export const VALID_INPUT_TAGS: ReadonlySet<string> = new Set(['input', 'select', 'textarea']);
 
-/**
- * DOM properties that carry URL values.
- *
- * Even when using `bindProp` (Property binding) instead of `bindAttr` (Attribute
- * binding), these properties must be guarded for dangerous protocols
- * (e.g. `javascript:`) to prevent bypasses.
- */
 export const URL_PROPS: ReadonlySet<string> = new Set([
   'src',
   'href',
@@ -106,13 +47,6 @@ export const URL_PROPS: ReadonlySet<string> = new Set([
   'xlink:href',
 ]);
 
-/**
- * DOM properties blocked by `bindProp` to prevent HTML injection and
- * prototype pollution attacks.
- *
- * ⚠ Note: `on*` event handler properties are blocked by logic in `bindProp`,
- * not by this static list, to cover all possible event types (onclick, etc.).
- */
 export const DANGEROUS_PROPS: ReadonlySet<string> = new Set([
   'innerHTML',
   'outerHTML',
@@ -122,55 +56,40 @@ export const DANGEROUS_PROPS: ReadonlySet<string> = new Set([
   'prototype',
 ]);
 
-// ============================================================================
-// Error & Warning Messages
-// ============================================================================
-
-/**
- * Canonical error and warning messages for all subsystems.
- *
- * Every entry is a function providing consistent caller-side context.
- */
 export const ERROR_MESSAGES = {
   ROUTE: {
-    NOT_FOUND: (name: string) => `Route "${name}" not found and no notFound route configured`,
-    TEMPLATE_NOT_FOUND: (selector: string) => `Template "${selector}" not found`,
-    TARGET_NOT_FOUND: (selector: string) => `Target element "${selector}" not found`,
-    MALFORMED_URI: (raw: string) => `Malformed URI component: ${raw}`,
+    NOT_FOUND: (n: string) => `Route "${n}" not found and no notFound route configured`,
+    TEMPLATE_NOT_FOUND: (s: string) => `Template "${s}" not found`,
+    TARGET_NOT_FOUND: (s: string) => `Target element "${s}" not found`,
+    MALFORMED_URI: (r: string) => `Malformed URI component: ${r}`,
   },
   SECURITY: {
-    /** Emitted when sanitizeHtml modifies the input. */
     UNSAFE_CONTENT: () => 'Unsafe content neutralized during sanitization.',
-    /** Emitted when a CSS style property value contains a dangerous protocol. */
-    BLOCKED_CSS_VALUE: (prop: string) => `Blocked dangerous value in CSS style property "${prop}".`,
-    BLOCKED_EVENT_HANDLER: (name: string) =>
-      `Blocked setting dangerous event handler attribute/property "${name}".`,
-    BLOCKED_PROTOCOL: (name: string) => `Blocked dangerous protocol in "${name}".`,
-    BLOCKED_PROP: (name: string) =>
-      `Blocked setting dangerous property "${name}". Use html binding for sanitized HTML.`,
+    BLOCKED_CSS_VALUE: (p: string) => `Blocked dangerous value in CSS style property "${p}".`,
+    BLOCKED_EVENT_HANDLER: (n: string) =>
+      `Blocked setting dangerous event handler attribute/property "${n}".`,
+    BLOCKED_PROTOCOL: (n: string) => `Blocked dangerous protocol in "${n}".`,
+    BLOCKED_PROP: (n: string) =>
+      `Blocked setting dangerous property "${n}". Use html binding for sanitized HTML.`,
   },
   BINDING: {
-    INVALID_INPUT_ELEMENT: (tagName: string) =>
-      `Val binding used on non-input element <${tagName}>.`,
-    MISSING_SOURCE: (method: string) =>
-      `[${method}] source is required when prop/name is a string.`,
-    MISSING_CONDITION: (method: string) =>
-      `[${method}] condition is required when className is a string.`,
-    UPDATER_ERROR: (debugType: string, isStatic?: boolean) =>
-      `Updater threw in binding "${debugType}"${isStatic ? ' (static)' : ''}`,
-    CLEANUP_ERROR: (info?: string) => `Binding cleanup error${info ? `: ${info}` : ''}`,
-    PARSE_ERROR: (details?: string) =>
-      `parse() threw during DOM→Atom sync${details ? `: ${details}` : ''}`,
+    INVALID_INPUT_ELEMENT: (t: string) => `Val binding used on non-input element <${t}>.`,
+    MISSING_SOURCE: (m: string) => `[${m}] source is required when prop/name is a string.`,
+    MISSING_CONDITION: (m: string) => `[${m}] condition is required when className is a string.`,
+    UPDATER_ERROR: (d: string, s?: boolean) =>
+      `Updater threw in binding "${d}"${s ? ' (static)' : ''}`,
+    CLEANUP_ERROR: (i?: string) => `Binding cleanup error${i ? `: ${i}` : ''}`,
+    PARSE_ERROR: (d?: string) => `parse() threw during DOM→Atom sync${d ? `: ${d}` : ''}`,
   },
   LIST: {
-    DUPLICATE_KEY: (key: string | number, index: number, container: string) =>
-      `Duplicate key "${key}" at index ${index} in atomList <${container}>.`,
+    DUPLICATE_KEY: (k: string | number, i: number, c: string) =>
+      `Duplicate key "${k}" at index ${i} in atomList <${c}>.`,
   },
   MOUNT: {
-    ERROR: (name?: string) => `Mount error${name ? ` in component <${name}>` : ''}`,
-    CLEANUP_ERROR: (name?: string) => `Cleanup error${name ? ` in component <${name}>` : ''}`,
+    ERROR: (n?: string) => `Mount error${n ? ` in component <${n}>` : ''}`,
+    CLEANUP_ERROR: (n?: string) => `Cleanup error${n ? ` in component <${n}>` : ''}`,
   },
   CORE: {
-    EFFECT_DISPOSE_ERROR: (info?: string) => `Effect dispose error${info ? `: ${info}` : ''}`,
+    EFFECT_DISPOSE_ERROR: (i?: string) => `Effect dispose error${i ? `: ${i}` : ''}`,
   },
 } as const;

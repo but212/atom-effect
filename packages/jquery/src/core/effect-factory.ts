@@ -65,29 +65,34 @@ export function registerReactiveEffect<T>(
 
   const runUpdater = (val: T | Promise<T>) => {
     if (isPromise(val)) {
-      const p = val;
-      latestPromise = p;
-      p.then((resolved) => {
-        if (latestPromise === p) {
-          untracked(() => {
-            try {
-              updater(resolved);
-              if (debug.enabled)
-                debug.domUpdated(LOG_PREFIXES.BINDING, el, `${debugType} (async)`, resolved);
-            } catch (e) {
-              debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType), e);
-            }
-          });
-        }
-      }).catch((e) => {
-        if (latestPromise === p) {
-          debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType), e);
-        }
-      });
+      latestPromise = val;
+      val
+        .then((resolved) => {
+          if (latestPromise === val) {
+            untracked(() => {
+              try {
+                updater(resolved);
+                if (debug.enabled)
+                  debug.domUpdated(LOG_PREFIXES.BINDING, el, `${debugType} (async)`, resolved);
+              } catch (e) {
+                debug.error(
+                  LOG_PREFIXES.BINDING,
+                  ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType),
+                  e
+                );
+              }
+            });
+          }
+        })
+        .catch((e) => {
+          if (latestPromise === val) {
+            debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType), e);
+          }
+        });
     } else {
       latestPromise = null;
       try {
-        updater(val as T);
+        updater(val);
         if (debug.enabled) debug.domUpdated(LOG_PREFIXES.BINDING, el, debugType, val);
       } catch (e) {
         debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType, true), e);
@@ -95,23 +100,14 @@ export function registerReactiveEffect<T>(
     }
   };
 
-  if (isReactive(source)) {
+  if (isReactive(source) || typeof source === 'function') {
     registry.trackEffect(
       el,
       effect(
         () => {
-          const value = (source as ReadonlyAtom<T | Promise<T>>).value;
-          untracked(() => runUpdater(value));
-        },
-        { name: debugType }
-      )
-    );
-  } else if (typeof source === 'function') {
-    registry.trackEffect(
-      el,
-      effect(
-        () => {
-          const value = (source as () => T | Promise<T>)();
+          const value = isReactive(source)
+            ? (source as ReadonlyAtom<T | Promise<T>>).value
+            : (source as () => T | Promise<T>)();
           untracked(() => runUpdater(value));
         },
         { name: debugType }
@@ -125,14 +121,6 @@ export function registerReactiveEffect<T>(
 /**
  * Registers a single reactive effect that observes multiple sources in a map.
  * When any source changes, the entire map is re-processed via the updater.
- *
- * This optimization reduces the number of Effect objects created for complex
- * bindings like atomClass({ ... }) or atomCss({ ... }).
- *
- * @param el        DOM element.
- * @param map       Dictionary of reactive or static values.
- * @param updater   Function that applies the entire map state to the DOM.
- * @param debugType Base label for debugging.
  */
 export function registerMapEffect<T>(
   el: Element,
@@ -144,25 +132,25 @@ export function registerMapEffect<T>(
   const reactiveKeys: string[] = [];
   const staticValues: Record<string, T | Promise<T>> = {};
 
-  for (let i = 0; i < keys.length; i++) {
+  for (let i = 0, len = keys.length; i < len; i++) {
     const key = keys[i]!;
     const val = map[key]!;
     if (isReactive(val) || typeof val === 'function') {
       reactiveKeys.push(key);
     } else {
-      staticValues[key] = val as T | Promise<T>;
+      staticValues[key] = val;
     }
   }
 
   let latestPromiseId = 0;
 
   const runUpdater = (currentMap: Record<string, T | Promise<T>>) => {
-    const keys = Object.keys(currentMap);
+    const mapKeys = Object.keys(currentMap);
     const promises: Promise<{ key: string; val: T }>[] = [];
     const resolvedMap: Record<string, T> = {};
 
-    for (let i = 0; i < keys.length; i++) {
-      const key = keys[i]!;
+    for (let i = 0, len = mapKeys.length; i < len; i++) {
+      const key = mapKeys[i]!;
       const val = currentMap[key]!;
       if (isPromise(val)) {
         promises.push(val.then((v) => ({ key, val: v })));
@@ -175,9 +163,8 @@ export function registerMapEffect<T>(
       const myId = ++latestPromiseId;
       Promise.all(promises).then((results) => {
         if (myId === latestPromiseId) {
-          for (let i = 0; i < results.length; i++) {
-            const { key, val } = results[i]!;
-            resolvedMap[key] = val;
+          for (let i = 0, len = results.length; i < len; i++) {
+            resolvedMap[results[i]!.key] = results[i]!.val;
           }
           untracked(() => {
             try {
@@ -207,21 +194,19 @@ export function registerMapEffect<T>(
       effect(
         () => {
           const currentMap: Record<string, T | Promise<T>> = { ...staticValues };
-          for (let i = 0; i < reactiveKeys.length; i++) {
+          for (let i = 0, len = reactiveKeys.length; i < len; i++) {
             const key = reactiveKeys[i]!;
             const source = map[key]!;
             currentMap[key] = isReactive(source)
               ? (source as ReadonlyAtom<T | Promise<T>>).value
               : (source as () => T | Promise<T>)();
           }
-
           untracked(() => runUpdater(currentMap));
         },
         { name: debugType }
       )
     );
   } else {
-    // Purely static map
     untracked(() => runUpdater(staticValues));
   }
 }

@@ -11,16 +11,25 @@
 
 ### jQuery
 
+#### Changed
+
+- **Refactor**: Completed an aggressive, high-density refactoring of the entire `@but212/atom-effect-jquery` package.
+  - **Density Optimization**: Eliminated over 1,000 lines of redundant comments, intermediate variables, and verbose logic while preserving 100% functional parity.
+  - **Type Safety**: Systematically removed all remaining `any` type casts. Hardened internal interfaces with precise generics and `Record<string, unknown>` to ensure strict compliance with Biome's `noExplicitAny` rules.
+  - **Internal Architecture**: Compacted core bindings (`unified.ts`, `chainable.ts`, `list.ts`) into a streamlined, monomorphic structure for improved V8 performance and reduced memory pressure.
+  - **Form Binding**: Hardened `atomForm` reconciliation by integrating it with the global `registry` and using `MutationObserver` more efficiently for dynamic control detection.
+  - **Registry**: Streamlined lifecycle management by unifying `cleanupTree` and `cleanupDescendants` paths, ensuring a single source of truth for reactive node tracking via `_aes-bound` class markers.
+  - **Static Extensions**: Refactored the `$.atom` namespace and static jQuery extensions into a concise, declarative registration pattern.
+
 #### Fixed
 
-- **Performance**: Optimized `atomList` (list rendering) by migrating hot-path DOM manipulation to native APIs.
-  - Replaced jQuery's `.insertBefore()` and `.appendTo()` with native `insertBefore()` and `appendChild()` within the reconciliation loop.
-  - Eliminated redundant jQuery object wrapping (`$(el)`) for list items, reducing object allocation overhead.
-  - Refactored `placeItems` to use raw `Element` references for structural changes, achieving O(N) performance gains in large lists.
-- **Memory Safety**: Hardened memory management against orphan subscriptions during external non-standard DOM removal.
-  - Implemented lazy auto-cleanup initialization to guarantee the `MutationObserver` activates immediately upon the first binding, even before `DOMContentLoaded`.
-  - Refactored `InputBinding` teardown pattern to release internal closure references, enabling faster garbage collection.
-  - Added strict `isConnected` guards during list container deletions to prevent redundant jQuery detachment warnings.
+- **Type Safety**: Fixed implicit `any` errors in `shallowEqual` and `atomBind` through robust type narrowing and explicit `Record` typing.
+- **Robustness**: Improved error isolation in `atomFetch` and `$.route` transitions to prevent cascading failures during malformed URI or network errors.
+
+#### Documentation
+
+- **Updated API.md**: Synchronized documentation with refined internal types and optimized binding signatures.
+- **Updated ARCHITECTURE.md**: Refined descriptions of the reconciled list engine and form dispatcher.
 
 ## [0.26.0]
 

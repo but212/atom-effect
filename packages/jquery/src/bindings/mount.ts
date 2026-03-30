@@ -30,53 +30,30 @@ const EMPTY_PROPS = Object.freeze({});
  *   rather than implicit.
  */
 $.fn.atomMount = function <P>(component: ComponentFn<P>, props?: P): JQuery {
-  // `props ?? EMPTY_PROPS` is cast to P: when props is omitted, P is
-  // constrained by the caller to be compatible with `{}` (all fields optional).
-  // The cast is necessary because TypeScript cannot infer the exact type of P
-  // from the `props` argument alone, especially for components with required fields.
   const p = (props ?? EMPTY_PROPS) as P;
 
   for (let i = 0, len = this.length; i < len; i++) {
     const rootEl = this[i];
     if (!rootEl) continue;
 
-    // Dispose any existing component and its reactive bindings on this element
-    // *before* mounting the new one. This ensures a clean slate and uses the
-    // same `cleanupTree` path as `atomUnmount` for consistency.
     registry.cleanupTree(rootEl);
-
-    const $el = $(rootEl);
-    let teardown: ReturnType<typeof component>;
     try {
-      // untracked: component setup code must not register dependencies on any
-      // outer reactive context (e.g. if atomMount is called inside an effect).
-      teardown = untracked(() => component($el, p));
+      const teardown = untracked(() => component($(rootEl), p));
+      if (typeof teardown === 'function') registry.setComponentCleanup(rootEl, teardown);
     } catch (err) {
       debug.error(LOG_PREFIXES.MOUNT, ERROR_MESSAGES.MOUNT.ERROR(component.name), err);
-      continue;
-    }
-
-    if (typeof teardown === 'function') {
-      registry.setComponentCleanup(rootEl, teardown);
     }
   }
-
   return this;
 };
 
 /**
  * Unmounts the component and disposes all reactive bindings on each selected
  * element and its descendants.
- *
- * Delegates to `bindUnbind`, which calls `registry.cleanupTree` — performing
- * a recursive cleanup of all reactive bindings on the element and its descendants.
- * This is the same full-subtree cleanup path used by `atomMount` when replacing
- * an existing component.
  */
 $.fn.atomUnmount = function (): JQuery {
   for (let i = 0, len = this.length; i < len; i++) {
-    const el = this[i];
-    if (el) bindUnbind(el);
+    if (this[i]) bindUnbind(this[i]!);
   }
   return this;
 };

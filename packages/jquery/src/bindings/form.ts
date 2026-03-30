@@ -13,23 +13,16 @@ export function bindForm<T extends object>(
   atom: WritableAtom<T>,
   options: ValOptions<unknown> = {}
 ): void {
-  const elements = form.elements;
   const fieldAtoms = new Map<string, WritableAtom<unknown>>();
   const fieldPaths = new Map<string, string[]>();
 
   // Single effect to watch the root atom and dispatch updates to individual fields.
-  // This is the core optimization: instead of N effects subscribing to the root atom
-  // (which causes O(N^2) overhead on large forms), only this single effect reacts
-  // to root changes and filters updates to only those fields that actually changed.
   const rootDispatcher = effect(() => {
     const rootVal = atom.value; // Subscribes to the root atom once
     untracked(() => {
       for (const [name, fAtom] of fieldAtoms) {
-        const parts = fieldPaths.get(name)!;
-        const newVal = getPathValue(rootVal, parts);
-        if (!Object.is(fAtom.peek(), newVal)) {
-          fAtom.value = newVal;
-        }
+        const newVal = getPathValue(rootVal, fieldPaths.get(name)!);
+        if (!Object.is(fAtom.peek(), newVal)) fAtom.value = newVal;
       }
     });
   });
@@ -47,19 +40,17 @@ export function bindForm<T extends object>(
       fAtom = createAtom(getPathValue(atom.peek(), parts));
 
       // Separate effect to sync changes from the field atom back to the root atom.
-      // This effect only tracks its specific fAtom, so typing in one field
-      // does not wake up other field effects.
-      const syncToRoot = effect(() => {
-        const newVal = fAtom!.value;
-        const currentRoot = atom.peek();
-        const nextRoot = setDeepValue(currentRoot, parts, 0, newVal);
+      registry.trackEffect(
+        form,
+        effect(() => {
+          const newVal = fAtom!.value;
+          const currentRoot = atom.peek();
+          const nextRoot = setDeepValue(currentRoot, parts, 0, newVal);
 
-        if (nextRoot !== currentRoot) {
-          atom.value = nextRoot as T;
-        }
-      });
+          if (nextRoot !== currentRoot) atom.value = nextRoot as T;
+        })
+      );
 
-      registry.trackEffect(form, syncToRoot);
       fieldAtoms.set(name, fAtom);
     }
     return fAtom;
@@ -88,18 +79,18 @@ export function bindForm<T extends object>(
     }
   };
 
-  for (let i = 0, len = elements.length; i < len; i++) {
-    bindElement(elements[i]!);
+  for (let i = 0, len = form.elements.length; i < len; i++) {
+    bindElement(form.elements[i]!);
   }
 
   const observer = new MutationObserver((mutations) => {
     for (let i = 0, mLen = mutations.length; i < mLen; i++) {
       const mutation = mutations[i]!;
       if (mutation.type === 'childList') {
-        const added = mutation.addedNodes;
-        for (let j = 0, aLen = added.length; j < aLen; j++) {
-          if (added[j]!.nodeType === 1) {
-            const el = added[j] as Element;
+        for (let j = 0, aLen = mutation.addedNodes.length; j < aLen; j++) {
+          const node = mutation.addedNodes[j]!;
+          if (node.nodeType === 1) {
+            const el = node as Element;
             bindElement(el);
             const controls = el.querySelectorAll('input, select, textarea');
             for (let k = 0, cLen = controls.length; k < cLen; k++) {

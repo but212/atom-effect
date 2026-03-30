@@ -314,9 +314,9 @@ The `ObjectPool` utility (`utils/object-pool.ts`) manages a stack of reusable pl
 2. **Reused Buffers**: Pre-allocated `Uint8Array` and `Int32Array` buffers are grown dynamically and reused across `atomList` update cycles to eliminate per-update allocations.
 3. **`ArrayPool`**: Reuses arrays used for `effects` and `cleanups` lists within a `BindingRecord`.
 
-### 10.2 Monomorphic Records
+### 10.2 Dense Monomorphic Strategy
 
-All internal state records are initialized with a fixed set of fields. By avoiding "shape transitions" (adding properties after creation), the objects remain **Monomorphic**. This allows V8 to use **Inline Caching (IC)** for property access, resulting in near-native lookup speeds.
+All internal state records (e.g., `BindingRecord`, `InputBinding`) are initialized with a fixed, dense set of fields from the constructor. By strictly avoiding "shape transitions" (dynamically adding or deleting properties), the objects remain **Monomorphic**. This allows V8 to utilize **Inline Caches (IC)** at every property access point, achieving near-native performance for reactive propagation and DOM updates.
 
 ### 10.3 Flat Buffer Reconciliation
 
