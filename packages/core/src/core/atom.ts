@@ -23,18 +23,12 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
   constructor(initialValue: T, sync: boolean) {
     super();
     this._value = initialValue;
-    this._pendingOldValue = undefined;
 
     if (sync) {
       this.flags |= ATOM_STATE_FLAGS.SYNC;
     }
 
     debug.attachDebugInfo(this, 'atom', this.id);
-  }
-
-  /** @internal */
-  get isDisposed(): boolean {
-    return (this.flags & ATOM_STATE_FLAGS.DISPOSED) !== 0;
   }
 
   /** @internal */
@@ -48,8 +42,7 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
   }
 
   get value(): T {
-    const context = trackingContext.current;
-    if (context != null) context.addDependency(this);
+    trackingContext.current?.addDependency(this);
     return this._value;
   }
 
@@ -61,8 +54,7 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
     this.version = nextVersion(this.version);
 
     // 1. Check if notifications are needed
-    const slots = this._slots;
-    if (slots == null || slots.size === 0 || this.isNotificationScheduled) {
+    if ((this._slots?.size ?? 0) === 0 || this.isNotificationScheduled) {
       return;
     }
 

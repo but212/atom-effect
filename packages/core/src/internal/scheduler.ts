@@ -3,12 +3,6 @@ import { SchedulerError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
 import { endFlush, startFlush } from '@/internal/epoch';
 
-export enum SchedulerPhase {
-  IDLE = 0,
-  BATCHING = 1,
-  FLUSHING = 2,
-}
-
 export interface SchedulerJobObject {
   execute(): void;
   /** Next scheduled epoch */
@@ -37,7 +31,6 @@ class Scheduler {
 
   /** State flags */
   _isProcessing = false;
-  _isBatching = false;
   _isFlushingSync = false;
 
   /** Batching state */
@@ -54,18 +47,12 @@ class Scheduler {
   /** Bound run loop for microtask */
   private readonly _boundRunLoop = this._runLoop.bind(this);
 
-  get phase(): SchedulerPhase {
-    if (this._isProcessing || this._isFlushingSync) return SchedulerPhase.FLUSHING;
-    if (this._isBatching) return SchedulerPhase.BATCHING;
-    return SchedulerPhase.IDLE;
-  }
-
   get queueSize(): number {
     return this._size;
   }
 
   get isBatching(): boolean {
-    return this._isBatching;
+    return this._batchDepth > 0;
   }
 
   /**
@@ -87,7 +74,7 @@ class Scheduler {
     if (callback._nextEpoch === this._epoch) return;
     callback._nextEpoch = this._epoch;
 
-    if (this._isBatching || this._isFlushingSync) {
+    if (this._batchDepth > 0 || this._isFlushingSync) {
       this._batchQueue[this._batchQueueSize++] = callback;
       return;
     }
@@ -124,7 +111,7 @@ class Scheduler {
     } finally {
       this._isProcessing = false;
       // If new jobs arrived during flush (and not batching), re-schedule
-      if (this._size > 0 && !this._isBatching) {
+      if (this._size > 0 && this._batchDepth === 0) {
         this._flush();
       }
     }
@@ -230,7 +217,6 @@ class Scheduler {
 
   startBatch(): void {
     this._batchDepth++;
-    this._isBatching = true;
   }
 
   endBatch(): void {
@@ -241,7 +227,6 @@ class Scheduler {
 
     if (--this._batchDepth === 0) {
       this._flushSync();
-      this._isBatching = false;
     }
   }
 

@@ -82,8 +82,8 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     this._fn = fn;
     this._defaultValue = 'defaultValue' in options ? options.defaultValue : (NO_DEFAULT_VALUE as T);
     this._onError = options.onError ?? null;
-    const retries = options.maxAsyncRetries;
-    this._maxAsyncRetries = (retries ?? COMPUTED_CONFIG.MAX_ASYNC_RETRIES) & SMI_MAX;
+    this._maxAsyncRetries =
+      (options.maxAsyncRetries ?? COMPUTED_CONFIG.MAX_ASYNC_RETRIES) & SMI_MAX;
 
     debug.attachDebugInfo(this, 'computed', this.id);
 
@@ -125,16 +125,17 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     this._track();
 
     const flags = this.flags;
-    if (this.isResolved && (flags & (DIRTY | IDLE)) === 0) {
+    if ((flags & RESOLVED) !== 0 && (flags & (DIRTY | IDLE)) === 0) {
       return this._value;
     }
 
-    if (this.isDisposed) {
+    if ((flags & DISPOSED) !== 0) {
       throw new ComputedError(ERROR_MESSAGES.COMPUTED_DISPOSED);
     }
 
-    if (this.isRecomputing) {
-      if (this._defaultValue !== (NO_DEFAULT_VALUE as T)) return this._defaultValue;
+    const def = this._defaultValue;
+    if ((flags & RECOMPUTING) !== 0) {
+      if (def !== (NO_DEFAULT_VALUE as T)) return def;
       throw new ComputedError(ERROR_MESSAGES.COMPUTED_CIRCULAR_DEPENDENCY);
     }
 
@@ -151,20 +152,17 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
         this._recompute();
       }
       // Re-read flags after update
-      if (this.isResolved) return this._value;
+      if ((this.flags & RESOLVED) !== 0) return this._value;
     }
 
     // 3. Async/Error handling
-    const def = this._defaultValue;
-    const hasDef = def !== (NO_DEFAULT_VALUE as T);
-
-    if (this.isPending) {
-      if (hasDef) return def;
+    if ((this.flags & PENDING) !== 0) {
+      if (def !== (NO_DEFAULT_VALUE as T)) return def;
       throw new ComputedError(ERROR_MESSAGES.COMPUTED_ASYNC_PENDING_NO_DEFAULT);
     }
 
-    if (this.isRejected) {
-      if (hasDef) return def;
+    if ((this.flags & REJECTED) !== 0) {
+      if (def !== (NO_DEFAULT_VALUE as T)) return def;
       throw this._error;
     }
 

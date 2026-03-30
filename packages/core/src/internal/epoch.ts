@@ -6,10 +6,7 @@ let collectorEpoch = 0;
 /**
  * Next tracking epoch.
  */
-export const nextEpoch = () => {
-  collectorEpoch = (collectorEpoch + 1) & SMI_MAX || 1;
-  return collectorEpoch;
-};
+export const nextEpoch = () => (collectorEpoch = (collectorEpoch + 1) & SMI_MAX || 1);
 
 /** Current tracking epoch. */
 export const currentEpoch = () => collectorEpoch;

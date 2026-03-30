@@ -24,14 +24,6 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
    */
   _depsHash = 0;
 
-  constructor() {
-    super();
-    // Initialize state-related fields explicitly for a stable V8 hidden class shape.
-    this._map = null;
-    this.hasComputeds = false;
-    this._depsHash = 0;
-  }
-
   /**
    * Resets tracking metadata for a new evaluation pass.
    * Ensures 'hasComputeds' is clean.
@@ -265,11 +257,19 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
    * Uses link.version (snapshot at tracking time) — NOT node.version.
    */
   seal(): void {
+    this._depsHash = this._calculateHash(false);
+  }
+
+  /**
+   * Efficient O(N) fast-path dirty check using the sealed version hash.
+   */
+  isDirtyFast(): boolean {
+    return this._calculateHash(true) !== this._depsHash;
+  }
+
+  private _calculateHash(isLive: boolean): number {
     const count = this._count;
-    if (count === 0) {
-      this._depsHash = 0;
-      return;
-    }
+    if (count === 0) return 0;
 
     const vbits = BITPACK.VERSION_BITS;
     let hash = 0;
@@ -277,19 +277,23 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
     // Inline slots (unrolled)
     if (count >= 1) {
       const l = this._s0!;
-      hash = (hash + (l.version << vbits) + l.node.id) | 0;
+      const v = isLive ? l.node.version : l.version;
+      hash = (hash + (v << vbits) + l.node.id) | 0;
     }
     if (count >= 2) {
       const l = this._s1!;
-      hash = (hash + (l.version << vbits) + l.node.id) | 0;
+      const v = isLive ? l.node.version : l.version;
+      hash = (hash + (v << vbits) + l.node.id) | 0;
     }
     if (count >= 3) {
       const l = this._s2!;
-      hash = (hash + (l.version << vbits) + l.node.id) | 0;
+      const v = isLive ? l.node.version : l.version;
+      hash = (hash + (v << vbits) + l.node.id) | 0;
     }
     if (count >= 4) {
       const l = this._s3!;
-      hash = (hash + (l.version << vbits) + l.node.id) | 0;
+      const v = isLive ? l.node.version : l.version;
+      hash = (hash + (v << vbits) + l.node.id) | 0;
     }
 
     // Overflow
@@ -297,54 +301,12 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
       const ov = this._overflow!;
       for (let i = 0, len = ov.length; i < len; i++) {
         const l = ov[i]!;
-        hash = (hash + (l.version << vbits) + l.node.id) | 0;
+        const v = isLive ? l.node.version : l.version;
+        hash = (hash + (v << vbits) + l.node.id) | 0;
       }
     }
 
-    this._depsHash = hash;
-  }
-
-  /**
-   * Efficient O(N) fast-path dirty check using the sealed version hash.
-   *
-   * Uses node.version (current live version) to detect drift from
-   * the sealed snapshot.
-   */
-  isDirtyFast(): boolean {
-    const count = this._count;
-    if (count === 0) return false;
-
-    const vbits = BITPACK.VERSION_BITS;
-    let hash = 0;
-
-    // Inline slots (unrolled)
-    if (count >= 1) {
-      const n = this._s0!.node;
-      hash = (hash + (n.version << vbits) + n.id) | 0;
-    }
-    if (count >= 2) {
-      const n = this._s1!.node;
-      hash = (hash + (n.version << vbits) + n.id) | 0;
-    }
-    if (count >= 3) {
-      const n = this._s2!.node;
-      hash = (hash + (n.version << vbits) + n.id) | 0;
-    }
-    if (count >= 4) {
-      const n = this._s3!.node;
-      hash = (hash + (n.version << vbits) + n.id) | 0;
-    }
-
-    // Overflow
-    if (count > 4) {
-      const ov = this._overflow!;
-      for (let i = 0, len = ov.length; i < len; i++) {
-        const n = ov[i]!.node;
-        hash = (hash + (n.version << vbits) + n.id) | 0;
-      }
-    }
-
-    return hash !== this._depsHash;
+    return hash;
   }
 
   /** Unsubscribes from all links and resets the buffer. */
@@ -353,10 +315,6 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
       this.truncateFrom(0);
     }
     this.hasComputeds = false;
-    if (this._map !== null) {
-      this._map.clear();
-      this._map = null;
-    }
   }
 
   /**

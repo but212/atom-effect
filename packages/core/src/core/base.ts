@@ -124,22 +124,20 @@ export abstract class ReactiveNode<T> {
   }
 
   protected _unsubscribe(link: Subscription<T>): void {
-    if (!this._slots) return;
+    const slots = this._slots;
+    if (!slots) return;
 
-    if (this._notifying > 0) {
-      this._slots.remove(link);
-      return;
+    slots.remove(link);
+    if (this._notifying === 0) {
+      slots.compact();
     }
-
-    this._slots.remove(link);
-    this._slots.compact();
   }
 
   /**
    * Returns current subscriber count.
    */
   subscriberCount(): number {
-    return this._slots ? this._slots.size : 0;
+    return this._slots?.size ?? 0;
   }
 
   /**

@@ -49,14 +49,8 @@ export class SlotBuffer<T> {
         return this._s2;
       case 3:
         return this._s3;
-      default: {
-        const ov = this._overflow;
-        if (ov !== null && index >= 4) {
-          const ovIdx = index - 4;
-          if (ovIdx < ov.length) return ov[ovIdx] ?? null;
-        }
-        return null;
-      }
+      default:
+        return index >= 4 ? (this._overflow?.[index - 4] ?? null) : null;
     }
   }
 
@@ -75,11 +69,9 @@ export class SlotBuffer<T> {
       case 3:
         this._s3 = item;
         break;
-      default: {
+      default:
         this._overflow ??= [];
-        const ov = this._overflow;
-        ov[index - 4] = item;
-      }
+        this._overflow[index - 4] = item;
     }
 
     if (index >= this._count) {

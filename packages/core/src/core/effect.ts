@@ -66,10 +66,6 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     this._maxExecutionsPerFlush =
       options.maxExecutionsPerFlush ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_EFFECT;
 
-    this._cleanup = null;
-    this._deps = new DepSlotBuffer();
-    this._currentEpoch = EPOCH_CONSTANTS.UNINITIALIZED;
-    this._lastFlushEpoch = EPOCH_CONSTANTS.UNINITIALIZED;
     this._executionsInEpoch = 0;
     this._executionCount = 0;
     this._windowStart = 0;
@@ -107,7 +103,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
   }
 
   public addDependency(dep: Dependency): void {
-    if (!this.isExecuting) return;
+    if ((this.flags & EFFECT_STATE_FLAGS.EXECUTING) === 0) return;
 
     const startEpoch = this._currentEpoch;
     if (dep._lastSeenEpoch === startEpoch) return;
@@ -166,7 +162,8 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
    * Executes effect with tracking.
    */
   public execute(force = false): void {
-    if (this.isDisposed || this.isExecuting) return;
+    const flags = this.flags;
+    if ((flags & (EFFECT_STATE_FLAGS.DISPOSED | EFFECT_STATE_FLAGS.EXECUTING)) !== 0) return;
 
     // Skip if not dirty
     const deps = this._deps!;
@@ -331,9 +328,6 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     }
   }
 
-  get isDisposed(): boolean {
-    return (this.flags & EFFECT_STATE_FLAGS.DISPOSED) !== 0;
-  }
   get executionCount(): number {
     return this._executionCount;
   }
