@@ -5,7 +5,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SCHEDULER_CONFIG } from '@/constants';
 import { SchedulerError } from '@/errors/errors';
-import { SchedulerPhase, scheduler } from '@/internal/scheduler';
+import { scheduler } from '@/internal/scheduler';
 import { sleep } from '../../utils/test-helpers';
 
 describe('Scheduler', () => {
@@ -36,28 +36,6 @@ describe('Scheduler', () => {
   });
 
   describe('Batching Strategy', () => {
-    it('starts IDLE, defers execution until outer batch ends, then returns to IDLE', () => {
-      expect(scheduler.phase).toBe(SchedulerPhase.IDLE);
-
-      const job = vi.fn();
-
-      scheduler.startBatch(); // Level 1
-      scheduler.startBatch(); // Level 2
-
-      scheduler.schedule(job);
-      expect(scheduler.phase).toBe(SchedulerPhase.BATCHING);
-
-      scheduler.endBatch(); // Level 1
-      expect(job).not.toHaveBeenCalled(); // Still batching
-
-      scheduler.endBatch(); // Level 0 -> Flush
-
-      // Batch flushing is synchronous
-      expect(job).toHaveBeenCalled();
-      expect(scheduler.isBatching).toBe(false);
-      expect(scheduler.phase).toBe(SchedulerPhase.IDLE);
-    });
-
     it('warns on unbalanced endBatch calls', () => {
       const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 

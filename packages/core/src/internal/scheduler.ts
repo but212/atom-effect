@@ -3,12 +3,6 @@ import { SchedulerError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
 import { endFlush, startFlush } from '@/internal/epoch';
 
-export enum SchedulerPhase {
-  IDLE = 0,
-  BATCHING = 1,
-  FLUSHING = 2,
-}
-
 export interface SchedulerJobObject {
   execute(): void;
   /** Next scheduled epoch */
@@ -28,36 +22,46 @@ export type SchedulerJob = SchedulerJobFunction | SchedulerJobObject;
  */
 class Scheduler {
   /** Queue buffer */
-  _queueBuffer: [SchedulerJob[], SchedulerJob[]] = [[], []];
-  _bufferIndex = 0;
-  _size = 0;
+  _queueBuffer: [SchedulerJob[], SchedulerJob[]];
+  _bufferIndex: number;
+  _size: number;
 
   /** Epoch counter */
-  _epoch = 0;
+  _epoch: number;
 
   /** State flags */
-  _isProcessing = false;
-  _isBatching = false;
-  _isFlushingSync = false;
+  _isProcessing: boolean;
+  _isBatching: boolean;
+  _isFlushingSync: boolean;
 
   /** Batching state */
-  _batchDepth = 0;
-  _batchQueue: SchedulerJob[] = [];
-  _batchQueueSize = 0;
+  _batchDepth: number;
+  _batchQueue: SchedulerJob[];
+  _batchQueueSize: number;
 
   /** Config */
-  _maxFlushIterations: number = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
+  _maxFlushIterations: number;
 
   /** Overflow callback */
-  onOverflow: ((droppedCount: number) => void) | null = null;
+  onOverflow: ((droppedCount: number) => void) | null;
 
   /** Bound run loop for microtask */
-  private readonly _boundRunLoop = this._runLoop.bind(this);
+  private readonly _boundRunLoop: () => void;
 
-  get phase(): SchedulerPhase {
-    if (this._isProcessing || this._isFlushingSync) return SchedulerPhase.FLUSHING;
-    if (this._isBatching) return SchedulerPhase.BATCHING;
-    return SchedulerPhase.IDLE;
+  constructor() {
+    this._queueBuffer = [[], []];
+    this._bufferIndex = 0;
+    this._size = 0;
+    this._epoch = 0;
+    this._isProcessing = false;
+    this._isBatching = false;
+    this._isFlushingSync = false;
+    this._batchDepth = 0;
+    this._batchQueue = [];
+    this._batchQueueSize = 0;
+    this._maxFlushIterations = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
+    this.onOverflow = null;
+    this._boundRunLoop = this._runLoop.bind(this);
   }
 
   get queueSize(): number {
