@@ -31,7 +31,6 @@ class Scheduler {
 
   /** State flags */
   _isProcessing: boolean;
-  _isBatching: boolean;
   _isFlushingSync: boolean;
 
   /** Batching state */
@@ -54,7 +53,6 @@ class Scheduler {
     this._size = 0;
     this._epoch = 0;
     this._isProcessing = false;
-    this._isBatching = false;
     this._isFlushingSync = false;
     this._batchDepth = 0;
     this._batchQueue = [];
@@ -69,7 +67,7 @@ class Scheduler {
   }
 
   get isBatching(): boolean {
-    return this._isBatching;
+    return this._batchDepth > 0;
   }
 
   /**
@@ -91,7 +89,7 @@ class Scheduler {
     if (callback._nextEpoch === this._epoch) return;
     callback._nextEpoch = this._epoch;
 
-    if (this._isBatching || this._isFlushingSync) {
+    if (this._batchDepth > 0 || this._isFlushingSync) {
       this._batchQueue[this._batchQueueSize++] = callback;
       return;
     }
@@ -128,7 +126,7 @@ class Scheduler {
     } finally {
       this._isProcessing = false;
       // If new jobs arrived during flush (and not batching), re-schedule
-      if (this._size > 0 && !this._isBatching) {
+      if (this._size > 0 && this._batchDepth === 0) {
         this._flush();
       }
     }
@@ -234,7 +232,6 @@ class Scheduler {
 
   startBatch(): void {
     this._batchDepth++;
-    this._isBatching = true;
   }
 
   endBatch(): void {
@@ -245,7 +242,6 @@ class Scheduler {
 
     if (--this._batchDepth === 0) {
       this._flushSync();
-      this._isBatching = false;
     }
   }
 

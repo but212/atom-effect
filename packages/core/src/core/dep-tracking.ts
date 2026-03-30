@@ -5,30 +5,23 @@ import type { Dependency, Subscriber } from '@/types';
  * Dependency graph edge.
  */
 export class DependencyLink {
-  public unsub: (() => void) | undefined;
-
   constructor(
     public node: Dependency,
     public version: number,
-    unsub: (() => void) | undefined = undefined
-  ) {
     // Always initialize to maintain consistent V8 hidden class
-    this.unsub = unsub;
-  }
+    public unsub: (() => void) | undefined = undefined
+  ) {}
 }
 
 /**
  * Subscription entry.
  */
 export class Subscription<T> {
-  public fn: ((newValue?: T, oldValue?: T) => void) | undefined;
-  public sub: Subscriber | undefined;
-
-  constructor(fn: ((newValue?: T, oldValue?: T) => void) | undefined, sub: Subscriber | undefined) {
+  constructor(
     // Always initialize both properties to maintain consistent V8 hidden class
-    this.fn = fn;
-    this.sub = sub;
-  }
+    public fn: ((newValue?: T, oldValue?: T) => void) | undefined,
+    public sub: Subscriber | undefined
+  ) {}
 
   notify(newValue?: T, oldValue?: T): void {
     if (this.fn) this.fn(newValue, oldValue);
