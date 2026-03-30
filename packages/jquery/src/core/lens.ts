@@ -15,67 +15,46 @@ const WRITABLE_BRAND = Symbol.for('atom-effect/writable');
 export function setDeepValue(obj: unknown, keys: string[], index: number, value: unknown): unknown {
   if (index === keys.length) return value;
 
-  const key = keys[index]!;
-  const currentLevel = obj && typeof obj === 'object' ? obj : {};
-  const oldValue = (currentLevel as Record<string, unknown>)[key];
+  const key = keys[index]!,
+    curr = obj && typeof obj === 'object' ? (obj as Record<string, unknown>) : {},
+    old = curr[key],
+    next = setDeepValue(old, keys, index + 1, value);
 
-  const newValue = setDeepValue(oldValue, keys, index + 1, value);
+  if (Object.is(old, next)) return obj;
 
-  // Structural Sharing: If the value didn't change, return the original object
-  // to avoid unnecessary allocations and downstream effect triggers.
-  if (Object.is(oldValue, newValue)) return obj;
-
-  if (Array.isArray(currentLevel)) {
-    const newArray = [...currentLevel];
-    const idx = Number.parseInt(key, 10);
-    if (!Number.isNaN(idx)) {
-      newArray[idx] = newValue;
-    } else {
-      (newArray as unknown as Record<string, unknown>)[key] = newValue;
-    }
-    return newArray;
+  if (Array.isArray(curr)) {
+    const arr = [...curr],
+      idx = Number.parseInt(key, 10);
+    if (!Number.isNaN(idx)) arr[idx] = next;
+    else (arr as unknown as Record<string, unknown>)[key] = next;
+    return arr;
   }
-  return { ...currentLevel, [key]: newValue };
+  return { ...curr, [key]: next };
 }
 
 /**
  * Helper to retrieve a nested value from an object/array at a given path.
- *
- * @param source The source object.
- * @param parts Array of path parts.
- * @returns The value at the path or undefined if not found.
  */
 export function getPathValue(source: unknown, parts: string[]): unknown {
-  let result = source;
-  for (let i = 0, len = parts.length; i < len && result != null; i++) {
-    result = (result as Record<string, unknown>)[parts[i]!];
+  let res = source;
+  for (let i = 0; i < parts.length && res != null; i++) {
+    res = (res as Record<string, unknown>)[parts[i]!];
   }
-  return result;
+  return res;
 }
 
 /**
  * Creates a two-way "lens" for a specific property path on an object-based atom.
- * Optimized for performance using structural sharing and equality guards.
- *
- * This "fake" atom allows fine-grained binding to deep properties of a
- * monolithic state atom without extra memory or complex computed logic.
- *
- * @param atom The source atom containing the object.
- * @param path Dot-separated path to the property (e.g. 'user.profile.name').
- * @returns A WritableAtom that reads from and writes to the specified path.
  */
 export function atomLens<T extends object, P extends Paths<T>>(
   atom: WritableAtom<T>,
   path: P
 ): WritableAtom<PathValue<T, P>> {
   const parts = path.includes('.') ? path.split('.') : [path];
-  const unsubscribers = new Set<() => void>();
-
+  const unsubs = new Set<() => void>();
   const dispose = () => {
-    for (const unsub of unsubscribers) {
-      unsub();
-    }
-    unsubscribers.clear();
+    unsubs.forEach((u) => u());
+    unsubs.clear();
   };
 
   return {
@@ -83,35 +62,24 @@ export function atomLens<T extends object, P extends Paths<T>>(
       return getPathValue(atom.value, parts) as PathValue<T, P>;
     },
     set value(newVal: PathValue<T, P>) {
-      const current = atom.peek();
-      const next = setDeepValue(current, parts, 0, newVal);
-
-      // Only write back to the atom if a change actually occurred.
-      if (next !== current) {
-        atom.value = next as T;
-      }
+      const cur = atom.peek(),
+        next = setDeepValue(cur, parts, 0, newVal);
+      if (next !== cur) atom.value = next as T;
     },
-    peek() {
-      return getPathValue(atom.peek(), parts) as PathValue<T, P>;
-    },
-    subscribe(listener: (newValue: PathValue<T, P>, oldValue: PathValue<T, P>) => void) {
-      const unsub = atom.subscribe((newParent, oldParent) => {
-        const newValue = getPathValue(newParent, parts) as PathValue<T, P>;
-        const oldValue = getPathValue(oldParent, parts) as PathValue<T, P>;
-        if (!Object.is(newValue, oldValue)) {
-          listener(newValue, oldValue);
-        }
+    peek: () => getPathValue(atom.peek(), parts) as PathValue<T, P>,
+    subscribe(listener: (nv: PathValue<T, P>, ov: PathValue<T, P>) => void) {
+      const unsub = atom.subscribe((np, op) => {
+        const nv = getPathValue(np, parts) as PathValue<T, P>,
+          ov = getPathValue(op, parts) as PathValue<T, P>;
+        if (!Object.is(nv, ov)) listener(nv, ov);
       });
-
-      unsubscribers.add(unsub);
+      unsubs.add(unsub);
       return () => {
         unsub();
-        unsubscribers.delete(unsub);
+        unsubs.delete(unsub);
       };
     },
-    subscriberCount() {
-      return unsubscribers.size;
-    },
+    subscriberCount: () => unsubs.size,
     dispose,
     [Symbol.dispose]: dispose,
     [ATOM_BRAND]: true,
@@ -121,26 +89,14 @@ export function atomLens<T extends object, P extends Paths<T>>(
 
 /**
  * Composes an existing lens with a sub-path to create a deeper lens.
- *
- * @param lens The parent lens.
- * @param path Sub-path relative to the parent lens.
- * @returns A new lens pointing to the deeper path.
  */
-export function composeLens<T extends object, P extends Paths<T>>(
-  lens: WritableAtom<T>,
-  path: P
-): WritableAtom<PathValue<T, P>> {
-  return atomLens(lens, path);
-}
+export const composeLens = <T extends object, P extends Paths<T>>(lens: WritableAtom<T>, path: P) =>
+  atomLens(lens, path);
 
 /**
  * Creates a lens factory bound to a specific atom.
- * Eliminates the need to pass the atom reference on every call.
- *
- * @example
- * const lens = lensFor(userAtom);
- * const email = lens('settings.notifications.email'); // WritableAtom<boolean>
  */
-export function lensFor<T extends object>(atom: WritableAtom<T>) {
-  return <P extends Paths<T>>(path: P) => atomLens(atom, path);
-}
+export const lensFor =
+  <T extends object>(atom: WritableAtom<T>) =>
+  <P extends Paths<T>>(path: P) =>
+    atomLens(atom, path);

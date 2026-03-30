@@ -13,91 +13,36 @@ import type { RenderRoute, RouteDefinition, TemplateRoute } from '@/types';
  * `ComputedAtomImpl` carries `ATOM_BRAND` in addition to `COMPUTED_BRAND`.
  * A separate `isComputed` check would therefore be redundant.
  */
-export function isReactive(value: unknown): value is ReadonlyAtom<unknown> {
-  return isAtom(value);
-}
+/** Checks if value is an Atom or Computed. */
+export const isReactive = (v: unknown): v is ReadonlyAtom<unknown> => isAtom(v);
 
-/**
- * Checks if a value is a Promise (thenable).
- */
-export function isPromise<T>(value: unknown): value is Promise<T> {
-  return !!value && typeof (value as Promise<T>).then === 'function';
-}
+export const isPromise = <T>(v: unknown): v is Promise<T> =>
+  !!v && typeof (v as { then?: unknown }).then === 'function';
 
-// ============================================================================
-// DOM helpers
-// ============================================================================
-
-/**
- * Generates a CSS selector-like string for a DOM element, suitable for debug
- * output. Returns `tagName#id` when an id is present, otherwise
- * `tagName.class1.class2…`.
- *
- * ⚠ Not a valid CSS selector — do NOT pass this to `querySelector()`.
- * Element IDs and class names may contain characters with special meaning in
- * CSS selectors (e.g. `.`, `[`, `(`). This helper is intended solely for
- * human-readable console/log messages.
- */
+/** Generates a human-readable selector string for debug. */
 export function getSelector(el: Element): string {
-  const tagName = el.tagName.toLowerCase();
-  if (el.id) return `${tagName}#${el.id}`;
-
-  const list = el.classList;
-  const len = list.length;
-  if (len === 0) return tagName;
-
-  let selector = tagName;
-  for (let i = 0; i < len; i++) {
-    selector += `.${list[i]!}`;
-  }
-  return selector;
+  const tag = el.tagName.toLowerCase();
+  if (el.id) return `${tag}#${el.id}`;
+  const cls = Array.from(el.classList);
+  return cls.length ? `${tag}.${cls.join('.')}` : tag;
 }
 
-// ============================================================================
-// Shared low-level helpers
-// ============================================================================
-
-/** Portable own-property check. Prefer over `in` to exclude prototype keys. */
 export const hasOwn = Object.prototype.hasOwnProperty;
 
-// ============================================================================
-// Route type guards
-// ============================================================================
+export const isTemplateRoute = (r: RouteDefinition): r is TemplateRoute =>
+  'template' in r && typeof r.template === 'string';
+export const isRenderRoute = (r: RouteDefinition): r is RenderRoute =>
+  'render' in r && typeof r.render === 'function';
 
-/** Narrows a `RouteDefinition` to `TemplateRoute`. */
-export function isTemplateRoute(r: RouteDefinition): r is TemplateRoute {
-  return typeof (r as TemplateRoute).template === 'string';
-}
-
-/** Narrows a `RouteDefinition` to `RenderRoute`. */
-export function isRenderRoute(r: RouteDefinition): r is RenderRoute {
-  return typeof (r as RenderRoute).render === 'function';
-}
-
-// ============================================================================
-// General utilities
-// ============================================================================
-
-/**
- * Shallow equality check for plain objects.
- * Returns `true` if both objects have the same own keys with identical (`===`) values.
- */
+/** Shallow equality check for objects. */
 export function shallowEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
-  if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return false;
-
-  const keysA = Object.keys(a);
-  const keysB = Object.keys(b);
-  if (keysA.length !== keysB.length) return false;
-
-  const objA = a as Record<string, unknown>;
-  const objB = b as Record<string, unknown>;
-
-  for (let i = 0; i < keysA.length; i++) {
-    const key = keysA[i]!;
-    if (!hasOwn.call(objB, key) || objA[key] !== objB[key]) {
-      return false;
-    }
-  }
-  return true;
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+  const kA = Object.keys(a),
+    kB = Object.keys(b);
+  if (kA.length !== kB.length) return false;
+  return kA.every(
+    (k) =>
+      hasOwn.call(b, k) && (a as Record<string, unknown>)[k] === (b as Record<string, unknown>)[k]
+  );
 }

@@ -11,20 +11,20 @@ import type {
 // Shared API Types
 // ============================================================================
 
-/**
- * Helper to convert a numeric string to a number type, otherwise returns the string.
- * Used for array indexing in paths.
- */
+/** Helper to convert numeric string to number for array indexing. */
 type StringKeyToNumber<S extends string> = S extends `${infer N extends number}` ? N : S;
-
-/**
- * Maximum recursion depth for path generation.
- * Prevents TypeScript compiler from hitting recursion limits on deeply nested types.
- */
+/** Max recursion depth for dot-paths. */
 type MaxDepth = 8;
 
 /**
- * Generates a union of all valid dot-separated paths for type T.
+ * Generates a union of all possible dot-separated paths for a given type T.
+ *
+ * Used for `atomLens` to provide IDE autocomplete and type safety when
+ * zooming into deeply nested reactive objects.
+ *
+ * @example
+ * type User = { profile: { name: string } };
+ * type P = Paths<User>; // "profile" | "profile.name"
  */
 export type Paths<T, D extends unknown[] = []> = D['length'] extends MaxDepth
   ? never
@@ -37,7 +37,10 @@ export type Paths<T, D extends unknown[] = []> = D['length'] extends MaxDepth
     : never;
 
 /**
- * Extracts the value type at path P within type T.
+ * Resolves the type of a value at a specific dot-path P within type T.
+ *
+ * Works in tandem with `Paths<T>` to ensure that lensed atoms have
+ * the correct inferred type for the member they point to.
  */
 export type PathValue<T, P extends string> = P extends `${infer K}.${infer Rest}`
   ? StringKeyToNumber<K> extends keyof T
@@ -47,221 +50,107 @@ export type PathValue<T, P extends string> = P extends `${infer K}.${infer Rest}
     ? T[StringKeyToNumber<P> & keyof T]
     : never;
 
-/**
- * Cleanup function returned by effects or components.
- */
 export type EffectCleanup = () => void;
-
-/**
- * Result of a reactive factory or component mount.
- * Returns `void` (no cleanup) or an `EffectCleanup` function.
- */
 export type EffectResult = undefined | EffectCleanup;
-
-/**
- * Generic equality predicate shared by `ValOptions` and any future consumer.
- * Extracted as a named type to avoid duplicating the inline function signature.
- */
 export type EqualFn<T> = (a: T, b: T) => boolean;
 
-/**
- * Extended options for Atom creation.
- */
 export interface AtomOptions extends BaseAtomOptions {
-  /** Name for debugging purposes */
   name?: string;
 }
 
 /**
- * Represents a value that can be either a reactive node (Atom or Computed)
- * or a plain static value of the same type.
- *
- * `ComputedAtom<T>` is a structural sub-type of `ReadonlyAtom<T>`, so it is
- * already covered by `ReadonlyAtom<T>`.
+ * Represents a value that can be tracked by the reactive system.
+ * - T: Static value (one-time bind)
+ * - ReadonlyAtom<T>: Reactive value (updates DOM when atom changes)
+ * - () => T: Reactive function (updates DOM when any atom read inside changes)
  */
 export type ReactiveValue<T> = T | ReadonlyAtom<T> | (() => T);
 
 /**
- * Represents a value that can be a synchronous `ReactiveValue<T>`,
- * a `Promise<T>`, or an Atom yielding `T | Promise<T>`.
+ * An extension of ReactiveValue that also supports Promises and async functions.
+ * The binding system automatically handles the promise lifecycle, showing the
+ * latest resolved value and ignoring stale ones (race condition protection).
  */
 export type AsyncReactiveValue<T> =
   | T
   | ReadonlyAtom<T | Promise<T>>
   | Promise<T>
   | (() => T | Promise<T>);
-
-/**
- * Values allowed for DOM properties and attributes.
- */
 export type PrimitiveValue = string | number | boolean | null | undefined;
-
-/**
- * Helper to extract keys of T whose values extend V.
- * Used to ensure `key` property refers to valid ID-like values.
- */
 type KeysOfType<T, V> = { [K in keyof T]: T[K] extends V ? K : never }[keyof T];
 
-/**
- * CSS value: either a direct reactive value or a numeric tuple of [source, unit].
- */
 export type CssValue =
   | AsyncReactiveValue<string | number>
   | [source: AsyncReactiveValue<number>, unit: string];
-
-/**
- * CSS bindings map property names to CSS values.
- */
 export type CssBindings = Record<string, CssValue>;
 
-/**
- * Configuration options for `atomBind`.
- * @template T Type of the value for two-way binding (`val` field).
- */
 export interface BindingOptions<T = unknown> {
-  /** Binds textContent to any reactive source. */
   text?: AsyncReactiveValue<unknown>;
-  /** Binds innerHTML to a reactive string source (sanitized). */
   html?: AsyncReactiveValue<string>;
-  /** Map of class names to reactive boolean conditions. */
   class?: Record<string, AsyncReactiveValue<boolean>>;
-  /** Map of CSS properties to reactive values or [value, unit] tuples. */
   css?: CssBindings;
-  /** Binds attributes with consistent primitive constraints. */
   attr?: Record<string, AsyncReactiveValue<PrimitiveValue>>;
-  /** Binds DOM properties. */
   prop?: Record<string, AsyncReactiveValue<unknown>>;
-  /** Direct visibility control (display: none). */
   show?: AsyncReactiveValue<boolean>;
-  /** Inverse visibility control. */
   hide?: AsyncReactiveValue<boolean>;
-
-  /**
-   * Two-way binding for input values.
-   * Pass an atom or a `[atom, options]` tuple.
-   */
   val?: WritableAtom<T> | [atom: WritableAtom<T>, options: ValOptions<T>];
-  /** Two-way binding for checkboxes and radio buttons. */
   checked?: WritableAtom<boolean>;
-  /** Fully automated two-way form binding using name attributes. */
   form?: WritableAtom<T extends object ? T : unknown>;
-  /** Event listeners with automatic batched execution and lifecycle-bound cleanup. */
   on?: Record<string, (e: JQuery.Event) => void>;
 }
 
-/**
- * A WritableAtom that can be disposed to clean up internal subscriptions.
- * Returned by $.atomLens, $.composeLens, and $.lensFor().
- */
 export interface DisposableWritableAtom<T> extends WritableAtom<T>, Disposable {
   dispose(): void;
 }
 
-// ============================================================================
-// List API Types
-// ============================================================================
-
-/** Key type for Map/Set inside list.ts */
 export type ListKey = string | number;
-
-/** Possible return types for render() / empty */
 export type ListRenderResult = string | Element | DocumentFragment | JQuery;
-
-/** Key extractor function signature. */
 export type ListKeyFn<T> = (item: T, index: number) => ListKey;
 
-/**
- * Configuration options for `atomList`.
- */
 export interface ListOptions<T> {
-  /**
-   * Key to track items. Must be a property name whose value is a string|number,
-   * or a key extractor function.
-   */
   key: KeysOfType<T, ListKey> | ListKeyFn<T>;
-  /** Render function for each item. */
   render: (item: T, index: number) => ListRenderResult;
-  /** Optional post-render binding logic. */
   bind?: ($el: JQuery, item: T, index: number) => void;
-  /** Optional update logic when item data changes but DOM is reused. */
   update?: ($el: JQuery, item: T, index: number) => void;
-  /** Lifecycle hook: called when an element is added to the list. */
   onAdd?: ($el: JQuery) => void;
-  /** Lifecycle hook: called when an element is about to be removed. */
   onRemove?: ($el: JQuery) => Promise<void> | void;
-  /** Content to show when the list is empty. */
   empty?: ListRenderResult;
-  /** Delegated event handlers attached to the container. */
   events?: Record<string, (item: T, index: number, e: JQuery.TriggeredEvent) => void>;
-  /**
-   * Custom equality checker to determine if an item has changed.
-   * Defaults to `shallowEqual`. If it returns false, the item is re-rendered (unless `update` is provided).
-   */
   isEqual?: (a: T, b: T) => boolean;
 }
 
-// ============================================================================
-// Form & Input Types
-// ============================================================================
-
 /**
- * Configuration options for `atomVal`.
+ * Options for `atomVal`, `atomChecked`, and `atomForm` bindings.
  */
 export interface ValOptions<T> {
-  /** Delay in milliseconds before syncing DOM input to Atom. */
+  /** Debounce duration in milliseconds for DOM -> Atom sync. Defaults to 0. */
   debounce?: number;
-  /** DOM event to trigger sync (default: 'input'). */
+  /** jQuery event name(s) to listen to. Defaults to "input". */
   event?: string;
-  /** Parser to convert string input to Atom type T. */
+  /** Custom function to parse DOM string to atom type T. */
   parse?: (v: string) => T;
-  /** Formatter to convert Atom type T to string for DOM display. */
+  /** Custom function to format atom type T to DOM string. */
   format?: (v: T) => string;
-  /** Custom equality check for comparing parsed values. Defaults to Object.is. */
+  /** Custom equality check to prevent redundant atom updates. */
   equal?: EqualFn<T>;
 }
 
-// ============================================================================
-// Fetch API Types
-// ============================================================================
-
-/**
- * Configuration options for `atomFetch`.
- */
 export interface FetchOptions<T> {
-  /** Initial value before the first fetch resolves. */
   defaultValue: T;
-  /** HTTP method (default: 'GET'). */
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS' | (string & {});
-  /** HTTP headers. */
   headers?: Record<string, string>;
-  /** Transforms the raw response into T. */
   transform?: (raw: unknown) => T;
-  /** Additional `$.ajax` settings. Can be a getter function for reactive data tracking. */
   ajaxOptions?: JQuery.AjaxSettings | (() => JQuery.AjaxSettings);
-  /** Error callback. */
   onError?: (err: unknown) => void;
-  /** Whether to fetch immediately (default: true). */
   eager?: boolean;
 }
 
-/** Error payload for atomFetch. */
 export interface FetchError extends Error {
-  /** The original jQuery XHR object. */
   jqXHR?: JQuery.jqXHR;
 }
 
-// ============================================================================
-// Component & Router Types
-// ============================================================================
-
-/**
- * A function that initializes logic on a jQuery element and returns an optional cleanup function.
- * `P` defaults to `Record<string, unknown>` for convenience. Use `P = Record<string, never>`
- * for strictly no-props components.
- */
 export type ComponentFn<P = Record<string, unknown>> = ($el: JQuery, props: P) => EffectResult;
 
-/** Shared route lifecycle hooks. */
 export interface RouteLifecycle {
   onEnter?: (params: Record<string, string>, router: Router) => Record<string, string> | undefined;
   onLeave?: (router: Router) => boolean | undefined;
@@ -306,14 +195,6 @@ export interface Router {
   destroy: () => void;
 }
 
-// ============================================================================
-// Internal Types (Implementation Details)
-// ============================================================================
-
-/**
- * Bit flags for input binding state management.
- * @internal
- */
 export enum BindingFlags {
   None = 0,
   Focused = 1 << 0,
@@ -323,29 +204,18 @@ export enum BindingFlags {
   Busy = Composing | SyncingToAtom | SyncingToDom,
 }
 
-/**
- * Context passed to binding handlers for unified lifecycle management.
- * @internal
- */
 export interface BindingContext {
   readonly el: HTMLElement;
   readonly trackCleanup: (fn: EffectCleanup) => void;
 }
 
-// ============================================================================
-// JQuery Global Augmentation
-// ============================================================================
-
 declare global {
   interface JQueryStatic {
-    atom: {
-      <T>(initialValue: T, options?: AtomOptions): WritableAtom<T>;
-      debug: boolean;
-    };
-    computed<T>(fn: () => T, options?: ComputedOptions<T>): ComputedAtom<T>;
+    atom: { <T>(v: T, opts?: AtomOptions): WritableAtom<T>; debug: boolean };
+    computed<T>(fn: () => T, opts?: ComputedOptions<T>): ComputedAtom<T>;
     computed<T>(
       fn: () => Promise<T>,
-      options: ComputedOptions<T> & { defaultValue: T }
+      opts: ComputedOptions<T> & { defaultValue: T }
     ): ComputedAtom<T>;
     effect(fn: () => EffectResult): EffectObject;
     batch(fn: () => void): void;
@@ -364,37 +234,34 @@ declare global {
     ): DisposableWritableAtom<PathValue<T, P>>;
     lensFor<T extends object>(
       atom: WritableAtom<T>
-    ): <P extends Paths<T>>(path: P) => DisposableWritableAtom<PathValue<T, P>>;
+    ): <P extends Paths<T>>(p: P) => DisposableWritableAtom<PathValue<T, P>>;
     route(config: RouteConfig): Router;
     atomFetch<T>(
-      urlOrFn: string | (() => string),
-      options: FetchOptions<T>
+      url: string | (() => string),
+      opts: FetchOptions<T>
     ): ComputedAtom<T> & { abort: () => void };
   }
 
   interface JQuery {
-    atomText<T>(source: AsyncReactiveValue<T>, formatter?: (v: T) => string): this;
-    atomHtml(source: AsyncReactiveValue<string>): this;
-    atomClass(className: string, condition: AsyncReactiveValue<boolean>): this;
-    atomClass(classMap: Record<string, AsyncReactiveValue<boolean>>): this;
-    atomCss(prop: string, source: AsyncReactiveValue<string | number>, unit?: string): this;
-    atomCss(cssMap: CssBindings): this;
-    atomAttr(name: string, source: AsyncReactiveValue<PrimitiveValue>): this;
-    atomAttr(attrMap: Record<string, AsyncReactiveValue<PrimitiveValue>>): this;
-    atomProp<T>(name: string, source: AsyncReactiveValue<T>): this;
-    atomProp<T>(propMap: Record<string, AsyncReactiveValue<T>>): this;
-    atomShow(condition: AsyncReactiveValue<boolean>): this;
-    atomHide(condition: AsyncReactiveValue<boolean>): this;
-
-    atomVal<T>(atom: WritableAtom<T>, options?: ValOptions<T>): this;
+    atomText<T>(src: AsyncReactiveValue<T>, fmt?: (v: T) => string): this;
+    atomHtml(src: AsyncReactiveValue<string>): this;
+    atomClass(name: string, cond: AsyncReactiveValue<boolean>): this;
+    atomClass(map: Record<string, AsyncReactiveValue<boolean>>): this;
+    atomCss(prop: string, src: AsyncReactiveValue<string | number>, unit?: string): this;
+    atomCss(map: CssBindings): this;
+    atomAttr(name: string, src: AsyncReactiveValue<PrimitiveValue>): this;
+    atomAttr(map: Record<string, AsyncReactiveValue<PrimitiveValue>>): this;
+    atomProp<T>(name: string, src: AsyncReactiveValue<T>): this;
+    atomProp<T>(map: Record<string, AsyncReactiveValue<T>>): this;
+    atomShow(cond: AsyncReactiveValue<boolean>): this;
+    atomHide(cond: AsyncReactiveValue<boolean>): this;
+    atomVal<T>(atom: WritableAtom<T>, opts?: ValOptions<T>): this;
     atomChecked(atom: WritableAtom<boolean>): this;
-    atomForm<T extends object>(atom: WritableAtom<T>, options?: ValOptions<unknown>): this;
+    atomForm<T extends object>(atom: WritableAtom<T>, opts?: ValOptions<unknown>): this;
     atomOn(event: string, handler: (e: JQuery.Event) => void): this;
-
-    atomBind<T = unknown>(options: BindingOptions<T>): this;
-    atomList<T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>): this;
-
-    atomMount<P>(component: ComponentFn<P>, props?: P): this;
+    atomBind<T = unknown>(opts: BindingOptions<T>): this;
+    atomList<T>(src: ReadonlyAtom<T[]>, opts: ListOptions<T>): this;
+    atomMount<P>(comp: ComponentFn<P>, props?: P): this;
     atomUnmount(): this;
     atomUnbind(): this;
   }

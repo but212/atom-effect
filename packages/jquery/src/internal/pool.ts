@@ -28,17 +28,12 @@ export interface BindingRecord {
 
 /**
  * Pool for BindingRecord objects.
- *
- * V8 Optimization: Objects always have the same hidden class (monomorphic shape)
- * because the factory creates them with all three fields initialized.
- * The reset callback nulls out references to prevent stale data leaks.
+ * Uses a fixed hidden class for V8 optimization.
  */
 export const bindingRecordPool = new ObjectPool<BindingRecord>(
   () => ({ effects: undefined, cleanups: undefined, componentCleanup: undefined }),
   (r) => {
-    r.effects = undefined;
-    r.cleanups = undefined;
-    r.componentCleanup = undefined;
+    r.effects = r.cleanups = r.componentCleanup = undefined;
   },
-  128 // SPA pages routinely bind hundreds of elements
+  128
 );

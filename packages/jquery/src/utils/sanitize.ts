@@ -106,88 +106,33 @@ const DANGEROUS_CSS_GLOBAL_RE = new RegExp(DANGEROUS_CSS_RE.source, 'gim');
 
 /**
  * HTML sanitization for XSS mitigation using regex-based filtering.
- *
- * Faster than DOMParser but relies on pattern matching.
- * Neutralizes dangerous attributes (`on*`, protocols) instead of removing
- * them entirely, so the surrounding markup structure is preserved.
- *
- * **This is the final sanitization layer.** No additional sanitizer runs
- * downstream. For user-controlled rich text (WYSIWYG, markdown output, etc.)
- * use a dedicated library such as DOMPurify instead of or on top of this.
  */
 export function sanitizeHtml(html: string | null | undefined): string {
-  let safe = String(html ?? '');
+  let s = String(html ?? '')
+    .replace(STRIP_CTRL_RE, '')
+    .replace(DECODE_NUMERIC_ENTITY_RE, (_, hex, dec) =>
+      String.fromCodePoint(hex ? parseInt(hex, 16) : parseInt(dec, 10))
+    )
+    .replace(DECODE_NAMED_ENTITY_RE, (_, name) => NAMED_ENTITY_MAP[name] ?? '')
+    .replace(STRIP_XML_RE, '');
 
-  // 0. Pre-process: Remove null bytes and control characters (bypass vectors)
-  // These are often used to bypass regex filters while browsers ignore them.
-  safe = safe.replace(STRIP_CTRL_RE, '');
-
-  // 0b. Decode numeric HTML entities (&#NNN; / &#xHH;) and dangerous named
-  // entities so that protocol-bypass vectors like "&#106;avascript:" are
-  // normalised to their literal characters before the dangerous-tag and
-  // dangerous-protocol regexes run.
-  safe = safe.replace(DECODE_NUMERIC_ENTITY_RE, (_, hex, dec) =>
-    String.fromCodePoint(hex ? parseInt(hex, 16) : parseInt(dec, 10))
-  );
-  safe = safe.replace(DECODE_NAMED_ENTITY_RE, (_, name) => NAMED_ENTITY_MAP[name] ?? '');
-
-  // 1. Remove dangerous tags (script, iframe, style, etc.) and their content.
-  // Note: <svg> and <math> are intentionally kept — they have legitimate uses
-  // (icons, equations). Their event handlers (on*) are neutralized in step 3.
-  // Also strip XML processing instructions <?...?> (abused in some parsers).
-  safe = safe.replace(STRIP_XML_RE, '');
-
-  // Loop tag removal to prevent nested reassembly bypass (e.g. "<scr<script>ipt>").
   let prev: string;
   do {
-    prev = safe;
-    safe = safe.replace(DANGEROUS_TAG_RE, '');
-  } while (safe !== prev);
+    prev = s;
+    s = s.replace(DANGEROUS_TAG_RE, '');
+  } while (s !== prev);
 
-  // 2. Neutralize dangerous protocols (javascript:, vbscript:).
-  // Whitespace-tolerant regex handles obfuscation like "j a v a s c r i p t:".
-  safe = safe.replace(DANGEROUS_PROTOCOL_GLOBAL_RE, 'data-unsafe-protocol:');
-
-  // Neutralize dangerous data URIs (text/html, application/javascript, image/svg+xml, etc.).
-  // Common inline images (data:image/png, data:image/jpeg, etc.) are preserved.
-  safe = safe.replace(DANGEROUS_DATA_URI_RE, 'data-unsafe-protocol:');
-
-  // 3. Neutralize event handler attributes (on* = → data-unsafe-attr=).
-  safe = safe.replace(UNSAFE_ATTR_RE, 'data-unsafe-attr=');
-
-  // 4. Neutralize CSS expressions (IE legacy) and -moz-binding.
-  safe = safe.replace(DANGEROUS_CSS_GLOBAL_RE, 'data-unsafe-css:');
-
-  return safe;
+  return s
+    .replace(DANGEROUS_PROTOCOL_GLOBAL_RE, 'data-unsafe-protocol:')
+    .replace(DANGEROUS_DATA_URI_RE, 'data-unsafe-protocol:')
+    .replace(UNSAFE_ATTR_RE, 'data-unsafe-attr=')
+    .replace(DANGEROUS_CSS_GLOBAL_RE, 'data-unsafe-css:');
 }
 
-// ============================================================================
-// Security guards (used by the binding layer)
-// ============================================================================
+/** Checks for javascript:/vbscript: protocols in URL attributes. */
+export const isDangerousUrl = (attr: string, val: string) =>
+  URL_ATTRS.has(attr.toLowerCase()) && DANGEROUS_PROTOCOL_RE.test(val);
 
-/**
- * Returns `true` when `attrName` is a URL-bearing attribute and `value`
- * contains a `javascript:` or `vbscript:` protocol.
- *
- * Only single-URL attributes are checked (see `URL_ATTRS`). `srcset` is
- * excluded because its comma-separated format requires per-URL parsing that
- * this function does not perform.
- *
- * Used by `bindAttr` to guard URL-bearing attributes.
- */
-export function isDangerousUrl(attrName: string, value: string): boolean {
-  if (!URL_ATTRS.has(attrName.toLowerCase())) return false;
-  return DANGEROUS_PROTOCOL_RE.test(value);
-}
-
-/**
- * Returns `true` when a CSS property value contains a dangerous protocol
- * inside a `url()` function (e.g. `background-image: url("javascript:…")`).
- *
- * Uses a non-global regex to avoid `lastIndex` statefulness between calls.
- */
-export function isDangerousCssValue(value: string): boolean {
-  // Fast pre-check avoids running the full regex on every CSS value.
-  if (!value.toLowerCase().includes('url(')) return false;
-  return DANGEROUS_CSS_URL_RE.test(value);
-}
+/** Checks for protocols inside CSS url() functions. */
+export const isDangerousCssValue = (val: string) =>
+  val.toLowerCase().includes('url(') && DANGEROUS_CSS_URL_RE.test(val);
