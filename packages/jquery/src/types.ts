@@ -16,7 +16,16 @@ type StringKeyToNumber<S extends string> = S extends `${infer N extends number}`
 /** Max recursion depth for dot-paths. */
 type MaxDepth = 8;
 
-/** Dot-separated paths for type T. */
+/**
+ * Generates a union of all possible dot-separated paths for a given type T.
+ *
+ * Used for `atomLens` to provide IDE autocomplete and type safety when
+ * zooming into deeply nested reactive objects.
+ *
+ * @example
+ * type User = { profile: { name: string } };
+ * type P = Paths<User>; // "profile" | "profile.name"
+ */
 export type Paths<T, D extends unknown[] = []> = D['length'] extends MaxDepth
   ? never
   : T extends object
@@ -27,7 +36,12 @@ export type Paths<T, D extends unknown[] = []> = D['length'] extends MaxDepth
       }[keyof T & (string | number)]
     : never;
 
-/** Value type at path P in T. */
+/**
+ * Resolves the type of a value at a specific dot-path P within type T.
+ *
+ * Works in tandem with `Paths<T>` to ensure that lensed atoms have
+ * the correct inferred type for the member they point to.
+ */
 export type PathValue<T, P extends string> = P extends `${infer K}.${infer Rest}`
   ? StringKeyToNumber<K> extends keyof T
     ? PathValue<T[StringKeyToNumber<K> & keyof T], Rest>
@@ -44,7 +58,19 @@ export interface AtomOptions extends BaseAtomOptions {
   name?: string;
 }
 
+/**
+ * Represents a value that can be tracked by the reactive system.
+ * - T: Static value (one-time bind)
+ * - ReadonlyAtom<T>: Reactive value (updates DOM when atom changes)
+ * - () => T: Reactive function (updates DOM when any atom read inside changes)
+ */
 export type ReactiveValue<T> = T | ReadonlyAtom<T> | (() => T);
+
+/**
+ * An extension of ReactiveValue that also supports Promises and async functions.
+ * The binding system automatically handles the promise lifecycle, showing the
+ * latest resolved value and ignoring stale ones (race condition protection).
+ */
 export type AsyncReactiveValue<T> =
   | T
   | ReadonlyAtom<T | Promise<T>>
@@ -93,11 +119,19 @@ export interface ListOptions<T> {
   isEqual?: (a: T, b: T) => boolean;
 }
 
+/**
+ * Options for `atomVal`, `atomChecked`, and `atomForm` bindings.
+ */
 export interface ValOptions<T> {
+  /** Debounce duration in milliseconds for DOM -> Atom sync. Defaults to 0. */
   debounce?: number;
+  /** jQuery event name(s) to listen to. Defaults to "input". */
   event?: string;
+  /** Custom function to parse DOM string to atom type T. */
   parse?: (v: string) => T;
+  /** Custom function to format atom type T to DOM string. */
   format?: (v: T) => string;
+  /** Custom equality check to prevent redundant atom updates. */
   equal?: EqualFn<T>;
 }
 

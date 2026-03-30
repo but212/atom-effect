@@ -31,6 +31,10 @@ class InputBinding<T> {
   private readonly format: (v: T) => string;
   private readonly equal: (a: T, b: T) => boolean;
 
+  /**
+   * Internal state flags using bitwise operations for zero-overhead tracking.
+   * Tracks focus, IME composition, and sync direction to prevent infinite loops.
+   */
   private flags = 0;
   private timeoutId: ReturnType<typeof setTimeout> | undefined = undefined;
 
@@ -92,11 +96,14 @@ class InputBinding<T> {
   // --- Event Handlers ---
 
   private readonly handleCompositionStart = () => {
+    // We ignore input events while the user is still composing characters
+    // (e.g., CJK character selection) to avoid syncing incomplete/partial data.
     this.flags |= BindingFlags.Composing;
   };
 
   private readonly handleCompositionEnd = () => {
     this.flags &= ~BindingFlags.Composing;
+    // Trigger sync once composition is finished to capture the final character.
     this.handleInput();
   };
 
@@ -109,12 +116,16 @@ class InputBinding<T> {
     const wasComposing = !!(this.flags & BindingFlags.Composing);
     this.flags &= ~BindingFlags.Composing;
 
+    // Ensure any pending debounced change is committed immediately on blur.
     this.flushPendingDebounce();
 
+    // If composition was interrupted by blur (e.g. clicking away),
+    // we must perform a final sync to stay consistent with the DOM.
     if (wasComposing && this.timeoutId === undefined) {
       this.syncAtomFromDom();
     }
 
+    // Restore the strict formatted value from the atom.
     this.normalizeDomValue();
   };
 
@@ -148,7 +159,7 @@ class InputBinding<T> {
     this.flags |= BindingFlags.SyncingToAtom;
     try {
       const raw = this.isMultipleSelect ? (this.$el.val() as string[] | null) || [] : this.el.value;
-      const parsed = this.parse(raw as string);
+      const parsed: T = this.isMultipleSelect ? (raw as unknown as T) : this.parse(raw as string);
       if (!this.equal(this.atom.peek(), parsed)) {
         this.atom.value = parsed;
       }
@@ -191,6 +202,11 @@ class InputBinding<T> {
           isFocused &&
           (this.el instanceof HTMLInputElement || this.el instanceof HTMLTextAreaElement)
         ) {
+          // --- Cursor Preservation Strategy ---
+          // When the atom updates while the input is focused, directly
+          // updating .value would reset the cursor to the end. We manually
+          // save and restore the selection range to preserve the user's
+          // typing experience.
           try {
             const start = this.el.selectionStart;
             const end = this.el.selectionEnd;
@@ -244,13 +260,13 @@ export function applyInputBinding<T>(
   atom: WritableAtom<T>,
   options: ValOptions<T>
 ): { fx: EffectObject; cleanup: () => void } {
-  let b: InputBinding<T> | null = new InputBinding($el, atom, options);
+  let binding: InputBinding<T> | null = new InputBinding($el, atom, options);
   return {
-    fx: effect(b.syncDomFromAtom),
+    fx: effect(binding.syncDomFromAtom),
     cleanup: () => {
-      if (b) {
-        b.cleanup();
-        b = null;
+      if (binding) {
+        binding.cleanup();
+        binding = null;
       }
     },
   };

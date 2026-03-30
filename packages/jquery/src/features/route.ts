@@ -25,6 +25,10 @@ class RouterImpl implements Router {
 
   private config: RouteConfig &
     Required<Pick<RouteConfig, 'mode' | 'basePath' | 'autoBindLinks' | 'activeClass'>>;
+  private readonly isHistoryMode: boolean;
+  private readonly basePath: string;
+  private readonly activeClass: string;
+
   private isDestroyed = false;
   private previousRoute = '';
   private previousUrl: string;
@@ -46,9 +50,12 @@ class RouterImpl implements Router {
       ...config,
     } as typeof this.config;
 
+    this.isHistoryMode = this.config.mode === 'history';
+    this.basePath = this.config.basePath.replace(/\/$/, '');
+    this.activeClass = this.config.activeClass;
+
     this.$target = $(this.config.target);
-    this.previousUrl =
-      this.config.mode === 'history' ? location.pathname + location.search : location.hash;
+    this.previousUrl = this.isHistoryMode ? location.pathname + location.search : location.hash;
     this.currentRouteAtom = createAtom(this.getRouteName());
     this.currentRoute = this.currentRouteAtom;
     this.queryParamsAtom = createAtom(this.getQueryParams());
@@ -57,7 +64,7 @@ class RouterImpl implements Router {
   }
 
   private init() {
-    const event = this.config.mode === 'history' ? 'popstate' : 'hashchange';
+    const event = this.isHistoryMode ? 'popstate' : 'hashchange';
     const handler = this.handleUrlChange.bind(this);
     window.addEventListener(event, handler);
     this.cleanups.push(() => window.removeEventListener(event, handler));
@@ -79,25 +86,26 @@ class RouterImpl implements Router {
   }
 
   private getRouteName(): string {
-    const { mode, basePath, default: def } = this.config;
-    if (mode === 'history') {
-      const base = (basePath || '').replace(/\/$/, '');
-      let p = location.pathname;
-      if (base && p.startsWith(base)) p = p.substring(base.length);
-      return p.replace(/^\//, '') || def!;
+    const { default: defaultRoute } = this.config;
+    if (this.isHistoryMode) {
+      const base = this.basePath;
+      let path = location.pathname;
+      if (base && path.startsWith(base)) {
+        path = path.substring(base.length);
+      }
+      return path.replace(/^\//, '') || defaultRoute!;
     }
-    return location.hash.split('?')[0]!.substring(1) || def!;
+    return location.hash.split('?')[0]!.substring(1) || defaultRoute!;
   }
 
   private getQueryParams(): Record<string, string> {
-    const h = location.hash,
-      qIndex = h.indexOf('?');
-    const raw =
-      this.config.mode === 'history'
-        ? location.search.substring(1)
-        : qIndex !== -1
-          ? h.substring(qIndex + 1)
-          : '';
+    const hash = location.hash;
+    const queryIndex = hash.indexOf('?');
+    const raw = this.isHistoryMode
+      ? location.search.substring(1)
+      : queryIndex !== -1
+        ? hash.substring(queryIndex + 1)
+        : '';
 
     if (raw === this.lastRawQuery) return this.cachedParams;
     this.lastRawQuery = raw;
@@ -126,16 +134,21 @@ class RouterImpl implements Router {
   }
 
   private setUrl(name: string): void {
-    const isHist = this.config.mode === 'history';
-    const url = isHist ? `${this.config.basePath.replace(/\/$/, '')}/${name}` : `#${name}`;
-    if (isHist) safePushState(null, url);
-    else location.hash = url;
-    this.previousUrl = isHist ? url : location.hash;
+    const url = this.isHistoryMode ? `${this.basePath}/${name}` : `#${name}`;
+    if (this.isHistoryMode) {
+      safePushState(null, url);
+    } else {
+      location.hash = url;
+    }
+    this.previousUrl = this.isHistoryMode ? url : location.hash;
   }
 
   private restoreUrl(): void {
-    if (this.config.mode === 'history') safePushState(null, this.previousUrl);
-    else location.hash = this.previousUrl;
+    if (this.isHistoryMode) {
+      safePushState(null, this.previousUrl);
+    } else {
+      location.hash = this.previousUrl;
+    }
   }
 
   private renderRoute(name: string): void {
@@ -182,21 +195,22 @@ class RouterImpl implements Router {
 
   private handleUrlChange(): void {
     if (this.isDestroyed) return;
-    const curr =
-      this.config.mode === 'history' ? location.pathname + location.search : location.hash;
-    if (curr === this.previousUrl) return;
 
-    const next = this.getRouteName(),
-      old = this.currentRouteAtom.peek();
-    if (old !== next) {
-      if (untracked(() => this.config.routes[old]?.onLeave?.(this)) === false) {
+    const currentUrl = this.isHistoryMode ? location.pathname + location.search : location.hash;
+    if (currentUrl === this.previousUrl) return;
+
+    const nextRoute = this.getRouteName();
+    const oldRoute = this.currentRouteAtom.peek();
+
+    if (oldRoute !== nextRoute) {
+      if (untracked(() => this.config.routes[oldRoute]?.onLeave?.(this)) === false) {
         this.restoreUrl();
         return;
       }
-      this.currentRouteAtom.value = next;
+      this.currentRouteAtom.value = nextRoute;
     }
     this.queryParamsAtom.value = this.getQueryParams();
-    this.previousUrl = curr;
+    this.previousUrl = currentUrl;
   }
 
   private setupAutoBindLinks(): void {
@@ -209,27 +223,29 @@ class RouterImpl implements Router {
     $(document).on('click', '[data-route]', onClick);
     this.cleanups.push(() => $(document).off('click', '[data-route]', onClick));
 
-    let prev: HTMLElement[] = [];
-    const fx = effect(() => {
-      const cur = this.currentRouteAtom.value,
-        cls = this.config.activeClass;
+    let previousActiveNodes: HTMLElement[] = [];
+    const activeLinkEffect = effect(() => {
+      const currentRoute = this.currentRouteAtom.value;
+      const activeClass = this.activeClass;
       untracked(() => {
-        prev.forEach((el) => el.classList.remove(cls));
+        previousActiveNodes.forEach((el) => el.classList.remove(activeClass));
         try {
           const nodes = Array.from(
-            document.querySelectorAll<HTMLElement>(`[data-route="${cur.replace(/"/g, '\\"')}"]`)
+            document.querySelectorAll<HTMLElement>(
+              `[data-route="${currentRoute.replace(/"/g, '\\"')}"]`
+            )
           );
           nodes.forEach((el) => {
-            el.classList.add(cls);
+            el.classList.add(activeClass);
             el.setAttribute('aria-current', 'page');
           });
-          prev = nodes;
+          previousActiveNodes = nodes;
         } catch {
-          prev = [];
+          previousActiveNodes = [];
         }
       });
     });
-    this.cleanups.push(() => fx.dispose());
+    this.cleanups.push(() => activeLinkEffect.dispose());
   }
 
   public navigate(name: string): void {

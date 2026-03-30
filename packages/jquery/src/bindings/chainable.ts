@@ -196,13 +196,12 @@ $.fn.atomOn = function (event: string, handler: (e: JQuery.Event) => void): JQue
 $.fn.atomBind = function <T>(options: BindingOptions<T>): JQuery {
   const { text, html, class: cls, css, attr, prop, show, hide, val, checked, form, on } = options;
 
-  // Pre-parse 'val' to avoid repeated array checks or type casting inside the loop
-  const v =
+  const valBinding =
     val === undefined
       ? null
       : Array.isArray(val)
-        ? { a: val[0] as WritableAtom<unknown>, o: val[1] as ValOptions<unknown> }
-        : { a: val as WritableAtom<unknown>, o: undefined };
+        ? { atom: val[0] as WritableAtom<unknown>, options: val[1] as ValOptions<unknown> }
+        : { atom: val as WritableAtom<unknown>, options: undefined };
 
   return atomEachElement(this, (ctx) => {
     if (text !== undefined) bindText(ctx, text);
@@ -213,7 +212,7 @@ $.fn.atomBind = function <T>(options: BindingOptions<T>): JQuery {
     if (prop !== undefined) bindProp(ctx, prop as Record<string, AsyncReactiveValue<unknown>>);
     if (show !== undefined) bindVisibility(ctx, show, false);
     if (hide !== undefined) bindVisibility(ctx, hide, true);
-    if (v) bindVal(ctx, v.a, v.o);
+    if (valBinding) bindVal(ctx, valBinding.atom, valBinding.options);
     if (checked !== undefined) bindChecked(ctx, checked);
     if (form !== undefined && ctx.el instanceof HTMLFormElement)
       bindForm(ctx.el, form as WritableAtom<object>);

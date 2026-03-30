@@ -73,18 +73,40 @@ class BindingRegistry {
     return res;
   }
 
+  /**
+   * Registers a reactive effect with an element's record.
+   * Effects are automatically disposed when the element is removed from the DOM.
+   *
+   * @param el - The DOM element to bind the effect to.
+   * @param fx - The reactive effect instance.
+   */
   trackEffect(el: Element, fx: EffectObject): void {
-    const r = this.getOrCreateRecord(el);
-    if (!r.effects) r.effects = effectsArrayPool.acquire();
-    r.effects.push(fx);
+    const record = this.getOrCreateRecord(el);
+    if (!record.effects) {
+      record.effects = effectsArrayPool.acquire();
+    }
+    record.effects.push(fx);
   }
 
+  /**
+   * Registers an arbitrary cleanup function with an element's record.
+   * Cleanups are executed when the element is removed from the DOM.
+   *
+   * @param el - The DOM element to bind the cleanup to.
+   * @param fn - The cleanup function (e.g., event unbinding, timer clear).
+   */
   trackCleanup(el: Element, fn: () => void): void {
-    const r = this.getOrCreateRecord(el);
-    if (!r.cleanups) r.cleanups = cleanupsArrayPool.acquire();
-    r.cleanups.push(fn);
+    const record = this.getOrCreateRecord(el);
+    if (!record.cleanups) {
+      record.cleanups = cleanupsArrayPool.acquire();
+    }
+    record.cleanups.push(fn);
   }
 
+  /**
+   * Assigns a component-level cleanup function (e.g., from atomMount).
+   * Unlike generic cleanups, there can only be one component cleanup per element.
+   */
   setComponentCleanup(el: Element, fn: (() => void) | undefined): void {
     this.getOrCreateRecord(el).componentCleanup = fn;
   }
@@ -191,22 +213,30 @@ export function enableAutoCleanup(root: Element): void {
   }
 
   const observer = new MutationObserver((mutations) => {
-    // Optimization: raw for-loop avoids iterator allocations.
     for (let i = 0, mLen = mutations.length; i < mLen; i++) {
       const removedNodes = mutations[i]!.removedNodes;
       for (let j = 0, rLen = removedNodes.length; j < rLen; j++) {
         const node = removedNodes[j]!;
 
-        // Only Element nodes can carry AES_BOUND bindings.
-        // 1 === Node.ELEMENT_NODE
+        // Only Element nodes can carry bindings marked by our AES_BOUND class.
+        // We skip text and comment nodes early for performance.
         if (node.nodeType !== 1) continue;
 
-        // isConnected handles the move case.
-        // isKept handles explicit .detach().
-        // isIgnored handles .remove().
-        if (node.isConnected || registry.isKept(node) || registry.isIgnored(node)) {
-          continue;
-        }
+        // --- Filtering Logic for Memory Safety ---
+
+        // 1. isConnected: Handles DOM moves. When an element is moved using append(node),
+        //    it is technically removed and added. MutationObserver detects this,
+        //    but we shouldn't cleanup the bindings if the node is still in the document.
+        if (node.isConnected) continue;
+
+        // 2. registry.isKept: Handles explicit .detach(). jQuery's .detach() is
+        //    meant to keep data/events intact. We support this by skipping cleanup.
+        if (registry.isKept(node)) continue;
+
+        // 3. registry.isIgnored: Eliminates race conditions with jQuery's .remove().
+        //    Since we patch .remove() to call cleanupTree() synchronously,
+        //    the observer would normally trigger a second redundant cleanup pass.
+        if (registry.isIgnored(node)) continue;
 
         registry.cleanupTree(node as Element);
       }

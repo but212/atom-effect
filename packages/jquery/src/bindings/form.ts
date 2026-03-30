@@ -6,7 +6,13 @@ import { bindChecked, bindVal, createContext } from './unified';
 
 /**
  * Binds an entire form to a single object-based atom.
- * Optimized for O(1) performance on large forms by avoiding O(N) effect fan-out.
+ *
+ * DESIGN STRATEGY:
+ * Optimized for O(1) performance on large forms. Instead of each input
+ * directly observing a "lens" of the root atom (which would create N effects),
+ * we use a single centralized 'rootDispatcher' effect. This dispatcher
+ * watches the root atom once and pushes updates to individual 'leaf atoms'
+ * only when their specific values change, eliminating O(N) effect fan-out.
  */
 export function bindForm<T extends object>(
   form: HTMLFormElement,
@@ -17,12 +23,17 @@ export function bindForm<T extends object>(
   const fieldPaths = new Map<string, string[]>();
 
   // Single effect to watch the root atom and dispatch updates to individual fields.
+  // This ensures that typing in one field doesn't trigger O(N) re-computations
+  // across all other fields.
   const rootDispatcher = effect(() => {
-    const rootVal = atom.value; // Subscribes to the root atom once
+    const rootValue = atom.value; // Subscribes to the root atom once
     untracked(() => {
-      for (const [name, fAtom] of fieldAtoms) {
-        const newVal = getPathValue(rootVal, fieldPaths.get(name)!);
-        if (!Object.is(fAtom.peek(), newVal)) fAtom.value = newVal;
+      for (const [name, fieldAtom] of fieldAtoms) {
+        const newValue = getPathValue(rootValue, fieldPaths.get(name)!);
+        // Only trigger the leaf atom if the value actually changed.
+        if (!Object.is(fieldAtom.peek(), newValue)) {
+          fieldAtom.value = newValue;
+        }
       }
     });
   });
@@ -31,29 +42,31 @@ export function bindForm<T extends object>(
   registry.trackEffect(form, rootDispatcher);
 
   const getOrFieldAtom = (name: string): WritableAtom<unknown> => {
-    let fAtom = fieldAtoms.get(name);
-    if (!fAtom) {
+    let fieldAtom = fieldAtoms.get(name);
+    if (!fieldAtom) {
       const parts = name.includes('.') ? name.split('.') : [name];
       fieldPaths.set(name, parts);
 
       // Create a leaf atom that only holds the value of this specific field.
-      fAtom = createAtom(getPathValue(atom.peek(), parts));
+      fieldAtom = createAtom(getPathValue(atom.peek(), parts));
 
       // Separate effect to sync changes from the field atom back to the root atom.
       registry.trackEffect(
         form,
         effect(() => {
-          const newVal = fAtom!.value;
+          const newValue = fieldAtom!.value; // Subscribes to the leaf atom only
           const currentRoot = atom.peek();
-          const nextRoot = setDeepValue(currentRoot, parts, 0, newVal);
+          const nextRoot = setDeepValue(currentRoot, parts, 0, newValue);
 
-          if (nextRoot !== currentRoot) atom.value = nextRoot as T;
+          if (nextRoot !== currentRoot) {
+            atom.value = nextRoot as T;
+          }
         })
       );
 
-      fieldAtoms.set(name, fAtom);
+      fieldAtoms.set(name, fieldAtom);
     }
-    return fAtom;
+    return fieldAtom;
   };
 
   const bindElement = (el: Element) => {

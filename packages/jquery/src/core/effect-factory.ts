@@ -68,12 +68,15 @@ export function registerReactiveEffect<T>(
       latestPromise = val;
       val
         .then((resolved) => {
+          // Ensure this is still the most recent promise to avoid race conditions
+          // where an older request resolves after a newer one.
           if (latestPromise === val) {
             untracked(() => {
               try {
                 updater(resolved);
-                if (debug.enabled)
+                if (debug.enabled) {
                   debug.domUpdated(LOG_PREFIXES.BINDING, el, `${debugType} (async)`, resolved);
+                }
               } catch (e) {
                 debug.error(
                   LOG_PREFIXES.BINDING,
@@ -100,20 +103,34 @@ export function registerReactiveEffect<T>(
     }
   };
 
-  if (isReactive(source) || typeof source === 'function') {
+  /**
+   * Decide whether to register a reactive effect or perform a one-time static update.
+   *
+   * STRATEGY:
+   * 1. If it's an Atom or a function, it's considered 'reactive' and wrapped in an effect.
+   * 2. If it's a plain value or a Promise, it's 'static' and applied once.
+   */
+  const sourceIsReactive = isReactive(source);
+  const sourceIsFunction = typeof source === 'function';
+
+  if (sourceIsReactive || sourceIsFunction) {
     registry.trackEffect(
       el,
       effect(
         () => {
-          const value = isReactive(source)
+          // Resolve the current value based on the source type.
+          // Both paths subscribe to their respective dependencies automatically.
+          const value = sourceIsReactive
             ? (source as ReadonlyAtom<T | Promise<T>>).value
             : (source as () => T | Promise<T>)();
+
           untracked(() => runUpdater(value));
         },
         { name: debugType }
       )
     );
   } else {
+    // Static path: applies the value immediately and doesn't register an effect.
     untracked(() => runUpdater(source as T | Promise<T>));
   }
 }

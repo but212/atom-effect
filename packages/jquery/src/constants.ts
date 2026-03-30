@@ -56,13 +56,22 @@ export const DANGEROUS_PROPS: ReadonlySet<string> = new Set([
   'prototype',
 ]);
 
+/**
+ * Centralized error messages for the entire library.
+ * Structured by subsystem to facilitate easy debugging and consistent error reporting.
+ *
+ * Each entry is a function that takes dynamic data (e.g. element name) to produce
+ * a human-readable and actionable error message.
+ */
 export const ERROR_MESSAGES = {
+  /** Errors related to the SPA Router. */
   ROUTE: {
     NOT_FOUND: (n: string) => `Route "${n}" not found and no notFound route configured`,
     TEMPLATE_NOT_FOUND: (s: string) => `Template "${s}" not found`,
     TARGET_NOT_FOUND: (s: string) => `Target element "${s}" not found`,
     MALFORMED_URI: (r: string) => `Malformed URI component: ${r}`,
   },
+  /** Security-related errors, specifically from the CSS/HTML sanitizer. */
   SECURITY: {
     UNSAFE_CONTENT: () => 'Unsafe content neutralized during sanitization.',
     BLOCKED_CSS_VALUE: (p: string) => `Blocked dangerous value in CSS style property "${p}".`,
@@ -72,6 +81,7 @@ export const ERROR_MESSAGES = {
     BLOCKED_PROP: (n: string) =>
       `Blocked setting dangerous property "${n}". Use html binding for sanitized HTML.`,
   },
+  /** General errors from reactive bindings (text, map, input, etc). */
   BINDING: {
     INVALID_INPUT_ELEMENT: (t: string) => `Val binding used on non-input element <${t}>.`,
     MISSING_SOURCE: (m: string) => `[${m}] source is required when prop/name is a string.`,
@@ -81,14 +91,17 @@ export const ERROR_MESSAGES = {
     CLEANUP_ERROR: (i?: string) => `Binding cleanup error${i ? `: ${i}` : ''}`,
     PARSE_ERROR: (d?: string) => `parse() threw during DOM→Atom sync${d ? `: ${d}` : ''}`,
   },
+  /** Errors specific to atomList rendering and reconciliation. */
   LIST: {
     DUPLICATE_KEY: (k: string | number, i: number, c: string) =>
       `Duplicate key "${k}" at index ${i} in atomList <${c}>.`,
   },
+  /** Lifecycle errors from atomMount/atomUnmount. */
   MOUNT: {
     ERROR: (n?: string) => `Mount error${n ? ` in component <${n}>` : ''}`,
     CLEANUP_ERROR: (n?: string) => `Cleanup error${n ? ` in component <${n}>` : ''}`,
   },
+  /** Internal architectural errors from the core engine or registry. */
   CORE: {
     EFFECT_DISPOSE_ERROR: (i?: string) => `Effect dispose error${i ? `: ${i}` : ''}`,
   },
