@@ -4,7 +4,7 @@
  */
 
 import { bench, describe } from 'vitest';
-import { atom, computed } from '@/index';
+import { atom, computed } from '../../dist/index.js';
 import type { DataGridRow } from '../fixtures/index.js';
 import { generateGridData } from '../fixtures/index.js';
 import { macroBenchOptions } from '../utils/setup.js';
