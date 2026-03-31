@@ -27,17 +27,16 @@ const setPool = new ObjectPool<Set<ListKey>>(
 const arrayPool = new ArrayPool<unknown>(100, 1024);
 
 function insertOrAppend(elOrJq: Element | JQuery, nextNode: Node | null, container: Element): void {
-  const isConnected = nextNode?.isConnected;
+  // Optimization: insertBefore(node, null) is same as appendChild(node)
   if (elOrJq instanceof Element) {
-    if (isConnected) container.insertBefore(elOrJq, nextNode);
-    else container.appendChild(elOrJq);
-  } else {
-    for (let i = 0, len = elOrJq.length; i < len; i++) {
-      const el = elOrJq[i];
-      if (el) {
-        if (isConnected) container.insertBefore(el, nextNode);
-        else container.appendChild(el);
-      }
+    container.insertBefore(elOrJq, nextNode);
+    return;
+  }
+  const len = elOrJq.length;
+  for (let i = 0; i < len; i++) {
+    const el = elOrJq[i];
+    if (el) {
+      container.insertBefore(el, nextNode);
     }
   }
 }
@@ -197,27 +196,23 @@ function buildIndices<T>(
     oldEndIndex = oldLen - 1,
     newEndIndex = itemCount - 1;
 
+  const eq = isEqual || shallowEqual;
+
   while (startIndex <= oldEndIndex && startIndex <= newEndIndex) {
-    const item = items[startIndex]!,
-      k = getKey(item, startIndex);
-    if (oldKeys[startIndex] !== k) break;
-    if (
-      !(isEqual ? isEqual(oldItems[startIndex]!, item) : shallowEqual(oldItems[startIndex]!, item))
-    )
+    const item = items[startIndex]!;
+    const k = getKey(item, startIndex);
+    if (oldKeys[startIndex] !== k || !eq(oldItems[startIndex]!, item)) {
       break;
+    }
     keyToIndex.set(k, startIndex++);
   }
 
   while (oldEndIndex >= startIndex && newEndIndex >= startIndex) {
-    const item = items[newEndIndex]!,
-      k = getKey(item, newEndIndex);
-    if (oldKeys[oldEndIndex] !== k) break;
-    if (
-      !(isEqual
-        ? isEqual(oldItems[oldEndIndex]!, item)
-        : shallowEqual(oldItems[oldEndIndex]!, item))
-    )
+    const item = items[newEndIndex]!;
+    const k = getKey(item, newEndIndex);
+    if (oldKeys[oldEndIndex] !== k || !eq(oldItems[oldEndIndex]!, item)) {
       break;
+    }
     keyToIndex.set(k, newEndIndex--);
     oldEndIndex--;
   }
@@ -366,13 +361,23 @@ function renderItems<T>(
       keyStr = String(trKeys[t]!);
 
     for (let j = 0, elLen = $el.length; j < elLen; j++) {
-      if ($el[j] instanceof Element) ($el[j] as Element).setAttribute('data-atom-key', keyStr);
+      const node = $el[j];
+      if (node instanceof Element) {
+        node.setAttribute('data-atom-key', keyStr);
+      }
     }
 
     if (newStates[targetIdx] === 2 && newNodes[targetIdx]) {
-      const $old = wrap(newNodes[targetIdx]!);
-      for (let j = 0; j < $old.length; j++) if ($old[j]) registry.cleanupTree($old[j] as Element);
-      $old.replaceWith($el);
+      const node = newNodes[targetIdx]!;
+      if (node instanceof Element) {
+        registry.cleanupTree(node);
+      } else {
+        for (let j = 0, nLen = node.length; j < nLen; j++) {
+          const el = node[j];
+          if (el instanceof Element) registry.cleanupTree(el);
+        }
+      }
+      wrap(node).replaceWith($el);
     }
     newNodes[targetIdx] = $el.length === 1 ? ($el[0] as Element) : $el;
   }
@@ -425,12 +430,14 @@ function placeItems<T>(
     let nextNode: Node | null = null,
       min = 2147483647;
     for (let i = itemCount - 1; i >= 0; i--) {
-      if (newIndices[i]! !== -1 && newIndices[i]! < min) min = newIndices[i]!;
-      else insertOrAppend(newNodes[i]!, nextNode, rawContainer);
-      nextNode =
-        newNodes[i] instanceof Element
-          ? (newNodes[i] as Node)
-          : ((newNodes[i] as JQuery)[0] ?? null);
+      const idx = newIndices[i]!;
+      if (idx !== -1 && idx < min) {
+        min = idx;
+      } else {
+        insertOrAppend(newNodes[i]!, nextNode, rawContainer);
+      }
+      const node = newNodes[i]!;
+      nextNode = node instanceof Element ? node : (node[0] ?? null);
     }
   }
 

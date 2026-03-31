@@ -135,7 +135,11 @@ export function bindClass(
 ): void {
   const tokenMap: Record<string, string[]> = {};
   for (const k in classMap) {
-    if (hasOwn.call(classMap, k)) tokenMap[k] = k.trim().split(/\s+/).filter(Boolean);
+    if (hasOwn.call(classMap, k)) {
+      const trimmed = k.trim();
+      // Optimization: avoid regex for simple single-class keys
+      tokenMap[k] = trimmed.indexOf(' ') === -1 ? [trimmed] : trimmed.split(/\s+/).filter(Boolean);
+    }
   }
 
   registerMapEffect(
@@ -143,8 +147,12 @@ export function bindClass(
     classMap,
     (states) => {
       for (const k in states) {
-        if (states[k]) el.classList.add(...tokenMap[k]!);
-        else el.classList.remove(...tokenMap[k]!);
+        const tokens = tokenMap[k]!;
+        if (states[k]) {
+          el.classList.add(...tokens);
+        } else {
+          el.classList.remove(...tokens);
+        }
       }
     },
     'class'
@@ -155,7 +163,7 @@ export function bindClass(
  * Updates multiple CSS style properties.
  */
 export function bindCss({ el }: BindingContext, cssMap: Record<string, CssValue>): void {
-  const style = el.style as unknown as Record<string, string>;
+  const style = el.style as unknown as Record<string, string | null>;
   const reactiveMap: Record<string, ReactiveValue<unknown>> = {};
   const meta: Record<string, { camel: string; unit: string }> = {};
 
@@ -173,9 +181,13 @@ export function bindCss({ el }: BindingContext, cssMap: Record<string, CssValue>
     reactiveMap,
     (states) => {
       for (const p in states) {
-        const { camel, unit } = meta[p]!;
-        const str = unit ? String(states[p]) + unit : String(states[p]);
-        if (!isDangerousCssValue(str) && style[camel] !== str) style[camel] = str;
+        const m = meta[p]!;
+        const val = states[p];
+        const str = m.unit ? `${val}${m.unit}` : String(val);
+        const camel = m.camel;
+        if (!isDangerousCssValue(str) && style[camel] !== str) {
+          style[camel] = str;
+        }
       }
     },
     'css'
@@ -212,17 +224,17 @@ export function bindAttr(
     safeMap,
     (states) => {
       for (const name in states) {
+        const m = metaMap[name]!;
         const val = states[name] as PrimitiveValue;
-        const { isAria, isUrl } = metaMap[name]!;
 
-        if (val == null || (val === false && !isAria)) {
+        if (val == null || (val === false && !m.isAria)) {
           if (cache[name] !== null) el.removeAttribute(name);
           cache[name] = null;
           continue;
         }
 
-        const newVal = val === true ? (isAria ? 'true' : name) : String(val);
-        if (isUrl && DANGEROUS_PROTOCOL_RE.test(newVal)) {
+        const newVal = val === true ? (m.isAria ? 'true' : name) : String(val);
+        if (m.isUrl && DANGEROUS_PROTOCOL_RE.test(newVal)) {
           console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_PROTOCOL(name)}`);
           continue;
         }
@@ -275,7 +287,9 @@ export function bindProp(
           console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_PROTOCOL(name)}`);
           continue;
         }
-        if (el[name] !== val) el[name] = val;
+        if (el[name] !== val) {
+          el[name] = val;
+        }
       }
     },
     'prop'

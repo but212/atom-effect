@@ -64,43 +64,41 @@ export function registerReactiveEffect<T>(
   let latestPromise: Promise<T> | null = null;
 
   const runUpdater = (val: T | Promise<T>) => {
-    if (isPromise(val)) {
-      latestPromise = val;
-      val
-        .then((resolved) => {
-          // Ensure this is still the most recent promise to avoid race conditions
-          // where an older request resolves after a newer one.
-          if (latestPromise === val) {
-            untracked(() => {
-              try {
-                updater(resolved);
-                if (debug.enabled) {
-                  debug.domUpdated(LOG_PREFIXES.BINDING, el, `${debugType} (async)`, resolved);
-                }
-              } catch (e) {
-                debug.error(
-                  LOG_PREFIXES.BINDING,
-                  ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType),
-                  e
-                );
-              }
-            });
-          }
-        })
-        .catch((e) => {
-          if (latestPromise === val) {
-            debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType), e);
-          }
-        });
-    } else {
+    if (!isPromise(val)) {
       latestPromise = null;
       try {
         updater(val);
-        if (debug.enabled) debug.domUpdated(LOG_PREFIXES.BINDING, el, debugType, val);
+        if (debug.enabled) {
+          debug.domUpdated(LOG_PREFIXES.BINDING, el, debugType, val);
+        }
       } catch (e) {
         debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType, true), e);
       }
+      return;
     }
+
+    latestPromise = val;
+    val
+      .then((resolved) => {
+        // Ensure this is still the most recent promise to avoid race conditions
+        if (latestPromise === val) {
+          untracked(() => {
+            try {
+              updater(resolved);
+              if (debug.enabled) {
+                debug.domUpdated(LOG_PREFIXES.BINDING, el, `${debugType} (async)`, resolved);
+              }
+            } catch (e) {
+              debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType), e);
+            }
+          });
+        }
+      })
+      .catch((e) => {
+        if (latestPromise === val) {
+          debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType), e);
+        }
+      });
   };
 
   /**
@@ -162,12 +160,12 @@ export function registerMapEffect<T>(
   let latestPromiseId = 0;
 
   const runUpdater = (currentMap: Record<string, T | Promise<T>>) => {
-    const mapKeys = Object.keys(currentMap);
     const promises: Promise<{ key: string; val: T }>[] = [];
     const resolvedMap: Record<string, T> = {};
+    const len = keys.length;
 
-    for (let i = 0, len = mapKeys.length; i < len; i++) {
-      const key = mapKeys[i]!;
+    for (let i = 0; i < len; i++) {
+      const key = keys[i]!;
       const val = currentMap[key]!;
       if (isPromise(val)) {
         promises.push(val.then((v) => ({ key, val: v })));
@@ -176,18 +174,21 @@ export function registerMapEffect<T>(
       }
     }
 
-    if (promises.length > 0) {
+    const pLen = promises.length;
+    if (pLen > 0) {
       const myId = ++latestPromiseId;
       Promise.all(promises).then((results) => {
         if (myId === latestPromiseId) {
-          for (let i = 0, len = results.length; i < len; i++) {
-            resolvedMap[results[i]!.key] = results[i]!.val;
+          for (let i = 0; i < pLen; i++) {
+            const res = results[i]!;
+            resolvedMap[res.key] = res.val;
           }
           untracked(() => {
             try {
               updater(resolvedMap);
-              if (debug.enabled)
+              if (debug.enabled) {
                 debug.domUpdated(LOG_PREFIXES.BINDING, el, `${debugType} (async)`, resolvedMap);
+              }
             } catch (e) {
               debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType), e);
             }
@@ -198,7 +199,9 @@ export function registerMapEffect<T>(
       latestPromiseId++; // Invalidate any pending promises
       try {
         updater(resolvedMap);
-        if (debug.enabled) debug.domUpdated(LOG_PREFIXES.BINDING, el, debugType, resolvedMap);
+        if (debug.enabled) {
+          debug.domUpdated(LOG_PREFIXES.BINDING, el, debugType, resolvedMap);
+        }
       } catch (e) {
         debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType, true), e);
       }

@@ -26,6 +26,7 @@ class InputBinding<T> {
   private readonly el: InputEl;
   private readonly atom: WritableAtom<T>;
   private readonly isMultipleSelect: boolean;
+  private readonly isTextControl: boolean;
 
   private readonly parse: (v: string) => T;
   private readonly format: (v: T) => string;
@@ -46,29 +47,41 @@ class InputBinding<T> {
     this.$el = $el;
     this.el = $el[0] as InputEl;
     this.atom = atom;
-    this.isMultipleSelect = this.el.tagName === 'SELECT' && (this.el as HTMLSelectElement).multiple;
+    const tagName = this.el.tagName;
+    const isMultiple = tagName === 'SELECT' && (this.el as HTMLSelectElement).multiple;
+    this.isMultipleSelect = isMultiple;
+    this.isTextControl = tagName === 'INPUT' || tagName === 'TEXTAREA';
     this.ns = `.atomBind-${++instanceCounter}`;
 
     const debounce = options.debounce ?? 0;
 
     this.parse = options.parse ?? ((v: string) => v as unknown as T);
-    this.format =
-      options.format ??
-      ((v: T) => {
-        if (this.isMultipleSelect) {
-          return (Array.isArray(v) ? v : v ? [String(v)] : []).join(',');
-        }
-        return String(v ?? '');
-      });
+
+    // Specialize format logic at construction to avoid branches in sync hot-path
+    if (isMultiple) {
+      this.format =
+        options.format ?? ((v: T) => (Array.isArray(v) ? v : v ? [String(v)] : []).join(','));
+    } else {
+      this.format = options.format ?? ((v: T) => String(v ?? ''));
+    }
 
     const baseEqual = options.equal ?? Object.is;
-    this.equal = (a: T, b: T): boolean => {
-      if (baseEqual(a, b)) return true;
-      if (Array.isArray(a) && Array.isArray(b)) {
-        return a.length === b.length && a.every((val, i) => Object.is(val, b[i]));
-      }
-      return false;
-    };
+    if (isMultiple) {
+      this.equal = (a: T, b: T): boolean => {
+        if (baseEqual(a, b)) return true;
+        if (Array.isArray(a) && Array.isArray(b)) {
+          const len = a.length;
+          if (len !== b.length) return false;
+          for (let i = 0; i < len; i++) {
+            if (!Object.is(a[i], b[i])) return false;
+          }
+          return true;
+        }
+        return false;
+      };
+    } else {
+      this.equal = baseEqual;
+    }
 
     if (debounce > 0) {
       this.handleInput = () => {
@@ -158,8 +171,9 @@ class InputBinding<T> {
     if (this.flags & BindingFlags.Busy) return;
     this.flags |= BindingFlags.SyncingToAtom;
     try {
-      const raw = this.isMultipleSelect ? (this.$el.val() as string[] | null) || [] : this.el.value;
-      const parsed: T = this.isMultipleSelect ? (raw as unknown as T) : this.parse(raw as string);
+      const isMultiple = this.isMultipleSelect;
+      const raw = isMultiple ? (this.$el.val() as string[] | null) || [] : this.el.value;
+      const parsed: T = isMultiple ? (raw as unknown as T) : (this.parse(raw as string) as T);
       if (!this.equal(this.atom.peek(), parsed)) {
         this.atom.value = parsed;
       }
@@ -178,43 +192,43 @@ class InputBinding<T> {
     const val = this.atom.value;
 
     untracked(() => {
+      const isMultiple = this.isMultipleSelect;
       const formatted = this.format(val);
-      const currentVal = (this.isMultipleSelect
+      const currentVal = (isMultiple
         ? (this.$el.val() as string[] | null) || []
         : this.el.value) as unknown as T;
 
       if (this.equal(currentVal, val)) return;
 
-      const isFocused = !!(this.flags & BindingFlags.Focused);
+      const flags = this.flags;
+      const isFocused = !!(flags & BindingFlags.Focused);
 
       if (isFocused) {
         try {
-          const parsedCurrent = this.isMultipleSelect ? currentVal : this.parse(this.el.value);
+          const parsedCurrent = isMultiple
+            ? (currentVal as unknown as T)
+            : this.parse(this.el.value);
           if (this.equal(parsedCurrent, val)) return;
-        } catch {}
+        } catch {
+          // Ignore parse errors on active focused element sync
+        }
       }
 
       this.flags |= BindingFlags.SyncingToDom;
       try {
-        if (this.isMultipleSelect) {
+        if (isMultiple) {
           this.$el.val(val as unknown as string[]);
-        } else if (
-          isFocused &&
-          (this.el instanceof HTMLInputElement || this.el instanceof HTMLTextAreaElement)
-        ) {
+        } else if (isFocused && this.isTextControl) {
           // --- Cursor Preservation Strategy ---
-          // When the atom updates while the input is focused, directly
-          // updating .value would reset the cursor to the end. We manually
-          // save and restore the selection range to preserve the user's
-          // typing experience.
           try {
-            const start = this.el.selectionStart;
-            const end = this.el.selectionEnd;
-            this.el.value = formatted;
+            const el = this.el as HTMLInputElement;
+            const start = el.selectionStart;
+            const end = el.selectionEnd;
+            el.value = formatted;
             const len = formatted.length;
 
             if (start !== null && end !== null) {
-              this.el.setSelectionRange(start < len ? start : len, end < len ? end : len);
+              el.setSelectionRange(start < len ? start : len, end < len ? end : len);
             }
           } catch {
             this.el.value = formatted;
@@ -222,7 +236,9 @@ class InputBinding<T> {
         } else {
           this.el.value = formatted;
         }
-        if (debug.enabled) debug.domUpdated(LOG_PREFIXES.BINDING, this.$el, 'val', formatted);
+        if (debug.enabled) {
+          debug.domUpdated(LOG_PREFIXES.BINDING, this.$el, 'val', formatted);
+        }
       } finally {
         this.flags &= ~BindingFlags.SyncingToDom;
       }

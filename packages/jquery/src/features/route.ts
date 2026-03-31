@@ -111,18 +111,29 @@ class RouterImpl implements Router {
     this.lastRawQuery = raw;
 
     const res: Record<string, string> = {};
-    if (raw) new URLSearchParams(raw).forEach((v, k) => (res[k] = v));
+    let newLen = 0;
+    if (raw) {
+      new URLSearchParams(raw).forEach((v, k) => {
+        res[k] = v;
+        newLen++;
+      });
+    }
 
-    let changed = Object.keys(res).length !== Object.keys(this.cachedParams).length;
-    if (!changed)
-      for (const k in res)
+    let oldLen = 0;
+    for (const _ in this.cachedParams) oldLen++;
+
+    let changed = newLen !== oldLen;
+    if (!changed) {
+      for (const k in res) {
         if (res[k] !== this.cachedParams[k]) {
           changed = true;
           break;
         }
+      }
+    }
 
     if (changed) {
-      if (raw.includes('%'))
+      if (raw.indexOf('%') !== -1)
         try {
           decodeURIComponent(raw);
         } catch {
@@ -225,20 +236,25 @@ class RouterImpl implements Router {
 
     let previousActiveNodes: HTMLElement[] = [];
     const activeLinkEffect = effect(() => {
-      const currentRoute = this.currentRouteAtom.value;
+      const routeName = this.currentRouteAtom.value;
       const activeClass = this.activeClass;
       untracked(() => {
-        previousActiveNodes.forEach((el) => el.classList.remove(activeClass));
+        const len = previousActiveNodes.length;
+        for (let i = 0; i < len; i++) {
+          const el = previousActiveNodes[i]!;
+          el.classList.remove(activeClass);
+          el.removeAttribute('aria-current');
+        }
+
         try {
-          const nodes = Array.from(
-            document.querySelectorAll<HTMLElement>(
-              `[data-route="${currentRoute.replace(/"/g, '\\"')}"]`
-            )
-          );
-          nodes.forEach((el) => {
+          const selector = `[data-route="${routeName.replace(/"/g, '\\"')}"]`;
+          const nodes = Array.from(document.querySelectorAll<HTMLElement>(selector));
+          const nLen = nodes.length;
+          for (let i = 0; i < nLen; i++) {
+            const el = nodes[i]!;
             el.classList.add(activeClass);
             el.setAttribute('aria-current', 'page');
-          });
+          }
           previousActiveNodes = nodes;
         } catch {
           previousActiveNodes = [];

@@ -43,8 +43,8 @@ Object.defineProperty(atom, 'debug', {
   },
 });
 
-/** Resolves after microtask effects flush. */
-export const nextTick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+/** Resolves after microtask effects flush. Fast Promise-based scheduling. */
+export const nextTick = (): Promise<void> => Promise.resolve();
 
 // Register static extensions to jQuery
 $.extend({

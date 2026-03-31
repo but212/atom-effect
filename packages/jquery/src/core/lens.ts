@@ -15,18 +15,21 @@ const WRITABLE_BRAND = Symbol.for('atom-effect/writable');
 export function setDeepValue(obj: unknown, keys: string[], index: number, value: unknown): unknown {
   if (index === keys.length) return value;
 
-  const key = keys[index]!,
-    curr = obj && typeof obj === 'object' ? (obj as Record<string, unknown>) : {},
-    old = curr[key],
-    next = setDeepValue(old, keys, index + 1, value);
+  const key = keys[index]!;
+  const curr = (obj != null && typeof obj === 'object' ? obj : {}) as Record<string, unknown>;
+  const old = curr[key];
+  const next = setDeepValue(old, keys, index + 1, value);
 
   if (Object.is(old, next)) return obj;
 
   if (Array.isArray(curr)) {
-    const arr = [...curr],
-      idx = Number.parseInt(key, 10);
-    if (!Number.isNaN(idx)) arr[idx] = next;
-    else (arr as unknown as Record<string, unknown>)[key] = next;
+    const arr = curr.slice();
+    const idx = +key; // Fast numeric conversion
+    if (idx >= 0) {
+      arr[idx] = next;
+    } else {
+      (arr as unknown as Record<string, unknown>)[key] = next;
+    }
     return arr;
   }
   return { ...curr, [key]: next };
@@ -37,7 +40,9 @@ export function setDeepValue(obj: unknown, keys: string[], index: number, value:
  */
 export function getPathValue(source: unknown, parts: string[]): unknown {
   let res = source;
-  for (let i = 0; i < parts.length && res != null; i++) {
+  const len = parts.length;
+  for (let i = 0; i < len; i++) {
+    if (res == null) return undefined;
     res = (res as Record<string, unknown>)[parts[i]!];
   }
   return res;

@@ -116,24 +116,27 @@ class BindingRegistry {
   }
 
   cleanup(el: Element | Node): void {
+    const isElement = el.nodeType === 1;
     const record = this.records.get(el as Element);
+
+    // Consolidate deletions
     this.preservedNodes.delete(el);
     this.ignoredNodes.delete(el);
+
     if (!record) {
-      if (el.nodeType === 1) (el as Element).classList.remove(AES_BOUND);
+      if (isElement) (el as Element).classList.remove(AES_BOUND);
       return;
     }
 
     this.records.delete(el as Element);
-    if (el.nodeType === 1) (el as Element).classList.remove(AES_BOUND);
+    if (isElement) (el as Element).classList.remove(AES_BOUND);
 
-    if (debug.enabled)
-      debug.cleanup(
-        LOG_PREFIXES.BINDING,
-        el.nodeType === 1 ? getSelector(el as Element) : el.nodeName || 'Node'
-      );
+    if (debug.enabled) {
+      const name = isElement ? getSelector(el as Element) : el.nodeName || 'Node';
+      debug.cleanup(LOG_PREFIXES.BINDING, name);
+    }
 
-    const selector = el.nodeType === 1 ? getSelector(el as Element) : 'Node';
+    const selector = isElement ? getSelector(el as Element) : 'Node';
     if (record.componentCleanup) {
       try {
         record.componentCleanup();
@@ -169,14 +172,23 @@ class BindingRegistry {
   }
 
   cleanupDescendants(el: Element | DocumentFragment | ShadowRoot): void {
-    const descendants =
-      'getElementsByClassName' in el && typeof el.getElementsByClassName === 'function'
-        ? el.getElementsByClassName(AES_BOUND)
-        : el.querySelectorAll(`.${AES_BOUND}`);
-    for (let i = descendants.length - 1; i >= 0; i--) {
+    // Fast path: getElementsByClassName is significantly faster than querySelectorAll
+    const descendants = (el as { getElementsByClassName?(name: string): HTMLCollectionOf<Element> })
+      .getElementsByClassName
+      ? (el as Element).getElementsByClassName(AES_BOUND)
+      : el.querySelectorAll(`.${AES_BOUND}`);
+
+    const len = descendants.length;
+    if (len === 0) return;
+
+    for (let i = len - 1; i >= 0; i--) {
       const child = descendants[i] as Element;
-      if (this.records.has(child)) this.cleanup(child);
-      else child.classList.remove(AES_BOUND);
+      // Pre-check registry to avoid unnecessary cleanup calls
+      if (this.records.has(child)) {
+        this.cleanup(child);
+      } else {
+        child.classList.remove(AES_BOUND);
+      }
     }
   }
 
@@ -213,6 +225,7 @@ export function enableAutoCleanup(root: Element): void {
   }
 
   const observer = new MutationObserver((mutations) => {
+    const reg = registry;
     for (let i = 0, mLen = mutations.length; i < mLen; i++) {
       const removedNodes = mutations[i]!.removedNodes;
       for (let j = 0, rLen = removedNodes.length; j < rLen; j++) {
@@ -223,22 +236,23 @@ export function enableAutoCleanup(root: Element): void {
         if (node.nodeType !== 1) continue;
 
         // --- Filtering Logic for Memory Safety ---
+        const el = node as Element;
 
         // 1. isConnected: Handles DOM moves. When an element is moved using append(node),
         //    it is technically removed and added. MutationObserver detects this,
         //    but we shouldn't cleanup the bindings if the node is still in the document.
-        if (node.isConnected) continue;
+        if (el.isConnected) continue;
 
-        // 2. registry.isKept: Handles explicit .detach(). jQuery's .detach() is
+        // 2. reg.isKept: Handles explicit .detach(). jQuery's .detach() is
         //    meant to keep data/events intact. We support this by skipping cleanup.
-        if (registry.isKept(node)) continue;
+        if (reg.isKept(el)) continue;
 
-        // 3. registry.isIgnored: Eliminates race conditions with jQuery's .remove().
+        // 3. reg.isIgnored: Eliminates race conditions with jQuery's .remove().
         //    Since we patch .remove() to call cleanupTree() synchronously,
         //    the observer would normally trigger a second redundant cleanup pass.
-        if (registry.isIgnored(node)) continue;
+        if (reg.isIgnored(el)) continue;
 
-        registry.cleanupTree(node as Element);
+        reg.cleanupTree(el);
       }
     }
   });

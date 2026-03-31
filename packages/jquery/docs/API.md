@@ -338,7 +338,7 @@ $.isReactive(v);       // true for any reactive node (atom or computed)
 
 ### `$.nextTick()`
 
-Returns a `Promise` that resolves after the next scheduler flush. Effects are processed in microtasks, so `nextTick` (via `setTimeout`) runs after all pending effects complete.
+Returns a ``Promise` that resolves after the next scheduler flush. Effects are processed in microtasks, so `nextTick` (via `Promise.resolve()`) runs immediately after all pending effects in the current tick complete.
 
 ```javascript
 countAtom.value = 1;

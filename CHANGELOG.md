@@ -19,6 +19,15 @@
 - **Refactor**: Completed a high-density overhaul of the `@but212/atom-effect-jquery` package.
   - **Architecture**: Compacted core bindings into monomorphic structures, eliminating over 1,000 lines of redundant logic and complex closures.
   - **Logic**: Hardened `atomForm` reconciliation, streamlined registry lifecycle management, and refined static API registrations.
+- **Performance**: Executed an aggressive engine-level optimization pass for the jQuery binding layer.
+  - **Hoisted Allocations**: Static maps in `atomClass`, `atomCss`, `atomAttr`, and `atomProp` are now hoisted outside the element iteration loop, eliminating redundant object allocations.
+  - **Monomorphic Dispatch**: Refactored `InputBinding` to specialize `format` and `equal` logic at construction time, removing branches and `instanceof` checks from hot-paths.
+  - **Form Update Efficiency**: Replaced `Map` iteration with flat array dispatch in `bindForm` for $O(N)$ field updates without iterator overhead.
+  - **Microtask Scheduling**: Switched `nextTick()` to use `Promise.resolve()` for faster, more reliable microtask-based effect flushing.
+  - **Registry Speed**: Optimized `cleanupDescendants` to prioritize `getElementsByClassName` ($O(M)$ performance) and added pre-checks to skip unnecessary registry lookups.
+  - **Shallow Equality**: Refactored `shallowEqual` to use manual property counting and `for...in` loops, avoiding `Object.keys()` array allocations.
+  - **Sanitization Fast-path**: Added an `indexOf('<')` early-exit to `sanitizeHtml` to bypass regex passes for plain-text content.
+  - **Route & Fetch**: Optimized request setup with shallow merges and replaced `Array.from`/`forEach` with manual loops in the router for link state patching.
 - **Robustness**: Hardened type safety across all bindings and improved error isolation in `$.route` and `atomFetch`.
 
 #### Documentation

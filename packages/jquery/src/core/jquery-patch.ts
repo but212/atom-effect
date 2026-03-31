@@ -48,13 +48,15 @@ let originals: OriginalMethods | null = null;
 // ============================================================================
 
 const getWrappedHandler = (fn: EventHandler): EventHandler => {
-  if ((fn as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER]) return fn;
+  // Fast check: is already wrapped?
+  if ((fn as { [INTERNAL_HANDLER]?: boolean })[INTERNAL_HANDLER]) return fn;
+
   let wrapped = handlerMap.get(fn);
   if (!wrapped) {
     wrapped = function (this: unknown, ...args: unknown[]) {
       return batch(() => fn.apply(this, args as Parameters<EventHandler>));
     } as unknown as EventHandler;
-    (wrapped as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
+    (wrapped as { [INTERNAL_HANDLER]?: boolean })[INTERNAL_HANDLER] = true;
     handlerMap.set(fn, wrapped);
   }
   return wrapped;
@@ -93,9 +95,10 @@ export function enablejQueryOverrides(): void {
   };
   const orig = originals;
 
-  $.fn.remove = function (selector?: string) {
+  $.fn.remove = function (this: JQuery, selector?: string) {
     const targets = selector ? this.filter(selector) : this;
-    for (let i = 0, len = targets.length; i < len; i++) {
+    const len = targets.length;
+    for (let i = 0; i < len; i++) {
       const el = targets[i];
       if (el) {
         registry.markIgnored(el);
@@ -105,17 +108,21 @@ export function enablejQueryOverrides(): void {
     return orig.remove.call(this, selector) ?? this;
   };
 
-  $.fn.empty = function () {
-    for (let i = 0, len = this.length; i < len; i++) {
-      if (this[i]?.hasChildNodes()) registry.cleanupDescendants(this[i]!);
+  $.fn.empty = function (this: JQuery) {
+    const len = this.length;
+    for (let i = 0; i < len; i++) {
+      const el = this[i];
+      if (el?.hasChildNodes()) registry.cleanupDescendants(el);
     }
     return orig.empty.call(this) ?? this;
   };
 
-  $.fn.detach = function (selector?: string) {
+  $.fn.detach = function (this: JQuery, selector?: string) {
     const targets = selector ? this.filter(selector) : this;
-    for (let i = 0, len = targets.length; i < len; i++) {
-      if (targets[i]) registry.keep(targets[i]!);
+    const len = targets.length;
+    for (let i = 0; i < len; i++) {
+      const el = targets[i];
+      if (el) registry.keep(el);
     }
     return orig.detach.call(this, selector) ?? this;
   };

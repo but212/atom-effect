@@ -28,8 +28,9 @@ class FetchContext<T> {
   private readonly onErrorFn: ((err: unknown) => void) | undefined;
 
   constructor(urlOrFn: string | (() => string), options: FetchOptions<T>) {
-    this.isStaticUrl = typeof urlOrFn === 'string';
-    if (this.isStaticUrl) {
+    const isStatic = typeof urlOrFn === 'string';
+    this.isStaticUrl = isStatic;
+    if (isStatic) {
       this.staticUrl = urlOrFn as string;
       this.getUrl = () => this.staticUrl!;
     } else {
@@ -38,14 +39,15 @@ class FetchContext<T> {
 
     this.ajaxOptionsFn =
       typeof options.ajaxOptions === 'function' ? options.ajaxOptions : undefined;
+
+    const baseAjax = typeof options.ajaxOptions === 'object' ? options.ajaxOptions : {};
     this.staticOptions = {
-      ...(typeof options.ajaxOptions === 'object' ? options.ajaxOptions : {}),
+      ...baseAjax,
       method: options.method,
-      headers: { ...(options.ajaxOptions as JQuery.AjaxSettings)?.headers, ...options.headers },
+      headers: { ...(baseAjax as JQuery.AjaxSettings)?.headers, ...options.headers },
     };
     this.transformFn = options.transform;
     this.onErrorFn = options.onError;
-    this.execute = this.execute.bind(this);
   }
 
   public abort(): void {
@@ -58,26 +60,34 @@ class FetchContext<T> {
       const x = err as JQuery.jqXHR;
       final = new Error(`Network Error: ${x.statusText || 'Unknown'} (${x.status})`);
       (final as FetchError).jqXHR = x;
-    } else final = err instanceof Error ? err : new Error(String(err ?? 'Unknown error'));
+    } else {
+      final = err instanceof Error ? err : new Error(String(err ?? 'Unknown error'));
+    }
 
-    if (this.onErrorFn)
+    if (this.onErrorFn) {
       try {
         this.onErrorFn(final);
-      } catch {}
+      } catch {
+        // Suppress errors in error callback
+      }
+    }
     throw final;
   }
 
-  public async execute(): Promise<T> {
+  public execute = async (): Promise<T> => {
     this.abortController?.abort();
     this.abortController = new AbortController();
     const { signal } = this.abortController;
-    const req = $.extend(
-      true,
-      { success: undefined, error: undefined, complete: undefined },
-      this.staticOptions,
-      this.ajaxOptionsFn?.(),
-      { url: this.isStaticUrl ? this.staticUrl : this.getUrl() }
-    );
+
+    // Use shallow merge for high-performance request setup
+    const req: JQuery.AjaxSettings = {
+      ...this.staticOptions,
+      ...this.ajaxOptionsFn?.(),
+      url: this.isStaticUrl ? this.staticUrl : this.getUrl(),
+      success: undefined,
+      error: undefined,
+      complete: undefined,
+    };
     const xhr = $.ajax(req);
 
     signal.onabort = () => xhr.abort();
@@ -97,7 +107,7 @@ class FetchContext<T> {
       signal.onabort = null;
       if (this.abortController?.signal === signal) this.abortController = null;
     }
-  }
+  };
 }
 
 /**

@@ -19,20 +19,25 @@ export function bindForm<T extends object>(
   atom: WritableAtom<T>,
   options: ValOptions<unknown> = {}
 ): void {
+  // Use a flat array for O(N) iteration without Map iterator overhead
   const fieldAtoms = new Map<string, WritableAtom<unknown>>();
-  const fieldPaths = new Map<string, string[]>();
+  const fields: { atom: WritableAtom<unknown>; parts: string[] }[] = [];
 
   // Single effect to watch the root atom and dispatch updates to individual fields.
   // This ensures that typing in one field doesn't trigger O(N) re-computations
   // across all other fields.
   const rootDispatcher = effect(() => {
     const rootValue = atom.value; // Subscribes to the root atom once
+    const len = fields.length;
+    if (len === 0) return;
+
     untracked(() => {
-      for (const [name, fieldAtom] of fieldAtoms) {
-        const newValue = getPathValue(rootValue, fieldPaths.get(name)!);
+      for (let i = 0; i < len; i++) {
+        const item = fields[i]!;
+        const newValue = getPathValue(rootValue, item.parts);
         // Only trigger the leaf atom if the value actually changed.
-        if (!Object.is(fieldAtom.peek(), newValue)) {
-          fieldAtom.value = newValue;
+        if (!Object.is(item.atom.peek(), newValue)) {
+          item.atom.value = newValue;
         }
       }
     });
@@ -45,10 +50,10 @@ export function bindForm<T extends object>(
     let fieldAtom = fieldAtoms.get(name);
     if (!fieldAtom) {
       const parts = name.includes('.') ? name.split('.') : [name];
-      fieldPaths.set(name, parts);
 
       // Create a leaf atom that only holds the value of this specific field.
       fieldAtom = createAtom(getPathValue(atom.peek(), parts));
+      fields.push({ atom: fieldAtom, parts });
 
       // Separate effect to sync changes from the field atom back to the root atom.
       registry.trackEffect(
@@ -103,9 +108,12 @@ export function bindForm<T extends object>(
         for (let j = 0, aLen = mutation.addedNodes.length; j < aLen; j++) {
           const node = mutation.addedNodes[j]!;
           if (node.nodeType === 1) {
-            const el = node as Element;
+            const el = node as HTMLElement;
             bindElement(el);
-            const controls = el.querySelectorAll('input, select, textarea');
+            // Search for inputs within the newly added fragment
+            const controls = el.matches?.('input, select, textarea')
+              ? [el]
+              : el.querySelectorAll('input, select, textarea');
             for (let k = 0, cLen = controls.length; k < cLen; k++) {
               bindElement(controls[k]!);
             }

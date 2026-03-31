@@ -31,9 +31,17 @@ export interface BindingRecord {
  * Uses a fixed hidden class for V8 optimization.
  */
 export const bindingRecordPool = new ObjectPool<BindingRecord>(
-  () => ({ effects: undefined, cleanups: undefined, componentCleanup: undefined }),
+  () => {
+    return {
+      effects: undefined,
+      cleanups: undefined,
+      componentCleanup: undefined,
+    };
+  },
   (r) => {
-    r.effects = r.cleanups = r.componentCleanup = undefined;
+    r.effects = undefined;
+    r.cleanups = undefined;
+    r.componentCleanup = undefined;
   },
   128
 );
