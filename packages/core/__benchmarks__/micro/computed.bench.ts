@@ -121,10 +121,13 @@ describe('Computed Recomputation', () => {
   bench(
     `trigger recomputation (chain of 10) (x${REPEATS})`,
     () => {
+      // biome-ignore lint/suspicious/noExplicitAny: it's just bench
+      let result: any;
       for (let i = 0; i < REPEATS; i++) {
         aChain.value += 1;
-        void currentChain.value;
+        result = currentChain.value;
       }
+      return result;
     },
     microBenchOptions
   );
@@ -229,6 +232,8 @@ describe('Computed Disposal', () => {
   bench(
     `dispose computed chain (x${REPEATS})`,
     () => {
+      // biome-ignore lint/suspicious/noExplicitAny: it's just bench
+      let lastValue: any;
       for (let j = 0; j < REPEATS; j++) {
         const a = atom(0);
         const computeds = [computed(() => a.value)];
@@ -236,8 +241,10 @@ describe('Computed Disposal', () => {
           const prev = computeds[i]!;
           computeds.push(computed(() => prev.value + 1));
         }
+        lastValue = computeds[computeds.length - 1]!.value;
         computeds.forEach((c) => c.dispose());
       }
+      return lastValue;
     },
     microBenchOptions
   );

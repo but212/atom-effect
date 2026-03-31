@@ -16,12 +16,12 @@
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
 | Create 1000 Atoms (Primitives) | 64,530.77 | 0.0155 | 0.0840 |
-| Create 1000 Atoms (Objects) | 58,918.36 | 0.0170 | 0.1107 |
-| Read 1000 Atoms (Value) | 792,254.54 | 0.0013 | 0.0019 |
-| Read 1000 Atoms (Peek) | 787,521.08 | 0.0013 | 0.0014 |
-| Write 1000 Atoms | 333,350.91 | 0.0030 | 0.0054 |
-| Subscribe/Unsubscribe (x100) | 370,973.96 | 0.0027 | 0.0052 |
-| Notify 1 Subscriber (x1000) | 276,432.31 | 0.0036 | 0.0047 |
+| Create 1000 Atoms (Objects) | 58,918.36 | 0.0170 | 0.0348 |
+| Read 1000 Atoms (Value) | 792,254.54 | 0.0013 | 0.0013 |
+| Read 1000 Atoms (Peek) | 787,521.08 | 0.0013 | 0.0013 |
+| Write 1000 Atoms | 333,350.91 | 0.0030 | 0.0032 |
+| Subscribe/Unsubscribe (x100) | 370,973.96 | 0.0027 | 0.0037 |
+| Notify 1 Subscriber (x1000) | 276,432.31 | 0.0036 | 0.0036 |
 | Untracked Read (x1000) | 761,462.34 | 0.0013 | 0.0014 |
 
 ### Computed - Micro
@@ -94,8 +94,15 @@
 | SlotBuffer: Add 16 items (spill) (x1000) | 15,780.76 | 0.0634 | 0.1567 |
 | Array: Push 16 items (baseline) (x1000) | 36,849.91 | 0.0271 | 0.1203 |
 | SlotBuffer: Churn (8 rem + 8 add) (x1000) | 3,499.56 | 0.2858 | 0.4052 |
+| SlotBuffer: Iteration (4 items) (x1000) | 91,290.15 | 0.0110 | 0.0229 |
+| SlotBuffer: Iteration (16 items) (x1000) | 29,420.15 | 0.0340 | 0.0470 |
+| SlotBuffer: Compaction (16 items) (x1000) | 3,848.53 | 0.2598 | 0.4775 |
 | DepSlotBuffer: Seal + isDirty (4 items) (x1000) | 31,730.06 | 0.0315 | 0.0400 |
+| DepSlotBuffer: Seal + isDirty (16 items) (x1000) | 16,333.41 | 0.0612 | 0.0699 |
 | DepSlotBuffer: Claim existing (Inline hit) (x1000) | 22,017.62 | 0.0454 | 0.0564 |
+| DepSlotBuffer: Claim existing (Overflow) (x1000) | 2,186.82 | 0.4573 | 0.4923 |
+| DepSlotBuffer: Map fallback (64 items) (x1000) | 1,236.27 | 0.8089 | 0.8765 |
+| DepSlotBuffer: Truncation (16 items) (x1000) | 2,356.62 | 0.4243 | 0.5052 |
 
 ## 2. Macro-Benchmarks
 
@@ -108,7 +115,7 @@
 | Create/Dispose 1K Effects | 425.39 | 2.3508 | 3.7677 |
 | Rapid GC (10K Cycles) | 5,799.69 | 0.1724 | 0.2731 |
 | Subscription Churn (1K) | 42,517.60 | 0.0235 | 0.1191 |
-| Object Pooling (10K) | 21.71 | 46.0569 | 48.6730 |
+| Object Pooling (10K Objects) | 21.71 | 46.0569 | 48.6730 |
 | Weak Reference Cleanup (1K) | 11,259.29 | 0.0888 | 0.3382 |
 | Effect Cleanup (1K) | 141.27 | 7.0787 | 7.4702 |
 | Circular Reference Cleanup | 164,756.98 | 0.0061 | 0.0106 |
@@ -148,10 +155,10 @@
 | --- | --- | --- | --- |
 | Create 100 Todos | 65,388.60 | 0.0153 | 0.0290 |
 | Toggle Completion | 654,638.71 | 0.0015 | 0.0020 |
-| Filter (Active/Completed) (x1000) | 39,575.34 | 0.0253 | 0.0337 |
-| Delete (50 from 100) | 118,476.17 | 0.0084 | 0.0200 |
-| Complete Workflow | 389,540.49 | 0.0026 | 0.0029 |
-| Stats with Auto-update | 105,367.38 | 0.0095 | 0.0200 |
+| Filter Switch (x1000) | 39,575.34 | 0.0253 | 0.0337 |
+| Delete Todos (50 items) | 118,476.17 | 0.0084 | 0.0200 |
+| Full Workflow | 389,540.49 | 0.0026 | 0.0029 |
+| Stat Propagation (100 items) | 105,367.38 | 0.0095 | 0.0200 |
 
 ## 3. Realistic-Benchmarks
 
@@ -166,7 +173,7 @@
 
 | Scenario | ops/sec | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Memory after component churn | 1,753.94 | 0.5701 | 1.1200 |
+| Heavy component churn (1000 items) | 1,753.94 | 0.5701 | 1.1200 |
 
 ### Batch Efficiency
 

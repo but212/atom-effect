@@ -123,10 +123,13 @@ describe('Complex Graph Patterns', () => {
   bench(
     `circular avoidance pattern (x${REPEATS})`,
     () => {
+      // biome-ignore lint/suspicious/noExplicitAny: it's just bench
+      let result: any;
       for (let i = 0; i < REPEATS; i++) {
         circA.value += 1;
-        const _ = circAll.value;
+        result = circAll.value;
       }
+      return result;
     },
     macroBenchOptions
   );
