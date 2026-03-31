@@ -1,5 +1,5 @@
 import { bench, describe } from 'vitest';
-import { atom, computed } from '@/index';
+import { atom, computed } from '../../dist';
 
 describe('Propagation Performance', () => {
   // 1 to 1 (Depth 1000)

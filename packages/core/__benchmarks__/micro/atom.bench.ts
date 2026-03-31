@@ -4,7 +4,7 @@
  */
 
 import { bench, describe } from 'vitest';
-import { atom, untracked } from '@/index';
+import { atom, untracked } from '../../dist';
 import { microBenchOptions } from '../utils/setup.js';
 
 describe('Atom Creation (x1000)', () => {
