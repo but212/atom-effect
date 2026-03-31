@@ -56,7 +56,7 @@ class DebugController {
   domUpdated(p: string, t: Element | JQuery<Element>, type: string, v: unknown): void {
     if (!this.enabled) return;
     const el = t instanceof Element ? t : (t[0] as Element | undefined);
-    if (!el || !el.isConnected) return;
+    if (!el?.isConnected) return;
     console.log(`${p} DOM updated: ${getSelector(el)}.${type} =`, v);
     highlightElement(el);
   }
