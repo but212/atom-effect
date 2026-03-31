@@ -29,6 +29,7 @@
   - **Sanitization Fast-path**: Added an `indexOf('<')` early-exit to `sanitizeHtml` to bypass regex passes for plain-text content.
   - **Route & Fetch**: Optimized request setup with shallow merges and replaced `Array.from`/`forEach` with manual loops in the router for link state patching.
 - **Robustness**: Hardened type safety across all bindings and improved error isolation in `$.route` and `atomFetch`.
+- **Fixed**: Resolved a regression in `atomFetch` where dynamic options would completely overwrite static headers instead of merging them.
 
 #### Documentation
 

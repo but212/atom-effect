@@ -79,10 +79,15 @@ class FetchContext<T> {
     this.abortController = new AbortController();
     const { signal } = this.abortController;
 
+    const dynamicOptions = this.ajaxOptionsFn?.() ?? {};
     // Use shallow merge for high-performance request setup
     const req: JQuery.AjaxSettings = {
       ...this.staticOptions,
-      ...this.ajaxOptionsFn?.(),
+      ...dynamicOptions,
+      headers: {
+        ...this.staticOptions.headers,
+        ...dynamicOptions.headers,
+      },
       url: this.isStaticUrl ? this.staticUrl : this.getUrl(),
       success: undefined,
       error: undefined,
