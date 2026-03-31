@@ -121,10 +121,12 @@ describe('Complex Graph Patterns', () => {
   );
 
   bench(
-    'circular avoidance pattern',
+    `circular avoidance pattern (x${REPEATS})`,
     () => {
-      circA.value += 1;
-      const _ = circAll.value;
+      for (let i = 0; i < REPEATS; i++) {
+        circA.value += 1;
+        const _ = circAll.value;
+      }
     },
     macroBenchOptions
   );

@@ -2,6 +2,8 @@ import { bench, describe } from 'vitest';
 import { atom, batch, computed, effect } from '../../dist';
 import { benchEffectOptions } from '../utils/setup.js';
 
+const REPEATS = 1000;
+
 describe('Batch Efficiency', () => {
   // Setup shared state - batch case
   const formFieldsBatch = Array.from({ length: 20 }, () => atom('initial'));
@@ -12,14 +14,16 @@ describe('Batch Efficiency', () => {
     _effectRunsBatch++;
   }, benchEffectOptions);
 
-  bench('form reset overhead (batch)', () => {
-    const nextVal = formFieldsBatch[0]!.value === '' ? 'initial' : '';
+  bench(`form reset overhead (batch) (x${REPEATS})`, () => {
+    for (let j = 0; j < REPEATS; j++) {
+      const nextVal = formFieldsBatch[0]!.value === '' ? 'initial' : '';
 
-    batch(() => {
-      for (let i = 0; i < 20; i++) {
-        formFieldsBatch[i]!.value = nextVal;
-      }
-    });
+      batch(() => {
+        for (let i = 0; i < 20; i++) {
+          formFieldsBatch[i]!.value = nextVal;
+        }
+      });
+    }
   });
 
   // Setup shared state - no batch case
@@ -31,11 +35,13 @@ describe('Batch Efficiency', () => {
     _effectRunsNoBatch++;
   }, benchEffectOptions);
 
-  bench('form reset overhead (no batch)', () => {
-    const nextVal = formFieldsNoBatch[0]!.value === '' ? 'initial' : '';
+  bench(`form reset overhead (no batch) (x${REPEATS})`, () => {
+    for (let j = 0; j < REPEATS; j++) {
+      const nextVal = formFieldsNoBatch[0]!.value === '' ? 'initial' : '';
 
-    for (let i = 0; i < 20; i++) {
-      formFieldsNoBatch[i]!.value = nextVal;
+      for (let i = 0; i < 20; i++) {
+        formFieldsNoBatch[i]!.value = nextVal;
+      }
     }
   });
 });
