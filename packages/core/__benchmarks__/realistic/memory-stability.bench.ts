@@ -1,5 +1,5 @@
 import { bench, describe } from 'vitest';
-import { atom, computed, effect } from '../../dist/index.js';
+import { atom, computed, effect } from '../../dist';
 import { benchEffectOptions, forceGC, memoryBenchOptions } from '../utils/setup';
 
 describe('Memory Stability', () => {

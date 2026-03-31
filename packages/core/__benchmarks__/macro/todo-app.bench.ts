@@ -4,7 +4,7 @@
  */
 
 import { bench, describe } from 'vitest';
-import { atom, computed, effect } from '../../dist/index.js';
+import { atom, computed, effect } from '../../dist';
 import type { TodoItem } from '../fixtures/index.js';
 import { benchEffectOptions, macroBenchOptions } from '../utils/setup.js';
 
