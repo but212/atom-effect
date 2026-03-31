@@ -56,7 +56,7 @@ describe('Dependency Chain Patterns', () => {
     'deep chain (100 levels)',
     () => {
       chainSource.value += 1;
-      const _ = chainSink.value;
+      return chainSink.value as any;
     },
     macroBenchOptions
   );
@@ -64,10 +64,12 @@ describe('Dependency Chain Patterns', () => {
   bench(
     'wide fan-out (1 atom → 100 computeds)',
     () => {
+      let last: any;
       fanOutSource.value += 1;
       fanOutSinks.forEach((c) => {
-        const _ = c.value;
+        last = c.value;
       });
+      return last;
     },
     macroBenchOptions
   );
@@ -76,7 +78,7 @@ describe('Dependency Chain Patterns', () => {
     'diamond dependency pattern',
     () => {
       diamondSource.value += 1;
-      const _ = diamondSink.value;
+      return diamondSink.value as any;
     },
     macroBenchOptions
   );
@@ -85,7 +87,7 @@ describe('Dependency Chain Patterns', () => {
     'pyramid dependency pattern (50 levels)',
     () => {
       pyramidBase[0]!.value += 1;
-      const _ = pyramidApex!.value;
+      return pyramidApex!.value as any;
     },
     macroBenchOptions
   );
@@ -111,11 +113,13 @@ describe('Complex Graph Patterns', () => {
   bench(
     'mixed dependencies (100 atoms, 200 computeds)',
     () => {
+      let last: any;
       // Update one atom, check all
       mixedAtoms[0]!.value += 1;
       mixedComputeds.forEach((c) => {
-        const _ = c.value;
+        last = c.value;
       });
+      return last;
     },
     macroBenchOptions
   );
@@ -123,7 +127,6 @@ describe('Complex Graph Patterns', () => {
   bench(
     `circular avoidance pattern (x${REPEATS})`,
     () => {
-      // biome-ignore lint/suspicious/noExplicitAny: it's just bench
       let result: any;
       for (let i = 0; i < REPEATS; i++) {
         circA.value += 1;
@@ -148,10 +151,11 @@ describe('Dynamic Dependency Patterns', () => {
   bench(
     `conditional dependencies (x${REPEATS})`,
     () => {
+      let last1, last2;
       for (let i = 0; i < REPEATS; i++) {
         // Toggle condition to switch dependency leg
         condAtom.value = !condAtom.value;
-        const _ = condResult.value;
+        last1 = condResult.value;
 
         // Update active branch
         if (condAtom.value) {
@@ -159,8 +163,9 @@ describe('Dynamic Dependency Patterns', () => {
         } else {
           condB.value++;
         }
-        const __ = condResult.value;
+        last2 = condResult.value;
       }
+      return [last1, last2] as any;
     },
     microBenchOptions
   );
@@ -168,15 +173,17 @@ describe('Dynamic Dependency Patterns', () => {
   bench(
     `array-based dynamic dependencies (x${REPEATS})`,
     () => {
+      let last1, last2;
       for (let i = 0; i < REPEATS; i++) {
         // Change index
         idxAtom.value = (idxAtom.value + 1) % 10;
-        const _ = arrSelected.value;
+        last1 = arrSelected.value;
 
         // Update underlying value
         arrValues[idxAtom.value]!.value++;
-        const __ = arrSelected.value;
+        last2 = arrSelected.value;
       }
+      return [last1, last2] as any;
     },
     microBenchOptions
   );

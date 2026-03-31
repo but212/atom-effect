@@ -13,10 +13,12 @@ describe('Computed Creation', () => {
   bench(
     `create computed (single dependency) (x${REPEATS})`,
     () => {
+      let c;
       for (let i = 0; i < REPEATS; i++) {
         const a = atom(0);
-        void computed(() => a.value * 2);
+        c = computed(() => a.value * 2);
       }
+      return c as any;
     },
     microBenchOptions
   );
@@ -24,12 +26,14 @@ describe('Computed Creation', () => {
   bench(
     `create computed (3 dependencies) (x${REPEATS})`,
     () => {
+      let res;
       for (let i = 0; i < REPEATS; i++) {
         const a = atom(1);
         const b = atom(2);
         const c = atom(3);
-        void computed(() => a.value + b.value + c.value);
+        res = computed(() => a.value + b.value + c.value);
       }
+      return res as any;
     },
     microBenchOptions
   );
@@ -43,7 +47,7 @@ describe('Computed Creation', () => {
         const prev = current;
         current = computed(() => prev.value + 1);
       }
-      void current.value;
+      return current.value as any;
     },
     microBenchOptions
   );
@@ -65,9 +69,11 @@ describe('Computed Dependency Tracking', () => {
   bench(
     `computed reads single dependency (x${REPEATS})`,
     () => {
+      let val;
       for (let i = 0; i < REPEATS; i++) {
-        void cSingle.value;
+        val = cSingle.value;
       }
+      return val as any;
     },
     microBenchOptions
   );
@@ -75,9 +81,11 @@ describe('Computed Dependency Tracking', () => {
   bench(
     `computed reads multiple dependencies (x${REPEATS})`,
     () => {
+      let val;
       for (let i = 0; i < REPEATS; i++) {
-        void cMultiple.value;
+        val = cMultiple.value;
       }
+      return val as any;
     },
     microBenchOptions
   );
@@ -85,9 +93,11 @@ describe('Computed Dependency Tracking', () => {
   bench(
     `computed with nested computations (x${REPEATS})`,
     () => {
+      let val;
       for (let i = 0; i < REPEATS; i++) {
-        void cQuadrupled.value;
+        val = cQuadrupled.value;
       }
+      return val as any;
     },
     microBenchOptions
   );
@@ -110,10 +120,12 @@ describe('Computed Recomputation', () => {
   bench(
     `trigger recomputation (single dependency) (x${REPEATS})`,
     () => {
+      let val;
       for (let i = 0; i < REPEATS; i++) {
         a.value += 1;
-        void c.value;
+        val = c.value;
       }
+      return val as any;
     },
     microBenchOptions
   );
@@ -121,7 +133,6 @@ describe('Computed Recomputation', () => {
   bench(
     `trigger recomputation (chain of 10) (x${REPEATS})`,
     () => {
-      // biome-ignore lint/suspicious/noExplicitAny: it's just bench
       let result: any;
       for (let i = 0; i < REPEATS; i++) {
         aChain.value += 1;
@@ -135,10 +146,12 @@ describe('Computed Recomputation', () => {
   bench(
     `no recomputation when value unchanged (x${REPEATS})`,
     () => {
+      let val: any;
       for (let i = 0; i < REPEATS; i++) {
         aNoChange.value = 42;
-        void cNoChange.value;
+        val = cNoChange.value;
       }
+      return val;
     },
     microBenchOptions
   );
@@ -148,10 +161,12 @@ describe('Computed Lazy Evaluation', () => {
   bench(
     `lazy computed (not accessed) (x${REPEATS})`,
     () => {
+      let res;
       for (let i = 0; i < REPEATS; i++) {
         const a = atom(0);
-        void computed(() => a.value * 2, { lazy: true });
+        res = computed(() => a.value * 2, { lazy: true });
       }
+      return res as any;
     },
     microBenchOptions
   );
@@ -159,11 +174,13 @@ describe('Computed Lazy Evaluation', () => {
   bench(
     `lazy computed (accessed once) (x${REPEATS})`,
     () => {
+      let val;
       for (let i = 0; i < REPEATS; i++) {
         const a = atom(0);
         const c = computed(() => a.value * 2, { lazy: true });
-        void c.value;
+        val = c.value;
       }
+      return val as any;
     },
     microBenchOptions
   );
@@ -171,13 +188,15 @@ describe('Computed Lazy Evaluation', () => {
   bench(
     `lazy computed (accessed multiple times) (x${REPEATS})`,
     () => {
+      let val;
       for (let i = 0; i < REPEATS; i++) {
         const a = atom(0);
         const c = computed(() => a.value * 2, { lazy: true });
         void c.value;
         void c.value;
-        void c.value;
+        val = c.value;
       }
+      return val as any;
     },
     microBenchOptions
   );
@@ -195,10 +214,12 @@ describe('Computed Cache Invalidation', () => {
   bench(
     `invalidate cache (single dependency) (x${REPEATS})`,
     () => {
+      let val;
       for (let i = 0; i < REPEATS; i++) {
         a.value += 1;
-        void c.value; // Force re-eval
+        val = c.value; // Force re-eval
       }
+      return val as any;
     },
     microBenchOptions
   );
@@ -206,10 +227,12 @@ describe('Computed Cache Invalidation', () => {
   bench(
     `partial invalidation (diamond dependency) (x${REPEATS})`,
     () => {
+      let val;
       for (let i = 0; i < REPEATS; i++) {
         aDiamond.value += 1;
-        void dDiamond.value;
+        val = dDiamond.value;
       }
+      return val as any;
     },
     microBenchOptions
   );
@@ -232,7 +255,6 @@ describe('Computed Disposal', () => {
   bench(
     `dispose computed chain (x${REPEATS})`,
     () => {
-      // biome-ignore lint/suspicious/noExplicitAny: it's just bench
       let lastValue: any;
       for (let j = 0; j < REPEATS; j++) {
         const a = atom(0);

@@ -21,6 +21,7 @@ describe('Effect Creation', () => {
         });
         effectHandle.dispose();
       }
+      return _value as any;
     },
     microBenchOptions
   );
@@ -38,6 +39,7 @@ describe('Effect Creation', () => {
         });
         effectHandle.dispose();
       }
+      return _sum as any;
     },
     microBenchOptions
   );
@@ -53,6 +55,7 @@ describe('Effect Creation', () => {
         });
       });
       effects.forEach((e) => e.dispose());
+      return effects as any;
     },
     microBenchOptions
   );
@@ -86,6 +89,7 @@ describe('Effect Execution', () => {
       for (let i = 0; i < REPEATS; i++) {
         a.value += 1;
       }
+      return a.value as any;
     },
     microBenchOptions
   );
@@ -97,6 +101,7 @@ describe('Effect Execution', () => {
         aMulti.value += 1;
         bMulti.value += 1;
       }
+      return (aMulti.value + bMulti.value) as any;
     },
     microBenchOptions
   );
@@ -107,6 +112,7 @@ describe('Effect Execution', () => {
       for (let i = 0; i < REPEATS; i++) {
         aComp.value += 1;
       }
+      return aComp.value as any;
     },
     microBenchOptions
   );
@@ -141,6 +147,7 @@ describe('Effect Re-execution', () => {
           a.value += 1;
         }
       }
+      return a.value as any;
     },
     microBenchOptions
   );
@@ -151,6 +158,7 @@ describe('Effect Re-execution', () => {
       for (let i = 0; i < REPEATS; i++) {
         aMultiEff.value += 1;
       }
+      return aMultiEff.value as any;
     },
     microBenchOptions
   );
@@ -181,6 +189,7 @@ describe('Effect Cleanup', () => {
         a.value = 1; // Triggers cleanup
         effectHandle.dispose(); // Triggers final cleanup
       }
+      return _cleaned as any;
     },
     microBenchOptions
   );
@@ -191,6 +200,7 @@ describe('Effect Cleanup', () => {
       for (let i = 0; i < REPEATS; i++) {
         aCleanup.value += 1;
       }
+      return aCleanup.value as any;
     },
     microBenchOptions
   );
@@ -208,6 +218,7 @@ describe('Effect Disposal', () => {
         });
         effectHandle.dispose();
       }
+      return _value as any;
     },
     microBenchOptions
   );
@@ -226,6 +237,7 @@ describe('Effect Disposal', () => {
         });
         effectHandle.dispose();
       }
+      return _cleaned as any;
     },
     microBenchOptions
   );
@@ -241,6 +253,7 @@ describe('Effect Disposal', () => {
         });
       });
       effects.forEach((e) => e.dispose());
+      return effects as any;
     },
     microBenchOptions
   );

@@ -13,6 +13,7 @@ describe('Memory Allocation', () => {
     () => {
       const atoms = Array.from({ length: 1000 }, (_, i) => atom(i));
       atoms.forEach((a) => a.dispose());
+      return atoms as any;
     },
     memoryBenchOptions
   );
@@ -24,6 +25,7 @@ describe('Memory Allocation', () => {
       const computeds = Array.from({ length: 1000 }, (_, i) => computed(() => a.value + i));
       computeds.forEach((c) => c.dispose());
       a.dispose();
+      return computeds as any;
     },
     memoryBenchOptions
   );
@@ -40,6 +42,7 @@ describe('Memory Allocation', () => {
       });
       effects.forEach((e) => e.dispose());
       a.dispose();
+      return effects as any;
     },
     memoryBenchOptions
   );
@@ -49,10 +52,13 @@ describe('GC Pressure', () => {
   bench(
     'rapid atom creation/disposal (10K cycles)',
     () => {
+      let lastA;
       for (let i = 0; i < 10000; i++) {
         const a = atom(i);
         a.dispose();
+        lastA = a;
       }
+      return lastA as any;
     },
     memoryBenchOptions
   );
@@ -60,12 +66,15 @@ describe('GC Pressure', () => {
   bench(
     'subscription churn (1K subscribe/unsubscribe)',
     () => {
+      let lastUnsub;
       const a = atom(0);
       for (let i = 0; i < 1000; i++) {
         const unsubscribe = a.subscribe(() => {});
         unsubscribe();
+        lastUnsub = unsubscribe;
       }
       a.dispose();
+      return lastUnsub as any;
     },
     memoryBenchOptions
   );
@@ -83,6 +92,7 @@ describe('GC Pressure', () => {
       }
 
       atoms.forEach((a) => a.dispose());
+      return atoms as any;
     },
     memoryBenchOptions
   );
@@ -103,6 +113,7 @@ describe('Memory Leak Detection', () => {
       forceGC();
 
       root.dispose();
+      return computeds as any;
     },
     memoryBenchOptions
   );
@@ -127,6 +138,7 @@ describe('Memory Leak Detection', () => {
       a.dispose();
 
       forceGC();
+      return effects as any;
     },
     memoryBenchOptions
   );
@@ -135,6 +147,7 @@ describe('Memory Leak Detection', () => {
     'circular reference cleanup',
     () => {
       // Create potential circular references
+      let lastA, lastB;
       for (let i = 0; i < 100; i++) {
         const a = atom<{ ref: unknown | null }>({ ref: null });
         const b = atom<{ ref: unknown | null }>({ ref: null });
@@ -145,9 +158,12 @@ describe('Memory Leak Detection', () => {
         // Dispose should handle this gracefully
         a.dispose();
         b.dispose();
+        lastA = a;
+        lastB = b;
       }
 
       forceGC();
+      return [lastA, lastB] as any;
     },
     memoryBenchOptions
   );
@@ -205,6 +221,7 @@ describe('Large State Management', () => {
       userCount.dispose();
       postCount.dispose();
       commentCount.dispose();
+      return [_, __, ___, ____] as any;
     },
     memoryBenchOptions
   );
@@ -229,8 +246,9 @@ describe('Large State Management', () => {
       const after = getMemoryUsage();
 
       // Track delta for analysis (prevent DCE)
-      void (during.heapUsed - before.heapUsed);
-      void (during.heapUsed - after.heapUsed);
+      const diff1 = during.heapUsed - before.heapUsed;
+      const diff2 = during.heapUsed - after.heapUsed;
+      return [diff1, diff2] as any;
     },
     memoryBenchOptions
   );

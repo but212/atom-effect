@@ -105,6 +105,19 @@
       }
     }
   },
+  "overrides": [
+    {
+      "includes": ["packages/core/__benchmarks__/**/*.ts"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noExplicitAny": "off",
+            "noImplicitAnyLet": "off"
+          }
+        }
+      }
+    }
+  ],
   "javascript": {
     "formatter": {
       "quoteStyle": "single",

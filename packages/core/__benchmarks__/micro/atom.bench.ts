@@ -11,10 +11,11 @@ describe('Atom Creation (x1000)', () => {
   bench(
     'create 1000 atoms (primitives)',
     () => {
+      let a;
       for (let i = 0; i < 1000; i++) {
-        const a = atom(i);
-        void a;
+        a = atom(i);
       }
+      return a as any;
     },
     microBenchOptions
   );
@@ -22,10 +23,11 @@ describe('Atom Creation (x1000)', () => {
   bench(
     'create 1000 atoms (objects)',
     () => {
+      let a;
       for (let i = 0; i < 1000; i++) {
-        const a = atom({ count: i });
-        void a;
+        a = atom({ count: i });
       }
+      return a as any;
     },
     microBenchOptions
   );
@@ -41,7 +43,7 @@ describe('Atom Read Operations (x1000)', () => {
       for (let i = 0; i < 1000; i++) {
         sum += atoms[i]!.value;
       }
-      void sum;
+      return sum as any;
     },
     microBenchOptions
   );
@@ -53,7 +55,7 @@ describe('Atom Read Operations (x1000)', () => {
       for (let i = 0; i < 1000; i++) {
         sum += atoms[i]!.peek();
       }
-      void sum;
+      return sum as any;
     },
     microBenchOptions
   );
@@ -107,12 +109,12 @@ describe('Atom Untracked Operations (x1000)', () => {
   bench(
     'untracked(fn) read 1000 atoms',
     () => {
-      untracked(() => {
+      return untracked(() => {
         let sum = 0;
         for (let i = 0; i < 1000; i++) {
           sum += atoms[i]!.value;
         }
-        void sum;
+        return sum as any;
       });
     },
     microBenchOptions
