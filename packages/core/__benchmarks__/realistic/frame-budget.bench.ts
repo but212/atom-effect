@@ -7,9 +7,9 @@ describe('Frame Budget (16ms)', () => {
   const atoms = Array.from({ length: 100 }, () => atom(0));
   const heavyComputed = computed(() => atoms.reduce((s, a) => s + a.value, 0));
 
-  // Effect to force read
+  let _sink = 0;
   effect(() => {
-    void heavyComputed.value;
+    _sink = heavyComputed.value;
   }, benchEffectOptions);
 
   bench('updates per frame (100 atoms)', () => {
@@ -19,7 +19,7 @@ describe('Frame Budget (16ms)', () => {
       atoms[i]!.value++;
     }
     // Read final value to ensure propagation
-    void heavyComputed.value;
+    return _sink as any;
   });
 
   bench('updates per frame (100 atoms, batched)', () => {
@@ -28,6 +28,6 @@ describe('Frame Budget (16ms)', () => {
         atoms[i]!.value++;
       }
     });
-    void heavyComputed.value;
+    return _sink as any;
   });
 });

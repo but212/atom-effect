@@ -29,6 +29,7 @@ describe('Todo App Scenarios', () => {
         });
       }
       todosCreate.value = newBatch;
+      return todosCreate.value as any;
     },
     macroBenchOptions
   );
@@ -50,6 +51,7 @@ describe('Todo App Scenarios', () => {
         ...todo,
         completed: !todo.completed,
       }));
+      return todosToggle.value as any;
     },
     macroBenchOptions
   );
@@ -73,15 +75,17 @@ describe('Todo App Scenarios', () => {
   bench(
     `filter switch (x${REPEATS})`,
     () => {
+      let last1, last2, last3;
       for (let i = 0; i < REPEATS; i++) {
         // Cycle filters
         filterAtom.value = 'active';
-        const _1 = filteredTodos.value;
+        last1 = filteredTodos.value;
         filterAtom.value = 'completed';
-        const _2 = filteredTodos.value;
+        last2 = filteredTodos.value;
         filterAtom.value = 'all';
-        const _3 = filteredTodos.value;
+        last3 = filteredTodos.value;
       }
+      return [last1, last2, last3] as any;
     },
     macroBenchOptions
   );
@@ -103,6 +107,7 @@ describe('Todo App Scenarios', () => {
 
       // Delete top 50
       todosDelete.value = todosDelete.value.slice(50);
+      return todosDelete.value as any;
     },
     macroBenchOptions
   );
@@ -147,6 +152,7 @@ describe('Todo App Scenarios', () => {
 
       // 6. Back to all
       filterWorkflow.value = 'all';
+      return _displayCount as any;
     },
     macroBenchOptions
   );
@@ -175,6 +181,7 @@ describe('Todo App Stats Architecture', () => {
         items.push({ id: i + 1, text: 'Item', completed: i % 2 === 0, createdAt: new Date() });
       }
       todosStats.value = items;
+      return _rate as any;
     },
     macroBenchOptions
   );

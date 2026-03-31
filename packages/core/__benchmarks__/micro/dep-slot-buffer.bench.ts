@@ -33,11 +33,13 @@ describe('DepSlotBuffer: Claiming (Cache Hits)', () => {
   bench(
     'claimExisting 4 items (Inline hit) x1000',
     () => {
+      let lastRes;
       for (let i = 0; i < BATCH_SIZE; i++) {
         for (let j = 0; j < 4; j++) {
-          buf4.claimExisting(deps4[j]!, j);
+          lastRes = buf4.claimExisting(deps4[j]!, j);
         }
       }
+      return lastRes as any;
     },
     microBenchOptions
   );
@@ -45,11 +47,13 @@ describe('DepSlotBuffer: Claiming (Cache Hits)', () => {
   bench(
     'claimExisting 16 items (Overflow hit) x1000',
     () => {
+      let lastRes;
       for (let i = 0; i < BATCH_SIZE; i++) {
         for (let j = 0; j < 16; j++) {
-          buf16.claimExisting(deps16[j]!, j);
+          lastRes = buf16.claimExisting(deps16[j]!, j);
         }
       }
+      return lastRes as any;
     },
     microBenchOptions
   );
@@ -69,10 +73,12 @@ describe('DepSlotBuffer: Hashing (seal vs isDirty)', () => {
   bench(
     'seal() + isDirtyFast() - 4 items x1000',
     () => {
+      let lastRes;
       for (let i = 0; i < BATCH_SIZE; i++) {
         buf4.seal();
-        buf4.isDirtyFast();
+        lastRes = buf4.isDirtyFast();
       }
+      return lastRes as any;
     },
     microBenchOptions
   );
@@ -80,10 +86,12 @@ describe('DepSlotBuffer: Hashing (seal vs isDirty)', () => {
   bench(
     'seal() + isDirtyFast() - 16 items x1000',
     () => {
+      let lastRes;
       for (let i = 0; i < BATCH_SIZE; i++) {
         buf16.seal();
-        buf16.isDirtyFast();
+        lastRes = buf16.isDirtyFast();
       }
+      return lastRes as any;
     },
     microBenchOptions
   );
@@ -97,11 +105,13 @@ describe('DepSlotBuffer: Mega-node Threshold (Map Fallback)', () => {
   bench(
     'claimExisting 64 items (Map fallback) x1000',
     () => {
+      let lastRes;
       for (let i = 0; i < BATCH_SIZE; i++) {
         for (let j = 0; j < 64; j++) {
-          buf64.claimExisting(deps64[j]!, j);
+          lastRes = buf64.claimExisting(deps64[j]!, j);
         }
       }
+      return lastRes as any;
     },
     microBenchOptions
   );
@@ -111,6 +121,7 @@ describe('DepSlotBuffer: Truncation', () => {
   bench(
     'truncateFrom(0) with 16 items x1000',
     () => {
+      let lastBuf;
       for (let i = 0; i < BATCH_SIZE; i++) {
         const buf = new DepSlotBuffer();
         for (let j = 0; j < 16; j++) {
@@ -118,8 +129,9 @@ describe('DepSlotBuffer: Truncation', () => {
           buf.insertNew(j, new DependencyLink(d, d.version));
         }
         buf.truncateFrom(0);
-        void buf;
+        lastBuf = buf;
       }
+      return lastBuf as any;
     },
     microBenchOptions
   );

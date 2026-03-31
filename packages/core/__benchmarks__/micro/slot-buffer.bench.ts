@@ -8,14 +8,16 @@ describe('SlotBuffer: Addition (Inline <= 4)', () => {
   bench(
     'add 4 items (SlotBuffer) x1000',
     () => {
+      let lastBuf;
       for (let i = 0; i < BATCH_SIZE; i++) {
         const buf = new SlotBuffer<number>();
         buf.add(1);
         buf.add(2);
         buf.add(3);
         buf.add(4);
-        void buf;
+        lastBuf = buf;
       }
+      return lastBuf as any;
     },
     microBenchOptions
   );
@@ -23,14 +25,16 @@ describe('SlotBuffer: Addition (Inline <= 4)', () => {
   bench(
     'push 4 items (Array baseline) x1000',
     () => {
+      let lastArr;
       for (let i = 0; i < BATCH_SIZE; i++) {
         const arr: number[] = [];
         arr.push(1);
         arr.push(2);
         arr.push(3);
         arr.push(4);
-        void arr;
+        lastArr = arr;
       }
+      return lastArr as any;
     },
     microBenchOptions
   );
@@ -40,13 +44,15 @@ describe('SlotBuffer: Addition (Overflow > 4)', () => {
   bench(
     'add 16 items (SlotBuffer spill) x1000',
     () => {
+      let lastBuf;
       for (let i = 0; i < BATCH_SIZE; i++) {
         const buf = new SlotBuffer<number>();
         for (let j = 0; j < 16; j++) {
           buf.add(j);
         }
-        void buf;
+        lastBuf = buf;
       }
+      return lastBuf as any;
     },
     microBenchOptions
   );
@@ -54,13 +60,15 @@ describe('SlotBuffer: Addition (Overflow > 4)', () => {
   bench(
     'push 16 items (Array baseline) x1000',
     () => {
+      let lastArr;
       for (let i = 0; i < BATCH_SIZE; i++) {
         const arr: number[] = [];
         for (let j = 0; j < 16; j++) {
           arr.push(j);
         }
-        void arr;
+        lastArr = arr;
       }
+      return lastArr as any;
     },
     microBenchOptions
   );
@@ -70,6 +78,7 @@ describe('SlotBuffer: Churn (Gap Reuse)', () => {
   bench(
     'remove 8 and add 8 (SlotBuffer O(1) reuse) x1000',
     () => {
+      let lastBuf;
       for (let i = 0; i < BATCH_SIZE; i++) {
         const buf = new SlotBuffer<number>();
         for (let j = 0; j < 16; j++) buf.add(j);
@@ -82,8 +91,9 @@ describe('SlotBuffer: Churn (Gap Reuse)', () => {
         for (let j = 0; j < 16; j += 2) {
           buf.add(j);
         }
-        void buf;
+        lastBuf = buf;
       }
+      return lastBuf as any;
     },
     microBenchOptions
   );
@@ -91,6 +101,7 @@ describe('SlotBuffer: Churn (Gap Reuse)', () => {
   bench(
     'splice 8 and push 8 (Array baseline) x1000',
     () => {
+      let lastArr;
       for (let i = 0; i < BATCH_SIZE; i++) {
         const arr: number[] = [];
         for (let j = 0; j < 16; j++) arr.push(j);
@@ -104,8 +115,9 @@ describe('SlotBuffer: Churn (Gap Reuse)', () => {
         for (let j = 0; j < 16; j += 2) {
           arr.push(j);
         }
-        void arr;
+        lastArr = arr;
       }
+      return lastArr as any;
     },
     microBenchOptions
   );
@@ -124,13 +136,15 @@ describe('SlotBuffer: Iteration', () => {
   bench(
     'forEach 4 items (SlotBuffer) x1000',
     () => {
+      let lastSum;
       for (let i = 0; i < BATCH_SIZE; i++) {
         let sum = 0;
         inlineBuf.forEach((item) => {
           sum += item;
         });
-        void sum;
+        lastSum = sum;
       }
+      return lastSum as any;
     },
     microBenchOptions
   );
@@ -138,13 +152,15 @@ describe('SlotBuffer: Iteration', () => {
   bench(
     'forEach 4 items (Array) x1000',
     () => {
+      let lastSum;
       for (let i = 0; i < BATCH_SIZE; i++) {
         let sum = 0;
         inlineArr.forEach((item) => {
           sum += item;
         });
-        void sum;
+        lastSum = sum;
       }
+      return lastSum as any;
     },
     microBenchOptions
   );
@@ -152,13 +168,15 @@ describe('SlotBuffer: Iteration', () => {
   bench(
     'forEach 16 items (SlotBuffer) x1000',
     () => {
+      let lastSum;
       for (let i = 0; i < BATCH_SIZE; i++) {
         let sum = 0;
         overflowBuf.forEach((item) => {
           sum += item;
         });
-        void sum;
+        lastSum = sum;
       }
+      return lastSum as any;
     },
     microBenchOptions
   );
@@ -166,13 +184,15 @@ describe('SlotBuffer: Iteration', () => {
   bench(
     'forEach 16 items (Array) x1000',
     () => {
+      let lastSum;
       for (let i = 0; i < BATCH_SIZE; i++) {
         let sum = 0;
         overflowArr.forEach((item) => {
           sum += item;
         });
-        void sum;
+        lastSum = sum;
       }
+      return lastSum as any;
     },
     microBenchOptions
   );
@@ -182,13 +202,15 @@ describe('SlotBuffer: Compaction', () => {
   bench(
     'compact 16 items with 8 gaps (SlotBuffer) x1000',
     () => {
+      let lastBuf;
       for (let i = 0; i < BATCH_SIZE; i++) {
         const buf = new SlotBuffer<number>();
         for (let j = 0; j < 16; j++) buf.add(j);
         for (let j = 0; j < 16; j += 2) buf.remove(j);
         buf.compact();
-        void buf;
+        lastBuf = buf;
       }
+      return lastBuf as any;
     },
     microBenchOptions
   );
@@ -196,13 +218,15 @@ describe('SlotBuffer: Compaction', () => {
   bench(
     'filter nulls (Array baseline equivalent) x1000',
     () => {
+      let lastArr;
       for (let i = 0; i < BATCH_SIZE; i++) {
         let arr: (number | null)[] = [];
         for (let j = 0; j < 16; j++) arr.push(j);
         for (let j = 0; j < 16; j += 2) arr[j] = null;
         arr = arr.filter((x) => x !== null);
-        void arr;
+        lastArr = arr;
       }
+      return lastArr as any;
     },
     microBenchOptions
   );

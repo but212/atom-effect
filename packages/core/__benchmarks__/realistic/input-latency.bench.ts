@@ -34,6 +34,7 @@ describe('Input Latency', () => {
       // Reset for next repeat within the same bench iteration
       searchQuery.value = '';
       await nextTick();
+      return _lastRender as any;
     },
     { ...microBenchOptions, iterations: 10 }
   );

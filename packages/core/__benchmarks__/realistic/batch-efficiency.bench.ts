@@ -24,6 +24,7 @@ describe('Batch Efficiency', () => {
         }
       });
     }
+    return _effectRunsBatch as any;
   });
 
   // Setup shared state - no batch case
@@ -43,5 +44,6 @@ describe('Batch Efficiency', () => {
         formFieldsNoBatch[i]!.value = nextVal;
       }
     }
+    return _effectRunsNoBatch as any;
   });
 });

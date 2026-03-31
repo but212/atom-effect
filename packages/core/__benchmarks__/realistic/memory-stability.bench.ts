@@ -9,8 +9,9 @@ describe('Memory Stability', () => {
       const createComponent = (id: number) => {
         const state = atom({ id, data: 'some data' });
         const derived = computed(() => `ID: ${state.value.id} - ${state.value.data.toUpperCase()}`);
+        let _val;
         const stop = effect(() => {
-          const _ = derived.value;
+          _val = derived.value;
         }, benchEffectOptions);
         return { state, derived, stop };
       };
@@ -34,6 +35,7 @@ describe('Memory Stability', () => {
 
       // Force GC to allow cleanup observation if --expose-gc is enabled
       forceGC();
+      return components as any;
     },
     memoryBenchOptions
   );
