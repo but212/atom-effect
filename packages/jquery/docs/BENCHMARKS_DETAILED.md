@@ -1,7 +1,7 @@
 # Benchmark Results - Detailed (jQuery Bindings)
 
-**Last Updated**: 2026-03-29
-**Version**: v0.26.0
+**Last Updated**: 2026-03-31
+**Version**: v0.27.0
 **Environment**:
 
 - **Node.js**: v22.x
@@ -15,120 +15,118 @@
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Create 100 text bindings | 141.54 | 7.0652 | 16.9755 |
-| Update text propagation (100el × 50) | 157.41 | 6.3529 | 11.9271 |
-| Text binding with formatter (100el × 50) | 161.85 | 6.1784 | 7.6124 |
+| Create 100 text bindings | 117.83 | 8.4869 | 21.7633 |
+| Update text propagation (100el × 50) | 133.63 | 7.4834 | 12.7949 |
+| Text binding with formatter (100el × 50) | 137.31 | 7.2826 | 8.4373 |
 
 ### atomHtml Binding
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Create 100 html bindings | 80.74 | 12.3858 | 22.0726 |
-| Update html propagation (100el × 50) | 86.48 | 11.5632 | 15.9512 |
+| Create 100 html bindings | 69.71 | 14.3445 | 25.2848 |
+| Update html propagation (100el × 50) | 75.23 | 13.2911 | 14.7907 |
 
 ### atomClass Binding
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Create 100 class bindings | 182.02 | 5.4940 | 6.9109 |
-| Toggle class (100el × 100) | 180.04 | 5.5543 | 10.2042 |
+| Create 100 class bindings | 156.73 | 6.3806 | 10.4078 |
+| Toggle class (100el × 100) | 155.09 | 6.4478 | 11.2618 |
 
 ### atomCss Binding
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Create 100 css bindings | 151.18 | 6.6145 | 9.7660 |
-| Update css (100el × 100) | 152.32 | 6.5649 | 11.1218 |
+| Create 100 css bindings | 125.06 | 7.9963 | 11.4190 |
+| Update css (100el × 100) | 130.13 | 7.6846 | 10.7811 |
 
 ### atomAttr Binding
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Create + update attr (100el × 100) | 159.63 | 6.2645 | 11.6499 |
+| Create + update attr (100el × 100) | 137.41 | 7.2777 | 13.2478 |
 
 ### atomProp Binding
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Create + update prop (100el × 100) | 170.16 | 5.8769 | 10.6866 |
+| Create + update prop (100el × 100) | 144.67 | 6.9125 | 12.2284 |
 
 ### atomShow / atomHide Binding
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Show toggle (100el × 100) | 88.20 | 11.3381 | 14.3569 |
-| Hide toggle (100el × 100) | 87.88 | 11.3796 | 14.7750 |
+| Show toggle (100el × 100) | 73.85 | 13.5406 | 19.8651 |
+| Hide toggle (100el × 100) | 75.83 | 13.1858 | 14.1889 |
 
 ### atomBind (unified)
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Create composite (text+class+css+show) × 100 | 103.05 | 9.7037 | 12.2440 |
-| Update composite (100el × 50) | 102.63 | 9.7433 | 12.9313 |
+| Create composite (text+class+css+show) × 100 | 87.35 | 11.4479 | 17.0744 |
+| Update composite (100el × 50) | 87.81 | 11.3877 | 16.6310 |
 
 ### sanitizeHtml
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Clean small | 866,950 | 0.0012 | 0.0016 |
-| Clean large | 47,405 | 0.0211 | 0.0277 |
-| Single dangerous tag | 642,295 | 0.0016 | 0.0025 |
-| Multiple dangerous tags | 340,854 | 0.0029 | 0.0034 |
-| Event-handler attrs | 161,586 | 0.0062 | 0.0106 |
-| Mixed attr profile | 170,712 | 0.0059 | 0.0069 |
-| 100 × clean small | 10,658 | 0.0938 | 0.1084 |
-| 100 × mixed attr profile | 1,762 | 0.5674 | 0.9500 |
-| 100 × multi dangerous tags | 3,769 | 0.2653 | 0.2902 |
+| Clean small | 829,814 | 0.0012 | 0.0013 |
+| Clean large | 42,352 | 0.0236 | 0.0321 |
+| Single dangerous tag | 628,317 | 0.0016 | 0.0016 |
+| Multiple dangerous tags | 326,658 | 0.0031 | 0.0032 |
+| Event-handler attrs | 154,572 | 0.0065 | 0.0090 |
+| Mixed attr profile | 151,597 | 0.0066 | 0.0096 |
+| 100 × clean small | 10,473 | 0.0955 | 0.1056 |
+| 100 × mixed attr profile | 1,574 | 0.6350 | 0.8071 |
+| 100 × multi dangerous tags | 3,517 | 0.2843 | 0.3021 |
 
 ### atomList
 
-| Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
-| --- | --- | --- | --- |
-| Render 100 items | 226.55 | 4.4141 | 11.4596 |
-| Render 500 items | 57.87 | 17.2812 | 26.0307 |
-| Render 1000 items | 29.30 | 34.1274 | 53.7920 |
-| Append 10 items to 100 | 262.91 | 3.8035 | 7.3265 |
-| Remove 10 items from 100 | 264.38 | 3.7825 | 7.7007 |
-| Full shuffle 100 items | 263.38 | 3.7969 | 8.4166 |
-| Update 10 of 100 items content | 268.78 | 3.7205 | 6.9906 |
-| Render 100 with bind callback | 56.33 | 17.7524 | 26.7595 |
+| Render 100 items | 225.50 | 4.4346 | 12.5954 |
+| Render 500 items | 59.72 | 16.7424 | 23.6067 |
+| Render 1000 items | 29.93 | 33.4086 | 51.1437 |
+| Append 10 items to 100 | 269.42 | 3.7116 | 7.4355 |
+| Remove 10 items from 100 | 274.30 | 3.6456 | 8.0276 |
+| Full shuffle 100 items | 271.67 | 3.6810 | 7.2461 |
+| Update 10 of 100 items content | 276.64 | 3.6148 | 7.1620 |
+| Render 100 with bind callback | 49.90 | 20.0394 | 31.9479 |
 
 ### atomVal Binding
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Create 100 input val bindings | 51.09 | 19.5716 | 38.6035 |
-| Atom → DOM propagation (100 × 100) | 58.25 | 17.1664 | 18.7566 |
-| DOM → Atom propagation (100 events) | 861.90 | 1.1602 | 2.2080 |
+| Create 100 input val bindings | 42.45 | 23.5563 | 42.4002 |
+| Atom → DOM propagation (100 × 100) | 47.18 | 21.1922 | 24.2250 |
+| DOM → Atom propagation (100 events) | 844.17 | 1.1846 | 1.8999 |
 
 ### atomChecked Binding
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Create 100 checkbox bindings | 92.22 | 10.8437 | 13.4136 |
-| Toggle checkbox (atom → DOM) × 100 | 92.49 | 10.8116 | 11.9403 |
-| Toggle checkbox via DOM event × 100 | 1,062.41 | 0.9413 | 1.9250 |
+| Create 100 checkbox bindings | 74.31 | 13.4559 | 15.8493 |
+| Toggle checkbox (atom → DOM) × 100 | 74.45 | 13.4305 | 18.1342 |
+| Toggle checkbox via DOM event × 100 | 976.90 | 1.0236 | 1.7883 |
 
 ### atomVal with Debounce
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Without debounce (baseline) | 881.36 | 1.1346 | 2.1735 |
-| With debounce option | 896.91 | 1.1149 | 2.1725 |
+| Without debounce (baseline) | 858.17 | 1.1653 | 2.1022 |
+| With debounce option | 868.80 | 1.1510 | 1.8247 |
 
 ### atomLens (New)
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Create lens (shallow) (x1000) | 783.85 | 1.2758 | 4.1958 |
-| Create lens (deep path) (x1000) | 694.41 | 1.4401 | 4.7127 |
-| Compose lenses (x1000) | 208.87 | 4.7876 | 11.7679 |
-| Read via lens (deep) (x1000) | 24,686 | 0.0405 | 0.0487 |
-| Write via lens (no change) (x1000) | 7,322 | 0.1366 | 0.1431 |
-| Write via lens (with change) (x1000) | 1,908 | 0.5239 | 0.6187 |
-| Write via lens (array element) (x1000) | 1,518 | 0.6586 | 1.0011 |
-| Source → Lens propagation (x1000) | 58,584 | 0.0171 | 0.0289 |
-| Lens → Source propagation (x1000) | 1,750 | 0.5711 | 0.7476 |
+| Create lens (shallow) (x1000) | 935.32 | 1.0692 | 3.6663 |
+| Create lens (deep path) (x1000) | 893.42 | 1.1193 | 3.2893 |
+| Compose lenses (x1000) | 254.91 | 3.9229 | 10.1465 |
+| Read via lens (deep) (x1000) | 23,120 | 0.0433 | 0.0518 |
+| Write via lens (no change) (x1000) | 6,813 | 0.1468 | 0.1561 |
+| Write via lens (with change) (x1000) | 2,047 | 0.4884 | 0.5493 |
+| Write via lens (array element) (x1000) | 1,644 | 0.6082 | 0.7492 |
+| Source → Lens propagation (x1000) | 81,657 | 0.0122 | 0.0272 |
+| Lens → Source propagation (x1000) | 1,853 | 0.5396 | 0.5888 |
 
 ## 2. Macro-Benchmarks
 
@@ -136,43 +134,43 @@
 
 | Scenario | ops/sec | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Add 50 todos (atomList + render) | 4,355.57 | 0.2296 | 0.6268 |
-| Toggle 50 todos (update callback) | 301.73 | 3.3142 | 8.7495 |
-| Filter switch (computed → atomList) | 279.47 | 3.5782 | 6.3840 |
-| Full workflow: add → toggle → filter → delete | 2,540.48 | 0.3936 | 1.8284 |
+| Add 50 todos (atomList + render) | 3,480.60 | 0.2873 | 0.7207 |
+| Toggle 50 todos (update callback) | 313.20 | 3.1928 | 8.1718 |
+| Filter switch (computed → atomList) | 290.64 | 3.4406 | 6.6439 |
+| Full workflow: add → toggle → filter → delete | 2,229.60 | 0.4485 | 1.3946 |
 
 ### Todo App — Stats with Effects
 
 | Scenario | ops/sec | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Todo stats auto-update (add 100 items) | 1,977.43 | 0.5057 | 1.8323 |
+| Todo stats auto-update (add 100 items) | 1,731.61 | 0.5775 | 1.4621 |
 
 ### Dashboard — Multi-Widget Binding
 
 | Scenario | ops/sec | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| 20 widgets with atomText + atomCss (creation) | 203.91 | 4.9041 | 12.0851 |
-| 20 widgets batch update (50 rounds) | 56.44 | 17.7179 | 20.6964 |
+| 20 widgets with atomText + atomCss (creation) | 160.46 | 6.2321 | 12.8906 |
+| 20 widgets batch update (50 rounds) | 48.61 | 20.5705 | 25.5153 |
 
 ### Dashboard — Mount/Unmount Cycles
 
 | Scenario | ops/sec | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Mount and unmount 20 components (10 cycles) | 29.46 | 33.9469 | 52.1679 |
+| Mount and unmount 20 components (10 cycles) | 23.67 | 42.2317 | 57.2497 |
 
 ### Dashboard — Computed → DOM Chain
 
 | Scenario | ops/sec | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Deep computed chain (5 levels) → atomText (20 widgets) | 779.69 | 1.2826 | 2.9320 |
-| Fan-out: 1 atom → 20 computed → 20 DOM bindings | 792.87 | 1.2612 | 3.0688 |
-| Fan-in: 20 atoms → 1 computed → 1 DOM binding | 1,522.96 | 0.6566 | 1.4297 |
+| Deep computed chain (5 levels) → atomText (20 widgets) | 635.40 | 1.5738 | 3.0884 |
+| Fan-out: 1 atom → 20 computed → 20 DOM bindings | 655.21 | 1.5262 | 2.9986 |
+| Fan-in: 20 atoms → 1 computed → 1 DOM binding | 1,458.09 | 0.6858 | 1.2360 |
 
 ### atomForm — O(1) Scaling (New)
 
 | Scenario | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Update 1 field in 10-field form (x1000) | 51,714 | 0.0193 | 0.0290 |
-| Update 1 field in 100-field form (x1000) | 50,407 | 0.0198 | 0.0291 |
+| Update 1 field in 10-field form (x1000) | 52,897 | 0.0189 | 0.0293 |
+| Update 1 field in 100-field form (x1000) | 51,265 | 0.0195 | 0.0297 |
 
 > **Analysis**: These results demonstrate true **O(1) scaling**. By isolating the state update cost, we observe that form size has negligible impact on field dispatch performance, maintaining over **50 million updates per second** (internal throughput) for both small and medium-sized forms.
