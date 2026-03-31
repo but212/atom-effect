@@ -82,6 +82,8 @@
 
 ### atomList
 
+| Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
+| --- | --- | --- | --- |
 | Render 100 items | 225.50 | 4.4346 | 12.5954 |
 | Render 500 items | 59.72 | 16.7424 | 23.6067 |
 | Render 1000 items | 29.93 | 33.4086 | 51.1437 |
