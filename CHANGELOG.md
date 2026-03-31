@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Core
+
+#### Changed
+
+- **Refactor**: Unified reactive node status flags into a single 31-bit SMI-safe bitmask (`NODE_FLAGS`) across `Atom`, `Computed`, and `Effect`.
+- **Performance**: Introduced inlined bit manipulation utilities (`has`, `set`, `clear`, `setVal`) in the `ReactiveNode` base class to optimize hot-path state transitions and improve maintainability.
+- **Internal**: Replaced legacy state flags with the unified binary flag system, reducing memory overhead and improving V8 JIT stability.
+
 ## [0.27.0] - 2026-03-31
 
 ### Core

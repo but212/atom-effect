@@ -1,10 +1,10 @@
 import {
   AsyncState,
   COMPUTED_CONFIG,
-  COMPUTED_STATE_FLAGS,
   EMPTY_ERROR_ARRAY,
   EPOCH_CONSTANTS,
   IS_DEV,
+  NODE_FLAGS,
   SMI_MAX,
 } from '@/constants';
 import { ReactiveNode } from '@/core/base';
@@ -25,19 +25,6 @@ import type {
 import { debug, NO_DEFAULT_VALUE } from '@/utils/debug';
 import { wrapError } from '@/utils/error';
 import { isPromise } from '@/utils/type-guards';
-
-const {
-  IDLE,
-  DIRTY,
-  PENDING,
-  RESOLVED,
-  REJECTED,
-  HAS_ERROR,
-  RECOMPUTING,
-  DISPOSED,
-  IS_COMPUTED,
-  FORCE_COMPUTE,
-} = COMPUTED_STATE_FLAGS;
 
 /**
  * Computed atom implementation.
@@ -77,7 +64,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
 
     this._value = undefined as T;
     // Start dirty so first access triggers computation
-    this.flags = IS_COMPUTED | DIRTY | IDLE;
+    this.flags = NODE_FLAGS.IS_COMPUTED | NODE_FLAGS.COMPUTED_DIRTY | NODE_FLAGS.COMPUTED_IDLE;
     this._equal = options.equal ?? Object.is;
     this._fn = fn;
     this._defaultValue = 'defaultValue' in options ? options.defaultValue : (NO_DEFAULT_VALUE as T);
@@ -99,22 +86,17 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
 
   /** @internal */
   get isDirty(): boolean {
-    return (this.flags & DIRTY) !== 0;
+    return this.has(NODE_FLAGS.COMPUTED_DIRTY);
   }
 
   /** @internal */
   get isRejected(): boolean {
-    return (this.flags & REJECTED) !== 0;
+    return this.has(NODE_FLAGS.COMPUTED_REJECTED);
   }
 
   /** @internal */
   get isRecomputing(): boolean {
-    return (this.flags & RECOMPUTING) !== 0;
-  }
-
-  /** @internal */
-  private get _hasErrorInternal(): boolean {
-    return (this.flags & HAS_ERROR) !== 0;
+    return this.has(NODE_FLAGS.EXECUTING);
   }
 
   private _track(): void {
@@ -127,46 +109,51 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
 
     let flags = this.flags;
     // 1. Fast path: Stable and Resolved
-    if ((flags & (RESOLVED | DIRTY | IDLE)) === RESOLVED) {
+    if (
+      (flags &
+        (NODE_FLAGS.COMPUTED_RESOLVED | NODE_FLAGS.COMPUTED_DIRTY | NODE_FLAGS.COMPUTED_IDLE)) ===
+      NODE_FLAGS.COMPUTED_RESOLVED
+    ) {
       return this._value;
     }
 
     // 2. Exception paths
-    if ((flags & DISPOSED) !== 0) throw new ComputedError(ERROR_MESSAGES.COMPUTED_DISPOSED);
+    if (this.has(NODE_FLAGS.DISPOSED)) throw new ComputedError(ERROR_MESSAGES.COMPUTED_DISPOSED);
 
-    if ((flags & RECOMPUTING) !== 0) {
+    if (this.has(NODE_FLAGS.EXECUTING)) {
       const def = this._defaultValue;
       if (def !== (NO_DEFAULT_VALUE as T)) return def;
       throw new ComputedError(ERROR_MESSAGES.COMPUTED_CIRCULAR_DEPENDENCY);
     }
 
     // 3. Evaluation path
-    if ((flags & (DIRTY | IDLE)) !== 0) {
+    if (this.has(NODE_FLAGS.COMPUTED_DIRTY | NODE_FLAGS.COMPUTED_IDLE)) {
       const deps = this._deps;
       if (
-        (flags & IDLE) === 0 &&
-        (flags & FORCE_COMPUTE) === 0 &&
+        !this.has(NODE_FLAGS.COMPUTED_IDLE) &&
+        !this.has(NODE_FLAGS.COMPUTED_FORCE_CHECK) &&
         deps.size > 0 &&
         !this._isDirty()
       ) {
-        flags = this.flags &= ~DIRTY;
+        this.clear(NODE_FLAGS.COMPUTED_DIRTY);
+        flags = this.flags;
       } else {
         this._recompute();
         flags = this.flags;
       }
-      if ((flags & RESOLVED) !== 0) return this._value;
+      if ((flags & NODE_FLAGS.COMPUTED_RESOLVED) !== 0) return this._value;
     }
 
     // 4. Async/Error handling
     const def = this._defaultValue;
     const hasDefault = def !== (NO_DEFAULT_VALUE as T);
 
-    if ((flags & PENDING) !== 0) {
+    if (this.has(NODE_FLAGS.COMPUTED_PENDING)) {
       if (hasDefault) return def;
       throw new ComputedError(ERROR_MESSAGES.COMPUTED_ASYNC_PENDING_NO_DEFAULT);
     }
 
-    if ((flags & REJECTED) !== 0) {
+    if (this.has(NODE_FLAGS.COMPUTED_REJECTED)) {
       if (hasDefault) return def;
       throw this._error;
     }
@@ -181,10 +168,9 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
   get state(): AsyncStateType {
     const ctx = trackingContext.current;
     if (ctx != null) ctx.addDependency(this);
-    const flags = this.flags;
-    if ((flags & RESOLVED) !== 0) return AsyncState.RESOLVED;
-    if ((flags & PENDING) !== 0) return AsyncState.PENDING;
-    if ((flags & REJECTED) !== 0) return AsyncState.REJECTED;
+    if (this.has(NODE_FLAGS.COMPUTED_RESOLVED)) return AsyncState.RESOLVED;
+    if (this.has(NODE_FLAGS.COMPUTED_PENDING)) return AsyncState.PENDING;
+    if (this.has(NODE_FLAGS.COMPUTED_REJECTED)) return AsyncState.REJECTED;
     return AsyncState.IDLE;
   }
 
@@ -194,7 +180,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
 
     const flags = this.flags;
     // Inlined checks for REJECTED | HAS_ERROR
-    if ((flags & (REJECTED | HAS_ERROR)) !== 0) return true;
+    if ((flags & (NODE_FLAGS.COMPUTED_REJECTED | NODE_FLAGS.COMPUTED_HAS_ERROR)) !== 0) return true;
 
     const deps = this._deps;
     if (!deps.hasComputeds) return false;
@@ -234,7 +220,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
 
       const dep = link.node;
       // Inlined isComputed + hasError check
-      if ((dep.flags & IS_COMPUTED) !== 0 && dep.hasError) {
+      if (dep.isComputed && dep.hasError) {
         this._collectErrorsFromDep(dep as unknown as ComputedAtom<unknown>, collected);
       }
     }
@@ -262,30 +248,29 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
   get isPending(): boolean {
     const ctx = trackingContext.current;
     if (ctx != null) ctx.addDependency(this);
-    return (this.flags & PENDING) !== 0;
+    return this.has(NODE_FLAGS.COMPUTED_PENDING);
   }
 
   get isResolved(): boolean {
     const ctx = trackingContext.current;
     if (ctx != null) ctx.addDependency(this);
-    return (this.flags & RESOLVED) !== 0;
+    return this.has(NODE_FLAGS.COMPUTED_RESOLVED);
   }
 
   invalidate(): void {
-    this.flags |= FORCE_COMPUTE;
+    this.set(NODE_FLAGS.COMPUTED_FORCE_CHECK);
     this._markDirty();
   }
 
   dispose(): void {
-    const flags = this.flags;
-    if ((flags & DISPOSED) !== 0) return;
+    if (this.has(NODE_FLAGS.DISPOSED)) return;
 
     this._deps.disposeAll();
 
     if (this._slots != null) {
       this._slots.clear();
     }
-    this.flags = DISPOSED | DIRTY | IDLE;
+    this.flags = NODE_FLAGS.DISPOSED | NODE_FLAGS.COMPUTED_DIRTY | NODE_FLAGS.COMPUTED_IDLE;
 
     // Release Memory
     this._error = null;
@@ -320,14 +305,14 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
       deps.insertNew(trackIndex, link);
     }
 
-    if ((dep.flags & IS_COMPUTED) !== 0) {
+    if (dep.isComputed) {
       deps.hasComputeds = true;
     }
   }
 
   private _recompute(): void {
-    if (this.isRecomputing) return;
-    this.flags = (this.flags | RECOMPUTING) & ~FORCE_COMPUTE;
+    if (this.has(NODE_FLAGS.EXECUTING)) return;
+    this.flags = (this.flags | NODE_FLAGS.EXECUTING) & ~NODE_FLAGS.COMPUTED_FORCE_CHECK;
 
     this._trackEpoch = nextEpoch();
     this._trackCount = 0;
@@ -366,13 +351,18 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
       // Reset transient state
       this._trackEpoch = EPOCH_CONSTANTS.UNINITIALIZED;
       this._trackCount = 0;
-      this.flags &= ~RECOMPUTING;
+      this.clear(NODE_FLAGS.EXECUTING);
     }
   }
 
   private _handleAsyncComputation(promise: Promise<T>): void {
     // Set pending, clear idle/dirty/resolved/rejected
-    this.flags = (this.flags | PENDING) & ~(IDLE | DIRTY | RESOLVED | REJECTED);
+    const mask =
+      NODE_FLAGS.COMPUTED_IDLE |
+      NODE_FLAGS.COMPUTED_DIRTY |
+      NODE_FLAGS.COMPUTED_RESOLVED |
+      NODE_FLAGS.COMPUTED_REJECTED;
+    this.flags = (this.flags & ~mask) | NODE_FLAGS.COMPUTED_PENDING;
     // Notify pending
     this._notifySubscribers(undefined, undefined);
 
@@ -422,7 +412,13 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
 
     this._error = error;
     // Set rejected + has_error, clear idle/dirty/pending/resolved
-    this.flags = (this.flags & ~(IDLE | DIRTY | PENDING | RESOLVED)) | REJECTED | HAS_ERROR;
+    const mask =
+      NODE_FLAGS.COMPUTED_IDLE |
+      NODE_FLAGS.COMPUTED_DIRTY |
+      NODE_FLAGS.COMPUTED_PENDING |
+      NODE_FLAGS.COMPUTED_RESOLVED;
+    this.flags =
+      (this.flags & ~mask) | NODE_FLAGS.COMPUTED_REJECTED | NODE_FLAGS.COMPUTED_HAS_ERROR;
 
     if (this._onError) {
       try {
@@ -437,16 +433,21 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
   }
 
   private _finalizeResolution(value: T): void {
-    const flags = this.flags;
     // Only bump version if value actually changed or first resolve
-    if ((flags & RESOLVED) === 0 || !this._equal(this._value, value)) {
+    if (!this.has(NODE_FLAGS.COMPUTED_RESOLVED) || !this._equal(this._value, value)) {
       this.version = nextVersion(this.version);
     }
 
     this._value = value;
     this._error = null;
     // Set resolved, clear idle/dirty/pending/rejected/has_error
-    this.flags = (flags | RESOLVED) & ~(IDLE | DIRTY | PENDING | REJECTED | HAS_ERROR);
+    const mask =
+      NODE_FLAGS.COMPUTED_IDLE |
+      NODE_FLAGS.COMPUTED_DIRTY |
+      NODE_FLAGS.COMPUTED_PENDING |
+      NODE_FLAGS.COMPUTED_REJECTED |
+      NODE_FLAGS.COMPUTED_HAS_ERROR;
+    this.flags = (this.flags & ~mask) | NODE_FLAGS.COMPUTED_RESOLVED;
   }
 
   execute(): void {
@@ -456,9 +457,8 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
 
   /** @internal */
   _markDirty(): void {
-    const flags = this.flags;
-    if ((flags & (RECOMPUTING | DIRTY)) !== 0) return;
-    this.flags = flags | DIRTY;
+    if (this.has(NODE_FLAGS.EXECUTING | NODE_FLAGS.COMPUTED_DIRTY)) return;
+    this.set(NODE_FLAGS.COMPUTED_DIRTY);
     this._notifySubscribers(undefined, undefined);
   }
 
@@ -487,7 +487,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
 
         const dep = link.node;
         // Inlined isComputed check
-        if ((dep.flags & IS_COMPUTED) !== 0) {
+        if (dep.isComputed) {
           try {
             // Force computed to re-evaluate so version reflects latest state
             void (dep as { value: unknown }).value;

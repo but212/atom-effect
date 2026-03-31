@@ -1,4 +1,4 @@
-import { COMPUTED_STATE_FLAGS, EPOCH_CONSTANTS, IS_DEV, SMI_MAX } from '@/constants';
+import { EPOCH_CONSTANTS, IS_DEV, NODE_FLAGS, SMI_MAX } from '@/constants';
 import { Subscription } from '@/core/dep-tracking';
 import { AtomError } from '@/errors/errors';
 import { ERROR_MESSAGES } from '@/errors/messages';
@@ -54,12 +54,36 @@ export abstract class ReactiveNode<T> {
     this.id = generateId() & SMI_MAX;
   }
 
+  // ============================================================================
+  // Bit Manipulation Utilities (Inlined by V8)
+  // ============================================================================
+
+  protected has(flag: number): boolean {
+    return (this.flags & flag) !== 0;
+  }
+
+  protected set(flag: number): void {
+    this.flags |= flag;
+  }
+
+  protected clear(flag: number): void {
+    this.flags &= ~flag;
+  }
+
+  /**
+   * Sets or clears a flag based on a boolean value.
+   */
+  protected setVal(flag: number, val: boolean): void {
+    if (val) this.flags |= flag;
+    else this.flags &= ~flag;
+  }
+
   /**
    * Whether the node has been disposed.
    * @internal
    */
   get isDisposed(): boolean {
-    return (this.flags & COMPUTED_STATE_FLAGS.DISPOSED) !== 0; // Bit 0: DISPOSED
+    return this.has(NODE_FLAGS.DISPOSED);
   }
 
   /**
@@ -67,7 +91,7 @@ export abstract class ReactiveNode<T> {
    * @internal
    */
   get isComputed(): boolean {
-    return (this.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) !== 0; // Bit 1: IS_COMPUTED
+    return this.has(NODE_FLAGS.IS_COMPUTED);
   }
 
   /**
@@ -76,6 +100,14 @@ export abstract class ReactiveNode<T> {
    */
   get hasError(): boolean {
     return false;
+  }
+
+  /**
+   * Whether the node is an effect.
+   * @internal
+   */
+  get isEffect(): boolean {
+    return this.has(NODE_FLAGS.IS_EFFECT);
   }
 
   // ============================================================================

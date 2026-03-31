@@ -1,4 +1,4 @@
-import { ATOM_STATE_FLAGS } from '@/constants';
+import { NODE_FLAGS } from '@/constants';
 import { ReactiveNode } from '@/core/base';
 import { nextVersion } from '@/internal/epoch';
 import { scheduler } from '@/internal/scheduler';
@@ -25,7 +25,7 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
     this._value = initialValue;
 
     if (sync) {
-      this.flags |= ATOM_STATE_FLAGS.SYNC;
+      this.set(NODE_FLAGS.ATOM_SYNC);
     }
 
     debug.attachDebugInfo(this, 'atom', this.id);
@@ -33,12 +33,12 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
 
   /** @internal */
   get isNotificationScheduled(): boolean {
-    return (this.flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED) !== 0;
+    return this.has(NODE_FLAGS.ATOM_NOTIFY_PENDING);
   }
 
   /** @internal */
   get isSync(): boolean {
-    return (this.flags & ATOM_STATE_FLAGS.SYNC) !== 0;
+    return this.has(NODE_FLAGS.ATOM_SYNC);
   }
 
   get value(): T {
@@ -56,18 +56,17 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
     this._value = newValue;
     this.version = nextVersion(this.version);
 
-    const flags = this.flags;
     // 1. Double check: schedule pending or no slots
-    if ((flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED) !== 0) return;
+    if (this.has(NODE_FLAGS.ATOM_NOTIFY_PENDING)) return;
 
     const slots = this._slots;
     if (slots == null || slots.size === 0) return;
 
     this._pendingOldValue = oldValue;
-    this.flags = flags | ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
+    this.set(NODE_FLAGS.ATOM_NOTIFY_PENDING);
 
     // 2. Schedule or flush (inline bitwise)
-    if ((flags & ATOM_STATE_FLAGS.SYNC) !== 0 && !scheduler.isBatching) {
+    if (this.has(NODE_FLAGS.ATOM_SYNC) && !scheduler.isBatching) {
       this._flushNotifications();
     } else {
       scheduler.schedule(this);
@@ -88,16 +87,15 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
   private _flushNotifications(): void {
     const flags = this.flags;
     // Guard: Combined bitwise check for NOTIFICATION_SCHEDULED and not DISPOSED
-    if (
-      (flags & (ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED | ATOM_STATE_FLAGS.DISPOSED)) !==
-      ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED
-    ) {
+    // Use a single bitmask check for high-performance hot path
+    const target = NODE_FLAGS.ATOM_NOTIFY_PENDING | NODE_FLAGS.DISPOSED;
+    if ((flags & target) !== NODE_FLAGS.ATOM_NOTIFY_PENDING) {
       return;
     }
 
     const oldValue = this._pendingOldValue as T;
     this._pendingOldValue = undefined;
-    this.flags = flags & ~ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
+    this.clear(NODE_FLAGS.ATOM_NOTIFY_PENDING);
 
     this._notifySubscribers(this._value, oldValue);
   }
@@ -107,11 +105,10 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
   }
 
   dispose(): void {
-    const flags = this.flags;
-    if ((flags & ATOM_STATE_FLAGS.DISPOSED) !== 0) return;
+    if (this.has(NODE_FLAGS.DISPOSED)) return;
 
     this._slots?.clear();
-    this.flags = flags | ATOM_STATE_FLAGS.DISPOSED;
+    this.set(NODE_FLAGS.DISPOSED);
     // Release references
     this._value = undefined as T;
     this._pendingOldValue = undefined;

@@ -9,38 +9,60 @@ export const AsyncState = {
 } as const;
 
 /**
- * Effect flags.
+ * Unified Reactive Node Flags (31-bit SMI safe)
+ */
+export const NODE_FLAGS = {
+  // --- Common Flags (0-3) ---
+  DISPOSED: 1 << 0, // All
+  IS_COMPUTED: 1 << 1, // Marker for Computeds
+  IS_EFFECT: 1 << 2, // Marker for Effects
+  EXECUTING: 1 << 3, // Computed (Recomputing) & Effect (Executing)
+
+  // --- Atom Specific (4-5) ---
+  ATOM_SYNC: 1 << 4,
+  ATOM_NOTIFY_PENDING: 1 << 5,
+
+  // --- Computed Specific (6-13) ---
+  COMPUTED_DIRTY: 1 << 6,
+  COMPUTED_IDLE: 1 << 7,
+  COMPUTED_PENDING: 1 << 8,
+  COMPUTED_RESOLVED: 1 << 9,
+  COMPUTED_REJECTED: 1 << 10,
+  COMPUTED_HAS_ERROR: 1 << 11,
+  COMPUTED_FORCE_CHECK: 1 << 12, // For explicit invalidation
+} as const;
+
+/**
+ * Effect flags (Legacy compatibility & semantic aliasing)
  */
 export const EFFECT_STATE_FLAGS = {
-  DISPOSED: 1 << 0,
-  EXECUTING: 1 << 3,
+  DISPOSED: NODE_FLAGS.DISPOSED,
+  EXECUTING: NODE_FLAGS.EXECUTING,
 } as const;
 
 /**
- * Computed flags.
+ * Computed flags (Legacy compatibility & semantic aliasing)
  */
 export const COMPUTED_STATE_FLAGS = {
-  DISPOSED: 1 << 0,
-  /** Marker bit: identifies this node as a computed. */
-  IS_COMPUTED: 1 << 1,
-  DIRTY: 1 << 3,
-  IDLE: 1 << 4,
-  PENDING: 1 << 5,
-  RESOLVED: 1 << 6,
-  REJECTED: 1 << 7,
-  RECOMPUTING: 1 << 8,
-  HAS_ERROR: 1 << 9,
-  /** Flagged when explicitly invalidated. Bypasses fast-path dirty checks. */
-  FORCE_COMPUTE: 1 << 10,
+  DISPOSED: NODE_FLAGS.DISPOSED,
+  IS_COMPUTED: NODE_FLAGS.IS_COMPUTED,
+  DIRTY: NODE_FLAGS.COMPUTED_DIRTY,
+  IDLE: NODE_FLAGS.COMPUTED_IDLE,
+  PENDING: NODE_FLAGS.COMPUTED_PENDING,
+  RESOLVED: NODE_FLAGS.COMPUTED_RESOLVED,
+  REJECTED: NODE_FLAGS.COMPUTED_REJECTED,
+  RECOMPUTING: NODE_FLAGS.EXECUTING,
+  HAS_ERROR: NODE_FLAGS.COMPUTED_HAS_ERROR,
+  FORCE_COMPUTE: NODE_FLAGS.COMPUTED_FORCE_CHECK,
 } as const;
 
 /**
- * Writable Atom Flags.
+ * Writable Atom Flags (Legacy compatibility & semantic aliasing)
  */
 export const ATOM_STATE_FLAGS = {
-  DISPOSED: 1 << 0,
-  SYNC: 1 << 3,
-  NOTIFICATION_SCHEDULED: 1 << 4,
+  DISPOSED: NODE_FLAGS.DISPOSED,
+  SYNC: NODE_FLAGS.ATOM_SYNC,
+  NOTIFICATION_SCHEDULED: NODE_FLAGS.ATOM_NOTIFY_PENDING,
 } as const;
 
 /**

@@ -1,10 +1,4 @@
-import {
-  DEBUG_CONFIG,
-  EFFECT_STATE_FLAGS,
-  EPOCH_CONSTANTS,
-  IS_DEV,
-  SCHEDULER_CONFIG,
-} from '@/constants';
+import { DEBUG_CONFIG, EPOCH_CONSTANTS, IS_DEV, NODE_FLAGS, SCHEDULER_CONFIG } from '@/constants';
 import { ReactiveNode } from '@/core/base';
 import { DependencyLink } from '@/core/dep-tracking';
 import { EffectError } from '@/errors/errors';
@@ -73,6 +67,12 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     this._execId = 0;
     this._trackCount = 0;
 
+    // Set marker and sync flag
+    this.set(NODE_FLAGS.IS_EFFECT);
+    if (this._sync) {
+      this.set(NODE_FLAGS.ATOM_SYNC); // Use shared SYNC bit
+    }
+
     // Pre-allocate callbacks once — eliminates per-dependency closure allocation
     if (this._sync) {
       this._notifyCallback = () => this.execute();
@@ -92,7 +92,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
 
   public dispose(): void {
     if (this.isDisposed) return;
-    this.flags |= EFFECT_STATE_FLAGS.DISPOSED;
+    this.set(NODE_FLAGS.DISPOSED);
 
     this._execCleanup();
     this._deps?.disposeAll();
@@ -103,8 +103,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
   }
 
   public addDependency(dep: Dependency): void {
-    const flags = this.flags;
-    if ((flags & EFFECT_STATE_FLAGS.EXECUTING) === 0) return;
+    if (!this.has(NODE_FLAGS.EXECUTING)) return;
 
     const startEpoch = this._currentEpoch;
     if (dep._lastSeenEpoch === startEpoch) return;
@@ -173,9 +172,8 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
    * Executes effect with tracking.
    */
   public execute(force = false): void {
-    const flags = this.flags;
     // Guard: Combined bitwise check for efficiency
-    if ((flags & (EFFECT_STATE_FLAGS.DISPOSED | EFFECT_STATE_FLAGS.EXECUTING)) !== 0) return;
+    if (this.has(NODE_FLAGS.DISPOSED | NODE_FLAGS.EXECUTING)) return;
 
     // Skip if not dirty or forced
     const deps = this._deps;
@@ -183,7 +181,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
 
     this._checkInfiniteLoops();
 
-    this.flags = flags | EFFECT_STATE_FLAGS.EXECUTING;
+    this.set(NODE_FLAGS.EXECUTING);
     this._execCleanup();
 
     this._currentEpoch = nextEpoch();
@@ -220,7 +218,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
       this._handleExecutionError(error);
       this._cleanup = null;
     } finally {
-      this.flags &= ~EFFECT_STATE_FLAGS.EXECUTING;
+      this.clear(NODE_FLAGS.EXECUTING);
     }
   }
 
@@ -345,7 +343,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     return this._executionCount;
   }
   get isExecuting(): boolean {
-    return (this.flags & EFFECT_STATE_FLAGS.EXECUTING) !== 0;
+    return this.has(NODE_FLAGS.EXECUTING);
   }
 
   private _throwInfiniteLoopError(type: 'per-effect' | 'global'): never {
