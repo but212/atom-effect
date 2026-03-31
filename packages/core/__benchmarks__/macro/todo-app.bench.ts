@@ -152,7 +152,7 @@ describe('Todo App Scenarios', () => {
 
       // 6. Back to all
       filterWorkflow.value = 'all';
-      return todosWorkflow.value as any;
+      return _displayCount as any;
     },
     macroBenchOptions
   );
@@ -181,7 +181,7 @@ describe('Todo App Stats Architecture', () => {
         items.push({ id: i + 1, text: 'Item', completed: i % 2 === 0, createdAt: new Date() });
       }
       todosStats.value = items;
-      return todosStats.value as any;
+      return _rate as any;
     },
     macroBenchOptions
   );

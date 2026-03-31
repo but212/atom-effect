@@ -15,7 +15,6 @@ describe('Batch Efficiency', () => {
   }, benchEffectOptions);
 
   bench(`form reset overhead (batch) (x${REPEATS})`, () => {
-    let last;
     for (let j = 0; j < REPEATS; j++) {
       const nextVal = formFieldsBatch[0]!.value === '' ? 'initial' : '';
 
@@ -24,9 +23,8 @@ describe('Batch Efficiency', () => {
           formFieldsBatch[i]!.value = nextVal;
         }
       });
-      last = nextVal;
     }
-    return last as any;
+    return _effectRunsBatch as any;
   });
 
   // Setup shared state - no batch case
@@ -39,15 +37,13 @@ describe('Batch Efficiency', () => {
   }, benchEffectOptions);
 
   bench(`form reset overhead (no batch) (x${REPEATS})`, () => {
-    let last;
     for (let j = 0; j < REPEATS; j++) {
       const nextVal = formFieldsNoBatch[0]!.value === '' ? 'initial' : '';
 
       for (let i = 0; i < 20; i++) {
         formFieldsNoBatch[i]!.value = nextVal;
       }
-      last = nextVal;
     }
-    return last as any;
+    return _effectRunsNoBatch as any;
   });
 });

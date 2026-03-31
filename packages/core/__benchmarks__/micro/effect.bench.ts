@@ -89,7 +89,7 @@ describe('Effect Execution', () => {
       for (let i = 0; i < REPEATS; i++) {
         a.value += 1;
       }
-      return a.value as any;
+      return _count as any;
     },
     microBenchOptions
   );
@@ -101,7 +101,7 @@ describe('Effect Execution', () => {
         aMulti.value += 1;
         bMulti.value += 1;
       }
-      return (aMulti.value + bMulti.value) as any;
+      return _sum as any;
     },
     microBenchOptions
   );
@@ -112,7 +112,7 @@ describe('Effect Execution', () => {
       for (let i = 0; i < REPEATS; i++) {
         aComp.value += 1;
       }
-      return aComp.value as any;
+      return _valComp as any;
     },
     microBenchOptions
   );
@@ -147,7 +147,7 @@ describe('Effect Re-execution', () => {
           a.value += 1;
         }
       }
-      return a.value as any;
+      return _count as any;
     },
     microBenchOptions
   );
@@ -158,7 +158,7 @@ describe('Effect Re-execution', () => {
       for (let i = 0; i < REPEATS; i++) {
         aMultiEff.value += 1;
       }
-      return aMultiEff.value as any;
+      return [_c1, _c2, _c3] as any;
     },
     microBenchOptions
   );
@@ -200,7 +200,7 @@ describe('Effect Cleanup', () => {
       for (let i = 0; i < REPEATS; i++) {
         aCleanup.value += 1;
       }
-      return aCleanup.value as any;
+      return _cleanupCount as any;
     },
     microBenchOptions
   );
