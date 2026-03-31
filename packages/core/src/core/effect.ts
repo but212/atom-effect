@@ -103,22 +103,34 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
   }
 
   public addDependency(dep: Dependency): void {
-    if ((this.flags & EFFECT_STATE_FLAGS.EXECUTING) === 0) return;
+    const flags = this.flags;
+    if ((flags & EFFECT_STATE_FLAGS.EXECUTING) === 0) return;
 
     const startEpoch = this._currentEpoch;
     if (dep._lastSeenEpoch === startEpoch) return;
     dep._lastSeenEpoch = startEpoch;
 
-    const trackIndex = this._trackCount;
-    const deps = this._deps!;
+    const trackIndex = this._trackCount++;
+    const deps = this._deps;
 
     // Optimized: Direct access to inline slots for the hottest 4 dependencies
     let existing: DependencyLink | null;
-    if (trackIndex === 0) existing = deps._s0;
-    else if (trackIndex === 1) existing = deps._s1;
-    else if (trackIndex === 2) existing = deps._s2;
-    else if (trackIndex === 3) existing = deps._s3;
-    else existing = deps.getAt(trackIndex);
+    switch (trackIndex) {
+      case 0:
+        existing = deps._s0;
+        break;
+      case 1:
+        existing = deps._s1;
+        break;
+      case 2:
+        existing = deps._s2;
+        break;
+      case 3:
+        existing = deps._s3;
+        break;
+      default:
+        existing = deps.getAt(trackIndex);
+    }
 
     // 1. Stable Path: dependency index remains the same
     if (existing != null && existing.node === dep) {
@@ -136,7 +148,6 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     if (dep.isComputed) {
       deps.hasComputeds = true;
     }
-    this._trackCount = trackIndex + 1;
   }
 
   private _insertNewDependency(dep: Dependency, trackIndex: number): void {
@@ -163,15 +174,16 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
    */
   public execute(force = false): void {
     const flags = this.flags;
+    // Guard: Combined bitwise check for efficiency
     if ((flags & (EFFECT_STATE_FLAGS.DISPOSED | EFFECT_STATE_FLAGS.EXECUTING)) !== 0) return;
 
-    // Skip if not dirty
-    const deps = this._deps!;
+    // Skip if not dirty or forced
+    const deps = this._deps;
     if (!force && deps.size > 0 && !this._isDirty()) return;
 
     this._checkInfiniteLoops();
 
-    this.flags |= EFFECT_STATE_FLAGS.EXECUTING;
+    this.flags = flags | EFFECT_STATE_FLAGS.EXECUTING;
     this._execCleanup();
 
     this._currentEpoch = nextEpoch();
@@ -281,13 +293,14 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
   }
 
   private _execCleanup(): void {
-    if (!this._cleanup) return;
+    const cleanup = this._cleanup;
+    if (cleanup == null) return;
+    this._cleanup = null;
     try {
-      this._cleanup();
+      cleanup();
     } catch (error) {
       this._handleExecutionError(error, ERROR_MESSAGES.EFFECT_CLEANUP_FAILED);
     }
-    this._cleanup = null;
   }
 
   private _checkInfiniteLoops(): void {

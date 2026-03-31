@@ -12,17 +12,17 @@ export function wrapError(
   ErrorClass: typeof AtomError,
   context: string
 ): AtomError {
-  // Return if wrapped
+  // 1. Skip if already wrapped
   if (error instanceof AtomError) {
     return error;
   }
 
-  const isNativeError = error instanceof Error;
-  const originalMessage = isNativeError ? error.message : String(error);
-  const cause = isNativeError ? error : undefined;
+  // 2. Handle native Error instances
+  if (error instanceof Error) {
+    const type = error.name || error.constructor.name || 'Error';
+    return new ErrorClass(`${type} (${context}): ${error.message}`, error);
+  }
 
-  const type = isNativeError ? error.constructor.name : 'Unexpected error';
-  const finalMessage = `${type} (${context}): ${originalMessage}`;
-
-  return new ErrorClass(finalMessage, cause);
+  // 3. Handle unexpected types (string, number, etc.)
+  return new ErrorClass(`Unexpected error (${context}): ${String(error)}`);
 }

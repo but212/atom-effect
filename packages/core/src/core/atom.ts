@@ -42,7 +42,10 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
   }
 
   get value(): T {
-    trackingContext.current?.addDependency(this);
+    const ctx = trackingContext.current;
+    if (ctx != null) {
+      ctx.addDependency(this);
+    }
     return this._value;
   }
 
@@ -53,21 +56,22 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
     this._value = newValue;
     this.version = nextVersion(this.version);
 
-    // 1. Check if notifications are needed
-    if ((this._slots?.size ?? 0) === 0 || this.isNotificationScheduled) {
-      return;
-    }
+    const flags = this.flags;
+    // 1. Double check: schedule pending or no slots
+    if ((flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED) !== 0) return;
+
+    const slots = this._slots;
+    if (slots == null || slots.size === 0) return;
 
     this._pendingOldValue = oldValue;
-    this.flags |= ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
+    this.flags = flags | ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
 
-    // 2. Schedule or flush
-    if (this.isSync && !scheduler.isBatching) {
+    // 2. Schedule or flush (inline bitwise)
+    if ((flags & ATOM_STATE_FLAGS.SYNC) !== 0 && !scheduler.isBatching) {
       this._flushNotifications();
-      return;
+    } else {
+      scheduler.schedule(this);
     }
-
-    scheduler.schedule(this);
   }
 
   /**
@@ -82,14 +86,18 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
    * Triggers subscribers.
    */
   private _flushNotifications(): void {
-    // Guard: Spurious flush or already disposed
-    if (!this.isNotificationScheduled || this.isDisposed) {
+    const flags = this.flags;
+    // Guard: Combined bitwise check for NOTIFICATION_SCHEDULED and not DISPOSED
+    if (
+      (flags & (ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED | ATOM_STATE_FLAGS.DISPOSED)) !==
+      ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED
+    ) {
       return;
     }
 
     const oldValue = this._pendingOldValue as T;
     this._pendingOldValue = undefined;
-    this.flags &= ~ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
+    this.flags = flags & ~ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
 
     this._notifySubscribers(this._value, oldValue);
   }
@@ -99,10 +107,11 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
   }
 
   dispose(): void {
-    if (this.isDisposed) return;
+    const flags = this.flags;
+    if ((flags & ATOM_STATE_FLAGS.DISPOSED) !== 0) return;
 
     this._slots?.clear();
-    this.flags |= ATOM_STATE_FLAGS.DISPOSED;
+    this.flags = flags | ATOM_STATE_FLAGS.DISPOSED;
     // Release references
     this._value = undefined as T;
     this._pendingOldValue = undefined;

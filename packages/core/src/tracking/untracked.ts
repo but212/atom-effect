@@ -7,15 +7,18 @@ import { trackingContext } from './context';
  * @returns Result of `fn`.
  */
 export function untracked<T>(fn: () => T): T {
-  const prev = trackingContext.current;
+  const ctx = trackingContext;
+  const prev = ctx.current;
 
-  // Skip if untracked
-  if (prev === null) return fn();
+  // Optimized: Fast-path when already untracked
+  if (prev === null) {
+    return fn();
+  }
 
-  trackingContext.current = null;
+  ctx.current = null;
   try {
     return fn();
   } finally {
-    trackingContext.current = prev;
+    ctx.current = prev;
   }
 }

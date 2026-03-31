@@ -13,6 +13,7 @@ Before diving into the bitwise flags and version hashing, it is helpful to under
   - **Push (Notification Phase)**: When an atom changes, it "pushes" a dirty signal to its immediate subscribers. No calculation happens yet.
   - **Pull (Evaluation Phase)**: When you read a `.value` or when an effect runs, the node "pulls" the latest versions from its dependencies to see if it actually needs to re-compute.
 - **The Scheduler's Role**: Effects don't run immediately. They are queued in a **Scheduler**. This allows the library to "coalesce" multiple atom updates into a single effect execution, ensuring efficiency.
+- **Small Vector Optimization (SVO)**: To minimize GC overhead and closure heap-allocations, the engine manually unrolls "Small Vector" paths (first 4 slots) for subscriber and dependency link storage.
 
 ---
 
@@ -32,7 +33,7 @@ To maximize performance and maintain consistent behavior, the engine uses a unif
 
 - **`ReactiveNode<T>`**: The single, unified base class for all reactive primitives (**Atoms**, **Computeds**, **Effects**). By merging the roles of **Producer** (observable) and **Consumer** (observer) into a single "God Class", the engine ensures that every reactive object shares a consistent memory layout.
   - **Subscriber Management**: Provides `subscribe()` and `_notifySubscribers()` capabilities.
-  - **Dependency Tracking**: Manages a `DepSlotBuffer` and provides optimized dirty checking logic (`_isDirty`).
+  - **Dependency Tracking**: Manages a `DepSlotBuffer` and provides optimized dirty checking logic (`_isDirty`). Critical tracking loops are manually unrolled for performance.
   - **Type Safety**: Uses generic type `T` to ensure type-safe notifications for subscribers.
 - **`AtomImpl<T>`**: A pure producer node that holds mutable state. It extends `ReactiveNode<T>` but keeps its dependency list (`_deps`) null to save memory.
 - **`ComputedAtomImpl<T>`**: A hybrid node that both consumes dependencies and produces a derived value. It fully leverages both producer and consumer facets of `ReactiveNode<T>`.
@@ -68,7 +69,7 @@ To reduce unnecessary work, a **Notify-and-Check** approach is used.
    - **Effect**: Before re-executing, `_isDirty()` is called. This performs a **Fast Dirty Check** (efficient O(N) version hash calculation). If the hash is stable, it skips re-evaluation. If not, it performs a full structural walk.
 
 **Trade-off: Fast Path (O(1)/O(N)) vs. Full Walk**
-The validation process uses layered heuristics to minimize expensive work. The **Hot-path Check (O(1))** provides instant dirty detection for recurring updates. If that misses, the **Version Hash (O(N))** provides a fast heuristic to avoid a full structural walk. Only if the hash differs does the engine perform a recursive pull of dependencies.
+The validation process uses layered heuristics to minimize expensive work. The **Hot-path Check (O(1))** provides instant dirty detection for recurring updates by caching the last dirty index. If that misses, the **Version Hash (O(N))** provides a fast heuristic to avoid a full structural walk. Only if the hash differs does the engine perform a recursive pull of dependencies. These checks are implemented using **Branchless/Manual Unrolling** for maximum density.
 
 ---
 
@@ -91,7 +92,8 @@ Reactivity systems are prone to memory leaks if subscriptions are not cleaned up
   - **Mega-Node Optimization**: A hybrid O(1) `Map` fallback when dependencies exceed 32, ensuring performance even for extremely large graphs.
   - **O(1) Free-Index Slot Reuse**: Uses a stack-based index reuse strategy to reclaim nulled slots in $O(1)$ time, eliminating linear scans during subscriber/dependency churn.
   - **Fast Dirty Checking**: An efficient version hash check (`isDirtyFast`) using an unrolled additive hash of all dependency versions. The logic is optimized for monochromatic V8 hidden classes and avoids branching overhead.
-  - **Safe Retrieval**: Implements `claimExisting` to reuse existing dependency links during re-evaluation, minimizing churn.
+  - **Manual Loop Unrolling**: Dependency collection and notifications are manually unrolled for the first 4 slots to bypass closure allocations and iterator dispatch.
+  - **Safe Retrieval**: Implemented `claimExisting` to reuse existing dependency links during re-evaluation, minimizing churn.
 - **Computed Optimizations**:
   - **Hot-path Check**: Caches the index of the last dirty dependency (`_hotIndex`) to provide $O(1)$ dirty detection for recurring state changes (e.g., animations, scrolls).
 

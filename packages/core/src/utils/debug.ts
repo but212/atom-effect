@@ -8,35 +8,41 @@ export const DEBUG_TYPE = Symbol('AtomEffect.Type');
 export const NO_DEFAULT_VALUE = Symbol('AtomEffect.NoDefaultValue');
 
 /**
- * Debug controller.
+ * Debug controller implementation.
  */
-export const debug: DebugConfig = {
-  // Dev mode flag
-  enabled: IS_DEV,
+class DebugController implements DebugConfig {
+  public enabled = IS_DEV;
+  public warnInfiniteLoop = DEBUG_CONFIG.WARN_INFINITE_LOOP;
 
-  warnInfiniteLoop: DEBUG_CONFIG.WARN_INFINITE_LOOP,
+  public warn(cond: boolean, msg: string): void {
+    if (!IS_DEV || !this.enabled || !cond) return;
+    console.warn(`[Atom Effect] ${msg}`);
+  }
 
-  warn(cond, msg) {
-    if (IS_DEV && this.enabled && cond) {
-      console.warn(`[Atom Effect] ${msg}`);
-    }
-  },
-
-  attachDebugInfo(obj, type, id) {
+  public attachDebugInfo(obj: object, type: string, id: DependencyId): void {
     if (!IS_DEV || !this.enabled) return;
 
     const t = obj as Record<symbol, unknown>;
     t[DEBUG_NAME] = `${type}_${id}`;
     t[DEBUG_ID] = id;
     t[DEBUG_TYPE] = type;
-  },
+  }
 
-  getDebugName: (obj) =>
-    (obj as Record<symbol, unknown> | null)?.[DEBUG_NAME] as string | undefined,
+  public getDebugName(obj: object | null): string | undefined {
+    if (obj == null) return undefined;
+    return (obj as Record<symbol, unknown>)[DEBUG_NAME] as string | undefined;
+  }
 
-  getDebugType: (obj) =>
-    (obj as Record<symbol, unknown> | null)?.[DEBUG_TYPE] as string | undefined,
-};
+  public getDebugType(obj: object | null): string | undefined {
+    if (obj == null) return undefined;
+    return (obj as Record<symbol, unknown>)[DEBUG_TYPE] as string | undefined;
+  }
+}
+
+/**
+ * Global debug controller singleton.
+ */
+export const debug: DebugConfig = new DebugController();
 
 /**
  * ID counter.
@@ -46,4 +52,4 @@ let nextId = 1;
 /**
  * Generates ID.
  */
-export const generateId = (): DependencyId => nextId++;
+export const generateId = (): DependencyId => nextId++ | 0;

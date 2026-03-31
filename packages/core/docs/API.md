@@ -138,7 +138,7 @@ Groups multiple state updates into a single notification cycle. Effects and comp
 - **Consistency**: Ensuring a set of atoms are updated together before any effect runs.
 - **Performance**: Making multiple mutations that should be one "transaction".
 
-> **Note**: The engine already performs automatic microtask batching by default. Use `batch()` only when you need **synchronous** flush (e.g., DOM must reflect updates before the next line).
+> **Note**: The engine already performs automatic microtask batching by default. Use `batch()` only when you need **Synchronous Reflection** (e.g., DOM must reflect updates before the next line). The `batch()` implementation is highly optimized to avoid redundant property lookups and array allocations.
 
 ### Basic Example - batch
 
@@ -206,7 +206,7 @@ const result = batch(() => {
 
 ## `untracked<T>(fn: () => T): T`
 
-Runs a function without tracking dependencies. Any `.value` reads inside the callback are invisible to the enclosing `effect` or `computed`.
+Runs a function without tracking dependencies. Any `.value` reads inside the callback are invisible to the enclosing `effect` or `computed`. Optimized with a zero-overhead fast-path for nested untracked calls.
 
 ### When to use - untracked
 

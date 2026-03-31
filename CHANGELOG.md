@@ -6,30 +6,24 @@
 
 #### Changed
 
-- **Refactor**: Abstracted bitwise flag operations into semantic internal accessors (e.g., `isDisposed`, `isDirty`, `isExecuting`) across all core reactive classes. This significantly improves internal maintainability and readability with zero performance overhead due to V8's ability to inline simple getters.
-- **Refactor**: Unified common reactive state properties (`isDisposed`, `isComputed`, `hasError`) into the `ReactiveNode` base class and updated the internal `Dependency` contract to ensure consistent engine-level interactions.
+- **Performance**: Executed an aggressive engine-level optimization pass.
+  - **SVO Unrolling**: Manually unrolled hot loops for subscriber notifications and dependency collection (Small Vector path) to eliminate closure overhead.
+  - **Monomorphic Singletons**: Refactored `trackingContext` and `debug` into class-based singletons and unified common reactive state into `ReactiveNode` for stable V8 hidden classes.
+  - **Hot-path Density**: Transitioned status management to direct bitwise operations and implemented local variable caching to reduce property lookup depth.
+  - **Internal**: Optimized scheduler batching, error paths, and `untracked()` fast-paths for minimal overhead.
 
 ### jQuery
 
 #### Changed
 
-- **Refactor**: Completed an aggressive, high-density refactoring of the entire `@but212/atom-effect-jquery` package.
-  - **Density Optimization**: Eliminated over 1,000 lines of redundant comments, intermediate variables, and verbose logic while preserving 100% functional parity.
-  - **Type Safety**: Systematically removed all remaining `any` type casts. Hardened internal interfaces with precise generics and `Record<string, unknown>` to ensure strict compliance with Biome's `noExplicitAny` rules.
-  - **Internal Architecture**: Compacted core bindings (`unified.ts`, `chainable.ts`, `list.ts`) into a streamlined, monomorphic structure for improved V8 performance and reduced memory pressure.
-  - **Form Binding**: Hardened `atomForm` reconciliation by integrating it with the global `registry` and using `MutationObserver` more efficiently for dynamic control detection.
-  - **Registry**: Streamlined lifecycle management by unifying `cleanupTree` and `cleanupDescendants` paths, ensuring a single source of truth for reactive node tracking via `_aes-bound` class markers.
-  - **Static Extensions**: Refactored the `$.atom` namespace and static jQuery extensions into a concise, declarative registration pattern.
-
-#### Fixed
-
-- **Type Safety**: Fixed implicit `any` errors in `shallowEqual` and `atomBind` through robust type narrowing and explicit `Record` typing.
-- **Robustness**: Improved error isolation in `atomFetch` and `$.route` transitions to prevent cascading failures during malformed URI or network errors.
+- **Refactor**: Completed a high-density overhaul of the `@but212/atom-effect-jquery` package.
+  - **Architecture**: Compacted core bindings into monomorphic structures, eliminating over 1,000 lines of redundant logic and complex closures.
+  - **Logic**: Hardened `atomForm` reconciliation, streamlined registry lifecycle management, and refined static API registrations.
+- **Robustness**: Hardened type safety across all bindings and improved error isolation in `$.route` and `atomFetch`.
 
 #### Documentation
 
-- **Updated API.md**: Synchronized documentation with refined internal types and optimized binding signatures.
-- **Updated ARCHITECTURE.md**: Refined descriptions of the reconciled list engine and form dispatcher.
+- **Sync**: Updated `API.md` and `ARCHITECTURE.md` to reflect refined internal types and optimized reconciliation engines.
 
 ## [0.26.0]
 

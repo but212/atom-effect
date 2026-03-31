@@ -71,8 +71,9 @@ class Scheduler {
     }
 
     // Deduplicate job
-    if (callback._nextEpoch === this._epoch) return;
-    callback._nextEpoch = this._epoch;
+    const epoch = this._epoch;
+    if (callback._nextEpoch === epoch) return;
+    callback._nextEpoch = epoch;
 
     if (this._batchDepth > 0 || this._isFlushingSync) {
       this._batchQueue[this._batchQueueSize++] = callback;
@@ -80,7 +81,9 @@ class Scheduler {
     }
 
     // Push to current active buffer
-    this._queueBuffer[this._bufferIndex]![this._size++] = callback;
+    const idx = this._bufferIndex;
+    const buffer = this._queueBuffer[idx]!;
+    buffer[this._size++] = callback;
 
     // Wake up if sleeping
     if (!this._isProcessing) {
@@ -130,18 +133,20 @@ class Scheduler {
   }
 
   _mergeBatchQueue(): void {
-    if (this._batchQueueSize === 0) return;
+    const queueSize = this._batchQueueSize;
+    if (queueSize === 0) return;
 
     // Increment epoch
     const epoch = ++this._epoch;
     const bQueue = this._batchQueue;
-    const targetBuffer = this._queueBuffer[this._bufferIndex]!;
+    const idx = this._bufferIndex;
+    const targetBuffer = this._queueBuffer[idx]!;
     let currentSize = this._size;
 
-    // Merge batch using a simple for-loop to avoid slice() allocation and forEach() overhead
-    for (let i = 0; i < this._batchQueueSize; i++) {
+    // Merge batch using a cached size to avoid property lookups
+    for (let i = 0; i < queueSize; i++) {
       const job = bQueue[i]!;
-      // Retag jobs
+      // Retag jobs only if they belong to a different epoch
       if (job._nextEpoch !== epoch) {
         job._nextEpoch = epoch;
         targetBuffer[currentSize++] = job;
@@ -150,10 +155,7 @@ class Scheduler {
 
     this._size = currentSize;
     this._batchQueueSize = 0;
-
-    // Hard reset length to 0 to release references for GC immediately.
-    // In V8, this is an O(1) operation that keeps the capacity if the array is small,
-    // or reclaims it if it exceeds a threshold.
+    // Release references immediately while keeping array capacity
     bQueue.length = 0;
   }
 
@@ -181,14 +183,17 @@ class Scheduler {
     // Swap buffers
     this._bufferIndex = idx ^ 1;
     this._size = 0;
-    this._epoch++;
+    this._epoch = (this._epoch + 1) | 0;
 
     // Execute jobs
     for (let i = 0; i < count; i++) {
+      const job = jobs[i]!;
       try {
-        const job = jobs[i]!;
-        if (typeof job === 'function') job();
-        else job.execute();
+        if (typeof job === 'function') {
+          job();
+        } else {
+          job.execute();
+        }
       } catch (e) {
         console.error(new SchedulerError('Error occurred during scheduler execution', e as Error));
       }
@@ -199,18 +204,19 @@ class Scheduler {
 
   private _handleFlushOverflow(): void {
     const droppedCount = this._size + this._batchQueueSize;
-    console.error(
-      new SchedulerError(
-        ERROR_MESSAGES.SCHEDULER_FLUSH_OVERFLOW(this._maxFlushIterations, droppedCount)
-      )
-    );
+    const max = this._maxFlushIterations;
+
+    console.error(new SchedulerError(ERROR_MESSAGES.SCHEDULER_FLUSH_OVERFLOW(max, droppedCount)));
+
     this._size = 0;
-    this._queueBuffer[this._bufferIndex]!.length = 0;
+    const idx = this._bufferIndex;
+    this._queueBuffer[idx]!.length = 0;
     this._batchQueueSize = 0;
 
-    if (this.onOverflow) {
+    const onOverflow = this.onOverflow;
+    if (onOverflow) {
       try {
-        this.onOverflow(droppedCount);
+        onOverflow(droppedCount);
       } catch {}
     }
   }
