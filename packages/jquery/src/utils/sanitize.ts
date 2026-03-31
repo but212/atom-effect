@@ -108,19 +108,22 @@ const DANGEROUS_CSS_GLOBAL_RE = new RegExp(DANGEROUS_CSS_RE.source, 'gim');
  * HTML sanitization for XSS mitigation using regex-based filtering.
  */
 export function sanitizeHtml(html: string | null | undefined): string {
-  let s = String(html ?? '')
+  if (!html) return '';
+  let s = String(html)
     .replace(STRIP_CTRL_RE, '')
     .replace(DECODE_NUMERIC_ENTITY_RE, (_, hex, dec) =>
       String.fromCodePoint(hex ? parseInt(hex, 16) : parseInt(dec, 10))
     )
-    .replace(DECODE_NAMED_ENTITY_RE, (_, name) => NAMED_ENTITY_MAP[name] ?? '')
-    .replace(STRIP_XML_RE, '');
+    .replace(DECODE_NAMED_ENTITY_RE, (_, name) => NAMED_ENTITY_MAP[name] ?? '');
 
-  let prev: string;
-  do {
-    prev = s;
-    s = s.replace(DANGEROUS_TAG_RE, '');
-  } while (s !== prev);
+  if (s.indexOf('<') !== -1) {
+    s = s.replace(STRIP_XML_RE, '');
+    let prev: string;
+    do {
+      prev = s;
+      s = s.replace(DANGEROUS_TAG_RE, '');
+    } while (s !== prev);
+  }
 
   return s
     .replace(DANGEROUS_PROTOCOL_GLOBAL_RE, 'data-unsafe-protocol:')
@@ -130,9 +133,14 @@ export function sanitizeHtml(html: string | null | undefined): string {
 }
 
 /** Checks for javascript:/vbscript: protocols in URL attributes. */
-export const isDangerousUrl = (attr: string, val: string) =>
-  URL_ATTRS.has(attr.toLowerCase()) && DANGEROUS_PROTOCOL_RE.test(val);
+export const isDangerousUrl = (attr: string, val: string): boolean => {
+  if (val.length < 10) return false; // "javascript:".length = 11
+  const lower = attr.toLowerCase();
+  return URL_ATTRS.has(lower) && DANGEROUS_PROTOCOL_RE.test(val);
+};
 
 /** Checks for protocols inside CSS url() functions. */
-export const isDangerousCssValue = (val: string) =>
-  val.toLowerCase().includes('url(') && DANGEROUS_CSS_URL_RE.test(val);
+export const isDangerousCssValue = (val: string): boolean => {
+  if (val.length < 15) return false; // "url(javascript:)".length = 15
+  return val.toLowerCase().includes('url(') && DANGEROUS_CSS_URL_RE.test(val);
+};

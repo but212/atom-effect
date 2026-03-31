@@ -78,8 +78,9 @@ Each handler is a standalone function that receives a `BindingContext` and the r
 
 To achieve maximum performance during high-frequency updates (e.g., animations or rapid state changes), `unified.ts` implements several optimizations:
 
-- **Metadata Caching**: Complex bindings like `atomClass`, `atomCss`, `atomAttr`, and `atomProp` pre-calculate metadata (e.g., camelCase property names, ARIA flags, URL-bearing status) during the initial registration. This avoids repeated string manipulations and regex checks inside the reactive update loop.
-- **JS-Level Value Caching**: `bindAttr` maintains a JS-side cache of the last written attribute value. This allows it to skip expensive `getAttribute` DOM calls (which require crossing the DOM boundary) to determine if a write is necessary.
+- **Metadata Caching**: Complex bindings like `atomClass`, `atomCss`, `atomAttr`, and `atomProp` pre-calculate metadata (e.g., camelCase property names, ARIA flags, URL-bearing status) during the initial registration. Map objects for these bindings are **hoisted outside the element iteration loop** to avoid redundant object allocations.
+- **Monomorphic Dispatch**: The internal `InputBinding` class specializes its `format` and `equal` logic at construction time. This removes branching and `instanceof` checks from the high-frequency `syncToDom` and `syncToAtom` paths.
+- **JS-Level Value Caching**: `bindAttr` maintains a JS-side cache of the last written attribute value.
 - **Batched Map Updates**: `registerMapEffect` processes entire dictionaries of reactive values in a single effect, reducing the number of total `Effect` objects and improving subscription efficiency.
 
 ## 3. Lifecycle Management
@@ -248,7 +249,7 @@ The hash/history difference is isolated to 5 internal functions, so all renderin
 - **Reactive**: `currentRoute` is a `ReadonlyAtom` — external code reads it reactively but must use `navigate()` to change routes, keeping the URL in sync.
 - **Navigation Guards**: `onLeave` hooks can return `false` to block navigation. URL is restored on block (hash revert or `replaceState`).
 - **Event Delegation**: `autoBindLinks` uses `$(document).on('click', '[data-route]')` for dynamically added links.
-- **Active State**: Active-link class management uses a reactive `effect` that re-runs whenever `currentRoute` changes, updating all `[data-route]` links in a single pass — more efficient than a persistent `MutationObserver`.
+- **Active State**: Active-link class management uses a reactive `effect` that re-runs whenever `currentRoute` changes, updating all `[data-route]` links in a single pass using **manual loops** for performance.
 - **Backwards Compatible**: Default mode is `'hash'`, preserving existing behavior.
 
 ## 8. Security
@@ -321,6 +322,9 @@ All internal state records (e.g., `BindingRecord`, `InputBinding`) are initializ
 ### 10.3 Flat Buffer Reconciliation
 
 By using `Uint8Array` and `Int32Array` for diffing state tracking, `atomList` eliminates the "GC hum" commonly associated with virtual DOM diffing in large lists. The reconciliation state is stored in a continuous memory block, maximizing CPU cache efficiency and minimizing allocation-time overhead.
+
+- **Sanitization Fast-path**: `sanitizeHtml` includes an early `indexOf('<')` check to bypass expensive regex scanning for plain-text content.
+- **Allocation-free Equality**: `shallowEqual` uses manual property counting and `for...in` loops to avoid `Object.keys()` array allocations.
 
 ## 11. Lenses & Structural Sharing
 

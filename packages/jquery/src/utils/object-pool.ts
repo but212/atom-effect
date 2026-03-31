@@ -34,7 +34,9 @@ export class ObjectPool<T extends object> {
 
   /** Drains all retained objects. */
   drain(): void {
-    this.pool.length = 0;
+    if (this.pool.length > 0) {
+      this.pool.length = 0;
+    }
   }
 
   get size(): number {

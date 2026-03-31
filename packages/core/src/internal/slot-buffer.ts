@@ -38,20 +38,25 @@ export class SlotBuffer<T> {
     return this._count;
   }
 
-  /** Gets the item at a specific logical index. */
   getAt(index: number): T | null {
-    switch (index) {
-      case 0:
-        return this._s0;
-      case 1:
-        return this._s1;
-      case 2:
-        return this._s2;
-      case 3:
-        return this._s3;
-      default:
-        return index >= 4 ? (this._overflow?.[index - 4] ?? null) : null;
+    if (index < 4) {
+      switch (index) {
+        case 0:
+          return this._s0;
+        case 1:
+          return this._s1;
+        case 2:
+          return this._s2;
+        case 3:
+          return this._s3;
+      }
     }
+    const ov = this._overflow;
+    if (ov !== null) {
+      const el = ov[index - 4];
+      return el === undefined ? null : el;
+    }
+    return null;
   }
 
   /** Overwrites an item at a specific index. */
@@ -69,9 +74,10 @@ export class SlotBuffer<T> {
       case 3:
         this._s3 = item;
         break;
-      default:
+      default: {
         this._overflow ??= [];
         this._overflow[index - 4] = item;
+      }
     }
 
     if (index >= this._count) {
@@ -79,48 +85,38 @@ export class SlotBuffer<T> {
     }
   }
 
-  /**
-   * Discards all items from the given index onwards.
-   * Equivalent to resetting the length of an array.
-   */
   truncateFrom(index: number): void {
     const count = this._count;
     if (index >= count) return;
 
-    // 1. Unroll Inline Slots Cleanup
-    // Uses fallthrough logic to clean up all slots from the given index onwards.
+    // 1. Unroll Inline Slots Cleanup: Simplified sequential check
     if (index <= 3) {
-      switch (index) {
-        // biome-ignore lint/suspicious/noFallthroughSwitchClause: intentional fallthrough for range cleanup
-        case 0: {
-          const s = this._s0;
-          if (s != null) {
-            this._onItemRemoved(s);
-            this._s0 = null;
-          }
+      if (index <= 0) {
+        const s = this._s0;
+        if (s != null) {
+          this._onItemRemoved(s);
+          this._s0 = null;
         }
-        // biome-ignore lint/suspicious/noFallthroughSwitchClause: intentional fallthrough for range cleanup
-        case 1: {
-          const s = this._s1;
-          if (s != null) {
-            this._onItemRemoved(s);
-            this._s1 = null;
-          }
+      }
+      if (index <= 1) {
+        const s = this._s1;
+        if (s != null) {
+          this._onItemRemoved(s);
+          this._s1 = null;
         }
-        // biome-ignore lint/suspicious/noFallthroughSwitchClause: intentional fallthrough for range cleanup
-        case 2: {
-          const s = this._s2;
-          if (s != null) {
-            this._onItemRemoved(s);
-            this._s2 = null;
-          }
+      }
+      if (index <= 2) {
+        const s = this._s2;
+        if (s != null) {
+          this._onItemRemoved(s);
+          this._s2 = null;
         }
-        case 3: {
-          const s = this._s3;
-          if (s != null) {
-            this._onItemRemoved(s);
-            this._s3 = null;
-          }
+      }
+      if (index <= 3) {
+        const s = this._s3;
+        if (s != null) {
+          this._onItemRemoved(s);
+          this._s3 = null;
         }
       }
     }
@@ -128,9 +124,9 @@ export class SlotBuffer<T> {
     // 2. Overflow Cleanup
     const ov = this._overflow;
     if (ov !== null && count > 4) {
-      const startIdx = index > 4 ? index - 4 : 0;
+      const offsetIdx = index > 4 ? index - 4 : 0;
       const len = ov.length;
-      for (let i = startIdx; i < len; i++) {
+      for (let i = offsetIdx; i < len; i++) {
         const item = ov[i];
         if (item != null) {
           this._onItemRemoved(item);
@@ -204,14 +200,15 @@ export class SlotBuffer<T> {
    * @internal
    */
   protected _addToOverflow(item: T): void {
-    if (this._overflow === null) {
+    const ov = this._overflow;
+    if (ov === null) {
       this._overflow = [item];
     } else {
       const free = this._freeIndices;
       if (free !== null && free.length > 0) {
-        this._overflow[free.pop()!] = item;
+        ov[free.pop()!] = item;
       } else {
-        this._overflow.push(item);
+        ov.push(item);
       }
     }
     this._count++;
@@ -255,19 +252,20 @@ export class SlotBuffer<T> {
         ov[i] = null;
         this._count--;
         // Track freed index for O(1) reuse
-        if (this._freeIndices === null) this._freeIndices = [];
-        this._freeIndices.push(i);
+        let free = this._freeIndices;
+        if (free === null) {
+          free = this._freeIndices = [];
+        }
+        free.push(i);
         return true;
       }
     }
     return false;
   }
 
-  /**
-   * Checks whether {@link item} exists in the buffer (identity comparison).
-   */
   has(item: T): boolean {
-    if (this._count === 0) return false;
+    const count = this._count;
+    if (count === 0) return false;
 
     // 1. Inline Slots
     if (this._s0 === item || this._s1 === item || this._s2 === item || this._s3 === item) {
@@ -292,24 +290,41 @@ export class SlotBuffer<T> {
    * array-based approach (length captured upfront for overflow).
    */
   forEach(fn: (item: T) => void): void {
-    if (this._count === 0) return;
+    const count = this._count;
+    if (count === 0) return;
 
+    let executed = 0;
     // 1. Inline slots
     const s0 = this._s0;
-    if (s0 != null) fn(s0);
+    if (s0 != null) {
+      fn(s0);
+      if (++executed === count) return;
+    }
     const s1 = this._s1;
-    if (s1 != null) fn(s1);
+    if (s1 != null) {
+      fn(s1);
+      if (++executed === count) return;
+    }
     const s2 = this._s2;
-    if (s2 != null) fn(s2);
+    if (s2 != null) {
+      fn(s2);
+      if (++executed === count) return;
+    }
     const s3 = this._s3;
-    if (s3 != null) fn(s3);
+    if (s3 != null) {
+      fn(s3);
+      if (++executed === count) return;
+    }
 
     // 2. Overflow
     const ov = this._overflow;
     if (ov != null) {
       for (let i = 0, len = ov.length; i < len; i++) {
         const el = ov[i];
-        if (el != null) fn(el);
+        if (el != null) {
+          fn(el);
+          if (++executed === count) return;
+        }
       }
     }
   }
@@ -329,26 +344,23 @@ export class SlotBuffer<T> {
     const s0 = this._s0;
     if (s0 != null) {
       fn(s0);
-      executed++;
+      if (++executed === count) return executed;
     }
     const s1 = this._s1;
     if (s1 != null) {
       fn(s1);
-      executed++;
+      if (++executed === count) return executed;
     }
     const s2 = this._s2;
     if (s2 != null) {
       fn(s2);
-      executed++;
+      if (++executed === count) return executed;
     }
     const s3 = this._s3;
     if (s3 != null) {
       fn(s3);
-      executed++;
+      if (++executed === count) return executed;
     }
-
-    // Fast exit
-    if (executed === count) return executed;
 
     // 2. Overflow
     const ov = this._overflow;
@@ -357,7 +369,7 @@ export class SlotBuffer<T> {
         const el = ov[i];
         if (el != null) {
           fn(el);
-          executed++;
+          if (++executed === count) return executed;
         }
       }
     }
@@ -372,19 +384,24 @@ export class SlotBuffer<T> {
    */
   compact(): void {
     const ov = this._overflow;
-    if (ov === null || ov.length === 0) return;
+    if (ov === null) return;
+
+    let len = ov.length;
+    if (len === 0) return;
 
     // Pop-and-swap compaction with proper null handling
     let i = 0;
-    while (i < ov.length) {
+    while (i < len) {
       if (ov[i] === null) {
         // Pop trailing nulls first to find a valid swap candidate
-        while (ov.length > i && ov[ov.length - 1] === null) {
+        while (len > i && ov[len - 1] === null) {
           ov.pop();
+          len--;
         }
         // If there's still a valid element beyond i, swap it in
-        if (ov.length > i) {
+        if (len > i) {
           ov[i] = ov.pop()!;
+          len--;
           i++;
         }
       } else {
@@ -396,7 +413,7 @@ export class SlotBuffer<T> {
     this._freeIndices = null;
 
     // Release overflow array when empty
-    if (ov.length === 0) {
+    if (len === 0) {
       this._overflow = null;
     }
   }

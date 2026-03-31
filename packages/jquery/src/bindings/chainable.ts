@@ -34,12 +34,13 @@ import { debug } from '@/utils/debug';
  * to each Element node. Handles nodeType check and context creation.
  */
 function atomEachElement(jq: JQuery, fn: (ctx: BindingContext, el: HTMLElement) => void): JQuery {
-  for (let i = 0, len = jq.length; i < len; i++) {
-    const node = jq[i]!;
-    if (node.nodeType === 1) {
+  const len = jq.length;
+  for (let i = 0; i < len; i++) {
+    const node = jq[i];
+    if (node?.nodeType === 1) {
       const el = node as HTMLElement;
       fn(createContext(el), el);
-    } else if (debug.enabled) {
+    } else if (debug.enabled && node) {
       debug.log(LOG_PREFIXES.BINDING, `Skipping non-Element node (nodeType=${node.nodeType})`);
     }
   }
@@ -64,80 +65,84 @@ $.fn.atomHtml = function (source: AsyncReactiveValue<string>): JQuery {
  * Toggles one or more CSS classes based on reactive boolean conditions.
  */
 $.fn.atomClass = function (
+  this: JQuery,
   classNameOrMap: string | Record<string, AsyncReactiveValue<boolean>>,
   condition?: AsyncReactiveValue<boolean>
 ): JQuery {
-  if (typeof classNameOrMap === 'string' && condition === undefined) {
-    console.warn(
-      `${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BINDING.MISSING_CONDITION('atomClass')}`
-    );
-    return this;
+  if (typeof classNameOrMap === 'string') {
+    if (condition === undefined) {
+      console.warn(
+        `${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BINDING.MISSING_CONDITION('atomClass')}`
+      );
+      return this;
+    }
+    // Hoist map creation outside the element loop
+    const map = { [classNameOrMap]: condition };
+    return atomEachElement(this, (ctx) => bindClass(ctx, map));
   }
-  return atomEachElement(this, (ctx) =>
-    bindClass(
-      ctx,
-      typeof classNameOrMap === 'string' ? { [classNameOrMap]: condition! } : classNameOrMap
-    )
-  );
+  return atomEachElement(this, (ctx) => bindClass(ctx, classNameOrMap));
 };
 
 /**
  * Binds one or more CSS style properties to reactive values.
  */
 $.fn.atomCss = function (
+  this: JQuery,
   propOrMap: string | CssBindings,
   source?: AsyncReactiveValue<string | number>,
   unit?: string
 ): JQuery {
-  if (typeof propOrMap === 'string' && source === undefined) {
-    console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BINDING.MISSING_SOURCE('atomCss')}`);
-    return this;
+  if (typeof propOrMap === 'string') {
+    if (source === undefined) {
+      console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BINDING.MISSING_SOURCE('atomCss')}`);
+      return this;
+    }
+    // Hoist map creation outside the element loop
+    const map = { [propOrMap]: unit ? [source as ReactiveValue<number>, unit] : source! };
+    return atomEachElement(this, (ctx) => bindCss(ctx, map as CssBindings));
   }
-  return atomEachElement(this, (ctx) =>
-    bindCss(
-      ctx,
-      typeof propOrMap === 'string'
-        ? { [propOrMap]: unit ? [source as ReactiveValue<number>, unit] : source! }
-        : propOrMap
-    )
-  );
+  return atomEachElement(this, (ctx) => bindCss(ctx, propOrMap));
 };
 
 /**
  * Binds one or more HTML attributes to reactive values with security guards.
  */
 $.fn.atomAttr = function (
+  this: JQuery,
   nameOrMap: string | Record<string, AsyncReactiveValue<PrimitiveValue>>,
   source?: AsyncReactiveValue<PrimitiveValue>
 ): JQuery {
-  if (typeof nameOrMap === 'string' && source === undefined) {
-    console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BINDING.MISSING_SOURCE('atomAttr')}`);
-    return this;
+  if (typeof nameOrMap === 'string') {
+    if (source === undefined) {
+      console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BINDING.MISSING_SOURCE('atomAttr')}`);
+      return this;
+    }
+    // Hoist map creation outside the element loop
+    const map = { [nameOrMap]: source };
+    return atomEachElement(this, (ctx) => bindAttr(ctx, map));
   }
-  return atomEachElement(this, (ctx) =>
-    bindAttr(ctx, typeof nameOrMap === 'string' ? { [nameOrMap]: source! } : nameOrMap)
-  );
+  return atomEachElement(this, (ctx) => bindAttr(ctx, nameOrMap));
 };
 
 /**
  * Binds one or more DOM properties to reactive values.
  */
 $.fn.atomProp = function <T>(
+  this: JQuery,
   nameOrMap: string | Record<string, AsyncReactiveValue<T>>,
   source?: AsyncReactiveValue<T>
 ): JQuery {
-  if (typeof nameOrMap === 'string' && source === undefined) {
-    console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BINDING.MISSING_SOURCE('atomProp')}`);
-    return this;
+  if (typeof nameOrMap === 'string') {
+    if (source === undefined) {
+      console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BINDING.MISSING_SOURCE('atomProp')}`);
+      return this;
+    }
+    // Hoist map creation outside the element loop
+    const map = { [nameOrMap]: source } as Record<string, AsyncReactiveValue<unknown>>;
+    return atomEachElement(this, (ctx) => bindProp(ctx, map));
   }
   return atomEachElement(this, (ctx) =>
-    bindProp(
-      ctx,
-      (typeof nameOrMap === 'string' ? { [nameOrMap]: source } : nameOrMap) as Record<
-        string,
-        AsyncReactiveValue<unknown>
-      >
-    )
+    bindProp(ctx, nameOrMap as Record<string, AsyncReactiveValue<unknown>>)
   );
 };
 
@@ -193,7 +198,7 @@ $.fn.atomOn = function (event: string, handler: (e: JQuery.Event) => void): JQue
 /**
  * Integrated multi-behavior reactive binding.
  */
-$.fn.atomBind = function <T>(options: BindingOptions<T>): JQuery {
+$.fn.atomBind = function <T>(this: JQuery, options: BindingOptions<T>): JQuery {
   const { text, html, class: cls, css, attr, prop, show, hide, val, checked, form, on } = options;
 
   const valBinding =
@@ -214,8 +219,9 @@ $.fn.atomBind = function <T>(options: BindingOptions<T>): JQuery {
     if (hide !== undefined) bindVisibility(ctx, hide, true);
     if (valBinding) bindVal(ctx, valBinding.atom, valBinding.options);
     if (checked !== undefined) bindChecked(ctx, checked);
-    if (form !== undefined && ctx.el instanceof HTMLFormElement)
+    if (form !== undefined && ctx.el instanceof HTMLFormElement) {
       bindForm(ctx.el, form as WritableAtom<object>);
+    }
     if (on !== undefined) bindEvents(ctx, on);
   });
 };
@@ -223,10 +229,13 @@ $.fn.atomBind = function <T>(options: BindingOptions<T>): JQuery {
 /**
  * Destroys all reactive bindings on the selected elements **and their descendants**.
  */
-$.fn.atomUnbind = function (): JQuery {
-  for (let i = 0, len = this.length; i < len; i++) {
-    const node = this[i]!;
-    if (node.nodeType === 1) bindUnbind(node as HTMLElement);
+$.fn.atomUnbind = function (this: JQuery): JQuery {
+  const len = this.length;
+  for (let i = 0; i < len; i++) {
+    const node = this[i];
+    if (node?.nodeType === 1) {
+      bindUnbind(node as HTMLElement);
+    }
   }
   return this;
 };

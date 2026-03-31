@@ -24,7 +24,15 @@ export class Subscription<T> {
   ) {}
 
   notify(newValue?: T, oldValue?: T): void {
-    if (this.fn) this.fn(newValue, oldValue);
-    else if (this.sub) this.sub.execute();
+    const fn = this.fn;
+    if (fn !== undefined) {
+      fn(newValue, oldValue);
+      return;
+    }
+
+    const sub = this.sub;
+    if (sub !== undefined) {
+      sub.execute();
+    }
   }
 }

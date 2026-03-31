@@ -1,90 +1,103 @@
-/**
- * Debug Mode
- *
- * When $.atom.debug = true is enabled:
- * 1. Logs state changes to the console.
- * 2. Visually highlights DOM updates (red border flash).
- *
- * Debug mode can be enabled in two ways:
- * 1. Build-time: VITE_ATOM_DEBUG=true (opt-in via env var)
- * 2. Runtime: $.atom.debug = true or window.__ATOM_DEBUG__ = true
- *
- * NOTE: debug mode is NOT enabled automatically in DEV builds to avoid
- * polluting the console without explicit opt-in.
- */
-
 import { DEBUG_DEFAULTS } from '@/constants';
 import { getSelector } from '@/utils';
 
 // ============================================================================
-// Timing constants — HIGHLIGHT_TRANSITION is derived from HIGHLIGHT_DEFAULTS
-// so the two values stay in sync automatically.
+// Environment utilities
 // ============================================================================
 
+const IS_BROWSER = typeof window !== 'undefined';
 const HIGHLIGHT_TRANSITION = `${DEBUG_DEFAULTS.HIGHLIGHT_DURATION_MS / 1000}s`;
 
+interface AtomWindow extends Window {
+  __ATOM_DEBUG__?: boolean;
+}
+
+interface AtomGlobal {
+  process?: {
+    env?: Record<string, string | undefined>;
+  };
+}
+
 function getInitialState(): boolean {
-  if (
-    typeof window !== 'undefined' &&
-    (window as Window & { __ATOM_DEBUG__?: boolean }).__ATOM_DEBUG__ === true
-  )
-    return true;
+  if (IS_BROWSER && (window as unknown as AtomWindow).__ATOM_DEBUG__ === true) return true;
   try {
     if (import.meta.env?.VITE_ATOM_DEBUG === 'true') return true;
   } catch {}
   try {
-    if (
-      (globalThis as typeof globalThis & { process?: { env?: Record<string, string | undefined> } })
-        .process?.env?.VITE_ATOM_DEBUG === 'true'
-    )
-      return true;
+    if ((globalThis as unknown as AtomGlobal).process?.env?.VITE_ATOM_DEBUG === 'true') return true;
   } catch {}
   return false;
 }
 
 let debugEnabled = getInitialState();
 
-export const debug = {
-  get enabled() {
+// ============================================================================
+// DebugController — Class-based singleton for JIT optimization
+// ============================================================================
+
+class DebugController {
+  get enabled(): boolean {
     return (
-      (typeof window !== 'undefined' &&
-        (window as Window & { __ATOM_DEBUG__?: boolean }).__ATOM_DEBUG__) ??
-      debugEnabled
+      (IS_BROWSER && (window as unknown as AtomWindow).__ATOM_DEBUG__ === true) || debugEnabled
     );
-  },
+  }
   set enabled(v: boolean) {
     debugEnabled = v;
-  },
-  log: (p: string, ...a: unknown[]) => debug.enabled && console.log(p, ...a),
-  atomChanged(p: string, n: string | undefined, o: unknown, v: unknown) {
+  }
+
+  log(p: string, ...a: unknown[]): void {
+    if (this.enabled) console.log(p, ...a);
+  }
+
+  atomChanged(p: string, n: string | undefined, o: unknown, v: unknown): void {
     if (this.enabled) console.log(`${p} Atom "${n ?? 'anonymous'}" changed:`, o, '→', v);
-  },
-  domUpdated(p: string, t: Element | JQuery<Element>, type: string, v: unknown) {
+  }
+
+  domUpdated(p: string, t: Element | JQuery<Element>, type: string, v: unknown): void {
     if (!this.enabled) return;
     const el = t instanceof Element ? t : (t[0] as Element | undefined);
-    if (el) {
-      console.log(`${p} DOM updated: ${getSelector(el)}.${type} =`, v);
-      highlightElement(el);
-    }
-  },
-  cleanup: (p: string, s: string) => debug.enabled && console.log(`${p} Cleanup: ${s}`),
-  warn: (p: string, m: string, ...r: unknown[]) => console.warn(`${p} ${m}`, ...r),
-  error: (p: string, m: string, c: unknown) => console.error(`${p} ${m}`, c),
-};
+    if (!el?.isConnected) return;
+    console.log(`${p} DOM updated: ${getSelector(el)}.${type} =`, v);
+    highlightElement(el);
+  }
+
+  cleanup(p: string, s: string): void {
+    if (this.enabled) console.log(`${p} Cleanup: ${s}`);
+  }
+
+  warn(p: string, m: string, ...r: unknown[]): void {
+    // Warnings are always logged unless suppressed via build-time logic
+    console.warn(`${p} ${m}`, ...r);
+  }
+
+  error(p: string, m: string, c: unknown): void {
+    // Errors are always logged
+    console.error(`${p} ${m}`, c);
+  }
+}
+
+export const debug = new DebugController();
+
+// ============================================================================
+// Highlighting logic
+// ============================================================================
 
 const HIGHLIGHT_CLASS = 'atom-debug-highlight',
   H_ATTR = 'data-atom-debug';
-let styleRef: WeakRef<HTMLStyleElement> | HTMLStyleElement | undefined;
+let styleInjected = false;
 
 function injectStyle(): void {
-  const cur = styleRef instanceof HTMLStyleElement ? styleRef : styleRef?.deref();
-  if (cur?.isConnected || document.querySelector(`style[${H_ATTR}]`)) return;
+  if (styleInjected || !IS_BROWSER) return;
+  if (document.querySelector(`style[${H_ATTR}]`)) {
+    styleInjected = true;
+    return;
+  }
   const s = Object.assign(document.createElement('style'), {
     textContent: `.${HIGHLIGHT_CLASS}{outline:2px solid rgba(255,68,68,0.8);outline-offset:1px;transition:outline ${HIGHLIGHT_TRANSITION} ease-out}`,
   });
   s.setAttribute(H_ATTR, '');
   document.head.appendChild(s);
-  styleRef = typeof WeakRef !== 'undefined' ? new WeakRef(s) : s;
+  styleInjected = true;
 }
 
 const timers = new WeakMap<Element, ReturnType<typeof setTimeout>>(),
@@ -93,10 +106,14 @@ const timers = new WeakMap<Element, ReturnType<typeof setTimeout>>(),
 function highlightElement(el: Element): void {
   if (!debug.enabled || !el.isConnected) return;
   injectStyle();
-  const exR = rafs.get(el),
-    exT = timers.get(el);
+
+  const exR = rafs.get(el);
+  const exT = timers.get(el);
   if (exR !== undefined) cancelAnimationFrame(exR);
-  if (exT !== undefined) clearTimeout(exT);
+  if (exT !== undefined) {
+    clearTimeout(exT);
+    timers.delete(el);
+  }
 
   rafs.set(
     el,

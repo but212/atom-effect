@@ -19,8 +19,10 @@ export class ArrayPool<T> {
 
   /** Releases array back to pool if within capacity and limit. */
   release(arr: T[]): void {
-    if (arr.length > this.capacity || this.pool.length >= this.limit || Object.isFrozen(arr))
-      return;
+    // Fast capacity check first to avoid frozen check cost
+    if (arr.length > this.capacity || this.pool.length >= this.limit) return;
+    if (Object.isFrozen(arr)) return;
+
     arr.length = 0;
     this.pool.push(arr);
   }

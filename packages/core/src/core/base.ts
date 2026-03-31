@@ -101,13 +101,37 @@ export abstract class ReactiveNode<T> {
       this._slots = slots;
     }
 
-    // Duplicate check
+    // Duplicate check: Unrolled for performance + early exit
     let duplicate = false;
-    slots.forEach((sub) => {
-      if (isFn ? sub.fn === listener : sub.sub === listener) {
-        duplicate = true;
+    if (slots._s0 != null && (isFn ? slots._s0.fn === listener : slots._s0.sub === listener)) {
+      duplicate = true;
+    } else if (
+      slots._s1 != null &&
+      (isFn ? slots._s1.fn === listener : slots._s1.sub === listener)
+    ) {
+      duplicate = true;
+    } else if (
+      slots._s2 != null &&
+      (isFn ? slots._s2.fn === listener : slots._s2.sub === listener)
+    ) {
+      duplicate = true;
+    } else if (
+      slots._s3 != null &&
+      (isFn ? slots._s3.fn === listener : slots._s3.sub === listener)
+    ) {
+      duplicate = true;
+    } else {
+      const ov = slots._overflow;
+      if (ov != null) {
+        for (let i = 0, len = ov.length; i < len; i++) {
+          const s = ov[i];
+          if (s != null && (isFn ? s.fn === listener : s.sub === listener)) {
+            duplicate = true;
+            break;
+          }
+        }
       }
-    });
+    }
 
     if (duplicate) {
       if (IS_DEV) console.warn(`[atom-effect] Duplicate subscription ignored on node ${this.id}`);
@@ -137,7 +161,8 @@ export abstract class ReactiveNode<T> {
    * Returns current subscriber count.
    */
   subscriberCount(): number {
-    return this._slots?.size ?? 0;
+    const slots = this._slots;
+    return slots === null ? 0 : slots.size;
   }
 
   /**
@@ -145,25 +170,67 @@ export abstract class ReactiveNode<T> {
    */
   protected _notifySubscribers(newValue: T | undefined, oldValue: T | undefined): void {
     const slots = this._slots;
-    if (!slots || slots.size === 0) return;
+    if (slots === null || slots.size === 0) return;
 
     this._notifying++;
     try {
-      slots.forEach((s) => {
+      // 1. Inline slots: Manual unroll to avoid closure allocation
+      let s = slots._s0;
+      if (s != null) {
         try {
           s.notify(newValue, oldValue);
-        } catch (err) {
-          console.error(
-            wrapError(err, AtomError, ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED)
-          );
+        } catch (e) {
+          this._logNotifyError(e);
         }
-      });
+      }
+      s = slots._s1;
+      if (s != null) {
+        try {
+          s.notify(newValue, oldValue);
+        } catch (e) {
+          this._logNotifyError(e);
+        }
+      }
+      s = slots._s2;
+      if (s != null) {
+        try {
+          s.notify(newValue, oldValue);
+        } catch (e) {
+          this._logNotifyError(e);
+        }
+      }
+      s = slots._s3;
+      if (s != null) {
+        try {
+          s.notify(newValue, oldValue);
+        } catch (e) {
+          this._logNotifyError(e);
+        }
+      }
+
+      // 2. Overflow scan: Standard loop for performance
+      const ov = slots._overflow;
+      if (ov != null) {
+        for (let i = 0, len = ov.length; i < len; i++) {
+          const sub = ov[i];
+          if (sub != null) {
+            try {
+              sub.notify(newValue, oldValue);
+            } catch (e) {
+              this._logNotifyError(e);
+            }
+          }
+        }
+      }
     } finally {
-      this._notifying--;
-      if (this._notifying === 0) {
+      if (--this._notifying === 0) {
         slots.compact();
       }
     }
+  }
+
+  private _logNotifyError(err: unknown): void {
+    console.error(wrapError(err, AtomError, ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED));
   }
 
   // ============================================================================
@@ -176,11 +243,12 @@ export abstract class ReactiveNode<T> {
    */
   protected _isDirty(): boolean {
     const deps = this._deps;
-    if (!deps || deps.size === 0) return false;
+    if (deps === null || deps.size === 0) return false;
 
     // Phase 1: Hot-path Check - O(1)
-    if (this._hotIndex !== -1) {
-      const hotLink = deps.getAt(this._hotIndex);
+    const hotIndex = this._hotIndex;
+    if (hotIndex !== -1) {
+      const hotLink = deps.getAt(hotIndex);
       if (hotLink != null && hotLink.node.version !== hotLink.version) {
         return true;
       }

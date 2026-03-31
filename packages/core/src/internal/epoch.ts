@@ -6,27 +6,40 @@ let collectorEpoch = 0;
 /**
  * Next tracking epoch.
  */
-export const nextEpoch = () => (collectorEpoch = (collectorEpoch + 1) & SMI_MAX || 1);
+export function nextEpoch(): number {
+  const next = (collectorEpoch + 1) & SMI_MAX;
+  collectorEpoch = next === 0 ? 1 : next;
+  return collectorEpoch;
+}
 
 /** Current tracking epoch. */
-export const currentEpoch = () => collectorEpoch;
+export function currentEpoch(): number {
+  return collectorEpoch;
+}
 
 /** Increments a version counter within SMI range. Avoids 0 to reserve it for uninitialized state. */
-export const nextVersion = (v: number) => (v + 1) & SMI_MAX || 1;
+export function nextVersion(v: number): number {
+  const next = (v + 1) & SMI_MAX;
+  return next === 0 ? 1 : next;
+}
 
 export let flushExecutionCount = 0;
 let isFlushing = false;
 let _flushEpoch = 0;
 
 /** Current flush epoch. */
-export const currentFlushEpoch = () => _flushEpoch;
+export function currentFlushEpoch(): number {
+  return _flushEpoch;
+}
 
 /**
  * Starts flush cycle.
  */
 export function startFlush(): boolean {
   if (isFlushing) {
-    if (IS_DEV) console.warn('startFlush() called during flush - ignored');
+    if (IS_DEV) {
+      console.warn('startFlush() called during flush - ignored');
+    }
     return false;
   }
 
@@ -37,16 +50,19 @@ export function startFlush(): boolean {
 }
 
 /** Ends flush cycle. */
-export const endFlush = () => {
+export function endFlush(): void {
   isFlushing = false;
-};
+}
 
 /**
  * Runs a function within a flush scope.
  * Ensures endFlush() is called even if an error occurs.
  */
 export function runInFlushScope<T>(fn: () => T): T | undefined {
-  if (!startFlush()) return undefined;
+  if (!startFlush()) {
+    return undefined;
+  }
+
   try {
     return fn();
   } finally {
@@ -58,16 +74,18 @@ export function runInFlushScope<T>(fn: () => T): T | undefined {
  * Increments execution count.
  * Throws an error if the count exceeds MAX_EXECUTIONS_PER_FLUSH.
  */
-export const incrementFlushExecutionCount = () => {
+export function incrementFlushExecutionCount(): number {
   if (!isFlushing) return 0;
+
   const count = ++flushExecutionCount;
-  if (count > SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH) {
-    throw new Error(
-      `[atom-effect] Infinite loop detected: flush execution count exceeded ${SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH}`
-    );
+  if (count <= SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH) {
+    return count;
   }
-  return count;
-};
+
+  throw new Error(
+    `[atom-effect] Infinite loop detected: flush execution count exceeded ${SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH}`
+  );
+}
 
 /**
  * Resets flush state.

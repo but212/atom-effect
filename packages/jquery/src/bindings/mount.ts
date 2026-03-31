@@ -29,8 +29,9 @@ const EMPTY_PROPS = Object.freeze({});
  *   for components with required fields, which is why the cast is explicit
  *   rather than implicit.
  */
-$.fn.atomMount = function <P>(component: ComponentFn<P>, props?: P): JQuery {
+$.fn.atomMount = function <P>(this: JQuery, component: ComponentFn<P>, props?: P): JQuery {
   const p = (props ?? EMPTY_PROPS) as P;
+  const compName = component.name || 'Component';
 
   for (let i = 0, len = this.length; i < len; i++) {
     const rootEl = this[i];
@@ -38,10 +39,13 @@ $.fn.atomMount = function <P>(component: ComponentFn<P>, props?: P): JQuery {
 
     registry.cleanupTree(rootEl);
     try {
+      // Untracked execution prevents component initialization from leaking into parent effects
       const teardown = untracked(() => component($(rootEl), p));
-      if (typeof teardown === 'function') registry.setComponentCleanup(rootEl, teardown);
+      if (typeof teardown === 'function') {
+        registry.setComponentCleanup(rootEl, teardown);
+      }
     } catch (err) {
-      debug.error(LOG_PREFIXES.MOUNT, ERROR_MESSAGES.MOUNT.ERROR(component.name), err);
+      debug.error(LOG_PREFIXES.MOUNT, ERROR_MESSAGES.MOUNT.ERROR(compName), err);
     }
   }
   return this;
@@ -51,9 +55,10 @@ $.fn.atomMount = function <P>(component: ComponentFn<P>, props?: P): JQuery {
  * Unmounts the component and disposes all reactive bindings on each selected
  * element and its descendants.
  */
-$.fn.atomUnmount = function (): JQuery {
+$.fn.atomUnmount = function (this: JQuery): JQuery {
   for (let i = 0, len = this.length; i < len; i++) {
-    if (this[i]) bindUnbind(this[i]!);
+    const el = this[i];
+    if (el) bindUnbind(el);
   }
   return this;
 };

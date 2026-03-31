@@ -1,11 +1,11 @@
 import type { Listener } from './tracking.types';
 
 /**
- * Global tracking context.
+ * Tracking context implementation.
  */
-export const trackingContext = {
+class TrackingContext {
   /** Active listener. */
-  current: null as Listener | null,
+  public current: Listener | null = null;
 
   /**
    * Executes in context.
@@ -14,7 +14,7 @@ export const trackingContext = {
    * @param fn - The logic to execute.
    * @returns The result of `fn`.
    */
-  run<T>(listener: Listener, fn: () => T): T {
+  public run<T>(listener: Listener, fn: () => T): T {
     const prev = this.current;
     this.current = listener;
     try {
@@ -22,10 +22,15 @@ export const trackingContext = {
     } finally {
       this.current = prev;
     }
-  },
-};
+  }
+}
+
+/**
+ * Global tracking context singleton.
+ */
+export const trackingContext = new TrackingContext();
 
 /**
  * Tracking context type.
  */
-export type ITrackingContext = typeof trackingContext;
+export type ITrackingContext = TrackingContext;

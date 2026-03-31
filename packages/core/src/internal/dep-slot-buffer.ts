@@ -127,13 +127,15 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
     }
 
     // 3. Sequential Scan for Overflow
-    const start = trackIndex > 4 ? trackIndex : 4;
     const ov = this._overflow;
     if (ov) {
-      for (let i = start - 4, len = ov.length; i < len; i++) {
+      const dv = dep.version;
+      const start = trackIndex > 4 ? trackIndex : 4;
+      const len = ov.length;
+      for (let i = start - 4; i < len; i++) {
         const link = ov[i];
         if (link && link.node === dep && link.unsub) {
-          link.version = dep.version;
+          link.version = dv;
           this._swapGeneral(i + 4, trackIndex, link);
           return true;
         }
@@ -144,27 +146,33 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
   }
 
   private _claimViaMap(dep: Dependency, trackIndex: number): boolean {
-    if (this._map === null) {
-      this._map = new Map();
+    let map = this._map;
+    if (map === null) {
+      map = this._map = new Map();
       const count = this._count;
       // Partitioned scan to avoid getAt() dispatch in loop
       if (trackIndex < 4) {
-        if (trackIndex <= 0 && this._s0?.unsub) this._map.set(this._s0.node, 0);
-        if (trackIndex <= 1 && this._s1?.unsub) this._map.set(this._s1.node, 1);
-        if (trackIndex <= 2 && this._s2?.unsub) this._map.set(this._s2.node, 2);
-        if (trackIndex <= 3 && this._s3?.unsub) this._map.set(this._s3.node, 3);
+        const s0 = this._s0;
+        if (trackIndex <= 0 && s0?.unsub) map.set(s0.node, 0);
+        const s1 = this._s1;
+        if (trackIndex <= 1 && s1?.unsub) map.set(s1.node, 1);
+        const s2 = this._s2;
+        if (trackIndex <= 2 && s2?.unsub) map.set(s2.node, 2);
+        const s3 = this._s3;
+        if (trackIndex <= 3 && s3?.unsub) map.set(s3.node, 3);
       }
       const ov = this._overflow;
       if (ov && count > 4) {
         const start = trackIndex > 4 ? trackIndex : 4;
-        for (let i = start - 4, len = ov.length; i < len; i++) {
+        const len = ov.length;
+        for (let i = start - 4; i < len; i++) {
           const link = ov[i];
-          if (link?.unsub) this._map.set(link.node, i + 4);
+          if (link?.unsub) map.set(link.node, i + 4);
         }
       }
     }
 
-    const existingIndex = this._map.get(dep);
+    const existingIndex = map.get(dep);
     if (existingIndex === undefined || existingIndex < trackIndex) return false;
 
     const link = this.getAt(existingIndex);
@@ -173,11 +181,18 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
     link.version = dep.version;
     if (existingIndex !== trackIndex) {
       // Inlined swap to avoid dispatch overhead
-      const occupant = this.getAt(trackIndex);
+      let occupant: DependencyLink | null;
+      if (trackIndex === 0) occupant = this._s0;
+      else if (trackIndex === 1) occupant = this._s1;
+      else if (trackIndex === 2) occupant = this._s2;
+      else if (trackIndex === 3) occupant = this._s3;
+      else occupant = this._overflow![trackIndex - 4] ?? null;
+
       this.setAt(trackIndex, link);
       this.setAt(existingIndex, occupant);
-      if (occupant?.unsub) this._map.set(occupant.node, existingIndex);
-      this._map.set(dep, trackIndex);
+
+      if (occupant?.unsub) map.set(occupant.node, existingIndex);
+      map.set(dep, trackIndex);
     }
     return true;
   }
@@ -186,7 +201,13 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
     if (idx === trackIndex) return;
 
     // Use direct access for the likely case where idx is in overflow
-    const occupant = this.getAt(trackIndex);
+    let occupant: DependencyLink | null;
+    if (trackIndex === 0) occupant = this._s0;
+    else if (trackIndex === 1) occupant = this._s1;
+    else if (trackIndex === 2) occupant = this._s2;
+    else if (trackIndex === 3) occupant = this._s3;
+    else occupant = this._overflow![trackIndex - 4] ?? null;
+
     this.setAt(trackIndex, link);
 
     if (idx === 0) this._s0 = occupant;
@@ -199,14 +220,16 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
     }
   }
 
-  /**
-   * Inserts a new link at `trackIndex`, relocating the current occupant
-   * to the end of the buffer so it can be cleanly unsubscribed later by `truncateFrom`.
-   */
   insertNew(trackIndex: number, link: DependencyLink): void {
     const count = this._count;
     if (trackIndex < count) {
-      const occupant = this.getAt(trackIndex);
+      let occupant: DependencyLink | null;
+      if (trackIndex === 0) occupant = this._s0;
+      else if (trackIndex === 1) occupant = this._s1;
+      else if (trackIndex === 2) occupant = this._s2;
+      else if (trackIndex === 3) occupant = this._s3;
+      else occupant = this._overflow![trackIndex - 4] ?? null;
+
       if (occupant != null) {
         // Direct overflow append avoids inline gap-scan overhead in add()
         // since we know all inline slots are occupied when trackIndex < count.
@@ -275,25 +298,32 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
     let hash = 0;
 
     // Inline slots (unrolled)
-    if (count >= 1) {
-      const l = this._s0!;
-      const v = isLive ? l.node.version : l.version;
-      hash = (hash + (v << vbits) + l.node.id) | 0;
-    }
-    if (count >= 2) {
-      const l = this._s1!;
-      const v = isLive ? l.node.version : l.version;
-      hash = (hash + (v << vbits) + l.node.id) | 0;
-    }
-    if (count >= 3) {
-      const l = this._s2!;
-      const v = isLive ? l.node.version : l.version;
-      hash = (hash + (v << vbits) + l.node.id) | 0;
-    }
-    if (count >= 4) {
-      const l = this._s3!;
-      const v = isLive ? l.node.version : l.version;
-      hash = (hash + (v << vbits) + l.node.id) | 0;
+    const s0 = this._s0;
+    if (s0 != null) {
+      const n0 = s0.node;
+      const v0 = isLive ? n0.version : s0.version;
+      hash = (hash + (v0 << vbits) + n0.id) | 0;
+
+      const s1 = this._s1;
+      if (count > 1 && s1 != null) {
+        const n1 = s1.node;
+        const v1 = isLive ? n1.version : s1.version;
+        hash = (hash + (v1 << vbits) + n1.id) | 0;
+
+        const s2 = this._s2;
+        if (count > 2 && s2 != null) {
+          const n2 = s2.node;
+          const v2 = isLive ? n2.version : s2.version;
+          hash = (hash + (v2 << vbits) + n2.id) | 0;
+
+          const s3 = this._s3;
+          if (count > 3 && s3 != null) {
+            const n3 = s3.node;
+            const v3 = isLive ? n3.version : s3.version;
+            hash = (hash + (v3 << vbits) + n3.id) | 0;
+          }
+        }
+      }
     }
 
     // Overflow
@@ -301,8 +331,9 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
       const ov = this._overflow!;
       for (let i = 0, len = ov.length; i < len; i++) {
         const l = ov[i]!;
-        const v = isLive ? l.node.version : l.version;
-        hash = (hash + (v << vbits) + l.node.id) | 0;
+        const n = l.node;
+        const v = isLive ? n.version : l.version;
+        hash = (hash + (v << vbits) + n.id) | 0;
       }
     }
 
