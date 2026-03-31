@@ -66,6 +66,40 @@ export const ATOM_STATE_FLAGS = {
 } as const;
 
 /**
+ * Pre-calculated bitmasks for high-performance hot paths.
+ */
+export const NODE_MASKS = {
+  // --- Atom ---
+  // Guard for _flushNotifications: Pending && !Disposed
+  ATOM_FLUSH_GUARD: NODE_FLAGS.ATOM_NOTIFY_PENDING | NODE_FLAGS.DISPOSED,
+
+  // --- Computed ---
+  // Access check: Stable (Resolved && !Dirty && !Idle)
+  COMPUTED_STABLE:
+    NODE_FLAGS.COMPUTED_RESOLVED | NODE_FLAGS.COMPUTED_DIRTY | NODE_FLAGS.COMPUTED_IDLE,
+
+  // State transitions: Clear specific groups before setting new state
+  COMPUTED_PENDING_RESET:
+    NODE_FLAGS.COMPUTED_IDLE |
+    NODE_FLAGS.COMPUTED_DIRTY |
+    NODE_FLAGS.COMPUTED_RESOLVED |
+    NODE_FLAGS.COMPUTED_REJECTED,
+
+  COMPUTED_ERROR_RESET:
+    NODE_FLAGS.COMPUTED_IDLE |
+    NODE_FLAGS.COMPUTED_DIRTY |
+    NODE_FLAGS.COMPUTED_PENDING |
+    NODE_FLAGS.COMPUTED_RESOLVED,
+
+  COMPUTED_RESOLVED_RESET:
+    NODE_FLAGS.COMPUTED_IDLE |
+    NODE_FLAGS.COMPUTED_DIRTY |
+    NODE_FLAGS.COMPUTED_PENDING |
+    NODE_FLAGS.COMPUTED_REJECTED |
+    NODE_FLAGS.COMPUTED_HAS_ERROR,
+} as const;
+
+/**
  * Scheduler configuration.
  */
 export const SCHEDULER_CONFIG = {

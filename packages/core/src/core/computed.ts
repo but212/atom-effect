@@ -5,6 +5,7 @@ import {
   EPOCH_CONSTANTS,
   IS_DEV,
   NODE_FLAGS,
+  NODE_MASKS,
   SMI_MAX,
 } from '@/constants';
 import { ReactiveNode } from '@/core/base';
@@ -109,11 +110,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
 
     let flags = this.flags;
     // 1. Fast path: Stable and Resolved
-    if (
-      (flags &
-        (NODE_FLAGS.COMPUTED_RESOLVED | NODE_FLAGS.COMPUTED_DIRTY | NODE_FLAGS.COMPUTED_IDLE)) ===
-      NODE_FLAGS.COMPUTED_RESOLVED
-    ) {
+    if ((flags & NODE_MASKS.COMPUTED_STABLE) === NODE_FLAGS.COMPUTED_RESOLVED) {
       return this._value;
     }
 
@@ -270,7 +267,11 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     if (this._slots != null) {
       this._slots.clear();
     }
-    this.flags = NODE_FLAGS.DISPOSED | NODE_FLAGS.COMPUTED_DIRTY | NODE_FLAGS.COMPUTED_IDLE;
+    this.flags =
+      NODE_FLAGS.IS_COMPUTED |
+      NODE_FLAGS.DISPOSED |
+      NODE_FLAGS.COMPUTED_DIRTY |
+      NODE_FLAGS.COMPUTED_IDLE;
 
     // Release Memory
     this._error = null;
@@ -357,12 +358,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
 
   private _handleAsyncComputation(promise: Promise<T>): void {
     // Set pending, clear idle/dirty/resolved/rejected
-    const mask =
-      NODE_FLAGS.COMPUTED_IDLE |
-      NODE_FLAGS.COMPUTED_DIRTY |
-      NODE_FLAGS.COMPUTED_RESOLVED |
-      NODE_FLAGS.COMPUTED_REJECTED;
-    this.flags = (this.flags & ~mask) | NODE_FLAGS.COMPUTED_PENDING;
+    this.flags = (this.flags & ~NODE_MASKS.COMPUTED_PENDING_RESET) | NODE_FLAGS.COMPUTED_PENDING;
     // Notify pending
     this._notifySubscribers(undefined, undefined);
 
@@ -412,13 +408,10 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
 
     this._error = error;
     // Set rejected + has_error, clear idle/dirty/pending/resolved
-    const mask =
-      NODE_FLAGS.COMPUTED_IDLE |
-      NODE_FLAGS.COMPUTED_DIRTY |
-      NODE_FLAGS.COMPUTED_PENDING |
-      NODE_FLAGS.COMPUTED_RESOLVED;
     this.flags =
-      (this.flags & ~mask) | NODE_FLAGS.COMPUTED_REJECTED | NODE_FLAGS.COMPUTED_HAS_ERROR;
+      (this.flags & ~NODE_MASKS.COMPUTED_ERROR_RESET) |
+      NODE_FLAGS.COMPUTED_REJECTED |
+      NODE_FLAGS.COMPUTED_HAS_ERROR;
 
     if (this._onError) {
       try {
@@ -441,13 +434,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     this._value = value;
     this._error = null;
     // Set resolved, clear idle/dirty/pending/rejected/has_error
-    const mask =
-      NODE_FLAGS.COMPUTED_IDLE |
-      NODE_FLAGS.COMPUTED_DIRTY |
-      NODE_FLAGS.COMPUTED_PENDING |
-      NODE_FLAGS.COMPUTED_REJECTED |
-      NODE_FLAGS.COMPUTED_HAS_ERROR;
-    this.flags = (this.flags & ~mask) | NODE_FLAGS.COMPUTED_RESOLVED;
+    this.flags = (this.flags & ~NODE_MASKS.COMPUTED_RESOLVED_RESET) | NODE_FLAGS.COMPUTED_RESOLVED;
   }
 
   execute(): void {

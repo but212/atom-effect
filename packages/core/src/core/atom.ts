@@ -1,4 +1,4 @@
-import { NODE_FLAGS } from '@/constants';
+import { NODE_FLAGS, NODE_MASKS } from '@/constants';
 import { ReactiveNode } from '@/core/base';
 import { nextVersion } from '@/internal/epoch';
 import { scheduler } from '@/internal/scheduler';
@@ -88,8 +88,7 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
     const flags = this.flags;
     // Guard: Combined bitwise check for NOTIFICATION_SCHEDULED and not DISPOSED
     // Use a single bitmask check for high-performance hot path
-    const target = NODE_FLAGS.ATOM_NOTIFY_PENDING | NODE_FLAGS.DISPOSED;
-    if ((flags & target) !== NODE_FLAGS.ATOM_NOTIFY_PENDING) {
+    if ((flags & NODE_MASKS.ATOM_FLUSH_GUARD) !== NODE_FLAGS.ATOM_NOTIFY_PENDING) {
       return;
     }
 
@@ -109,6 +108,7 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
 
     this._slots?.clear();
     this.set(NODE_FLAGS.DISPOSED);
+
     // Release references
     this._value = undefined as T;
     this._pendingOldValue = undefined;
