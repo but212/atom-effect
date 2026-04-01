@@ -2,9 +2,11 @@ import { bench, describe } from 'vitest';
 import { atom, computed, effect } from '../../dist';
 import { benchEffectOptions, forceGC, memoryBenchOptions } from '../utils/setup';
 
+const REPEATS = 100;
+
 describe('Memory Stability', () => {
   bench(
-    'heavy component churn (1000 items)',
+    `heavy component churn (x${REPEATS})`,
     () => {
       const createComponent = (id: number) => {
         const state = atom({ id, data: 'some data' });
@@ -19,17 +21,17 @@ describe('Memory Stability', () => {
       const components: ReturnType<typeof createComponent>[] = [];
 
       // Mount 1000 components
-      for (let i = 0; i < 1000; i++) {
+      for (let i = 0; i < REPEATS; i++) {
         components.push(createComponent(i));
       }
 
       // Update them
-      for (let i = 0; i < 1000; i++) {
+      for (let i = 0; i < REPEATS; i++) {
         components[i]!.state.value = { id: i, data: 'updated data' };
       }
 
       // Unmount them
-      for (let i = 0; i < 1000; i++) {
+      for (let i = 0; i < REPEATS; i++) {
         components[i]!.stop.dispose();
       }
 

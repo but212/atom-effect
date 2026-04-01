@@ -8,18 +8,18 @@ import { atom, computed, effect } from '../../dist';
 import type { TodoItem } from '../fixtures/index.js';
 import { benchEffectOptions, macroBenchOptions } from '../utils/setup.js';
 
-const REPEATS = 1000;
+const REPEATS = 100;
 
 describe('Todo App Scenarios', () => {
   const todosCreate = atom<TodoItem[]>([]);
   bench(
-    'create 100 todos (bulk update)',
+    `create ${REPEATS} todos (bulk update)`,
     () => {
       const currentLen = todosCreate.value.length;
       if (currentLen > 5000) todosCreate.value = [];
 
       const newBatch: TodoItem[] = [...todosCreate.value];
-      for (let i = 0; i < 100; i++) {
+      for (let i = 0; i < REPEATS; i++) {
         const id = currentLen + i + 1;
         newBatch.push({
           id,
@@ -44,7 +44,7 @@ describe('Todo App Scenarios', () => {
   );
 
   bench(
-    'toggle completion status (100 todos)',
+    `toggle completion status (${REPEATS} todos)`,
     () => {
       // Toggle all items in the list
       todosToggle.value = todosToggle.value.map((todo: TodoItem) => ({
@@ -57,7 +57,7 @@ describe('Todo App Scenarios', () => {
   );
 
   const todosFilter = atom<TodoItem[]>(
-    Array.from({ length: 100 }, (_, i) => ({
+    Array.from({ length: REPEATS }, (_, i) => ({
       id: i + 1,
       text: `Todo ${i + 1}`,
       completed: i % 3 === 0,
@@ -93,11 +93,11 @@ describe('Todo App Scenarios', () => {
   const todosDelete = atom<TodoItem[]>([]);
 
   bench(
-    'delete todos (50 items)',
+    `delete todos (${REPEATS / 2} items)`,
     () => {
       // Reset to 100 items if we've deleted too many
-      if (todosDelete.value.length < 50) {
-        todosDelete.value = Array.from({ length: 100 }, (_, i) => ({
+      if (todosDelete.value.length < REPEATS / 2) {
+        todosDelete.value = Array.from({ length: REPEATS }, (_, i) => ({
           id: i + 1,
           text: `Todo ${i + 1}`,
           completed: i % 2 === 0,
@@ -174,10 +174,10 @@ describe('Todo App Stats Architecture', () => {
   }, benchEffectOptions);
 
   bench(
-    'stat propagation (add 100 items)',
+    `stat propagation (${REPEATS} items)`,
     () => {
       const items: TodoItem[] = [];
-      for (let i = 0; i < 100; i++) {
+      for (let i = 0; i < REPEATS; i++) {
         items.push({ id: i + 1, text: 'Item', completed: i % 2 === 0, createdAt: new Date() });
       }
       todosStats.value = items;

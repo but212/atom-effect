@@ -7,7 +7,7 @@ import { bench, describe } from 'vitest';
 import { atom, computed } from '../../dist';
 import { microBenchOptions } from '../utils/setup.js';
 
-const REPEATS = 1000;
+const REPEATS = 100;
 
 describe('Computed Creation', () => {
   bench(

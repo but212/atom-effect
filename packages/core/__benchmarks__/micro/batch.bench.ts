@@ -7,7 +7,7 @@ import { bench, describe } from 'vitest';
 import { atom, batch, computed, effect } from '../../dist';
 import { benchEffectOptions, microBenchOptions } from '../utils/setup.js';
 
-const REPEATS = 1000;
+const REPEATS = 100;
 
 describe('Batch Operations', () => {
   const a = atom(0);
