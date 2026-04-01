@@ -2,7 +2,7 @@ import { bench, describe } from 'vitest';
 import { atom, batch, computed, effect } from '../../dist';
 import { benchEffectOptions } from '../utils/setup.js';
 
-const REPEATS = 1000;
+const REPEATS = 100;
 
 describe('Batch Efficiency', () => {
   // Setup shared state - batch case

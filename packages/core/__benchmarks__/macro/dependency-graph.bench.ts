@@ -7,7 +7,7 @@ import { bench, describe } from 'vitest';
 import { atom, computed } from '../../dist';
 import { macroBenchOptions, microBenchOptions } from '../utils/setup.js';
 
-const REPEATS = 1000;
+const REPEATS = 100;
 
 describe('Dependency Chain Patterns', () => {
   const chainSource = atom(0);
