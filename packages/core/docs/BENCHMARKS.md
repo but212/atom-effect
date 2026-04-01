@@ -6,11 +6,11 @@ Comprehensive benchmarking suite for `atom-effect` to measure performance and de
 
 | Category | Key Metric | Value | Context |
 | ---------- | ---------- | ----- | ------- |
-| **Atom** | Read 1000x (peek) | 808.4K ops/sec | Near-native array access speed |
-| **Computed** | Recompute (cached) | 197.1K ops/sec | Efficient recompute logic |
-| **Effect** | Execution (single dep) | 334.1K ops/sec | Low-overhead notify |
-| **Real-world** | Todo full workflow | 405.5K ops/sec | Production-ready performance |
-| **Frame Budget** | 100 atom updates | 0.0022ms | well under 16ms budget |
+| **Atom** | Read 100x (peek) | 5.14M ops/sec | Near-native array access speed |
+| **Computed** | Recompute (cached) | 1.82M ops/sec | Efficient recompute logic |
+| **Effect** | Execution (single dep) | 1.20M ops/sec | Low-overhead notify |
+| **Real-world** | Todo full workflow | 381.5K ops/sec | Production-ready performance |
+| **Frame Budget** | 100 atom updates | 0.0023ms | well under 16ms budget |
 
 ## Running Benchmarks
 
@@ -110,11 +110,11 @@ Production-like scenarios:
 
 | Benchmark | Result | Analysis |
 | ---------- | ------ | -------- |
-| Atom peek (1000x) | 808.4K ops/sec | Near-native performance |
-| Computed read (1000x) | 610.9K ops/sec | Low-overhead tracking |
-| Effect execution (single) | 334.1K ops/sec | Efficient subscriber notify |
-| Todo workflow | 405.5K ops/sec | Production-ready (Complete workflow) |
-| Frame Budget (100 atoms) | 0.0022ms | Well under 16ms |
+| Atom peek (100x) | 5.14M ops/sec | Near-native performance |
+| Computed read (100x) | 4.07M ops/sec | Low-overhead tracking |
+| Effect execution (single) | 1.20M ops/sec | Efficient subscriber notify |
+| Todo workflow | 381.5K ops/sec | Production-ready (Complete workflow) |
+| Frame Budget (100 atoms) | 0.0023ms | Well under 16ms |
 | Data Grid Filter (1000x) | 0.0048ms | Real-time filtering |
 
 ## Contributing Benchmarks
