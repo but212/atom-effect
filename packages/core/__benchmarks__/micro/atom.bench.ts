@@ -7,14 +7,14 @@ import { bench, describe } from 'vitest';
 import { atom, untracked } from '../../dist';
 import { microBenchOptions } from '../utils/setup.js';
 
-const REPEAT = 100;
+const REPEATS = 100;
 
-describe(`Atom Creation (x${REPEAT})`, () => {
+describe(`Atom Creation (x${REPEATS})`, () => {
   bench(
-    `create primitive atoms (X${REPEAT})`,
+    `create primitive atoms (X${REPEATS})`,
     () => {
       let a;
-      for (let i = 0; i < REPEAT; i++) {
+      for (let i = 0; i < REPEATS; i++) {
         a = atom(i);
       }
       return a as any;
@@ -23,10 +23,10 @@ describe(`Atom Creation (x${REPEAT})`, () => {
   );
 
   bench(
-    `create object atoms (X${REPEAT})`,
+    `create object atoms (X${REPEATS})`,
     () => {
       let a;
-      for (let i = 0; i < REPEAT; i++) {
+      for (let i = 0; i < REPEATS; i++) {
         a = atom({ count: i });
       }
       return a as any;
@@ -35,14 +35,14 @@ describe(`Atom Creation (x${REPEAT})`, () => {
   );
 });
 
-describe(`Atom Read Operations (x${REPEAT})`, () => {
-  const atoms = Array.from({ length: REPEAT }, (_, i) => atom(i));
+describe(`Atom Read Operations (x${REPEATS})`, () => {
+  const atoms = Array.from({ length: REPEATS }, (_, i) => atom(i));
 
   bench(
-    `read atoms value (X${REPEAT})`,
+    `read atoms value (X${REPEATS})`,
     () => {
       let sum = 0;
-      for (let i = 0; i < REPEAT; i++) {
+      for (let i = 0; i < REPEATS; i++) {
         sum += atoms[i]!.value;
       }
       return sum as any;
@@ -51,10 +51,10 @@ describe(`Atom Read Operations (x${REPEAT})`, () => {
   );
 
   bench(
-    `read atoms peek (X${REPEAT})`,
+    `read atoms peek (X${REPEATS})`,
     () => {
       let sum = 0;
-      for (let i = 0; i < REPEAT; i++) {
+      for (let i = 0; i < REPEATS; i++) {
         sum += atoms[i]!.peek();
       }
       return sum as any;
@@ -63,13 +63,13 @@ describe(`Atom Read Operations (x${REPEAT})`, () => {
   );
 });
 
-describe(`Atom Write Operations (x${REPEAT})`, () => {
-  const atoms = Array.from({ length: REPEAT }, (_, i) => atom(i));
+describe(`Atom Write Operations (x${REPEATS})`, () => {
+  const atoms = Array.from({ length: REPEATS }, (_, i) => atom(i));
 
   bench(
-    `write atoms value (X${REPEAT})`,
+    `write atoms value (X${REPEATS})`,
     () => {
-      for (let i = 0; i < REPEAT; i++) {
+      for (let i = 0; i < REPEATS; i++) {
         atoms[i]!.value = i;
       }
     },
@@ -77,11 +77,11 @@ describe(`Atom Write Operations (x${REPEAT})`, () => {
   );
 });
 
-describe(`Atom Subscription (x${REPEAT})`, () => {
+describe(`Atom Subscription (x${REPEATS})`, () => {
   const a = atom(0);
 
   bench(
-    `subscribe and unsubscribe (X${REPEAT})`,
+    `subscribe and unsubscribe (X${REPEATS})`,
     () => {
       for (let i = 0; i < 100; i++) {
         const unsubscribe = a.subscribe(() => {});
@@ -105,15 +105,15 @@ describe(`Atom Subscription (x${REPEAT})`, () => {
   );
 });
 
-describe(`Atom Untracked Operations (x${REPEAT})`, () => {
-  const atoms = Array.from({ length: REPEAT }, (_, i) => atom(i));
+describe(`Atom Untracked Operations (x${REPEATS})`, () => {
+  const atoms = Array.from({ length: REPEATS }, (_, i) => atom(i));
 
   bench(
-    `untracked(fn) read atoms (X${REPEAT})`,
+    `untracked(fn) read atoms (X${REPEATS})`,
     () => {
       return untracked(() => {
         let sum = 0;
-        for (let i = 0; i < REPEAT; i++) {
+        for (let i = 0; i < REPEATS; i++) {
           sum += atoms[i]!.value;
         }
         return sum as any;

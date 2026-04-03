@@ -27,7 +27,7 @@ describe('atomForm: O(1) Scaling', () => {
   const form10 = createForm(10);
   const form100 = createForm(100);
 
-  const REPEATS = 1000;
+  const REPEATS = 100;
 
   // Use two object references to alternate and trigger updates without O(N) spreading
   const createUpdater = (form: ReturnType<typeof createForm>) => {

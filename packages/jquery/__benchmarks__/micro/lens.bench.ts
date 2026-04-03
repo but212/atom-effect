@@ -8,7 +8,7 @@ import { bench, describe } from 'vitest';
 import { atomLens, composeLens } from '@/core/lens';
 import { microBenchOptions } from '../utils/setup.js';
 
-const REPEATS = 1000;
+const REPEATS = 100;
 
 interface SimpleSchema {
   a: {
