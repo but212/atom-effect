@@ -8,23 +8,15 @@ import { getSelector } from '@/utils';
 const IS_BROWSER = typeof window !== 'undefined';
 const HIGHLIGHT_TRANSITION = `${DEBUG_DEFAULTS.HIGHLIGHT_DURATION_MS / 1000}s`;
 
-interface AtomWindow extends Window {
-  __ATOM_DEBUG__?: boolean;
-}
-
-interface AtomGlobal {
-  process?: {
-    env?: Record<string, string | undefined>;
-  };
-}
-
 function getInitialState(): boolean {
-  if (IS_BROWSER && (window as unknown as AtomWindow).__ATOM_DEBUG__ === true) return true;
+  // biome-ignore lint/suspicious/noExplicitAny: globalThis is not typed
+  const g = globalThis as any;
+  if (IS_BROWSER && g.window?.__ATOM_DEBUG__ === true) return true;
   try {
     if (import.meta.env?.VITE_ATOM_DEBUG === 'true') return true;
   } catch {}
   try {
-    if ((globalThis as unknown as AtomGlobal).process?.env?.VITE_ATOM_DEBUG === 'true') return true;
+    if (g.process?.env?.VITE_ATOM_DEBUG === 'true') return true;
   } catch {}
   return false;
 }
@@ -44,8 +36,9 @@ class DebugController {
   }
 
   get enabled(): boolean {
-    const current =
-      (IS_BROWSER && (window as unknown as AtomWindow).__ATOM_DEBUG__ === true) || this._enabled;
+    // biome-ignore lint/suspicious/noExplicitAny: globalThis is not typed
+    const g = globalThis as any;
+    const current = (IS_BROWSER && g.window?.__ATOM_DEBUG__ === true) || this._enabled;
     if (current !== this._lastState) {
       this._lastState = current;
       this._applyMethods(current);
