@@ -25,10 +25,9 @@ describe('Effect Factory', () => {
   it('integrates with debug module when enabled', () => {
     const el = document.createElement('div');
     const updater = vi.fn();
-    const domUpdatedSpy = vi.spyOn(debug, 'domUpdated');
-
     try {
       debug.enabled = true;
+      const domUpdatedSpy = vi.spyOn(debug, 'domUpdated');
       registerReactiveEffect(el, 'static', updater, 'debug-test');
       expect(domUpdatedSpy).toHaveBeenCalledWith(expect.anything(), el, 'debug-test', 'static');
     } finally {

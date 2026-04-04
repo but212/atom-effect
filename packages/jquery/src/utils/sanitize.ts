@@ -117,12 +117,17 @@ function needsSanitization(s: string): boolean {
       return true;
     }
   }
-  // Check for colon (protocols) or "on" (event handlers)
-  if (s.indexOf(':') !== -1) {
-    const lower = s.toLowerCase();
-    if (lower.includes('javascript:') || lower.includes('vbscript:') || lower.includes('data:')) {
-      return true;
-    }
+
+  // Use a more conservative check for protocols and event handlers.
+  // Any colon or the pattern "on" + letter should trigger a full regex-based sanitization.
+  if (s.indexOf(':') !== -1) return true;
+
+  const lower = s.toLowerCase();
+  const onIdx = lower.indexOf('on');
+  if (onIdx !== -1 && onIdx < len - 2) {
+    const nextChar = lower.charCodeAt(onIdx + 2);
+    // Check if it's "on" followed by a letter (potential event handler like onclick)
+    if (nextChar >= 97 && nextChar <= 122) return true;
   }
 
   return false;
