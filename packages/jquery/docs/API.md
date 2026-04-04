@@ -253,24 +253,7 @@ Manually disposes all reactive effects and cleanups registered on the selected e
 
 ## Static Methods
 
-### `$.atom(val)`, `$.computed(fn)`, `$.effect(fn)`
-
-Aliases to the core functions, exposed for convenience.
-
-`$.atom` also exposes a **`$.atom.debug`** boolean accessor. Setting it to `true` enables internal debug logging across the reactive system.
-
-### `$.lensFor(atom)`
-
-Creates a lens factory bound to a specific atom, which eliminates the need to pass the atom reference on every call.
-
-```javascript
-const user = $.atom({ profile: { name: 'Alice', email: 'alice@example.com' } });
-const lens = $.lensFor(user); // Factory bound to 'user'
-
-// IDE will autocomplete 'profile.name' and 'profile.email'
-const nameLens = lens('profile.name'); // WritableAtom<string>
-const emailLens = lens('profile.email'); // WritableAtom<string>
-```
+All lens functions are now officially part of `@but212/atom-effect` (Core) and re-attached to the jQuery namespace for convenience.
 
 ### `$.atomLens(atom, path)`
 
@@ -282,7 +265,7 @@ Creates a two-way reactive "lens" for a specific property path on an object-base
 **Returns**: A `WritableAtom` that:
 
 1. **Read/Write**: Directly updates the parent atom at the specified path using structural sharing.
-2. **Type Safety**: Uses the `Paths<T>` and `PathValue<T, P>` recursive types for exact compile-time path validation, IDE path autocomplete (up to 8 levels deep), and precise return type inference without `unknown` fallbacks.
+2. **Type Safety**: Uses the `Paths<T>` and `PathValue<T, P>` recursive types (imported from core) for exact compile-time path validation, IDE path autocomplete (up to 8 levels deep), and precise return type inference without `unknown` fallbacks.
 3. **Memory Management**: Implements a `.dispose()` method to automatically clean up internal parent atom subscriptions.
 
 ```javascript
@@ -316,6 +299,23 @@ const userLens = $.atomLens(store, 'user');
 const profileLens = $.composeLens(userLens, 'profile');
 const nameLens = $.composeLens(profileLens, 'name'); // Pointing to store.user.profile.name
 ```
+
+### `$.lensFor(atom)`
+
+Creates a lens factory bound to a specific atom, which eliminates the need to pass the atom reference on every call.
+
+```javascript
+const user = $.atom({ profile: { name: 'Alice', email: 'alice@example.com' } });
+const lens = $.lensFor(user); // Factory bound to 'user'
+
+// IDE will autocomplete 'profile.name' and 'profile.email'
+const nameLens = lens('profile.name'); // WritableAtom<string>
+const emailLens = lens('profile.email'); // WritableAtom<string>
+```
+
+---
+
+## Static Methods (Primitive & Control)
 
 ### `$.batch(fn)`
 

@@ -29,13 +29,10 @@ import { disableAutoCleanup, enableAutoCleanup, registry } from '@/core/registry
 // Global initialization on DOM ready.
 $(() => {
   enablejQueryOverrides();
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   enableAutoCleanup(document.body!);
 });
 
-export { atom, batch, computed, effect, isAtom, isComputed, untracked } from '@but212/atom-effect';
 export { disablejQueryOverrides, enablejQueryOverrides } from '@/core/jquery-patch';
-export { atomLens, composeLens, lensFor } from '@/core/lens';
 export { nextTick } from '@/core/namespace';
 export type {
   BindingOptions,
@@ -48,8 +45,6 @@ export type {
   EqualFn,
   FetchOptions,
   ListOptions,
-  Paths,
-  PathValue,
   PrimitiveValue,
   ReactiveValue,
   ReadonlyAtom,

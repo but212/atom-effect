@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Core
+
+#### Added
+
+- **API**: **Official Lens Support**.
+  - `atomLens`: Two-way reactive "view" into nested state with 100% structural sharing and zero-render impact on unrelated branches.
+  - `composeLens` / `lensFor`: Composition utilities for modular state management.
+  - `getPathValue` / `setDeepValue`: High-performance recursive object manipulation utilities.
+- **Types**: High-performance recursive dot-path types (`Paths<T>`, `PathValue<T, P>`) with up to 8 levels of depth and exact type inference.
+
+#### Changed
+
+- **Performance**: Optimized lens write path with `Object.is` identity guards to prevent redundant propagation.
+- **Reliability**: Ensured `setDeepValue` is non-destructive and preserves references for unchanged branches.
+
 ### jQuery
 
 #### Changed
@@ -14,6 +29,10 @@
   - **Registry Stability**: Optimized `cleanupDescendants` by transitioning from live collections to static array snapshots, stabilizing loop prediction and preventing mutation-induced stalls.
   - **Hot-path Density**: Merged `MutationObserver` conditional guards and pre-classified reactive sources in `registerMapEffect` to minimize Branch Target Buffer (BTB) pressure.
 - **Robustness**: Improved `debug` mode with dynamic state synchronization, allowing `window.__ATOM_DEBUG__` to be toggled from the browser console without manual initialization.
+- **Refactor**: **Core Lens Migration**.
+  - Migrated `atomLens`, `composeLens`, and `lensFor` implementation from the jQuery package to the Core package for universal utility.
+  - Centralized `Paths` and `PathValue` recursive types into `@but212/atom-effect` to provide global type safety.
+  - Re-exported all lens utilities via the jQuery namespace to maintain backward compatibility while delegating core logic.
 
 ## [0.27.0] - 2026-03-31
 

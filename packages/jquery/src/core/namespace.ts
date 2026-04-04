@@ -1,10 +1,13 @@
 import {
+  atomLens,
   batch,
+  composeLens,
   computed,
   atom as createAtom,
   effect,
   isAtom,
   isComputed,
+  lensFor,
   untracked,
 } from '@but212/atom-effect';
 import $ from 'jquery';
@@ -13,7 +16,6 @@ import type { AtomOptions, WritableAtom } from '@/types';
 // atoms (ComputedAtom carries ATOM_BRAND), making a separate isComputed check redundant.
 import { isReactive } from '@/utils';
 import { debug } from '@/utils/debug';
-import { atomLens, composeLens, lensFor } from './lens';
 
 // ============================================================================
 // atom factory + debug namespace

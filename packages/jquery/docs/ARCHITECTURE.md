@@ -367,31 +367,13 @@ Live DOM collections (e.g. `HTMLCollection`) change their length as elements are
 
 ## 12. Lenses & Structural Sharing
 
-`$.atomLens` (`core/lens.ts`) provides a mechanism for fine-grained reactivity over monolithic state objects. It creates a "virtual atom" that points to a specific path within a parent atom.
+`$.atomLens` and related utilities are now **re-exported from the Core package**. The jQuery layer provides these via the `$` namespace while delegating the recursive structural sharing logic to the core engine.
 
-### 12.1 Structural Sharing
+### 12.1 Integration with `atomForm`
 
-When a value is updated through a lens, the lens implementation uses a recursive helper (`setDeepValue`) to create a new object tree. It only clones the objects along the path to the changed property, while preserving references to all other parts of the object tree.
-
-This "Structural Sharing" approach ensures that:
-
-1. **Minimal Re-renders**: Unrelated parts of the state tree remain reference-equal (`===`), so effects watching those parts do not re-trigger.
-2. **Memory Efficiency**: Avoids deep cloning the entire state object on every small change.
-3. **Equality Guards**: If the new value is identical to the current value (via `Object.is`), the parent atom is not updated at all, preventing unnecessary reactive propagation.
-
-### 12.2 Integration with `atomForm`
-
-`atomForm` leverages leaf-level atoms and a centralized dispatcher for O(1) performance on large forms:
+`atomForm` leverages core's `setDeepValue` and `getPathValue` utilities for O(1) performance on large forms:
 
 1. **Field-Level Atoms**: Instead of binding each input directly to a lens of the root atom (which would create N effects subscribing to the root), `atomForm` creates individual "leaf atoms" for each field.
 2. **Centralized Dispatcher**: A single `effect` watches the root atom and dispatches updates only to the leaf atoms whose values have actually changed. This eliminates the O(N) effect fan-out overhead.
 3. **Local Sync**: Each leaf atom has a dedicated effect to sync its local changes back to the root atom. Since this effect only tracks the leaf atom, typing in one field does not wake up or re-evaluate other fields.
-4. **Deep Paths**: Supports dot-notation in `name` attributes via the shared `getPathValue` and `setDeepValue` utilities.
-
-### 12.3 Type-Level Safety with `Paths<T>`
-
-`$.atomLens`, `$.composeLens` and `$.lensFor` utilize the generic utility types `Paths<T>` and `PathValue<T, P>`. `Paths<T>` enumerates all valid dot-separated nested paths of a state object recursively (up to 8 levels deep) providing rich IDE autocompletion for deep properties. `PathValue<T, P>` precisely extracts the corresponding type at that valid path. This structurally eliminates runtime errors and invalid fallbacks (`unknown`) during development.
-
-### 12.4 Memory Safety & Subscription Tracking
-
-Lenses act as bridges between a parent atom and a consumer. To prevent memory leaks when lenses are created dynamically without being bound to a DOM element, every lens maintains an internal `Set` of parent atom subscriptions. Calling `lens.dispose()` (supported via `[Symbol.dispose]`) clears all internal subscriptions, ensuring zero-overhead cleanup for high-churn state management patterns.
+4. **Recursive Path Support**: Supports nested property access (e.g., `user.profile.name`) using core's deep path utilities.

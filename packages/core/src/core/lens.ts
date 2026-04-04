@@ -1,4 +1,4 @@
-import type { Paths, PathValue, WritableAtom } from '@/types';
+import type { Paths, PathValue, WritableAtom } from '../types';
 
 // Note: atom-effect brands are based on Symbol.for, which works across realms
 // and library copies. This allows the lens to behave as a first-class atom
@@ -9,8 +9,6 @@ const WRITABLE_BRAND = Symbol.for('atom-effect/writable');
 /**
  * Internal recursive helper for creating deep immutable copies with structural sharing.
  * Only clones nodes along the path where changes occur.
- *
- * @internal
  */
 export function setDeepValue(obj: unknown, keys: string[], index: number, value: unknown): unknown {
   if (index === keys.length) return value;
@@ -50,6 +48,12 @@ export function getPathValue(source: unknown, parts: string[]): unknown {
 
 /**
  * Creates a two-way "lens" for a specific property path on an object-based atom.
+ *
+ * @example
+ * const store = atom({ user: { name: 'Alice' } });
+ * const nameLens = atomLens(store, 'user.name');
+ * console.log(nameLens.value); // 'Alice'
+ * nameLens.value = 'Bob'; // Updates store.user.name immutably
  */
 export function atomLens<T extends object, P extends Paths<T>>(
   atom: WritableAtom<T>,
