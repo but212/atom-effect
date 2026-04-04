@@ -68,9 +68,7 @@ export function registerReactiveEffect<T>(
       latestPromise = null;
       try {
         updater(val);
-        if (debug.enabled) {
-          debug.domUpdated(LOG_PREFIXES.BINDING, el, debugType, val);
-        }
+        debug.domUpdated(LOG_PREFIXES.BINDING, el, debugType, val);
       } catch (e) {
         debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType, true), e);
       }
@@ -85,9 +83,7 @@ export function registerReactiveEffect<T>(
           untracked(() => {
             try {
               updater(resolved);
-              if (debug.enabled) {
-                debug.domUpdated(LOG_PREFIXES.BINDING, el, `${debugType} (async)`, resolved);
-              }
+              debug.domUpdated(LOG_PREFIXES.BINDING, el, `${debugType} (async)`, resolved);
             } catch (e) {
               debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType), e);
             }
@@ -145,13 +141,18 @@ export function registerMapEffect<T>(
 ): void {
   const keys = Object.keys(map);
   const reactiveKeys: string[] = [];
+  const reactiveSources: AsyncReactiveValue<T>[] = [];
+  const sourceIsAtom: boolean[] = [];
   const staticValues: Record<string, T | Promise<T>> = {};
 
   for (let i = 0, len = keys.length; i < len; i++) {
     const key = keys[i]!;
     const val = map[key]!;
-    if (isReactive(val) || typeof val === 'function') {
+    const isAtomVal = isReactive(val);
+    if (isAtomVal || typeof val === 'function') {
       reactiveKeys.push(key);
+      reactiveSources.push(val);
+      sourceIsAtom.push(isAtomVal);
     } else {
       staticValues[key] = val;
     }
@@ -186,9 +187,7 @@ export function registerMapEffect<T>(
           untracked(() => {
             try {
               updater(resolvedMap);
-              if (debug.enabled) {
-                debug.domUpdated(LOG_PREFIXES.BINDING, el, `${debugType} (async)`, resolvedMap);
-              }
+              debug.domUpdated(LOG_PREFIXES.BINDING, el, `${debugType} (async)`, resolvedMap);
             } catch (e) {
               debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType), e);
             }
@@ -199,9 +198,7 @@ export function registerMapEffect<T>(
       latestPromiseId++; // Invalidate any pending promises
       try {
         updater(resolvedMap);
-        if (debug.enabled) {
-          debug.domUpdated(LOG_PREFIXES.BINDING, el, debugType, resolvedMap);
-        }
+        debug.domUpdated(LOG_PREFIXES.BINDING, el, debugType, resolvedMap);
       } catch (e) {
         debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType, true), e);
       }
@@ -215,9 +212,8 @@ export function registerMapEffect<T>(
         () => {
           const currentMap: Record<string, T | Promise<T>> = { ...staticValues };
           for (let i = 0, len = reactiveKeys.length; i < len; i++) {
-            const key = reactiveKeys[i]!;
-            const source = map[key]!;
-            currentMap[key] = isReactive(source)
+            const source = reactiveSources[i]!;
+            currentMap[reactiveKeys[i]!] = sourceIsAtom[i]
               ? (source as ReadonlyAtom<T | Promise<T>>).value
               : (source as () => T | Promise<T>)();
           }

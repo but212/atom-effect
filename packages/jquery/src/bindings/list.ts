@@ -74,7 +74,7 @@ class ListContext<T> {
       if (this.fx?.isDisposed) return;
       if ($el[0]?.isConnected) $el.remove();
       this.removingKeys.delete(k);
-      if (debug.enabled) debug.log(LOG_PREFIXES.LIST, `${this.containerSelector} removed item:`, k);
+      debug.log(LOG_PREFIXES.LIST, `${this.containerSelector} removed item:`, k);
     };
 
     const res = this.onRemove?.($el);
@@ -411,8 +411,7 @@ function placeItems<T>(
       newNodes[i] = el;
       newStates[i] = 0;
       ctx.removingKeys.delete(newKeys[i]!);
-      if (debug.enabled)
-        debug.domUpdated(LOG_PREFIXES.LIST, $(el) as unknown as JQuery, 'list.add', newItems[i]);
+      debug.domUpdated(LOG_PREFIXES.LIST, $(el) as unknown as JQuery, 'list.add', newItems[i]);
       el = el.nextElementSibling;
     }
     return;
@@ -451,7 +450,7 @@ function placeItems<T>(
       if (state === 1) {
         callbacks.onAdd?.($el);
         ctx.removingKeys.delete(newKeys[i]!);
-        if (debug.enabled) debug.domUpdated(LOG_PREFIXES.LIST, $el, 'list.add', item);
+        debug.domUpdated(LOG_PREFIXES.LIST, $el, 'list.add', item);
       }
     }
   }
@@ -491,8 +490,7 @@ $.fn.atomList = function <T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>)
       untracked(() => {
         handleEmpty(ctx, len, $c, options.empty);
         if (len === 0) return;
-        if (debug.enabled)
-          debug.log(LOG_PREFIXES.LIST, `${ctx.containerSelector} updating with ${len} items`);
+        debug.log(LOG_PREFIXES.LIST, `${ctx.containerSelector} updating with ${len} items`);
 
         const diff = buildIndices(ctx, items, len, getKey, options.update, options.isEqual);
         const frag = renderItems(diff, options, ctx.oldKeys.length === 0);

@@ -40,7 +40,7 @@ function atomEachElement(jq: JQuery, fn: (ctx: BindingContext, el: HTMLElement) 
     if (node?.nodeType === 1) {
       const el = node as HTMLElement;
       fn(createContext(el), el);
-    } else if (debug.enabled && node) {
+    } else if (node) {
       debug.log(LOG_PREFIXES.BINDING, `Skipping non-Element node (nodeType=${node.nodeType})`);
     }
   }
@@ -196,33 +196,66 @@ $.fn.atomOn = function (event: string, handler: (e: JQuery.Event) => void): JQue
 };
 
 /**
+ * Lookup table for reactive binding handlers.
+ * Ordered to match the bitmask bits in atomBind.
+ */
+const BIND_HANDLERS: Array<(ctx: BindingContext, options: BindingOptions<unknown>) => void> = [
+  (ctx, o) => bindText(ctx, o.text), // 1 << 0
+  (ctx, o) => bindHtml(ctx, o.html!), // 1 << 1
+  (ctx, o) => bindClass(ctx, o.class!), // 1 << 2
+  (ctx, o) => bindCss(ctx, o.css!), // 1 << 3
+  (ctx, o) => bindAttr(ctx, o.attr!), // 1 << 4
+  (ctx, o) => bindProp(ctx, o.prop as Record<string, AsyncReactiveValue<unknown>>), // 1 << 5
+  (ctx, o) => bindVisibility(ctx, o.show!, false), // 1 << 6
+  (ctx, o) => bindVisibility(ctx, o.hide!, true), // 1 << 7
+  (ctx, o) => {
+    // 1 << 8: val
+    const v = o.val!;
+    if (Array.isArray(v)) {
+      bindVal(ctx, v[0] as WritableAtom<unknown>, v[1] as ValOptions<unknown>);
+    } else {
+      bindVal(ctx, v as WritableAtom<unknown>);
+    }
+  },
+  (ctx, o) => bindChecked(ctx, o.checked!), // 1 << 9
+  (ctx, o) => {
+    // 1 << 10: form
+    if (ctx.el instanceof HTMLFormElement) {
+      bindForm(ctx.el, o.form as WritableAtom<object>);
+    }
+  },
+  (ctx, o) => bindEvents(ctx, o.on!), // 1 << 11
+];
+
+/**
  * Integrated multi-behavior reactive binding.
+ * Uses a bitmask dispatch strategy to minimize branch mispredictions in hot-path.
  */
 $.fn.atomBind = function <T>(this: JQuery, options: BindingOptions<T>): JQuery {
-  const { text, html, class: cls, css, attr, prop, show, hide, val, checked, form, on } = options;
+  let mask = 0;
+  if (options.text !== undefined) mask |= 1 << 0;
+  if (options.html !== undefined) mask |= 1 << 1;
+  if (options.class !== undefined) mask |= 1 << 2;
+  if (options.css !== undefined) mask |= 1 << 3;
+  if (options.attr !== undefined) mask |= 1 << 4;
+  if (options.prop !== undefined) mask |= 1 << 5;
+  if (options.show !== undefined) mask |= 1 << 6;
+  if (options.hide !== undefined) mask |= 1 << 7;
+  if (options.val !== undefined) mask |= 1 << 8;
+  if (options.checked !== undefined) mask |= 1 << 9;
+  if (options.form !== undefined) mask |= 1 << 10;
+  if (options.on !== undefined) mask |= 1 << 11;
 
-  const valBinding =
-    val === undefined
-      ? null
-      : Array.isArray(val)
-        ? { atom: val[0] as WritableAtom<unknown>, options: val[1] as ValOptions<unknown> }
-        : { atom: val as WritableAtom<unknown>, options: undefined };
+  if (mask === 0) return this;
 
   return atomEachElement(this, (ctx) => {
-    if (text !== undefined) bindText(ctx, text);
-    if (html !== undefined) bindHtml(ctx, html);
-    if (cls !== undefined) bindClass(ctx, cls);
-    if (css !== undefined) bindCss(ctx, css);
-    if (attr !== undefined) bindAttr(ctx, attr);
-    if (prop !== undefined) bindProp(ctx, prop as Record<string, AsyncReactiveValue<unknown>>);
-    if (show !== undefined) bindVisibility(ctx, show, false);
-    if (hide !== undefined) bindVisibility(ctx, hide, true);
-    if (valBinding) bindVal(ctx, valBinding.atom, valBinding.options);
-    if (checked !== undefined) bindChecked(ctx, checked);
-    if (form !== undefined && ctx.el instanceof HTMLFormElement) {
-      bindForm(ctx.el, form as WritableAtom<object>);
+    let m = mask;
+    while (m > 0) {
+      const bit = m & -m;
+      const idx = 31 - Math.clz32(bit);
+      BIND_HANDLERS[idx]!(ctx, options as BindingOptions<unknown>);
+      m ^= bit;
     }
-    if (on !== undefined) bindEvents(ctx, on);
   });
 };
 

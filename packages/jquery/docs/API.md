@@ -2,11 +2,24 @@
 
 This package extends jQuery with reactive capabilities. All methods are available on jQuery objects (`$(selector).method()`).
 
+## Table of Contents
+
+- [Unified Binding (`.atomBind`)](#unified-binding)
+- [Content & Attributes](#content--attributes)
+- [Control Flow](#control-flow)
+- [Form Bindings](#form-bindings)
+- [Components](#components)
+- [Static Methods](#static-methods)
+- [Data Fetching (`$.atomFetch`)](#data-fetching)
+- [Routing (`$.route`)](#routing)
+
+---
+
 ## Unified Binding
 
 ### `.atomBind(bindings)`
 
-The preferred way to apply multiple bindings at once.
+The preferred way to apply multiple bindings at once. This method uses a **bitmask dispatch strategy** to minimize CPU branch mispredictions, ensuring constant-time (O(1)) invocation overhead even for complex binding maps.
 
 ```javascript
 $('.user-card').atomBind({
@@ -113,17 +126,17 @@ $('.overlay').atomHide(isDismissed);
 
 Efficiently renders a list of items using keyed diffing.
 
-**Options**:
+#### Options
 
-- `key`: `keyof T | (item, index) => string | number` (Required) - Property name or function returning a unique ID for diffing.
-- `render`: `(item, index) => string | Element | DocumentFragment | JQuery` - HTML string, DOM element, DocumentFragment, or jQuery object for new items.
-- `bind`: `($el, item, index) => void` - Bind events/atoms to the created element. Runs once when the item is first added.
-- `update`: `($el, item, index) => void` - Manually update existing elements when data changes but the key remains the same (optimization to avoid re-rendering).
-- `onAdd`: `($el) => void` - Called after an item is added to the DOM.
-- `onRemove`: `($el) => Promise<void> | void` - Called before removal (supports async exit animations).
-- `empty`: `string | Element | DocumentFragment | JQuery` - Content to show when the list is empty.
-- `isEqual`: `(oldItem, newItem) => boolean` - Custom equality check for item updates (defaults to shallow comparison).
-- `events`: `Record<string, (item, index, e) => void>` - Delegated event handlers attached to the container. One listener per event type regardless of item count. Key format: `'eventType'` or `'eventType selector'`. Handler receives the original item and its current index.
+- **`key`**: `keyof T | (item, index) => string | number` (Required) — Property name or function returning a unique ID for diffing.
+- **`render`**: `(item, index) => string | Element | DocumentFragment | JQuery` — HTML string, DOM element, DocumentFragment, or jQuery object for new items.
+- **`bind`**: `($el, item, index) => void` — One-time reactive binding logic for the element.
+- **`update`**: `($el, item, index) => void` — Updates existing elements manually when the key remains the same (optimizes to avoid re-binding).
+- **`onAdd`**: `($el) => void` — Called after an item is added to the DOM.
+- **`onRemove`**: `($el) => Promise<void> | void` — Called before removal (supports async exit animations).
+- **`empty`**: `string | Element | DocumentFragment | JQuery` — Content to show when the list is empty.
+- **`isEqual`**: `(oldItem, newItem) => boolean` — Custom equality check for item updates (defaults to shallow comparison).
+- **`events`**: `Record<string, (item, index, e) => void>` — Delegated event handlers attached to the container. One listener per event type. Key format: `'eventType' or 'eventType selector'`.
 
 ```javascript
 $('ul').atomList(usersAtom, {
@@ -240,24 +253,7 @@ Manually disposes all reactive effects and cleanups registered on the selected e
 
 ## Static Methods
 
-### `$.atom(val)`, `$.computed(fn)`, `$.effect(fn)`
-
-Aliases to the core functions, exposed for convenience.
-
-`$.atom` also exposes a **`$.atom.debug`** boolean accessor. Setting it to `true` enables internal debug logging across the reactive system.
-
-### `$.lensFor(atom)`
-
-Creates a lens factory bound to a specific atom, which eliminates the need to pass the atom reference on every call.
-
-```javascript
-const user = $.atom({ profile: { name: 'Alice', email: 'alice@example.com' } });
-const lens = $.lensFor(user); // Factory bound to 'user'
-
-// IDE will autocomplete 'profile.name' and 'profile.email'
-const nameLens = lens('profile.name'); // WritableAtom<string>
-const emailLens = lens('profile.email'); // WritableAtom<string>
-```
+All lens functions are now officially part of `@but212/atom-effect` (Core) and re-attached to the jQuery namespace for convenience.
 
 ### `$.atomLens(atom, path)`
 
@@ -269,7 +265,7 @@ Creates a two-way reactive "lens" for a specific property path on an object-base
 **Returns**: A `WritableAtom` that:
 
 1. **Read/Write**: Directly updates the parent atom at the specified path using structural sharing.
-2. **Type Safety**: Uses the `Paths<T>` and `PathValue<T, P>` recursive types for exact compile-time path validation, IDE path autocomplete (up to 8 levels deep), and precise return type inference without `unknown` fallbacks.
+2. **Type Safety**: Uses the `Paths<T>` and `PathValue<T, P>` recursive types (imported from core) for exact compile-time path validation, IDE path autocomplete (up to 8 levels deep), and precise return type inference without `unknown` fallbacks.
 3. **Memory Management**: Implements a `.dispose()` method to automatically clean up internal parent atom subscriptions.
 
 ```javascript
@@ -303,6 +299,23 @@ const userLens = $.atomLens(store, 'user');
 const profileLens = $.composeLens(userLens, 'profile');
 const nameLens = $.composeLens(profileLens, 'name'); // Pointing to store.user.profile.name
 ```
+
+### `$.lensFor(atom)`
+
+Creates a lens factory bound to a specific atom, which eliminates the need to pass the atom reference on every call.
+
+```javascript
+const user = $.atom({ profile: { name: 'Alice', email: 'alice@example.com' } });
+const lens = $.lensFor(user); // Factory bound to 'user'
+
+// IDE will autocomplete 'profile.name' and 'profile.email'
+const nameLens = lens('profile.name'); // WritableAtom<string>
+const emailLens = lens('profile.email'); // WritableAtom<string>
+```
+
+---
+
+## Static Methods (Primitive & Control)
 
 ### `$.batch(fn)`
 

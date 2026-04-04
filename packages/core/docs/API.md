@@ -260,3 +260,52 @@ const result = computed(() => {
   return items.value.map(i => i * untracked(() => multiplier.value));
 });
 ```
+
+---
+
+## Lens & Structural Sharing
+
+Lenses provide a type-safe way to create two-way reactive "views" into part of a larger object-based atom. They are essential for managing monolithic state trees with high performance and zero-allocation updates.
+
+### `atomLens<T, P>(atom: WritableAtom<T>, path: P): WritableAtom<PathValue<T, P>>`
+
+Creates a writable "fake" atom that points to a specific dot-path within a source atom.
+
+- **Structural Sharing**: Writing to a lens only clones objects along the modified path. Unrelated branches stay reference-equal (`===`).
+- **Equality Guard**: If the new value is identical to the current one (via `Object.is`), the parent atom is not updated, preventing redundant effect propagation.
+- **Auto-Autocompletion**: Supports IDE path completion up to 8 levels deep with exact type inference.
+
+```typescript
+const store = atom({ user: { profile: { name: 'Alice' } } });
+const nameLens = atomLens(store, 'user.profile.name');
+
+console.log(nameLens.value); // 'Alice'
+nameLens.value = 'Bob'; // Atomically updates store.user.profile.name
+```
+
+### `composeLens<T, P>(lens: WritableAtom<T>, path: P)`
+
+Deeper targeting by composing an existing lens with a relative sub-path.
+
+```typescript
+const userLens = atomLens(store, 'user');
+const nameLens = composeLens(userLens, 'profile.name');
+```
+
+### `lensFor(atom)`
+
+Creates a factory function bound to an atom for concise lens creation.
+
+```typescript
+const lens = lensFor(store);
+const name = lens('user.profile.name');
+const age = lens('user.profile.age');
+```
+
+### `getPathValue(source: unknown, parts: string[]): unknown`
+
+High-performance utility to retrieve a nested value using an array of path segments.
+
+### `setDeepValue(obj: unknown, keys: string[], index: number, value: unknown): unknown`
+
+The core structural sharing engine. Recursively creates a new object tree, cloning only the necessary nodes.

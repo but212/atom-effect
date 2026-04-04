@@ -3,12 +3,11 @@
  * @description Benchmarks for lens creation, read, and write operations
  */
 
-import { atom } from '@but212/atom-effect';
 import { bench, describe } from 'vitest';
-import { atomLens, composeLens } from '@/core/lens';
+import { atom, atomLens, composeLens } from '../../dist';
 import { microBenchOptions } from '../utils/setup.js';
 
-const REPEATS = 1000;
+const REPEATS = 100;
 
 interface SimpleSchema {
   a: {
@@ -176,7 +175,7 @@ describe('Lens Subscription Propagation', () => {
 
   let _val = 0;
   lens.subscribe((newVal) => {
-    _val = newVal!;
+    _val = (newVal as number) ?? 0;
   });
 
   bench(

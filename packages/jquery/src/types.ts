@@ -3,6 +3,8 @@ import type {
   ComputedAtom,
   ComputedOptions,
   EffectObject,
+  Paths,
+  PathValue,
   ReadonlyAtom,
   WritableAtom,
 } from '@but212/atom-effect';
@@ -10,45 +12,6 @@ import type {
 // ============================================================================
 // Shared API Types
 // ============================================================================
-
-/** Helper to convert numeric string to number for array indexing. */
-type StringKeyToNumber<S extends string> = S extends `${infer N extends number}` ? N : S;
-/** Max recursion depth for dot-paths. */
-type MaxDepth = 8;
-
-/**
- * Generates a union of all possible dot-separated paths for a given type T.
- *
- * Used for `atomLens` to provide IDE autocomplete and type safety when
- * zooming into deeply nested reactive objects.
- *
- * @example
- * type User = { profile: { name: string } };
- * type P = Paths<User>; // "profile" | "profile.name"
- */
-export type Paths<T, D extends unknown[] = []> = D['length'] extends MaxDepth
-  ? never
-  : T extends object
-    ? {
-        [K in keyof T & (string | number)]-?:
-          | `${K}`
-          | (T[K] extends object ? `${K}.${Paths<T[K], [...D, 1]>}` : never);
-      }[keyof T & (string | number)]
-    : never;
-
-/**
- * Resolves the type of a value at a specific dot-path P within type T.
- *
- * Works in tandem with `Paths<T>` to ensure that lensed atoms have
- * the correct inferred type for the member they point to.
- */
-export type PathValue<T, P extends string> = P extends `${infer K}.${infer Rest}`
-  ? StringKeyToNumber<K> extends keyof T
-    ? PathValue<T[StringKeyToNumber<K> & keyof T], Rest>
-    : never
-  : StringKeyToNumber<P> extends keyof T
-    ? T[StringKeyToNumber<P> & keyof T]
-    : never;
 
 export type EffectCleanup = () => void;
 export type EffectResult = undefined | EffectCleanup;

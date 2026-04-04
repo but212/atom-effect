@@ -131,12 +131,9 @@ class BindingRegistry {
     this.records.delete(el as Element);
     if (isElement) (el as Element).classList.remove(AES_BOUND);
 
-    if (debug.enabled) {
-      const name = isElement ? getSelector(el as Element) : el.nodeName || 'Node';
-      debug.cleanup(LOG_PREFIXES.BINDING, name);
-    }
+    const selector = isElement ? getSelector(el as Element) : el.nodeName || 'Node';
+    debug.cleanup(LOG_PREFIXES.BINDING, selector);
 
-    const selector = isElement ? getSelector(el as Element) : 'Node';
     if (record.componentCleanup) {
       try {
         record.componentCleanup();
@@ -173,16 +170,21 @@ class BindingRegistry {
 
   cleanupDescendants(el: Element | DocumentFragment | ShadowRoot): void {
     // Fast path: getElementsByClassName is significantly faster than querySelectorAll
-    const descendants = (el as { getElementsByClassName?(name: string): HTMLCollectionOf<Element> })
+    const live = (el as { getElementsByClassName?(name: string): HTMLCollectionOf<Element> })
       .getElementsByClassName
       ? (el as Element).getElementsByClassName(AES_BOUND)
       : el.querySelectorAll(`.${AES_BOUND}`);
 
-    const len = descendants.length;
+    const len = live.length;
     if (len === 0) return;
 
+    // Snapshot to avoid issues with live collection changing during cleanup
+    // and to stabilize loop prediction.
+    const snapshot = new Array<Element>(len);
+    for (let i = 0; i < len; i++) snapshot[i] = live[i]!;
+
     for (let i = len - 1; i >= 0; i--) {
-      const child = descendants[i] as Element;
+      const child = snapshot[i]!;
       // Pre-check registry to avoid unnecessary cleanup calls
       if (this.records.has(child)) {
         this.cleanup(child);
@@ -233,24 +235,14 @@ export function enableAutoCleanup(root: Element): void {
 
         // Only Element nodes can carry bindings marked by our AES_BOUND class.
         // We skip text and comment nodes early for performance.
-        if (node.nodeType !== 1) continue;
+        // Combined check for nodeType and connectivity (the two most common early exits)
+        // to reduce separate branch prediction entries.
+        if (node.nodeType !== 1 || (node as Element).isConnected) continue;
 
-        // --- Filtering Logic for Memory Safety ---
         const el = node as Element;
 
-        // 1. isConnected: Handles DOM moves. When an element is moved using append(node),
-        //    it is technically removed and added. MutationObserver detects this,
-        //    but we shouldn't cleanup the bindings if the node is still in the document.
-        if (el.isConnected) continue;
-
-        // 2. reg.isKept: Handles explicit .detach(). jQuery's .detach() is
-        //    meant to keep data/events intact. We support this by skipping cleanup.
-        if (reg.isKept(el)) continue;
-
-        // 3. reg.isIgnored: Eliminates race conditions with jQuery's .remove().
-        //    Since we patch .remove() to call cleanupTree() synchronously,
-        //    the observer would normally trigger a second redundant cleanup pass.
-        if (reg.isIgnored(el)) continue;
+        // Combined flag checks for explicit detach (.keep) or manual cleanup traversal (.ignore).
+        if (reg.isKept(el) || reg.isIgnored(el)) continue;
 
         reg.cleanupTree(el);
       }

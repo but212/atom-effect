@@ -1,5 +1,11 @@
-import { atom as createAtom, effect, untracked, type WritableAtom } from '@but212/atom-effect';
-import { getPathValue, setDeepValue } from '@/core/lens';
+import {
+  atom as createAtom,
+  effect,
+  getPathValue,
+  setDeepValue,
+  untracked,
+  type WritableAtom,
+} from '@but212/atom-effect';
 import { registry } from '@/core/registry';
 import type { ValOptions } from '@/types';
 import { bindChecked, bindVal, createContext } from './unified';

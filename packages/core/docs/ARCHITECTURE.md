@@ -122,3 +122,28 @@ Effects can inadvertently create feedback loops (e.g., an effect that writes to 
 | `MAX_EXECUTIONS_PER_SECOND` | 1,000 / sec (dev only) | Frequency guard per effect |
 
 When a threshold is crossed, an `EffectError` is thrown and the offending effect is disposed to avoid blocking the main thread indefinitely.
+
+---
+
+## 7. Lenses & Structural Sharing
+
+The Core package provides fine-grained reactivity over monolithic state objects via **Lenses**. A lens is a "virtual atom" that points to a specific dot-path within a parent atom.
+
+### Structural Sharing Logic
+
+When a value is updated through a lens, the `setDeepValue` recursive helper creates a new object tree:
+
+1. **Path Cloning**: Only clones the nodes along the specific path from the root to the leaf.
+2. **Reference Preservation**: All other branches are preserved by reference. Unrelated effect nodes remain reference-equal (`===`), preventing "Re-render Storms".
+3. **Monomorphic Equality**: Uses `Object.is` for zero-allocation identity checks before triggering parent atom updates.
+
+### Type-Safe Paths
+
+Lenses utilize recursive utility types (`Paths<T>`, `PathValue<T, P>`) to enforce safety:
+
+- **Autocompletion**: Enumerates all possible dot-separated paths up to **8 levels deep** (V8 Smi-friendly recursion limit).
+- **Inference**: Precisely resolves the resulting type, eliminating `any` casts in user code.
+
+### Subscription Lifecycle
+
+Every lens maintains an internal set of parent atom subscriptions to bridge the bridge. Calling `lens.dispose()` (supported via `[Symbol.dispose]`) shuts down these bridges, ensuring zero memory usage for high-churn patterns (e.g., dynamic forms or list item lensing).

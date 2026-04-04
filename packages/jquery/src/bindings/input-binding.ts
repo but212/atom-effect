@@ -31,6 +31,9 @@ class InputBinding<T> {
   private readonly parse: (v: string) => T;
   private readonly format: (v: T) => string;
   private readonly equal: (a: T, b: T) => boolean;
+  private readonly readDom: () => T;
+  private readonly getRawDom: () => string | string[];
+  private readonly writeDom: (val: T, formatted: string) => void;
 
   /**
    * Internal state flags using bitwise operations for zero-overhead tracking.
@@ -57,12 +60,45 @@ class InputBinding<T> {
 
     this.parse = options.parse ?? ((v: string) => v as unknown as T);
 
-    // Specialize format logic at construction to avoid branches in sync hot-path
+    // Specialize strategy functions at construction to avoid branches in sync hot-paths
     if (isMultiple) {
       this.format =
         options.format ?? ((v: T) => (Array.isArray(v) ? v : v ? [String(v)] : []).join(','));
+      this.getRawDom = () => (this.$el.val() as string[] | null) || [];
+      this.readDom = () => this.getRawDom() as unknown as T;
+      this.writeDom = (val) => {
+        this.$el.val(val as unknown as string[]);
+      };
     } else {
       this.format = options.format ?? ((v: T) => String(v ?? ''));
+      this.getRawDom = () => this.el.value;
+      this.readDom = () => this.parse(this.el.value);
+
+      if (this.isTextControl) {
+        this.writeDom = (_val, formatted) => {
+          if (this.flags & BindingFlags.Focused) {
+            // --- Cursor Preservation Strategy ---
+            try {
+              const el = this.el as HTMLInputElement;
+              const start = el.selectionStart;
+              const end = el.selectionEnd;
+              el.value = formatted;
+              const len = formatted.length;
+              if (start !== null && end !== null) {
+                el.setSelectionRange(start < len ? start : len, end < len ? end : len);
+              }
+            } catch {
+              this.el.value = formatted;
+            }
+          } else {
+            this.el.value = formatted;
+          }
+        };
+      } else {
+        this.writeDom = (_, formatted) => {
+          this.el.value = formatted;
+        };
+      }
     }
 
     const baseEqual = options.equal ?? Object.is;
@@ -155,15 +191,14 @@ class InputBinding<T> {
   private normalizeDomValue(): void {
     const val = this.atom.peek();
     const formatted = this.format(val);
+    const raw = this.getRawDom();
 
     if (this.isMultipleSelect) {
-      const current = (this.$el.val() as string[] | null) || [];
-      const arr = Array.isArray(val) ? (val as unknown as string[]) : [];
-      if (!this.equal(current as unknown as T, arr as unknown as T)) {
-        this.$el.val(arr);
+      if (!this.equal(raw as unknown as T, val)) {
+        this.writeDom(val, formatted);
       }
-    } else if (this.el.value !== formatted) {
-      this.el.value = formatted;
+    } else if (raw !== formatted) {
+      this.writeDom(val, formatted);
     }
   }
 
@@ -171,9 +206,7 @@ class InputBinding<T> {
     if (this.flags & BindingFlags.Busy) return;
     this.flags |= BindingFlags.SyncingToAtom;
     try {
-      const isMultiple = this.isMultipleSelect;
-      const raw = isMultiple ? (this.$el.val() as string[] | null) || [] : this.el.value;
-      const parsed: T = isMultiple ? (raw as unknown as T) : (this.parse(raw as string) as T);
+      const parsed = this.readDom();
       if (!this.equal(this.atom.peek(), parsed)) {
         this.atom.value = parsed;
       }
@@ -192,53 +225,30 @@ class InputBinding<T> {
     const val = this.atom.value;
 
     untracked(() => {
-      const isMultiple = this.isMultipleSelect;
       const formatted = this.format(val);
-      const currentVal = (isMultiple
-        ? (this.$el.val() as string[] | null) || []
-        : this.el.value) as unknown as T;
+      const raw = this.getRawDom();
 
-      if (this.equal(currentVal, val)) return;
+      // Skip if raw DOM matches formatted string (or array for select-multiple)
+      if (this.isMultipleSelect) {
+        if (this.equal(raw as unknown as T, val)) return;
+      } else if (raw === formatted) {
+        return;
+      }
 
-      const flags = this.flags;
-      const isFocused = !!(flags & BindingFlags.Focused);
-
-      if (isFocused) {
+      // If focused, check if it's already "functionally" equal via parse to avoid
+      // overwriting while user is typing (e.g. typing "1.0" when atom is 1)
+      if (this.flags & BindingFlags.Focused) {
         try {
-          const parsedCurrent = isMultiple
-            ? (currentVal as unknown as T)
-            : this.parse(this.el.value);
-          if (this.equal(parsedCurrent, val)) return;
+          if (this.equal(this.readDom(), val)) return;
         } catch {
-          // Ignore parse errors on active focused element sync
+          // Ignore parse errors on check-only read
         }
       }
 
       this.flags |= BindingFlags.SyncingToDom;
       try {
-        if (isMultiple) {
-          this.$el.val(val as unknown as string[]);
-        } else if (isFocused && this.isTextControl) {
-          // --- Cursor Preservation Strategy ---
-          try {
-            const el = this.el as HTMLInputElement;
-            const start = el.selectionStart;
-            const end = el.selectionEnd;
-            el.value = formatted;
-            const len = formatted.length;
-
-            if (start !== null && end !== null) {
-              el.setSelectionRange(start < len ? start : len, end < len ? end : len);
-            }
-          } catch {
-            this.el.value = formatted;
-          }
-        } else {
-          this.el.value = formatted;
-        }
-        if (debug.enabled) {
-          debug.domUpdated(LOG_PREFIXES.BINDING, this.$el, 'val', formatted);
-        }
+        this.writeDom(val, formatted);
+        debug.domUpdated(LOG_PREFIXES.BINDING, this.$el, 'val', formatted);
       } finally {
         this.flags &= ~BindingFlags.SyncingToDom;
       }

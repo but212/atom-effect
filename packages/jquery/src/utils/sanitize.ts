@@ -105,11 +105,46 @@ const DANGEROUS_CSS_GLOBAL_RE = new RegExp(DANGEROUS_CSS_RE.source, 'gim');
 // ============================================================================
 
 /**
+ * O(n) single-pass scan for characters that indicate potential danger.
+ * Much cheaper than running 5+ regexes on safe strings.
+ */
+function needsSanitization(s: string): boolean {
+  const len = s.length;
+  for (let i = 0; i < len; i++) {
+    const c = s.charCodeAt(i);
+    // '<' (0x3C), '&' (0x26), control chars (0x00-0x1F excl. tab/nl/cr)
+    if (c === 0x3c || c === 0x26 || (c <= 0x1f && c !== 0x09 && c !== 0x0a && c !== 0x0d)) {
+      return true;
+    }
+  }
+
+  // Use a more conservative check for protocols and event handlers.
+  // Any colon or the pattern "on" + letter should trigger a full regex-based sanitization.
+  if (s.indexOf(':') !== -1) return true;
+
+  const lower = s.toLowerCase();
+  const onIdx = lower.indexOf('on');
+  if (onIdx !== -1 && onIdx < len - 2) {
+    const nextChar = lower.charCodeAt(onIdx + 2);
+    // Check if it's "on" followed by a letter (potential event handler like onclick)
+    if (nextChar >= 97 && nextChar <= 122) return true;
+  }
+
+  return false;
+}
+
+/**
  * HTML sanitization for XSS mitigation using regex-based filtering.
+ * Optimized with an early-exit fast-path for safe strings.
  */
 export function sanitizeHtml(html: string | null | undefined): string {
   if (!html) return '';
-  let s = String(html)
+  const sInit = String(html);
+
+  // Fast path: if no dangerous characters or patterns exist, skip all regex processing.
+  if (!needsSanitization(sInit)) return sInit;
+
+  let s = sInit
     .replace(STRIP_CTRL_RE, '')
     .replace(DECODE_NUMERIC_ENTITY_RE, (_, hex, dec) =>
       String.fromCodePoint(hex ? parseInt(hex, 16) : parseInt(dec, 10))
