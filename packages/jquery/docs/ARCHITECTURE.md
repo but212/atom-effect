@@ -323,14 +323,53 @@ All internal state records (e.g., `BindingRecord`, `InputBinding`) are initializ
 
 By using `Uint8Array` and `Int32Array` for diffing state tracking, `atomList` eliminates the "GC hum" commonly associated with virtual DOM diffing in large lists. The reconciliation state is stored in a continuous memory block, maximizing CPU cache efficiency and minimizing allocation-time overhead.
 
-- **Sanitization Fast-path**: `sanitizeHtml` includes an early `indexOf('<')` check to bypass expensive regex scanning for plain-text content.
+- **Sanitization Fast-path**: `sanitizeHtml` includes an early O(n) single-pass scan (`needsSanitization`) to bypass expensive regex scanning for safe strings.
 - **Allocation-free Equality**: `shallowEqual` uses manual property counting and `for...in` loops to avoid `Object.keys()` array allocations.
 
-## 11. Lenses & Structural Sharing
+## 11. CPU Branch Prediction Optimizations
+
+To achieve zero-overhead reactive updates, the library implements several techniques to maximize **Pipeline Efficiency** by reducing branch mispredictions in the hot-path.
+
+### 11.1 No-op Proxy Debugging
+
+Instead of checking `if (debug.enabled)` in every updater and loop, the `DebugController` uses a **Method Pointer Swapping** pattern.
+
+- In production (or when disabled), debug methods point to empty No-op functions (`() => {}`).
+- When enabled, they refer to the actual logging implementation.
+
+This eliminates thousands of conditional branches from the execution pipeline, keeping the CPU's Branch Target Buffer (BTB) clear for business logic.
+
+### 11.2 Bitmask Dispatch (`atomBind`)
+
+The sequential 12-way `if` chain in `atomBind` was replaced with a **Bitmask Dispatch table**.
+
+1. `atomBind` converts current options into a single 32-bit integer mask.
+2. The loop uses bitwise operations (`m & -m`) to isolate the next binding bit.
+3. The bit index is calculated using `31 - Math.clz32(bit)`, which V8 compiles to a single `BSR` (Bit Scan Reverse) instruction.
+4. The corresponding handler is looked up in the monomorphic `BIND_HANDLERS` table, achieving O(1) jump table dispatching.
+
+### 11.3 Strategy Specialization (`InputBinding`)
+
+Two-way input bindings often branch based on element type (Text vs. Select-Multiple) and focus state. These branches were eliminated by:
+
+- Pre-specializing `readDom` and `writeDom` functions in the constructor.
+- Moving state checks (e.g. `isTextControl`) out of the sync loop.
+
+This ensures the updater function's control flow remains identical for a given element type, allowing the CPU to perfectly predict the execution path.
+
+### 11.4 Static Snapshot for Registry Cleanup
+
+Live DOM collections (e.g. `HTMLCollection`) change their length as elements are removed, which causes "unstable loop prediction". `cleanupDescendants` now converts the result to a **static array snapshot**. This stabilizes the loop's iteration count and branch targets, preventing stalls during large DOM teardowns.
+
+### 11.5 Fast-path Sanitization Scan
+
+`sanitizeHtml` performs an O(n) scan for safe characters (`<`, `&`, controls) before running the regex pipeline. For the vast majority of "safe" updates (numbers, plain text), this skips the computationally expensive and branch-heavy regex logic entirely.
+
+## 12. Lenses & Structural Sharing
 
 `$.atomLens` (`core/lens.ts`) provides a mechanism for fine-grained reactivity over monolithic state objects. It creates a "virtual atom" that points to a specific path within a parent atom.
 
-### 11.1 Structural Sharing
+### 12.1 Structural Sharing
 
 When a value is updated through a lens, the lens implementation uses a recursive helper (`setDeepValue`) to create a new object tree. It only clones the objects along the path to the changed property, while preserving references to all other parts of the object tree.
 
@@ -340,7 +379,7 @@ This "Structural Sharing" approach ensures that:
 2. **Memory Efficiency**: Avoids deep cloning the entire state object on every small change.
 3. **Equality Guards**: If the new value is identical to the current value (via `Object.is`), the parent atom is not updated at all, preventing unnecessary reactive propagation.
 
-### 11.2 Integration with `atomForm`
+### 12.2 Integration with `atomForm`
 
 `atomForm` leverages leaf-level atoms and a centralized dispatcher for O(1) performance on large forms:
 
@@ -349,10 +388,10 @@ This "Structural Sharing" approach ensures that:
 3. **Local Sync**: Each leaf atom has a dedicated effect to sync its local changes back to the root atom. Since this effect only tracks the leaf atom, typing in one field does not wake up or re-evaluate other fields.
 4. **Deep Paths**: Supports dot-notation in `name` attributes via the shared `getPathValue` and `setDeepValue` utilities.
 
-### 11.3 Type-Level Safety with `Paths<T>`
+### 12.3 Type-Level Safety with `Paths<T>`
 
 `$.atomLens`, `$.composeLens` and `$.lensFor` utilize the generic utility types `Paths<T>` and `PathValue<T, P>`. `Paths<T>` enumerates all valid dot-separated nested paths of a state object recursively (up to 8 levels deep) providing rich IDE autocompletion for deep properties. `PathValue<T, P>` precisely extracts the corresponding type at that valid path. This structurally eliminates runtime errors and invalid fallbacks (`unknown`) during development.
 
-### 11.4 Memory Safety & Subscription Tracking
+### 12.4 Memory Safety & Subscription Tracking
 
 Lenses act as bridges between a parent atom and a consumer. To prevent memory leaks when lenses are created dynamically without being bound to a DOM element, every lens maintains an internal `Set` of parent atom subscriptions. Calling `lens.dispose()` (supported via `[Symbol.dispose]`) clears all internal subscriptions, ensuring zero-overhead cleanup for high-churn state management patterns.

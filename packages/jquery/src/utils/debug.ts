@@ -29,50 +29,97 @@ function getInitialState(): boolean {
   return false;
 }
 
-let debugEnabled = getInitialState();
-
 // ============================================================================
 // DebugController — Class-based singleton for JIT optimization
 // ============================================================================
 
 class DebugController {
+  private _enabled = false;
+  private _lastState = false;
+
+  constructor() {
+    this._enabled = getInitialState();
+    this._lastState = this._enabled;
+    this._applyMethods(this._enabled);
+  }
+
   get enabled(): boolean {
-    return (
-      (IS_BROWSER && (window as unknown as AtomWindow).__ATOM_DEBUG__ === true) || debugEnabled
-    );
+    const current =
+      (IS_BROWSER && (window as unknown as AtomWindow).__ATOM_DEBUG__ === true) || this._enabled;
+    if (current !== this._lastState) {
+      this._lastState = current;
+      this._applyMethods(current);
+    }
+    return current;
   }
+
   set enabled(v: boolean) {
-    debugEnabled = v;
+    this._enabled = v;
+    // Getter will handle _applyMethods on next access,
+    // but we force it here for immediate effect (e.g. from code).
+    if (v !== this._lastState) {
+      this._lastState = v;
+      this._applyMethods(v);
+    }
   }
 
+  /** Normal logs (No-op in production) */
   log(p: string, ...a: unknown[]): void {
-    if (this.enabled) console.log(p, ...a);
+    // Accessing .enabled triggers state sync if window.__ATOM_DEBUG__ changed
+    if (this.enabled) this._log(p, ...a);
   }
 
+  /** Atom state change logs (No-op in production) */
   atomChanged(p: string, n: string | undefined, o: unknown, v: unknown): void {
-    if (this.enabled) console.log(`${p} Atom "${n ?? 'anonymous'}" changed:`, o, '→', v);
+    if (this.enabled) this._atomChanged(p, n, o, v);
   }
 
+  /** DOM update logs with highlighting (No-op in production) */
   domUpdated(p: string, t: Element | JQuery<Element>, type: string, v: unknown): void {
-    if (!this.enabled) return;
-    const el = t instanceof Element ? t : (t[0] as Element | undefined);
-    if (!el?.isConnected) return;
-    console.log(`${p} DOM updated: ${getSelector(el)}.${type} =`, v);
-    highlightElement(el);
+    if (this.enabled) this._domUpdated(p, t, type, v);
   }
 
+  /** Resource cleanup logs (No-op in production) */
   cleanup(p: string, s: string): void {
-    if (this.enabled) console.log(`${p} Cleanup: ${s}`);
+    if (this.enabled) this._cleanup(p, s);
   }
 
+  /** Warnings (Always logged) */
   warn(p: string, m: string, ...r: unknown[]): void {
-    // Warnings are always logged unless suppressed via build-time logic
     console.warn(`${p} ${m}`, ...r);
   }
 
+  /** Errors (Always logged) */
   error(p: string, m: string, c: unknown): void {
-    // Errors are always logged
     console.error(`${p} ${m}`, c);
+  }
+
+  private _log: (p: string, ...a: unknown[]) => void = () => {};
+  private _atomChanged: (p: string, n: string | undefined, o: unknown, v: unknown) => void =
+    () => {};
+  private _domUpdated: (p: string, t: Element | JQuery<Element>, type: string, v: unknown) => void =
+    () => {};
+  private _cleanup: (p: string, s: string) => void = () => {};
+
+  private _applyMethods(isEnabled: boolean) {
+    if (isEnabled) {
+      this._log = (p, ...a) => console.log(p, ...a);
+      this._atomChanged = (p, n, o, v) =>
+        console.log(`${p} Atom "${n ?? 'anonymous'}" changed:`, o, '→', v);
+      this._domUpdated = (p, t, type, v) => {
+        const el = t instanceof Element ? t : (t[0] as Element | undefined);
+        if (el?.isConnected) {
+          console.log(`${p} DOM updated: ${getSelector(el)}.${type} =`, v);
+          highlightElement(el);
+        }
+      };
+      this._cleanup = (p, s) => console.log(`${p} Cleanup: ${s}`);
+    } else {
+      this._log = () => {};
+      this._atomChanged = () => {};
+      this._domUpdated = () => {};
+      this._cleanup = () => {};
+    }
   }
 }
 
