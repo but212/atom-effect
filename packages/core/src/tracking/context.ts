@@ -1,22 +1,22 @@
-import type { Listener } from './tracking.types';
+import type { DependencySubscriber } from './tracking.types';
 
 /**
  * Tracking context implementation.
  */
 class TrackingContext {
-  /** Active listener. */
-  public current: Listener | null = null;
+  /** Active subscriber. */
+  public current: DependencySubscriber | null = null;
 
   /**
    * Executes in context.
    *
-   * @param listener - The subscriber.
+   * @param subscriber - The subscriber.
    * @param fn - The logic to execute.
    * @returns The result of `fn`.
    */
-  public run<T>(listener: Listener, fn: () => T): T {
+  public run<T>(subscriber: DependencySubscriber, fn: () => T): T {
     const prev = this.current;
-    this.current = listener;
+    this.current = subscriber;
     try {
       return fn();
     } finally {
@@ -29,8 +29,3 @@ class TrackingContext {
  * Global tracking context singleton.
  */
 export const trackingContext = new TrackingContext();
-
-/**
- * Tracking context type.
- */
-export type ITrackingContext = TrackingContext;

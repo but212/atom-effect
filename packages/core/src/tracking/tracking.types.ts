@@ -26,9 +26,3 @@ export interface DependencyTracker extends DependencySubscriber, ExecutableSubsc
  * Trackable function.
  */
 export type TrackableFunction = (() => void) & DependencySubscriber;
-
-/**
- * Listener.
- * A listener must be able to collect dependencies.
- */
-export type Listener = DependencySubscriber;
