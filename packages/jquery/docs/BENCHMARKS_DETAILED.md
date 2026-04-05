@@ -1,7 +1,7 @@
 # Benchmark Results - Detailed (jQuery Bindings)
 
 **Last Updated**: 2026-04-05
-**Version**: v0.27.0
+**Version**: v0.28.0
 **Environment**:
 
 - **Node.js**: v22.x

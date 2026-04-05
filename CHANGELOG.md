@@ -1,38 +1,36 @@
 # Changelog
 
-## [Unreleased]
+## [0.28.0]
 
 ### Core
 
 #### Added
 
 - **API**: **Official Lens Support**.
-  - `atomLens`: Two-way reactive "view" into nested state with 100% structural sharing and zero-render impact on unrelated branches.
-  - `composeLens` / `lensFor`: Composition utilities for modular state management.
-  - `getPathValue` / `setDeepValue`: High-performance recursive object manipulation utilities.
-- **Types**: High-performance recursive dot-path types (`Paths<T>`, `PathValue<T, P>`) with up to 8 levels of depth and exact type inference.
+  - `atomLens`: Two-way reactive "view" into nested state with 100% structural sharing and zero-render impact.
+  - `composeLens` / `lensFor`: Composition utilities and high-performance recursive object manipulation.
+- **Types**: High-performance recursive dot-path types (`Paths<T>`, `PathValue<T, P>`) with 8-level depth and exact type inference.
 
 #### Changed
 
-- **Performance**: Optimized lens write path with `Object.is` identity guards to prevent redundant propagation.
-- **Reliability**: Ensured `setDeepValue` is non-destructive and preserves references for unchanged branches.
+- **Performance**: Optimized lens write paths with `Object.is` identity guards to prevent redundant propagation.
+- **Reliability**: Ensured `setDeepValue` is non-destructive and reference-stable for unchanged branches.
 
 ### jQuery
 
 #### Changed
 
-- **Performance**: Radical **CPU Branch Prediction (BP)** optimization pass.
-  - **Monomorphic Dispatch**: Replaced sequential `if` chains in `atomBind` with a constant-time **Bitmask Dispatch** table (`BIND_HANDLERS`) and integer LSB indexing via `Math.clz32`.
-  - **No-op Proxy Debugging**: Eliminated `debug.enabled` conditional guards from all hot paths. Debugging methods are now swapped between real loggers and No-op pointers at runtime.
-  - **Strategy Specialization**: Refactored `InputBinding` to use construction-time strategy functions (`readDom`/`writeDom`), removing all element-type branching from synchronization loops.
-  - **Sanitization Fast-path**: Implemented an O(n) single-pass scan (`needsSanitization`) to skip complex regex pipelines for safe strings, resulting in ~5x faster text updates.
-  - **Registry Stability**: Optimized `cleanupDescendants` by transitioning from live collections to static array snapshots, stabilizing loop prediction and preventing mutation-induced stalls.
-  - **Hot-path Density**: Merged `MutationObserver` conditional guards and pre-classified reactive sources in `registerMapEffect` to minimize Branch Target Buffer (BTB) pressure.
-- **Robustness**: Improved `debug` mode with dynamic state synchronization, allowing `window.__ATOM_DEBUG__` to be toggled from the browser console without manual initialization.
-- **Refactor**: **Core Lens Migration**.
-  - Migrated `atomLens`, `composeLens`, and `lensFor` implementation from the jQuery package to the Core package for universal utility.
-  - Centralized `Paths` and `PathValue` recursive types into `@but212/atom-effect` to provide global type safety.
-  - Re-exported all lens utilities via the jQuery namespace to maintain backward compatibility while delegating core logic.
+- **Performance**: CPU Branch Prediction (BP) optimization pass.
+  - **Monomorphic Dispatch**: Replaced `if` chains in `atomBind` with a bitmask-based constant-time dispatch table and integer LSB indexing via `Math.clz32`.
+  - **Zero-overhead Debugging**: Removed `debug.enabled` guards by swapping loggers with No-op pointers at runtime.
+  - **Strategy Specialization**: Eliminated element-type branching in `InputBinding` via construction-time strategy specialization.
+  - **Sanitization Fast-path**: Added O(n) scan to bypass regex pipelines for safe strings (~5x faster updates).
+  - **Registry Stability**: Transitioned to static array snapshots for cleanup, stabilizing loop prediction and BTB pressure.
+- **Robustness**: Improved `debug` mode with dynamic console synchronization (`window.__ATOM_DEBUG__`).
+- **Encapsulation**: **Architecture Consolidation**.
+  - Migrated core lens implementation and recursive types to `@but212/atom-effect` for universal utility.
+  - Hardened package interface by restricting public exports strictly to the `$` namespace and `$.fn` extensions.
+  - Re-exported all lens utilities via the jQuery namespace to maintain seamless backward compatibility.
 
 ## [0.27.0] - 2026-03-31
 
