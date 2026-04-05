@@ -4,94 +4,114 @@
  */
 
 import { bench, describe } from 'vitest';
-import {
-  atom,
-  batch,
-  computed,
-  effect,
-  untracked,
-  atomLens,
-  composeLens,
-} from '../../dist';
+import { atom, atomLens, batch, composeLens, computed, effect, untracked } from '../../dist';
 import { benchEffectOptions, keep, microBenchOptions } from '../utils/setup.js';
 
 const REPEATS = 100;
 
 describe('Atoms: Core Operations', () => {
-  bench(`creation: primitive atom (x${REPEATS})`, () => {
-    for (let i = 0; i < REPEATS; i++) keep(atom(i));
-  }, microBenchOptions);
+  bench(
+    `creation: primitive atom (x${REPEATS})`,
+    () => {
+      for (let i = 0; i < REPEATS; i++) keep(atom(i));
+    },
+    microBenchOptions
+  );
 
-  bench(`creation: object atom (x${REPEATS})`, () => {
-    for (let i = 0; i < REPEATS; i++) keep(atom({ count: i }));
-  }, microBenchOptions);
+  bench(
+    `creation: object atom (x${REPEATS})`,
+    () => {
+      for (let i = 0; i < REPEATS; i++) keep(atom({ count: i }));
+    },
+    microBenchOptions
+  );
 
   const atoms = Array.from({ length: REPEATS }, (_, i) => atom(i));
-  bench(`read/write performance (x${REPEATS})`, () => {
-    let sum = 0;
-    for (let i = 0; i < REPEATS; i++) {
-      atoms[i]!.value = i;
-      sum += atoms[i]!.value;
-      sum += atoms[i]!.peek();
-    }
-    keep(sum);
-  }, microBenchOptions);
-
-  bench(`untracked read (x${REPEATS})`, () => {
-    untracked(() => {
+  bench(
+    `read/write performance (x${REPEATS})`,
+    () => {
       let sum = 0;
-      for (let i = 0; i < REPEATS; i++) sum += atoms[i]!.value;
+      for (let i = 0; i < REPEATS; i++) {
+        atoms[i]!.value = i;
+        sum += atoms[i]!.value;
+        sum += atoms[i]!.peek();
+      }
       keep(sum);
-    });
-  }, microBenchOptions);
+    },
+    microBenchOptions
+  );
+
+  bench(
+    `untracked read (x${REPEATS})`,
+    () => {
+      untracked(() => {
+        let sum = 0;
+        for (let i = 0; i < REPEATS; i++) sum += atoms[i]!.value;
+        keep(sum);
+      });
+    },
+    microBenchOptions
+  );
 });
 
 describe('Batching & Synchronization', () => {
   const atoms100 = Array.from({ length: 100 }, () => atom(0));
-  
-  bench(`batch update 100 atoms (x${REPEATS})`, () => {
-    for (let j = 0; j < REPEATS; j++) {
-      const val = j % 2;
-      batch(() => {
-        for (let i = 0; i < 100; i++) atoms100[i]!.value = val;
-      });
-    }
-  }, microBenchOptions);
+
+  bench(
+    `batch update 100 atoms (x${REPEATS})`,
+    () => {
+      for (let j = 0; j < REPEATS; j++) {
+        const val = j % 2;
+        batch(() => {
+          for (let i = 0; i < 100; i++) atoms100[i]!.value = val;
+        });
+      }
+    },
+    microBenchOptions
+  );
 
   const a = atom(0);
   const b = atom(0);
   const sum = computed(() => a.value + b.value);
   const doubled = computed(() => sum.value * 2);
 
-  bench(`batched computed chain update (x${REPEATS})`, () => {
-    for (let i = 0; i < REPEATS; i++) {
-      batch(() => {
-        a.value++;
-        b.value++;
-      });
-      keep(doubled.value);
-    }
-  }, microBenchOptions);
+  bench(
+    `batched computed chain update (x${REPEATS})`,
+    () => {
+      for (let i = 0; i < REPEATS; i++) {
+        batch(() => {
+          a.value++;
+          b.value++;
+        });
+        keep(doubled.value);
+      }
+    },
+    microBenchOptions
+  );
 });
 
 describe('Computeds: Reactive Logic', () => {
-  bench(`creation: flat vs chain (10 levels)`, () => {
-    const a = atom(0);
-    const b = atom(1);
-    const c = atom(2);
-    // Flat
-    keep(computed(() => a.value + b.value + c.value));
-    // Chain
-    let current = computed(() => a.value);
-    for (let i = 0; i < 9; i++) {
-      const prev = current;
-      current = computed(() => prev.value + 1);
-    }
-    keep(current.value);
-  }, microBenchOptions);
+  bench(
+    `creation: flat vs chain (10 levels)`,
+    () => {
+      const a = atom(0);
+      const b = atom(1);
+      const c = atom(2);
+      // Flat
+      keep(computed(() => a.value + b.value + c.value));
+      // Chain
+      let current = computed(() => a.value);
+      for (let i = 0; i < 9; i++) {
+        const prev = current;
+        current = computed(() => prev.value + 1);
+      }
+      keep(current.value);
+    },
+    microBenchOptions
+  );
 
   const source = atom(0);
-  const chain10 = (function() {
+  const chain10 = (() => {
     let curr = computed(() => source.value);
     for (let i = 0; i < 9; i++) {
       const prev = curr;
@@ -100,56 +120,80 @@ describe('Computeds: Reactive Logic', () => {
     return curr;
   })();
 
-  bench(`recomputation & cache (x${REPEATS})`, () => {
-    for (let i = 0; i < REPEATS; i++) {
-      source.value++;
-      keep(chain10.value); // Recompute
-      keep(chain10.value); // Cache hit
-    }
-  }, microBenchOptions);
+  bench(
+    `recomputation & cache (x${REPEATS})`,
+    () => {
+      for (let i = 0; i < REPEATS; i++) {
+        source.value++;
+        keep(chain10.value); // Recompute
+        keep(chain10.value); // Cache hit
+      }
+    },
+    microBenchOptions
+  );
 
-  bench(`lazy evaluation overhead (x${REPEATS})`, () => {
-    for (let i = 0; i < REPEATS; i++) {
-      const a = atom(i);
-      const c = computed(() => a.value * 2, { lazy: true });
-      keep(c.value);
-    }
-  }, microBenchOptions);
+  bench(
+    `lazy evaluation overhead (x${REPEATS})`,
+    () => {
+      for (let i = 0; i < REPEATS; i++) {
+        const a = atom(i);
+        const c = computed(() => a.value * 2, { lazy: true });
+        keep(c.value);
+      }
+    },
+    microBenchOptions
+  );
 });
 
 describe('Effects: Life-cycle & Propagation', () => {
-  bench(`creation & disposal (x${REPEATS})`, () => {
-    const a = atom(0);
-    for (let i = 0; i < REPEATS; i++) {
-      const e = effect(() => keep(a.value), benchEffectOptions);
-      e.dispose();
-    }
-  }, microBenchOptions);
+  bench(
+    `creation & disposal (x${REPEATS})`,
+    () => {
+      const a = atom(0);
+      for (let i = 0; i < REPEATS; i++) {
+        const e = effect(() => keep(a.value), benchEffectOptions);
+        e.dispose();
+      }
+    },
+    microBenchOptions
+  );
 
   const trigger = atom(0);
   const comp = computed(() => trigger.value * 2);
   let _val = 0;
-  effect(() => { _val = comp.value; }, benchEffectOptions);
+  effect(() => {
+    _val = comp.value;
+  }, benchEffectOptions);
 
-  bench(`propagation: atom → computed → effect (x${REPEATS})`, () => {
-    for (let i = 0; i < REPEATS; i++) {
-      trigger.value++;
-    }
-    keep(_val);
-  }, microBenchOptions);
+  bench(
+    `propagation: atom → computed → effect (x${REPEATS})`,
+    () => {
+      for (let i = 0; i < REPEATS; i++) {
+        trigger.value++;
+      }
+      keep(_val);
+    },
+    microBenchOptions
+  );
 
-  bench(`cleanup execution (x${REPEATS})`, () => {
-    let cleaned = 0;
-    const a = atom(0);
-    const e = effect(() => {
-      keep(a.value);
-      return () => { cleaned++; };
-    }, benchEffectOptions);
-    
-    for (let i = 0; i < REPEATS; i++) a.value++;
-    e.dispose();
-    keep(cleaned);
-  }, microBenchOptions);
+  bench(
+    `cleanup execution (x${REPEATS})`,
+    () => {
+      let cleaned = 0;
+      const a = atom(0);
+      const e = effect(() => {
+        keep(a.value);
+        return () => {
+          cleaned++;
+        };
+      }, benchEffectOptions);
+
+      for (let i = 0; i < REPEATS; i++) a.value++;
+      e.dispose();
+      keep(cleaned);
+    },
+    microBenchOptions
+  );
 });
 
 describe('Lenses: Structural Access', () => {
@@ -158,40 +202,67 @@ describe('Lenses: Structural Access', () => {
   const comp = computed(() => source.value.a.b.c);
   comp.subscribe(() => {});
 
-  bench(`read: lens (x${REPEATS})`, () => {
-    for (let i = 0; i < REPEATS; i++) keep(lens.value);
-  }, microBenchOptions);
+  bench(
+    `read: lens (x${REPEATS})`,
+    () => {
+      for (let i = 0; i < REPEATS; i++) keep(lens.value);
+    },
+    microBenchOptions
+  );
 
-  bench(`read: computed active (x${REPEATS})`, () => {
-    for (let i = 0; i < REPEATS; i++) keep(comp.value);
-  }, microBenchOptions);
+  bench(
+    `read: computed active (x${REPEATS})`,
+    () => {
+      for (let i = 0; i < REPEATS; i++) keep(comp.value);
+    },
+    microBenchOptions
+  );
 
-  bench(`read: direct object access (x${REPEATS})`, () => {
-    for (let i = 0; i < REPEATS; i++) keep(source.value.a.b.c);
-  }, microBenchOptions);
+  bench(
+    `read: direct object access (x${REPEATS})`,
+    () => {
+      for (let i = 0; i < REPEATS; i++) keep(source.value.a.b.c);
+    },
+    microBenchOptions
+  );
 
-  bench(`write: lens (x${REPEATS})`, () => {
-    for (let i = 0; i < REPEATS; i++) lens.value = i;
-  }, microBenchOptions);
+  bench(
+    `write: lens (x${REPEATS})`,
+    () => {
+      for (let i = 0; i < REPEATS; i++) lens.value = i;
+    },
+    microBenchOptions
+  );
 
-  bench(`write: manual spread (x${REPEATS})`, () => {
-    for (let i = 0; i < REPEATS; i++) {
-      source.value = { ...source.value, a: { ...source.value.a, b: { ...source.value.a.b, c: i } } };
-    }
-  }, microBenchOptions);
+  bench(
+    `write: manual spread (x${REPEATS})`,
+    () => {
+      for (let i = 0; i < REPEATS; i++) {
+        source.value = {
+          ...source.value,
+          a: { ...source.value.a, b: { ...source.value.a.b, c: i } },
+        };
+      }
+    },
+    microBenchOptions
+  );
 
-  bench(`composition & scaling (100 active lenses)`, () => {
-    const sharedSource = atom({ x: { y: 1 } });
-    const composed = composeLens(atomLens(sharedSource, 'x' as any), 'y');
-    const manyLenses = Array.from({ length: 100 }, () => {
-      const l = atomLens(sharedSource, 'x.y' as any);
-      l.subscribe(() => {});
-      return l;
-    });
+  bench(
+    `composition & scaling (100 active lenses)`,
+    () => {
+      const sharedSource = atom({ x: { y: 1 } });
+      const composed = composeLens(atomLens(sharedSource, 'x' as any), 'y');
+      const manyLenses = Array.from({ length: 100 }, () => {
+        const l = atomLens(sharedSource, 'x.y' as any);
+        l.subscribe(() => {});
+        return l;
+      });
 
-    sharedSource.value = { x: { y: 2 } };
-    keep([composed.value, manyLenses.length]);
-  }, microBenchOptions);
+      sharedSource.value = { x: { y: 2 } };
+      keep([composed.value, manyLenses.length]);
+    },
+    microBenchOptions
+  );
 });
 
 describe('Stress Tests: Extreme Scale (1000)', () => {
@@ -204,30 +275,44 @@ describe('Stress Tests: Extreme Scale (1000)', () => {
   }
   keep(depthTarget.value); // Initial computation
 
-  bench('1 to 1 propagation (Depth 1000)', () => {
-    depthSource.value++;
-    keep(depthTarget.value);
-  }, microBenchOptions);
+  bench(
+    '1 to 1 propagation (Depth 1000)',
+    () => {
+      depthSource.value++;
+      keep(depthTarget.value);
+    },
+    microBenchOptions
+  );
 
   // 1 to N (Fan Out 1000)
   const fanOut1000Source = atom(0);
-  const fanOut1000Targets = Array.from({ length: 1000 }, () => computed(() => fanOut1000Source.value));
+  const fanOut1000Targets = Array.from({ length: 1000 }, () =>
+    computed(() => fanOut1000Source.value)
+  );
   for (const target of fanOut1000Targets) keep(target.value); // Initial computation
 
-  bench('1 to N propagation (Fan Out 1000)', () => {
-    fanOut1000Source.value++;
-    for (const target of fanOut1000Targets) {
-      keep(target.value);
-    }
-  }, microBenchOptions);
+  bench(
+    '1 to N propagation (Fan Out 1000)',
+    () => {
+      fanOut1000Source.value++;
+      for (const target of fanOut1000Targets) {
+        keep(target.value);
+      }
+    },
+    microBenchOptions
+  );
 
   // N to 1 (Fan In 1000)
   const fanIn1000Sources = Array.from({ length: 1000 }, (_, i) => atom(i));
   const fanIn1000Target = computed(() => fanIn1000Sources.reduce((sum, s) => sum + s.value, 0));
   keep(fanIn1000Target.value); // Initial computation
 
-  bench('N to 1 propagation (Fan In 1000)', () => {
-    fanIn1000Sources[0]!.value++;
-    keep(fanIn1000Target.value);
-  }, microBenchOptions);
+  bench(
+    'N to 1 propagation (Fan In 1000)',
+    () => {
+      fanIn1000Sources[0]!.value++;
+      keep(fanIn1000Target.value);
+    },
+    microBenchOptions
+  );
 });

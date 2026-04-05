@@ -163,4 +163,3 @@ let _sink: any;
 export function keep(value: any): void {
   _sink = value;
 }
-
