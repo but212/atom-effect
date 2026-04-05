@@ -120,27 +120,6 @@ describe('Todo App: Comprehensive Workflow', () => {
 describe('Data Grid: Core Operations (1000 Rows)', () => {
   const data = generateGridData(1000);
 
-  bench(
-    '[Vanilla] initialize (x100)',
-    () => {
-      // Measurement focus: Plain object reference initialization
-      const rows = data;
-      keep(rows[0]);
-    },
-    macroBenchOptions
-  );
-
-  bench(
-    '[Atom] initialize (x100)',
-    () => {
-      // Measurement focus: Atom overhead with initial access
-      const rows = atom<DataGridRow[]>(data);
-      // Ensure the value is actually accessed and the atom is distinct
-      keep(rows.value[0]);
-    },
-    macroBenchOptions
-  );
-
   let sortDir: 'asc' | 'desc' = 'asc';
   bench(
     '[Vanilla] toggle sort',
