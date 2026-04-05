@@ -154,3 +154,12 @@ export function forceGC(): void {
 export function nextTick(): Promise<void> {
   return new Promise<void>((resolve) => setTimeout(resolve, 0));
 }
+
+let _sink: any;
+/**
+ * Prevents Dead Code Elimination (DCE) by assigning the value to a sink.
+ * Use this in benchmarks for values that aren't otherwise consumed.
+ */
+export function keep(value: any): void {
+  _sink = value;
+}
