@@ -94,8 +94,6 @@
 
 | Scenario | ops/sec | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| [Vanilla] Initialize | 4,676.82 | 0.2138 | 0.4763 |
-| [Atom] Initialize | 10,273,057.14 | 0.0001 | 0.0002 |
 | [Vanilla] Toggle Sort | 4,543.24 | 0.2201 | 0.2376 |
 | [Atom] Toggle Sort | 4,205.47 | 0.2378 | 0.2582 |
 | [Vanilla] Switch Filter | 452,921.87 | 0.0022 | 0.0027 |
