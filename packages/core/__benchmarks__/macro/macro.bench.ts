@@ -272,7 +272,9 @@ describe('Data Grid: Targeted Updates', () => {
       const selectedCount = computed(() => selectedIds.value.size);
 
       for (let i = 1; i <= 100; i++) {
-        selectedIds.value = new Set([...selectedIds.value, i]);
+        const newSet = new Set(selectedIds.value);
+        newSet.add(i);
+        selectedIds.value = newSet;
       }
       for (let i = 1; i <= 50; i++) {
         const newSet = new Set(selectedIds.value);
