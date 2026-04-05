@@ -15,6 +15,9 @@ class TrackingContext {
    * @returns The result of `fn`.
    */
   public run<T>(subscriber: DependencySubscriber, fn: () => T): T {
+    if (this.current === subscriber) {
+      return fn();
+    }
     const prev = this.current;
     this.current = subscriber;
     try {
@@ -29,3 +32,8 @@ class TrackingContext {
  * Global tracking context singleton.
  */
 export const trackingContext = new TrackingContext();
+
+/**
+ * Tracking context type.
+ */
+export type { TrackingContext };
