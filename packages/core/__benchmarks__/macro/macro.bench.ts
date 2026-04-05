@@ -434,25 +434,21 @@ describe('Large Grid with Lenses (50x50)', () => {
   );
 
   bench(
-    `bulk update: replace full grid (x${REPEATS})`,
+    `bulk update: replace full grid`,
     () => {
-      for (let i = 0; i < REPEATS; i++) {
-        gridAtom.value = gridAtom
-          .peek()
-          .map((row) => row.map((cell) => ({ v: cell.v + 1, color: 'red' })));
-      }
+      gridAtom.value = gridAtom
+        .peek()
+        .map((row) => row.map((cell) => ({ v: cell.v + 1, color: 'red' })));
     },
     macroBenchOptions
   );
 
   bench(
-    `read performance: 2500 lenses (x${REPEATS})`,
+    `read performance: 2500 lenses`,
     () => {
-      for (let i = 0; i < REPEATS; i++) {
-        for (let r = 0; r < ROWS; r++) {
-          for (let c = 0; c < COLS; c++) {
-            keep(cellLenses[r]![c]!.value);
-          }
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          keep(cellLenses[r]![c]!.value);
         }
       }
     },
