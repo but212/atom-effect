@@ -28,6 +28,10 @@ interface TestInternalDepSlotBuffer {
   _s2: DependencyLink | null;
   _s3: DependencyLink | null;
   _depsHash: number;
+  _claimViaMap(node: Dependency, index: number): boolean;
+  _swapGeneral(idx: number, trackIndex: number, link: DependencyLink): void;
+  _calculateHash(isLive: boolean): number;
+  truncateFrom(index: number): void;
 }
 
 describe('DepSlotBuffer', () => {
@@ -305,6 +309,157 @@ describe('DepSlotBuffer', () => {
     it('compact() is a no-op', () => {
       const buf = new DepSlotBuffer();
       expect(() => buf.compact()).not.toThrow();
+    });
+  });
+
+  describe('Coverage Gaps', () => {
+    it('claimExisting case 0 match', () => {
+      const buf = new DepSlotBuffer();
+      const dep = createMockDep(0);
+      const link = new DependencyLink(dep, 1, vi.fn());
+      buf.add(link);
+
+      expect(buf.claimExisting(dep, 0)).toBe(true); // line 66-67
+    });
+
+    it('claimExisting case 3 relocations (swaps with 0 or 1)', () => {
+      const buf = new DepSlotBuffer();
+      const deps = [0, 1, 2, 3].map((id) => createMockDep(id));
+      deps.forEach((d) => buf.add(new DependencyLink(d, 1, vi.fn())));
+
+      // Swap index 3 to 0
+      buf.claimExisting(deps[3]!, 0); // line 111-112
+      expect(buf.getAt(0)).toBeDefined();
+
+      // Refresh links and test swap index 3 to 1
+      buf.truncateFrom(0);
+      deps.forEach((d) => buf.add(new DependencyLink(d, 1, vi.fn())));
+      buf.claimExisting(deps[3]!, 1); // line 114-115
+      expect(buf.getAt(1)).toBeDefined();
+    });
+
+    it('insertNew overflow lazy initialization and map sync', () => {
+      const buf = new DepSlotBuffer();
+      const link = new DependencyLink(createMockDep(100), 1, vi.fn());
+
+      // Lazy init overflow (lines 250-251)
+      buf.insertNew(4, link);
+      expect(buf._overflow).not.toBeNull();
+
+      // Map sync for occupant in overflow (line 238)
+      const occupants = [0, 1, 2, 3, 4].map(
+        (id) => new DependencyLink(createMockDep(id), 1, vi.fn())
+      );
+      buf.truncateFrom(0);
+      occupants.forEach((o) => buf.add(o));
+
+      // Trigger map creation
+      const testBuf = buf as unknown as TestInternalDepSlotBuffer;
+      buf.claimExisting(occupants[4]!.node, 4); // Just to have counts right
+
+      // Force map
+      (buf as unknown as TestInternalDepSlotBuffer)._claimViaMap(occupants[0]!.node, 0);
+
+      const newLink = new DependencyLink(createMockDep(99), 1, vi.fn());
+      buf.insertNew(4, newLink); // Should sync map at line 238
+      expect(testBuf._map!.get(occupants[4]!.node)).toBe(5);
+    });
+
+    it('claimExisting swap in case 1 and 2', () => {
+      const buf = new DepSlotBuffer();
+      const deps = [0, 1, 2].map((id) => createMockDep(id));
+      deps.forEach((d) => buf.add(new DependencyLink(d, 1, vi.fn())));
+
+      // Swap s1 to s0
+      buf.claimExisting(deps[1]!, 0); // line 76-79
+      expect(buf.getAt(0)!.node).toBe(deps[1]);
+      expect(buf.getAt(1)!.node).toBe(deps[0]);
+
+      // Swap s2 to s1
+      buf.claimExisting(deps[2]!, 1); // line 91-96
+      expect(buf.getAt(1)!.node).toBe(deps[2]);
+      expect(buf.getAt(2)!.node).toBe(deps[0]);
+    });
+
+    it('claimExisting overflow and _claimViaMap branches', () => {
+      const buf = new DepSlotBuffer();
+      const deps = Array.from({ length: 6 }, (_, i) => createMockDep(i));
+      deps.forEach((d) => buf.add(new DependencyLink(d, 1, vi.fn())));
+
+      const testBuf = buf as unknown as TestInternalDepSlotBuffer;
+
+      // 1. claimExisting overflow search (line 133: trackIndex > 4 ? trackIndex : 4)
+      expect(buf.claimExisting(deps[5]!, 5)).toBe(true);
+
+      // 2. _claimViaMap with trackIndex > 0 (lines 156-165)
+      testBuf.truncateFrom(0);
+      deps.forEach((d) => buf.add(new DependencyLink(d, 1, vi.fn())));
+      // Trigger map with trackIndex = 2
+      testBuf._claimViaMap(deps[2]!, 2);
+      expect(testBuf._map!.has(deps[0]!)).toBe(false);
+      expect(testBuf._map!.has(deps[1]!)).toBe(false);
+      expect(testBuf._map!.has(deps[2]!)).toBe(true);
+
+      // 3. _claimViaMap link with no unsub (line 179)
+      const depNoUnsub = createMockDep(99);
+      const linkNoUnsub = new DependencyLink(depNoUnsub, 1, undefined);
+      buf.add(linkNoUnsub);
+      testBuf._map!.set(depNoUnsub, deps.length); // force it into map
+      expect(testBuf._claimViaMap(depNoUnsub, deps.length)).toBe(false);
+
+      // 4. _claimViaMap swaps for trackIndex 1, 2, 3 (lines 186-194)
+      testBuf.truncateFrom(0);
+      deps.forEach((d) => buf.add(new DependencyLink(d, 1, vi.fn())));
+      testBuf._claimViaMap(deps[1]!, 0); // swap s1 to s0
+      testBuf._claimViaMap(deps[2]!, 1); // swap s2 to s1
+      testBuf._claimViaMap(deps[3]!, 2); // swap s3 to s2
+      testBuf._claimViaMap(deps[5]!, 3); // swap overflow to s3
+      expect(buf.getAt(3)!.node).toBe(deps[5]);
+    });
+
+    it('_swapGeneral indices for inline slots', () => {
+      const buf = new DepSlotBuffer();
+      const deps = Array.from({ length: 6 }, (_, i) => createMockDep(i));
+      deps.forEach((d) => buf.add(new DependencyLink(d, 1, vi.fn())));
+
+      const testBuf = buf as unknown as TestInternalDepSlotBuffer;
+
+      // Test idx 1, 2, 3 in _swapGeneral (lines 213-216)
+      const link1 = buf.getAt(1)!;
+      const node0 = buf.getAt(0)!.node;
+      testBuf._swapGeneral(1, 0, link1);
+      expect(buf.getAt(1)!.node).toBe(node0);
+
+      const link2 = buf.getAt(2)!;
+      testBuf._swapGeneral(2, 0, link2);
+      const link3 = buf.getAt(3)!;
+      testBuf._swapGeneral(3, 0, link3);
+    });
+
+    it('insertNew occupant relocation from various slots', () => {
+      const buf = new DepSlotBuffer();
+      const occupants = Array.from({ length: 6 }, (_, i) => createMockDep(i));
+      occupants.forEach((o) => buf.add(new DependencyLink(o, 1, vi.fn())));
+
+      // insertNew at 0 relocates s0 to end (line 227)
+      buf.insertNew(0, new DependencyLink(createMockDep(100), 1, vi.fn()));
+      expect(buf.getAt(6)!.node).toBe(occupants[0]);
+
+      // insertNew at 5 relocates overflow to end (line 231)
+      buf.insertNew(5, new DependencyLink(createMockDep(101), 1, vi.fn()));
+      expect(buf.getAt(7)!.node).toBe(occupants[5]);
+    });
+
+    it('_calculateHash coverage', () => {
+      const buf = new DepSlotBuffer();
+      const dep = createMockDep(1);
+      buf.add(new DependencyLink(dep, 1));
+      buf.seal();
+
+      const testBuf = buf as unknown as TestInternalDepSlotBuffer;
+      // Force a state where count > 0 but _s0 is null (line 302)
+      testBuf._s0 = null;
+      expect(testBuf._calculateHash(true)).toBe(0);
     });
   });
 });

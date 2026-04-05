@@ -14,6 +14,15 @@ describe('Atom', () => {
     vi.restoreAllMocks();
   });
 
+  interface InternalAtom {
+    hasError: boolean;
+    _deepDirtyCheck(): boolean;
+    isSync: boolean;
+    isNotificationScheduled: boolean;
+    _flushNotifications(): void;
+    dispose(): void;
+  }
+
   describe('Identity, Validation & Initialization', () => {
     it('sets initial value and rejects invalid subscribers', () => {
       const a = atom(42);
@@ -157,6 +166,82 @@ describe('Atom', () => {
       a.value = 99;
       await waitForScheduler();
       expect(spy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Coverage Gaps', () => {
+    it('ReactiveNode base properties', () => {
+      const a = atom(0) as unknown as InternalAtom;
+      expect(a.hasError).toBe(false);
+      expect(a._deepDirtyCheck()).toBe(false);
+      expect(a.isSync).toBe(false);
+      expect(a.isNotificationScheduled).toBe(false);
+
+      const s = atom(0, { sync: true }) as unknown as InternalAtom;
+      expect(s.isSync).toBe(true);
+    });
+
+    it('Duplicate subscription checks across all slots and overflow', () => {
+      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const a = atom(0);
+      const f0 = () => {};
+      const f1 = () => {};
+      const f2 = () => {};
+      const f3 = () => {};
+      const f4 = () => {};
+      const f5 = () => {};
+
+      a.subscribe(f0);
+      a.subscribe(f1);
+      a.subscribe(f2);
+      a.subscribe(f3);
+      a.subscribe(f4);
+      a.subscribe(f5);
+
+      // Check duplicates for each slot
+      a.subscribe(f0);
+      expect(consoleWarn).toHaveBeenCalledTimes(1);
+      a.subscribe(f1);
+      expect(consoleWarn).toHaveBeenCalledTimes(2);
+      a.subscribe(f2);
+      expect(consoleWarn).toHaveBeenCalledTimes(3);
+      a.subscribe(f3);
+      expect(consoleWarn).toHaveBeenCalledTimes(4);
+      a.subscribe(f4);
+      expect(consoleWarn).toHaveBeenCalledTimes(5);
+      a.subscribe(f5);
+      expect(consoleWarn).toHaveBeenCalledTimes(6);
+    });
+
+    it('Subscriber error logging across all slots and overflow', async () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const a = atom(0);
+      const bad = (msg: string) => () => {
+        throw new Error(msg);
+      };
+
+      // Fill all slots and overflow with UNIQUE bad subscribers to bypass duplicate checks
+      // f0, f1, f2, f3 -> inline slots
+      // f4, f5 -> overflow slots
+      for (let i = 0; i < 6; i++) {
+        a.subscribe(bad(`bad${i}`));
+      }
+
+      a.value = 1;
+      await waitForScheduler();
+
+      // Should have 6 errors logged
+      expect(consoleError).toHaveBeenCalledTimes(6);
+    });
+
+    it('Internal _flushNotifications guards', () => {
+      const a = atom(0) as unknown as InternalAtom;
+      // Manually trigger flush when nothing is scheduled (line 95 in atom.ts)
+      expect(() => a._flushNotifications()).not.toThrow();
+
+      a.dispose();
+      // Should return early if disposed
+      expect(() => a._flushNotifications()).not.toThrow();
     });
   });
 });

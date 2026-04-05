@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { atom, atomLens, composeLens, effect, lensFor } from '../../../dist';
+import { atom } from '@/core/atom';
+import { effect } from '@/core/effect';
+import { atomLens, composeLens, lensFor } from '@/core/lens';
 import { nextTick } from '../../utils/test-helpers';
 
 describe('atomLens', () => {

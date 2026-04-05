@@ -7,6 +7,12 @@ import { describe, expect, it } from 'vitest';
 import { SlotBuffer } from '@/internal/slot-buffer';
 
 describe('SlotBuffer', () => {
+  interface InternalSlotBuffer<T> {
+    add(item: T): void;
+    remove(item: T): boolean;
+    _addToOverflow(item: T): void;
+    _overflow: T[];
+  }
   describe('Inline Slot Storage (0-4 items)', () => {
     it('starts empty with size 0', () => {
       const buf = new SlotBuffer<string>();
@@ -203,6 +209,109 @@ describe('SlotBuffer', () => {
       const count = buf.forEachIndexed((item) => items.push(item));
       expect(count).toBe(3);
       expect(items).toEqual(['a', 'b', 'c']);
+    });
+  });
+
+  describe('Coverage Gaps', () => {
+    it('getAt and setAt edge cases', () => {
+      const buf = new SlotBuffer<string>();
+      // setAt inline
+      buf.setAt(0, 's0');
+      buf.setAt(1, 's1');
+      buf.setAt(2, 's2');
+      buf.setAt(3, 's3');
+      expect(buf.size).toBe(4);
+      expect(buf.getAt(0)).toBe('s0');
+      expect(buf.getAt(1)).toBe('s1');
+      expect(buf.getAt(2)).toBe('s2');
+      expect(buf.getAt(3)).toBe('s3');
+
+      // setAt overflow
+      buf.setAt(4, 's4');
+      expect(buf.size).toBe(5);
+      expect(buf.getAt(4)).toBe('s4');
+
+      // getAt out of bounds / null overflow
+      expect(buf.getAt(5)).toBeNull();
+
+      const empty = new SlotBuffer<string>();
+      expect(empty.getAt(4)).toBeNull();
+    });
+
+    it('truncateFrom with overflow and free index cleanup', () => {
+      const buf = new SlotBuffer<number>();
+      for (let i = 0; i < 6; i++) buf.add(i); // 0,1,2,3 in inline, 4,5 in overflow
+
+      buf.remove(4); // Add 0 to free indices
+      expect(buf._freeIndices).not.toBeNull();
+
+      buf.truncateFrom(4); // Should clear overflow and free indices (line 147)
+      expect(buf.size).toBe(4);
+      expect(buf._overflow).toBeNull();
+      expect(buf._freeIndices).toBeNull();
+
+      // truncate everything
+      buf.truncateFrom(0);
+      expect(buf.size).toBe(0);
+      expect(buf._s0).toBeNull();
+    });
+
+    it('addToOverflow free index reuse', () => {
+      const buf = new SlotBuffer<number>() as unknown as InternalSlotBuffer<number>;
+      for (let i = 0; i < 5; i++) buf.add(i); // 4 is in overflow
+
+      buf.remove(4); // 4 is null, free index pushed
+      buf._addToOverflow(99); // Should reuse free index (line 209)
+      expect(buf._overflow[0]).toBe(99);
+    });
+
+    it('remove from all slots and overflow failure', () => {
+      const buf = new SlotBuffer<string>();
+      buf.add('s0');
+      buf.add('s1');
+      buf.add('s2');
+      buf.add('s3');
+      buf.add('s4');
+
+      expect(buf.remove('s0')).toBe(true);
+      expect(buf.remove('s1')).toBe(true);
+      expect(buf.remove('s2')).toBe(true);
+      expect(buf.remove('s3')).toBe(true); // line 242
+      expect(buf.remove('s4')).toBe(true);
+      expect(buf.remove('unknown')).toBe(false); // line 263
+    });
+
+    it('forEachIndexed comprehensive traversal', () => {
+      const buf = new SlotBuffer<number>();
+      // 0 elements
+      expect(buf.forEachIndexed(() => {})).toBe(0);
+
+      // 1 element (inline s0)
+      buf.add(0);
+      expect(buf.forEachIndexed(() => {})).toBe(1);
+
+      // 2 elements (inline s1)
+      buf.add(1);
+      expect(buf.forEachIndexed(() => {})).toBe(2);
+
+      // 3 elements (inline s2)
+      buf.add(2);
+      expect(buf.forEachIndexed(() => {})).toBe(3);
+
+      // 4 elements (inline s3)
+      buf.add(3);
+      expect(buf.forEachIndexed(() => {})).toBe(4);
+
+      // 5 elements (overflow)
+      buf.add(4);
+      expect(buf.forEachIndexed(() => {})).toBe(5);
+    });
+
+    it('dispose calling clear', () => {
+      const buf = new SlotBuffer<number>();
+      buf.add(1);
+      buf.dispose(); // line 442
+      expect(buf.size).toBe(0);
     });
   });
 });
