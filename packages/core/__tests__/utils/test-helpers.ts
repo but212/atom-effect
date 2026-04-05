@@ -3,6 +3,8 @@ export const sleep = (ms: number): Promise<void> =>
 
 export const flush = (): Promise<void> => sleep(0);
 
+export const nextTick = (): Promise<void> => Promise.resolve();
+
 // Use a reasonable default timeout for async scheduler
 export const waitForScheduler = (): Promise<void> => sleep(10);
 
@@ -35,20 +37,4 @@ export const getNodeVersion = (node: any): number => node.version;
 // biome-ignore lint/suspicious/noExplicitAny: Internal tests need access to private properties
 export const getSubscriberCount = (node: any): number => {
   return node._slots?.size ?? 0;
-};
-
-export interface FuzzConfig {
-  atomCount: number;
-  computedCount: number;
-  updateCount: number;
-  maxDepsPerComputed: number;
-  effectCount: number;
-}
-
-export const DEFAULT_FUZZ_CONFIG: FuzzConfig = {
-  atomCount: 1000,
-  computedCount: 500,
-  updateCount: 10000,
-  maxDepsPerComputed: 5,
-  effectCount: 50,
 };

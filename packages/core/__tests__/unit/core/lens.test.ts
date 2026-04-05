@@ -1,11 +1,13 @@
-import $ from 'jquery';
 import { describe, expect, it } from 'vitest';
-import '@/index';
+import { atom } from '@/core/atom';
+import { effect } from '@/core/effect';
+import { atomLens, composeLens, lensFor } from '@/core/lens';
+import { nextTick } from '../../utils/test-helpers';
 
-describe('$.atomLens', () => {
+describe('atomLens', () => {
   it('should create a two-way lens for a single-level property', () => {
-    const user = $.atom({ name: 'Alice', age: 25 });
-    const nameLens = $.atomLens(user, 'name');
+    const user = atom({ name: 'Alice', age: 25 });
+    const nameLens = atomLens(user, 'name');
 
     // Read initial value
     expect(nameLens.value).toBe('Alice');
@@ -21,7 +23,7 @@ describe('$.atomLens', () => {
   });
 
   it('should create a two-way lens for deep nested properties', () => {
-    const store = $.atom({
+    const store = atom({
       settings: {
         theme: 'dark',
         notifications: {
@@ -31,7 +33,7 @@ describe('$.atomLens', () => {
       },
     });
 
-    const emailLens = $.atomLens(store, 'settings.notifications.email');
+    const emailLens = atomLens(store, 'settings.notifications.email');
 
     // Read initial value
     expect(emailLens.value).toBe(true);
@@ -53,12 +55,12 @@ describe('$.atomLens', () => {
   });
 
   it('should maintain structural sharing for unchanged paths', () => {
-    const store = $.atom({
+    const store = atom({
       a: { val: 1 },
       b: { val: 2 },
     });
 
-    const aLens = $.atomLens(store, 'a.val');
+    const aLens = atomLens(store, 'a.val');
     const originalB = store.value.b;
 
     aLens.value = 10;
@@ -68,11 +70,11 @@ describe('$.atomLens', () => {
   });
 
   it('should not update the parent atom if the value is identical', () => {
-    const store = $.atom({ profile: { name: 'Alice' } });
-    const nameLens = $.atomLens(store, 'profile.name');
+    const store = atom({ profile: { name: 'Alice' } });
+    const nameLens = atomLens(store, 'profile.name');
 
     let updateCount = 0;
-    $.effect(() => {
+    effect(() => {
       const _ = store.value;
       updateCount++;
       return undefined;
@@ -84,32 +86,9 @@ describe('$.atomLens', () => {
     expect(updateCount).toBe(0);
   });
 
-  it('should work with jQuery bindings like atomVal', async () => {
-    const store = $.atom({ profile: { name: 'Alice' } });
-    const nameLens = $.atomLens(store, 'profile.name');
-
-    const $input = $('<input>').appendTo(document.body);
-    $input.atomVal(nameLens);
-
-    expect($input.val()).toBe('Alice');
-
-    // Update from DOM
-    $input.val('Bob').trigger('input');
-    await $.nextTick();
-
-    expect(store.value.profile.name).toBe('Bob');
-
-    // Update from Atom
-    nameLens.value = 'Charlie';
-    await $.nextTick();
-    expect($input.val()).toBe('Charlie');
-
-    $input.remove();
-  });
-
   it('should correctly filter and map subscription values', async () => {
-    const store = $.atom({ profile: { name: 'Alice', age: 25 } });
-    const nameLens = $.atomLens(store, 'profile.name');
+    const store = atom({ profile: { name: 'Alice', age: 25 } });
+    const nameLens = atomLens(store, 'profile.name');
 
     let callCount = 0;
     let lastValue: string | undefined;
@@ -127,26 +106,26 @@ describe('$.atomLens', () => {
 
     // 2. Update the lensed property directly
     nameLens.value = 'Bob';
-    await $.nextTick();
+    await nextTick();
     expect(callCount).toBe(1);
     expect(lastValue).toBe('Bob');
     expect(oldVal).toBe('Alice');
 
     // 3. Update parent atom with same lensed value
     store.value = { ...store.value, profile: { ...store.value.profile, name: 'Bob' } };
-    await $.nextTick();
+    await nextTick();
     expect(callCount).toBe(1); // Should NOT notify (Object.is check)
   });
 
   it('should maintain array type when property path traverses an array', () => {
-    const store = $.atom({
+    const store = atom({
       items: [
         { id: 1, text: 'First' },
         { id: 2, text: 'Second' },
       ],
     });
 
-    const secondTextLens = $.atomLens(store, 'items.1.text');
+    const secondTextLens = atomLens(store, 'items.1.text');
     expect(secondTextLens.value).toBe('Second');
 
     secondTextLens.value = 'Updated Second';
@@ -157,55 +136,55 @@ describe('$.atomLens', () => {
   });
 
   it('should compose two lenses', async () => {
-    const store = $.atom({ user: { profile: { name: 'Alice' } } });
-    const userLens = $.atomLens(store, 'user');
-    const nameLens = $.composeLens(userLens, 'profile.name');
+    const store = atom({ user: { profile: { name: 'Alice' } } });
+    const userLens = atomLens(store, 'user');
+    const nameLens = composeLens(userLens, 'profile.name');
 
     expect(nameLens.value).toBe('Alice');
 
     nameLens.value = 'Bob';
-    await $.nextTick();
+    await nextTick();
     expect(store.value.user.profile.name).toBe('Bob');
 
     userLens.value = { profile: { name: 'Charlie' } };
-    await $.nextTick();
+    await nextTick();
     expect(nameLens.value).toBe('Charlie');
   });
 
   it('should compose lenses multi-tier', async () => {
-    const store = $.atom({ a: { b: { c: { d: 11 } } } });
-    const ab = $.atomLens(store, 'a.b');
-    const abc = $.composeLens(ab, 'c');
-    const abcd = $.composeLens(abc, 'd');
+    const store = atom({ a: { b: { c: { d: 11 } } } });
+    const ab = atomLens(store, 'a.b');
+    const abc = composeLens(ab, 'c');
+    const abcd = composeLens(abc, 'd');
 
     expect(abcd.value).toBe(11);
     abcd.value = 22;
-    await $.nextTick();
+    await nextTick();
     expect(store.value.a.b.c.d).toBe(22);
     expect(abc.value.d).toBe(22);
     expect(ab.value.c.d).toBe(22);
   });
 
   it('should compose with array indexing', async () => {
-    const store = $.atom({
+    const store = atom({
       items: [
         { id: 1, text: 'First' },
         { id: 2, text: 'Second' },
       ],
     });
-    const itemsLens = $.atomLens(store, 'items');
-    const firstTextLens = $.composeLens(itemsLens, '0.text');
+    const itemsLens = atomLens(store, 'items');
+    const firstTextLens = composeLens(itemsLens, '0.text');
 
     expect(firstTextLens.value).toBe('First');
 
     firstTextLens.value = 'Updated First';
-    await $.nextTick();
+    await nextTick();
     expect(store.value.items[0]!.text).toBe('Updated First');
   });
 
   it('should clean up subscriptions on dispose', async () => {
-    const store = $.atom({ name: 'Alice' });
-    const lens = $.atomLens(store, 'name');
+    const store = atom({ name: 'Alice' });
+    const lens = atomLens(store, 'name');
 
     let callCount = 0;
     lens.subscribe(() => {
@@ -214,19 +193,19 @@ describe('$.atomLens', () => {
 
     // Initial update
     store.value = { name: 'Bob' };
-    await $.nextTick();
+    await nextTick();
     expect(callCount).toBe(1);
 
     // Dispose and update
     lens.dispose();
     store.value = { name: 'Charlie' };
-    await $.nextTick();
+    await nextTick();
     expect(callCount).toBe(1); // Should not increase
   });
 
   it('should return its own subscriber count', () => {
-    const store = $.atom({ name: 'Alice' });
-    const lens = $.atomLens(store, 'name');
+    const store = atom({ name: 'Alice' });
+    const lens = atomLens(store, 'name');
 
     expect(lens.subscriberCount()).toBe(0);
     expect(store.subscriberCount()).toBe(0); // Lens doesn't subscribe until it has its own subscribers
@@ -241,8 +220,8 @@ describe('$.atomLens', () => {
   });
 
   it('should create a factory using lensFor', () => {
-    const user = $.atom({ profile: { name: 'Alice', email: 'alice@example.com' } });
-    const lens = $.lensFor(user);
+    const user = atom({ profile: { name: 'Alice', email: 'alice@example.com' } });
+    const lens = lensFor(user);
 
     const nameLens = lens('profile.name');
     const emailLens = lens('profile.email');

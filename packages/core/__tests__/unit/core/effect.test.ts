@@ -20,6 +20,13 @@ describe('Effect', () => {
     vi.useRealTimers();
   });
 
+  interface InternalEffect {
+    _deps: {
+      truncateFrom(index: number): void;
+    };
+    dispose(): void;
+  }
+
   describe('Validation & Initialization', () => {
     it('rejects invalid constructor inputs', () => {
       expect(() => effect(null as unknown as () => void)).toThrow(EffectError);
@@ -297,6 +304,64 @@ describe('Effect', () => {
       await sleep(10);
       expect(consoleSpy).toHaveBeenCalledTimes(1);
       expect(consoleSpy).toHaveBeenCalledWith(expect.any(EffectError));
+    });
+  });
+
+  describe('Coverage Gaps', () => {
+    it('handles dependency slot overflows (index >= 4)', async () => {
+      const atoms = Array.from({ length: 6 }, (_, i) => atom(i));
+      const e = effect(() => {
+        atoms.forEach((a) => a.value);
+      });
+      await vi.runAllTimersAsync();
+      expect(e.executionCount).toBe(1);
+
+      atoms[5]!.value = 100;
+      await vi.runAllTimersAsync();
+      expect(e.executionCount).toBe(2);
+      e.dispose();
+    });
+
+    it('handles errors when a dependency subscription fails', async () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const onError = vi.fn();
+      const badDep = atom(0);
+      vi.spyOn(badDep, 'subscribe').mockImplementation(() => {
+        throw new Error('subscribe fail');
+      });
+
+      const e = effect(
+        () => {
+          badDep.value;
+        },
+        { onError }
+      );
+
+      await vi.runAllTimersAsync();
+      expect(consoleError).toHaveBeenCalled();
+      expect(onError).toHaveBeenCalled();
+      e.dispose();
+    });
+
+    it('handles errors in _commitDeps during recovery', async () => {
+      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const a = atom(0);
+      const e = effect(() => {
+        a.value;
+        throw new Error('exec fail');
+      }) as unknown as InternalEffect;
+
+      vi.spyOn(e._deps, 'truncateFrom').mockImplementationOnce(() => {
+        throw new Error('truncate fail');
+      });
+
+      a.value = 1;
+      await vi.runAllTimersAsync();
+      expect(consoleWarn).toHaveBeenCalledWith(
+        expect.stringContaining('_commitDeps failed'),
+        expect.anything()
+      );
+      e.dispose();
     });
   });
 });

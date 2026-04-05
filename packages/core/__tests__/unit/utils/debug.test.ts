@@ -115,3 +115,11 @@ describe('generateId', () => {
     expect(c).toBe(a + 2);
   });
 });
+
+describe('Debug Coverage Gaps', () => {
+  it('Debug info fallback (debug.ts 37)', () => {
+    const obj = {};
+    debug.attachDebugInfo(obj, 'type', 1);
+    expect((obj as Record<symbol, unknown>)[DEBUG_NAME]).toBeDefined();
+  });
+});

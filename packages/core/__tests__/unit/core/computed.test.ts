@@ -15,6 +15,21 @@ describe('Computed', () => {
     vi.restoreAllMocks();
   });
 
+  interface InternalComputed<T = unknown> {
+    value: T;
+    isDirty: boolean;
+    _isDirty(): boolean;
+    _hasErrorInternal: boolean;
+    _track(): void;
+    _finalizeResolution(value: T): void;
+    _deps: {
+      truncateFrom(index: number): void;
+      size: number;
+    };
+    _hotIndex: number;
+    invalidate(): void;
+  }
+
   describe('Identity & Validation', () => {
     it('assigns unique identity and proper brands for valid computed instances', () => {
       const c1 = computed(() => 1);
@@ -239,6 +254,113 @@ describe('Computed', () => {
 
       await sleep(60);
       expect(c.value).toBe(1); // the latest valid state wins
+    });
+  });
+
+  describe('Coverage Gaps', () => {
+    it('Internal getters and track method', () => {
+      const c = computed(() => 1) as unknown as InternalComputed;
+      expect(c.isDirty).toBe(true);
+      expect(c._hasErrorInternal).toBe(false);
+      c.value; // Evaluate
+      expect(c.isDirty).toBe(false);
+
+      // Manually trigger _track
+      expect(() => c._track()).not.toThrow();
+    });
+
+    it('Pending/Rejected states without default value throw', async () => {
+      // Pending without default
+      const p = computed(async () => {
+        await sleep(10);
+        return 1;
+      }) as unknown as InternalComputed;
+
+      // Trigger evaluation
+      try {
+        p.value;
+      } catch {
+        // expected
+      }
+      expect(() => p.value).toThrow(ComputedError);
+
+      // Rejected without default
+      const r = computed(() => {
+        throw new Error('fail');
+      }) as unknown as InternalComputed;
+      expect(() => r.value).toThrow(ComputedError);
+
+      // Double check the return value branch (line 174)
+      r._finalizeResolution(42);
+      expect(r.value).toBe(42);
+    });
+
+    it('Dev-mode warnings for failed dependency evaluation', async () => {
+      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      // Case 1: Dependency throws during _recompute commit (lines 359-360)
+      const dep1 = atom(0);
+      const c1 = computed(() => {
+        dep1.value;
+        throw new Error('computation fail');
+      }) as unknown as InternalComputed;
+
+      // Mock truncateFrom to throw
+      vi.spyOn(c1._deps, 'truncateFrom').mockImplementationOnce(() => {
+        throw new Error('truncate fail');
+      });
+
+      // Recompute happens here. It will throw because _handleError rethrows.
+      expect(() => c1.value).toThrow();
+      expect(consoleWarn).toHaveBeenCalledWith(
+        expect.stringContaining('_commitDeps failed'),
+        expect.anything()
+      );
+
+      // Case 2: Dependency throws during dirty check (lines 495-496)
+      const dep2 = computed(() => {
+        throw new Error('dep fail');
+      });
+      const c2 = computed(() => {
+        try {
+          return dep2.value;
+        } catch {
+          return 0;
+        }
+      }) as unknown as InternalComputed;
+
+      c2.value; // established dependency
+      dep2.invalidate(); // make it dirty
+
+      // dirty check should happen here
+      c2._isDirty();
+      expect(consoleWarn).toHaveBeenCalledWith(expect.stringContaining('threw during dirty check'));
+    });
+
+    it('ReactiveNode hot-path dirty check (base.ts 245-261)', async () => {
+      const a = atom(0);
+      const b = computed(() => a.value); // b is a computed dep
+      const c = computed(() => b.value) as unknown as InternalComputed;
+
+      c.value; // establishes deps, _hotIndex = -1
+
+      // Make 'a' dirty, which makes 'b' dirty
+      a.value = 1;
+
+      // Before reading c.value, it's dirty because 'a' changed.
+      expect(c._isDirty()).toBe(true);
+
+      // Recompute c by reading its value, making it clean
+      void c.value;
+
+      // Check dirtiness (now clean)
+      // We verify hotIndex is set during the deep check
+      expect(c._hotIndex).toBeGreaterThanOrEqual(0);
+
+      // If we re-set a.value to same thing, it might still trigger notify but version won't change
+      // But setting it to new value 2 makes it dirty again
+      a.value = 2;
+      expect(c._isDirty()).toBe(true); // Hits Phase 1 (line 250-255) in base.ts
     });
   });
 });
