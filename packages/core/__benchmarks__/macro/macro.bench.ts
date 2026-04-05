@@ -85,7 +85,7 @@ describe('Todo App: Comprehensive Workflow', () => {
   }, benchEffectOptions);
 
   bench(
-    'full workflow: add → toggle → filter → delete → stats',
+    '[Atom] full workflow: add → toggle → filter → delete → stats',
     () => {
       // 1. Reset
       todosWorkflow.value = [];
@@ -121,20 +121,22 @@ describe('Data Grid: Core Operations (1000 Rows)', () => {
   const data = generateGridData(1000);
 
   bench(
-    '[Vanilla] initialize',
+    '[Vanilla] initialize (x100)',
     () => {
-      const generated = generateGridData(1000);
-      const rows = generated;
+      // Measurement focus: Plain object reference initialization
+      const rows = data;
       keep(rows[0]);
     },
     macroBenchOptions
   );
 
   bench(
-    '[Atom] initialize',
+    '[Atom] initialize (x100)',
     () => {
+      // Measurement focus: Atom overhead with initial access
       const rows = atom<DataGridRow[]>(data);
-      keep(rows.value);
+      // Ensure the value is actually accessed and the atom is distinct
+      keep(rows.value[0]);
     },
     macroBenchOptions
   );
