@@ -6,12 +6,12 @@ Benchmarking suite for `@but212/atom-effect-jquery` to measure DOM binding perfo
 
 | Category | Key Metric | Value | Context |
 | ---------- | ---------- | ----- | ------- |
-| **Text Binding** | Update (100el × 50) | 187.6 ops/sec | Efficient set-and-notify |
-| **Class Binding** | Toggle (100el × 100) | 207.7 ops/sec | Fast optimized toggle |
-| **List Render** | 100 items (append) | 247.8 ops/sec | Smooth list updates |
-| **Input (DOM→Atom)** | 100 events | 855.9 ops/sec | Minimal event overhead |
-| **Todo App** | Full workflow | 1,910.4 ops/sec | High-throughput DOM sync |
-| **Dashboard** | Fan-in chain | 1,459.1 ops/sec | Scalable reactive topology |
+| **Text Binding** | Update (100el × 50) | 161.5 ops/sec | Efficient set-and-notify |
+| **Class Binding** | Toggle (100el × 100) | 175.4 ops/sec | Fast optimized toggle |
+| **List Render** | 100 items (append) | 242.6 ops/sec | Smooth list updates |
+| **Input (DOM→Atom)** | 100 events | 840.7 ops/sec | Minimal event overhead |
+| **Todo App** | Full workflow | 1,677.2 ops/sec | High-throughput DOM sync |
+| **Dashboard** | Fan-in chain | 1,455.0 ops/sec | Scalable reactive topology |
 
 ## Running Benchmarks
 
@@ -71,8 +71,8 @@ Located in `__benchmarks__/macro/`, these test real-world DOM scenarios:
 
 ## Latest Results
 
-**Version**: v0.28.0
-**Last Updated**: 2026-04-05
+**Version**: v0.29.0
+**Last Updated**: 2026-04-07
 **Environment**:
 
 - **Node.js**: v22.x
@@ -84,13 +84,13 @@ Located in `__benchmarks__/macro/`, these test real-world DOM scenarios:
 
 | Benchmark | Result | Analysis |
 | ---------- | ------ | -------- |
-| atomText propagation | 187.6 ops/sec | Consistent DOM text updates |
-| atomClass toggle | 207.7 ops/sec | Fast class manipulation |
-| atomList render (100) | 247.8 ops/sec | Efficient list reconciliation |
-| atomVal DOM→Atom | 855.9 ops/sec | Near-instant input sync |
-| Todo full workflow | 1,910.4 ops/sec | Optimized for web-apps |
-| Dashboard fan-in | 1,459.1 ops/sec | Efficient computed→DOM chain |
-| atomForm O(1) Scaling | 422.1K ops/sec | O(1) field dispatch validated |
+| atomText propagation | 161.5 ops/sec | Consistent DOM text updates |
+| atomClass toggle | 175.4 ops/sec | Fast class manipulation |
+| atomList render (100) | 242.6 ops/sec | Efficient list reconciliation |
+| atomVal DOM→Atom | 840.7 ops/sec | Near-instant input sync |
+| Todo full workflow | 1,677.2 ops/sec | Optimized for web-apps |
+| Dashboard fan-in | 1,455.0 ops/sec | Efficient computed→DOM chain |
+| atomForm O(1) Scaling | 478.8K ops/sec | O(1) field dispatch validated |
 
 ## Contributing Benchmarks
 

@@ -1,43 +1,45 @@
 # Changelog
 
-## [Unreleased]
+## [0.29.0] - 2026-04-07
 
 ### Core
 
-#### Changed
+#### Breaking Changes
 
-- **Performance & Simplicity**: Simplified internal dirty checking by removing redundant DJB2-based hashing.
-  - Replaced `isDirtyFast()` (cheap O(N)) with unified `_isDirty()` / `_deepDirtyCheck()` (O(N)), leveraging the existing `hotIndex` (O(1)) optimization for high-frequency updates.
-  - Reduced core complexity by ~120 lines and removed internal `BITPACK` / version bit-shifting constants.
-- **Breaking Change (Core)**: Removed `maxAsyncRetries` option from `computed`.
-  - Computation drift now naturally triggers a re-evaluation (`_markDirty()`) without an arbitrary retry limit.
-  - Aligns with reactive principles: any dependency change MUST be reflected, regardless of how many times it drifts during an async flight.
-- **Architecture**: **Directory Structure Flattening & Consolidation**.
+- **Removed**: `maxAsyncRetries` option in `computed`. Computation drift now naturally triggers re-evaluation (`_markDirty()`) without an arbitrary limit, ensuring reactive consistency during async resolution cycles.
+
+#### Performance
+
+- **Simplicity**: Simplified internal dirty checking by removing redundant DJB2-based hashing in favor of a unified `_isDirty` mechanism, reducing core complexity by ~120 lines.
+- **Buffers**: Merged `SlotBuffer` and `DepSlotBuffer` in `src/core/buffers.ts` to improve cache locality and simplify buffer management.
+
+#### Internal
+
+- **Architecture**: **Directory Flattening & Consolidation**.
   - Eliminated redundant `internal/`, `tracking/`, and `errors/` subdirectories to reduce module fragmentation and import depth.
-  - Consolidated fragmented logic into unified, high-cohesion modules:
-    - `src/errors.ts`: Unified all error classes, messages, and utility functions.
-    - `src/core/scheduler.ts`: Merged scheduler, epoch management, and batching logic.
-    - `src/core/buffers.ts`: Merged `SlotBuffer` and `DepSlotBuffer` for better cache locality and unified buffer management.
-    - `src/core/tracking.ts`: Consolidated dependency tracking, subscription entry, and tracking context logic.
-  - Refactored all internal package imports and test suites to align with the flattened architecture.
+  - Consolidated fragmented logic into unified high-cohesion modules: `errors.ts`, `scheduler.ts`, and `tracking.ts`.
 
 ### jQuery
 
-#### Changed
+#### Added
 
-- **Architecture**: **Directory Structure Flattening & Consolidation**.
-  - Eliminated redundant `internal/` subdirectory to reduce module fragmentation.
-  - Consolidated fragmented logic into a unified, high-cohesion module:
-    - `src/utils/pool.ts`: Merged `array-pool.ts`, `object-pool.ts`, and internal core pools to simplify abstractions and reduce the number of utility files.
-  - Refactored related internal package imports (`list.ts`, `registry.ts`) to align with the flattened architecture.
 - **API**: **Enhanced `atomForm` Binding**.
   - Added support for `FormOptions`: `debounce`, `transform`, and `onChange` hooks.
   - Improved deep path support (e.g., `user.profile.age`, `items[0].text`).
   - Automated lifecycle: Full support for dynamic control addition, removal, and renaming via `MutationObserver`.
-  - Added native support for radio groups and checkbox groups (auto-mapping to array values).
-  - Internal: Re-implemented via `FormBinder` manager for robust circular protection and O(1) dispatcher performance.
-- **API**: **Tuple Support in `atomBind`**.
-  - `form` binding now accepts `[atom, options]` tuple for advanced configuration.
+  - Native support for radio groups and checkbox groups with auto-mapping.
+  - Advanced configuration support via `[atom, options]` tuple in `atomBind`.
+
+#### Changed
+
+- **Performance**: Re-implemented form binding via `FormBinder` manager for robust circular protection and O(1) dispatcher performance.
+
+#### Internal
+
+- **Architecture**: **Directory Flattening & Consolidation**.
+  - Flattened `internal/` subdirectory to simplify package structure.
+  - `src/utils/pool.ts`: Merged array and object pool sets to simplify internal abstractions.
+- **Testing**: Refactored `form.test.ts` suite to prioritize behavior-driven verification over implementation details.
 
 ## [0.28.0]
 
