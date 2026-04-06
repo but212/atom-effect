@@ -8,13 +8,8 @@ import {
   SMI_MAX,
 } from '@/constants';
 import { ReactiveNode } from '@/core/base';
-import { DependencyLink } from '@/core/dep-tracking';
-import { ComputedError } from '@/errors/errors';
-import { ERROR_MESSAGES } from '@/errors/messages';
-import { DepSlotBuffer } from '@/internal/dep-slot-buffer';
-import { currentFlushEpoch, nextEpoch, nextVersion } from '@/internal/epoch';
+import { ComputedError, ERROR_MESSAGES, wrapError } from '@/errors';
 import { ATOM_BRAND, COMPUTED_BRAND } from '@/symbols';
-import { trackingContext } from '@/tracking';
 import type {
   AsyncStateType,
   ComputedAtom,
@@ -23,8 +18,10 @@ import type {
   Subscriber,
 } from '@/types';
 import { debug, NO_DEFAULT_VALUE } from '@/utils/debug';
-import { wrapError } from '@/utils/error';
 import { isPromise } from '@/utils/type-guards';
+import { DepSlotBuffer } from './buffers';
+import { currentFlushEpoch, nextEpoch, nextVersion } from './scheduler';
+import { DependencyLink, trackingContext } from './tracking';
 
 const {
   IDLE,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { atom, batch, computed } from '../src';
+import { atom, batch, computed } from '@/index';
 
 interface Todo {
   id: number;

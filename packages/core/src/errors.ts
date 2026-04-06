@@ -1,4 +1,46 @@
 /**
+ * Base error class.
+ */
+export class AtomError extends Error {
+  override name = 'AtomError';
+
+  constructor(
+    message: string,
+    public cause: Error | null = null,
+    public recoverable = true
+  ) {
+    super(message);
+  }
+}
+
+/** Computed error. */
+export class ComputedError extends AtomError {
+  override name = 'ComputedError';
+
+  constructor(message: string, cause: Error | null = null) {
+    super(message, cause, true);
+  }
+}
+
+/** Effect error. */
+export class EffectError extends AtomError {
+  override name = 'EffectError';
+
+  constructor(message: string, cause: Error | null = null) {
+    super(message, cause, false);
+  }
+}
+
+/** Scheduler error. */
+export class SchedulerError extends AtomError {
+  override name = 'SchedulerError';
+
+  constructor(message: string, cause: Error | null = null) {
+    super(message, cause, false);
+  }
+}
+
+/**
  * Error message registry.
  */
 export const ERROR_MESSAGES = {
@@ -35,3 +77,30 @@ export const ERROR_MESSAGES = {
   SCHEDULER_END_BATCH_WITHOUT_START: 'endBatch() called without matching startBatch(). Ignoring.',
   BATCH_CALLBACK_MUST_BE_FUNCTION: 'Batch callback must be a function',
 } as const;
+
+/**
+ * Wraps error.
+ *
+ * @param error - Raw error.
+ * @param ErrorClass - Error class.
+ * @param context - Error context.
+ */
+export function wrapError(
+  error: unknown,
+  ErrorClass: typeof AtomError,
+  context: string
+): AtomError {
+  // 1. Skip if already wrapped
+  if (error instanceof AtomError) {
+    return error;
+  }
+
+  // 2. Handle native Error instances
+  if (error instanceof Error) {
+    const type = error.name || error.constructor.name || 'Error';
+    return new ErrorClass(`${type} (${context}): ${error.message}`, error);
+  }
+
+  // 3. Handle unexpected types (string, number, etc.)
+  return new ErrorClass(`Unexpected error (${context}): ${String(error)}`);
+}

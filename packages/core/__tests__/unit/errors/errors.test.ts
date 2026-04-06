@@ -8,8 +8,7 @@ import { EMPTY_ERROR_ARRAY } from '@/constants';
 import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
 import { effect } from '@/core/effect';
-import { AtomError, ComputedError, EffectError, SchedulerError } from '@/errors/errors';
-import { wrapError } from '@/utils/error';
+import { AtomError, ComputedError, EffectError, SchedulerError, wrapError } from '@/errors';
 import { isAtom, isComputed, isEffect, isPromise, isWritable } from '@/utils/type-guards';
 
 // ── Error Classes ─────────────────────────────────────────────────────────────

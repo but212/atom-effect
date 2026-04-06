@@ -5,8 +5,8 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { atom } from '@/core/atom';
-import { AtomError } from '@/errors/errors';
-import { scheduler } from '@/internal/scheduler';
+import { scheduler } from '@/core/scheduler';
+import { AtomError } from '@/errors';
 import { waitForScheduler } from '../../utils/test-helpers';
 
 describe('Atom', () => {

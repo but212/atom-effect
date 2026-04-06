@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { SlotBuffer } from '@/internal/slot-buffer';
+import { SlotBuffer } from '@/core/buffers';
 
 describe('SlotBuffer', () => {
   interface InternalSlotBuffer<T> {

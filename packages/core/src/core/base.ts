@@ -1,12 +1,9 @@
 import { COMPUTED_STATE_FLAGS, EPOCH_CONSTANTS, IS_DEV, SMI_MAX } from '@/constants';
-import { Subscription } from '@/core/dep-tracking';
-import { AtomError } from '@/errors/errors';
-import { ERROR_MESSAGES } from '@/errors/messages';
-import type { DepSlotBuffer } from '@/internal/dep-slot-buffer';
-import { SlotBuffer } from '@/internal/slot-buffer';
+import { AtomError, ERROR_MESSAGES, wrapError } from '@/errors';
 import type { DependencyId, Subscriber } from '@/types';
 import { generateId } from '@/utils/debug';
-import { wrapError } from '@/utils/error';
+import { type DepSlotBuffer, SlotBuffer } from './buffers';
+import { Subscription } from './tracking';
 
 /**
  * Unified base class for all reactive nodes (Atoms, Computeds, Effects).

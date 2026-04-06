@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { DependencyLink, Subscription } from '@/core/dep-tracking';
+import { DependencyLink, Subscription } from '@/core/tracking';
 import type { Dependency, Subscriber } from '@/types';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

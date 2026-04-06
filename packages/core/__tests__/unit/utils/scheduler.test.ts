@@ -4,8 +4,8 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SCHEDULER_CONFIG } from '@/constants';
-import { SchedulerError } from '@/errors/errors';
-import { scheduler } from '@/internal/scheduler';
+import { scheduler } from '@/core/scheduler';
+import { SchedulerError } from '@/errors';
 import { sleep } from '../../utils/test-helpers';
 
 describe('Scheduler', () => {

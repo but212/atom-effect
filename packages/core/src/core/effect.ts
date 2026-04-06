@@ -6,23 +6,20 @@ import {
   SCHEDULER_CONFIG,
 } from '@/constants';
 import { ReactiveNode } from '@/core/base';
-import { DependencyLink } from '@/core/dep-tracking';
-import { EffectError } from '@/errors/errors';
-import { ERROR_MESSAGES } from '@/errors/messages';
-import { DepSlotBuffer } from '@/internal/dep-slot-buffer';
+import { EffectError, ERROR_MESSAGES, wrapError } from '@/errors';
+import { EFFECT_BRAND } from '@/symbols';
+import type { Dependency, EffectFunction, EffectObject, EffectOptions } from '@/types';
+import { debug } from '@/utils/debug';
+import { isPromise } from '@/utils/type-guards';
+import { DepSlotBuffer } from './buffers';
 import {
   currentFlushEpoch,
   flushExecutionCount,
   incrementFlushExecutionCount,
   nextEpoch,
-} from '@/internal/epoch';
-import { scheduler } from '@/internal/scheduler';
-import { EFFECT_BRAND } from '@/symbols';
-import { type DependencyTracker, trackingContext } from '@/tracking';
-import type { Dependency, EffectFunction, EffectObject, EffectOptions } from '@/types';
-import { debug } from '@/utils/debug';
-import { wrapError } from '@/utils/error';
-import { isPromise } from '@/utils/type-guards';
+  scheduler,
+} from './scheduler';
+import { DependencyLink, type DependencyTracker, trackingContext } from './tracking';
 
 /**
  * Effect implementation.

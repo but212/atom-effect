@@ -3,8 +3,8 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { DependencyLink } from '@/core/dep-tracking';
-import { DepSlotBuffer } from '@/internal/dep-slot-buffer';
+import { DepSlotBuffer } from '@/core/buffers';
+import { DependencyLink } from '@/core/tracking';
 import type { Dependency } from '@/types';
 
 // Mock dependency builder
