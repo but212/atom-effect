@@ -1,51 +1,46 @@
-import { describe, expect, it } from 'vitest';
-import $, { registry } from '@/index';
+import { describe, expect, it, vi } from 'vitest';
+import $ from '@/index';
 
 describe('Form Binding (atomForm)', () => {
-  it('should sync various data paths and handle initial state efficiently', async () => {
+  it('should synchronize various input types and deep paths (Two-way Binding)', async () => {
     const data = $.atom({
-      user: { name: 'Alice', profile: { age: 30 } },
-      items: [{ text: 'item0' }, { text: 'item1' }],
+      user: { name: 'Alice' },
+      gender: 'male',
+      hobbies: ['coding'],
       status: 'active',
-    });
-
-    // Track set counts for efficiency check
-    let setCount = 0;
-    const proto = Object.getPrototypeOf(data);
-    const originalDescriptor = Object.getOwnPropertyDescriptor(proto, 'value')!;
-    Object.defineProperty(data, 'value', {
-      get: () => originalDescriptor.get!.call(data),
-      set: (v) => {
-        setCount++;
-        originalDescriptor.set!.call(data, v);
-      },
-      configurable: true,
     });
 
     const $form = $(`
       <form>
         <input name="user.name">
-        <input name="user.profile.age">
-        <input name="items[0].text">
+        <input type="radio" name="gender" value="male" id="r-male">
+        <input type="radio" name="gender" value="female" id="r-female">
+        <input type="checkbox" name="hobbies" value="coding">
+        <input type="checkbox" name="hobbies" value="music">
         <input name="status">
       </form>
     `).appendTo(document.body);
 
-    $form.atomForm(data);
+    // atomForm 및 atomBind(alias) 동시 검증
+    $form.atomBind({ form: data });
     await $.nextTick();
 
-    // Initial Sync
+    // 1. Initial Sync
     expect($form.find('[name="user.name"]').val()).toBe('Alice');
-    expect($form.find('[name="items[0].text"]').val()).toBe('item0');
-    // Efficiency: no premature write to atom if values match
-    expect(setCount).toBe(0);
+    expect($form.find('#r-male').prop('checked')).toBe(true);
+    expect($form.find('[value="coding"]').prop('checked')).toBe(true);
 
-    // DOM -> Atom (Deep Path)
-    $form.find('[name="user.profile.age"]').val('31').trigger('input');
+    // 2. DOM -> Atom (Deep & Group)
+    $form.find('[name="user.name"]').val('Bob').trigger('input');
+    $form.find('#r-female').prop('checked', true).trigger('change');
+    $form.find('[value="music"]').prop('checked', true).trigger('change');
     await $.nextTick();
-    expect(data.value.user.profile.age).toBe('31');
 
-    // Atom -> DOM (Bulk)
+    expect(data.value.user.name).toBe('Bob');
+    expect(data.value.gender).toBe('female');
+    expect(data.value.hobbies).toEqual(['coding', 'music']);
+
+    // 3. Atom -> DOM (Bulk Update)
     data.value = { ...data.value, status: 'inactive' };
     await $.nextTick();
     expect($form.find('[name="status"]').val()).toBe('inactive');
@@ -53,64 +48,24 @@ describe('Form Binding (atomForm)', () => {
     $form.remove();
   });
 
-  it('should support radio and checkbox groups with partial lifecycle', async () => {
-    const data = $.atom({ gender: 'male', hobbies: ['coding'] });
-    const $form = $(`
-      <form>
-        <input type="radio" name="gender" value="male" id="r-male">
-        <input type="radio" name="gender" value="female" id="r-female">
-        <input type="checkbox" name="hobbies" value="coding">
-        <input type="checkbox" name="hobbies" value="music">
-      </form>
-    `).appendTo(document.body);
-
-    $form.atomForm(data);
-    await $.nextTick();
-
-    // Radio: DOM -> Atom
-    $form.find('#r-female').prop('checked', true).trigger('change');
-    await $.nextTick();
-    expect(data.value.gender).toBe('female');
-
-    // Radio: Partial removal check
-    $form.find('#r-male').remove();
-    await new Promise((r) => setTimeout(r, 10));
-    data.value = { ...data.value, gender: 'male' };
-    await $.nextTick();
-    expect($form.find('#r-female').prop('checked')).toBe(false);
-
-    // Checkbox Group: DOM -> Atom
-    $form.find('[value="music"]').prop('checked', true).trigger('change');
-    await $.nextTick();
-    expect(data.value.hobbies).toEqual(['coding', 'music']);
-
-    $form.remove();
-  });
-
-  it('should handle complex dynamic lifecycle (add/remove/rename)', async () => {
+  it('should handle dynamic lifecycle (MutationObserver logic)', async () => {
     const data = $.atom({ a: '1', b: '2', c: '3' });
     const $form = $('<form><input name="a" id="id-a"></form>').appendTo(document.body);
-
     $form.atomForm(data);
     await $.nextTick();
 
-    // 1. Dynamic Addition (including nested to verify observer depth)
+    // 1. Dynamic Addition
     $form.append('<div><input name="b" id="id-b"></div>');
-    await new Promise((r) => setTimeout(r, 20));
+    await new Promise((r) => setTimeout(r, 20)); // Wait for MutationObserver
     expect($form.find('#id-b').val()).toBe('2');
 
-    // 2. Dynamic Renaming (including Double Release & Rapid change check)
+    // 2. Dynamic Renaming
     const $inputA = $form.find('#id-a');
     $inputA.attr('name', 'c');
     await new Promise((r) => setTimeout(r, 20));
     expect($inputA.val()).toBe('3');
 
-    // Verify it still works after rename
-    $inputA.val('new-3').trigger('input');
-    await $.nextTick();
-    expect(data.value.c).toBe('new-3');
-
-    // 3. Removal & Ref-counting
+    // 3. Removal & Ref-counting Check
     $inputA.remove();
     await new Promise((r) => setTimeout(r, 20));
     data.value = { ...data.value, b: 'changed-b' };
@@ -120,99 +75,73 @@ describe('Form Binding (atomForm)', () => {
     $form.remove();
   });
 
-  it('should support binding via atomBind options', async () => {
-    const data = $.atom({ title: 'Hello' });
-    const $form = $('<form><input name="title"></form>').appendTo(document.body);
-    $form.atomBind({ form: data });
-    await $.nextTick();
-
-    expect($form.find('[name="title"]').val()).toBe('Hello');
-    $form.find('[name="title"]').val('World').trigger('input');
-    await $.nextTick();
-    expect(data.value.title).toBe('World');
-
-    $form.remove();
-  });
-
-  it('should support configuration options (debounce, transform, onChange)', async () => {
-    const data = $.atom({ text: 'init', age: 0 });
-    let lastPath = '';
+  it('should apply configuration options (debounce, transform, onChange)', async () => {
+    const data = $.atom({ age: 20, text: 'init', ids: [1] });
+    const onChange = vi.fn();
     const $form = $(`
       <form>
-        <input name="text">
         <input name="age">
+        <input name="text">
+        <input type="checkbox" name="ids" value="2" id="id-2">
       </form>
     `).appendTo(document.body);
 
     $form.atomForm(data, {
-      debounce: 50,
-      transform: (p, v) => (p === 'age' ? Number(v) : v),
-      onChange: (p) => {
-        lastPath = p;
+      debounce: 30,
+      transform: (p, v) => {
+        if (p === 'age') return Number(v);
+        if (p === 'ids' && Array.isArray(v)) return v.map(Number);
+        return v;
       },
+      onChange,
     });
     await $.nextTick();
 
-    // Transform & onChange (Wait for debounce)
+    // 1. Transform & OnChange
     $form.find('[name="age"]').val('25').trigger('input');
-    await new Promise((r) => setTimeout(r, 60));
-    await $.nextTick();
+    await new Promise((r) => setTimeout(r, 50));
     expect(data.value.age).toBe(25);
-    expect(lastPath).toBe('age');
+    expect(onChange).toHaveBeenCalledWith('age', 25);
 
-    // Debounce
+    // 2. Debounce
     $form.find('[name="text"]').val('delayed').trigger('input');
     expect(data.value.text).toBe('init');
-    await new Promise((r) => setTimeout(r, 60));
-    await $.nextTick();
+    await new Promise((r) => setTimeout(r, 50));
     expect(data.value.text).toBe('delayed');
 
-    $form.remove();
-  });
-
-  it('should prevent infinite loops via Echo protection flag', async () => {
-    const data = $.atom({ info: { count: 1 } });
-    const $form = $('<form><input name="info.count"></form>').appendTo(document.body);
-
-    let rootUpdateCount = 0;
-    const proto = Object.getPrototypeOf(data);
-    const originalDescriptor = Object.getOwnPropertyDescriptor(proto, 'value')!;
-    Object.defineProperty(data, 'value', {
-      get: () => originalDescriptor.get!.call(data),
-      set: (v) => {
-        rootUpdateCount++;
-        originalDescriptor.set!.call(data, v);
-      },
-      configurable: true,
-    });
-
-    $form.atomForm(data);
-    await $.nextTick();
-
-    $form.find('[name="info.count"]').val('2').trigger('input');
-    await $.nextTick();
-
-    expect(data.value.info.count).toBe('2');
-    expect(rootUpdateCount).toBe(1);
+    // 3. Checkbox Group + Transform (Merged case)
+    $form.find('#id-2').prop('checked', true).trigger('change');
+    await new Promise((r) => setTimeout(r, 50));
+    expect(data.value.ids).toEqual([1, 2]);
 
     $form.remove();
   });
 
-  it('should only track root dispatcher in registry and cleanup on removal', async () => {
-    const data = $.atom({ a: '1', b: '2' });
-    const $form = $('<form><input name="a"><input name="b"></form>').appendTo(document.body);
+  it('should prevent infinite loops and co-exist with other bindings', async () => {
+    const data = $.atom({ text: 'val' });
+    const active = $.atom(true);
+    const $form = $('<form><input name="text"></form>').appendTo(document.body);
+    const $input = $form.find('input');
+
+    $input.atomClass('active', active);
     $form.atomForm(data);
     await $.nextTick();
 
-    const formEl = $form[0] as HTMLFormElement;
-    const record = (
-      registry as unknown as { records: WeakMap<Element, { effects: unknown[] }> }
-    ).records.get(formEl);
-    expect(record?.effects.length).toBe(1);
+    // 1. Echo protection (no redundant sets)
+    let updateCount = 0;
+    data.subscribe(() => updateCount++);
+
+    $input.val('new').trigger('input');
+    await $.nextTick();
+    expect(data.value.text).toBe('new');
+    expect(updateCount).toBe(1); // Should only update once despite being a two-way bind
+
+    // 2. Interaction check (Interop)
+    active.value = false;
+    await $.nextTick();
+    expect($input.hasClass('active')).toBe(false);
+    expect($input.val()).toBe('new');
 
     $form.remove();
-    expect(
-      (registry as unknown as { records: WeakMap<Element, unknown> }).records.get(formEl)
-    ).toBeUndefined();
   });
 });

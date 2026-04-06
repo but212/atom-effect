@@ -86,8 +86,9 @@ class FormBinder<T extends object> {
     const name = control.name;
     if (!name) return;
 
-    if (this.elementNames.get(control) !== name) registry.cleanup(control);
-    if (registry.hasBind(control)) return;
+    const oldName = this.elementNames.get(control);
+    if (oldName !== undefined && oldName !== name) registry.cleanup(control);
+    if (this.elementNames.has(control) && oldName === name) return;
 
     const entry = this.acquireField(name);
     this.elementNames.set(control, name);
@@ -115,7 +116,7 @@ class FormBinder<T extends object> {
     const handler = () => {
       const curr = atom.peek();
       if (isCheck && Array.isArray(curr)) {
-        const s = new Set(curr);
+        const s = new Set(curr.map(String));
         el.checked ? s.add(val) : s.delete(val);
         atom.value = Array.from(s);
       } else {
@@ -131,7 +132,11 @@ class FormBinder<T extends object> {
       el,
       effect(() => {
         const v = atom.value;
-        const checked = isCheck ? (Array.isArray(v) ? v.includes(val) : !!v) : String(v) === val;
+        const checked = isCheck
+          ? Array.isArray(v)
+            ? v.some((x) => String(x) === val)
+            : !!v
+          : String(v) === val;
         if (el.checked !== checked) el.checked = checked;
       })
     );
