@@ -4,7 +4,7 @@
  */
 
 import { bench, describe } from 'vitest';
-import $ from '@/index';
+import $ from '../../dist';
 import { sanitizeHtml } from '@/utils/sanitize';
 import { cleanupContainer, createContainer, microBenchOptions } from '../utils/setup';
 
