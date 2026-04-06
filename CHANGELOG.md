@@ -15,6 +15,16 @@
     - `src/core/tracking.ts`: Consolidated dependency tracking, subscription entry, and tracking context logic.
   - Refactored all internal package imports and test suites to align with the flattened architecture.
 
+### jQuery
+
+#### Changed
+
+- **Architecture**: **Directory Structure Flattening & Consolidation**.
+  - Eliminated redundant `internal/` subdirectory to reduce module fragmentation.
+  - Consolidated fragmented logic into a unified, high-cohesion module:
+    - `src/utils/pool.ts`: Merged `array-pool.ts`, `object-pool.ts`, and internal core pools to simplify abstractions and reduce the number of utility files.
+  - Refactored related internal package imports (`list.ts`, `registry.ts`) to align with the flattened architecture.
+
 ## [0.28.0]
 
 ### Core

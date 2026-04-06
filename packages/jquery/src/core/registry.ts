@@ -1,13 +1,13 @@
 import { ERROR_MESSAGES, LOG_PREFIXES } from '@/constants';
+import type { EffectObject } from '@/types';
+import { getSelector } from '@/utils';
+import { debug } from '@/utils/debug';
 import {
   type BindingRecord,
   bindingRecordPool,
   cleanupsArrayPool,
   effectsArrayPool,
-} from '@/internal/pool';
-import type { EffectObject } from '@/types';
-import { getSelector } from '@/utils';
-import { debug } from '@/utils/debug';
+} from '@/utils/pool';
 
 let autoCleanupScheduled = false;
 

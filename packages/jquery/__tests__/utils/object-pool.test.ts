@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { ObjectPool } from '@/utils/object-pool';
+import { ObjectPool } from '@/utils/pool';
 
 interface TestObj {
   x: number;
