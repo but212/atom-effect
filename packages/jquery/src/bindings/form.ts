@@ -1,142 +1,230 @@
 import {
+  batch,
   atom as createAtom,
+  type EffectObject,
   effect,
   getPathValue,
   setDeepValue,
   untracked,
   type WritableAtom,
 } from '@but212/atom-effect';
+import $ from 'jquery';
+import { INTERNAL_HANDLER } from '@/core/jquery-patch';
 import { registry } from '@/core/registry';
-import type { ValOptions } from '@/types';
-import { bindChecked, bindVal, createContext } from './unified';
+import type { BindingContext, FormOptions } from '@/types';
+import { bindVal, createContext } from './unified';
 
 /**
- * Binds an entire form to a single object-based atom.
- *
- * DESIGN STRATEGY:
- * Optimized for O(1) performance on large forms. Instead of each input
- * directly observing a "lens" of the root atom (which would create N effects),
- * we use a single centralized 'rootDispatcher' effect. This dispatcher
- * watches the root atom once and pushes updates to individual 'leaf atoms'
- * only when their specific values change, eliminating O(N) effect fan-out.
+ * Manager class for orchestrating two-way form synchronization.
+ * Optimizes performance via Root -> Leaf dispatcher and maintains circular protection.
  */
-export function bindForm<T extends object>(
-  form: HTMLFormElement,
-  atom: WritableAtom<T>,
-  options: ValOptions<unknown> = {}
-): void {
-  // Use a flat array for O(N) iteration without Map iterator overhead
-  const fieldAtoms = new Map<string, WritableAtom<unknown>>();
-  const fields: { atom: WritableAtom<unknown>; parts: string[] }[] = [];
+interface FieldEntry {
+  atom: WritableAtom<unknown>;
+  parts: string[];
+  name: string;
+  refCount: number;
+  effect: EffectObject | null;
+}
 
-  // Single effect to watch the root atom and dispatch updates to individual fields.
-  // This ensures that typing in one field doesn't trigger O(N) re-computations
-  // across all other fields.
-  const rootDispatcher = effect(() => {
-    const rootValue = atom.value; // Subscribes to the root atom once
-    const len = fields.length;
-    if (len === 0) return;
+const SELECTOR = 'input, select, textarea';
 
-    untracked(() => {
-      for (let i = 0; i < len; i++) {
-        const item = fields[i]!;
-        const newValue = getPathValue(rootValue, item.parts);
-        // Only trigger the leaf atom if the value actually changed.
-        if (!Object.is(item.atom.peek(), newValue)) {
-          item.atom.value = newValue;
-        }
-      }
-    });
-  });
+class FormBinder<T extends object> {
+  private fieldMap = new Map<string, FieldEntry>();
+  private fields: FieldEntry[] = [];
+  private elementNames = new WeakMap<Element, string>();
+  private isSyncingFromLeaf = false;
 
-  // Track the dispatcher for cleanup when the form is removed.
-  registry.trackEffect(form, rootDispatcher);
+  constructor(
+    private form: HTMLFormElement,
+    private atom: WritableAtom<T>,
+    private options: FormOptions<unknown> = {}
+  ) {
+    this.init();
+  }
 
-  const getOrFieldAtom = (name: string): WritableAtom<unknown> => {
-    let fieldAtom = fieldAtoms.get(name);
-    if (!fieldAtom) {
-      const parts = name.includes('.') ? name.split('.') : [name];
+  private init(): void {
+    const rootDispatcher = effect(() => {
+      const rootValue = this.atom.value;
+      if (this.isSyncingFromLeaf || !this.fields.length) return;
 
-      // Create a leaf atom that only holds the value of this specific field.
-      fieldAtom = createAtom(getPathValue(atom.peek(), parts));
-      fields.push({ atom: fieldAtom, parts });
-
-      // Separate effect to sync changes from the field atom back to the root atom.
-      registry.trackEffect(
-        form,
-        effect(() => {
-          const newValue = fieldAtom!.value; // Subscribes to the leaf atom only
-          const currentRoot = atom.peek();
-          const nextRoot = setDeepValue(currentRoot, parts, 0, newValue);
-
-          if (nextRoot !== currentRoot) {
-            atom.value = nextRoot as T;
+      batch(() => {
+        untracked(() => {
+          for (let i = 0; i < this.fields.length; i++) {
+            const f = this.fields[i]!;
+            const newVal = getPathValue(rootValue, f.parts);
+            if (!Object.is(f.atom.peek(), newVal)) f.atom.value = newVal;
           }
-        })
-      );
+        });
+      });
+    });
 
-      fieldAtoms.set(name, fieldAtom);
+    registry.trackEffect(this.form, rootDispatcher);
+    this.bindElement(this.form);
+    this.setupObserver();
+  }
+
+  public bindElement(el: Element): void {
+    const targets = el.matches?.(SELECTOR)
+      ? [el]
+      : (el as HTMLElement).querySelectorAll?.(SELECTOR) || [];
+    for (let i = 0, len = targets.length; i < len; i++) {
+      this.bindControl(targets[i] as Element);
     }
-    return fieldAtom;
-  };
+  }
 
-  const bindElement = (el: Element) => {
+  private bindControl(el: Element): void {
     if (
       !(
         el instanceof HTMLInputElement ||
-        el instanceof HTMLTextAreaElement ||
-        el instanceof HTMLSelectElement
+        el instanceof HTMLSelectElement ||
+        el instanceof HTMLTextAreaElement
       )
     ) {
       return;
     }
-    const name = el.name;
-    if (!name || registry.hasBind(el)) return;
+    const control = el;
+    const name = control.name;
+    if (!name) return;
 
-    const fieldAtom = getOrFieldAtom(name);
-    const controlCtx = createContext(el as HTMLElement);
+    const oldName = this.elementNames.get(control);
+    if (oldName !== undefined && oldName !== name) registry.cleanup(control);
+    if (this.elementNames.has(control) && oldName === name) return;
 
-    if (el instanceof HTMLInputElement && (el.type === 'checkbox' || el.type === 'radio')) {
-      bindChecked(controlCtx, fieldAtom as WritableAtom<boolean>);
+    const entry = this.acquireField(name);
+    this.elementNames.set(control, name);
+
+    const ctx = createContext(control);
+    ctx.trackCleanup(() => this.releaseField(control, name));
+
+    if (
+      control instanceof HTMLInputElement &&
+      (control.type === 'radio' || control.type === 'checkbox')
+    ) {
+      this.bindToggle(ctx, entry.atom, control.value, control.type === 'checkbox');
     } else {
-      bindVal(controlCtx, fieldAtom, options);
+      bindVal(ctx, entry.atom, this.options);
     }
-  };
-
-  for (let i = 0, len = form.elements.length; i < len; i++) {
-    bindElement(form.elements[i]!);
   }
 
-  const observer = new MutationObserver((mutations) => {
-    for (let i = 0, mLen = mutations.length; i < mLen; i++) {
-      const mutation = mutations[i]!;
-      if (mutation.type === 'childList') {
-        for (let j = 0, aLen = mutation.addedNodes.length; j < aLen; j++) {
-          const node = mutation.addedNodes[j]!;
-          if (node.nodeType === 1) {
-            const el = node as HTMLElement;
-            bindElement(el);
-            // Search for inputs within the newly added fragment
-            const controls = el.matches?.('input, select, textarea')
-              ? [el]
-              : el.querySelectorAll('input, select, textarea');
-            for (let k = 0, cLen = controls.length; k < cLen; k++) {
-              bindElement(controls[k]!);
-            }
-          }
-        }
-      } else if (mutation.type === 'attributes' && mutation.attributeName === 'name') {
-        bindElement(mutation.target as Element);
+  private bindToggle(
+    ctx: BindingContext,
+    atom: WritableAtom<unknown>,
+    val: string,
+    isCheck: boolean
+  ): void {
+    const el = ctx.el as HTMLInputElement;
+    const handler = () => {
+      const curr = atom.peek();
+      if (isCheck && Array.isArray(curr)) {
+        const s = new Set(curr.map(String));
+        el.checked ? s.add(val) : s.delete(val);
+        atom.value = Array.from(s);
+      } else {
+        atom.value = isCheck ? el.checked : val;
       }
+    };
+
+    (handler as unknown as { [INTERNAL_HANDLER]: boolean })[INTERNAL_HANDLER] = true;
+    $(el).on('change', handler);
+    ctx.trackCleanup(() => $(el).off('change', handler));
+
+    registry.trackEffect(
+      el,
+      effect(() => {
+        const v = atom.value;
+        const checked = isCheck
+          ? Array.isArray(v)
+            ? v.some((x) => String(x) === val)
+            : !!v
+          : String(v) === val;
+        if (el.checked !== checked) el.checked = checked;
+      })
+    );
+  }
+
+  private acquireField(name: string): FieldEntry {
+    let entry = this.fieldMap.get(name);
+    if (entry) {
+      entry.refCount++;
+      return entry;
     }
-  });
 
-  observer.observe(form, {
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeFilter: ['name'],
-  });
+    const parts = name
+      .replace(/\[(\w+)\]/g, '.$1')
+      .split('.')
+      .filter(Boolean);
+    const fieldAtom = createAtom(getPathValue(this.atom.peek(), parts));
+    entry = { atom: fieldAtom, parts, name, refCount: 1, effect: null };
 
-  registry.trackCleanup(form, () => observer.disconnect());
+    entry.effect = effect(() => {
+      let val = fieldAtom.value;
+      if (this.options.transform) val = this.options.transform(name, val);
+
+      const root = this.atom.peek();
+      const next = setDeepValue(root, parts, 0, val);
+
+      if (next !== root) {
+        this.isSyncingFromLeaf = true;
+        try {
+          this.atom.value = next as T;
+          if (this.options.onChange) untracked(() => this.options.onChange!(name, val));
+        } finally {
+          this.isSyncingFromLeaf = false;
+        }
+      }
+    });
+
+    this.fieldMap.set(name, entry);
+    this.fields.push(entry);
+    return entry;
+  }
+
+  private releaseField(el: Element, name: string): void {
+    const entry = this.fieldMap.get(name);
+    if (entry && --entry.refCount <= 0) {
+      const idx = this.fields.indexOf(entry);
+      if (idx !== -1) this.fields.splice(idx, 1);
+      entry.effect?.dispose();
+      this.fieldMap.delete(name);
+    }
+    registry.cleanup(el);
+  }
+
+  private setupObserver(): void {
+    const observer = new MutationObserver((ms) => {
+      for (let i = 0, len = ms.length; i < len; i++) {
+        const m = ms[i]!;
+        if (m.type === 'childList') {
+          for (let j = 0; j < m.addedNodes.length; j++) {
+            const node = m.addedNodes[j]!;
+            if (node.nodeType === 1) this.bindElement(node as Element);
+          }
+        } else if (m.attributeName === 'name') {
+          this.bindElement(m.target as Element);
+        }
+      }
+    });
+
+    observer.observe(this.form, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['name'],
+    });
+
+    registry.trackCleanup(this.form, () => observer.disconnect());
+  }
+}
+
+/**
+ * Binds an entire form to a single object-based atom.
+ * Features: O(1) performance for large forms, circular loop protection,
+ * and custom transform/change hooks.
+ */
+export function bindForm<T extends object>(
+  form: HTMLFormElement,
+  atom: WritableAtom<T>,
+  options: FormOptions<unknown> = {}
+): void {
+  new FormBinder(form, atom, options);
 }

@@ -38,6 +38,10 @@ count.value++; // logs: 1, 2
 pnpm install
 pnpm build
 pnpm test
+
+# Run a command in a specific package
+pnpm --filter @but212/atom-effect <command>
+pnpm --filter @but212/atom-effect-jquery <command>
 ```
 
 ## Documentation
