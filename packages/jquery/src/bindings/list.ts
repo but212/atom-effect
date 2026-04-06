@@ -4,9 +4,8 @@ import { ERROR_MESSAGES, LOG_PREFIXES } from '@/constants';
 import { registry } from '@/core/registry';
 import type { EffectObject, ListKey, ListKeyFn, ListOptions, ReadonlyAtom } from '@/types';
 import { getSelector, hasOwn, shallowEqual } from '@/utils';
-import { ArrayPool } from '@/utils/array-pool';
 import { debug } from '@/utils/debug';
-import { ObjectPool } from '@/utils/object-pool';
+import { ArrayPool, ObjectPool } from '@/utils/pool';
 import { sanitizeHtml } from '@/utils/sanitize';
 
 // ============================================================================

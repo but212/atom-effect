@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { BITPACK, SMI_MAX } from '@/constants';
+import { SMI_MAX } from '@/constants';
 import {
   currentEpoch,
   currentFlushEpoch,
@@ -83,7 +83,6 @@ describe('epoch improvements', () => {
   });
 
   it('EPOCH wrap around and constants (epoch.ts 63, constants.ts 107)', () => {
-    expect(BITPACK.VERSION_BITS).toBeDefined();
     expect(SMI_MAX).toBeDefined();
 
     nextEpoch();

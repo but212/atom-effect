@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '@/index';
 import { disableAutoCleanup, enableAutoCleanup, registry } from '@/core/registry';
-import { bindingRecordPool, cleanupsArrayPool, effectsArrayPool } from '@/internal/pool';
+import { bindingRecordPool, cleanupsArrayPool, effectsArrayPool } from '@/utils/pool';
 
 describe('Pool Integration', () => {
   beforeEach(() => {

@@ -59,44 +59,6 @@ describe('DepSlotBuffer: Claiming (Cache Hits)', () => {
   );
 });
 
-describe('DepSlotBuffer: Hashing (seal vs isDirty)', () => {
-  const deps4 = Array.from({ length: 4 }, (_, i) => new MockDep(i, 1));
-  const buf4 = new DepSlotBuffer();
-  deps4.forEach((d) => buf4.insertNew(buf4.size, new DependencyLink(d, d.version)));
-  buf4.seal();
-
-  const deps16 = Array.from({ length: 16 }, (_, i) => new MockDep(i, 1));
-  const buf16 = new DepSlotBuffer();
-  deps16.forEach((d) => buf16.insertNew(buf16.size, new DependencyLink(d, d.version)));
-  buf16.seal();
-
-  bench(
-    `seal() + isDirtyFast() - 4 items X${REPEATS}`,
-    () => {
-      let lastRes;
-      for (let i = 0; i < REPEATS; i++) {
-        buf4.seal();
-        lastRes = buf4.isDirtyFast();
-      }
-      return lastRes as any;
-    },
-    microBenchOptions
-  );
-
-  bench(
-    `seal() + isDirtyFast() - 16 items X${REPEATS}`,
-    () => {
-      let lastRes;
-      for (let i = 0; i < REPEATS; i++) {
-        buf16.seal();
-        lastRes = buf16.isDirtyFast();
-      }
-      return lastRes as any;
-    },
-    microBenchOptions
-  );
-});
-
 describe('DepSlotBuffer: Mega-node Threshold (Map Fallback)', () => {
   const deps64 = Array.from({ length: 64 }, (_, i) => new MockDep(i, 1));
   const buf64 = new DepSlotBuffer();

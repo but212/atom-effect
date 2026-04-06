@@ -4,7 +4,7 @@
  */
 
 import { afterAll, bench, describe } from 'vitest';
-import $ from '@/index';
+import $ from '../../dist';
 import { cleanupContainer, createContainer, macroBenchOptions } from '../utils/setup';
 
 // ============================================================================

@@ -85,7 +85,6 @@ const userData = computed(async () => {
 - `defaultValue`: Initial value while async computation is pending.
 - `lazy`: Boolean (default `true`).
 - `onError`: `(error: Error) => void`. Error handler for computation failures.
-- `maxAsyncRetries`: Number (default `3`). Maximum number of async retries before giving up when dependency drift is detected.
 
 ## `effect(fn: () => void | CleanupFn, options?: EffectOptions)`
 

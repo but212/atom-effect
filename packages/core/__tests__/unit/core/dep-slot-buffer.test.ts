@@ -27,10 +27,8 @@ interface TestInternalDepSlotBuffer {
   _s1: DependencyLink | null;
   _s2: DependencyLink | null;
   _s3: DependencyLink | null;
-  _depsHash: number;
   _claimViaMap(node: Dependency, index: number): boolean;
   _swapGeneral(idx: number, trackIndex: number, link: DependencyLink): void;
-  _calculateHash(isLive: boolean): number;
   truncateFrom(index: number): void;
 }
 
@@ -235,71 +233,6 @@ describe('DepSlotBuffer', () => {
     });
   });
 
-  describe('Versioning and Hashing (Boundary Checks)', () => {
-    it('handles exact boundary counts: 1, 2, 3, 4, >4', () => {
-      const buf = new DepSlotBuffer();
-      const deps = [1, 2, 3, 4, 5].map((id) => {
-        const d = createMockDep(id);
-        d.version = id;
-        return d;
-      });
-
-      // 1 item
-      buf.add(new DependencyLink(deps[0]!, deps[0]!.version));
-      buf.seal();
-      expect(buf.isDirtyFast()).toBe(false);
-
-      // 2 items
-      buf.add(new DependencyLink(deps[1]!, deps[1]!.version));
-      buf.seal();
-      expect(buf.isDirtyFast()).toBe(false);
-
-      // 3 items
-      buf.add(new DependencyLink(deps[2]!, deps[2]!.version));
-      buf.seal();
-      expect(buf.isDirtyFast()).toBe(false);
-
-      // 4 items
-      buf.add(new DependencyLink(deps[3]!, deps[3]!.version));
-      buf.seal();
-      expect(buf.isDirtyFast()).toBe(false);
-
-      // 5 items (overflow)
-      buf.add(new DependencyLink(deps[4]!, deps[4]!.version));
-      buf.seal();
-      expect(buf.isDirtyFast()).toBe(false);
-
-      // Verify dirty detection in overflow
-      deps[4]!.version++;
-      expect(buf.isDirtyFast()).toBe(true);
-    });
-
-    it('seal and isDirtyFast handle empty buffer gracefully', () => {
-      const buf = new DepSlotBuffer();
-      buf.seal();
-      expect((buf as unknown as TestInternalDepSlotBuffer)._depsHash).toBe(0);
-      expect(buf.isDirtyFast()).toBe(false);
-    });
-
-    it('Sum hash handles multiple dependencies and is order-independent', () => {
-      const buf = new DepSlotBuffer();
-      const dep1 = createMockDep(1);
-      const dep2 = createMockDep(2);
-
-      buf.add(new DependencyLink(dep1, dep1.version));
-      buf.add(new DependencyLink(dep2, dep2.version));
-      buf.seal();
-
-      dep1.version++;
-      dep2.version++;
-      expect(buf.isDirtyFast()).toBe(true);
-
-      dep1.version--;
-      dep2.version--;
-      expect(buf.isDirtyFast()).toBe(false);
-    });
-  });
-
   describe('Safety Guards', () => {
     it('prohibits remove()', () => {
       const buf = new DepSlotBuffer();
@@ -448,18 +381,6 @@ describe('DepSlotBuffer', () => {
       // insertNew at 5 relocates overflow to end (line 231)
       buf.insertNew(5, new DependencyLink(createMockDep(101), 1, vi.fn()));
       expect(buf.getAt(7)!.node).toBe(occupants[5]);
-    });
-
-    it('_calculateHash coverage', () => {
-      const buf = new DepSlotBuffer();
-      const dep = createMockDep(1);
-      buf.add(new DependencyLink(dep, 1));
-      buf.seal();
-
-      const testBuf = buf as unknown as TestInternalDepSlotBuffer;
-      // Force a state where count > 0 but _s0 is null (line 302)
-      testBuf._s0 = null;
-      expect(testBuf._calculateHash(true)).toBe(0);
     });
   });
 });

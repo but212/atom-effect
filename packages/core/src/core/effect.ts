@@ -194,7 +194,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
 
       // Clean up any remaining trailing dependencies
       deps.truncateFrom(this._trackCount);
-      deps.seal();
+
       committed = true;
 
       // Handle result
@@ -219,15 +219,6 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     } finally {
       this.flags &= ~EFFECT_STATE_FLAGS.EXECUTING;
     }
-  }
-
-  /**
-   * Optimized dirty check. Bypasses deep scan if only Atoms are involved.
-   */
-  protected override _isDirty(): boolean {
-    const deps = this._deps;
-    if (deps.hasComputeds) return this._deepDirtyCheck();
-    return deps.isDirtyFast();
   }
 
   private _handleAsyncResult(promise: Promise<unknown>): void {

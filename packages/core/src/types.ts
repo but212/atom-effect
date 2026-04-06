@@ -169,8 +169,6 @@ export interface ComputedOptions<T = unknown> {
   lazy?: boolean;
   /** Error handler. */
   onError?: (error: Error) => void;
-  /** Maximum number of async retries before giving up (default: 3). */
-  maxAsyncRetries?: number;
 }
 
 /**

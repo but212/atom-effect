@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { ArrayPool } from '@/utils/array-pool';
+import { ArrayPool } from '@/utils/pool';
 
 describe('ArrayPool', () => {
   let pool: ArrayPool<number>;
