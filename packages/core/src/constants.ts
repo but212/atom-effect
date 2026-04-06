@@ -72,7 +72,6 @@ export const DEBUG_CONFIG = {
  * Computed configuration.
  */
 export const COMPUTED_CONFIG = {
-  MAX_ASYNC_RETRIES: 3,
   MAX_PROMISE_ID: Number.MAX_SAFE_INTEGER - 1,
 } as const;
 
@@ -90,15 +89,6 @@ export const EPOCH_CONSTANTS = {
  * V8 Small Integer (SMI) max value.
  */
 export const SMI_MAX = 0x3fffffff;
-
-/**
- * Bit-packing constants for versioned slot operations.
- * Used by DepSlotBuffer for O(1) snapshot hashing.
- */
-export const BITPACK = {
-  /** Bits allocated for version in a packed slot value. */
-  VERSION_BITS: 16,
-} as const;
 
 /**
  * Development environment flag.

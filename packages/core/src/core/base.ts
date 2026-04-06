@@ -252,9 +252,6 @@ export abstract class ReactiveNode<T> {
     }
 
     // Phase 2: Standard Validation - O(N)
-    if (!deps.hasComputeds && !deps.isDirtyFast()) return false;
-
-    // Deep check for computeds
     return this._deepDirtyCheck();
   }
 

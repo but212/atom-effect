@@ -9,7 +9,6 @@ This document explains the internal mechanics of `@but212/atom-effect`. It bridg
 Before diving into the bitwise flags and version hashing, it is helpful to understand how the high-level API maps to the internal engine.
 
 - **Unified Surface**: While you use `atom`, `computed`, and `effect`, they are all specialized instances of a single internal class: **`ReactiveNode`**. This ensures consistent memory layout (Monomorphism) for V8 optimization.
-- **Push-Pull Hybrid**:
   - **Push (Notification Phase)**: When an atom changes, it "pushes" a dirty signal to its immediate subscribers. No calculation happens yet.
   - **Pull (Evaluation Phase)**: When you read a `.value` or when an effect runs, the node "pulls" the latest versions from its dependencies to see if it actually needs to re-compute.
 - **The Scheduler's Role**: Effects don't run immediately. They are queued in a **Scheduler**. This allows the library to "coalesce" multiple atom updates into a single effect execution, ensuring efficiency.
@@ -25,7 +24,7 @@ The core design focuses on **decentralized responsibility**. Truth is not manage
 
 1. **Local Versioning**: Nodes track their own `version`. Staleness is determined by comparing a node's current state with what was previously observed by its subscribers.
 2. **Implicit Subscriptions**: Relationships are formed through usage. Reading a `.value` registers the caller as a dependency automatically via `trackingContext`.
-3. **Lifecycle Snapshots**: For asynchronous tasks, nodes capture a hash of their dependencies' versions (`_asyncStartAggregateVersion`). This allows a node to detect if the "world" has moved on during its execution.
+3. **Lifecycle Snapshots**: For asynchronous tasks, nodes capture a snapshot of their dependencies' versions. This allows a node to detect if the "world" has moved on during its execution.
 
 ### Core Class Hierarchy
 
@@ -66,10 +65,10 @@ To reduce unnecessary work, a **Notify-and-Check** approach is used.
 1. **Phase 1: Notification**: When an atom changes, it notifies its immediate subscribers. For **Computed** nodes, this sets the `DIRTY` flag. For **Effects**, this schedules an execution check via the scheduler.
 2. **Phase 2: Evaluation (Sweep)**: The check differs by node type:
    - **Computed**: On `.value` access, it calls `_isDirty()` to determine if re-computation is needed. This uses a **Hot-path Check**: it first checks the last known dependency that caused a change. If that dependency is still updating, the node is known to be dirty in $O(1)$.
-   - **Effect**: Before re-executing, `_isDirty()` is called. This performs a **Fast Dirty Check** (efficient O(N) version hash calculation). If the hash is stable, it skips re-evaluation. If not, it performs a full structural walk.
+   - **Effect**: Before re-executing, `_isDirty()` is called. This performs a structural walk of dependency versions.
 
-**Trade-off: Fast Path (O(1)/O(N)) vs. Full Walk**
-The validation process uses layered heuristics to minimize expensive work. The **Hot-path Check (O(1))** provides instant dirty detection for recurring updates by caching the last dirty index. If that misses, the **Version Hash (O(N))** provides a fast heuristic to avoid a full structural walk. Only if the hash differs does the engine perform a recursive pull of dependencies. These checks are implemented using **Branchless/Manual Unrolling** for maximum density.
+**Trade-off: Fast Path (O(1)) vs. Full Walk (O(N))**
+The validation process uses layered heuristics to minimize expensive work. The **Hot-path Check (O(1))** provides instant dirty detection for recurring updates by caching the last dirty index. Only if that misses does the engine perform a structural walk of dependencies.
 
 ---
 
@@ -77,7 +76,7 @@ The validation process uses layered heuristics to minimize expensive work. The *
 
 Async computed nodes are treated as state machines, using **version snapshots** to guard against race conditions.
 
-- **Async Drift Detection**: If dependency versions change between a Promise's start and resolution (detected via a DJB2-based version snapshot), the result is discarded and the node re-evaluates.
+- **Async Drift Detection**: If dependency versions change between a Promise's start and resolution (detected via a version snapshot), the result is discarded and the node re-evaluates.
 - **Cancellation**: Only the latest "Promise ID" is allowed to resolve. This prevents slow, stale responses from overwriting newer results.
 
 **Implementation Detail**: Bitwise flags (e.g., `PENDING`, `RESOLVED`, `RECOMPUTING`) are used to keep state transitions fast and memory-efficient.
@@ -91,7 +90,6 @@ Reactivity systems are prone to memory leaks if subscriptions are not cleaned up
 - **DepSlotBuffer (Dependency Tracking)**: A specialized `SlotBuffer` for dependency links. It features:
   - **Mega-Node Optimization**: A hybrid O(1) `Map` fallback when dependencies exceed 32, ensuring performance even for extremely large graphs.
   - **O(1) Free-Index Slot Reuse**: Uses a stack-based index reuse strategy to reclaim nulled slots in $O(1)$ time, eliminating linear scans during subscriber/dependency churn.
-  - **Fast Dirty Checking**: An efficient version hash check (`isDirtyFast`) using an unrolled additive hash of all dependency versions. The logic is optimized for monochromatic V8 hidden classes and avoids branching overhead.
   - **Manual Loop Unrolling**: Dependency collection and notifications are manually unrolled for the first 4 slots to bypass closure allocations and iterator dispatch.
   - **Safe Retrieval**: Implemented `claimExisting` to reuse existing dependency links during re-evaluation, minimizing churn.
 - **Computed Optimizations**:

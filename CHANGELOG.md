@@ -6,6 +6,12 @@
 
 #### Changed
 
+- **Performance & Simplicity**: Simplified internal dirty checking by removing redundant DJB2-based hashing.
+  - Replaced `isDirtyFast()` (cheap O(N)) with unified `_isDirty()` / `_deepDirtyCheck()` (O(N)), leveraging the existing `hotIndex` (O(1)) optimization for high-frequency updates.
+  - Reduced core complexity by ~120 lines and removed internal `BITPACK` / version bit-shifting constants.
+- **Breaking Change (Core)**: Removed `maxAsyncRetries` option from `computed`.
+  - Computation drift now naturally triggers a re-evaluation (`_markDirty()`) without an arbitrary retry limit.
+  - Aligns with reactive principles: any dependency change MUST be reflected, regardless of how many times it drifts during an async flight.
 - **Architecture**: **Directory Structure Flattening & Consolidation**.
   - Eliminated redundant `internal/`, `tracking/`, and `errors/` subdirectories to reduce module fragmentation and import depth.
   - Consolidated fragmented logic into unified, high-cohesion modules:

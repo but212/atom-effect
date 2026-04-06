@@ -1,5 +1,3 @@
-import { BITPACK } from '@/constants';
-
 // ── SlotBuffer ──────────────────────────────────────────────────────────
 
 /**
@@ -469,11 +467,6 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
   hasComputeds = false;
 
   /**
-   * Cached dependency version snapshot hash.
-   */
-  _depsHash = 0;
-
-  /**
    * Resets tracking metadata for a new evaluation pass.
    * Ensures 'hasComputeds' is clean.
    */
@@ -720,73 +713,6 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
       this._map.clear();
       this._map = null;
     }
-  }
-
-  /**
-   * Seals the buffer after a tracking pass completes.
-   * Computes the additive snapshot hash of all dependency versions.
-   *
-   * Uses link.version (snapshot at tracking time) — NOT node.version.
-   */
-  seal(): void {
-    this._depsHash = this._calculateHash(false);
-  }
-
-  /**
-   * Efficient O(N) fast-path dirty check using the sealed version hash.
-   */
-  isDirtyFast(): boolean {
-    return this._calculateHash(true) !== this._depsHash;
-  }
-
-  private _calculateHash(isLive: boolean): number {
-    const count = this._count;
-    if (count === 0) return 0;
-
-    const vbits = BITPACK.VERSION_BITS;
-    let hash = 0;
-
-    // Inline slots (unrolled)
-    const s0 = this._s0;
-    if (s0 != null) {
-      const n0 = s0.node;
-      const v0 = isLive ? n0.version : s0.version;
-      hash = (hash + (v0 << vbits) + n0.id) | 0;
-
-      const s1 = this._s1;
-      if (count > 1 && s1 != null) {
-        const n1 = s1.node;
-        const v1 = isLive ? n1.version : s1.version;
-        hash = (hash + (v1 << vbits) + n1.id) | 0;
-
-        const s2 = this._s2;
-        if (count > 2 && s2 != null) {
-          const n2 = s2.node;
-          const v2 = isLive ? n2.version : s2.version;
-          hash = (hash + (v2 << vbits) + n2.id) | 0;
-
-          const s3 = this._s3;
-          if (count > 3 && s3 != null) {
-            const n3 = s3.node;
-            const v3 = isLive ? n3.version : s3.version;
-            hash = (hash + (v3 << vbits) + n3.id) | 0;
-          }
-        }
-      }
-    }
-
-    // Overflow
-    if (count > 4) {
-      const ov = this._overflow!;
-      for (let i = 0, len = ov.length; i < len; i++) {
-        const l = ov[i]!;
-        const n = l.node;
-        const v = isLive ? n.version : l.version;
-        hash = (hash + (v << vbits) + n.id) | 0;
-      }
-    }
-
-    return hash;
   }
 
   /** Unsubscribes from all links and resets the buffer. */

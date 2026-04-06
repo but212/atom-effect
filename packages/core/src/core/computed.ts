@@ -5,7 +5,6 @@ import {
   EMPTY_ERROR_ARRAY,
   EPOCH_CONSTANTS,
   IS_DEV,
-  SMI_MAX,
 } from '@/constants';
 import { ReactiveNode } from '@/core/base';
 import { ComputedError, ERROR_MESSAGES, wrapError } from '@/errors';
@@ -20,7 +19,7 @@ import type {
 import { debug, NO_DEFAULT_VALUE } from '@/utils/debug';
 import { isPromise } from '@/utils/type-guards';
 import { DepSlotBuffer } from './buffers';
-import { currentFlushEpoch, nextEpoch, nextVersion } from './scheduler';
+import { nextEpoch, nextVersion } from './scheduler';
 import { DependencyLink, trackingContext } from './tracking';
 
 const {
@@ -54,15 +53,11 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
   private readonly _fn: () => T | Promise<T>;
   private readonly _defaultValue: T;
   private readonly _onError: ((error: Error) => void) | null;
-  private readonly _maxAsyncRetries: number;
 
   /** Initialized in constructor. Unified node property. */
   _deps = new DepSlotBuffer();
 
   // Async state
-
-  private _asyncRetryCount = 0;
-  private _lastDriftEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
 
   // Dependency collection state
   private _trackEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
@@ -79,8 +74,6 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     this._fn = fn;
     this._defaultValue = 'defaultValue' in options ? options.defaultValue : (NO_DEFAULT_VALUE as T);
     this._onError = options.onError ?? null;
-    this._maxAsyncRetries =
-      (options.maxAsyncRetries ?? COMPUTED_CONFIG.MAX_ASYNC_RETRIES) & SMI_MAX;
 
     debug.attachDebugInfo(this, 'computed', this.id);
 
@@ -338,7 +331,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
 
       // Clean up any remaining trailing dependencies
       this._deps.truncateFrom(this._trackCount);
-      this._deps.seal();
+
       committed = true;
 
       // Handle Result
@@ -373,7 +366,6 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     // Notify pending
     this._notifySubscribers(undefined, undefined);
 
-    this._asyncRetryCount = 0;
     // Invalidate old promises
     this._promiseId = (this._promiseId + 1) % COMPUTED_CONFIG.MAX_PROMISE_ID;
     const promiseId = this._promiseId;
@@ -383,22 +375,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
         if (promiseId !== this._promiseId) return; // Stale
 
         if (this._isDirty()) {
-          // Reset retry counter when flush epoch changes — drifts across different
-          // scheduler flushes are independent bursts, not a continuous failure streak.
-          const epoch = currentFlushEpoch();
-          if (this._lastDriftEpoch !== epoch) {
-            this._lastDriftEpoch = epoch;
-            this._asyncRetryCount = 0;
-          }
-          if (this._asyncRetryCount++ < this._maxAsyncRetries) {
-            return this._markDirty(); // Retry
-          }
-          return this._handleError(
-            new ComputedError(
-              `Async drift threshold exceeded after ${this._maxAsyncRetries} retries.`
-            ),
-            ERROR_MESSAGES.COMPUTED_ASYNC_COMPUTATION_FAILED
-          );
+          return this._markDirty(); // Retry
         }
 
         this._finalizeResolution(res);
@@ -457,15 +434,6 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     if ((flags & (RECOMPUTING | DIRTY)) !== 0) return;
     this.flags = flags | DIRTY;
     this._notifySubscribers(undefined, undefined);
-  }
-
-  /**
-   * Optimized dirty check. Bypasses deep scan if only Atoms are involved.
-   */
-  protected override _isDirty(): boolean {
-    const deps = this._deps;
-    if (deps.hasComputeds) return this._deepDirtyCheck();
-    return deps.isDirtyFast();
   }
 
   /**
