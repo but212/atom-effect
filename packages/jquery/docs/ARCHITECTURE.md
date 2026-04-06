@@ -371,9 +371,14 @@ Live DOM collections (e.g. `HTMLCollection`) change their length as elements are
 
 ### 12.1 Integration with `atomForm`
 
-`atomForm` leverages core's `setDeepValue` and `getPathValue` utilities for O(1) performance on large forms:
+`atomForm` (`bindings/form.ts`) leverages core's `setDeepValue` and `getPathValue` utilities for O(1) performance on large forms, managed by the `FormBinder` orchestrator.
 
-1. **Field-Level Atoms**: Instead of binding each input directly to a lens of the root atom (which would create N effects subscribing to the root), `atomForm` creates individual "leaf atoms" for each field.
-2. **Centralized Dispatcher**: A single `effect` watches the root atom and dispatches updates only to the leaf atoms whose values have actually changed. This eliminates the O(N) effect fan-out overhead.
-3. **Local Sync**: Each leaf atom has a dedicated effect to sync its local changes back to the root atom. Since this effect only tracks the leaf atom, typing in one field does not wake up or re-evaluate other fields.
-4. **Recursive Path Support**: Supports nested property access (e.g., `user.profile.name`) using core's deep path utilities.
+1. Field-Level Atoms (Leaf Atoms): Instead of binding each input directly to a lens of the root atom (which would create N effects subscribing to the root), `atomForm` creates individual "leaf atoms" for each field.
+2. Centralized Root Dispatcher: A single `effect` watches the root atom and dispatches updates only to relevant leaf atoms using a batch cycle. This eliminates the O(N) re-evaluation overhead.
+3. Local Sync & Circular Protection: Each field entry has its own effect to sync local changes (including debouncing and transforms) back to the root atom. The `FormBinder` uses an `isSyncingFromLeaf` flag to explicitly break circular update loops between the root and leaf states.
+4. Dynamic Lifecycle & Ref-Counting:
+   - A `MutationObserver` monitors child additions, removals, and attribute changes (`name`).
+   - **Ref-counting**: Multiple radio/checkbox inputs with the same `name` share a single `FieldEntry` (atom + effect). The entry is only disposed when all associated elements are removed.
+   - **Renaming**: When an element's `name` changes, the binder automatically releases the old field and acquires the new one.
+5. Recursive Path Support: Supports nested property access and array indexing (e.g., `user.profile.name`, `items[0].text`) by normalizing name attributes into standard dot-notation paths.
+6. Toggle Groups: Radio and Checkbox groups are handled via a specialized `bindToggle` strategy that manages array-based values for multi-check boxes and string/boolean states for radio and single checks.

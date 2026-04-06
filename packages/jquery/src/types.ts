@@ -58,7 +58,9 @@ export interface BindingOptions<T = unknown> {
   hide?: AsyncReactiveValue<boolean>;
   val?: WritableAtom<T> | [atom: WritableAtom<T>, options: ValOptions<T>];
   checked?: WritableAtom<boolean>;
-  form?: WritableAtom<T extends object ? T : unknown>;
+  form?:
+    | WritableAtom<T extends object ? T : unknown>
+    | [atom: WritableAtom<T extends object ? T : unknown>, options: FormOptions<unknown>];
   on?: Record<string, (e: JQuery.Event) => void>;
 }
 
@@ -96,6 +98,16 @@ export interface ValOptions<T> {
   format?: (v: T) => string;
   /** Custom equality check to prevent redundant atom updates. */
   equal?: EqualFn<T>;
+}
+
+/**
+ * Options for `atomForm` binding.
+ */
+export interface FormOptions<T> extends ValOptions<T> {
+  /** Custom function to transform field value based on path before atomic sync. */
+  transform?: (path: string, value: unknown) => unknown;
+  /** Callback triggered when a field value changes. */
+  onChange?: (path: string, value: unknown) => void;
 }
 
 export interface FetchOptions<T> {
@@ -220,7 +232,7 @@ declare global {
     atomHide(cond: AsyncReactiveValue<boolean>): this;
     atomVal<T>(atom: WritableAtom<T>, opts?: ValOptions<T>): this;
     atomChecked(atom: WritableAtom<boolean>): this;
-    atomForm<T extends object>(atom: WritableAtom<T>, opts?: ValOptions<unknown>): this;
+    atomForm<T extends object>(atom: WritableAtom<T>, opts?: FormOptions<unknown>): this;
     atomOn(event: string, handler: (e: JQuery.Event) => void): this;
     atomBind<T = unknown>(opts: BindingOptions<T>): this;
     atomList<T>(src: ReadonlyAtom<T[]>, opts: ListOptions<T>): this;

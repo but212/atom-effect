@@ -30,6 +30,14 @@
   - Consolidated fragmented logic into a unified, high-cohesion module:
     - `src/utils/pool.ts`: Merged `array-pool.ts`, `object-pool.ts`, and internal core pools to simplify abstractions and reduce the number of utility files.
   - Refactored related internal package imports (`list.ts`, `registry.ts`) to align with the flattened architecture.
+- **API**: **Enhanced `atomForm` Binding**.
+  - Added support for `FormOptions`: `debounce`, `transform`, and `onChange` hooks.
+  - Improved deep path support (e.g., `user.profile.age`, `items[0].text`).
+  - Automated lifecycle: Full support for dynamic control addition, removal, and renaming via `MutationObserver`.
+  - Added native support for radio groups and checkbox groups (auto-mapping to array values).
+  - Internal: Re-implemented via `FormBinder` manager for robust circular protection and O(1) dispatcher performance.
+- **API**: **Tuple Support in `atomBind`**.
+  - `form` binding now accepts `[atom, options]` tuple for advanced configuration.
 
 ## [0.28.0]
 

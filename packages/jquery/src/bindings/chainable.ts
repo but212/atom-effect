@@ -21,6 +21,7 @@ import type {
   BindingContext,
   BindingOptions,
   CssBindings,
+  FormOptions,
   PrimitiveValue,
   ReactiveValue,
   ValOptions,
@@ -181,7 +182,7 @@ $.fn.atomChecked = function (atom: WritableAtom<boolean>): JQuery {
  */
 $.fn.atomForm = function <T extends object>(
   atom: WritableAtom<T>,
-  options: ValOptions<unknown> = {}
+  options: FormOptions<unknown> = {}
 ): JQuery {
   return atomEachElement(this, (_, el) => {
     if (el instanceof HTMLFormElement) bindForm(el, atom, options);
@@ -221,7 +222,12 @@ const BIND_HANDLERS: Array<(ctx: BindingContext, options: BindingOptions<unknown
   (ctx, o) => {
     // 1 << 10: form
     if (ctx.el instanceof HTMLFormElement) {
-      bindForm(ctx.el, o.form as WritableAtom<object>);
+      const f = o.form!;
+      if (Array.isArray(f)) {
+        bindForm(ctx.el, f[0] as WritableAtom<object>, f[1] as FormOptions<unknown>);
+      } else {
+        bindForm(ctx.el, f as WritableAtom<object>);
+      }
     }
   },
   (ctx, o) => bindEvents(ctx, o.on!), // 1 << 11

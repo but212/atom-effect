@@ -198,15 +198,44 @@ $('#agree').atomChecked(isAgreedAtom);
 
 Fully automated two-way binding for an entire form. Binds every input, select, and textarea inside the form to a property of the atom based on their `name` attribute.
 
-- **Deep Paths**: Supports dot-notation in `name` attributes (e.g., `name="user.profile.name"`) to bind to nested object properties.
-- **Dynamic DOM**: Automatically detects and binds new form controls added to the DOM after the initial call.
+- **Deep Paths**: Supports dot-notation and array access in `name` attributes (e.g., `name="user.profile.name"`, `name="items[0].text"`) to bind to nested object properties.
+- **Dynamic DOM**: Automatically detects and binds new form controls added to the DOM after the initial call using `MutationObserver`. Also handles field renaming and removal (via ref-counting).
+- **Radio & Checkbox Groups**: Native support for radio groups and checkbox groups. Checks are automatically mapped to boolean, string, or array values based on input type and name collision.
+- **Circular Protection**: Built-in protection against infinite sync loops between Leaf (element) and Root (atom) states.
 - **Optimized**: Uses `form.elements` for O(1) element access and a centralized dispatcher to avoid O(N) effect fan-out on large forms, ensuring typing performance remains constant regardless of form size.
 
+**Options**:
+
+```typescript
+interface FormOptions<T> extends ValOptions<T> {
+  /** Custom function to transform field value based on path before atomic sync. */
+  transform?: (path: string, value: unknown) => unknown;
+  /** Callback triggered when a field value changes. */
+  onChange?: (path: string, value: unknown) => void;
+  /** Debounce duration in milliseconds for DOM -> Atom sync. (Inherited from ValOptions) */
+  debounce?: number;
+}
+```
+
 ```javascript
-const user = $.atom({ name: 'Alice', role: 'admin' });
+const user = $.atom({ name: 'Alice', age: 30, items: [{ text: 'Item 1' }] });
 
 // Every input with a 'name' attribute is automatically bound
-$('form').atomForm(user);
+$('form').atomForm(user, {
+  debounce: 200,
+  transform: (path, val) => (path === 'age' ? Number(val) : val),
+  onChange: (path, val) => console.log(`Field ${path} changed to:`, val)
+});
+```
+
+#### `.atomBind` Example with Form Tuple
+
+The `form` option in `atomBind` also supports a tuple for providing options.
+
+```javascript
+$('.my-form').atomBind({
+  form: [dataAtom, { debounce: 300 }]
+});
 ```
 
 ### `.atomOn(event, handler)`
