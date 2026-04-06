@@ -10,7 +10,7 @@ import {
   resetFlushState,
   runInFlushScope,
   startFlush,
-} from '@/internal/epoch';
+} from '@/core/scheduler';
 
 describe('epoch', () => {
   it('generates sequential non-zero epochs', () => {

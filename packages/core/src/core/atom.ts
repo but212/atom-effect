@@ -1,11 +1,10 @@
 import { ATOM_STATE_FLAGS } from '@/constants';
 import { ReactiveNode } from '@/core/base';
-import { nextVersion } from '@/internal/epoch';
-import { scheduler } from '@/internal/scheduler';
 import { ATOM_BRAND, WRITABLE_BRAND } from '@/symbols';
-import { trackingContext } from '@/tracking';
 import type { AtomOptions, WritableAtom } from '@/types';
 import { debug } from '@/utils/debug';
+import { nextVersion, scheduler } from './scheduler';
+import { trackingContext } from './tracking';
 
 /**
  * Internal {@link WritableAtom} implementation.

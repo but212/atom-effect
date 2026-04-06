@@ -6,7 +6,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
-import { AtomError, ComputedError } from '@/errors/errors';
+import { AtomError, ComputedError } from '@/errors';
 import { ATOM_BRAND, COMPUTED_BRAND } from '@/symbols';
 import { sleep, waitForScheduler } from '../../utils/test-helpers';
 

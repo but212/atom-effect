@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
 import { effect } from '@/core/effect';
-import { ComputedError, SchedulerError } from '@/errors/errors';
+import { ComputedError, SchedulerError } from '@/errors';
 
 const flush = async () => await new Promise((r) => setTimeout(r, 0));
 

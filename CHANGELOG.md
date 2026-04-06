@@ -1,5 +1,20 @@
 # Changelog
 
+## [Unreleased]
+
+### Core
+
+#### Changed
+
+- **Architecture**: **Directory Structure Flattening & Consolidation**.
+  - Eliminated redundant `internal/`, `tracking/`, and `errors/` subdirectories to reduce module fragmentation and import depth.
+  - Consolidated fragmented logic into unified, high-cohesion modules:
+    - `src/errors.ts`: Unified all error classes, messages, and utility functions.
+    - `src/core/scheduler.ts`: Merged scheduler, epoch management, and batching logic.
+    - `src/core/buffers.ts`: Merged `SlotBuffer` and `DepSlotBuffer` for better cache locality and unified buffer management.
+    - `src/core/tracking.ts`: Consolidated dependency tracking, subscription entry, and tracking context logic.
+  - Refactored all internal package imports and test suites to align with the flattened architecture.
+
 ## [0.28.0]
 
 ### Core

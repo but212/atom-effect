@@ -4,7 +4,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { atom, batch, type ComputedError, computed, effect, untracked } from '../src';
+import { atom, batch, type ComputedError, computed, effect, untracked } from '@/index';
 import { getNodeVersion, waitForScheduler } from './utils/test-helpers';
 
 // ─── 1. Version Semantics ───────────────────────────────────────────────────

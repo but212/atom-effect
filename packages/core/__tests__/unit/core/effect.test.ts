@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
 import { effect } from '@/core/effect';
-import { EffectError } from '@/errors/errors';
+import { EffectError } from '@/errors';
 import { sleep } from '../../utils/test-helpers';
 
 describe('Effect', () => {

@@ -1,7 +1,105 @@
-import { IS_DEV, SCHEDULER_CONFIG } from '@/constants';
-import { SchedulerError } from '@/errors/errors';
-import { ERROR_MESSAGES } from '@/errors/messages';
-import { endFlush, startFlush } from '@/internal/epoch';
+import { IS_DEV, SCHEDULER_CONFIG, SMI_MAX } from '@/constants';
+import { ERROR_MESSAGES, SchedulerError } from '@/errors';
+
+// ── Epoch & Version Management ──────────────────────────────────────────
+
+// Global epoch counter.
+let collectorEpoch = 0;
+
+/**
+ * Next tracking epoch.
+ */
+export function nextEpoch(): number {
+  const next = (collectorEpoch + 1) & SMI_MAX;
+  collectorEpoch = next === 0 ? 1 : next;
+  return collectorEpoch;
+}
+
+/** Current tracking epoch. */
+export function currentEpoch(): number {
+  return collectorEpoch;
+}
+
+/** Increments a version counter within SMI range. Avoids 0 to reserve it for uninitialized state. */
+export function nextVersion(v: number): number {
+  const next = (v + 1) & SMI_MAX;
+  return next === 0 ? 1 : next;
+}
+
+export let flushExecutionCount = 0;
+let isFlushing = false;
+let _flushEpoch = 0;
+
+/** Current flush epoch. */
+export function currentFlushEpoch(): number {
+  return _flushEpoch;
+}
+
+/**
+ * Starts flush cycle.
+ */
+export function startFlush(): boolean {
+  if (isFlushing) {
+    if (IS_DEV) {
+      console.warn('startFlush() called during flush - ignored');
+    }
+    return false;
+  }
+
+  isFlushing = true;
+  _flushEpoch = nextEpoch();
+  flushExecutionCount = 0;
+  return true;
+}
+
+/** Ends flush cycle. */
+export function endFlush(): void {
+  isFlushing = false;
+}
+
+/**
+ * Runs a function within a flush scope.
+ * Ensures endFlush() is called even if an error occurs.
+ */
+export function runInFlushScope<T>(fn: () => T): T | undefined {
+  if (!startFlush()) {
+    return undefined;
+  }
+
+  try {
+    return fn();
+  } finally {
+    endFlush();
+  }
+}
+
+/**
+ * Increments execution count.
+ * Throws an error if the count exceeds MAX_EXECUTIONS_PER_FLUSH.
+ */
+export function incrementFlushExecutionCount(): number {
+  if (!isFlushing) return 0;
+
+  const count = ++flushExecutionCount;
+  if (count <= SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH) {
+    return count;
+  }
+
+  throw new Error(
+    `[atom-effect] Infinite loop detected: flush execution count exceeded ${SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH}`
+  );
+}
+
+/**
+ * Resets flush state.
+ */
+export function resetFlushState(): void {
+  _flushEpoch = 0;
+  flushExecutionCount = 0;
+  isFlushing = false;
+}
+
+// ── Scheduler ───────────────────────────────────────────────────────────
 
 export interface SchedulerJobObject {
   execute(): void;
@@ -246,3 +344,25 @@ class Scheduler {
 }
 
 export const scheduler = new Scheduler();
+
+// ── Batch ───────────────────────────────────────────────────────────────
+
+/**
+ * Batches updates.
+ *
+ * @param fn - Batch function.
+ * @returns - Result of `fn`.
+ */
+export function batch<T>(fn: () => T): T {
+  if (typeof fn !== 'function') {
+    throw new TypeError(ERROR_MESSAGES.BATCH_CALLBACK_MUST_BE_FUNCTION);
+  }
+
+  const s = scheduler;
+  s.startBatch();
+  try {
+    return fn();
+  } finally {
+    s.endBatch();
+  }
+}

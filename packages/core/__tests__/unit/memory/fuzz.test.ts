@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
-import { batch } from '@/internal/batch';
+import { batch } from '@/core/scheduler';
 import type { ComputedAtom, WritableAtom } from '@/types';
 import { seededRandom } from '../../utils/test-helpers';
 

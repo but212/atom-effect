@@ -9,7 +9,7 @@ import { AsyncState } from '@/constants';
 import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
 import { effect } from '@/core/effect';
-import { resetFlushState } from '@/internal/epoch';
+import { resetFlushState } from '@/core/scheduler';
 import { sleep } from '../../utils/test-helpers';
 
 describe('Async Drift Constraint & Recovery', () => {

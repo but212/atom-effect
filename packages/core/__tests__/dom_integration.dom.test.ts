@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { atom, computed, effect } from '../src';
+import { atom, computed, effect } from '@/core';
 
 import { flush } from './utils/test-helpers';
 

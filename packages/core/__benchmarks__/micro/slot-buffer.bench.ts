@@ -1,5 +1,5 @@
 import { bench, describe } from 'vitest';
-import { SlotBuffer } from '@/internal/slot-buffer';
+import { SlotBuffer } from '@/core/buffers';
 import { microBenchOptions } from '../utils/setup.js';
 
 const REPEATS = 100;
