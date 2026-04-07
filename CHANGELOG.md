@@ -18,6 +18,7 @@
 - **Lifecycle**: `$.fn.atomMount` now automatically cleans up existing components on an element and executes functions within `batch()` for atomic renders.
 - **Internal**: Refactored `InputBinding` and `atomForm` to eliminate redundant `BindingContext` creation and stabilize DOM sync checks.
 - **Robustness**: Enhanced component mount/unmount with specialized error handling and logging for lifecycle failures.
+- **Lifecycle**: Integrated `isDisposed` flag into binding factories (`registerReactiveEffect`, `registerMapEffect`) to prevent "zombie updates" on disconnected DOM elements.
 
 #### Fixed
 
@@ -32,6 +33,7 @@
 #### Performance
 
 - **Caching**: Implemented local JS-level value caching in `bindHtml`, `bindClass`, `bindCss`, and `bindProp` to minimize redundant DOM reads and writes.
+- **Async Optimization**: Implemented a resolution cache in `registerMapEffect` to reuse resolved Promise values, enabling synchronous updates for redundant async dependencies.
 
 #### Internal
 
