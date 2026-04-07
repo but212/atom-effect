@@ -2,13 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LOG_PREFIXES } from '@/constants';
 import { debug } from '@/utils/debug';
 
-/**
- * @file debug.test.ts
- * @description
- * Refactored test suite for the Debug Module.
- * Consolidates redundant logic-path tests into behavioral specifications.
- */
-
 describe('Debug Module', () => {
   const logSpy = vi.fn();
   const warnSpy = vi.fn();
