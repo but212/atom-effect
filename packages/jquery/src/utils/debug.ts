@@ -136,17 +136,13 @@ class DebugController {
   /** Swaps the internal implementation of logging methods based on the state. */
   private _applyLoggingSubsystem(isEnabled: boolean) {
     if (isEnabled) {
-      this.log = (p, ...a) => console.log(p, ...a);
-      this.atomChanged = (p, n, o, v) =>
-        console.log(`${p} Atom "${n ?? 'anonymous'}" changed:`, o, '→', v);
-      this.domUpdated = (p, t, type, v) => {
-        const el = t instanceof Element ? t : (t[0] as Element | undefined);
-        if (el?.isConnected) {
-          console.log(`${p} DOM updated: ${getSelector(el)}.${type} =`, v);
-          this._triggerVisualHighlight(el);
-        }
+      this.log = (prefix, ...args) => console.log(prefix, ...args);
+      this.atomChanged = (prefix, name, prev, next) =>
+        console.log(`${prefix} Atom "${name ?? 'anonymous'}" changed:`, prev, '→', next);
+      this.domUpdated = (prefix, target, type, value) => {
+        this._handleDomUpdateLog(prefix, target, type, value);
       };
-      this.cleanup = (p, s) => console.log(`${p} Cleanup: ${s}`);
+      this.cleanup = (prefix, subject) => console.log(`${prefix} Cleanup: ${subject}`);
     } else {
       const noop = () => {};
       this.log = noop;
@@ -156,14 +152,39 @@ class DebugController {
     }
   }
 
+  /**
+   * Internal handler for DOM updates. Resolves the target element,
+   * logs the change, and triggers visual feedback.
+   */
+  private _handleDomUpdateLog(
+    prefix: string,
+    target: Element | JQuery<Element>,
+    type: string,
+    value: unknown
+  ) {
+    // Resolve element from target (supports HTMLElement, SVGElement, or JQuery wrapper)
+    const el = 'jquery' in target ? target[0] : target;
+
+    // Only proceed if it is a connected Element node
+    if (el && el.nodeType === 1 && el.isConnected) {
+      console.log(`${prefix} DOM updated: ${getSelector(el as Element)}.${type} =`, value);
+      this._triggerVisualHighlight(el as Element);
+    }
+  }
+
   /** Applies a visual outline highlight to an element with a fade-out transition. */
   private _triggerVisualHighlight(el: Element): void {
+    const g = globalThis;
+    const raf = g.requestAnimationFrame;
+    const caf = g.cancelAnimationFrame;
+
+    if (!IS_BROWSER || typeof raf !== 'function') return;
     injectStyle();
 
     // Cancel existing scheduled highlights on this element
     const existingRaf = rafs.get(el);
     const existingTimer = timers.get(el);
-    if (existingRaf !== undefined) cancelAnimationFrame(existingRaf);
+    if (existingRaf !== undefined && typeof caf === 'function') caf(existingRaf);
     if (existingTimer !== undefined) {
       clearTimeout(existingTimer);
       timers.delete(el);
@@ -177,7 +198,7 @@ class DebugController {
     // Use requestAnimationFrame to ensure the class change happens in the next paint cycle
     rafs.set(
       el,
-      requestAnimationFrame(() => {
+      raf(() => {
         rafs.delete(el);
         if (!el.isConnected) return;
 

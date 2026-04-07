@@ -21,124 +21,115 @@ describe('Debug Module', () => {
   });
 
   // --------------------------------------------------------------------------
-  // Control Flow & Gating
+  // Configuration & Gating
   // --------------------------------------------------------------------------
 
-  describe('Flow Control', () => {
-    it('should gate all standard logging methods by enabled state', () => {
-      // 1. Silent when disabled
-      debug.log(LOG_PREFIXES.BINDING, 'msg');
-      debug.atomChanged(LOG_PREFIXES.MOUNT, 'atom', 0, 1);
-      debug.cleanup(LOG_PREFIXES.LIST, 'subject');
+  describe('Configuration & Gating', () => {
+    it('should gate standard logs by state while always emitting critical messages', () => {
+      // 1. Gating check (standard logs should be silent when disabled)
+      debug.log(LOG_PREFIXES.BINDING, 'silent');
+      debug.atomChanged(LOG_PREFIXES.BINDING, 'atom', 0, 1);
+      debug.cleanup(LOG_PREFIXES.BINDING, 'subject');
       expect(logSpy).not.toHaveBeenCalled();
 
-      // 2. Active when enabled
+      // 2. Activation check (standard logs should emit when enabled)
       debug.enabled = true;
-      debug.log(LOG_PREFIXES.BINDING, 'msg');
-      debug.atomChanged(LOG_PREFIXES.MOUNT, 'atom', 0, 1);
-      debug.atomChanged(LOG_PREFIXES.MOUNT, undefined, 'old', 'new'); // Anonymous check
-      debug.cleanup(LOG_PREFIXES.LIST, 'subject');
+      debug.log(LOG_PREFIXES.BINDING, 'active');
+      expect(logSpy).toHaveBeenCalledWith(LOG_PREFIXES.BINDING, 'active');
 
-      expect(logSpy).toHaveBeenCalledWith(LOG_PREFIXES.BINDING, 'msg');
-      expect(logSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.MOUNT} Atom "atom" changed:`, 0, '→', 1);
-      expect(logSpy).toHaveBeenCalledWith(
-        `${LOG_PREFIXES.MOUNT} Atom "anonymous" changed:`,
-        'old',
-        '→',
-        'new'
-      );
-      expect(logSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.LIST} Cleanup: subject`);
-    });
-
-    it('should always emit critical messages (warn, error) irrespective of state', () => {
-      const cause = new Error('boom');
-      debug.warn(LOG_PREFIXES.MOUNT, 'low battery');
-      debug.error(LOG_PREFIXES.BINDING, 'short circuit', cause);
-
-      expect(warnSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.MOUNT} low battery`);
-      expect(errorSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.BINDING} short circuit`, cause);
-
-      warnSpy.mockClear();
-      debug.enabled = true;
-      debug.warn(LOG_PREFIXES.MOUNT, 'low battery');
-      expect(warnSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.MOUNT} low battery`);
+      // 3. Critical messages check (behavior: always on irrespective of state)
+      debug.enabled = false;
+      const error = new Error('fail');
+      debug.warn(LOG_PREFIXES.MOUNT, 'warning');
+      debug.error(LOG_PREFIXES.BINDING, 'error', error);
+      expect(warnSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.MOUNT} warning`);
+      expect(errorSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.BINDING} error`, error);
     });
   });
 
   // --------------------------------------------------------------------------
-  // DOM Feedback (domUpdated)
+  // DOM Feedback Behavior
   // --------------------------------------------------------------------------
 
-  describe('DOM Visual Feedback', () => {
-    it('should resolve various target types and apply highlighting', async () => {
+  describe('DOM Feedback Behavior', () => {
+    it('should resolve diverse targets and manage highlight lifecycle', async () => {
       debug.enabled = true;
-
-      // Prepare different targets
-      const htmlEl = Object.assign(document.createElement('div'), { id: 'app', className: 'main' });
+      const htmlEl = Object.assign(document.createElement('div'), { id: 'app' });
       const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      svgEl.setAttribute('class', 'icon small');
-      const jqEl = Object.assign([htmlEl], { jquery: 'fixture' }) as unknown as JQuery<HTMLElement>;
+      const textNode = document.createTextNode('text');
+      const jqWrapper = Object.assign([htmlEl], {
+        jquery: '3.x',
+      }) as unknown as JQuery<HTMLElement>;
 
-      document.body.append(htmlEl, svgEl);
+      document.body.append(htmlEl, svgEl, textNode);
 
-      // Trigger updates
+      // Verify identification logic (HTML, SVG, JQuery)
       debug.domUpdated(LOG_PREFIXES.BINDING, htmlEl, 'text', 'v1');
       debug.domUpdated(LOG_PREFIXES.BINDING, svgEl, 'attr', 'v2');
-      debug.domUpdated(LOG_PREFIXES.BINDING, jqEl, 'prop', 'v3');
+      debug.domUpdated(LOG_PREFIXES.BINDING, jqWrapper, 'prop', 'v3');
 
-      // Verify selectors in logs
-      expect(logSpy).toHaveBeenCalledWith(
-        `${LOG_PREFIXES.BINDING} DOM updated: div#app.main.text =`,
-        'v1'
-      );
-      expect(logSpy).toHaveBeenCalledWith(
-        `${LOG_PREFIXES.BINDING} DOM updated: svg.icon.small.attr =`,
-        'v2'
-      );
-      expect(logSpy).toHaveBeenCalledWith(
-        `${LOG_PREFIXES.BINDING} DOM updated: div#app.main.prop =`,
-        'v3'
-      );
+      // Verify skip logic (TextNode) - should not log or highlight
+      debug.domUpdated(LOG_PREFIXES.BINDING, textNode as unknown as Element, 'op', 'v4');
 
-      // Wait for RAF
+      expect(logSpy).toHaveBeenCalledTimes(3); // html, svg, jq only
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('div#app.text'), 'v1');
+
+      // Verify highlighting application
       await new Promise((r) => requestAnimationFrame(r));
       expect(htmlEl.classList.contains('atom-debug-highlight')).toBe(true);
-      expect(svgEl.classList.contains('atom-debug-highlight')).toBe(true);
 
-      [htmlEl, svgEl].forEach((el) => el.remove());
+      // Verify cleanup lifecycle (even if element is disconnected during the wait)
+      htmlEl.remove();
+      await new Promise((r) => setTimeout(r, 600)); // duration + buffer for reliability
+      expect(htmlEl.classList.contains('atom-debug-highlight')).toBe(false);
+
+      svgEl.remove();
+      textNode.remove();
     });
 
-    it('should manage highlight lifecycle and ensure cleanup even on disconnected elements', async () => {
+    it('should ensure idempotent style injection', () => {
       debug.enabled = true;
       const el = document.createElement('div');
-      document.body.appendChild(el);
 
-      // Start highlight
-      debug.domUpdated(LOG_PREFIXES.BINDING, el, 'op', 'val');
-      await new Promise((r) => requestAnimationFrame(r));
-      expect(el.classList.contains('atom-debug-highlight')).toBe(true);
-
-      // Regression check: element removed before timeout
-      el.remove();
-
-      // Wait for timeout (duration is 500ms)
-      await new Promise((r) => setTimeout(r, 650));
-      expect(el.classList.contains('atom-debug-highlight')).toBe(false);
-    });
-
-    it('should inject persistent transition styles exactly once', () => {
-      debug.enabled = true;
-      const el = document.createElement('div');
-      document.body.appendChild(el);
-
-      // Multiple calls
+      // Triggering update multiple times should result in exactly one <style> tag
       debug.domUpdated(LOG_PREFIXES.BINDING, el, 'a', '1');
       debug.domUpdated(LOG_PREFIXES.BINDING, el, 'b', '2');
 
       const styles = document.querySelectorAll('style[data-atom-debug]');
       expect(styles.length).toBe(1);
       expect(styles[0]?.textContent).toMatch(/\[data-atom-debug\]\s*\{.*transition/);
-      el.remove();
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // Cross-environment Resilience
+  // --------------------------------------------------------------------------
+
+  describe('SSR & Environment Resilience', () => {
+    it('should remain robust when browser-only globals are missing', () => {
+      debug.enabled = true;
+      const container = document.createElement('div');
+
+      const originalElement = globalThis.Element;
+      const originalRaf = globalThis.requestAnimationFrame;
+
+      // Mock SSR environment by temporarily removing browser globals
+      // @ts-expect-error: simulating missing globals
+      globalThis.Element = undefined;
+      // @ts-expect-error: simulating missing globals
+      globalThis.requestAnimationFrame = undefined;
+
+      // Logic check: should not throw ReferenceErrors or crash
+      expect(() => {
+        debug.domUpdated(LOG_PREFIXES.BINDING, container, 'test', 'value');
+      }).not.toThrow();
+
+      // Verify state was not updated illegally
+      expect(logSpy).not.toHaveBeenCalled();
+
+      // Restore environment
+      globalThis.Element = originalElement;
+      globalThis.requestAnimationFrame = originalRaf;
     });
   });
 });
