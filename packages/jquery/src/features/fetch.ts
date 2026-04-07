@@ -43,9 +43,12 @@ class FetchContext<T> {
     const baseAjax = typeof options.ajaxOptions === 'object' ? options.ajaxOptions : {};
     this.staticOptions = {
       ...baseAjax,
-      method: options.method,
       headers: { ...(baseAjax as JQuery.AjaxSettings)?.headers, ...options.headers },
     };
+    if (options.method) {
+      this.staticOptions.method = options.method;
+    }
+
     this.transformFn = options.transform;
     this.onErrorFn = options.onError;
   }
@@ -75,44 +78,53 @@ class FetchContext<T> {
   }
 
   public execute = async (): Promise<T> => {
-    this.abortController?.abort();
-    this.abortController = new AbortController();
-    const { signal } = this.abortController;
+    this.abort();
+    const controller = new AbortController();
+    this.abortController = controller;
+    const { signal } = controller;
 
+    let onAbort: (() => void) | undefined;
+
+    try {
+      const settings = this.prepareSettings();
+      const xhr = $.ajax(settings);
+
+      // Link AbortSignal to jqXHR
+      onAbort = () => xhr.abort();
+      signal.addEventListener('abort', onAbort);
+      if (signal.aborted) xhr.abort();
+
+      const raw = await xhr;
+      return this.transformFn ? this.transformFn(raw) : (raw as T);
+    } catch (err) {
+      if (signal.aborted) throw this.createAbortError();
+      return this.handleError(err);
+    } finally {
+      if (onAbort) signal.removeEventListener('abort', onAbort);
+      if (this.abortController === controller) {
+        this.abortController = null;
+      }
+    }
+  };
+
+  private prepareSettings(): JQuery.AjaxSettings {
     const dynamicOptions = this.ajaxOptionsFn?.() ?? {};
-    // Use shallow merge for high-performance request setup
-    const req: JQuery.AjaxSettings = {
+    return {
       ...this.staticOptions,
       ...dynamicOptions,
-      headers: {
-        ...this.staticOptions.headers,
-        ...dynamicOptions.headers,
-      },
+      headers: { ...this.staticOptions.headers, ...dynamicOptions.headers },
       url: this.isStaticUrl ? this.staticUrl : this.getUrl(),
       success: undefined,
       error: undefined,
       complete: undefined,
     };
-    const xhr = $.ajax(req);
+  }
 
-    signal.onabort = () => xhr.abort();
-    if (signal.aborted) xhr.abort();
-
-    try {
-      const raw = await xhr;
-      return this.transformFn ? this.transformFn(raw) : (raw as T);
-    } catch (err) {
-      if (signal.aborted) {
-        const e = new Error('AbortError');
-        e.name = 'AbortError';
-        throw e;
-      }
-      return this.handleError(err);
-    } finally {
-      signal.onabort = null;
-      if (this.abortController?.signal === signal) this.abortController = null;
-    }
-  };
+  private createAbortError(): Error {
+    const e = new Error('AbortError');
+    e.name = 'AbortError';
+    return e;
+  }
 }
 
 /**
@@ -131,6 +143,13 @@ $.extend({
       defaultValue: options.defaultValue,
       lazy: options.eager === false,
     });
+
+    const originalDispose = atomVal.dispose.bind(atomVal);
+    atomVal.dispose = () => {
+      ctx.abort();
+      originalDispose();
+    };
+
     return Object.assign(atomVal, {
       abort: () => ctx.abort(),
     }) as ComputedAtom<T> & { abort: () => void };

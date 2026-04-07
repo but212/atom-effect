@@ -149,7 +149,7 @@ export function buildIndices<T>(
     } else {
       newStates[i] = 0; // Mark as EXISTING
     }
-    // If the key is currently being removed (ongoing transition), 
+    // If the key is currently being removed (ongoing transition),
     // treat it as conceptually fresh for placement logic.
     newIndices[i] = removingKeys.has(k) ? -1 : oldIdx;
   }

@@ -12,6 +12,11 @@
   - Fixed DOM integrity issues during concurrent async removals and re-entries.
   - Improved robustness against duplicate keys; duplicates are now ignored gracefully.
   - Optimized initial render with `innerHTML` bulk insertion safety checks.
+- **`$.atomFetch`**: **Robust Lifecycle & Error Handling**.
+  - **Disposal Safety**: Automatically aborts pending requests when the atom is disposed to prevent memory leaks and "zombie" resolutions.
+  - **Sync Error Handling**: Correctly captures and surfaces synchronous errors thrown by `$.ajax` via `.hasError` and `onError` callback.
+  - **Flexible Options**: Fixed `ajaxOptions.method` merging; it is no longer clobbered when the top-level `method` option is omitted.
+  - **Resource Cleanup**: Optimized `AbortController` usage with reliable event listener removal.
 
 ## [0.29.0] - 2026-04-07
 

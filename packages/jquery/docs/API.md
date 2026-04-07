@@ -398,7 +398,7 @@ Declarative AJAX primitive. Wraps core's async `computed` with jQuery's `$.ajax`
 
 **Key Features**:
 
-- **Auto-Cancellation**: Automatically aborts previous pending requests using `AbortController` when dependencies change or `.invalidate()` is called. Aborted requests are silently discarded — they do **not** set `hasError`.
+- **Auto-Cancellation**: Automatically aborts previous pending requests using `AbortController` when dependencies change, `.invalidate()` is called, or when the atom is manually **disposed**. Aborted requests are silently discarded — they do **not** set `hasError`.
 - **Reactive URL**: Re-fetches automatically if `urlOrFn` depends on atoms.
 
 **Parameters**:
@@ -409,7 +409,7 @@ Declarative AJAX primitive. Wraps core's async `computed` with jQuery's `$.ajax`
   - `method`: `string` — HTTP method (default: `'GET'`).
   - `headers`: `Record<string, string>` — Request headers.
   - `transform`: `(raw: unknown) => T` — Response transformer.
-  - `ajaxOptions`: `JQuery.AjaxSettings | () => JQuery.AjaxSettings` — Full `$.ajax` passthrough. When a **function** is provided, it is called on every request and its atom reads are automatically tracked, enabling reactive request payloads (e.g., dynamic headers or body). Static options (`method`, `headers`) are merged as the base, with dynamic values on top.
+  - `ajaxOptions`: `JQuery.AjaxSettings | () => JQuery.AjaxSettings` — Full `$.ajax` passthrough. When a **function** is provided, it is called on every request and its atom reads are automatically tracked, enabling reactive request payloads (e.g., dynamic headers or body). Static options (`method`, `headers`) are merged as the base, with dynamic values on top. Note: the top-level `method` option only overrides `ajaxOptions.method` if it is explicitly provided.
 
 **Returns**: `ComputedAtom<T>` — reactive value with:
 
