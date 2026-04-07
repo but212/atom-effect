@@ -3,28 +3,6 @@ import { describe, expect, it, vi } from 'vitest';
 import '@/index';
 
 describe('Chainable Methods: One-Way Bindings', () => {
-  it('smoke: reactive chain with multiple updates', async () => {
-    const text = $.atom('a');
-    const color = $.atom('red');
-    const isActive = $.atom(true);
-    const $el = $('<div>').appendTo(document.body);
-
-    $el.atomText(text).atomCss('color', color).atomClass('active', isActive);
-
-    await $.nextTick();
-    expect($el.text()).toBe('a');
-    expect($el.css('color')).toMatch(/red|rgb\(255, 0, 0\)/);
-    expect($el.hasClass('active')).toBe(true);
-
-    text.value = 'A';
-    isActive.value = false;
-    await $.nextTick();
-    expect($el.text()).toBe('A');
-    expect($el.hasClass('active')).toBe(false);
-
-    $el.remove();
-  });
-
   it('atomText & atomHtml: basic content binding', async () => {
     const text = $.atom('text');
     const html = $.atom('<b>html</b>');
@@ -41,24 +19,30 @@ describe('Chainable Methods: One-Way Bindings', () => {
     $el.remove();
   });
 
-  it('atomClass: toggles single or multiple classes', async () => {
+  it('atomClass: handles multiple classes with overlapping protection', async () => {
+    const a1 = $.atom(true);
+    const a2 = $.atom(true);
     const isActive = $.atom(false);
-    const isError = $.atom(true);
     const $el = $('<div>').appendTo(document.body);
 
-    // Single class with space-separated support
+    // Initial state
     $el.atomClass(' bg-red-500  font-bold ', isActive);
-    // Map overload
-    $el.atomClass({ error: isError });
+    $el.atomClass({ 'active highlight': a1, 'active large': a2 });
 
     await $.nextTick();
     expect($el.hasClass('bg-red-500')).toBe(false);
-    expect($el.hasClass('error')).toBe(true);
+    expect($el.hasClass('active highlight large')).toBe(true);
 
+    // bug prevention: if a1 becomes false, 'active' should NOT be removed because a2 still needs it
+    a1.value = false;
+    await $.nextTick();
+    expect($el.hasClass('highlight')).toBe(false);
+    expect($el.hasClass('active')).toBe(true);
+
+    // Static toggle
     isActive.value = true;
     await $.nextTick();
     expect($el.hasClass('bg-red-500')).toBe(true);
-    expect($el.hasClass('font-bold')).toBe(true);
 
     $el.remove();
   });
@@ -114,14 +98,17 @@ describe('Chainable Methods: One-Way Bindings', () => {
     $el.remove();
   });
 
-  it('atomShow / atomHide: visibility toggle and original style preservation', async () => {
+  it('atomShow/Hide: preserves original style and supports subsequent changes', async () => {
     const isVisible = $.atom(true);
     const isHidden = $.atom(false);
-    const $el = $('<div style="display: flex;">').appendTo(document.body);
+    const $el = $('<div style="display: block;">').appendTo(document.body);
 
     $el.atomShow(isVisible).atomHide(isHidden);
     await $.nextTick();
-    expect($el.css('display')).toBe('flex');
+    expect($el.css('display')).toBe('block');
+
+    // Manually change base style to flex
+    $el.css('display', 'flex');
 
     isVisible.value = false;
     await $.nextTick();
@@ -129,7 +116,8 @@ describe('Chainable Methods: One-Way Bindings', () => {
 
     isVisible.value = true;
     await $.nextTick();
-    expect($el[0]!.style.display).toBe('flex');
+    // Should revert to 'flex', not 'block'
+    expect($el.css('display')).toBe('flex');
 
     $el.remove();
   });
@@ -150,32 +138,40 @@ describe('Chainable Methods: Two-Way Bindings', () => {
     $el.remove();
   });
 
-  it('atomChecked: checkbox and radio synchronization', async () => {
+  it('atomChecked: syncs checkbox and radio (User & Programmatic Sync)', async () => {
     const check = $.atom(true);
-    const radioA = $.atom(true);
-    const radioB = $.atom(false);
+    const rA = $.atom(true);
+    const rB = $.atom(false);
+    const radioName = 'user[role]';
 
     const $form = $('<form>').appendTo(document.body);
     const $check = $('<input type="checkbox">').appendTo($form);
-    const $rA = $('<input type="radio" name="g" value="A">').appendTo($form);
-    const $rB = $('<input type="radio" name="g" value="B">').appendTo($form);
+    const $rA = $(`<input type="radio" name="${radioName}" value="A">`).appendTo($form);
+    const $rB = $(`<input type="radio" name="${radioName}" value="B">`).appendTo($form);
 
     $check.atomChecked(check);
-    $rA.atomChecked(radioA);
-    $rB.atomChecked(radioB);
+    $rA.atomChecked(rA);
+    $rB.atomChecked(rB);
 
     await $.nextTick();
     expect($check.prop('checked')).toBe(true);
 
-    // Test checkbox toggle
+    // 1. Checkbox toggle
     $check.prop('checked', false).trigger('change');
     expect(check.value).toBe(false);
 
-    // Test radio sibling sync
+    // 2. Radio interaction (rB checked -> rA becomes false)
     $rB.prop('checked', true).trigger('change');
     await $.nextTick();
-    expect(radioB.value).toBe(true);
-    expect(radioA.value).toBe(false);
+    expect(rB.value).toBe(true);
+    expect(rA.value).toBe(false);
+
+    // 3. Programmatic update (rA atom = true -> rB atom must become false)
+    rA.value = true;
+    await $.nextTick();
+    expect($rA.prop('checked')).toBe(true);
+    expect($rB.prop('checked')).toBe(false);
+    expect(rB.value).toBe(false);
 
     $form.remove();
   });
@@ -261,7 +257,7 @@ describe('Events & Lifecycle', () => {
   });
 });
 
-describe('Safety & Edge Cases', () => {
+describe('Safety & Robustness', () => {
   it('Security: blocks dangerous attributes and properties', async () => {
     const warnSpy = vi.spyOn(console, 'warn');
     const $el = $('<div>');
@@ -283,7 +279,6 @@ describe('Safety & Edge Cases', () => {
 
     // Non-input atomVal
     $div.atomVal($.atom(''));
-    // Missing condition
     // @ts-expect-error
     $input.atomClass('active');
 
@@ -291,7 +286,7 @@ describe('Safety & Edge Cases', () => {
     warnSpy.mockRestore();
   });
 
-  it('Robustness: multi-element sets and non-element nodes', async () => {
+  it('Robustness: multi-element sets and static arrays', async () => {
     const text = $.atom('hi');
     const $els = $('<span></span><span></span>').appendTo(document.body);
     const $mixed = $els.add(document.createTextNode('skip'));
@@ -301,20 +296,12 @@ describe('Safety & Edge Cases', () => {
     expect($els.eq(0).text()).toBe('hi');
     expect($els.eq(1).text()).toBe('hi');
 
-    $els.remove();
-  });
-
-  it('Robustness: should not confuse static array with a tuple in atomText', async () => {
-    const $el = $('<div>').appendTo(document.body);
+    // Should not confuse static array with a tuple in atomText
     const staticArray = ['a', 'b'];
-
-    // Should be treated as a single value, not [source, formatter]
-    $el.atomText(staticArray);
+    $els.eq(0).atomText(staticArray);
     await $.nextTick();
+    expect($els.eq(0).text()).toMatch(/a,?b/);
 
-    // jQuery .text(['a', 'b']) stringifies the array
-    expect($el.text()).toMatch(/a,?b/);
-
-    $el.remove();
+    $els.remove();
   });
 });

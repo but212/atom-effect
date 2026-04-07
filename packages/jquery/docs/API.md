@@ -73,12 +73,14 @@ Updates `innerHTML`.
 > $('#container').atomHtml(safeContent);
 > ```
 
-### `.atomClass(className, booleanAtom)`
+Toggles `className` based on the atom's truthiness. Supports multiple space-separated classes in a single key.
 
-Toggles `className` based on the atom's truthiness.
+- **Overlapping Protection**: Safely handles duplicate classes across multiple reactive keys within the same binding map. Turning one condition off will not remove a class if another active condition still requires it.
 
 ```javascript
 $('#btn').atomClass('disabled', isLoading);
+// Overlapping example
+$el.atomClass({ 'active highlight': atom1, 'active large': atom2 });
 ```
 
 ### `.atomCss(property, atom, unit?)`
@@ -116,9 +118,9 @@ $('input').atomProp('disabled', shouldDisable);
 
 ## Control Flow
 
-### `.atomShow(booleanAtom)` / `.atomHide(booleanAtom)`
-
 Toggles visibility (`display: none`). `atomHide` is the inverse — hides the element when the atom is truthy.
+
+- **Style Preservation**: Dynamically captures and restores the last non-none display style. If the element's base style is changed (e.g., from `block` to `flex`) while visible, that change is preserved through subsequent toggle cycles.
 
 ```javascript
 $('.loading-spinner').atomShow(isLoading);
@@ -197,7 +199,9 @@ $('#multi-select').atomVal(selected);
 
 Two-way binding for `<input type="checkbox">` and `<input type="radio">` elements.
 
-- Uses jQuery's event system for compatibility with `.trigger()`.
+- **Radio Sync**: Automatically synchronizes all radio buttons in the same group (`name`) when a value is changed either by user interaction or programmatically via the atom.
+- **Robust Selectors**: Uses `$.escapeSelector` to safely target groups even when names contain special characters (e.g. `user[role]`).
+- **Compatibility**: Uses jQuery's event system for compatibility with `.trigger()`.
 
 ```javascript
 $('#agree').atomChecked(isAgreedAtom);

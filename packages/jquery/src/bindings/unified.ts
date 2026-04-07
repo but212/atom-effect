@@ -98,14 +98,17 @@ export function bindHtml({ el }: BindingContext, value: AsyncReactiveValue<strin
     ? getSanitizedHtml(value as ReadonlyAtom<string | Promise<string>>)
     : value;
 
+  let lastHtml: string | null = null;
+
   registerReactiveEffect(
     el,
     source,
     (val) => {
       const html = source === value ? sanitizeHtml(val) : val;
-      if (el.innerHTML !== html) {
+      if (lastHtml !== html) {
         registry.cleanupDescendants(el);
         el.innerHTML = html;
+        lastHtml = html;
       }
     },
     'html'
@@ -120,11 +123,13 @@ export function bindClass(
   classMap: Record<string, AsyncReactiveValue<boolean>>
 ): void {
   const tokenMap: Record<string, string[]> = {};
+  const prevStates: Record<string, boolean> = {};
+
   for (const k in classMap) {
     if (hasOwn.call(classMap, k)) {
       const trimmed = k.trim();
-      // Optimization: avoid regex for simple single-class keys
-      tokenMap[k] = trimmed.indexOf(' ') === -1 ? [trimmed] : trimmed.split(/\s+/).filter(Boolean);
+      // Optimization: avoid regex for simple single-class keys, but handle all whitespace robustly
+      tokenMap[k] = /\s/.test(trimmed) ? trimmed.split(/\s+/).filter(Boolean) : [trimmed];
     }
   }
 
@@ -133,12 +138,26 @@ export function bindClass(
     classMap,
     (states) => {
       for (const k in states) {
+        const val = !!states[k];
+        if (prevStates[k] === val) continue;
+
         const tokens = tokenMap[k]!;
-        if (states[k]) {
+        if (val) {
           el.classList.add(...tokens);
         } else {
-          el.classList.remove(...tokens);
+          // Safely remove tokens only if no other active key in this map requires them
+          for (const token of tokens) {
+            let stillNeeded = false;
+            for (const otherK in states) {
+              if (otherK !== k && states[otherK] && tokenMap[otherK]!.includes(token)) {
+                stillNeeded = true;
+                break;
+              }
+            }
+            if (!stillNeeded) el.classList.remove(token);
+          }
         }
+        prevStates[k] = val;
       }
     },
     'class'
@@ -152,6 +171,7 @@ export function bindCss({ el }: BindingContext, cssMap: Record<string, CssValue>
   const style = el.style as unknown as Record<string, string | null>;
   const reactiveMap: Record<string, ReactiveValue<unknown>> = {};
   const meta: Record<string, { camel: string; unit: string }> = {};
+  const prevValues: Record<string, string | null> = {};
 
   for (const p in cssMap) {
     if (hasOwn.call(cssMap, p)) {
@@ -171,8 +191,12 @@ export function bindCss({ el }: BindingContext, cssMap: Record<string, CssValue>
         const val = states[p];
         const str = m.unit ? `${val}${m.unit}` : String(val);
         const camel = m.camel;
-        if (!isDangerousCssValue(str) && style[camel] !== str) {
-          style[camel] = str;
+
+        if (prevValues[p] !== str) {
+          if (!isDangerousCssValue(str)) {
+            style[camel] = str;
+          }
+          prevValues[p] = str;
         }
       }
     },
@@ -245,6 +269,7 @@ export function bindProp(
   const el = ctx.el as unknown as Record<string, unknown>;
   const safeMap: Record<string, AsyncReactiveValue<unknown>> = {};
   const metaMap: Record<string, { isUrl: boolean }> = {};
+  const prevValues: Record<string, unknown> = {};
 
   for (const name in propMap) {
     if (!hasOwn.call(propMap, name)) continue;
@@ -269,13 +294,15 @@ export function bindProp(
     (states) => {
       for (const name in states) {
         const val = states[name];
+        if (prevValues[name] === val) continue;
+
         if (metaMap[name]!.isUrl && typeof val === 'string' && DANGEROUS_PROTOCOL_RE.test(val)) {
           console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_PROTOCOL(name)}`);
           continue;
         }
-        if (el[name] !== val) {
-          el[name] = val;
-        }
+
+        el[name] = val;
+        prevValues[name] = val;
       }
     },
     'prop'
@@ -290,13 +317,21 @@ export function bindVisibility(
   condition: AsyncReactiveValue<boolean>,
   invert: boolean
 ): void {
-  const show = el.style.display === 'none' ? '' : el.style.display;
+  let lastDisplay = el.style.display === 'none' ? '' : el.style.display;
+
   registerReactiveEffect(
     el,
     condition,
     (val) => {
-      const target = invert !== !!val ? show : 'none';
-      if (el.style.display !== target) el.style.display = target;
+      const isVisible = invert !== !!val;
+      if (isVisible) {
+        if (el.style.display === 'none') {
+          el.style.display = lastDisplay;
+        }
+      } else if (el.style.display !== 'none') {
+        lastDisplay = el.style.display;
+        el.style.display = 'none';
+      }
     },
     invert ? 'hide' : 'show'
   );
@@ -321,6 +356,18 @@ export function bindVal(
 }
 
 /**
+ * Helper to trigger synchronization across a radio group.
+ */
+function syncRadioGroup(el: HTMLInputElement): void {
+  if (el.type === 'radio' && el.name) {
+    (el.form ? $(el.form) : $(document))
+      .find(`input[type="radio"][name="${$.escapeSelector(el.name)}"]`)
+      .not(el)
+      .trigger('change.atomRadioSync');
+  }
+}
+
+/**
  * Two-way binding for checkbox/radio checked state.
  */
 export function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): void {
@@ -330,12 +377,7 @@ export function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): v
   const handler = () => {
     if (atom.peek() !== el.checked) {
       atom.value = el.checked;
-      if (el.type === 'radio' && el.checked && el.name) {
-        (el.form ? $(el.form) : $(document))
-          .find(`input[type="radio"][name="${el.name.replace(/"/g, '\\"')}"]`)
-          .not(el)
-          .trigger('change.atomRadioSync');
-      }
+      syncRadioGroup(el);
     }
   };
   (handler as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
@@ -351,6 +393,7 @@ export function bindChecked(ctx: BindingContext, atom: WritableAtom<boolean>): v
         if (el.checked !== val) {
           el.checked = val;
           debug.domUpdated(LOG_PREFIXES.BINDING, el, 'checked', val);
+          if (val) syncRadioGroup(el);
         }
       });
     })

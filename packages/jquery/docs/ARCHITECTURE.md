@@ -78,7 +78,7 @@ To achieve maximum performance during high-frequency updates (e.g., animations o
 
 - **Metadata Caching**: Complex bindings like `atomClass`, `atomCss`, `atomAttr`, and `atomProp` pre-calculate metadata (e.g., camelCase property names, ARIA flags, URL-bearing status) during the initial registration. Map objects for these bindings are **hoisted outside the element iteration loop** to avoid redundant object allocations.
 - **Monomorphic Dispatch**: The internal `InputBinding` class specializes its `format` and `equal` logic at construction time. This removes branching and `instanceof` checks from the high-frequency `syncToDom` and `syncToAtom` paths.
-- **JS-Level Value Caching**: `bindAttr` maintains a JS-side cache of the last written attribute value.
+- **JS-Level Value Caching**: `bindHtml`, `bindClass`, `bindCss`, `bindProp`, and `bindAttr` maintain a local JS-side cache of the last written value. This avoids expensive DOM reads (like `el.innerHTML`) and redundant DOM writes (like `classList.add` or property assignments) when the reactive state hasn't meaningfully changed.
 - **Batched Map Updates**: `registerMapEffect` processes entire dictionaries of reactive values in a single effect, reducing the number of total `Effect` objects and improving subscription efficiency.
 
 ## 3. Lifecycle Management
