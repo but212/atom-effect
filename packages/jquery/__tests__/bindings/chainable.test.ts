@@ -303,4 +303,18 @@ describe('Safety & Edge Cases', () => {
 
     $els.remove();
   });
+
+  it('Robustness: should not confuse static array with a tuple in atomText', async () => {
+    const $el = $('<div>').appendTo(document.body);
+    const staticArray = ['a', 'b'];
+
+    // Should be treated as a single value, not [source, formatter]
+    $el.atomText(staticArray);
+    await $.nextTick();
+
+    // jQuery .text(['a', 'b']) stringifies the array
+    expect($el.text()).toMatch(/a,?b/);
+
+    $el.remove();
+  });
 });

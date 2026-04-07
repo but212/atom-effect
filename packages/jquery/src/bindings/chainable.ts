@@ -53,7 +53,14 @@ function atomEachElement(
 
 /** Utility to handle [source, options] tuple arguments in integrated bindings. */
 function unpack<T, O>(val: T | [T, O]): [T, O?] {
-  return Array.isArray(val) ? val : [val];
+  return Array.isArray(val) &&
+    val.length === 2 &&
+    (typeof val[0] === 'function' ||
+      (val[0] !== null &&
+        typeof val[0] === 'object' &&
+        ('value' in (val[0] as object) || 'then' in (val[0] as object))))
+    ? (val as [T, O])
+    : [val as T];
 }
 
 /**
