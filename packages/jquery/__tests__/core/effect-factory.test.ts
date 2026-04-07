@@ -4,110 +4,120 @@ import $ from '@/index';
 import { debug } from '@/utils/debug';
 
 describe('Effect Factory', () => {
-  // 1. Basic behavior: Immediate update for non-reactive sources (Static Path)
-  it('Initial Sync: executes updater immediately for non-reactive sources', () => {
-    const updater = vi.fn();
+  /**
+   * 1. Basic Synchronization & Reactive Path
+   * Verifies immediate update on registration and subsequent reactive propagation.
+   */
+  it('Consistency: handles immediate sync and reactive updates for both single and map effects', async () => {
     const el = document.createElement('div');
-
-    // Single value case
-    registerReactiveEffect(el, 'static', updater, 'text-test');
-    // Map case
-    registerMapEffect(el, { a: 1, b: 2 }, updater, 'map-test');
-
-    expect(updater).toHaveBeenCalledWith('static');
-    expect(updater).toHaveBeenCalledWith({ a: 1, b: 2 });
-  });
-
-  // 2. Core behavior: Reactive propagation (Reactive Path)
-  it('Reactive Propagation: updates DOM when atom dependencies change', async () => {
-    const atom = $.atom('initial');
     const updater = vi.fn();
-    const el = document.createElement('div');
+    const atomValue = $.atom('initial');
+    const atomMap = $.atom(10);
 
-    // Test registerReactiveEffect
-    registerReactiveEffect(el, atom, updater, 'text-reactive');
+    // Single source
+    registerReactiveEffect(el, atomValue, updater, 'text-reactive');
     expect(updater).toHaveBeenCalledWith('initial');
-
-    atom.value = 'updated';
+    atomValue.value = 'updated';
     await $.nextTick();
     expect(updater).toHaveBeenCalledWith('updated');
 
-    // Test registerMapEffect propagation
-    const atomMap = $.atom(10);
-    registerMapEffect(el, { val: atomMap }, updater, 'map-reactive');
-    expect(updater).toHaveBeenCalledWith({ val: 10 });
-
+    // Map source
+    updater.mockClear();
+    registerMapEffect<string | number>(el, { count: atomMap, static: 'val' }, updater, 'map-reactive');
+    expect(updater).toHaveBeenCalledWith({ count: 10, static: 'val' });
     atomMap.value = 20;
     await $.nextTick();
-    expect(updater).toHaveBeenCalledWith({ val: 20 });
+    expect(updater).toHaveBeenCalledWith({ count: 20, static: 'val' });
   });
 
-  // 3. Performance & Async handling (Async Path)
-  describe('Asynchronous Handling', () => {
-    it('optimization: resolved promises are cached to avoid unnecessary async delays', async () => {
-      const staticPromise = Promise.resolve('resolved');
-      const atom = $.atom('initial');
+  /**
+   * 2. Asynchronous Handling & Cache Management
+   * Verifies Promise resolution, instance-aware caching, and stale cache prevention.
+   */
+  describe('Asynchronous Operations', () => {
+    it('Cache Management: optimizes redundant promises and prevents stale instance updates', async () => {
+      const el = document.createElement('div');
       const updater = vi.fn();
+      const p1 = Promise.resolve('old');
+      const atom = $.atom<Promise<string> | string>(p1);
 
-      registerMapEffect(
-        document.createElement('div'),
-        { p: staticPromise, a: atom },
-        updater,
-        'cache-test'
-      );
+      registerMapEffect(el, { p: atom }, updater, 'async-test');
 
-      // Wait for initial async resolution (needs multiple ticks for Promise.all + inner .then)
+      // 1. Initial resolution (instance-aware cache population)
       await $.nextTick();
       await $.nextTick();
       await $.nextTick();
-
-      expect(updater).toHaveBeenCalledWith({ p: 'resolved', a: 'initial' });
+      expect(updater).toHaveBeenCalledWith({ p: 'old' });
       updater.mockClear();
 
-      // Subsequent update should be sync (within the same microtask re-run) because promise is cached
-      atom.value = 'updated';
+      // 2. New Promise instance (same key) should trigger fresh resolution (Stale Cache Prevention)
+      const p2 = Promise.resolve('new');
+      atom.value = p2;
+      await $.nextTick(); 
+      expect(updater).not.toHaveBeenCalledWith({ p: 'old' }); // Should not hit old cache immediately
+
       await $.nextTick();
-      expect(updater).toHaveBeenCalledWith({ p: 'resolved', a: 'updated' });
+      await $.nextTick();
+      await $.nextTick();
+      expect(updater).toHaveBeenCalledWith({ p: 'new' });
+
+      // 3. Same Promise instance again should hit cache (Optimization)
+      updater.mockClear();
+      atom.value = 'dummy-trigger'; // Trigger re-evaluation of the map
+      atom.value = p2; 
+      await $.nextTick();
+      // Hits cache synchronously within the runUpdater pass if resolvedMap has no other promises
+      // Or in the microtask if other promises exist.
+      expect(updater).toHaveBeenCalledWith({ p: 'new' });
     });
 
-    it('error-handling: logs errors to debug module when promises reject', async () => {
-      const error = new Error('fail');
-      const promise = Promise.resolve().then(() => {
-        throw error;
-      });
+    it('Error Handling: reports promise rejections to the debug module', async () => {
+      const error = new Error('async-fail');
+      const rej = Promise.reject(error);
       const errorSpy = vi.spyOn(debug, 'error').mockImplementation(() => {});
 
-      registerMapEffect(document.createElement('div'), { a: promise }, vi.fn(), 'error-test');
+      registerReactiveEffect(document.createElement('div'), rej, vi.fn(), 'err-test');
 
-      // Wait for rejection propagation
       await $.nextTick();
       await $.nextTick();
-      await $.nextTick();
-      await $.nextTick();
-
       expect(errorSpy).toHaveBeenCalledWith(expect.anything(), expect.anything(), error);
       errorSpy.mockRestore();
     });
   });
 
-  // 4. Lifecycle safety: Zombie prevention
-  it('Safety: prevents zombie updates after element disconnection', async () => {
-    const atom = $.atom('initial');
-    const updater = vi.fn();
+  /**
+   * 3. Lifecycle Safety (Zombie Prevention)
+   * Verifies that updates are discarded if the element is disconnected, 
+   * covering both reactive sources and static asynchronous promises.
+   */
+  it('Memory Safety: prevents zombie updates for both reactive and static async sources', async () => {
     const el = document.createElement('div');
     document.body.appendChild(el);
-
-    registerReactiveEffect(el, atom, updater, 'zombie-test');
-    expect(updater).toHaveBeenCalledWith('initial');
-    updater.mockClear();
-
-    // 1. Trigger reactive update
-    atom.value = 'updated';
-    // 2. Immediately disconnect element (triggers cleanup)
-    document.body.removeChild(el);
-
+    const updater = vi.fn();
+    
+    // Case A: Reactive Source
+    const atom = $.atom('initial');
+    registerReactiveEffect(el, atom, updater, 'reactive-zombie');
+    atom.value = 'discarded';
+    document.body.removeChild(el); // Immediate disconnect
     await $.nextTick();
-    // Updater should NOT be called for disconnected element
+    expect(updater).not.toHaveBeenCalledWith('discarded');
+
+    // Case B: Static Promise Source
+    const { promise, resolve } = (() => {
+      let r: (v: string) => void;
+      const p = new Promise<string>((res) => { r = res; });
+      return { promise: p, resolve: r! };
+    })();
+    
+    document.body.appendChild(el);
+    updater.mockClear();
+    registerReactiveEffect(el, promise, updater, 'static-zombie');
+    document.body.removeChild(el); // Disconnect before resolution
+    
+    resolve('resolved');
+    await $.nextTick();
+    await $.nextTick();
     expect(updater).not.toHaveBeenCalled();
   });
 });

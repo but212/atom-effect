@@ -66,23 +66,32 @@ export function registerReactiveEffect<T>(
     isDisposed: false,
   };
 
+  // Ensure zombie protection by registering cleanup immediately.
+  // Covers all execution paths, including static Promise inputs.
+  registry.trackCleanup(el, () => {
+    state.isDisposed = true;
+  });
+
   const runUpdater = (val: T | Promise<T>) => {
-    // If it's a plain value, update immediately and invalidate pending promises.
+    // Sync Path: Update immediately and invalidate any pending async runs.
     if (!isPromise(val)) {
       state.latestId++;
-      try {
-        updater(val);
-        debug.domUpdated(LOG_PREFIXES.BINDING, el, debugType, val);
-      } catch (e) {
-        debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType, true), e);
-      }
+      untracked(() => {
+        try {
+          updater(val);
+          debug.domUpdated(LOG_PREFIXES.BINDING, el, debugType, val);
+        } catch (e) {
+          debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType, true), e);
+        }
+      });
       return;
     }
 
-    // Async path: track this specific promise run.
+    // Async Path: Increment ID to track this specific execution's relevance.
     const myId = ++state.latestId;
     val
       .then((resolved) => {
+        // Execute only if this element is still connected and this promise is still current.
         if (myId === state.latestId && !state.isDisposed) {
           untracked(() => {
             try {
@@ -105,10 +114,6 @@ export function registerReactiveEffect<T>(
   const sourceIsFunction = typeof source === 'function';
 
   if (sourceIsReactive || sourceIsFunction) {
-    registry.trackCleanup(el, () => {
-      state.isDisposed = true;
-    });
-
     registry.trackEffect(
       el,
       effect(
@@ -116,13 +121,13 @@ export function registerReactiveEffect<T>(
           const value = sourceIsReactive
             ? (source as ReadonlyAtom<T | Promise<T>>).value
             : (source as () => T | Promise<T>)();
-          untracked(() => runUpdater(value));
+          runUpdater(value);
         },
         { name: debugType }
       )
     );
   } else {
-    untracked(() => runUpdater(source as T | Promise<T>));
+    runUpdater(source as T | Promise<T>);
   }
 }
 
@@ -158,8 +163,13 @@ export function registerMapEffect<T>(
   const state = {
     latestId: 0,
     isDisposed: false,
-    cache: {} as Record<string, T>,
+    cache: {} as Record<string, { p: Promise<T>; v: T }>,
   };
+
+  // Ensure zombie protection by registering cleanup immediately.
+  registry.trackCleanup(el, () => {
+    state.isDisposed = true;
+  });
 
   const runUpdater = (currentMap: Record<string, T | Promise<T>>) => {
     const promises: Promise<{ key: string; val: T }>[] = [];
@@ -168,17 +178,21 @@ export function registerMapEffect<T>(
 
     for (let i = 0; i < len; i++) {
       const key = keys[i]!;
-      let val = currentMap[key]!;
+      const val = currentMap[key]!;
 
-      // Optimization: use cached value if promise has already resolved
+      // Optimization: use cached result if it matches the current promise instance.
       if (isPromise(val) && hasOwn.call(state.cache, key)) {
-        val = state.cache[key]!;
+        const entry = state.cache[key]!;
+        if (entry.p === val) {
+          resolvedMap[key] = entry.v;
+          continue;
+        }
       }
 
       if (isPromise(val)) {
         promises.push(
           val.then((v) => {
-            state.cache[key] = v;
+            state.cache[key] = { p: val as Promise<T>, v };
             return { key, val: v };
           })
         );
@@ -193,7 +207,7 @@ export function registerMapEffect<T>(
         (results) => {
           if (myId === state.latestId && !state.isDisposed) {
             for (let i = 0, rLen = results.length; i < rLen; i++) {
-              const res = results[i]! as { key: string; val: T };
+              const res = results[i]!;
               resolvedMap[res.key] = res.val;
             }
             untracked(() => {
@@ -201,11 +215,7 @@ export function registerMapEffect<T>(
                 updater(resolvedMap);
                 debug.domUpdated(LOG_PREFIXES.BINDING, el, `${debugType} (async)`, resolvedMap);
               } catch (e) {
-                debug.error(
-                  LOG_PREFIXES.BINDING,
-                  ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType),
-                  e
-                );
+                debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType), e);
               }
             });
           }
@@ -217,21 +227,20 @@ export function registerMapEffect<T>(
         }
       );
     } else {
+      // Sync Path: Update immediately and invalidate any pending async runs.
       state.latestId++;
-      try {
-        updater(resolvedMap);
-        debug.domUpdated(LOG_PREFIXES.BINDING, el, debugType, resolvedMap);
-      } catch (e) {
-        debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType, true), e);
-      }
+      untracked(() => {
+        try {
+          updater(resolvedMap);
+          debug.domUpdated(LOG_PREFIXES.BINDING, el, debugType, resolvedMap);
+        } catch (e) {
+          debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType, true), e);
+        }
+      });
     }
   };
 
   if (reactiveKeys.length > 0) {
-    registry.trackCleanup(el, () => {
-      state.isDisposed = true;
-    });
-
     registry.trackEffect(
       el,
       effect(
@@ -243,12 +252,12 @@ export function registerMapEffect<T>(
               ? (source as ReadonlyAtom<T | Promise<T>>).value
               : (source as () => T | Promise<T>)();
           }
-          untracked(() => runUpdater(currentMap));
+          runUpdater(currentMap);
         },
         { name: debugType }
       )
     );
   } else {
-    untracked(() => runUpdater(staticValues));
+    runUpdater(staticValues);
   }
 }
