@@ -32,8 +32,6 @@
 - **Bindings**: `bindChecked` now correctly synchronizes radio button groups when updated programmatically via atoms.
 - **Styles**: `bindVisibility` (atomShow/atomHide) now dynamically captures and preserves the last non-none display style, respecting external CSS or inline style updates.
 - **Classes**: `atomClass` now supports multiple space-separated class names and handles overlapping classes safely across multiple reactive keys.
-- **ARIA**: `atomAttr` now correctly preserves `false` values as the string `"false"` for ARIA attributes.
-- **Stability**: Resolved IME composition issues where external updates would interrupt typing for Korean/Chinese/Japanese characters.
 - **Sync**: Corrected dependency tracking bugs in `syncDomFromAtom` and removed redundant synchronizations during `blur` events.
 
 #### Performance
