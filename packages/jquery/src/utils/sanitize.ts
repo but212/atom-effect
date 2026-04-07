@@ -11,17 +11,10 @@
  */
 
 // ============================================================================
-// URL attribute registry
+// Constants & Registry
 // ============================================================================
 
-/**
- * Attributes that carry a single URL value.
- *
- * `srcset` is intentionally excluded: its value is a comma-separated list of
- * URLs (e.g. `"img.png 1x, img@2x.png 2x"`), so a start-anchored regex cannot
- * reliably detect a dangerous protocol buried after the first comma. Callers
- * that need to validate srcset should parse each URL individually.
- */
+/** Attributes that carry a single URL value. */
 export const URL_ATTRS = new Set([
   'href',
   'src',
@@ -37,101 +30,107 @@ export const URL_ATTRS = new Set([
   'usemap',
   'classid',
   'codebase',
+  'fill',
+  'filter',
+  'mask',
+  'marker-start',
+  'marker-mid',
+  'marker-end',
+  'clip-path',
 ]);
 
-// ============================================================================
-// Pre-compiled regex constants
-// ============================================================================
-
-export const DANGEROUS_PROTOCOL_RE = /^\s*(?:javascript|vbscript)\s*:/i;
-
-const DANGEROUS_CSS_RE =
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: Intentionally matching control characters for XSS sanitization
-  /(?:expression\s*\(|behavior\s*:|-moz-binding\s*:|(?:\\[0-9a-f]{1,6}\s*|[\s\x00-\x20/'"])*(?:j\s*a\s*v\s*a\s*s\s*c\s*r\s*i\s*p\s*t|v\s*b\s*s\s*c\s*r\s*i\s*p\s*t|d\s*a\s*t\s*a)\s*:(?!image\/))/i;
-
-/** Detects `javascript:` / `vbscript:` inside a CSS `url()` function. Non-global — no `lastIndex` state. */
-const DANGEROUS_CSS_URL_RE = /url\s*\(\s*(?:["']?\s*)?(?:javascript|vbscript)\s*:/i;
-
-// biome-ignore lint/suspicious/noControlCharactersInRegex: Intentionally matching control characters
-const STRIP_CTRL_RE = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g;
-
-/**
- * Numeric HTML entity decoder: &#NNN; and &#xHH; forms.
- *
- * Runs before protocol/tag checks so entity-encoded bypass vectors like
- * "&#106;avascript:" (j=106) are normalised to their literal characters.
- * Safe structural entities (&amp; &lt; &gt; &quot;) are intentionally left
- * encoded — they produce inert text when re-inserted via innerHTML and must
- * remain escaped for correct HTML rendering.
- *
- * The semicolon is optional (`?`) to catch unterminated references such as
- * "&#106avascript:" which some parsers still decode.
- */
-const DECODE_NUMERIC_ENTITY_RE = /&#x([0-9a-f]+);?|&#([0-9]+);?/gi;
-
-/**
- * Named-entity decoder for the small set of entities relevant to protocol
- * smuggling (colon, Tab, NewLine).
- *
- * HTML5 named character references are **case-sensitive** — `&Tab;` exists,
- * `&tab;` does not. Do NOT add the `i` flag: it would incorrectly decode
- * non-existent variants and widen the attack surface.
- */
 const NAMED_ENTITY_MAP: Record<string, string> = {
   colon: ':',
   Tab: '\t',
   NewLine: '\n',
 };
-const DECODE_NAMED_ENTITY_RE = /&(colon|Tab|NewLine);/g;
 
-const STRIP_XML_RE = /<\?[\s\S]*?\?>/g;
+// ============================================================================
+// Pre-compiled regex constants
+// ============================================================================
 
-const DANGEROUS_TAG_RE =
+/** Normalization & Fast-path regexes */
+const RE_NUMERIC_ENTITY = /&#x([0-9a-f]+);?|&#([0-9]+);?/gi;
+const RE_NAMED_ENTITY = /&(colon|Tab|NewLine);/g;
+// biome-ignore lint/suspicious/noControlCharactersInRegex: Intentionally matching control characters for XSS sanitization
+const RE_STRIP_CTRL = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g;
+// biome-ignore lint/suspicious/noControlCharactersInRegex: Intentionally matching control characters for XSS sanitization
+const RE_FAST_SCAN = /[<&\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/;
+
+/** Sanitization regexes */
+const RE_STRIP_XML = /<\?[\s\S]*?\?>/g;
+const RE_DANGEROUS_TAG =
   /(<(script|iframe|object|embed|base|meta|applet|noscript|form|style|link)\b[^>]*>([\s\S]*?)<\/\2>|<(script|iframe|object|embed|base|meta|applet|noscript|form|style|link)\b[^>]*\/?>)/gi;
 
-const DANGEROUS_PROTOCOL_GLOBAL_RE =
-  /(j\s*a\s*v\s*a\s*s\s*c\s*r\s*i\s*p\s*t|v\s*b\s*s\s*c\s*r\s*i\s*p\s*t)\s*:/gi;
-
-const DANGEROUS_DATA_URI_RE =
+const RE_UNSAFE_ATTR = /\bon\w+\s*=/gim;
+const RE_DANGEROUS_DATA_URI =
   /data\s*:\s*(?:text\/(?:html|javascript|vbscript|xml)|application\/(?:javascript|xhtml\+xml|xml|x-shockwave-flash)|image\/svg\+xml)/gi;
 
-const UNSAFE_ATTR_RE = /\bon\w+\s*=/gim;
+/** Shared protocol pattern (handles internal whitespace/control chars) */
+const PROTOCOL_PATTERN =
+  '(?:j\\s*a\\s*v\\s*a\\s*s\\s*c\\s*r\\s*i\\s*p\\s*t|v\\s*b\\s*s\\s*c\\s*r\\s*i\\s*p\\s*t)';
 
-/** Global variant of DANGEROUS_CSS_RE for use inside sanitizeHtml. */
-const DANGEROUS_CSS_GLOBAL_RE = new RegExp(DANGEROUS_CSS_RE.source, 'gim');
+const RE_DANGEROUS_PROTOCOL_GLOBAL = new RegExp(`${PROTOCOL_PATTERN}\\s*:`, 'gi');
+const RE_DANGEROUS_PROTOCOL_START = new RegExp(`^\\s*${PROTOCOL_PATTERN}\\s*:`, 'i');
+
+/** CSS Sanitization */
+const CSS_KEYWORD_PATTERN = `(?:expression\\s*\\(|behavior\\s*:|-moz-binding\\s*:|(?:\\\\[0-9a-f]{1,6}\\s*|[\\s\\x00-\\x20/'"])*${PROTOCOL_PATTERN}\\s*:(?!image\\/)|data\\s*:\\s*(?!image\\/))`;
+const RE_DANGEROUS_CSS_GLOBAL = new RegExp(CSS_KEYWORD_PATTERN, 'gim');
+const RE_DANGEROUS_CSS_SINGLE = new RegExp(CSS_KEYWORD_PATTERN, 'im');
+const RE_DANGEROUS_CSS_URL = new RegExp(
+  `url\\s*\\(\\s*(?:["']?\\s*)?${PROTOCOL_PATTERN}\\s*:`,
+  'i'
+);
 
 // ============================================================================
-// sanitizeHtml
+// Internal Helpers
 // ============================================================================
+
+/** Normalizes a string by decoding entities and stripping control characters. */
+function normalize(s: string): string {
+  return s
+    .replace(RE_NUMERIC_ENTITY, (_, hex, dec) => {
+      const cp = hex ? parseInt(hex, 16) : parseInt(dec, 10);
+      return cp >= 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : '';
+    })
+    .replace(RE_NAMED_ENTITY, (_, name) => NAMED_ENTITY_MAP[name] ?? '')
+    .replace(RE_STRIP_CTRL, '');
+}
+
+/** Returns true if the string contains a dangerous protocol or data URI. */
+function hasDangerousProtocol(s: string): boolean {
+  return (
+    RE_DANGEROUS_PROTOCOL_START.test(s) || new RegExp(RE_DANGEROUS_DATA_URI.source, 'i').test(s)
+  );
+}
+
+/** Returns true if the string contains dangerous CSS patterns. */
+function hasDangerousCss(s: string): boolean {
+  return (
+    (s.toLowerCase().includes('url(') && RE_DANGEROUS_CSS_URL.test(s)) ||
+    RE_DANGEROUS_CSS_SINGLE.test(s)
+  );
+}
 
 /**
  * O(n) single-pass scan for characters that indicate potential danger.
- * Much cheaper than running 5+ regexes on safe strings.
  */
 function needsSanitization(s: string): boolean {
-  const len = s.length;
-  for (let i = 0; i < len; i++) {
-    const c = s.charCodeAt(i);
-    // '<' (0x3C), '&' (0x26), control chars (0x00-0x1F excl. tab/nl/cr)
-    if (c === 0x3c || c === 0x26 || (c <= 0x1f && c !== 0x09 && c !== 0x0a && c !== 0x0d)) {
-      return true;
-    }
-  }
-
-  // Use a more conservative check for protocols and event handlers.
-  // Any colon or the pattern "on" + letter should trigger a full regex-based sanitization.
-  if (s.indexOf(':') !== -1) return true;
+  if (RE_FAST_SCAN.test(s) || s.indexOf(':') !== -1) return true;
 
   const lower = s.toLowerCase();
-  const onIdx = lower.indexOf('on');
-  if (onIdx !== -1 && onIdx < len - 2) {
+  let onIdx = lower.indexOf('on');
+  while (onIdx !== -1 && onIdx < s.length - 2) {
     const nextChar = lower.charCodeAt(onIdx + 2);
-    // Check if it's "on" followed by a letter (potential event handler like onclick)
     if (nextChar >= 97 && nextChar <= 122) return true;
+    onIdx = lower.indexOf('on', onIdx + 1);
   }
-
   return false;
 }
+
+// ============================================================================
+// Public API
+// ============================================================================
 
 /**
  * HTML sanitization for XSS mitigation using regex-based filtering.
@@ -141,41 +140,39 @@ export function sanitizeHtml(html: string | null | undefined): string {
   if (!html) return '';
   const sInit = String(html);
 
-  // Fast path: if no dangerous characters or patterns exist, skip all regex processing.
+  // Fast path: skip expensive processing if no dangerous patterns exist.
   if (!needsSanitization(sInit)) return sInit;
 
-  let s = sInit
-    .replace(STRIP_CTRL_RE, '')
-    .replace(DECODE_NUMERIC_ENTITY_RE, (_, hex, dec) =>
-      String.fromCodePoint(hex ? parseInt(hex, 16) : parseInt(dec, 10))
-    )
-    .replace(DECODE_NAMED_ENTITY_RE, (_, name) => NAMED_ENTITY_MAP[name] ?? '');
+  // 1. Normalize (Decode entities -> Strip control chars)
+  let s = normalize(sInit);
 
+  // 2. Strip Tags (Recursive to handle nested reassembly like <scr<script>ipt>)
   if (s.indexOf('<') !== -1) {
-    s = s.replace(STRIP_XML_RE, '');
+    s = s.replace(RE_STRIP_XML, '');
     let prev: string;
     do {
       prev = s;
-      s = s.replace(DANGEROUS_TAG_RE, '');
+      s = s.replace(RE_DANGEROUS_TAG, '');
     } while (s !== prev);
   }
 
+  // 3. Neutralize CSS, Protocols, Data URIs, and Attributes
+  // (Note: CSS first to ensure url(javascript:) captures the whole property)
   return s
-    .replace(DANGEROUS_PROTOCOL_GLOBAL_RE, 'data-unsafe-protocol:')
-    .replace(DANGEROUS_DATA_URI_RE, 'data-unsafe-protocol:')
-    .replace(UNSAFE_ATTR_RE, 'data-unsafe-attr=')
-    .replace(DANGEROUS_CSS_GLOBAL_RE, 'data-unsafe-css:');
+    .replace(RE_DANGEROUS_CSS_GLOBAL, 'data-unsafe-css:')
+    .replace(RE_DANGEROUS_PROTOCOL_GLOBAL, 'data-unsafe-protocol:')
+    .replace(RE_DANGEROUS_DATA_URI, 'data-unsafe-protocol:')
+    .replace(RE_UNSAFE_ATTR, 'data-unsafe-attr=');
 }
 
 /** Checks for javascript:/vbscript: protocols in URL attributes. */
 export const isDangerousUrl = (attr: string, val: string): boolean => {
-  if (val.length < 10) return false; // "javascript:".length = 11
-  const lower = attr.toLowerCase();
-  return URL_ATTRS.has(lower) && DANGEROUS_PROTOCOL_RE.test(val);
+  const lowerAttr = attr.toLowerCase();
+  if (!URL_ATTRS.has(lowerAttr)) return false;
+  return hasDangerousProtocol(normalize(val));
 };
 
-/** Checks for protocols inside CSS url() functions. */
+/** Checks for protocols/expressions inside CSS. */
 export const isDangerousCssValue = (val: string): boolean => {
-  if (val.length < 15) return false; // "url(javascript:)".length = 15
-  return val.toLowerCase().includes('url(') && DANGEROUS_CSS_URL_RE.test(val);
+  return hasDangerousCss(normalize(val));
 };

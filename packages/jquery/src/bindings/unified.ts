@@ -19,12 +19,7 @@ import type {
 import { hasOwn, isPromise } from '@/utils';
 import { debug } from '@/utils/debug';
 
-import {
-  DANGEROUS_PROTOCOL_RE,
-  isDangerousCssValue,
-  sanitizeHtml,
-  URL_ATTRS,
-} from '@/utils/sanitize';
+import { isDangerousCssValue, isDangerousUrl, sanitizeHtml, URL_ATTRS } from '@/utils/sanitize';
 
 // Cache for CSS property camelization to avoid repeated regex overhead.
 // Uses Map instead of a plain object to avoid prototype pollution risk and
@@ -244,7 +239,7 @@ export function bindAttr(
         }
 
         const newVal = val === true ? (m.isAria ? 'true' : name) : String(val);
-        if (m.isUrl && DANGEROUS_PROTOCOL_RE.test(newVal)) {
+        if (isDangerousUrl(name, newVal)) {
           console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_PROTOCOL(name)}`);
           continue;
         }
@@ -296,7 +291,7 @@ export function bindProp(
         const val = states[name];
         if (prevValues[name] === val) continue;
 
-        if (metaMap[name]!.isUrl && typeof val === 'string' && DANGEROUS_PROTOCOL_RE.test(val)) {
+        if (typeof val === 'string' && isDangerousUrl(name, val)) {
           console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_PROTOCOL(name)}`);
           continue;
         }
