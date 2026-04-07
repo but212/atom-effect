@@ -258,9 +258,17 @@ $('.my-form').atomBind({
 ### `.atomOn(event, handler)`
 
 Lifecycle-aware event listener. The handler is automatically removed when the element is unbound or unmounted.
+Additionally, handlers are automatically wrapped in `batch()`, ensuring that multiple atom updates triggered by the event result in a single reactive flush.
+
+Supports all jQuery event signatures, including event maps and `.one()`.
 
 ```javascript
 $('#btn').atomOn('click', () => doSomething());
+// Event Map
+$('#btn').atomOn({
+  mouseenter: () => (isHovered.value = true),
+  mouseleave: () => (isHovered.value = false),
+});
 ```
 
 ---

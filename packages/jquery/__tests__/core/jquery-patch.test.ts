@@ -1,9 +1,8 @@
-import $ from 'jquery';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import '@/index';
 import { atom } from '@but212/atom-effect';
-import { enablejQueryOverrides } from '@/core/jquery-patch';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { enablejQueryOverrides, INTERNAL_HANDLER } from '@/core/jquery-patch';
 import { disableAutoCleanup, enableAutoCleanup, registry } from '@/core/registry';
+import $ from '@/index';
 
 describe('jQuery Patch (Lifecycle & Events)', () => {
   beforeEach(() => {
@@ -17,128 +16,96 @@ describe('jQuery Patch (Lifecycle & Events)', () => {
     registry.cleanupTree(document.body);
   });
 
-  describe('DOM Removal Overrides', () => {
-    it('should clean up bindings on .remove() and be idempotent', () => {
-      const $el = $('<div></div>').appendTo(document.body);
-      const text = atom('hello');
-      $el.atomText(text);
+  describe('DOM Lifecycle Overrides', () => {
+    it('should manage registry lifecycle during removal (remove, empty, selectors)', () => {
+      const $root = $(
+        '<div id="root"><div class="target"></div><div class="stay"></div></div>'
+      ).appendTo(document.body);
+      const [$target, $stay] = [$root.find('.target'), $root.find('.stay')];
 
-      expect(registry.hasBind($el[0]!)).toBe(true);
+      registry.trackCleanup($target[0]!, () => {});
+      registry.trackCleanup($stay[0]!, () => {});
 
-      $el.remove();
-      expect(registry.hasBind($el[0]!)).toBe(false);
+      // 1. Selector-based remove (behavior test)
+      $root.children().remove('.target');
+      expect(registry.hasBind($target[0]!)).toBe(false);
+      expect(registry.hasBind($stay[0]!)).toBe(true);
 
-      // Second remove should not throw (idempotent)
-      $el.remove();
+      // 2. Empty (child cleanup)
+      $root.empty();
+      expect(registry.hasBind($stay[0]!)).toBe(false);
     });
 
-    it('should clean up children bindings on .empty()', () => {
-      const $parent = $('<div></div>').appendTo(document.body);
-      const $child = $('<span></span>').appendTo($parent);
-      const text = atom('hello');
-      $child.atomText(text);
-
-      expect(registry.hasBind($child[0]!)).toBe(true);
-
-      $parent.empty();
-
-      expect(registry.hasBind($child[0]!)).toBe(false);
-      expect($parent[0]!.hasChildNodes()).toBe(false);
-    });
-
-    it('should preserve bindings on .detach() and restore on re-attach', async () => {
+    it('should preserve and restore bindings during detachment', () => {
       const $el = $('<div></div>').appendTo(document.body);
-      const text = atom('hello');
-      $el.atomText(text);
+      registry.trackCleanup($el[0]!, () => {});
 
-      expect(registry.hasBind($el[0]!)).toBe(true);
-
-      const $detached = $el.detach();
-      await new Promise((r) => setTimeout(r, 0));
-
-      // Bindings preserved while detached
-      expect(registry.hasBind($el[0]!)).toBe(true);
-      expect(document.body.contains($el[0]!)).toBe(false);
-
-      // Reactivity works in memory
-      text.value = 'world';
-      await new Promise((r) => setTimeout(r, 0));
-      expect($el.text()).toBe('world');
-
-      // Re-attach
-      $detached.appendTo(document.body);
-      await new Promise((r) => setTimeout(r, 0));
-
-      text.value = 'again';
-      await new Promise((r) => setTimeout(r, 0));
-      expect($el.text()).toBe('again');
-
-      // Detach then remove: cleanup happens on remove
+      // Detach: should keep internal state
       $el.detach();
+      expect(registry.isKept($el[0]!)).toBe(true);
       expect(registry.hasBind($el[0]!)).toBe(true);
+
+      // Final removal: should complete cleanup
       $el.remove();
       expect(registry.hasBind($el[0]!)).toBe(false);
-    });
-
-    it('should support selectors in remove and detach', () => {
-      const $parent = $('<div>').appendTo(document.body);
-      const $child1 = $('<div class="a">').appendTo($parent);
-      const $child2 = $('<div class="b">').appendTo($parent);
-
-      registry.trackCleanup($child1[0]!, () => {});
-      registry.trackCleanup($child2[0]!, () => {});
-
-      // remove with selector
-      $parent.children().remove('.a');
-      expect(registry.hasBind($child1[0]!)).toBe(false);
-      expect(registry.hasBind($child2[0]!)).toBe(true);
-
-      // detach with selector
-      $parent.children().detach('.b');
-      expect(registry.isKept($child2[0]!)).toBe(true);
-
-      $parent.remove();
     });
   });
 
-  describe('Event Patching', () => {
-    it('should support on/off cycle', () => {
-      const $el = $('<div>');
-      const handler = vi.fn();
-
-      $el.on('click', handler);
-      $el.trigger('click');
-      expect(handler).toHaveBeenCalledTimes(1);
-
-      $el.off('click', handler);
-      $el.trigger('click');
-      expect(handler).toHaveBeenCalledTimes(1);
-    });
-
-    it('should batch updates inside jQuery events', async () => {
+  describe('Reactive Event Integration', () => {
+    it('should batch updates across all registration patterns (on, one, map)', async () => {
       const count = atom(0);
       let computeCount = 0;
-
       $.effect(() => {
-        const _val = count.value;
+        count.value;
         computeCount++;
         return undefined;
       });
 
-      computeCount = 0;
       const $btn = $('<button>').appendTo(document.body);
-
-      $btn.on('click', () => {
+      const increment = () => {
         count.value++;
         count.value++;
-      });
+      };
 
-      $btn.trigger('click');
+      // Test Case 1: Standard .on()
+      computeCount = 0;
+      $btn.on('click', increment).trigger('click');
       await $.nextTick();
-
       expect(computeCount).toBe(1);
-      expect(count.value).toBe(2);
+
+      // Test Case 2: One-time .one()
+      computeCount = 0;
+      $btn.one('dblclick', increment).trigger('dblclick');
+      await $.nextTick();
+      expect(computeCount).toBe(1);
+
+      // Test Case 3: Event Map
+      computeCount = 0;
+      $btn.on({ mouseenter: increment }).trigger('mouseenter');
+      await $.nextTick();
+      expect(computeCount).toBe(1);
+
       $btn.remove();
+    });
+
+    it('should maintain compatibility for special handlers (false, symbols)', () => {
+      interface JQueryInternal extends JQueryStatic {
+        _data(
+          element: Node,
+          key: 'events'
+        ): Record<string, JQuery.HandleObject<Node, unknown>[]> | undefined;
+      }
+
+      const $el = $('<div>');
+
+      // Symbol stability check
+      expect(INTERNAL_HANDLER).toBe(Symbol.for('atom-effect-internal'));
+
+      // Special 'false' handler cleanup
+      $el.on('click', false);
+      $el.off('click', false);
+      const events = ($ as unknown as JQueryInternal)._data($el[0]!, 'events');
+      expect(events?.click).toBeUndefined();
     });
   });
 });

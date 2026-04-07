@@ -10,7 +10,7 @@ type EventHandler = JQuery.EventHandlerBase<unknown, JQuery.TriggeredEvent>;
  * Handlers carrying this marker are NOT wrapped in batch() — they already
  * manage atom writes directly and do not need an extra reactive flush.
  */
-export const INTERNAL_HANDLER = Symbol('atom-effect-internal');
+export const INTERNAL_HANDLER = Symbol.for('atom-effect-internal');
 
 /**
  * WeakMap from original handler function → batch-wrapped handler function.
@@ -24,6 +24,8 @@ const handlerMap = new WeakMap<EventHandler, EventHandler>();
 // Originals store
 // ============================================================================
 
+type JQueryEventHandler = EventHandler | boolean;
+
 /**
  * Snapshot of jQuery prototype methods captured at `enablejQueryOverrides()`
  * time and restored by `disablejQueryOverrides()`.
@@ -35,6 +37,7 @@ const handlerMap = new WeakMap<EventHandler, EventHandler>();
  */
 type OriginalMethods = {
   on: typeof $.fn.on;
+  one: typeof $.fn.one;
   off: typeof $.fn.off;
   remove: typeof $.fn.remove;
   empty: typeof $.fn.empty;
@@ -62,21 +65,46 @@ const getWrappedHandler = (fn: EventHandler): EventHandler => {
   return wrapped;
 };
 
-function wrapEventMap(map: Record<string, EventHandler>): Record<string, EventHandler> {
-  const newMap: Record<string, EventHandler> = {};
-  for (const k in map) if (map[k]) newMap[k] = getWrappedHandler(map[k]);
+function wrapEventMap(
+  map: Record<string, JQueryEventHandler | undefined>
+): Record<string, JQueryEventHandler> {
+  const newMap: Record<string, JQueryEventHandler> = {};
+  for (const k in map) {
+    const fn = map[k];
+    if (typeof fn === 'function') newMap[k] = getWrappedHandler(fn);
+    else if (fn !== undefined) newMap[k] = fn;
+  }
   return newMap;
 }
 
 function resolveOffEventMap(
-  map: Record<string, EventHandler | undefined>
-): Record<string, EventHandler | undefined> {
-  const newMap: Record<string, EventHandler | undefined> = {};
+  map: Record<string, JQueryEventHandler | undefined>
+): Record<string, JQueryEventHandler | undefined> {
+  const newMap: Record<string, JQueryEventHandler | undefined> = {};
   for (const k in map) {
     const h = map[k];
-    newMap[k] = h ? (handlerMap.get(h) ?? h) : undefined;
+    if (typeof h === 'function') newMap[k] = (handlerMap.get(h) ?? h) as EventHandler;
+    else newMap[k] = h;
   }
   return newMap;
+}
+
+/**
+ * Helper for patching 'on' and 'one' methods which share argument logic.
+ */
+function createEventHandlerPatch(origFn: Function) {
+  return function (this: JQuery, ...args: unknown[]) {
+    const types = args[0];
+    if (types && typeof types === 'object') {
+      args[0] = wrapEventMap(types as Record<string, JQueryEventHandler | undefined>);
+    } else {
+      const last = args.length - 1;
+      if (last >= 0 && typeof args[last] === 'function') {
+        args[last] = getWrappedHandler(args[last] as EventHandler);
+      }
+    }
+    return origFn.apply(this, args) ?? this;
+  };
 }
 
 // ============================================================================
@@ -88,6 +116,7 @@ export function enablejQueryOverrides(): void {
 
   originals = {
     on: $.fn.on,
+    one: $.fn.one,
     off: $.fn.off,
     remove: $.fn.remove,
     empty: $.fn.empty,
@@ -127,23 +156,15 @@ export function enablejQueryOverrides(): void {
     return orig.detach.call(this, selector) ?? this;
   };
 
-  $.fn.on = function (this: JQuery, ...args: unknown[]) {
-    const types = args[0];
-    if (types && typeof types === 'object') {
-      args[0] = wrapEventMap(types as Record<string, EventHandler>);
-    } else {
-      const last = args.length - 1;
-      if (last >= 0 && typeof args[last] === 'function') {
-        args[last] = getWrappedHandler(args[last] as EventHandler);
-      }
-    }
-    return orig.on.apply(this, args as Parameters<typeof $.fn.on>) ?? this;
-  };
+  // --- Event Handling Patches ---
+
+  $.fn.on = createEventHandlerPatch(orig.on) as typeof $.fn.on;
+  $.fn.one = createEventHandlerPatch(orig.one) as typeof $.fn.one;
 
   $.fn.off = function (this: JQuery, ...args: unknown[]) {
     const types = args[0];
     if (types && typeof types === 'object') {
-      args[0] = resolveOffEventMap(types as Record<string, EventHandler | undefined>);
+      args[0] = resolveOffEventMap(types as Record<string, JQueryEventHandler | undefined>);
     } else {
       const last = args.length - 1;
       if (last >= 0 && typeof args[last] === 'function') {
@@ -163,6 +184,7 @@ export function disablejQueryOverrides(): void {
   if (originals === null) return;
 
   $.fn.on = originals.on;
+  $.fn.one = originals.one;
   $.fn.off = originals.off;
   $.fn.remove = originals.remove;
   $.fn.empty = originals.empty;

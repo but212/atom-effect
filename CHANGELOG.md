@@ -22,6 +22,9 @@
 
 #### Fixed
 
+- **Reactivity**: Enhanced jQuery event patching by explicitly supporting `$.fn.one()` and providing cross-instance compatibility via `Symbol.for('atom-effect-internal')`.
+- **Reactivity**: Improved `on/one` event mapping logic to correctly handle boolean handlers (`false`) and prevent redundant reactive flushes.
+- **Internal**: Refactored `jquery-patch.ts` with a unified `createEventHandlerPatch` helper to improve maintainability and strictly typed internal `_data` access in tests.
 - **Reactivity**: `atomUnbind` now correctly cleans up all bindings recursively across descendants.
 - **Bindings**: `bindChecked` now correctly synchronizes radio button groups when updated programmatically via atoms.
 - **Styles**: `bindVisibility` (atomShow/atomHide) now dynamically captures and preserves the last non-none display style, respecting external CSS or inline style updates.
