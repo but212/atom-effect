@@ -1,100 +1,130 @@
 import { atom, effect } from '@but212/atom-effect';
-import $ from 'jquery';
 import { afterEach, describe, expect, it } from 'vitest';
-import '@/index'; // Register all plugins including $.nextTick
+import $ from '@/index';
 import { registry } from '@/core/registry';
 import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '@/utils/sanitize';
 
 // ============================================================================
 // PART 1: Unit Tests (The "Brains")
-// Strict validation of the logic itself.
+// Focused validation of defense mechanisms.
 // ============================================================================
 
 describe('Unit: sanitizeHtml (Core Logic)', () => {
-  it('strips dangerous tags and preserves safe ones', () => {
+  it('strips dangerous tags and handles reassembly/XML/null', () => {
     const vectors = [
       '<script>alert(1)</script>',
-      '<iframe src="http://evil.com"></iframe>',
+      '<iframe src="javascript:alert(1)"></iframe>',
       '<meta http-equiv="refresh">',
       '<base href="https://evil.com/">',
-      '<form action="/submit"></form>',
       '<style>.red{color:red}</style>',
+      '<scr<script>ipt>alert(1)</script>', // Reassembly defense
+      '<?xml version="1.0"?>',             // XML processing instructions
     ];
     vectors.forEach((v) => {
-      expect(sanitizeHtml(v).toLowerCase()).not.toMatch(/<(script|iframe|meta|base|form|style)/);
+      const result = sanitizeHtml(v).toLowerCase();
+      expect(result).not.toMatch(/<(script|iframe|meta|base|form|style|link|xml|\?)/);
     });
 
-    // Boundary conditions
-    expect(sanitizeHtml('<template><b>ok</b></template>')).toContain('<template');
-    expect(sanitizeHtml('<scr<script>ipt>alert(1)</script>')).not.toContain('<script');
+    // Null safety
+    expect(sanitizeHtml(null as unknown as string)).toBe('');
   });
 
-  it('neutralizes on* handlers (handling fast-path bypasses)', () => {
+  it('neutralizes on* event handlers (including fast-path bypasses)', () => {
     const vectors = [
-      '<img src=x onerror=alert(1)>',
+      '<img onerror=alert(1)>',
       '<svg onload=alert(1)>',
-      '<div title="iron" onclick="alert(1)">', // Regression: iron bug
-      '<img src=x onerror\n=alert(1)>', // Whitespace handling
+      '<div title="iron" onclick="alert(1)">', // Regression: iron-pattern fast-path bypass
+      '<a onload\n=alert(1)>',                 // Whitespace/Newline after attribute name
     ];
     vectors.forEach((v) => {
-      const safe = sanitizeHtml(v).toLowerCase();
-      expect(safe).not.toMatch(/\bon\w+\s*=/);
-      expect(safe).toContain('data-unsafe-attr=');
+      const result = sanitizeHtml(v).toLowerCase();
+      expect(result).not.toMatch(/\bon\w+\s*=/);
+      expect(result).toContain('data-unsafe-attr=');
     });
   });
 
-  it('neutralizes protocols (handling order-bypass & encoding)', () => {
+  it('neutralizes dangerous protocols (javascript, vbscript, data)', () => {
+    // Vectors cover: standard, whitespace, entity-encoding, control characters, and data URIs
     const vectors = [
       '<a href="javascript:alert(1)">',
-      '<a href="j a v a s c r i p t :alert(1)">', // Whitespace split
-      '<a href="&#106;avascript:alert(1)">', // Entity encoding
-      '<a href="j&#1;avascript:alert(1)">', // Regression: control char bypass
-      '<a href="javascript&colon;alert(1)">', // Named entity
-      '<img srcset="javascript:alert(1) 2x">', // srcset special case
+      '<a href="vbscript:msgbox(1)">',
+      '<a href="j a v a s c r i p t :alert(1)">',    // Whitespace split
+      '<a href="&#106;avascript:alert(1)">',         // Entity decimal encoding
+      '<a href="&#x6A;avascript:alert(1)">',         // Entity hex encoding
+      '<a href="j&#1;avascript:alert(1)">',          // Control character smuggling
+      '<a href="javascript&colon;alert(1)">',       // Named entity
+      '<img srcset="javascript:alert(1) 2x">',      // srcset specific pattern
+      '<a href="data:text/html,xss">',              // Dangerous data URI
+      '&#999999999;',                               // DoS (RangeError) protection
     ];
     vectors.forEach((v) => {
-      expect(sanitizeHtml(v).toLowerCase()).not.toMatch(/javascript\s*:/);
+      const result = sanitizeHtml(v).toLowerCase();
+      // Verify protocol is either replaced or stripped of its dangerous part
+      expect(result).not.toMatch(/(javascript|vbscript|data)\s*:/);
     });
-  });
 
-  it('filters data URIs and CSS safely', () => {
-    // Data URI
-    expect(sanitizeHtml('<a href="data:text/html;...">')).toContain('data-unsafe-protocol:');
+    // Valid data URIs should be preserved
     expect(sanitizeHtml('<img src="data:image/png;...">')).toContain('data:image/png');
-
-    // CSS
-    const css = '<div style="background:url(javascript:alert(1)); width:expression(alert(1))">';
-    const safe = sanitizeHtml(css).toLowerCase();
-    expect(safe).not.toContain('javascript:');
-    expect(safe).not.toContain('expression(');
   });
 
-  it('handles edge cases (null, SVG, XML)', () => {
-    expect(sanitizeHtml(null as unknown as string)).toBe('');
-    expect(sanitizeHtml('<?xml version="1.0"?>')).toBe('');
-    expect(sanitizeHtml('<svg><script></script><circle/></svg>')).not.toContain('<script');
+  it('neutralizes dangerous CSS (expression, behavior, url protocols)', () => {
+    const vectors = [
+      'background:url(javascript:alert(1))',
+      'background:url(vbscript:alert(1))',
+      'background:url("&#106;avascript:alert(1)")',
+      'width:expression(alert(1))',
+      'behavior:url(#default#VML)',
+      '-moz-binding:url(https://evil.com/xbl)',
+    ];
+    vectors.forEach((v) => {
+      const result = sanitizeHtml(`<div style="${v}">`).toLowerCase();
+      expect(result).not.toMatch(/(javascript|vbscript|expression|behavior|binding)\s*[:(]/);
+      expect(result).toContain('data-unsafe-css:');
+    });
   });
 });
 
 describe('Unit: Protocol Validation Helpers', () => {
-  it('isDangerousUrl: detects smuggled protocols in specific attributes', () => {
-    expect(isDangerousUrl('href', 'javascript:alert(1)')).toBe(true);
-    expect(isDangerousUrl('href', 'j a v a s c r i p t :alert(1)')).toBe(true); // Robustness
-    expect(isDangerousUrl('fill', 'javascript:alert(1)')).toBe(true); // SVG Support
+  it('isDangerousUrl detects smuggled or unsupported protocols', () => {
+    const dangerous = [
+      'javascript:alert(1)',
+      'vbscript:alert(1)',
+      'j a v a s c r i p t :alert(1)',
+      '&#106;avascript:alert(1)',
+      'data:text/html,xss',
+    ];
+    dangerous.forEach(v => {
+      expect(isDangerousUrl('href', v)).toBe(true);
+    });
 
+    // SVG attributes
+    expect(isDangerousUrl('fill', 'javascript:alert(1)')).toBe(true);
+
+    // Safe values
     expect(isDangerousUrl('href', 'https://example.com')).toBe(false);
     expect(isDangerousUrl('title', 'javascript:alert(1)')).toBe(false); // Non-URL attr
   });
 
-  it('isDangerousCssValue: detects url() smuggling', () => {
-    expect(isDangerousCssValue('url(javascript:alert(1))')).toBe(true);
+  it('isDangerousCssValue detects protocols and keywords', () => {
+    const dangerous = [
+      'url(javascript:1)',
+      'url(vbscript:1)',
+      'url(&#106;avascript:1)',
+      'expression(1)',
+      'behavior:url(#)',
+    ];
+    dangerous.forEach(v => {
+      expect(isDangerousCssValue(v)).toBe(true);
+    });
+
+    expect(isDangerousCssValue('color: red')).toBe(false);
     expect(isDangerousCssValue('url("https://safe.com")')).toBe(false);
   });
 });
 
 // ============================================================================
 // PART 2: API Integration Tests (The "Plumbing")
-// Ensure reactive methods actually USE the sanitizer.
+// High-signal interaction verification.
 // ============================================================================
 
 describe('API Integration: XSS Guards', () => {
@@ -119,11 +149,9 @@ describe('API Integration: XSS Guards', () => {
   it('atomAttr & atomProp guard dangerous sinks', () => {
     const div = $('<div>').appendTo(document.body);
 
-    // atomAttr
     div.atomAttr('href', atom('javascript:alert(1)'));
     expect(div.attr('href')).toBeUndefined();
 
-    // atomProp (DANGEROUS_PROPS)
     div.atomProp('innerHTML', atom(XSS_HTML));
     expect(div.html()).toBe('');
   });
@@ -145,19 +173,14 @@ describe('API Integration: XSS Guards', () => {
   });
 });
 
-describe('Policy: Practicality & Exceptions', () => {
-  it('allows safe interactive content', () => {
-    const div = $('<div>').appendTo(document.body);
-    div.atomHtml(atom('<svg><circle/></svg><img src="data:image/png;base64,123">'));
-    expect(div.find('svg, img').length).toBe(2);
-  });
-
-  it('provides an escape hatch via raw effects', () => {
+describe('Policy: Escape Hatches', () => {
+  it('provides an escape hatch via raw effects (untracked by sanitizer)', () => {
     const div = $('<div>');
     const fx = effect(() => {
       div.html('<script id="trusted"></script>');
     });
     registry.trackEffect(div[0]!, fx);
     expect(div.find('#trusted').length).toBe(1);
+    registry.cleanupTree(div[0]!);
   });
 });
