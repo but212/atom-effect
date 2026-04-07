@@ -19,6 +19,9 @@
 - **Reactivity**: Improved `on/one` event mapping logic to correctly handle boolean handlers (`false`) and prevent redundant reactive flushes.
 - **Internal**: Refactored `jquery-patch.ts` with a unified `createEventHandlerPatch` helper to improve maintainability and strictly typed internal `_data` access in tests.
 - **Reactivity**: `atomUnbind` now correctly cleans up all bindings recursively across descendants.
+- **Debug**: Fixed highlight persistence where visual outlines remained on elements if they were disconnected from the DOM before the timeout.
+- **Debug**: Resolved abrupt fade-out of highlights by migrating the CSS transition to a persistent attribute selector (`[data-atom-debug]`).
+- **Debug**: Corrected `getSelector` to support SVG elements and provide more informative output (Tag#Id.Class).
 
 #### Changed
 
@@ -27,6 +30,7 @@
 - **Core**: Centralized DOM utilities (`createContext`, `atomEachElement`, `unpack`) into `src/core/dom.ts` to improve maintainability.
 - **Lifecycle**: `$.fn.atomMount` now automatically cleans up existing components on an element and executes functions within `batch()` for atomic renders.
 - **Internal**: Refactored `InputBinding` and `atomForm` to eliminate redundant `BindingContext` creation and stabilize DOM sync checks.
+- **Internal**: Refactored `DebugController` as a robust singleton with JIT method swapping for zero overhead.
 - **Robustness**: Enhanced component mount/unmount with specialized error handling and logging for lifecycle failures.
 - **Lifecycle**: Integrated `isDisposed` flag into binding factories (`registerReactiveEffect`, `registerMapEffect`) to prevent "zombie updates" on disconnected DOM elements.
 - **Bindings**: `bindChecked` now correctly synchronizes radio button groups when updated programmatically via atoms.

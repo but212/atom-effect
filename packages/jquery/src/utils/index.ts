@@ -15,17 +15,17 @@ export const isPromise = <T>(v: unknown): v is Promise<T> =>
 
 /** Generates a human-readable selector string for debug. */
 export function getSelector(el: Element): string {
-  const tag = el.localName;
-  const id = el.id;
-  if (id) return `${tag}#${id}`;
-  const className = el.className;
-  if (typeof className === 'string') {
+  let res = el.localName;
+  if (el.id) res += `#${el.id}`;
+
+  const className = el.getAttribute('class');
+  if (className) {
     const trimmed = className.trim();
     if (trimmed) {
-      return `${tag}.${trimmed.replace(/\s+/g, '.')}`;
+      res += `.${trimmed.replace(/\s+/g, '.')}`;
     }
   }
-  return tag;
+  return res;
 }
 
 export const hasOwn = Object.prototype.hasOwnProperty;
