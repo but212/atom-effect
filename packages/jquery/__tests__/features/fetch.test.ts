@@ -188,12 +188,12 @@ describe('$.atomFetch (Reactivity and Atom State)', () => {
 
     // 2. Rapidly invalidate multiple times
     for (let i = 0; i < 5; i++) {
-       data.invalidate();
-       void data.value; // trigger immediate execution
-       await $.nextTick();
-       // If it flickers, hasError would be true here
-       expect(data.hasError, `Flicker detected at iteration ${i}`).toBe(false);
-       expect(data.isPending).toBe(true);
+      data.invalidate();
+      void data.value; // trigger immediate execution
+      await $.nextTick();
+      // If it flickers, hasError would be true here
+      expect(data.hasError, `Flicker detected at iteration ${i}`).toBe(false);
+      expect(data.isPending).toBe(true);
     }
 
     expect(requestCount).toBe(6); // 1 initial + 5 invalidations
