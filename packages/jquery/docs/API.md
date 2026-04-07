@@ -12,6 +12,7 @@ This package extends jQuery with reactive capabilities. All methods are availabl
 - [Static Methods](#static-methods)
 - [Data Fetching (`$.atomFetch`)](#data-fetching)
 - [Routing (`$.route`)](#routing)
+- [Debug Mode](#debug-mode)
 
 ---
 
@@ -553,3 +554,25 @@ const historyRouter = $.route({
 // Navigates to /my-app/about using pushState
 historyRouter.navigate('about');
 ```
+
+---
+
+## Debug Mode
+
+The library includes a built-in debug mode to help you visualize reactive updates and troubleshoot issues.
+
+### Enabling Debug Mode
+
+You can enable debug mode in several ways:
+
+1. **Global Toggle**: Set `window.__ATOM_DEBUG__ = true` before the library loads.
+2. **Environment Variable**: Set `VITE_ATOM_DEBUG=true` in your `.env` file (for Vite projects).
+3. **Runtime**: Toggle `$.atom.debug = true` or `debug.enabled = true` from the console.
+
+### Visual Feedback
+
+When enabled:
+
+- **Console Logs**: Every DOM update is logged with its selector (e.g., `[atom-binding] DOM updated: div#app.main.text = new value`).
+- **Visual Highlighting**: Updated elements are temporarily outlined with a red border. This highlight uses a non-blocking `requestAnimationFrame` loop and is automatically cleaned up after a short duration, even if the element is removed from the DOM.
+- **Selector Precision**: Logs use a precise `tag#id.class` format (including SVG support) to help you identify the exact source of a change.

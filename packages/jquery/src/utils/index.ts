@@ -36,10 +36,10 @@ export function getSelector(el: Element): string {
   if (typeof classStr === 'string') {
     const trimmed = classStr.trim();
     if (trimmed) {
-      return `${tag}.${trimmed.replace(/\s+/g, '.')}`;
+      res += `.${trimmed.replace(/\s+/g, '.')}`;
     }
   }
-  return tag;
+  return res;
 }
 
 export const hasOwn = Object.prototype.hasOwnProperty;

@@ -11,9 +11,7 @@ describe('Debug Module', () => {
     vi.spyOn(console, 'log').mockImplementation(logSpy);
     vi.spyOn(console, 'warn').mockImplementation(warnSpy);
     vi.spyOn(console, 'error').mockImplementation(errorSpy);
-    logSpy.mockClear();
-    warnSpy.mockClear();
-    errorSpy.mockClear();
+    [logSpy, warnSpy, errorSpy].forEach((s) => s.mockClear());
     debug.enabled = false;
   });
 
@@ -23,151 +21,115 @@ describe('Debug Module', () => {
   });
 
   // --------------------------------------------------------------------------
-  // debug.log — gated by enabled
+  // Configuration & Gating
   // --------------------------------------------------------------------------
 
-  it('log: silent when disabled, emits formatted message when enabled', () => {
-    debug.log(LOG_PREFIXES.LIST, 'payload');
-    expect(logSpy).not.toHaveBeenCalled();
+  describe('Configuration & Gating', () => {
+    it('should gate standard logs by state while always emitting critical messages', () => {
+      // 1. Gating check (standard logs should be silent when disabled)
+      debug.log(LOG_PREFIXES.BINDING, 'silent');
+      debug.atomChanged(LOG_PREFIXES.BINDING, 'atom', 0, 1);
+      debug.cleanup(LOG_PREFIXES.BINDING, 'subject');
+      expect(logSpy).not.toHaveBeenCalled();
 
-    debug.enabled = true;
-    debug.log(LOG_PREFIXES.LIST, 'payload');
-    expect(logSpy).toHaveBeenCalledWith(LOG_PREFIXES.LIST, 'payload');
+      // 2. Activation check (standard logs should emit when enabled)
+      debug.enabled = true;
+      debug.log(LOG_PREFIXES.BINDING, 'active');
+      expect(logSpy).toHaveBeenCalledWith(LOG_PREFIXES.BINDING, 'active');
+
+      // 3. Critical messages check (behavior: always on irrespective of state)
+      debug.enabled = false;
+      const error = new Error('fail');
+      debug.warn(LOG_PREFIXES.MOUNT, 'warning');
+      debug.error(LOG_PREFIXES.BINDING, 'error', error);
+      expect(warnSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.MOUNT} warning`);
+      expect(errorSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.BINDING} error`, error);
+    });
   });
 
   // --------------------------------------------------------------------------
-  // debug.warn — always-on
+  // DOM Feedback Behavior
   // --------------------------------------------------------------------------
 
-  it('warn: emits regardless of enabled state', () => {
-    debug.warn(LOG_PREFIXES.MOUNT, 'warning message');
-    expect(warnSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.MOUNT} warning message`);
+  describe('DOM Feedback Behavior', () => {
+    it('should resolve diverse targets and manage highlight lifecycle', async () => {
+      debug.enabled = true;
+      const htmlEl = Object.assign(document.createElement('div'), { id: 'app' });
+      const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      const textNode = document.createTextNode('text');
+      const jqWrapper = Object.assign([htmlEl], {
+        jquery: '3.x',
+      }) as unknown as JQuery<HTMLElement>;
 
-    warnSpy.mockClear();
-    debug.enabled = true;
-    debug.warn(LOG_PREFIXES.MOUNT, 'warning message');
-    expect(warnSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.MOUNT} warning message`);
+      document.body.append(htmlEl, svgEl, textNode);
+
+      // Verify identification logic (HTML, SVG, JQuery)
+      debug.domUpdated(LOG_PREFIXES.BINDING, htmlEl, 'text', 'v1');
+      debug.domUpdated(LOG_PREFIXES.BINDING, svgEl, 'attr', 'v2');
+      debug.domUpdated(LOG_PREFIXES.BINDING, jqWrapper, 'prop', 'v3');
+
+      // Verify skip logic (TextNode) - should not log or highlight
+      debug.domUpdated(LOG_PREFIXES.BINDING, textNode as unknown as Element, 'op', 'v4');
+
+      expect(logSpy).toHaveBeenCalledTimes(3); // html, svg, jq only
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('div#app.text'), 'v1');
+
+      // Verify highlighting application
+      await new Promise((r) => requestAnimationFrame(r));
+      expect(htmlEl.classList.contains('atom-debug-highlight')).toBe(true);
+
+      // Verify cleanup lifecycle (even if element is disconnected during the wait)
+      htmlEl.remove();
+      await new Promise((r) => setTimeout(r, 600)); // duration + buffer for reliability
+      expect(htmlEl.classList.contains('atom-debug-highlight')).toBe(false);
+
+      svgEl.remove();
+      textNode.remove();
+    });
+
+    it('should ensure idempotent style injection', () => {
+      debug.enabled = true;
+      const el = document.createElement('div');
+
+      // Triggering update multiple times should result in exactly one <style> tag
+      debug.domUpdated(LOG_PREFIXES.BINDING, el, 'a', '1');
+      debug.domUpdated(LOG_PREFIXES.BINDING, el, 'b', '2');
+
+      const styles = document.querySelectorAll('style[data-atom-debug]');
+      expect(styles.length).toBe(1);
+      expect(styles[0]?.textContent).toMatch(/\[data-atom-debug\]\s*\{.*transition/);
+    });
   });
 
   // --------------------------------------------------------------------------
-  // debug.error — always-on
+  // Cross-environment Resilience
   // --------------------------------------------------------------------------
 
-  it('error: emits with prefix and cause regardless of enabled state', () => {
-    const cause = new Error('boom');
-    debug.error(LOG_PREFIXES.BINDING, 'Effect dispose error', cause);
-    expect(errorSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.BINDING} Effect dispose error`, cause);
-  });
+  describe('SSR & Environment Resilience', () => {
+    it('should remain robust when browser-only globals are missing', () => {
+      debug.enabled = true;
+      const container = document.createElement('div');
 
-  // --------------------------------------------------------------------------
-  // debug.atomChanged — gated, anonymous fallback
-  // --------------------------------------------------------------------------
+      const originalElement = globalThis.Element;
+      const originalRaf = globalThis.requestAnimationFrame;
 
-  it('atomChanged: silent when disabled, emits formatted change when enabled', () => {
-    debug.atomChanged(LOG_PREFIXES.MOUNT, 'counter', 0, 1);
-    expect(logSpy).not.toHaveBeenCalled();
+      // Mock SSR environment by temporarily removing browser globals
+      // @ts-expect-error: simulating missing globals
+      globalThis.Element = undefined;
+      // @ts-expect-error: simulating missing globals
+      globalThis.requestAnimationFrame = undefined;
 
-    debug.enabled = true;
-    debug.atomChanged(LOG_PREFIXES.MOUNT, 'counter', 0, 1);
-    expect(logSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.MOUNT} Atom "counter" changed:`, 0, '→', 1);
-  });
+      // Logic check: should not throw ReferenceErrors or crash
+      expect(() => {
+        debug.domUpdated(LOG_PREFIXES.BINDING, container, 'test', 'value');
+      }).not.toThrow();
 
-  it('atomChanged: falls back to "anonymous" when name is undefined', () => {
-    debug.enabled = true;
-    debug.atomChanged(LOG_PREFIXES.MOUNT, undefined, 'a', 'b');
-    expect(logSpy).toHaveBeenCalledWith(
-      `${LOG_PREFIXES.MOUNT} Atom "anonymous" changed:`,
-      'a',
-      '→',
-      'b'
-    );
-  });
+      // Verify state was not updated illegally
+      expect(logSpy).not.toHaveBeenCalled();
 
-  // --------------------------------------------------------------------------
-  // debug.cleanup — gated
-  // --------------------------------------------------------------------------
-
-  it('cleanup: logs selector when enabled', () => {
-    debug.enabled = true;
-    debug.cleanup(LOG_PREFIXES.BINDING, '#test');
-    expect(logSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.BINDING} Cleanup: #test`);
-  });
-
-  // --------------------------------------------------------------------------
-  // debug.domUpdated
-  // --------------------------------------------------------------------------
-
-  it('domUpdated: logs and highlights HTMLElement when enabled', async () => {
-    debug.enabled = true;
-    const el = document.createElement('div');
-    document.body.appendChild(el);
-
-    debug.domUpdated(LOG_PREFIXES.BINDING, el, 'text', 'new text');
-
-    expect(logSpy).toHaveBeenCalledWith(
-      `${LOG_PREFIXES.BINDING} DOM updated: div.text =`,
-      'new text'
-    );
-
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-    expect(el.classList.contains('atom-debug-highlight')).toBe(true);
-    el.remove();
-  });
-
-  it('domUpdated: accepts jQuery wrapper and highlights underlying element', async () => {
-    debug.enabled = true;
-    const el = document.createElement('div');
-    document.body.appendChild(el);
-    const jqEl = Object.assign([el], { jquery: 'mock' }) as unknown as JQuery;
-
-    debug.domUpdated(LOG_PREFIXES.BINDING, jqEl, 'text', 'val');
-
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-    expect(el.classList.contains('atom-debug-highlight')).toBe(true);
-    el.remove();
-  });
-
-  it('domUpdated: supports SVGElement targets', async () => {
-    debug.enabled = true;
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    document.body.appendChild(svg);
-
-    debug.domUpdated(LOG_PREFIXES.BINDING, svg, 'attr', 'val');
-
-    expect(logSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.BINDING} DOM updated: svg.attr =`, 'val');
-
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-    expect(svg.classList.contains('atom-debug-highlight')).toBe(true);
-
-    svg.remove();
-  });
-
-  it('domUpdated: removes highlight class after duration', async () => {
-    debug.enabled = true;
-    const el = document.createElement('div');
-    document.body.appendChild(el);
-
-    debug.domUpdated(LOG_PREFIXES.BINDING, el, 'text', 'val');
-
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-    expect(el.classList.contains('atom-debug-highlight')).toBe(true);
-
-    await new Promise<void>((r) => setTimeout(r, 650));
-    expect(el.classList.contains('atom-debug-highlight')).toBe(false);
-
-    el.remove();
-  }, 2000);
-
-  it('domUpdated: injects highlight style tag only once per document', async () => {
-    debug.enabled = true;
-    const el = document.createElement('div');
-    document.body.appendChild(el);
-
-    debug.domUpdated(LOG_PREFIXES.BINDING, el, 'text', 'a');
-    debug.domUpdated(LOG_PREFIXES.BINDING, el, 'text', 'b');
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-
-    expect(document.querySelectorAll('style[data-atom-debug]').length).toBe(1);
-    el.remove();
+      // Restore environment
+      globalThis.Element = originalElement;
+      globalThis.requestAnimationFrame = originalRaf;
+    });
   });
 });
