@@ -510,13 +510,22 @@ describe('$.route() - SPA Routing', () => {
       const router = $.route({
         target: '#app',
         default: 'home',
-        routes: { home: { render: (el) => { el.innerHTML = 'Home'; } } },
+        routes: {
+          home: {
+            render: (el) => {
+              el.innerHTML = 'Home';
+            },
+          },
+        },
       });
 
       window.location.hash = '#home?bad=%FF%FE';
       window.dispatchEvent(new window.Event('hashchange'));
       await $.nextTick();
-      expect(warnSpy).toHaveBeenCalledWith(LOG_PREFIXES.ROUTE, expect.stringContaining('Malformed URI'));
+      expect(warnSpy).toHaveBeenCalledWith(
+        LOG_PREFIXES.ROUTE,
+        expect.stringContaining('Malformed URI')
+      );
 
       router.destroy();
     });
@@ -543,7 +552,11 @@ describe('$.route() - SPA Routing', () => {
       await $.nextTick();
 
       expect(pushStateSpy).toHaveBeenCalled();
-      expect(warnSpy).toHaveBeenCalledWith(LOG_PREFIXES.ROUTE, expect.stringContaining('PushState failed'), expect.anything());
+      expect(warnSpy).toHaveBeenCalledWith(
+        LOG_PREFIXES.ROUTE,
+        expect.stringContaining('PushState failed'),
+        expect.anything()
+      );
       expect(router.currentRoute.value).toBe('about');
 
       router.destroy();
