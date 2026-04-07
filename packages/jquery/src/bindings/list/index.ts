@@ -62,8 +62,8 @@ function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptio
     events: options.events,
   };
 
-    // Each element in the jQuery collection can host a separate list instance.
-    for (let cIdx = 0, cLen = this.length; cIdx < cLen; cIdx++) {
+  // Each element in the jQuery collection can host a separate list instance.
+  for (let cIdx = 0, cLen = this.length; cIdx < cLen; cIdx++) {
     const raw = this[cIdx]!,
       $c = $(raw);
 
