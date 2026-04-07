@@ -11,6 +11,10 @@
 - **Fixed**: `atomShow` / `atomHide` now preserve original inline `display` styles (e.g. `flex`) instead of resetting to empty string.
 - **Fixed**: `atomAttr` now preserves `false` boolean values as `"false"` string for ARIA prefix attributes (e.g. `aria-expanded="false"`).
 - **Security**: Hardened non-element node skipping and improved logging during binding/unbinding phases.
+- **Fixed**: IME stability issue where external atom updates would destroy input composition state (e.g. while typing Korean/Chinese).
+- **Fixed**: Corrected dependency tracking bug in `syncDomFromAtom` ensuring reliable updates after skipped syncs.
+- **Fixed**: Removed redundant/duplicate synchronizations during `blur` events for both debounced and non-debounced inputs.
+- **Refactor**: Optimized `InputBinding` internal structure with strategy-based initialization and consolidated DOM state checks.
 - **Performance**: Optimized `atomForm` and `atomUnbind` by eliminating redundant `BindingContext` creation.
 
 #### Added
