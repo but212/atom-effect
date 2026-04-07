@@ -169,6 +169,12 @@ The `atomList` reconciliation engine uses a **1D flat buffer strategy** combined
 
 Two-way binding for `<input>`, `<textarea>`, and `<select>`.
 
+**Reliability Features**:
+
+- **IME Stability**: Automatically detects composition state to prevent external updates from breaking character entry (e.g. for Korean/Japanese).
+- **Cursor Preservation**: Maintains selection range when the atom is updated while the input is focused.
+- **Cycle Prevention**: Built-in guards prevent infinite feedback loops.
+
 Natively supports `<select multiple>` — the atom value is synchronized as a `string[]` array with shallow equality checks.
 
 **Options**:

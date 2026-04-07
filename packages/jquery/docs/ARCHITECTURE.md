@@ -154,10 +154,10 @@ The binding maintains closure references internally, but utilizes a strict teard
 
 ### Features
 
-- **IME Support**: `compositionstart`/`compositionend` events gate sync to prevent partial character commits.
-- **Debounce**: Optional delay before DOM→Atom sync, with flush on blur.
-- **Focus Awareness**: Preserves cursor position when atom updates while input is focused.
-- **Cycle Prevention**: `BindingFlags` bitfield prevents sync loops (SyncingToAtom/SyncingToDom guards).
+- **IME Support**: `compositionstart`/`compositionend` events gate sync to prevent partial character commits. External atom updates are ignored while `Composing` bit is set to preserve terminal IME windows.
+- **Debounce**: Optional delay before DOM→Atom sync, with atomic flush on blur to prevent data loss.
+- **Focus Awareness**: Preserves cursor position when atom updates while input is focused. Uses `isDomUpToDate` to check functional equality (via `parse`) to avoid overwriting user typing (e.g. "1.0" vs atom 1).
+- **Cycle Prevention**: `BindingFlags` bitfield prevents sync loops (SyncingToAtom/SyncingToDom) and tracks Focus/IME state.
 - **Parse/Format**: Custom transform functions for type coercion (e.g., string ↔ number).
 
 ## 5. List Reconciliation
@@ -377,8 +377,9 @@ The sequential 12-way `if` chain in `atomBind` was replaced with a **Bitmask Dis
 
 Two-way input bindings often branch based on element type (Text vs. Select-Multiple) and focus state. These branches were eliminated by:
 
-- Pre-specializing `readDom` and `writeDom` functions in the constructor.
-- Moving state checks (e.g. `isTextControl`) out of the sync loop.
+- **Monomorphic `initStrategies`**: Pre-specializing `readDom`, `writeDom`, `equal`, and `format` functions in the constructor.
+- **Consolidated `isDomUpToDate`**: Encapsulates functional equality checks (including `parse`-based checks while focused) into a single, predictable path.
+- **Bitmask Guards**: Uses the `Busy` mask (Composing | SyncingToAtom | SyncingToDom) for constant-time synchronization gates.
 
 This ensures the updater function's control flow remains identical for a given element type, allowing the CPU to perfectly predict the execution path.
 
