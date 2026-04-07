@@ -17,8 +17,8 @@ let autoCleanupScheduled = false;
  */
 function ensureAutoCleanup(): void {
   if (autoCleanupScheduled) return;
-  autoCleanupScheduled = true;
   if (typeof document !== 'undefined' && document.body) {
+    autoCleanupScheduled = true;
     enableAutoCleanup(document.body);
   }
 }
@@ -115,23 +115,25 @@ class BindingRegistry {
     return this.records.has(el);
   }
 
-  cleanup(el: Element | Node): void {
-    const isElement = el.nodeType === 1;
-    const record = this.records.get(el as Element);
-
-    // Consolidate deletions
+  cleanup(el: Node): void {
+    // Shared deletions for all node types
     this.preservedNodes.delete(el);
     this.ignoredNodes.delete(el);
 
+    if (el.nodeType !== 1) return; // Only Elements can have bindings
+
+    const element = el as Element;
+    const record = this.records.get(element);
+
     if (!record) {
-      if (isElement) (el as Element).classList.remove(AES_BOUND);
+      element.classList.remove(AES_BOUND);
       return;
     }
 
-    this.records.delete(el as Element);
-    if (isElement) (el as Element).classList.remove(AES_BOUND);
+    this.records.delete(element);
+    element.classList.remove(AES_BOUND);
 
-    const selector = isElement ? getSelector(el as Element) : el.nodeName || 'Node';
+    const selector = getSelector(element);
     debug.cleanup(LOG_PREFIXES.BINDING, selector);
 
     if (record.componentCleanup) {
@@ -170,22 +172,20 @@ class BindingRegistry {
 
   cleanupDescendants(el: Element | DocumentFragment | ShadowRoot): void {
     // Fast path: getElementsByClassName is significantly faster than querySelectorAll
-    const live = (el as { getElementsByClassName?(name: string): HTMLCollectionOf<Element> })
-      .getElementsByClassName
-      ? (el as Element).getElementsByClassName(AES_BOUND)
-      : el.querySelectorAll(`.${AES_BOUND}`);
+    const live =
+      'getElementsByClassName' in el
+        ? (el as Element).getElementsByClassName(AES_BOUND)
+        : el.querySelectorAll(`.${AES_BOUND}`);
 
     const len = live.length;
     if (len === 0) return;
 
     // Snapshot to avoid issues with live collection changing during cleanup
-    // and to stabilize loop prediction.
     const snapshot = new Array<Element>(len);
     for (let i = 0; i < len; i++) snapshot[i] = live[i]!;
 
     for (let i = len - 1; i >= 0; i--) {
       const child = snapshot[i]!;
-      // Pre-check registry to avoid unnecessary cleanup calls
       if (this.records.has(child)) {
         this.cleanup(child);
       } else {
@@ -194,7 +194,7 @@ class BindingRegistry {
     }
   }
 
-  cleanupTree(el: Element | Node): void {
+  cleanupTree(el: Node): void {
     if (el.nodeType === 1 || el.nodeType === 11) {
       this.cleanupDescendants(el as Element | DocumentFragment | ShadowRoot);
     }
@@ -208,20 +208,17 @@ class BindingRegistry {
 
 export const registry = new BindingRegistry();
 
-const observers = new Map<Element, MutationObserver>();
+const observers = new Map<Node, MutationObserver>();
 
 /**
  * Starts observing `root` for removed elements and automatically disposes
  * their reactive bindings when they leave the DOM.
  *
+ * Supports Element, ShadowRoot, and DocumentFragment roots.
  * Multiple roots can be observed concurrently (e.g. for Micro-Frontends).
- * The `root` parameter is required (no default) to make the caller explicit
- * about which subtree is being observed.
- *
- * Idempotent: calling more than once with the same root has no effect.
  */
-export function enableAutoCleanup(root: Element): void {
-  // Support independent multiple roots for Micro-Frontend architectures.
+export function enableAutoCleanup(root: Element | ShadowRoot | DocumentFragment): void {
+  // Idempotent: calling more than once with the same root has no effect.
   if (observers.has(root)) {
     return;
   }
@@ -233,15 +230,13 @@ export function enableAutoCleanup(root: Element): void {
       for (let j = 0, rLen = removedNodes.length; j < rLen; j++) {
         const node = removedNodes[j]!;
 
-        // Only Element nodes can carry bindings marked by our AES_BOUND class.
-        // We skip text and comment nodes early for performance.
-        // Combined check for nodeType and connectivity (the two most common early exits)
-        // to reduce separate branch prediction entries.
-        if (node.nodeType !== 1 || (node as Element).isConnected) continue;
+        // Performance: skip non-element nodes early
+        if (node.nodeType !== 1) continue;
+
+        // Skip nodes that were moved (still connected elsewhere)
+        if ((node as Element).isConnected) continue;
 
         const el = node as Element;
-
-        // Combined flag checks for explicit detach (.keep) or manual cleanup traversal (.ignore).
         if (reg.isKept(el) || reg.isIgnored(el)) continue;
 
         reg.cleanupTree(el);

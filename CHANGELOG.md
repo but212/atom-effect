@@ -6,26 +6,29 @@
 
 #### Added
 
+- **Core**: `enableAutoCleanup` now officially supports `ShadowRoot` and `DocumentFragment` as observation roots, enabling robust cleanup in Shadow DOM and Web Component environments.
 - **API**: Added support for `[source, formatter]` tuples in `atomText` (via `atomBind`).
 - **List Rendering**: Major `atomList` refactor with multiple root support and improved concurrent async removal handling.
 - **`$.atomFetch`**: Enhanced lifecycle and error handling with automatic abortion on disposal and specialized `$.ajax` resource cleanup.
 - **Routing**: Optimized history mode stability and improved `basePath` prefix matching for precise navigation.
 
+#### Fixed
+
+- **Core**: Resolved a race condition where `ensureAutoCleanup` could fail to attach a `MutationObserver` if the first reactive binding occurred before `document.body` was available.
+- **Reactivity**: Enhanced jQuery event patching by explicitly supporting `$.fn.one()` and providing cross-instance compatibility via `Symbol.for('atom-effect-internal')`.
+- **Reactivity**: Improved `on/one` event mapping logic to correctly handle boolean handlers (`false`) and prevent redundant reactive flushes.
+- **Internal**: Refactored `jquery-patch.ts` with a unified `createEventHandlerPatch` helper to improve maintainability and strictly typed internal `_data` access in tests.
+- **Reactivity**: `atomUnbind` now correctly cleans up all bindings recursively across descendants.
+
 #### Changed
 
+- **Refactor**: Improved `BindingRegistry` type safety and internal cleanup logic, reducing reliance on explicit type casting for non-element nodes.
 - **Performance**: Significant optimization of chainable bindings with lazy context creation and bitmask-based constant-time dispatch.
 - **Core**: Centralized DOM utilities (`createContext`, `atomEachElement`, `unpack`) into `src/core/dom.ts` to improve maintainability.
 - **Lifecycle**: `$.fn.atomMount` now automatically cleans up existing components on an element and executes functions within `batch()` for atomic renders.
 - **Internal**: Refactored `InputBinding` and `atomForm` to eliminate redundant `BindingContext` creation and stabilize DOM sync checks.
 - **Robustness**: Enhanced component mount/unmount with specialized error handling and logging for lifecycle failures.
 - **Lifecycle**: Integrated `isDisposed` flag into binding factories (`registerReactiveEffect`, `registerMapEffect`) to prevent "zombie updates" on disconnected DOM elements.
-
-#### Fixed
-
-- **Reactivity**: Enhanced jQuery event patching by explicitly supporting `$.fn.one()` and providing cross-instance compatibility via `Symbol.for('atom-effect-internal')`.
-- **Reactivity**: Improved `on/one` event mapping logic to correctly handle boolean handlers (`false`) and prevent redundant reactive flushes.
-- **Internal**: Refactored `jquery-patch.ts` with a unified `createEventHandlerPatch` helper to improve maintainability and strictly typed internal `_data` access in tests.
-- **Reactivity**: `atomUnbind` now correctly cleans up all bindings recursively across descendants.
 - **Bindings**: `bindChecked` now correctly synchronizes radio button groups when updated programmatically via atoms.
 - **Styles**: `bindVisibility` (atomShow/atomHide) now dynamically captures and preserves the last non-none display style, respecting external CSS or inline style updates.
 - **Classes**: `atomClass` now supports multiple space-separated class names and handles overlapping classes safely across multiple reactive keys.
