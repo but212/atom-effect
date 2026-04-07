@@ -29,7 +29,7 @@ $('.user-card').atomBind({
   class: { 'active': isActive },  // Toggles class (yields or is boolean|Promise)
   css: { 'color': colorAtom },    // Style property (yields or is string|number|Promise)
   attr: { 'data-id': idAtom },    // Attribute (yielding PrimitiveValue|Promise)
-  prop: { 'disabled': isDisabled },// DOM property (yielding any|Promise)
+  prop: { 'disabled': isDisabled },// DOM property (yielding unknown|Promise)
   show: isVisible,                // show/hide (yielding boolean|Promise)
   hide: isHidden,                 // Inverse of show
   val: inputAtom,                 // Two-way binding: atom or [atom, options]
@@ -109,7 +109,7 @@ $('img').atomAttr('src', imageUrl);
 
 Updates a DOM property (e.g., `checked`, `disabled`, `value`).
 
-- **Flexible**: Decoupled from the primary binding generic to allow any property type.
+- **Flexible**: Employs `unknown` instead of `any` to satisfy strict linting while maintaining 100% flexibility for heterogeneous property types.
 
 ```javascript
 $('input').atomProp('disabled', shouldDisable);

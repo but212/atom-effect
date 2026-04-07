@@ -25,8 +25,8 @@ export const ROUTE_DEFAULTS = Object.freeze({
   activeClass: 'active',
 } as const);
 
-export const INPUT_DEFAULTS = { EVENT: 'input', DEBOUNCE: 0 } as const;
-export const DEBUG_DEFAULTS = { HIGHLIGHT_DURATION_MS: 500 } as const;
+export const INPUT_DEFAULTS = Object.freeze({ EVENT: 'input', DEBOUNCE: 0 } as const);
+export const DEBUG_DEFAULTS = Object.freeze({ HIGHLIGHT_DURATION_MS: 500 } as const);
 
 export const VALID_INPUT_TAGS: ReadonlySet<string> = new Set(['input', 'select', 'textarea']);
 
@@ -55,6 +55,10 @@ export const DANGEROUS_PROPS: ReadonlySet<string> = new Set([
   'constructor',
   'prototype',
 ]);
+
+/** Regex-like pattern for dangerous protocols (javascript, vbscript) with optional whitespace. */
+export const DANGEROUS_PROTOCOL_PATTERN =
+  '(?:j\\s*a\\s*v\\s*a\\s*s\\s*c\\s*r\\s*i\\s*p\\s*t|v\\s*b\\s*s\\s*c\\s*r\\s*i\\s*p\\s*t)';
 
 /**
  * Centralized error messages for the entire library.

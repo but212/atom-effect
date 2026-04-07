@@ -100,7 +100,7 @@ Bound elements receive a `_aes-bound` CSS class marker. This enables O(M) cleanu
 
 ### 3.3 Auto-Cleanup via MutationObserver
 
-`enableAutoCleanup(root)` installs a `MutationObserver` on the specified `root` (Element, ShadowRoot, or DocumentFragment) that watches for removed nodes. For the global DOM, this is lazily initialized via `ensureAutoCleanup()` upon registering the very first reactive binding. The logic is robust against early initialization; if called before `document.body` is available, it retries on subsequent binding registrations until the observer is successfully attached. Multiple roots can be observed concurrently (e.g., for micro-frontends).
+`enableAutoCleanup(root)` installs a `MutationObserver` on the specified `root` (Element, ShadowRoot, or DocumentFragment) that watches for removed nodes. For the global DOM, this is lazily initialized via `ensureAutoCleanup()` upon registering the very first reactive binding. The logic is robust against early initialization; it performs a safety check for `document.body` and gracefully recovers if the binding occurs before the body is ready. Multiple roots can be observed concurrently (e.g., for micro-frontends).
 
 ```text
 DOM Removal Detected
@@ -279,8 +279,9 @@ To prevent memory leaks and "zombie" resolutions (where a request resolves but i
 
 The binding layer includes defensive measures against XSS:
 
-- `bindHtml`: Sanitizes content via `sanitizeHtml()` (removes `<script>`, `on*` events, `javascript:`, `vbscript:`, and dangerous `data:` protocols). Uses a **Normalize → Strip Tags → Neutralize** pipeline to prevent bypasses via encoding or control character smuggling.
+- `bindHtml`: Sanitizes content via `sanitizeHtml()` (removes `<script>`, `on*` events, and dangerous protocols). Uses a **Normalize → Strip Tags → Neutralize** pipeline to prevent bypasses via encoding or control character smuggling.
 - `bindAttr`: Blocks `on*` event handler attributes and dangerous URL protocols, including SVG-specific attributes (`fill`, `filter`, `mask`, etc.).
+- Centralized Protection: Dangerous protocol patterns (e.g., `javascript:`, `vbscript:`) are centralized as `DANGEROUS_PROTOCOL_PATTERN` in `constants.ts` to ensure consistent enforcement across HTML, attribute, and CSS bindings.
 - `bindCss`: Blocks CSS values containing `expression()`, `behavior:`, `url(javascript:)`, etc.
 - `bindProp`: Blocks dangerous properties (`innerHTML`, `outerHTML`), prototype pollution vectors (`__proto__`, `constructor`, `prototype`), `on*` event handlers, and checks mapped URL properties for dangerous protocols.
 

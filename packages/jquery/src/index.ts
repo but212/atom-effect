@@ -29,7 +29,9 @@ import { disableAutoCleanup, enableAutoCleanup, registry } from '@/core/registry
 // Global initialization on DOM ready.
 $(() => {
   enablejQueryOverrides();
-  enableAutoCleanup(document.body!);
+  if (document.body) {
+    enableAutoCleanup(document.body);
+  }
 });
 
 export { disablejQueryOverrides, enablejQueryOverrides } from '@/core/jquery-patch';

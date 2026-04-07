@@ -23,6 +23,9 @@
 - **Utils**: `getSelector` now supports SVG elements by correctly handling `SVGAnimatedString` for `className`.
 - **Utils**: `shallowEqual` now handles `NaN` values correctly using `Object.is` for comparison.
 - **Debug**: Fixed highlight persistence where visual outlines remained on elements if they were disconnected from the DOM before the timeout.
+- **Core**: Added `document.body` existence check in `index.ts` to prevent potential null pointer errors during early initialization.
+- **Types**: Fixed `FormOptions` generic type inference in `atomForm` and `BindingOptions<T>`, ensuring correct types for `transform` and `onChange` hooks.
+- **Types**: Improved `atomProp` signature in `JQuery` interface to allow heterogeneous property types using `unknown` while satisfying strict lint rules.
 - **Debug**: Resolved abrupt fade-out of highlights by migrating the CSS transition to a persistent attribute selector (`[data-atom-debug]`).
 - **Debug**: Corrected `getSelector` to support SVG elements and provide more informative output (Tag#Id.Class).
 - **Internal**: Hardened `ArrayPool` and `ObjectPool` with double-release protection and mandatory resource resetting even when exceeding pool limits to prevent memory pressure.
@@ -31,6 +34,7 @@
 - **Utils**: Fixed XSS sanitization fast-path bypass where event handlers could be skipped if preceded by certain safe words (e.g. "iron").
 - **Utils**: Fixed entity decoding order in `sanitizeHtml` to prevent protocol smuggling via encoded characters (e.g. `&#1;`).
 - **Utils**: Strengthened dangerous protocol regex to handle internal whitespace and control characters.
+- **Constants**: Froze `INPUT_DEFAULTS` and `DEBUG_DEFAULTS` using `Object.freeze()` to prevent accidental runtime modifications.
 
 #### Changed
 
@@ -63,6 +67,7 @@
 
 - **Hardening**: Reinforced non-element node skipping logic and refined logging during registration phases to prevent silent failures.
 - **Sanitization**: Added missing SVG URL attributes (`fill`, `filter`, `mask`, `marker-*`, `clip-path`) to the default sanitization registry.
+- **Hardening**: Centralized `DANGEROUS_PROTOCOL_PATTERN` in `constants.ts` and hardened the regex-based sanitizer against whitespace-obfuscated protocols.
 
 ## [0.29.0] - 2026-04-07
 

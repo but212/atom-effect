@@ -9,6 +9,7 @@
  * reactive string bindings. For user-controlled rich text (e.g. a WYSIWYG
  * editor), replace or supplement this with DOMPurify.
  */
+import { DANGEROUS_PROTOCOL_PATTERN } from '@/constants';
 
 // ============================================================================
 // Constants & Registry
@@ -66,19 +67,15 @@ const RE_UNSAFE_ATTR = /\bon\w+\s*=/gim;
 const RE_DANGEROUS_DATA_URI =
   /data\s*:\s*(?:text\/(?:html|javascript|vbscript|xml)|application\/(?:javascript|xhtml\+xml|xml|x-shockwave-flash)|image\/svg\+xml)/gi;
 
-/** Shared protocol pattern (handles internal whitespace/control chars) */
-const PROTOCOL_PATTERN =
-  '(?:j\\s*a\\s*v\\s*a\\s*s\\s*c\\s*r\\s*i\\s*p\\s*t|v\\s*b\\s*s\\s*c\\s*r\\s*i\\s*p\\s*t)';
-
-const RE_DANGEROUS_PROTOCOL_GLOBAL = new RegExp(`${PROTOCOL_PATTERN}\\s*:`, 'gi');
-const RE_DANGEROUS_PROTOCOL_START = new RegExp(`^\\s*${PROTOCOL_PATTERN}\\s*:`, 'i');
+const RE_DANGEROUS_PROTOCOL_GLOBAL = new RegExp(`${DANGEROUS_PROTOCOL_PATTERN}\\s*:`, 'gi');
+const RE_DANGEROUS_PROTOCOL_START = new RegExp(`^\\s*${DANGEROUS_PROTOCOL_PATTERN}\\s*:`, 'i');
 
 /** CSS Sanitization */
-const CSS_KEYWORD_PATTERN = `(?:expression\\s*\\(|behavior\\s*:|-moz-binding\\s*:|(?:\\\\[0-9a-f]{1,6}\\s*|[\\s\\x00-\\x20/'"])*${PROTOCOL_PATTERN}\\s*:(?!image\\/)|data\\s*:\\s*(?!image\\/))`;
+const CSS_KEYWORD_PATTERN = `(?:expression\\s*\\(|behavior\\s*:|-moz-binding\\s*:|(?:\\\\[0-9a-f]{1,6}\\s*|[\\s\\x00-\\x20/'"])*${DANGEROUS_PROTOCOL_PATTERN}\\s*:(?!image\\/)|data\\s*:\\s*(?!image\\/))`;
 const RE_DANGEROUS_CSS_GLOBAL = new RegExp(CSS_KEYWORD_PATTERN, 'gim');
 const RE_DANGEROUS_CSS_SINGLE = new RegExp(CSS_KEYWORD_PATTERN, 'im');
 const RE_DANGEROUS_CSS_URL = new RegExp(
-  `url\\s*\\(\\s*(?:["']?\\s*)?${PROTOCOL_PATTERN}\\s*:`,
+  `url\\s*\\(\\s*(?:["']?\\s*)?${DANGEROUS_PROTOCOL_PATTERN}\\s*:`,
   'i'
 );
 
