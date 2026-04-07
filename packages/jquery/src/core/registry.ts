@@ -142,6 +142,7 @@ class BindingRegistry {
       } catch (e) {
         debug.error(LOG_PREFIXES.MOUNT, ERROR_MESSAGES.MOUNT.CLEANUP_ERROR(selector), e);
       }
+      record.componentCleanup = undefined;
     }
 
     if (record.effects) {

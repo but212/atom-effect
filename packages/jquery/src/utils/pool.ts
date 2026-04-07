@@ -32,7 +32,7 @@ export class ArrayPool<T> {
     arr.length = 0;
 
     if (this.pool.length < this.limit && length <= this.capacity) {
-      // Basic double-release protection. indexOf is O(N) but pool size is small (limit=50).
+      // Basic double-release protection. indexOf is O(N) but pool size is small.
       if (this.pool.indexOf(arr) === -1) {
         this.pool.push(arr);
       }
@@ -84,7 +84,7 @@ export class ObjectPool<T extends object> {
     this.reset(obj);
 
     if (this.pool.length < this.limit) {
-      // Basic double-release protection. indexOf is O(N) but pool size is small (limit=64).
+      // Basic double-release protection. indexOf is O(N) but pool size is small.
       if (this.pool.indexOf(obj) === -1) {
         this.pool.push(obj);
       }
@@ -135,17 +135,42 @@ export const bindingRecordPool = new ObjectPool<BindingRecord>(
     componentCleanup: undefined,
   }),
   (r) => {
-    // Orchestration: Return internal arrays to their respective pools.
-    // registry.ts also does this, but keeping it here ensures safety if used elsewhere.
+    // Orchestration: Proactively dispose all effects and execute cleanups.
+    // This is defensive; registry.ts handles primary cleanup with logging.
     if (r.effects) {
+      const len = r.effects.length;
+      for (let i = 0; i < len; i++) {
+        try {
+          r.effects[i]!.dispose();
+        } catch {
+          /* ignore */
+        }
+      }
       effectsArrayPool.release(r.effects);
       r.effects = undefined;
     }
+
     if (r.cleanups) {
+      const len = r.cleanups.length;
+      for (let i = 0; i < len; i++) {
+        try {
+          r.cleanups[i]!();
+        } catch {
+          /* ignore */
+        }
+      }
       cleanupsArrayPool.release(r.cleanups);
       r.cleanups = undefined;
     }
-    r.componentCleanup = undefined;
+
+    if (r.componentCleanup) {
+      try {
+        r.componentCleanup();
+      } catch {
+        /* ignore */
+      }
+      r.componentCleanup = undefined;
+    }
   },
   SHARED_LIMIT
 );
