@@ -814,4 +814,140 @@ describe('$.route() - SPA Routing', () => {
       router.destroy();
     });
   });
+
+  describe('Reported Issues Reproduction', () => {
+    it('ISSUE: navigate() should support query strings in the route name', async () => {
+      const router = $.route({
+        target: '#app',
+        default: 'home',
+        routes: {
+          home: { template: '#tmpl-home' },
+          about: { template: '#tmpl-about' },
+        },
+      });
+
+      await $.nextTick();
+
+      // Currently, this fails or strips query params because navigate() resets queryParamsAtom to {}
+      // and only uses the name for setUrl.
+      router.navigate('about?id=123');
+      await $.nextTick();
+
+      expect(router.currentRoute.value).toBe('about');
+      // EXPECTATION: queryParams should be { id: '123' }
+      // ACTUAL: it will likely be {}
+      expect(router.queryParams.value).toEqual({ id: '123' });
+      expect(window.location.hash).toContain('?id=123');
+
+      router.destroy();
+    });
+
+    it('ISSUE: history mode onLeave cancellation should not push new state (loop risk)', async () => {
+      const pushStateSpy = vi.spyOn(history, 'pushState');
+      const replaceStateSpy = vi.spyOn(history, 'replaceState');
+
+      const router = $.route({
+        target: '#app',
+        default: 'home',
+        mode: 'history',
+        routes: {
+          home: { template: '#tmpl-home' },
+          about: {
+            template: '#tmpl-about',
+            onLeave: (r) => {
+              // Block navigation if it's not home (contrived example)
+              if (r.currentRoute.value === 'about') return false;
+              return true;
+            },
+          },
+        },
+      });
+
+      await $.nextTick();
+      router.navigate('about');
+      await $.nextTick();
+
+      pushStateSpy.mockClear();
+      replaceStateSpy.mockClear();
+
+      // Simulate browser "Back" button to "home"
+      Object.defineProperty(window, 'location', {
+        value: { ...window.location, pathname: '/home' },
+        writable: true,
+        configurable: true,
+      });
+      window.dispatchEvent(new window.Event('popstate'));
+      await $.nextTick();
+
+      // Because onLeave returned false, restoreUrl is called.
+      // Current implementation now calls replaceState('/about') which does NOT add to history.
+      expect(router.currentRoute.value).toBe('about');
+
+      // confirm pushState was NOT called (no new history entry)
+      expect(pushStateSpy).not.toHaveBeenCalled();
+      // confirm replaceState WAS called to revert the URL
+      expect(replaceStateSpy).toHaveBeenCalledWith(null, '', expect.stringContaining('/about'));
+
+      router.destroy();
+    });
+
+    it('ISSUE: basePath matching should be exact or followed by slash', async () => {
+      Object.defineProperty(window, 'location', {
+        value: { ...window.location, pathname: '/app-settings' },
+        writable: true,
+        configurable: true,
+      });
+
+      const router = $.route({
+        target: '#app',
+        default: 'home',
+        mode: 'history',
+        basePath: '/app',
+        routes: {
+          home: { template: '#tmpl-home' },
+          settings: { template: '#tmpl-home' },
+        },
+      });
+
+      await $.nextTick();
+
+      // '/app-settings' starts with '/app', so currently it strips '/app'
+      // and looks for route '-settings'.
+      // EXPECTATION: It should not match '/app' as base and should probably go to default or 404.
+      // ACTUAL: router.currentRoute.value becomes '-settings' (stripped '/app')
+      expect(router.currentRoute.value).not.toBe('-settings');
+
+      router.destroy();
+    });
+
+    it('ISSUE: activeLinkEffect might leak detached DOM nodes', async () => {
+      const router = $.route({
+        target: '#app',
+        default: 'home',
+        autoBindLinks: true,
+        routes: {
+          home: { template: '#tmpl-home' },
+          about: { template: '#tmpl-about' },
+        },
+      });
+
+      await $.nextTick();
+      const homeLink = document.querySelector('[data-route="home"]');
+      expect(homeLink?.classList.contains('active')).toBe(true);
+
+      // Remove the link from DOM
+      homeLink?.remove();
+
+      // Change route
+      router.navigate('about');
+      await $.nextTick();
+
+      // The 'homeLink' is still held in the 'previousActiveNodes' array in the closure
+      // of the effect until the next route change or destroy.
+      // This is hard to assert directly without access to private variables,
+      // but indicates a need for WeakRef or better management.
+
+      router.destroy();
+    });
+  });
 });
