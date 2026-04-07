@@ -61,7 +61,7 @@ $el.atomBind({ text: [count, c => `Count: ${c}`] });
 Updates `innerHTML`.
 
 > **🛡️ Security Note**:
-> This method uses a high-performance regex-based sanitizer for speed (approx 100x faster). It neutralizes `<script>` tags, `on*` event attributes, and dangerous protocols (`javascript:`, `data:`).
+> This method uses a high-performance regex-based sanitizer for speed. It neutralizes `<script>` tags, `on*` event attributes, and dangerous protocols (`javascript:`, `vbscript:`, `data:`). The implementation includes a **hardened normalization layer** (handling entity encoding and control character smuggling) and a **robust fast-path** to ensure security without sacrificing update performance.
 >
 > While efficient for most cases, [DOMPurify](https://github.com/cure53/DOMPurify) is recommended for complex, user-generated content to ensure maximum security.
 > See the [Security Guide](./SECURITY.md) for details.

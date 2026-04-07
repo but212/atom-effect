@@ -16,11 +16,11 @@ This guide explains the built-in sanitization layer and how to integrate [DOMPur
 | ------ | ------ |
 | `<script>`, `<iframe>`, `<object>`, `<embed>`, `<base>`, `<meta>`, `<applet>`, `<noscript>`, `<form>`, `<style>`, `<link>` | Tag removed entirely (loop until stable) |
 | `onclick`, `onerror`, etc. (`on*` attributes) | Replaced with `data-unsafe-attr=` |
-| `javascript:`, `vbscript:` protocols | Replaced with `data-unsafe-protocol:` |
-| Dangerous data URIs (`text/html`, `application/javascript`, `image/svg+xml`, etc.) | Replaced with `data-unsafe-protocol:` |
+| `javascript:`, `vbscript:`, `data:` protocols | Neutralized (Replaced with `data-unsafe-protocol:`). Strengthened to handle internal whitespace and control character smuggling. |
+| Dangerous data URIs (`text/html`, `application/javascript`, `image/svg+xml`, etc.) | Neutralized. |
 | CSS `expression()`, `behavior:`, `-moz-binding:`, obfuscated protocol sequences | Replaced with `data-unsafe-css:` |
-| Entities (`&#NNN;`, `&#xHH;`, `&colon;`, `&Tab;`, `&NewLine;`) | Decoded to literals first to prevent protocol smuggling |
-| Null bytes / control characters | Stripped |
+| Entities (`&#NNN;`, `&#xHH;`, `&colon;`, `&Tab;`, `&NewLine;`) | **Decoded first** in the normalization phase to prevent protocol smuggling. |
+| Null bytes / control characters | **Stripped after entity decoding** to catch hidden payloads. |
 | XML processing instructions (`<?...?>`) | Stripped |
 
 `bindAttr` (used by `atomAttr` / `atomBind.attr`):
@@ -28,7 +28,8 @@ This guide explains the built-in sanitization layer and how to integrate [DOMPur
 | Vector | Action |
 | ------ | ------ |
 | `on*` attribute names (e.g., `onclick`) | Silently blocked (attribute not set) |
-| `javascript:` / `vbscript:` in URL attributes (`href`, `src`, `action`, etc.) | Silently blocked |
+| `javascript:` / `vbscript:` / `data:` in URL attributes (`href`, `src`, `action`, etc.) | Silently blocked |
+| SVG URL attributes (`fill`, `filter`, `mask`, `marker-*`, `clip-path`) | Sanitized for dangerous protocols |
 
 `bindCss` (used by `atomCss` / `atomBind.css`):
 
@@ -47,9 +48,9 @@ This guide explains the built-in sanitization layer and how to integrate [DOMPur
 
 ### What it does NOT block
 
-- Attribute-based injection via lesser-known tags (e.g., `<svg>`, `<math>` event handlers beyond `on*` pattern)
+- Non-standard event handlers beyond `on*` pattern in specialized tags (e.g., rare attribute-based execution in outdated browsers)
 - Mutation-based XSS (mXSS)
-- CSS-based data exfiltration
+- CSS-based data exfiltration (beyond known protocol vectors)
 
 **For production applications handling user-generated content, always use DOMPurify.**
 

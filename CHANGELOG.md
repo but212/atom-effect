@@ -28,6 +28,9 @@
 - **Internal**: Hardened `ArrayPool` and `ObjectPool` with double-release protection and mandatory resource resetting even when exceeding pool limits to prevent memory pressure.
 - **Internal**: Synchronized `effectsArrayPool` and `cleanupsArrayPool` limits (128) with `bindingRecordPool` to ensure consistent reuse.
 - **Internal**: Orchestrated `BindingRecord` disposal to automatically return internal `effects` and `cleanups` arrays to their respective pools, improving library robustness.
+- **Utils**: Fixed XSS sanitization fast-path bypass where event handlers could be skipped if preceded by certain safe words (e.g. "iron").
+- **Utils**: Fixed entity decoding order in `sanitizeHtml` to prevent protocol smuggling via encoded characters (e.g. `&#1;`).
+- **Utils**: Strengthened dangerous protocol regex to handle internal whitespace and control characters.
 
 #### Changed
 
@@ -44,6 +47,8 @@
 - **Styles**: `bindVisibility` (atomShow/atomHide) now dynamically captures and preserves the last non-none display style, respecting external CSS or inline style updates.
 - **Classes**: `atomClass` now supports multiple space-separated class names and handles overlapping classes safely across multiple reactive keys.
 - **Sync**: Corrected dependency tracking bugs in `syncDomFromAtom` and removed redundant synchronizations during `blur` events.
+- **Refactor**: Overhauled `sanitize.ts` with a cleaner, more maintainable structure, extracting normalization logic and consolidating regex constants.
+- **Testing**: Streamlined `sanitize.test.ts` to reduce redundancy and improve signal-to-noise ratio by merging regression tests and focusing API tests on integration.
 
 #### Performance
 
@@ -57,6 +62,7 @@
 #### Security
 
 - **Hardening**: Reinforced non-element node skipping logic and refined logging during registration phases to prevent silent failures.
+- **Sanitization**: Added missing SVG URL attributes (`fill`, `filter`, `mask`, `marker-*`, `clip-path`) to the default sanitization registry.
 
 ## [0.29.0] - 2026-04-07
 

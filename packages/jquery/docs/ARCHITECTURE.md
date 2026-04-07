@@ -279,12 +279,12 @@ To prevent memory leaks and "zombie" resolutions (where a request resolves but i
 
 The binding layer includes defensive measures against XSS:
 
-- `bindHtml`: Sanitizes content via `sanitizeHtml()` (removes `<script>`, `on*` events, `javascript:` protocols).
-- `bindAttr`: Blocks `on*` event handler attributes and dangerous URL protocols.
-- `bindCss`: Blocks CSS values containing `expression()`, `url(javascript:)`, etc.
+- `bindHtml`: Sanitizes content via `sanitizeHtml()` (removes `<script>`, `on*` events, `javascript:`, `vbscript:`, and dangerous `data:` protocols). Uses a **Normalize → Strip Tags → Neutralize** pipeline to prevent bypasses via encoding or control character smuggling.
+- `bindAttr`: Blocks `on*` event handler attributes and dangerous URL protocols, including SVG-specific attributes (`fill`, `filter`, `mask`, etc.).
+- `bindCss`: Blocks CSS values containing `expression()`, `behavior:`, `url(javascript:)`, etc.
 - `bindProp`: Blocks dangerous properties (`innerHTML`, `outerHTML`), prototype pollution vectors (`__proto__`, `constructor`, `prototype`), `on*` event handlers, and checks mapped URL properties for dangerous protocols.
 
-These are **first-pass filters**. For user-generated content, [DOMPurify](https://github.com/cure53/DOMPurify) is recommended. See the [Security Guide](./SECURITY.md) for integration patterns.
+These are **first-pass filters** using optimized regular expressions. For user-generated content, [DOMPurify](https://github.com/cure53/DOMPurify) is recommended. See the [Security Guide](./SECURITY.md) for integration patterns.
 
 ## 10. Module Structure
 
@@ -354,7 +354,7 @@ All internal state records (e.g., `BindingRecord`, `InputBinding`) are initializ
 
 By using `Uint8Array` and `Int32Array` for diffing state tracking, `atomList` eliminates the "GC hum" commonly associated with virtual DOM diffing in large lists. The reconciliation state is stored in a continuous memory block, maximizing CPU cache efficiency and minimizing allocation-time overhead.
 
-- **Sanitization Fast-path**: `sanitizeHtml` includes an early O(n) single-pass scan (`needsSanitization`) to bypass expensive regex scanning for safe strings.
+- **Sanitization Fast-path**: `sanitizeHtml` includes an early scan (`needsSanitization`) to bypass expensive regex scanning for safe strings. The implementation uses recursive "on" handler detection and meta-character filtering to prevent bypasses while remaining highly performant.
 - **Robust Equality**: `shallowEqual` uses `Object.keys()` and `Object.is()` for reliable comparison, correctly handling `NaN` and edge cases while maintaining an efficient linear scan.
 
 ## 12. CPU Branch Prediction Optimizations
