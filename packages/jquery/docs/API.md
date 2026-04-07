@@ -129,14 +129,14 @@ Efficiently renders a list of items using keyed diffing.
 #### Options
 
 - **`key`**: `keyof T | (item, index) => string | number` (Required) — Property name or function returning a unique ID for diffing.
-- **`render`**: `(item, index) => string | Element | DocumentFragment | JQuery` — HTML string, DOM element, DocumentFragment, or jQuery object for new items.
+- **`render`**: `(item, index) => string | Element | DocumentFragment | JQuery` — HTML string, DOM element, DocumentFragment, or jQuery object for new items. Supports multiple root elements (e.g. `<i></i><b></b>`).
 - **`bind`**: `($el, item, index) => void` — One-time reactive binding logic for the element.
 - **`update`**: `($el, item, index) => void` — Updates existing elements manually when the key remains the same (optimizes to avoid re-binding).
 - **`onAdd`**: `($el) => void` — Called after an item is added to the DOM.
 - **`onRemove`**: `($el) => Promise<void> | void` — Called before removal (supports async exit animations).
 - **`empty`**: `string | Element | DocumentFragment | JQuery` — Content to show when the list is empty.
 - **`isEqual`**: `(oldItem, newItem) => boolean` — Custom equality check for item updates (defaults to shallow comparison).
-- **`events`**: `Record<string, (item, index, e) => void>` — Delegated event handlers attached to the container. One listener per event type. Key format: `'eventType' or 'eventType selector'`.
+- **`events`**: `Record<string, (item, index, e) => void>` — Delegated event handlers attached to the container. One listener per event type. Key format: `'eventType' or 'eventType selector'`. Handler called with `(item, index, event)`.
 
 ```javascript
 $('ul').atomList(usersAtom, {

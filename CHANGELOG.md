@@ -1,5 +1,18 @@
 # Changelog
 
+## [Unreleased]
+
+### jQuery
+
+#### Added
+
+- **List Rendering**: **Major `atomList` Refactor & Multiple Root Support**.
+  - Modularized `list.ts` into `diff.ts`, `dom.ts`, `context.ts`, and `types.ts` for better maintainability.
+  - Added full support for items with multiple root elements.
+  - Fixed DOM integrity issues during concurrent async removals and re-entries.
+  - Improved robustness against duplicate keys; duplicates are now ignored gracefully.
+  - Optimized initial render with `innerHTML` bulk insertion safety checks.
+
 ## [0.29.0] - 2026-04-07
 
 ### Core
@@ -421,8 +434,25 @@
 
 - **atomList Edge Cases**:
   - **DOM Cleanup Race Condition**: Fixed a race condition where async `onRemove` callbacks could leave "ghost" elements in the DOM if re-added synchronously. Added `isConnected` checks during reconciliation to correctly handle detached nodes.
-  - **Focus Loss on Update**: Implemented shallow equality check for item updates. Prevents unnecessary DOM replacement when the object reference changes but content is identical, preserving input focus during reordering or immutable updates.
-  - **Duplicate Key Robustness**: Added warnings for duplicate keys in debug mode and improved reconciliation logic to recover gracefully from key collisions.
+  - **`key`**: `keyof T | (item, index) => string | number` (Required) — Property name or function returning a unique ID for diffing.
+  - **`render`**: `(item, index) => string | Element | DocumentFragment | JQuery` — HTML string, DOM element, DocumentFragment, or jQuery object for new items. Supports multiple root elements (e.g. `<i></i><b></b>`).
+  - **`bind`**: `($el, item, index) => void` — One-time reactive binding logic for the element.
+  - **`update`**: `($el, item, index) => void` — Updates existing elements manually when the key remains the same (optimizes to avoid re-binding).
+  - **`onAdd`**: `($el) => void` — Called after an item is added to the DOM.
+  - **`onRemove`**: `($el) => Promise<void> | void` — Called before removal (supports async exit animations).
+  - **`empty`**: `string | Element | DocumentFragment | JQuery` — Content to show when the list is empty.
+  - **`isEqual`**: `(oldItem, newItem) => boolean` — Custom equality check for item updates (defaults to shallow comparison).
+  - **`events`**: `Record<string, (item, index, e) => void>` — Delegated event handlers attached to the container. One listener per event type. Key format: `'eventType' or 'eventType selector'`. Handler called with `(item, index, event)`.
+  - **Modularization**:
+    input-binding.ts  — Two-way input binding with IME/debounce/cursor support
+    form.ts           — Fully automated form binding with lens-based deep paths
+    list/             — Modularized atomList implementation
+      index.ts        — Main entry point and effect registration
+      diff.ts         — Keyed diffing algorithm with prefix/suffix trimming
+      dom.ts          — DOM manipulation, rendering, and empty state handling
+      context.ts      — ListContext for managing state and async removals
+      types.ts        — Internal types and interface definitions
+    mount.ts          — atomMount / atomUnmount component lifecycle
   - **Empty Template Typing**: Fixed TS error in empty template logic.
 
 ## [0.15.2]
@@ -593,8 +623,11 @@
 
 #### Changed
 
-- **Refactor**: Refactored internal logic for `atomList`, `registry`, and chainable methods.
-  - Updated `getLIS` and reconciliation loop; optimized `registry` for element tracking; moved invariant checks out of iteration loops.
+- **Refactor**: Refactored internal logic│  jquery-patch.ts ← jQuery patches │
+│  chainable.ts ← $.fn methods      │
+│  bindings/list/ ← Modular list    │
+│  route.ts     ← SPA router        │
+element tracking; moved invariant checks out of iteration loops.
 
 ## [0.10.0]
 

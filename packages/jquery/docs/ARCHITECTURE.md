@@ -20,7 +20,7 @@ The jQuery package is a **thin reactive binding layer** on top of `@but212/atom-
                  │  registry.ts  ← Lifecycle mgmt    │
                  │  jquery-patch.ts ← jQuery patches │
                  │  chainable.ts ← $.fn methods      │
-                 │  list.ts      ← Keyed list diff   │
+                 │  bindings/list/ ← Modular list    │
                  │  route.ts     ← SPA router        │
                  │  mount.ts     ← Component mount   │
                  └───────────────────────────────────┘
@@ -280,7 +280,12 @@ packages/jquery/src/
     unified.ts        — Binding handler implementations + atomBind
     input-binding.ts  — Two-way input binding with IME/debounce/cursor support
     form.ts           — Fully automated form binding with lens-based deep paths
-    list.ts           — atomList with high-performance 1D flat buffer reconciliation
+    list/             — Modularized atomList implementation
+      index.ts        — Main entry point and effect registration
+      diff.ts         — Keyed diffing algorithm with prefix/suffix trimming
+      dom.ts          — DOM manipulation, rendering, and empty state handling
+      context.ts      — ListContext for managing state and async removals
+      types.ts        — Internal types and interface definitions
     mount.ts          — atomMount / atomUnmount component lifecycle
   features/
     route.ts          — SPA router (hash + history mode) with reactive state
