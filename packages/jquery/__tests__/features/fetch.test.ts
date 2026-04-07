@@ -165,6 +165,40 @@ describe('$.atomFetch (Reactivity and Atom State)', () => {
     expect(data.lastError?.message).toContain('AbortError');
   });
 
+  it('should NOT trigger error flickering (hasError=true) during rapid re-fetches', async () => {
+    let rejectXhr!: (e: unknown) => void;
+    let requestCount = 0;
+
+    vi.spyOn($, 'ajax').mockImplementation(() => {
+      requestCount++;
+      return Object.assign(
+        new Promise<unknown>((_, reject) => {
+          rejectXhr = reject;
+        }),
+        { abort: () => rejectXhr(new Error('AbortError')) }
+      ) as unknown as JQuery.jqXHR;
+    });
+
+    const data = $.atomFetch('/api/rapid', { defaultValue: null });
+
+    // 1. Initial pending
+    await $.nextTick();
+    expect(data.isPending).toBe(true);
+    expect(data.hasError).toBe(false);
+
+    // 2. Rapidly invalidate multiple times
+    for (let i = 0; i < 5; i++) {
+       data.invalidate();
+       void data.value; // trigger immediate execution
+       await $.nextTick();
+       // If it flickers, hasError would be true here
+       expect(data.hasError, `Flicker detected at iteration ${i}`).toBe(false);
+       expect(data.isPending).toBe(true);
+    }
+
+    expect(requestCount).toBe(6); // 1 initial + 5 invalidations
+  });
+
   it('should abort pending request when the atom is disposed', async () => {
     let rejectXhr!: (e: unknown) => void;
     const abortSpy = vi.fn(() => rejectXhr(new Error('abort')));

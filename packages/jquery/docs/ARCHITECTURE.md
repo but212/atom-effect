@@ -270,7 +270,7 @@ To prevent memory leaks and "zombie" resolutions (where a request resolves but i
 
 - **Synchronous Catching**: It wraps the `$.ajax` call in a `try/catch` to capture immediate errors (e.g., malformed URL, synchronous exceptions).
 - **Network Error Normalization**: Standardizes jQuery's `jqXHR` error objects into standard `Error` instances with attached metadata (e.g., `lastError.jqXHR`).
-- **Abort Silence**: Errors resulting from intentional cancellations (`AbortError`) are caught but ignored by the atom's state manager, preventing "flickering" error states during rapid dependency changes.
+- **Abort Silence (Zero Flickering)**: `$.atomFetch` does not require manual `if (error.name === 'AbortError')` checks. The core reactive engine (Signal) enforces a principle where any result—success or failure—from a superseded async execution is discarded. Consequently, `AbortError` from cancelled requests is naturally filtered out, preventing the "Error Flickering" common in traditional `useEffect` patterns during rapid state transitions.
 
 ## 9. Security
 
