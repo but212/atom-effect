@@ -478,6 +478,4 @@ describe('$.atomList (Integration)', () => {
     expect($ul.find('li').text()).toBe('2');
     $ul.remove();
   });
-
-
 });
