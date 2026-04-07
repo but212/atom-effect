@@ -261,7 +261,11 @@ $('#btn').atomOn('click', () => doSomething());
 
 ### `.atomMount(component, props?)`
 
-Mounts a functional component to an element. Automatically handles cleanup of existing components and reactive effects on that element.
+Mounts a functional component to each selected element. Automatically handles cleanup of existing components and reactive bindings on those elements and their descendants.
+
+- **Batching**: The component function is executed inside a `batch()` cycle, ensuring that multiple initial atom updates result in a single DOM flush.
+- **Isolation**: Executed within an `untracked()` block to prevent component logic from subscribing to a parent reactive context.
+- **Error Handling**: Mount and cleanup errors are caught and logged as `[atom-mount] Mount/Cleanup error`.
 
 - **component**: `($el, props) => EffectResult` (Function returning an optional cleanup).
 - **props**: Optional initial data object.
@@ -279,7 +283,7 @@ $('#root').atomMount(UserProfile, { id: 42 });
 
 ### `.atomUnmount()`
 
-Triggers the unmount sequence: executes the component's cleanup function and disposes of all nested reactive bindings.
+Disposes all reactive bindings and component cleanups on the selected elements and their descendants. This method is the primary way to manually teardown a component tree from the DOM.
 
 ### `.atomUnbind()`
 

@@ -9,92 +9,125 @@ describe('Atom Mount (Component Lifecycle)', () => {
   });
 
   afterEach(() => {
+    // registry.cleanupTree handles all remaining bindings,
+    // so individual $el.remove() calls in tests are mostly redundant.
     registry.cleanupTree(document.body);
   });
 
-  it('should mount and unmount components with cleanup', () => {
-    const $el = $('<div>').appendTo(document.body);
-    const cleanup = vi.fn();
-
-    const Component = (el: JQuery) => {
-      el.text('mounted');
-      return cleanup;
-    };
-
-    $el.atomMount(Component);
-    expect($el.text()).toBe('mounted');
-
-    $el.atomUnmount();
-    expect(cleanup).toHaveBeenCalled();
-
-    $el.remove();
-  });
-
-  it('should unmount existing component when mounting a new one', () => {
+  it('should handle full lifecycle: mount, remount, and unmount', () => {
     const $el = $('<div>').appendTo(document.body);
     const cleanup1 = vi.fn();
+    const cleanup2 = vi.fn();
 
+    // 1. Mount
     $el.atomMount(() => {
-      cleanup1();
-      return undefined;
+      $el.text('v1');
+      return cleanup1;
     });
-    $el.atomMount(() => undefined);
+    expect($el.text()).toBe('v1');
 
+    // 2. Remount (Should trigger cleanup of v1)
+    $el.atomMount(() => {
+      $el.text('v2');
+      return cleanup2;
+    });
     expect(cleanup1).toHaveBeenCalled();
+    expect($el.text()).toBe('v2');
 
-    $el.remove();
+    // 3. Unmount
+    $el.atomUnmount();
+    expect(cleanup2).toHaveBeenCalled();
   });
 
-  it('should handle errors in component function', () => {
-    const $el = $('<div>').appendTo(document.body);
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  it('should recursively cleanup descendants', () => {
+    const $parent = $('<div>').appendTo(document.body);
+    const $child = $('<div>').appendTo($parent);
+    const cleanup = vi.fn();
 
+    $child.atomMount(() => cleanup);
+    $parent.atomUnmount();
+
+    expect(cleanup).toHaveBeenCalled();
+  });
+
+  it('should cleanup automatically via jQuery methods (remove/empty)', () => {
+    const cleanup1 = vi.fn();
+    const cleanup2 = vi.fn();
+
+    // Test remove()
+    const $el1 = $('<div>')
+      .appendTo(document.body)
+      .atomMount(() => cleanup1);
+    $el1.remove();
+    expect(cleanup1).toHaveBeenCalled();
+
+    // Test empty()
+    const $parent = $('<div>').appendTo(document.body);
+    $('<div>')
+      .appendTo($parent)
+      .atomMount(() => cleanup2);
+    $parent.empty();
+    expect(cleanup2).toHaveBeenCalled();
+  });
+
+  it('should handle and log lifecycle errors gracefully', () => {
+    const $el = $('<div>').appendTo(document.body);
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    // Mount error
     $el.atomMount(() => {
       throw new Error('mount fail');
     });
-
-    expect(consoleSpy).toHaveBeenCalledWith(
+    expect(spy).toHaveBeenCalledWith(
       expect.stringContaining('[atom-mount] Mount error'),
       expect.any(Error)
     );
-    consoleSpy.mockRestore();
-    $el.remove();
-  });
 
-  it('should log console.error when userCleanup throws', () => {
-    const $el = $('<div>').appendTo(document.body);
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-    $el.atomMount(() => {
-      return () => {
-        throw new Error('user cleanup error');
-      };
+    // Cleanup error
+    $el.atomMount(() => () => {
+      throw new Error('cleanup fail');
     });
-
     $el.atomUnmount();
-
-    expect(consoleSpy).toHaveBeenCalledWith(
+    expect(spy).toHaveBeenCalledWith(
       expect.stringContaining('[atom-mount] Cleanup error'),
       expect.any(Error)
     );
-    consoleSpy.mockRestore();
-    $el.remove();
+
+    spy.mockRestore();
   });
 
-  it('double atomUnmount() only runs cleanup once', () => {
+  it('should batch updates and be idempotent', () => {
     const $el = $('<div>').appendTo(document.body);
-    const cleanup = vi.fn();
+    const count = $.atom(0);
+    const cleanup = vi.fn().mockReturnValue(undefined);
+    let effectCount = 0;
 
-    $el.atomMount(() => cleanup);
+    $.effect(() => {
+      count.value;
+      effectCount++;
+      return undefined;
+    });
 
-    // First unmount: runs cleanup
+    // Batching check: Initial execution (1) + Batched update (1) = 2
+    // Without batching, it would be 1 (initial) + 2 (two updates) = 3
+    $el.atomMount(() => {
+      count.value = 1;
+      count.value = 2;
+      return cleanup;
+    });
+    expect(effectCount).toBe(2);
+
+    // Idempotency check: multiple unmounts should only run cleanup once
+    $el.atomUnmount();
     $el.atomUnmount();
     expect(cleanup).toHaveBeenCalledTimes(1);
+  });
 
-    // Second unmount: should be idempotent
-    $el.atomUnmount();
-    expect(cleanup).toHaveBeenCalledTimes(1);
+  it('should skip and log when mounting on non-Element nodes', () => {
+    const textNode = document.createTextNode('txt');
+    const mountFn = vi.fn().mockReturnValue(undefined);
 
-    $el.remove();
+    $(textNode).atomMount(mountFn);
+    expect(mountFn).not.toHaveBeenCalled();
   });
 });

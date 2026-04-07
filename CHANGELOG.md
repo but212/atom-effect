@@ -16,6 +16,10 @@
 - **Fixed**: Removed redundant/duplicate synchronizations during `blur` events for both debounced and non-debounced inputs.
 - **Refactor**: Optimized `InputBinding` internal structure with strategy-based initialization and consolidated DOM state checks.
 - **Performance**: Optimized `atomForm` and `atomUnbind` by eliminating redundant `BindingContext` creation.
+- **Refactor**: Centralized core DOM utilities (`createContext`, `atomEachElement`, `unpack`) into `src/core/dom.ts` to improve maintainability and reuse across modules.
+- **Improved**: `$.fn.atomMount` now automatically cleans up existing components on an element before mounting a new one, ensuring a robust lifecycle and preventing memory leaks.
+- **Performance**: `$.fn.atomMount` now executes component functions within `batch()` and `untracked()` blocks to ensure atomic initial renders and prevent subscription leakage.
+- **Robustness**: Enhanced `$.fn.atomMount` and `$.fn.atomUnmount` with specialized error handling and logging for mount/cleanup failures.
 
 #### Added
 
