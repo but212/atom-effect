@@ -47,9 +47,12 @@ $('.user-card').atomBind({
 Updates `textContent`. Supports `AsyncReactiveValue` (direct Promise or atom yielding Promise).
 
 - **formatter**: optional function `(val) => string`.
+- **Integrated Binding Support**: When used via `.atomBind()`, can be expressed as a tuple `text: [source, formatter]`.
 
 ```javascript
 $('#price').atomText(price, p => `$${p.toFixed(2)}`);
+// Via atomBind
+$el.atomBind({ text: [count, c => `Count: ${c}`] });
 ```
 
 ### `.atomHtml(atom)`

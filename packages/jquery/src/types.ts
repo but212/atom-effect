@@ -48,7 +48,9 @@ export type CssValue =
 export type CssBindings = Record<string, CssValue>;
 
 export interface BindingOptions<T = unknown> {
-  text?: AsyncReactiveValue<unknown>;
+  text?:
+    | AsyncReactiveValue<unknown>
+    | [source: AsyncReactiveValue<unknown>, formatter: (v: unknown) => string];
   html?: AsyncReactiveValue<string>;
   class?: Record<string, AsyncReactiveValue<boolean>>;
   css?: CssBindings;

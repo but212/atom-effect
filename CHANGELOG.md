@@ -4,6 +4,15 @@
 
 ### jQuery
 
+- **Refactor**: Major optimization of chainable bindings with lazy context creation and bitmask-based constant-time dispatch.
+- **API**: Added support for `[source, formatter]` tuples in `atomText` (via `atomBind`).
+- **Fixed**: `atomUnbind` now correctly cleans up all bindings on root elements and their descendants recursively.
+- **Fixed**: `atomClass` now supports multiple space-separated class names (e.g., `bg-red font-bold`) without throwing exceptions.
+- **Fixed**: `atomShow` / `atomHide` now preserve original inline `display` styles (e.g. `flex`) instead of resetting to empty string.
+- **Fixed**: `atomAttr` now preserves `false` boolean values as `"false"` string for ARIA prefix attributes (e.g. `aria-expanded="false"`).
+- **Security**: Hardened non-element node skipping and improved logging during binding/unbinding phases.
+- **Performance**: Optimized `atomForm` and `atomUnbind` by eliminating redundant `BindingContext` creation.
+
 #### Added
 
 - **List Rendering**: **Major `atomList` Refactor & Multiple Root Support**.
