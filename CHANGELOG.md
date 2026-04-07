@@ -4,42 +4,32 @@
 
 ### jQuery
 
-- **Refactor**: Major optimization of chainable bindings with lazy context creation and bitmask-based constant-time dispatch.
-- **API**: Added support for `[source, formatter]` tuples in `atomText` (via `atomBind`).
-- **Fixed**: `atomUnbind` now correctly cleans up all bindings on root elements and their descendants recursively.
-- **Fixed**: `atomClass` now supports multiple space-separated class names (e.g., `bg-red font-bold`) without throwing exceptions.
-- **Fixed**: `atomShow` / `atomHide` now preserve original inline `display` styles (e.g. `flex`) instead of resetting to empty string.
-- **Fixed**: `atomAttr` now preserves `false` boolean values as `"false"` string for ARIA prefix attributes (e.g. `aria-expanded="false"`).
-- **Security**: Hardened non-element node skipping and improved logging during binding/unbinding phases.
-- **Fixed**: IME stability issue where external atom updates would destroy input composition state (e.g. while typing Korean/Chinese).
-- **Fixed**: Corrected dependency tracking bug in `syncDomFromAtom` ensuring reliable updates after skipped syncs.
-- **Fixed**: Removed redundant/duplicate synchronizations during `blur` events for both debounced and non-debounced inputs.
-- **Refactor**: Optimized `InputBinding` internal structure with strategy-based initialization and consolidated DOM state checks.
-- **Performance**: Optimized `atomForm` and `atomUnbind` by eliminating redundant `BindingContext` creation.
-- **Refactor**: Centralized core DOM utilities (`createContext`, `atomEachElement`, `unpack`) into `src/core/dom.ts` to improve maintainability and reuse across modules.
-- **Improved**: `$.fn.atomMount` now automatically cleans up existing components on an element before mounting a new one, ensuring a robust lifecycle and preventing memory leaks.
-- **Performance**: `$.fn.atomMount` now executes component functions within `batch()` and `untracked()` blocks to ensure atomic initial renders and prevent subscription leakage.
-- **Robustness**: Enhanced `$.fn.atomMount` and `$.fn.atomUnmount` with specialized error handling and logging for mount/cleanup failures.
-
 #### Added
 
-- **List Rendering**: **Major `atomList` Refactor & Multiple Root Support**.
-  - Modularized `list.ts` into `diff.ts`, `dom.ts`, `context.ts`, and `types.ts` for better maintainability.
-  - Added full support for items with multiple root elements.
-  - Fixed DOM integrity issues during concurrent async removals and re-entries.
-  - Improved robustness against duplicate keys; duplicates are now ignored gracefully.
-  - Optimized initial render with `innerHTML` bulk insertion safety checks.
-- **`$.atomFetch`**: **Robust Lifecycle & Error Handling**.
-  - **Disposal Safety**: Automatically aborts pending requests when the atom is disposed to prevent memory leaks and "zombie" resolutions.
-  - **Sync Error Handling**: Correctly captures and surfaces synchronous errors thrown by `$.ajax` via `.hasError` and `onError` callback.
-  - **Flexible Options**: Fixed `ajaxOptions.method` merging; it is no longer clobbered when the top-level `method` option is omitted.
-  - **Resource Cleanup**: Optimized `AbortController` usage with reliable event listener removal.
-- **Routing**: **Stability & Performance Pass**.
-  - **Query Support**: Fixed query parameter loss during programmatic navigation via `$.route().navigate()`.
-  - **History Buffering**: Improved history mode stability by using `replaceState` for navigation guard restoration, preventing history loop risks during "Back" button usage.
-  - **Path Matching**: Fixed `basePath` prefix matching to prevent false positives (e.g., `/app-settings` no longer matches the `/app` base path).
-  - **Memory Management**: Optimized active link tracking effects to explicitly clear DOM references, preventing potential memory leaks for detached nodes.
-  - **Refactor**: Improved internal type safety and modularized URL parsing/comparison logic.
+- **API**: Added support for `[source, formatter]` tuples in `atomText` (via `atomBind`).
+- **List Rendering**: Major `atomList` refactor with multiple root support and improved concurrent async removal handling.
+- **`$.atomFetch`**: Enhanced lifecycle and error handling with automatic abortion on disposal and specialized `$.ajax` resource cleanup.
+- **Routing**: Optimized history mode stability and improved `basePath` prefix matching for precise navigation.
+
+#### Changed
+
+- **Performance**: Significant optimization of chainable bindings with lazy context creation and bitmask-based constant-time dispatch.
+- **Core**: Centralized DOM utilities (`createContext`, `atomEachElement`, `unpack`) into `src/core/dom.ts` to improve maintainability.
+- **Lifecycle**: `$.fn.atomMount` now automatically cleans up existing components on an element and executes functions within `batch()` for atomic renders.
+- **Internal**: Refactored `InputBinding` and `atomForm` to eliminate redundant `BindingContext` creation and stabilize DOM sync checks.
+- **Robustness**: Enhanced component mount/unmount with specialized error handling and logging for lifecycle failures.
+
+#### Fixed
+
+- **Bindings**: `atomUnbind` now correctly cleans up all bindings recursively; `atomClass` now supports multiple space-separated class names.
+- **Styles**: `atomShow` / `atomHide` now preserve original inline `display` styles (e.g. `flex`) instead of resetting to empty.
+- **ARIA**: `atomAttr` now correctly preserves `false` values as the string `"false"` for ARIA attributes.
+- **Stability**: Resolved IME composition issues where external updates would interrupt typing for Korean/Chinese/Japanese characters.
+- **Sync**: Corrected dependency tracking bugs in `syncDomFromAtom` and removed redundant synchronizations during `blur` events.
+
+#### Security
+
+- **Hardening**: Reinforced non-element node skipping logic and refined logging during registration phases to prevent silent failures.
 
 ## [0.29.0] - 2026-04-07
 
