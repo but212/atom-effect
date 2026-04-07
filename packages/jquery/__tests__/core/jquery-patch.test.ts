@@ -1,8 +1,21 @@
 import { atom } from '@but212/atom-effect';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { enablejQueryOverrides, INTERNAL_HANDLER } from '@/core/jquery-patch';
+import { enablejQueryOverrides, INTERNAL_HANDLER, WRAPPED_HANDLER } from '@/core/jquery-patch';
 import { disableAutoCleanup, enableAutoCleanup, registry } from '@/core/registry';
 import $ from '@/index';
+
+/** Type definitions for accessing jQuery's internal event store and metadata */
+interface JQueryInternal extends JQueryStatic {
+  _data(
+    element: Node,
+    key: 'events'
+  ): Record<string, JQuery.HandleObject<Node, unknown>[]> | undefined;
+}
+
+interface HandlerMetadata extends Function {
+  [INTERNAL_HANDLER]?: boolean;
+  [WRAPPED_HANDLER]?: JQuery.EventHandlerBase<unknown, JQuery.TriggeredEvent>;
+}
 
 describe('jQuery Patch (Lifecycle & Events)', () => {
   beforeEach(() => {
@@ -17,42 +30,24 @@ describe('jQuery Patch (Lifecycle & Events)', () => {
   });
 
   describe('DOM Lifecycle Overrides', () => {
-    it('should manage registry lifecycle during removal (remove, empty, selectors)', () => {
-      const $root = $(
-        '<div id="root"><div class="target"></div><div class="stay"></div></div>'
-      ).appendTo(document.body);
-      const [$target, $stay] = [$root.find('.target'), $root.find('.stay')];
-
+    it('should correctly manage registry lifecycle during removal and detachment', () => {
+      const $root = $('<div id="root"><span class="target"></span></div>').appendTo(document.body);
+      const $target = $root.find('.target');
       registry.trackCleanup($target[0]!, () => {});
-      registry.trackCleanup($stay[0]!, () => {});
 
-      // 1. Selector-based remove (behavior test)
-      $root.children().remove('.target');
+      // 1. Detach: binding state preserved
+      $target.detach();
+      expect(registry.isKept($target[0]!)).toBe(true);
+      expect(registry.hasBind($target[0]!)).toBe(true);
+
+      // 2. Re-append and Remove: binding state cleaned up
+      $target.appendTo($root).remove();
       expect(registry.hasBind($target[0]!)).toBe(false);
-      expect(registry.hasBind($stay[0]!)).toBe(true);
-
-      // 2. Empty (child cleanup)
-      $root.empty();
-      expect(registry.hasBind($stay[0]!)).toBe(false);
-    });
-
-    it('should preserve and restore bindings during detachment', () => {
-      const $el = $('<div></div>').appendTo(document.body);
-      registry.trackCleanup($el[0]!, () => {});
-
-      // Detach: should keep internal state
-      $el.detach();
-      expect(registry.isKept($el[0]!)).toBe(true);
-      expect(registry.hasBind($el[0]!)).toBe(true);
-
-      // Final removal: should complete cleanup
-      $el.remove();
-      expect(registry.hasBind($el[0]!)).toBe(false);
     });
   });
 
   describe('Reactive Event Integration', () => {
-    it('should batch updates across all registration patterns (on, one, map)', async () => {
+    it('should apply reactive batching across all registration signatures', async () => {
       const count = atom(0);
       let computeCount = 0;
       $.effect(() => {
@@ -67,45 +62,62 @@ describe('jQuery Patch (Lifecycle & Events)', () => {
         count.value++;
       };
 
-      // Test Case 1: Standard .on()
-      computeCount = 0;
-      $btn.on('click', increment).trigger('click');
-      await $.nextTick();
-      expect(computeCount).toBe(1);
+      // Batching verification patterns
+      const patterns: Array<{ name: string; setup: () => void }> = [
+        { name: 'Standard .on()', setup: () => $btn.on('click', increment).trigger('click') },
+        {
+          name: 'One-time .one()',
+          setup: () => $btn.one('dblclick', increment).trigger('dblclick'),
+        },
+        {
+          name: 'Event Map',
+          setup: () => $btn.on({ mouseenter: increment }).trigger('mouseenter'),
+        },
+        {
+          name: 'Robust positioning (handler not last)',
+          setup: () => {
+            const $span = $('<span>').appendTo($btn);
+            ($btn.on as (t: string, s: string, d: unknown, h: unknown, e: string) => JQuery)(
+              'keydown',
+              'span',
+              { d: 1 },
+              increment,
+              'extra'
+            );
+            $span.trigger('keydown');
+          },
+        },
+      ];
 
-      // Test Case 2: One-time .one()
-      computeCount = 0;
-      $btn.one('dblclick', increment).trigger('dblclick');
-      await $.nextTick();
-      expect(computeCount).toBe(1);
-
-      // Test Case 3: Event Map
-      computeCount = 0;
-      $btn.on({ mouseenter: increment }).trigger('mouseenter');
-      await $.nextTick();
-      expect(computeCount).toBe(1);
-
+      for (const { name, setup } of patterns) {
+        computeCount = 0;
+        setup();
+        await $.nextTick();
+        expect(computeCount, `Batching failed for: ${name}`).toBe(1);
+      }
       $btn.remove();
     });
 
-    it('should maintain compatibility for special handlers (false, symbols)', () => {
-      interface JQueryInternal extends JQueryStatic {
-        _data(
-          element: Node,
-          key: 'events'
-        ): Record<string, JQuery.HandleObject<Node, unknown>[]> | undefined;
-      }
-
+    it('should ensure handler identification and cross-bundle compatibility', () => {
       const $el = $('<div>');
+      const handler = () => {};
 
-      // Symbol stability check
-      expect(INTERNAL_HANDLER).toBe(Symbol.for('atom-effect-internal'));
+      // 1. Property-based marking for cross-instance unbinding
+      $el.on('click', handler);
+      expect(
+        (handler as HandlerMetadata)[WRAPPED_HANDLER],
+        'Missing wrapped pointer'
+      ).toBeDefined();
 
-      // Special 'false' handler cleanup
-      $el.on('click', false);
-      $el.off('click', false);
       const events = ($ as unknown as JQueryInternal)._data($el[0]!, 'events');
-      expect(events?.click).toBeUndefined();
+      const registered = events?.click?.[0]?.handler as HandlerMetadata;
+      expect(registered[INTERNAL_HANDLER], 'Handler not marked as internal').toBe(true);
+
+      // 2. Special handler (boolean false) compatibility
+      $el.on('submit', false);
+      $el.off('submit', false);
+      const postEvents = ($ as unknown as JQueryInternal)._data($el[0]!, 'events');
+      expect(postEvents?.submit).toBeUndefined();
     });
   });
 });

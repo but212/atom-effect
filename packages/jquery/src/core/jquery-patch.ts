@@ -13,11 +13,18 @@ type EventHandler = JQuery.EventHandlerBase<unknown, JQuery.TriggeredEvent>;
 export const INTERNAL_HANDLER = Symbol.for('atom-effect-internal');
 
 /**
- * WeakMap from original handler function → batch-wrapped handler function.
- * Keys are functions (held alive by jQuery's internal event store for as long
- * as the handler is registered), so entries are naturally released when the
- * handler is removed via .off() and jQuery drops its reference.
+ * Symbol used to store the wrapped version of a handler directly on the original
+ * function. This enables different instances of the library to correctly
+ * identify and unbind handlers registered by others.
  */
+export const WRAPPED_HANDLER = Symbol.for('atom-effect-wrapped');
+
+/** Matches jQuery handler signature with internal metadata properties. */
+interface JQueryHandlerInternal extends Function {
+  [INTERNAL_HANDLER]?: boolean;
+  [WRAPPED_HANDLER]?: EventHandler;
+}
+
 const handlerMap = new WeakMap<EventHandler, EventHandler>();
 
 // ============================================================================
@@ -51,18 +58,38 @@ let originals: OriginalMethods | null = null;
 // ============================================================================
 
 const getWrappedHandler = (fn: EventHandler): EventHandler => {
-  // Fast check: is already wrapped?
-  if ((fn as { [INTERNAL_HANDLER]?: boolean })[INTERNAL_HANDLER]) return fn;
+  const internal = fn as unknown as JQueryHandlerInternal;
 
-  let wrapped = handlerMap.get(fn);
+  // Fast check: is already wrapped?
+  if (internal[INTERNAL_HANDLER]) return fn;
+
+  // 1. Check direct property (for cross-instance/bundle compatibility)
+  let wrapped = internal[WRAPPED_HANDLER];
+  if (wrapped) return wrapped;
+
+  // 2. Check local map
+  wrapped = handlerMap.get(fn);
+
   if (!wrapped) {
     wrapped = function (this: unknown, ...args: unknown[]) {
       return batch(() => fn.apply(this, args as Parameters<EventHandler>));
     } as unknown as EventHandler;
-    (wrapped as { [INTERNAL_HANDLER]?: boolean })[INTERNAL_HANDLER] = true;
+    (wrapped as unknown as JQueryHandlerInternal)[INTERNAL_HANDLER] = true;
+
+    // Store in both places
     handlerMap.set(fn, wrapped);
+    try {
+      internal[WRAPPED_HANDLER] = wrapped;
+    } catch {
+      // Ignore if function is not extensible (rare for event handlers)
+    }
   }
   return wrapped;
+};
+
+const resolveWrapped = (fn: EventHandler): EventHandler => {
+  const internal = fn as unknown as JQueryHandlerInternal;
+  return internal[WRAPPED_HANDLER] ?? handlerMap.get(fn) ?? fn;
 };
 
 function wrapEventMap(
@@ -83,26 +110,41 @@ function resolveOffEventMap(
   const newMap: Record<string, JQueryEventHandler | undefined> = {};
   for (const k in map) {
     const h = map[k];
-    if (typeof h === 'function') newMap[k] = (handlerMap.get(h) ?? h) as EventHandler;
+    if (typeof h === 'function') newMap[k] = resolveWrapped(h);
     else newMap[k] = h;
   }
   return newMap;
 }
 
 /**
- * Helper for patching 'on' and 'one' methods which share argument logic.
+ * Common logic to detect and process event handler functions in jQuery argument lists.
+ * jQuery standard signatures are:
+ * - Positional: (types, [selector], [data], handler, ...)
+ * - Map: (map, [selector], [data], ...)
  */
-function createEventHandlerPatch(origFn: Function) {
-  return function (this: JQuery, ...args: unknown[]) {
-    const types = args[0];
-    if (types && typeof types === 'object') {
-      args[0] = wrapEventMap(types as Record<string, JQueryEventHandler | undefined>);
-    } else {
-      const last = args.length - 1;
-      if (last >= 0 && typeof args[last] === 'function') {
-        args[last] = getWrappedHandler(args[last] as EventHandler);
+function patchEventArguments(
+  args: unknown[],
+  mapProcessor: (
+    map: Record<string, JQueryEventHandler | undefined>
+  ) => Record<string, JQueryEventHandler | undefined>,
+  handlerProcessor: (fn: EventHandler) => EventHandler
+) {
+  const first = args[0];
+  if (first && typeof first === 'object') {
+    args[0] = mapProcessor(first as Record<string, JQueryEventHandler | undefined>);
+  } else {
+    // Scan positional arguments (skipping types at index 0) for handler functions.
+    for (let i = 1; i < args.length; i++) {
+      if (typeof args[i] === 'function') {
+        args[i] = handlerProcessor(args[i] as EventHandler);
       }
     }
+  }
+}
+
+function createEventHandlerPatch(origFn: Function) {
+  return function (this: JQuery, ...args: unknown[]) {
+    patchEventArguments(args, wrapEventMap, getWrappedHandler);
     return origFn.apply(this, args) ?? this;
   };
 }
@@ -162,16 +204,7 @@ export function enablejQueryOverrides(): void {
   $.fn.one = createEventHandlerPatch(orig.one) as typeof $.fn.one;
 
   $.fn.off = function (this: JQuery, ...args: unknown[]) {
-    const types = args[0];
-    if (types && typeof types === 'object') {
-      args[0] = resolveOffEventMap(types as Record<string, JQueryEventHandler | undefined>);
-    } else {
-      const last = args.length - 1;
-      if (last >= 0 && typeof args[last] === 'function') {
-        const fn = args[last] as EventHandler;
-        args[last] = handlerMap.get(fn) ?? fn;
-      }
-    }
+    patchEventArguments(args, resolveOffEventMap, resolveWrapped);
     return orig.off.apply(this, args as Parameters<typeof $.fn.off>) ?? this;
   };
 }
