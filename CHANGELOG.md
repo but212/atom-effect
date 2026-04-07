@@ -19,6 +19,9 @@
 - **Reactivity**: Improved `on/one` event mapping logic to correctly handle boolean handlers (`false`) and prevent redundant reactive flushes.
 - **Internal**: Refactored `jquery-patch.ts` with a unified `createEventHandlerPatch` helper to improve maintainability and strictly typed internal `_data` access in tests.
 - **Reactivity**: `atomUnbind` now correctly cleans up all bindings recursively across descendants.
+- **Utils**: `isPromise` now correctly identifies Thenable functions, improving compatibility with various async patterns.
+- **Utils**: `getSelector` now supports SVG elements by correctly handling `SVGAnimatedString` for `className`.
+- **Utils**: `shallowEqual` now handles `NaN` values correctly using `Object.is` for comparison.
 - **Debug**: Fixed highlight persistence where visual outlines remained on elements if they were disconnected from the DOM before the timeout.
 - **Debug**: Resolved abrupt fade-out of highlights by migrating the CSS transition to a persistent attribute selector (`[data-atom-debug]`).
 - **Debug**: Corrected `getSelector` to support SVG elements and provide more informative output (Tag#Id.Class).
@@ -28,6 +31,7 @@
 - **Refactor**: Improved `BindingRegistry` type safety and internal cleanup logic, reducing reliance on explicit type casting for non-element nodes.
 - **Performance**: Significant optimization of chainable bindings with lazy context creation and bitmask-based constant-time dispatch.
 - **Core**: Centralized DOM utilities (`createContext`, `atomEachElement`, `unpack`) into `src/core/dom.ts` to improve maintainability.
+- **Utils**: Internal utilities refactored for better maintainability and type safety, reducing `any` usage in favor of `Record<string, unknown>`.
 - **Lifecycle**: `$.fn.atomMount` now automatically cleans up existing components on an element and executes functions within `batch()` for atomic renders.
 - **Internal**: Refactored `InputBinding` and `atomForm` to eliminate redundant `BindingContext` creation and stabilize DOM sync checks.
 - **Internal**: Refactored `DebugController` as a robust singleton with JIT method swapping for zero overhead.

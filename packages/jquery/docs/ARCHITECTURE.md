@@ -353,7 +353,7 @@ All internal state records (e.g., `BindingRecord`, `InputBinding`) are initializ
 By using `Uint8Array` and `Int32Array` for diffing state tracking, `atomList` eliminates the "GC hum" commonly associated with virtual DOM diffing in large lists. The reconciliation state is stored in a continuous memory block, maximizing CPU cache efficiency and minimizing allocation-time overhead.
 
 - **Sanitization Fast-path**: `sanitizeHtml` includes an early O(n) single-pass scan (`needsSanitization`) to bypass expensive regex scanning for safe strings.
-- **Allocation-free Equality**: `shallowEqual` uses manual property counting and `for...in` loops to avoid `Object.keys()` array allocations.
+- **Robust Equality**: `shallowEqual` uses `Object.keys()` and `Object.is()` for reliable comparison, correctly handling `NaN` and edge cases while maintaining an efficient linear scan.
 
 ## 12. CPU Branch Prediction Optimizations
 
