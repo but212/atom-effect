@@ -46,9 +46,10 @@ $.fn.atomText(atom)
 
 - If the source is **reactive** (atom/computed): creates an `effect` that reads `.value` and calls the updater.
 - If the source is **static**: calls the updater once immediately (no effect created).
-- **Async Support**: If the value (from atom or static source) is a **Promise**, `registerReactiveEffect` handles the resolution automatically. It includes race condition protection using `latestPromise` tracking to ensure only the most recently assigned promise's result is applied to the DOM.
+- **Async Support**: If the value (from atom or static source) is a **Promise**, `registerReactiveEffect` handles the resolution automatically. It includes race condition protection using numeric `latestId` tracking to ensure only the most recently assigned promise's result is applied to the DOM.
+- **Zombie Prevention**: Every effect registration includes an `isDisposed` flag managed by `registry.trackCleanup`. This ensures that async callbacks (promises) return early if the element has been removed from the DOM, preventing memory leaks and stale updates.
 
-This eliminates boilerplate across all binding types and ensures robust async behavior.
+This eliminates boilerplate across all binding types and ensures robust, memory-safe async behavior.
 
 ### 2.2 Binding Context & DOM Engine
 
@@ -80,6 +81,7 @@ To achieve maximum performance during high-frequency updates (e.g., animations o
 - **Monomorphic Dispatch**: The internal `InputBinding` class specializes its `format` and `equal` logic at construction time. This removes branching and `instanceof` checks from the high-frequency `syncToDom` and `syncToAtom` paths.
 - **JS-Level Value Caching**: `bindHtml`, `bindClass`, `bindCss`, `bindProp`, and `bindAttr` maintain a local JS-side cache of the last written value. This avoids expensive DOM reads (like `el.innerHTML`) and redundant DOM writes (like `classList.add` or property assignments) when the reactive state hasn't meaningfully changed.
 - **Batched Map Updates**: `registerMapEffect` processes entire dictionaries of reactive values in a single effect, reducing the number of total `Effect` objects and improving subscription efficiency.
+- **Resolution Caching**: `registerMapEffect` implements a `resolvedCache` to store previously resolved Promise values. When a reactive dependency in a map changes, the factory re-uses cached values for already-resolved promises instead of triggering new `Promise.all` cycles, enabling synchronous updates for redundant async dependencies.
 
 ## 3. Lifecycle Management
 

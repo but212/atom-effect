@@ -163,6 +163,10 @@ $('ul').atomList(usersAtom, {
 
 The `atomList` reconciliation engine uses a **1D flat buffer strategy** combined with native DOM APIs (`insertBefore`, `appendChild`) for structural updates. This bypasses jQuery's internal overhead (script scanning, context normalization) during the rendering hot path, ensuring O(N) performance even for lists with thousands of items.
 
+#### Memory & Async Safety
+
+All reactive bindings (`atomBind`, `atomText`, etc.) include built-in **Zombie Prevention**. This ensures that asynchronous updates (promises) are automatically discarded if the element is disconnected from the DOM before the resolution completes. Additionally, `atomBind` (via `registerMapEffect`) optimizes multi-promise maps by caching resolved values, allowing subsequent reactive updates to skip redundant async delays.
+
 ---
 
 ## Form Bindings
