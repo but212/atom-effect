@@ -252,7 +252,27 @@ The hash/history difference is isolated to 5 internal functions, so all renderin
 - **Active State**: Active-link class management uses a reactive `effect` that re-runs whenever `currentRoute` changes, updating all `[data-route]` links in a single pass using **manual loops** for performance.
 - **Backwards Compatible**: Default mode is `'hash'`, preserving existing behavior.
 
-## 8. Security
+## 8. Reactive Data Fetching (`$.atomFetch`)
+
+`$.atomFetch` (`fetch.ts`) is a high-level primitive that integrates jQuery's `$.ajax` with `@but212/atom-effect` core's async `computed` atoms.
+
+### 8.1 Lifecycle & Abort Logic
+
+To prevent memory leaks and "zombie" resolutions (where a request resolves but its reactive node was already disposed or superseded), `$.atomFetch` implements a strict lifecycle:
+
+- **AbortController**: Each execution creates a new `AbortController`. The signal is linked to the `jqXHR` object via its `.abort()` method.
+- **Auto-Cleanup**: Event listeners on the `AbortSignal` are explicitly removed in a `finally` block to prevent leaks.
+- **Disposal**: The returned atom's `.dispose()` method is extended to automatically trigger the `FetchContext.abort()` method, ensuring all pending network activity stops immediately when the UI component using the data is unmounted.
+
+### 8.2 Error Handling
+
+`$.atomFetch` provides robust error isolation:
+
+- **Synchronous Catching**: It wraps the `$.ajax` call in a `try/catch` to capture immediate errors (e.g., malformed URL, synchronous exceptions).
+- **Network Error Normalization**: Standardizes jQuery's `jqXHR` error objects into standard `Error` instances with attached metadata (e.g., `lastError.jqXHR`).
+- **Abort Silence**: Errors resulting from intentional cancellations (`AbortError`) are caught but ignored by the atom's state manager, preventing "flickering" error states during rapid dependency changes.
+
+## 9. Security
 
 The binding layer includes defensive measures against XSS:
 
@@ -263,7 +283,7 @@ The binding layer includes defensive measures against XSS:
 
 These are **first-pass filters**. For user-generated content, [DOMPurify](https://github.com/cure53/DOMPurify) is recommended. See the [Security Guide](./SECURITY.md) for integration patterns.
 
-## 9. Module Structure
+## 10. Module Structure
 
 ```text
 packages/jquery/src/
@@ -300,7 +320,7 @@ packages/jquery/src/
     object-pool.ts    — Monomorphic object pooling utility
 ```
 
-## 10. Performance & Memory Management
+## 11. Performance & Memory Management
 
 ### 10.1 Object & Array Pooling
 
@@ -331,7 +351,7 @@ By using `Uint8Array` and `Int32Array` for diffing state tracking, `atomList` el
 - **Sanitization Fast-path**: `sanitizeHtml` includes an early O(n) single-pass scan (`needsSanitization`) to bypass expensive regex scanning for safe strings.
 - **Allocation-free Equality**: `shallowEqual` uses manual property counting and `for...in` loops to avoid `Object.keys()` array allocations.
 
-## 11. CPU Branch Prediction Optimizations
+## 12. CPU Branch Prediction Optimizations
 
 To achieve zero-overhead reactive updates, the library implements several techniques to maximize **Pipeline Efficiency** by reducing branch mispredictions in the hot-path.
 
@@ -370,7 +390,7 @@ Live DOM collections (e.g. `HTMLCollection`) change their length as elements are
 
 `sanitizeHtml` performs an O(n) scan for safe characters (`<`, `&`, controls) before running the regex pipeline. For the vast majority of "safe" updates (numbers, plain text), this skips the computationally expensive and branch-heavy regex logic entirely.
 
-## 12. Lenses & Structural Sharing
+## 13. Lenses & Structural Sharing
 
 `$.atomLens` and related utilities are now **re-exported from the Core package**. The jQuery layer provides these via the `$` namespace while delegating the recursive structural sharing logic to the core engine.
 
