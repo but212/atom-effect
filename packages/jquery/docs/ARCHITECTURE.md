@@ -126,8 +126,10 @@ The automatic `MutationObserver` cleanup does not cross Shadow DOM boundaries. I
 | `.remove()` | Calls `cleanupTree` + marks as ignored before original removal |
 | `.empty()` | Calls `cleanupDescendants` before original empty |
 | `.detach()` | Marks elements as "kept" (preserves bindings for re-attach) |
-| `.on()` | Wraps handlers in `batch()` for automatic update coalescing |
+| `.on()` | Wraps handlers in `batch()` for automatic update coalescing. Supports maps and `.one()`. |
 | `.off()` | Resolves wrapped handlers via WeakMap for correct unbinding |
+
+The `.on()` and `.one()` patches use `Symbol.for('atom-effect-internal')` to mark wrapped handlers, ensuring compatibility across different library instances or bundles.
 
 The `.on()` patch ensures that multiple atom writes inside a single jQuery event handler are batched into one synchronous flush:
 
