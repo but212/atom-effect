@@ -17,6 +17,12 @@
   - **Sync Error Handling**: Correctly captures and surfaces synchronous errors thrown by `$.ajax` via `.hasError` and `onError` callback.
   - **Flexible Options**: Fixed `ajaxOptions.method` merging; it is no longer clobbered when the top-level `method` option is omitted.
   - **Resource Cleanup**: Optimized `AbortController` usage with reliable event listener removal.
+- **Routing**: **Stability & Performance Pass**.
+  - **Query Support**: Fixed query parameter loss during programmatic navigation via `$.route().navigate()`.
+  - **History Buffering**: Improved history mode stability by using `replaceState` for navigation guard restoration, preventing history loop risks during "Back" button usage.
+  - **Path Matching**: Fixed `basePath` prefix matching to prevent false positives (e.g., `/app-settings` no longer matches the `/app` base path).
+  - **Memory Management**: Optimized active link tracking effects to explicitly clear DOM references, preventing potential memory leaks for detached nodes.
+  - **Refactor**: Improved internal type safety and modularized URL parsing/comparison logic.
 
 ## [0.29.0] - 2026-04-07
 

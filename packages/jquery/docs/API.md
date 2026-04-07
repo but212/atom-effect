@@ -483,7 +483,7 @@ A `Router` object with:
 
 - `currentRoute`: `ReadonlyAtom<string>` containing the active route name.
 - `queryParams`: `ReadonlyAtom<Record<string, string>>` reactive map of URL parameters.
-- `navigate(route)`: Programmatically change route. Empty string navigates to `default`.
+- `navigate(route)`: Programmatically change route. Supports query strings (e.g., `navigate('user?id=123')`). Empty string navigates to `default`.
 - `destroy()`: Cleanup listeners, effects, and template cache.
 
 **Example**:

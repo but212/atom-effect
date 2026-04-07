@@ -23,8 +23,7 @@ class RouterImpl implements Router {
   public currentRoute: ReadonlyAtom<string>;
   public queryParams: ReadonlyAtom<Record<string, string>>;
 
-  private config: RouteConfig &
-    Required<Pick<RouteConfig, 'mode' | 'basePath' | 'autoBindLinks' | 'activeClass'>>;
+  private config: Required<RouteConfig>;
   private readonly isHistoryMode: boolean;
   private readonly basePath: string;
   private readonly activeClass: string;
@@ -41,14 +40,27 @@ class RouterImpl implements Router {
   private lastRawQuery = '';
   private cachedParams: Record<string, string> = {};
 
+  private parseQueryParams(raw: string): Record<string, string> {
+    const res: Record<string, string> = {};
+    if (raw) {
+      new URLSearchParams(raw).forEach((v, k) => {
+        res[k] = v;
+      });
+    }
+    return res;
+  }
+
   constructor(config: RouteConfig) {
     this.config = {
       mode: ROUTE_DEFAULTS.mode,
       basePath: ROUTE_DEFAULTS.basePath,
       autoBindLinks: ROUTE_DEFAULTS.autoBindLinks,
       activeClass: ROUTE_DEFAULTS.activeClass,
+      notFound: config.notFound || '',
+      beforeTransition: config.beforeTransition || (() => {}),
+      afterTransition: config.afterTransition || (() => {}),
       ...config,
-    } as typeof this.config;
+    } as Required<RouteConfig>;
 
     this.isHistoryMode = this.config.mode === 'history';
     this.basePath = this.config.basePath.replace(/\/$/, '');
@@ -90,62 +102,63 @@ class RouterImpl implements Router {
     if (this.isHistoryMode) {
       const base = this.basePath;
       let path = location.pathname;
-      if (base && path.startsWith(base)) {
+      if (base && (path === base || path.startsWith(`${base}/`))) {
         path = path.substring(base.length);
       }
-      return path.replace(/^\//, '') || defaultRoute!;
+      return path.replace(/^\/+/, '') || defaultRoute!;
     }
-    return location.hash.split('?')[0]!.substring(1) || defaultRoute!;
+    const hash = location.hash;
+    const { route } = this.splitPath(hash.startsWith('#') ? hash.substring(1) : hash);
+    return route || defaultRoute!;
   }
 
   private getQueryParams(): Record<string, string> {
-    const hash = location.hash;
-    const queryIndex = hash.indexOf('?');
-    const raw = this.isHistoryMode
-      ? location.search.substring(1)
-      : queryIndex !== -1
-        ? hash.substring(queryIndex + 1)
-        : '';
-
+    const raw = this.getCurrentRawQuery();
     if (raw === this.lastRawQuery) return this.cachedParams;
     this.lastRawQuery = raw;
 
-    const res: Record<string, string> = {};
-    let newLen = 0;
-    if (raw) {
-      new URLSearchParams(raw).forEach((v, k) => {
-        res[k] = v;
-        newLen++;
-      });
-    }
+    const res = this.parseQueryParams(raw);
+    if (this.areParamsEqual(res, this.cachedParams)) return this.cachedParams;
 
-    let oldLen = 0;
-    for (const _ in this.cachedParams) oldLen++;
-
-    let changed = newLen !== oldLen;
-    if (!changed) {
-      for (const k in res) {
-        if (res[k] !== this.cachedParams[k]) {
-          changed = true;
-          break;
-        }
+    if (raw.indexOf('%') !== -1)
+      try {
+        decodeURIComponent(raw);
+      } catch {
+        debug.warn(LOG_PREFIXES.ROUTE, ERROR_MESSAGES.ROUTE.MALFORMED_URI(raw));
       }
-    }
 
-    if (changed) {
-      if (raw.indexOf('%') !== -1)
-        try {
-          decodeURIComponent(raw);
-        } catch {
-          debug.warn(LOG_PREFIXES.ROUTE, ERROR_MESSAGES.ROUTE.MALFORMED_URI(raw));
-        }
-      this.cachedParams = res;
-    }
-    return this.cachedParams;
+    this.cachedParams = res;
+    return res;
+  }
+
+  private getCurrentRawQuery(): string {
+    if (this.isHistoryMode) return location.search.substring(1);
+    const hash = location.hash;
+    const queryIndex = hash.indexOf('?');
+    return queryIndex !== -1 ? hash.substring(queryIndex + 1) : '';
+  }
+
+  private areParamsEqual(a: Record<string, string>, b: Record<string, string>): boolean {
+    const keysA = Object.keys(a);
+    if (keysA.length !== Object.keys(b).length) return false;
+    for (const k of keysA) if (a[k] !== b[k]) return false;
+    return true;
+  }
+
+  private splitPath(path: string): { route: string; query: string | undefined } {
+    const queryIndex = path.indexOf('?');
+    const route = queryIndex !== -1 ? path.slice(0, queryIndex) : path;
+    const query = queryIndex !== -1 ? path.slice(queryIndex + 1) : undefined;
+    return {
+      route: route.replace(/^\/+/, ''),
+      query,
+    };
   }
 
   private setUrl(name: string): void {
-    const url = this.isHistoryMode ? `${this.basePath}/${name}` : `#${name}`;
+    const { route, query } = this.splitPath(name);
+    const fullPath = query ? `${route}?${query}` : route;
+    const url = this.isHistoryMode ? `${this.basePath}/${fullPath}` : `#${fullPath}`;
     if (this.isHistoryMode) {
       safePushState(null, url);
     } else {
@@ -155,10 +168,14 @@ class RouterImpl implements Router {
   }
 
   private restoreUrl(): void {
-    if (this.isHistoryMode) {
-      safePushState(null, this.previousUrl);
-    } else {
-      location.hash = this.previousUrl;
+    try {
+      if (this.isHistoryMode) {
+        history.replaceState(null, '', this.previousUrl);
+      } else {
+        location.hash = this.previousUrl;
+      }
+    } catch (e) {
+      debug.warn(LOG_PREFIXES.ROUTE, 'Restore URL failed', e);
     }
   }
 
@@ -239,9 +256,7 @@ class RouterImpl implements Router {
       const routeName = this.currentRouteAtom.value;
       const activeClass = this.activeClass;
       untracked(() => {
-        const len = previousActiveNodes.length;
-        for (let i = 0; i < len; i++) {
-          const el = previousActiveNodes[i]!;
+        for (const el of previousActiveNodes) {
           el.classList.remove(activeClass);
           el.removeAttribute('aria-current');
         }
@@ -249,9 +264,7 @@ class RouterImpl implements Router {
         try {
           const selector = `[data-route="${routeName.replace(/"/g, '\\"')}"]`;
           const nodes = Array.from(document.querySelectorAll<HTMLElement>(selector));
-          const nLen = nodes.length;
-          for (let i = 0; i < nLen; i++) {
-            const el = nodes[i]!;
+          for (const el of nodes) {
             el.classList.add(activeClass);
             el.setAttribute('aria-current', 'page');
           }
@@ -261,7 +274,10 @@ class RouterImpl implements Router {
         }
       });
     });
-    this.cleanups.push(() => activeLinkEffect.dispose());
+    this.cleanups.push(() => {
+      activeLinkEffect.dispose();
+      previousActiveNodes.length = 0;
+    });
   }
 
   public navigate(name: string): void {
@@ -269,12 +285,18 @@ class RouterImpl implements Router {
     const old = this.currentRouteAtom.peek();
     if (this.config.routes[old]?.onLeave?.(this) === false) return;
 
-    const resolved = name || this.config.default;
-    if (!resolved) return;
+    const { route, query } = this.splitPath(name);
+    const resolvedRoute = route || this.config.default || '';
+    if (!resolvedRoute) return;
 
-    this.setUrl(resolved);
-    this.queryParamsAtom.value = {};
-    this.currentRouteAtom.value = resolved;
+    $.batch(() => {
+      this.setUrl(name);
+      const nextParams = query ? this.parseQueryParams(query) : {};
+      if (!this.areParamsEqual(nextParams, this.queryParamsAtom.peek())) {
+        this.queryParamsAtom.value = nextParams;
+      }
+      this.currentRouteAtom.value = resolvedRoute;
+    });
   }
 
   public destroy(): void {

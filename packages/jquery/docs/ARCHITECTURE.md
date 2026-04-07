@@ -238,10 +238,10 @@ The hash/history difference is isolated to 5 internal functions, so all renderin
 
 | Function | Hash mode | History mode |
 | --- | --- | --- |
-| `getRouteName()` | Parses `location.hash` | Extracts from `pathname` after `basePath` |
+| `getRouteName()` | Parses `location.hash` | Extracts from `pathname` after `basePath` (exact match or slash-delimited) |
 | `getQueryParams()` | Parses `?` in hash string | Parses `location.search` |
 | `setUrl(route)` | Sets `location.hash` | Calls `history.pushState()` |
-| `restoreUrl()` | Reverts `location.hash` | Calls `history.replaceState()` |
+| `restoreUrl()` | Reverts `location.hash` | Calls `history.replaceState()` (prevents history stack loops) |
 | `getCurrentUrl()` | Returns `location.hash` | Returns `pathname + search` |
 
 ### Key Design Decisions
