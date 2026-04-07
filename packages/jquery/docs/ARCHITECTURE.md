@@ -23,6 +23,7 @@ The jQuery package is a **thin reactive binding layer** on top of `@but212/atom-
                  │  bindings/list/ ← Modular list    │
                  │  route.ts     ← SPA router        │
                  │  mount.ts     ← Component mount   │
+                 │  core/dom.ts  ← Core DOM engine   │
                  └───────────────────────────────────┘
 ```
 
@@ -49,18 +50,15 @@ $.fn.atomText(atom)
 
 This eliminates boilerplate across all binding types and ensures robust async behavior.
 
-### 2.2 Binding Context
+### 2.2 Binding Context & DOM Engine
 
-`createContext(el)` in `unified.ts` provides a shared context object per element:
+`createContext(el)` and `atomEachElement(jq, fn)` in `core/dom.ts` provide the base engine for all reactive bindings:
 
-```typescript
-interface BindingContext {
-  el: HTMLElement;         // Raw DOM element (fast path)
-  trackCleanup(fn): void;  // Registers cleanup with registry
-}
-```
+- **Binding Context**: Provides a shared context object per element, including a `trackCleanup` helper.
+- **DOM Engine (`atomEachElement`)**: The central iterator used by all chainable methods. It handles jQuery sets, filters for `HTMLElement` (skipping text/comment nodes), and provides lazy context creation only when required (`needsCtx: true`).
+- **Unpack Utility**: A shared utility used by `atomBind` and other integrated bindings to handle `[source, options]` tuple arguments consistently.
 
-The lazy `$el` getter avoids unnecessary jQuery object creation for bindings that only need native DOM access. Furthermore, chainable methods like `atomForm`, `atomUnbind`, and `atomBind` (for element filtering) now utilize `needsCtx: false` to skip `BindingContext` creation entirely when it's not required for effect registration, reducing allocation overhead.
+The lazy `$el` getter in `unified.ts` (when using `atomOn`, etc.) avoids unnecessary jQuery object creation for bindings that only need native DOM access.
 
 ### 2.3 Unified Binding (`atomBind`)
 
@@ -216,9 +214,10 @@ $el.atomMount((el, props) => {
 });
 ```
 
-- Auto-unmounts existing components when mounting a new one on the same element.
-- Double-unmount protection via `WeakMap.delete()` atomic guard.
-- Cleanup errors are caught and logged without propagation.
+- **Automatic Cleanup**: Before mounting, it automatically calls `registry.cleanupTree(el)` to dispose of any existing component and its reactive bindings.
+- **Batched Execution**: The component function is executed within `batch()` and `untracked()`. This ensures that initial state setups are atomic (preventing intermediate DOM flushes) and that setup logic doesn't leak into parent reactive effects.
+- **Idempotency**: Double-unmount protection via `WeakMap.delete()` atomic guard.
+- **Error Isolation**: Cleanup errors and mounting errors are caught and logged as `[atom-mount]` without interrupting the rest of the application.
 
 ## 7. SPA Router
 
@@ -292,6 +291,7 @@ packages/jquery/src/
   types.ts          — TypeScript global and internal type definitions
   core/
     namespace.ts      — $.atom, $.computed, $.effect, $.nextTick statics
+    dom.ts            — Core DOM engine (atomEachElement, createContext, unpack)
     effect-factory.ts — registerReactiveEffect (creates and registers effects)
     registry.ts       — WeakMap-based binding registry + MutationObserver cleanup
     jquery-patch.ts   — jQuery method patches (.on batch, .remove cleanup)

@@ -9,10 +9,11 @@ import {
   type WritableAtom,
 } from '@but212/atom-effect';
 import $ from 'jquery';
+import { createContext } from '@/core/dom';
 import { INTERNAL_HANDLER } from '@/core/jquery-patch';
 import { registry } from '@/core/registry';
 import type { BindingContext, FormOptions } from '@/types';
-import { bindVal, createContext } from './unified';
+import { bindVal } from './unified';
 
 /**
  * Interface for managing the state and synchronization logic of individual form fields.

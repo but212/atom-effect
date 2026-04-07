@@ -1,7 +1,8 @@
-import { untracked } from '@but212/atom-effect';
+import { batch, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
 import { bindUnbind } from '@/bindings/unified';
 import { ERROR_MESSAGES, LOG_PREFIXES } from '@/constants';
+import { atomEachElement } from '@/core/dom';
 import { registry } from '@/core/registry';
 import type { ComponentFn } from '@/types';
 import { debug } from '@/utils/debug';
@@ -33,22 +34,20 @@ $.fn.atomMount = function <P>(this: JQuery, component: ComponentFn<P>, props?: P
   const p = (props ?? EMPTY_PROPS) as P;
   const compName = component.name || 'Component';
 
-  for (let i = 0, len = this.length; i < len; i++) {
-    const rootEl = this[i];
-    if (!rootEl) continue;
-
-    registry.cleanupTree(rootEl);
+  return atomEachElement(this, (_, el) => {
+    registry.cleanupTree(el);
     try {
-      // Untracked execution prevents component initialization from leaking into parent effects
-      const teardown = untracked(() => component($(rootEl), p));
+      // Untracked + Batched execution:
+      // prevents component initialization from leaking into parent effects
+      // and ensures multiple initial state updates only trigger one flush.
+      const teardown = untracked(() => batch(() => component($(el), p)));
       if (typeof teardown === 'function') {
-        registry.setComponentCleanup(rootEl, teardown);
+        registry.setComponentCleanup(el, teardown);
       }
     } catch (err) {
       debug.error(LOG_PREFIXES.MOUNT, ERROR_MESSAGES.MOUNT.ERROR(compName), err);
     }
-  }
-  return this;
+  });
 };
 
 /**
@@ -56,9 +55,5 @@ $.fn.atomMount = function <P>(this: JQuery, component: ComponentFn<P>, props?: P
  * element and its descendants.
  */
 $.fn.atomUnmount = function (this: JQuery): JQuery {
-  for (let i = 0, len = this.length; i < len; i++) {
-    const el = this[i];
-    if (el) bindUnbind(el);
-  }
-  return this;
+  return atomEachElement(this, (_, el) => bindUnbind(el));
 };

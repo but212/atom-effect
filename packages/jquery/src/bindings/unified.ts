@@ -16,11 +16,8 @@ import type {
   ValOptions,
   WritableAtom,
 } from '@/types';
-import { debug } from '@/utils/debug';
-
-export type { BindingContext };
-
 import { hasOwn, isPromise } from '@/utils';
+import { debug } from '@/utils/debug';
 
 import {
   DANGEROUS_PROTOCOL_RE,
@@ -68,17 +65,6 @@ function getSanitizedHtml(
     htmlSanitizeCache.set(source, cached);
   }
   return cached;
-}
-
-// ============================================================================
-// Binding Context Factory
-// ============================================================================
-
-export function createContext(el: HTMLElement): BindingContext {
-  return {
-    el,
-    trackCleanup: (fn) => registry.trackCleanup(el, fn),
-  };
 }
 
 // ============================================================================
