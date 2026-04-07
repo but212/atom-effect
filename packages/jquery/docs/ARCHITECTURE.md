@@ -60,7 +60,7 @@ interface BindingContext {
 }
 ```
 
-The lazy `$el` getter avoids unnecessary jQuery object creation for bindings that only need native DOM access.
+The lazy `$el` getter avoids unnecessary jQuery object creation for bindings that only need native DOM access. Furthermore, chainable methods like `atomForm`, `atomUnbind`, and `atomBind` (for element filtering) now utilize `needsCtx: false` to skip `BindingContext` creation entirely when it's not required for effect registration, reducing allocation overhead.
 
 ### 2.3 Unified Binding (`atomBind`)
 
@@ -371,7 +371,7 @@ The sequential 12-way `if` chain in `atomBind` was replaced with a **Bitmask Dis
 1. `atomBind` converts current options into a single 32-bit integer mask.
 2. The loop uses bitwise operations (`m & -m`) to isolate the next binding bit.
 3. The bit index is calculated using `31 - Math.clz32(bit)`, which V8 compiles to a single `BSR` (Bit Scan Reverse) instruction.
-4. The corresponding handler is looked up in the monomorphic `BIND_HANDLERS` table, achieving O(1) jump table dispatching.
+4. The corresponding handler is looked up in the monomorphic `BIND_HANDLERS` table, achieving O(1) jump table dispatching. Tuple arguments (e.g. `[source, formatter]`) are efficiently unpacked using a shared `unpack` utility.
 
 ### 11.3 Strategy Specialization (`InputBinding`)
 
