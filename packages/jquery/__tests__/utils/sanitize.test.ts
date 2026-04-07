@@ -1,7 +1,7 @@
 import { atom, effect } from '@but212/atom-effect';
 import { afterEach, describe, expect, it } from 'vitest';
-import $ from '@/index';
 import { registry } from '@/core/registry';
+import $ from '@/index';
 import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '@/utils/sanitize';
 
 // ============================================================================
@@ -18,7 +18,7 @@ describe('Unit: sanitizeHtml (Core Logic)', () => {
       '<base href="https://evil.com/">',
       '<style>.red{color:red}</style>',
       '<scr<script>ipt>alert(1)</script>', // Reassembly defense
-      '<?xml version="1.0"?>',             // XML processing instructions
+      '<?xml version="1.0"?>', // XML processing instructions
     ];
     vectors.forEach((v) => {
       const result = sanitizeHtml(v).toLowerCase();
@@ -34,7 +34,7 @@ describe('Unit: sanitizeHtml (Core Logic)', () => {
       '<img onerror=alert(1)>',
       '<svg onload=alert(1)>',
       '<div title="iron" onclick="alert(1)">', // Regression: iron-pattern fast-path bypass
-      '<a onload\n=alert(1)>',                 // Whitespace/Newline after attribute name
+      '<a onload\n=alert(1)>', // Whitespace/Newline after attribute name
     ];
     vectors.forEach((v) => {
       const result = sanitizeHtml(v).toLowerCase();
@@ -48,14 +48,14 @@ describe('Unit: sanitizeHtml (Core Logic)', () => {
     const vectors = [
       '<a href="javascript:alert(1)">',
       '<a href="vbscript:msgbox(1)">',
-      '<a href="j a v a s c r i p t :alert(1)">',    // Whitespace split
-      '<a href="&#106;avascript:alert(1)">',         // Entity decimal encoding
-      '<a href="&#x6A;avascript:alert(1)">',         // Entity hex encoding
-      '<a href="j&#1;avascript:alert(1)">',          // Control character smuggling
-      '<a href="javascript&colon;alert(1)">',       // Named entity
-      '<img srcset="javascript:alert(1) 2x">',      // srcset specific pattern
-      '<a href="data:text/html,xss">',              // Dangerous data URI
-      '&#999999999;',                               // DoS (RangeError) protection
+      '<a href="j a v a s c r i p t :alert(1)">', // Whitespace split
+      '<a href="&#106;avascript:alert(1)">', // Entity decimal encoding
+      '<a href="&#x6A;avascript:alert(1)">', // Entity hex encoding
+      '<a href="j&#1;avascript:alert(1)">', // Control character smuggling
+      '<a href="javascript&colon;alert(1)">', // Named entity
+      '<img srcset="javascript:alert(1) 2x">', // srcset specific pattern
+      '<a href="data:text/html,xss">', // Dangerous data URI
+      '&#999999999;', // DoS (RangeError) protection
     ];
     vectors.forEach((v) => {
       const result = sanitizeHtml(v).toLowerCase();
@@ -93,7 +93,7 @@ describe('Unit: Protocol Validation Helpers', () => {
       '&#106;avascript:alert(1)',
       'data:text/html,xss',
     ];
-    dangerous.forEach(v => {
+    dangerous.forEach((v) => {
       expect(isDangerousUrl('href', v)).toBe(true);
     });
 
@@ -113,7 +113,7 @@ describe('Unit: Protocol Validation Helpers', () => {
       'expression(1)',
       'behavior:url(#)',
     ];
-    dangerous.forEach(v => {
+    dangerous.forEach((v) => {
       expect(isDangerousCssValue(v)).toBe(true);
     });
 
