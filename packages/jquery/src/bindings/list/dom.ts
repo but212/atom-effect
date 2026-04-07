@@ -9,6 +9,14 @@ import { cleanupNodes, setAtomKey, wrap } from './utils';
 
 let listBatchIdCounter = 0;
 
+/**
+ * Helper to insert an element or a jQuery collection before a specific node.
+ * Handles both single DOM elements and multi-root jQuery collections.
+ *
+ * @param elOrJq - The element(s) to insert.
+ * @param nextNode - The reference node to insert before.
+ * @param container - The parent container.
+ */
 export function insertOrAppend(
   elOrJq: Element | JQuery | undefined,
   nextNode: Node | null,
@@ -28,6 +36,16 @@ export function insertOrAppend(
   }
 }
 
+/**
+ * Handles the logic when the list becomes empty.
+ * Manages the removal of old items and the display of the 'empty' placeholder.
+ *
+ * @param ctx - The list context.
+ * @param itemCount - Current number of items.
+ * @param $container - The jQuery container.
+ * @param empty - The empty state configuration.
+ * @param arrayPool - Resource pool for releasing arrays.
+ */
 export function handleEmpty<T>(
   ctx: ListContext<T>,
   itemCount: number,
@@ -67,6 +85,15 @@ export function handleEmpty<T>(
   ctx.oldNodes = [];
 }
 
+/**
+ * Renders the items that need creation or replacement.
+ * Implements batch sanitization and optionally 'initial' optimization using innerHTML.
+ *
+ * @param diff - The prepared diff.
+ * @param options - The list options.
+ * @param isInitial - Whether this is the very first render of the list.
+ * @returns An array of sanitized HTML strings if initial optimization is possible, null otherwise.
+ */
 export function renderItems<T>(
   diff: PreparedDiff<T>,
   options: ListOptions<T>,
@@ -134,15 +161,29 @@ export function renderItems<T>(
   return null;
 }
 
+/**
+ * Identifies and removes items that are no longer present in the list.
+ */
 export function cleanupRemoved<T>(ctx: ListContext<T>, diff: PreparedDiff<T>): void {
   const { startIndex, oldEndIndex, newKeySet } = diff;
   for (let i = startIndex; i <= oldEndIndex; i++) {
     const k = ctx.oldKeys[i]!;
+    // If key not in new set and node exists, trigger removal
     if (!newKeySet.has(k) && ctx.oldNodes[i])
       ctx.removeItem(k, wrap(ctx.oldNodes[i] as Element | JQuery<Element>));
   }
 }
 
+/**
+ * Places the rendered/updated items into the DOM.
+ * Optimizes for both the 'all-new' case and the 'incremental update' case.
+ *
+ * @param ctx - The list context.
+ * @param diff - The prepared diff.
+ * @param rawContainer - The raw DOM container element.
+ * @param callbacks - Lifecycle hooks.
+ * @param innerHtmlFragments - Optional pre-rendered HTML fragments for innerHTML optimization.
+ */
 export function placeItems<T>(
   ctx: ListContext<T>,
   diff: PreparedDiff<T>,
@@ -154,6 +195,8 @@ export function placeItems<T>(
   const itemCount = newKeys.length;
 
   if (innerHtmlFragments !== null) {
+    // Fast-path: If rendering the whole list for the first time and no hooks are needed,
+    // we can use innerHTML for maximum performance.
     rawContainer.innerHTML = innerHtmlFragments.join('');
     let el = rawContainer.firstElementChild;
     for (let i = 0; i < itemCount; i++) {
