@@ -92,7 +92,7 @@ The `BindingRegistry` (`registry.ts`) is the central lifecycle manager. It track
 - **Effects**: Core `effect` instances bound to DOM elements.
 - **Cleanups**: Arbitrary cleanup functions (event listeners, timers, etc.).
 
-Storage uses **WeakMap/WeakSet** to prevent memory leaks. To reduce GC pressure, the `BindingRecord` objects used to store these resources are acquired from and released to a **LIFO Object Pool**.
+Storage uses **WeakMap/WeakSet** to prevent memory leaks. To reduce GC pressure, the `BindingRecord` objects used to store these resources are acquired from and released to a **Hardened LIFO Object Pool**. This pool implements mandatory resource resetting and **Orchestration**, where a record's disposal automatically returns its internal `effects` and `cleanups` arrays to their respective specialized pools.
 
 ### 3.2 Marker Class Optimization
 
@@ -336,13 +336,15 @@ The `ObjectPool` utility (`utils/object-pool.ts`) manages a stack of reusable pl
 
 - **Monomorphic Shape**: The pool factory ensures all created objects share the same "hidden class" in V8.
 - **LIFO Strategy**: Uses a Last-In-First-Out (stack) approach to improve CPU cache locality.
-- **Strict Reset**: Every object is passed through a `reset` callback before being returned to the pool to prevent stale data/reference leaks.
+- **Strict Reset**: Every object/array is passed through a `reset` callback before being returned to the pool to prevent stale data leaks.
+- **Mandatory Clear on Overflow**: Resources are reset even if the pool reached its `limit` to break element references immediately and assist the Garbage Collector.
+- **Double-Release Protection**: Implements `indexOf` checks during `release()` cycles to prevent the same instance from being stored twice, which would otherwise lead to catastrophic shared state corruption.
 
 #### 10.1.2 Reused Structures
 
-1. **`BindingRecord`**: Created per bound element. Pooling these avoids thousands of micro-allocations during initial page hydration or route transitions.
-2. **Reused Buffers**: Pre-allocated `Uint8Array` and `Int32Array` buffers are grown dynamically and reused across `atomList` update cycles to eliminate per-update allocations.
-3. **`ArrayPool`**: Reuses arrays used for `effects` and `cleanups` lists within a `BindingRecord`.
+1. **`BindingRecord`**: Created per bound element. Pooling these avoids thousands of micro-allocations during hydration. Its `reset` logic orchestrates the cleanup of nested arrays.
+2. **Reused Buffers**: Pre-allocated `Uint8Array` and `Int32Array` buffers are grown dynamically and reused across `atomList` cycles.
+3. **`ArrayPool`**: Reuses arrays for `effects` and `cleanups` within a `BindingRecord`. Its `limit` (128) is synchronized with the record pool for maximum reuse.
 
 ### 10.2 Dense Monomorphic Strategy
 

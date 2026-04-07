@@ -25,6 +25,9 @@
 - **Debug**: Fixed highlight persistence where visual outlines remained on elements if they were disconnected from the DOM before the timeout.
 - **Debug**: Resolved abrupt fade-out of highlights by migrating the CSS transition to a persistent attribute selector (`[data-atom-debug]`).
 - **Debug**: Corrected `getSelector` to support SVG elements and provide more informative output (Tag#Id.Class).
+- **Internal**: Hardened `ArrayPool` and `ObjectPool` with double-release protection and mandatory resource resetting even when exceeding pool limits to prevent memory pressure.
+- **Internal**: Synchronized `effectsArrayPool` and `cleanupsArrayPool` limits (128) with `bindingRecordPool` to ensure consistent reuse.
+- **Internal**: Orchestrated `BindingRecord` disposal to automatically return internal `effects` and `cleanups` arrays to their respective pools, improving library robustness.
 
 #### Changed
 

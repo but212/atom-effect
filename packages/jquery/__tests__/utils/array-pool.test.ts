@@ -3,144 +3,91 @@ import { ArrayPool } from '@/utils/pool';
 
 describe('ArrayPool', () => {
   let pool: ArrayPool<number>;
+  const LIMIT = 4;
+  const CAPACITY = 8;
 
   beforeEach(() => {
-    pool = new ArrayPool<number>(4, 8);
+    pool = new ArrayPool<number>(LIMIT, CAPACITY);
   });
 
-  // --------------------------------------------------------------------------
-  // acquire
-  // --------------------------------------------------------------------------
+  describe('Basic Acquisition & Reuse', () => {
+    it('should provide empty arrays and reuse them in LIFO order', () => {
+      // 1. Initial acquire is empty
+      expect(pool.acquire()).toEqual([]);
 
-  describe('acquire', () => {
-    it('should return a new empty array when pool is empty', () => {
-      const arr = pool.acquire();
-      expect(arr).toEqual([]);
-      expect(arr).toBeInstanceOf(Array);
-    });
-
-    it('should return a previously released array (LIFO reuse)', () => {
-      const original = [1, 2, 3];
-      pool.release(original);
-
-      const reused = pool.acquire();
-      // Released arrays are cleared (length = 0), so it should be empty.
-      expect(reused).toHaveLength(0);
-      // Same reference was reused.
-      expect(reused).toBe(original);
-    });
-
-    it('should return arrays in LIFO order', () => {
-      const a: number[] = [];
-      const b: number[] = [];
-      const c: number[] = [];
-
+      // 2. Release in sequence (a, then b)
+      const a = [1];
+      const b = [2];
       pool.release(a);
       pool.release(b);
-      pool.release(c);
 
-      expect(pool.acquire()).toBe(c);
-      expect(pool.acquire()).toBe(b);
-      expect(pool.acquire()).toBe(a);
+      // 3. Acquire back (LIFO order: b first, then a)
+      const first = pool.acquire();
+      const second = pool.acquire();
+
+      expect(first).toBe(b);
+      expect(second).toBe(a);
+      expect(second).toHaveLength(0); // cleared on release
+
+      // 4. Exhausted pool returns fresh array
+      expect(pool.acquire()).not.toBe(a);
+      expect(pool.acquire()).toEqual([]);
     });
   });
 
-  // --------------------------------------------------------------------------
-  // release
-  // --------------------------------------------------------------------------
+  describe('Pooling Policies & Safety', () => {
+    it('should always clear the array on release (GC hygiene)', () => {
+      // 1. Normal case
+      const normal = [1];
+      pool.release(normal);
+      expect(normal).toHaveLength(0);
 
-  describe('release', () => {
-    it('should clear the array before pooling', () => {
-      const arr = [10, 20, 30];
-      pool.release(arr);
-      expect(arr).toHaveLength(0);
-    });
-
-    it('should reject arrays exceeding capacity', () => {
-      // capacity = 8
-      const big = new Array(9).fill(0);
+      // 2. Rejected by capacity (still should clear)
+      const big = new Array(CAPACITY + 1).fill(0);
       pool.release(big);
-      // Big array was NOT pooled, so acquire gives a fresh one.
-      const fresh = pool.acquire();
-      expect(fresh).not.toBe(big);
+      expect(big).toHaveLength(0);
+
+      // 3. Rejected by limit overflow (still should clear)
+      for (let i = 0; i < LIMIT; i++) {
+        pool.release([]);
+      }
+      const overflow = [99];
+      pool.release(overflow);
+      expect(overflow).toHaveLength(0);
     });
 
-    it('should reject frozen arrays', () => {
-      const frozen = Object.freeze([1, 2]) as number[];
+    it('should respect pooling limits and ignore invalid objects', () => {
+      // Boundary check: 8 is accepted, 9 is rejected for pooling.
+      const exact = new Array(CAPACITY).fill(0);
+      const tooBig = new Array(CAPACITY + 1).fill(0);
+      const frozen = Object.freeze([]) as unknown as number[];
+
+      pool.release(exact);
+      pool.release(tooBig);
       pool.release(frozen);
 
-      const fresh = pool.acquire();
-      expect(fresh).not.toBe(frozen);
-    });
-
-    it('should reject when pool is at limit', () => {
-      // limit = 4
-      for (let i = 0; i < 4; i++) {
-        pool.release([i]);
-      }
-      const overflow: number[] = [99];
-      pool.release(overflow);
-      // overflow should NOT have been cleared since it wasn't accepted.
-      expect(overflow).toEqual([99]);
-    });
-
-    it('should accept arrays at exactly the capacity boundary', () => {
-      // capacity = 8
-      const exact = new Array(8).fill(0);
-      pool.release(exact);
+      // Only 'exact' should have been stored.
       expect(pool.acquire()).toBe(exact);
+      expect(pool.acquire()).not.toBe(tooBig);
+      expect(pool.acquire()).not.toBe(frozen);
+    });
+
+    it('should prevent double-pooling the same instance', () => {
+      const arr: number[] = [];
+      pool.release(arr);
+      pool.release(arr);
+
+      // Verify it only exists once in the pool
+      expect(pool.acquire()).toBe(arr);
+      expect(pool.acquire()).not.toBe(arr);
     });
   });
 
-  // --------------------------------------------------------------------------
-  // reset
-  // --------------------------------------------------------------------------
-
-  describe('reset', () => {
-    it('should drain all pooled arrays', () => {
+  describe('Management', () => {
+    it('should clear all cached arrays on reset', () => {
       pool.release([1]);
-      pool.release([2]);
-      pool.release([3]);
-
       pool.reset();
-
-      // After reset, acquire should return a fresh array.
-      const fresh = pool.acquire();
-      expect(fresh).toEqual([]);
-    });
-  });
-
-  // --------------------------------------------------------------------------
-  // Integration: acquire-release cycle
-  // --------------------------------------------------------------------------
-
-  describe('acquire-release cycle', () => {
-    it('should reuse arrays across multiple cycles', () => {
-      const refs = new Set<number[]>();
-
-      // Cycle 1: acquire 3 arrays
-      for (let i = 0; i < 3; i++) {
-        refs.add(pool.acquire());
-      }
-      expect(refs.size).toBe(3);
-
-      // Release all
-      for (const arr of refs) {
-        arr.push(42);
-        pool.release(arr);
-      }
-
-      // Cycle 2: acquire 3 again — should be the same 3 references
-      const reused = new Set<number[]>();
-      for (let i = 0; i < 3; i++) {
-        reused.add(pool.acquire());
-      }
-
-      // All reused references should come from the original set.
-      for (const r of reused) {
-        expect(refs.has(r)).toBe(true);
-        expect(r).toHaveLength(0); // cleared by release
-      }
+      expect(pool.acquire()).toEqual([]);
     });
   });
 });

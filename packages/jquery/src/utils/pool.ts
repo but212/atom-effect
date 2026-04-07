@@ -6,7 +6,6 @@ import type { EffectObject } from '@/types';
 
 /**
  * Array pool for reusing temporarily allocated arrays to avoid GC pressure.
- * Ported from @but212/atom-effect core.
  *
  * @template T - Element type.
  */
@@ -25,12 +24,19 @@ export class ArrayPool<T> {
 
   /** Releases array back to pool if within capacity and limit. */
   release(arr: T[]): void {
-    // Fast capacity check first to avoid frozen check cost
-    if (arr.length > this.capacity || this.pool.length >= this.limit) return;
     if (Object.isFrozen(arr)) return;
 
+    const length = arr.length;
+    // Always clear the array to help GC by breaking references,
+    // even if it won't be stored in the pool.
     arr.length = 0;
-    this.pool.push(arr);
+
+    if (this.pool.length < this.limit && length <= this.capacity) {
+      // Basic double-release protection. indexOf is O(N) but pool size is small (limit=50).
+      if (this.pool.indexOf(arr) === -1) {
+        this.pool.push(arr);
+      }
+    }
   }
 
   /** Clears the pool. */
@@ -71,9 +77,17 @@ export class ObjectPool<T extends object> {
 
   /** Releases object back to pool after reset. */
   release(obj: T): void {
+    if (Object.isFrozen(obj)) return;
+
+    // Always reset the object to help GC by breaking references,
+    // even if it won't be stored in the pool.
+    this.reset(obj);
+
     if (this.pool.length < this.limit) {
-      this.reset(obj);
-      this.pool.push(obj);
+      // Basic double-release protection. indexOf is O(N) but pool size is small (limit=64).
+      if (this.pool.indexOf(obj) === -1) {
+        this.pool.push(obj);
+      }
     }
   }
 
@@ -93,15 +107,16 @@ export class ObjectPool<T extends object> {
 // Specialized Pools
 // ============================================================================
 
-export const effectsArrayPool = new ArrayPool<EffectObject>();
-export const cleanupsArrayPool = new ArrayPool<() => void>();
+/** Limit synchronized with bindingRecordPool to ensure constituent arrays are also pooled. */
+const SHARED_LIMIT = 128;
+
+export const effectsArrayPool = new ArrayPool<EffectObject>(SHARED_LIMIT);
+export const cleanupsArrayPool = new ArrayPool<() => void>(SHARED_LIMIT);
 
 /**
  * Per-element record of all reactive resources that must be released on cleanup.
  * Fields are optional to avoid allocating arrays for the common case where only
  * one resource type is used.
- *
- * Extracted here so that both the pool and registry share the same type.
  */
 export interface BindingRecord {
   effects: EffectObject[] | undefined;
@@ -111,20 +126,26 @@ export interface BindingRecord {
 
 /**
  * Pool for BindingRecord objects.
- * Uses a fixed hidden class for V8 optimization.
+ * Orchestrates constituent array pools during reset to prevent resource leaks.
  */
 export const bindingRecordPool = new ObjectPool<BindingRecord>(
-  () => {
-    return {
-      effects: undefined,
-      cleanups: undefined,
-      componentCleanup: undefined,
-    };
-  },
+  () => ({
+    effects: undefined,
+    cleanups: undefined,
+    componentCleanup: undefined,
+  }),
   (r) => {
-    r.effects = undefined;
-    r.cleanups = undefined;
+    // Orchestration: Return internal arrays to their respective pools.
+    // registry.ts also does this, but keeping it here ensures safety if used elsewhere.
+    if (r.effects) {
+      effectsArrayPool.release(r.effects);
+      r.effects = undefined;
+    }
+    if (r.cleanups) {
+      cleanupsArrayPool.release(r.cleanups);
+      r.cleanups = undefined;
+    }
     r.componentCleanup = undefined;
   },
-  128
+  SHARED_LIMIT
 );
