@@ -399,14 +399,15 @@ $.effect(() => {
 });
 ```
 
-### `$.isAtom(v)`, `$.isComputed(v)`, `$.isReactive(v)`
+### `$.isAtom(v)`, `$.isComputed(v)`, `$.isReactive(v)`, `$.isPromise(v)`
 
-Runtime type checks for reactive nodes.
+Runtime type checks for reactive nodes and thenables.
 
 ```javascript
 $.isAtom(myAtom);      // true for WritableAtom
 $.isComputed(myComp);  // true for ComputedAtom
 $.isReactive(v);       // true for any reactive node (atom or computed)
+$.isPromise(v);        // true for Promise or Thenable (including thenable functions)
 ```
 
 ### `$.nextTick()`

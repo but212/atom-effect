@@ -3,24 +3,38 @@ import { isAtom } from '@but212/atom-effect';
 import type { RenderRoute, RouteDefinition, TemplateRoute } from '@/types';
 
 // ============================================================================
+// Internal Helpers
+// ============================================================================
+
+const isObject = (v: unknown): v is object => v !== null && typeof v === 'object';
+
+// ============================================================================
 // Reactive helpers
 // ============================================================================
 
 /** Checks if a given value is a reactive node (Atom or Computed). */
 export const isReactive = (v: unknown): v is ReadonlyAtom<unknown> => isAtom(v);
 
-/** Checks if value is a Promise. */
+/**
+ * Checks if value is a Promise or Thenable.
+ */
 export const isPromise = <T>(v: unknown): v is Promise<T> =>
-  v !== null && typeof v === 'object' && typeof (v as Record<string, unknown>).then === 'function';
+  (isObject(v) || typeof v === 'function') &&
+  typeof (v as Record<string, unknown>).then === 'function';
 
 /** Generates a human-readable selector string for debug. */
 export function getSelector(el: Element): string {
-  const tag = el.localName;
-  const id = el.id;
+  const { localName: tag, id, className } = el;
   if (id) return `${tag}#${id}`;
-  const className = el.className;
-  if (typeof className === 'string') {
-    const trimmed = className.trim();
+
+  // Handle SVG className which returns SVGAnimatedString instead of string
+  const classStr =
+    typeof className === 'string'
+      ? className
+      : (className as unknown as { baseVal: string }).baseVal;
+
+  if (typeof classStr === 'string') {
+    const trimmed = classStr.trim();
     if (trimmed) {
       return `${tag}.${trimmed.replace(/\s+/g, '.')}`;
     }
@@ -31,33 +45,32 @@ export function getSelector(el: Element): string {
 export const hasOwn = Object.prototype.hasOwnProperty;
 
 export const isTemplateRoute = (r: RouteDefinition): r is TemplateRoute =>
-  'template' in r && typeof r.template === 'string';
+  isObject(r) && 'template' in r && typeof r.template === 'string';
+
 export const isRenderRoute = (r: RouteDefinition): r is RenderRoute =>
-  'render' in r && typeof r.render === 'function';
+  isObject(r) && 'render' in r && typeof r.render === 'function';
 
 /**
  * Shallow equality check for objects.
- * Optimized to avoid Object.keys() array allocations.
+ * Handles NaN correctly using Object.is.
  */
 export function shallowEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
-  if (typeof a !== 'object' || a === null || typeof b !== 'object' || b === null) return false;
+  if (!isObject(a) || !isObject(b)) return false;
 
   const objA = a as Record<string, unknown>;
   const objB = b as Record<string, unknown>;
 
-  let countA = 0;
-  for (const k in objA) {
-    if (hasOwn.call(objA, k)) {
-      if (!hasOwn.call(objB, k) || objA[k] !== objB[k]) return false;
-      countA++;
+  const keysA = Object.keys(objA);
+  const keysB = Object.keys(objB);
+
+  if (keysA.length !== keysB.length) return false;
+
+  for (const key of keysA) {
+    if (!hasOwn.call(objB, key) || !Object.is(objA[key], objB[key])) {
+      return false;
     }
   }
 
-  let countB = 0;
-  for (const k in objB) {
-    if (hasOwn.call(objB, k)) countB++;
-  }
-
-  return countA === countB;
+  return true;
 }

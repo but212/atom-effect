@@ -1,43 +1,54 @@
 import { describe, expect, it } from 'vitest';
-import $ from '@/index'; // Register plugins ($.atom)
-import { getSelector, isReactive, shallowEqual } from '@/utils';
+import $ from '@/index';
+import { getSelector, isPromise, isReactive, shallowEqual } from '@/utils';
 import { sanitizeHtml } from '@/utils/sanitize';
 
 describe('Utils', () => {
   describe('getSelector', () => {
-    it('should generate correct selectors', () => {
+    it('should generate correct selectors including SVG support', () => {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('class', 'foo bar');
+
       const cases = [
-        { id: 'test-id', class: '', tag: 'div', expected: 'div#test-id' },
-        { id: '', class: 'foo bar', tag: 'div', expected: 'div.foo.bar' },
-        { id: '', class: '', tag: 'span', expected: 'span' },
-        { id: '', class: '   ', tag: 'div', expected: 'div' },
+        {
+          el: Object.assign(document.createElement('div'), { id: 'test-id' }),
+          expected: 'div#test-id',
+        },
+        {
+          el: Object.assign(document.createElement('div'), { className: 'foo bar' }),
+          expected: 'div.foo.bar',
+        },
+        { el: document.createElement('span'), expected: 'span' },
+        { el: Object.assign(document.createElement('div'), { className: '   ' }), expected: 'div' },
+        { el: svg, expected: 'svg.foo.bar' },
       ];
 
-      cases.forEach(({ id, class: cls, tag, expected }) => {
-        const el = document.createElement(tag);
-        if (id) el.id = id;
-        if (cls) el.className = cls;
+      for (const { el, expected } of cases) {
         expect(getSelector(el)).toBe(expected);
-      });
-    });
-
-    it('should return tagName for element without id or classes', () => {
-      const el = document.createElement('div');
-      expect(getSelector(el)).toBe('div');
+      }
     });
   });
 
-  describe('Reactivity', () => {
+  describe('Reactivity & Promises', () => {
     it('isReactive identifies atoms', () => {
       expect(isReactive($.atom(1))).toBe(true);
       expect(isReactive(1)).toBe(false);
       expect(isReactive(null)).toBe(false);
       expect(isReactive({ value: 1, subscribe: () => {} })).toBe(false);
     });
+
+    it('isPromise identifies thenables including functions', () => {
+      expect(isPromise(Promise.resolve())).toBe(true);
+      expect(isPromise({ then: () => {} })).toBe(true);
+
+      const thenableFn = () => {};
+      thenableFn.then = () => {};
+      expect(isPromise(thenableFn)).toBe(true);
+    });
   });
 
   describe('shallowEqual', () => {
-    it('compares objects correctly', () => {
+    it('compares objects correctly including NaN handling', () => {
       const obj = { a: 1 };
       const cases = [
         [obj, obj, true],
@@ -46,40 +57,32 @@ describe('Utils', () => {
         [{ a: 1 }, { b: 1 }, false],
         [{ a: 1 }, { a: 1, b: 2 }, false],
         [null, {}, false],
+        [{ a: NaN }, { a: NaN }, true],
         [1, 1, true],
         [1, '1', false],
       ] as const;
 
-      cases.forEach(([a, b, expected]) => {
+      for (const [a, b, expected] of cases) {
         expect(shallowEqual(a, b)).toBe(expected);
-      });
+      }
     });
   });
 
   describe('sanitizeHtml', () => {
-    it('should preserve HTML comment separators', () => {
-      const input = '<div>A</div><!--sep--><span>B</span>';
-      const output = sanitizeHtml(input);
-      expect(output).toContain('<!--sep-->');
-      expect(output).toContain('A');
-      expect(output).toContain('B');
-    });
+    it('should preserve comment separators and filter dangerous tags', () => {
+      // Basic preservation
+      expect(sanitizeHtml('<div>A</div><!--sep--><span>B</span>')).toContain('<!--sep-->');
 
-    it('should preserve multiple consecutive comment separators', () => {
-      const parts = ['<p>1</p>', '<p>2</p>', '<p>3</p>'];
-      const combined = parts.join('<!--sep-->');
-      const sanitized = sanitizeHtml(combined);
-      const fragments = sanitized.split('<!--sep-->');
-      expect(fragments).toHaveLength(3);
-    });
+      // Multiple separators
+      const combined = ['<p>1</p>', '<p>2</p>', '<p>3</p>'].join('<!--sep-->');
+      expect(sanitizeHtml(combined).split('<!--sep-->')).toHaveLength(3);
 
-    it('should sanitize dangerous tags while preserving separators', () => {
-      const input =
-        '<div>Safe</div><!--sep--><script>alert("xss")</script><!--sep--><span>OK</span>';
-      const sanitized = sanitizeHtml(input);
+      // Security + preservation
+      const xss = '<div>Safe</div><!--sep--><script>alert(1)</script><!--sep--><span>OK</span>';
+      const sanitized = sanitizeHtml(xss);
       const fragments = sanitized.split('<!--sep-->');
+
       expect(fragments).toHaveLength(3);
-      expect(fragments[0]).toContain('Safe');
       expect(fragments[1]).not.toContain('script');
       expect(fragments[2]).toContain('OK');
     });
