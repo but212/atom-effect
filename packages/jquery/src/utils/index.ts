@@ -25,7 +25,8 @@ export const isPromise = <T>(v: unknown): v is Promise<T> =>
 /** Generates a human-readable selector string for debug. */
 export function getSelector(el: Element): string {
   const { localName: tag, id, className } = el;
-  if (id) return `${tag}#${id}`;
+  let res = tag;
+  if (id) res += `#${id}`;
 
   // Handle SVG className which returns SVGAnimatedString instead of string
   const classStr =
@@ -39,6 +40,13 @@ export function getSelector(el: Element): string {
       res += `.${trimmed.replace(/\s+/g, '.')}`;
     }
   }
+
+  // Include type attribute for inputs/buttons for extra context
+  const type = (el as HTMLInputElement | HTMLButtonElement).type;
+  if (type && typeof type === 'string' && type !== 'text') {
+    res += `.${type}`;
+  }
+
   return res;
 }
 
