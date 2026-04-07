@@ -166,7 +166,7 @@ The `atomList` reconciliation engine uses a **1D flat buffer strategy** combined
 
 #### Memory & Async Safety
 
-All reactive bindings (`atomBind`, `atomText`, etc.) include built-in **Zombie Prevention**. This ensures that asynchronous updates (promises) are automatically discarded if the element is disconnected from the DOM before the resolution completes. Additionally, `atomBind` (via `registerMapEffect`) optimizes multi-promise maps by caching resolved values, allowing subsequent reactive updates to skip redundant async delays.
+All reactive bindings (`atomBind`, `atomText`, etc.) include built-in **Zombie Prevention**. This ensures that asynchronous updates (promises) are automatically discarded if the element is disconnected from the DOM before the resolution completes. Additionally, the library employs a **Hardened Memory Pool** with double-release protection and synchronized resource orchestration to ensure zero memory leaks even in highly dynamic states. `atomBind` (via `registerMapEffect`) also optimizes multi-promise maps by caching resolved values, allowing subsequent reactive updates to skip redundant async delays.
 
 ---
 
