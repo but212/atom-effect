@@ -34,7 +34,7 @@ interface FieldEntry {
 const SELECTOR = 'input, select, textarea';
 
 /**
- * Orchestrator class for managing two-way synchronization between a single object-based Atom 
+ * Orchestrator class for managing two-way synchronization between a single object-based Atom
  * and HTML form elements.
  *
  * This class uses a "Root -> Leaf" dispatcher model to maintain performance in large forms:
@@ -158,7 +158,7 @@ class FormBinder<T extends object> {
     isCheck: boolean
   ): void {
     const el = ctx.el as HTMLInputElement;
-    
+
     // Handler to reflect UI changes back to the Atom
     const handler = () => {
       const curr = atom.peek();
@@ -209,7 +209,7 @@ class FormBinder<T extends object> {
       .replace(/\[(\w+)\]/g, '.$1')
       .split('.')
       .filter(Boolean);
-    
+
     // Create an independent field Atom for Leaf -> Root synchronization
     const fieldAtom = createAtom(getPathValue(this.atom.peek(), parts));
     entry = { atom: fieldAtom, parts, name, refCount: 1, effect: null };
@@ -289,7 +289,7 @@ class FormBinder<T extends object> {
 
 /**
  * Binds an entire HTML form to a single object-based Atom.
- * 
+ *
  * Key Features:
  * - O(1) level update performance for large forms (only changed fields react)
  * - Circular loop protection via internal flags for two-way updates
@@ -307,4 +307,3 @@ export function bindForm<T extends object>(
 ): void {
   new FormBinder(form, atom, options);
 }
-
