@@ -359,12 +359,12 @@ By using `Uint8Array` and `Int32Array` for diffing state tracking, `atomList` el
 
 To achieve zero-overhead reactive updates, the library implements several techniques to maximize **Pipeline Efficiency** by reducing branch mispredictions in the hot-path.
 
-### 11.1 No-op Proxy Debugging
+### 12.1 No-op Proxy Debugging
 
 Instead of checking `if (debug.enabled)` in every updater and loop, the `DebugController` uses a **Method Pointer Swapping** pattern.
 
 - In production (or when disabled), debug methods point to empty No-op functions (`() => {}`).
-- When enabled, they refer to the actual logging implementation.
+- When enabled, they refer to the actual logging implementation (see [Section 14](#14-debugging--visual-highlighting)).
 
 This eliminates thousands of conditional branches from the execution pipeline, keeping the CPU's Branch Target Buffer (BTB) clear for business logic.
 
@@ -412,3 +412,24 @@ Live DOM collections (e.g. `HTMLCollection`) change their length as elements are
    - **Renaming**: When an element's `name` changes, the binder automatically releases the old field and acquires the new one.
 5. Recursive Path Support: Supports nested property access and array indexing (e.g., `user.profile.name`, `items[0].text`) by normalizing name attributes into standard dot-notation paths.
 6. Toggle Groups: Radio and Checkbox groups are handled via a specialized `bindToggle` strategy that manages array-based values for multi-check boxes and string/boolean states for radio and single checks.
+
+## 14. Debugging & Visual Highlighting
+
+The `DebugController` (`utils/debug.ts`) provides visual feedback for DOM updates when enabled.
+
+### 14.1 Visual Highlighting
+
+To provide immediate visual feedback during reactive updates, the controller applies a temporary outline highlight to the target element.
+
+- **Non-blocking Rendering**: Highlights are applied using `requestAnimationFrame` to ensure they don't block the reactive update cycle.
+- **Robustness**: Uses a `WeakMap` for `rafs` and `timers` to track active animations per element. This prevents overlapping highlights from leaking and ensures that existing timers are cancelled if a new change occurs.
+- **Highlight Persistence**: The cleanup logic explicitly removes the highlight class even if an element is disconnected from the DOM before the timeout, preventing accidental persistence.
+- **Smooth Fade-out**: To fix abrupt transitions when the highlight class is removed, the CSS `transition` is attached to a persistent attribute selector (`[data-atom-debug]`). The highlight class itself is purely additive, enabling a graceful exit transition handled by the browser's CSS engine.
+- **Dynamic Style Injection**: Injects necessary CSS exactly once into the document head, with checks for existing style markers to avoid duplication.
+
+### 14.2 Selector Logic (`getSelector`)
+
+The `getSelector` utility in `utils/index.ts` generates human-readable identifier strings for elements in logs:
+
+- **Format**: Returns `tag#id.class1.class2.type` for maximum context during debugging.
+- **SVG Support**: Explicitly uses `getAttribute('class')` to handle SVG elements, where `.className` returns an `SVGAnimatedString` object instead of a string.

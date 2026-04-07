@@ -2,74 +2,139 @@ import { DEBUG_DEFAULTS } from '@/constants';
 import { getSelector } from '@/utils';
 
 // ============================================================================
-// Environment utilities
+// Constants & Configuration
 // ============================================================================
 
+const HIGHLIGHT_CLASS = 'atom-debug-highlight';
+const ATTR_MARKER = 'data-atom-debug';
 const IS_BROWSER = typeof window !== 'undefined';
-const HIGHLIGHT_TRANSITION = `${DEBUG_DEFAULTS.HIGHLIGHT_DURATION_MS / 1000}s`;
 
-function getInitialState(): boolean {
-  // biome-ignore lint/suspicious/noExplicitAny: globalThis is not typed
+/** Shared timer maps to track active animations and timeouts on elements. */
+const timers = new WeakMap<Element, ReturnType<typeof setTimeout>>();
+const rafs = new WeakMap<Element, number>();
+
+let styleInjected = false;
+
+// ============================================================================
+// Utilities
+// ============================================================================
+
+/** Calculates the CSS transition duration based on configuration. */
+const getTransitionDuration = () => `${DEBUG_DEFAULTS.HIGHLIGHT_DURATION_MS / 1000}s`;
+
+/** Returns the necessary CSS for visual debugging. */
+const getHighlightStyles = () =>
+  `
+  [${ATTR_MARKER}] {
+    transition: outline ${getTransitionDuration()} ease-out;
+  }
+  .${HIGHLIGHT_CLASS} {
+    outline: 2px solid rgba(255, 68, 68, 0.8);
+    outline-offset: 1px;
+  }
+`.replace(/\s+/g, ' ');
+
+/** Injects necessary CSS for highlighting to the document head. */
+function injectStyle(): void {
+  if (styleInjected || !IS_BROWSER) return;
+
+  // Double check existence in case of multiple debug modules or manual removal
+  if (document.querySelector(`style[${ATTR_MARKER}]`)) {
+    styleInjected = true;
+    return;
+  }
+
+  const style = document.createElement('style');
+  style.setAttribute(ATTR_MARKER, '');
+  style.textContent = getHighlightStyles();
+  document.head.appendChild(style);
+  styleInjected = true;
+}
+
+/** Determines the initial debug state of the application. */
+function resolveInitialState(): boolean {
+  // biome-ignore lint/suspicious/noExplicitAny: globalThis/process may be untyped
   const g = globalThis as any;
+
+  // 1. Browser global override
   if (IS_BROWSER && g.window?.__ATOM_DEBUG__ === true) return true;
+
+  // 2. Vite/Meta environment
   try {
     if (import.meta.env?.VITE_ATOM_DEBUG === 'true') return true;
   } catch {}
+
+  // 3. Node.js environment
   try {
     if (g.process?.env?.VITE_ATOM_DEBUG === 'true') return true;
   } catch {}
+
   return false;
 }
 
 // ============================================================================
-// DebugController — Class-based singleton for JIT optimization
+// DebugController
 // ============================================================================
 
+/**
+ * Controller responsible for managing debug logs and UI feedback.
+ * Swaps methods at runtime to minimize branch prediction misses in hot paths.
+ */
 class DebugController {
   private _enabled = false;
-  private _lastState = false;
 
   constructor() {
-    this._enabled = getInitialState();
-    this._lastState = this._enabled;
-    this._applyMethods(this._enabled);
+    this._enabled = resolveInitialState();
+    this._applyLoggingSubsystem(this._enabled);
   }
 
-  get enabled(): boolean {
+  /** Gets whether debug mode is currently active. */
+  public get enabled(): boolean {
     return this._enabled;
   }
 
-  set enabled(v: boolean) {
+  /** Sets the debug mode state and updates active logging methods. */
+  public set enabled(v: boolean) {
     if (this._enabled !== v) {
       this._enabled = v;
-      this._applyMethods(v);
+      this._applyLoggingSubsystem(v);
     }
   }
 
-  /** Normal logs (No-op in production) */
-  public log: (p: string, ...a: unknown[]) => void = () => {};
+  /** Normal logs (No-op when disabled) */
+  public log: (prefix: string, ...args: unknown[]) => void = () => {};
 
-  /** Atom state change logs (No-op in production) */
-  public atomChanged: (p: string, n: string | undefined, o: unknown, v: unknown) => void = () => {};
+  /** Atom state change logs (No-op when disabled) */
+  public atomChanged: (
+    prefix: string,
+    name: string | undefined,
+    prev: unknown,
+    next: unknown
+  ) => void = () => {};
 
-  /** DOM update logs with highlighting (No-op in production) */
-  public domUpdated: (p: string, t: Element | JQuery<Element>, type: string, v: unknown) => void =
-    () => {};
+  /** DOM update logs with visual highlighting (No-op when disabled) */
+  public domUpdated: (
+    prefix: string,
+    target: Element | JQuery<Element>,
+    type: string,
+    value: unknown
+  ) => void = () => {};
 
-  /** Resource cleanup logs (No-op in production) */
-  public cleanup: (p: string, s: string) => void = () => {};
+  /** Resource cleanup logs (No-op when disabled) */
+  public cleanup: (prefix: string, subject: string) => void = () => {};
 
-  /** Warnings (Always logged) */
-  warn(p: string, m: string, ...r: unknown[]): void {
-    console.warn(`${p} ${m}`, ...r);
+  /** Warnings (Always logged irrespective of enabled state) */
+  public warn(prefix: string, message: string, ...rest: unknown[]): void {
+    console.warn(`${prefix} ${message}`, ...rest);
   }
 
-  /** Errors (Always logged) */
-  error(p: string, m: string, c: unknown): void {
-    console.error(`${p} ${m}`, c);
+  /** Errors (Always logged irrespective of enabled state) */
+  public error(prefix: string, message: string, cause: unknown): void {
+    console.error(`${prefix} ${message}`, cause);
   }
 
-  private _applyMethods(isEnabled: boolean) {
+  /** Swaps the internal implementation of logging methods based on the state. */
+  private _applyLoggingSubsystem(isEnabled: boolean) {
     if (isEnabled) {
       this.log = (p, ...a) => console.log(p, ...a);
       this.atomChanged = (p, n, o, v) =>
@@ -78,40 +143,53 @@ class DebugController {
         const el = t instanceof Element ? t : (t[0] as Element | undefined);
         if (el?.isConnected) {
           console.log(`${p} DOM updated: ${getSelector(el)}.${type} =`, v);
-          this._highlightElement(el);
+          this._triggerVisualHighlight(el);
         }
       };
       this.cleanup = (p, s) => console.log(`${p} Cleanup: ${s}`);
     } else {
-      this.log = () => {};
-      this.atomChanged = () => {};
-      this.domUpdated = () => {};
-      this.cleanup = () => {};
+      const noop = () => {};
+      this.log = noop;
+      this.atomChanged = noop;
+      this.domUpdated = noop;
+      this.cleanup = noop;
     }
   }
 
-  private _highlightElement(el: Element): void {
-    if (!el.isConnected) return;
+  /** Applies a visual outline highlight to an element with a fade-out transition. */
+  private _triggerVisualHighlight(el: Element): void {
     injectStyle();
 
-    const exR = rafs.get(el);
-    const exT = timers.get(el);
-    if (exR !== undefined) cancelAnimationFrame(exR);
-    if (exT !== undefined) {
-      clearTimeout(exT);
+    // Cancel existing scheduled highlights on this element
+    const existingRaf = rafs.get(el);
+    const existingTimer = timers.get(el);
+    if (existingRaf !== undefined) cancelAnimationFrame(existingRaf);
+    if (existingTimer !== undefined) {
+      clearTimeout(existingTimer);
       timers.delete(el);
     }
 
+    // Apply the marker attribute if not present to enable the CSS transition
+    if (!el.hasAttribute(ATTR_MARKER)) {
+      el.setAttribute(ATTR_MARKER, '');
+    }
+
+    // Use requestAnimationFrame to ensure the class change happens in the next paint cycle
     rafs.set(
       el,
       requestAnimationFrame(() => {
         rafs.delete(el);
         if (!el.isConnected) return;
+
         el.classList.add(HIGHLIGHT_CLASS);
+
+        // Schedule removal
         timers.set(
           el,
           setTimeout(() => {
-            if (el.isConnected) el.classList.remove(HIGHLIGHT_CLASS);
+            // Remove the highlight class. The outline will fade out smoothly
+            // because the [data-atom-debug] transition remains active.
+            el.classList.remove(HIGHLIGHT_CLASS);
             timers.delete(el);
           }, DEBUG_DEFAULTS.HIGHLIGHT_DURATION_MS)
         );
@@ -120,29 +198,5 @@ class DebugController {
   }
 }
 
+/** Singleton instance of the DebugController. */
 export const debug = new DebugController();
-
-// ============================================================================
-// Highlighting logic
-// ============================================================================
-
-const HIGHLIGHT_CLASS = 'atom-debug-highlight',
-  H_ATTR = 'data-atom-debug';
-let styleInjected = false;
-
-function injectStyle(): void {
-  if (styleInjected || !IS_BROWSER) return;
-  if (document.querySelector(`style[${H_ATTR}]`)) {
-    styleInjected = true;
-    return;
-  }
-  const s = Object.assign(document.createElement('style'), {
-    textContent: `.${HIGHLIGHT_CLASS}{outline:2px solid rgba(255,68,68,0.8);outline-offset:1px;transition:outline ${HIGHLIGHT_TRANSITION} ease-out}`,
-  });
-  s.setAttribute(H_ATTR, '');
-  document.head.appendChild(s);
-  styleInjected = true;
-}
-
-const timers = new WeakMap<Element, ReturnType<typeof setTimeout>>(),
-  rafs = new WeakMap<Element, number>();

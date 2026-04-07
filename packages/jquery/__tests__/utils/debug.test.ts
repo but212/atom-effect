@@ -2,6 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LOG_PREFIXES } from '@/constants';
 import { debug } from '@/utils/debug';
 
+/**
+ * @file debug.test.ts
+ * @description
+ * Refactored test suite for the Debug Module.
+ * Consolidates redundant logic-path tests into behavioral specifications.
+ */
+
 describe('Debug Module', () => {
   const logSpy = vi.fn();
   const warnSpy = vi.fn();
@@ -11,9 +18,7 @@ describe('Debug Module', () => {
     vi.spyOn(console, 'log').mockImplementation(logSpy);
     vi.spyOn(console, 'warn').mockImplementation(warnSpy);
     vi.spyOn(console, 'error').mockImplementation(errorSpy);
-    logSpy.mockClear();
-    warnSpy.mockClear();
-    errorSpy.mockClear();
+    [logSpy, warnSpy, errorSpy].forEach((s) => s.mockClear());
     debug.enabled = false;
   });
 
@@ -23,151 +28,124 @@ describe('Debug Module', () => {
   });
 
   // --------------------------------------------------------------------------
-  // debug.log — gated by enabled
+  // Control Flow & Gating
   // --------------------------------------------------------------------------
 
-  it('log: silent when disabled, emits formatted message when enabled', () => {
-    debug.log(LOG_PREFIXES.LIST, 'payload');
-    expect(logSpy).not.toHaveBeenCalled();
+  describe('Flow Control', () => {
+    it('should gate all standard logging methods by enabled state', () => {
+      // 1. Silent when disabled
+      debug.log(LOG_PREFIXES.BINDING, 'msg');
+      debug.atomChanged(LOG_PREFIXES.MOUNT, 'atom', 0, 1);
+      debug.cleanup(LOG_PREFIXES.LIST, 'subject');
+      expect(logSpy).not.toHaveBeenCalled();
 
-    debug.enabled = true;
-    debug.log(LOG_PREFIXES.LIST, 'payload');
-    expect(logSpy).toHaveBeenCalledWith(LOG_PREFIXES.LIST, 'payload');
+      // 2. Active when enabled
+      debug.enabled = true;
+      debug.log(LOG_PREFIXES.BINDING, 'msg');
+      debug.atomChanged(LOG_PREFIXES.MOUNT, 'atom', 0, 1);
+      debug.atomChanged(LOG_PREFIXES.MOUNT, undefined, 'old', 'new'); // Anonymous check
+      debug.cleanup(LOG_PREFIXES.LIST, 'subject');
+
+      expect(logSpy).toHaveBeenCalledWith(LOG_PREFIXES.BINDING, 'msg');
+      expect(logSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.MOUNT} Atom "atom" changed:`, 0, '→', 1);
+      expect(logSpy).toHaveBeenCalledWith(
+        `${LOG_PREFIXES.MOUNT} Atom "anonymous" changed:`,
+        'old',
+        '→',
+        'new'
+      );
+      expect(logSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.LIST} Cleanup: subject`);
+    });
+
+    it('should always emit critical messages (warn, error) irrespective of state', () => {
+      const cause = new Error('boom');
+      debug.warn(LOG_PREFIXES.MOUNT, 'low battery');
+      debug.error(LOG_PREFIXES.BINDING, 'short circuit', cause);
+
+      expect(warnSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.MOUNT} low battery`);
+      expect(errorSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.BINDING} short circuit`, cause);
+
+      warnSpy.mockClear();
+      debug.enabled = true;
+      debug.warn(LOG_PREFIXES.MOUNT, 'low battery');
+      expect(warnSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.MOUNT} low battery`);
+    });
   });
 
   // --------------------------------------------------------------------------
-  // debug.warn — always-on
+  // DOM Feedback (domUpdated)
   // --------------------------------------------------------------------------
 
-  it('warn: emits regardless of enabled state', () => {
-    debug.warn(LOG_PREFIXES.MOUNT, 'warning message');
-    expect(warnSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.MOUNT} warning message`);
+  describe('DOM Visual Feedback', () => {
+    it('should resolve various target types and apply highlighting', async () => {
+      debug.enabled = true;
 
-    warnSpy.mockClear();
-    debug.enabled = true;
-    debug.warn(LOG_PREFIXES.MOUNT, 'warning message');
-    expect(warnSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.MOUNT} warning message`);
-  });
+      // Prepare different targets
+      const htmlEl = Object.assign(document.createElement('div'), { id: 'app', className: 'main' });
+      const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svgEl.setAttribute('class', 'icon small');
+      const jqEl = Object.assign([htmlEl], { jquery: 'fixture' }) as unknown as JQuery<HTMLElement>;
 
-  // --------------------------------------------------------------------------
-  // debug.error — always-on
-  // --------------------------------------------------------------------------
+      document.body.append(htmlEl, svgEl);
 
-  it('error: emits with prefix and cause regardless of enabled state', () => {
-    const cause = new Error('boom');
-    debug.error(LOG_PREFIXES.BINDING, 'Effect dispose error', cause);
-    expect(errorSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.BINDING} Effect dispose error`, cause);
-  });
+      // Trigger updates
+      debug.domUpdated(LOG_PREFIXES.BINDING, htmlEl, 'text', 'v1');
+      debug.domUpdated(LOG_PREFIXES.BINDING, svgEl, 'attr', 'v2');
+      debug.domUpdated(LOG_PREFIXES.BINDING, jqEl, 'prop', 'v3');
 
-  // --------------------------------------------------------------------------
-  // debug.atomChanged — gated, anonymous fallback
-  // --------------------------------------------------------------------------
+      // Verify selectors in logs
+      expect(logSpy).toHaveBeenCalledWith(
+        `${LOG_PREFIXES.BINDING} DOM updated: div#app.main.text =`,
+        'v1'
+      );
+      expect(logSpy).toHaveBeenCalledWith(
+        `${LOG_PREFIXES.BINDING} DOM updated: svg.icon.small.attr =`,
+        'v2'
+      );
+      expect(logSpy).toHaveBeenCalledWith(
+        `${LOG_PREFIXES.BINDING} DOM updated: div#app.main.prop =`,
+        'v3'
+      );
 
-  it('atomChanged: silent when disabled, emits formatted change when enabled', () => {
-    debug.atomChanged(LOG_PREFIXES.MOUNT, 'counter', 0, 1);
-    expect(logSpy).not.toHaveBeenCalled();
+      // Wait for RAF
+      await new Promise((r) => requestAnimationFrame(r));
+      expect(htmlEl.classList.contains('atom-debug-highlight')).toBe(true);
+      expect(svgEl.classList.contains('atom-debug-highlight')).toBe(true);
 
-    debug.enabled = true;
-    debug.atomChanged(LOG_PREFIXES.MOUNT, 'counter', 0, 1);
-    expect(logSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.MOUNT} Atom "counter" changed:`, 0, '→', 1);
-  });
+      [htmlEl, svgEl].forEach((el) => el.remove());
+    });
 
-  it('atomChanged: falls back to "anonymous" when name is undefined', () => {
-    debug.enabled = true;
-    debug.atomChanged(LOG_PREFIXES.MOUNT, undefined, 'a', 'b');
-    expect(logSpy).toHaveBeenCalledWith(
-      `${LOG_PREFIXES.MOUNT} Atom "anonymous" changed:`,
-      'a',
-      '→',
-      'b'
-    );
-  });
+    it('should manage highlight lifecycle and ensure cleanup even on disconnected elements', async () => {
+      debug.enabled = true;
+      const el = document.createElement('div');
+      document.body.appendChild(el);
 
-  // --------------------------------------------------------------------------
-  // debug.cleanup — gated
-  // --------------------------------------------------------------------------
+      // Start highlight
+      debug.domUpdated(LOG_PREFIXES.BINDING, el, 'op', 'val');
+      await new Promise((r) => requestAnimationFrame(r));
+      expect(el.classList.contains('atom-debug-highlight')).toBe(true);
 
-  it('cleanup: logs selector when enabled', () => {
-    debug.enabled = true;
-    debug.cleanup(LOG_PREFIXES.BINDING, '#test');
-    expect(logSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.BINDING} Cleanup: #test`);
-  });
+      // Regression check: element removed before timeout
+      el.remove();
 
-  // --------------------------------------------------------------------------
-  // debug.domUpdated
-  // --------------------------------------------------------------------------
+      // Wait for timeout (duration is 500ms)
+      await new Promise((r) => setTimeout(r, 650));
+      expect(el.classList.contains('atom-debug-highlight')).toBe(false);
+    });
 
-  it('domUpdated: logs and highlights HTMLElement when enabled', async () => {
-    debug.enabled = true;
-    const el = document.createElement('div');
-    document.body.appendChild(el);
+    it('should inject persistent transition styles exactly once', () => {
+      debug.enabled = true;
+      const el = document.createElement('div');
+      document.body.appendChild(el);
 
-    debug.domUpdated(LOG_PREFIXES.BINDING, el, 'text', 'new text');
+      // Multiple calls
+      debug.domUpdated(LOG_PREFIXES.BINDING, el, 'a', '1');
+      debug.domUpdated(LOG_PREFIXES.BINDING, el, 'b', '2');
 
-    expect(logSpy).toHaveBeenCalledWith(
-      `${LOG_PREFIXES.BINDING} DOM updated: div.text =`,
-      'new text'
-    );
-
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-    expect(el.classList.contains('atom-debug-highlight')).toBe(true);
-    el.remove();
-  });
-
-  it('domUpdated: accepts jQuery wrapper and highlights underlying element', async () => {
-    debug.enabled = true;
-    const el = document.createElement('div');
-    document.body.appendChild(el);
-    const jqEl = Object.assign([el], { jquery: 'mock' }) as unknown as JQuery;
-
-    debug.domUpdated(LOG_PREFIXES.BINDING, jqEl, 'text', 'val');
-
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-    expect(el.classList.contains('atom-debug-highlight')).toBe(true);
-    el.remove();
-  });
-
-  it('domUpdated: supports SVGElement targets', async () => {
-    debug.enabled = true;
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    document.body.appendChild(svg);
-
-    debug.domUpdated(LOG_PREFIXES.BINDING, svg, 'attr', 'val');
-
-    expect(logSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.BINDING} DOM updated: svg.attr =`, 'val');
-
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-    expect(svg.classList.contains('atom-debug-highlight')).toBe(true);
-
-    svg.remove();
-  });
-
-  it('domUpdated: removes highlight class after duration', async () => {
-    debug.enabled = true;
-    const el = document.createElement('div');
-    document.body.appendChild(el);
-
-    debug.domUpdated(LOG_PREFIXES.BINDING, el, 'text', 'val');
-
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-    expect(el.classList.contains('atom-debug-highlight')).toBe(true);
-
-    await new Promise<void>((r) => setTimeout(r, 650));
-    expect(el.classList.contains('atom-debug-highlight')).toBe(false);
-
-    el.remove();
-  }, 2000);
-
-  it('domUpdated: injects highlight style tag only once per document', async () => {
-    debug.enabled = true;
-    const el = document.createElement('div');
-    document.body.appendChild(el);
-
-    debug.domUpdated(LOG_PREFIXES.BINDING, el, 'text', 'a');
-    debug.domUpdated(LOG_PREFIXES.BINDING, el, 'text', 'b');
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-
-    expect(document.querySelectorAll('style[data-atom-debug]').length).toBe(1);
-    el.remove();
+      const styles = document.querySelectorAll('style[data-atom-debug]');
+      expect(styles.length).toBe(1);
+      expect(styles[0]?.textContent).toMatch(/\[data-atom-debug\]\s*\{.*transition/);
+      el.remove();
+    });
   });
 });
