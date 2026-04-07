@@ -30,7 +30,7 @@ export function buildIndices<T>(
   while (startIndex <= oldEndIndex && startIndex <= newEndIndex) {
     const item = items[startIndex]!;
     const k = getKey(item, startIndex);
-    if (oldKeys[startIndex] !== k || !eq(oldItems[startIndex]!, item)) {
+    if (oldKeys[startIndex] !== k || !eq(oldItems[startIndex]!, item) || !oldNodes[startIndex]) {
       break;
     }
     keyToIndex.set(k, startIndex++);
@@ -39,7 +39,7 @@ export function buildIndices<T>(
   while (oldEndIndex >= startIndex && newEndIndex >= startIndex) {
     const item = items[newEndIndex]!;
     const k = getKey(item, newEndIndex);
-    if (oldKeys[oldEndIndex] !== k || !eq(oldItems[oldEndIndex]!, item)) {
+    if (oldKeys[oldEndIndex] !== k || !eq(oldItems[oldEndIndex]!, item) || !oldNodes[oldEndIndex]) {
       break;
     }
     keyToIndex.set(k, newEndIndex--);

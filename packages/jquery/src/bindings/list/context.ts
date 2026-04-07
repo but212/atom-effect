@@ -1,6 +1,7 @@
 import { LOG_PREFIXES } from '@/constants';
 import type { EffectObject, ListKey } from '@/types';
 import { debug } from '@/utils/debug';
+import { setAtomKey } from './utils';
 
 export class ListContext<T> {
   oldKeys: ListKey[] = [];
@@ -25,6 +26,9 @@ export class ListContext<T> {
   scheduleRemoval(k: ListKey, $el: JQuery): void {
     const commit = () => {
       if (this.fx?.isDisposed) return;
+      // If the element has a key attribute, it means it was re-added to the list
+      // and we should abort the removal.
+      if ($el[0] instanceof Element && $el[0].hasAttribute('data-atom-key')) return;
       if ($el[0]?.isConnected) $el.remove();
       this.removingKeys.delete(k);
       debug.log(LOG_PREFIXES.LIST, `${this.containerSelector} removed item:`, k);
@@ -36,9 +40,7 @@ export class ListContext<T> {
   }
 
   removeItem(k: ListKey, $el: JQuery): void {
-    for (let j = 0; j < $el.length; j++) {
-      if ($el[j] instanceof Element) ($el[j] as Element).removeAttribute('data-atom-key');
-    }
+    setAtomKey($el, null);
     this.removingKeys.add(k);
     this.scheduleRemoval(k, $el);
   }

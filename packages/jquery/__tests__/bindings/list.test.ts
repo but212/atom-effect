@@ -296,6 +296,98 @@ describe('$.atomList (Integration)', () => {
     $container.remove();
   });
 
+  it('should not remove item if it was re-added before async removal finishes (race condition)', async () => {
+    let resolveRemove!: () => void;
+    const items = $.atom([{ id: 1 }]);
+    const $container = $('<div>').appendTo(document.body);
+
+    $container.atomList(items, {
+      key: 'id',
+      render: (i: { id: number }) => `<span class="item-${i.id}"></span>`,
+      onRemove: () =>
+        new Promise<void>((r) => {
+          resolveRemove = r;
+        }),
+    });
+
+    await $.nextTick();
+
+    // Remove item
+    items.value = [];
+    await $.nextTick();
+    expect($container.find('.item-1').length).toBe(1); // Still there (async)
+
+    // Re-add item (same key)
+    items.value = [{ id: 1 }];
+    await $.nextTick();
+
+    // Complete the old removal
+    resolveRemove();
+    await new Promise((r) => setTimeout(r, 0));
+
+    // The item should STILL be there because it was re-added
+    expect($container.find('.item-1').length).toBe(1);
+    $container.remove();
+  });
+
+  it('should not use innerHTML optimization if item contains text nodes', async () => {
+    const list = $.atom(['A']);
+    const $container = $('<div>').appendTo(document.body);
+
+    $container.atomList(list, {
+      key: (i: string) => i,
+      render: (i: string) => ` ${i} <span>X</span>`, // Leading space and span
+    });
+
+    await $.nextTick();
+    list.value = ['B'];
+    await $.nextTick();
+
+    expect($container.text().includes('B')).toBe(true);
+    expect($container.find('span').length).toBe(1);
+    $container.remove();
+  });
+
+  it('should not duplicate elements when replacing multi-root items', async () => {
+    const list = $.atom([{ id: 1, text: 'A' }]);
+    const $container = $('<div>').appendTo(document.body);
+
+    $container.atomList(list, {
+      key: 'id',
+      render: (item) => `<b class="root1">${item.id}</b><i class="root2">${item.text}</i>`,
+    });
+
+    await $.nextTick();
+    expect($container.children().length).toBe(2);
+
+    // Update item (force replacement by changing content without update fn)
+    list.value = [{ id: 1, text: 'B' }];
+    await $.nextTick();
+
+    expect($container.children().length).toBe(2);
+    expect($container.find('.root2').text()).toBe('B');
+    $container.remove();
+  });
+
+  it('should correctly handle trimming logic when old item was ignored due to duplicate keys', async () => {
+    const list = $.atom([{ id: 1 }, { id: 2 }, { id: 2 }]); // Initial with duplicate
+    const $container = $('<div>').appendTo(document.body);
+
+    $container.atomList(list, {
+      key: 'id',
+      render: (i: { id: number }) => `<span>${i.id}</span>`,
+    });
+
+    await $.nextTick();
+
+    // Shift items so the duplicate-hole is now matched during suffix trimming
+    list.value = [{ id: 1 }, { id: 3 }, { id: 2 }];
+    await $.nextTick();
+
+    expect($container.find('span').length).toBe(3);
+    $container.remove();
+  });
+
   it('should dispose effect on re-render without relying on internal classes', async () => {
     let runCount = 0;
     const items = $.atom([{ id: 1, val: 'a' }]);
@@ -386,4 +478,6 @@ describe('$.atomList (Integration)', () => {
     expect($ul.find('li').text()).toBe('2');
     $ul.remove();
   });
+
+
 });

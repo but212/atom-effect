@@ -1,17 +1,13 @@
 import $ from 'jquery';
 import { LOG_PREFIXES } from '@/constants';
-import { registry } from '@/core/registry';
 import type { ListOptions } from '@/types';
 import { debug } from '@/utils/debug';
 import { sanitizeHtml } from '@/utils/sanitize';
 import type { ListContext } from './context';
 import type { PlaceCallbacks, PreparedDiff } from './types';
+import { cleanupNodes, setAtomKey, wrap } from './utils';
 
 let listBatchIdCounter = 0;
-
-export function wrap($el: Element | JQuery<Element>): JQuery {
-  return ($el instanceof Element ? $($el) : $el) as unknown as JQuery;
-}
 
 export function insertOrAppend(
   elOrJq: Element | JQuery | undefined,
@@ -109,9 +105,8 @@ export function renderItems<T>(
     !options.onRemove &&
     !options.events
   ) {
-    // Safety check: ensure each rendered string results in a single root element
-    // to keep the mapping correct during innerHTML bulk insertion.
-    if ($(sanitized.join('')).length === renderCount) {
+    // ensure each rendered string results in a single node
+    if ($.parseHTML(sanitized.join('')).length === renderCount) {
       return sanitized;
     }
   }
@@ -120,29 +115,19 @@ export function renderItems<T>(
   for (let t = 0; t < renderCount; t++) {
     const raw = renderResults[t]!;
     const $el = (typeof raw === 'string'
-      ? $(sanitized![fragIdx++]!)
+      ? $($.parseHTML(sanitized![fragIdx++]!))
       : $(raw as Element | DocumentFragment | JQuery)) as unknown as JQuery;
     const targetIdx = trIdxs[t]!,
       keyStr = String(trKeys[t]!);
 
-    for (let j = 0, elLen = $el.length; j < elLen; j++) {
-      const node = $el[j];
-      if (node instanceof Element) {
-        node.setAttribute('data-atom-key', keyStr);
-      }
-    }
+    setAtomKey($el, keyStr);
 
     if (newStates[targetIdx] === 2 && newNodes[targetIdx]) {
       const node = newNodes[targetIdx]!;
-      if (node instanceof Element) {
-        registry.cleanupTree(node);
-      } else {
-        for (let j = 0, nLen = (node as JQuery).length; j < nLen; j++) {
-          const el = (node as JQuery)[j];
-          if (el instanceof Element) registry.cleanupTree(el);
-        }
-      }
-      wrap(node as Element | JQuery<Element>).replaceWith($el);
+      cleanupNodes(node as Element | JQuery);
+      const $old = wrap(node as Element | JQuery<Element>);
+      $old.first().before($el);
+      $old.remove();
     }
     newNodes[targetIdx] = $el.length === 1 ? ($el[0] as Element) : $el;
   }
