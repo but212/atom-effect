@@ -105,9 +105,11 @@ class RouterImpl implements Router {
       if (base && (path === base || path.startsWith(`${base}/`))) {
         path = path.substring(base.length);
       }
-      return path.replace(/^\//, '') || defaultRoute!;
+      return path.replace(/^\/+/, '') || defaultRoute!;
     }
-    return location.hash.split('?')[0]!.substring(1) || defaultRoute!;
+    const hash = location.hash;
+    const { route } = this.splitPath(hash.startsWith('#') ? hash.substring(1) : hash);
+    return route || defaultRoute!;
   }
 
   private getQueryParams(): Record<string, string> {
@@ -143,9 +145,20 @@ class RouterImpl implements Router {
     return true;
   }
 
+  private splitPath(path: string): { route: string; query: string | undefined } {
+    const queryIndex = path.indexOf('?');
+    const route = queryIndex !== -1 ? path.slice(0, queryIndex) : path;
+    const query = queryIndex !== -1 ? path.slice(queryIndex + 1) : undefined;
+    return {
+      route: route.replace(/^\/+/, ''),
+      query,
+    };
+  }
+
   private setUrl(name: string): void {
-    const cleanName = name.replace(/^\//, '');
-    const url = this.isHistoryMode ? `${this.basePath}/${cleanName}` : `#${cleanName}`;
+    const { route, query } = this.splitPath(name);
+    const fullPath = query ? `${route}?${query}` : route;
+    const url = this.isHistoryMode ? `${this.basePath}/${fullPath}` : `#${fullPath}`;
     if (this.isHistoryMode) {
       safePushState(null, url);
     } else {
@@ -272,13 +285,18 @@ class RouterImpl implements Router {
     const old = this.currentRouteAtom.peek();
     if (this.config.routes[old]?.onLeave?.(this) === false) return;
 
-    const [route, query] = name.split('?');
-    const resolved = route || this.config.default;
-    if (!resolved) return;
+    const { route, query } = this.splitPath(name);
+    const resolvedRoute = route || this.config.default || '';
+    if (!resolvedRoute) return;
 
-    this.setUrl(name);
-    this.queryParamsAtom.value = query ? this.parseQueryParams(query) : {};
-    this.currentRouteAtom.value = resolved;
+    $.batch(() => {
+      this.setUrl(name);
+      const nextParams = query ? this.parseQueryParams(query) : {};
+      if (!this.areParamsEqual(nextParams, this.queryParamsAtom.peek())) {
+        this.queryParamsAtom.value = nextParams;
+      }
+      this.currentRouteAtom.value = resolvedRoute;
+    });
   }
 
   public destroy(): void {
