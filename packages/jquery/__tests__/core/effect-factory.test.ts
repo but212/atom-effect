@@ -23,7 +23,12 @@ describe('Effect Factory', () => {
 
     // Map source
     updater.mockClear();
-    registerMapEffect<string | number>(el, { count: atomMap, static: 'val' }, updater, 'map-reactive');
+    registerMapEffect<string | number>(
+      el,
+      { count: atomMap, static: 'val' },
+      updater,
+      'map-reactive'
+    );
     expect(updater).toHaveBeenCalledWith({ count: 10, static: 'val' });
     atomMap.value = 20;
     await $.nextTick();
@@ -53,7 +58,7 @@ describe('Effect Factory', () => {
       // 2. New Promise instance (same key) should trigger fresh resolution (Stale Cache Prevention)
       const p2 = Promise.resolve('new');
       atom.value = p2;
-      await $.nextTick(); 
+      await $.nextTick();
       expect(updater).not.toHaveBeenCalledWith({ p: 'old' }); // Should not hit old cache immediately
 
       await $.nextTick();
@@ -64,7 +69,7 @@ describe('Effect Factory', () => {
       // 3. Same Promise instance again should hit cache (Optimization)
       updater.mockClear();
       atom.value = 'dummy-trigger'; // Trigger re-evaluation of the map
-      atom.value = p2; 
+      atom.value = p2;
       await $.nextTick();
       // Hits cache synchronously within the runUpdater pass if resolvedMap has no other promises
       // Or in the microtask if other promises exist.
@@ -87,14 +92,14 @@ describe('Effect Factory', () => {
 
   /**
    * 3. Lifecycle Safety (Zombie Prevention)
-   * Verifies that updates are discarded if the element is disconnected, 
+   * Verifies that updates are discarded if the element is disconnected,
    * covering both reactive sources and static asynchronous promises.
    */
   it('Memory Safety: prevents zombie updates for both reactive and static async sources', async () => {
     const el = document.createElement('div');
     document.body.appendChild(el);
     const updater = vi.fn();
-    
+
     // Case A: Reactive Source
     const atom = $.atom('initial');
     registerReactiveEffect(el, atom, updater, 'reactive-zombie');
@@ -106,15 +111,17 @@ describe('Effect Factory', () => {
     // Case B: Static Promise Source
     const { promise, resolve } = (() => {
       let r: (v: string) => void;
-      const p = new Promise<string>((res) => { r = res; });
+      const p = new Promise<string>((res) => {
+        r = res;
+      });
       return { promise: p, resolve: r! };
     })();
-    
+
     document.body.appendChild(el);
     updater.mockClear();
     registerReactiveEffect(el, promise, updater, 'static-zombie');
     document.body.removeChild(el); // Disconnect before resolution
-    
+
     resolve('resolved');
     await $.nextTick();
     await $.nextTick();

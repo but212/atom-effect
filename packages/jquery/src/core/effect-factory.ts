@@ -81,7 +81,11 @@ export function registerReactiveEffect<T>(
           updater(val);
           debug.domUpdated(LOG_PREFIXES.BINDING, el, debugType, val);
         } catch (e) {
-          debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType, true), e);
+          debug.error(
+            LOG_PREFIXES.BINDING,
+            ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType, true),
+            e
+          );
         }
       });
       return;
@@ -215,7 +219,11 @@ export function registerMapEffect<T>(
                 updater(resolvedMap);
                 debug.domUpdated(LOG_PREFIXES.BINDING, el, `${debugType} (async)`, resolvedMap);
               } catch (e) {
-                debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType), e);
+                debug.error(
+                  LOG_PREFIXES.BINDING,
+                  ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType),
+                  e
+                );
               }
             });
           }
@@ -234,7 +242,11 @@ export function registerMapEffect<T>(
           updater(resolvedMap);
           debug.domUpdated(LOG_PREFIXES.BINDING, el, debugType, resolvedMap);
         } catch (e) {
-          debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType, true), e);
+          debug.error(
+            LOG_PREFIXES.BINDING,
+            ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType, true),
+            e
+          );
         }
       });
     }
