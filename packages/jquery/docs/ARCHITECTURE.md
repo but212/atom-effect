@@ -100,7 +100,7 @@ Bound elements receive a `_aes-bound` CSS class marker. This enables O(M) cleanu
 
 ### 3.3 Auto-Cleanup via MutationObserver
 
-`enableAutoCleanup(root)` installs a `MutationObserver` on the specified `root` element that watches for removed nodes. For the global DOM, this is lazily initialized via `ensureAutoCleanup()` upon registering the very first reactive binding, ensuring protection even if bindings occur prior to `DOMContentLoaded`. Multiple roots can be observed concurrently (e.g., for micro-frontends).
+`enableAutoCleanup(root)` installs a `MutationObserver` on the specified `root` (Element, ShadowRoot, or DocumentFragment) that watches for removed nodes. For the global DOM, this is lazily initialized via `ensureAutoCleanup()` upon registering the very first reactive binding. The logic is robust against early initialization; if called before `document.body` is available, it retries on subsequent binding registrations until the observer is successfully attached. Multiple roots can be observed concurrently (e.g., for micro-frontends).
 
 ```text
 DOM Removal Detected
@@ -115,7 +115,7 @@ DOM Removal Detected
 
 ### 3.4 Shadow DOM
 
-The automatic `MutationObserver` cleanup does not cross Shadow DOM boundaries. If you use Web Components with Shadow Roots, you must manually call `registry.cleanupTree(shadowRoot)` when the component is disconnected to prevent memory leaks in its internal bindings.
+The global `MutationObserver` (on `document.body`) does not cross Shadow DOM boundaries. However, `enableAutoCleanup` now supports `ShadowRoot` as a root element. If you use Web Components, you can call `enableAutoCleanup(this.shadowRoot)` in `connectedCallback` to enable automatic cleanup within that shadow subtree, or manually call `registry.cleanupTree(this.shadowRoot)` in `disconnectedCallback`.
 
 ### 3.5 jQuery Method Patches
 

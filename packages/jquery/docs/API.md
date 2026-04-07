@@ -303,9 +303,11 @@ Disposes all reactive bindings and component cleanups on the selected elements a
 
 ### `.atomUnbind()`
 
-Manually disposes all reactive effects and cleanups registered on the selected elements and their descendants. Does not invoke the component cleanup function — use `.atomUnmount()` for full component teardown.
+Manually disposes all reactive effects and cleanups registered on the selected elements and their descendants. Does not invoke the component cleanup function — use `.atomUnmount()` for full component teardown. Supports recursive traversal across `DocumentFragment` and `ShadowRoot`.
 
 > **💡 Note**: You generally do not need to call `.atomUnbind()` manually. The library heavily leverages `MutationObserver` to automatically perform memory cleanup when elements are removed from the DOM, even if they are forcibly deleted by external, non-jQuery libraries (e.g. React or vanilla JS `replaceChildren()`).
+>
+> For **Shadow DOM** support, while the global observer on `document.body` does not cross shadow boundaries, the library provides `enableAutoCleanup(shadowRoot)` to attach independent observers to specific subtrees, or you can manually call `.atomUnbind()` during the component's `disconnectedCallback`.
 
 ---
 
