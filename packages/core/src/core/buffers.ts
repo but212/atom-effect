@@ -72,6 +72,10 @@ export class SlotBuffer<T> {
     const prev = this.getAt(index);
     if (prev === item) return;
 
+    if (prev !== null) {
+      this._onItemRemoved(prev);
+    }
+
     this._directSetAt(index, item);
 
     if (prev === null && item !== null) {
@@ -126,7 +130,7 @@ export class SlotBuffer<T> {
       const len = ov.length;
       for (let i = startIdx; i < len; i++) {
         const item = ov[i];
-        if (item != null && item !== undefined) {
+        if (item != null) {
           this._onItemRemoved(item);
           ov[i] = null;
           this._count--;
@@ -287,57 +291,14 @@ export class SlotBuffer<T> {
   }
 
   /**
-   * Iterates over all non-null elements.
-   *
-   * Safe to call during notification — newly-added or removed items
-   * during iteration follow the same snapshot semantics as the old
-   * array-based approach (length captured upfront for overflow).
+   * Traverses all active items in the buffer.
    */
   forEach(fn: (item: T) => void): void {
-    const count = this._count;
-    if (count === 0) return;
-
-    let executed = 0;
-    // 1. Inline slots
-    const s0 = this._s0;
-    if (s0 !== null) {
-      fn(s0);
-      if (++executed === count) return;
-    }
-    const s1 = this._s1;
-    if (s1 !== null) {
-      fn(s1);
-      if (++executed === count) return;
-    }
-    const s2 = this._s2;
-    if (s2 !== null) {
-      fn(s2);
-      if (++executed === count) return;
-    }
-    const s3 = this._s3;
-    if (s3 !== null) {
-      fn(s3);
-      if (++executed === count) return;
-    }
-
-    // 2. Overflow
-    const ov = this._overflow;
-    if (ov !== null) {
-      for (let i = 0, len = ov.length; i < len; i++) {
-        const el = ov[i];
-        if (el != null && el !== undefined) {
-          fn(el);
-          if (++executed === count) return;
-        }
-      }
-    }
+    this.forEachIndexed(fn);
   }
 
   /**
-   * Iterates with index-based access for length-captured traversal.
-   *
-   * Returns the total number of slots to iterate (inline + overflow).
-   * Used by `_notifySubscribers` for length-captured iteration.
+   * Traverses all active items and returns the total count of executed items.
    */
   forEachIndexed(fn: (item: T) => void): number {
     const count = this._count;
@@ -371,7 +332,7 @@ export class SlotBuffer<T> {
     if (ov !== null) {
       for (let i = 0, len = ov.length; i < len; i++) {
         const el = ov[i];
-        if (el != null && el !== undefined) {
+        if (el != null) {
           fn(el);
           if (++executed === count) return executed;
         }
@@ -491,7 +452,7 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
         // biome-ignore lint/suspicious/noFallthroughSwitchClause: intentional fallthrough
         case 0: {
           const l = this._s0;
-          if (l && l.node === dep && l.unsub) {
+          if (l?.node === dep && l.unsub) {
             l.version = dep.version;
             return true;
           }
@@ -500,9 +461,9 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
         case 1: {
           if (count > 1) {
             const l = this._s1;
-            if (l && l.node === dep && l.unsub) {
+            if (l?.node === dep && l.unsub) {
               l.version = dep.version;
-              if (trackIndex !== 1) this._swapInline(1, trackIndex, l);
+              if (trackIndex !== 1) this._relocate(1, trackIndex, l);
               return true;
             }
           }
@@ -511,9 +472,9 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
         case 2: {
           if (count > 2) {
             const l = this._s2;
-            if (l && l.node === dep && l.unsub) {
+            if (l?.node === dep && l.unsub) {
               l.version = dep.version;
-              if (trackIndex !== 2) this._swapInline(2, trackIndex, l);
+              if (trackIndex !== 2) this._relocate(2, trackIndex, l);
               return true;
             }
           }
@@ -521,9 +482,9 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
         case 3: {
           if (count > 3) {
             const l = this._s3;
-            if (l && l.node === dep && l.unsub) {
+            if (l?.node === dep && l.unsub) {
               l.version = dep.version;
-              if (trackIndex !== 3) this._swapInline(3, trackIndex, l);
+              if (trackIndex !== 3) this._relocate(3, trackIndex, l);
               return true;
             }
           }
@@ -540,7 +501,7 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
         const link = ov[i];
         if (link && link.node === dep && link.unsub) {
           link.version = dv;
-          this._swapGeneral(i + 4, trackIndex, link);
+          this._relocate(i + 4, trackIndex, link);
           return true;
         }
       }
@@ -595,16 +556,10 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
     return true;
   }
 
-  private _swapInline(idx: number, trackIndex: number, link: DependencyLink): void {
-    const occupant = this.getAt(trackIndex);
-    this._directSetAt(trackIndex, link);
-    this._directSetAt(idx, occupant);
-  }
-
-  private _swapGeneral(idx: number, trackIndex: number, link: DependencyLink): void {
-    const occupant = this.getAt(trackIndex);
-    this._directSetAt(trackIndex, link);
-    this._directSetAt(idx, occupant);
+  private _relocate(fromAt: number, toAt: number, link: DependencyLink): void {
+    const occupant = this.getAt(toAt);
+    this._directSetAt(toAt, link);
+    this._directSetAt(fromAt, occupant);
   }
 
   insertNew(trackIndex: number, link: DependencyLink): void {

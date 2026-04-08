@@ -41,11 +41,15 @@ describe('SlotBuffer', () => {
     expect(buf.size).toBe(5);
     expect(buf.getAt(4)).toBe('e');
 
-    // Sparse setAt
+    // Sparse setAt & Active Count tracking
     buf.setAt(10, 'z');
-    expect(buf.size).toBe(6);
+    expect(buf.size).toBe(6); // Correctly tracks active count even with gaps
     expect(buf.getAt(10)).toBe('z');
     expect(buf.getAt(9)).toBeNull();
+
+    // Clearing an item via setAt(null)
+    buf.setAt(10, null);
+    expect(buf.size).toBe(5);
   });
 
   it('should handle iteration over non-null elements', () => {
@@ -129,6 +133,18 @@ describe('DepSlotBuffer', () => {
     expect(unsub).toHaveBeenCalledOnce();
   });
 
+  it('should trigger unsubscription when overwriting an existing link via setAt', () => {
+    const buf = new DepSlotBuffer();
+    const unsub = vi.fn();
+    const link1 = new DependencyLink(createMockDep(1), 1, unsub);
+    const link2 = new DependencyLink(createMockDep(2), 1, vi.fn());
+
+    buf.setAt(0, link1);
+    buf.setAt(0, link2); // Replacement triggers unsub
+
+    expect(unsub).toHaveBeenCalledOnce();
+  });
+
   it('should claim and relocate existing dependencies (In-place updates)', () => {
     const buf = new DepSlotBuffer();
     const deps = [0, 1, 2, 3, 4, 5].map(createMockDep);
@@ -143,7 +159,7 @@ describe('DepSlotBuffer', () => {
     // Case: Swap overflow to inline (5 -> 1)
     expect(buf.claimExisting(deps[5]!, 1)).toBe(true);
     expect(buf.getAt(1)).toBe(links[5]);
-    expect(buf.getAt(5)).toBe(links[1]); // links[1] was at index 1
+    expect(buf.getAt(5)).toBe(links[1]);
 
     // Case: Not found or dead link
     expect(buf.claimExisting(createMockDep(99), 0)).toBe(false);
@@ -166,6 +182,12 @@ describe('DepSlotBuffer', () => {
     // Verify subsequent Map-based lookup
     expect(buf.claimExisting(deps[38]!, 6)).toBe(true);
     expect(buf.getAt(6)!.node).toBe(deps[38]);
+
+    // Regression: maintains Map synchronization during insertNew
+    const newDep = createMockDep(100);
+    const newLink = new DependencyLink(newDep, 1, vi.fn());
+    buf.insertNew(7, newLink);
+    expect(buf.claimExisting(newDep, 7)).toBe(true);
 
     // Resetting
     buf.prepareTracking();
@@ -201,36 +223,5 @@ describe('DepSlotBuffer', () => {
 
     // No-op compact
     expect(() => buf.compact()).not.toThrow();
-  });
-});
-
-// ── Regression Tests ───────────────────────────────────────────────────
-
-describe('Regressions', () => {
-  it('correctly tracks active count with sparse setAt', () => {
-    const buf = new SlotBuffer<string>();
-    buf.setAt(10, 'a');
-    expect(buf.size).toBe(1); // Should only count the non-null item
-
-    buf.setAt(10, null);
-    expect(buf.size).toBe(0);
-  });
-
-  it('maintains internal Map synchronization in DepSlotBuffer', () => {
-    const buf = new DepSlotBuffer();
-    const deps = Array.from({ length: 40 }, (_, i) => createMockDep(i));
-    deps.forEach((d) => buf.add(new DependencyLink(d, 1, vi.fn())));
-
-    // Trigger map creation via scan threshold
-    buf.claimExisting(deps[39]!, 0);
-
-    // insertNew at index 5 should update map for the NEW link
-    const newDep = createMockDep(100);
-    const newLink = new DependencyLink(newDep, 1, vi.fn());
-    buf.insertNew(5, newLink);
-
-    // If map is synced, claimExisting(newDep) should work even beyond threshold
-    expect(buf.claimExisting(newDep, 5)).toBe(true);
-    expect(buf.getAt(5)).toBe(newLink);
   });
 });
