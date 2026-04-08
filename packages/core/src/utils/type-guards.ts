@@ -2,12 +2,19 @@ import { ATOM_BRAND, COMPUTED_BRAND, EFFECT_BRAND, WRITABLE_BRAND } from '@/symb
 import type { ComputedAtom, EffectObject, ReadonlyAtom, WritableAtom } from '@/types';
 
 /**
+ * Internal check for objects or functions that can have brands or thenable.
+ */
+function isObject(val: unknown): val is object {
+  return val !== null && (typeof val === 'object' || typeof val === 'function');
+}
+
+/**
  * Readonly atom check.
  *
  * @param obj - Object to check.
  */
 export function isAtom(obj: unknown): obj is ReadonlyAtom {
-  return typeof obj === 'object' && obj !== null && ATOM_BRAND in obj;
+  return isObject(obj) && ATOM_BRAND in obj;
 }
 
 /**
@@ -17,30 +24,29 @@ export function isAtom(obj: unknown): obj is ReadonlyAtom {
  * correct if new ReadonlyAtom-style primitives are added in the future.
  */
 export function isWritable(obj: unknown): obj is WritableAtom {
-  return typeof obj === 'object' && obj !== null && WRITABLE_BRAND in obj;
+  return isObject(obj) && WRITABLE_BRAND in obj;
 }
 
 /**
  * Computed atom check.
  */
 export function isComputed(obj: unknown): obj is ComputedAtom {
-  return typeof obj === 'object' && obj !== null && COMPUTED_BRAND in obj;
+  return isObject(obj) && COMPUTED_BRAND in obj;
 }
 
 /**
  * Effect object check.
  */
 export function isEffect(obj: unknown): obj is EffectObject {
-  return typeof obj === 'object' && obj !== null && EFFECT_BRAND in obj;
+  return isObject(obj) && EFFECT_BRAND in obj;
 }
 
 /**
  * Promise check.
+ *
+ * Checks if the value is "Thenable" (has a .then method).
+ * Supports both function-based and object-based Promises.
  */
 export function isPromise<T>(value: unknown): value is Promise<T> {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    typeof (value as { then?: unknown }).then === 'function'
-  );
+  return isObject(value) && typeof (value as { then?: unknown }).then === 'function';
 }

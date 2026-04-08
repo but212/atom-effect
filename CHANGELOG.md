@@ -12,6 +12,7 @@
 - **Atom**: Transitioned to iterative sync notifications and direct bitwise flag manipulation to prevent stack overflows and state loss.
 - **Scheduler**: Resolved re-entrancy bugs in synchronous flushes and memory leaks during queue overflows.
 - **Engine**: Hardened `SlotBuffer` and `DepSlotBuffer` synchronization; resolved reactive context leaks in `untracked()` and subscription disposal.
+- **Internal**: Hardened `isPromise` detector to correctly identify "Thenables" in both function and object forms.
 
 #### Changed
 
@@ -20,6 +21,7 @@
 - **Internal**: Standardized debugging API (`debug.warn` -> `debug.warnIf`) and centralized internal symbols into `symbols.ts`.
 - **Internal**: Hardened global counters (ID, Epoch, Version) using SMI-safe modulo logic (`(v % SMI_MAX) + 1`) to ensure stable V8 optimization and avoid zero-value collisions.
 - **Internal**: Encapsulated `TrackingContext` state and standardized `Subscription` notification logic for improved performance.
+- **Internal**: Refactored type guards with a unified `isObject` helper and eliminated `any` casts to satisfy strict linting.
 - **Testing**: Overhauled `effect.test.ts` to improve maintainability and signal-to-noise ratio.
 
 ### jQuery
