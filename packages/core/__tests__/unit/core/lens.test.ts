@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { atom } from '@/core/atom';
+import { computed } from '@/core/computed';
 import { effect } from '@/core/effect';
-import { atomLens, composeLens, lensFor } from '@/core/lens';
+import { atomLens, composeLens, LensImpl, lensFor } from '@/core/lens';
 import { nextTick } from '../../utils/test-helpers';
 
 describe('atomLens', () => {
@@ -113,6 +114,43 @@ describe('atomLens', () => {
       expect(nameLens.value).toBe('Alice');
       nameLens.value = 'Bob';
       expect(user.value.profile.name).toBe('Bob');
+    });
+
+    it('should support deep path flattening across multiple levels', () => {
+      const store = atom({ a: { b: { c: { d: 42 } } } });
+      const a = atomLens(store, 'a');
+      const b = composeLens(a, 'b');
+      const c = composeLens(b, 'c');
+      const d = composeLens(c, 'd');
+
+      expect(d.value).toBe(42);
+      // Verify internal flattening
+      expect(d).toBeInstanceOf(LensImpl);
+      const dInternal = d as unknown as { _fullPath: string; _parent: unknown };
+      expect(dInternal._fullPath).toBe('a.b.c.d');
+      expect(dInternal._parent).toBe(store);
+    });
+  });
+
+  describe('Lazy Evaluation (Computed Chains)', () => {
+    it('should re-validate correctly when part of a lazy computed chain', async () => {
+      const store = atom({ user: { name: 'Alice' } });
+      const nameLens = atomLens(store, 'user.name');
+
+      const nameCount = computed(() => {
+        return nameLens.value.length;
+      });
+
+      expect(nameCount.value).toBe(5);
+
+      // 2. Update store while no one is listening to nameCount
+      store.value = { user: { name: 'Bob' } };
+
+      // 3. Wait for microtask (since atom is async by default)
+      await nextTick();
+
+      // 4. Read computed value - should trigger _recompute because notification arrived
+      expect(nameCount.value).toBe(3);
     });
   });
 

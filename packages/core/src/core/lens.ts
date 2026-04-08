@@ -9,9 +9,10 @@ import { COMPUTED_STATE_FLAGS } from '../constants';
 import { ATOM_BRAND, WRITABLE_BRAND } from '../symbols';
 import type { Paths, PathValue, Subscriber, WritableAtom } from '../types';
 import { ReactiveNode } from './base';
+import { nextVersion } from './scheduler';
 import { trackingContext } from './tracking';
 
-const { DISPOSED } = COMPUTED_STATE_FLAGS;
+const { DISPOSED, IS_COMPUTED } = COMPUTED_STATE_FLAGS;
 
 /**
  * Creates a deep immutable copy of an object/array with a value updated at a specific path.
@@ -77,8 +78,9 @@ export function getPathValue(source: unknown, parts: string[]): unknown {
  *
  * @template T - The type of the root object.
  * @template P - The dot-notation path string.
+ * @internal
  */
-class LensImpl<T extends object, P extends Paths<T>>
+export class LensImpl<T extends object, P extends Paths<T>>
   extends ReactiveNode<PathValue<T, P>>
   implements WritableAtom<PathValue<T, P>>, Subscriber
 {
@@ -104,6 +106,7 @@ class LensImpl<T extends object, P extends Paths<T>>
 
   constructor(parent: WritableAtom<T>, path: string) {
     super();
+    this.flags |= IS_COMPUTED;
     this._parent = parent;
     this._fullPath = path;
     this._parts = path.includes('.') ? path.split('.') : [path];
@@ -116,9 +119,15 @@ class LensImpl<T extends object, P extends Paths<T>>
     const ctx = trackingContext.current;
     if (ctx != null) ctx.addDependency(this);
 
-    // CRITICAL: Use peek() to prevent the caller from depending directly on the entire root atom.
-    // This lens acts as a filter; the caller depends on THIS lens, and THIS lens depends on the root.
-    return getPathValue(this._parent.peek(), this._parts) as PathValue<T, P>;
+    const val = this._currentValue();
+
+    // Pull-based versioning: If the lens is not currently subscribed to the parent,
+    // it must manually check for changes and update its version during access.
+    if (!this._unsubParent) {
+      this._syncVersion(val);
+    }
+
+    return val;
   }
 
   /**
@@ -139,7 +148,24 @@ class LensImpl<T extends object, P extends Paths<T>>
    * Reads the current value without registering a dependency.
    */
   peek(): PathValue<T, P> {
+    return this._currentValue();
+  }
+
+  /**
+   * Helper to retrieve the current value at the lensed path.
+   */
+  private _currentValue(): PathValue<T, P> {
     return getPathValue(this._parent.peek(), this._parts) as PathValue<T, P>;
+  }
+
+  /**
+   * Synchronizes the internal version and cached value for pull-based validation.
+   */
+  private _syncVersion(currentVal: PathValue<T, P>): void {
+    if (!Object.is(currentVal, this._lastValue)) {
+      this._lastValue = currentVal;
+      this.version = nextVersion(this.version);
+    }
   }
 
   /**
@@ -182,7 +208,7 @@ class LensImpl<T extends object, P extends Paths<T>>
     // Granular Filtering: Only bump version and notify if OUR slice changed
     if (!Object.is(nextVal, prevVal)) {
       this._lastValue = nextVal;
-      this.version++;
+      this.version = nextVersion(this.version);
       this._notifySubscribers(nextVal, prevVal);
     }
   }
@@ -206,6 +232,15 @@ class LensImpl<T extends object, P extends Paths<T>>
    */
   [Symbol.dispose](): void {
     this.dispose();
+  }
+
+  /**
+   * Performs a granular dirty check for the engine.
+   *
+   * @internal
+   */
+  protected override _isDirty(): boolean {
+    return this._deepDirtyCheck();
   }
 
   /**
