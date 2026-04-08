@@ -169,20 +169,25 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
 
   get errors(): readonly Error[] {
     this._track();
-    const collected: Error[] = [];
-    if (this._error != null) collected.push(this._error);
+
+    if (this._error == null && !this._deps.hasComputeds) {
+      return EMPTY_ERROR_ARRAY;
+    }
+
+    const collected = new Set<Error>();
+    if (this._error != null) collected.add(this._error);
 
     if (this._deps.hasComputeds) {
       this._walkErrorGraph((dep) => {
         if ((dep.flags & IS_COMPUTED) !== 0) {
           const err = (dep as ComputedAtomImpl<unknown>)._error;
-          if (err != null && !collected.includes(err)) collected.push(err);
+          if (err != null) collected.add(err);
         }
         return true;
       });
     }
 
-    return collected.length === 0 ? EMPTY_ERROR_ARRAY : Object.freeze(collected);
+    return collected.size === 0 ? EMPTY_ERROR_ARRAY : Object.freeze(Array.from(collected));
   }
 
   // --- 2. Public APIs ---
