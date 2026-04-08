@@ -8,8 +8,8 @@ Creates a mutable state container. Atoms are the leaf nodes of your dependency g
 
 ### When to use - atom
 
-- **Store source of truth:** User inputs, server data, configuration.
-- **Avoid:** Storing derived data (use `computed` instead).
+- **Store source of truth**: User inputs, server data, configuration.
+- **Avoid**: Storing derived data (use `computed` instead).
 
 ### Example - atom
 
@@ -118,7 +118,7 @@ effectHandle.dispose();
 `effect()` returns an `EffectObject` with the following properties:
 
 - `dispose()`: Stops the effect and runs cleanup.
-- `run()`: Manually re-executes the effect.
+- `run()`: Manually re-executes the effect immediately. This also resets the "infinite loop" execution counter for the current flush cycle, allowing for controlled manual re-runs.
 - `isDisposed`: Whether the effect has been disposed.
 - `isExecuting`: Whether the effect is currently running.
 - `executionCount`: Number of times the effect has executed.

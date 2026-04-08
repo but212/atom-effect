@@ -109,6 +109,10 @@ Reactivity in the engine is **strictly synchronous**. The `trackingContext` (whi
 - **Why `untracked()` is Sync-Only**: If an async function were passed to `untracked()`, the context would be cleared, the function would return a `Promise`, and the original context would be restored **before** the code after the first `await` even runs. This would lead to "Tracking Leakage" where async code unexpectedly tracks dependencies in the outer scope.
 - **The Solution**: For async operations, use `peek()`. Since `peek()` explicitly avoids the `trackingContext` without needing a wrapper, it is safe to use anywhere, including across multiple `await` boundaries.
 
+### Effect Cleanup Isolation
+
+Similarly, effect cleanup functions are executed within an **`untracked()`** scope. This prevents **"Tracking Leakage"** where any reactive reads performed during cleanup (e.g., logging old state or releasing resources) would inadvertently be registered as dependencies for the next execution cycle.
+
 **Implementation Detail**: Bitwise flags (e.g., `PENDING`, `RESOLVED`, `RECOMPUTING`) are used to keep state transitions fast and memory-efficient.
 
 ## 6. Resource Stewardship: Memory Management
@@ -149,6 +153,8 @@ Effects can inadvertently create feedback loops (e.g., an effect that writes to 
 | `MAX_EXECUTIONS_PER_SECOND` | 1,000 / sec (dev only) | Frequency guard per effect |
 
 When a threshold is crossed, an `EffectError` is thrown and the offending effect is disposed to avoid blocking the main thread indefinitely.
+
+- **Manual Override**: Calling **`run()`** manually on an effect will reset its local execution counter for the current flush epoch. This allows developers to force execution in scenarios where the safety limits might otherwise block it, provided the trigger is initiated outside of the standard reactive propagation loop.
 
 ---
 
