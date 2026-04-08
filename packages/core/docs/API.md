@@ -23,10 +23,12 @@ console.log(counter.value);
 
 // Write (notifies observers)
 counter.value = 1;
-
-// Peek (read without tracking)
-console.log(counter.peek()); 
 ```
+
+- `peek()`: Returns the current value without creating a dependency.
+- `dispose()`: Disconnects the atom from the engine. After disposal, reading `.value` or `peek()` returns `undefined` (GC release).
+- `subscriberCount()`: Returns the number of active subscribers.
+- `id`: The unique internal ID of the node.
 
 ### Options - atom
 

@@ -22,6 +22,9 @@
 - **Lens**: Implemented "Path Flattening" optimization; composing multiple lenses (e.g., `composeLens`) now merges paths into a single `LensImpl` instance instead of creating nested proxies, improving performance.
 - **Lens**: Hardened disposal logic to strictly block operations and cleanup parent subscriptions after `dispose()` is called.
 - **Lens**: Fixed granularity issues in lenses where accessing `.value` would inadvertently create a direct dependency on the root atom; now uses `peek()` internally to isolate the dependency graph.
+- **Atom**: Implemented "Iterative Sync Notification" loop; converted synchronous recursion into an iterative process to prevent stack overflow while maintaining notification integrity during re-entrant updates.
+- **Atom**: Refactored `_flushNotifications()` with a robust re-entrancy guard (`_notifying` check) for safer synchronous evaluation.
+- **Internal**: Transitioned `AtomImpl` to direct bitwise flag manipulation (e.g., `this.flags |= ...`) to eliminate state loss bugs associated with flag snapshotting and overwriting.
 
 #### Changed
 

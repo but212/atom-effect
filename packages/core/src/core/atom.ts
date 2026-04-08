@@ -49,24 +49,31 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
   }
 
   set value(newValue: T) {
-    const oldValue = this._value;
-    if (Object.is(oldValue, newValue)) return;
+    if (Object.is(this._value, newValue)) return;
 
+    const oldValue = this._value;
     this._value = newValue;
     this.version = nextVersion(this.version);
 
-    const flags = this.flags;
-    // 1. Double check: schedule pending or no slots
-    if ((flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED) !== 0) return;
+    if (this._shouldNotify()) {
+      this._pendingOldValue = oldValue;
+      this.flags |= ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
+      this._requestFlush();
+    }
+  }
 
-    const slots = this._slots;
-    if (slots == null || slots.size === 0) return;
+  /**
+   * Determines if a notification should be initiated.
+   */
+  private _shouldNotify(): boolean {
+    return !this.isNotificationScheduled && this.subscriberCount() > 0;
+  }
 
-    this._pendingOldValue = oldValue;
-    this.flags = flags | ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
-
-    // 2. Schedule or flush (inline bitwise)
-    if ((flags & ATOM_STATE_FLAGS.SYNC) !== 0 && !scheduler.isBatching) {
+  /**
+   * Initiates the notification cycle based on sync/async strategy.
+   */
+  private _requestFlush(): void {
+    if (this.isSync && !scheduler.isBatching) {
       this._flushNotifications();
     } else {
       scheduler.schedule(this);
@@ -82,23 +89,21 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
   }
 
   /**
-   * Triggers subscribers.
+   * Triggers subscribers using an iterative loop to handle sync recursion safely.
    */
   private _flushNotifications(): void {
-    const flags = this.flags;
-    // Guard: Combined bitwise check for NOTIFICATION_SCHEDULED and not DISPOSED
-    if (
-      (flags & (ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED | ATOM_STATE_FLAGS.DISPOSED)) !==
-      ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED
-    ) {
-      return;
+    // Guards: Skip if disposed or already in a notification loop (re-entrancy)
+    if (this.isDisposed || this._notifying > 0) return;
+
+    while (this.isNotificationScheduled) {
+      const oldValue = this._pendingOldValue as T;
+      this._pendingOldValue = undefined;
+      this.flags &= ~ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
+
+      if (!Object.is(this._value, oldValue)) {
+        this._notifySubscribers(this._value, oldValue);
+      }
     }
-
-    const oldValue = this._pendingOldValue as T;
-    this._pendingOldValue = undefined;
-    this.flags = flags & ~ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
-
-    this._notifySubscribers(this._value, oldValue);
   }
 
   peek(): T {
@@ -106,12 +111,12 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
   }
 
   dispose(): void {
-    const flags = this.flags;
-    if ((flags & ATOM_STATE_FLAGS.DISPOSED) !== 0) return;
+    if (this.isDisposed) return;
 
     this._slots?.clear();
-    this.flags = flags | ATOM_STATE_FLAGS.DISPOSED;
-    // Release references
+    this.flags |= ATOM_STATE_FLAGS.DISPOSED;
+
+    // Release references for GC
     this._value = undefined as T;
     this._pendingOldValue = undefined;
   }

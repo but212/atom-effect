@@ -36,6 +36,8 @@ To maximize performance and maintain consistent behavior, the engine uses a unif
   - **Dependency Tracking**: Manages a `DepSlotBuffer` and provides optimized dirty checking logic (`_isDirty`). Critical tracking loops are manually unrolled for performance.
   - **Type Safety**: Uses generic type `T` to ensure type-safe notifications for subscribers.
 - **`AtomImpl<T>`**: A pure producer node that holds mutable state. It extends `ReactiveNode<T>` but keeps its dependency list (`_deps`) null to save memory.
+  - **Iterative Sync Notification**: Features a specialized `_flushNotifications()` loop that converts synchronous recursion into iteration. This prevents stack overflow when a subscriber recursively updates the same atom, while ensuring that all state transitions are notified in the correct order.
+  - **Bitwise State Integrity**: Uses direct bitwise operations on the `flags` property to ensure atomic state updates and prevent data loss from concurrent flag manipulation.
 - **`ComputedAtomImpl<T>`**: A hybrid node that both consumes dependencies and produces a derived value. It fully leverages both producer and consumer facets of `ReactiveNode<T>`.
 - **`EffectImpl`**: A pure consumer node that performs side effects. It extends `ReactiveNode<void>` and keeps its subscriber list (`_slots`) null.
 
