@@ -6,23 +6,19 @@
 
 #### Fixed
 
-- **Effect**: Resolved dependency tracking leakage in cleanup functions and false-positive infinite loop detection during manual `run()` calls.
-- **Computed**: Fixed critical reactivity regressions, async state leaks, and stack overflows in deep chains via BFS-based traversal.
-- **Lens**: Implemented fine-grained reactivity and O(1) path flattening; refactored implementation into a first-class `ReactiveNode`.
-- **Atom**: Transitioned to iterative sync notifications and direct bitwise flag manipulation to prevent stack overflows and state loss.
-- **Scheduler**: Resolved re-entrancy bugs in synchronous flushes and memory leaks during queue overflows.
-- **Engine**: Hardened `SlotBuffer` and `DepSlotBuffer` synchronization; resolved reactive context leaks in `untracked()` and subscription disposal.
-- **Internal**: Hardened `isPromise` detector to correctly identify "Thenables" in both function and object forms.
+- **Reactivity**: Resolved critical regressions in `Computed` (async state leaks, stack overflows) and `Effect` (cleanup tracking, infinite loop false-positives).
+- **Core Engine**: Transitioned `Atom` to iterative synchronous notifications and hardened `SlotBuffer` synchronization to prevent state loss and stack overflows.
+- **Scheduler**: Resolved re-entrancy bugs during synchronous flushes and addressed memory leaks in queue overflows.
+- **Lens**: Refactored as a first-class `ReactiveNode` to support O(1) path flattening and fine-grained reactivity.
+- **Internal**: Corrected `isPromise` detector to robustly identify Thenables in both function and object forms.
 
 #### Changed
 
-- **API**: Strengthened `Paths<T>` type safety and `subscribe` listener signatures; updated `EffectFunction` to natively support `Promise<void>`.
-- **API**: Enhanced error system with standardized `Type (Context): Message` formatting, `unknown` cause support, and mandatory context-preserving wrapping in `wrapError`.
-- **Internal**: Optimized core engine for V8 hidden class monomorphism and unified global epoch management using SMI-safe wrapping and disjoint bitmask partitioning.
-- **Internal**: Refactored `ReactiveNode` state flags into a hierarchical bitmask: Bits 0-3 for node identification (`IS_COMPUTED`, `IS_EFFECT`, `IS_ATOM`) and Bit 4+ for implementation-specific states (`DIRTY`, `EXECUTING`, etc.).
-- **Internal**: Hardened global counters (ID, Epoch, Version, Promise ID) using 31-bit SMI-safe limits (`0x3fffffff`) to ensure stable V8 optimization and avoid heap-allocation overhead.
-- **Internal**: Standardized debugging API (`debug.warn` -> `debug.warnIf`) and centralized internal symbols into `symbols.ts` using `unique symbol` for improved type safety.
-- **Internal**: Improved `AtomError` debugging with `Error.captureStackTrace` for cleaner V8 traces and `Object.setPrototypeOf` for legacy environment compatibility.
+- **Error System**: Standardized diagnostic formatting (`Type (Context): Message`) and improved debugging with `Error.captureStackTrace` and context-preserving `wrapError` logic.
+- **V8 Optimization**: Optimized engine for hidden class monomorphism and hardened all internal counters (ID, Epoch, Version, Promise ID) using 31-bit SMI-safe limits (`0x3fffffff`).
+- **Internal Architecture**: Refactored `ReactiveNode` flags into a disjoint bitmask partition (Bits 0-3 for node identification) to eliminate state collisions and improve dispatch performance.
+- **Type Safety**: Strengthened `Paths<T>` inference, `subscribe` signatures, and implemented `unique symbol` for internal sentinels in `symbols.ts`.
+- **Diagnostics**: Standardized internal debugging API (`debug.warnIf`) to provide consistent telemetry across core modules.
 
 ### jQuery
 
