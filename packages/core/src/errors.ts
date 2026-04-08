@@ -1,4 +1,12 @@
 /**
+ * Internal interface for AtomError constructor signature.
+ * Used for type-safe instantiation in wrapError.
+ */
+interface AtomErrorClass<T extends AtomError> {
+  new (message: string, cause?: unknown): T;
+}
+
+/**
  * Base error class for all atom-effect related issues.
  */
 export class AtomError extends Error {
@@ -9,11 +17,13 @@ export class AtomError extends Error {
   ) {
     super(message);
 
-    // Standardize error name based on constructor
-    this.name = this.constructor.name;
+    // Standardize error name. Explicitly set to support minified environments.
+    this.name = 'AtomError';
 
-    // Restore prototype chain for ES5/TS environments
-    Object.setPrototypeOf(this, new.target.prototype);
+    // Restore prototype chain.
+    // Falls back to constructor.prototype if new.target is missing (ES5 transpilation).
+    const proto = (new.target ? new.target.prototype : (this.constructor as any).prototype) as object;
+    Object.setPrototypeOf(this, proto);
 
     // Capture clean stack trace on V8 engines
     if (Error.captureStackTrace) {
@@ -28,6 +38,7 @@ export class AtomError extends Error {
 export class ComputedError extends AtomError {
   constructor(message: string, cause: unknown = null) {
     super(message, cause, true);
+    this.name = 'ComputedError';
   }
 }
 
@@ -37,6 +48,7 @@ export class ComputedError extends AtomError {
 export class EffectError extends AtomError {
   constructor(message: string, cause: unknown = null) {
     super(message, cause, false);
+    this.name = 'EffectError';
   }
 }
 
@@ -46,6 +58,7 @@ export class EffectError extends AtomError {
 export class SchedulerError extends AtomError {
   constructor(message: string, cause: unknown = null) {
     super(message, cause, false);
+    this.name = 'SchedulerError';
   }
 }
 
@@ -94,7 +107,7 @@ export const ERROR_MESSAGES = {
 /**
  * Wraps an unknown error into a specific AtomError subclass while preserving context.
  *
- * @template T - The specific AtomError subclass constructor.
+ * @template T - The specific AtomError subclass type (constructor).
  * @param error - The original error to wrap.
  * @param ErrorConstructor - The class to instantiate (e.g., ComputedError).
  * @param context - Human-readable description of where the error occurred.
@@ -106,12 +119,14 @@ export function wrapError<T extends typeof AtomError>(
   context: string
 ): InstanceType<T> {
   const isNative = error instanceof Error;
-  const errorName = isNative ? (error.name || error.constructor.name) : 'Error';
+  const errorName = isNative ? error.name || error.constructor.name : 'Error';
   const innerMessage = isNative ? error.message : String(error);
 
   const finalMessage = isNative
     ? `${errorName} (${context}): ${innerMessage}`
     : `Unexpected error (${context}): ${innerMessage}`;
 
-  return new (ErrorConstructor as any)(finalMessage, error) as InstanceType<T>;
+  // Cast through unknown to AtomErrorClass for type-safe construction without 'any'
+  const Ctor = ErrorConstructor as unknown as AtomErrorClass<InstanceType<T>>;
+  return new Ctor(finalMessage, error);
 }

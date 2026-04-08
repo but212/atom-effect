@@ -22,7 +22,11 @@ describe('Error Classes', () => {
   ] as const;
 
   describe('Common inheritance and identification', () => {
-    it.each(errorTypes)('$name should be identified correctly', ({ Class, name, expectedRecoverable }) => {
+    it.each(errorTypes)('$name should be identified correctly', ({
+      Class,
+      name,
+      expectedRecoverable,
+    }) => {
       const err = new Class('msg');
       expect(err).toBeInstanceOf(AtomError);
       expect(err).toBeInstanceOf(Error);
