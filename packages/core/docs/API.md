@@ -60,10 +60,10 @@ A `ComputedAtom` instance provides the following reactive properties:
 
 - `value`: Returns the current value.
 - `state`: Returns `AsyncState` (`IDLE`, `PENDING`, `RESOLVED`, `REJECTED`).
-- `hasError`: Boolean indicating if the computation (or its dependencies) failed.
+- `hasError`: Boolean indicating if this computation or any of its dependencies failed. Uses an iterative walk to prevent stack overflows in deep chains.
 - `isValid`: Shortcut for `!hasError`.
-- `errors`: A read-only array of all errors in the local dependency sub-graph.
-- `lastError`: The specific error thrown by this node's computation.
+- `errors`: A read-only array of all unique errors collected from the dependency graph via an iterative traversal.
+- `lastError`: The specific error thrown by this node's calculation function, if any.
 - `isPending`: Shortcut for `state === AsyncState.PENDING`.
 - `isResolved`: Shortcut for `state === AsyncState.RESOLVED`.
 
