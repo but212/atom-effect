@@ -21,56 +21,80 @@ describe('Error Classes', () => {
     { Class: SchedulerError, name: 'SchedulerError', expectedRecoverable: false },
   ] as const;
 
-  it.each(errorTypes)('$name has correct name, message, cause, and default recoverable', ({
-    Class,
-    name,
-    expectedRecoverable,
-  }) => {
-    const cause = new Error('root cause');
-    const err = new Class('test msg', cause);
-
-    expect(err).toBeInstanceOf(AtomError);
-    expect(err).toBeInstanceOf(Error);
-    expect(err.name).toBe(name);
-    expect(err.message).toBe('test msg');
-    expect(err.cause).toBe(cause);
-    expect(err.recoverable).toBe(expectedRecoverable);
+  describe('Common inheritance and identification', () => {
+    it.each(errorTypes)('$name should be identified correctly', ({
+      Class,
+      name,
+      expectedRecoverable,
+    }) => {
+      const err = new Class('msg');
+      expect(err).toBeInstanceOf(AtomError);
+      expect(err).toBeInstanceOf(Error);
+      expect(err.name).toBe(name);
+      expect(err.recoverable).toBe(expectedRecoverable);
+    });
   });
 
-  it.each(errorTypes)('$name defaults cause to null when omitted', ({ Class }) => {
-    expect(new Class('no cause').cause).toBeNull();
+  describe('Property handling', () => {
+    it('should store message and cause correctly (including non-Error causes)', () => {
+      const nativeCause = new Error('native');
+      const err1 = new AtomError('msg', nativeCause);
+      expect(err1.message).toBe('msg');
+      expect(err1.cause).toBe(nativeCause);
+
+      const stringCause = 'string cause';
+      const err2 = new AtomError('msg', stringCause);
+      expect(err2.cause).toBe(stringCause);
+    });
+
+    it('should default cause to null', () => {
+      expect(new AtomError('msg').cause).toBeNull();
+    });
+
+    it('should allow overriding recoverable flag for AtomError', () => {
+      expect(new AtomError('fatal', null, false).recoverable).toBe(false);
+    });
   });
 
-  it('AtomError allows overriding recoverable to false', () => {
-    expect(new AtomError('fatal', null, false).recoverable).toBe(false);
+  describe('Environment specific behavior', () => {
+    it('should capture stack trace starting outside constructor', () => {
+      const error = new AtomError('test message');
+      expect(error.stack).toBeDefined();
+      // Stack trace should refer to this test file focus, not the error constructor internal frame
+      expect(error.stack).not.toContain('at new AtomError');
+    });
   });
 });
 
 // ── wrapError() ───────────────────────────────────────────────────────────────
 
 describe('wrapError()', () => {
-  it('wraps a native Error with type + context + message format', () => {
+  it('should wrap native errors adding type, context and preserving original message', () => {
     const native = new TypeError('native failure');
-    const wrapped = wrapError(native, ComputedError, 'context');
+    const wrapped = wrapError(native, ComputedError, 'FetchContext');
 
     expect(wrapped).toBeInstanceOf(ComputedError);
     expect(wrapped.cause).toBe(native);
-    expect(wrapped.message).toBe('TypeError (context): native failure');
+    expect(wrapped.message).toBe('TypeError (FetchContext): native failure');
   });
 
-  it('returns existing AtomError as-is (idempotent, any subclass)', () => {
-    const original = new SchedulerError('already wrapped');
-    expect(wrapError(original, EffectError, 'ignored')).toBe(original);
+  it('should wrap existing AtomErrors to preserve the context chain (non-idempotent)', () => {
+    const inner = new SchedulerError('scheduler failure');
+    const wrapped = wrapError(inner, EffectError, 'OuterEffect');
 
-    const c = new ComputedError('c');
-    expect(wrapError(c, AtomError, 'ignored')).toBe(c);
+    expect(wrapped).not.toBe(inner);
+    expect(wrapped.cause).toBe(inner);
+    expect(wrapped.message).toContain('OuterEffect');
+    expect(wrapped.message).toContain('SchedulerError');
   });
 
-  it('normalizes non-Error throwables with Unexpected error format', () => {
-    const wrapped = wrapError('oops', AtomError, 'ctx');
+  it('should normalize non-Error throwables with Unexpected error format', () => {
+    const throwable = 'primitive string';
+    const wrapped = wrapError(throwable, AtomError, 'UserContext');
+
     expect(wrapped).toBeInstanceOf(AtomError);
-    expect(wrapped.message).toBe('Unexpected error (ctx): oops');
-    expect(wrapped.cause).toBeNull();
+    expect(wrapped.message).toBe('Unexpected error (UserContext): primitive string');
+    expect(wrapped.cause).toBe(throwable);
   });
 });
 

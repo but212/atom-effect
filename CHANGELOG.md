@@ -17,11 +17,12 @@
 #### Changed
 
 - **API**: Strengthened `Paths<T>` type safety and `subscribe` listener signatures; updated `EffectFunction` to natively support `Promise<void>`.
-- **Internal**: Optimized core engine for V8 hidden class monomorphism and unified global epoch management using SMI-safe wrapping.
-- **Internal**: Standardized debugging API (`debug.warn` -> `debug.warnIf`) and centralized internal symbols into `symbols.ts`.
-- **Internal**: Hardened global counters (ID, Epoch, Version) using SMI-safe modulo logic (`(v % SMI_MAX) + 1`) to ensure stable V8 optimization and avoid zero-value collisions.
-- **Internal**: Encapsulated `TrackingContext` state and standardized `Subscription` notification logic for improved performance.
-- **Testing**: Overhauled `effect.test.ts` to improve maintainability and signal-to-noise ratio.
+- **API**: Enhanced error system with standardized `Type (Context): Message` formatting, `unknown` cause support, and mandatory context-preserving wrapping in `wrapError`.
+- **Internal**: Optimized core engine for V8 hidden class monomorphism and unified global epoch management using SMI-safe wrapping and disjoint bitmask partitioning.
+- **Internal**: Refactored `ReactiveNode` state flags into a hierarchical bitmask: Bits 0-3 for node identification (`IS_COMPUTED`, `IS_EFFECT`, `IS_ATOM`) and Bit 4+ for implementation-specific states (`DIRTY`, `EXECUTING`, etc.).
+- **Internal**: Hardened global counters (ID, Epoch, Version, Promise ID) using 31-bit SMI-safe limits (`0x3fffffff`) to ensure stable V8 optimization and avoid heap-allocation overhead.
+- **Internal**: Standardized debugging API (`debug.warn` -> `debug.warnIf`) and centralized internal symbols into `symbols.ts` using `unique symbol` for improved type safety.
+- **Internal**: Improved `AtomError` debugging with `Error.captureStackTrace` for cleaner V8 traces and `Object.setPrototypeOf` for legacy environment compatibility.
 
 ### jQuery
 
