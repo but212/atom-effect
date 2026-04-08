@@ -43,7 +43,7 @@ To maximize performance and maintain consistent behavior, the engine uses a unif
 
 ### The Fundamental Trade-off: Local vs. Global
 
-To make autonomous judgment possible, a **Global Epoch** is accepted. While each node makes its own decision, it does so based on a shared "pulse" of time. Absolute decentralization is traded for the performance and consistency of a single global counter (managed via `nextEpoch`), which utilizes `SMI_MAX` bitwise wrapping to remain V8-friendly and avoid `0` as an uninitialized state.
+To make autonomous judgment possible, a **Global Epoch** is accepted. While each node makes its own decision, it does so based on a shared "pulse" of time. Aabsolute decentralization is traded for the performance and consistency of a single global counter (managed via `nextEpoch`), which utilizes `SMI_MAX` bitwise wrapping (`(v % SMI_MAX) + 1`) to remain V8-friendly and avoid `0` as an uninitialized state.
 
 ---
 
@@ -53,7 +53,7 @@ A "glitch" occurs when an inconsistent intermediate state is observed. The appro
 
 - **Global Epoch**: Incremented whenever a mutation starts. It acts as a "logical clock" to identify *when* something happened across the entire system.
 - **Local Version**: Incremented only when a node's *value* actually changes.
-  - **Sentinel Value**: Both Epoch and Version avoid `0` (wrapping to `1`). This ensures `0` can be used as a reliable "uninitialized" or "never seen" marker across the engine.
+  - **Sentinel Value**: Both Epoch and Version avoid `0` (wrapping to `1` using modulo). This ensures `0` can be used as a reliable "uninitialized" or "never seen" marker across the engine.
 
 ### Rationale
 

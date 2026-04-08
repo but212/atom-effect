@@ -4,11 +4,10 @@ import {
   COMPUTED_STATE_FLAGS,
   EMPTY_ERROR_ARRAY,
   EPOCH_CONSTANTS,
-  IS_DEV,
 } from '@/constants';
 import { ReactiveNode } from '@/core/base';
 import { ComputedError, ERROR_MESSAGES, wrapError } from '@/errors';
-import { ATOM_BRAND, COMPUTED_BRAND } from '@/symbols';
+import { ATOM_BRAND, COMPUTED_BRAND, NO_DEFAULT_VALUE } from '@/symbols';
 import type {
   AsyncStateType,
   ComputedAtom,
@@ -16,7 +15,7 @@ import type {
   Dependency,
   Subscriber,
 } from '@/types';
-import { debug, NO_DEFAULT_VALUE } from '@/utils/debug';
+import { debug } from '@/utils/debug';
 import { isPromise } from '@/utils/type-guards';
 import { DepSlotBuffer } from './buffers';
 import { nextEpoch, nextVersion } from './scheduler';
@@ -88,7 +87,6 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     return (this.flags & DIRTY) !== 0;
   }
 
-  /** @internal */
   // --- 1. Basic Getters (Value & Identity) ---
 
   get value(): T {
@@ -153,7 +151,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     if (!this._deps.hasComputeds) return false;
 
     let found = false;
-    this._walkErrorGraph((dep) => {
+    this._walkDepGraph((dep) => {
       if ((dep.flags & (REJECTED | HAS_ERROR)) !== 0) {
         found = true;
         return false;
@@ -178,7 +176,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     if (this._error != null) collected.add(this._error);
 
     if (this._deps.hasComputeds) {
-      this._walkErrorGraph((dep) => {
+      this._walkDepGraph((dep) => {
         if ((dep.flags & IS_COMPUTED) !== 0) {
           const err = (dep as ComputedAtomImpl<unknown>)._error;
           if (err != null) collected.add(err);
@@ -282,7 +280,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
         try {
           this._deps.truncateFrom(this._trackCount);
         } catch (err) {
-          if (IS_DEV) console.warn('[atom-effect] _commitDeps failed during error recovery:', err);
+          debug.warnIf(true, `_commitDeps failed during error recovery: ${err}`);
         }
       }
       this._handleError(e as Error, ERROR_MESSAGES.COMPUTED_COMPUTATION_FAILED, true);
@@ -387,8 +385,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
           try {
             void (dep as { value: unknown }).value;
           } catch {
-            if (IS_DEV)
-              console.warn(`[atom-effect] Dependency #${dep.id} threw during dirty check`);
+            debug.warnIf(true, `Dependency #${dep.id} threw during dirty check`);
           }
         }
 
@@ -404,7 +401,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     }
   }
 
-  private _walkErrorGraph(visitor: (dep: Dependency) => boolean): void {
+  private _walkDepGraph(visitor: (dep: Dependency) => boolean): void {
     const deps = this._deps;
     const queue: Dependency[] = [];
     const visited = new Set<Dependency>();

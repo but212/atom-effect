@@ -1,5 +1,6 @@
-import { COMPUTED_STATE_FLAGS, EPOCH_CONSTANTS, IS_DEV, SMI_MAX } from '@/constants';
+import { COMPUTED_STATE_FLAGS, EPOCH_CONSTANTS, IS_DEV } from '@/constants';
 import { AtomError, ERROR_MESSAGES, wrapError } from '@/errors';
+import { DEBUG_NAME, DEBUG_TYPE } from '@/symbols';
 import type { DependencyId, Subscriber } from '@/types';
 import { generateId } from '@/utils/debug';
 import { type DepSlotBuffer, SlotBuffer } from './buffers';
@@ -14,6 +15,11 @@ import { Subscription } from './tracking';
  * @template T - The type of value produced by this node (used for subscriptions).
  */
 export abstract class ReactiveNode<T> {
+  /** [Debug] Human-readable identifier. */
+  [DEBUG_NAME]?: string;
+  /** [Debug] Node type (e.g., 'atom', 'computed'). */
+  [DEBUG_TYPE]?: string;
+
   /** [Producer/Consumer] State flags */
   flags: number;
   /** [Producer/Consumer] Version counter */
@@ -43,7 +49,7 @@ export abstract class ReactiveNode<T> {
     this.flags = 0;
     this.version = 0;
     this._lastSeenEpoch = EPOCH_CONSTANTS.UNINITIALIZED;
-    this.id = generateId() & SMI_MAX;
+    this.id = generateId();
     this._nextEpoch = undefined;
   }
 
