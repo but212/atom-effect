@@ -308,3 +308,20 @@ High-performance utility to retrieve a nested value using an array of path segme
 ### `setDeepValue(obj: unknown, keys: string[], index: number, value: unknown): unknown`
 
 The core structural sharing engine. Recursively creates a new object tree, cloning only the necessary nodes.
+
+---
+
+## Advanced: Scheduler Configuration
+
+The global `scheduler` instance can be configured for advanced debugging or performance tuning.
+
+### `scheduler.setMaxFlushIterations(max: number)`
+
+Sets the maximum number of iterations allowed in a single `_drainQueue` cycle before an overflow is triggered.
+
+- Default: `100` (via `SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS`).
+- Minimum: `10` (via `SCHEDULER_CONFIG.MIN_FLUSH_ITERATIONS`).
+
+### `scheduler.onOverflow: ((droppedCount: number) => void) | null`
+
+Custom callback triggered when the scheduler detects an infinite loop/overflow. Useful for telemetry or specialized error reporting.
