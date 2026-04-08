@@ -4,10 +4,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { atom } from '@/core/atom';
-import { computed } from '@/core/computed';
-import { effect } from '@/core/effect';
 import { EffectError } from '@/errors';
+import { atom, computed, effect } from '@/index';
 import { sleep } from '../../utils/test-helpers';
 
 describe('Effect', () => {
@@ -135,6 +133,29 @@ describe('Effect', () => {
       expect(runs).toBe(1);
       e.dispose();
     });
+
+    it('pulls computed values during dirty checks within an effect', async () => {
+      const src = atom(0);
+      let computeCount = 0;
+      const c = computed(() => {
+        computeCount++;
+        return src.value * 2;
+      });
+
+      const results: number[] = [];
+      const e = effect(() => {
+        results.push(c.value);
+      });
+      expect(computeCount).toBe(1);
+      expect(results).toEqual([0]);
+
+      src.value = 5;
+      await vi.runAllTimersAsync();
+      expect(results).toContain(10);
+      expect(computeCount).toBeGreaterThanOrEqual(2);
+
+      e.dispose();
+    });
   });
 
   describe('Lifecycle & Cleanup', () => {
@@ -228,6 +249,38 @@ describe('Effect', () => {
       expect(onError).toHaveBeenCalledWith(expect.any(EffectError));
       expect(() => e.dispose()).not.toThrow();
       expect(e.isDisposed).toBe(true);
+    });
+
+    it('isolates crashing side-effects and wraps errors via onError safely', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const a = atom(0);
+      const goodWorker = vi.fn();
+      const errHandler = vi.fn();
+
+      a.subscribe(() => {
+        throw new Error('Subscriber crash');
+      });
+      a.subscribe(goodWorker);
+
+      const e = effect(
+        () => {
+          if (a.value > 0) throw new Error('Effect crash');
+        },
+        { onError: errHandler }
+      );
+
+      await vi.runAllTimersAsync();
+
+      a.value = 1;
+      await vi.runAllTimersAsync();
+
+      expect(goodWorker).toHaveBeenCalledTimes(1);
+      expect(errHandler).toHaveBeenCalledTimes(1);
+      expect(errHandler.mock.calls[0]![0]).toBeInstanceOf(Error);
+      expect(consoleSpy).toHaveBeenCalled();
+
+      e.dispose();
+      consoleSpy.mockRestore();
     });
 
     it('auto-disposes to prevent infinite loops based on frequency constraints', async () => {

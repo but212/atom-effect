@@ -3,10 +3,20 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { SCHEDULER_CONFIG } from '@/constants';
-import { atom, computed, effect } from '@/core';
-import { batch, scheduler } from '@/core/scheduler';
+import { SCHEDULER_CONFIG, SMI_MAX } from '@/constants';
+import {
+  currentEpoch,
+  currentFlushEpoch,
+  endFlush,
+  incrementFlushExecutionCount,
+  nextEpoch,
+  nextVersion,
+  resetFlushState,
+  runInFlushScope,
+  startFlush,
+} from '@/core/scheduler';
 import { SchedulerError } from '@/errors';
+import { atom, batch, computed, effect, scheduler } from '@/index';
 import { sleep } from '../../utils/test-helpers';
 
 describe('Scheduler', () => {
@@ -218,5 +228,95 @@ describe('batch()', () => {
 
     expect(a.value).toBe(42);
     expect(scheduler.isBatching).toBe(false);
+  });
+
+  it('defers all notifications until the outermost batch completes', async () => {
+    const a = atom(0);
+    const b = atom(0);
+    const results: [number, number][] = [];
+
+    effect(() => {
+      results.push([a.value, b.value]);
+    });
+    results.length = 0;
+
+    batch(() => {
+      a.value = 1;
+      batch(() => {
+        b.value = 2;
+        a.value = 3;
+      });
+      b.value = 4;
+    });
+
+    await sleep(10);
+    expect(results).toEqual([[3, 4]]);
+  });
+});
+
+describe('Epoch & Versioning', () => {
+  it('generates sequential non-zero epochs within SMI limits', () => {
+    const previous = currentEpoch();
+    const next = nextEpoch();
+
+    expect(next).not.toBe(previous);
+    expect(next).toBeGreaterThan(0);
+    expect(next).toBeLessThanOrEqual(SMI_MAX);
+  });
+
+  it('calculates next version with wrap-around and avoids 0', () => {
+    expect(nextVersion(0)).toBe(1);
+    expect(nextVersion(SMI_MAX)).toBe(1);
+  });
+
+  it('manages flush lifecycle and state correctly', () => {
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    resetFlushState();
+    expect(incrementFlushExecutionCount()).toBe(0); // idle
+
+    expect(startFlush()).toBe(true);
+    const epochAfterStart = currentFlushEpoch();
+    expect(epochAfterStart).toBeGreaterThan(0);
+
+    // Re-entrancy blocked
+    expect(startFlush()).toBe(false);
+    expect(consoleWarn).toHaveBeenCalled();
+    expect(currentFlushEpoch()).toBe(epochAfterStart);
+
+    expect(incrementFlushExecutionCount()).toBe(1);
+    expect(incrementFlushExecutionCount()).toBe(2);
+
+    endFlush();
+    expect(incrementFlushExecutionCount()).toBe(0);
+    expect(startFlush()).toBe(true);
+
+    endFlush();
+    consoleWarn.mockRestore();
+  });
+
+  it('runInFlushScope ensures endFlush is called even on failure', () => {
+    resetFlushState();
+    expect(() =>
+      runInFlushScope(() => {
+        throw new Error('fail');
+      })
+    ).toThrow('fail');
+
+    expect(startFlush()).toBe(true); // restart allowed
+    endFlush();
+  });
+
+  it('detects infinite loops in flush execution count', () => {
+    resetFlushState();
+    startFlush();
+
+    // Use a high number to hit the 10k threshold
+    for (let i = 0; i < 10000; i++) {
+      incrementFlushExecutionCount();
+    }
+
+    expect(() => incrementFlushExecutionCount()).toThrow(/Infinite loop detected/);
+    endFlush();
   });
 });

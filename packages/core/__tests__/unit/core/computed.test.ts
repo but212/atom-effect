@@ -4,9 +4,9 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { atom } from '@/core/atom';
-import { computed } from '@/core/computed';
+import { EMPTY_ERROR_ARRAY } from '@/constants';
 import { AtomError, ComputedError } from '@/errors';
+import { atom, computed, effect } from '@/index';
 import { ATOM_BRAND, COMPUTED_BRAND } from '@/symbols';
 import { sleep, waitForScheduler } from '../../utils/test-helpers';
 
@@ -77,6 +77,127 @@ describe('Computed', () => {
       expect(() => c.value).toThrow(ComputedError);
       expect(handler).toHaveBeenCalledTimes(1);
       expect(consoleError).toHaveBeenCalled(); // Caught internally
+    });
+
+    it('manages version bumps: bumps only on resolution with changed value', () => {
+      const src = atom(0);
+      const c = computed(() => Math.floor(src.value / 10));
+      c.value; // initial resolve -> 0
+      const v0 = (c as unknown as { version: number }).version;
+
+      // invalidate() does NOT bump version
+      c.invalidate();
+      expect((c as unknown as { version: number }).version).toBe(v0);
+
+      // same resolved value (floor(5/10)=0) -> no bump
+      src.value = 5;
+      c.value;
+      expect((c as unknown as { version: number }).version).toBe(v0);
+
+      // different resolved value -> bump
+      src.value = 99;
+      c.invalidate();
+      c.value;
+      expect((c as unknown as { version: number }).version).toBeGreaterThan(v0);
+    });
+
+    it('bumps version on async error', async () => {
+      const c = computed(
+        async () => {
+          await sleep(5);
+          throw new Error('async-fail');
+        },
+        { defaultValue: -1 }
+      );
+
+      c.value; // triggers async
+      const v0 = (c as unknown as { version: number }).version;
+
+      await sleep(30);
+
+      expect((c as unknown as { version: number }).version).toBeGreaterThan(v0);
+      expect(c.hasError).toBe(true);
+    });
+
+    it('aggregates multiple upstream errors and clears completely upon recovery', () => {
+      const cause1 = atom(true, { sync: true });
+      const cause2 = atom(true, { sync: true });
+
+      const x = computed(
+        () => {
+          if (cause1.value) throw new Error('X fail');
+          return 1;
+        },
+        { defaultValue: 0 }
+      );
+      const y = computed(
+        () => {
+          if (cause2.value) throw new Error('Y fail');
+          return 2;
+        },
+        { defaultValue: 0 }
+      );
+
+      const z = computed(() => x.value + y.value, { defaultValue: -1 });
+
+      expect(z.hasError).toBe(false);
+      expect(z.errors).toBe(EMPTY_ERROR_ARRAY);
+
+      // Eval triggers
+      try {
+        x.value;
+      } catch {
+        /* ignore */
+      }
+      try {
+        y.value;
+      } catch {
+        /* ignore */
+      }
+
+      expect(z.value).toBe(0); // 0 + 0
+      expect(z.hasError).toBe(true);
+      expect(z.errors.length).toBeGreaterThanOrEqual(2);
+      expect(z.errors.some((e) => e.message.includes('X fail'))).toBe(true);
+      expect(z.errors.some((e) => e.message.includes('Y fail'))).toBe(true);
+
+      cause1.value = false;
+      expect(z.value).toBe(1); // 1 + 0
+      expect(z.errors.length).toBe(1);
+
+      cause2.value = false;
+      expect(z.value).toBe(3); // 1 + 2
+      expect(z.hasError).toBe(false);
+      expect(z.errors).toBe(EMPTY_ERROR_ARRAY);
+    });
+
+    it('transitions asynchronously to rejected state and recovers fully upon retry', async () => {
+      const shouldFail = atom(true);
+      const user = computed(
+        async () => {
+          await sleep(10);
+          if (shouldFail.value) throw new Error('API Fail');
+          return { name: 'Test' };
+        },
+        { defaultValue: null }
+      );
+
+      user.value;
+      await sleep(30);
+
+      expect(user.state).toBe('rejected');
+      expect(user.hasError).toBe(true);
+      expect(user.errors[0]?.message).toContain('API Fail');
+
+      shouldFail.value = false;
+      user.invalidate();
+      user.value;
+
+      await sleep(30);
+
+      expect(user.state).toBe('resolved');
+      expect(user.hasError).toBe(false);
+      expect(user.value).toEqual({ name: 'Test' });
     });
   });
 
@@ -162,6 +283,46 @@ describe('Computed', () => {
       await waitForScheduler();
       expect(c.peek()).toBe(0); // Stale read skips computation
       expect(fn).toHaveBeenCalledTimes(2);
+    });
+
+    it('tracks only accessed dependencies and prunes on branch switch', async () => {
+      const toggle = atom(true);
+      const a = atom('A');
+      const b = atom('B');
+      let runs = 0;
+      const c = computed(() => {
+        runs++;
+        return toggle.value ? a.value : b.value;
+      });
+
+      expect(c.value).toBe('A');
+      expect(runs).toBe(1);
+
+      // b is not tracked
+      b.value = 'B2';
+      await waitForScheduler();
+      c.invalidate();
+      expect(c.value).toBe('A');
+      expect(runs).toBe(2);
+
+      // switch branch: now c depends on toggle + b
+      toggle.value = false;
+      c.invalidate();
+      expect(c.value).toBe('B2');
+      expect(runs).toBe(3);
+
+      // a is pruned
+      const runsAfterSwitch = runs;
+      a.value = 'A2';
+      await waitForScheduler();
+      expect(runs).toBe(runsAfterSwitch);
+    });
+
+    it('deduplicates same dependency accessed multiple times', () => {
+      const a = atom(1);
+      const c = computed(() => a.value + a.value + a.value);
+      expect(c.value).toBe(3);
+      expect(a.subscriberCount()).toBe(1);
     });
   });
 
@@ -254,6 +415,34 @@ describe('Computed', () => {
 
       await sleep(60);
       expect(c.value).toBe(1); // the latest valid state wins
+    });
+
+    it('eventually resolves to latest value after dependency drift', async () => {
+      const src = atom(1);
+      const results: number[] = [];
+
+      const c = computed(
+        async () => {
+          const val = src.value;
+          await sleep(20);
+          return val;
+        },
+        { defaultValue: 0 }
+      );
+
+      const e = effect(() => {
+        results.push(c.value);
+      });
+
+      await sleep(40);
+      expect(c.value).toBe(1);
+
+      src.value = 2;
+      await sleep(60);
+
+      expect(c.value).toBe(2);
+      expect(results[results.length - 1]).toBe(2);
+      e.dispose();
     });
   });
 

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { atom, computed, effect } from '@/core';
+import { atom, computed, effect } from '@/index';
 
-import { flush } from './utils/test-helpers';
+import { flush } from '../utils/test-helpers';
 
 describe('DOM Integration', () => {
   let container: HTMLDivElement;

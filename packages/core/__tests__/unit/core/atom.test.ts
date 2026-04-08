@@ -4,9 +4,8 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { atom } from '@/core/atom';
-import { scheduler } from '@/core/scheduler';
 import { AtomError } from '@/errors';
+import { atom, scheduler } from '@/index';
 import { waitForScheduler } from '../../utils/test-helpers';
 
 describe('Atom', () => {
@@ -87,6 +86,18 @@ describe('Atom', () => {
       await waitForScheduler();
       expect(spy).not.toHaveBeenCalled();
     });
+
+    it('manages version increments: bumps on change, stays on same-value assignment', () => {
+      const a = atom(0);
+      const v0 = (a as unknown as { version: number }).version;
+
+      a.value = 1;
+      expect((a as unknown as { version: number }).version).toBe(v0 + 1);
+
+      const v1 = (a as unknown as { version: number }).version;
+      a.value = 1; // same value
+      expect((a as unknown as { version: number }).version).toBe(v1);
+    });
   });
 
   describe('Sync Mode Execution', () => {
@@ -131,6 +142,36 @@ describe('Atom', () => {
       unsub1();
       expect(a.subscriberCount()).toBe(0);
       expect(() => unsub2()).not.toThrow(); // Safe double unsubscribe
+    });
+
+    it('supports both function and object subscribers', async () => {
+      const a = atom(0);
+      const fnCalls: number[] = [];
+      const objCalls: number[] = [];
+
+      a.subscribe((val) => fnCalls.push(val!));
+      a.subscribe({ execute: () => objCalls.push(a.peek()) });
+
+      a.value = 5;
+      await waitForScheduler();
+
+      expect(fnCalls).toEqual([5]);
+      expect(objCalls).toEqual([5]);
+    });
+
+    it('concurrent unsubscribe prevents notification in current batch', () => {
+      const a = atom(0, { sync: true });
+      const calls: string[] = [];
+      let unsub2: () => void;
+
+      a.subscribe(() => {
+        calls.push('first');
+        unsub2();
+      });
+      unsub2 = a.subscribe(() => calls.push('second'));
+
+      a.value = 1;
+      expect(calls).toEqual(['first']);
     });
 
     it('isolates subscriber errors so peers still execute', async () => {
