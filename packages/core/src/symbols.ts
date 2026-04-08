@@ -12,9 +12,13 @@ export const EFFECT_BRAND: unique symbol = Symbol.for('atom-effect/effect');
  * without being misidentified as writable by isWritable().
  */
 export const WRITABLE_BRAND: unique symbol = Symbol.for('atom-effect/writable');
-/** Marker for missing optional default values. */
-export const NO_DEFAULT_VALUE = Symbol.for('atom-effect/no-default-value');
+
+/**
+ * Marker for missing optional default values.
+ * Use private Symbol to prevent identity spoofing from external code.
+ */
+export const NO_DEFAULT_VALUE: unique symbol = Symbol('atom-effect/no-default-value');
 
 /** Internal debug symbols. */
-export const DEBUG_NAME = Symbol.for('atom-effect/debug-name');
-export const DEBUG_TYPE = Symbol.for('atom-effect/debug-type');
+export const DEBUG_NAME: unique symbol = Symbol('atom-effect/debug-name');
+export const DEBUG_TYPE: unique symbol = Symbol('atom-effect/debug-type');
