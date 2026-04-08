@@ -24,7 +24,10 @@ export class SlotBuffer<T> {
   _s3: T | null = null;
 
   // ── Bookkeeping ───────────────────────────────────────────────────────
-  /** Active (non-null) element count across slots + overflow. */
+  /**
+   * Active (non-null) element count across slots + overflow.
+   * This property specifically tracks "active elements", not the "length" of the buffer.
+   */
   _count = 0;
 
   /** Lazy-allocated overflow array for subscribers beyond inline capacity. */
@@ -61,8 +64,28 @@ export class SlotBuffer<T> {
     return null;
   }
 
-  /** Overwrites an item at a specific index. */
+  /**
+   * Overwrites an item at a specific index.
+   * Correctly maintains the active element count.
+   */
   setAt(index: number, item: T | null): void {
+    const prev = this.getAt(index);
+    if (prev === item) return;
+
+    this._directSetAt(index, item);
+
+    if (prev === null && item !== null) {
+      this._count++;
+    } else if (prev !== null && item === null) {
+      this._count--;
+    }
+  }
+
+  /**
+   * Internal set without count management.
+   * Useful for bulk operations in subclasses.
+   */
+  protected _directSetAt(index: number, item: T | null): void {
     switch (index) {
       case 0:
         this._s0 = item;
@@ -81,58 +104,32 @@ export class SlotBuffer<T> {
         this._overflow[index - 4] = item;
       }
     }
-
-    if (index >= this._count) {
-      this._count = index + 1;
-    }
   }
 
+  /**
+   * Discards all items from the given index onwards.
+   * Correctly calls `_onItemRemoved` and maintains `_count`.
+   */
   truncateFrom(index: number): void {
-    const count = this._count;
-    if (index >= count) return;
-
-    // 1. Unroll Inline Slots Cleanup: Simplified sequential check
-    if (index <= 3) {
-      if (index <= 0) {
-        const s = this._s0;
-        if (s != null) {
-          this._onItemRemoved(s);
-          this._s0 = null;
-        }
-      }
-      if (index <= 1) {
-        const s = this._s1;
-        if (s != null) {
-          this._onItemRemoved(s);
-          this._s1 = null;
-        }
-      }
-      if (index <= 2) {
-        const s = this._s2;
-        if (s != null) {
-          this._onItemRemoved(s);
-          this._s2 = null;
-        }
-      }
-      if (index <= 3) {
-        const s = this._s3;
-        if (s != null) {
-          this._onItemRemoved(s);
-          this._s3 = null;
-        }
-      }
+    // 1. Inline Slots Cleanup
+    if (index < 4) {
+      if (index <= 0) this._clearInline(0);
+      if (index <= 1) this._clearInline(1);
+      if (index <= 2) this._clearInline(2);
+      if (index <= 3) this._clearInline(3);
     }
 
     // 2. Overflow Cleanup
     const ov = this._overflow;
-    if (ov !== null && count > 4) {
-      const offsetIdx = index > 4 ? index - 4 : 0;
+    if (ov !== null) {
+      const startIdx = index > 4 ? index - 4 : 0;
       const len = ov.length;
-      for (let i = offsetIdx; i < len; i++) {
+      for (let i = startIdx; i < len; i++) {
         const item = ov[i];
-        if (item != null) {
+        if (item != null && item !== undefined) {
           this._onItemRemoved(item);
           ov[i] = null;
+          this._count--;
         }
       }
 
@@ -140,22 +137,28 @@ export class SlotBuffer<T> {
         ov.length = 0;
         this._overflow = null;
       } else {
-        ov.length = index - 4;
+        ov.length = startIdx;
       }
     }
 
-    // 3. Invalidate free indices (they may point to truncated positions)
+    // 3. Invalidate free indices
     if (this._freeIndices !== null) {
       this._freeIndices = null;
     }
+  }
 
-    this._count = index;
+  private _clearInline(idx: number): void {
+    const prop = idx === 0 ? '_s0' : idx === 1 ? '_s1' : idx === 2 ? '_s2' : '_s3';
+    const s = this[prop];
+    if (s !== null) {
+      this._onItemRemoved(s);
+      this[prop] = null;
+      this._count--;
+    }
   }
 
   /**
    * Protected hook called whenever an item is logically removed from the buffer.
-   * Allows subclasses (like DepSlotBuffer) to perform cleanup (unsubscribing)
-   * without allocating temporary closures in hot paths.
    */
   protected _onItemRemoved(_item: T): void {
     // Base implementation does nothing
@@ -266,8 +269,7 @@ export class SlotBuffer<T> {
   }
 
   has(item: T): boolean {
-    const count = this._count;
-    if (count === 0) return false;
+    if (this._count === 0) return false;
 
     // 1. Inline Slots
     if (this._s0 === item || this._s1 === item || this._s2 === item || this._s3 === item) {
@@ -276,7 +278,7 @@ export class SlotBuffer<T> {
 
     // 2. Overflow Scan
     const ov = this._overflow;
-    if (ov != null) {
+    if (ov !== null) {
       for (let i = 0, len = ov.length; i < len; i++) {
         if (ov[i] === item) return true;
       }
@@ -298,32 +300,32 @@ export class SlotBuffer<T> {
     let executed = 0;
     // 1. Inline slots
     const s0 = this._s0;
-    if (s0 != null) {
+    if (s0 !== null) {
       fn(s0);
       if (++executed === count) return;
     }
     const s1 = this._s1;
-    if (s1 != null) {
+    if (s1 !== null) {
       fn(s1);
       if (++executed === count) return;
     }
     const s2 = this._s2;
-    if (s2 != null) {
+    if (s2 !== null) {
       fn(s2);
       if (++executed === count) return;
     }
     const s3 = this._s3;
-    if (s3 != null) {
+    if (s3 !== null) {
       fn(s3);
       if (++executed === count) return;
     }
 
     // 2. Overflow
     const ov = this._overflow;
-    if (ov != null) {
+    if (ov !== null) {
       for (let i = 0, len = ov.length; i < len; i++) {
         const el = ov[i];
-        if (el != null) {
+        if (el != null && el !== undefined) {
           fn(el);
           if (++executed === count) return;
         }
@@ -344,32 +346,32 @@ export class SlotBuffer<T> {
     // 1. Inline slots
     let executed = 0;
     const s0 = this._s0;
-    if (s0 != null) {
+    if (s0 !== null) {
       fn(s0);
       if (++executed === count) return executed;
     }
     const s1 = this._s1;
-    if (s1 != null) {
+    if (s1 !== null) {
       fn(s1);
       if (++executed === count) return executed;
     }
     const s2 = this._s2;
-    if (s2 != null) {
+    if (s2 !== null) {
       fn(s2);
       if (++executed === count) return executed;
     }
     const s3 = this._s3;
-    if (s3 != null) {
+    if (s3 !== null) {
       fn(s3);
       if (++executed === count) return executed;
     }
 
     // 2. Overflow
     const ov = this._overflow;
-    if (ov != null) {
+    if (ov !== null) {
       for (let i = 0, len = ov.length; i < len; i++) {
         const el = ov[i];
-        if (el != null) {
+        if (el != null && el !== undefined) {
           fn(el);
           if (++executed === count) return executed;
         }
@@ -380,9 +382,6 @@ export class SlotBuffer<T> {
 
   /**
    * Compacts the overflow array by removing null gaps.
-   *
-   * Inline slots are not compacted — they stay null until reused by
-   * `add()`. This keeps the V8 hidden class stable.
    */
   compact(): void {
     const ov = this._overflow;
@@ -391,16 +390,14 @@ export class SlotBuffer<T> {
     let len = ov.length;
     if (len === 0) return;
 
-    // Pop-and-swap compaction with proper null handling
+    // Pop-and-swap compaction
     let i = 0;
     while (i < len) {
       if (ov[i] === null) {
-        // Pop trailing nulls first to find a valid swap candidate
         while (len > i && ov[len - 1] === null) {
           ov.pop();
           len--;
         }
-        // If there's still a valid element beyond i, swap it in
         if (len > i) {
           ov[i] = ov.pop()!;
           len--;
@@ -411,10 +408,7 @@ export class SlotBuffer<T> {
       }
     }
 
-    // Invalidate free indices after compaction (positions have shifted)
     this._freeIndices = null;
-
-    // Release overflow array when empty
     if (len === 0) {
       this._overflow = null;
     }
@@ -454,42 +448,36 @@ import type { DependencyLink } from './tracking';
  * Specialized inline-slot container for dependency tracking.
  *
  * Inherits from `SlotBuffer` to share the same zero-allocation inline
- * properties (`_s0`...`_s3`). Adds dependency-specific in-place updates,
- * truncation, and a hybrid O(1) Map fallback for mega-node performance.
+ * properties (`_s0`...`_s3`).
  */
 export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
   private _map: Map<Dependency, number> | null = null;
   private readonly _SCAN_THRESHOLD = 32;
 
-  /**
-   * Indicates if the buffer contains at least one computed dependency.
-   */
+  /** Indicates if the buffer contains at least one computed dependency. */
   hasComputeds = false;
 
-  /**
-   * Resets tracking metadata for a new evaluation pass.
-   * Ensures 'hasComputeds' is clean.
-   */
+  /** Resets tracking metadata. */
   prepareTracking(): void {
     this.hasComputeds = false;
   }
 
-  /**
-   * Protected hook called whenever a link is extracted from the buffer.
-   * Handles automatic unsubscription without closure allocation.
-   */
+  /** Protected hook called whenever a link is extracted from the buffer. */
   protected override _onItemRemoved(link: DependencyLink): void {
     const unsub = link.unsub;
     if (unsub) unsub();
   }
 
   /**
-   * Looks for an existing subscription to the given node starting from `trackIndex`.
-   * If found, swaps it to `trackIndex`, updates version, and returns true.
+   * Looks for an existing subscription and relocates it to `trackIndex`.
    */
   claimExisting(dep: Dependency, trackIndex: number): boolean {
+    const ovLimitCheck = this._overflow;
+    const limit = ovLimitCheck ? ovLimitCheck.length + 4 : 4;
+    if (trackIndex >= limit) return false;
+
     const count = this._count;
-    if (trackIndex >= count) return false;
+    if (count === 0) return false;
 
     // 1. Hybrid O(1) Map Fallback for Mega-Nodes
     const remaining = count - trackIndex;
@@ -498,10 +486,9 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
     }
 
     // 2. Unrolled Fast Path for Inline Slots (0..3)
-    // Avoids overhead of getAt/setAt by using switch-fallthrough and direct access.
     if (trackIndex < 4) {
       switch (trackIndex) {
-        // biome-ignore lint/suspicious/noFallthroughSwitchClause: intentional fallthrough for sequential search
+        // biome-ignore lint/suspicious/noFallthroughSwitchClause: intentional fallthrough
         case 0: {
           const l = this._s0;
           if (l && l.node === dep && l.unsub) {
@@ -509,34 +496,24 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
             return true;
           }
         }
-        // biome-ignore lint/suspicious/noFallthroughSwitchClause: intentional fallthrough for sequential search
+        // biome-ignore lint/suspicious/noFallthroughSwitchClause: intentional fallthrough
         case 1: {
           if (count > 1) {
             const l = this._s1;
             if (l && l.node === dep && l.unsub) {
               l.version = dep.version;
-              if (trackIndex !== 1) {
-                // we know trackIndex is 0 here
-                this._s1 = this._s0;
-                this._s0 = l;
-              }
+              if (trackIndex !== 1) this._swapInline(1, trackIndex, l);
               return true;
             }
           }
         }
-        // biome-ignore lint/suspicious/noFallthroughSwitchClause: intentional fallthrough for sequential search
+        // biome-ignore lint/suspicious/noFallthroughSwitchClause: intentional fallthrough
         case 2: {
           if (count > 2) {
             const l = this._s2;
             if (l && l.node === dep && l.unsub) {
               l.version = dep.version;
-              if (trackIndex !== 2) {
-                // swap with trackIndex (0 or 1)
-                const occ = trackIndex === 0 ? this._s0 : this._s1;
-                if (trackIndex === 0) this._s0 = l;
-                else this._s1 = l;
-                this._s2 = occ;
-              }
+              if (trackIndex !== 2) this._swapInline(2, trackIndex, l);
               return true;
             }
           }
@@ -546,21 +523,7 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
             const l = this._s3;
             if (l && l.node === dep && l.unsub) {
               l.version = dep.version;
-              if (trackIndex !== 3) {
-                // swap with trackIndex (0, 1, or 2)
-                let occ: DependencyLink | null;
-                if (trackIndex === 0) {
-                  occ = this._s0;
-                  this._s0 = l;
-                } else if (trackIndex === 1) {
-                  occ = this._s1;
-                  this._s1 = l;
-                } else {
-                  occ = this._s2;
-                  this._s2 = l;
-                }
-                this._s3 = occ;
-              }
+              if (trackIndex !== 3) this._swapInline(3, trackIndex, l);
               return true;
             }
           }
@@ -572,9 +535,8 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
     const ov = this._overflow;
     if (ov) {
       const dv = dep.version;
-      const start = trackIndex > 4 ? trackIndex : 4;
-      const len = ov.length;
-      for (let i = start - 4; i < len; i++) {
+      const startIdx = trackIndex > 4 ? trackIndex : 4;
+      for (let i = startIdx - 4; i < ov.length; i++) {
         const link = ov[i];
         if (link && link.node === dep && link.unsub) {
           link.version = dv;
@@ -592,46 +554,40 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
     if (map === null) {
       map = this._map = new Map();
       const count = this._count;
-      // Partitioned scan to avoid getAt() dispatch in loop
-      if (trackIndex < 4) {
-        const s0 = this._s0;
-        if (trackIndex <= 0 && s0?.unsub) map.set(s0.node, 0);
-        const s1 = this._s1;
-        if (trackIndex <= 1 && s1?.unsub) map.set(s1.node, 1);
-        const s2 = this._s2;
-        if (trackIndex <= 2 && s2?.unsub) map.set(s2.node, 2);
-        const s3 = this._s3;
-        if (trackIndex <= 3 && s3?.unsub) map.set(s3.node, 3);
-      }
+      // Populate Map starting from trackIndex
+      const s0 = this._s0;
+      if (trackIndex <= 0 && s0?.unsub) map.set(s0.node, 0);
+      const s1 = this._s1;
+      if (trackIndex <= 1 && s1?.unsub) map.set(s1.node, 1);
+      const s2 = this._s2;
+      if (trackIndex <= 2 && s2?.unsub) map.set(s2.node, 2);
+      const s3 = this._s3;
+      if (trackIndex <= 3 && s3?.unsub) map.set(s3.node, 3);
+
       const ov = this._overflow;
       if (ov && count > 4) {
-        const start = trackIndex > 4 ? trackIndex : 4;
-        const len = ov.length;
-        for (let i = start - 4; i < len; i++) {
-          const link = ov[i];
-          if (link?.unsub) map.set(link.node, i + 4);
+        const startIdx = trackIndex > 4 ? trackIndex : 4;
+        for (let i = startIdx - 4; i < ov.length; i++) {
+          const l = ov[i];
+          if (l?.unsub) map.set(l.node, i + 4);
         }
       }
     }
 
     const existingIndex = map.get(dep);
-    if (existingIndex === undefined || existingIndex < trackIndex) return false;
+    const ovLimitCheck = this._overflow;
+    const limit = ovLimitCheck ? ovLimitCheck.length + 4 : 4;
+    if (existingIndex === undefined || existingIndex < trackIndex || existingIndex >= limit)
+      return false;
 
     const link = this.getAt(existingIndex);
     if (link == null || !link.unsub) return false;
 
     link.version = dep.version;
     if (existingIndex !== trackIndex) {
-      // Inlined swap to avoid dispatch overhead
-      let occupant: DependencyLink | null;
-      if (trackIndex === 0) occupant = this._s0;
-      else if (trackIndex === 1) occupant = this._s1;
-      else if (trackIndex === 2) occupant = this._s2;
-      else if (trackIndex === 3) occupant = this._s3;
-      else occupant = this._overflow![trackIndex - 4] ?? null;
-
-      this.setAt(trackIndex, link);
-      this.setAt(existingIndex, occupant);
+      const occupant = this.getAt(trackIndex);
+      this._directSetAt(trackIndex, link);
+      this._directSetAt(existingIndex, occupant);
 
       if (occupant?.unsub) map.set(occupant.node, existingIndex);
       map.set(dep, trackIndex);
@@ -639,105 +595,57 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
     return true;
   }
 
+  private _swapInline(idx: number, trackIndex: number, link: DependencyLink): void {
+    const occupant = this.getAt(trackIndex);
+    this._directSetAt(trackIndex, link);
+    this._directSetAt(idx, occupant);
+  }
+
   private _swapGeneral(idx: number, trackIndex: number, link: DependencyLink): void {
-    if (idx === trackIndex) return;
-
-    // Use direct access for the likely case where idx is in overflow
-    let occupant: DependencyLink | null;
-    if (trackIndex === 0) occupant = this._s0;
-    else if (trackIndex === 1) occupant = this._s1;
-    else if (trackIndex === 2) occupant = this._s2;
-    else if (trackIndex === 3) occupant = this._s3;
-    else occupant = this._overflow![trackIndex - 4] ?? null;
-
-    this.setAt(trackIndex, link);
-
-    if (idx === 0) this._s0 = occupant;
-    else if (idx === 1) this._s1 = occupant;
-    else if (idx === 2) this._s2 = occupant;
-    else if (idx === 3) this._s3 = occupant;
-    else {
-      const ov = this._overflow!;
-      ov[idx - 4] = occupant;
-    }
+    const occupant = this.getAt(trackIndex);
+    this._directSetAt(trackIndex, link);
+    this._directSetAt(idx, occupant);
   }
 
   insertNew(trackIndex: number, link: DependencyLink): void {
-    const count = this._count;
-    if (trackIndex < count) {
-      let occupant: DependencyLink | null;
-      if (trackIndex === 0) occupant = this._s0;
-      else if (trackIndex === 1) occupant = this._s1;
-      else if (trackIndex === 2) occupant = this._s2;
-      else if (trackIndex === 3) occupant = this._s3;
-      else occupant = this._overflow![trackIndex - 4] ?? null;
+    const occupant = this.getAt(trackIndex);
 
-      if (occupant != null) {
-        // Direct overflow append avoids inline gap-scan overhead in add()
-        // since we know all inline slots are occupied when trackIndex < count.
-        this._addToOverflow(occupant);
-        if (this._map !== null && occupant.unsub) {
-          this._map.set(occupant.node, this._count - 1);
-        }
+    if (occupant !== null) {
+      this._addToOverflow(occupant);
+      if (this._map !== null && occupant.unsub) {
+        this._map.set(occupant.node, this._count - 1);
       }
     }
 
-    if (trackIndex === 0) this._s0 = link;
-    else if (trackIndex === 1) this._s1 = link;
-    else if (trackIndex === 2) this._s2 = link;
-    else if (trackIndex === 3) this._s3 = link;
-    else {
-      let ov = this._overflow;
-      if (!ov) {
-        ov = [];
-        this._overflow = ov;
-      }
-      ov[trackIndex - 4] = link;
+    this._directSetAt(trackIndex, link);
+
+    if (this._map !== null && link.unsub) {
+      this._map.set(link.node, trackIndex);
     }
 
-    if (trackIndex >= count) {
-      this._count = trackIndex + 1;
+    if (occupant === null) {
+      this._count++;
     }
   }
 
-  /**
-   * Discards all links from the given index onwards.
-   * Unsubscribes each link before removing it.
-   */
   truncateFrom(index: number): void {
-    if (index >= this._count) return;
-
     super.truncateFrom(index);
-
     if (this._map !== null) {
       this._map.clear();
       this._map = null;
     }
   }
 
-  /** Unsubscribes from all links and resets the buffer. */
   disposeAll(): void {
-    if (this._count > 0) {
-      this.truncateFrom(0);
-    }
+    if (this._count > 0) this.truncateFrom(0);
     this.hasComputeds = false;
   }
 
-  /**
-   * [Safety Guard]
-   * remove() is strictly prohibited in DepSlotBuffer to preserve sequential cache paths.
-   */
   override remove(_item: DependencyLink): boolean {
-    throw new Error(
-      'remove() is strictly prohibited in DepSlotBuffer to preserve sequential cache paths.'
-    );
+    throw new Error('remove() is prohibited in DepSlotBuffer.');
   }
 
-  /**
-   * [Safety Guard]
-   * Compaction is unnecessary since remove() is prohibited.
-   */
   override compact(): void {
-    // No-op for DepSlotBuffer
+    // No-op
   }
 }

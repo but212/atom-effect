@@ -9,6 +9,9 @@
 - **Scheduler**: Resolved `_isFlushingSync` state re-entrancy issue where nested synchronous flushes could prematurely reset the flushing flag, disrupting deduplication.
 - **Scheduler**: Fixed memory leak in `_handleFlushOverflow` by ensuring `_batchQueue` references are strictly cleared during overflow events.
 - **Tracking**: Resolved "Async Context Loss" bug in `untracked()` where tracking context could leak into subsequent async operations.
+- **Internal**: Refactored `SlotBuffer` and `DepSlotBuffer` to ensure `size` (via `_count`) strictly tracks active (non-null) elements instead of acting as a length-based index.
+- **Internal**: Fixed Map synchronization in `DepSlotBuffer` where internal lookup tables could become stale after `insertNew` or `claimExisting` relocations.
+- **Internal**: Standardized sparse update logic in `SlotBuffer.setAt` to correctly manage element counts during overwrite operations.
 
 #### Changed
 
