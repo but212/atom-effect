@@ -115,7 +115,7 @@ const effectHandle = effect(() => {
 effectHandle.dispose();
 ```
 
-`effectHandle` returns an `EffectObject` with the following properties:
+`effect()` returns an `EffectObject` with the following properties:
 
 - `dispose()`: Stops the effect and runs cleanup.
 - `run()`: Manually re-executes the effect immediately. This also resets the "infinite loop" execution counter for the current flush cycle, allowing for controlled manual re-runs.
