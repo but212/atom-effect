@@ -273,16 +273,23 @@ Lenses provide a type-safe way to create two-way reactive "views" into part of a
 
 Creates a writable "fake" atom that points to a specific dot-path within a source atom.
 
+- **Fine-grained Reactivity**: Lenses are intelligent filters. An effect using a lens will only re-run if the *specific sub-path* changes. Updates to sibling properties in the parent atom are ignored.
+- **Path Flattening**: Nested lenses (created via `composeLens`) are automatically optimized into a single node. Composing a lens 10 times results in $O(1)$ node overhead rather than $O(N)$.
+- **Subscriber Tracking**: `subscriberCount()` accurately reflects both manual `.subscribe()` listeners and reactive dependencies from effects or computed values.
 - **Structural Sharing**: Writing to a lens only clones objects along the modified path. Unrelated branches stay reference-equal (`===`).
 - **Equality Guard**: If the new value is identical to the current one (via `Object.is`), the parent atom is not updated, preventing redundant effect propagation.
-- **Auto-Autocompletion**: Supports IDE path completion up to 8 levels deep with exact type inference. Now filters out non-data properties (methods) and supports numeric array indices.
+- **Auto-Autocompletion**: Supports IDE path completion up to 8 levels deep with exact type inference. Filters out non-data properties (methods) and supports numeric array indices.
 
 ```typescript
-const store = atom({ user: { profile: { name: 'Alice' } } });
+const store = atom({ user: { profile: { name: 'Alice', age: 25 } } });
 const nameLens = atomLens(store, 'user.profile.name');
 
-console.log(nameLens.value); // 'Alice'
-nameLens.value = 'Bob'; // Atomically updates store.user.profile.name
+effect(() => {
+  console.log(nameLens.value); // Re-runs ONLY when 'name' changes
+});
+
+store.value = { ...store.value, user: { ...store.value.user, age: 26 } }; 
+// The effect above does NOT re-run because 'name' is still 'Alice'.
 ```
 
 ### `composeLens<T, P>(lens: WritableAtom<T>, path: P)`
