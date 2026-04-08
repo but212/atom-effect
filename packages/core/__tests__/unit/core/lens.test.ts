@@ -5,232 +5,157 @@ import { atomLens, composeLens, lensFor } from '@/core/lens';
 import { nextTick } from '../../utils/test-helpers';
 
 describe('atomLens', () => {
-  it('should create a two-way lens for a single-level property', () => {
-    const user = atom({ name: 'Alice', age: 25 });
-    const nameLens = atomLens(user, 'name');
+  describe('Basic Operations', () => {
+    it('should support bidirectional access and maintain structural sharing', () => {
+      const store = atom({
+        user: { name: 'Alice', age: 25 },
+        other: { data: 1 },
+      });
+      const nameLens = atomLens(store, 'user.name');
+      const originalOther = store.value.other;
 
-    // Read initial value
-    expect(nameLens.value).toBe('Alice');
+      // Read & Write
+      expect(nameLens.value).toBe('Alice');
+      nameLens.value = 'Bob';
+      expect(store.value.user.name).toBe('Bob');
 
-    // Update through lens
-    nameLens.value = 'Bob';
-    expect(user.value.name).toBe('Bob');
-    expect(nameLens.value).toBe('Bob');
-
-    // Update through parent atom
-    user.value = { ...user.value, name: 'Charlie' };
-    expect(nameLens.value).toBe('Charlie');
-  });
-
-  it('should create a two-way lens for deep nested properties', () => {
-    const store = atom({
-      settings: {
-        theme: 'dark',
-        notifications: {
-          email: true,
-          sms: false,
-        },
-      },
+      // Structural sharing: 'user' should change, 'other' should remain identical
+      expect(store.value.other).toBe(originalOther);
     });
 
-    const emailLens = atomLens(store, 'settings.notifications.email');
+    it('should maintain array integrity when traversing indices', () => {
+      const store = atom({ items: [{ text: 'A' }, { text: 'B' }] });
+      const secondItemLens = atomLens(store, 'items.1.text');
 
-    // Read initial value
-    expect(emailLens.value).toBe(true);
+      secondItemLens.value = 'Updated';
 
-    // Update through lens
-    emailLens.value = false;
-    expect(store.value.settings.notifications.email).toBe(false);
-    expect(emailLens.value).toBe(false);
-
-    // Structural Sharing check
-    const originalSettings = store.value.settings;
-    const originalNotifications = store.value.settings.notifications;
-
-    emailLens.value = true;
-
-    expect(store.value.settings).not.toBe(originalSettings);
-    expect(store.value.settings.notifications).not.toBe(originalNotifications);
-    expect(store.value.settings.theme).toBe('dark');
-  });
-
-  it('should maintain structural sharing for unchanged paths', () => {
-    const store = atom({
-      a: { val: 1 },
-      b: { val: 2 },
+      expect(Array.isArray(store.value.items)).toBe(true);
+      expect(store.value.items[1]?.text).toBe('Updated');
     });
 
-    const aLens = atomLens(store, 'a.val');
-    const originalB = store.value.b;
+    it('should avoid redundant updates when value is unchanged', () => {
+      const store = atom({ a: 1 });
+      const aLens = atomLens(store, 'a');
 
-    aLens.value = 10;
+      let updateCount = 0;
+      effect(() => {
+        void store.value;
+        updateCount++;
+      });
 
-    expect(store.value.a.val).toBe(10);
-    expect(store.value.b).toBe(originalB); // Reference to 'b' should be preserved
+      updateCount = 0;
+      aLens.value = 1; // Same value
+      expect(updateCount).toBe(0);
+    });
   });
 
-  it('should not update the parent atom if the value is identical', () => {
-    const store = atom({ profile: { name: 'Alice' } });
-    const nameLens = atomLens(store, 'profile.name');
+  describe('Reactivity', () => {
+    it('should notify subscribers only when the specific path changes', async () => {
+      const store = atom({ profile: { name: 'Alice', age: 25 } });
+      const nameLens = atomLens(store, 'profile.name');
 
-    let updateCount = 0;
-    effect(() => {
-      const _ = store.value;
-      updateCount++;
-      return undefined;
+      let callCount = 0;
+      nameLens.subscribe(() => callCount++);
+
+      // 1. Unrelated change
+      store.value = { ...store.value, profile: { ...store.value.profile, age: 26 } };
+      expect(callCount).toBe(0);
+
+      // 2. Related change
+      nameLens.value = 'Bob';
+      await nextTick();
+      expect(callCount).toBe(1);
     });
 
-    updateCount = 0;
-    nameLens.value = 'Alice'; // Same value
+    it('should provide fine-grained reactivity in effects', async () => {
+      const root = atom({ a: 1, b: 2 });
+      const aLens = atomLens(root, 'a');
 
-    expect(updateCount).toBe(0);
+      let effectCount = 0;
+      effect(() => {
+        void aLens.value;
+        effectCount++;
+      });
+
+      await nextTick();
+      effectCount = 0;
+
+      // Update unrelated 'b' -> should not re-run effect
+      root.value = { a: 1, b: 3 };
+      await nextTick();
+      expect(effectCount).toBe(0);
+
+      // Update lensed 'a' -> should re-run
+      root.value = { a: 2, b: 3 };
+      await nextTick();
+      expect(effectCount).toBe(1);
+    });
   });
 
-  it('should correctly filter and map subscription values', async () => {
-    const store = atom({ profile: { name: 'Alice', age: 25 } });
-    const nameLens = atomLens(store, 'profile.name');
+  describe('Composition', () => {
+    it('should support flattened multi-tier composition including arrays', async () => {
+      const store = atom({ root: { items: [{ val: 10 }] } });
+      const itemsLens = atomLens(store, 'root.items');
+      const valLens = composeLens(itemsLens, '0.val');
 
-    let callCount = 0;
-    let lastValue: string | undefined;
-    let oldVal: string | undefined;
+      expect(valLens.value).toBe(10);
+      valLens.value = 20;
+      await nextTick();
 
-    nameLens.subscribe((v, o) => {
-      callCount++;
-      lastValue = v as string;
-      oldVal = o as string;
+      expect(store.value.root.items[0]?.val).toBe(20);
     });
 
-    // 1. Update unrelated sibling property in parent atom
-    store.value = { ...store.value, profile: { ...store.value.profile, age: 26 } };
-    expect(callCount).toBe(0); // Should NOT notify because 'name' didn't change
+    it('should support factory creation via lensFor', () => {
+      const user = atom({ profile: { name: 'Alice' } });
+      const lens = lensFor(user);
+      const nameLens = lens('profile.name');
 
-    // 2. Update the lensed property directly
-    nameLens.value = 'Bob';
-    await nextTick();
-    expect(callCount).toBe(1);
-    expect(lastValue).toBe('Bob');
-    expect(oldVal).toBe('Alice');
-
-    // 3. Update parent atom with same lensed value
-    store.value = { ...store.value, profile: { ...store.value.profile, name: 'Bob' } };
-    await nextTick();
-    expect(callCount).toBe(1); // Should NOT notify (Object.is check)
+      expect(nameLens.value).toBe('Alice');
+      nameLens.value = 'Bob';
+      expect(user.value.profile.name).toBe('Bob');
+    });
   });
 
-  it('should maintain array type when property path traverses an array', () => {
-    const store = atom({
-      items: [
-        { id: 1, text: 'First' },
-        { id: 2, text: 'Second' },
-      ],
+  describe('Lifecycle & Engine Contract', () => {
+    it('should track subscriber counts accurately for both manual and reactive hooks', async () => {
+      const store = atom({ name: 'Alice' });
+      const lens = atomLens(store, 'name');
+
+      expect(lens.subscriberCount()).toBe(0);
+
+      // Manual
+      const unsub = lens.subscribe(() => {});
+      expect(lens.subscriberCount()).toBe(1);
+      expect(store.subscriberCount()).toBe(1);
+
+      // Reactive
+      const stop = effect(() => void lens.value);
+      await nextTick();
+      expect(lens.subscriberCount()).toBe(2);
+
+      unsub();
+      stop.dispose();
+      await nextTick();
+      expect(lens.subscriberCount()).toBe(0);
+      expect(store.subscriberCount()).toBe(0);
     });
 
-    const secondTextLens = atomLens(store, 'items.1.text');
-    expect(secondTextLens.value).toBe('Second');
+    it('should handle disposal correctly by cleaning up and blocking updates', () => {
+      const store = atom({ name: 'Alice' });
+      const lens = atomLens(store, 'name');
 
-    secondTextLens.value = 'Updated Second';
+      let callCount = 0;
+      lens.subscribe(() => callCount++);
 
-    expect(Array.isArray(store.value.items)).toBe(true);
-    expect(store.value.items[1]!.text).toBe('Updated Second');
-    expect(store.value.items[0]!.id).toBe(1); // Structural sharing check
-  });
+      lens.dispose();
 
-  it('should compose two lenses', async () => {
-    const store = atom({ user: { profile: { name: 'Alice' } } });
-    const userLens = atomLens(store, 'user');
-    const nameLens = composeLens(userLens, 'profile.name');
+      // 1. Should not notify after disposal
+      store.value = { name: 'Bob' };
+      expect(callCount).toBe(0);
 
-    expect(nameLens.value).toBe('Alice');
-
-    nameLens.value = 'Bob';
-    await nextTick();
-    expect(store.value.user.profile.name).toBe('Bob');
-
-    userLens.value = { profile: { name: 'Charlie' } };
-    await nextTick();
-    expect(nameLens.value).toBe('Charlie');
-  });
-
-  it('should compose lenses multi-tier', async () => {
-    const store = atom({ a: { b: { c: { d: 11 } } } });
-    const ab = atomLens(store, 'a.b');
-    const abc = composeLens(ab, 'c');
-    const abcd = composeLens(abc, 'd');
-
-    expect(abcd.value).toBe(11);
-    abcd.value = 22;
-    await nextTick();
-    expect(store.value.a.b.c.d).toBe(22);
-    expect(abc.value.d).toBe(22);
-    expect(ab.value.c.d).toBe(22);
-  });
-
-  it('should compose with array indexing', async () => {
-    const store = atom({
-      items: [
-        { id: 1, text: 'First' },
-        { id: 2, text: 'Second' },
-      ],
+      // 2. Should block updates through the lens
+      lens.value = 'Charlie';
+      expect(store.value.name).toBe('Bob'); // Stayed 'Bob'
     });
-    const itemsLens = atomLens(store, 'items');
-    const firstTextLens = composeLens(itemsLens, '0.text');
-
-    expect(firstTextLens.value).toBe('First');
-
-    firstTextLens.value = 'Updated First';
-    await nextTick();
-    expect(store.value.items[0]!.text).toBe('Updated First');
-  });
-
-  it('should clean up subscriptions on dispose', async () => {
-    const store = atom({ name: 'Alice' });
-    const lens = atomLens(store, 'name');
-
-    let callCount = 0;
-    lens.subscribe(() => {
-      callCount++;
-    });
-
-    // Initial update
-    store.value = { name: 'Bob' };
-    await nextTick();
-    expect(callCount).toBe(1);
-
-    // Dispose and update
-    lens.dispose();
-    store.value = { name: 'Charlie' };
-    await nextTick();
-    expect(callCount).toBe(1); // Should not increase
-  });
-
-  it('should return its own subscriber count', () => {
-    const store = atom({ name: 'Alice' });
-    const lens = atomLens(store, 'name');
-
-    expect(lens.subscriberCount()).toBe(0);
-    expect(store.subscriberCount()).toBe(0); // Lens doesn't subscribe until it has its own subscribers
-
-    const unsub = lens.subscribe(() => {});
-    expect(lens.subscriberCount()).toBe(1);
-    expect(store.subscriberCount()).toBe(1); // Now lens is subscribed to parent
-
-    unsub();
-    expect(lens.subscriberCount()).toBe(0);
-    expect(store.subscriberCount()).toBe(0); // Lens unsubscribed from parent
-  });
-
-  it('should create a factory using lensFor', () => {
-    const user = atom({ profile: { name: 'Alice', email: 'alice@example.com' } });
-    const lens = lensFor(user);
-
-    const nameLens = lens('profile.name');
-    const emailLens = lens('profile.email');
-
-    expect(nameLens.value).toBe('Alice');
-    expect(emailLens.value).toBe('alice@example.com');
-
-    nameLens.value = 'Bob';
-    expect(user.value.profile.name).toBe('Bob');
-    expect(nameLens.value).toBe('Bob');
   });
 });

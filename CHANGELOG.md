@@ -12,6 +12,12 @@
 - **Internal**: Refactored `SlotBuffer` and `DepSlotBuffer` to ensure `size` (via `_count`) strictly tracks active (non-null) elements instead of acting as a length-based index.
 - **Internal**: Fixed Map synchronization in `DepSlotBuffer` where internal lookup tables could become stale after `insertNew` or `claimExisting` relocations.
 - **Internal**: Standardized sparse update logic in `SlotBuffer.setAt` to correctly manage element counts during overwrite operations.
+- **Lens**: Refactored `atomLens` into a first-class `ReactiveNode` (`LensImpl`), enabling standard engine-level participation.
+- **Lens**: Implemented "Fine-grained Reactivity" for lenses—effects using a lens now only re-run if the specific lensed sub-path changes, ignoring unrelated property updates in the parent atom.
+- **Lens**: Fixed `subscriberCount` accuracy; lenses now correctly track both manual subscriptions and reactive dependencies from effects/computeds.
+- **Lens**: Implemented "Path Flattening" optimization; composing multiple lenses (e.g., `composeLens`) now merges paths into a single `LensImpl` instance instead of creating nested proxies, improving performance.
+- **Lens**: Hardened disposal logic to strictly block operations and cleanup parent subscriptions after `dispose()` is called.
+- **Lens**: Fixed granularity issues in lenses where accessing `.value` would inadvertently create a direct dependency on the root atom; now uses `peek()` internally to isolate the dependency graph.
 
 #### Changed
 

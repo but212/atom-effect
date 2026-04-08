@@ -131,9 +131,19 @@ When a threshold is crossed, an `EffectError` is thrown and the offending effect
 
 ---
 
-## 7. Lenses & Structural Sharing
+The Core package provides fine-grained reactivity over monolithic state objects via **Lenses**. A lens is a first-class **`LensImpl`** node (subclass of `ReactiveNode`) that acts as a bidirectional bridge between a parent atom and focused consumers.
 
-The Core package provides fine-grained reactivity over monolithic state objects via **Lenses**. A lens is a "virtual atom" that points to a specific dot-path within a parent atom.
+### Fine-Grained Filtering
+
+Unlike a simple proxy, a `LensImpl` implements a **Granular Dirty Check** (`_deepDirtyCheck`):
+
+1. **Lazy Consumption**: It only subscribes to the parent atom when it has its own active subscribers.
+2. **Notification Filtering**: When the parent atom notifies, the lens pulls its specific sub-value and performs an `Object.is` check. It only increments its own `version` and notifies its listeners if its specific "slice" was affected.
+3. **Peek Optimization**: The lens getter uses `peek()` to read the parent value. This ensures that a consumer (e.g., an effect) only adds the *lens* as a dependency, not the whole parent atom, preventing accidental "Leakage" of reactivity.
+
+### Path Flattening
+
+To avoid the performance degradation of nested reactive nodes, `atomLens` performs **Flattening** at creation time. If you create a lens from another lens, the engine merges the paths and points directly to the original parent atom. This ensures $O(1)$ notification depth regardless of composition complexity.
 
 ### Structural Sharing Logic
 
@@ -152,4 +162,4 @@ Lenses utilize recursive utility types (`Paths<T>`, `PathValue<T, P>`) to enforc
 
 ### Subscription Lifecycle
 
-Every lens maintains an internal set of parent atom subscriptions to bridge the bridge. Calling `lens.dispose()` (supported via `[Symbol.dispose]`) shuts down these bridges, ensuring zero memory usage for high-churn patterns (e.g., dynamic forms or list item lensing).
+Every lens maintains an internal connection to the parent atom managed via `subscribe()` counts. Calling `lens.dispose()` (supported via `[Symbol.dispose]`) disconnects this bridge and marks the lens as disposed, blocking any future setter operations to protect the integrity of the state tree.
