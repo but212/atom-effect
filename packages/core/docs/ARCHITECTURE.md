@@ -139,8 +139,8 @@ When a value is updated through a lens, the `setDeepValue` recursive helper crea
 
 Lenses utilize recursive utility types (`Paths<T>`, `PathValue<T, P>`) to enforce safety:
 
-- **Autocompletion**: Enumerates all possible dot-separated paths up to **8 levels deep** (V8 Smi-friendly recursion limit).
-- **Inference**: Precisely resolves the resulting type, eliminating `any` casts in user code.
+- **Autocompletion**: Enumerates all possible dot-separated paths up to **8 levels deep** (V8 Smi-friendly recursion limit). Now intelligently filters out prototype methods and provides explicit support for numeric array indices (`${number}`).
+- **Inference**: Precisely resolves the resulting type, eliminating `any` casts in user code. Now more robust with optional path handling.
 
 ### Subscription Lifecycle
 

@@ -13,6 +13,11 @@
 
 - **Internal**: Unified internal epoch management with a new `_updateEpoch()` method using `SMI_MAX` wrapping for consistent versioning across the core engine.
 - **Internal**: Refactored `Scheduler.schedule()` to remove redundant processing checks and optimize job queuing.
+- **Types**: Improved `Paths<T>` to filter out functions/methods and added explicit support for numeric array indices (`${number}`).
+- **Types**: Enhanced `PathValue<T, P>` robustness to correctly handle potential `undefined` in nested optional paths.
+- **API**: Strengthened `subscribe` listener signature by making `newValue` and `oldValue` non-optional, eliminating redundant null checks for users.
+- **API**: Updated `EffectFunction` to natively support `Promise<void>` as a return type.
+- **Internal**: Hardened `Dependency` interface by marking internal engine fields (`version`, `flags`, `_lastSeenEpoch`) as `readonly` to prevent external mutation.
 
 ### jQuery
 
@@ -131,7 +136,7 @@
 - **API**: **Official Lens Support**.
   - `atomLens`: Two-way reactive "view" into nested state with 100% structural sharing and zero-render impact.
   - `composeLens` / `lensFor`: Composition utilities and high-performance recursive object manipulation.
-- **Types**: High-performance recursive dot-path types (`Paths<T>`, `PathValue<T, P>`) with 8-level depth and exact type inference.
+  - **Types**: High-performance recursive dot-path types (`Paths<T>`, `PathValue<T, P>`) with 8-level depth and exact type inference.
 
 #### Changed
 

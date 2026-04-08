@@ -27,23 +27,22 @@ export type MaxDepth = 8;
  */
 export type Paths<T, D extends unknown[] = []> = D['length'] extends MaxDepth
   ? never
-  : T extends object
-    ? {
-        [K in keyof T & (string | number)]-?:
-          | `${K}`
-          | (T[K] extends object ? `${K}.${Paths<T[K], [...D, 1]>}` : never);
-      }[keyof T & (string | number)]
-    : never;
+  : T extends (infer U)[] // Array handling: generate paths for numeric indices
+    ? `${number}` | (U extends object ? `${number}.${Paths<U, [...D, 1]>}` : never)
+    : T extends object
+      ? {
+          [K in keyof T & (string | number)]-?: T[K] extends Function
+            ? never // Exclude methods
+            : `${K}` | (T[K] extends object ? `${K}.${Paths<T[K], [...D, 1]>}` : never);
+        }[keyof T & (string | number)]
+      : never;
 
 /**
  * Resolves the type of a value at a specific dot-path P within type T.
- *
- * Works in tandem with `Paths<T>` to ensure that lensed atoms have
- * the correct inferred type for the member they point to.
  */
 export type PathValue<T, P extends string> = P extends `${infer K}.${infer Rest}`
   ? StringKeyToNumber<K> extends keyof T
-    ? PathValue<T[StringKeyToNumber<K> & keyof T], Rest>
+    ? PathValue<Exclude<T[StringKeyToNumber<K> & keyof T], undefined>, Rest>
     : never
   : StringKeyToNumber<P> extends keyof T
     ? T[StringKeyToNumber<P> & keyof T]
@@ -78,7 +77,7 @@ export interface ReadonlyAtom<T = unknown> {
    * @param listener - Function called when value changes.
    * @returns Unsubscribe function.
    */
-  subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void;
+  subscribe(listener: ((newValue: T, oldValue: T) => void) | Subscriber): () => void;
 
   /**
    * Non-reactive read.
@@ -116,13 +115,13 @@ export interface Dependency {
    * Incremented whenever the dependency's value changes.
    * @internal
    */
-  version: number;
+  readonly version: number;
 
   /**
    * Bitfield of internal state flags (e.g. DIRTY, DISPOSED, IS_COMPUTED).
    * @internal
    */
-  flags: number;
+  readonly flags: number;
 
   /**
    * Tracks the last epoch in which this dependency was visited during
@@ -148,7 +147,7 @@ export interface Dependency {
    * The listener may optionally receive the new and previous values.
    * @param listener - A callback or Subscriber object.
    */
-  subscribe(listener: ((newValue?: unknown, oldValue?: unknown) => void) | Subscriber): () => void;
+  subscribe(listener: ((newValue: unknown, oldValue: unknown) => void) | Subscriber): () => void;
 
   /** Peek hook. */
   peek?(): unknown;
