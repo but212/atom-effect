@@ -95,6 +95,8 @@ Reactivity systems are prone to memory leaks if subscriptions are not cleaned up
 
 - **DepSlotBuffer (Dependency Tracking)**: A specialized `SlotBuffer` for dependency links. It features:
   - **Mega-Node Optimization**: A hybrid O(1) `Map` fallback when dependencies exceed 32, ensuring performance even for extremely large graphs.
+  - **Synchronization Guarantee**: Internal lookup maps are strictly synchronized during all relocation operations (`insertNew`, `claimExisting`), preventing stale cache hits.
+  - **Active Count Tracking**: The `size` property strictly reflects the number of active (non-null) elements, enabling reliable traversal even in sparse buffer scenarios.
   - **O(1) Free-Index Slot Reuse**: Uses a stack-based index reuse strategy to reclaim nulled slots in $O(1)$ time, eliminating linear scans during subscriber/dependency churn.
   - **Manual Loop Unrolling**: Dependency collection and notifications are manually unrolled for the first 4 slots to bypass closure allocations and iterator dispatch.
   - **Safe Retrieval**: Implemented `claimExisting` to reuse existing dependency links during re-evaluation, minimizing churn.
