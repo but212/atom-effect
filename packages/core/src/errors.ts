@@ -76,6 +76,10 @@ export const ERROR_MESSAGES = {
   SCHEDULER_CALLBACK_MUST_BE_FUNCTION: 'Scheduler callback must be a function',
   SCHEDULER_END_BATCH_WITHOUT_START: 'endBatch() called without matching startBatch(). Ignoring.',
   BATCH_CALLBACK_MUST_BE_FUNCTION: 'Batch callback must be a function',
+
+  // Tracking Errors
+  TRACKING_UNTRACKED_ASYNC:
+    'untracked() does not support async functions as tracking context is synchronous. Use peek() for non-reactive reads in async code.',
 } as const;
 
 /**

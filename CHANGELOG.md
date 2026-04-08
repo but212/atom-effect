@@ -8,8 +8,14 @@
 
 - **Scheduler**: Resolved `_isFlushingSync` state re-entrancy issue where nested synchronous flushes could prematurely reset the flushing flag, disrupting deduplication.
 - **Scheduler**: Fixed memory leak in `_handleFlushOverflow` by ensuring `_batchQueue` references are strictly cleared during overflow events.
+- **Tracking**: Resolved "Async Context Loss" bug in `untracked()` where tracking context could leak into subsequent async operations.
 
 #### Changed
+
+- **API**: `untracked()` now explicitly forbids `async` functions in DEV mode to prevent reactive context leakage and promote the use of `atom.peek()`.
+- **Internal**: Encapsulated `TrackingContext` with private state and introduced a governed `run()` method for safer context management.
+- **Internal**: Hardened `DependencyLink` by marking `node` as `readonly`, enforcing graph immutability during evaluation.
+- **Internal**: Standardized `Subscription` constructor and notification logic for improved V8 hidden class stability and dispatch performance.
 
 - **Internal**: Unified internal epoch management with a new `_updateEpoch()` method using `SMI_MAX` wrapping for consistent versioning across the core engine.
 - **Internal**: Refactored `Scheduler.schedule()` to remove redundant processing checks and optimize job queuing.
@@ -680,7 +686,8 @@
 - **Discrete Phase-Shift Versioning**: 30-bit cyclic phase structure (10-bit Cycle, 20-bit Phase) optimized for V8 Smi. Moved `version` field from `ReactiveDependency` to `ReactiveNode`.
 - **Branchless Operations**: `rotatePhase()` for O(1) bitwise rotation; `getShift()` for O(1) modular distance calculation.
 - **Urgent Priority Queue**: Jobs exceeding `PHASE_THRESHOLD` are prioritized. Branchless urgency detection.
-- **Internal**: `_getAggregateShift()` for tracking total staleness across all dependencies.
+- **Internal**: `_getAggregateShift()` for tracking - **Cancellation**: Only the latest "Promise ID" is allowed to resolve. This prevents slow, stale responses from overwriting newer results.
+
 - **Async Drift Validation**: Phase drift detection with fail-fast policy (up to `MAX_ASYNC_RETRIES = 3`). Prevents UI flickering from race conditions.
 
 ## [0.10.1]

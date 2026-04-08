@@ -76,8 +76,14 @@ The validation process uses layered heuristics to minimize expensive work. The *
 
 Async computed nodes are treated as state machines, using **version snapshots** to guard against race conditions.
 
-- **Async Drift Detection**: If dependency versions change between a Promise's start and resolution (detected via a version snapshot), the result is discarded and the node re-evaluates.
 - **Cancellation**: Only the latest "Promise ID" is allowed to resolve. This prevents slow, stale responses from overwriting newer results.
+
+### Synchronous Tracking Constraint
+
+Reactivity in the engine is **strictly synchronous**. The `trackingContext` (which determines the current subscriber) uses a stack-based `run()` mechanism that restores the previous context immediately after the provided function returns.
+
+- **Why `untracked()` is Sync-Only**: If an async function were passed to `untracked()`, the context would be cleared, the function would return a `Promise`, and the original context would be restored **before** the code after the first `await` even runs. This would lead to "Tracking Leakage" where async code unexpectedly tracks dependencies in the outer scope.
+- **The Solution**: For async operations, use `peek()`. Since `peek()` explicitly avoids the `trackingContext` without needing a wrapper, it is safe to use anywhere, including across multiple `await` boundaries.
 
 **Implementation Detail**: Bitwise flags (e.g., `PENDING`, `RESOLVED`, `RECOMPUTING`) are used to keep state transitions fast and memory-efficient.
 

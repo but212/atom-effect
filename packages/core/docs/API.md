@@ -207,6 +207,9 @@ const result = batch(() => {
 
 Runs a function without tracking dependencies. Any `.value` reads inside the callback are invisible to the enclosing `effect` or `computed`. Optimized with a zero-overhead fast-path for nested untracked calls.
 
+> [!IMPORTANT]
+> **No Async Support**: `untracked()` does not support `async` functions. Because the tracking context is restored synchronously in a `finally` block, any reads occurring after an `await` would either leak or be ignored. If you need to read an atom without tracking across an async boundary, use **`peek()`** instead.
+
 ### When to use - untracked
 
 - **Read without subscribing**: Access a value for computation without creating a dependency.
