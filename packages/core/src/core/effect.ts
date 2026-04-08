@@ -209,9 +209,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
         try {
           deps.truncateFrom(this._trackCount);
         } catch (commitErr) {
-          if (IS_DEV) {
-            console.warn('[atom-effect] _commitDeps failed during error recovery:', commitErr);
-          }
+          debug.warnIf(true, `_commitDeps failed during error recovery: ${commitErr}`);
         }
       }
       this._handleExecutionError(error);
@@ -270,9 +268,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
       // Force computed to re-evaluate so version reflects latest state
       void (dep as { value: unknown }).value;
     } catch {
-      if (IS_DEV) {
-        console.warn(`[atom-effect] Dependency #${dep.id} threw during dirty check`);
-      }
+      debug.warnIf(true, `Dependency #${dep.id} threw during dirty check`);
     }
   }
 

@@ -1,5 +1,6 @@
 import { IS_DEV, SCHEDULER_CONFIG, SMI_MAX } from '@/constants';
 import { ERROR_MESSAGES, SchedulerError } from '@/errors';
+import { debug } from '@/utils/debug';
 
 // ── Epoch & Version Management ──────────────────────────────────────────
 
@@ -10,8 +11,7 @@ let collectorEpoch = 0;
  * Next tracking epoch.
  */
 export function nextEpoch(): number {
-  const next = (collectorEpoch + 1) & SMI_MAX;
-  collectorEpoch = next === 0 ? 1 : next;
+  collectorEpoch = (collectorEpoch % SMI_MAX) + 1;
   return collectorEpoch;
 }
 
@@ -20,10 +20,9 @@ export function currentEpoch(): number {
   return collectorEpoch;
 }
 
-/** Increments a version counter within SMI range. Avoids 0 to reserve it for uninitialized state. */
+/** Increments a version counter within [1, SMI_MAX] range. Avoids 0 to reserve it for uninitialized state. */
 export function nextVersion(v: number): number {
-  const next = (v + 1) & SMI_MAX;
-  return next === 0 ? 1 : next;
+  return (v % SMI_MAX) + 1;
 }
 
 export let flushExecutionCount = 0;
@@ -40,9 +39,7 @@ export function currentFlushEpoch(): number {
  */
 export function startFlush(): boolean {
   if (isFlushing) {
-    if (IS_DEV) {
-      console.warn('startFlush() called during flush - ignored');
-    }
+    debug.warnIf(true, 'startFlush() called during flush - ignored');
     return false;
   }
 
@@ -323,7 +320,7 @@ class Scheduler {
 
   endBatch(): void {
     if (this._batchDepth === 0) {
-      if (IS_DEV) console.warn(ERROR_MESSAGES.SCHEDULER_END_BATCH_WITHOUT_START);
+      debug.warnIf(true, ERROR_MESSAGES.SCHEDULER_END_BATCH_WITHOUT_START);
       return;
     }
 

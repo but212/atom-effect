@@ -337,3 +337,21 @@ Sets the maximum number of iterations allowed in a single `_drainQueue` cycle be
 ### `scheduler.onOverflow: ((droppedCount: number) => void) | null`
 
 Custom callback triggered when the scheduler detects an infinite loop/overflow. Useful for telemetry or specialized error reporting.
+
+---
+
+## Debug Utilities (Advanced)
+
+For internal development or specialized tooling, the library provides a `debug` controller.
+
+### `debug.enabled`
+
+Boolean (defaults to `true` in dev builds, `false` in production). Globally toggles internal library warnings and telemetry.
+
+### `debug.warnIf(condition: boolean, message: string)`
+
+Logs a formatted warning to the console if the condition is met and debugging is enabled.
+
+### `debug.getDebugName(obj: object | null)`
+
+Retrieves the internal human-readable name assigned to a reactive node (e.g., `"atom_123"`).

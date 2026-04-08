@@ -227,7 +227,7 @@ export interface PoolStats {
 export interface DebugConfig {
   enabled: boolean;
   warnInfiniteLoop: boolean;
-  warn(condition: boolean, message: string): void;
+  warnIf(condition: boolean, message: string): void;
   attachDebugInfo(obj: object, type: string, id: number): void;
   getDebugName(obj: object | null | undefined): string | undefined;
   getDebugType(obj: object | null | undefined): string | undefined;
