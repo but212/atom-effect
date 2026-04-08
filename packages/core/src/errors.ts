@@ -22,7 +22,9 @@ export class AtomError extends Error {
 
     // Restore prototype chain.
     // Falls back to constructor.prototype if new.target is missing (ES5 transpilation).
-    const proto = (new.target ? new.target.prototype : (this.constructor as any).prototype) as object;
+    const proto = (
+      new.target ? new.target.prototype : this.constructor.prototype
+    ) as object;
     Object.setPrototypeOf(this, proto);
 
     // Capture clean stack trace on V8 engines
