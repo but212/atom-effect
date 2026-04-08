@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Core
+
+#### Fixed
+
+- **Scheduler**: Resolved `_isFlushingSync` state re-entrancy issue where nested synchronous flushes could prematurely reset the flushing flag, disrupting deduplication.
+- **Scheduler**: Fixed memory leak in `_handleFlushOverflow` by ensuring `_batchQueue` references are strictly cleared during overflow events.
+
+#### Changed
+
+- **Internal**: Unified internal epoch management with a new `_updateEpoch()` method using `SMI_MAX` wrapping for consistent versioning across the core engine.
+- **Internal**: Refactored `Scheduler.schedule()` to remove redundant processing checks and optimize job queuing.
+
 ### jQuery
 
 #### Added

@@ -180,13 +180,9 @@ class Scheduler {
 
     // Push to current active buffer
     const idx = this._bufferIndex;
-    const buffer = this._queueBuffer[idx]!;
-    buffer[this._size++] = callback;
+    this._queueBuffer[idx]![this._size++] = callback;
 
-    // Wake up if sleeping
-    if (!this._isProcessing) {
-      this._flush();
-    }
+    this._flush();
   }
 
   /**
@@ -219,13 +215,14 @@ class Scheduler {
   }
 
   _flushSync(): void {
+    const prev = this._isFlushingSync;
     this._isFlushingSync = true;
     const started = startFlush();
     try {
       this._mergeBatchQueue();
       this._drainQueue();
     } finally {
-      this._isFlushingSync = false;
+      this._isFlushingSync = prev;
       if (started) endFlush();
     }
   }
@@ -235,13 +232,13 @@ class Scheduler {
     if (queueSize === 0) return;
 
     // Increment epoch
-    const epoch = ++this._epoch;
+    const epoch = this._updateEpoch();
     const bQueue = this._batchQueue;
     const idx = this._bufferIndex;
     const targetBuffer = this._queueBuffer[idx]!;
     let currentSize = this._size;
 
-    // Merge batch using a cached size to avoid property lookups
+    // Merge batch
     for (let i = 0; i < queueSize; i++) {
       const job = bQueue[i]!;
       // Retag jobs only if they belong to a different epoch
@@ -281,7 +278,7 @@ class Scheduler {
     // Swap buffers
     this._bufferIndex = idx ^ 1;
     this._size = 0;
-    this._epoch = (this._epoch + 1) | 0;
+    this._updateEpoch();
 
     // Execute jobs
     for (let i = 0; i < count; i++) {
@@ -310,6 +307,7 @@ class Scheduler {
     const idx = this._bufferIndex;
     this._queueBuffer[idx]!.length = 0;
     this._batchQueueSize = 0;
+    this._batchQueue.length = 0;
 
     const onOverflow = this.onOverflow;
     if (onOverflow) {
@@ -340,6 +338,11 @@ class Scheduler {
         `Max flush iterations must be at least ${SCHEDULER_CONFIG.MIN_FLUSH_ITERATIONS}`
       );
     this._maxFlushIterations = max;
+  }
+
+  private _updateEpoch(): number {
+    this._epoch = nextVersion(this._epoch);
+    return this._epoch;
   }
 }
 
