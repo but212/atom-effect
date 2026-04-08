@@ -104,13 +104,13 @@ export function resetFlushState(): void {
 export interface SchedulerJobObject {
   execute(): void;
   /** Next scheduled epoch */
-  _nextEpoch?: number;
+  _nextEpoch?: number | undefined;
 }
 
 export interface SchedulerJobFunction {
   (): void;
   /** Next scheduled epoch */
-  _nextEpoch?: number;
+  _nextEpoch?: number | undefined;
 }
 
 export type SchedulerJob = SchedulerJobFunction | SchedulerJobObject;

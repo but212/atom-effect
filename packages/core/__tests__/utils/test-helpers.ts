@@ -8,6 +8,8 @@ export const nextTick = (): Promise<void> => Promise.resolve();
 // Use a reasonable default timeout for async scheduler
 export const waitForScheduler = (): Promise<void> => sleep(10);
 
+export const hasOwn = Object.prototype.hasOwnProperty;
+
 // Simple seeded PRNG (sfc32) for reproducible fuzz tests
 export function seededRandom(seed: number): () => number {
   let a = 13971 ^ seed;

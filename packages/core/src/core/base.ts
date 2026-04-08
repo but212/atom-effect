@@ -21,34 +21,30 @@ export abstract class ReactiveNode<T> {
   /** [Producer/Consumer] Last access epoch */
   _lastSeenEpoch: number;
   /** [Context] Scheduler epoch tag */
-  _nextEpoch?: number;
+  _nextEpoch: number | undefined;
   /** [Debug] Unique ID for identify node in tracking maps */
   readonly id: DependencyId;
 
-  /**
-   * [Producer] Managed subscribers.
-   */
-  _slots: SlotBuffer<Subscription<T>> | null;
+  // ── Producer Properties (Subscriber Management) ───────────────────────────
 
-  /** [Producer] Re-entry guard for notification loop. */
-  _notifying: number;
+  /** Managed subscribers. */
+  _slots: SlotBuffer<Subscription<T>> | null = null;
+  /** Re-entry guard for notification loop. */
+  _notifying = 0;
 
-  /**
-   * [Consumer] Managed dependencies.
-   */
-  _deps: DepSlotBuffer | null;
-  /** [Consumer] O(1) Hot-path dependency index for rapid dirty checks. */
-  _hotIndex: number;
+  // ── Consumer Properties (Dependency Management) ───────────────────────────
+
+  /** Managed dependencies. */
+  _deps: DepSlotBuffer | null = null;
+  /** O(1) Hot-path dependency index for rapid dirty checks. */
+  _hotIndex = -1;
 
   constructor() {
     this.flags = 0;
     this.version = 0;
     this._lastSeenEpoch = EPOCH_CONSTANTS.UNINITIALIZED;
-    this._notifying = 0;
-    this._hotIndex = -1;
-    this._slots = null;
-    this._deps = null;
     this.id = generateId() & SMI_MAX;
+    this._nextEpoch = undefined;
   }
 
   /**
@@ -72,7 +68,7 @@ export abstract class ReactiveNode<T> {
    * @internal
    */
   get hasError(): boolean {
-    return false;
+    return (this.flags & COMPUTED_STATE_FLAGS.HAS_ERROR) !== 0;
   }
 
   // ============================================================================
@@ -83,6 +79,8 @@ export abstract class ReactiveNode<T> {
    * Adds subscriber for notifications.
    */
   subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
+    if (this.isDisposed) return () => {};
+
     const isFn = typeof listener === 'function';
     if (!isFn && (!listener || typeof (listener as Subscriber).execute !== 'function')) {
       throw wrapError(
@@ -94,43 +92,10 @@ export abstract class ReactiveNode<T> {
 
     let slots = this._slots;
     if (!slots) {
-      slots = new SlotBuffer<Subscription<T>>();
-      this._slots = slots;
+      slots = this._slots = new SlotBuffer<Subscription<T>>();
     }
 
-    // Duplicate check: Unrolled for performance + early exit
-    let duplicate = false;
-    if (slots._s0 != null && (isFn ? slots._s0.fn === listener : slots._s0.sub === listener)) {
-      duplicate = true;
-    } else if (
-      slots._s1 != null &&
-      (isFn ? slots._s1.fn === listener : slots._s1.sub === listener)
-    ) {
-      duplicate = true;
-    } else if (
-      slots._s2 != null &&
-      (isFn ? slots._s2.fn === listener : slots._s2.sub === listener)
-    ) {
-      duplicate = true;
-    } else if (
-      slots._s3 != null &&
-      (isFn ? slots._s3.fn === listener : slots._s3.sub === listener)
-    ) {
-      duplicate = true;
-    } else {
-      const ov = slots._overflow;
-      if (ov != null) {
-        for (let i = 0, len = ov.length; i < len; i++) {
-          const s = ov[i];
-          if (s != null && (isFn ? s.fn === listener : s.sub === listener)) {
-            duplicate = true;
-            break;
-          }
-        }
-      }
-    }
-
-    if (duplicate) {
+    if (this._isAlreadySubscribed(slots, listener, isFn)) {
       if (IS_DEV) console.warn(`[atom-effect] Duplicate subscription ignored on node ${this.id}`);
       return () => {};
     }
@@ -151,6 +116,9 @@ export abstract class ReactiveNode<T> {
     slots.remove(link);
     if (this._notifying === 0) {
       slots.compact();
+      if (slots.size === 0) {
+        this._slots = null;
+      }
     }
   }
 
@@ -172,62 +140,63 @@ export abstract class ReactiveNode<T> {
     this._notifying++;
     try {
       // 1. Inline slots: Manual unroll to avoid closure allocation
-      let s = slots._s0;
-      if (s != null) {
-        try {
-          s.notify(newValue, oldValue);
-        } catch (e) {
-          this._logNotifyError(e);
-        }
-      }
-      s = slots._s1;
-      if (s != null) {
-        try {
-          s.notify(newValue, oldValue);
-        } catch (e) {
-          this._logNotifyError(e);
-        }
-      }
-      s = slots._s2;
-      if (s != null) {
-        try {
-          s.notify(newValue, oldValue);
-        } catch (e) {
-          this._logNotifyError(e);
-        }
-      }
-      s = slots._s3;
-      if (s != null) {
-        try {
-          s.notify(newValue, oldValue);
-        } catch (e) {
-          this._logNotifyError(e);
-        }
-      }
+      this._safeNotify(slots._s0, newValue, oldValue);
+      this._safeNotify(slots._s1, newValue, oldValue);
+      this._safeNotify(slots._s2, newValue, oldValue);
+      this._safeNotify(slots._s3, newValue, oldValue);
 
-      // 2. Overflow scan: Standard loop for performance
+      // 2. Overflow scan: Standard loop
       const ov = slots._overflow;
-      if (ov != null) {
+      if (ov !== null) {
         for (let i = 0, len = ov.length; i < len; i++) {
-          const sub = ov[i];
-          if (sub != null) {
-            try {
-              sub.notify(newValue, oldValue);
-            } catch (e) {
-              this._logNotifyError(e);
-            }
-          }
+          this._safeNotify(ov[i], newValue, oldValue);
         }
       }
     } finally {
       if (--this._notifying === 0) {
         slots.compact();
+        if (slots.size === 0) {
+          this._slots = null;
+        }
       }
     }
   }
 
-  private _logNotifyError(err: unknown): void {
-    console.error(wrapError(err, AtomError, ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED));
+  private _safeNotify(
+    sub: Subscription<T> | null | undefined,
+    newValue: T | undefined,
+    oldValue: T | undefined
+  ): void {
+    if (sub == null) return;
+    try {
+      sub.notify(newValue, oldValue);
+    } catch (e) {
+      console.error(wrapError(e, AtomError, ERROR_MESSAGES.ATOM_INDIVIDUAL_SUBSCRIBER_FAILED));
+    }
+  }
+
+  private _isAlreadySubscribed(
+    slots: SlotBuffer<Subscription<T>>,
+    listener: ((newValue?: T, oldValue?: T) => void) | Subscriber,
+    isFn: boolean
+  ): boolean {
+    const s0 = slots._s0;
+    if (s0 != null && (isFn ? s0.fn === listener : s0.sub === listener)) return true;
+    const s1 = slots._s1;
+    if (s1 != null && (isFn ? s1.fn === listener : s1.sub === listener)) return true;
+    const s2 = slots._s2;
+    if (s2 != null && (isFn ? s2.fn === listener : s2.sub === listener)) return true;
+    const s3 = slots._s3;
+    if (s3 != null && (isFn ? s3.fn === listener : s3.sub === listener)) return true;
+
+    const ov = slots._overflow;
+    if (ov !== null) {
+      for (let i = 0, len = ov.length; i < len; i++) {
+        const s = ov[i];
+        if (s != null && (isFn ? s.fn === listener : s.sub === listener)) return true;
+      }
+    }
+    return false;
   }
 
   // ============================================================================
