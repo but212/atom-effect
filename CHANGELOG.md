@@ -6,6 +6,13 @@
 
 #### Fixed
 
+- **Computed**: Restored missing `_track()` call in the `value` getter, resolving critical reactive dependency tracking regressions.
+- **Computed**: Implemented BFS-based iterative traversal in `_walkErrorGraph` to prevent stack overflows in extremely deep computed chains.
+- **Computed**: Fixed "Async State Leak" where disposed instances could incorrectly update internal value/state after promise resolution.
+- **Computed**: Resolved `HAS_ERROR` flag staleness by ensuring it is consistently reset at the start of every re-computation (sync & async).
+- **Computed**: Fixed versioning logic; version now correctly bumps upon async rejection, enabling reliable error propagation to downstream subscribers.
+- **Computed**: Hardened `dispose()` to exhaustively clear internal references (`_fn`, `_onError`, `_equal`) and release all subscriber slots.
+- **Computed**: Fixed optimization regression; `_hotIndex` is now correctly reset to `-1` at the start of new evaluations to ensure proper O(1) hot-path detection.
 - **Scheduler**: Resolved `_isFlushingSync` state re-entrancy issue where nested synchronous flushes could prematurely reset the flushing flag, disrupting deduplication.
 - **Scheduler**: Fixed memory leak in `_handleFlushOverflow` by ensuring `_batchQueue` references are strictly cleared during overflow events.
 - **Tracking**: Resolved "Async Context Loss" bug in `untracked()` where tracking context could leak into subsequent async operations.

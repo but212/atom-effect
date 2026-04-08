@@ -61,7 +61,30 @@ By comparing `version` instead of just reacting to `epoch`, unnecessary re-calcu
 
 ---
 
-## 3. Efficiency through Deferral: Two-Phase Propagation
+### 3. Error Propagation: Beyond Recursion
+
+Errors in a `ComputedAtom` are not just local; they propagate through the dependency graph. Unlike traditional reactive libraries that use recursion, we use an iterative approach for stability.
+
+### Iterative Walk (BFS)
+
+To prevent `RangeError: Maximum call stack size exceeded` in extremely deep chains (e.g., chains with >1,000 nodes), property accessors like `hasError` and `errors` utilize a **Breadth-First Search (BFS)** iterative traversal instead of recursion.
+
+- **Safety**: Guaranteed stack independence regardless of graph depth.
+- **Deduplication**: Uses a `Set` to track visited nodes, ensuring each dependency is checked only once.
+
+### HAS_ERROR Bitwise Guard
+
+- **O(1) Local Check**: Each node maintains a `HAS_ERROR` bitwise flag.
+- **Transitive Integrity**: While the local flag provides instant detection for the node itself, the iterative walk ensures total graph integrity by discovering errors tucked deep in the upstream tree.
+
+### Async Error Recovery
+
+When an asynchronous computation fails, the atom transitions to the `REJECTED` state and sets `HAS_ERROR`. Upon a dependency change:
+
+1. **Reset**: Both `HAS_ERROR` and `REJECTED` flags are cleared immediately before the retry starts.
+2. **Transition**: The atom moves to `IDLE` or `PENDING`, ensuring that subscribers (like UI components) see a clean "loading" state during the recovery attempt instead of a stale error.
+
+## 4. Efficiency through Deferral: Two-Phase Propagation
 
 To reduce unnecessary work, a **Notify-and-Check** approach is used.
 
@@ -73,9 +96,7 @@ To reduce unnecessary work, a **Notify-and-Check** approach is used.
 **Trade-off: Fast Path (O(1)) vs. Full Walk (O(N))**
 The validation process uses layered heuristics to minimize expensive work. The **Hot-path Check (O(1))** provides instant dirty detection for recurring updates by caching the last dirty index. Only if that misses does the engine perform a structural walk of dependencies.
 
----
-
-## 4. Integrity at the Async Boundary
+## 5. Integrity at the Async Boundary
 
 Async computed nodes are treated as state machines, using **version snapshots** to guard against race conditions.
 
@@ -90,9 +111,7 @@ Reactivity in the engine is **strictly synchronous**. The `trackingContext` (whi
 
 **Implementation Detail**: Bitwise flags (e.g., `PENDING`, `RESOLVED`, `RECOMPUTING`) are used to keep state transitions fast and memory-efficient.
 
----
-
-## 5. Resource Stewardship: Memory Management
+## 6. Resource Stewardship: Memory Management
 
 Reactivity systems are prone to memory leaks if subscriptions are not cleaned up. Two mechanisms are used to manage memory efficiently: **Subscriber Management** and **Array Pooling**.
 
@@ -110,9 +129,7 @@ Reactivity systems are prone to memory leaks if subscriptions are not cleaned up
 **Trade-off: Complexity vs. Zero-Allocation**
 Managing inline slots and hybrid lookups adds internal complexity, but it significantly reduces Garbage Collection (GC) pressure and improves performance in high-frequency update scenarios.
 
----
-
-## 6. Security & Boundaries
+## 7. Security & Boundaries
 
 A **Symmetric Boundary** is enforced between production and consumption.
 
