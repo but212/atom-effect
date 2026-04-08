@@ -100,7 +100,9 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
       this._pendingOldValue = undefined;
       this.flags &= ~ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
 
-      this._notifySubscribers(this._value, oldValue);
+      if (!Object.is(this._value, oldValue)) {
+        this._notifySubscribers(this._value, oldValue);
+      }
     }
   }
 

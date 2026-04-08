@@ -5,7 +5,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { atom, scheduler } from '@/index';
+import { atom, batch, scheduler } from '@/index';
 import { waitForScheduler } from '../../utils/test-helpers';
 
 describe('Atom', () => {
@@ -186,6 +186,20 @@ describe('Atom', () => {
 
       // Internals should be consistent
       expect((a as unknown as InternalAtom).isNotificationScheduled).toBe(false);
+    });
+
+    it('suppresses notification if value reverts to original within a batch', async () => {
+      const a = atom(0);
+      const spy = vi.fn();
+      a.subscribe(spy);
+
+      batch(() => {
+        a.value = 1;
+        a.value = 0; // Revert
+      });
+
+      await waitForScheduler();
+      expect(spy).not.toHaveBeenCalled();
     });
   });
 });
