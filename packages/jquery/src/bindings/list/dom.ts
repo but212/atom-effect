@@ -18,12 +18,12 @@ let listBatchIdCounter = 0;
  * @param container - The parent container.
  */
 export function insertOrAppend(
-  elOrJq: Element | JQuery | undefined,
+  elOrJq: Node | JQuery | undefined,
   nextNode: Node | null,
   container: Element
 ): void {
   if (!elOrJq) return;
-  if (elOrJq instanceof Element) {
+  if (elOrJq instanceof Node) {
     container.insertBefore(elOrJq, nextNode);
     return;
   }
@@ -66,7 +66,8 @@ export function handleEmpty<T>(
   } else {
     for (let i = 0, len = oldKeys.length; i < len; i++) {
       const k = oldKeys[i]!;
-      if (oldNodes[i]) ctx.removeItem(k, wrap(oldNodes[i] as Element | JQuery<Element>));
+      const node = oldNodes[i];
+      if (node) ctx.removeItem(k, wrap(node));
     }
   }
 
@@ -132,8 +133,9 @@ export function renderItems<T>(
     !options.onRemove &&
     !options.events
   ) {
-    // ensure each rendered string results in a single node
-    if ($.parseHTML(sanitized.join('')).length === renderCount) {
+    // ensure each rendered string results in a single Element node for optimization
+    const nodes = $.parseHTML(sanitized.join(''));
+    if (nodes?.length === renderCount && nodes.every((n) => n.nodeType === 1)) {
       return sanitized;
     }
   }
@@ -143,20 +145,22 @@ export function renderItems<T>(
     const raw = renderResults[t]!;
     const $el = (typeof raw === 'string'
       ? $($.parseHTML(sanitized![fragIdx++]!))
-      : $(raw as Element | DocumentFragment | JQuery)) as unknown as JQuery;
+      : $(raw as Node | DocumentFragment | JQuery)) as unknown as JQuery;
     const targetIdx = trIdxs[t]!,
       keyStr = String(trKeys[t]!);
 
     setAtomKey($el, keyStr);
 
-    if (newStates[targetIdx] === 2 && newNodes[targetIdx]) {
-      const node = newNodes[targetIdx]!;
-      cleanupNodes(node as Element | JQuery);
-      const $old = wrap(node as Element | JQuery<Element>);
-      $old.first().before($el);
-      $old.remove();
+    if (newStates[targetIdx] === 2) {
+      const oldNode = newNodes[targetIdx];
+      if (oldNode) {
+        cleanupNodes(oldNode as Node | JQuery);
+        const $old = wrap(oldNode);
+        $old.first().before($el);
+        $old.remove();
+      }
     }
-    newNodes[targetIdx] = $el.length === 1 ? ($el[0] as Element) : $el;
+    newNodes[targetIdx] = $el.length === 1 ? $el[0]! : $el;
   }
   return null;
 }
@@ -166,11 +170,13 @@ export function renderItems<T>(
  */
 export function cleanupRemoved<T>(ctx: ListContext<T>, diff: PreparedDiff<T>): void {
   const { startIndex, oldEndIndex, newKeySet } = diff;
+
   for (let i = startIndex; i <= oldEndIndex; i++) {
     const k = ctx.oldKeys[i]!;
-    // If key not in new set and node exists, trigger removal
-    if (!newKeySet.has(k) && ctx.oldNodes[i])
-      ctx.removeItem(k, wrap(ctx.oldNodes[i] as Element | JQuery<Element>));
+    const node = ctx.oldNodes[i];
+    if (!newKeySet.has(k) && node) {
+      ctx.removeItem(k, wrap(node));
+    }
   }
 }
 
@@ -216,7 +222,7 @@ export function placeItems<T>(
     for (let i = 0; i < itemCount; i++) {
       const node = newNodes[i];
       if (!node) continue;
-      if (node instanceof Element) frag.appendChild(node);
+      if (node instanceof Node) frag.appendChild(node);
       else for (let j = 0; j < (node as JQuery).length; j++) frag.appendChild((node as JQuery)[j]!);
     }
     rawContainer.innerHTML = '';
@@ -232,9 +238,9 @@ export function placeItems<T>(
       if (idx !== -1 && idx < min) {
         min = idx;
       } else {
-        insertOrAppend(node as Element | JQuery, nextNode, rawContainer);
+        insertOrAppend(node, nextNode, rawContainer);
       }
-      nextNode = node instanceof Element ? node : ((node as JQuery)[0] ?? null);
+      nextNode = node instanceof Node ? node : (node as JQuery)[0] || null;
     }
   }
 
@@ -243,7 +249,7 @@ export function placeItems<T>(
     if (state !== 3) {
       const node = newNodes[i];
       if (!node) continue;
-      const $el = wrap(node as Element | JQuery<Element>),
+      const $el = wrap(node),
         item = newItems[i]!;
       if (state === 0) callbacks.update?.($el, item, i);
       else callbacks.bind?.($el, item, i);

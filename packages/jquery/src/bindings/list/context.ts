@@ -14,7 +14,7 @@ export class ListContext<T> {
   /** Actual items currently in the DOM. */
   oldItems: T[] = [];
   /** DOM elements or collections corresponding to the items. */
-  oldNodes: (Element | JQuery | undefined)[] = [];
+  oldNodes: (Node | JQuery | undefined)[] = [];
 
   /** Keys that are currently in the process of being removed (e.g., during an animation). */
   readonly removingKeys = new Set<ListKey>();

@@ -4,8 +4,8 @@ import { registry } from '@/core/registry';
 /**
  * Ensures an element or jQuery collection is wrapped in a jQuery object.
  */
-export function wrap($el: Element | JQuery<Element>): JQuery {
-  return ($el instanceof Element ? $($el) : $el) as unknown as JQuery;
+export function wrap($el: Node | JQuery<unknown>): JQuery {
+  return ($el instanceof Node ? $($el) : $el) as unknown as JQuery;
 }
 
 /**
@@ -37,12 +37,13 @@ export function setAtomKey(node: Element | Node | JQuery, key: string | null): v
  *
  * @param node - The root element or a jQuery collection potentially containing multiple roots.
  */
-export function cleanupNodes(node: Element | JQuery): void {
+export function cleanupNodes(node: Node | JQuery): void {
   if (node instanceof Element) {
     registry.cleanupTree(node);
-  } else {
-    for (let j = 0, nLen = (node as JQuery).length; j < nLen; j++) {
-      const el = (node as JQuery)[j];
+  } else if ((node as JQuery).length !== undefined) {
+    const jq = node as JQuery;
+    for (let j = 0, nLen = jq.length; j < nLen; j++) {
+      const el = jq[j];
       if (el instanceof Element) registry.cleanupTree(el);
     }
   }

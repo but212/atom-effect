@@ -478,4 +478,29 @@ describe('$.atomList (Integration)', () => {
     expect($ul.find('li').text()).toBe('2');
     $ul.remove();
   });
+
+  it('should not use innerHTML optimization if any item is a text node (count-matching case)', async () => {
+    const list = $.atom(['<div>A</div>', 'B']); // 2 items
+    const $container = $('<div>').appendTo(document.body);
+
+    $container.atomList(list, {
+      key: (i: string) => i,
+      render: (i: string) => i,
+    });
+
+    await $.nextTick();
+
+    // Verify initial render
+    expect($container.text()).toBe('AB');
+
+    // Update list: 'B' -> 'C'
+    list.value = ['<div>A</div>', 'C'];
+    await $.nextTick();
+
+    // If incorrectly optimized, 'B' (text node) remains because it wasn't tracked in newNodes/oldNodes
+    // and thus couldn't be removed.
+    expect($container.text()).toBe('AC');
+
+    $container.remove();
+  });
 });

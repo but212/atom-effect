@@ -72,7 +72,7 @@ export function buildIndices<T>(
   newKeys.length = itemCount;
   const newItems = pools.array.acquire() as T[];
   newItems.length = itemCount;
-  const newNodes = pools.array.acquire() as (Element | JQuery | undefined)[];
+  const newNodes = pools.array.acquire() as (Node | JQuery | undefined)[];
   newNodes.length = itemCount;
 
   // Track item states:

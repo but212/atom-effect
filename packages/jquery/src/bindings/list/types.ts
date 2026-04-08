@@ -13,10 +13,9 @@ export interface PreparedDiff<T> {
   /** The new items from the source. */
   newItems: T[];
   /**
-   * The new DOM nodes corresponding to items.
-   * Can be an Element (single root) or JQuery (multi-root).
+   * Can be a Node (single root) or JQuery (multi-root).
    */
-  newNodes: (Element | JQuery | undefined)[];
+  newNodes: (Node | JQuery | undefined)[];
   /**
    * Status of each item in the new list.
    * 0: Existing (possibly update), 1: New (add), 2: Forced (replace), 3: Unchanged (trimmed)
