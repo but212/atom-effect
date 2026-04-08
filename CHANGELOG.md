@@ -669,11 +669,7 @@
 
 #### Changed
 
-- **Refactor**: Refactored internal logic│  jquery-patch.ts ← jQuery patches │
-│  chainable.ts ← $.fn methods      │
-│  bindings/list/ ← Modular list    │
-│  route.ts     ← SPA router        │
-element tracking; moved invariant checks out of iteration loops.
+- **Refactor**: Refactored internal logic for `atomList`, `registry`, and chainable methods. Modularized the list implementation and optimized element tracking by moving invariant checks out of iteration loops.
 
 ## [0.10.0]
 
