@@ -63,6 +63,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     this._maxExecutionsPerFlush =
       options.maxExecutionsPerFlush ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_EFFECT;
 
+    this.flags |= EFFECT_STATE_FLAGS.IS_EFFECT;
     this._executionsInEpoch = 0;
     this._executionCount = 0;
     this._windowStart = 0;

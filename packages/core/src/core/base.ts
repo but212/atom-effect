@@ -1,4 +1,4 @@
-import { COMPUTED_STATE_FLAGS, EPOCH_CONSTANTS, IS_DEV } from '@/constants';
+import { COMMON_STATE_FLAGS, EPOCH_CONSTANTS, IS_DEV } from '@/constants';
 import { AtomError, ERROR_MESSAGES, wrapError } from '@/errors';
 import { DEBUG_NAME, DEBUG_TYPE } from '@/symbols';
 import type { DependencyId, Subscriber } from '@/types';
@@ -58,7 +58,7 @@ export abstract class ReactiveNode<T> {
    * @internal
    */
   get isDisposed(): boolean {
-    return (this.flags & COMPUTED_STATE_FLAGS.DISPOSED) !== 0; // Bit 0: DISPOSED
+    return (this.flags & COMMON_STATE_FLAGS.DISPOSED) !== 0; // Bit 0: DISPOSED
   }
 
   /**
@@ -66,7 +66,23 @@ export abstract class ReactiveNode<T> {
    * @internal
    */
   get isComputed(): boolean {
-    return (this.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) !== 0; // Bit 1: IS_COMPUTED
+    return (this.flags & COMMON_STATE_FLAGS.IS_COMPUTED) !== 0; // Bit 1: IS_COMPUTED
+  }
+
+  /**
+   * Whether the node is an effect.
+   * @internal
+   */
+  get isEffect(): boolean {
+    return (this.flags & COMMON_STATE_FLAGS.IS_EFFECT) !== 0; // Bit 2: IS_EFFECT
+  }
+
+  /**
+   * Whether the node is an atom.
+   * @internal
+   */
+  get isAtom(): boolean {
+    return (this.flags & COMMON_STATE_FLAGS.IS_ATOM) !== 0; // Bit 3: IS_ATOM
   }
 
   /**
@@ -74,7 +90,8 @@ export abstract class ReactiveNode<T> {
    * @internal
    */
   get hasError(): boolean {
-    return (this.flags & COMPUTED_STATE_FLAGS.HAS_ERROR) !== 0;
+    // Note: Use bit 10 (HAS_ERROR) which is consistent across Computed atoms.
+    return (this.flags & (1 << 10)) !== 0;
   }
 
   // ============================================================================

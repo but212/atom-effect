@@ -23,6 +23,7 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
     super();
     this._value = initialValue;
 
+    this.flags |= ATOM_STATE_FLAGS.IS_ATOM;
     if (sync) {
       this.flags |= ATOM_STATE_FLAGS.SYNC;
     }

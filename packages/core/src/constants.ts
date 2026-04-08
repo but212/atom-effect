@@ -9,38 +9,56 @@ export const AsyncState = {
 } as const;
 
 /**
- * Effect flags.
+ * Common flags shared by all reactive nodes.
  */
-export const EFFECT_STATE_FLAGS = {
+export const COMMON_STATE_FLAGS = {
   DISPOSED: 1 << 0,
-  EXECUTING: 1 << 3,
+  /** Marker bit for computed atoms. */
+  IS_COMPUTED: 1 << 1,
+  /** Marker bit for effects. */
+  IS_EFFECT: 1 << 2,
+  /** Marker bit for base atoms. */
+  IS_ATOM: 1 << 3,
 } as const;
 
 /**
- * Computed flags.
+ * Effect-specific flags.
+ */
+export const EFFECT_STATE_FLAGS = {
+  ...COMMON_STATE_FLAGS,
+  /** Multi-use slot for active/executing state. */
+  EXECUTING: 1 << 4,
+} as const;
+
+/**
+ * Computed-specific flags.
  */
 export const COMPUTED_STATE_FLAGS = {
-  DISPOSED: 1 << 0,
-  /** Marker bit: identifies this node as a computed. */
-  IS_COMPUTED: 1 << 1,
-  DIRTY: 1 << 3,
-  IDLE: 1 << 4,
-  PENDING: 1 << 5,
-  RESOLVED: 1 << 6,
-  REJECTED: 1 << 7,
-  RECOMPUTING: 1 << 8,
-  HAS_ERROR: 1 << 9,
-  /** Flagged when explicitly invalidated. Bypasses fast-path dirty checks. */
-  FORCE_COMPUTE: 1 << 10,
+  ...COMMON_STATE_FLAGS,
+  /** Node is dirty and needs re-computation. */
+  DIRTY: 1 << 4,
+
+  // Evaluation States
+  IDLE: 1 << 5,
+  PENDING: 1 << 6,
+  RESOLVED: 1 << 7,
+  REJECTED: 1 << 8,
+
+  // Reification Status
+  RECOMPUTING: 1 << 9,
+  HAS_ERROR: 1 << 10,
+  FORCE_COMPUTE: 1 << 11,
 } as const;
 
 /**
  * Writable Atom Flags.
  */
 export const ATOM_STATE_FLAGS = {
-  DISPOSED: 1 << 0,
-  SYNC: 1 << 3,
-  NOTIFICATION_SCHEDULED: 1 << 4,
+  ...COMMON_STATE_FLAGS,
+  /** Notifier strategy. */
+  SYNC: 1 << 4,
+  /** Scheduler status. */
+  NOTIFICATION_SCHEDULED: 1 << 5,
 } as const;
 
 /**
@@ -72,7 +90,8 @@ export const DEBUG_CONFIG = {
  * Computed configuration.
  */
 export const COMPUTED_CONFIG = {
-  MAX_PROMISE_ID: Number.MAX_SAFE_INTEGER - 1,
+  /** SMI-safe promise counter limit. */
+  MAX_PROMISE_ID: 0x3fffffff,
 } as const;
 
 /**
@@ -94,7 +113,9 @@ export const SMI_MAX = 0x3fffffff;
  * Development environment flag.
  */
 export const IS_DEV =
-  (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production') ||
+  (typeof process !== 'undefined' &&
+    process.env &&
+    (process.env.NODE_ENV === 'development' || process.env.NODE_ENV !== 'production')) ||
   (typeof __DEV__ !== 'undefined' && !!__DEV__);
 
 // Fallback declaration for __DEV__ if not present in environment
