@@ -32,6 +32,7 @@ To maximize performance and maintain consistent behavior, the engine uses a unif
 
 - **`ReactiveNode<T>`**: The single, unified base class for all reactive primitives (**Atoms**, **Computeds**, **Effects**). By merging the roles of **Producer** (observable) and **Consumer** (observer) into a single "God Class", the engine ensures that every reactive object shares a consistent memory layout and avoids hidden class transitions during its lifecycle.
   - **Monomorphic Initialization**: All internal fields (including `_slots`, `_deps`, and `_nextEpoch`) are pre-initialized in the constructor to ensure a stable object shape from the moment of creation.
+  - **Bitmask Partitioning**: To manage the complexity of a multi-purpose base class, state flags are explicitly partitioned. Bits 0-3 are reserved for fixed node identification (`IS_COMPUTED`, `IS_EFFECT`, `IS_ATOM`), while Bit 4 and higher are used for dynamic implementation states. This guarantees bitwise integrity across all node types.
   - **Subscriber Management**: Provides `subscribe()` and `_notifySubscribers()` capabilities. Automatically cleans up buffer memory by nulling out `_slots` when the last subscriber is removed.
   - **Dependency Tracking**: Manages a `DepSlotBuffer` and provides optimized dirty checking logic (`_isDirty`). Critical tracking loops are manually unrolled for performance.
   - **Type Safety**: Uses generic type `T` to ensure type-safe notifications for subscribers.
@@ -43,7 +44,7 @@ To maximize performance and maintain consistent behavior, the engine uses a unif
 
 ### The Fundamental Trade-off: Local vs. Global
 
-To make autonomous judgment possible, a **Global Epoch** is accepted. While each node makes its own decision, it does so based on a shared "pulse" of time. Aabsolute decentralization is traded for the performance and consistency of a single global counter (managed via `nextEpoch`), which utilizes `SMI_MAX` bitwise wrapping (`(v % SMI_MAX) + 1`) to remain V8-friendly and avoid `0` as an uninitialized state.
+To make autonomous judgment possible, a **Global Epoch** is accepted. While each node makes its own decision, it does so based on a shared "pulse" of time. Absolute decentralization is traded for the performance and consistency of a single set of global counters. All engine counters (including **Epoch**, **ID**, and **Promise ID**) utilize a 31-bit max limit (`0x3fffffff`) to maintain **V8 Small Integer (SMI)** status, completely avoiding heap-allocation overhead.
 
 ---
 
@@ -61,9 +62,14 @@ By comparing `version` instead of just reacting to `epoch`, unnecessary re-calcu
 
 ---
 
-### 3. Error Propagation: Beyond Recursion
+### 3. Error Architecture: Context & Chaining
 
-Errors in a `ComputedAtom` are not just local; they propagate through the dependency graph. Unlike traditional reactive libraries that use recursion, we use an iterative approach for stability.
+Errors in a `ComputedAtom` or `Effect` are not just local; they propagate through the dependency graph. The engine prioritizes diagnostic clarity through a structured wrapping system.
+
+- **Stack Trace Integration**: `AtomError` utilizes `Error.captureStackTrace` (on V8) to prune internal engine frames from the trace, ensuring that the error source points directly to the user code (e.g., the faulty computation function).
+- **Mandatory Context Chaining**: Unlike traditional idempotent wrapping, **`wrapError`** always generates a new error instance if a context string is provided. This creates an explicit relationship chain (`cause` property), allowing developers to trace an error from its root (e.g., `TypeError`) through the reactive pipeline (e.g., `ComputedError` -> `EffectError`).
+- **Standardized Messaging**: Messages follow a strict `Type (Context): Message` template, providing instant visibility into the error type and its location in the reactive flow.
+- **Unknown Cause Support**: The `cause` property accepts `unknown` types, allowing the engine to capture non-Error throwables (strings, objects) without data loss.
 
 ### Iterative Walk (BFS)
 

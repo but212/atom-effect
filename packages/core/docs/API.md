@@ -340,6 +340,34 @@ Custom callback triggered when the scheduler detects an infinite loop/overflow. 
 
 ---
 
+## Error Handling
+
+The library provides a specialized error hierarchy for tracing issues across the reactive dependency graph.
+
+### `AtomError`
+
+Base error class for all reactive failures. Inherits from `Error`.
+
+- **`cause`: `unknown`**: The original error or value that triggered the failure.
+- **`recoverable`: `boolean`**: Whether the system can attempt to recover via re-evaluation.
+- **`name`: `string`**: Standardized to the class name (e.g., `"AtomError"`, `"ComputedError"`).
+
+### Specialized Errors
+
+- **`ComputedError`**: Thrown during lazy or async computation evaluation. (Recoverable: `true`).
+- **`EffectError`**: Thrown during effect execution or cleanup. (Recoverable: `false`).
+- **`SchedulerError`**: Thrown when internal engine limits (e.g., flush overflow) are met. (Recoverable: `false`).
+
+### `wrapError<T>(error: unknown, ErrorClass: T, context: string)`
+
+Utility used internally (and available for custom extensions) to wrap exceptions with diagnostic context.
+
+- **Non-idempotent**: Always creates a new wrapper instance if context is provided, preserving the full diagnostic chain.
+- **Message Format**: `Type (Context): Message` (e.g., `TypeError (UserDataFetch): Failed to fetch`).
+- **Cause Preservation**: Correctly maps the `error` argument to the `cause` property of the new instance.
+
+---
+
 ## Debug Utilities (Advanced)
 
 For internal development or specialized tooling, the library provides a `debug` controller.
