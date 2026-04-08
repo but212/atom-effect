@@ -6,6 +6,10 @@
 
 #### Fixed
 
+- **Effect**: Fixed "Tracking Leakage" where atom reads inside a cleanup function could incorrectly be captured as dependencies for the next execution.
+- **Effect**: Resolved false positive "Infinite Loop" detection during multiple manual `run()` calls by allowing the loop counter to reset for top-level manual executions.
+- **Effect**: Improved dirty-check and cleanup reliability by utilizing the `untracked()` utility to isolate reactive contexts.
+- **Effect**: Fixed missing `_hotIndex` initialization and access by ensuring it correctly participates in the `ReactiveNode` base class optimization.
 - **Computed**: Restored missing `_track()` call in the `value` getter, resolving critical reactive dependency tracking regressions.
 - **Computed**: Implemented BFS-based iterative traversal in `_walkErrorGraph` to prevent stack overflows in extremely deep computed chains.
 - **Computed**: Fixed "Async State Leak" where disposed instances could incorrectly update internal value/state after promise resolution.
@@ -32,6 +36,7 @@
 - **Atom**: Implemented "Iterative Sync Notification" loop; converted synchronous recursion into an iterative process to prevent stack overflow while maintaining notification integrity during re-entrant updates.
 - **Atom**: Refactored `_flushNotifications()` with a robust re-entrancy guard (`_notifying` check) for safer synchronous evaluation.
 - **Internal**: Transitioned `AtomImpl` to direct bitwise flag manipulation (e.g., `this.flags |= ...`) to eliminate state loss bugs associated with flag snapshotting and overwriting.
+- **Testing**: Refactored `effect.test.ts` to improve maintainability by merging redundant tests and removing brittle implementation-dependent mocks.
 
 #### Changed
 

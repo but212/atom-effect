@@ -19,7 +19,7 @@ import {
   nextEpoch,
   scheduler,
 } from './scheduler';
-import { DependencyLink, type DependencyTracker, trackingContext } from './tracking';
+import { DependencyLink, type DependencyTracker, trackingContext, untracked } from './tracking';
 
 /**
  * Effect implementation.
@@ -178,23 +178,23 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     const deps = this._deps;
     if (!force && deps.size > 0 && !this._isDirty()) return;
 
-    this._checkInfiniteLoops();
+    this._checkInfiniteLoops(force);
 
-    this.flags = flags | EFFECT_STATE_FLAGS.EXECUTING;
-    this._execCleanup();
-
-    this._currentEpoch = nextEpoch();
-    this._trackCount = 0;
-    deps.prepareTracking();
-    this._hotIndex = -1;
+    this.flags |= EFFECT_STATE_FLAGS.EXECUTING;
 
     let committed = false;
     try {
+      this._execCleanup();
+
+      this._currentEpoch = nextEpoch();
+      this._trackCount = 0;
+      deps.prepareTracking();
+      this._hotIndex = -1;
+
       const result = trackingContext.run(this, this._fn);
 
       // Clean up any remaining trailing dependencies
       deps.truncateFrom(this._trackCount);
-
       committed = true;
 
       // Handle result
@@ -243,11 +243,9 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
   }
 
   protected override _deepDirtyCheck(): boolean {
-    const prevContext = trackingContext.current;
-    trackingContext.current = null;
     const deps = this._deps!;
 
-    try {
+    return untracked(() => {
       const size = deps.size;
       for (let i = 0; i < size; i++) {
         const link = deps.getAt(i);
@@ -264,9 +262,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
         }
       }
       return false;
-    } finally {
-      trackingContext.current = prevContext;
-    }
+    });
   }
 
   private _tryPullComputed(dep: Dependency): void {
@@ -284,16 +280,19 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     const cleanup = this._cleanup;
     if (cleanup == null) return;
     this._cleanup = null;
-    try {
-      cleanup();
-    } catch (error) {
-      this._handleExecutionError(error, ERROR_MESSAGES.EFFECT_CLEANUP_FAILED);
-    }
+
+    untracked(() => {
+      try {
+        cleanup();
+      } catch (error) {
+        this._handleExecutionError(error, ERROR_MESSAGES.EFFECT_CLEANUP_FAILED);
+      }
+    });
   }
 
-  private _checkInfiniteLoops(): void {
+  private _checkInfiniteLoops(reset: boolean): void {
     const epoch = currentFlushEpoch();
-    if (this._lastFlushEpoch !== epoch) {
+    if (this._lastFlushEpoch !== epoch || reset) {
       this._lastFlushEpoch = epoch;
       this._executionsInEpoch = 0;
     }
