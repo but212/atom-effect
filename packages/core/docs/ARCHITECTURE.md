@@ -40,7 +40,7 @@ To maximize performance and maintain consistent behavior, the engine uses a unif
 
 ### The Fundamental Trade-off: Local vs. Global
 
-To make autonomous judgment possible, a **Global Epoch** is accepted. While each node makes its own decision, it does so based on a shared "pulse" of time. Absolute decentralization is traded for the performance and consistency of a single global counter (`_updateEpoch`), which utilizes `SMI_MAX` bitwise wrapping to remain V8-friendly and avoid `0` as an uninitialized state.
+To make autonomous judgment possible, a **Global Epoch** is accepted. While each node makes its own decision, it does so based on a shared "pulse" of time. Absolute decentralization is traded for the performance and consistency of a single global counter (managed via `nextEpoch`), which utilizes `SMI_MAX` bitwise wrapping to remain V8-friendly and avoid `0` as an uninitialized state.
 
 ---
 

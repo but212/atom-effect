@@ -341,8 +341,7 @@ class Scheduler {
   }
 
   private _updateEpoch(): number {
-    const next = (this._epoch + 1) & SMI_MAX;
-    this._epoch = next === 0 ? 1 : next;
+    this._epoch = nextVersion(this._epoch);
     return this._epoch;
   }
 }
