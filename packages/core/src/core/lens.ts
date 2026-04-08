@@ -18,7 +18,6 @@ const { DISPOSED, IS_COMPUTED } = COMPUTED_STATE_FLAGS;
  * Creates a deep immutable copy of an object/array with a value updated at a specific path.
  * Uses structural sharing to preserve references for unchanged branches.
  *
- * @internal
  * @param obj - The source object or array.
  * @param keys - Array of keys representing the path.
  * @param index - Current index in the keys array.
@@ -52,7 +51,8 @@ export function setDeepValue(obj: unknown, keys: string[], index: number, value:
 /**
  * Traverses an object/array to retrieve a value at a specific path.
  *
- * @internal
+ * Traverses an object/array to retrieve a value at a specific path.
+ *
  * @param source - The object or array to traverse.
  * @param parts - Array of keys representing the path.
  * @returns The value at the path, or undefined if traversal fails.
