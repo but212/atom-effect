@@ -10,6 +10,10 @@
 - **Scheduler**: Fixed memory leak in `_handleFlushOverflow` by ensuring `_batchQueue` references are strictly cleared during overflow events.
 - **Tracking**: Resolved "Async Context Loss" bug in `untracked()` where tracking context could leak into subsequent async operations.
 - **Internal**: Refactored `SlotBuffer` and `DepSlotBuffer` to ensure `size` (via `_count`) strictly tracks active (non-null) elements instead of acting as a length-based index.
+- **ReactiveNode**: Fixed `hasError` getter to accurately reflect `HAS_ERROR` state flags.
+- **ReactiveNode**: Resolved potential memory leak by automatically nulling out `_slots` when the subscriber count reaches zero.
+- **ReactiveNode**: Hardened `subscribe()` to strictly block new subscriptions after a node has been disposed.
+- **Scheduler**: Fixed type incompatibility with `exactOptionalPropertyTypes` by allowing explicit `undefined` for `_nextEpoch` in `SchedulerJob`.
 - **Internal**: Fixed Map synchronization in `DepSlotBuffer` where internal lookup tables could become stale after `insertNew` or `claimExisting` relocations.
 - **Internal**: Standardized sparse update logic in `SlotBuffer.setAt` to correctly manage element counts during overwrite operations.
 - **Lens**: Refactored `atomLens` into a first-class `ReactiveNode` (`LensImpl`), enabling standard engine-level participation.
@@ -27,11 +31,13 @@
 - **Internal**: Standardized `Subscription` constructor and notification logic for improved V8 hidden class stability and dispatch performance.
 
 - **Internal**: Unified internal epoch management with a new `_updateEpoch()` method using `SMI_MAX` wrapping for consistent versioning across the core engine.
+- **Internal**: Optimized `ReactiveNode` for V8 Hidden Class Monomorphism by ensuring all engine-level properties (including `_nextEpoch`) are pre-initialized in the constructor.
 - **Internal**: Refactored `Scheduler.schedule()` to remove redundant processing checks and optimize job queuing.
 - **Types**: Improved `Paths<T>` to filter out functions/methods and added explicit support for numeric array indices (`${number}`).
 - **Types**: Enhanced `PathValue<T, P>` robustness to correctly handle potential `undefined` in nested optional paths.
 - **API**: Strengthened `subscribe` listener signature by making `newValue` and `oldValue` non-optional, eliminating redundant null checks for users.
 - **API**: Updated `EffectFunction` to natively support `Promise<void>` as a return type.
+- **Internal**: Refactored repetitive logic in `ReactiveNode` into `_safeNotify()` and `_isAlreadySubscribed()` private helpers while maintaining performance-critical unrolled loops.
 - **Internal**: Hardened `Dependency` interface by marking internal engine fields (`version`, `flags`, `_lastSeenEpoch`) as `readonly` to prevent external mutation.
 
 ### jQuery

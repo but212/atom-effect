@@ -30,8 +30,9 @@ The core design focuses on **decentralized responsibility**. Truth is not manage
 
 To maximize performance and maintain consistent behavior, the engine uses a unified inheritance structure optimized for **V8 Hidden Class Monomorphism**:
 
-- **`ReactiveNode<T>`**: The single, unified base class for all reactive primitives (**Atoms**, **Computeds**, **Effects**). By merging the roles of **Producer** (observable) and **Consumer** (observer) into a single "God Class", the engine ensures that every reactive object shares a consistent memory layout.
-  - **Subscriber Management**: Provides `subscribe()` and `_notifySubscribers()` capabilities.
+- **`ReactiveNode<T>`**: The single, unified base class for all reactive primitives (**Atoms**, **Computeds**, **Effects**). By merging the roles of **Producer** (observable) and **Consumer** (observer) into a single "God Class", the engine ensures that every reactive object shares a consistent memory layout and avoids hidden class transitions during its lifecycle.
+  - **Monomorphic Initialization**: All internal fields (including `_slots`, `_deps`, and `_nextEpoch`) are pre-initialized in the constructor to ensure a stable object shape from the moment of creation.
+  - **Subscriber Management**: Provides `subscribe()` and `_notifySubscribers()` capabilities. Automatically cleans up buffer memory by nulling out `_slots` when the last subscriber is removed.
   - **Dependency Tracking**: Manages a `DepSlotBuffer` and provides optimized dirty checking logic (`_isDirty`). Critical tracking loops are manually unrolled for performance.
   - **Type Safety**: Uses generic type `T` to ensure type-safe notifications for subscribers.
 - **`AtomImpl<T>`**: A pure producer node that holds mutable state. It extends `ReactiveNode<T>` but keeps its dependency list (`_deps`) null to save memory.
@@ -99,6 +100,7 @@ Reactivity systems are prone to memory leaks if subscriptions are not cleaned up
   - **Active Count Tracking**: The `size` property strictly reflects the number of active (non-null) elements, enabling reliable traversal even in sparse buffer scenarios.
   - **O(1) Free-Index Slot Reuse**: Uses a stack-based index reuse strategy to reclaim nulled slots in $O(1)$ time, eliminating linear scans during subscriber/dependency churn.
   - **Manual Loop Unrolling**: Dependency collection and notifications are manually unrolled for the first 4 slots to bypass closure allocations and iterator dispatch.
+  - **Automatic Cleanup**: Reactive nodes automatically set `_slots` to `null` when the subscriber count drops to zero during unsubscription or notification compaction, ensuring that idle nodes do not retain empty buffer objects.
   - **Safe Retrieval**: Implemented `claimExisting` to reuse existing dependency links during re-evaluation, minimizing churn.
 - **Computed Optimizations**:
   - **Hot-path Check**: Caches the index of the last dirty dependency (`_hotIndex`) to provide $O(1)$ dirty detection for recurring state changes (e.g., animations, scrolls).
