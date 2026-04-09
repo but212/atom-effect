@@ -1,5 +1,5 @@
-import type { Dependency, Subscriber } from '@/types';
 import { IS_DEV } from '@/constants';
+import type { Dependency, Subscriber } from '@/types';
 import { debug } from '@/utils/debug';
 import { isPromise } from '@/utils/type-guards';
 
