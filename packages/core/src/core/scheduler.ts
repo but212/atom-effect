@@ -272,7 +272,7 @@ class Scheduler {
     this._size = currentSize;
     this._batchQueueSize = 0;
     // Shrink array if it grew significantly, otherwise keep capacity to avoid re-allocs.
-    if (bQueue.length > 1000) bQueue.length = 0;
+    if (bQueue.length > SCHEDULER_CONFIG.BATCH_QUEUE_SHRINK_THRESHOLD) bQueue.length = 0;
   }
 
   /**
