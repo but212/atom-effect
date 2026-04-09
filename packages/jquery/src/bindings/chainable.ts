@@ -180,13 +180,16 @@ $.fn.atomChecked = function (atom: WritableAtom<boolean>): JQuery {
  */
 $.fn.atomForm = function <T extends object>(
   atom: WritableAtom<T>,
-  options: FormOptions<unknown> = {}
+  options: FormOptions<T> = {}
 ): JQuery {
   return atomEachElement(
     this,
     (_, el) => {
-      if (el instanceof HTMLFormElement) bindForm(el, atom, options);
-      else debug.log(LOG_PREFIXES.BINDING, 'Skipping non-Form element for atomForm');
+      if (el instanceof HTMLFormElement) {
+        bindForm(el, atom as WritableAtom<object>, options as unknown as FormOptions<unknown>);
+      } else {
+        debug.log(LOG_PREFIXES.BINDING, 'Skipping non-Form element for atomForm');
+      }
     },
     { needsCtx: false }
   );

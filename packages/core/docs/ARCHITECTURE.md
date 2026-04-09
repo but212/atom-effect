@@ -11,7 +11,7 @@ Before diving into the bitwise flags and version hashing, it is helpful to under
 - **Unified Surface**: While you use `atom`, `computed`, and `effect`, they are all specialized instances of a single internal class: **`ReactiveNode`**. This ensures consistent memory layout (Monomorphism) for V8 optimization.
   - **Push (Notification Phase)**: When an atom changes, it "pushes" a dirty signal to its immediate subscribers. No calculation happens yet.
   - **Pull (Evaluation Phase)**: When you read a `.value` or when an effect runs, the node "pulls" the latest versions from its dependencies to see if it actually needs to re-compute.
-- **The Scheduler's Role**: Effects don't run immediately. They are queued in a **Scheduler**. This allows the library to "coalesce" multiple atom updates into a single effect execution, ensuring efficiency.
+- **The Scheduler's Role**: Effects don't run immediately. They are queued in a **Scheduler**. This allows the library to "coalesce" multiple atom updates into a single effect execution, ensuring efficiency. The scheduler uses a **Double Buffering** strategy and a **Flat Loop** to ensure execution stability and prevent call stack overflows during recursive updates.
 - **Small Vector Optimization (SVO)**: To minimize GC overhead and closure heap-allocations, the engine manually unrolls "Small Vector" paths (first 4 slots) for subscriber and dependency link storage.
 
 ---
@@ -108,6 +108,17 @@ A **Symmetric Boundary** is enforced between production and consumption.
 - **Effects (Impure)**: The designated place for side effects (DOM mutation, logging, API calls).
 
 **Protection**: `RECOMPUTING` flags are used to detect circular dependencies. If a Computed node is accessed while it is already calculating, an error is raised to protect the integrity of the graph.
+
+### Execution Engine (Scheduler)
+
+The scheduler orchestrates state propagation and effect execution using a microtask-based loop.
+
+#### Key Mechanics
+
+- **Epoch-based Deduplication**: Every job is tagged with a version (epoch). If a job is scheduled multiple times within the same epoch, subsequent requests are ignored.
+- **Double Buffering**: Ingests new jobs into a dormant buffer while processing the active one, ensuring stable iteration and preventing "queue jumping".
+- **Flat Loop Drainage**: Drains both main and batch queues in a single non-recursive loop. This prevents call stack overflows even under heavy reactive churn or deeply nested `batch()` calls.
+- **Memory Safety**: Explicitly clears internal array references (`undefined`) immediately after a job executes. This ensures closures are not retained longer than necessary, aiding Garbage Collection in long-running apps.
 
 ### Infinite Loop Defense
 

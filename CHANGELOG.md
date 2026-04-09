@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Core
+
+#### Fixed
+
+- **Scheduler**: Critical bug in `runInFlushScope` where callbacks were ignored if a flush was already in progress.
+- **Scheduler**: Fixed nested synchronous flush state corruption where `isFlushingSync` was prematurely reset.
+- **Scheduler**: Eliminated memory leaks by explicitly nullifying job references after execution using `undefined`.
+- **Scheduler**: Prevented stack overflow risks in deeply nested `batch()` updates via a flat execution loop.
+
+#### Changed
+
+- **Scheduler**: Optimized with a double-buffered queue strategy for better stability under high churn.
+- **Scheduler**: Improved JSDoc documentation and internal type safety.
+
 ### jQuery
 
 #### Added
@@ -35,6 +49,7 @@
 - **Utils**: Fixed entity decoding order in `sanitizeHtml` to prevent protocol smuggling via encoded characters (e.g. `&#1;`).
 - **Utils**: Strengthened dangerous protocol regex to handle internal whitespace and control characters.
 - **Constants**: Froze `INPUT_DEFAULTS` and `DEBUG_DEFAULTS` using `Object.freeze()` to prevent accidental runtime modifications.
+- **Bindings**: Fixed generic type incompatibility in `atomForm` where `FormOptions<T>` couldn't be assigned to `FormOptions<unknown>`.
 
 #### Changed
 

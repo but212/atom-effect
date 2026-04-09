@@ -128,16 +128,16 @@ effectHandle.dispose();
 - `maxExecutionsPerSecond`: Number (default `1000`). Maximum executions per second (dev mode only).
 - `maxExecutionsPerFlush`: Number (default `100`). Maximum executions per flush cycle before infinite loop detection triggers.
 
-## `batch(fn: () => void)`
+## `batch<T>(fn: () => T): T`
 
-Groups multiple state updates into a single notification cycle. Effects and computed values are deferred until the batch completes, then flushed **synchronously**.
+Groups multiple state updates into a single synchronous notification cycle. Effects and computed values are deferred until the batch completes, then flushed.
 
-### When to use - batch
+- **Returns**: The return value of `fn`.
+- **Nesting**: Fully supports deep nesting. Updates are coalesced and flushed only once after the outermost batch ends.
+- **Stability**: Guaranteed protection against stack overflows in deeply recursive reactive patterns via a flat execution loop.
+- **Atomicity**: Changes made to atoms within a batch are committed even if the callback throws an error, ensuring state integrity.
 
-- **Consistency**: Ensuring a set of atoms are updated together before any effect runs.
-- **Performance**: Making multiple mutations that should be one "transaction".
-
-> **Note**: The engine already performs automatic microtask batching by default. Use `batch()` only when you need **Synchronous Reflection** (e.g., DOM must reflect updates before the next line). The `batch()` implementation is highly optimized to avoid redundant property lookups and array allocations.
+> **Note**: The engine already performs automatic microtask batching by default. Use `batch()` specifically when you need **Synchronous Reflection** (e.g., updates must be applied before the next line of code executes) or to group multiple mutations into a single transactional flush.
 
 ### Basic Example - batch
 
