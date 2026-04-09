@@ -79,6 +79,9 @@ const userData = computed(async () => {
 // Race conditions are handled via promise cancellation (see ARCHITECTURE.md)
 ```
 
+> [!IMPORTANT]
+> **Dependency Tracking is Synchronous**: Inside an async function, only atoms/computeds accessed **before** the first `await` are tracked as dependencies. Values read after an `await` will return their current value but will not trigger re-evaluations when they change. Always "hoist" your dependency reads to the top of your async function.
+
 ### Options - computed
 
 - `equal`: `(a, b) => boolean`. Custom equality check.
