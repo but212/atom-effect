@@ -1,42 +1,46 @@
-import { ATOM_BRAND, COMPUTED_BRAND, EFFECT_BRAND, WRITABLE_BRAND } from '@/symbols';
+import { BRAND, BrandFlags } from '@/symbols';
 import type { ComputedAtom, EffectObject, ReadonlyAtom, WritableAtom } from '@/types';
 
 /**
- * Internal helper to check for a brand symbol on objects or functions.
- * Optimized to fail fast on null or primitives.
+ * Internal helper to check for a brand flag on objects or functions.
+ * Optimized for high-performance bitwise identification.
  */
-function isBranded<T>(obj: unknown, brand: symbol): obj is T {
+function isBranded<T>(obj: unknown, flag: number): obj is T {
   if (!obj) return false;
   const type = typeof obj;
-  return (type === 'object' || type === 'function') && brand in (obj as object);
+  return (
+    (type === 'object' || type === 'function') &&
+    // Bitwise AND check on the consolidated BRAND symbol
+    !!(((obj as Record<symbol, number>)[BRAND] ?? 0) & flag)
+  );
 }
 
 /**
  * Readonly atom check.
  */
 export function isAtom(obj: unknown): obj is ReadonlyAtom {
-  return isBranded(obj, ATOM_BRAND);
+  return isBranded(obj, BrandFlags.Atom);
 }
 
 /**
  * Writable atom check.
  */
 export function isWritable(obj: unknown): obj is WritableAtom {
-  return isBranded(obj, WRITABLE_BRAND);
+  return isBranded(obj, BrandFlags.Writable);
 }
 
 /**
  * Computed atom check.
  */
 export function isComputed(obj: unknown): obj is ComputedAtom {
-  return isBranded(obj, COMPUTED_BRAND);
+  return isBranded(obj, BrandFlags.Computed);
 }
 
 /**
  * Effect object check.
  */
 export function isEffect(obj: unknown): obj is EffectObject {
-  return isBranded(obj, EFFECT_BRAND);
+  return isBranded(obj, BrandFlags.Effect);
 }
 
 /**

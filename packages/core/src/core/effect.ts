@@ -7,7 +7,7 @@ import {
 } from '@/constants';
 import { ReactiveNode } from '@/core/base';
 import { EffectError, ERROR_MESSAGES, wrapError } from '@/errors';
-import { EFFECT_BRAND } from '@/symbols';
+import { BRAND, BrandFlags } from '@/symbols';
 import type { Dependency, EffectFunction, EffectObject, EffectOptions } from '@/types';
 import { debug } from '@/utils/debug';
 import { isPromise } from '@/utils/type-guards';
@@ -26,7 +26,7 @@ import { DependencyLink, type DependencyTracker, trackingContext } from './track
  */
 class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyTracker {
   /** @internal */
-  readonly [EFFECT_BRAND] = true;
+  readonly [BRAND] = BrandFlags.Effect;
 
   private _cleanup: (() => void) | null = null;
   /** Initialized in constructor to maintain God Class object shape */

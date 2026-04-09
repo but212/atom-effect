@@ -8,7 +8,7 @@ import {
 } from '@/constants';
 import { ReactiveNode } from '@/core/base';
 import { ComputedError, ERROR_MESSAGES, wrapError } from '@/errors';
-import { ATOM_BRAND, COMPUTED_BRAND } from '@/symbols';
+import { BRAND, BrandFlags } from '@/symbols';
 import type {
   AsyncStateType,
   ComputedAtom,
@@ -40,9 +40,7 @@ const {
  */
 class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Subscriber {
   /** @internal */
-  readonly [ATOM_BRAND] = true;
-  /** @internal */
-  readonly [COMPUTED_BRAND] = true;
+  readonly [BRAND] = BrandFlags.Atom | BrandFlags.Computed;
 
   private _value: T;
   private _error: Error | null = null;
