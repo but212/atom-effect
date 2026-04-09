@@ -1,111 +1,90 @@
 /**
- * @fileoverview dep-tracking.ts branch coverage tests
+ * @fileoverview Refactored tracking tests: Focusing on behavior and core safety.
  */
 
 import { describe, expect, it, vi } from 'vitest';
 import { atom, computed } from '@/core';
-import { DependencyLink, Subscription, untracked } from '@/core/tracking';
-import type { Dependency, Subscriber } from '@/types';
+import {
+  type DependencySubscriber,
+  Subscription,
+  trackingContext,
+  untracked,
+} from '@/core/tracking';
+import type { Subscriber } from '@/types';
 import { flush } from '../../utils/test-helpers';
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function makeDep(overrides: Partial<Dependency> = {}): Dependency {
-  return {
-    id: Math.random(),
-    version: 0,
-    flags: 0,
-    _lastSeenEpoch: -1,
-    subscribe: vi.fn(() => vi.fn()),
-    ...overrides,
-  } as unknown as Dependency;
-}
-
-// ── Models (DependencyLink & Subscription) ───────────────────────────────────
-
-describe('Data Models', () => {
-  it('DependencyLink correctly structures identity and mutates limits safely', () => {
-    const dep = makeDep();
-    const link = new DependencyLink(dep, 42);
-    expect(link.node).toBe(dep);
-    expect(link.version).toBe(42);
-    expect(link.unsub).toBeUndefined();
-
-    const unsub = vi.fn();
-    const linkWithUnsub = new DependencyLink(dep, 0, unsub);
-    expect(linkWithUnsub.unsub).toBe(unsub);
-
-    link.node = makeDep();
-    link.version = 99;
-    expect(link.version).toBe(99);
-  });
-
-  it('Subscription correctly accepts optional fields', () => {
-    const fn = vi.fn();
-    const sub: Subscriber = { execute: vi.fn() };
-
-    const s1 = new Subscription(fn, undefined);
-    expect(s1.fn).toBe(fn);
-    expect(s1.sub).toBeUndefined();
-
-    const s2 = new Subscription(undefined, sub);
-    expect(s2.fn).toBeUndefined();
-    expect(s2.sub).toBe(sub);
-
-    const s3 = new Subscription(fn, sub);
-    expect(s3.fn).toBe(fn);
-    expect(s3.sub).toBe(sub);
-  });
-});
-
-describe('untracked()', () => {
-  it('suppresses dependency tracking inside computed', () => {
-    const a = atom(0);
-    let computeCount = 0;
-
-    const c = computed(() => {
-      computeCount++;
-      return untracked(() => a.value);
-    });
-
-    expect(c.value).toBe(0);
-    expect(computeCount).toBe(1);
-
-    a.value = 1;
-    expect(c.value).toBe(0); // not recomputed
-    expect(computeCount).toBe(1);
-  });
-
-  it('passes return value through and propagates errors', () => {
-    expect(untracked(() => 42)).toBe(42);
-    expect(() =>
-      untracked(() => {
-        throw new Error('Ops');
-      })
-    ).toThrow('Ops');
-  });
-
-  it('computed with mixed tracked and untracked deps only reacts to tracked', async () => {
+describe('Tracking Context & untracked()', () => {
+  it('untracked() suppresses dependency collection while allowing value access', async () => {
     const a = atom(1);
     const b = atom(10);
     let computeCount = 0;
 
+    // Mixed mode: a is tracked, b is untracked
     const c = computed(() => {
       computeCount++;
       return a.value + untracked(() => b.value);
     });
 
     expect(c.value).toBe(11);
-    expect(computeCount).toBe(1);
 
-    b.value = 20; // untracked — c must not recompute
+    // 1. Untracked change: must NOT trigger re-computation
+    b.value = 20;
     await flush();
-    expect(c.value).toBe(11);
+    expect(c.value).toBe(11); // Stale value is expected until 'a' changes
     expect(computeCount).toBe(1);
 
-    a.value = 2; // tracked — c recomputes and picks up latest b
+    // 2. Tracked change: must trigger re-computation and pick up latest untracked value
+    a.value = 2;
     await flush();
     expect(c.value).toBe(22); // 2 + 20
     expect(computeCount).toBe(2);
+
+    // 3. Simple passthrough & error propagation
+    expect(untracked(() => 'foo')).toBe('foo');
+    expect(() =>
+      untracked(() => {
+        throw new Error('baz');
+      })
+    ).toThrow('baz');
+  });
+
+  it('LIMITATION: tracking context is strictly synchronous for safety', async () => {
+    const a = atom(0);
+    const sub = {
+      execute: vi.fn(),
+      addDependency: vi.fn(),
+    } as unknown as Subscriber & DependencySubscriber;
+
+    await trackingContext.run(sub, async () => {
+      a.value; // Synchronous: Tracked
+      await Promise.resolve();
+      a.value; // Asynchronous: NOT tracked (intended limitation)
+    });
+
+    expect(sub.addDependency).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Subscription Notification Robustness', () => {
+  it('Subscription.notify ensures reliable execution and context isolation', () => {
+    const fn = vi.fn();
+    const sub = {
+      execute: vi.fn(),
+      addDependency: vi.fn(),
+    } as unknown as Subscriber & DependencySubscriber;
+
+    const s = new Subscription(fn, sub);
+
+    // Context Isolation: running notify inside another tracker must not leak
+    trackingContext.run(sub, () => {
+      s.notify(1, 0);
+    });
+
+    // 1. Reliable execution: both callback and subscriber are called
+    expect(fn).toHaveBeenCalledWith(1, 0);
+    expect(sub.execute).toHaveBeenCalled();
+
+    // 2. Context Safety: notify must be untracked internally
+    expect(sub.addDependency).not.toHaveBeenCalled();
   });
 });

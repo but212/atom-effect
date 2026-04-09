@@ -109,6 +109,30 @@ A **Symmetric Boundary** is enforced between production and consumption.
 
 **Protection**: `RECOMPUTING` flags are used to detect circular dependencies. If a Computed node is accessed while it is already calculating, an error is raised to protect the integrity of the graph.
 
+### The Synchronous Tracking Boundary
+
+While `@but212/atom-effect` fully supports asynchronous `computed` and `effect` nodes, **dependency tracking is a strictly synchronous process**.
+
+- **Why**: Tracking relies on a global, synchronous stack (`trackingContext`). When a function `await`s, it yields control to the event loop. By the time it resumes, the tracking context has already been popped or replaced.
+- **Accessing Values After Await**: You can still read `.value` after an `await` boundary to get the current state, but these reads **will not be registered as dependencies**. The node will not re-evaluate when those specific dependencies change.
+
+- **The Pattern**: Always read your reactive dependencies at the top of your function, before the first `await`.
+
+```typescript
+// ❌ WRONG: 'atom2' will not be tracked
+computed(async () => {
+  await someAsyncCall();
+  return atom2.value;
+});
+
+// ✅ CORRECT: 'atom2' is tracked
+computed(async () => {
+  const val = atom2.value; // Captured synchronously
+  await someAsyncCall();
+  return val;
+});
+```
+
 ### Execution Engine (Scheduler)
 
 The scheduler orchestrates state propagation and effect execution using a microtask-based loop.
