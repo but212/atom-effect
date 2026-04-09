@@ -227,10 +227,6 @@ class Scheduler {
       if (started) endFlush();
     } finally {
       this._isProcessing = false;
-      // Re-trigger if jobs were added during a non-batched async loop.
-      if (this._size > 0 || this._batchQueueSize > 0) {
-        this._flush();
-      }
     }
   }
 
@@ -258,7 +254,8 @@ class Scheduler {
     const queueSize = this._batchQueueSize;
     if (queueSize === 0) return;
 
-    const epoch = ++this._epoch;
+    this._epoch = (this._epoch + 1) | 0;
+    const epoch = this._epoch;
     const bQueue = this._batchQueue;
     const targetBuffer = this._queueBuffer[this._bufferIndex]!;
     let currentSize = this._size;
