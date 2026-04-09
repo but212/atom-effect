@@ -20,6 +20,9 @@
 - **Performance**: Transitioned to a consolidated `BRAND` symbol with bitwise `BrandFlags` for reactive primitive identification. This eliminates redundant symbol properties on objects and accelerates type guard checks (`isAtom`, `isComputed`, etc.) on hot paths.
 - **Performance**: Improved V8 hidden class stability by explicitly initializing all optional members (`unsub`, `fn`, `sub`) in `DependencyLink` and `Subscription` constructors.
 - **Performance**: Optimized `debug.warn` calls to be fully stripped in production by wrapping them in `IS_DEV` checks at call sites, reducing bundle size and runtime string overhead.
+- **API**: Formalized `Disposable` interface and added `[Symbol.dispose]` support to all reactive primitives for explicit resource management (TS 5.2+).
+- **Types**: Enhanced `Paths<T>` and `PathValue<T, P>` to handle nullable/optional properties correctly using `NonNullable`.
+- **Types**: Hardened `Dependency<T>` contract by making `peek()` and `value` required and strictly typed.
 
 ### jQuery
 

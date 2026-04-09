@@ -119,6 +119,7 @@ effectHandle.dispose();
 `effect()` returns an `EffectObject` with the following properties:
 
 - `dispose()`: Stops the effect and runs cleanup.
+- `[Symbol.dispose]()`: Support for explicit resource management (TS 5.2+).
 - `run()`: Manually re-executes the effect.
 - `isDisposed`: Whether the effect has been disposed.
 - `isExecuting`: Whether the effect is currently running.
@@ -275,6 +276,7 @@ Creates a writable "fake" atom that points to a specific dot-path within a sourc
 
 - **Structural Sharing**: Writing to a lens only clones objects along the modified path. Unrelated branches stay reference-equal (`===`).
 - **Equality Guard**: If the new value is identical to the current one (via `Object.is`), the parent atom is not updated, preventing redundant effect propagation.
+- **Nullable Support**: Correctly resolves types for optional (`?`) or nullable properties using `NonNullable` internally.
 - **Auto-Autocompletion**: Supports IDE path completion up to 8 levels deep with exact type inference.
 
 ```typescript

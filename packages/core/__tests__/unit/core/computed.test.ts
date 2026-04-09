@@ -194,7 +194,7 @@ describe('Computed', () => {
       c.subscribe(() => {});
 
       c.dispose();
-      c[Symbol.dispose](); // Double dispose safety
+      c[Symbol.dispose]?.(); // Double dispose safety
 
       expect(() => c.value).toThrow(ComputedError);
       expect(c.subscriberCount()).toBe(0);
