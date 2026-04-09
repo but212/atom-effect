@@ -149,4 +149,9 @@ describe('EMPTY_ERROR_ARRAY', () => {
     c.value;
     expect(c.errors).toBe(EMPTY_ERROR_ARRAY);
   });
+
+  it('Error handling wrapError fallback (error.ts 22)', () => {
+    const err = wrapError('string error', AtomError, 'message');
+    expect(err).toBeInstanceOf(AtomError);
+  });
 });
