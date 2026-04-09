@@ -69,7 +69,7 @@ export interface BindingOptions<T = unknown> {
   on?: Record<string, (e: JQuery.Event) => void>;
 }
 
-export interface DisposableWritableAtom<T> extends WritableAtom<T>, Disposable {
+export interface DisposableWritableAtom<T> extends WritableAtom<T> {
   dispose(): void;
 }
 

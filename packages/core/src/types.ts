@@ -16,43 +16,68 @@ export type StringKeyToNumber<S extends string> = S extends `${infer N extends n
 /** Max recursion depth for dot-paths. */
 export type MaxDepth = 8;
 
+/** Types that should be treated as terminals (no further path exploration). */
+type TerminalTypes =
+  | Date
+  | RegExp
+  | Map<unknown, unknown>
+  | Set<unknown>
+  | Promise<unknown>
+  | Function;
+
 /**
  * Generates a union of all possible dot-separated paths for a given type T.
+ * Excludes prototype methods and stops at TerminalTypes.
  *
  * Used for `atomLens` to provide IDE autocomplete and type safety when
  * zooming into deeply nested reactive objects.
- *
- * @example
- * type User = { profile: { name: string } };
- * type P = Paths<User>; // "profile" | "profile.name"
  */
 export type Paths<T, D extends unknown[] = []> = D['length'] extends MaxDepth
   ? never
-  : T extends object
-    ? {
-        [K in keyof T & (string | number)]-?:
-          | `${K}`
-          | (T[K] extends object ? `${K}.${Paths<T[K], [...D, 1]>}` : never);
-      }[keyof T & (string | number)]
-    : never;
+  : T extends TerminalTypes
+    ? never
+    : T extends object
+      ? {
+          [K in keyof T & (string | number)]: T[K] extends Function
+            ? never
+            : NonNullable<T[K]> extends object
+              ? `${K}` | `${K}.${Paths<NonNullable<T[K]>, [...D, 1]>}`
+              : `${K}`;
+        }[keyof T & (string | number)]
+      : never;
 
 /**
  * Resolves the type of a value at a specific dot-path P within type T.
+ * Uses NonNullable to correctly handle optional (?) or nullable properties.
  *
  * Works in tandem with `Paths<T>` to ensure that lensed atoms have
  * the correct inferred type for the member they point to.
  */
 export type PathValue<T, P extends string> = P extends `${infer K}.${infer Rest}`
-  ? StringKeyToNumber<K> extends keyof T
-    ? PathValue<T[StringKeyToNumber<K> & keyof T], Rest>
+  ? StringKeyToNumber<K> extends keyof NonNullable<T>
+    ? PathValue<NonNullable<NonNullable<T>[StringKeyToNumber<K> & keyof NonNullable<T>]>, Rest>
     : never
-  : StringKeyToNumber<P> extends keyof T
-    ? T[StringKeyToNumber<P> & keyof T]
+  : StringKeyToNumber<P> extends keyof NonNullable<T>
+    ? NonNullable<T>[StringKeyToNumber<P> & keyof NonNullable<T>]
     : never;
 
 // ============================================================================
 // Core Types
 // ============================================================================
+
+/**
+ * Custom Disposable interface for explicit resource management.
+ */
+export interface Disposable {
+  /**
+   * Cleans up the object and releases resources.
+   */
+  dispose(): void;
+  /**
+   * Support for explicit resource management (TS 5.2+).
+   */
+  [Symbol.dispose](): void;
+}
 
 /**
  * Async state values.
@@ -103,16 +128,19 @@ export interface WritableAtom<T = unknown> extends ReadonlyAtom<T>, Disposable {
    * Cleans up the atom and releases resources.
    */
   dispose(): void;
+  [Symbol.dispose](): void;
 }
 
 /**
  * Dependency interface.
+ * Core contract for reactive nodes. All properties are required to ensure
+ * high-performance access within the engine.
  *
  * @remarks
  * Internal fields (`version`, `flags`, `_lastSeenEpoch`) are part of the
  * engine contract between reactive nodes and must not be mutated externally.
  */
-export interface Dependency {
+export interface Dependency<T = unknown> {
   /** @internal */
   readonly [BRAND]?: number;
   readonly id: DependencyId;
@@ -153,13 +181,17 @@ export interface Dependency {
    * The listener may optionally receive the new and previous values.
    * @param listener - A callback or Subscriber object.
    */
-  subscribe(listener: ((newValue?: unknown, oldValue?: unknown) => void) | Subscriber): () => void;
+  subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void;
 
-  /** Peek hook. */
-  peek?(): unknown;
+  /**
+   * Non-reactive read of the current value.
+   */
+  peek(): T;
 
-  /** Value accessor. */
-  value?: unknown;
+  /**
+   * Current value accessor.
+   */
+  readonly value: T;
 }
 
 /**
@@ -197,6 +229,7 @@ export interface ComputedAtom<T = unknown> extends ReadonlyAtom<T>, Disposable {
   /** Invalidates atom. */
   invalidate(): void;
   dispose(): void;
+  [Symbol.dispose](): void;
 }
 
 export interface Subscriber {
@@ -204,9 +237,17 @@ export interface Subscriber {
 }
 
 /**
- * Effect return type.
+ * Effect cleanup function.
  */
-export type EffectFunction = () => void | (() => void) | Promise<undefined | (() => void)>;
+export type EffectCleanup = () => void;
+
+/**
+ * Effect function type.
+ * Sync effects can return a cleanup function.
+ * Async effects can return a promise that resolves to a cleanup function or void.
+ */
+// biome-ignore lint/suspicious/noConfusingVoidType: void is required here for TypeScript return type compatibility
+export type EffectFunction = () => (void | EffectCleanup) | Promise<void | EffectCleanup>;
 
 export interface EffectOptions {
   name?: string;
@@ -220,6 +261,7 @@ export interface EffectObject extends Disposable {
   /** @internal */
   readonly [BRAND]?: number;
   dispose(): void;
+  [Symbol.dispose](): void;
   run(): void;
   readonly isDisposed: boolean;
   readonly executionCount: number;
