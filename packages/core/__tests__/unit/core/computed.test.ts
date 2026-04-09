@@ -7,7 +7,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
 import { AtomError, ComputedError } from '@/errors';
-import { ATOM_BRAND, COMPUTED_BRAND } from '@/symbols';
+import { BRAND, BrandFlags } from '@/symbols';
+import { isAtom, isComputed } from '@/utils/type-guards';
 import { sleep, waitForScheduler } from '../../utils/test-helpers';
 
 describe('Computed', () => {
@@ -35,8 +36,9 @@ describe('Computed', () => {
       const c1 = computed(() => 1);
       const c2 = computed(() => 2);
 
-      expect((c1 as unknown as Record<symbol, boolean>)[ATOM_BRAND]).toBe(true);
-      expect((c1 as unknown as Record<symbol, boolean>)[COMPUTED_BRAND]).toBe(true);
+      expect(isAtom(c1)).toBe(true);
+      expect(isComputed(c1)).toBe(true);
+      expect((c1 as unknown as { [BRAND]?: number })[BRAND]! & BrandFlags.Writable).toBeFalsy();
       expect((c1 as unknown as { id: number }).id).not.toBe((c2 as unknown as { id: number }).id);
     });
 

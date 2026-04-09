@@ -1,10 +1,5 @@
+import { BRAND, BrandFlags } from '@/symbols';
 import type { Paths, PathValue, WritableAtom } from '../types';
-
-// Note: atom-effect brands are based on Symbol.for, which works across realms
-// and library copies. This allows the lens to behave as a first-class atom
-// to any consumer using the core's branding checks.
-const ATOM_BRAND = Symbol.for('atom-effect/atom');
-const WRITABLE_BRAND = Symbol.for('atom-effect/writable');
 
 /**
  * Internal recursive helper for creating deep immutable copies with structural sharing.
@@ -91,8 +86,7 @@ export function atomLens<T extends object, P extends Paths<T>>(
     subscriberCount: () => unsubs.size,
     dispose,
     [Symbol.dispose]: dispose,
-    [ATOM_BRAND]: true,
-    [WRITABLE_BRAND]: true,
+    [BRAND]: BrandFlags.Atom | BrandFlags.Writable,
   } as unknown as WritableAtom<PathValue<T, P>>;
 }
 

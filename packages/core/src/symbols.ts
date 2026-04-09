@@ -1,14 +1,15 @@
 /**
- * Brand symbols for reliable type identification.
- * Prevents false positives from duck-typing with external objects.
+ * Global brand symbol for all reactive primitives.
+ * Uses a bitwise mask for high-performance type identification.
  */
-export const ATOM_BRAND: unique symbol = Symbol.for('atom-effect/atom');
-export const COMPUTED_BRAND: unique symbol = Symbol.for('atom-effect/computed');
-export const EFFECT_BRAND: unique symbol = Symbol.for('atom-effect/effect');
+export const BRAND: unique symbol = Symbol.for('atom-effect/brand');
 
 /**
- * Positive writable brand — only stamped on truly mutable atoms.
- * Allows future ReadonlyAtom / derived primitives to carry ATOM_BRAND
- * without being misidentified as writable by isWritable().
+ * Bitwise flags for brand identification.
  */
-export const WRITABLE_BRAND: unique symbol = Symbol.for('atom-effect/writable');
+export const BrandFlags = {
+  Atom: 1 << 0,
+  Writable: 1 << 1,
+  Computed: 1 << 2,
+  Effect: 1 << 3,
+} as const;

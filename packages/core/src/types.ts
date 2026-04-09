@@ -1,4 +1,5 @@
 import type { AsyncState } from '@/constants';
+import { BRAND } from '@/symbols';
 
 /**
  * Dependency ID.
@@ -70,6 +71,8 @@ export interface AtomOptions {
  * Readonly atom interface.
  */
 export interface ReadonlyAtom<T = unknown> {
+  /** @internal */
+  readonly [BRAND]?: number;
   /** The current value of the atom. */
   readonly value: T;
 
@@ -110,6 +113,8 @@ export interface WritableAtom<T = unknown> extends ReadonlyAtom<T>, Disposable {
  * engine contract between reactive nodes and must not be mutated externally.
  */
 export interface Dependency {
+  /** @internal */
+  readonly [BRAND]?: number;
   readonly id: DependencyId;
 
   /**
@@ -175,6 +180,8 @@ export interface ComputedOptions<T = unknown> {
  * Computed atom interface.
  */
 export interface ComputedAtom<T = unknown> extends ReadonlyAtom<T>, Disposable {
+  /** @internal */
+  readonly [BRAND]?: number;
   readonly state: AsyncStateType;
   readonly hasError: boolean;
   readonly lastError: Error | null;
@@ -210,6 +217,8 @@ export interface EffectOptions {
 }
 
 export interface EffectObject extends Disposable {
+  /** @internal */
+  readonly [BRAND]?: number;
   dispose(): void;
   run(): void;
   readonly isDisposed: boolean;

@@ -1,6 +1,6 @@
 import { ATOM_STATE_FLAGS } from '@/constants';
 import { ReactiveNode } from '@/core/base';
-import { ATOM_BRAND, WRITABLE_BRAND } from '@/symbols';
+import { BRAND, BrandFlags } from '@/symbols';
 import type { AtomOptions, WritableAtom } from '@/types';
 import { debug } from '@/utils/debug';
 import { nextVersion, scheduler } from './scheduler';
@@ -15,9 +15,7 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
   private _pendingOldValue: T | undefined;
 
   /** @internal */
-  readonly [ATOM_BRAND] = true;
-  /** @internal */
-  readonly [WRITABLE_BRAND] = true;
+  readonly [BRAND] = BrandFlags.Atom | BrandFlags.Writable;
 
   constructor(initialValue: T, sync: boolean) {
     super();
