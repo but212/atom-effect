@@ -176,8 +176,9 @@ When a value is updated through a lens, the `setDeepValue` recursive helper crea
 Lenses utilize recursive utility types (`Paths<T>`, `PathValue<T, P>`) to enforce safety:
 
 - **Autocompletion**: Enumerates all possible dot-separated paths up to **8 levels deep** (V8 Smi-friendly recursion limit).
+- **Method Filtering**: Automatically excludes prototype methods (e.g., `push`, `pop` on arrays) to keep autocompletion focused strictly on data paths.
 - **Inference**: Precisely resolves the resulting type, eliminating `any` casts in user code.
 
 ### Subscription Lifecycle
 
-Every lens maintains an internal set of parent atom subscriptions. Calling `lens.dispose()` (or using `[Symbol.dispose]()` via the `using` keyword) shuts down these bridges, ensuring zero memory usage for high-churn patterns (e.g., dynamic forms or list item lensing). Improved type safety in `PathValue` now correctly handles nullable and optional properties within the state tree.
+Every lens maintains an internal set of parent atom subscriptions. Calling `lens.dispose()` (or using `[Symbol.dispose]()` via the `using` keyword) shuts down these bridges, ensuring zero memory usage for high-churn patterns (e.g., dynamic forms or list item lensing). Improved type safety in `PathValue` and `Paths` now correctly handles nullable and optional properties within the state tree.

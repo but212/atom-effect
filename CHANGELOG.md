@@ -10,6 +10,7 @@
 - **Scheduler**: Fixed nested synchronous flush state corruption where `isFlushingSync` was prematurely reset.
 - **Scheduler**: Eliminated memory leaks by explicitly nullifying job references after execution using `undefined`.
 - **Scheduler**: Prevented stack overflow risks in deeply nested `batch()` updates via a flat execution loop.
+- **Effect**: Resolved an internal `this` binding leak in `EffectImpl` by passing the effect function reference directly, ensuring the internal instance is not exposed as `this` to user-provided functions.
 
 #### Changed
 
@@ -21,7 +22,9 @@
 - **Performance**: Improved V8 hidden class stability by explicitly initializing all optional members (`unsub`, `fn`, `sub`) in `DependencyLink` and `Subscription` constructors.
 - **Performance**: Optimized `debug.warn` calls to be fully stripped in production by wrapping them in `IS_DEV` checks at call sites, reducing bundle size and runtime string overhead.
 - **API**: Formalized `Disposable` interface and added `[Symbol.dispose]` support to all reactive primitives for explicit resource management (TS 5.2+).
-- **Types**: Enhanced `Paths<T>` and `PathValue<T, P>` to handle nullable/optional properties correctly using `NonNullable`.
+- **Types**: Enhanced `Paths<T>` and `PathValue<T, P>` to handle nullable/optional properties correctly using `NonNullable`, and implemented method filtering to exclude prototype functions from path unions.
+- **Types**: Simplified `EffectFunction` into a single function type returning a union of result types, improving TypeScript inference and internal engine consistency.
+
 - **Types**: Hardened `Dependency<T>` contract by making `peek()` and `value` required and strictly typed.
 
 ### jQuery

@@ -190,7 +190,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
 
     let committed = false;
     try {
-      const result = trackingContext.run(this, () => this._fn());
+      const result = trackingContext.run(this, this._fn);
 
       // Clean up any remaining trailing dependencies
       deps.truncateFrom(this._trackCount);

@@ -38,9 +38,11 @@ export type Paths<T, D extends unknown[] = []> = D['length'] extends MaxDepth
     ? never
     : T extends object
       ? {
-          [K in keyof T & (string | number)]: T[K] extends object
-            ? `${K}` | `${K}.${Paths<T[K], [...D, 1]>}`
-            : `${K}`;
+          [K in keyof T & (string | number)]: T[K] extends Function
+            ? never
+            : NonNullable<T[K]> extends object
+              ? `${K}` | `${K}.${Paths<NonNullable<T[K]>, [...D, 1]>}`
+              : `${K}`;
         }[keyof T & (string | number)]
       : never;
 
@@ -245,7 +247,7 @@ export type EffectCleanup = () => void;
  * Async effects can return a promise that resolves to a cleanup function or void.
  */
 // biome-ignore lint/suspicious/noConfusingVoidType: void is required here for TypeScript return type compatibility
-export type EffectFunction = (() => void | EffectCleanup) | (() => Promise<void | EffectCleanup>);
+export type EffectFunction = () => (void | EffectCleanup) | Promise<void | EffectCleanup>;
 
 export interface EffectOptions {
   name?: string;
