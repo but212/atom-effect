@@ -2,45 +2,53 @@ import { ATOM_BRAND, COMPUTED_BRAND, EFFECT_BRAND, WRITABLE_BRAND } from '@/symb
 import type { ComputedAtom, EffectObject, ReadonlyAtom, WritableAtom } from '@/types';
 
 /**
+ * Internal helper to check for a brand symbol on objects or functions.
+ * Optimized to fail fast on null or primitives.
+ */
+function isBranded<T>(obj: unknown, brand: symbol): obj is T {
+  if (!obj) return false;
+  const type = typeof obj;
+  return (type === 'object' || type === 'function') && brand in (obj as object);
+}
+
+/**
  * Readonly atom check.
- *
- * @param obj - Object to check.
  */
 export function isAtom(obj: unknown): obj is ReadonlyAtom {
-  return typeof obj === 'object' && obj !== null && ATOM_BRAND in obj;
+  return isBranded(obj, ATOM_BRAND);
 }
 
 /**
  * Writable atom check.
- *
- * Uses a dedicated positive brand instead of `!isComputed()` to remain
- * correct if new ReadonlyAtom-style primitives are added in the future.
  */
 export function isWritable(obj: unknown): obj is WritableAtom {
-  return typeof obj === 'object' && obj !== null && WRITABLE_BRAND in obj;
+  return isBranded(obj, WRITABLE_BRAND);
 }
 
 /**
  * Computed atom check.
  */
 export function isComputed(obj: unknown): obj is ComputedAtom {
-  return typeof obj === 'object' && obj !== null && COMPUTED_BRAND in obj;
+  return isBranded(obj, COMPUTED_BRAND);
 }
 
 /**
  * Effect object check.
  */
 export function isEffect(obj: unknown): obj is EffectObject {
-  return typeof obj === 'object' && obj !== null && EFFECT_BRAND in obj;
+  return isBranded(obj, EFFECT_BRAND);
 }
 
 /**
  * Promise check.
+ * Includes a fast-path for native Promises and supports duck-typed thenables.
  */
 export function isPromise<T>(value: unknown): value is Promise<T> {
+  if (value instanceof Promise) return true;
+  if (!value) return false;
+  const type = typeof value;
   return (
-    typeof value === 'object' &&
-    value !== null &&
+    (type === 'object' || type === 'function') &&
     typeof (value as { then?: unknown }).then === 'function'
   );
 }
