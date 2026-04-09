@@ -121,9 +121,9 @@ class TrackingContext {
       const result = fn();
 
       // Async detection: check if the function returned a Promise
-      if (IS_DEV && isPromise(result)) {
+      if (IS_DEV) {
         debug.warn(
-          true,
+          isPromise(result),
           'Detected Promise returned within tracking context. ' +
             'Dependencies accessed after "await" will NOT be tracked. ' +
             'Consider using synchronous tracking before the async boundary.'
