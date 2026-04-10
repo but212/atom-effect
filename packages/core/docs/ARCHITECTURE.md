@@ -14,6 +14,7 @@ Before diving into the bitwise flags and version hashing, it is helpful to under
 - **The Scheduler's Role**: Effects don't run immediately. They are queued in a **Scheduler**. This allows the library to "coalesce" multiple atom updates into a single effect execution, ensuring efficiency. The scheduler uses a **Double Buffering** strategy and a **Flat Loop** to ensure execution stability and prevent call stack overflows during recursive updates.
 - **Small Vector Optimization (SVO)**: To minimize GC overhead and closure heap-allocations, the engine manually unrolls "Small Vector" paths (first 4 slots) for subscriber and dependency link storage.
 - **Bitwise Branding Strategy**: To ensure high-performance type identification, all reactive primitives carry a single `BRAND` symbol property. Instead of checking for the existence of multiple distinct symbols, the engine uses a bitwise mask (`BrandFlags`) to verify if a node is an Atom, Computed, or Effect in a single constant-time operation.
+- **Zero-cost Debug Metadata**: Debug information (ID, Type, Name) is injected using non-enumerable symbols. This ensures that debugging metadata does not interfere with object iteration (`Object.keys`), serialization (`JSON.stringify`), or production performance while providing deep traceability during development.
 
 ---
 

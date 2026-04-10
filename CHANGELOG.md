@@ -21,6 +21,10 @@
 - **Performance**: Transitioned to a consolidated `BRAND` symbol with bitwise `BrandFlags` for reactive primitive identification. This eliminates redundant symbol properties on objects and accelerates type guard checks (`isAtom`, `isComputed`, etc.) on hot paths.
 - **Performance**: Improved V8 hidden class stability by explicitly initializing all optional members (`unsub`, `fn`, `sub`) in `DependencyLink` and `Subscription` constructors.
 - **Performance**: Optimized `debug.warn` calls to be fully stripped in production by wrapping them in `IS_DEV` checks at call sites, reducing bundle size and runtime string overhead.
+- **Debug**: Enhanced `DebugController` with zero-cost abstraction support.
+  - Added `customName` support for reactive nodes to improve developer traceability in large graphs.
+  - Implemented `trackUpdate` for automated infinite loop detection with bitwise SMI-safe identifiers.
+  - Optimized metadata storage using non-enumerable `Object.defineProperties` to ensure debug info doesn't pollute iteration or serialization.
 - **API**: Formalized `Disposable` interface and added `[Symbol.dispose]` support to all reactive primitives for explicit resource management (TS 5.2+).
 - **Types**: Enhanced `Paths<T>` and `PathValue<T, P>` to handle nullable/optional properties correctly using `NonNullable`, and implemented method filtering to exclude prototype functions from path unions.
 - **Types**: Simplified `EffectFunction` into a single function type returning a union of result types, improving TypeScript inference and internal engine consistency.

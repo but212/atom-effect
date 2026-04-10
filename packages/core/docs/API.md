@@ -30,6 +30,7 @@ console.log(counter.peek());
 
 ### Options - atom
 
+- `name`: String. Optional name used for debugging and traceability.
 - `sync`: Boolean (default `false`). If `true`, updates flush synchronously (bypassing microtask batching). Use with caution.
 
 ## `computed<T>(fn: () => T | Promise<T>, options?: ComputedOptions)`
@@ -84,6 +85,7 @@ const userData = computed(async () => {
 
 ### Options - computed
 
+- `name`: String. Optional name used for debugging and traceability.
 - `equal`: `(a, b) => boolean`. Custom equality check.
 - `defaultValue`: Initial value while async computation is pending.
 - `lazy`: Boolean (default `true`).
@@ -127,6 +129,7 @@ effectHandle.dispose();
 
 ### Options - effect
 
+- `name`: String. Optional name used for debugging and traceability.
 - `sync`: Boolean (default `false`). Force synchronous execution.
 - `onError`: `(error: unknown) => void`. Custom error handler.
 - `maxExecutionsPerSecond`: Number (default `1000`). Maximum executions per second (dev mode only).

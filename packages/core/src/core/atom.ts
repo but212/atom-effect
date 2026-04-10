@@ -17,15 +17,15 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
   /** @internal */
   readonly [BRAND] = BrandFlags.Atom | BrandFlags.Writable;
 
-  constructor(initialValue: T, sync: boolean) {
+  constructor(initialValue: T, options: AtomOptions) {
     super();
     this._value = initialValue;
 
-    if (sync) {
+    if (options.sync) {
       this.flags |= ATOM_STATE_FLAGS.SYNC;
     }
 
-    debug.attachDebugInfo(this, 'atom', this.id);
+    debug.attachDebugInfo(this, 'atom', this.id, options.name);
   }
 
   /** @internal */
@@ -130,5 +130,5 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
  * @param options - Configuration options (sync: boolean).
  */
 export function atom<T>(initialValue: T, options: AtomOptions = {}): WritableAtom<T> {
-  return new AtomImpl(initialValue, options.sync ?? false);
+  return new AtomImpl(initialValue, options);
 }
