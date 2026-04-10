@@ -80,7 +80,14 @@ Async computed nodes are treated as state machines, using **version snapshots** 
 - **Async Drift Detection**: If dependency versions change between a Promise's start and resolution (detected via a version snapshot), the result is discarded and the node re-evaluates.
 - **Cancellation**: Only the latest "Promise ID" is allowed to resolve. This prevents slow, stale responses from overwriting newer results.
 
-**Implementation Detail**: Bitwise flags (e.g., `PENDING`, `RESOLVED`, `RECOMPUTING`) are used to keep state transitions fast and memory-efficient.
+### Bitwise State Management
+
+To keep state transitions fast and memory-efficient, `ReactiveNode` utilizes a single 31-bit integer field (V8 SMI optimized) to manage all internal status flags. This field is strictly partitioned to avoid bit collisions across different node types and lifecycles:
+
+- **[0-7] Shared Core**: Common flags like `DISPOSED` and identity markers like `IS_COMPUTED`.
+- **[8-15] Computed States**: Management of `DIRTY`, `RECOMPUTING`, and `HAS_ERROR` states.
+- **[16-23] Async Lifecycle**: Tracking partitioned states for asynchronous operations (Idle, Pending, Resolved, Rejected).
+- **[24-30] Primitive Specific**: Specialized flags for specific implementations, such as `ATOM_SYNC` or `EFFECT_EXECUTING`.
 
 ---
 
