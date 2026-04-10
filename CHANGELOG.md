@@ -25,6 +25,13 @@
 - **Types**: Enhanced `Paths<T>` and `PathValue<T, P>` to handle nullable/optional properties correctly using `NonNullable`, and implemented method filtering to exclude prototype functions from path unions.
 - **Types**: Simplified `EffectFunction` into a single function type returning a union of result types, improving TypeScript inference and internal engine consistency.
 
+#### Refactor
+
+- **Core**: Reorganized internal state flags into a partitioned 31-bit layout (V8 SMI optimized) with dedicated ranges for core, computed, async, and primitive-specific flags.
+- **Core**: Hardened all configuration and state constant objects with `Object.freeze()` to prevent runtime mutations.
+- **Core**: Enhanced `IS_DEV` detection to natively support Vite (`import.meta.env`) and improved reliability across different environments.
+- **Core**: Added comprehensive unit tests for constants to ensure bitwise uniqueness, partition integrity, and immutability.
+
 - **Types**: Hardened `Dependency<T>` contract by making `peek()` and `value` required and strictly typed.
 
 ### jQuery

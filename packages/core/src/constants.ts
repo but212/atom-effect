@@ -1,52 +1,96 @@
 /**
- * Async operation states.
+ * Internal State Flags for ReactiveNode.
+ *
+ * Managed as a 31-bit integer field (V8 SMI optimization).
+ *
+ * Bit Layout:
+ * [0-7]   - Shared Core (Disposed, Computed marker, etc.)
+ * [8-15]  - Computed States (Dirty, Recomputing, etc.)
+ * [16-23] - Async Lifecycle (Idle, Pending, Resolved, Rejected)
+ * [24-30] - Primitive Specific (Atom Sync, Effect Executing, etc.)
  */
-export const AsyncState = {
+const FLAGS = {
+  // --- Shared Core (0-7) ---
+  DISPOSED: 1 << 0,
+  IS_COMPUTED: 1 << 1,
+
+  // --- Computed Flags (8-15) ---
+  DIRTY: 1 << 8,
+  RECOMPUTING: 1 << 9,
+  HAS_ERROR: 1 << 10,
+  FORCE_COMPUTE: 1 << 11,
+
+  // --- Async States (16-23) ---
+  IDLE: 1 << 16,
+  PENDING: 1 << 17,
+  RESOLVED: 1 << 18,
+  REJECTED: 1 << 19,
+
+  // --- Atom Specific (24-27) ---
+  ATOM_SYNC: 1 << 24,
+  ATOM_NOTIFICATION_SCHEDULED: 1 << 25,
+
+  // --- Effect Specific (28-30) ---
+  EFFECT_EXECUTING: 1 << 28,
+} as const;
+
+/**
+ * Compound Masks for fast bitwise clearing/checking.
+ */
+export const STATE_MASKS = Object.freeze({
+  /** Matches all bits related to async states (Idle, Pending, Resolved, Rejected). */
+  ASYNC_STATE: FLAGS.IDLE | FLAGS.PENDING | FLAGS.RESOLVED | FLAGS.REJECTED,
+  /** Matches all flags that define a "clean" or "idle" computed state. */
+  COMPUTED_CLEAN: ~(FLAGS.DIRTY | FLAGS.RECOMPUTING | FLAGS.FORCE_COMPUTE),
+});
+
+/**
+ * Async operation states for public API and high-level checks.
+ */
+export const AsyncState = Object.freeze({
   IDLE: 'idle',
   PENDING: 'pending',
   RESOLVED: 'resolved',
   REJECTED: 'rejected',
-} as const;
+});
 
 /**
  * Effect flags.
  */
-export const EFFECT_STATE_FLAGS = {
-  DISPOSED: 1 << 0,
-  EXECUTING: 1 << 3,
-} as const;
+export const EFFECT_STATE_FLAGS = Object.freeze({
+  DISPOSED: FLAGS.DISPOSED,
+  EXECUTING: FLAGS.EFFECT_EXECUTING,
+});
 
 /**
  * Computed flags.
  */
-export const COMPUTED_STATE_FLAGS = {
-  DISPOSED: 1 << 0,
-  /** Marker bit: identifies this node as a computed. */
-  IS_COMPUTED: 1 << 1,
-  DIRTY: 1 << 3,
-  IDLE: 1 << 4,
-  PENDING: 1 << 5,
-  RESOLVED: 1 << 6,
-  REJECTED: 1 << 7,
-  RECOMPUTING: 1 << 8,
-  HAS_ERROR: 1 << 9,
-  /** Flagged when explicitly invalidated. Bypasses fast-path dirty checks. */
-  FORCE_COMPUTE: 1 << 10,
-} as const;
+export const COMPUTED_STATE_FLAGS = Object.freeze({
+  DISPOSED: FLAGS.DISPOSED,
+  IS_COMPUTED: FLAGS.IS_COMPUTED,
+  DIRTY: FLAGS.DIRTY,
+  IDLE: FLAGS.IDLE,
+  PENDING: FLAGS.PENDING,
+  RESOLVED: FLAGS.RESOLVED,
+  REJECTED: FLAGS.REJECTED,
+  RECOMPUTING: FLAGS.RECOMPUTING,
+  HAS_ERROR: FLAGS.HAS_ERROR,
+  FORCE_COMPUTE: FLAGS.FORCE_COMPUTE,
+});
 
 /**
  * Writable Atom Flags.
  */
-export const ATOM_STATE_FLAGS = {
-  DISPOSED: 1 << 0,
-  SYNC: 1 << 3,
-  NOTIFICATION_SCHEDULED: 1 << 4,
-} as const;
+export const ATOM_STATE_FLAGS = Object.freeze({
+  DISPOSED: FLAGS.DISPOSED,
+  SYNC: FLAGS.ATOM_SYNC,
+  NOTIFICATION_SCHEDULED: FLAGS.ATOM_NOTIFICATION_SCHEDULED,
+});
 
 /**
  * Scheduler configuration.
  */
-export const SCHEDULER_CONFIG = {
+export const SCHEDULER_CONFIG = Object.freeze({
   // Infinite loop protection
   MAX_EXECUTIONS_PER_SECOND: 1000,
   MAX_EXECUTIONS_PER_EFFECT: 100,
@@ -58,32 +102,32 @@ export const SCHEDULER_CONFIG = {
 
   // Memory management
   BATCH_QUEUE_SHRINK_THRESHOLD: 1000,
-} as const;
+});
 
 /**
  * Debugging thresholds.
  */
-export const DEBUG_CONFIG = {
+export const DEBUG_CONFIG = Object.freeze({
   WARN_INFINITE_LOOP: true,
   EFFECT_FREQUENCY_WINDOW: 1000,
-} as const;
+});
 
 /**
  * Computed configuration.
  */
-export const COMPUTED_CONFIG = {
+export const COMPUTED_CONFIG = Object.freeze({
   MAX_PROMISE_ID: Number.MAX_SAFE_INTEGER - 1,
-} as const;
+});
 
 /**
  * Epoch sentinel values.
  */
-export const EPOCH_CONSTANTS = {
+export const EPOCH_CONSTANTS = Object.freeze({
   /** Uninitialized epoch marker. Used as initial value before any flush has occurred. */
   UNINITIALIZED: -1,
   /** Minimum valid epoch value after a counter reset. */
   MIN: 1,
-} as const;
+});
 
 /**
  * V8 Small Integer (SMI) max value.
@@ -94,8 +138,12 @@ export const SMI_MAX = 0x3fffffff;
  * Development environment flag.
  */
 export const IS_DEV =
-  (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production') ||
-  (typeof __DEV__ !== 'undefined' && !!__DEV__);
+  (typeof process !== 'undefined' &&
+    process.env &&
+    (process.env.NODE_ENV === 'development' || process.env.NODE_ENV !== 'production')) ||
+  (typeof __DEV__ !== 'undefined' && !!__DEV__) ||
+  // @ts-expect-error: import.meta.env is Vite-specific and may not be defined in all environments
+  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.DEV);
 
 // Fallback declaration for __DEV__ if not present in environment
 declare const __DEV__: boolean;
