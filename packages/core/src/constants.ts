@@ -40,8 +40,8 @@ const FLAGS = {
 export const STATE_MASKS = Object.freeze({
   /** Matches all bits related to async states (Idle, Pending, Resolved, Rejected). */
   ASYNC_STATE: FLAGS.IDLE | FLAGS.PENDING | FLAGS.RESOLVED | FLAGS.REJECTED,
-  /** Matches all flags that define a "clean" or "idle" computed state. */
-  COMPUTED_CLEAN: ~(FLAGS.DIRTY | FLAGS.RECOMPUTING | FLAGS.FORCE_COMPUTE),
+  /** Matches all flags that indicate a computed node is dirty or recomputing. */
+  COMPUTED_DIRTY_MASK: FLAGS.DIRTY | FLAGS.RECOMPUTING | FLAGS.FORCE_COMPUTE,
 });
 
 /**
@@ -105,6 +105,11 @@ export const SCHEDULER_CONFIG = Object.freeze({
 });
 
 /**
+ * V8 Small Integer (SMI) max value.
+ */
+export const SMI_MAX = 0x3fffffff;
+
+/**
  * Debugging thresholds.
  */
 export const DEBUG_CONFIG = Object.freeze({
@@ -116,7 +121,7 @@ export const DEBUG_CONFIG = Object.freeze({
  * Computed configuration.
  */
 export const COMPUTED_CONFIG = Object.freeze({
-  MAX_PROMISE_ID: Number.MAX_SAFE_INTEGER - 1,
+  MAX_PROMISE_ID: SMI_MAX,
 });
 
 /**
@@ -130,22 +135,15 @@ export const EPOCH_CONSTANTS = Object.freeze({
 });
 
 /**
- * V8 Small Integer (SMI) max value.
- */
-export const SMI_MAX = 0x3fffffff;
-
-/**
  * Development environment flag.
  */
 export const IS_DEV =
-  (typeof process !== 'undefined' &&
-    process.env &&
-    (process.env.NODE_ENV === 'development' || process.env.NODE_ENV !== 'production')) ||
+  (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production') ||
   (typeof __DEV__ !== 'undefined' && !!__DEV__) ||
   // @ts-expect-error: import.meta.env is Vite-specific and may not be defined in all environments
   (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.DEV);
 
-// Fallback declaration for __DEV__ if not present in environment
+// Fallback declarations for global environment variables
 declare const __DEV__: boolean;
 
 export const EMPTY_ERROR_ARRAY: readonly Error[] = Object.freeze([]);
