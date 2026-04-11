@@ -1,19 +1,41 @@
 /**
+ * Structured JSON representation of an AtomError.
+ */
+export interface AtomErrorJSON {
+  name: string;
+  message: string;
+  code?: string | undefined;
+  recoverable: boolean;
+  stack?: string | undefined;
+  cause?: unknown | undefined;
+}
+
+/**
+ * Constructor type for Atom errors.
+ */
+export type AtomErrorConstructor = new (
+  message: string,
+  cause?: unknown,
+  recoverable?: boolean,
+  code?: string
+) => AtomError;
+
+/**
  * Base error class for the Atom system.
- * Designed for high traceability and programmatic inspection.
+ * Designed for high performance, traceability, and cycle protection.
  */
 export class AtomError extends Error {
-  // Explicitly set name on the prototype for better performance and reliability
-  override name = 'AtomError';
+  override readonly name: string = 'AtomError';
 
   constructor(
     message: string,
     public readonly cause: unknown = null,
-    public readonly recoverable = true,
+    public readonly recoverable: boolean = true,
     public readonly code?: string
   ) {
     super(message);
-    // Maintains proper stack trace in V8 environments
+
+    // Maintain a stable object shape for V8
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, this.constructor);
     }
@@ -21,61 +43,97 @@ export class AtomError extends Error {
 
   /**
    * Returns the entire error chain as an array.
-   * Useful for deep debugging and logging.
+   * Includes the circular node if a cycle is detected.
    */
   getChain(): Array<AtomError | Error | unknown> {
+    // Fast path: no cause
+    if (this.cause === null || this.cause === undefined) {
+      return [this];
+    }
+
     const chain: Array<AtomError | Error | unknown> = [this];
+    const seen = new Set<unknown>([this]);
     let current: unknown = this.cause;
-    while (current) {
+
+    while (current !== null && current !== undefined) {
+      const alreadySeen = seen.has(current);
       chain.push(current);
+
+      if (alreadySeen) break;
+      seen.add(current);
+
       if (current instanceof AtomError) {
         current = current.cause;
       } else if (current instanceof Error && 'cause' in current) {
         current = (current as Error & { cause?: unknown }).cause;
       } else {
-        current = null;
+        break;
       }
     }
     return chain;
   }
 
   /**
-   * Custom serialization for logging systems.
+   * Serializes the error to a structured object for logging.
+   * Protected against circular references.
    */
-  toJSON() {
+  toJSON(seen: Set<unknown> = new Set()): AtomErrorJSON {
+    if (seen.has(this)) {
+      return {
+        name: this.name,
+        message: '[Circular Reference]',
+        recoverable: this.recoverable,
+        code: this.code,
+      };
+    }
+    seen.add(this);
+
+    let causeJson: unknown = this.cause;
+    if (this.cause instanceof AtomError) {
+      causeJson = this.cause.toJSON(seen);
+    } else if (this.cause instanceof Error) {
+      causeJson = {
+        name: this.cause.name,
+        message: this.cause.message,
+        stack: this.cause.stack,
+        cause: (this.cause as Error & { cause?: unknown }).cause,
+      };
+    }
+
     return {
       name: this.name,
       message: this.message,
       code: this.code,
       recoverable: this.recoverable,
       stack: this.stack,
-      cause:
-        this.cause instanceof Error
-          ? { name: this.cause.name, message: this.cause.message }
-          : this.cause,
+      cause: causeJson,
     };
   }
-}
 
-/** Computed-specific error. */
-export class ComputedError extends AtomError {
-  override name = 'ComputedError';
-  constructor(message: string, cause: unknown = null, recoverable = true, code?: string) {
-    super(message, cause, recoverable, code);
+  /**
+   * Internal helper to format wrapped messages consistently.
+   */
+  static format(source: string, context: string, message: string): string {
+    return `${source} (${context}): ${message}`;
   }
 }
 
-/** Effect-specific error. */
+/** Thrown when a computation fails. */
+export class ComputedError extends AtomError {
+  override readonly name = 'ComputedError';
+}
+
+/** Thrown when an effect execution or cleanup fails. */
 export class EffectError extends AtomError {
-  override name = 'EffectError';
+  override readonly name = 'EffectError';
   constructor(message: string, cause: unknown = null, recoverable = false, code?: string) {
     super(message, cause, recoverable, code);
   }
 }
 
-/** Scheduler-specific error. */
+/** Thrown by the execution engine or scheduler. */
 export class SchedulerError extends AtomError {
-  override name = 'SchedulerError';
+  override readonly name = 'SchedulerError';
   constructor(message: string, cause: unknown = null, recoverable = false, code?: string) {
     super(message, cause, recoverable, code);
   }
@@ -117,24 +175,7 @@ export const ERROR_MESSAGES = {
 } as const;
 
 /**
- * Internal helper to format error messages consistently.
- */
-function formatWrappedMessage(source: string, context: string, originalMessage: string): string {
-  return `${source} (${context}): ${originalMessage}`;
-}
-
-/**
- * Constructor type for Atom errors.
- */
-export type AtomErrorConstructor = new (
-  message: string,
-  cause?: unknown,
-  recoverable?: boolean,
-  code?: string
-) => AtomError;
-
-/**
- * Wraps any error into the Atom error hierarchy, preserving the trace and context.
+ * Wraps any value into the Atom error hierarchy, preserving the trace and context.
  *
  * @param error - The raw error or object thrown.
  * @param ErrorClass - The specific AtomError subclass to use.
@@ -148,7 +189,7 @@ export function wrapError(
   // 1. AtomError (Chainable Trace)
   if (error instanceof AtomError) {
     return new ErrorClass(
-      formatWrappedMessage(error.name, context, error.message),
+      AtomError.format(error.name, context, error.message),
       error,
       error.recoverable,
       error.code
@@ -158,9 +199,9 @@ export function wrapError(
   // 2. Native Error
   if (error instanceof Error) {
     const type = error.name || error.constructor.name || 'Error';
-    return new ErrorClass(formatWrappedMessage(type, context, error.message), error);
+    return new ErrorClass(AtomError.format(type, context, error.message), error);
   }
 
   // 3. Unknown Types (Raw Preservation)
-  return new ErrorClass(formatWrappedMessage('Unexpected error', context, String(error)), error);
+  return new ErrorClass(AtomError.format('Unexpected error', context, String(error)), error);
 }
