@@ -53,11 +53,21 @@ function injectStyle(): void {
 
 /** Determines the initial debug state of the application. */
 function resolveInitialState(): boolean {
-  // biome-ignore lint/suspicious/noExplicitAny: globalThis/process may be untyped
-  const g = globalThis as any;
+  const g = globalThis as {
+    __ATOM_DEBUG__?: boolean;
+    __DEV__?: boolean;
+    process?: { env?: { NODE_ENV?: string } };
+  };
 
-  // 1. Explicit global override (supports build products)
+  // 1. Explicit global override or sessionStorage (supports runtime toggling in builds)
   if (typeof g.__ATOM_DEBUG__ !== 'undefined') return !!g.__ATOM_DEBUG__;
+  try {
+    if (
+      typeof sessionStorage !== 'undefined' &&
+      sessionStorage.getItem('__ATOM_DEBUG__') === 'true'
+    )
+      return true;
+  } catch {}
 
   // 2. Node.js / Bundler environment check
   if (g.process?.env?.NODE_ENV !== 'production' && g.process?.env?.NODE_ENV !== undefined) {
@@ -80,92 +90,49 @@ function resolveInitialState(): boolean {
 // DebugController
 // ============================================================================
 
-/**
- * Controller responsible for managing debug logs and UI feedback.
- * Swaps methods at runtime to minimize branch prediction misses in hot paths.
- */
-class DebugController {
-  private _enabled = false;
+export interface DebugConfig {
+  enabled: boolean;
+  log(prefix: string, ...args: unknown[]): void;
+  atomChanged(prefix: string, name: string | undefined, prev: unknown, next: unknown): void;
+  domUpdated(prefix: string, target: Element | JQuery<Element>, type: string, value: unknown): void;
+  cleanup(prefix: string, subject: string): void;
+  warn(prefix: string, message: string, ...rest: unknown[]): void;
+  error(prefix: string, message: string, cause: unknown): void;
+}
 
-  constructor() {
-    this._enabled = resolveInitialState();
-    this._applyLoggingSubsystem(this._enabled);
+class DevDebugController implements DebugConfig {
+  public enabled = true;
+
+  public log(prefix: string, ...args: unknown[]): void {
+    if (!this.enabled) return;
+    console.log(prefix, ...args);
   }
 
-  /** Gets whether debug mode is currently active. */
-  public get enabled(): boolean {
-    return this._enabled;
+  public atomChanged(prefix: string, name: string | undefined, prev: unknown, next: unknown): void {
+    if (!this.enabled) return;
+    console.log(`${prefix} Atom "${name ?? 'anonymous'}" changed:`, prev, '→', next);
   }
 
-  /** Sets the debug mode state and updates active logging methods. */
-  public set enabled(v: boolean) {
-    if (this._enabled !== v) {
-      this._enabled = v;
-      this._applyLoggingSubsystem(v);
-    }
+  public cleanup(prefix: string, subject: string): void {
+    if (!this.enabled) return;
+    console.log(`${prefix} Cleanup: ${subject}`);
   }
 
-  /** Normal logs (No-op when disabled) */
-  public log: (prefix: string, ...args: unknown[]) => void = () => {};
-
-  /** Atom state change logs (No-op when disabled) */
-  public atomChanged: (
-    prefix: string,
-    name: string | undefined,
-    prev: unknown,
-    next: unknown
-  ) => void = () => {};
-
-  /** DOM update logs with visual highlighting (No-op when disabled) */
-  public domUpdated: (
-    prefix: string,
-    target: Element | JQuery<Element>,
-    type: string,
-    value: unknown
-  ) => void = () => {};
-
-  /** Resource cleanup logs (No-op when disabled) */
-  public cleanup: (prefix: string, subject: string) => void = () => {};
-
-  /** Warnings (Always logged irrespective of enabled state) */
   public warn(prefix: string, message: string, ...rest: unknown[]): void {
     console.warn(`${prefix} ${message}`, ...rest);
   }
 
-  /** Errors (Always logged irrespective of enabled state) */
   public error(prefix: string, message: string, cause: unknown): void {
     console.error(`${prefix} ${message}`, cause);
   }
 
-  /** Swaps the internal implementation of logging methods based on the state. */
-  private _applyLoggingSubsystem(isEnabled: boolean) {
-    if (isEnabled) {
-      this.log = (prefix, ...args) => console.log(prefix, ...args);
-      this.atomChanged = (prefix, name, prev, next) =>
-        console.log(`${prefix} Atom "${name ?? 'anonymous'}" changed:`, prev, '→', next);
-      this.domUpdated = (prefix, target, type, value) => {
-        this._handleDomUpdateLog(prefix, target, type, value);
-      };
-      this.cleanup = (prefix, subject) => console.log(`${prefix} Cleanup: ${subject}`);
-    } else {
-      const noop = () => {};
-      this.log = noop;
-      this.atomChanged = noop;
-      this.domUpdated = noop;
-      this.cleanup = noop;
-    }
-  }
-
-  /**
-   * Internal handler for DOM updates. Resolves the target element,
-   * logs the change, and triggers visual feedback.
-   */
-  private _handleDomUpdateLog(
+  public domUpdated(
     prefix: string,
     target: Element | JQuery<Element>,
     type: string,
     value: unknown
-  ) {
+  ): void {
+    if (!this.enabled) return;
     // Resolve element from target (supports HTMLElement, SVGElement, or JQuery wrapper)
     const el = 'jquery' in target ? target[0] : target;
 
@@ -223,5 +190,25 @@ class DebugController {
   }
 }
 
-/** Singleton instance of the DebugController. */
-export const debug = new DebugController();
+/**
+ * Inert implementation for production.
+ */
+const ProdDebugController: DebugConfig = {
+  enabled: false,
+  log: () => {},
+  atomChanged: () => {},
+  domUpdated: () => {},
+  cleanup: () => {},
+  warn: (prefix: string, message: string, ...rest: unknown[]) =>
+    console.warn(`${prefix} ${message}`, ...rest),
+  error: (prefix: string, message: string, cause: unknown) =>
+    console.error(`${prefix} ${message}`, cause),
+};
+
+/**
+ * Global debug controller singleton.
+ * Swaps between Dev and Prod implementations for zero overhead in production.
+ */
+export const debug: DebugConfig = resolveInitialState()
+  ? new DevDebugController()
+  : ProdDebugController;

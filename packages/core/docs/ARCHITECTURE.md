@@ -221,4 +221,11 @@ The engine automatically calls `debug.trackUpdate(id, name)` during every state 
 
 ### Production Runtime Toggle
 
-To support troubleshooting in production environments, the `IS_DEV` check includes a fallback for `globalThis.__ATOM_DEBUG__`. Setting his flag to `true` at runtime bypasses the production no-op implementation, enabling full tracking and inspection capabilities on any istribution artifact without requiring a re-build.
+To support troubleshooting in production environments, the `IS_DEV` check includes a fallback for `globalThis.__ATOM_DEBUG__` and `sessionStorage.getItem('__ATOM_DEBUG__')`. Because the implementation is evaluated at load time to preserve zero-overhead execution paths, you must set this flag **before** the library loads, or by setting it in session storage and refreshing the page:
+
+```javascript
+sessionStorage.setItem('__ATOM_DEBUG__', 'true');
+// Reload the page
+```
+
+This bypasses the production no-op implementation, enabling full tracking and inspection capabilities on any distribution artifact without requiring a re-build.

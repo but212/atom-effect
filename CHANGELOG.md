@@ -12,6 +12,8 @@
 
 #### Fixed
 
+- **Debug**: Resolved memory leak in `trackUpdate` by clearing the `_updateCounts` map at the end of the current microtask execution cycle.
+- **Debug**: Prevented memory leak in `dumpGraph` by deleting `_updateCounts` entries when related nodes are garbage collected.
 - **Scheduler**: Critical bug in `runInFlushScope` where callbacks were ignored if a flush was already in progress.
 - **Scheduler**: Fixed nested synchronous flush state corruption where `isFlushingSync` was prematurely reset.
 - **Scheduler**: Eliminated memory leaks by explicitly nullifying job references after execution using `undefined`.
@@ -38,6 +40,8 @@
 - **Debug**: Enhanced environment detection with `globalThis.__ATOM_DEBUG__` support, allowing debug features to be enabled at runtime even in production-mode distribution builds.
 - **Debug**: Externalized `LOOP_THRESHOLD` to `DEBUG_CONFIG` for better configurability.
 - **Build**: Optimized Vite configuration to preserve debug code paths in distribution files by relying on `NODE_ENV` and global flags rather than aggressive compile-time stripping.
+- **Constants**: Safely introduced `sessionStorage.getItem('__ATOM_DEBUG__')` check on startup to toggle `IS_DEV`/runtime debugging behavior.
+- **Types**: Eliminated `any` type casts for `globalThis` environment checks by adopting inline type assertions.
 
 #### Refactor
 
@@ -59,6 +63,8 @@
 - **Routing**: Optimized history mode stability and improved `basePath` prefix matching for precise navigation.
 
 #### Fixed
+
+- **Debug**: Fixed test assertion failures by ensuring `DevDebugController` standard logs correctly check the `enabled` state when explicitly muted.
 
 - **Core**: Resolved a race condition where `ensureAutoCleanup` could fail to attach a `MutationObserver` if the first reactive binding occurred before `document.body` was available.
 - **Reactivity**: Enhanced jQuery event patching by explicitly supporting `$.fn.one()` and providing cross-instance compatibility via `Symbol.for('atom-effect-internal')`.
@@ -85,6 +91,9 @@
 
 #### Changed
 
+- **Debug**: Expanded `resolveInitialState` to recognize `sessionStorage.getItem('__ATOM_DEBUG__')`, allowing persistent debugging toggle without requiring build parameter modifications.
+- **Debug**: Refactored `DebugController` into robust singleton configurations (`DevDebugController` and `ProdDebugController`) using a *Monomorphic Singleton Swap* architectural pattern, perfectly aligning with the `@but212/atom-effect` core engine and improving JIT performance while completely removing object mutation overhead.
+- **Types**: Eliminated `any` casts for `globalThis` across internal initialization files.
 - **Refactor**: Improved `BindingRegistry` type safety and internal cleanup logic, reducing reliance on explicit type casting for non-element nodes.
 - **Performance**: Significant optimization of chainable bindings with lazy context creation and bitmask-based constant-time dispatch.
 - **Core**: Centralized DOM utilities (`createContext`, `atomEachElement`, `unpack`) into `src/core/dom.ts` to improve maintainability.

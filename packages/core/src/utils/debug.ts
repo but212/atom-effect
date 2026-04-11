@@ -19,6 +19,7 @@ class DevDebugController implements DebugConfig {
   private _updateCounts = new Map<DependencyId, number>();
   private _nodeRegistry = new Map<DependencyId, WeakRef<object>>();
   private _threshold = DEBUG_CONFIG.LOOP_THRESHOLD;
+  private _cleanupScheduled = false;
 
   public warn = (cond: boolean, msg: string): void => {
     if (this.enabled && cond) console.warn(`${PREFIX} ${msg}`);
@@ -56,10 +57,18 @@ class DevDebugController implements DebugConfig {
         true,
         `Infinite loop detected for ${name ?? `dependency ${id}`}. Over ${this._threshold} updates in a single execution scope.`
       );
-      counts.delete(id);
-      if (counts.size > 1000) counts.clear();
     } else {
       counts.set(id, count);
+    }
+
+    if (!this._cleanupScheduled) {
+      this._cleanupScheduled = true;
+      // Reset counts at the end of the current microtask to prevent memory leaks
+      // and false positives across different execution cycles.
+      Promise.resolve().then(() => {
+        this._updateCounts.clear();
+        this._cleanupScheduled = false;
+      });
     }
   };
 
@@ -76,6 +85,7 @@ class DevDebugController implements DebugConfig {
         });
       } else {
         this._nodeRegistry.delete(id);
+        this._updateCounts.delete(id);
       }
     }
     return result;

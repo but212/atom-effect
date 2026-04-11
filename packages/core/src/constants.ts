@@ -135,6 +135,15 @@ export const EPOCH_CONSTANTS = Object.freeze({
   MIN: 1,
 });
 
+let runtimeDebug = false;
+try {
+  runtimeDebug = !!(
+    (typeof globalThis !== 'undefined' &&
+      (globalThis as { __ATOM_DEBUG__?: boolean }).__ATOM_DEBUG__) ||
+    (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('__ATOM_DEBUG__') === 'true')
+  );
+} catch {}
+
 /**
  * Development environment flag.
  */
@@ -143,8 +152,7 @@ export const IS_DEV =
   (typeof __DEV__ !== 'undefined' && !!__DEV__) ||
   // @ts-expect-error: import.meta.env is Vite-specific and may not be defined in all environments
   (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.DEV) ||
-  // biome-ignore lint/suspicious/noExplicitAny: globalThis is not defined in all environments
-  (typeof globalThis !== 'undefined' && (globalThis as any).__ATOM_DEBUG__);
+  runtimeDebug;
 
 // Fallback declarations for global environment variables
 declare const __DEV__: boolean;

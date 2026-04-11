@@ -362,14 +362,14 @@ By using `Uint8Array` and `Int32Array` for diffing state tracking, `atomList` el
 
 To achieve zero-overhead reactive updates, the library implements several techniques to maximize **Pipeline Efficiency** by reducing branch mispredictions in the hot-path.
 
-### 12.1 No-op Proxy Debugging
+### 12.1 Monomorphic Singleton Swap
 
-Instead of checking `if (debug.enabled)` in every updater and loop, the `DebugController` uses a **Method Pointer Swapping** pattern.
+Instead of checking `if (debug.enabled)` in the hot paths and relying on complex dynamic method replacement, the debugging subsystem utilizes a **Monomorphic Singleton Swap** pattern (identical to the Core package).
 
-- In production (or when disabled), debug methods point to empty No-op functions (`() => {}`).
-- When enabled, they refer to the actual logging implementation (see [Section 14](#14-debugging--visual-highlighting)).
+- In production (or when disabled during initialization), the exported `debug` singleton is a `ProdDebugController` composed entirely of empty No-op functions (`() => {}`). V8 aggressively inlines these empty functions, eliminating the call overhead entirely.
+- When development mode is active (or enabled explicitly via `sessionStorage.setItem('__ATOM_DEBUG__', 'true')`), the fully instrumented `DevDebugController` is exported instead.
 
-This eliminates thousands of conditional branches from the execution pipeline, keeping the CPU's Branch Target Buffer (BTB) clear for business logic.
+This eliminates thousands of conditional branches from the execution pipeline, keeping the CPU's Branch Target Buffer (BTB) clear for business logic while ensuring zero cost for shipping debug instrumentation to production.
 
 ### 11.2 Bitmask Dispatch (`atomBind`)
 

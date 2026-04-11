@@ -565,9 +565,11 @@ The library includes a built-in debug mode to help you visualize reactive update
 
 You can enable debug mode in several ways:
 
-1. **Global Toggle**: Set `window.__ATOM_DEBUG__ = true` before the library loads.
-2. **Environment Variable**: Set `VITE_ATOM_DEBUG=true` in your `.env` file (for Vite projects).
-3. **Runtime**: Toggle `$.atom.debug = true` or `debug.enabled = true` from the console.
+1. **Global Toggle**: Set `window.__ATOM_DEBUG__ = true` **before** the library script evaluates.
+2. **Session Storage**: Because the library utilizes a zero-overhead architecture by swapping the debug implementation precisely at load time, you can still seamlessly activate debug functionality on production builds by setting `sessionStorage.setItem('__ATOM_DEBUG__', 'true')` and refreshing the page.
+3. **Environment Variable**: Set `VITE_ATOM_DEBUG=true` in your `.env` file (for Vite projects).
+
+> **Note**: Toggling `debug.enabled = true` from the browser console dynamically is no longer supported since the production implementation explicitly strips out all formatting and branch logic at initialization time.
 
 ### Visual Feedback
 

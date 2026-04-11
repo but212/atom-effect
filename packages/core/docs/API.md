@@ -343,10 +343,16 @@ Retrieves the debug name and type metadata attached to a reactive node.
 
 ## Global Debug Toggle
 
-Even in production-mode builds, you can enable debug features at runtime by setting a global flag in the browser console:
+Even in production-mode builds, you can enable debug features at runtime. Because the library swaps the debug implementation at load time for zero-overhead performance, the global flag must be set **before** the library script evaluates.
+
+You can accomplish this by either setting it in your HTML `<head>`, or by using `sessionStorage` and refreshing the page (which is evaluated when resolving the initial state):
 
 ```javascript
+// Method 1: Set before script loads
 window.__ATOM_DEBUG__ = true;
+
+// Method 2: Set in sessionStorage and refresh
+sessionStorage.setItem('__ATOM_DEBUG__', 'true');
 ```
 
 This bypasses the `ProdDebugController` no-op implementation and activates full tracking and logging features.
