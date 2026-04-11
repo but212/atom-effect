@@ -56,6 +56,7 @@
 - **Core**: Hardened all configuration and state constant objects with `Object.freeze()` to prevent runtime mutations.
 - **Core**: Enhanced `IS_DEV` detection to natively support Vite (`import.meta.env`) and improved reliability across different environments.
 - **Core**: Added comprehensive unit tests for constants to ensure bitwise uniqueness, partition integrity, and immutability.
+- **Buffers**: Refactored `SlotBuffer` and `DepSlotBuffer` for ultra-high performance and allocation optimization. Implemented size duality (physical vs logical) and enhanced relocation logic to minimize GC pressure and improve iteration speed.
 
 - **Types**: Hardened `Dependency<T>` contract by making `peek()` and `value` required and strictly typed.
 

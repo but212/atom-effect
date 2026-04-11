@@ -96,10 +96,11 @@ To keep state transitions fast and memory-efficient, `ReactiveNode` utilizes a s
 
 Reactivity systems are prone to memory leaks if subscriptions are not cleaned up. Two mechanisms are used to manage memory efficiently: **Subscriber Management** and **Array Pooling**.
 
-- **DepSlotBuffer (Dependency Tracking)**: A specialized `SlotBuffer` for dependency links. It features:
+- **DepSlotBuffer (Dependency Tracking)**: A specialized high-speed buffer for dependency tracking cycles. It features:
+  - **Size Duality**: Distinguishes between Physical Boundary and Logical Size to support fast iteration while maintaining hole-reuse capabilities.
   - **Mega-Node Optimization**: A hybrid O(1) `Map` fallback when dependencies exceed 32, ensuring performance even for extremely large graphs.
-  - **O(1) Free-Index Slot Reuse**: Uses a stack-based index reuse strategy to reclaim nulled slots in $O(1)$ time, eliminating linear scans during subscriber/dependency churn.
-  - **Manual Loop Unrolling**: Dependency collection and notifications are manually unrolled for the first 4 slots to bypass closure allocations and iterator dispatch.
+  - **Dense-head Structure**: Swaps existing links to the current track index to maintain cache locality.
+  - **Manual Loop Unrolling**: Dependency collection and notifications prioritize inline slots (_s0.._s3) to bypass closure allocations and iterator dispatch.
   - **Safe Retrieval**: Implemented `claimExisting` to reuse existing dependency links during re-evaluation, minimizing churn.
 - **Computed Optimizations**:
   - **Hot-path Check**: Caches the index of the last dirty dependency (`_hotIndex`) to provide $O(1)$ dirty detection for recurring state changes (e.g., animations, scrolls).
@@ -246,10 +247,10 @@ The engine uses a **Context Accumulation** strategy. When an error propagates th
 ### Policy-Driven Recovery
 
 The `recoverable` flag acts as a signal to the execution engine:
+
 - **Recoverable (`true`)**: The node is marked as having an error, but its subscribers are notified that they can try to re-evaluate if the environment changes.
 - **Non-recoverable (`false`)**: The error is considered fatal for that specific branch of the graph, and the engine may stop further attempts to execute the node until manual intervention or disposal occurs.
 
 ### Data Integrity
 
 Since JavaScript allows throwing any value, the engine treats the `cause` as `unknown`. This ensures that if a developer throws a complex metadata object, it remains fully intact and inspectable by the top-level error handler or global `onError` hook.
-
