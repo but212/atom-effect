@@ -6,12 +6,14 @@
 
 #### Added
 
-- **Debug**: Integrated automated `trackUpdate` instrumentation into `Atom`, `Computed`, and `Effect` for immediate identification of churning nodes during infinite loops.
-- **Debug**: Introduced `debug.dumpGraph()` and `debug.registerNode()` APIs to support external DevTools and graph inspection.
-- **Debug**: Implemented a `WeakRef` based node registry that tracks active reactive nodes without preventing garbage collection.
+- **Error Handling**: Introduced `AtomError.getChain()` to programmatically retrieve the full error propagation path.
+- **Error Handling**: Added `AtomError.toJSON()` support for structured logging and integration with external monitoring tools.
+- **Error Handling**: Exported `AtomErrorConstructor` to standardize error class instantiation across the system.
 
 #### Fixed
 
+- **Error Handling**: Resolved context loss during error propagation by making `wrapError` chainable, preserving the full trace from source to effect.
+- **Error Handling**: Fixed data loss when non-Error objects were thrown; the raw value is now preserved in the `cause` property.
 - **Debug**: Resolved memory leak in `trackUpdate` by clearing the `_updateCounts` map at the end of the current microtask execution cycle.
 - **Debug**: Prevented memory leak in `dumpGraph` by deleting `_updateCounts` entries when related nodes are garbage collected.
 - **Scheduler**: Critical bug in `runInFlushScope` where callbacks were ignored if a flush was already in progress.
@@ -22,6 +24,11 @@
 
 #### Changed
 
+- **Error Handling**: Enhanced `AtomError` hierarchy with support for optional machine-readable error codes and manual `recoverable` policy overrides in all subclasses.
+- **Error Handling**: Expanded `cause` type to `unknown` to strictly follow modern JavaScript error patterns while maintaining ES2021 compatibility.
+- **Debug**: Integrated `Error.captureStackTrace` (where available) to provide cleaner, more focused traces by excluding internal wrapping frames.
+- **Debug**: Introduced `debug.dumpGraph()` and `debug.registerNode()` APIs to support external DevTools and graph inspection.
+- **Debug**: Implemented a `WeakRef` based node registry that tracks active reactive nodes without preventing garbage collection.
 - **Scheduler**: Optimized with a double-buffered queue strategy for better stability under high churn.
 - **Scheduler**: Improved JSDoc documentation and internal type safety.
 - **Tracking**: Hardened `TrackingContext` with synchronous tracking boundary validation. Detects and warns when a `Promise` is returned within a tracking scope to help developers identify dependencies accessed after an `await` (which are not tracked).

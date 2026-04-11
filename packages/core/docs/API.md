@@ -267,6 +267,46 @@ const result = computed(() => {
 });
 ```
 
+## Error Handling
+
+The library provides a structured error hierarchy to help you identify and recover from issues in the reactive graph.
+
+### `AtomError` (Base Class)
+
+All errors thrown by the system inherit from `AtomError`.
+
+- **Properties**:
+  - `message`: Human-readable description.
+  - `cause`: The original error or value that triggered this error (`unknown`).
+  - `recoverable`: Boolean indicating if the system can potentially recover if dependencies change.
+  - `code`: Optional machine-readable string (e.g., `ERR_CIRCULAR_DEP`).
+- **Methods**:
+  - `getChain()`: Returns an array of the entire error chain, from the current error down to the root cause.
+  - `toJSON()`: Returns a plain object representation for logging.
+
+### Specialized Errors
+
+- `ComputedError`: Thrown when a computation fails. Usually `recoverable: true`.
+- `EffectError`: Thrown during effect execution or cleanup. Usually `recoverable: false`.
+- `SchedulerError`: Thrown by the execution engine (e.g., infinite loop detection).
+
+### `AtomErrorConstructor` (Type)
+
+A specialized constructor type for Atom errors, ensuring consistent signatures across the system.
+
+```typescript
+type AtomErrorConstructor = new (
+  message: string,
+  cause?: unknown,
+  recoverable?: boolean,
+  code?: string
+) => AtomError;
+```
+
+### `wrapError(error: unknown, ErrorClass: AtomErrorConstructor, context: string): AtomError`
+
+Wraps any value into the Atom error hierarchy. If the input is already an `AtomError`, it creates a new wrapper to preserve the propagation context, building a "trace" of how the error traveled through your atoms.
+
 ---
 
 ## Lens & Structural Sharing

@@ -8,17 +8,32 @@ import { EMPTY_ERROR_ARRAY } from '@/constants';
 import { atom } from '@/core/atom';
 import { computed } from '@/core/computed';
 import { effect } from '@/core/effect';
-import { AtomError, ComputedError, EffectError, SchedulerError, wrapError } from '@/errors';
+import {
+  AtomError,
+  type AtomErrorConstructor,
+  ComputedError,
+  EffectError,
+  SchedulerError,
+  wrapError,
+} from '@/errors';
 import { isAtom, isComputed, isEffect, isPromise, isWritable } from '@/utils/type-guards';
 
 // ── Error Classes ─────────────────────────────────────────────────────────────
 
 describe('Error Classes', () => {
   const errorTypes = [
-    { Class: AtomError, name: 'AtomError', expectedRecoverable: true },
-    { Class: ComputedError, name: 'ComputedError', expectedRecoverable: true },
-    { Class: EffectError, name: 'EffectError', expectedRecoverable: false },
-    { Class: SchedulerError, name: 'SchedulerError', expectedRecoverable: false },
+    { Class: AtomError as AtomErrorConstructor, name: 'AtomError', expectedRecoverable: true },
+    {
+      Class: ComputedError as AtomErrorConstructor,
+      name: 'ComputedError',
+      expectedRecoverable: true,
+    },
+    { Class: EffectError as AtomErrorConstructor, name: 'EffectError', expectedRecoverable: false },
+    {
+      Class: SchedulerError as AtomErrorConstructor,
+      name: 'SchedulerError',
+      expectedRecoverable: false,
+    },
   ] as const;
 
   it.each(errorTypes)('$name has correct name, message, cause, and default recoverable', ({
@@ -37,12 +52,17 @@ describe('Error Classes', () => {
     expect(err.recoverable).toBe(expectedRecoverable);
   });
 
-  it.each(errorTypes)('$name defaults cause to null when omitted', ({ Class }) => {
-    expect(new Class('no cause').cause).toBeNull();
+  it('supports optional error codes', () => {
+    const err = new AtomError('msg', null, true, 'ERR_001');
+    expect(err.code).toBe('ERR_001');
   });
 
-  it('AtomError allows overriding recoverable to false', () => {
-    expect(new AtomError('fatal', null, false).recoverable).toBe(false);
+  it.each(errorTypes)('$name allows overriding recoverable', ({ Class }) => {
+    // ComputedError is normally true, EffectError is normally false
+    const errTrue = new Class('msg', null, true);
+    const errFalse = new Class('msg', null, false);
+    expect(errTrue.recoverable).toBe(true);
+    expect(errFalse.recoverable).toBe(false);
   });
 });
 
@@ -58,19 +78,23 @@ describe('wrapError()', () => {
     expect(wrapped.message).toBe('TypeError (context): native failure');
   });
 
-  it('returns existing AtomError as-is (idempotent, any subclass)', () => {
-    const original = new SchedulerError('already wrapped');
-    expect(wrapError(original, EffectError, 'ignored')).toBe(original);
+  it('accumulates context for existing AtomError (Chainable)', () => {
+    const original = new ComputedError('initial error');
+    const wrapped = wrapError(original, EffectError, 'secondary context');
 
-    const c = new ComputedError('c');
-    expect(wrapError(c, AtomError, 'ignored')).toBe(c);
+    // Should NOT be idempotent. Should create a new error to preserve trace.
+    expect(wrapped).not.toBe(original);
+    expect(wrapped.message).toContain('secondary context');
+    expect(wrapped.cause).toBe(original);
   });
 
-  it('normalizes non-Error throwables with Unexpected error format', () => {
-    const wrapped = wrapError('oops', AtomError, 'ctx');
+  it('preserves raw non-Error throwables in cause', () => {
+    const rawReason = { status: 500, detail: 'failed' };
+    const wrapped = wrapError(rawReason, AtomError, 'ctx');
+
     expect(wrapped).toBeInstanceOf(AtomError);
-    expect(wrapped.message).toBe('Unexpected error (ctx): oops');
-    expect(wrapped.cause).toBeNull();
+    expect(wrapped.cause).toBe(rawReason);
+    expect(wrapped.message).toContain('Unexpected error (ctx)');
   });
 });
 
@@ -148,10 +172,5 @@ describe('EMPTY_ERROR_ARRAY', () => {
     const c = computed(() => 42);
     c.value;
     expect(c.errors).toBe(EMPTY_ERROR_ARRAY);
-  });
-
-  it('Error handling wrapError fallback (error.ts 22)', () => {
-    const err = wrapError('string error', AtomError, 'message');
-    expect(err).toBeInstanceOf(AtomError);
   });
 });
