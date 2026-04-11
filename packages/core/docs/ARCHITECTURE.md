@@ -247,10 +247,10 @@ The engine uses a **Context Accumulation** strategy. When an error propagates th
 ### Policy-Driven Recovery
 
 The `recoverable` flag acts as a signal to the execution engine:
+
 - **Recoverable (`true`)**: The node is marked as having an error, but its subscribers are notified that they can try to re-evaluate if the environment changes.
 - **Non-recoverable (`false`)**: The error is considered fatal for that specific branch of the graph, and the engine may stop further attempts to execute the node until manual intervention or disposal occurs.
 
 ### Data Integrity
 
 Since JavaScript allows throwing any value, the engine treats the `cause` as `unknown`. This ensures that if a developer throws a complex metadata object, it remains fully intact and inspectable by the top-level error handler or global `onError` hook.
-
