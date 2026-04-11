@@ -229,3 +229,27 @@ sessionStorage.setItem('__ATOM_DEBUG__', 'true');
 ```
 
 This bypasses the production no-op implementation, enabling full tracking and inspection capabilities on any distribution artifact without requiring a re-build.
+
+---
+
+## 9. Error Handling & Traceability
+
+Reactivity creates invisible links between distant parts of an application. When an error occurs, knowing *what* failed is often less important than knowing *where it came from* and *how it traveled*.
+
+### Chainable Context Tracking
+
+The engine uses a **Context Accumulation** strategy. When an error propagates through the graph (e.g., from an Atom to a Computed, then to an Effect), each stage "wraps" the error with its own context using `wrapError`.
+
+- **Traceability**: Unlike standard errors that only show a stack trace, `AtomError` preserves a "logical trace" of the reactive nodes.
+- **Programmatic Inspection**: The `getChain()` method allows tools to walk this logical path without parsing stack strings.
+
+### Policy-Driven Recovery
+
+The `recoverable` flag acts as a signal to the execution engine:
+- **Recoverable (`true`)**: The node is marked as having an error, but its subscribers are notified that they can try to re-evaluate if the environment changes.
+- **Non-recoverable (`false`)**: The error is considered fatal for that specific branch of the graph, and the engine may stop further attempts to execute the node until manual intervention or disposal occurs.
+
+### Data Integrity
+
+Since JavaScript allows throwing any value, the engine treats the `cause` as `unknown`. This ensures that if a developer throws a complex metadata object, it remains fully intact and inspectable by the top-level error handler or global `onError` hook.
+
