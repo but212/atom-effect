@@ -46,7 +46,6 @@ export class SlotBuffer<T> {
       const ov = this._overflow;
       const ovIdx = index - 4;
       // Growth-on-demand for sparse writes via setAt()
-      while (ovIdx >= ov.length) ov.push(null);
       ov[ovIdx] = item;
     }
   }
