@@ -190,3 +190,35 @@ Lenses utilize recursive utility types (`Paths<T>`, `PathValue<T, P>`) to enforc
 ### Subscription Lifecycle
 
 Every lens maintains an internal set of parent atom subscriptions. Calling `lens.dispose()` (or using `[Symbol.dispose]()` via the `using` keyword) shuts down these bridges, ensuring zero memory usage for high-churn patterns (e.g., dynamic forms or list item lensing). Improved type safety in `PathValue` and `Paths` now correctly handles nullable and optional properties within the state tree.
+
+---
+
+## 8. Debugging Subsystem & DevTools Readiness
+
+The engine includes a sophisticated debugging layer designed to provide deep observability while maintaining a pay-only-for-what-you-use" performance profile.
+
+### Dual-Controller Strategy (Zero-Overhead)
+
+To eliminate conditional branching (`if (dev)`) on critical hot paths, the engine employs a **Monomorphic Singleton Swap**:
+
+- **`DevDebugController`**: Active in development. It manages update counters, maintains the node registry, and issues contextual arnings.
+- **`ProdDebugController`**: An inert, no-op implementation. Modern JS engines can inline these empty calls, effectively removing ebugging overhead from the production execution path.
+
+### WeakRef-based Node Registry
+
+The `debug` controller maintains a global catalog of all active reactive nodes (Atoms, Computeds, Effects).
+
+- **Registry Mechanism**: Every node is automatically registered upon creation.
+- **Memory Safety**: The registry uses **`WeakRef`** to store references. This ensures the debugger itself never prevents a reactive ode from being garbage collected once it is no longer needed by the application.
+- **Inspection**: The `debug.dumpGraph()` API allows external DevTools to snapshot the entire reactive state, including update requencies and node relationships, without manual instrumentation.
+
+### Infinite Loop Detection & Naming
+
+The engine automatically calls `debug.trackUpdate(id, name)` during every state mutation (Atom), invalidation (Computed), or execution (Effect).
+
+- **Contextual Warnings**: When the `LOOP_THRESHOLD` (default: 100) is exceeded within a single execution scope, the engine issues a arning.
+- **Name-based Traceability**: By capturing the user-provided `name` (or auto-generated alias), the warning clearly identifies the ffending node (e.g., `Infinite loop detected for userProfile_atom`), drastically reducing the time needed to debug complex reactive ycles.
+
+### Production Runtime Toggle
+
+To support troubleshooting in production environments, the `IS_DEV` check includes a fallback for `globalThis.__ATOM_DEBUG__`. Setting his flag to `true` at runtime bypasses the production no-op implementation, enabling full tracking and inspection capabilities on any istribution artifact without requiring a re-build.

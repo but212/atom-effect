@@ -56,17 +56,21 @@ function resolveInitialState(): boolean {
   // biome-ignore lint/suspicious/noExplicitAny: globalThis/process may be untyped
   const g = globalThis as any;
 
-  // 1. Browser global override
-  if (IS_BROWSER && g.window?.__ATOM_DEBUG__ === true) return true;
+  // 1. Explicit global override (supports build products)
+  if (typeof g.__ATOM_DEBUG__ !== 'undefined') return !!g.__ATOM_DEBUG__;
 
-  // 2. Vite/Meta environment
+  // 2. Node.js / Bundler environment check
+  if (g.process?.env?.NODE_ENV !== 'production' && g.process?.env?.NODE_ENV !== undefined) {
+    return true;
+  }
+
+  // 3. __DEV__ flag (often injected by bundlers)
+  if (typeof g.__DEV__ !== 'undefined') return !!g.__DEV__;
+
+  // 4. Vite/Meta specific
   try {
+    if (import.meta.env?.DEV) return true;
     if (import.meta.env?.VITE_ATOM_DEBUG === 'true') return true;
-  } catch {}
-
-  // 3. Node.js environment
-  try {
-    if (g.process?.env?.VITE_ATOM_DEBUG === 'true') return true;
   } catch {}
 
   return false;

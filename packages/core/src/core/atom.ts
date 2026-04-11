@@ -52,6 +52,7 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
 
     this._value = newValue;
     this.version = nextVersion(this.version);
+    debug.trackUpdate(this.id, debug.getDebugName(this));
 
     const flags = this.flags;
     // 1. Double check: schedule pending or no slots

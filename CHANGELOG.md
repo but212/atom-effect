@@ -4,6 +4,12 @@
 
 ### Core
 
+#### Added
+
+- **Debug**: Integrated automated `trackUpdate` instrumentation into `Atom`, `Computed`, and `Effect` for immediate identification of churning nodes during infinite loops.
+- **Debug**: Introduced `debug.dumpGraph()` and `debug.registerNode()` APIs to support external DevTools and graph inspection.
+- **Debug**: Implemented a `WeakRef` based node registry that tracks active reactive nodes without preventing garbage collection.
+
 #### Fixed
 
 - **Scheduler**: Critical bug in `runInFlushScope` where callbacks were ignored if a flush was already in progress.
@@ -28,6 +34,10 @@
 - **API**: Formalized `Disposable` interface and added `[Symbol.dispose]` support to all reactive primitives for explicit resource management (TS 5.2+).
 - **Types**: Enhanced `Paths<T>` and `PathValue<T, P>` to handle nullable/optional properties correctly using `NonNullable`, and implemented method filtering to exclude prototype functions from path unions.
 - **Types**: Simplified `EffectFunction` into a single function type returning a union of result types, improving TypeScript inference and internal engine consistency.
+- **Debug**: Refactored `DebugController` into `DevDebugController` and `ProdDebugController` implementations, ensuring zero runtime overhead in production via a no-op singleton swap.
+- **Debug**: Enhanced environment detection with `globalThis.__ATOM_DEBUG__` support, allowing debug features to be enabled at runtime even in production-mode distribution builds.
+- **Debug**: Externalized `LOOP_THRESHOLD` to `DEBUG_CONFIG` for better configurability.
+- **Build**: Optimized Vite configuration to preserve debug code paths in distribution files by relying on `NODE_ENV` and global flags rather than aggressive compile-time stripping.
 
 #### Refactor
 
@@ -89,7 +99,7 @@
 - **Classes**: `atomClass` now supports multiple space-separated class names and handles overlapping classes safely across multiple reactive keys.
 - **Sync**: Corrected dependency tracking bugs in `syncDomFromAtom` and removed redundant synchronizations during `blur` events.
 - **Refactor**: Overhauled `sanitize.ts` with a cleaner, more maintainable structure, extracting normalization logic and consolidating regex constants.
-- **Testing**: Streamlined `sanitize.test.ts` to reduce redundancy and improve signal-to-noise ratio by merging regression tests and focusing API tests on integration.
+- **Debug**: Unified environment detection logic with the core package, following the `globalThis.__ATOM_DEBUG__` pattern for better reliability across build products.
 
 #### Performance
 

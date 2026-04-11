@@ -287,5 +287,7 @@ export interface DebugConfig {
   attachDebugInfo(obj: object, type: string, id: number, customName?: string): void;
   getDebugName(obj: object | null | undefined): string | undefined;
   getDebugType(obj: object | null | undefined): string | undefined;
-  trackUpdate(id: DependencyId): void;
+  trackUpdate(id: DependencyId, name?: string): void;
+  registerNode(node: object & { id: DependencyId }): void;
+  dumpGraph(): Record<string, unknown>[];
 }

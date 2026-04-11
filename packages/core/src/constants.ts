@@ -115,6 +115,7 @@ export const SMI_MAX = 0x3fffffff;
 export const DEBUG_CONFIG = Object.freeze({
   WARN_INFINITE_LOOP: true,
   EFFECT_FREQUENCY_WINDOW: 1000,
+  LOOP_THRESHOLD: 100,
 });
 
 /**
@@ -141,7 +142,9 @@ export const IS_DEV =
   (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production') ||
   (typeof __DEV__ !== 'undefined' && !!__DEV__) ||
   // @ts-expect-error: import.meta.env is Vite-specific and may not be defined in all environments
-  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.DEV);
+  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.DEV) ||
+  // biome-ignore lint/suspicious/noExplicitAny: globalThis is not defined in all environments
+  (typeof globalThis !== 'undefined' && (globalThis as any).__ATOM_DEBUG__);
 
 // Fallback declarations for global environment variables
 declare const __DEV__: boolean;

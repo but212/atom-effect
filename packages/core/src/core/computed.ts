@@ -431,6 +431,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     const flags = this.flags;
     if ((flags & (RECOMPUTING | DIRTY)) !== 0) return;
     this.flags = flags | DIRTY;
+    debug.trackUpdate(this.id, debug.getDebugName(this));
     this._notifySubscribers(undefined, undefined);
   }
 
