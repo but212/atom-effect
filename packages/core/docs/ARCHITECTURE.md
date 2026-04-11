@@ -14,6 +14,7 @@ Before diving into the bitwise flags and version hashing, it is helpful to under
 - **The Scheduler's Role**: Effects don't run immediately. They are queued in a **Scheduler**. This allows the library to "coalesce" multiple atom updates into a single effect execution, ensuring efficiency. The scheduler uses a **Double Buffering** strategy and a **Flat Loop** to ensure execution stability and prevent call stack overflows during recursive updates.
 - **Small Vector Optimization (SVO)**: To minimize GC overhead and closure heap-allocations, the engine manually unrolls "Small Vector" paths (first 4 slots) for subscriber and dependency link storage.
 - **Bitwise Branding Strategy**: To ensure high-performance type identification, all reactive primitives carry a single `BRAND` symbol property. Instead of checking for the existence of multiple distinct symbols, the engine uses a bitwise mask (`BrandFlags`) to verify if a node is an Atom, Computed, or Effect in a single constant-time operation.
+- **Zero-cost Debug Metadata**: Debug information (ID, Type, Name) is injected using non-enumerable symbols. This ensures that debugging metadata does not interfere with object iteration (`Object.keys`), serialization (`JSON.stringify`), or production performance while providing deep traceability during development.
 
 ---
 
@@ -189,3 +190,42 @@ Lenses utilize recursive utility types (`Paths<T>`, `PathValue<T, P>`) to enforc
 ### Subscription Lifecycle
 
 Every lens maintains an internal set of parent atom subscriptions. Calling `lens.dispose()` (or using `[Symbol.dispose]()` via the `using` keyword) shuts down these bridges, ensuring zero memory usage for high-churn patterns (e.g., dynamic forms or list item lensing). Improved type safety in `PathValue` and `Paths` now correctly handles nullable and optional properties within the state tree.
+
+---
+
+## 8. Debugging Subsystem & DevTools Readiness
+
+The engine includes a sophisticated debugging layer designed to provide deep observability while maintaining a pay-only-for-what-you-use" performance profile.
+
+### Dual-Controller Strategy (Zero-Overhead)
+
+To eliminate conditional branching (`if (dev)`) on critical hot paths, the engine employs a **Monomorphic Singleton Swap**:
+
+- **`DevDebugController`**: Active in development. It manages update counters, maintains the node registry, and issues contextual arnings.
+- **`ProdDebugController`**: An inert, no-op implementation. Modern JS engines can inline these empty calls, effectively removing ebugging overhead from the production execution path.
+
+### WeakRef-based Node Registry
+
+The `debug` controller maintains a global catalog of all active reactive nodes (Atoms, Computeds, Effects).
+
+- **Registry Mechanism**: Every node is automatically registered upon creation.
+- **Memory Safety**: The registry uses **`WeakRef`** to store references. This ensures the debugger itself never prevents a reactive ode from being garbage collected once it is no longer needed by the application.
+- **Inspection**: The `debug.dumpGraph()` API allows external DevTools to snapshot the entire reactive state, including update requencies and node relationships, without manual instrumentation.
+
+### Infinite Loop Detection & Naming
+
+The engine automatically calls `debug.trackUpdate(id, name)` during every state mutation (Atom), invalidation (Computed), or execution (Effect).
+
+- **Contextual Warnings**: When the `LOOP_THRESHOLD` (default: 100) is exceeded within a single execution scope, the engine issues a arning.
+- **Name-based Traceability**: By capturing the user-provided `name` (or auto-generated alias), the warning clearly identifies the ffending node (e.g., `Infinite loop detected for userProfile_atom`), drastically reducing the time needed to debug complex reactive ycles.
+
+### Production Runtime Toggle
+
+To support troubleshooting in production environments, the `IS_DEV` check includes a fallback for `globalThis.__ATOM_DEBUG__` and `sessionStorage.getItem('__ATOM_DEBUG__')`. Because the implementation is evaluated at load time to preserve zero-overhead execution paths, you must set this flag **before** the library loads, or by setting it in session storage and refreshing the page:
+
+```javascript
+sessionStorage.setItem('__ATOM_DEBUG__', 'true');
+// Reload the page
+```
+
+This bypasses the production no-op implementation, enabling full tracking and inspection capabilities on any distribution artifact without requiring a re-build.

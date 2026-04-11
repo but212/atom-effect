@@ -3,13 +3,9 @@ import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 
 export default defineConfig(({ mode }) => ({
-  define:
-    mode === 'production'
-      ? {
-          'process.env.NODE_ENV': JSON.stringify('production'),
-          __DEV__: 'false',
-        }
-      : {},
+  define: {
+    'process.env.NODE_ENV': JSON.stringify(mode),
+  },
   build: {
     lib: {
       entry: resolve(__dirname, 'src/index.ts'),

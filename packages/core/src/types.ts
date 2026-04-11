@@ -88,6 +88,8 @@ export type AsyncStateType = (typeof AsyncState)[keyof typeof AsyncState];
  * Atom options.
  */
 export interface AtomOptions {
+  /** Optional name for debugging. */
+  name?: string;
   /** If true, subscribers are notified synchronously. Default: false (microtask scheduled). */
   sync?: boolean;
 }
@@ -198,6 +200,8 @@ export interface Dependency<T = unknown> {
  * Computed options.
  */
 export interface ComputedOptions<T = unknown> {
+  /** Optional name for debugging. */
+  name?: string;
   /** Equality check. */
   equal?: (a: T, b: T) => boolean;
   /** Initial value. */
@@ -280,7 +284,10 @@ export interface DebugConfig {
   enabled: boolean;
   warnInfiniteLoop: boolean;
   warn(condition: boolean, message: string): void;
-  attachDebugInfo(obj: object, type: string, id: number): void;
+  attachDebugInfo(obj: object, type: string, id: number, customName?: string): void;
   getDebugName(obj: object | null | undefined): string | undefined;
   getDebugType(obj: object | null | undefined): string | undefined;
+  trackUpdate(id: DependencyId, name?: string): void;
+  registerNode(node: object & { id: DependencyId }): void;
+  dumpGraph(): Record<string, unknown>[];
 }

@@ -7,42 +7,121 @@ export const DEBUG_ID = Symbol('AtomEffect.Id');
 export const DEBUG_TYPE = Symbol('AtomEffect.Type');
 export const NO_DEFAULT_VALUE = Symbol('AtomEffect.NoDefaultValue');
 
+const PREFIX = '[Atom Effect]';
+
 /**
- * Debug controller implementation.
+ * Optimized Debug controller implementation for development.
  */
-class DebugController implements DebugConfig {
-  public enabled = IS_DEV;
+class DevDebugController implements DebugConfig {
+  public enabled = true;
   public warnInfiniteLoop = DEBUG_CONFIG.WARN_INFINITE_LOOP;
 
-  public warn(cond: boolean, msg: string): void {
-    if (!IS_DEV || !this.enabled || !cond) return;
-    console.warn(`[Atom Effect] ${msg}`);
-  }
+  private _updateCounts = new Map<DependencyId, number>();
+  private _nodeRegistry = new Map<DependencyId, WeakRef<object>>();
+  private _threshold = DEBUG_CONFIG.LOOP_THRESHOLD;
+  private _cleanupScheduled = false;
 
-  public attachDebugInfo(obj: object, type: string, id: DependencyId): void {
-    if (!IS_DEV || !this.enabled) return;
+  public warn = (cond: boolean, msg: string): void => {
+    if (this.enabled && cond) console.warn(`${PREFIX} ${msg}`);
+  };
 
-    const t = obj as Record<symbol, unknown>;
-    t[DEBUG_NAME] = `${type}_${id}`;
-    t[DEBUG_ID] = id;
-    t[DEBUG_TYPE] = type;
-  }
+  public registerNode = (node: object & { id: DependencyId }): void => {
+    this._nodeRegistry.set(node.id, new WeakRef(node));
+  };
 
-  public getDebugName(obj: object | null): string | undefined {
-    if (obj == null) return undefined;
+  public attachDebugInfo = (
+    obj: object,
+    type: string,
+    id: DependencyId,
+    customName?: string
+  ): void => {
+    if (!this.enabled) return;
+
+    Object.defineProperties(obj, {
+      [DEBUG_NAME]: { value: customName ?? `${type}_${id}`, configurable: true },
+      [DEBUG_ID]: { value: id, configurable: true },
+      [DEBUG_TYPE]: { value: type, configurable: true },
+    });
+
+    this.registerNode(obj as { id: DependencyId });
+  };
+
+  public trackUpdate = (id: DependencyId, name?: string): void => {
+    if (!this.enabled || !this.warnInfiniteLoop) return;
+
+    const counts = this._updateCounts;
+    const count = (counts.get(id) ?? 0) + 1;
+
+    if (count > this._threshold) {
+      this.warn(
+        true,
+        `Infinite loop detected for ${name ?? `dependency ${id}`}. Over ${this._threshold} updates in a single execution scope.`
+      );
+    } else {
+      counts.set(id, count);
+    }
+
+    if (!this._cleanupScheduled) {
+      this._cleanupScheduled = true;
+      // Reset counts at the end of the current microtask to prevent memory leaks
+      // and false positives across different execution cycles.
+      Promise.resolve().then(() => {
+        this._updateCounts.clear();
+        this._cleanupScheduled = false;
+      });
+    }
+  };
+
+  public dumpGraph = (): Record<string, unknown>[] => {
+    const result: Record<string, unknown>[] = [];
+    for (const [id, ref] of this._nodeRegistry) {
+      const node = ref.deref();
+      if (node) {
+        result.push({
+          id,
+          name: this.getDebugName(node),
+          type: this.getDebugType(node),
+          updateCount: this._updateCounts.get(id) ?? 0,
+        });
+      } else {
+        this._nodeRegistry.delete(id);
+        this._updateCounts.delete(id);
+      }
+    }
+    return result;
+  };
+
+  public getDebugName = (obj: object | null | undefined): string | undefined => {
+    if (!obj) return undefined;
     return (obj as Record<symbol, unknown>)[DEBUG_NAME] as string | undefined;
-  }
+  };
 
-  public getDebugType(obj: object | null): string | undefined {
-    if (obj == null) return undefined;
+  public getDebugType = (obj: object | null | undefined): string | undefined => {
+    if (!obj) return undefined;
     return (obj as Record<symbol, unknown>)[DEBUG_TYPE] as string | undefined;
-  }
+  };
 }
 
 /**
- * Global debug controller singleton.
+ * Inert implementation for production.
  */
-export const debug: DebugConfig = new DebugController();
+const ProdDebugController: DebugConfig = {
+  enabled: false,
+  warnInfiniteLoop: false,
+  warn: () => {},
+  registerNode: () => {},
+  attachDebugInfo: () => {},
+  trackUpdate: () => {},
+  dumpGraph: () => [],
+  getDebugName: () => undefined,
+  getDebugType: () => undefined,
+};
+
+/**
+ * Global debug controller singleton.
+ * Swaps between Dev and Prod implementations for zero overhead in production.
+ */
+export const debug: DebugConfig = IS_DEV ? new DevDebugController() : ProdDebugController;
 
 /**
  * ID counter.
@@ -50,6 +129,6 @@ export const debug: DebugConfig = new DebugController();
 let nextId = 1;
 
 /**
- * Generates ID.
+ * Generates monotonically increasing integer IDs.
  */
-export const generateId = (): DependencyId => nextId++ | 0;
+export const generateId = (): DependencyId => (nextId++ | 0) as DependencyId;

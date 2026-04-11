@@ -115,6 +115,7 @@ export const SMI_MAX = 0x3fffffff;
 export const DEBUG_CONFIG = Object.freeze({
   WARN_INFINITE_LOOP: true,
   EFFECT_FREQUENCY_WINDOW: 1000,
+  LOOP_THRESHOLD: 100,
 });
 
 /**
@@ -134,6 +135,15 @@ export const EPOCH_CONSTANTS = Object.freeze({
   MIN: 1,
 });
 
+let runtimeDebug = false;
+try {
+  runtimeDebug = !!(
+    (typeof globalThis !== 'undefined' &&
+      (globalThis as { __ATOM_DEBUG__?: boolean }).__ATOM_DEBUG__) ||
+    (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('__ATOM_DEBUG__') === 'true')
+  );
+} catch {}
+
 /**
  * Development environment flag.
  */
@@ -141,7 +151,8 @@ export const IS_DEV =
   (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production') ||
   (typeof __DEV__ !== 'undefined' && !!__DEV__) ||
   // @ts-expect-error: import.meta.env is Vite-specific and may not be defined in all environments
-  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.DEV);
+  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.DEV) ||
+  runtimeDebug;
 
 // Fallback declarations for global environment variables
 declare const __DEV__: boolean;

@@ -73,7 +73,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     this._defaultValue = 'defaultValue' in options ? options.defaultValue : (NO_DEFAULT_VALUE as T);
     this._onError = options.onError ?? null;
 
-    debug.attachDebugInfo(this, 'computed', this.id);
+    debug.attachDebugInfo(this, 'computed', this.id, options.name);
 
     // Eager evaluation if not lazy
     if (options.lazy === false) {
@@ -431,6 +431,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     const flags = this.flags;
     if ((flags & (RECOMPUTING | DIRTY)) !== 0) return;
     this.flags = flags | DIRTY;
+    debug.trackUpdate(this.id, debug.getDebugName(this));
     this._notifySubscribers(undefined, undefined);
   }
 

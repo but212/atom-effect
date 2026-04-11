@@ -30,6 +30,7 @@ console.log(counter.peek());
 
 ### Options - atom
 
+- `name`: String. Optional name used for debugging and traceability.
 - `sync`: Boolean (default `false`). If `true`, updates flush synchronously (bypassing microtask batching). Use with caution.
 
 ## `computed<T>(fn: () => T | Promise<T>, options?: ComputedOptions)`
@@ -84,6 +85,7 @@ const userData = computed(async () => {
 
 ### Options - computed
 
+- `name`: String. Optional name used for debugging and traceability.
 - `equal`: `(a, b) => boolean`. Custom equality check.
 - `defaultValue`: Initial value while async computation is pending.
 - `lazy`: Boolean (default `true`).
@@ -127,6 +129,7 @@ effectHandle.dispose();
 
 ### Options - effect
 
+- `name`: String. Optional name used for debugging and traceability.
 - `sync`: Boolean (default `false`). Force synchronous execution.
 - `onError`: `(error: unknown) => void`. Custom error handler.
 - `maxExecutionsPerSecond`: Number (default `1000`). Maximum executions per second (dev mode only).
@@ -313,3 +316,43 @@ High-performance utility to retrieve a nested value using an array of path segme
 ### `setDeepValue(obj: unknown, keys: string[], index: number, value: unknown): unknown`
 
 The core structural sharing engine. Recursively creates a new object tree, cloning only the necessary nodes.
+
+---
+
+## `debug` Utilities
+
+The `debug` object provides several utilities for troubleshooting and inspecting the reactive graph. In production builds, these utilities are swapped for zero-overhead no-op functions unless explicitly enabled.
+
+### `debug.dumpGraph()`
+
+Returns an array containing metadata for all currently active reactive nodes (Atoms, Computeds, Effects).
+
+- **Returns**: `Array<{ id: number, name: string, type: string, updateCount: number }>`
+- **Usage**: Useful for building DevTools or inspecting the state of the reactive graph at runtime.
+- **Note**: Uses `WeakRef` internally; only returns nodes that have not been garbage collected.
+
+### `debug.trackUpdate(id: DependencyId, name?: string)`
+
+Increments the update count for a specific node to detect infinite loops. While automatically called by the engine's internal setters and executors, it can be used for custom instrumentation.
+
+### `debug.getDebugName(node: object)` / `debug.getDebugType(node: object)`
+
+Retrieves the debug name and type metadata attached to a reactive node.
+
+---
+
+## Global Debug Toggle
+
+Even in production-mode builds, you can enable debug features at runtime. Because the library swaps the debug implementation at load time for zero-overhead performance, the global flag must be set **before** the library script evaluates.
+
+You can accomplish this by either setting it in your HTML `<head>`, or by using `sessionStorage` and refreshing the page (which is evaluated when resolving the initial state):
+
+```javascript
+// Method 1: Set before script loads
+window.__ATOM_DEBUG__ = true;
+
+// Method 2: Set in sessionStorage and refresh
+sessionStorage.setItem('__ATOM_DEBUG__', 'true');
+```
+
+This bypasses the `ProdDebugController` no-op implementation and activates full tracking and logging features.

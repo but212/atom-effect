@@ -77,7 +77,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
       this._notifyCallback = () => scheduler.schedule(this);
     }
 
-    debug.attachDebugInfo(this, 'effect', this.id);
+    debug.attachDebugInfo(this, 'effect', this.id, options.name);
   }
 
   public run(): void {
@@ -179,6 +179,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     if (!force && deps.size > 0 && !this._isDirty()) return;
 
     this._checkInfiniteLoops();
+    debug.trackUpdate(this.id, debug.getDebugName(this));
 
     this.flags = flags | EFFECT_STATE_FLAGS.EXECUTING;
     this._execCleanup();

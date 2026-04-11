@@ -1,125 +1,161 @@
-import { describe, expect, it, vi } from 'vitest';
-import {
-  DEBUG_ID,
-  DEBUG_NAME,
-  DEBUG_TYPE,
-  debug,
-  generateId,
-  NO_DEFAULT_VALUE,
-} from '@/utils/debug';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEBUG_CONFIG } from '@/constants';
+import { atom } from '@/core/atom';
+import { computed } from '@/core/computed';
+import { effect } from '@/core/effect';
+import type { Dependency } from '@/types';
+import { debug, generateId, NO_DEFAULT_VALUE } from '@/utils/debug';
 
-describe('debug.warn', () => {
-  it('outputs warning with prefix when enabled and condition is true', () => {
-    const originalEnabled = debug.enabled;
-    debug.enabled = true;
-    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+describe('Debug System', () => {
+  let originalEnabled: boolean;
+  let originalWarnLoop: boolean;
 
-    debug.warn(true, 'Test warning');
-    expect(consoleWarn).toHaveBeenCalledWith('[Atom Effect] Test warning');
+  beforeEach(() => {
+    originalEnabled = debug.enabled;
+    originalWarnLoop = debug.warnInfiniteLoop;
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
 
-    consoleWarn.mockRestore();
+  afterEach(() => {
     debug.enabled = originalEnabled;
+    debug.warnInfiniteLoop = originalWarnLoop;
+    vi.restoreAllMocks();
   });
 
-  it('is silent when condition is false', () => {
-    const originalEnabled = debug.enabled;
-    debug.enabled = true;
-    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  describe('Core Naming & Metadata', () => {
+    it('correctly attaches and retrieves non-enumerable debug metadata', () => {
+      debug.enabled = true;
+      const node = atom(0, { name: 'Store_User_Email' });
 
-    debug.warn(false, 'Should not warn');
-    expect(consoleWarn).not.toHaveBeenCalled();
+      expect(debug.getDebugName(node)).toBe('Store_User_Email');
+      expect(debug.getDebugType(node)).toBe('atom');
 
-    consoleWarn.mockRestore();
-    debug.enabled = originalEnabled;
+      // Verification: Metadata should not pollute Object.keys or JSON.stringify
+      expect(Object.keys(node)).not.toContain('Store_User_Email');
+      expect(JSON.stringify(node)).not.toContain('Store_User_Email');
+
+      node.dispose();
+    });
+
+    it('falls back to "type_id" pattern for unnamed nodes', () => {
+      debug.enabled = true;
+      const a = atom(0);
+      expect(debug.getDebugName(a)).toMatch(/^atom_\d+$/);
+      a.dispose();
+    });
+
+    it('remains inert when debugging is disabled or input is invalid', () => {
+      debug.enabled = false;
+      const node = atom(100);
+      expect(debug.getDebugName(node)).toBeUndefined();
+
+      debug.enabled = true;
+      expect(debug.getDebugName(null)).toBeUndefined();
+      expect(debug.getDebugName({})).toBeUndefined();
+
+      node.dispose();
+    });
   });
 
-  it('is silent when disabled', () => {
-    const originalEnabled = debug.enabled;
-    debug.enabled = false;
-    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  describe('Auto-Instrumentation (Engine Integration)', () => {
+    it('tracks updates automatically for Atom, Computed, and Effect', () => {
+      const spy = vi.spyOn(debug, 'trackUpdate');
 
-    debug.warn(true, 'Should not warn in production');
-    expect(consoleWarn).not.toHaveBeenCalled();
+      // 1. Atom Write
+      const a = atom(0);
+      a.value = 1;
+      expect(spy).toHaveBeenCalledWith(expect.any(Number), expect.stringContaining('atom'));
 
-    consoleWarn.mockRestore();
-    debug.enabled = originalEnabled;
-  });
-});
+      // 2. Computed Dirty Check (propagation)
+      const src = atom(0);
+      const c = computed(() => src.value * 2);
+      void c.value; // prime
+      spy.mockClear();
+      src.value = 2;
+      expect(spy).toHaveBeenCalled(); // triggered via compute invalidation
 
-describe('debug.attachDebugInfo', () => {
-  it('attaches name, id, and type symbols when enabled', () => {
-    const originalEnabled = debug.enabled;
-    debug.enabled = true;
+      // 3. Effect Execution
+      const fx = effect(() => {
+        void src.value;
+      });
+      spy.mockClear();
+      src.value = 3;
+      expect(spy).toHaveBeenCalled(); // triggered via effect re-run
 
-    const obj: Record<symbol, unknown> = {};
-    debug.attachDebugInfo(obj, 'test', 123);
-
-    expect(obj[DEBUG_NAME]).toBe('test_123');
-    expect(obj[DEBUG_ID]).toBe(123);
-    expect(obj[DEBUG_TYPE]).toBe('test');
-
-    debug.enabled = originalEnabled;
-  });
-
-  it('attaches nothing when disabled', () => {
-    const originalEnabled = debug.enabled;
-    debug.enabled = false;
-
-    const obj = {};
-    debug.attachDebugInfo(obj, 'test', 456);
-
-    expect((obj as Record<symbol, unknown>)[DEBUG_NAME]).toBeUndefined();
-
-    debug.enabled = originalEnabled;
-  });
-});
-
-describe('debug.getDebugName / getDebugType', () => {
-  it('returns name and type set by attachDebugInfo', () => {
-    const originalEnabled = debug.enabled;
-    debug.enabled = true;
-
-    const obj = {};
-    debug.attachDebugInfo(obj, 'atom', 1);
-
-    expect(debug.getDebugName(obj)).toBe('atom_1');
-    expect(debug.getDebugType(obj)).toBe('atom');
-
-    debug.enabled = originalEnabled;
+      a.dispose();
+      src.dispose();
+      c.dispose();
+      fx.dispose();
+    });
   });
 
-  it('returns undefined for plain objects and null/undefined inputs', () => {
-    expect(debug.getDebugName({})).toBeUndefined();
-    expect(debug.getDebugType({})).toBeUndefined();
-    expect(debug.getDebugName(null)).toBeUndefined();
-    expect(debug.getDebugName(undefined)).toBeUndefined();
+  describe('Infinite Loop Protection', () => {
+    it('triggers warning exactly when count exceeds threshold with the node name', () => {
+      debug.enabled = true;
+      debug.warnInfiniteLoop = true;
+
+      const threshold = DEBUG_CONFIG.LOOP_THRESHOLD;
+      const nodeName = 'Infinite_Loop_Node';
+      const fakeId = 9999;
+
+      // Below threshold: Silent
+      for (let i = 0; i < threshold; i++) debug.trackUpdate(fakeId, nodeName);
+      expect(console.warn).not.toHaveBeenCalled();
+
+      // Exceed threshold: Warn with Name context
+      debug.trackUpdate(fakeId, nodeName);
+      expect(console.warn).toHaveBeenCalledWith(
+        expect.stringContaining(`Infinite loop detected for ${nodeName}`)
+      );
+    });
+
+    it('stays silent when disabled regardless of threshold', () => {
+      debug.enabled = true;
+      debug.warnInfiniteLoop = false;
+      for (let i = 0; i < 200; i++) debug.trackUpdate(1);
+      expect(console.warn).not.toHaveBeenCalled();
+    });
   });
-});
 
-describe('NO_DEFAULT_VALUE', () => {
-  it('is a symbol distinct from common falsy values', () => {
-    expect(typeof NO_DEFAULT_VALUE).toBe('symbol');
-    expect(NO_DEFAULT_VALUE).not.toBe(undefined);
-    expect(NO_DEFAULT_VALUE).not.toBe(null);
+  describe('Global Inspection (DevTools Registry)', () => {
+    it('captures the graph state and handles disposed nodes gracefully', () => {
+      debug.enabled = true;
+      const a = atom(1, { name: 'Active_Node' });
+      const b = atom(2, { name: 'Disposed_Node' });
+
+      debug.registerNode(a as unknown as Dependency);
+      debug.registerNode(b as unknown as Dependency);
+      b.dispose();
+
+      const graph = debug.dumpGraph();
+      // Active node must be present
+      expect(graph.some((e) => (e as { name: string }).name === 'Active_Node')).toBe(true);
+
+      // WeakRef behavior (dumpGraph should not throw if node is GCed/Disposed)
+      expect(() => debug.dumpGraph()).not.toThrow();
+
+      a.dispose();
+    });
   });
-});
 
-describe('generateId', () => {
-  it('returns monotonically increasing integers', () => {
-    const a = generateId();
-    const b = generateId();
-    const c = generateId();
+  describe('Internal Diagnostics', () => {
+    it('debug.warn outputs prefixed logs only when enabled', () => {
+      debug.enabled = true;
+      debug.warn(true, 'Hello');
+      expect(console.warn).toHaveBeenCalledWith('[Atom Effect] Hello');
 
-    expect(typeof a).toBe('number');
-    expect(b).toBe(a + 1);
-    expect(c).toBe(a + 2);
-  });
-});
+      vi.mocked(console.warn).mockClear();
+      debug.enabled = false;
+      debug.warn(true, 'Silent');
+      expect(console.warn).not.toHaveBeenCalled();
+    });
 
-describe('Debug Coverage Gaps', () => {
-  it('Debug info fallback (debug.ts 37)', () => {
-    const obj = {};
-    debug.attachDebugInfo(obj, 'type', 1);
-    expect((obj as Record<symbol, unknown>)[DEBUG_NAME]).toBeDefined();
+    it('generateId and constants provide unique identities', () => {
+      expect(typeof NO_DEFAULT_VALUE).toBe('symbol');
+
+      const id1 = generateId();
+      const id2 = generateId();
+      expect(id2).toBeGreaterThan(id1);
+    });
   });
 });
