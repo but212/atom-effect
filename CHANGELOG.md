@@ -13,6 +13,8 @@
 
 #### Fixed
 
+- **Computed**: Resolved synchronous error propagation bug where subscribers were not notified and versions were not bumped when a computation threw an error during evaluation.
+- **Computed**: Fixed dependency pollution in `hasError` and `errors` getters; these now operate in an `untracked` scope to prevent leaking deep internal dependencies to callers.
 - **Atom**: Resolved "Net-Zero" update bug where notifications were erroneously sent if an atom's value returned to its original state during a batch or before a microtask flush.
 - **Atom**: Fixed out-of-order notification during synchronous re-entrancy by implementing a breadth-first `while` loop in `_flushNotifications`, ensuring consistent state observation.
 - **Error Handling**: Resolved context loss during error propagation by making `wrapError` chainable, preserving the full trace from source to effect.

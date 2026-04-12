@@ -365,4 +365,57 @@ describe('Computed', () => {
       expect(c._isDirty()).toBe(true); // Hits Phase 1 (line 250-255) in base.ts
     });
   });
+
+  describe('Bug Fixes & Regressions', () => {
+    it('notifies subscribers and bumps version when computation throws synchronously', () => {
+      const src = atom(0, { sync: true });
+      const c = computed(() => {
+        if (src.value === 1) throw new Error('fail');
+        return src.value;
+      }) as unknown as {
+        value: number;
+        version: number;
+        subscribe: (fn: () => void) => () => void;
+      };
+
+      c.value; // Initialize
+      const v0 = c.version;
+      const spy = vi.fn();
+      const unsub = c.subscribe(spy);
+
+      src.value = 1; // Should trigger recompute and then _handleError(..., true)
+
+      // Since it's a pull-based system for values but notifications happen on change
+      // src.value = 1 will call _notifySubscribers on src
+      // If c is subscribed, it gets marked dirty and notifies its own subscribers.
+      // BUT, if we pull the value:
+      expect(() => c.value).toThrow();
+      expect(spy).toHaveBeenCalled(); // Failure 1: Notification should have happened
+      expect(c.version).toBeGreaterThan(v0); // Failure 2: Version should have bumped
+
+      unsub();
+    });
+
+    it('does not leak dependencies when accessing hasError or errors', () => {
+      const dep = atom(0);
+      const child = computed(() => {
+        dep.value;
+        return 1;
+      });
+      const parent = computed(() => child.hasError);
+
+      const tracker = computed(() => {
+        return parent.hasError;
+      });
+
+      tracker.value; // Run once to establish deps
+
+      // Tracker should depend on 'parent', but NOT on 'child' or 'dep' directly via bubbling
+      const spy = vi.fn();
+      tracker.subscribe(spy);
+
+      dep.value = 1; // Should NOT trigger tracker if child/parent states didn't change (still no error)
+      expect(spy).not.toHaveBeenCalled();
+    });
+  });
 });
