@@ -247,9 +247,9 @@ The engine uses a **Context Accumulation** strategy. When an error propagates th
 
 ### Dependency Isolation in Error Queries
 
-Accessing error-related properties like `hasError` or `errors` is automatically wrapped in an `untracked` scope. 
+Accessing error-related properties like `hasError` or `errors` is automatically wrapped in an `untracked` scope.
 
-- **Graph Pollution Prevention**: This ensures that while a caller can react to the *presence* of an error in a computation, it does not accidentally subscribe to the entire deep dependency tree of that computation. 
+- **Graph Pollution Prevention**: This ensures that while a caller can react to the *presence* of an error in a computation, it does not accidentally subscribe to the entire deep dependency tree of that computation.
 - **Predictable Re-execution**: The caller only re-executes if the computed node's own error state changes, preventing unnecessary re-runs when unrelated internal child nodes of the computation change in ways that don't affect the final error status.
 
 ### Policy-Driven Recovery
