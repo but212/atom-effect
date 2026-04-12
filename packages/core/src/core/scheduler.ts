@@ -112,7 +112,7 @@ export function resetFlushState(): void {
 export interface SchedulerJobObject {
   execute(): void;
   /** Internal tracking for deduplication within the same epoch. */
-  _nextEpoch: number | undefined;
+  _nextEpoch?: number | undefined;
 }
 
 /** Represents a job that can be executed by the scheduler via a function interface. */
