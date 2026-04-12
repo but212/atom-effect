@@ -34,6 +34,8 @@
 - **Tracking**: Hardened `TrackingContext` with synchronous tracking boundary validation. Detects and warns when a `Promise` is returned within a tracking scope to help developers identify dependencies accessed after an `await` (which are not tracked).
 - **Tracking**: Optimized `Subscription.notify` with internal `untracked` isolation, ensuring that notification listeners (effects/computeds) do not accidentally capture the trigger's tracking context.
 - **Performance**: Transitioned to a consolidated `BRAND` symbol with bitwise `BrandFlags` for reactive primitive identification. This eliminates redundant symbol properties on objects and accelerates type guard checks (`isAtom`, `isComputed`, etc.) on hot paths.
+- **Performance**: Improved V8 hidden class stability by explicitly initializing `_nextEpoch` in the `ReactiveNode` constructor.
+- **Performance**: Ensured `ReactiveNode.id` is consistently represented as a Small Integer (SMI) by masking it with `SMI_MAX`, aligning with system-wide bitwise optimization patterns.
 - **Performance**: Improved V8 hidden class stability by explicitly initializing all optional members (`unsub`, `fn`, `sub`) in `DependencyLink` and `Subscription` constructors.
 - **Performance**: Optimized `debug.warn` calls to be fully stripped in production by wrapping them in `IS_DEV` checks at call sites, reducing bundle size and runtime string overhead.
 - **Debug**: Enhanced `DebugController` with zero-cost abstraction support.
