@@ -6,12 +6,15 @@
 
 #### Added
 
+- **Atom**: Added `equal` property to `AtomOptions` to allow custom equality checks, providing parity with `computed` atoms.
 - **Error Handling**: Introduced `AtomError.getChain()` to programmatically retrieve the full error propagation path.
 - **Error Handling**: Added `AtomError.toJSON()` support for structured logging and integration with external monitoring tools.
 - **Error Handling**: Exported `AtomErrorConstructor` to standardize error class instantiation across the system.
 
 #### Fixed
 
+- **Atom**: Resolved "Net-Zero" update bug where notifications were erroneously sent if an atom's value returned to its original state during a batch or before a microtask flush.
+- **Atom**: Fixed out-of-order notification during synchronous re-entrancy by implementing a breadth-first `while` loop in `_flushNotifications`, ensuring consistent state observation.
 - **Error Handling**: Resolved context loss during error propagation by making `wrapError` chainable, preserving the full trace from source to effect.
 - **Error Handling**: Fixed data loss when non-Error objects were thrown; the raw value is now preserved in the `cause` property.
 - **Debug**: Resolved memory leak in `trackUpdate` by clearing the `_updateCounts` map at the end of the current microtask execution cycle.
@@ -54,6 +57,7 @@
 
 #### Refactor
 
+- **Atom**: Optimized `AtomImpl` performance via local flag caching and direct bitwise status checks, improving hot-path write/notification speed.
 - **Core**: Reorganized internal state flags into a partitioned 31-bit layout (V8 SMI optimized) with dedicated ranges for core, computed, async, and primitive-specific flags.
 - **Core**: Hardened all configuration and state constant objects with `Object.freeze()` to prevent runtime mutations.
 - **Core**: Enhanced `IS_DEV` detection to natively support Vite (`import.meta.env`) and improved reliability across different environments.

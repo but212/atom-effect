@@ -87,11 +87,13 @@ export type AsyncStateType = (typeof AsyncState)[keyof typeof AsyncState];
 /**
  * Atom options.
  */
-export interface AtomOptions {
+export interface AtomOptions<T = unknown> {
   /** Optional name for debugging. */
   name?: string;
   /** If true, subscribers are notified synchronously. Default: false (microtask scheduled). */
   sync?: boolean;
+  /** Equality check. */
+  equal?: (a: T, b: T) => boolean;
 }
 
 /**
