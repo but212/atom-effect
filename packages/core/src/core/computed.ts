@@ -223,7 +223,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
       for (let i = 0; i < size; i++) {
         const link = deps.getAt(i);
         const depNode = link?.node;
-        if (depNode != null && (depNode.flags & IS_COMPUTED) !== 0 && depNode.hasError) {
+        if (depNode != null && (depNode.flags & IS_COMPUTED) !== 0) {
           this._accumulateErrors(depNode as unknown as ComputedAtomImpl<unknown>, collected);
         }
       }
@@ -248,7 +248,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     for (let i = 0; i < size; i++) {
       const link = deps.getAt(i);
       const node = link?.node;
-      if (node != null && (node.flags & IS_COMPUTED) !== 0 && node.hasError) {
+      if (node != null && (node.flags & IS_COMPUTED) !== 0) {
         this._accumulateErrors(node as unknown as ComputedAtomImpl<unknown>, collected);
       }
     }
@@ -401,9 +401,9 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
   private _handleError(err: unknown, msg: string, throwErr = false): void {
     const error = wrapError(err, ComputedError, msg);
 
-    // Always bump version if state changed from something else to rejected
-    // This ensures bubbling and tracking systems are aware of the transition
-    if (!this.isRejected) {
+    // Always bump version if state changed to rejected or the error instance is different.
+    // This ensures bubbling and tracking systems are aware of the transition or change.
+    if (!this.isRejected || this._error !== error) {
       this.version = nextVersion(this.version);
     }
 
