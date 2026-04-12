@@ -6,11 +6,11 @@ Comprehensive benchmarking suite for `atom-effect` to measure performance and de
 
 | Category | Key Metric | Value | Context |
 | ---------- | ---------- | ----- | ------- |
-| **Atom** | Read 100x (peek) | 3.03M ops/sec | Fast untracked access |
-| **Computed** | Recompute (cached) | 240K ops/sec | Highly optimized re-evaluation |
-| **Effect** | Execution (single dep) | 1.60M ops/sec | Efficient notify-trigger cycle |
-| **Real-world** | Todo full workflow | 96.3K ops/sec | Production-ready performance |
-| **Frame Budget** | 100 atom updates | 0.0020ms | Well under 16ms budget |
+| **Atom** | Read 100x (peek) | 1.71M ops/sec | Fast untracked access |
+| **Computed** | Recompute (cached) | 236K ops/sec | Highly optimized re-evaluation |
+| **Effect** | Execution (single dep) | 1.09M ops/sec | Efficient notify-trigger cycle |
+| **Real-world** | Todo full workflow | 98.9K ops/sec | Production-ready performance |
+| **Frame Budget** | 100 atom updates | 0.0018ms | Well under 16ms budget |
 
 ## Running Benchmarks
 
@@ -97,8 +97,8 @@ Production-like scenarios:
 
 ## Latest Results
 
-**Version**: v0.29.0
-**Last Updated**: 2026-04-07
+**Version**: v0.30.0
+**Last Updated**: 2026-04-12
 **Environment**:
 
 - **Node.js**: v22.x
@@ -110,12 +110,12 @@ Production-like scenarios:
 
 | Benchmark | Result | Analysis |
 | ---------- | ------ | -------- |
-| Atom peek (100x) | 3.03M ops/sec | Near-native performance |
-| Computed read (100x) | 637K ops/sec | Low-overhead tracking |
-| Effect execution (single) | 1.60M ops/sec | Efficient subscriber notify |
-| Todo workflow | 96.3K ops/sec | Production-ready (Full workflow) |
-| Frame Budget (100 atoms) | 0.0020ms | Well under 16ms |
-| Data Grid Filter (1000x) | 0.0021ms | Real-time filtering |
+| Atom peek (100x) | 1.71M ops/sec | Near-native performance |
+| Computed read (100x) | 925K ops/sec | Low-overhead tracking |
+| Effect execution (single) | 1.09M ops/sec | Efficient subscriber notify |
+| Todo workflow | 98.9K ops/sec | Production-ready (Full workflow) |
+| Frame Budget (100 atoms) | 0.0018ms | Well under 16ms |
+| Data Grid Filter (1000x) | 0.0022ms | Real-time filtering |
 
 ## Contributing Benchmarks
 
