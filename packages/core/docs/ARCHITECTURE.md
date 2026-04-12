@@ -245,6 +245,13 @@ The engine uses a **Context Accumulation** strategy. When an error propagates th
 - **Traceability**: Unlike standard errors that only show a stack trace, `AtomError` preserves a "logical trace" of the reactive nodes.
 - **Programmatic Inspection**: The `getChain()` method allows tools to walk this logical path without parsing stack strings.
 
+### Dependency Isolation in Error Queries
+
+Accessing error-related properties like `hasError` or `errors` is automatically wrapped in an `untracked` scope. 
+
+- **Graph Pollution Prevention**: This ensures that while a caller can react to the *presence* of an error in a computation, it does not accidentally subscribe to the entire deep dependency tree of that computation. 
+- **Predictable Re-execution**: The caller only re-executes if the computed node's own error state changes, preventing unnecessary re-runs when unrelated internal child nodes of the computation change in ways that don't affect the final error status.
+
 ### Policy-Driven Recovery
 
 The `recoverable` flag acts as a signal to the execution engine:
