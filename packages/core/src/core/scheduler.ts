@@ -109,18 +109,17 @@ export function resetFlushState(): void {
 
 // ── Scheduler ───────────────────────────────────────────────────────────
 
-/** Represents a job that can be executed by the scheduler via an object interface. */
 export interface SchedulerJobObject {
   execute(): void;
   /** Internal tracking for deduplication within the same epoch. */
-  _nextEpoch?: number;
+  _nextEpoch: number | undefined;
 }
 
 /** Represents a job that can be executed by the scheduler via a function interface. */
 export interface SchedulerJobFunction {
   (): void;
   /** Internal tracking for deduplication within the same epoch. */
-  _nextEpoch?: number;
+  _nextEpoch?: number | undefined;
 }
 
 /** Union type representing any valid schedulable task. */
