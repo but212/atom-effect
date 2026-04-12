@@ -32,6 +32,7 @@ console.log(counter.peek());
 
 - `name`: String. Optional name used for debugging and traceability.
 - `sync`: Boolean (default `false`). If `true`, updates flush synchronously (bypassing microtask batching). Use with caution.
+- `equal`: `(a, b) => boolean`. Custom equality check. If returns `true`, the update is ignored.
 
 ## `computed<T>(fn: () => T | Promise<T>, options?: ComputedOptions)`
 

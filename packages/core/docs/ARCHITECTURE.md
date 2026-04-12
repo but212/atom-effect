@@ -36,8 +36,9 @@ To maximize performance and maintain consistent behavior, the engine uses a unif
   - **Subscriber Management**: Provides `subscribe()` and `_notifySubscribers()` capabilities.
   - **Dependency Tracking**: Manages a `DepSlotBuffer` and provides optimized dirty checking logic (`_isDirty`). Critical tracking loops are manually unrolled for performance.
   - **Type Safety**: Uses generic type `T` to ensure type-safe notifications for subscribers.
-- **`AtomImpl<T>`**: A pure producer node that holds mutable state. It extends `ReactiveNode<T>` but keeps its dependency list (`_deps`) null to save memory.
+- **`AtomImpl<T>`**: A pure producer node that holds mutable state. It extends `ReactiveNode<T>` but keeps its dependency list (`_deps`) null to save memory. Implements a **Breadth-First Notification Loop** to handle synchronous re-entrancy and a **Net-Zero Guard** to suppress redundant notifications.
 - **`ComputedAtomImpl<T>`**: A hybrid node that both consumes dependencies and produces a derived value. It fully leverages both producer and consumer facets of `ReactiveNode<T>`.
+
 - **`EffectImpl`**: A pure consumer node that performs side effects. It extends `ReactiveNode<void>` and keeps its subscriber list (`_slots`) null.
 
 ### The Fundamental Trade-off: Local vs. Global

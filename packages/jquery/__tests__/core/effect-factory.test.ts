@@ -69,6 +69,8 @@ describe('Effect Factory', () => {
       // 3. Same Promise instance again should hit cache (Optimization)
       updater.mockClear();
       atom.value = 'dummy-trigger'; // Trigger re-evaluation of the map
+      await $.nextTick(); // Wait for dummy-trigger to flush (since we now suppress net-zero changes in a single tick)
+
       atom.value = p2;
       await $.nextTick();
       // Hits cache synchronously within the runUpdater pass if resolvedMap has no other promises
