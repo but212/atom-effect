@@ -57,18 +57,17 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
     this.version = nextVersion(this.version);
     debug.trackUpdate(this.id, debug.getDebugName(this));
 
-    let flags = this.flags;
     // 1. Double check: schedule pending or no slots
-    if ((flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED) !== 0) return;
+    if ((this.flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED) !== 0) return;
 
     const slots = this._slots;
     if (slots == null || slots.size === 0) return;
 
     this._pendingOldValue = oldValue;
-    this.flags = flags |= ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
+    this.flags |= ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
 
     // 2. Schedule or flush (inline bitwise)
-    if ((flags & ATOM_STATE_FLAGS.SYNC) !== 0 && !scheduler.isBatching) {
+    if ((this.flags & ATOM_STATE_FLAGS.SYNC) !== 0 && !scheduler.isBatching) {
       // If not already notifying, start the flush loop.
       // If already notifying, the existing loop will pick up the new flag.
       if (this._notifying === 0) {
