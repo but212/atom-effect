@@ -12,6 +12,7 @@ This package extends jQuery with reactive capabilities. All methods are availabl
 - [Static Methods](#static-methods)
 - [Data Fetching (`$.atomFetch`)](#data-fetching)
 - [Routing (`$.route`)](#routing)
+- [Debug Mode](#debug-mode)
 
 ---
 
@@ -28,7 +29,7 @@ $('.user-card').atomBind({
   class: { 'active': isActive },  // Toggles class (yields or is boolean|Promise)
   css: { 'color': colorAtom },    // Style property (yields or is string|number|Promise)
   attr: { 'data-id': idAtom },    // Attribute (yielding PrimitiveValue|Promise)
-  prop: { 'disabled': isDisabled },// DOM property (yielding any|Promise)
+  prop: { 'disabled': isDisabled },// DOM property (yielding unknown|Promise)
   show: isVisible,                // show/hide (yielding boolean|Promise)
   hide: isHidden,                 // Inverse of show
   val: inputAtom,                 // Two-way binding: atom or [atom, options]
@@ -47,9 +48,12 @@ $('.user-card').atomBind({
 Updates `textContent`. Supports `AsyncReactiveValue` (direct Promise or atom yielding Promise).
 
 - **formatter**: optional function `(val) => string`.
+- **Integrated Binding Support**: When used via `.atomBind()`, can be expressed as a tuple `text: [source, formatter]`.
 
 ```javascript
 $('#price').atomText(price, p => `$${p.toFixed(2)}`);
+// Via atomBind
+$el.atomBind({ text: [count, c => `Count: ${c}`] });
 ```
 
 ### `.atomHtml(atom)`
@@ -57,7 +61,7 @@ $('#price').atomText(price, p => `$${p.toFixed(2)}`);
 Updates `innerHTML`.
 
 > **🛡️ Security Note**:
-> This method uses a high-performance regex-based sanitizer for speed (approx 100x faster). It neutralizes `<script>` tags, `on*` event attributes, and dangerous protocols (`javascript:`, `data:`).
+> This method uses a high-performance regex-based sanitizer for speed. It neutralizes `<script>` tags, `on*` event attributes, and dangerous protocols (`javascript:`, `vbscript:`, `data:`). The implementation includes a **hardened normalization layer** (handling entity encoding and control character smuggling) and a **robust fast-path** to ensure security without sacrificing update performance.
 >
 > While efficient for most cases, [DOMPurify](https://github.com/cure53/DOMPurify) is recommended for complex, user-generated content to ensure maximum security.
 > See the [Security Guide](./SECURITY.md) for details.
@@ -70,12 +74,14 @@ Updates `innerHTML`.
 > $('#container').atomHtml(safeContent);
 > ```
 
-### `.atomClass(className, booleanAtom)`
+Toggles `className` based on the atom's truthiness. Supports multiple space-separated classes in a single key.
 
-Toggles `className` based on the atom's truthiness.
+- **Overlapping Protection**: Safely handles duplicate classes across multiple reactive keys within the same binding map. Turning one condition off will not remove a class if another active condition still requires it.
 
 ```javascript
 $('#btn').atomClass('disabled', isLoading);
+// Overlapping example
+$el.atomClass({ 'active highlight': atom1, 'active large': atom2 });
 ```
 
 ### `.atomCss(property, atom, unit?)`
@@ -103,7 +109,7 @@ $('img').atomAttr('src', imageUrl);
 
 Updates a DOM property (e.g., `checked`, `disabled`, `value`).
 
-- **Flexible**: Decoupled from the primary binding generic to allow any property type.
+- **Flexible**: Employs `unknown` instead of `any` to satisfy strict linting while maintaining 100% flexibility for heterogeneous property types.
 
 ```javascript
 $('input').atomProp('disabled', shouldDisable);
@@ -113,9 +119,9 @@ $('input').atomProp('disabled', shouldDisable);
 
 ## Control Flow
 
-### `.atomShow(booleanAtom)` / `.atomHide(booleanAtom)`
-
 Toggles visibility (`display: none`). `atomHide` is the inverse — hides the element when the atom is truthy.
+
+- **Style Preservation**: Dynamically captures and restores the last non-none display style. If the element's base style is changed (e.g., from `block` to `flex`) while visible, that change is preserved through subsequent toggle cycles.
 
 ```javascript
 $('.loading-spinner').atomShow(isLoading);
@@ -129,14 +135,14 @@ Efficiently renders a list of items using keyed diffing.
 #### Options
 
 - **`key`**: `keyof T | (item, index) => string | number` (Required) — Property name or function returning a unique ID for diffing.
-- **`render`**: `(item, index) => string | Element | DocumentFragment | JQuery` — HTML string, DOM element, DocumentFragment, or jQuery object for new items.
+- **`render`**: `(item, index) => string | Element | DocumentFragment | JQuery` — HTML string, DOM element, DocumentFragment, or jQuery object for new items. Supports multiple root elements (e.g. `<i></i><b></b>`).
 - **`bind`**: `($el, item, index) => void` — One-time reactive binding logic for the element.
 - **`update`**: `($el, item, index) => void` — Updates existing elements manually when the key remains the same (optimizes to avoid re-binding).
 - **`onAdd`**: `($el) => void` — Called after an item is added to the DOM.
 - **`onRemove`**: `($el) => Promise<void> | void` — Called before removal (supports async exit animations).
 - **`empty`**: `string | Element | DocumentFragment | JQuery` — Content to show when the list is empty.
 - **`isEqual`**: `(oldItem, newItem) => boolean` — Custom equality check for item updates (defaults to shallow comparison).
-- **`events`**: `Record<string, (item, index, e) => void>` — Delegated event handlers attached to the container. One listener per event type. Key format: `'eventType' or 'eventType selector'`.
+- **`events`**: `Record<string, (item, index, e) => void>` — Delegated event handlers attached to the container. One listener per event type. Key format: `'eventType' or 'eventType selector'`. Handler called with `(item, index, event)`.
 
 ```javascript
 $('ul').atomList(usersAtom, {
@@ -158,6 +164,10 @@ $('ul').atomList(usersAtom, {
 
 The `atomList` reconciliation engine uses a **1D flat buffer strategy** combined with native DOM APIs (`insertBefore`, `appendChild`) for structural updates. This bypasses jQuery's internal overhead (script scanning, context normalization) during the rendering hot path, ensuring O(N) performance even for lists with thousands of items.
 
+#### Memory & Async Safety
+
+All reactive bindings (`atomBind`, `atomText`, etc.) include built-in **Zombie Prevention**. This ensures that asynchronous updates (promises) are automatically discarded if the element is disconnected from the DOM before the resolution completes. Additionally, the library employs a **Hardened Memory Pool** with double-release protection and synchronized resource orchestration to ensure zero memory leaks even in highly dynamic states. `atomBind` (via `registerMapEffect`) also optimizes multi-promise maps by caching resolved values, allowing subsequent reactive updates to skip redundant async delays.
+
 ---
 
 ## Form Bindings
@@ -165,6 +175,12 @@ The `atomList` reconciliation engine uses a **1D flat buffer strategy** combined
 ### `.atomVal(atom, options?)`
 
 Two-way binding for `<input>`, `<textarea>`, and `<select>`.
+
+**Reliability Features**:
+
+- **IME Stability**: Automatically detects composition state to prevent external updates from breaking character entry (e.g. for Korean/Japanese).
+- **Cursor Preservation**: Maintains selection range when the atom is updated while the input is focused.
+- **Cycle Prevention**: Built-in guards prevent infinite feedback loops.
 
 Natively supports `<select multiple>` — the atom value is synchronized as a `string[]` array with shallow equality checks.
 
@@ -188,7 +204,9 @@ $('#multi-select').atomVal(selected);
 
 Two-way binding for `<input type="checkbox">` and `<input type="radio">` elements.
 
-- Uses jQuery's event system for compatibility with `.trigger()`.
+- **Radio Sync**: Automatically synchronizes all radio buttons in the same group (`name`) when a value is changed either by user interaction or programmatically via the atom.
+- **Robust Selectors**: Uses `$.escapeSelector` to safely target groups even when names contain special characters (e.g. `user[role]`).
+- **Compatibility**: Uses jQuery's event system for compatibility with `.trigger()`.
 
 ```javascript
 $('#agree').atomChecked(isAgreedAtom);
@@ -241,9 +259,17 @@ $('.my-form').atomBind({
 ### `.atomOn(event, handler)`
 
 Lifecycle-aware event listener. The handler is automatically removed when the element is unbound or unmounted.
+Additionally, handlers are automatically wrapped in `batch()`, ensuring that multiple atom updates triggered by the event result in a single reactive flush.
+
+Supports all jQuery event signatures, including event maps and `.one()`.
 
 ```javascript
 $('#btn').atomOn('click', () => doSomething());
+// Event Map
+$('#btn').atomOn({
+  mouseenter: () => (isHovered.value = true),
+  mouseleave: () => (isHovered.value = false),
+});
 ```
 
 ---
@@ -252,7 +278,11 @@ $('#btn').atomOn('click', () => doSomething());
 
 ### `.atomMount(component, props?)`
 
-Mounts a functional component to an element. Automatically handles cleanup of existing components and reactive effects on that element.
+Mounts a functional component to each selected element. Automatically handles cleanup of existing components and reactive bindings on those elements and their descendants.
+
+- **Batching**: The component function is executed inside a `batch()` cycle, ensuring that multiple initial atom updates result in a single DOM flush.
+- **Isolation**: Executed within an `untracked()` block to prevent component logic from subscribing to a parent reactive context.
+- **Error Handling**: Mount and cleanup errors are caught and logged as `[atom-mount] Mount/Cleanup error`.
 
 - **component**: `($el, props) => EffectResult` (Function returning an optional cleanup).
 - **props**: Optional initial data object.
@@ -270,13 +300,15 @@ $('#root').atomMount(UserProfile, { id: 42 });
 
 ### `.atomUnmount()`
 
-Triggers the unmount sequence: executes the component's cleanup function and disposes of all nested reactive bindings.
+Disposes all reactive bindings and component cleanups on the selected elements and their descendants. This method is the primary way to manually teardown a component tree from the DOM.
 
 ### `.atomUnbind()`
 
-Manually disposes all reactive effects and cleanups registered on the selected elements and their descendants. Does not invoke the component cleanup function — use `.atomUnmount()` for full component teardown.
+Manually disposes all reactive effects and cleanups registered on the selected elements and their descendants. Does not invoke the component cleanup function — use `.atomUnmount()` for full component teardown. Supports recursive traversal across `DocumentFragment` and `ShadowRoot`.
 
 > **💡 Note**: You generally do not need to call `.atomUnbind()` manually. The library heavily leverages `MutationObserver` to automatically perform memory cleanup when elements are removed from the DOM, even if they are forcibly deleted by external, non-jQuery libraries (e.g. React or vanilla JS `replaceChildren()`).
+>
+> For **Shadow DOM** support, while the global observer on `document.body` does not cross shadow boundaries, the library provides `enableAutoCleanup(shadowRoot)` to attach independent observers to specific subtrees, or you can manually call `.atomUnbind()` during the component's `disconnectedCallback`.
 
 ---
 
@@ -368,14 +400,15 @@ $.effect(() => {
 });
 ```
 
-### `$.isAtom(v)`, `$.isComputed(v)`, `$.isReactive(v)`
+### `$.isAtom(v)`, `$.isComputed(v)`, `$.isReactive(v)`, `$.isPromise(v)`
 
-Runtime type checks for reactive nodes.
+Runtime type checks for reactive nodes and thenables.
 
 ```javascript
 $.isAtom(myAtom);      // true for WritableAtom
 $.isComputed(myComp);  // true for ComputedAtom
 $.isReactive(v);       // true for any reactive node (atom or computed)
+$.isPromise(v);        // true for Promise or Thenable (including thenable functions)
 ```
 
 ### `$.nextTick()`
@@ -398,7 +431,7 @@ Declarative AJAX primitive. Wraps core's async `computed` with jQuery's `$.ajax`
 
 **Key Features**:
 
-- **Auto-Cancellation**: Automatically aborts previous pending requests using `AbortController` when dependencies change or `.invalidate()` is called. Aborted requests are silently discarded — they do **not** set `hasError`.
+- **Auto-Cancellation**: Automatically aborts previous pending requests using `AbortController` when dependencies change, `.invalidate()` is called, or when the atom is manually **disposed**. Aborted requests are silently discarded — they do **not** set `hasError`.
 - **Reactive URL**: Re-fetches automatically if `urlOrFn` depends on atoms.
 
 **Parameters**:
@@ -409,7 +442,7 @@ Declarative AJAX primitive. Wraps core's async `computed` with jQuery's `$.ajax`
   - `method`: `string` — HTTP method (default: `'GET'`).
   - `headers`: `Record<string, string>` — Request headers.
   - `transform`: `(raw: unknown) => T` — Response transformer.
-  - `ajaxOptions`: `JQuery.AjaxSettings | () => JQuery.AjaxSettings` — Full `$.ajax` passthrough. When a **function** is provided, it is called on every request and its atom reads are automatically tracked, enabling reactive request payloads (e.g., dynamic headers or body). Static options (`method`, `headers`) are merged as the base, with dynamic values on top.
+  - `ajaxOptions`: `JQuery.AjaxSettings | () => JQuery.AjaxSettings` — Full `$.ajax` passthrough. When a **function** is provided, it is called on every request and its atom reads are automatically tracked, enabling reactive request payloads (e.g., dynamic headers or body). Static options (`method`, `headers`) are merged as the base, with dynamic values on top. Note: the top-level `method` option only overrides `ajaxOptions.method` if it is explicitly provided.
 
 **Returns**: `ComputedAtom<T>` — reactive value with:
 
@@ -483,7 +516,7 @@ A `Router` object with:
 
 - `currentRoute`: `ReadonlyAtom<string>` containing the active route name.
 - `queryParams`: `ReadonlyAtom<Record<string, string>>` reactive map of URL parameters.
-- `navigate(route)`: Programmatically change route. Empty string navigates to `default`.
+- `navigate(route)`: Programmatically change route. Supports query strings (e.g., `navigate('user?id=123')`). Empty string navigates to `default`.
 - `destroy()`: Cleanup listeners, effects, and template cache.
 
 **Example**:
@@ -521,3 +554,27 @@ const historyRouter = $.route({
 // Navigates to /my-app/about using pushState
 historyRouter.navigate('about');
 ```
+
+---
+
+## Debug Mode
+
+The library includes a built-in debug mode to help you visualize reactive updates and troubleshoot issues.
+
+### Enabling Debug Mode
+
+You can enable debug mode in several ways:
+
+1. **Global Toggle**: Set `window.__ATOM_DEBUG__ = true` **before** the library script evaluates.
+2. **Session Storage**: Because the library utilizes a zero-overhead architecture by swapping the debug implementation precisely at load time, you can still seamlessly activate debug functionality on production builds by setting `sessionStorage.setItem('__ATOM_DEBUG__', 'true')` and refreshing the page.
+3. **Environment Variable**: Set `VITE_ATOM_DEBUG=true` in your `.env` file (for Vite projects).
+
+> **Note**: Toggling `debug.enabled = true` from the browser console dynamically is no longer supported since the production implementation explicitly strips out all formatting and branch logic at initialization time.
+
+### Visual Feedback
+
+When enabled:
+
+- **Console Logs**: Every DOM update is logged with its selector (e.g., `[atom-binding] DOM updated: div#app.main.text = new value`).
+- **Visual Highlighting**: Updated elements are temporarily outlined with a red border. This highlight uses a non-blocking `requestAnimationFrame` loop and is automatically cleaned up after a short duration, even if the element is removed from the DOM.
+- **Selector Precision**: Logs use a precise `tag#id.class` format (including SVG support) to help you identify the exact source of a change.

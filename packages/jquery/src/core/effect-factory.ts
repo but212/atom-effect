@@ -3,7 +3,7 @@ import { ERROR_MESSAGES, LOG_PREFIXES } from '@/constants';
 import { registry } from '@/core/registry';
 import type { AsyncReactiveValue } from '@/types';
 
-import { isPromise, isReactive } from '@/utils';
+import { hasOwn, isPromise, isReactive } from '@/utils';
 import { debug } from '@/utils/debug';
 
 // ============================================================================
@@ -61,25 +61,42 @@ export function registerReactiveEffect<T>(
   updater: (value: T) => void,
   debugType: BindingDebugType
 ): void {
-  let latestPromise: Promise<T> | null = null;
+  const state = {
+    latestId: 0,
+    isDisposed: false,
+  };
+
+  // Ensure zombie protection by registering cleanup immediately.
+  // Covers all execution paths, including static Promise inputs.
+  registry.trackCleanup(el, () => {
+    state.isDisposed = true;
+  });
 
   const runUpdater = (val: T | Promise<T>) => {
+    // Sync Path: Update immediately and invalidate any pending async runs.
     if (!isPromise(val)) {
-      latestPromise = null;
-      try {
-        updater(val);
-        debug.domUpdated(LOG_PREFIXES.BINDING, el, debugType, val);
-      } catch (e) {
-        debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType, true), e);
-      }
+      state.latestId++;
+      untracked(() => {
+        try {
+          updater(val);
+          debug.domUpdated(LOG_PREFIXES.BINDING, el, debugType, val);
+        } catch (e) {
+          debug.error(
+            LOG_PREFIXES.BINDING,
+            ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType, true),
+            e
+          );
+        }
+      });
       return;
     }
 
-    latestPromise = val;
+    // Async Path: Increment ID to track this specific execution's relevance.
+    const myId = ++state.latestId;
     val
       .then((resolved) => {
-        // Ensure this is still the most recent promise to avoid race conditions
-        if (latestPromise === val) {
+        // Execute only if this element is still connected and this promise is still current.
+        if (myId === state.latestId && !state.isDisposed) {
           untracked(() => {
             try {
               updater(resolved);
@@ -91,19 +108,12 @@ export function registerReactiveEffect<T>(
         }
       })
       .catch((e) => {
-        if (latestPromise === val) {
+        if (myId === state.latestId && !state.isDisposed) {
           debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType), e);
         }
       });
   };
 
-  /**
-   * Decide whether to register a reactive effect or perform a one-time static update.
-   *
-   * STRATEGY:
-   * 1. If it's an Atom or a function, it's considered 'reactive' and wrapped in an effect.
-   * 2. If it's a plain value or a Promise, it's 'static' and applied once.
-   */
   const sourceIsReactive = isReactive(source);
   const sourceIsFunction = typeof source === 'function';
 
@@ -112,20 +122,16 @@ export function registerReactiveEffect<T>(
       el,
       effect(
         () => {
-          // Resolve the current value based on the source type.
-          // Both paths subscribe to their respective dependencies automatically.
           const value = sourceIsReactive
             ? (source as ReadonlyAtom<T | Promise<T>>).value
             : (source as () => T | Promise<T>)();
-
-          untracked(() => runUpdater(value));
+          runUpdater(value);
         },
         { name: debugType }
       )
     );
   } else {
-    // Static path: applies the value immediately and doesn't register an effect.
-    untracked(() => runUpdater(source as T | Promise<T>));
+    runUpdater(source as T | Promise<T>);
   }
 }
 
@@ -158,7 +164,16 @@ export function registerMapEffect<T>(
     }
   }
 
-  let latestPromiseId = 0;
+  const state = {
+    latestId: 0,
+    isDisposed: false,
+    cache: {} as Record<string, { p: Promise<T>; v: T }>,
+  };
+
+  // Ensure zombie protection by registering cleanup immediately.
+  registry.trackCleanup(el, () => {
+    state.isDisposed = true;
+  });
 
   const runUpdater = (currentMap: Record<string, T | Promise<T>>) => {
     const promises: Promise<{ key: string; val: T }>[] = [];
@@ -168,40 +183,72 @@ export function registerMapEffect<T>(
     for (let i = 0; i < len; i++) {
       const key = keys[i]!;
       const val = currentMap[key]!;
+
+      // Optimization: use cached result if it matches the current promise instance.
+      if (isPromise(val) && hasOwn.call(state.cache, key)) {
+        const entry = state.cache[key]!;
+        if (entry.p === val) {
+          resolvedMap[key] = entry.v;
+          continue;
+        }
+      }
+
       if (isPromise(val)) {
-        promises.push(val.then((v) => ({ key, val: v })));
+        promises.push(
+          val.then((v) => {
+            state.cache[key] = { p: val as Promise<T>, v };
+            return { key, val: v };
+          })
+        );
       } else {
         resolvedMap[key] = val as T;
       }
     }
 
-    const pLen = promises.length;
-    if (pLen > 0) {
-      const myId = ++latestPromiseId;
-      Promise.all(promises).then((results) => {
-        if (myId === latestPromiseId) {
-          for (let i = 0; i < pLen; i++) {
-            const res = results[i]!;
-            resolvedMap[res.key] = res.val;
-          }
-          untracked(() => {
-            try {
-              updater(resolvedMap);
-              debug.domUpdated(LOG_PREFIXES.BINDING, el, `${debugType} (async)`, resolvedMap);
-            } catch (e) {
-              debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType), e);
+    if (promises.length > 0) {
+      const myId = ++state.latestId;
+      Promise.all(promises).then(
+        (results) => {
+          if (myId === state.latestId && !state.isDisposed) {
+            for (let i = 0, rLen = results.length; i < rLen; i++) {
+              const res = results[i]!;
+              resolvedMap[res.key] = res.val;
             }
-          });
+            untracked(() => {
+              try {
+                updater(resolvedMap);
+                debug.domUpdated(LOG_PREFIXES.BINDING, el, `${debugType} (async)`, resolvedMap);
+              } catch (e) {
+                debug.error(
+                  LOG_PREFIXES.BINDING,
+                  ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType),
+                  e
+                );
+              }
+            });
+          }
+        },
+        (e) => {
+          if (myId === state.latestId && !state.isDisposed) {
+            debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType), e);
+          }
+        }
+      );
+    } else {
+      // Sync Path: Update immediately and invalidate any pending async runs.
+      state.latestId++;
+      untracked(() => {
+        try {
+          updater(resolvedMap);
+          debug.domUpdated(LOG_PREFIXES.BINDING, el, debugType, resolvedMap);
+        } catch (e) {
+          debug.error(
+            LOG_PREFIXES.BINDING,
+            ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType, true),
+            e
+          );
         }
       });
-    } else {
-      latestPromiseId++; // Invalidate any pending promises
-      try {
-        updater(resolvedMap);
-        debug.domUpdated(LOG_PREFIXES.BINDING, el, debugType, resolvedMap);
-      } catch (e) {
-        debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType, true), e);
-      }
     }
   };
 
@@ -211,18 +258,18 @@ export function registerMapEffect<T>(
       effect(
         () => {
           const currentMap: Record<string, T | Promise<T>> = { ...staticValues };
-          for (let i = 0, len = reactiveKeys.length; i < len; i++) {
+          for (let i = 0, rLen = reactiveKeys.length; i < rLen; i++) {
             const source = reactiveSources[i]!;
             currentMap[reactiveKeys[i]!] = sourceIsAtom[i]
               ? (source as ReadonlyAtom<T | Promise<T>>).value
               : (source as () => T | Promise<T>)();
           }
-          untracked(() => runUpdater(currentMap));
+          runUpdater(currentMap);
         },
         { name: debugType }
       )
     );
   } else {
-    untracked(() => runUpdater(staticValues));
+    runUpdater(staticValues);
   }
 }

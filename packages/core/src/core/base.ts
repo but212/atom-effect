@@ -21,7 +21,7 @@ export abstract class ReactiveNode<T> {
   /** [Producer/Consumer] Last access epoch */
   _lastSeenEpoch: number;
   /** [Context] Scheduler epoch tag */
-  _nextEpoch?: number;
+  _nextEpoch: number | undefined;
   /** [Debug] Unique ID for identify node in tracking maps */
   readonly id: DependencyId;
 
@@ -44,6 +44,7 @@ export abstract class ReactiveNode<T> {
     this.flags = 0;
     this.version = 0;
     this._lastSeenEpoch = EPOCH_CONSTANTS.UNINITIALIZED;
+    this._nextEpoch = undefined;
     this._notifying = 0;
     this._hotIndex = -1;
     this._slots = null;

@@ -1,19 +1,24 @@
+import { IS_DEV } from '@/constants';
 import type { Dependency, Subscriber } from '@/types';
+import { debug } from '@/utils/debug';
+import { isPromise } from '@/utils/type-guards';
 
 // ── Tracking Types ──────────────────────────────────────────────────────
 
 /**
  * Dependency consumer.
+ * Objects implementing this can be registered as the current tracking target.
  */
 export interface DependencySubscriber {
   /**
-   * Registers dependency.
+   * Registers a dependency to this subscriber.
    */
   addDependency(dep: Dependency): void;
 }
 
 /**
  * Executable unit.
+ * Represents a reactive node or effect that can be re-run.
  */
 export interface ExecutableSubscriber {
   execute(): void;
@@ -21,11 +26,13 @@ export interface ExecutableSubscriber {
 
 /**
  * Dependency tracker.
+ * Combines dependency collection and execution capabilities.
  */
 export interface DependencyTracker extends DependencySubscriber, ExecutableSubscriber {}
 
 /**
  * Trackable function.
+ * A function that is also recognized as a dependency consumer.
  */
 export type TrackableFunction = (() => void) & DependencySubscriber;
 
@@ -33,37 +40,54 @@ export type TrackableFunction = (() => void) & DependencySubscriber;
 
 /**
  * Dependency graph edge.
+ * Maintains the link between a subscriber and its dependency.
  */
 export class DependencyLink {
   constructor(
     public node: Dependency,
     public version: number,
-    // Always initialize to maintain consistent V8 hidden class
+    /**
+     * Unsubscribe cleanup function.
+     * Default value ensures consistent V8 hidden class shape.
+     */
     public unsub: (() => void) | undefined = undefined
   ) {}
 }
 
 /**
  * Subscription entry.
+ * Encapsulates the notification logic for a dependency change.
  */
 export class Subscription<T> {
   constructor(
-    // Always initialize both properties to maintain consistent V8 hidden class
-    public fn: ((newValue?: T, oldValue?: T) => void) | undefined,
-    public sub: Subscriber | undefined
+    /**
+     * Optional callback. Always initialized to maintain hidden class.
+     */
+    public fn: ((newValue?: T, oldValue?: T) => void) | undefined = undefined,
+    /**
+     * Optional subscriber. Always initialized to maintain hidden class.
+     */
+    public sub: Subscriber | undefined = undefined
   ) {}
 
+  /**
+   * Notifies the subscriber of a value change.
+   *
+   * @remarks
+   * Execution is wrapped in `untracked` to prevent context leakage.
+   */
   notify(newValue?: T, oldValue?: T): void {
-    const fn = this.fn;
-    if (fn !== undefined) {
-      fn(newValue, oldValue);
-      return;
-    }
+    untracked(() => {
+      const fn = this.fn;
+      if (fn !== undefined) {
+        fn(newValue, oldValue);
+      }
 
-    const sub = this.sub;
-    if (sub !== undefined) {
-      sub.execute();
-    }
+      const sub = this.sub;
+      if (sub !== undefined) {
+        sub.execute();
+      }
+    });
   }
 }
 
@@ -71,27 +95,44 @@ export class Subscription<T> {
 
 /**
  * Tracking context implementation.
+ * Manages the global stack of active dependency collectors.
  */
 class TrackingContext {
-  /** Active subscriber. */
+  /** Active subscriber at the top of the stack. */
   public current: DependencySubscriber | null = null;
 
   /**
-   * Executes in context.
+   * Executes a function within the scope of a specific subscriber.
    *
-   * @param subscriber - The subscriber.
+   * @param subscriber - The subscriber to collect dependencies for.
    * @param fn - The logic to execute.
    * @returns The result of `fn`.
    */
   public run<T>(subscriber: DependencySubscriber, fn: () => T): T {
+    // Fast path: already in the correct context
     if (this.current === subscriber) {
       return fn();
     }
+
     const prev = this.current;
     this.current = subscriber;
+
     try {
-      return fn();
+      const result = fn();
+
+      // Async detection: check if the function returned a Promise
+      if (IS_DEV) {
+        debug.warn(
+          isPromise(result),
+          'Detected Promise returned within tracking context. ' +
+            'Dependencies accessed after "await" will NOT be tracked. ' +
+            'Consider using synchronous tracking before the async boundary.'
+        );
+      }
+
+      return result;
     } finally {
+      // Synchronous restoration is required for safety in multi-tasking environments
       this.current = prev;
     }
   }
@@ -110,7 +151,7 @@ export type { TrackingContext };
 // ── Untracked ───────────────────────────────────────────────────────────
 
 /**
- * Untracked execution.
+ * Executes a function without dependency tracking.
  *
  * @param fn - Function to execute.
  * @returns Result of `fn`.
@@ -119,7 +160,7 @@ export function untracked<T>(fn: () => T): T {
   const ctx = trackingContext;
   const prev = ctx.current;
 
-  // Optimized: Fast-path when already untracked
+  // Optimized: Skip context switching if already untracked
   if (prev === null) {
     return fn();
   }

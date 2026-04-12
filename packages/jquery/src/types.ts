@@ -48,7 +48,9 @@ export type CssValue =
 export type CssBindings = Record<string, CssValue>;
 
 export interface BindingOptions<T = unknown> {
-  text?: AsyncReactiveValue<unknown>;
+  text?:
+    | AsyncReactiveValue<unknown>
+    | [source: AsyncReactiveValue<unknown>, formatter: (v: unknown) => string];
   html?: AsyncReactiveValue<string>;
   class?: Record<string, AsyncReactiveValue<boolean>>;
   css?: CssBindings;
@@ -60,11 +62,14 @@ export interface BindingOptions<T = unknown> {
   checked?: WritableAtom<boolean>;
   form?:
     | WritableAtom<T extends object ? T : unknown>
-    | [atom: WritableAtom<T extends object ? T : unknown>, options: FormOptions<unknown>];
+    | [
+        atom: WritableAtom<T extends object ? T : unknown>,
+        options: FormOptions<T extends object ? T : unknown>,
+      ];
   on?: Record<string, (e: JQuery.Event) => void>;
 }
 
-export interface DisposableWritableAtom<T> extends WritableAtom<T>, Disposable {
+export interface DisposableWritableAtom<T> extends WritableAtom<T> {
   dispose(): void;
 }
 
@@ -227,12 +232,12 @@ declare global {
     atomAttr(name: string, src: AsyncReactiveValue<PrimitiveValue>): this;
     atomAttr(map: Record<string, AsyncReactiveValue<PrimitiveValue>>): this;
     atomProp<T>(name: string, src: AsyncReactiveValue<T>): this;
-    atomProp<T>(map: Record<string, AsyncReactiveValue<T>>): this;
+    atomProp(map: Record<string, AsyncReactiveValue<unknown>>): this;
     atomShow(cond: AsyncReactiveValue<boolean>): this;
     atomHide(cond: AsyncReactiveValue<boolean>): this;
     atomVal<T>(atom: WritableAtom<T>, opts?: ValOptions<T>): this;
     atomChecked(atom: WritableAtom<boolean>): this;
-    atomForm<T extends object>(atom: WritableAtom<T>, opts?: FormOptions<unknown>): this;
+    atomForm<T extends object>(atom: WritableAtom<T>, opts?: FormOptions<T>): this;
     atomOn(event: string, handler: (e: JQuery.Event) => void): this;
     atomBind<T = unknown>(opts: BindingOptions<T>): this;
     atomList<T>(src: ReadonlyAtom<T[]>, opts: ListOptions<T>): this;

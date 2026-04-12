@@ -8,7 +8,7 @@ import {
 } from '@/constants';
 import { ReactiveNode } from '@/core/base';
 import { ComputedError, ERROR_MESSAGES, wrapError } from '@/errors';
-import { ATOM_BRAND, COMPUTED_BRAND } from '@/symbols';
+import { BRAND, BrandFlags } from '@/symbols';
 import type {
   AsyncStateType,
   ComputedAtom,
@@ -20,7 +20,7 @@ import { debug, NO_DEFAULT_VALUE } from '@/utils/debug';
 import { isPromise } from '@/utils/type-guards';
 import { DepSlotBuffer } from './buffers';
 import { nextEpoch, nextVersion } from './scheduler';
-import { DependencyLink, trackingContext } from './tracking';
+import { DependencyLink, trackingContext, untracked } from './tracking';
 
 const {
   IDLE,
@@ -40,9 +40,7 @@ const {
  */
 class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Subscriber {
   /** @internal */
-  readonly [ATOM_BRAND] = true;
-  /** @internal */
-  readonly [COMPUTED_BRAND] = true;
+  readonly [BRAND] = BrandFlags.Atom | BrandFlags.Computed;
 
   private _value: T;
   private _error: Error | null = null;
@@ -75,7 +73,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     this._defaultValue = 'defaultValue' in options ? options.defaultValue : (NO_DEFAULT_VALUE as T);
     this._onError = options.onError ?? null;
 
-    debug.attachDebugInfo(this, 'computed', this.id);
+    debug.attachDebugInfo(this, 'computed', this.id, options.name);
 
     // Eager evaluation if not lazy
     if (options.lazy === false) {
@@ -102,7 +100,6 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     return (this.flags & RECOMPUTING) !== 0;
   }
 
-  /** @internal */
   private get _hasErrorInternal(): boolean {
     return (this.flags & HAS_ERROR) !== 0;
   }
@@ -189,12 +186,15 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     const deps = this._deps;
     if (!deps.hasComputeds) return false;
 
-    const size = deps.size;
-    for (let i = 0; i < size; i++) {
-      const link = deps.getAt(i);
-      if (link?.node.hasError) return true;
-    }
-    return false;
+    // Isolate tracking to prevent bubbling dependencies from polluting the current context
+    return untracked(() => {
+      const size = deps.size;
+      for (let i = 0; i < size; i++) {
+        const link = deps.getAt(i);
+        if (link?.node.hasError) return true;
+      }
+      return false;
+    });
   }
 
   get isValid(): boolean {
@@ -217,28 +217,39 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     const collected: Error[] = [];
     if (selfErr != null) collected.push(selfErr);
 
-    const size = deps.size;
-    for (let i = 0; i < size; i++) {
-      const link = deps.getAt(i);
-      if (link == null) continue;
-
-      const dep = link.node;
-      // Inlined isComputed + hasError check
-      if ((dep.flags & IS_COMPUTED) !== 0 && dep.hasError) {
-        this._collectErrorsFromDep(dep as unknown as ComputedAtom<unknown>, collected);
+    // Isolate tracking and accumulate errors recursively
+    untracked(() => {
+      const size = deps.size;
+      for (let i = 0; i < size; i++) {
+        const link = deps.getAt(i);
+        const depNode = link?.node;
+        if (depNode != null && (depNode.flags & IS_COMPUTED) !== 0) {
+          this._accumulateErrors(depNode as unknown as ComputedAtomImpl<unknown>, collected);
+        }
       }
-    }
+    });
 
     return collected.length === 0 ? EMPTY_ERROR_ARRAY : Object.freeze(collected);
   }
 
-  private _collectErrorsFromDep(computedDep: ComputedAtom<unknown>, collected: Error[]): void {
-    const errs = computedDep.errors;
-    const len = errs.length;
-    for (let j = 0; j < len; j++) {
-      const err = errs[j];
-      if (err != null && !collected.includes(err)) {
-        collected.push(err);
+  /**
+   * Internal helper to collect unique errors from a computed dependency.
+   */
+  private _accumulateErrors(dep: ComputedAtomImpl<unknown>, collected: Error[]): void {
+    const err = dep._error;
+    if (err != null && !collected.includes(err)) {
+      collected.push(err);
+    }
+
+    const deps = dep._deps;
+    if (!deps.hasComputeds) return;
+
+    const size = deps.size;
+    for (let i = 0; i < size; i++) {
+      const link = deps.getAt(i);
+      const node = link?.node;
+      if (node != null && (node.flags & IS_COMPUTED) !== 0) {
+        this._accumulateErrors(node as unknown as ComputedAtomImpl<unknown>, collected);
       }
     }
   }
@@ -390,7 +401,9 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
   private _handleError(err: unknown, msg: string, throwErr = false): void {
     const error = wrapError(err, ComputedError, msg);
 
-    if (!throwErr && !this.isRejected) {
+    // Always bump version if state changed to rejected or the error instance is different.
+    // This ensures bubbling and tracking systems are aware of the transition or change.
+    if (!this.isRejected || this._error !== error) {
       this.version = nextVersion(this.version);
     }
 
@@ -406,8 +419,11 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
       }
     }
 
-    if (throwErr) throw error;
+    // Must notify subscribers BEFORE throwing, otherwise the reactivity chain is broken
+    // for synchronous failures.
     this._notifySubscribers(undefined, undefined);
+
+    if (throwErr) throw error;
   }
 
   private _finalizeResolution(value: T): void {
@@ -433,6 +449,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     const flags = this.flags;
     if ((flags & (RECOMPUTING | DIRTY)) !== 0) return;
     this.flags = flags | DIRTY;
+    debug.trackUpdate(this.id, debug.getDebugName(this));
     this._notifySubscribers(undefined, undefined);
   }
 
@@ -441,10 +458,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
    */
   protected override _deepDirtyCheck(): boolean {
     const deps = this._deps;
-    const prevContext = trackingContext.current;
-    trackingContext.current = null;
-
-    try {
+    return untracked(() => {
       const size = deps.size;
       for (let i = 0; i < size; i++) {
         const link = deps.getAt(i);
@@ -470,9 +484,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
 
       this._hotIndex = -1;
       return false;
-    } finally {
-      trackingContext.current = prevContext;
-    }
+    });
   }
 }
 

@@ -3,7 +3,10 @@
 import dts from 'vite-plugin-dts';
 import { defineConfig } from 'vitest/config';
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  define: {
+    'process.env.NODE_ENV': JSON.stringify(mode),
+  },
   build: {
     target: 'es2021',
     lib: {
@@ -32,4 +35,4 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./__tests__/setup.ts'],
   },
-});
+}));

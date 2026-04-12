@@ -7,7 +7,7 @@ import {
 } from '@/constants';
 import { ReactiveNode } from '@/core/base';
 import { EffectError, ERROR_MESSAGES, wrapError } from '@/errors';
-import { EFFECT_BRAND } from '@/symbols';
+import { BRAND, BrandFlags } from '@/symbols';
 import type { Dependency, EffectFunction, EffectObject, EffectOptions } from '@/types';
 import { debug } from '@/utils/debug';
 import { isPromise } from '@/utils/type-guards';
@@ -26,7 +26,7 @@ import { DependencyLink, type DependencyTracker, trackingContext } from './track
  */
 class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyTracker {
   /** @internal */
-  readonly [EFFECT_BRAND] = true;
+  readonly [BRAND] = BrandFlags.Effect;
 
   private _cleanup: (() => void) | null = null;
   /** Initialized in constructor to maintain God Class object shape */
@@ -77,7 +77,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
       this._notifyCallback = () => scheduler.schedule(this);
     }
 
-    debug.attachDebugInfo(this, 'effect', this.id);
+    debug.attachDebugInfo(this, 'effect', this.id, options.name);
   }
 
   public run(): void {
@@ -179,6 +179,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     if (!force && deps.size > 0 && !this._isDirty()) return;
 
     this._checkInfiniteLoops();
+    debug.trackUpdate(this.id, debug.getDebugName(this));
 
     this.flags = flags | EFFECT_STATE_FLAGS.EXECUTING;
     this._execCleanup();

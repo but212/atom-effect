@@ -12,12 +12,16 @@ class MockDep implements Dependency {
   flags = 0;
   isComputed = false;
   hasError = false;
+  value = undefined;
   constructor(
     public id: number,
     public version: number
   ) {}
   subscribe() {
     return () => {};
+  }
+  peek() {
+    return this.value;
   }
 }
 

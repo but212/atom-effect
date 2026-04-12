@@ -2,116 +2,186 @@ import { DEBUG_DEFAULTS } from '@/constants';
 import { getSelector } from '@/utils';
 
 // ============================================================================
-// Environment utilities
+// Constants & Configuration
 // ============================================================================
 
+const HIGHLIGHT_CLASS = 'atom-debug-highlight';
+const ATTR_MARKER = 'data-atom-debug';
 const IS_BROWSER = typeof window !== 'undefined';
-const HIGHLIGHT_TRANSITION = `${DEBUG_DEFAULTS.HIGHLIGHT_DURATION_MS / 1000}s`;
 
-function getInitialState(): boolean {
-  // biome-ignore lint/suspicious/noExplicitAny: globalThis is not typed
-  const g = globalThis as any;
-  if (IS_BROWSER && g.window?.__ATOM_DEBUG__ === true) return true;
+/** Shared timer maps to track active animations and timeouts on elements. */
+const timers = new WeakMap<Element, ReturnType<typeof setTimeout>>();
+const rafs = new WeakMap<Element, number>();
+
+let styleInjected = false;
+
+// ============================================================================
+// Utilities
+// ============================================================================
+
+/** Calculates the CSS transition duration based on configuration. */
+const getTransitionDuration = () => `${DEBUG_DEFAULTS.HIGHLIGHT_DURATION_MS / 1000}s`;
+
+/** Returns the necessary CSS for visual debugging. */
+const getHighlightStyles = () =>
+  `
+  [${ATTR_MARKER}] {
+    transition: outline ${getTransitionDuration()} ease-out;
+  }
+  .${HIGHLIGHT_CLASS} {
+    outline: 2px solid rgba(255, 68, 68, 0.8);
+    outline-offset: 1px;
+  }
+`.replace(/\s+/g, ' ');
+
+/** Injects necessary CSS for highlighting to the document head. */
+function injectStyle(): void {
+  if (styleInjected || !IS_BROWSER) return;
+
+  // Double check existence in case of multiple debug modules or manual removal
+  if (document.querySelector(`style[${ATTR_MARKER}]`)) {
+    styleInjected = true;
+    return;
+  }
+
+  const style = document.createElement('style');
+  style.setAttribute(ATTR_MARKER, '');
+  style.textContent = getHighlightStyles();
+  document.head.appendChild(style);
+  styleInjected = true;
+}
+
+/** Determines the initial debug state of the application. */
+function resolveInitialState(): boolean {
+  const g = globalThis as {
+    __ATOM_DEBUG__?: boolean;
+    __DEV__?: boolean;
+    process?: { env?: { NODE_ENV?: string } };
+  };
+
+  // 1. Explicit global override or sessionStorage (supports runtime toggling in builds)
+  if (typeof g.__ATOM_DEBUG__ !== 'undefined') return !!g.__ATOM_DEBUG__;
   try {
+    if (
+      typeof sessionStorage !== 'undefined' &&
+      sessionStorage.getItem('__ATOM_DEBUG__') === 'true'
+    )
+      return true;
+  } catch {}
+
+  // 2. Node.js / Bundler environment check
+  if (g.process?.env?.NODE_ENV !== 'production' && g.process?.env?.NODE_ENV !== undefined) {
+    return true;
+  }
+
+  // 3. __DEV__ flag (often injected by bundlers)
+  if (typeof g.__DEV__ !== 'undefined') return !!g.__DEV__;
+
+  // 4. Vite/Meta specific
+  try {
+    if (import.meta.env?.DEV) return true;
     if (import.meta.env?.VITE_ATOM_DEBUG === 'true') return true;
   } catch {}
-  try {
-    if (g.process?.env?.VITE_ATOM_DEBUG === 'true') return true;
-  } catch {}
+
   return false;
 }
 
 // ============================================================================
-// DebugController — Class-based singleton for JIT optimization
+// DebugController
 // ============================================================================
 
-class DebugController {
-  private _enabled = false;
-  private _lastState = false;
+export interface DebugConfig {
+  enabled: boolean;
+  log(prefix: string, ...args: unknown[]): void;
+  atomChanged(prefix: string, name: string | undefined, prev: unknown, next: unknown): void;
+  domUpdated(prefix: string, target: Element | JQuery<Element>, type: string, value: unknown): void;
+  cleanup(prefix: string, subject: string): void;
+  warn(prefix: string, message: string, ...rest: unknown[]): void;
+  error(prefix: string, message: string, cause: unknown): void;
+}
 
-  constructor() {
-    this._enabled = getInitialState();
-    this._lastState = this._enabled;
-    this._applyMethods(this._enabled);
+class DevDebugController implements DebugConfig {
+  public enabled = true;
+
+  public log(prefix: string, ...args: unknown[]): void {
+    if (!this.enabled) return;
+    console.log(prefix, ...args);
   }
 
-  get enabled(): boolean {
-    return this._enabled;
+  public atomChanged(prefix: string, name: string | undefined, prev: unknown, next: unknown): void {
+    if (!this.enabled) return;
+    console.log(`${prefix} Atom "${name ?? 'anonymous'}" changed:`, prev, '→', next);
   }
 
-  set enabled(v: boolean) {
-    if (this._enabled !== v) {
-      this._enabled = v;
-      this._applyMethods(v);
+  public cleanup(prefix: string, subject: string): void {
+    if (!this.enabled) return;
+    console.log(`${prefix} Cleanup: ${subject}`);
+  }
+
+  public warn(prefix: string, message: string, ...rest: unknown[]): void {
+    console.warn(`${prefix} ${message}`, ...rest);
+  }
+
+  public error(prefix: string, message: string, cause: unknown): void {
+    console.error(`${prefix} ${message}`, cause);
+  }
+
+  public domUpdated(
+    prefix: string,
+    target: Element | JQuery<Element>,
+    type: string,
+    value: unknown
+  ): void {
+    if (!this.enabled) return;
+    // Resolve element from target (supports HTMLElement, SVGElement, or JQuery wrapper)
+    const el = 'jquery' in target ? target[0] : target;
+
+    // Only proceed if it is a connected Element node
+    if (el && el.nodeType === 1 && el.isConnected) {
+      console.log(`${prefix} DOM updated: ${getSelector(el as Element)}.${type} =`, value);
+      this._triggerVisualHighlight(el as Element);
     }
   }
 
-  /** Normal logs (No-op in production) */
-  public log: (p: string, ...a: unknown[]) => void = () => {};
+  /** Applies a visual outline highlight to an element with a fade-out transition. */
+  private _triggerVisualHighlight(el: Element): void {
+    const g = globalThis;
+    const raf = g.requestAnimationFrame;
+    const caf = g.cancelAnimationFrame;
 
-  /** Atom state change logs (No-op in production) */
-  public atomChanged: (p: string, n: string | undefined, o: unknown, v: unknown) => void = () => {};
-
-  /** DOM update logs with highlighting (No-op in production) */
-  public domUpdated: (p: string, t: Element | JQuery<Element>, type: string, v: unknown) => void =
-    () => {};
-
-  /** Resource cleanup logs (No-op in production) */
-  public cleanup: (p: string, s: string) => void = () => {};
-
-  /** Warnings (Always logged) */
-  warn(p: string, m: string, ...r: unknown[]): void {
-    console.warn(`${p} ${m}`, ...r);
-  }
-
-  /** Errors (Always logged) */
-  error(p: string, m: string, c: unknown): void {
-    console.error(`${p} ${m}`, c);
-  }
-
-  private _applyMethods(isEnabled: boolean) {
-    if (isEnabled) {
-      this.log = (p, ...a) => console.log(p, ...a);
-      this.atomChanged = (p, n, o, v) =>
-        console.log(`${p} Atom "${n ?? 'anonymous'}" changed:`, o, '→', v);
-      this.domUpdated = (p, t, type, v) => {
-        const el = t instanceof Element ? t : (t[0] as Element | undefined);
-        if (el?.isConnected) {
-          console.log(`${p} DOM updated: ${getSelector(el)}.${type} =`, v);
-          this._highlightElement(el);
-        }
-      };
-      this.cleanup = (p, s) => console.log(`${p} Cleanup: ${s}`);
-    } else {
-      this.log = () => {};
-      this.atomChanged = () => {};
-      this.domUpdated = () => {};
-      this.cleanup = () => {};
-    }
-  }
-
-  private _highlightElement(el: Element): void {
-    if (!el.isConnected) return;
+    if (!IS_BROWSER || typeof raf !== 'function') return;
     injectStyle();
 
-    const exR = rafs.get(el);
-    const exT = timers.get(el);
-    if (exR !== undefined) cancelAnimationFrame(exR);
-    if (exT !== undefined) {
-      clearTimeout(exT);
+    // Cancel existing scheduled highlights on this element
+    const existingRaf = rafs.get(el);
+    const existingTimer = timers.get(el);
+    if (existingRaf !== undefined && typeof caf === 'function') caf(existingRaf);
+    if (existingTimer !== undefined) {
+      clearTimeout(existingTimer);
       timers.delete(el);
     }
 
+    // Apply the marker attribute if not present to enable the CSS transition
+    if (!el.hasAttribute(ATTR_MARKER)) {
+      el.setAttribute(ATTR_MARKER, '');
+    }
+
+    // Use requestAnimationFrame to ensure the class change happens in the next paint cycle
     rafs.set(
       el,
-      requestAnimationFrame(() => {
+      raf(() => {
         rafs.delete(el);
         if (!el.isConnected) return;
+
         el.classList.add(HIGHLIGHT_CLASS);
+
+        // Schedule removal
         timers.set(
           el,
           setTimeout(() => {
-            if (el.isConnected) el.classList.remove(HIGHLIGHT_CLASS);
+            // Remove the highlight class. The outline will fade out smoothly
+            // because the [data-atom-debug] transition remains active.
+            el.classList.remove(HIGHLIGHT_CLASS);
             timers.delete(el);
           }, DEBUG_DEFAULTS.HIGHLIGHT_DURATION_MS)
         );
@@ -120,29 +190,25 @@ class DebugController {
   }
 }
 
-export const debug = new DebugController();
+/**
+ * Inert implementation for production.
+ */
+const ProdDebugController: DebugConfig = {
+  enabled: false,
+  log: () => {},
+  atomChanged: () => {},
+  domUpdated: () => {},
+  cleanup: () => {},
+  warn: (prefix: string, message: string, ...rest: unknown[]) =>
+    console.warn(`${prefix} ${message}`, ...rest),
+  error: (prefix: string, message: string, cause: unknown) =>
+    console.error(`${prefix} ${message}`, cause),
+};
 
-// ============================================================================
-// Highlighting logic
-// ============================================================================
-
-const HIGHLIGHT_CLASS = 'atom-debug-highlight',
-  H_ATTR = 'data-atom-debug';
-let styleInjected = false;
-
-function injectStyle(): void {
-  if (styleInjected || !IS_BROWSER) return;
-  if (document.querySelector(`style[${H_ATTR}]`)) {
-    styleInjected = true;
-    return;
-  }
-  const s = Object.assign(document.createElement('style'), {
-    textContent: `.${HIGHLIGHT_CLASS}{outline:2px solid rgba(255,68,68,0.8);outline-offset:1px;transition:outline ${HIGHLIGHT_TRANSITION} ease-out}`,
-  });
-  s.setAttribute(H_ATTR, '');
-  document.head.appendChild(s);
-  styleInjected = true;
-}
-
-const timers = new WeakMap<Element, ReturnType<typeof setTimeout>>(),
-  rafs = new WeakMap<Element, number>();
+/**
+ * Global debug controller singleton.
+ * Swaps between Dev and Prod implementations for zero overhead in production.
+ */
+export const debug: DebugConfig = resolveInitialState()
+  ? new DevDebugController()
+  : ProdDebugController;

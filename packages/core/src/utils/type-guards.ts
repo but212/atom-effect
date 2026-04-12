@@ -1,46 +1,58 @@
-import { ATOM_BRAND, COMPUTED_BRAND, EFFECT_BRAND, WRITABLE_BRAND } from '@/symbols';
+import { BRAND, BrandFlags } from '@/symbols';
 import type { ComputedAtom, EffectObject, ReadonlyAtom, WritableAtom } from '@/types';
 
 /**
+ * Internal helper to check for a brand flag on objects or functions.
+ * Optimized for high-performance bitwise identification.
+ */
+function isBranded<T>(obj: unknown, flag: number): obj is T {
+  if (!obj) return false;
+  const type = typeof obj;
+  return (
+    (type === 'object' || type === 'function') &&
+    // Bitwise AND check on the consolidated BRAND symbol
+    !!(((obj as Record<symbol, number>)[BRAND] ?? 0) & flag)
+  );
+}
+
+/**
  * Readonly atom check.
- *
- * @param obj - Object to check.
  */
 export function isAtom(obj: unknown): obj is ReadonlyAtom {
-  return typeof obj === 'object' && obj !== null && ATOM_BRAND in obj;
+  return isBranded(obj, BrandFlags.Atom);
 }
 
 /**
  * Writable atom check.
- *
- * Uses a dedicated positive brand instead of `!isComputed()` to remain
- * correct if new ReadonlyAtom-style primitives are added in the future.
  */
 export function isWritable(obj: unknown): obj is WritableAtom {
-  return typeof obj === 'object' && obj !== null && WRITABLE_BRAND in obj;
+  return isBranded(obj, BrandFlags.Writable);
 }
 
 /**
  * Computed atom check.
  */
 export function isComputed(obj: unknown): obj is ComputedAtom {
-  return typeof obj === 'object' && obj !== null && COMPUTED_BRAND in obj;
+  return isBranded(obj, BrandFlags.Computed);
 }
 
 /**
  * Effect object check.
  */
 export function isEffect(obj: unknown): obj is EffectObject {
-  return typeof obj === 'object' && obj !== null && EFFECT_BRAND in obj;
+  return isBranded(obj, BrandFlags.Effect);
 }
 
 /**
  * Promise check.
+ * Includes a fast-path for native Promises and supports duck-typed thenables.
  */
 export function isPromise<T>(value: unknown): value is Promise<T> {
+  if (value instanceof Promise) return true;
+  if (!value) return false;
+  const type = typeof value;
   return (
-    typeof value === 'object' &&
-    value !== null &&
+    (type === 'object' || type === 'function') &&
     typeof (value as { then?: unknown }).then === 'function'
   );
 }

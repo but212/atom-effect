@@ -30,7 +30,9 @@ console.log(counter.peek());
 
 ### Options - atom
 
+- `name`: String. Optional name used for debugging and traceability.
 - `sync`: Boolean (default `false`). If `true`, updates flush synchronously (bypassing microtask batching). Use with caution.
+- `equal`: `(a, b) => boolean`. Custom equality check. If returns `true`, the update is ignored.
 
 ## `computed<T>(fn: () => T | Promise<T>, options?: ComputedOptions)`
 
@@ -41,7 +43,7 @@ Creates a derived signal that updates automatically when its dependencies change
 - **Lazy**: Only recalculates when read or when needed by an active effect.
 - **Cached**: Returns the cached value if dependencies haven't changed.
 - **Async-Aware**: Natively handles Promises.
-- **Hot-path Optimized**: Uses a temporal hint to provide $O(1)$ dirty detection for recurring updates and O(1) slot reuse for zero-allocation dependency churn.
+- **Ultra-High Performance**: Uses an allocation-optimized `DepSlotBuffer` with size duality and $O(1)$ slot reuse for zero-allocation dependency churn and mega-node scalability.
 
 ### Synchronous Example - computed
 
@@ -58,9 +60,9 @@ A `ComputedAtom` instance provides the following reactive properties:
 
 - `value`: Returns the current value.
 - `state`: Returns `AsyncState` (`IDLE`, `PENDING`, `RESOLVED`, `REJECTED`).
-- `hasError`: Boolean indicating if the computation (or its dependencies) failed.
+- `hasError`: Boolean indicating if the computation (or its dependencies) failed. Accessing this property is **dependency-isolated** (untracked) to prevent graph pollution.
 - `isValid`: Shortcut for `!hasError`.
-- `errors`: A read-only array of all errors in the local dependency sub-graph.
+- `errors`: A read-only array of all errors in the local dependency sub-graph. Optimized via recursive accumulation and dependency isolation.
 - `lastError`: The specific error thrown by this node's computation.
 - `isPending`: Shortcut for `state === AsyncState.PENDING`.
 - `isResolved`: Shortcut for `state === AsyncState.RESOLVED`.
@@ -79,8 +81,12 @@ const userData = computed(async () => {
 // Race conditions are handled via promise cancellation (see ARCHITECTURE.md)
 ```
 
+> [!IMPORTANT]
+> **Dependency Tracking is Synchronous**: Inside an async function, only atoms/computeds accessed **before** the first `await` are tracked as dependencies. Values read after an `await` will return their current value but will not trigger re-evaluations when they change. Always "hoist" your dependency reads to the top of your async function.
+
 ### Options - computed
 
+- `name`: String. Optional name used for debugging and traceability.
 - `equal`: `(a, b) => boolean`. Custom equality check.
 - `defaultValue`: Initial value while async computation is pending.
 - `lazy`: Boolean (default `true`).
@@ -116,6 +122,7 @@ effectHandle.dispose();
 `effect()` returns an `EffectObject` with the following properties:
 
 - `dispose()`: Stops the effect and runs cleanup.
+- `[Symbol.dispose]()`: Support for explicit resource management (TS 5.2+).
 - `run()`: Manually re-executes the effect.
 - `isDisposed`: Whether the effect has been disposed.
 - `isExecuting`: Whether the effect is currently running.
@@ -123,21 +130,22 @@ effectHandle.dispose();
 
 ### Options - effect
 
+- `name`: String. Optional name used for debugging and traceability.
 - `sync`: Boolean (default `false`). Force synchronous execution.
 - `onError`: `(error: unknown) => void`. Custom error handler.
 - `maxExecutionsPerSecond`: Number (default `1000`). Maximum executions per second (dev mode only).
 - `maxExecutionsPerFlush`: Number (default `100`). Maximum executions per flush cycle before infinite loop detection triggers.
 
-## `batch(fn: () => void)`
+## `batch<T>(fn: () => T): T`
 
-Groups multiple state updates into a single notification cycle. Effects and computed values are deferred until the batch completes, then flushed **synchronously**.
+Groups multiple state updates into a single synchronous notification cycle. Effects and computed values are deferred until the batch completes, then flushed.
 
-### When to use - batch
+- **Returns**: The return value of `fn`.
+- **Nesting**: Fully supports deep nesting. Updates are coalesced and flushed only once after the outermost batch ends.
+- **Stability**: Guaranteed protection against stack overflows in deeply recursive reactive patterns via a flat execution loop.
+- **Atomicity**: Changes made to atoms within a batch are committed even if the callback throws an error, ensuring state integrity.
 
-- **Consistency**: Ensuring a set of atoms are updated together before any effect runs.
-- **Performance**: Making multiple mutations that should be one "transaction".
-
-> **Note**: The engine already performs automatic microtask batching by default. Use `batch()` only when you need **Synchronous Reflection** (e.g., DOM must reflect updates before the next line). The `batch()` implementation is highly optimized to avoid redundant property lookups and array allocations.
+> **Note**: The engine already performs automatic microtask batching by default. Use `batch()` specifically when you need **Synchronous Reflection** (e.g., updates must be applied before the next line of code executes) or to group multiple mutations into a single transactional flush.
 
 ### Basic Example - batch
 
@@ -260,6 +268,46 @@ const result = computed(() => {
 });
 ```
 
+## Error Handling
+
+The library provides a structured error hierarchy to help you identify and recover from issues in the reactive graph.
+
+### `AtomError` (Base Class)
+
+All errors thrown by the system inherit from `AtomError`.
+
+- **Properties**:
+  - `message`: Human-readable description.
+  - `cause`: The original error or value that triggered this error (`unknown`).
+  - `recoverable`: Boolean indicating if the system can potentially recover if dependencies change.
+  - `code`: Optional machine-readable string (e.g., `ERR_CIRCULAR_DEP`).
+- **Methods**:
+  - `getChain()`: Returns an array of the entire error chain, from the current error down to the root cause.
+  - `toJSON()`: Returns a plain object representation for logging.
+
+### Specialized Errors
+
+- `ComputedError`: Thrown when a computation fails. Usually `recoverable: true`.
+- `EffectError`: Thrown during effect execution or cleanup. Usually `recoverable: false`.
+- `SchedulerError`: Thrown by the execution engine (e.g., infinite loop detection).
+
+### `AtomErrorConstructor` (Type)
+
+A specialized constructor type for Atom errors, ensuring consistent signatures across the system.
+
+```typescript
+type AtomErrorConstructor = new (
+  message: string,
+  cause?: unknown,
+  recoverable?: boolean,
+  code?: string
+) => AtomError;
+```
+
+### `wrapError(error: unknown, ErrorClass: AtomErrorConstructor, context: string): AtomError`
+
+Wraps any value into the Atom error hierarchy. If the input is already an `AtomError`, it creates a new wrapper to preserve the propagation context, building a "trace" of how the error traveled through your atoms.
+
 ---
 
 ## Lens & Structural Sharing
@@ -272,6 +320,7 @@ Creates a writable "fake" atom that points to a specific dot-path within a sourc
 
 - **Structural Sharing**: Writing to a lens only clones objects along the modified path. Unrelated branches stay reference-equal (`===`).
 - **Equality Guard**: If the new value is identical to the current one (via `Object.is`), the parent atom is not updated, preventing redundant effect propagation.
+- **Nullable Support**: Correctly resolves types for optional (`?`) or nullable properties using `NonNullable` internally.
 - **Auto-Autocompletion**: Supports IDE path completion up to 8 levels deep with exact type inference.
 
 ```typescript
@@ -308,3 +357,43 @@ High-performance utility to retrieve a nested value using an array of path segme
 ### `setDeepValue(obj: unknown, keys: string[], index: number, value: unknown): unknown`
 
 The core structural sharing engine. Recursively creates a new object tree, cloning only the necessary nodes.
+
+---
+
+## `debug` Utilities
+
+The `debug` object provides several utilities for troubleshooting and inspecting the reactive graph. In production builds, these utilities are swapped for zero-overhead no-op functions unless explicitly enabled.
+
+### `debug.dumpGraph()`
+
+Returns an array containing metadata for all currently active reactive nodes (Atoms, Computeds, Effects).
+
+- **Returns**: `Array<{ id: number, name: string, type: string, updateCount: number }>`
+- **Usage**: Useful for building DevTools or inspecting the state of the reactive graph at runtime.
+- **Note**: Uses `WeakRef` internally; only returns nodes that have not been garbage collected.
+
+### `debug.trackUpdate(id: DependencyId, name?: string)`
+
+Increments the update count for a specific node to detect infinite loops. While automatically called by the engine's internal setters and executors, it can be used for custom instrumentation.
+
+### `debug.getDebugName(node: object)` / `debug.getDebugType(node: object)`
+
+Retrieves the debug name and type metadata attached to a reactive node.
+
+---
+
+## Global Debug Toggle
+
+Even in production-mode builds, you can enable debug features at runtime. Because the library swaps the debug implementation at load time for zero-overhead performance, the global flag must be set **before** the library script evaluates.
+
+You can accomplish this by either setting it in your HTML `<head>`, or by using `sessionStorage` and refreshing the page (which is evaluated when resolving the initial state):
+
+```javascript
+// Method 1: Set before script loads
+window.__ATOM_DEBUG__ = true;
+
+// Method 2: Set in sessionStorage and refresh
+sessionStorage.setItem('__ATOM_DEBUG__', 'true');
+```
+
+This bypasses the `ProdDebugController` no-op implementation and activates full tracking and logging features.

@@ -235,7 +235,7 @@ Accessing an async computed's value before resolution throws if no `defaultValue
 
 ```typescript
 const data = computed(async () => fetch('/api'));
-data.value; // Throws: No defaultValue for pending async computed
+data.value; // Throws: Async computation pending with no default value
 
 // Fix:
 const data = computed(async () => fetch('/api'), { defaultValue: null });
@@ -251,16 +251,18 @@ packages/core/src/
     computed.ts     — Computed atom with async support
     effect.ts       — Side effect runner
     base.ts         — ReactiveNode / ReactiveDependency base classes
-    dep-tracking.ts — Dependency link management
-  internal/
-    scheduler.ts    — Microtask-based double-buffered scheduler
-    epoch.ts        — Global epoch counter and version management
-    pool.ts         — Array pool for DependencyLink recycling
-  tracking/         — Tracking context (current listener stack)
-  errors/           — Error types and messages
-  utils/            — Debug, type guards, error wrapping
-  types.ts          — Public type definitions
-  constants.ts      — Flags, config values
+    tracking.ts     — Tracking context and dependency links
+    scheduler.ts    — Microtask-based scheduler and epoch management
+    buffers.ts      — Slot-buffered dependency storage
+    lens.ts         — Writable atom lenses
+  utils/
+    debug.ts        — Runtime debug info and dev-only warnings
+    type-guards.ts  — Reactive node type identification
+  types.ts          — Public TypeScript definitions
+  constants.ts      — Configuration flags and default values
+  errors.ts         — Custom error classes and message registry
+  symbols.ts        — Internal brands for runtime safety
+  index.ts          — Main entry point
 ```
 
 ## Next Steps

@@ -165,6 +165,62 @@ describe('$.atomFetch (Reactivity and Atom State)', () => {
     expect(data.lastError?.message).toContain('AbortError');
   });
 
+  it('should NOT trigger error flickering (hasError=true) during rapid re-fetches', async () => {
+    let rejectXhr!: (e: unknown) => void;
+    let requestCount = 0;
+
+    vi.spyOn($, 'ajax').mockImplementation(() => {
+      requestCount++;
+      return Object.assign(
+        new Promise<unknown>((_, reject) => {
+          rejectXhr = reject;
+        }),
+        { abort: () => rejectXhr(new Error('AbortError')) }
+      ) as unknown as JQuery.jqXHR;
+    });
+
+    const data = $.atomFetch('/api/rapid', { defaultValue: null });
+
+    // 1. Initial pending
+    await $.nextTick();
+    expect(data.isPending).toBe(true);
+    expect(data.hasError).toBe(false);
+
+    // 2. Rapidly invalidate multiple times
+    for (let i = 0; i < 5; i++) {
+      data.invalidate();
+      void data.value; // trigger immediate execution
+      await $.nextTick();
+      // If it flickers, hasError would be true here
+      expect(data.hasError, `Flicker detected at iteration ${i}`).toBe(false);
+      expect(data.isPending).toBe(true);
+    }
+
+    expect(requestCount).toBe(6); // 1 initial + 5 invalidations
+  });
+
+  it('should abort pending request when the atom is disposed', async () => {
+    let rejectXhr!: (e: unknown) => void;
+    const abortSpy = vi.fn(() => rejectXhr(new Error('abort')));
+
+    vi.spyOn($, 'ajax').mockReturnValue(
+      Object.assign(
+        new Promise<unknown>((_, reject) => {
+          rejectXhr = reject;
+        }),
+        { abort: abortSpy }
+      ) as unknown as JQuery.jqXHR
+    );
+
+    const data = $.atomFetch('/api/dispose', { defaultValue: null });
+
+    await $.nextTick();
+    expect(data.isPending).toBe(true);
+
+    data.dispose();
+    expect(abortSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('should normalize jqXHR error objects into standard Error', async () => {
     const jqXhrError = { readyState: 4, status: 500, statusText: 'Internal Server Error' };
     vi.spyOn($, 'ajax').mockRejectedValue(jqXhrError);
@@ -183,6 +239,24 @@ describe('$.atomFetch (Reactivity and Atom State)', () => {
     const capturedErr = onError.mock.calls[0]![0] as FetchError;
     expect(capturedErr.message).toBe('Network Error: Internal Server Error (500)');
     expect(capturedErr.jqXHR).toBe(jqXhrError);
+  });
+
+  it('should handle synchronous errors in $.ajax and trigger onError', async () => {
+    vi.spyOn($, 'ajax').mockImplementation(() => {
+      throw new Error('Immediate failure');
+    });
+    const onError = vi.fn();
+    const data = $.atomFetch('/api/sync-fail', {
+      defaultValue: null,
+      onError,
+    });
+
+    await $.nextTick();
+    await $.nextTick();
+
+    expect(data.hasError).toBe(true);
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0]![0].message).toContain('Immediate failure');
   });
 
   it('transform error message is surfaced on the atom lastError', async () => {
@@ -255,6 +329,25 @@ describe('$.atomFetch (Reactivity and Atom State)', () => {
 
       expect(capturedOptions?.data).toEqual({ q: 'banana' });
       expect(capturedOptions?.method).toBe('POST'); // must still be present after refetch
+    });
+
+    it('should NOT overwrite ajaxOptions.method if options.method is undefined', async () => {
+      let capturedOptions: JQuery.AjaxSettings | undefined;
+      vi.spyOn($, 'ajax').mockImplementation((opts) => {
+        capturedOptions = opts;
+        return Promise.resolve({ ok: true }) as unknown as JQuery.jqXHR;
+      });
+
+      // No method in options, but POST in ajaxOptions
+      const _data = $.atomFetch('/api/test', {
+        defaultValue: null,
+        ajaxOptions: { method: 'POST' },
+      });
+
+      await $.nextTick();
+      await $.nextTick();
+
+      expect(capturedOptions?.method).toBe('POST');
     });
 
     it('4. Async Tracking Loss: atoms read after await in transform are NOT tracked (known limitation)', async () => {

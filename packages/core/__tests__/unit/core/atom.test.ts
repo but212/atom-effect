@@ -1,6 +1,5 @@
 /**
  * @fileoverview Atom Behavior Tests
- * @description Verifies validation, state management, lifecycle, and subscription handling.
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -23,6 +22,23 @@ describe('Atom', () => {
     dispose(): void;
   }
 
+  it('should manage lifecycle: creation, non-reactive read, and disposal', () => {
+    const a = atom(42);
+    const spy = vi.fn();
+    a.subscribe(spy);
+
+    expect(a.value).toBe(42);
+    expect(a.peek()).toBe(42);
+
+    a.dispose();
+    a.value = 99; // Update after disposal
+    expect(a.subscriberCount()).toBe(0);
+    expect(spy).not.toHaveBeenCalled();
+
+    // Invalid subscribers
+    expect(() => a.subscribe(null as unknown as () => void)).toThrow(AtomError);
+  });
+
   describe('Identity, Validation & Initialization', () => {
     it('sets initial value and rejects invalid subscribers', () => {
       const a = atom(42);
@@ -34,7 +50,7 @@ describe('Atom', () => {
       });
 
       // Valid subscriber with execute method should not throw
-      expect(() => a.subscribe({ execute: vi.fn() } as unknown as () => void)).not.toThrow();
+      expect(() => a.subscribe({ execute: vi.fn() })).not.toThrow();
     });
   });
 
@@ -45,16 +61,20 @@ describe('Atom', () => {
       a.value = 8;
       expect(a.peek()).toBe(8);
     });
+  });
 
-    it('defers notifications and batches rapid updates (Default Async Behaviors)', async () => {
+  describe('Notification Policy (Async)', () => {
+    it('should optimize notifications via batching, identity check, and net-zero guard', async () => {
       const a = atom(0);
       const log: Array<[number | undefined, number | undefined]> = [];
 
       a.subscribe((nv, ov) => log.push([nv, ov]));
 
+      // 1. Batching & Identity protection
       a.value = 1;
-      expect(log).toHaveLength(0); // Synchronous access shows no updates
+      expect(log).toHaveLength(0); // Synchronous access shows no updates (async by default)
 
+      a.value = 1; // Same value -> ignored
       a.value = 2;
       a.value = 3;
       await waitForScheduler();
@@ -87,10 +107,24 @@ describe('Atom', () => {
       await waitForScheduler();
       expect(spy).not.toHaveBeenCalled();
     });
+
+    it('implements net-zero guard (returns to original value in batch)', async () => {
+      const a = atom(0);
+      const spy = vi.fn();
+      a.subscribe(spy);
+
+      scheduler.startBatch();
+      a.value = 4;
+      a.value = 0; // Return to 0
+      scheduler.endBatch();
+
+      await waitForScheduler();
+      expect(spy).not.toHaveBeenCalled();
+    });
   });
 
   describe('Sync Mode Execution', () => {
-    it('notifies synchronously immediately unless scheduler is batching', async () => {
+    it('notifies synchronously immediately unless scheduler is batching', () => {
       const a = atom(0, { sync: true });
       const spy = vi.fn();
       a.subscribe(spy);
@@ -98,10 +132,7 @@ describe('Atom', () => {
       // Immediate notification
       a.value = 1;
       expect(spy).toHaveBeenCalledTimes(1);
-
-      // Does not triple-fire after async scheduler flush
-      await waitForScheduler();
-      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy).toHaveBeenCalledWith(1, 0);
 
       // Suppressed during manual scheduler batch
       scheduler.startBatch();
@@ -111,6 +142,22 @@ describe('Atom', () => {
 
       scheduler.endBatch();
       expect(spy).toHaveBeenCalledTimes(2); // Final value synced
+      expect(spy).toHaveBeenCalledWith(3, 1);
+    });
+
+    it('should maintain order during re-entrancy (Breadth-First)', () => {
+      const a = atom(1, { sync: true });
+      const log: string[] = [];
+
+      a.subscribe((nv, ov) => {
+        log.push(`sub1: ${ov} -> ${nv}`);
+        if (nv === 2) a.value = 3; // Re-entry
+      });
+      a.subscribe((nv, ov) => log.push(`sub2: ${ov} -> ${nv}`));
+
+      a.value = 2; // Trigger
+
+      expect(log).toEqual(['sub1: 1 -> 2', 'sub2: 1 -> 2', 'sub1: 2 -> 3', 'sub2: 2 -> 3']);
     });
   });
 
@@ -133,26 +180,6 @@ describe('Atom', () => {
       expect(() => unsub2()).not.toThrow(); // Safe double unsubscribe
     });
 
-    it('isolates subscriber errors so peers still execute', async () => {
-      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-      const a = atom(0);
-
-      const bad = vi.fn().mockImplementation(() => {
-        throw new Error('boom');
-      });
-      const good = vi.fn();
-
-      a.subscribe(bad);
-      a.subscribe(good);
-
-      a.value = 1;
-      await waitForScheduler();
-
-      expect(bad).toHaveBeenCalled();
-      expect(good).toHaveBeenCalled();
-      expect(consoleError).toHaveBeenCalled();
-    });
-
     it('dispose() rigidly clears listeners and supports Symbol.dispose', async () => {
       const a = atom(0);
       const spy = vi.fn();
@@ -166,6 +193,25 @@ describe('Atom', () => {
       a.value = 99;
       await waitForScheduler();
       expect(spy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Reliability', () => {
+    it('should isolate subscriber errors to prevent chain collapse', async () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const a = atom(0);
+      const good = vi.fn();
+
+      a.subscribe(() => {
+        throw new Error('boom');
+      });
+      a.subscribe(good);
+
+      a.value = 1;
+      await waitForScheduler();
+
+      expect(good).toHaveBeenCalled();
+      expect(consoleError).toHaveBeenCalled();
     });
   });
 
@@ -236,7 +282,7 @@ describe('Atom', () => {
 
     it('Internal _flushNotifications guards', () => {
       const a = atom(0) as unknown as InternalAtom;
-      // Manually trigger flush when nothing is scheduled (line 95 in atom.ts)
+      // Manually trigger flush when nothing is scheduled
       expect(() => a._flushNotifications()).not.toThrow();
 
       a.dispose();
