@@ -6,284 +6,125 @@
 
 #### Added
 
-- **Atom**: Added `equal` property to `AtomOptions` to allow custom equality checks, providing parity with `computed` atoms.
-- **Error Handling**: Introduced `AtomError.getChain()` to programmatically retrieve the full error propagation path.
-- **Error Handling**: Added `AtomError.toJSON()` support for structured logging and integration with external monitoring tools.
-- **Error Handling**: Exported `AtomErrorConstructor` to standardize error class instantiation across the system.
+- **Atom**: Added `equal` property to `AtomOptions` for custom equality parity with `computed`.
+- **Error Handling**: Added `AtomError.getChain()` and `AtomError.toJSON()` for programmatic tracing and structured logging.
+- **Error Handling**: Exported `AtomErrorConstructor` to standardize error instantiation.
+- **API**: Added `[Symbol.dispose]` support to all primitives for explicit resource management (TS 5.2+).
 
 #### Fixed
 
-- **Computed**: Resolved synchronous error propagation bug where subscribers were not notified and versions were not bumped when a computation threw an error during evaluation.
-- **Computed**: Fixed dependency pollution in `hasError` and `errors` getters; these now operate in an `untracked` scope to prevent leaking deep internal dependencies to callers.
-- **Atom**: Resolved "Net-Zero" update bug where notifications were erroneously sent if an atom's value returned to its original state during a batch or before a microtask flush.
-- **Atom**: Fixed out-of-order notification during synchronous re-entrancy by implementing a breadth-first `while` loop in `_flushNotifications`, ensuring consistent state observation.
-- **Error Handling**: Resolved context loss during error propagation by making `wrapError` chainable, preserving the full trace from source to effect.
-- **Error Handling**: Fixed data loss when non-Error objects were thrown; the raw value is now preserved in the `cause` property.
-- **Debug**: Resolved memory leak in `trackUpdate` by clearing the `_updateCounts` map at the end of the current microtask execution cycle.
-- **Debug**: Prevented memory leak in `dumpGraph` by deleting `_updateCounts` entries when related nodes are garbage collected.
-- **Scheduler**: Critical bug in `runInFlushScope` where callbacks were ignored if a flush was already in progress.
-- **Scheduler**: Fixed nested synchronous flush state corruption where `isFlushingSync` was prematurely reset.
-- **Scheduler**: Eliminated memory leaks by explicitly nullifying job references after execution using `undefined`.
-- **Scheduler**: Prevented stack overflow risks in deeply nested `batch()` updates via a flat execution loop.
-- **Effect**: Resolved an internal `this` binding leak in `EffectImpl` by passing the effect function reference directly, ensuring the internal instance is not exposed as `this` to user-provided functions.
+- **Computed**: Resolved sync error propagation bug where subscribers missed notifications on failed evaluations.
+- **Computed**: Isolated `hasError`/`errors` getters in `untracked` scope to prevent internal dependency leakage.
+- **Atom**: Fixed "Net-Zero" update bug; notifications are no longer sent if values return to their original state during batches.
+- **Atom**: Corrected re-entrancy notification order using a breadth-first `while` loop in `_flushNotifications`.
+- **Error Handling**: Fixed context loss in `wrapError` and preserved raw throwable values in `cause`.
+- **Debug**: Fixed memory leaks in `trackUpdate` and `dumpGraph` via `WeakRef` and microtask cleanup.
+- **Scheduler**: Fixed job ignoring during active flushes and resolved nested flush state corruption.
+- **Scheduler**: Eliminated memory leaks by nullifying job references and prevented stack crashes via flat execution loops.
+- **Effect**: Fixed `this` binding leak in `EffectImpl`.
 
 #### Changed
 
-- **Error Handling**: Enhanced `AtomError` hierarchy with support for optional machine-readable error codes and manual `recoverable` policy overrides in all subclasses.
-- **Error Handling**: Expanded `cause` type to `unknown` to strictly follow modern JavaScript error patterns while maintaining ES2021 compatibility.
-- **Debug**: Integrated `Error.captureStackTrace` (where available) to provide cleaner, more focused traces by excluding internal wrapping frames.
-- **Debug**: Introduced `debug.dumpGraph()` and `debug.registerNode()` APIs to support external DevTools and graph inspection.
-- **Debug**: Implemented a `WeakRef` based node registry that tracks active reactive nodes without preventing garbage collection.
-- **Scheduler**: Optimized with a double-buffered queue strategy for better stability under high churn.
-- **Scheduler**: Improved JSDoc documentation and internal type safety.
-- **Tracking**: Hardened `TrackingContext` with synchronous tracking boundary validation. Detects and warns when a `Promise` is returned within a tracking scope to help developers identify dependencies accessed after an `await` (which are not tracked).
-- **Tracking**: Optimized `Subscription.notify` with internal `untracked` isolation, ensuring that notification listeners (effects/computeds) do not accidentally capture the trigger's tracking context.
-- **Performance**: Transitioned to a consolidated `BRAND` symbol with bitwise `BrandFlags` for reactive primitive identification. This eliminates redundant symbol properties on objects and accelerates type guard checks (`isAtom`, `isComputed`, etc.) on hot paths.
-- **Performance**: Improved V8 hidden class stability by explicitly initializing `_nextEpoch` in the `ReactiveNode` constructor.
-- **Performance**: Ensured `ReactiveNode.id` is consistently represented as a Small Integer (SMI) by masking it with `SMI_MAX`, aligning with system-wide bitwise optimization patterns.
-- **Performance**: Improved V8 hidden class stability by explicitly initializing all optional members (`unsub`, `fn`, `sub`) in `DependencyLink` and `Subscription` constructors.
-- **Performance**: Optimized `debug.warn` calls to be fully stripped in production by wrapping them in `IS_DEV` checks at call sites, reducing bundle size and runtime string overhead.
-- **Debug**: Enhanced `DebugController` with zero-cost abstraction support.
-  - Added `customName` support for reactive nodes to improve developer traceability in large graphs.
-  - Implemented `trackUpdate` for automated infinite loop detection with bitwise SMI-safe identifiers.
-  - Optimized metadata storage using non-enumerable `Object.defineProperties` to ensure debug info doesn't pollute iteration or serialization.
-- **API**: Formalized `Disposable` interface and added `[Symbol.dispose]` support to all reactive primitives for explicit resource management (TS 5.2+).
-- **Types**: Enhanced `Paths<T>` and `PathValue<T, P>` to handle nullable/optional properties correctly using `NonNullable`, and implemented method filtering to exclude prototype functions from path unions.
-- **Types**: Simplified `EffectFunction` into a single function type returning a union of result types, improving TypeScript inference and internal engine consistency.
-- **Debug**: Refactored `DebugController` into `DevDebugController` and `ProdDebugController` implementations, ensuring zero runtime overhead in production via a no-op singleton swap.
-- **Debug**: Enhanced environment detection with `globalThis.__ATOM_DEBUG__` support, allowing debug features to be enabled at runtime even in production-mode distribution builds.
-- **Debug**: Externalized `LOOP_THRESHOLD` to `DEBUG_CONFIG` for better configurability.
-- **Build**: Optimized Vite configuration to preserve debug code paths in distribution files by relying on `NODE_ENV` and global flags rather than aggressive compile-time stripping.
-- **Constants**: Safely introduced `sessionStorage.getItem('__ATOM_DEBUG__')` check on startup to toggle `IS_DEV`/runtime debugging behavior.
-- **Types**: Eliminated `any` type casts for `globalThis` environment checks by adopting inline type assertions.
+- **Error Handling**: Enhanced `AtomError` with machine-readable codes and `recoverable` policy overrides.
+- **Debug**: Integrated `Error.captureStackTrace` and implemented a zero-overhead `DebugController` with monomorphic singleton swapping.
+- **Tracking**: Hardened `TrackingContext` to detect/warn when returned `Promise` objects might leak dependencies.
+- **Performance**: Consolidated reactive identification into a bitwise `BRAND` symbol flag system.
+- **Performance**: Optimized V8 hidden class stability by explicitly initializing all members in constructors.
+- **Performance**: Masked `ReactiveNode.id` to Small Integer (SMI) range for faster bitwise operations.
+- **Performance**: Production builds now fully strip `debug.warn` calls and related overhead.
+- **Types**: Improved `Paths<T>` for nullable properties and simplified `EffectFunction` for better inference.
 
 #### Refactor
 
-- **Atom**: Optimized `AtomImpl` performance via local flag caching and direct bitwise status checks, improving hot-path write/notification speed.
-- **Core**: Reorganized internal state flags into a partitioned 31-bit layout (V8 SMI optimized) with dedicated ranges for core, computed, async, and primitive-specific flags.
-- **Core**: Hardened all configuration and state constant objects with `Object.freeze()` to prevent runtime mutations.
-- **Core**: Enhanced `IS_DEV` detection to natively support Vite (`import.meta.env`) and improved reliability across different environments.
-- **Core**: Added comprehensive unit tests for constants to ensure bitwise uniqueness, partition integrity, and immutability.
-- **Buffers**: Refactored `SlotBuffer` and `DepSlotBuffer` for ultra-high performance and allocation optimization. Implemented size duality (physical vs logical) and enhanced relocation logic to minimize GC pressure and improve iteration speed.
-
-- **Types**: Hardened `Dependency<T>` contract by making `peek()` and `value` required and strictly typed.
+- **Buffers**: Consolidated `SlotBuffer` and `DepSlotBuffer` for better cache locality and GC efficiency.
+- **Core**: Reorganized state flags into a partitioned 31-bit layout optimized for V8.
 
 ### jQuery
 
 #### Added
 
-- **Core**: `enableAutoCleanup` now officially supports `ShadowRoot` and `DocumentFragment` as observation roots, enabling robust cleanup in Shadow DOM and Web Component environments.
-- **API**: Added support for `[source, formatter]` tuples in `atomText` (via `atomBind`).
-- **List Rendering**: Major `atomList` refactor with multiple root support and improved concurrent async removal handling.
-- **`$.atomFetch`**: Enhanced lifecycle and error handling with automatic abortion on disposal and specialized `$.ajax` resource cleanup.
-- **Routing**: Optimized history mode stability and improved `basePath` prefix matching for precise navigation.
+- **Core**: `enableAutoCleanup` now supports `ShadowRoot` and `DocumentFragment` roots.
+- **API**: Added `[source, formatter]` tuple support for `atomText`.
+- **List Rendering**: Refactored `atomList` for multi-root element support and concurrent async removals.
+- **Fetch**: Enhanced `$.atomFetch` with automatic abortion and specialized resource cleanup.
 
 #### Fixed
 
-- **Debug**: Fixed test assertion failures by ensuring `DevDebugController` standard logs correctly check the `enabled` state when explicitly muted.
-
-- **Core**: Resolved a race condition where `ensureAutoCleanup` could fail to attach a `MutationObserver` if the first reactive binding occurred before `document.body` was available.
-- **Reactivity**: Enhanced jQuery event patching by explicitly supporting `$.fn.one()` and providing cross-instance compatibility via `Symbol.for('atom-effect-internal')`.
-- **Reactivity**: Improved `on/one` event mapping logic to correctly handle boolean handlers (`false`) and prevent redundant reactive flushes.
-- **Internal**: Refactored `jquery-patch.ts` with a unified `createEventHandlerPatch` helper to improve maintainability and strictly typed internal `_data` access in tests.
-- **Reactivity**: `atomUnbind` now correctly cleans up all bindings recursively across descendants.
-- **Utils**: `isPromise` now correctly identifies Thenable functions, improving compatibility with various async patterns.
-- **Utils**: `getSelector` now supports SVG elements by correctly handling `SVGAnimatedString` for `className`.
-- **Utils**: `shallowEqual` now handles `NaN` values correctly using `Object.is` for comparison.
-- **Debug**: Fixed highlight persistence where visual outlines remained on elements if they were disconnected from the DOM before the timeout.
-- **Core**: Added `document.body` existence check in `index.ts` to prevent potential null pointer errors during early initialization.
-- **Types**: Fixed `FormOptions` generic type inference in `atomForm` and `BindingOptions<T>`, ensuring correct types for `transform` and `onChange` hooks.
-- **Types**: Improved `atomProp` signature in `JQuery` interface to allow heterogeneous property types using `unknown` while satisfying strict lint rules.
-- **Debug**: Resolved abrupt fade-out of highlights by migrating the CSS transition to a persistent attribute selector (`[data-atom-debug]`).
-- **Debug**: Corrected `getSelector` to support SVG elements and provide more informative output (Tag#Id.Class).
-- **Internal**: Hardened `ArrayPool` and `ObjectPool` with double-release protection and mandatory resource resetting even when exceeding pool limits to prevent memory pressure.
-- **Internal**: Synchronized `effectsArrayPool` and `cleanupsArrayPool` limits (128) with `bindingRecordPool` to ensure consistent reuse.
-- **Internal**: Orchestrated `BindingRecord` disposal to automatically return internal `effects` and `cleanups` arrays to their respective pools, improving library robustness.
-- **Utils**: Fixed XSS sanitization fast-path bypass where event handlers could be skipped if preceded by certain safe words (e.g. "iron").
-- **Utils**: Fixed entity decoding order in `sanitizeHtml` to prevent protocol smuggling via encoded characters (e.g. `&#1;`).
-- **Utils**: Strengthened dangerous protocol regex to handle internal whitespace and control characters.
-- **Constants**: Froze `INPUT_DEFAULTS` and `DEBUG_DEFAULTS` using `Object.freeze()` to prevent accidental runtime modifications.
-- **Bindings**: Fixed generic type incompatibility in `atomForm` where `FormOptions<T>` couldn't be assigned to `FormOptions<unknown>`.
+- **Core**: Resolved race condition in `MutationObserver` attachment during early initialization.
+- **Reactivity**: Enhanced event patching for `$.fn.one()` and added cross-instance compatibility.
+- **Reactivity**: Recursively clean up all bindings in `atomUnbind`.
+- **Utils**: Fixed thenable detection in `isPromise` and SVG element support in `getSelector`.
+- **Debug**: Fixed highlight persistence/fading issues and standardized logger state checks.
+- **Internal**: Hardened `ArrayPool`/`ObjectPool` with double-release protection.
+- **Security**: Fixed XSS sanitization bypasses and protocol smuggling via encoded characters.
 
 #### Changed
 
-- **Debug**: Expanded `resolveInitialState` to recognize `sessionStorage.getItem('__ATOM_DEBUG__')`, allowing persistent debugging toggle without requiring build parameter modifications.
-- **Debug**: Refactored `DebugController` into robust singleton configurations (`DevDebugController` and `ProdDebugController`) using a *Monomorphic Singleton Swap* architectural pattern, perfectly aligning with the `@but212/atom-effect` core engine and improving JIT performance while completely removing object mutation overhead.
-- **Types**: Eliminated `any` casts for `globalThis` across internal initialization files.
-- **Refactor**: Improved `BindingRegistry` type safety and internal cleanup logic, reducing reliance on explicit type casting for non-element nodes.
-- **Performance**: Significant optimization of chainable bindings with lazy context creation and bitmask-based constant-time dispatch.
-- **Core**: Centralized DOM utilities (`createContext`, `atomEachElement`, `unpack`) into `src/core/dom.ts` to improve maintainability.
-- **Utils**: Internal utilities refactored for better maintainability and type safety, reducing `any` usage in favor of `Record<string, unknown>`.
-- **Lifecycle**: `$.fn.atomMount` now automatically cleans up existing components on an element and executes functions within `batch()` for atomic renders.
-- **Internal**: Refactored `InputBinding` and `atomForm` to eliminate redundant `BindingContext` creation and stabilize DOM sync checks.
-- **Internal**: Refactored `DebugController` as a robust singleton with JIT method swapping for zero overhead.
-- **Robustness**: Enhanced component mount/unmount with specialized error handling and logging for lifecycle failures.
-- **Lifecycle**: Integrated `isDisposed` flag into binding factories (`registerReactiveEffect`, `registerMapEffect`) to prevent "zombie updates" on disconnected DOM elements.
-- **Bindings**: `bindChecked` now correctly synchronizes radio button groups when updated programmatically via atoms.
-- **Styles**: `bindVisibility` (atomShow/atomHide) now dynamically captures and preserves the last non-none display style, respecting external CSS or inline style updates.
-- **Classes**: `atomClass` now supports multiple space-separated class names and handles overlapping classes safely across multiple reactive keys.
-- **Sync**: Corrected dependency tracking bugs in `syncDomFromAtom` and removed redundant synchronizations during `blur` events.
-- **Refactor**: Overhauled `sanitize.ts` with a cleaner, more maintainable structure, extracting normalization logic and consolidating regex constants.
-- **Debug**: Unified environment detection logic with the core package, following the `globalThis.__ATOM_DEBUG__` pattern for better reliability across build products.
-
-#### Performance
-
-- **Caching**: Implemented local JS-level value caching in `bindHtml`, `bindClass`, `bindCss`, and `bindProp` to minimize redundant DOM reads and writes.
-- **Async Optimization**: Implemented a resolution cache in `registerMapEffect` to reuse resolved Promise values, enabling synchronous updates for redundant async dependencies.
-
-#### Internal
-
-- **Reliability**: Extracted radio group synchronization logic into a unified `syncRadioGroup` helper using `$.escapeSelector`.
-
-#### Security
-
-- **Hardening**: Reinforced non-element node skipping logic and refined logging during registration phases to prevent silent failures.
-- **Sanitization**: Added missing SVG URL attributes (`fill`, `filter`, `mask`, `marker-*`, `clip-path`) to the default sanitization registry.
-- **Hardening**: Centralized `DANGEROUS_PROTOCOL_PATTERN` in `constants.ts` and hardened the regex-based sanitizer against whitespace-obfuscated protocols.
+- **Lifecycle**: `$.fn.atomMount` now auto-cleans existing components and uses `batch()` for atomic updates.
+- **Bindings**: Optimized `atomClass` for space-separated names and `atomShow`/`atomHide` for display style preservation.
+- **Performance**: Implemented local value caching in property/attribute bindings to minimize DOM churn.
+- **Performance**: Added resolution caching to `registerMapEffect` for redundant async dependencies.
 
 ## [0.29.0] - 2026-04-07
 
 ### Core
 
-#### Breaking Changes
-
-- **Removed**: `maxAsyncRetries` option in `computed`. Computation drift now naturally triggers re-evaluation (`_markDirty()`) without an arbitrary limit, ensuring reactive consistency during async resolution cycles.
-
-#### Performance
-
-- **Simplicity**: Simplified internal dirty checking by removing redundant DJB2-based hashing in favor of a unified `_isDirty` mechanism, reducing core complexity by ~120 lines.
-- **Buffers**: Merged `SlotBuffer` and `DepSlotBuffer` in `src/core/buffers.ts` to improve cache locality and simplify buffer management.
-
-#### Internal
-
-- **Architecture**: **Directory Flattening & Consolidation**.
-  - Eliminated redundant `internal/`, `tracking/`, and `errors/` subdirectories to reduce module fragmentation and import depth.
-  - Consolidated fragmented logic into unified high-cohesion modules: `errors.ts`, `scheduler.ts`, and `tracking.ts`.
+- **Breaking**: Removed `maxAsyncRetries` in `computed`; drift now naturally triggers re-evaluation via `_markDirty()`.
+- **Performance**: Replaced DJB2 hashing with a unified `_isDirty` mechanism, reducing core complexity.
+- **Internal**: Flattened directory structure (removed `internal/`, `tracking/`, `errors/`) into high-cohesion modules.
 
 ### jQuery
 
-#### Added
+- **Added**: Enhanced `atomForm` with `debounce`, `transform`, `onChange` hooks, and deep path support.
+- **Changed**: Re-implemented form binding via `FormBinder` for circular protection and O(1) dispatch.
+- **Internal**: Merged pool sets and refactored test suites for behavior-driven verification.
 
-- **API**: **Enhanced `atomForm` Binding**.
-  - Added support for `FormOptions`: `debounce`, `transform`, and `onChange` hooks.
-  - Improved deep path support (e.g., `user.profile.age`, `items[0].text`).
-  - Automated lifecycle: Full support for dynamic control addition, removal, and renaming via `MutationObserver`.
-  - Native support for radio groups and checkbox groups with auto-mapping.
-  - Advanced configuration support via `[atom, options]` tuple in `atomBind`.
-
-#### Changed
-
-- **Performance**: Re-implemented form binding via `FormBinder` manager for robust circular protection and O(1) dispatcher performance.
-
-#### Internal
-
-- **Architecture**: **Directory Flattening & Consolidation**.
-  - Flattened `internal/` subdirectory to simplify package structure.
-  - `src/utils/pool.ts`: Merged array and object pool sets to simplify internal abstractions.
-- **Testing**: Refactored `form.test.ts` suite to prioritize behavior-driven verification over implementation details.
-
-## [0.28.0]
+## [0.28.0] - 2026-04-03
 
 ### Core
 
-#### Added
-
-- **API**: **Official Lens Support**.
-  - `atomLens`: Two-way reactive "view" into nested state with 100% structural sharing and zero-render impact.
-  - `composeLens` / `lensFor`: Composition utilities and high-performance recursive object manipulation.
-- **Types**: High-performance recursive dot-path types (`Paths<T>`, `PathValue<T, P>`) with 8-level depth and exact type inference.
-
-#### Changed
-
-- **Performance**: Optimized lens write paths with `Object.is` identity guards to prevent redundant propagation.
-- **Reliability**: Ensured `setDeepValue` is non-destructive and reference-stable for unchanged branches.
+- **Added**: Official lens support (`atomLens`, `lensFor`) with recursive dot-path types.
+- **Performance**: Optimized lens write paths with identity guards to prevent redundant propagation.
 
 ### jQuery
 
-#### Changed
-
-- **Performance**: CPU Branch Prediction (BP) optimization pass.
-  - **Monomorphic Dispatch**: Replaced `if` chains in `atomBind` with a bitmask-based constant-time dispatch table and integer LSB indexing via `Math.clz32`.
-  - **Zero-overhead Debugging**: Removed `debug.enabled` guards by swapping loggers with No-op pointers at runtime.
-  - **Strategy Specialization**: Eliminated element-type branching in `InputBinding` via construction-time strategy specialization.
-  - **Sanitization Fast-path**: Added O(n) scan to bypass regex pipelines for safe strings (~5x faster updates).
-  - **Registry Stability**: Transitioned to static array snapshots for cleanup, stabilizing loop prediction and BTB pressure.
-- **Robustness**: Improved `debug` mode with dynamic console synchronization (`window.__ATOM_DEBUG__`).
-- **Encapsulation**: **Architecture Consolidation**.
-  - Migrated core lens implementation and recursive types to `@but212/atom-effect` for universal utility.
-  - Hardened package interface by restricting public exports strictly to the `$` namespace and `$.fn` extensions.
-  - Re-exported all lens utilities via the jQuery namespace to maintain seamless backward compatibility.
+- **Performance**: Applied CPU Branch Prediction (BP) optimizations, including monomorphic dispatch and strategy specialization.
+- **Performance**: Added a fast-path scanner to `sanitizeHtml` for safe strings (~5x speedup).
+- **Encapsulation**: Migrated lens core to the main package and restricted public jQuery exports to the `$` namespace.
 
 ## [0.27.0] - 2026-03-31
 
 ### Core
 
-#### Changed
-
-- **Performance**: Executed an aggressive engine-level optimization pass.
-  - **SVO Unrolling**: Manually unrolled hot loops for subscriber notifications and dependency collection (Small Vector path) to eliminate closure overhead.
-  - **Monomorphic Singletons**: Refactored `trackingContext` and `debug` into class-based singletons and unified common reactive state into `ReactiveNode` for stable V8 hidden classes.
-  - **Hot-path Density**: Transitioned status management to direct bitwise operations and implemented local variable caching to reduce property lookup depth.
-  - **Internal**: Optimized scheduler batching, error paths, and `untracked()` fast-paths for minimal overhead.
+- **Performance**: Aggressive engine-level optimization pass:
+  - SVO Unrolling to eliminate closure overhead in hot loops.
+  - Class-based singletons for `trackingContext` and `debug` to stabilize V8 hidden classes.
+  - Bitwise status management and local variable caching for reduced property lookups.
 
 ### jQuery
 
-#### Changed
+- **Refactor**: Major overhaul removing 1,000+ lines of redundant logic via monomorphic structures.
+- **Performance**: Hoisted allocations and switched to native loops/selectors (`getElementsByClassName`) for speed.
+- **Robustness**: Improved error isolation in `$.route` and `atomFetch`.
 
-- **Refactor**: Major overhaul of `@but212/atom-effect-jquery` architecture, removing 1,000+ lines of redundant logic through monomorphic structures and streamlined registry management.
-- **Performance**: Significant engine-level optimizations:
-  - Reduced memory overhead by hoisting allocations and using manual loops instead of `Object.keys()`.
-  - Accelerated hot-paths via specialized construction-time logic and faster microtask scheduling (`Promise.resolve()`).
-  - Improved DOM performance using targeted selectors (`getElementsByClassName`) and fast-path text sanitization.
-  - Optimized router and fetch internal loops and object merges.
-- **Robustness**: Hardened type safety and improved error isolation in `$.route` and `atomFetch`.
-- **Fixed**: Corrected `atomFetch` header merging to prevent dynamic options from overwriting static headers.
+## [0.26.0] - 2026-03-24
 
-#### Documentation
+- **Core**: Added infinite loop detection and exception-safe `runInFlushScope` wrappers.
+- **jQuery**: Optimized `atomForm` for O(1) scaling on large forms.
 
-- **Sync**: Updated `API.md` and `ARCHITECTURE.md` to reflect refined internal types and optimized reconciliation engines.
+## [0.25.0] - 2026-03-17
 
-## [0.26.0]
+- **jQuery**: Added native `Promise` support to content/attribute bindings and implemented DOM metadata caching.
 
-### Core
+## [0.24.1] - 2026-03-10
 
-- **Reliability**: Added infinite loop detection and `runInFlushScope` Exception-safe wrappers.
-- **Performance**: Optimized `SlotBuffer` with O(1) stack-based index reuse and enhanced `DepSlotBuffer` relocation.
+- **Core**: Unified `_isDirty()` mechanism and stabilized V8 hidden classes.
+- **jQuery**: Initial `$.fn.atomForm` release with nested path support.
 
-### jQuery
+## [0.24.0] - 2026-03-03
 
-- **API**: Introduced `$.atomLens` and `$.lensFor` for type-safe, two-way deep state management.
-- **Performance**: Optimized `atomForm` for O(1) scaling on large forms via centralized dispatching.
-
-## [0.25.0]
-
-### jQuery
-
-- **API**: Added native `Promise` support to all content and attribute bindings.
-- **Performance**: Implemented metadata and value caching for DOM bindings to minimize property lookup overhead.
-
-## [0.24.1]
-
-### Core
-
-- **Performance**: Stabilized V8 hidden classes via monomorphic constructors and optimized dispatch loops.
-- **Performance**: Unified `_isDirty()` mechanism to replace redundant hashing in async drift detection.
-
-### jQuery
-
-- **API**: Added `$.fn.atomForm` for automated form binding with nested path support.
-
-## [0.24.0]
-
-### Core
-
-- **Performance**: Bit-packed versioned slot buffers and stable-skip re-evaluation for O(1) efficiency.
-- **Refactor**: Unified dependency tracking inside the `ReactiveNode` hierarchy.
-
-### jQuery
-
-- **List Rendering**: Overhauled `atomList` with a 1D Flat Buffer strategy and typed arrays for GC-free updates.
-- **Routing**: Refactored `$.route` to be natively reactive with O(1) link patching.
+- **Core**: Bit-packed slot buffers and stable-skip re-evaluation (O(1)).
+- **jQuery**: Overhauled `atomList` with a 1D Flat Buffer strategy and typed arrays.
 
 ## [0.23.0]
 
@@ -751,11 +592,7 @@
 
 #### Changed
 
-- **Refactor**: Refactored internal logic│  jquery-patch.ts ← jQuery patches │
-│  chainable.ts ← $.fn methods      │
-│  bindings/list/ ← Modular list    │
-│  route.ts     ← SPA router        │
-element tracking; moved invariant checks out of iteration loops.
+- **Refactor**: Reorganized internal modules (`jquery-patch`, `chainable`, `list`, `route`) to improve element tracking and move invariant checks out of iteration loops.
 
 ## [0.10.0]
 
