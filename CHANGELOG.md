@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased]
+
+### jQuery
+
+#### Fixed
+
+- **Core**: Fixed a logic flaw in the `unpack` utility where static values (strings, numbers, null) and plain objects were not correctly identified as part of a `[source, options]` tuple.
+
+#### Changed
+
+- **Performance**: Optimized the `atomEachElement` engine by caching context requirements and collection length, reducing property lookup overhead in hot loops.
+
 ## [0.30.0] - 2026-04-12
 
 ### Core

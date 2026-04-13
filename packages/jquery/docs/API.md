@@ -81,11 +81,11 @@ $('.user-card').atomBind({
 Updates `textContent`. Supports `AsyncReactiveValue` (direct Promise or atom yielding Promise).
 
 - **formatter**: optional function `(val) => string`.
-- **Integrated Binding Support**: When used via `.atomBind()`, can be expressed as a tuple `text: [source, formatter]`.
+- **Integrated Binding Support**: When used via `.atomBind()`, can be expressed as a tuple `text: [source, formatter]`. This now fully supports **static values** (e.g., `text: ['Hello', h => h + '!']`).
 
 ```javascript
 $('#price').atomText(price, p => `$${p.toFixed(2)}`);
-// Via atomBind
+// Via atomBind (supports static values and atoms)
 $el.atomBind({ text: [count, c => `Count: ${c}`] });
 ```
 

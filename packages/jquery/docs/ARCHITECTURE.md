@@ -56,8 +56,8 @@ This eliminates boilerplate across all binding types and ensures robust, memory-
 `createContext(el)` and `atomEachElement(jq, fn)` in `core/dom.ts` provide the base engine for all reactive bindings:
 
 - **Binding Context**: Provides a shared context object per element, including a `trackCleanup` helper.
-- **DOM Engine (`atomEachElement`)**: The central iterator used by all chainable methods. It handles jQuery sets, filters for `HTMLElement` (skipping text/comment nodes), and provides lazy context creation only when required (`needsCtx: true`).
-- **Unpack Utility**: A shared utility used by `atomBind` and other integrated bindings to handle `[source, options]` tuple arguments consistently.
+- **DOM Engine (`atomEachElement`)**: The central iterator used by all chainable methods. It handles jQuery sets, filters for `HTMLElement` (skipping text/comment nodes), and provides lazy context creation only when required (`needsCtx: true`). The loop is optimized by caching context flags and length to minimize property lookups in hot paths.
+- **Unpack Utility**: A shared utility used by `atomBind` and other integrated bindings to handle `[source, options]` tuple arguments. It uses a **look-ahead heuristic** on the second element to differentiate between tuples and 2-element array values, enabling support for static source data.
 
 The lazy `$el` getter in `unified.ts` (when using `atomOn`, etc.) avoids unnecessary jQuery object creation for bindings that only need native DOM access.
 
@@ -378,7 +378,7 @@ The sequential 12-way `if` chain in `atomBind` was replaced with a **Bitmask Dis
 1. `atomBind` converts current options into a single 32-bit integer mask.
 2. The loop uses bitwise operations (`m & -m`) to isolate the next binding bit.
 3. The bit index is calculated using `31 - Math.clz32(bit)`, which V8 compiles to a single `BSR` (Bit Scan Reverse) instruction.
-4. The corresponding handler is looked up in the monomorphic `BIND_HANDLERS` table, achieving O(1) jump table dispatching. Tuple arguments (e.g. `[source, formatter]`) are efficiently unpacked using a shared `unpack` utility.
+4. The corresponding handler is looked up in the monomorphic `BIND_HANDLERS` table, achieving O(1) jump table dispatching. Tuple arguments (e.g. `[source, formatter]`) are efficiently unpacked using a shared `unpack` utility which recognizes valid options/formatters via property-checking on the second element.
 
 ### 11.3 Strategy Specialization (`InputBinding`)
 
