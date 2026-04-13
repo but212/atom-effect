@@ -146,12 +146,14 @@ describe('Computeds: Reactive Logic', () => {
 });
 
 describe('Effects: Life-cycle & Propagation', () => {
+  const lifecycleAtom = atom(0);
+  const lifecycleFn = () => keep(lifecycleAtom.value);
+
   bench(
     `creation & disposal (x${REPEATS})`,
     () => {
-      const a = atom(0);
       for (let i = 0; i < REPEATS; i++) {
-        const e = effect(() => keep(a.value), benchEffectOptions);
+        const e = effect(lifecycleFn, benchEffectOptions);
         e.dispose();
       }
     },
