@@ -95,6 +95,11 @@ describe('DOM Core Utilities', () => {
       expect(unpack([1, 2, 3])).toEqual([[1, 2, 3]]);
     });
 
+    it('returns [val] if the second element is an array (not a tuple)', () => {
+      const arrayVal: [string, string[]] = ['a', ['b', 'c']];
+      expect(unpack(arrayVal)).toEqual([arrayVal]);
+    });
+
     it('unpacks [source, options] for static values (BUG REPRODUCTION)', () => {
       const options = { opt: 1 };
       expect(unpack(['static', options])).toEqual(['static', options]);

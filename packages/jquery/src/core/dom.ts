@@ -80,10 +80,14 @@ export function unpack<T, O>(val: T | [T, O]): [T, O?] {
 
   // Identifies a tuple if the second element:
   // 1. Is a function (usually a formatter: (v) => formattedValue).
-  // 2. Is a plain object that doesn't exhibit reactive 'Atom' or 'Promise' behaviors.
+  // 2. Is a plain object (excluding arrays, Atoms, and Promises).
   const isTuple =
     typeof second === 'function' ||
-    (second !== null && typeof second === 'object' && !('value' in second) && !('then' in second));
+    (second !== null &&
+      typeof second === 'object' &&
+      !Array.isArray(second) &&
+      !('value' in second) &&
+      !('then' in second));
 
   return isTuple ? (val as [T, O]) : [val as T];
 }
