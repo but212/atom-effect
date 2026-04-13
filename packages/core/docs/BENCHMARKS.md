@@ -115,7 +115,7 @@ Production-like scenarios:
 | Effect execution (single) | 1.08M ops/sec | Efficient subscriber notify |
 | Todo workflow | 96.2K ops/sec | Production-ready (Full workflow) |
 | Frame Budget (100 atoms) | 0.0018ms | Well under 16ms |
-| Data Grid Filter (1000x) | 0.0021ms | Real-time filtering |
+| Data Grid Filter (1000 rows) | 0.0046ms | Real-time filtering |
 
 ## Contributing Benchmarks
 
