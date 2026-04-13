@@ -1,7 +1,7 @@
 # Benchmark Results - Detailed
 
-**Last Updated**: 2026-04-12
-**Version**: v0.30.0
+**Last Updated**: 2026-04-14
+**Version**: v0.30.1
 **Environment**:
 
 - **Node.js**: v22.x
@@ -15,67 +15,68 @@
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Create 100 Atoms (Primitives) | 312,822.85 | 0.0032 | 0.0061 |
-| Create 100 Atoms (Objects) | 306,999.70 | 0.0033 | 0.0051 |
-| Read/Write Performance (x100) | 1,144,191.97 | 0.0009 | 0.0010 |
-| Untracked Read (x100) | 1,715,670.93 | 0.0006 | 0.0009 |
+| Create 100 Atoms (Primitives) | 307,041.17 | 0.0033 | 0.0061 |
+| Create 100 Atoms (Objects) | 295,036.59 | 0.0034 | 0.0058 |
+| Read/Write Performance (x100) | 990,872.86 | 0.0010 | 0.0011 |
+| Untracked Read (x100) | 1,556,358.63 | 0.0006 | 0.0010 |
 
 ### Computed - Micro
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Recompute & Cache (x100) | 236,297.88 | 0.0042 | 0.0060 |
-| Lazy Evaluation Overhead (x100) | 72,974.77 | 0.0137 | 0.0235 |
-| Creation: Flat vs Chain (10 levels) | 594,710.43 | 0.0017 | 0.0030 |
+| Recompute & Cache (x100) | 225,039.12 | 0.0044 | 0.0051 |
+| Lazy Evaluation Overhead (x100) | 74,990.80 | 0.0133 | 0.0255 |
+| Creation: Flat vs Chain (10 levels) | 716,107.91 | 0.0014 | 0.0019 |
 
 ### Effect - Micro
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Creation & Disposal (x100) | 59,338.11 | 0.0169 | 0.0284 |
-| Propagation: Atom → Computed → Effect (x100) | 1,095,885.70 | 0.0009 | 0.0011 |
-| Cleanup Execution (x100) | 656,284.62 | 0.0015 | 0.0021 |
+| Creation & Disposal (x100) | 68,784.92 | 0.0145 | 0.0270 |
+| Propagation: Atom → Computed → Effect (x100) | 1,081,084.71 | 0.0009 | 0.0010 |
+| Cleanup Execution (x100) | 729,363.89 | 0.0014 | 0.0017 |
 
 ### Lenses - Micro
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Read: Lens (x100) | 232,853.92 | 0.0043 | 0.0047 |
-| Read: Computed Active (x100) | 925,633.42 | 0.0011 | 0.0012 |
-| Read: Direct Object Access (x100) | 850,739.09 | 0.0012 | 0.0024 |
-| Write: Lens (x100) | 24,018.46 | 0.0416 | 0.0474 |
-| Write: Manual Spread (x100) | 313,245.83 | 0.0032 | 0.0043 |
-| Composition & Scaling (100 active) | 5,811.67 | 0.1721 | 3.9306 |
+| Read: Lens (x100) | 111,853.96 | 0.0089 | 0.0169 |
+| Read: Computed Active (x100) | 617,051.07 | 0.0016 | 0.0016 |
+| Read: Direct Object Access (x100) | 710,845.87 | 0.0014 | 0.0014 |
+| Write: Lens (x100) | 21,793.77 | 0.0459 | 0.0570 |
+| Write: Manual Spread (x100) | 302,296.82 | 0.0033 | 0.0050 |
+| Composition & Scaling (100 active) | 6,302.75 | 0.1587 | 3.8845 |
 
 ### Batch & Synchronization - Micro
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Batch Update 100 Atoms (x100) | 21,577.94 | 0.0463 | 0.0543 |
-| Batched Computed Chain Update (x100) | 31,581.64 | 0.0317 | 0.0434 |
+| Batch Update 100 Atoms (x100) | 20,180.09 | 0.0496 | 0.0607 |
+| Batched Computed Chain Update (x100) | 35,082.55 | 0.0285 | 0.0411 |
 
 ### Propagation - Stress Tests (1000 nodes)
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| 1 to 1 Propagation (Depth 1000) | 15,443.79 | 0.0648 | 0.2080 |
-| 1 to N Propagation (Fan Out 1000) | 17,573.50 | 0.0569 | 0.0850 |
-| N to 1 Propagation (Fan In 1000) | 68,104.33 | 0.0147 | 0.0192 |
+| 1 to 1 Propagation (Depth 1000) | 15,108.83 | 0.0662 | 0.2250 |
+| 1 to N Propagation (Fan Out 1000) | 16,644.42 | 0.0601 | 0.0771 |
+| N to 1 Propagation (Fan In 1000) | 67,343.99 | 0.0148 | 0.0239 |
 
 ### Internal Latency (Internal Structures)
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| SlotBuffer: Add 4 items (SlotBuffer) X100 | 609,705.67 | 0.0016 | 0.0028 |
-| SlotBuffer: Push 4 items (Array baseline) X100 | 511,534.54 | 0.0020 | 0.0037 |
-| SlotBuffer: Add 16 items (SlotBuffer spill) X100 | 112,981.01 | 0.0089 | 0.0161 |
-| SlotBuffer: Push 16 items (Array baseline) X100 | 218,113.27 | 0.0046 | 0.0067 |
-| SlotBuffer: Remove 8 and Add 8 (Reuse) X100 | 42,700.45 | 0.0234 | 0.0363 |
-| SlotBuffer: forEach 16 items (SlotBuffer) X100 | 254,318.59 | 0.0039 | 0.0052 |
-| SlotBuffer: Compact 16 items with 8 gaps X100 | 28,272.55 | 0.0354 | 0.0471 |
-| DepSlotBuffer: ClaimExisting (Inline hit) | 252,056.62 | 0.0040 | 0.0043 |
-| DepSlotBuffer: ClaimExisting (Map fallback 64) | 14,944.98 | 0.0669 | 0.0757 |
-| DepSlotBuffer: truncateFrom(0) (16 items) | 20,045.65 | 0.0499 | 0.1450 |
+| SlotBuffer: Add 4 items (SlotBuffer) X100 | 624,514.28 | 0.0016 | 0.0026 |
+| SlotBuffer: Push 4 items (Array baseline) X100 | 700,793.13 | 0.0014 | 0.0020 |
+| SlotBuffer: Add 16 items (SlotBuffer spill) X100 | 136,803.66 | 0.0073 | 0.0129 |
+| SlotBuffer: Push 16 items (Array baseline) X100 | 340,937.25 | 0.0029 | 0.0044 |
+| SlotBuffer: Remove 8 and Add 8 (Reuse) X100 | 42,902.56 | 0.0233 | 0.0342 |
+| SlotBuffer: forEach 4 items (SlotBuffer) X100 | 864,321.12 | 0.0012 | 0.0016 |
+| SlotBuffer: forEach 16 items (SlotBuffer) X100 | 360,374.33 | 0.0028 | 0.0037 |
+| SlotBuffer: Compact 16 items with 8 gaps X100 | 27,593.69 | 0.0362 | 0.0503 |
+| DepSlotBuffer: ClaimExisting (Inline hit) | 247,275.48 | 0.0040 | 0.0040 |
+| DepSlotBuffer: ClaimExisting (Map fallback 64) | 14,601.24 | 0.0685 | 0.0786 |
+| DepSlotBuffer: truncateFrom(0) (16 items) | 24,232.58 | 0.0413 | 0.1441 |
 
 ## 2. Macro-Benchmarks
 
@@ -83,59 +84,74 @@
 
 | Scenario | ops/sec | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Create/Dispose 1K Units (A/C/E) | 1,559.41 | 0.6413 | 1.0752 |
-| Subscription Churn (1K cycles) | 33,225.65 | 0.0301 | 0.1383 |
-| Circular Reference Cleanup (100 cycles) | 185,739.81 | 0.0054 | 0.0095 |
-| 10K Entity State Tree Management | 1,690.21 | 0.5916 | 0.9927 |
-| Heap Monitoring (1000 large atoms) | 3,724.82 | 0.2685 | 0.4788 |
+| Create/Dispose 1K Units (A/C/E) | 1,535.30 | 0.6513 | 1.1925 |
+| Subscription Churn (1K cycles) | 33,544.91 | 0.0298 | 0.1501 |
+| Circular Reference Cleanup (100 cycles) | 178,584.92 | 0.0056 | 0.0091 |
 
 ### Data Grid (1000 Rows) - Macro
 
 | Scenario | ops/sec | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| [Vanilla] Toggle Sort | 4,552.90 | 0.2196 | 0.2390 |
-| [Atom] Toggle Sort | 4,176.49 | 0.2394 | 0.3888 |
-| [Vanilla] Switch Filter | 463,109.45 | 0.0022 | 0.0028 |
-| [Atom] Switch Filter | 223,161.48 | 0.0045 | 0.0054 |
-| [Vanilla] Sort + Filter + Paginate | 4,434.05 | 0.2255 | 0.2487 |
-| [Atom] Sort + Filter + Paginate | 4,208.73 | 0.2376 | 0.2611 |
-| [Manual] Update Single Cell (x100) | 21,313.99 | 0.0469 | 0.1732 |
-| [Lens] Update Single Cell (x100) | 13,433.25 | 0.0744 | 0.2105 |
-| Select/Deselect Rows (Set-based) | 15,513.46 | 0.0645 | 0.1989 |
+| [Vanilla] Toggle Sort | 4,477.25 | 0.2234 | 0.2523 |
+| [Atom] Toggle Sort | 4,165.74 | 0.2401 | 0.3402 |
+| [Vanilla] Switch Filter | 484,450.22 | 0.0021 | 0.0026 |
+| [Atom] Switch Filter | 219,136.80 | 0.0046 | 0.0053 |
+| [Vanilla] Sort + Filter + Paginate | 4,366.92 | 0.2290 | 0.2547 |
+| [Atom] Sort + Filter + Paginate | 4,087.10 | 0.2447 | 0.2806 |
+| [Manual] Update Single Cell (x100) | 21,342.68 | 0.0469 | 0.1790 |
+| [Lens] Update Single Cell (x100) | 10,786.16 | 0.0927 | 0.2526 |
+| Select/Deselect Rows (Set-based) | 16,660.00 | 0.0600 | 0.2085 |
 
 ### Dependency Graph Patterns - Macro
 
 | Pattern | ops/sec | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Deep Chain (100 levels) | 111,287.89 | 0.0090 | 0.0154 |
-| Diamond Pattern (1 → 10 → 10 → 1) | 513,745.21 | 0.0019 | 0.0033 |
-| Pyramid Pattern (50 levels) | 173,411.59 | 0.0058 | 0.0079 |
-| Mixed Dependencies (100A → 200C) | 566,896.84 | 0.0018 | 0.0024 |
-| Circular Avoidance (x100) | 778,528.95 | 0.0013 | 0.0017 |
-| Conditional Dependencies (x100) | 196,941.69 | 0.0051 | 0.0058 |
-| Array-based Selection (x100) | 199,995.89 | 0.0050 | 0.0054 |
+| Deep Chain (100 levels) | 136,929.67 | 0.0073 | 0.0117 |
+| Diamond Pattern (1 → 10 → 10 → 1) | 543,155.32 | 0.0018 | 0.0032 |
+| Pyramid Pattern (50 levels) | 203,112.64 | 0.0049 | 0.0059 |
+
+### Complex Graph Architecture
+
+| Scenario | ops/sec | Mean (ms) | p99 (ms) |
+| --- | --- | --- | --- |
+| Mixed Dependencies (100A → 200C) | 559,087.54 | 0.0018 | 0.0022 |
+| Circular Avoidance (x100) | 741,340.66 | 0.0013 | 0.0015 |
+
+### Dynamic Dependency Patterns
+
+| Scenario | ops/sec | Mean (ms) | p99 (ms) |
+| --- | --- | --- | --- |
+| Conditional Dependencies (x100) | 173,977.33 | 0.0057 | 0.0062 |
+| Array-based Selection (x100) | 180,404.16 | 0.0055 | 0.0062 |
 
 ### Todo App (100 Items) - Macro
 
 | Action | ops/sec | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| [Vanilla] Full Workflow | 98,932.41 | 0.0101 | 0.0182 |
-| [Atom] Full Workflow | 98,948.11 | 0.0101 | 0.0182 |
+| [Vanilla] Full Workflow | 96,080.61 | 0.0104 | 0.0210 |
+| [Atom] Full Workflow | 96,289.60 | 0.0104 | 0.0210 |
 
 ### Large Grid with Lenses (50x50)
 
 | Scenario | ops/sec | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Batch Update: 10 Random Cells | 217,068.14 | 0.0046 | 0.0069 |
-| Bulk Update: Replace Grid | 48,152.92 | 0.0208 | 0.3294 |
-| Read Performance: 2500 Lenses | 4,767.67 | 0.2097 | 0.2428 |
+| Batch Update: 10 Random Cells | 233,274.09 | 0.0043 | 0.0063 |
+| Bulk Update: Replace Grid | 63,497.68 | 0.0157 | 0.3384 |
+| Read Performance: 2500 Lenses | 4,572.67 | 0.2187 | 0.2574 |
 
 ### Recursive Lens Depth Stress
 
 | Scenario | ops/sec | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Read Depth 100 Lens Chain (x100) | 2,447.05 | 0.4087 | 0.4327 |
-| Update Depth 100 Lens Chain | 5,692.69 | 0.1757 | 0.1885 |
+| Read Depth 100 Lens Chain (x100) | 2,217.08 | 0.4510 | 0.4793 |
+| Update Depth 100 Lens Chain | 4,512.77 | 0.2216 | 0.2427 |
+
+### Large State Analysis
+
+| Scenario | ops/sec | Mean (ms) | p99 (ms) |
+| --- | --- | --- | --- |
+| 10K Entity State Tree Management | 1,267.97 | 0.7887 | 3.9825 |
+| Heap Monitoring (1000 large atoms) | 3,210.73 | 0.3115 | 0.5980 |
 
 ## 3. Realistic-Benchmarks
 
@@ -143,24 +159,24 @@
 
 | Scenario | ops/sec | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| [Manual] State Sync (100 atoms) | 560,137.46 | 0.0018 | 0.0022 |
-| [Batch] State Sync (100 atoms) | 149,389.48 | 0.0067 | 0.0098 |
+| [Manual] State Sync (100 atoms) | 570,553.83 | 0.0018 | 0.0018 |
+| [Batch] State Sync (100 atoms) | 157,515.88 | 0.0063 | 0.0101 |
 
 ### Stability & Memory
 
 | Scenario | ops/sec | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Heavy Component Lifecycle (x100) | 16,103.76 | 0.0621 | 0.2486 |
+| Heavy Component Lifecycle (x100) | 17,591.32 | 0.0568 | 0.2972 |
 
 ### Batch Efficiency
 
 | Scenario | ops/sec | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| [Batch] Form Reset (20 fields, x100) | 6,297.22 | 0.1588 | 0.3172 |
-| [Manual] Form Reset (20 fields, x100) | 76,995.71 | 0.0130 | 0.0174 |
+| [Batch] Form Reset (20 fields, x100) | 6,347.77 | 0.1575 | 0.2836 |
+| [Manual] Form Reset (20 fields, x100) | 75,961.17 | 0.0132 | 0.0214 |
 
 ### Input Latency
 
 | Scenario | ops/sec | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Input-to-Render Latency (simulation) | 150.89 | 6.6273 | 7.7156 |
+| Input-to-Render Latency (simulation) | 150.57 | 6.6416 | 6.9195 |

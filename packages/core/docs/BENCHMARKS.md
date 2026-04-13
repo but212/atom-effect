@@ -6,10 +6,10 @@ Comprehensive benchmarking suite for `atom-effect` to measure performance and de
 
 | Category | Key Metric | Value | Context |
 | ---------- | ---------- | ----- | ------- |
-| **Atom** | Read 100x (peek) | 1.71M ops/sec | Fast untracked access |
-| **Computed** | Recompute (cached) | 236K ops/sec | Highly optimized re-evaluation |
-| **Effect** | Execution (single dep) | 1.09M ops/sec | Efficient notify-trigger cycle |
-| **Real-world** | Todo full workflow | 98.9K ops/sec | Production-ready performance |
+| **Atom** | Read 100x (untracked) | 1.55M ops/sec | Fast untracked access |
+| **Computed** | Recompute (cached) | 225K ops/sec | Highly optimized re-evaluation |
+| **Effect** | Execution (single dep) | 1.08M ops/sec | Efficient notify-trigger cycle |
+| **Real-world** | Todo full workflow | 96.2K ops/sec | Production-ready performance |
 | **Frame Budget** | 100 atom updates | 0.0018ms | Well under 16ms budget |
 
 ## Running Benchmarks
@@ -60,7 +60,7 @@ Located in `__benchmarks__/macro/`, these test real-world scenarios:
 - **Todo App**: Create, toggle, filter, delete (100 items)
 - **Data Grid**: Sort, filter, paginate (1000 rows × 10 columns)
 - **Dependency Graphs**: Deep chains, wide fan-out, diamond patterns
-- **Memory Stress**: Create/dispose 10K atoms, GC pressure, leak detection
+- **Memory Stress**: Create/dispose 1K atoms, GC pressure, leak detection
 
 ### Realistic-Benchmarks
 
@@ -97,8 +97,8 @@ Production-like scenarios:
 
 ## Latest Results
 
-**Version**: v0.30.0
-**Last Updated**: 2026-04-12
+**Version**: v0.30.1
+**Last Updated**: 2026-04-14
 **Environment**:
 
 - **Node.js**: v22.x
@@ -110,12 +110,12 @@ Production-like scenarios:
 
 | Benchmark | Result | Analysis |
 | ---------- | ------ | -------- |
-| Atom peek (100x) | 1.71M ops/sec | Near-native performance |
-| Computed read (100x) | 925K ops/sec | Low-overhead tracking |
-| Effect execution (single) | 1.09M ops/sec | Efficient subscriber notify |
-| Todo workflow | 98.9K ops/sec | Production-ready (Full workflow) |
+| Atom untracked (100x) | 1.55M ops/sec | Near-native performance |
+| Computed read (100x) | 617K ops/sec | Low-overhead tracking |
+| Effect execution (single) | 1.08M ops/sec | Efficient subscriber notify |
+| Todo workflow | 96.2K ops/sec | Production-ready (Full workflow) |
 | Frame Budget (100 atoms) | 0.0018ms | Well under 16ms |
-| Data Grid Filter (1000x) | 0.0022ms | Real-time filtering |
+| Data Grid Filter (1000 rows) | 0.0046ms | Real-time filtering |
 
 ## Contributing Benchmarks
 

@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.30.1] - 2026-04-14
 
 ### Core
 
