@@ -24,7 +24,7 @@ export function setDeepValue(obj: unknown, keys: string[], index: number, value:
   if (Array.isArray(curr)) {
     const arr = curr.slice();
     const idx = Number(key);
-    if (!Number.isNaN(idx) && Number.isInteger(idx)) {
+    if (key.trim() !== '' && Number.isInteger(idx) && idx >= 0) {
       arr[idx] = newVal;
     } else {
       (arr as unknown as Record<string, unknown>)[key] = newVal;

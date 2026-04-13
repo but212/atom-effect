@@ -19,7 +19,7 @@ import type {
 import { hasOwn, isPromise } from '@/utils';
 import { debug } from '@/utils/debug';
 
-import { isDangerousCssValue, isDangerousUrl, sanitizeHtml, URL_ATTRS } from '@/utils/sanitize';
+import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '@/utils/sanitize';
 
 // Cache for CSS property camelization to avoid repeated regex overhead.
 // Uses Map instead of a plain object to avoid prototype pollution risk and
@@ -228,7 +228,7 @@ export function bindAttr(
   attrMap: Record<string, AsyncReactiveValue<PrimitiveValue>>
 ): void {
   const safeMap: Record<string, AsyncReactiveValue<PrimitiveValue>> = {};
-  const metaMap: Record<string, { isAria: boolean; isUrl: boolean }> = {};
+  const metaMap: Record<string, { isAria: boolean }> = {};
   const cache: Record<string, string | null> = {};
 
   for (const name in attrMap) {
@@ -237,7 +237,7 @@ export function bindAttr(
 
     const lower = name.toLowerCase();
     safeMap[name] = attrMap[name]!;
-    metaMap[name] = { isAria: lower.startsWith('aria-'), isUrl: URL_ATTRS.has(lower) };
+    metaMap[name] = { isAria: lower.startsWith('aria-') };
     cache[name] = el.getAttribute(name);
   }
 
@@ -280,15 +280,12 @@ export function bindProp(
 ): void {
   const el = ctx.el as unknown as Record<string, unknown>;
   const safeMap: Record<string, AsyncReactiveValue<unknown>> = {};
-  const metaMap: Record<string, { isUrl: boolean }> = {};
   const prevValues: Record<string, unknown> = {};
-
   for (const name in propMap) {
     if (!hasOwn.call(propMap, name)) continue;
     if (!isSafeBinding(name, true)) continue;
 
     safeMap[name] = propMap[name]!;
-    metaMap[name] = { isUrl: URL_ATTRS.has(name.toLowerCase()) };
   }
 
   registerMapEffect(
