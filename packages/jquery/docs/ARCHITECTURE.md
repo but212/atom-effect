@@ -277,13 +277,14 @@ To prevent memory leaks and "zombie" resolutions (where a request resolves but i
 
 ## 9. Security
 
-The binding layer includes defensive measures against XSS:
+The binding layer includes defensive measures against XSS and prototype pollution:
 
-- `bindHtml`: Sanitizes content via `sanitizeHtml()` (removes `<script>`, `on*` events, and dangerous protocols). Uses a **Normalize → Strip Tags → Neutralize** pipeline to prevent bypasses via encoding or control character smuggling.
-- `bindAttr`: Blocks `on*` event handler attributes and dangerous URL protocols, including SVG-specific attributes (`fill`, `filter`, `mask`, etc.).
-- Centralized Protection: Dangerous protocol patterns (e.g., `javascript:`, `vbscript:`) are centralized as `DANGEROUS_PROTOCOL_PATTERN` in `constants.ts` to ensure consistent enforcement across HTML, attribute, and CSS bindings.
-- `bindCss`: Blocks CSS values containing `expression()`, `behavior:`, `url(javascript:)`, etc.
-- `bindProp`: Blocks dangerous properties (`innerHTML`, `outerHTML`), prototype pollution vectors (`__proto__`, `constructor`, `prototype`), `on*` event handlers, and checks mapped URL properties for dangerous protocols.
+- `bindHtml`: Sanitizes content via `sanitizeHtml()` (removes `<script>`, `on*` events, and dangerous protocols). Uses a **Normalize → Strip Tags → Neutralize** pipeline. The normalization layer is hardened against case-sensitive and semicolon-less entity bypasses (e.g., `&Colon;`, `&tab`).
+- `bindAttr`: Blocks `on*` event handler attributes and dangerous URL protocols using a centralized matcher. This protection covers standard and SVG-specific attributes (`fill`, `filter`, `mask`, etc.) which may contain `url(javascript:...)` patterns.
+- `srcdoc` Protection: Specifically monitors `srcdoc` as a high-risk HTML sink, applying tag-based sanitization checks before binding.
+- `bindCss`: Blocks CSS values containing `expression()`, `behavior:`, and `url(javascript:)` protocols.
+- `bindProp`: Blocks dangerous properties (`innerHTML`, `outerHTML`) and prototype pollution vectors (`__proto__`, `constructor`, `prototype`). It also enforces protocol security on properties mapped to `URL_ATTRS`.
+- Centralized Engine: Security patterns and monitoring lists are centralized in `utils/sanitize.ts` and `constants.ts` to ensure consistent enforcement across the entire library.
 
 These are **first-pass filters** using optimized regular expressions. For user-generated content, [DOMPurify](https://github.com/cure53/DOMPurify) is recommended. See the [Security Guide](./SECURITY.md) for integration patterns.
 

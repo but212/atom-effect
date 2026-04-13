@@ -177,9 +177,10 @@ The Core package provides fine-grained reactivity over monolithic state objects 
 
 When a value is updated through a lens, the `setDeepValue` recursive helper creates a new object tree:
 
-1. **Path Cloning**: Only clones the nodes along the specific path from the root to the leaf.
-2. **Reference Preservation**: All other branches are preserved by reference. Unrelated effect nodes remain reference-equal (`===`), preventing "Re-render Storms".
-3. **Monomorphic Equality**: Uses `Object.is` for zero-allocation identity checks before triggering parent atom updates.
+1. **Security Guard**: Blocks all access to `__proto__`, `constructor`, and `prototype` keys. Any path containing these segments is treated as `undefined` for reads and a no-op for writes, preventing prototype pollution attacks.
+2. **Path Cloning**: Only clones the nodes along the specific path from the root to the leaf.
+3. **Reference Preservation**: All other branches are preserved by reference. Unrelated effect nodes remain reference-equal (`===`), preventing "Re-render Storms".
+4. **Monomorphic Equality**: Uses `Object.is` for zero-allocation identity checks before triggering parent atom updates.
 
 ### Type-Safe Paths
 
