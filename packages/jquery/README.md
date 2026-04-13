@@ -21,6 +21,17 @@ npm install @but212/atom-effect-jquery jquery
 <script src="https://code.jquery.com/jquery-4.0.0.min.js"></script>
 <!-- atom-effect-jquery -->
 <script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.30.0"></script>
+
+<script>
+  /*
+   * CDN Usage Notes:
+   * 1. The library is exposed via the global `AtomEffectJQuery` namespace.
+   * 2. It automatically extends jQuery ($), so methods like $.atom() are available.
+   * 3. Manual cleanup initialization: If the library is loaded dynamically, 
+   *    ensure auto-cleanup is enabled for the target container.
+   */
+  AtomEffectJQuery.enableAutoCleanup(document.body);
+</script>
 ```
 
 ### Usage

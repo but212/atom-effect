@@ -1,6 +1,9 @@
 import { BRAND, BrandFlags } from '@/symbols';
 import type { Paths, PathValue, WritableAtom } from '../types';
 
+/** Blocks prototype pollution and dangerous object member access */
+const SAFE_KEY_PATTERN = /^(?:__proto__|constructor|prototype)$/;
+
 /**
  * Internal recursive helper for creating deep immutable copies with structural sharing.
  * Only clones nodes along the path where changes occur.
@@ -9,23 +12,27 @@ export function setDeepValue(obj: unknown, keys: string[], index: number, value:
   if (index === keys.length) return value;
 
   const key = keys[index]!;
+  if (SAFE_KEY_PATTERN.test(key)) return obj;
+
   const curr = (obj != null && typeof obj === 'object' ? obj : {}) as Record<string, unknown>;
-  const old = curr[key];
-  const next = setDeepValue(old, keys, index + 1, value);
+  const oldVal = curr[key];
+  const newVal = setDeepValue(oldVal, keys, index + 1, value);
 
-  if (Object.is(old, next)) return obj;
+  if (Object.is(oldVal, newVal)) return obj;
 
+  // Handle Array cloning with index awareness
   if (Array.isArray(curr)) {
     const arr = curr.slice();
-    const idx = Number.parseInt(key, 10);
-    if (!Number.isNaN(idx)) {
-      arr[idx] = next;
+    const idx = Number(key);
+    if (key.trim() !== '' && Number.isInteger(idx) && idx >= 0) {
+      arr[idx] = newVal;
     } else {
-      (arr as unknown as Record<string, unknown>)[key] = next;
+      (arr as unknown as Record<string, unknown>)[key] = newVal;
     }
     return arr;
   }
-  return { ...curr, [key]: next };
+
+  return { ...curr, [key]: newVal };
 }
 
 /**
@@ -36,7 +43,9 @@ export function getPathValue(source: unknown, parts: string[]): unknown {
   const len = parts.length;
   for (let i = 0; i < len; i++) {
     if (res == null) return undefined;
-    res = (res as Record<string, unknown>)[parts[i]!];
+    const key = parts[i]!;
+    if (SAFE_KEY_PATTERN.test(key)) return undefined;
+    res = (res as Record<string, unknown>)[key];
   }
   return res;
 }

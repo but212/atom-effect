@@ -56,8 +56,8 @@ This eliminates boilerplate across all binding types and ensures robust, memory-
 `createContext(el)` and `atomEachElement(jq, fn)` in `core/dom.ts` provide the base engine for all reactive bindings:
 
 - **Binding Context**: Provides a shared context object per element, including a `trackCleanup` helper.
-- **DOM Engine (`atomEachElement`)**: The central iterator used by all chainable methods. It handles jQuery sets, filters for `HTMLElement` (skipping text/comment nodes), and provides lazy context creation only when required (`needsCtx: true`).
-- **Unpack Utility**: A shared utility used by `atomBind` and other integrated bindings to handle `[source, options]` tuple arguments consistently.
+- **DOM Engine (`atomEachElement`)**: The central iterator used by all chainable methods. It handles jQuery sets, filters for `HTMLElement` (skipping text/comment nodes), and provides lazy context creation only when required (`needsCtx: true`). The loop is optimized by caching context flags and length to minimize property lookups in hot paths.
+- **Unpack Utility**: A shared utility used by `atomBind` and other integrated bindings to handle `[source, options]` tuple arguments. It uses a **look-ahead heuristic** on the second element to differentiate between tuples and 2-element array values, enabling support for static source data.
 
 The lazy `$el` getter in `unified.ts` (when using `atomOn`, etc.) avoids unnecessary jQuery object creation for bindings that only need native DOM access.
 
@@ -277,13 +277,14 @@ To prevent memory leaks and "zombie" resolutions (where a request resolves but i
 
 ## 9. Security
 
-The binding layer includes defensive measures against XSS:
+The binding layer includes defensive measures against XSS and prototype pollution:
 
-- `bindHtml`: Sanitizes content via `sanitizeHtml()` (removes `<script>`, `on*` events, and dangerous protocols). Uses a **Normalize → Strip Tags → Neutralize** pipeline to prevent bypasses via encoding or control character smuggling.
-- `bindAttr`: Blocks `on*` event handler attributes and dangerous URL protocols, including SVG-specific attributes (`fill`, `filter`, `mask`, etc.).
-- Centralized Protection: Dangerous protocol patterns (e.g., `javascript:`, `vbscript:`) are centralized as `DANGEROUS_PROTOCOL_PATTERN` in `constants.ts` to ensure consistent enforcement across HTML, attribute, and CSS bindings.
-- `bindCss`: Blocks CSS values containing `expression()`, `behavior:`, `url(javascript:)`, etc.
-- `bindProp`: Blocks dangerous properties (`innerHTML`, `outerHTML`), prototype pollution vectors (`__proto__`, `constructor`, `prototype`), `on*` event handlers, and checks mapped URL properties for dangerous protocols.
+- `bindHtml`: Sanitizes content via `sanitizeHtml()` (removes `<script>`, `on*` events, and dangerous protocols). Uses a **Normalize → Strip Tags → Neutralize** pipeline. The normalization layer is hardened against case-sensitive and semicolon-less entity bypasses (e.g., `&Colon;`, `&tab`).
+- `bindAttr`: Blocks `on*` event handler attributes and dangerous URL protocols using a centralized matcher. This protection covers standard and SVG-specific attributes (`fill`, `filter`, `mask`, etc.) which may contain `url(javascript:...)` patterns.
+- `srcdoc` Protection: Specifically monitors `srcdoc` as a high-risk HTML sink, applying tag-based sanitization checks before binding.
+- `bindCss`: Blocks CSS values containing `expression()`, `behavior:`, and `url(javascript:)` protocols.
+- `bindProp`: Blocks dangerous properties (`innerHTML`, `outerHTML`) and prototype pollution vectors (`__proto__`, `constructor`, `prototype`). It also enforces protocol security on properties mapped to `URL_ATTRS`.
+- Centralized Engine: Security patterns and monitoring lists are centralized in `utils/sanitize.ts` and `constants.ts` to ensure consistent enforcement across the entire library.
 
 These are **first-pass filters** using optimized regular expressions. For user-generated content, [DOMPurify](https://github.com/cure53/DOMPurify) is recommended. See the [Security Guide](./SECURITY.md) for integration patterns.
 
@@ -378,7 +379,7 @@ The sequential 12-way `if` chain in `atomBind` was replaced with a **Bitmask Dis
 1. `atomBind` converts current options into a single 32-bit integer mask.
 2. The loop uses bitwise operations (`m & -m`) to isolate the next binding bit.
 3. The bit index is calculated using `31 - Math.clz32(bit)`, which V8 compiles to a single `BSR` (Bit Scan Reverse) instruction.
-4. The corresponding handler is looked up in the monomorphic `BIND_HANDLERS` table, achieving O(1) jump table dispatching. Tuple arguments (e.g. `[source, formatter]`) are efficiently unpacked using a shared `unpack` utility.
+4. The corresponding handler is looked up in the monomorphic `BIND_HANDLERS` table, achieving O(1) jump table dispatching. Tuple arguments (e.g. `[source, formatter]`) are efficiently unpacked using a shared `unpack` utility which recognizes valid options/formatters via property-checking on the second element.
 
 ### 11.3 Strategy Specialization (`InputBinding`)
 

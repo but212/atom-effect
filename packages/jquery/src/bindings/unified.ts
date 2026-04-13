@@ -19,7 +19,7 @@ import type {
 import { hasOwn, isPromise } from '@/utils';
 import { debug } from '@/utils/debug';
 
-import { isDangerousCssValue, isDangerousUrl, sanitizeHtml, URL_ATTRS } from '@/utils/sanitize';
+import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '@/utils/sanitize';
 
 // Cache for CSS property camelization to avoid repeated regex overhead.
 // Uses Map instead of a plain object to avoid prototype pollution risk and
@@ -60,6 +60,27 @@ function getSanitizedHtml(
     htmlSanitizeCache.set(source, cached);
   }
   return cached;
+}
+
+// ============================================================================
+// Internal Helpers
+// ============================================================================
+
+/**
+ * Validates attribute or property names against security policies.
+ * Returns false if the name is blocked (on* handlers or dangerous sinks).
+ */
+function isSafeBinding(name: string, isProp: boolean): boolean {
+  const lower = name.toLowerCase();
+  if (lower.startsWith('on')) {
+    console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_EVENT_HANDLER(name)}`);
+    return false;
+  }
+  if (isProp && DANGEROUS_PROPS.has(name)) {
+    console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_PROP(name)}`);
+    return false;
+  }
+  return true;
 }
 
 // ============================================================================
@@ -207,20 +228,16 @@ export function bindAttr(
   attrMap: Record<string, AsyncReactiveValue<PrimitiveValue>>
 ): void {
   const safeMap: Record<string, AsyncReactiveValue<PrimitiveValue>> = {};
-  const metaMap: Record<string, { isAria: boolean; isUrl: boolean }> = {};
+  const metaMap: Record<string, { isAria: boolean }> = {};
   const cache: Record<string, string | null> = {};
 
   for (const name in attrMap) {
     if (!hasOwn.call(attrMap, name)) continue;
+    if (!isSafeBinding(name, false)) continue;
+
     const lower = name.toLowerCase();
-    if (lower.startsWith('on')) {
-      console.warn(
-        `${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_EVENT_HANDLER(name)}`
-      );
-      continue;
-    }
     safeMap[name] = attrMap[name]!;
-    metaMap[name] = { isAria: lower.startsWith('aria-'), isUrl: URL_ATTRS.has(lower) };
+    metaMap[name] = { isAria: lower.startsWith('aria-') };
     cache[name] = el.getAttribute(name);
   }
 
@@ -263,24 +280,12 @@ export function bindProp(
 ): void {
   const el = ctx.el as unknown as Record<string, unknown>;
   const safeMap: Record<string, AsyncReactiveValue<unknown>> = {};
-  const metaMap: Record<string, { isUrl: boolean }> = {};
   const prevValues: Record<string, unknown> = {};
-
   for (const name in propMap) {
     if (!hasOwn.call(propMap, name)) continue;
-    const lower = name.toLowerCase();
-    if (lower.startsWith('on') || DANGEROUS_PROPS.has(name)) {
-      console.warn(
-        `${LOG_PREFIXES.BINDING} ${
-          lower.startsWith('on')
-            ? ERROR_MESSAGES.SECURITY.BLOCKED_EVENT_HANDLER(name)
-            : ERROR_MESSAGES.SECURITY.BLOCKED_PROP(name)
-        }`
-      );
-      continue;
-    }
+    if (!isSafeBinding(name, true)) continue;
+
     safeMap[name] = propMap[name]!;
-    metaMap[name] = { isUrl: URL_ATTRS.has(lower) };
   }
 
   registerMapEffect(

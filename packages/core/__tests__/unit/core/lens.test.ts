@@ -233,4 +233,73 @@ describe('atomLens', () => {
     expect(user.value.profile.name).toBe('Bob');
     expect(nameLens.value).toBe('Bob');
   });
+
+  describe('Security: Prototype Pollution & Member Access', () => {
+    it('should block prototype pollution through malicious paths', () => {
+      // biome-ignore lint/suspicious/noExplicitAny: Intentional for security test
+      const store = atom({ data: 'initial' }) as any;
+
+      // 1. Direct __proto__ access via path
+      // @ts-expect-error: Invalid path for lens type
+      // biome-ignore lint/suspicious/noExplicitAny: Intentional malicious path for security testing
+      const protoLens = atomLens(store, '__proto__.polluted' as any);
+      // @ts-expect-error: Invalid value for lens type
+      // biome-ignore lint/suspicious/noExplicitAny: Intentional malicious value for security testing
+      protoLens.value = 'evil' as any;
+
+      // Verify global prototype is NOT polluted
+      // biome-ignore lint/suspicious/noExplicitAny: Explicit access to check for global pollution
+      expect(({} as any).polluted).toBeUndefined();
+      // Parent atom should remain unchanged as the key was blocked
+      expect(store.value.data).toBe('initial');
+
+      // 2. constructor.prototype access
+      // @ts-expect-error: Invalid path for lens type
+      // biome-ignore lint/suspicious/noExplicitAny: Intentional malicious path for security testing
+      const constProtoLens = atomLens(store, 'constructor.prototype.polluted' as any);
+      // @ts-expect-error: Invalid value for lens type
+      // biome-ignore lint/suspicious/noExplicitAny: Intentional malicious value for security testing
+      constProtoLens.value = 'evil' as any;
+      // biome-ignore lint/suspicious/noExplicitAny: Explicit access to check for global pollution
+      expect(({} as any).polluted).toBeUndefined();
+
+      // 3. Nested pollution attempt
+      // @ts-expect-error: Invalid path for lens type
+      // biome-ignore lint/suspicious/noExplicitAny: Intentional malicious path for security testing
+      const nestedPollution = atomLens(store, 'data.__proto__.polluted' as any);
+      // @ts-expect-error: Invalid value for lens type
+      // biome-ignore lint/suspicious/noExplicitAny: Intentional malicious value for security testing
+      nestedPollution.value = 'evil' as any;
+      // biome-ignore lint/suspicious/noExplicitAny: Explicit access to check for global pollution
+      expect(({} as any).polluted).toBeUndefined();
+    });
+
+    it('should block reading from dangerous properties in getPathValue', () => {
+      const store = atom({ data: 'initial' });
+
+      // Attempt to read prototype or constructor
+      // biome-ignore lint/suspicious/noExplicitAny: Intentional malicious path for security testing
+      const protoLens = atomLens(store, '__proto__' as any);
+      expect(protoLens.value).toBeUndefined();
+
+      // biome-ignore lint/suspicious/noExplicitAny: Intentional malicious path for security testing
+      const constructorLens = atomLens(store, 'constructor' as any);
+      expect(constructorLens.value).toBeUndefined();
+    });
+
+    it('should treat blocked keys as undefined for both get and set', () => {
+      const store = atom({ a: { b: 1 } });
+      // biome-ignore lint/suspicious/noExplicitAny: Intentional malicious path for security testing
+      const maliciousLens = atomLens(store, 'a.__proto__.b' as any);
+
+      // Get should return undefined
+      expect(maliciousLens.value).toBeUndefined();
+
+      // Set should be a no-op (return original object)
+      const originalValue = store.value;
+      // biome-ignore lint/suspicious/noExplicitAny: Intentional malicious value for security testing
+      maliciousLens.value = 100 as any;
+      expect(store.value).toBe(originalValue);
+    });
+  });
 });

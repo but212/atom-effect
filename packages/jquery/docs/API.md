@@ -4,6 +4,7 @@ This package extends jQuery with reactive capabilities. All methods are availabl
 
 ## Table of Contents
 
+- [CDN / UMD Usage](#cdn--umd-usage)
 - [Unified Binding (`.atomBind`)](#unified-binding)
 - [Content & Attributes](#content--attributes)
 - [Control Flow](#control-flow)
@@ -13,6 +14,38 @@ This package extends jQuery with reactive capabilities. All methods are availabl
 - [Data Fetching (`$.atomFetch`)](#data-fetching)
 - [Routing (`$.route`)](#routing)
 - [Debug Mode](#debug-mode)
+
+---
+
+## CDN / UMD Usage
+
+When using the library via a CDN (e.g., jsDelivr or unpkg), the library is exposed through the global `AtomEffectJQuery` namespace.
+
+### Global Namespace
+
+The following utilities and constants are available on the global `AtomEffectJQuery` object:
+
+- `enableAutoCleanup(container)`: Manually initialize the MutationObserver on a specific element.
+- `disableAutoCleanup(container)`: Remove the observer from an element.
+- `enablejQueryOverrides()`: Manually enable patches for jQuery's native methods (like `.empty()` and `.remove()`).
+- `nextTick()`: Utility for waiting until the next reactive flush.
+- `registry`: Access to the internal element-effect registry.
+
+### Manual Initialization
+
+While the library attempts to auto-initialize on `document.body` when the DOM is ready, certain environments (dynamic scripts, Shadow DOM, or custom containers) may require manual initialization:
+
+```javascript
+// Ensure auto-cleanup is active for the entire document
+AtomEffectJQuery.enableAutoCleanup(document.body);
+
+// Active specifically for a Shadow Root
+AtomEffectJQuery.enableAutoCleanup(myShadowRoot);
+```
+
+### Extending jQuery
+
+The library automatically extends the global `jQuery` (or `$`) object. Methods like `$.atom()`, `$.computed()`, and all `.atom*()` chainable methods will be available as soon as the script is loaded.
 
 ---
 
@@ -48,11 +81,11 @@ $('.user-card').atomBind({
 Updates `textContent`. Supports `AsyncReactiveValue` (direct Promise or atom yielding Promise).
 
 - **formatter**: optional function `(val) => string`.
-- **Integrated Binding Support**: When used via `.atomBind()`, can be expressed as a tuple `text: [source, formatter]`.
+- **Integrated Binding Support**: When used via `.atomBind()`, can be expressed as a tuple `text: [source, formatter]`. This now fully supports **static values** (e.g., `text: ['Hello', h => h + '!']`).
 
 ```javascript
 $('#price').atomText(price, p => `$${p.toFixed(2)}`);
-// Via atomBind
+// Via atomBind (supports static values and atoms)
 $el.atomBind({ text: [count, c => `Count: ${c}`] });
 ```
 
@@ -61,7 +94,7 @@ $el.atomBind({ text: [count, c => `Count: ${c}`] });
 Updates `innerHTML`.
 
 > **🛡️ Security Note**:
-> This method uses a high-performance regex-based sanitizer for speed. It neutralizes `<script>` tags, `on*` event attributes, and dangerous protocols (`javascript:`, `vbscript:`, `data:`). The implementation includes a **hardened normalization layer** (handling entity encoding and control character smuggling) and a **robust fast-path** to ensure security without sacrificing update performance.
+> This method uses a high-performance regex-based sanitizer for speed. It neutralizes `<script>` tags, `on*` event attributes, and dangerous protocols (`javascript:`, `vbscript:`, `data:`). The implementation includes a **hardened normalization layer** (handling case-sensitive/semicolon-less entity encoding and control character smuggling) and a **robust fast-path** to ensure security without sacrificing update performance.
 >
 > While efficient for most cases, [DOMPurify](https://github.com/cure53/DOMPurify) is recommended for complex, user-generated content to ensure maximum security.
 > See the [Security Guide](./SECURITY.md) for details.
@@ -97,7 +130,8 @@ $('.box').atomCss('width', widthAtom, 'px'); // Outputs e.g. "120px"
 
 Updates an HTML attribute.
 
-- **Security Guards**: Automatically blocks `on*` event handlers and dangerous protocols (`javascript:`) to prevent injection.
+- **Security Guards**: Automatically blocks `on*` event handlers and dangerous protocols (`javascript:`, `vbscript:`, etc.) to prevent injection. This protection extends to SVG attributes like `fill`, `filter`, and `mask` which may contain `url(javascript:...)` patterns.
+- **HTML Sinks**: Specifically monitors and sanitizes dangerous HTML sinks like `srcdoc`.
 - **Constraints**: Accepts `PrimitiveValue` (string, number, boolean, null, undefined).
 - **WAI-ARIA**: Boolean `false` is preserved as the string `"false"` for `aria-*` attributes (e.g., `aria-expanded="false"`), not removed. Other attributes treat `false` as removal.
 
@@ -110,6 +144,7 @@ $('img').atomAttr('src', imageUrl);
 Updates a DOM property (e.g., `checked`, `disabled`, `value`).
 
 - **Flexible**: Employs `unknown` instead of `any` to satisfy strict linting while maintaining 100% flexibility for heterogeneous property types.
+- **Security**: Blocks dangerous properties (`innerHTML`, `outerHTML`) and prototype pollution vectors (`__proto__`, `constructor`, `prototype`).
 
 ```javascript
 $('input').atomProp('disabled', shouldDisable);
