@@ -2,11 +2,26 @@
 
 ## [Unreleased]
 
+### Core
+
+#### Fixed
+
+- **Lens**: Implemented strict prototype pollution protection in `setDeepValue` and `getPathValue` by blocking `__proto__`, `constructor`, and `prototype` keys.
+
 ### jQuery
 
 #### Fixed
 
 - **Core**: Fixed a logic flaw in the `unpack` utility where static values (strings, numbers, null) and plain objects were not correctly identified as part of a `[source, options]` tuple.
+- **Security**: Hardened `sanitizeHtml` against XSS bypasses using case-sensitive or semicolon-less HTML entities (e.g., `&Colon;`, `&tab`).
+- **Security**: Added `srcdoc` to monitored URL attributes and implemented HTML injection filtering for it.
+- **Security**: Improved protocol detection to identify `url(javascript:...)` patterns in SVG attributes (`fill`, `filter`, `mask`, etc.) and CSS values.
+- **Security**: Refined CSS sanitization regex to prevent over-matching HTML attribute quotes.
+
+#### Refactor
+
+- **Bindings**: Consolidated security guards for `on*` handlers and dangerous properties into a unified `isSafeBinding` helper in `bindAttr` and `bindProp`.
+- **Sanitization**: Centralized and optimized the security regex engine in `sanitize.ts` for better maintainability.
 
 #### Changed
 

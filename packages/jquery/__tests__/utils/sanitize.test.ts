@@ -67,6 +67,45 @@ describe('Unit: sanitizeHtml (Core Logic)', () => {
     expect(sanitizeHtml('<img src="data:image/png;...">')).toContain('data:image/png');
   });
 
+  describe('Vulnerability Regression (Red Phase)', () => {
+    it('blocks case-sensitive and semicolon-less named entities in protocols', () => {
+      const bypasses = [
+        '<a href="javascript&Colon;alert(1)">',
+        '<a href="j&tab;avascript:alert(1)">',
+        '<a href="j&Tab;avascript:alert(1)">',
+        '<a href="javascript&colon alert(1)">',
+        '<a href="j&Tab avascript:alert(1)">',
+      ];
+      bypasses.forEach((v) => {
+        const result = sanitizeHtml(v).toLowerCase();
+        expect(result, `Failed to block: ${v}`).not.toContain('javascript:');
+        expect(result).toContain('data-unsafe-protocol:');
+      });
+    });
+
+    it('blocks HTML injection in srcdoc attribute via bindAttr', () => {
+      // srcdoc is a dangerous sink that must be neutralized
+      expect(isDangerousUrl('srcdoc', '<script>alert(1)</script>')).toBe(true);
+      // Case: on* handlers in srcdoc
+      expect(isDangerousUrl('srcdoc', '<img src=x onerror=alert(1)>')).toBe(true);
+      // Case: dangerous protocols in srcdoc
+      expect(isDangerousUrl('srcdoc', '<a href="javascript:alert(1)">click</a>')).toBe(true);
+    });
+
+    it('blocks dangerous protocols in SVG attributes using url()', () => {
+      const vectors = [
+        'url(javascript:alert(1))',
+        'url( vbscript:alert(1) )',
+        'url("javascript:alert(1)")',
+      ];
+      vectors.forEach((v) => {
+        expect(isDangerousUrl('fill', v), `Failed to detect dangerous URL in fill: ${v}`).toBe(
+          true
+        );
+      });
+    });
+  });
+
   it('neutralizes dangerous CSS (expression, behavior, url protocols)', () => {
     const vectors = [
       'background:url(javascript:alert(1))',

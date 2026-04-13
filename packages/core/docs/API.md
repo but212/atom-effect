@@ -354,9 +354,13 @@ const age = lens('user.profile.age');
 
 High-performance utility to retrieve a nested value using an array of path segments.
 
+- **Security**: Automatically blocks access to `__proto__`, `constructor`, and `prototype` keys to prevent information leaks or prototype manipulation.
+
 ### `setDeepValue(obj: unknown, keys: string[], index: number, value: unknown): unknown`
 
 The core structural sharing engine. Recursively creates a new object tree, cloning only the necessary nodes.
+
+- **Security**: Implements strict prototype pollution protection by blocking updates to `__proto__`, `constructor`, and `prototype` keys. Any attempt to modify these properties is ignored, returning the original object reference.
 
 ---
 

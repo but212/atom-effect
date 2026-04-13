@@ -63,6 +63,27 @@ function getSanitizedHtml(
 }
 
 // ============================================================================
+// Internal Helpers
+// ============================================================================
+
+/**
+ * Validates attribute or property names against security policies.
+ * Returns false if the name is blocked (on* handlers or dangerous sinks).
+ */
+function isSafeBinding(name: string, isProp: boolean): boolean {
+  const lower = name.toLowerCase();
+  if (lower.startsWith('on')) {
+    console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_EVENT_HANDLER(name)}`);
+    return false;
+  }
+  if (isProp && DANGEROUS_PROPS.has(name)) {
+    console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_PROP(name)}`);
+    return false;
+  }
+  return true;
+}
+
+// ============================================================================
 // One-Way Binding Handlers (Atom → DOM)
 // ============================================================================
 
@@ -212,13 +233,9 @@ export function bindAttr(
 
   for (const name in attrMap) {
     if (!hasOwn.call(attrMap, name)) continue;
+    if (!isSafeBinding(name, false)) continue;
+
     const lower = name.toLowerCase();
-    if (lower.startsWith('on')) {
-      console.warn(
-        `${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_EVENT_HANDLER(name)}`
-      );
-      continue;
-    }
     safeMap[name] = attrMap[name]!;
     metaMap[name] = { isAria: lower.startsWith('aria-'), isUrl: URL_ATTRS.has(lower) };
     cache[name] = el.getAttribute(name);
@@ -268,19 +285,10 @@ export function bindProp(
 
   for (const name in propMap) {
     if (!hasOwn.call(propMap, name)) continue;
-    const lower = name.toLowerCase();
-    if (lower.startsWith('on') || DANGEROUS_PROPS.has(name)) {
-      console.warn(
-        `${LOG_PREFIXES.BINDING} ${
-          lower.startsWith('on')
-            ? ERROR_MESSAGES.SECURITY.BLOCKED_EVENT_HANDLER(name)
-            : ERROR_MESSAGES.SECURITY.BLOCKED_PROP(name)
-        }`
-      );
-      continue;
-    }
+    if (!isSafeBinding(name, true)) continue;
+
     safeMap[name] = propMap[name]!;
-    metaMap[name] = { isUrl: URL_ATTRS.has(lower) };
+    metaMap[name] = { isUrl: URL_ATTRS.has(name.toLowerCase()) };
   }
 
   registerMapEffect(
