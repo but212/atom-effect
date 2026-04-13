@@ -93,7 +93,23 @@ describe('DOM Core Utilities', () => {
 
     it('returns [val] for arrays that are not [source, options] tuples', () => {
       expect(unpack([1, 2, 3])).toEqual([[1, 2, 3]]);
-      expect(unpack(['static', { opt: 1 }])).toEqual([['static', { opt: 1 }]]);
+    });
+
+    it('returns [val] if the second element is an array (not a tuple)', () => {
+      const arrayVal: [string, string[]] = ['a', ['b', 'c']];
+      expect(unpack(arrayVal)).toEqual([arrayVal]);
+    });
+
+    it('unpacks [source, options] for static values (BUG REPRODUCTION)', () => {
+      const options = { opt: 1 };
+      expect(unpack(['static', options])).toEqual(['static', options]);
+      expect(unpack([123, options])).toEqual([123, options]);
+    });
+
+    it('unpacks [source, options] for plain objects (BUG REPRODUCTION)', () => {
+      const source = { data: 'test' };
+      const options = { opt: 1 };
+      expect(unpack([source, options])).toEqual([source, options]);
     });
 
     it('unpacks [source, options] when source is a function', () => {
@@ -114,9 +130,10 @@ describe('DOM Core Utilities', () => {
       expect(unpack([promise, options] as [unknown, unknown])).toEqual([promise, options]);
     });
 
-    it('returns [val] if the source is null or not an object/function', () => {
-      expect(unpack([null, {}] as [unknown, unknown])).toEqual([[null, {}]]);
-      expect(unpack([undefined, {}] as [unknown, unknown])).toEqual([[undefined, {}]]);
+    it('returns [val] if the source is null or not an object/function (BUG REPRODUCTION)', () => {
+      // These currently fail to unpack as [source, options]
+      expect(unpack([null, {}] as [unknown, unknown])).toEqual([null, {}]);
+      expect(unpack([undefined, {}] as [unknown, unknown])).toEqual([undefined, {}]);
     });
   });
 });

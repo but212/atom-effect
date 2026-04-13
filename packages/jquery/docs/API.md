@@ -4,6 +4,7 @@ This package extends jQuery with reactive capabilities. All methods are availabl
 
 ## Table of Contents
 
+- [CDN / UMD Usage](#cdn--umd-usage)
 - [Unified Binding (`.atomBind`)](#unified-binding)
 - [Content & Attributes](#content--attributes)
 - [Control Flow](#control-flow)
@@ -13,6 +14,38 @@ This package extends jQuery with reactive capabilities. All methods are availabl
 - [Data Fetching (`$.atomFetch`)](#data-fetching)
 - [Routing (`$.route`)](#routing)
 - [Debug Mode](#debug-mode)
+
+---
+
+## CDN / UMD Usage
+
+When using the library via a CDN (e.g., jsDelivr or unpkg), the library is exposed through the global `AtomEffectJQuery` namespace.
+
+### Global Namespace
+
+The following utilities and constants are available on the global `AtomEffectJQuery` object:
+
+- `enableAutoCleanup(container)`: Manually initialize the MutationObserver on a specific element.
+- `disableAutoCleanup(container)`: Remove the observer from an element.
+- `enablejQueryOverrides()`: Manually enable patches for jQuery's native methods (like `.empty()` and `.remove()`).
+- `nextTick()`: Utility for waiting until the next reactive flush.
+- `registry`: Access to the internal element-effect registry.
+
+### Manual Initialization
+
+While the library attempts to auto-initialize on `document.body` when the DOM is ready, certain environments (dynamic scripts, Shadow DOM, or custom containers) may require manual initialization:
+
+```javascript
+// Ensure auto-cleanup is active for the entire document
+AtomEffectJQuery.enableAutoCleanup(document.body);
+
+// Active specifically for a Shadow Root
+AtomEffectJQuery.enableAutoCleanup(myShadowRoot);
+```
+
+### Extending jQuery
+
+The library automatically extends the global `jQuery` (or `$`) object. Methods like `$.atom()`, `$.computed()`, and all `.atom*()` chainable methods will be available as soon as the script is loaded.
 
 ---
 
@@ -48,11 +81,11 @@ $('.user-card').atomBind({
 Updates `textContent`. Supports `AsyncReactiveValue` (direct Promise or atom yielding Promise).
 
 - **formatter**: optional function `(val) => string`.
-- **Integrated Binding Support**: When used via `.atomBind()`, can be expressed as a tuple `text: [source, formatter]`.
+- **Integrated Binding Support**: When used via `.atomBind()`, can be expressed as a tuple `text: [source, formatter]`. This now fully supports **static values** (e.g., `text: ['Hello', h => h + '!']`).
 
 ```javascript
 $('#price').atomText(price, p => `$${p.toFixed(2)}`);
-// Via atomBind
+// Via atomBind (supports static values and atoms)
 $el.atomBind({ text: [count, c => `Count: ${c}`] });
 ```
 
