@@ -20,10 +20,11 @@ export function setDeepValue(obj: unknown, keys: string[], index: number, value:
 
   if (Object.is(oldVal, newVal)) return obj;
 
+  // Handle Array cloning with index awareness
   if (Array.isArray(curr)) {
     const arr = curr.slice();
-    const idx = Number.parseInt(key, 10);
-    if (!Number.isNaN(idx)) {
+    const idx = Number(key);
+    if (!Number.isNaN(idx) && Number.isInteger(idx)) {
       arr[idx] = newVal;
     } else {
       (arr as unknown as Record<string, unknown>)[key] = newVal;

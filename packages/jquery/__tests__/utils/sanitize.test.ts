@@ -86,6 +86,10 @@ describe('Unit: sanitizeHtml (Core Logic)', () => {
     it('blocks HTML injection in srcdoc attribute via bindAttr', () => {
       // srcdoc is a dangerous sink that must be neutralized
       expect(isDangerousUrl('srcdoc', '<script>alert(1)</script>')).toBe(true);
+      // Case: on* handlers in srcdoc
+      expect(isDangerousUrl('srcdoc', '<img src=x onerror=alert(1)>')).toBe(true);
+      // Case: dangerous protocols in srcdoc
+      expect(isDangerousUrl('srcdoc', '<a href="javascript:alert(1)">click</a>')).toBe(true);
     });
 
     it('blocks dangerous protocols in SVG attributes using url()', () => {
