@@ -94,6 +94,14 @@ class RouterImpl implements Router {
     return res;
   }
 
+  /**
+   * Universal path normalization: removes leading and trailing slashes.
+   * This ensures that '/home/', '/home', 'home/', and 'home' are treated identically.
+   */
+  private normalizePath(path: string): string {
+    return path.replace(/(^\/+|\/+$)/g, '');
+  }
+
   constructor(config: RouteConfig) {
     // Merge defaults with user config, ensuring routes and lifecycle hooks represent valid defaults.
     this.config = {
@@ -156,9 +164,10 @@ class RouterImpl implements Router {
 
       for (let i = 0; i < len; i++) {
         const tmpl = templates[i]!;
-        const path = tmpl.getAttribute('data-path');
-        if (path == null) continue;
+        const rawPath = tmpl.getAttribute('data-path');
+        if (rawPath == null) continue;
 
+        const path = this.normalizePath(rawPath);
         const isDefault = tmpl.hasAttribute('data-default');
 
         // Assign a unique ID if missing for selector performance.
@@ -169,7 +178,9 @@ class RouterImpl implements Router {
           this.config.default = path;
         }
       }
-    } catch {}
+    } catch (e) {
+      debug.warn(LOG_PREFIXES.ROUTE, 'Route discovery failed:', e);
+    }
   }
 
   /**
@@ -184,8 +195,9 @@ class RouterImpl implements Router {
     const len = keys.length;
 
     for (let i = 0; i < len; i++) {
-      const key = keys[i]!;
-      const def = routes[key]!;
+      const rawKey = keys[i]!;
+      const key = this.normalizePath(rawKey);
+      const def = routes[rawKey]!;
 
       // Static path optimization
       if (key.indexOf(':') === -1) {
@@ -193,10 +205,12 @@ class RouterImpl implements Router {
       } else {
         // Dynamic path: convert :name into regex capture groups.
         const paramNames: string[] = [];
-        const regexStr = key.replace(/\/+$/, '').replace(/:(\w+)/g, (_, paramName) => {
-          paramNames.push(paramName);
-          return '([^/]+)';
-        });
+        const regexStr = key
+          .replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // Escape regex special chars in static parts
+          .replace(/:(\w+)/g, (_, paramName) => {
+            paramNames.push(paramName);
+            return '([^/]+)';
+          });
 
         this.regexRoutes.push({
           pattern: key,
@@ -288,7 +302,7 @@ class RouterImpl implements Router {
           path = path.substring(base.length);
         }
       }
-      return path.replace(/^\/+/, '') || defaultRoute;
+      return this.normalizePath(path) || defaultRoute;
     }
     const hash = location.hash;
     const path = hash.startsWith('#') ? hash.substring(1) : hash;
@@ -349,10 +363,10 @@ class RouterImpl implements Router {
   private splitPath(path: string): { route: string; query: string | undefined } {
     const queryIndex = path.indexOf('?');
     if (queryIndex === -1) {
-      return { route: path.replace(/^\/+/, ''), query: undefined };
+      return { route: this.normalizePath(path), query: undefined };
     }
     return {
-      route: path.slice(0, queryIndex).replace(/^\/+/, ''),
+      route: this.normalizePath(path.slice(0, queryIndex)),
       query: path.slice(queryIndex + 1),
     };
   }
@@ -554,10 +568,10 @@ class RouterImpl implements Router {
             if (base && (path === base || path.startsWith(`${base}/`))) {
               path = path.substring(base.length);
             }
-            routeName = path.replace(/^\/+/, '') + anchor.search;
+            routeName = this.normalizePath(path) + anchor.search;
           } else {
             if (!anchor.hash || anchor.hash[0] !== '#') return;
-            routeName = anchor.hash.substring(1);
+            routeName = this.normalizePath(anchor.hash.substring(1));
           }
         }
 
@@ -621,11 +635,13 @@ class RouterImpl implements Router {
                 if (historyMode) {
                   let path = anchor.pathname;
                   if (basePath && path.startsWith(basePath)) path = path.substring(basePath.length);
-                  elRouteName = path.replace(/^\/+/, '');
+                  elRouteName = this.normalizePath(path);
                 } else if (anchor.hash && anchor.hash[0] === '#') {
                   const rawHash = anchor.hash.substring(1);
                   const qIdx = rawHash.indexOf('?');
-                  elRouteName = qIdx !== -1 ? rawHash.substring(0, qIdx) : rawHash;
+                  elRouteName = this.normalizePath(
+                    qIdx !== -1 ? rawHash.substring(0, qIdx) : rawHash
+                  );
                 }
               }
               cache.set(el, elRouteName);
