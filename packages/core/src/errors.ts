@@ -46,28 +46,34 @@ export class AtomError extends Error {
    * Includes the circular node if a cycle is detected.
    */
   getChain(): Array<AtomError | Error | unknown> {
-    // Fast path: no cause
-    if (this.cause === null || this.cause === undefined) {
-      return [this];
-    }
+    const cause = this.cause;
+    if (cause === null || cause === undefined) return [this];
 
     const chain: Array<AtomError | Error | unknown> = [this];
-    const seen = new Set<unknown>([this]);
-    let current: unknown = this.cause;
+    let current: unknown = cause;
+    let seen: Set<unknown> | null = null;
 
     while (current !== null && current !== undefined) {
-      const alreadySeen = seen.has(current);
       chain.push(current);
 
-      if (alreadySeen) break;
-      seen.add(current);
+      // Cycle detection after push to include the circular node in the chain
+      if (current === this || seen?.has(current)) break;
 
       if (current instanceof AtomError) {
         current = current.cause;
-      } else if (current instanceof Error && 'cause' in current) {
-        current = (current as Error & { cause?: unknown }).cause;
+      } else if (current instanceof Error) {
+        current = (current as { cause?: unknown }).cause;
       } else {
         break;
+      }
+
+      // Initialize deep cycle detection only for long chains to minimize allocations
+      if (chain.length > 3) {
+        if (seen === null) {
+          seen = new Set(chain);
+        } else {
+          seen.add(current);
+        }
       }
     }
     return chain;
@@ -77,8 +83,9 @@ export class AtomError extends Error {
    * Serializes the error to a structured object for logging.
    * Protected against circular references.
    */
-  toJSON(seen: Set<unknown> = new Set()): AtomErrorJSON {
-    if (seen.has(this)) {
+  toJSON(seen?: Set<unknown>): AtomErrorJSON {
+    const s = seen ?? new Set<unknown>();
+    if (s.has(this)) {
       return {
         name: this.name,
         message: '[Circular Reference]',
@@ -86,17 +93,17 @@ export class AtomError extends Error {
         code: this.code,
       };
     }
-    seen.add(this);
+    s.add(this);
 
     let causeJson: unknown = this.cause;
-    if (this.cause instanceof AtomError) {
-      causeJson = this.cause.toJSON(seen);
-    } else if (this.cause instanceof Error) {
+    if (causeJson instanceof AtomError) {
+      causeJson = causeJson.toJSON(s);
+    } else if (causeJson instanceof Error) {
       causeJson = {
-        name: this.cause.name,
-        message: this.cause.message,
-        stack: this.cause.stack,
-        cause: (this.cause as Error & { cause?: unknown }).cause,
+        name: causeJson.name,
+        message: causeJson.message,
+        stack: causeJson.stack,
+        cause: (causeJson as { cause?: unknown }).cause,
       };
     }
 
@@ -189,7 +196,7 @@ export function wrapError(
   // 1. AtomError (Chainable Trace)
   if (error instanceof AtomError) {
     return new ErrorClass(
-      AtomError.format(error.name, context, error.message),
+      `${error.name} (${context}): ${error.message}`,
       error,
       error.recoverable,
       error.code
@@ -198,10 +205,9 @@ export function wrapError(
 
   // 2. Native Error
   if (error instanceof Error) {
-    const type = error.name || error.constructor.name || 'Error';
-    return new ErrorClass(AtomError.format(type, context, error.message), error);
+    return new ErrorClass(`${error.name || 'Error'} (${context}): ${error.message}`, error);
   }
 
   // 3. Unknown Types (Raw Preservation)
-  return new ErrorClass(AtomError.format('Unexpected error', context, String(error)), error);
+  return new ErrorClass(`Unexpected error (${context}): ${String(error)}`, error);
 }
