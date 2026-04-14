@@ -252,7 +252,7 @@ declare global {
     atomFetch<T>(
       url: string | (() => string),
       opts: FetchOptions<T>
-    ): ComputedAtom<T> & { abort: () => void };
+    ): ComputedAtom<T> & { abort: () => void; dispose(): void };
     atomNav(options: AtomNavOptions): AtomNav;
   }
 
