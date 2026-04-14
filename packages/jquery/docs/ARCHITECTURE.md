@@ -235,9 +235,28 @@ History mode: window.location.pathname ──▶  currentRoute (atom)   ──�
 
 The router is entirely **reactive**. Navigation (`navigate()` or URL change) updates the `currentRoute` and `queryParams` atoms. A single core `effect` (`renderEffect`) observes these atoms and triggers `renderRoute()` when they change.
 
-### Mode Abstraction
+### 7.1 Initialization & Compilation
 
-The hash/history difference is isolated to 5 internal functions, so all rendering, guard, and link-binding logic is shared:
+- **Auto-Discovery**: If no routes are provided, the router scans for `<template data-path="...">` elements and populates the config automatically.
+- **Compilation**: Route paths are compiled into `CompiledRoute` objects.
+  - **Static Routes**: Stored in an `exactRoutes` Map for O(1) matching.
+  - **Dynamic Routes**: Paths with `:param` segments are converted to Regular Expressions (with named capture groups where possible) and stored in a `regexRoutes` array.
+
+### 7.2 Matching Engine
+
+1. **Normalized Path Lookup**: The current URL path is first checked against the `exactRoutes` Map.
+2. **Regex Scan**: If no static match is found, the path is tested against the `regexRoutes` array in order.
+3. **Param Extraction**: Matching regexes extract capture groups into a `params` object, ensuring dynamic values like `:id` are reactive.
+
+### 7.3 Performance Optimizations
+
+- **Link Resolution Cache**: A `WeakMap` caches the resolved route name for every `[data-route]` element. This eliminates repeated URL parsing and string manipulation during the active-link synchronization pass.
+- **Invariant Hoisting**: The synchronization pass hoists environment-stable values (like `basePath` and `historyMode`) outside its Hot Loop to minimize property access overhead.
+- **Reactive Param Diffing**: Navigations only trigger re-renders if the merged path/query parameters have meaningfully changed (checked via shallow equality).
+
+### 7.4 Mode Abstraction
+
+The hash/history difference is isolated to internal functions:
 
 | Function | Hash mode | History mode |
 | --- | --- | --- |

@@ -21,6 +21,21 @@
 - **Debug**: Replaced `Object.defineProperties` with direct symbol assignment for peak node initialization performance.
 - **Error Handling**: Optimized `AtomError.getChain` to only allocate tracking `Set` for deep exception chains (>3 levels).
 
+### jQuery
+
+#### Performance
+
+- **Router Link Caching**: Implemented a `WeakMap` in `route.ts` to cache resolved route names for `[data-route]` elements, drastically reducing string parsing overhead during active link highlighting.
+- **Router Matching Optimization**: Optimized the router's matching engine with a bifurcated O(1) exact map lookup and O(N) regex compiled-route lookup.
+- **Monomorphic Parameters**: Standardized parameter comparison in the router using shallow equality guards and hoisted invariants to prevent unnecessary re-renders.
+
+#### Features
+
+- **Dynamic Routing**: Added support for dynamic route segments (e.g., `user/:id`) with automatic regex compilation and value extraction.
+- **Zero-Config Discovery**: Implemented implicit route discovery; the router now automatically detects routes from `<template data-path="..." data-default>` elements if no routes are provided.
+- **Reactive Params Atom**: Added a dedicated `params` atom to the `Router` interface, providing a unified reactive view of path and query parameters.
+- **Hardened Link Interception**: Enhanced `setupAutoBindLinks` to respect modifier keys (Ctrl/Cmd click), `rel="external"`, cross-origin navigation, and download attributes.
+
 ## [0.30.1] - 2026-04-14
 
 ### Core

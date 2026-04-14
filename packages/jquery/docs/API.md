@@ -530,28 +530,39 @@ Creates an SPA router with reactive state management. Supports both hash-based a
 
 - `target`: Selector for the container element where routes will be rendered.
 - `default`: Name of the default route to load if the URL is empty.
-- `routes`: Object mapping route names to definitions. Each route must specify **either** `template` **or** `render`, but not both (mutually exclusive).
+- `routes`: (Optional) Object mapping route names to definitions. If omitted, the router will attempt **Implicit Auto-Discovery** (see below). Each route must specify **either** `template` **or** `render`, but not both.
+  - Supports **Dynamic Segments**: Use `:paramName` (e.g., `'user/:id'`). Parameters are automatically extracted and available in the `params` atom.
   - `template`: Selector for a `<template>` element to clone.
   - `render`: Custom function `(container, name, params, onUnmount, router) => void`.
     - `onUnmount`: Callback `(cleanupFn) => void` to register side-effect cleanups for the route.
   - `onEnter`: Hook called before rendering. Can return an object to merge into `params`.
   - `onLeave`: Hook called before navigating away. Return `false` to cancel.
   - `onMount`: `($content: JQuery, onUnmount, router) => void` — **Template routes only.** Called after template content is appended.
-- `mode`: (Optional) `'hash'` (default) or `'history'`. Hash mode uses `location.hash` and `hashchange`; history mode uses `pushState`/`popstate`.
-- `basePath`: (Optional) Base path prefix for history mode (e.g., `'/app'`). Ignored in hash mode. Default: `''`.
+- `mode`: (Optional) `'hash'` (default) or `'history'`.
+- `basePath`: (Optional) Base path prefix for history mode (e.g., `'/app'`).
 - `notFound`: (Optional) Route name to use when no match is found.
 - `autoBindLinks`: (Optional) If `true`, automatically handles clicks on `[data-route]` links.
 - `activeClass`: (Optional) CSS class for active links (default: `'active'`).
 - `beforeTransition`: (Optional) Global hook `(from, to) => void`.
 - `afterTransition`: (Optional) Global hook `(from, to) => void`.
 
+#### Implicit Auto-Discovery
+
+If the `routes` configuration is omitted, the router scans the DOM for `<template data-path="..." data-default>` elements.
+
+```html
+<template data-path="home" data-default><!-- content --></template>
+<template data-path="user/:id"><!-- content --></template>
+```
+
 **Returns**:
 
 A `Router` object with:
 
-- `currentRoute`: `ReadonlyAtom<string>` containing the active route name.
-- `queryParams`: `ReadonlyAtom<Record<string, string>>` reactive map of URL parameters.
-- `navigate(route)`: Programmatically change route. Supports query strings (e.g., `navigate('user?id=123')`). Empty string navigates to `default`.
+- `currentRoute`: `ReadonlyAtom<string>` containing the active route name (pattern).
+- `queryParams`: `ReadonlyAtom<Record<string, string>>` reactive map of URL query parameters.
+- `params`: `ReadonlyAtom<Record<string, string>>` merged reactive map of path parameters and query parameters.
+- `navigate(route)`: Programmatically change route. Supports dynamic paths (e.g., `navigate('user/42')`) and query strings.
 - `destroy()`: Cleanup listeners, effects, and template cache.
 
 **Example**:
@@ -565,29 +576,18 @@ const router = $.route({
   routes: {
     home: { template: '#tmpl-home' },
     about: { template: '#tmpl-about' },
-    user: {
+    'user/:id': {
       render: (el, route, params, onUnmount) => {
-        // Use reactive bindings inside render for full capability
-        $(el).atomText($.computed(() => `User ID: ${params.id}`));
+        // params.id is reactively extracted from the URL
+        const id = $.computed(() => params.id);
+        $(el).atomText(id, val => `User ID: ${val}`);
       }
     }
   }
 });
 
-// History mode (pushState)
-const historyRouter = $.route({
-  target: '#app',
-  default: 'home',
-  mode: 'history',
-  basePath: '/my-app',
-  autoBindLinks: true,
-  routes: {
-    home: { template: '#tmpl-home' },
-    about: { template: '#tmpl-about' },
-  }
-});
-// Navigates to /my-app/about using pushState
-historyRouter.navigate('about');
+// Navigate to a dynamic route
+router.navigate('user/42');
 ```
 
 ---

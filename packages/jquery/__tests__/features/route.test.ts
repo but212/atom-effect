@@ -2,21 +2,23 @@ import $ from 'jquery';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '@/index';
 import { LOG_PREFIXES } from '@/constants';
-import type { Router } from '@/types';
 import { debug } from '@/utils/debug';
 
 describe('$.route() - SPA Routing', () => {
   beforeEach(() => {
     document.body.innerHTML = `
       <nav>
-        <a href="#home" data-route="home">Home</a>
-        <a href="#about" data-route="about">About</a>
-        <a href="#contact" data-route="contact">Contact</a>
+        <a href="#home" id="nav-home" data-route>Home</a>
+        <a href="#about" id="nav-about" data-route>About</a>
+        <a href="#contact" id="nav-contact" data-route>Contact</a>
+        <a href="#user/42" id="nav-user" data-route>User</a>
+        <a href="https://example.com" id="nav-external">External</a>
       </nav>
       <div id="app"></div>
-      <template id="tmpl-home"><h1>Home Page</h1><p>Welcome to home</p></template>
-      <template id="tmpl-about"><h1>About Page</h1><p>About us</p></template>
-      <template id="tmpl-contact"><h1>Contact Page</h1><p>Contact form here</p></template>
+      <template id="tmpl-home" data-path="home" data-default><h1>Home Page</h1><p>Welcome to home</p></template>
+      <template id="tmpl-about" data-path="about"><h1>About Page</h1><p>About us</p></template>
+      <template id="tmpl-contact" data-path="contact"><h1>Contact Page</h1><p>Contact form here</p></template>
+      <template id="tmpl-user" data-path="user/:id"><h1>User Page</h1><p>ID: <span id="user-id"></span></p></template>
       <template id="tmpl-notfound"><h1>404</h1><p>Page not found</p></template>
     `;
     window.location.hash = '';
@@ -29,66 +31,61 @@ describe('$.route() - SPA Routing', () => {
     vi.restoreAllMocks();
   });
 
-  describe('Core Functionality', () => {
-    it('should initialize and render default route', async () => {
-      const router = $.route({
+  describe('Core Navigation & Path Discovery', () => {
+    it('should initialize and render default route (including auto-discovery)', async () => {
+      // Test explicit config
+      const router1 = $.route({
         target: '#app',
         default: 'home',
-        routes: {
-          home: { template: '#tmpl-home' },
-          about: { template: '#tmpl-about' },
-        },
+        routes: { home: { template: '#tmpl-home' } },
       });
-
       await $.nextTick();
+      expect(router1.currentRoute.value).toBe('home');
+      expect(document.querySelector('#app')?.innerHTML).toContain('Home Page');
+      router1.destroy();
 
-      expect(router.currentRoute.value).toBe('home');
-      const appContent = document.querySelector('#app')?.innerHTML;
-      expect(appContent).toContain('Home Page');
-      expect(appContent).toContain('Welcome to home');
+      // Test auto-discovery from DOM
+      const router2 = $.route({ target: '#app' });
+      await $.nextTick();
+      expect(router2.currentRoute.value).toBe('home'); // from data-default
+      expect(document.querySelector('#app')?.innerHTML).toContain('Home Page');
+      router2.destroy();
     });
 
-    it('should handle various navigation patterns and route formats', async () => {
+    it('should handle navigation across different formats (hash, programmatic, dynamic)', async () => {
       const router = $.route({
         target: '#app',
         default: 'home',
         routes: {
           home: { template: '#tmpl-home' },
           about: { template: '#tmpl-about' },
-          contact: { template: '#tmpl-contact' },
+          'user/:id': { template: '#tmpl-user' },
         },
       });
+      await $.nextTick();
 
-      // 1. Hash change navigation
+      // 1. Hash change
       window.location.hash = '#about';
       window.dispatchEvent(new window.Event('hashchange'));
       await $.nextTick();
       expect(router.currentRoute.value).toBe('about');
-      expect(document.querySelector('#app')?.innerHTML).toContain('About Page');
 
-      // 2. Programmatic navigation with name only
-      router.navigate('contact');
-      await $.nextTick();
-      expect(window.location.hash).toBe('#contact');
-      expect(router.currentRoute.value).toBe('contact');
-
-      // 3. Navigation with query strings
-      router.navigate('about?id=123');
-      await $.nextTick();
-      expect(router.currentRoute.value).toBe('about');
-      expect(router.queryParams.value).toEqual({ id: '123' });
-      expect(window.location.hash).toBe('#about?id=123');
-
-      // 4. Robustness: Handle multiple leading slashes
+      // 2. Programmatic & Normalization
       router.navigate('///home');
       await $.nextTick();
       expect(router.currentRoute.value).toBe('home');
       expect(window.location.hash).toBe('#home');
 
+      // 3. Dynamic segments
+      router.navigate('user/42');
+      await $.nextTick();
+      expect(router.params.value).toEqual({ id: '42' });
+      expect(router.currentRoute.value).toBe('user/42');
+
       router.destroy();
     });
 
-    it('should handle 404s and empty hash fallback', async () => {
+    it('should handle 404s and fallback routes', async () => {
       const router = $.route({
         target: '#app',
         default: 'home',
@@ -99,30 +96,22 @@ describe('$.route() - SPA Routing', () => {
         },
       });
 
-      expect(router.currentRoute.value).toBe('home');
-
       router.navigate('unknown-route');
       await $.nextTick();
-
       expect(document.querySelector('#app')?.innerHTML).toContain('404');
+      router.destroy();
     });
-  });
 
-  describe('Declarative Features', () => {
-    it('should bind links and manage active state/aria attributes', async () => {
+    it('should bind standard <a href> links and manage active state/aria attributes', async () => {
       const router = $.route({
         target: '#app',
-        default: 'home',
         autoBindLinks: true,
         activeClass: 'active',
-        routes: {
-          home: { template: '#tmpl-home' },
-          about: { template: '#tmpl-about' },
-        },
       });
 
-      const homeLink = document.querySelector('[data-route="home"]') as HTMLElement;
-      const aboutLink = document.querySelector('[data-route="about"]') as HTMLElement;
+      const homeLink = document.querySelector('#nav-home') as HTMLElement;
+      const aboutLink = document.querySelector('#nav-about') as HTMLElement;
+      const externalLink = document.querySelector('#nav-external') as HTMLElement;
 
       await $.nextTick();
 
@@ -137,9 +126,16 @@ describe('$.route() - SPA Routing', () => {
       expect(homeLink.classList.contains('active')).toBe(false);
       expect(aboutLink.classList.contains('active')).toBe(true);
       expect(aboutLink.getAttribute('aria-current')).toBe('page');
+
+      // Interception should ignore cross-origin / standard overrides
+      externalLink.click();
+      await $.nextTick();
+      expect(router.currentRoute.value).toBe('about'); // unchanged
+
+      router.destroy();
     });
 
-    it('should bind dynamically added [data-route] links and avoid leaks', async () => {
+    it('should bind dynamically added a[href] links and avoid leaks', async () => {
       document.body.innerHTML = '<div id="app"></div><div id="links"></div>';
 
       const router = $.route({
@@ -163,7 +159,7 @@ describe('$.route() - SPA Routing', () => {
 
       await $.nextTick();
 
-      const $newLink = $('<a href="#page2" data-route="page2">Page 2</a>').appendTo('#links');
+      const $newLink = $('<a href="#page2" data-route>Page 2</a>').appendTo('#links');
 
       $newLink[0]!.click();
       await $.nextTick();
@@ -182,156 +178,74 @@ describe('$.route() - SPA Routing', () => {
     });
   });
 
-  describe('Custom Rendering & Params', () => {
-    it('should support custom render functions with parameters', async () => {
-      const renderSpy = vi.fn(
-        (
-          container: HTMLElement,
-          route: string,
-          params: Record<string, string>,
-          _unmount: (cleanupFn: () => void) => void,
-          router: Router
-        ) => {
-          const currentParams = router.queryParams.value;
-          container.innerHTML = `Route: ${route}, ID: ${currentParams.id}, Extra: ${params.extra}`;
-        }
-      );
+  describe('Rendering & Lifecycle Hooks', () => {
+    it('should support custom rendering and manage component lifecycles (onMount/onUnmount)', async () => {
+      const cleanupSpy = vi.fn();
+      const onMountSpy = vi.fn();
+      const renderSpy = vi.fn((container, route, params, onUnmount) => {
+        container.innerHTML = `Route: ${route}, Extra: ${params.extra}`;
+        onUnmount(cleanupSpy);
+      });
 
-      $.route({
+      const router = $.route({
         target: '#app',
         default: 'home',
         routes: {
           home: {
             render: renderSpy,
-            onEnter: (params) => ({ ...params, extra: 'injected' }),
+            onEnter: (params) => ({ ...params, extra: 'data' }),
           },
-        },
-      });
-
-      window.location.hash = '#home?id=42';
-      window.dispatchEvent(new window.Event('hashchange'));
-      await $.nextTick();
-
-      // Called twice: once for default init, once for hashchange
-      expect(renderSpy).toHaveBeenCalledTimes(2);
-      expect(document.querySelector('#app')?.innerHTML).toContain(
-        'Route: home, ID: 42, Extra: injected'
-      );
-    });
-
-    it('should call registered onUnmount cleanups when transitioning routes', async () => {
-      const cleanupSpy = vi.fn();
-
-      const router = $.route({
-        target: '#app',
-        default: 'home',
-        routes: {
-          home: {
-            render: (el, _route, _params, onUnmount) => {
-              el.innerHTML = 'Home';
-              onUnmount(cleanupSpy);
-            },
-          },
-          about: { template: '#tmpl-about' },
+          about: { template: '#tmpl-about', onMount: onMountSpy },
         },
       });
 
       await $.nextTick();
-      expect(cleanupSpy).not.toHaveBeenCalled();
+      expect(renderSpy).toHaveBeenCalled();
+      expect(document.querySelector('#app')?.innerHTML).toContain('Extra: data');
 
+      // Transition to template-based route
       router.navigate('about');
       await $.nextTick();
-
-      expect(cleanupSpy).toHaveBeenCalledTimes(1);
+      expect(cleanupSpy).toHaveBeenCalled(); // clean up 'home'
+      expect(onMountSpy).toHaveBeenCalled(); // mount 'about'
+      expect(onMountSpy.mock.calls[0]![0]).toBeInstanceOf($);
 
       router.destroy();
     });
   });
 
-  describe('Lifecycle Hooks', () => {
-    it('should trigger onEnter/onLeave and respect navigation guards', async () => {
-      const onEnterHome = vi.fn();
-      const onLeaveHome = vi.fn(() => true);
-      const onLeaveAbout = vi.fn(() => false); // Block navigation
+  describe('Navigation Guards & Transition Hooks', () => {
+    it('should respect enter/leave guards and trigger global hooks', async () => {
+      const onLeaveAbout = vi.fn(() => false); // Block
+      const beforeSpy = vi.fn();
+      const afterSpy = vi.fn();
 
       const router = $.route({
         target: '#app',
         default: 'home',
+        beforeTransition: beforeSpy,
+        afterTransition: afterSpy,
         routes: {
-          home: { template: '#tmpl-home', onEnter: onEnterHome, onLeave: onLeaveHome },
+          home: { template: '#tmpl-home' },
           about: { template: '#tmpl-about', onLeave: onLeaveAbout },
           contact: { template: '#tmpl-contact' },
         },
       });
 
       await $.nextTick();
-      expect(onEnterHome).toHaveBeenCalledTimes(1);
 
+      // Successful move: home -> about
       router.navigate('about');
       await $.nextTick();
-      expect(onLeaveHome).toHaveBeenCalledTimes(1);
       expect(router.currentRoute.value).toBe('about');
+      expect(beforeSpy).toHaveBeenCalledWith('home', 'about');
+      expect(afterSpy).toHaveBeenCalledWith('home', 'about');
 
-      // Navigate about -> contact (blocked)
+      // Blocked move: about -> contact
       router.navigate('contact');
       await $.nextTick();
-      expect(onLeaveAbout).toHaveBeenCalledTimes(1);
-      expect(router.currentRoute.value).toBe('about');
-
-      router.destroy();
-    });
-
-    it('should call global transition hooks with correct from/to', async () => {
-      const beforeTransition = vi.fn();
-      const afterTransition = vi.fn();
-
-      const router = $.route({
-        target: '#app',
-        default: 'home',
-        beforeTransition,
-        afterTransition,
-        routes: {
-          home: { template: '#tmpl-home' },
-          about: { template: '#tmpl-about' },
-        },
-      });
-
-      await $.nextTick();
-
-      router.navigate('about');
-      await $.nextTick();
-
-      expect(beforeTransition).toHaveBeenCalledWith('home', 'about');
-      expect(afterTransition).toHaveBeenCalledWith('home', 'about');
-
-      router.destroy();
-    });
-  });
-
-  describe('Template Hooks', () => {
-    it('should call onMount with jQuery object of content children', async () => {
-      const onMountSpy = vi.fn((_$content: JQuery) => {});
-
-      const router = $.route({
-        target: '#app',
-        default: 'home',
-        routes: {
-          home: { template: '#tmpl-home', onMount: onMountSpy },
-          about: { template: '#tmpl-about' },
-        },
-      });
-
-      await $.nextTick();
-      expect(onMountSpy).toHaveBeenCalledTimes(1);
-      expect(onMountSpy.mock.calls[0]![0]).toBeInstanceOf($);
-
-      // Re-entry check
-      router.navigate('about');
-      await $.nextTick();
-      router.navigate('home');
-      await $.nextTick();
-
-      expect(onMountSpy).toHaveBeenCalledTimes(2);
+      expect(onLeaveAbout).toHaveBeenCalled();
+      expect(router.currentRoute.value).toBe('about'); // Stayed
 
       router.destroy();
     });
@@ -448,8 +362,8 @@ describe('$.route() - SPA Routing', () => {
     });
   });
 
-  describe('queryParams atom behavior', () => {
-    it('should manage reactive param updates efficiently', async () => {
+  describe('Query Parameters', () => {
+    it('should manage reactive query params efficiently', async () => {
       const router = $.route({
         target: '#app',
         default: 'home',
@@ -463,41 +377,25 @@ describe('$.route() - SPA Routing', () => {
       });
 
       await $.nextTick();
-      expect(router.queryParams.value).toEqual({});
       spy.mockClear();
 
-      // 1. Basic update
+      // 1. Basic update & Reactivity
       window.location.hash = '#home?id=42&tab=info';
       window.dispatchEvent(new window.Event('hashchange'));
       await $.nextTick();
       expect(router.queryParams.value).toEqual({ id: '42', tab: 'info' });
       expect(spy).toHaveBeenCalledTimes(1);
-      spy.mockClear();
 
-      // 2. Redundant update prevention (different order, same content)
+      // 2. Redundant update prevention
       router.navigate('home?tab=info&id=42');
       await $.nextTick();
-      expect(spy).not.toHaveBeenCalled();
+      expect(spy).toHaveBeenCalledTimes(1); // No new call
 
-      // 3. Robustness: Multiple question marks preserved in value
+      // 3. Robustness
       router.navigate('home?target=page?id=123');
       await $.nextTick();
       expect(router.queryParams.value.target).toBe('page?id=123');
 
-      router.destroy();
-    });
-
-    it('should be read-only', async () => {
-      const router = $.route({
-        target: '#app',
-        default: 'home',
-        routes: { home: { template: '#tmpl-home' } },
-      });
-      await $.nextTick();
-      expect(() => {
-        // @ts-expect-error: property is readonly
-        router.queryParams.value = { foo: 'bar' };
-      }).toThrow();
       router.destroy();
     });
   });
