@@ -1,5 +1,26 @@
 # Changelog
 
+## [Unreleased]
+
+### Core
+
+#### Performance
+
+- **V8 Hidden Class Optimization**: Reordered class properties (integers/SMI first, references last) across `ReactiveNode`, `SlotBuffer`, `ComputedAtom`, and `Effect` to stabilize object shapes and improve property access speed.
+- **Hot-path Loop Unrolling**: Manually unrolled loops for initial 4 element slots in `SlotBuffer` and `ReactiveNode.notify` to reduce branching and property indexing overhead.
+- **Zero-Allocation Notification**: Inlined `untracked` logic in `Subscription.notify` to eliminate closure allocation during reactive propagation.
+- **Dependency Tracking**: Implemented `hotIndex` caching in `ComputedAtom` and `Effect` to achieve O(1) dirty checking for the most frequently changed dependencies.
+- **Fast-path Buffering**: Optimized `SlotBuffer` with a "Dense Optimization" path that bypasses null checks when the buffer is fully occupied.
+- **Scheduler Efficiency**: Replaced array-tuple buffers with discrete fields (`_buffer0`, `_buffer1`) and optimized batch merging to reduce engine-level overhead.
+- **Type Guard Optimization**: Refactored `isPromise` and `isBranded` for faster early-exit on non-matching types.
+
+#### Refactor
+
+- **Lens**: Replaced Regex-based safety checks with string comparisons in `setDeepValue` and `getPathValue`.
+- **Lens**: Implemented local value caching in `atomLens.subscribe` to reduce redundant path traversal and value lookups by 50%.
+- **Debug**: Replaced `Object.defineProperties` with direct symbol assignment for peak node initialization performance.
+- **Error Handling**: Optimized `AtomError.getChain` to only allocate tracking `Set` for deep exception chains (>3 levels).
+
 ## [0.30.1] - 2026-04-14
 
 ### Core

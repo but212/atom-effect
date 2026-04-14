@@ -135,29 +135,23 @@ export type SchedulerJob = SchedulerJobFunction | SchedulerJobObject;
  * - Microsecond-level scheduling via queueMicrotask.
  */
 class Scheduler {
-  /** Double buffer to allow scheduling new jobs while processing the current queue. */
-  private _queueBuffer: [(SchedulerJob | undefined)[], (SchedulerJob | undefined)[]] = [[], []];
-  /** Pointer to the currently active buffer for ingestion. */
+  // SMI fields grouped at top for V8 layout optimization
   private _bufferIndex = 0;
-  /** Current size of the active ingestion buffer. */
   private _size = 0;
-  /** Current internal epoch for job tagging. */
   private _epoch = 0;
+  private _batchDepth = 0;
+  private _batchQueueSize = 0;
+  private _maxFlushIterations: number = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
 
-  /** Flag indicating the scheduler is currently draining a microtask loop. */
+  // Booleans for compact state tracking
   private _isProcessing = false;
-  /** Flag indicating a synchronous flush (batch end) is currently active. */
   private _isFlushingSync = false;
 
-  /** Number of active nested batch contexts. */
-  private _batchDepth = 0;
+  // Pre-allocated buffers to avoid tuple access overhead
+  private _buffer0: (SchedulerJob | undefined)[] = [];
+  private _buffer1: (SchedulerJob | undefined)[] = [];
   /** Temporary holding area for jobs scheduled during an active batch or sync flush. */
   private _batchQueue: (SchedulerJob | undefined)[] = [];
-  /** Current number of jobs in the batch holding area. */
-  private _batchQueueSize = 0;
-
-  /** Maximum allowed internal loop iterations before assuming an infinite loop. */
-  private _maxFlushIterations: number = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
 
   /** Optional callback fired when the scheduler drops jobs due to overflow. */
   onOverflow: ((droppedCount: number) => void) | null = null;
@@ -176,8 +170,7 @@ class Scheduler {
 
   /**
    * Schedules a job for execution.
-   * Jobs are deduplicated based on the current epoch; if the same job is scheduled twice
-   * in the same epoch, the second call is ignored.
+   * Jobs are deduplicated based on the current epoch.
    *
    * @param callback - The task to be executed.
    */
@@ -201,7 +194,7 @@ class Scheduler {
       return;
     }
 
-    const buffer = this._queueBuffer[this._bufferIndex]!;
+    const buffer = this._bufferIndex === 0 ? this._buffer0 : this._buffer1;
     buffer[this._size++] = callback;
 
     if (!this._isProcessing) {
@@ -211,7 +204,7 @@ class Scheduler {
 
   /** Initiates an asynchronous flush via microtask. */
   private _flush(): void {
-    if (this._isProcessing || this._size === 0) return;
+    if (this._isProcessing || (this._size === 0 && this._batchQueueSize === 0)) return;
     this._isProcessing = true;
     queueMicrotask(this._boundRunLoop);
   }
@@ -247,16 +240,14 @@ class Scheduler {
 
   /**
    * Merges the temporal batch queue into the main active buffer.
-   * Increments the epoch to allow previously executed jobs to be re-scheduled if needed.
    */
   private _mergeBatchQueue(): void {
     const queueSize = this._batchQueueSize;
     if (queueSize === 0) return;
 
-    this._epoch = (this._epoch + 1) | 0;
-    const epoch = this._epoch;
+    const epoch = ++this._epoch | 0;
     const bQueue = this._batchQueue;
-    const targetBuffer = this._queueBuffer[this._bufferIndex]!;
+    const targetBuffer = this._bufferIndex === 0 ? this._buffer0 : this._buffer1;
     let currentSize = this._size;
 
     for (let i = 0; i < queueSize; i++) {
@@ -270,13 +261,12 @@ class Scheduler {
 
     this._size = currentSize;
     this._batchQueueSize = 0;
-    // Shrink array if it grew significantly, otherwise keep capacity to avoid re-allocs.
+    // Shrink array if it grew significantly
     if (bQueue.length > SCHEDULER_CONFIG.BATCH_QUEUE_SHRINK_THRESHOLD) bQueue.length = 0;
   }
 
   /**
    * Continuous loop that drains both main and batch queues.
-   * Processes until all queues are empty or max iterations reached.
    */
   private _drainQueue(): void {
     let iterations = 0;
@@ -294,17 +284,17 @@ class Scheduler {
   /** Executes all jobs currently in the primary buffer and swaps buffers. */
   private _processQueue(): void {
     const idx = this._bufferIndex;
-    const jobs = this._queueBuffer[idx]!;
+    const jobs = idx === 0 ? this._buffer0 : this._buffer1;
     const count = this._size;
 
-    // Buffer swapping: ingestion now happens in the previously dormant buffer.
+    // Buffer swapping & Epoch bump
     this._bufferIndex = idx ^ 1;
     this._size = 0;
     this._epoch = (this._epoch + 1) | 0;
 
     for (let i = 0; i < count; i++) {
       const job = jobs[i]!;
-      jobs[i] = undefined; // Avoid memory leaks by clearing references immediately.
+      jobs[i] = undefined; // Avoid memory leaks
       try {
         if (typeof job === 'function') {
           job();
@@ -317,7 +307,7 @@ class Scheduler {
     }
   }
 
-  /** Resets the scheduler state on infinite loop detection and notifies via onOverflow. */
+  /** Resets the scheduler state on infinite loop detection. */
   private _handleFlushOverflow(): void {
     const droppedCount = this._size + this._batchQueueSize;
     console.error(
@@ -327,8 +317,8 @@ class Scheduler {
     );
 
     this._size = 0;
-    this._queueBuffer[0]!.length = 0;
-    this._queueBuffer[1]!.length = 0;
+    this._buffer0.length = 0;
+    this._buffer1.length = 0;
     this._batchQueueSize = 0;
     this._batchQueue.length = 0;
 
@@ -345,10 +335,7 @@ class Scheduler {
     this._batchDepth++;
   }
 
-  /**
-   * Decrements batching depth. If depth reaches 0, triggers a synchronous flush
-   * to apply all coherent updates collected during the batch.
-   */
+  /** Decrements batching depth. */
   endBatch(): void {
     if (this._batchDepth === 0) {
       if (IS_DEV) console.warn(ERROR_MESSAGES.SCHEDULER_END_BATCH_WITHOUT_START);
@@ -362,7 +349,7 @@ class Scheduler {
     }
   }
 
-  /** Configures the maximum safety iterations for the flush loop. */
+  /** Configures the maximum safety iterations. */
   setMaxFlushIterations(max: number): void {
     if (max < SCHEDULER_CONFIG.MIN_FLUSH_ITERATIONS)
       throw new SchedulerError(

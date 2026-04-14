@@ -74,20 +74,33 @@ export class Subscription<T> {
    * Notifies the subscriber of a value change.
    *
    * @remarks
-   * Execution is wrapped in `untracked` to prevent context leakage.
+   * Optimized with inlined 'untracked' logic to eliminate closure allocation.
    */
   notify(newValue?: T, oldValue?: T): void {
-    untracked(() => {
-      const fn = this.fn;
-      if (fn !== undefined) {
-        fn(newValue, oldValue);
-      }
+    const fn = this.fn;
+    const sub = this.sub;
 
-      const sub = this.sub;
-      if (sub !== undefined) {
-        sub.execute();
-      }
-    });
+    // Fast path: nothing to notify
+    if (fn === undefined && sub === undefined) return;
+
+    const ctx = trackingContext;
+    const prev = ctx.current;
+
+    // If already untracked, bypass context switching logic
+    if (prev === null) {
+      if (fn !== undefined) fn(newValue, oldValue);
+      if (sub !== undefined) sub.execute();
+      return;
+    }
+
+    // Context switch required for notification safety
+    ctx.current = null;
+    try {
+      if (fn !== undefined) fn(newValue, oldValue);
+      if (sub !== undefined) sub.execute();
+    } finally {
+      ctx.current = prev;
+    }
   }
 }
 
@@ -118,17 +131,18 @@ class TrackingContext {
     this.current = subscriber;
 
     try {
+      // Small production optimization: direct return
+      if (!IS_DEV) return fn();
+
       const result = fn();
 
       // Async detection: check if the function returned a Promise
-      if (IS_DEV) {
-        debug.warn(
-          isPromise(result),
-          'Detected Promise returned within tracking context. ' +
-            'Dependencies accessed after "await" will NOT be tracked. ' +
-            'Consider using synchronous tracking before the async boundary.'
-        );
-      }
+      debug.warn(
+        isPromise(result),
+        'Detected Promise returned within tracking context. ' +
+          'Dependencies accessed after "await" will NOT be tracked. ' +
+          'Consider using synchronous tracking before the async boundary.'
+      );
 
       return result;
     } finally {

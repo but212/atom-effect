@@ -1,38 +1,40 @@
 import { BRAND, BrandFlags } from '@/symbols';
 import type { Paths, PathValue, WritableAtom } from '../types';
 
-/** Blocks prototype pollution and dangerous object member access */
-const SAFE_KEY_PATTERN = /^(?:__proto__|constructor|prototype)$/;
-
 /**
  * Internal recursive helper for creating deep immutable copies with structural sharing.
- * Only clones nodes along the path where changes occur.
+ * Optimized for performance: avoids Regex overhead and minimizes object allocations.
  */
 export function setDeepValue(obj: unknown, keys: string[], index: number, value: unknown): unknown {
   if (index === keys.length) return value;
 
   const key = keys[index]!;
-  if (SAFE_KEY_PATTERN.test(key)) return obj;
+  // Fast string-based safety check instead of Regex
+  if (key === '__proto__' || key === 'constructor' || key === 'prototype') return obj;
 
-  const curr = (obj != null && typeof obj === 'object' ? obj : {}) as Record<string, unknown>;
+  const isObj = obj != null && typeof obj === 'object';
+  const curr = (isObj ? obj : {}) as Record<string, unknown>;
   const oldVal = curr[key];
   const newVal = setDeepValue(oldVal, keys, index + 1, value);
 
+  // Return original if value is unchanged (structural sharing)
   if (Object.is(oldVal, newVal)) return obj;
 
-  // Handle Array cloning with index awareness
   if (Array.isArray(curr)) {
-    const arr = curr.slice();
-    const idx = Number(key);
-    if (key.trim() !== '' && Number.isInteger(idx) && idx >= 0) {
-      arr[idx] = newVal;
+    const copy = curr.slice();
+    const idx = +key;
+    // Check for valid array index (positive integer, non-empty)
+    if (key.trim() !== '' && idx >= 0 && idx % 1 === 0) {
+      copy[idx] = newVal;
     } else {
-      (arr as unknown as Record<string, unknown>)[key] = newVal;
+      (copy as unknown as Record<string, unknown>)[key] = newVal;
     }
-    return arr;
+    return copy;
   }
 
-  return { ...curr, [key]: newVal };
+  const res = { ...curr };
+  res[key] = newVal;
+  return res;
 }
 
 /**
@@ -44,7 +46,8 @@ export function getPathValue(source: unknown, parts: string[]): unknown {
   for (let i = 0; i < len; i++) {
     if (res == null) return undefined;
     const key = parts[i]!;
-    if (SAFE_KEY_PATTERN.test(key)) return undefined;
+    // Performance: Fast string comparison avoids Regex overhead in hot paths
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') return undefined;
     res = (res as Record<string, unknown>)[key];
   }
   return res;
@@ -81,10 +84,16 @@ export function atomLens<T extends object, P extends Paths<T>>(
     },
     peek: () => getPathValue(atom.peek(), parts) as PathValue<T, P>,
     subscribe(listener: (nv: PathValue<T, P>, ov: PathValue<T, P>) => void) {
-      const unsub = atom.subscribe((np, op) => {
-        const nv = getPathValue(np, parts) as PathValue<T, P>,
-          ov = getPathValue(op, parts) as PathValue<T, P>;
-        if (!Object.is(nv, ov)) listener(nv, ov);
+      // Local tracking of prevValue cuts getPathValue calls by 50% during root updates
+      let prevValue = getPathValue(atom.peek(), parts) as PathValue<T, P>;
+
+      const unsub = atom.subscribe((np) => {
+        const nv = getPathValue(np, parts) as PathValue<T, P>;
+        if (!Object.is(nv, prevValue)) {
+          const ov = prevValue;
+          prevValue = nv;
+          listener(nv, ov);
+        }
       });
       unsubs.add(unsub);
       return () => {
