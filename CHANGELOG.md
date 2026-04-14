@@ -6,38 +6,40 @@
 
 #### Performance
 
-- **V8 Hidden Class Optimization**: Reordered class properties (integers/SMI first, references last) across `ReactiveNode`, `SlotBuffer`, `ComputedAtom`, and `Effect` to stabilize object shapes and improve property access speed.
-- **Hot-path Loop Unrolling**: Manually unrolled loops for initial 4 element slots in `SlotBuffer` and `ReactiveNode.notify` to reduce branching and property indexing overhead.
-- **Zero-Allocation Notification**: Inlined `untracked` logic in `Subscription.notify` to eliminate closure allocation during reactive propagation.
-- **Dependency Tracking**: Implemented `hotIndex` caching in `ComputedAtom` and `Effect` to achieve O(1) dirty checking for the most frequently changed dependencies.
+- **V8 Hidden Class Optimization**: Reordered class properties across `ReactiveNode`, `SlotBuffer`, `ComputedAtom`, and `Effect` to stabilize object shapes and improve property access speed.
+- **Hot-path Loop Unrolling**: Manually unrolled loops for hot-path slots in `SlotBuffer` and `ReactiveNode.notify` to reduce branching and indexing overhead.
+- **Zero-Allocation Notification**: Inlined `untracked` logic in `Subscription.notify` to eliminate closure allocations during reactive propagation.
+- **Dependency Tracking**: Implemented `hotIndex` caching in `ComputedAtom` and `Effect` to achieve O(1) dirty checking for high-frequency dependencies.
 - **Fast-path Buffering**: Optimized `SlotBuffer` with a "Dense Optimization" path that bypasses null checks when the buffer is fully occupied.
-- **Scheduler Efficiency**: Replaced array-tuple buffers with discrete fields (`_buffer0`, `_buffer1`) and optimized batch merging to reduce engine-level overhead.
+- **Scheduler Efficiency**: Replaced array-tuple buffers with discrete fields and optimized batch merging to reduce engine-level overhead.
 - **Type Guard Optimization**: Refactored `isPromise` and `isBranded` for faster early-exit on non-matching types.
 
 #### Refactor
 
-- **Lens**: Replaced Regex-based safety checks with string comparisons in `setDeepValue` and `getPathValue`.
-- **Lens**: Implemented local value caching in `atomLens.subscribe` to reduce redundant path traversal and value lookups by 50%.
-- **Debug**: Replaced `Object.defineProperties` with direct symbol assignment for peak node initialization performance.
+- **Lens**: Replaced Regex-based safety checks with string comparisons and implemented local value caching in `atomLens.subscribe` to reduce redundant path traversal.
+- **Debug**: Switched from `Object.defineProperties` to direct symbol assignment for peak node initialization performance.
 - **Error Handling**: Optimized `AtomError.getChain` to only allocate tracking `Set` for deep exception chains (>3 levels).
 
 ### jQuery
 
+#### Added
+
+- **Dynamic Routing**: Full support for dynamic route segments (e.g., `user/:id`) with automatic regex compilation and value extraction.
+- **Zero-Config Discovery**: Automatically detect routes from `<template data-path="..." data-default>` elements if no explicit routes are provided.
+- **Reactive Params Atom**: Added a dedicated `params` atom to the `Router`, providing a unified reactive view of path and query parameters.
+- **PJAX Navigation**: Introduced `$.atomNav`, a reactive PJAX module for seamless page transitions with automatic title syncing, scroll management, and memory-safe unbinding.
+- **Reactive Navigation State**: `$.atomNav` now exposes `currentUrl`, `isPending`, and `hasError` atoms for building global loading indicators.
+- **Race-Condition Safety**: Integrated navigation with `$.atomFetch` for automatic request abortion during rapid transitions.
+
 #### Performance
 
-- **Router Link Caching**: Implemented a `WeakMap` in `route.ts` to cache resolved route names for `[data-route]` elements, drastically reducing string parsing overhead during active link highlighting.
-- **Router Matching Optimization**: Optimized the router's matching engine with a bifurcated O(1) exact map lookup and O(N) regex compiled-route lookup.
-- **Monomorphic Parameters**: Standardized parameter comparison in the router using shallow equality guards and hoisted invariants to prevent unnecessary re-renders.
+- **Router Link Caching**: Implemented `WeakMap` caching for resolved route names, reducing string parsing overhead during link highlighting.
+- **Router Matching Optimization**: Bifurcated matching engine with O(1) exact map lookup and O(N) regex fallback.
+- **Monomorphic Parameters**: Standardized parameter comparison in the router using shallow equality guards to prevent unnecessary re-renders.
 
-#### Features
+#### Changed
 
-- **Dynamic Routing**: Added support for dynamic route segments (e.g., `user/:id`) with automatic regex compilation and value extraction.
-- **Zero-Config Discovery**: Implemented implicit route discovery; the router now automatically detects routes from `<template data-path="..." data-default>` elements if no routes are provided.
-- **Reactive Params Atom**: Added a dedicated `params` atom to the `Router` interface, providing a unified reactive view of path and query parameters.
-- **Hardened Link Interception**: Enhanced `setupAutoBindLinks` to respect modifier keys (Ctrl/Cmd click), `rel="external"`, cross-origin navigation, and download attributes.
-- **PJAX Navigation**: Introduced `$.atomNav`, a reactive PJAX module for seamless page transitions with automatic title syncing, scroll management, and memory-safe unbinding.
-- **Reactive Navigation State**: `$.atomNav` exposes `currentUrl`, `isPending`, and `hasError` atoms for building global loading indicators and navigation UI.
-- **Race-Condition Safety**: Integrated with `$.atomFetch` to provide automatic request abortion during rapid navigation.
+- **Hardened Link Interception**: Enhanced `setupAutoBindLinks` to correctly respect modifier keys (Ctrl/Cmd), `rel="external"`, cross-origin navigation, and download attributes.
 
 ## [0.30.1] - 2026-04-14
 
