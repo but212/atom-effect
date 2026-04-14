@@ -157,8 +157,8 @@ export type RouteDefinition = TemplateRoute | RenderRoute;
 
 export interface RouteConfig {
   target: string;
-  default: string;
-  routes: Record<string, RouteDefinition>;
+  default?: string;
+  routes?: Record<string, RouteDefinition>;
   mode?: 'hash' | 'history';
   basePath?: string;
   notFound?: string;
@@ -171,6 +171,7 @@ export interface RouteConfig {
 export interface Router {
   currentRoute: ReadonlyAtom<string>;
   queryParams: ReadonlyAtom<Record<string, string>>;
+  params: ReadonlyAtom<Record<string, string>>;
   navigate: (route: string) => void;
   destroy: () => void;
 }
