@@ -9,27 +9,32 @@ import type {
 } from '@/types';
 
 /**
- * Regex Hoisting: Pre-compiled to avoid repeated execution overhead.
- * Handles extracting the <title> content while enabling single-pass cleanup.
+ * Pre-compiled regular expressions hosted at the module level.
+ * Hoisting prevents repeated object allocation during high-frequency operations.
  */
 const TITLE_RE = /<title>([\s\S]*?)<\/title>/gi;
+const ABSOLUTE_RE = /^(?:[a-z]+:)?\/\//i;
+const SPECIAL_PROTO_RE = /^(?:mailto|tel|javascript):/i;
 
 /**
  * AtomNavigator
  *
- * Internal implementation of the state-driven navigation module (PJAX).
- * This class manages the lifecycle of page transitions, network requests,
- * and reactive DOM reconciliation.
+ * A state-driven PJAX (PushState & AJAX) navigation engine built for jQuery.
+ * This class orchestrates reactive state management, asynchronous content loading,
+ * and high-performance DOM reconciliation.
  *
- * Refactored into a class structure to improve property access speed (V8 Hidden Classes)
- * and provide better organizational clarity for complex state interactions.
+ * Design Architecture:
+ * - Single Source of Truth: Driven by the `_currentUrl` atom.
+ * - Reactive Loading: Content is automatically fetched via `$.atomFetch` when the URL changes.
+ * - Batch UI Updates: `$.effect` ensures DOM updates are synchronized with the resolved state.
+ * - Performance: Utilizes V8 hidden classes and minimizes allocations during navigation events.
  */
 class AtomNavigator implements AtomNav {
-  /** Reactive atom containing the current URL path and query string. */
+  /** A readonly reactive view of the current browser URL (including path, search, and hash). */
   public readonly currentUrl: ReadonlyAtom<string>;
-  /** Reactive atom indicating whether a navigation operation is in progress. */
+  /** Indicates whether a network request for new content is currently in progress. */
   public readonly isPending: ReadonlyAtom<boolean>;
-  /** Reactive atom indicating whether the last navigation attempt resulted in an error. */
+  /** Indicates whether the last navigation attempt resulted in a network or processing error. */
   public readonly hasError: ReadonlyAtom<boolean>;
 
   private readonly _currentUrl: WritableAtom<string>;
@@ -42,10 +47,9 @@ class AtomNavigator implements AtomNav {
   private readonly _$target: JQuery;
 
   /**
-   * Initializes a new AtomNavigator instance.
-   * Sets up reactive state, network resource loaders, and global event listeners.
+   * Constructs an AtomNavigator instance.
    *
-   * @param options - Configuration including target element, selectors, and lifecycle hooks.
+   * @param options - Navigation settings including the target DOM element and lifecycle hooks.
    */
   constructor(private readonly options: AtomNavOptions) {
     const {
@@ -58,20 +62,15 @@ class AtomNavigator implements AtomNav {
       onMount,
     } = options;
 
-    // Namespace for event delegation to ensure safe disposal without affecting other modules.
+    // Unique namespace for jQuery event delegation to prevent crosstalk and ensure clean cleanup.
     this._eventNamespace = `.atomNav_${Math.random().toString(36).slice(2, 11)}`;
     this._$target = $(target as string & JQuery & HTMLElement);
 
-    // 1. Reactive State Initialization
-    // We derive current and previous URLs to manage lifecycle transitions effectively.
+    // 1. Reactive State: Initialize atoms with the current window state.
     this._currentUrl = $.atom(this.getPath());
     this._previousUrl = $.atom(this._currentUrl.value);
 
-    /**
-     * 2. Reactive Resource Loader
-     * Utilizes $.atomFetch to automatically trigger network requests when currentUrl changes.
-     * Includes X-PJAX headers to allow servers to minimize response payloads.
-     */
+    // 2. Resource Loader: Declarative fetch task that aborts stale requests automatically.
     const fetchHeaders = { 'X-PJAX': 'true', ...headers };
     this._content = $.atomFetch<{ html: string; title: string | null }>(
       () => this._currentUrl.value,
@@ -83,73 +82,60 @@ class AtomNavigator implements AtomNav {
       }
     );
 
-    /**
-     * 3. Reactive UI Synchronizer (Effect)
-     * The heart of the navigation engine. Automatically reconciles the DOM whenever
-     * fetch results or internal navigation state changes.
-     */
+    // 3. UI Synchronizer: The core reconciliation effect that updates the screen.
     this._navEffect = $.effect(() => {
       const state = this._content.value;
 
-      // Guard Clause: Only proceed if the state has successfully resolved with payload.
+      // Guard Clause: Only reconcile if the request is resolved successfully with content.
       if (!this._content.isResolved || this._content.hasError || !state.html) return undefined;
 
       const { html, title } = state;
       const url = this._currentUrl.value;
       const oldUrl = this._previousUrl.value;
 
-      // Update Browser Tab Title
-      if (syncTitle && title) {
-        document.title = title;
-      }
+      // Synchronization: Update the browser tab title.
+      if (syncTitle && title) document.title = title;
 
-      /**
-       * Lifecycle: Before content replacement.
-       * Useful for manual unbinding or capturing state from the outgoing page.
-       */
+      // Lifecycle Hook: Pre-update cleanup call.
       onUnmount?.(this._$target, oldUrl);
 
       /**
-       * DOM Update & Memory Safety:
-       * .atomUnbind() is critical before replacing content. It destroys all
-       * reactive bindings within the target to prevent memory leaks and ghost effects.
+       * DOM Reconciliation & Memory Safety:
+       * .atomUnbind() recursively destroys all reactive bindings within the target container.
+       * This prevents memory leaks and accidental state synchronization for unmounted elements.
        */
       this._$target.atomUnbind().html(html);
 
-      // Reset scroll position to top for a natural page-like transition.
+      // View Management: Apply specialized scrolling logic.
       if (scrollToTop) {
-        window.scrollTo(0, 0);
+        this.scrollToPosition(url);
       }
 
-      /**
-       * Lifecycle: After content is mounted.
-       * Primary hook for initializing plugins or custom reactivity on the new page.
-       */
+      // Lifecycle Hook: Post-update initialization call.
       onMount?.(this._$target, url);
-
       return undefined;
     });
 
-    // 4. Setup Global Event Listeners (Link Interception & Browser History)
+    // 4. Global Event Listeners: Hook into the browser's navigation infrastructure.
     this.setupListeners(selector);
 
-    // 5. Expose Public Readonly View of internal states.
+    // 5. Public Interface: Expose derivative computed atoms for UI introspection.
     this.currentUrl = $.computed(() => this._currentUrl.value);
     this.isPending = $.computed(() => this._content.isPending);
     this.hasError = $.computed(() => this._content.hasError);
   }
 
   /**
-   * Internal URL Helper.
-   * Normalizes current browser path and query string for PJAX comparisons.
+   * Normalizes the current browser location into a standard PJAX-compatible path.
+   * @returns The concatenated path, search, and hash strings.
    */
   private getPath(): string {
-    return window.location.pathname + window.location.search;
+    return window.location.pathname + window.location.search + window.location.hash;
   }
 
   /**
-   * Extracts page title and returns cleaned HTML content.
-   * Optimized with a single Regex pass to handle extraction and removal simultaneously.
+   * Extracts page metadata and cleans the HTML payload in a single pass.
+   * @param html - The raw response string from the server.
    */
   private processHtml(html: string) {
     let title: string | null = null;
@@ -161,52 +147,97 @@ class AtomNavigator implements AtomNav {
   }
 
   /**
-   * Configures DOM event delegation and window history listeners.
+   * Predicts whether a specific anchor click should be intercepted based on origin and protocols.
+   * Prevents PJAX interception for external links, downloads, and special URIs (e.g. mailto).
+   *
+   * @param el - The clicked HTMLAnchorElement.
+   * @param url - The extracted 'href' attribute.
+   */
+  private shouldIntercept(el: HTMLAnchorElement, url: string | null): url is string {
+    // Immediate filters for common non-navigation links.
+    if (!url || url[0] === '#' || el.target === '_blank' || el.hasAttribute('download'))
+      return false;
+
+    // Skip based on explicit external markers or non-HTTP protocols.
+    if (el.getAttribute('rel') === 'external' || SPECIAL_PROTO_RE.test(url)) return false;
+
+    // Cross-origin check: Only intercept if the target shares the same protocol and host.
+    if (ABSOLUTE_RE.test(url)) {
+      try {
+        return new URL(url, window.location.href).origin === window.location.origin;
+      } catch {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Intelligent scrolling logic that prioritizes hash fragments for deep-linking.
+   * Falls back to (0, 0) if no specific target ID is found in the DOM.
+   *
+   * @param url - The destination URL string.
+   */
+  private scrollToPosition(url: string): void {
+    const hash = url.split('#')[1];
+    const $el = hash ? $(`#${$.escapeSelector(hash)}`) : [];
+
+    if ($el.length) {
+      $el[0]?.scrollIntoView();
+    } else {
+      window.scrollTo(0, 0);
+    }
+  }
+
+  /**
+   * Delegates click events and attaches browser history listeners.
    */
   private setupListeners(selector: string): void {
-    // Intercept clicks on qualified navigation links.
     $(document).on(`click${this._eventNamespace}`, selector, (e) => {
-      // Respect standard browser behavior: ignore clicks with modifiers or non-left buttons.
+      // Respect standard browser UX: Ignore modified clicks or non-primary buttons.
       if (e.ctrlKey || e.metaKey || e.shiftKey || e.which === 2) return;
 
       const el = e.currentTarget as HTMLAnchorElement;
       const url = el.getAttribute('href');
 
-      // Filter: Ignore external links, hash fragments, and empty elements.
-      if (!url || url[0] === '#' || url.includes('://')) return;
-
-      e.preventDefault();
-      this.navigate(url);
+      if (this.shouldIntercept(el, url)) {
+        e.preventDefault();
+        this.navigate(url);
+      }
     });
 
-    // Synchronize reactive state with browser Back/Forward actions.
-    this.handlePopState = this.handlePopState.bind(this);
     window.addEventListener('popstate', this.handlePopState);
   }
 
   /**
-   * Responds to the browser popstate event.
+   * Synchronizes internal reactive state with browser history (Back/Forward actions).
    */
-  private handlePopState(): void {
+  private handlePopState = (): void => {
     const newUrl = this.getPath();
     this._previousUrl.value = this._currentUrl.value;
     this._currentUrl.value = newUrl;
-  }
+  };
 
   /**
-   * Programmatically navigates to a new URL.
-   * Updates history state which in turn triggers the reactive fetch loader.
+   * Programmatic navigation API.
+   * Includes URL normalization to protect against redundant network requests.
    *
-   * @param url - The relative URL path to navigate to.
+   * @param url - The destination URL path (absolute or relative).
    */
   public async navigate(url: string): Promise<void> {
     const { onBeforeLoad } = this.options;
 
-    // Allow cancellation of navigation via onBeforeLoad hook.
+    // Final check for navigation cancellation via hook.
     if (onBeforeLoad && (await onBeforeLoad(url)) === false) return;
 
-    // Prevent redundant navigation to the same endpoint.
-    if (this.getPath() !== url) {
+    const current = new URL(window.location.href);
+    const target = new URL(url, current.href);
+
+    /**
+     * URL Normalization: Prevents redundant fetches by comparing normalized path strings.
+     * This avoids triggers for different string formats pointing to the same endpoint.
+     */
+    if (current.pathname + current.search !== target.pathname + target.search) {
       window.history.pushState(null, '', url);
       this._previousUrl.value = this._currentUrl.value;
       this._currentUrl.value = url;
@@ -214,8 +245,8 @@ class AtomNavigator implements AtomNav {
   }
 
   /**
-   * Tears down the navigator instance.
-   * Cleans up global listeners, stops fetch operations, and disposes reactive effects.
+   * Disposes of the navigator instance.
+   * Unbinds global events and cleans up all associated reactive effects to prevent memory leaks.
    */
   public destroy(): void {
     $(document).off(this._eventNamespace);
@@ -228,14 +259,16 @@ class AtomNavigator implements AtomNav {
 /**
  * $.atomNav
  *
- * Factory function for creating a state-driven PJAX navigation module.
- * Integrates with $.atomFetch and $.effect for seamless, memory-safe page transitions.
+ * Factory function to initialize a state-driven navigation module.
+ *
+ * @param options - Configuration settings for the PJAX module.
+ * @returns An instance implementing the AtomNav interface.
  */
 export function atomNav(options: AtomNavOptions): AtomNav {
   return new AtomNavigator(options);
 }
 
-// Register as a jQuery utility
+// Global jQuery utility extension.
 $.extend({
   atomNav,
 });
