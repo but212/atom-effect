@@ -35,6 +35,9 @@
 - **Zero-Config Discovery**: Implemented implicit route discovery; the router now automatically detects routes from `<template data-path="..." data-default>` elements if no routes are provided.
 - **Reactive Params Atom**: Added a dedicated `params` atom to the `Router` interface, providing a unified reactive view of path and query parameters.
 - **Hardened Link Interception**: Enhanced `setupAutoBindLinks` to respect modifier keys (Ctrl/Cmd click), `rel="external"`, cross-origin navigation, and download attributes.
+- **PJAX Navigation**: Introduced `$.atomNav`, a reactive PJAX module for seamless page transitions with automatic title syncing, scroll management, and memory-safe unbinding.
+- **Reactive Navigation State**: `$.atomNav` exposes `currentUrl`, `isPending`, and `hasError` atoms for building global loading indicators and navigation UI.
+- **Race-Condition Safety**: Integrated with `$.atomFetch` to provide automatic request abortion during rapid navigation.
 
 ## [0.30.1] - 2026-04-14
 

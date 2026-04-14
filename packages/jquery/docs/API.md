@@ -13,6 +13,7 @@ This package extends jQuery with reactive capabilities. All methods are availabl
 - [Static Methods](#static-methods)
 - [Data Fetching (`$.atomFetch`)](#data-fetching)
 - [Routing (`$.route`)](#routing)
+- [PJAX Navigation (`$.atomNav`)](#pjax-navigation)
 - [Debug Mode](#debug-mode)
 
 ---
@@ -588,6 +589,45 @@ const router = $.route({
 
 // Navigate to a dynamic route
 router.navigate('user/42');
+```
+
+---
+
+## PJAX Navigation
+
+### `$.atomNav(options)`
+
+A state-driven lightweight navigation module (PJAX) for jQuery. It intercepts link clicks, fetches content asynchronously, and updates a target container while maintaining browser history.
+
+**Options**:
+
+- `target`: `string | JQuery | HTMLElement` (Required) — Selector or element where content will be injected.
+- `selector`: `string` (Optional) — Selector for links to intercept. Defaults to `'a[data-nav]'`.
+- `headers`: `Record<string, string>` (Optional) — Custom headers (e.g., `X-PJAX: true` is sent by default).
+- `onBeforeLoad`: `(url) => boolean | Promise<boolean>` (Optional) — Return `false` to cancel navigation.
+- `onMount`: `($container, url) => void` (Optional) — Called after content is injected.
+- `onUnmount`: `($container, oldUrl) => void` (Optional) — Called before content is replaced.
+- `scrollToTop`: `boolean` (Optional) — Whether to scroll to top on nav. Defaults to `true`.
+- `syncTitle`: `boolean` (Optional) — Whether to sync `document.title` from response `<title>` tags. Defaults to `true`.
+
+**Returns**: `AtomNav` object:
+
+- `currentUrl`: `ReadonlyAtom<string>` — Reactive current URL.
+- `isPending`: `ReadonlyAtom<boolean>` — Loading state.
+- `hasError`: `ReadonlyAtom<boolean>` — Error state.
+- `navigate(url)`: Programmatically navigate.
+- `destroy()`: Cleanup listeners and resources.
+
+```javascript
+const nav = $.atomNav({
+  target: '#main-content',
+  onMount: ($el) => $el.hide().fadeIn(300)
+});
+
+// React to navigation state globally
+$.effect(() => {
+  $('#loader').toggle(nav.isPending.value);
+});
 ```
 
 ---

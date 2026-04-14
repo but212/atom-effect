@@ -176,6 +176,38 @@ export interface Router {
   destroy: () => void;
 }
 
+export interface AtomNavOptions {
+  /** Target element or selector where the content will be injected. */
+  target: string | JQuery | HTMLElement;
+  /** Selector for links to intercept. Defaults to 'a[data-nav]'. */
+  selector?: string;
+  /** Custom headers to send with the AJAX request (e.g., X-PJAX). */
+  headers?: Record<string, string>;
+  /** Callback before loading starts. Return false to cancel. */
+  onBeforeLoad?: (url: string) => boolean | undefined | Promise<boolean | undefined>;
+  /** Callback after new content is mounted. */
+  onMount?: ($container: JQuery, url: string) => void;
+  /** Callback before content is replaced. */
+  onUnmount?: ($container: JQuery, oldUrl: string) => void;
+  /** Whether to scroll to top on navigation. Defaults to true. */
+  scrollToTop?: boolean;
+  /** Whether to sync document.title from response. Defaults to true. */
+  syncTitle?: boolean;
+}
+
+export interface AtomNav {
+  /** Current URL as a reactive atom. */
+  currentUrl: ReadonlyAtom<string>;
+  /** Loading state as a reactive atom. */
+  isPending: ReadonlyAtom<boolean>;
+  /** Error state as a reactive atom. */
+  hasError: ReadonlyAtom<boolean>;
+  /** Function to programmatically navigate to a URL. */
+  navigate: (url: string) => void;
+  /** Cleans up global event listeners and resources. */
+  destroy: () => void;
+}
+
 export enum BindingFlags {
   None = 0,
   Focused = 1 << 0,
@@ -221,6 +253,7 @@ declare global {
       url: string | (() => string),
       opts: FetchOptions<T>
     ): ComputedAtom<T> & { abort: () => void };
+    atomNav(options: AtomNavOptions): AtomNav;
   }
 
   interface JQuery {
