@@ -335,6 +335,7 @@ packages/jquery/src/
   features/
     route.ts          — SPA router (hash + history mode) with reactive state
     fetch.ts          — $.atomFetch declarative AJAX primitive
+    nav.ts            — $.atomNav PJAX navigation module
   internal/
     pool.ts           — Centralized Object/Array pools for low-latency memory reuse
   utils/
@@ -345,7 +346,31 @@ packages/jquery/src/
     object-pool.ts    — Monomorphic object pooling utility
 ```
 
-## 11. Performance & Memory Management
+## 11. PJAX Navigation (`$.atomNav`)
+
+`$.atomNav` (`features/nav.ts`) is a state-driven PJAX (Partial Page Loading) module that treats the browser's URL as a reactive atom.
+
+### 11.1 Single Source of Truth
+
+Unlike traditional PJAX libraries that rely on sequential event handlers, `$.atomNav` is driven by a `currentUrl` atom.
+
+- Link clicks and `popstate` events update the `currentUrl`.
+- A reactive `$.atomFetch` observes `currentUrl` and handles the network request.
+- A reactive `effect` observes the fetch result and reconciles the DOM.
+
+### 11.2 Memory & Race Condition Safety
+
+- **Automatic Unbinding**: To prevent memory leaks in long-lived SPAs, `$.atomNav` automatically calls `.atomUnbind()` on the target container before injecting new HTML. This ensures all observers and event listeners from the previous page are disposed.
+- **Abort Protection**: By leveraging `$.atomFetch`, it automatically aborts pending requests if the user clicks another link before the current one finishes.
+- **Fragment Processing**: It extracts `<title>` tags from incoming HTML fragments to sync `document.title` while stripping them from the content injected into the DOM.
+
+### 11.3 Lifecycle Hooks
+
+- `onBeforeLoad`: Allows intercepting navigation (e.g., for per-page authentication or unsaved changes warnings).
+- `onMount`: Called after new content is injected and bound. Useful for triggering entry animations.
+- `onUnmount`: Called before content is replaced. Useful for exit animations.
+
+## 12. Performance & Memory Management
 
 ### 10.1 Object & Array Pooling
 

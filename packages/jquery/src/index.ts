@@ -22,6 +22,7 @@ import '@/bindings/list'; // $.fn.atomList
 import '@/bindings/mount'; // $.fn.atomMount
 import '@/features/route'; // $.route
 import '@/features/fetch'; // $.atomFetch
+import '@/features/nav'; // $.atomNav
 
 import { enablejQueryOverrides } from '@/core/jquery-patch';
 import { disableAutoCleanup, enableAutoCleanup, registry } from '@/core/registry';
