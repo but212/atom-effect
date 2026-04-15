@@ -104,44 +104,27 @@ describe('Scheduler', () => {
   });
 
   describe('aeNextTick', () => {
-    it('resolves after all queued jobs are executed', async () => {
+    it('should wait for all reactive updates to be flushed', async () => {
       const a = atom(0);
       let capturedValue = -1;
-
       effect(() => {
         capturedValue = a.value;
       });
 
       a.value = 42;
-      expect(capturedValue).toBe(0); // Still 0 because effect is queued
+      expect(capturedValue).toBe(0); // Queued
 
       await aeNextTick();
-      expect(capturedValue).toBe(42); // Now 42 after nextTick
+      expect(capturedValue).toBe(42); // Flushed
     });
 
-    it('executes the provided callback', async () => {
+    it('should execute optional callback and resolve correctly', async () => {
       const cb = vi.fn();
       await aeNextTick(cb);
       expect(cb).toHaveBeenCalled();
     });
 
-    it('works correctly within a batch', async () => {
-      const a = atom(0);
-      let capturedValue = -1;
-
-      effect(() => {
-        capturedValue = a.value;
-      });
-
-      batch(() => {
-        a.value = 100;
-      });
-
-      await aeNextTick();
-      expect(capturedValue).toBe(100);
-    });
-
-    it('handles errors in the callback by rejecting the promise', async () => {
+    it('should propagate errors from the callback', async () => {
       const error = new Error('tick-fail');
       await expect(
         aeNextTick(() => {

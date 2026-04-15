@@ -164,6 +164,7 @@ This ensures that:
 1. It executes **after** all reactive effects that were already queued.
 2. It correctly participates in `batch()` cycles, resolving only after the synchronous flush completes.
 3. It respects the internal `epoch` system, preventing premature resolution during complex re-evaluation cycles.
+4. **Promise Deduplication**: To minimize GC pressure and scheduler overhead, multiple calls to `aeNextTick()` without a callback share a single pending promise. Subsequent calls return the same promise instance until the scheduler flush completes and clears the shared reference.
 
 ### Infinite Loop Defense
 

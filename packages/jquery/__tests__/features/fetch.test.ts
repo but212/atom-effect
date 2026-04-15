@@ -17,9 +17,8 @@ describe('$.atomFetch (Reactivity and Atom State)', () => {
       defaultValue: { name: '' },
     });
 
-    await $.nextTick();
-
-    expect(user.value).toEqual({ name: 'Alice' });
+    void user.value;
+    await vi.waitFor(() => expect(user.value).toEqual({ name: 'Alice' }));
   });
 
   it('should auto-refetch when a reactive URL changes', async () => {

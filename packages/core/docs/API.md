@@ -215,7 +215,7 @@ const result = batch(() => {
 
 Returns a promise that resolves after the next scheduler flush. This is the recommended way to wait for all asynchronous effects to be processed and the DOM to be in a consistent state.
 
-- **Deduplication**: If called multiple times before a flush, they all resolve in the order they were queued during the same flush cycle.
+- **Deduplication**: Optimized for performance. Multiple calls without a callback share a single pending promise and scheduler job, significantly reducing allocations. Calls with callbacks resolve in the order they were queued within the same flush cycle.
 - **Batch Awareness**: If called within a `batch()` block, it waits for the synchronous flush triggered at the end of the batch.
 - **Callback Support**: Accepts an optional callback for non-async/await usage.
 

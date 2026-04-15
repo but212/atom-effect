@@ -58,7 +58,7 @@ describe('Effect Factory', () => {
       await $.nextTick();
       expect(updater).not.toHaveBeenCalledWith({ p: 'old' }); // Should not hit old cache immediately
 
-      vi.waitFor(() => expect(updater).toHaveBeenCalledWith({ p: 'new' }));
+      await vi.waitFor(() => expect(updater).toHaveBeenCalledWith({ p: 'new' }));
 
       // 3. Same Promise instance again should hit cache (Optimization)
       updater.mockClear();

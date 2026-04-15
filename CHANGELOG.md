@@ -44,6 +44,7 @@
 #### Changed
 
 - **Hardened Link Interception**: Enhanced `setupAutoBindLinks` to correctly respect modifier keys (Ctrl/Cmd), `rel="external"`, cross-origin navigation, and download attributes.
+- **$.nextTick**: Standardized to use core's `aeNextTick()` for unified scheduler synchronization and improved performance via promise deduplication.
 
 ## [0.30.1] - 2026-04-14
 
