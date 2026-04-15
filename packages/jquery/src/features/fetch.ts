@@ -136,22 +136,23 @@ class FetchContext<T> {
  * - Reactive URL: Re-fetches automatically if `urlOrFn` depends on atoms.
  * - Error Isolation: Network errors are captured in .hasError/.lastError.
  */
+function atomFetch<T>(urlOrFn: string | (() => string), options: FetchOptions<T>): ComputedAtom<T> {
+  const ctx = new FetchContext<T>(urlOrFn, options);
+  const atomVal = computed(ctx.execute, {
+    defaultValue: options.defaultValue,
+    lazy: options.eager === false,
+  });
+
+  const originalDispose = atomVal.dispose.bind(atomVal);
+  atomVal.dispose = () => {
+    ctx.abort();
+    originalDispose();
+  };
+
+  return Object.assign(atomVal, {
+    abort: () => ctx.abort(),
+  }) as ComputedAtom<T> & { abort: () => void };
+}
 $.extend({
-  atomFetch<T>(urlOrFn: string | (() => string), options: FetchOptions<T>): ComputedAtom<T> {
-    const ctx = new FetchContext<T>(urlOrFn, options);
-    const atomVal = computed(ctx.execute, {
-      defaultValue: options.defaultValue,
-      lazy: options.eager === false,
-    });
-
-    const originalDispose = atomVal.dispose.bind(atomVal);
-    atomVal.dispose = () => {
-      ctx.abort();
-      originalDispose();
-    };
-
-    return Object.assign(atomVal, {
-      abort: () => ctx.abort(),
-    }) as ComputedAtom<T> & { abort: () => void };
-  },
+  atomFetch,
 });
