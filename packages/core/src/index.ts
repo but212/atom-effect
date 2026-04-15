@@ -1,7 +1,7 @@
 export { AsyncState, DEBUG_CONFIG, SCHEDULER_CONFIG } from '@/constants';
 export { atom, computed, effect } from '@/core';
 export { atomLens, composeLens, getPathValue, lensFor, setDeepValue } from '@/core/lens';
-export { batch, scheduler as globalScheduler } from '@/core/scheduler';
+export { aeNextTick, batch, scheduler as globalScheduler } from '@/core/scheduler';
 export { untracked } from '@/core/tracking';
 export { AtomError, ComputedError, EffectError, SchedulerError } from '@/errors';
 

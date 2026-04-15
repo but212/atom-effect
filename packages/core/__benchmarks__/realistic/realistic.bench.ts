@@ -4,7 +4,7 @@
  */
 
 import { beforeEach, bench, describe } from 'vitest';
-import { atom, batch, computed, effect } from '../../dist';
+import { aeNextTick, atom, batch, computed, effect } from '../../dist';
 import {
   benchEffectOptions,
   forceGC,
@@ -12,7 +12,6 @@ import {
   macroBenchOptions,
   memoryBenchOptions,
   microBenchOptions,
-  nextTick,
 } from '../utils/setup.js';
 
 const REPEATS = 100;
@@ -105,7 +104,7 @@ describe('UX: Input & UI Latency', () => {
       const input = 'Item 1';
       for (const char of input) {
         searchQuery.value += char;
-        await nextTick();
+        await aeNextTick();
       }
       keep(_lastRender);
     },

@@ -4,7 +4,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SCHEDULER_CONFIG } from '@/constants';
-import { batch, resetFlushState, runInFlushScope, scheduler } from '@/core/scheduler';
+import { aeNextTick, batch, resetFlushState, runInFlushScope, scheduler } from '@/core/scheduler';
 import { SchedulerError } from '@/errors';
 import { atom, computed, effect } from '@/index';
 import { sleep } from '../../utils/test-helpers';
@@ -100,6 +100,54 @@ describe('Scheduler', () => {
       };
 
       expect(() => fn(depth)).not.toThrow();
+    });
+  });
+
+  describe('aeNextTick', () => {
+    it('resolves after all queued jobs are executed', async () => {
+      const a = atom(0);
+      let capturedValue = -1;
+
+      effect(() => {
+        capturedValue = a.value;
+      });
+
+      a.value = 42;
+      expect(capturedValue).toBe(0); // Still 0 because effect is queued
+
+      await aeNextTick();
+      expect(capturedValue).toBe(42); // Now 42 after nextTick
+    });
+
+    it('executes the provided callback', async () => {
+      const cb = vi.fn();
+      await aeNextTick(cb);
+      expect(cb).toHaveBeenCalled();
+    });
+
+    it('works correctly within a batch', async () => {
+      const a = atom(0);
+      let capturedValue = -1;
+
+      effect(() => {
+        capturedValue = a.value;
+      });
+
+      batch(() => {
+        a.value = 100;
+      });
+
+      await aeNextTick();
+      expect(capturedValue).toBe(100);
+    });
+
+    it('handles errors in the callback by rejecting the promise', async () => {
+      const error = new Error('tick-fail');
+      await expect(
+        aeNextTick(() => {
+          throw error;
+        })
+      ).rejects.toThrow('tick-fail');
     });
   });
 

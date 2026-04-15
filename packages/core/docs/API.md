@@ -211,6 +211,35 @@ const result = batch(() => {
 }); // result === 20
 ```
 
+## `aeNextTick(fn?: () => void): Promise<void>`
+
+Returns a promise that resolves after the next scheduler flush. This is the recommended way to wait for all asynchronous effects to be processed and the DOM to be in a consistent state.
+
+- **Deduplication**: If called multiple times before a flush, they all resolve in the order they were queued during the same flush cycle.
+- **Batch Awareness**: If called within a `batch()` block, it waits for the synchronous flush triggered at the end of the batch.
+- **Callback Support**: Accepts an optional callback for non-async/await usage.
+
+### Example - aeNextTick
+
+```typescript
+import { atom, effect, aeNextTick } from '@but212/atom-effect';
+
+const count = atom(0);
+let title = '';
+
+effect(() => {
+  title = `Count is ${count.value}`;
+});
+
+count.value = 1;
+
+// Title is still '' because the effect is queued in a microtask
+await aeNextTick();
+
+// Now title is 'Count is 1'
+console.log(title);
+```
+
 ## `untracked<T>(fn: () => T): T`
 
 Runs a function without tracking dependencies. Any `.value` reads inside the callback are invisible to the enclosing `effect` or `computed`. Optimized with a zero-overhead fast-path for nested untracked calls.

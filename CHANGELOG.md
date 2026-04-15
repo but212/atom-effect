@@ -4,6 +4,10 @@
 
 ### Core
 
+#### Added
+
+- **aeNextTick**: Introduced `aeNextTick()` to provide a reliable way to wait for the next scheduler flush. Supports both Promise-based `await` and callback patterns.
+
 #### Performance
 
 - **V8 Hidden Class Optimization**: Reordered class properties across `ReactiveNode`, `SlotBuffer`, `ComputedAtom`, and `Effect` to stabilize object shapes and improve property access speed.

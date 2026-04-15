@@ -382,3 +382,23 @@ export function batch<T>(fn: () => T): T {
     scheduler.endBatch();
   }
 }
+
+/**
+ * Returns a promise that resolves after the next scheduler flush.
+ * This can be used to wait for all asynchronous effects to be processed.
+ *
+ * @param fn - Optional callback to execute after the flush.
+ * @returns A promise that resolves after the flush completes.
+ */
+export function aeNextTick(fn?: () => void): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    scheduler.schedule(() => {
+      try {
+        if (fn) fn();
+        resolve();
+      } catch (err) {
+        reject(err);
+      }
+    });
+  });
+}
