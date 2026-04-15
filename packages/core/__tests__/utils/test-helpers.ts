@@ -3,8 +3,6 @@ export const sleep = (ms: number): Promise<void> =>
 
 export const flush = (): Promise<void> => sleep(0);
 
-export const nextTick = (): Promise<void> => Promise.resolve();
-
 // Use a reasonable default timeout for async scheduler
 export const waitForScheduler = (): Promise<void> => sleep(10);
 

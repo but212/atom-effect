@@ -4,12 +4,8 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { atom } from '@/core/atom';
-import { computed } from '@/core/computed';
-import { effect } from '@/core/effect';
+import { aeNextTick, atom, computed, effect } from '@/core';
 import { ComputedError, SchedulerError } from '@/errors';
-
-const flush = async () => await new Promise((r) => setTimeout(r, 0));
 
 describe('Dependency Graph Safety', () => {
   describe('Cycle Detection', () => {
@@ -53,7 +49,7 @@ describe('Dependency Graph Safety', () => {
       expect(last.value).toBe(depth);
 
       start.value = 1;
-      await flush();
+      await aeNextTick();
 
       expect(last.value).toBe(depth + 1);
     });
@@ -69,7 +65,7 @@ describe('Dependency Graph Safety', () => {
         if (val < 200) counter.value = val + 1;
       });
 
-      await flush();
+      await aeNextTick();
 
       expect(spy).toHaveBeenCalledWith(expect.any(SchedulerError));
       expect(fx.isDisposed).toBe(true);
@@ -93,7 +89,7 @@ describe('Dependency Graph Safety', () => {
       expect(d.value).toBe(5);
 
       a.value = 2;
-      await flush();
+      await aeNextTick();
 
       // Glitch would be D=7 (4+3) or D=8 (2+6) — must be 10
       expect(d.value).toBe(10);
@@ -134,7 +130,7 @@ describe('Dependency Graph Safety', () => {
       expect(d.errors.some((e) => e.message.includes('C fail'))).toBe(true);
 
       a.value = false;
-      await flush();
+      await aeNextTick();
       expect(d.value).toBe(2);
       expect(d.hasError).toBe(false);
     });
