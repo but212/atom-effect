@@ -1,11 +1,6 @@
 export const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
-export const flush = (): Promise<void> => sleep(0);
-
-// Use a reasonable default timeout for async scheduler
-export const waitForScheduler = (): Promise<void> => sleep(10);
-
 // Simple seeded PRNG (sfc32) for reproducible fuzz tests
 export function seededRandom(seed: number): () => number {
   let a = 13971 ^ seed;

@@ -3,10 +3,8 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { atom } from '@/core/atom';
 import { scheduler } from '@/core/scheduler';
-import { AtomError } from '@/errors';
-import { waitForScheduler } from '../../utils/test-helpers';
+import { AtomError, aeNextTick, atom } from '@/index';
 
 describe('Atom', () => {
   afterEach(() => {
@@ -77,7 +75,7 @@ describe('Atom', () => {
       a.value = 1; // Same value -> ignored
       a.value = 2;
       a.value = 3;
-      await waitForScheduler();
+      await aeNextTick();
 
       // Should batch rapid updates into one notification
       expect(log).toEqual([[3, 0]]);
@@ -89,13 +87,13 @@ describe('Atom', () => {
       const numAtom = atom(NaN);
       numAtom.subscribe(spy);
       numAtom.value = NaN; // ignored
-      await waitForScheduler();
+      await aeNextTick();
       expect(spy).not.toHaveBeenCalled();
 
       // +0 vs -0 are distinct
       numAtom.value = 0;
       numAtom.value = -0;
-      await waitForScheduler();
+      await aeNextTick();
       expect(spy).toHaveBeenCalledTimes(1);
 
       spy.mockClear();
@@ -104,7 +102,7 @@ describe('Atom', () => {
       const objAtom = atom(obj);
       objAtom.subscribe(spy);
       objAtom.value = obj; // ignored
-      await waitForScheduler();
+      await aeNextTick();
       expect(spy).not.toHaveBeenCalled();
     });
 
@@ -118,7 +116,7 @@ describe('Atom', () => {
       a.value = 0; // Return to 0
       scheduler.endBatch();
 
-      await waitForScheduler();
+      await aeNextTick();
       expect(spy).not.toHaveBeenCalled();
     });
   });
@@ -191,7 +189,7 @@ describe('Atom', () => {
       expect(a.subscriberCount()).toBe(0);
 
       a.value = 99;
-      await waitForScheduler();
+      await aeNextTick();
       expect(spy).not.toHaveBeenCalled();
     });
   });
@@ -208,7 +206,7 @@ describe('Atom', () => {
       a.subscribe(good);
 
       a.value = 1;
-      await waitForScheduler();
+      await aeNextTick();
 
       expect(good).toHaveBeenCalled();
       expect(consoleError).toHaveBeenCalled();
@@ -274,7 +272,7 @@ describe('Atom', () => {
       }
 
       a.value = 1;
-      await waitForScheduler();
+      await aeNextTick();
 
       // Should have 6 errors logged
       expect(consoleError).toHaveBeenCalledTimes(6);

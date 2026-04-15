@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { atom, computed, effect } from '@/core';
+import { atom, computed, effect } from '@/index';
 import { BRAND, BrandFlags } from '@/symbols';
 import { isAtom, isComputed, isEffect, isWritable } from '@/utils/type-guards';
 

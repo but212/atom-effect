@@ -5,10 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { atom } from '@/core/atom';
-import { computed } from '@/core/computed';
-import { batch } from '@/core/scheduler';
-import type { ComputedAtom, WritableAtom } from '@/types';
+import { atom, batch, type ComputedAtom, computed, type WritableAtom } from '@/index';
 import { seededRandom } from '../../utils/test-helpers';
 
 function buildGraph(rand: () => number, atomCount = 5, computedCount = 20) {

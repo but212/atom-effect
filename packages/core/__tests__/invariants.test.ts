@@ -4,8 +4,8 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { atom, batch, type ComputedError, computed, effect, untracked } from '@/index';
-import { getNodeVersion, waitForScheduler } from './utils/test-helpers';
+import { aeNextTick, atom, batch, type ComputedError, computed, effect, untracked } from '@/index';
+import { getNodeVersion } from './utils/test-helpers';
 
 // ─── 1. Version Semantics ───────────────────────────────────────────────────
 
@@ -75,7 +75,7 @@ describe('Push-Pull Propagation', () => {
     asyncAtom.value = 1;
     expect(asyncCalls).toEqual([]); // not yet
 
-    await waitForScheduler();
+    await aeNextTick();
     expect(asyncCalls).toEqual([1]);
 
     // Sync opt-in
@@ -103,7 +103,7 @@ describe('Push-Pull Propagation', () => {
     expect(results).toEqual([0]);
 
     src.value = 5;
-    await waitForScheduler();
+    await aeNextTick();
     expect(results).toContain(10);
     expect(computeCount).toBeGreaterThanOrEqual(2);
 
@@ -129,7 +129,7 @@ describe('Dependency Tracking', () => {
 
     // b is not tracked
     b.value = 'B2';
-    await waitForScheduler();
+    await aeNextTick();
     c.invalidate();
     expect(c.value).toBe('A');
     expect(runs).toBe(2);
@@ -143,7 +143,7 @@ describe('Dependency Tracking', () => {
     // a is pruned
     const runsAfterSwitch = runs;
     a.value = 'A2';
-    await waitForScheduler();
+    await aeNextTick();
     expect(runs).toBe(runsAfterSwitch);
   });
 
@@ -187,7 +187,7 @@ describe('Batch Guarantees', () => {
       b.value = 4;
     });
 
-    await waitForScheduler();
+    await aeNextTick();
     expect(results).toEqual([[3, 4]]);
   });
 });
@@ -228,7 +228,7 @@ describe('Disposal Finality', () => {
     }
 
     source.value = 1;
-    await waitForScheduler();
+    await aeNextTick();
     expect(leakContainer).toEqual([0, 1]);
 
     const safeContainer: number[] = [];
@@ -239,7 +239,7 @@ describe('Disposal Finality', () => {
     }
 
     source.value = 2;
-    await waitForScheduler();
+    await aeNextTick();
 
     expect(safeContainer).toEqual([1]);
     expect(leakContainer).toEqual([0, 1, 2]);
@@ -263,7 +263,7 @@ describe('Error Isolation', () => {
     a.subscribe(good);
 
     a.value = 1;
-    await waitForScheduler();
+    await aeNextTick();
 
     expect(bad).toHaveBeenCalled();
     expect(good).toHaveBeenCalled();
@@ -295,7 +295,7 @@ describe('Error Isolation', () => {
     );
 
     trigger.value = 1;
-    await waitForScheduler();
+    await aeNextTick();
 
     expect(onError).toHaveBeenCalledTimes(1);
     expect(onError.mock.calls[0]?.[0].name).toBe('EffectError');
@@ -314,7 +314,7 @@ describe('Error Isolation', () => {
     );
 
     trigger2.value = true;
-    await waitForScheduler();
+    await aeNextTick();
 
     const a = atom(0);
     expect(computed(() => a.value + 1).value).toBe(1);
@@ -331,7 +331,7 @@ describe('Equality Contract', () => {
     a.subscribe(listener);
 
     a.value = NaN;
-    await waitForScheduler();
+    await aeNextTick();
     expect(listener).not.toHaveBeenCalled();
   });
 
@@ -404,7 +404,7 @@ describe('Subscription Protocol', () => {
     a.subscribe({ execute: () => objCalls.push(a.peek()) });
 
     a.value = 5;
-    await waitForScheduler();
+    await aeNextTick();
 
     expect(fnCalls).toEqual([5]);
     expect(objCalls).toEqual([5]);

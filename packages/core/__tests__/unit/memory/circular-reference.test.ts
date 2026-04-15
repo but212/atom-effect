@@ -4,8 +4,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { aeNextTick, atom, computed, effect } from '@/core';
-import { ComputedError, SchedulerError } from '@/errors';
+import { aeNextTick, atom, ComputedError, computed, effect, SchedulerError } from '@/index';
 
 describe('Dependency Graph Safety', () => {
   describe('Cycle Detection', () => {

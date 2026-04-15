@@ -4,9 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { atom } from '@/core/atom';
-import { computed } from '@/core/computed';
-import { effect } from '@/core/effect';
+import { atom, computed, effect } from '@/index';
 import { getSubscriberCount } from '../../utils/test-helpers';
 
 describe('Memory Leaks (GC)', () => {

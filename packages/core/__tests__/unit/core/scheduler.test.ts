@@ -4,9 +4,8 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SCHEDULER_CONFIG } from '@/constants';
-import { aeNextTick, batch, resetFlushState, runInFlushScope, scheduler } from '@/core/scheduler';
-import { SchedulerError } from '@/errors';
-import { atom, computed, effect } from '@/index';
+import { resetFlushState, runInFlushScope, scheduler } from '@/core/scheduler';
+import { aeNextTick, atom, batch, computed, effect, SchedulerError } from '@/index';
 import { sleep } from '../../utils/test-helpers';
 
 describe('Scheduler', () => {
