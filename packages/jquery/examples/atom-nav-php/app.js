@@ -10,11 +10,11 @@ $(() => {
   const nav = $.atomNav({
     target: "#app-root",
     selector: "[data-nav]",
-    onBeforeLoad: (url) => {
+    onBeforeLoad: (_) => {
       // Start progress animation
       $loader.css("width", "30%");
     },
-    onMount: ($container, url) => {
+    onMount: ($container, _) => {
       // Finish progress animation
       $loader.css("width", "100%");
       setTimeout(() => $loader.css("width", "0"), 300);
