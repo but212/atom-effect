@@ -21,7 +21,6 @@ describe('Form Binding (atomForm)', () => {
       </form>
     `).appendTo(document.body);
 
-    // atomForm 및 atomBind(alias) 동시 검증
     $form.atomBind({ form: data });
     await $.nextTick();
 
