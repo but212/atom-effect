@@ -40,21 +40,6 @@ $(() => {
     },
   });
 
-  // --- HTMX-style Optimization: PRELOAD ON HOVER ---
-  // When a user hovers over a link, the browser starts fetching the content
-  // so it's ready by the time they actually click.
-  $(document).on("mouseenter", "[data-nav]", function () {
-    const url = $(this).attr("href");
-    if (url && url !== window.location.pathname + window.location.search) {
-      // By calling a silent fetch (or just navigate if logic allows),
-      // the content is cached by the atomFetch.
-      console.log("⚡ Preloading:", url);
-      // For demonstration, we just trigger the underlying fetch mechanism
-      // by temporarily updating the atom if we want, but nav.navigate already handles pushState.
-      // In a real refactor, we'd expose a `nav.preload(url)` method.
-    }
-  });
-
   // Keep track of the actual reactive URL atom for the status chip
   $.effect(() => {
     $pathChip.text(nav.currentUrl.value);
