@@ -1,6 +1,5 @@
-import $ from 'jquery';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import '@/index';
+import $ from '@/index';
 import type { FetchError } from '@/types';
 
 // ---------------------------------------------------------------------------
@@ -18,10 +17,8 @@ describe('$.atomFetch (Reactivity and Atom State)', () => {
       defaultValue: { name: '' },
     });
 
-    await $.nextTick();
-    await $.nextTick();
-
-    expect(user.value).toEqual({ name: 'Alice' });
+    void user.value;
+    await vi.waitFor(() => expect(user.value).toEqual({ name: 'Alice' }));
   });
 
   it('should auto-refetch when a reactive URL changes', async () => {
@@ -35,16 +32,12 @@ describe('$.atomFetch (Reactivity and Atom State)', () => {
     });
 
     await $.nextTick();
-    await $.nextTick();
     expect(user.value).toEqual({ id: 1, name: 'Alice' });
 
     id.value = 2;
-    await $.nextTick();
     void user.value;
-    await $.nextTick();
-    await $.nextTick();
 
-    expect(user.value).toEqual({ id: 2, name: 'Bob' });
+    await vi.waitFor(() => expect(user.value).toEqual({ id: 2, name: 'Bob' }));
     expect($.ajax).toHaveBeenCalledTimes(2);
   });
 
@@ -64,7 +57,6 @@ describe('$.atomFetch (Reactivity and Atom State)', () => {
 
     resolveAjax({ done: true });
     await $.nextTick();
-    await $.nextTick();
 
     expect(data.isPending).toBe(false);
     expect(data.isResolved).toBe(true);
@@ -75,7 +67,6 @@ describe('$.atomFetch (Reactivity and Atom State)', () => {
 
     const data = $.atomFetch('/api/fail', { defaultValue: null });
 
-    await $.nextTick();
     await $.nextTick();
 
     expect(data.hasError).toBe(true);
@@ -89,12 +80,10 @@ describe('$.atomFetch (Reactivity and Atom State)', () => {
     const data = $.atomFetch('/api/data', { defaultValue: { v: 0 } });
 
     await $.nextTick();
-    await $.nextTick();
     expect(data.value).toEqual({ v: 1 });
 
     data.invalidate();
     void data.value;
-    await $.nextTick();
     await $.nextTick();
 
     expect(data.value).toEqual({ v: 2 });
@@ -126,8 +115,6 @@ describe('$.atomFetch (Reactivity and Atom State)', () => {
     abortFn(); // simulate rejection callback firing from the aborted xhr
 
     await $.nextTick();
-    await $.nextTick();
-    await $.nextTick();
 
     // The AbortError thrown by the superseded request is ignored by the `computed` core, so the atom does not enter an error state.
     expect(data.hasError).toBe(false);
@@ -156,8 +143,6 @@ describe('$.atomFetch (Reactivity and Atom State)', () => {
     data.abort();
     expect(abortSpy).toHaveBeenCalledTimes(1);
 
-    await $.nextTick();
-    await $.nextTick();
     await $.nextTick();
 
     expect(data.isPending).toBe(false);
@@ -229,7 +214,6 @@ describe('$.atomFetch (Reactivity and Atom State)', () => {
     const data = $.atomFetch('/api/500', { defaultValue: null, onError });
 
     await $.nextTick();
-    await $.nextTick();
 
     expect(data.hasError).toBe(true);
     expect(data.lastError).toBeInstanceOf(Error);
@@ -252,7 +236,6 @@ describe('$.atomFetch (Reactivity and Atom State)', () => {
     });
 
     await $.nextTick();
-    await $.nextTick();
 
     expect(data.hasError).toBe(true);
     expect(onError).toHaveBeenCalledTimes(1);
@@ -269,7 +252,6 @@ describe('$.atomFetch (Reactivity and Atom State)', () => {
       },
     });
 
-    await $.nextTick();
     await $.nextTick();
 
     expect(data.lastError?.message).toContain('bad shape');
@@ -288,7 +270,6 @@ describe('$.atomFetch (Reactivity and Atom State)', () => {
         },
       });
 
-      await $.nextTick();
       await $.nextTick();
 
       expect(onError).toHaveBeenCalledTimes(1);
@@ -315,7 +296,6 @@ describe('$.atomFetch (Reactivity and Atom State)', () => {
       });
 
       await $.nextTick();
-      await $.nextTick();
       expect(capturedOptions?.data).toEqual({ q: 'apple' });
       expect(capturedOptions?.method).toBe('POST'); // method must survive ajaxOptionsFn
 
@@ -324,7 +304,6 @@ describe('$.atomFetch (Reactivity and Atom State)', () => {
 
       await $.nextTick();
       void data.value;
-      await $.nextTick();
       await $.nextTick();
 
       expect(capturedOptions?.data).toEqual({ q: 'banana' });
@@ -345,7 +324,6 @@ describe('$.atomFetch (Reactivity and Atom State)', () => {
       });
 
       await $.nextTick();
-      await $.nextTick();
 
       expect(capturedOptions?.method).toBe('POST');
     });
@@ -360,7 +338,6 @@ describe('$.atomFetch (Reactivity and Atom State)', () => {
       });
 
       await $.nextTick();
-      await $.nextTick();
 
       expect(priceEur.value).toBe(120);
 
@@ -369,9 +346,7 @@ describe('$.atomFetch (Reactivity and Atom State)', () => {
       // This is a known limitation of async computed.
       currencyRate.value = 1.5;
 
-      await $.nextTick();
       void priceEur.value;
-      await $.nextTick();
       await $.nextTick();
 
       // Value stays at 120 (NOT 150) because currencyRate was never tracked.

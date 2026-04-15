@@ -1,4 +1,5 @@
 import {
+  aeNextTick,
   atomLens,
   batch,
   composeLens,
@@ -46,7 +47,7 @@ Object.defineProperty(atom, 'debug', {
 });
 
 /** Resolves after microtask effects flush. Fast Promise-based scheduling. */
-export const nextTick = (): Promise<void> => Promise.resolve();
+export const nextTick = (): Promise<void> => aeNextTick();
 
 // Register static extensions to jQuery
 $.extend({

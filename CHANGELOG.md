@@ -4,6 +4,10 @@
 
 ### Core
 
+#### Added
+
+- **aeNextTick**: Introduced `aeNextTick()` to provide a reliable way to wait for the next scheduler flush. Supports both Promise-based `await` and callback patterns.
+
 #### Performance
 
 - **V8 Hidden Class Optimization**: Reordered class properties across `ReactiveNode`, `SlotBuffer`, `ComputedAtom`, and `Effect` to stabilize object shapes and improve property access speed.
@@ -40,6 +44,7 @@
 #### Changed
 
 - **Hardened Link Interception**: Enhanced `setupAutoBindLinks` to correctly respect modifier keys (Ctrl/Cmd), `rel="external"`, cross-origin navigation, and download attributes.
+- **$.nextTick**: Standardized to use core's `aeNextTick()` for unified scheduler synchronization and improved performance via promise deduplication.
 
 ## [0.30.1] - 2026-04-14
 

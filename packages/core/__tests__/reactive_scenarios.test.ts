@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { atom, batch, computed } from '@/index';
+import { aeNextTick, atom, batch, computed } from '@/index';
 
 interface Todo {
   id: number;
@@ -52,7 +52,7 @@ describe('Reactive Scenarios - Auth & App State', () => {
     expect(isAdmin.value).toBe(false);
 
     user.value = { name: 'Admin', email: 'boss@admin.com' };
-    await new Promise((r) => setTimeout(r, 0));
+    await aeNextTick();
     expect(greeting.value).toBe('Hello Admin');
     expect(isAdmin.value).toBe(true);
   });

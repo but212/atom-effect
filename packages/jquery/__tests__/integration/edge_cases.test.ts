@@ -1,7 +1,6 @@
-import $ from 'jquery';
 import { describe, expect, it, vi } from 'vitest';
+import $ from '@/index';
 import { debug } from '@/utils/debug';
-import '@/index';
 
 describe('Atom List Edge Cases', () => {
   it('should visually collapse items with duplicate keys', async () => {
@@ -88,7 +87,6 @@ describe('Atom List Edge Cases', () => {
     // Finish removal
     resolveRemove!();
     await $.nextTick(); // wait for promise resolution in onRemove wrapper
-    await new Promise((r) => setTimeout(r, 0)); // Microtask flush
 
     // Old one gone, new one remains
     expect($container.children().length).toBe(1);

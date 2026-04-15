@@ -1,7 +1,6 @@
-import $ from 'jquery';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import '@/index';
 import { LOG_PREFIXES } from '@/constants';
+import $ from '@/index';
 import { debug } from '@/utils/debug';
 
 describe('$.route() - SPA Routing', () => {
@@ -232,8 +231,6 @@ describe('$.route() - SPA Routing', () => {
         },
       });
 
-      await $.nextTick();
-
       // Successful move: home -> about
       router.navigate('about');
       await $.nextTick();
@@ -293,7 +290,6 @@ describe('$.route() - SPA Routing', () => {
         },
       });
 
-      await $.nextTick();
       router.navigate('about'); // Initial navigate
       await $.nextTick();
       expect(router.currentRoute.value).toBe('about');
@@ -445,7 +441,6 @@ describe('$.route() - SPA Routing', () => {
         },
       });
 
-      await $.nextTick();
       router.navigate('about');
       await $.nextTick();
 

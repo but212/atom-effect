@@ -155,6 +155,17 @@ The scheduler orchestrates state propagation and effect execution using a microt
 - **Flat Loop Drainage**: Drains both main and batch queues in a single non-recursive loop. This prevents call stack overflows even under heavy reactive churn or deeply nested `batch()` calls.
 - **Memory Safety**: Explicitly clears internal array references (`undefined`) immediately after a job executes. This ensures closures are not retained longer than necessary, aiding Garbage Collection in long-running apps.
 
+#### `aeNextTick` Synchronization
+
+`aeNextTick` provides a public interface for synchronizing with the scheduler's internal state. Unlike a generic `Promise.resolve().then()`, `aeNextTick` schedules a job on the internal queue (`scheduler.schedule()`).
+
+This ensures that:
+
+1. It executes **after** all reactive effects that were already queued.
+2. It correctly participates in `batch()` cycles, resolving only after the synchronous flush completes.
+3. It respects the internal `epoch` system, preventing premature resolution during complex re-evaluation cycles.
+4. **Promise Deduplication**: To minimize GC pressure and scheduler overhead, multiple calls to `aeNextTick()` without a callback share a single pending promise. Subsequent calls return the same promise instance until the scheduler flush completes and clears the shared reference.
+
 ### Infinite Loop Defense
 
 Effects can inadvertently create feedback loops (e.g., an effect that writes to an atom it also reads). Layered hard limits are in place to prevent runaway execution:

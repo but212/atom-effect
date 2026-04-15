@@ -382,3 +382,40 @@ export function batch<T>(fn: () => T): T {
     scheduler.endBatch();
   }
 }
+
+let sharedNextTickPromise: Promise<void> | null = null;
+
+/**
+ * Returns a promise that resolves after the next scheduler flush.
+ * This can be used to wait for all asynchronous effects to be processed.
+ *
+ * @param fn - Optional callback to execute after the flush.
+ * @returns A promise that resolves after the flush completes.
+ */
+export function aeNextTick(fn?: () => void): Promise<void> {
+  if (fn) {
+    return new Promise<void>((resolve, reject) => {
+      scheduler.schedule(() => {
+        try {
+          fn();
+          resolve();
+        } catch (err) {
+          reject(err);
+        }
+      });
+    });
+  }
+
+  if (sharedNextTickPromise) {
+    return sharedNextTickPromise;
+  }
+
+  sharedNextTickPromise = new Promise<void>((resolve) => {
+    scheduler.schedule(() => {
+      sharedNextTickPromise = null;
+      resolve();
+    });
+  });
+
+  return sharedNextTickPromise;
+}
