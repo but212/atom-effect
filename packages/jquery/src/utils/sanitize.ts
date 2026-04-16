@@ -135,9 +135,19 @@ function needsSanitization(s: string): boolean {
 // ============================================================================
 
 /**
- * Inert template for parsing.
+ * Template Pool for re-entrant efficiency.
+ * Minimizes GC pressure by reusing template elements across calls.
  */
-const SHARED_TEMPLATE = document.createElement('template');
+const TEMPLATE_POOL: HTMLTemplateElement[] = [];
+
+function acquireTemplate(): HTMLTemplateElement {
+  return TEMPLATE_POOL.pop() || document.createElement('template');
+}
+
+function releaseTemplate(t: HTMLTemplateElement): void {
+  t.innerHTML = '';
+  TEMPLATE_POOL.push(t);
+}
 
 /**
  * DOM_BRIDGE: Low-level access to Element prototypes.
@@ -151,61 +161,71 @@ const DOM_BRIDGE = {
 };
 
 /**
- * Scrubs a single element for dangerous tags and attributes.
+ * Scrubs attributes for dangerous patterns (on*, javascript:, srcdoc).
  */
-function scrubElement(el: HTMLElement): void {
-  const nodeName = el.localName;
-
-  // 1. Sanitize Attributes FIRST (Always sanitize before potential tag replacement)
+function scrubAttributes(el: HTMLElement): void {
   const attrs = DOM_BRIDGE.getAttributes(el);
-  if (attrs && attrs.length > 0) {
-    for (let i = attrs.length - 1; i >= 0; i--) {
-      const attr = attrs[i];
-      if (!attr) continue;
+  if (!attrs || attrs.length === 0) return;
 
-      const name = attr.name;
-      const lowerName = name.toLowerCase();
-      const value = attr.value;
+  for (let i = attrs.length - 1; i >= 0; i--) {
+    const attr = attrs[i];
+    if (!attr) continue;
 
-      if (lowerName.startsWith('on')) {
-        DOM_BRIDGE.removeAttribute(el, name);
-        el.setAttribute('data-unsafe-attr', name);
-      } else if (URL_ATTRS.has(lowerName)) {
-        const normalized = normalize(value);
-        const isBlocked =
-          lowerName === 'srcdoc'
-            ? isDangerousHtmlContent(normalized)
-            : hasDangerousProtocol(normalized);
+    const name = attr.name;
+    const lowerName = name.toLowerCase();
+    const value = attr.value;
 
-        if (isBlocked) {
-          el.setAttribute(name, 'data-unsafe-protocol:');
+    if (lowerName.startsWith('on')) {
+      DOM_BRIDGE.removeAttribute(el, name);
+      el.setAttribute('data-unsafe-attr', name);
+    } else if (URL_ATTRS.has(lowerName)) {
+      const normalized = normalize(value);
+      if (lowerName === 'srcdoc') {
+        // Fast-path for safe srcdoc content
+        if (needsSanitization(normalized)) {
+          const sanitized = sanitizeHtml(normalized);
+          if (sanitized !== value) el.setAttribute(name, sanitized);
         }
-      } else if (lowerName === 'style') {
-        if (isDangerousCssValue(value)) {
-          el.setAttribute('style', 'data-unsafe-css:');
-        }
+      } else if (hasDangerousProtocol(normalized)) {
+        el.setAttribute(name, 'data-unsafe-protocol:');
+      }
+    } else if (lowerName === 'style') {
+      if (isDangerousCssValue(value)) {
+        el.setAttribute('style', 'data-unsafe-css:');
       }
     }
   }
+}
 
-  // 2. Replace Dangerous Tags with inert <span>
-  if (DANGEROUS_TAGS.has(nodeName)) {
-    const span = document.createElement('span');
-    const sanitizedAttrs = DOM_BRIDGE.getAttributes(el);
+/**
+ * Transforms dangerous nodes into inert <span> wrappers.
+ */
+function transformNode(el: HTMLElement): void {
+  if (!DANGEROUS_TAGS.has(el.localName)) return;
 
-    // Transfer attributes
-    for (let i = 0; i < sanitizedAttrs.length; i++) {
-      const a = sanitizedAttrs[i];
-      if (a) span.setAttribute(a.name, a.value);
-    }
+  const span = document.createElement('span');
+  const attrs = DOM_BRIDGE.getAttributes(el);
 
-    // Transfer children
-    while (el.firstChild) {
-      span.appendChild(el.firstChild);
-    }
-
-    DOM_BRIDGE.replaceWith(el, span);
+  for (let i = 0; i < attrs.length; i++) {
+    const a = attrs[i];
+    if (a) span.setAttribute(a.name, a.value);
   }
+
+  while (el.firstChild) {
+    span.appendChild(el.firstChild);
+  }
+
+  DOM_BRIDGE.replaceWith(el, span);
+}
+
+/**
+ * Scrubs a single element for dangerous tags and attributes.
+ */
+function scrubElement(el: HTMLElement): void {
+  // 1. Sanitize Attributes FIRST
+  scrubAttributes(el);
+  // 2. Wrap dangerous tags in spans
+  transformNode(el);
 }
 
 /**
@@ -241,15 +261,14 @@ export function sanitizeHtml(html: string | null | undefined): string {
 
   if (!needsSanitization(sInit)) return sInit;
 
-  SHARED_TEMPLATE.innerHTML = sInit;
-  const frag = SHARED_TEMPLATE.content;
-
-  walkAndScrub(frag);
-
-  const result = SHARED_TEMPLATE.innerHTML;
-  SHARED_TEMPLATE.innerHTML = ''; // Eager GC
-
-  return result;
+  const template = acquireTemplate();
+  try {
+    template.innerHTML = sInit;
+    walkAndScrub(template.content);
+    return template.innerHTML;
+  } finally {
+    releaseTemplate(template);
+  }
 }
 
 /** Checks for dangerous patterns in URL-bearing attributes or HTML sinks. */

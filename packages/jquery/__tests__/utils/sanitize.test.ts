@@ -224,11 +224,28 @@ describe('API Integration: XSS Guards', () => {
       expect(sanitized).not.toMatch(/\bonmouseover\s*=/i);
     });
 
-    it('blocks dangerous content in srcdoc even with entity encoding', () => {
-      // srcdoc is often used to bypass simple filters
-      const payload = '<iframe srcdoc="&lt;script&gt;alert(1)&lt;/script&gt;"></iframe>';
+    it('sanitizes srcdoc content recursively instead of blocking it entirely', () => {
+      // srcdoc is a dangerous sink, but instead of blocking it entirely,
+      // we should sanitize its contents recursively for better UX.
+      const payload = '<iframe srcdoc="<script>alert(1)</script><b>Hello</b>"></iframe>';
       const sanitized = sanitizeHtml(payload);
-      expect(sanitized).toContain('data-unsafe-protocol:');
+
+      expect(sanitized).toContain('srcdoc="');
+      // The content is encoded because it's in an attribute
+      expect(sanitized).toContain('&lt;b&gt;Hello&lt;/b&gt;');
+      expect(sanitized).not.toContain('&lt;script');
+      expect(sanitized).not.toContain('data-unsafe-protocol:');
+    });
+
+    it('supports re-entrant sanitization calls', () => {
+      // Verifies that calling sanitizeHtml inside a sanitization walk (e.g. for srcdoc)
+      // does not corrupt the outer template state.
+      const payload = '<div id="outer"><iframe srcdoc="<div id=\'inner\'></div>"></iframe><p>Keep</p></div>';
+      const sanitized = sanitizeHtml(payload);
+
+      expect(sanitized).toContain('id="outer"');
+      expect(sanitized).toContain('id=&quot;inner&quot;');
+      expect(sanitized).toContain('<p>Keep</p>');
     });
   });
 });
