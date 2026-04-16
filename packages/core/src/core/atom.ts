@@ -149,9 +149,9 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
     return false;
   }
 
-  [Symbol.dispose](): void {
-    this.dispose();
-  }
+  // [Symbol.dispose](): void {
+  //   this.dispose();
+  // }
 }
 
 /**
