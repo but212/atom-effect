@@ -361,9 +361,11 @@ Unlike traditional PJAX libraries that rely on sequential event handlers, `$.ato
 
 ### 11.2 Memory & Race Condition Safety
 
-- **Automatic Unbinding**: To prevent memory leaks in long-lived SPAs, `$.atomNav` automatically calls `.atomUnbind()` on the target container before injecting new HTML. This ensures all observers and event listeners from the previous page are disposed.
-- **Abort Protection**: By leveraging `$.atomFetch`, it automatically aborts pending requests if the user clicks another link before the current one finishes.
-- **Fragment Processing**: It extracts `<title>` tags from incoming HTML fragments to sync `document.title` while stripping them from the content injected into the DOM.
+- **Automatic Unbinding**: To prevent memory leaks and state "shadowing", `$.atomNav` automatically calls `.atomUnbind()` on the target container's children before injecting new HTML.
+- **Metadata Synchronization**: It automatically synchronizes `<title>`, and meta tags (`description`, `keywords`, `canonical`) from the response.
+- **Attribute Reconciliation**: Container attributes (excluding `id`) are synchronized with the incoming fragment's attributes.
+- **Abort Protection**: Each navigation life-cycle is managed by an `AbortController`. Programmatic navigations and `popstate` events trigger a new signal, automatically cancelling stale requests and pending hooks.
+- **Redirect Support**: Respects `X-PJAX-URL` headers for server-side redirects, updating the browser history and reactive state accordingly.
 
 ### 11.3 Lifecycle Hooks
 

@@ -217,7 +217,7 @@ describe('Disposal Finality', () => {
     e.dispose();
   });
 
-  it('Symbol.dispose prevents memory leaks and zombie listeners compared to manual management', async () => {
+  it('manual disposal prevents memory leaks and zombie listeners', async () => {
     const leakContainer: number[] = [];
     const source = atom(0);
 
@@ -233,9 +233,11 @@ describe('Disposal Finality', () => {
 
     const safeContainer: number[] = [];
     {
-      using _safeEffect = effect(() => {
+      const _safeEffect = effect(() => {
         safeContainer.push(source.value);
       });
+      // Manual disposal replaces ES2023 'using' for ES2021 compatibility
+      _safeEffect.dispose();
     }
 
     source.value = 2;

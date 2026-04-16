@@ -282,9 +282,9 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     this._hotIndex = -1;
   }
 
-  [Symbol.dispose](): void {
-    this.dispose();
-  }
+  // [Symbol.dispose](): void {
+  //   this.dispose();
+  // }
 
   addDependency(dep: Dependency): void {
     const trackEpoch = this._trackEpoch;

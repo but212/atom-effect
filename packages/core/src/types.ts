@@ -74,9 +74,9 @@ export interface Disposable {
    */
   dispose(): void;
   /**
-   * Support for explicit resource management (TS 5.2+).
+   * Support for explicit resource management (TS 5.2+, ES2023).
    */
-  [Symbol.dispose](): void;
+  // [Symbol.dispose](): void;
 }
 
 /**
@@ -99,7 +99,7 @@ export interface AtomOptions<T = unknown> {
 /**
  * Readonly atom interface.
  */
-export interface ReadonlyAtom<T = unknown> {
+export interface ReadonlyAtom<T = unknown> extends Disposable {
   /** @internal */
   readonly [BRAND]?: number;
   /** The current value of the atom. */
@@ -126,13 +126,8 @@ export interface ReadonlyAtom<T = unknown> {
 /**
  * Writable atom interface.
  */
-export interface WritableAtom<T = unknown> extends ReadonlyAtom<T>, Disposable {
+export interface WritableAtom<T = unknown> extends ReadonlyAtom<T> {
   value: T;
-  /**
-   * Cleans up the atom and releases resources.
-   */
-  dispose(): void;
-  [Symbol.dispose](): void;
 }
 
 /**
@@ -217,7 +212,7 @@ export interface ComputedOptions<T = unknown> {
 /**
  * Computed atom interface.
  */
-export interface ComputedAtom<T = unknown> extends ReadonlyAtom<T>, Disposable {
+export interface ComputedAtom<T = unknown> extends ReadonlyAtom<T> {
   /** @internal */
   readonly [BRAND]?: number;
   readonly state: AsyncStateType;
@@ -234,8 +229,6 @@ export interface ComputedAtom<T = unknown> extends ReadonlyAtom<T>, Disposable {
 
   /** Invalidates atom. */
   invalidate(): void;
-  dispose(): void;
-  [Symbol.dispose](): void;
 }
 
 export interface Subscriber {
@@ -266,8 +259,6 @@ export interface EffectOptions {
 export interface EffectObject extends Disposable {
   /** @internal */
   readonly [BRAND]?: number;
-  dispose(): void;
-  [Symbol.dispose](): void;
   run(): void;
   readonly isDisposed: boolean;
   readonly executionCount: number;

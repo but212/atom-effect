@@ -103,7 +103,7 @@ export function atomLens<T extends object, P extends Paths<T>>(
     },
     subscriberCount: () => unsubs.size,
     dispose,
-    [Symbol.dispose]: dispose,
+    // [Symbol.dispose]: dispose,
     [BRAND]: BrandFlags.Atom | BrandFlags.Writable,
   } as unknown as WritableAtom<PathValue<T, P>>;
 }

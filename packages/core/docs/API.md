@@ -122,7 +122,6 @@ effectHandle.dispose();
 `effect()` returns an `EffectObject` with the following properties:
 
 - `dispose()`: Stops the effect and runs cleanup.
-- `[Symbol.dispose]()`: Support for explicit resource management (TS 5.2+).
 - `run()`: Manually re-executes the effect.
 - `isDisposed`: Whether the effect has been disposed.
 - `isExecuting`: Whether the effect is currently running.

@@ -184,7 +184,7 @@ describe('Atom', () => {
 
       a.subscribe(spy);
       a.dispose();
-      a[Symbol.dispose](); // Double call is safe
+      // a[Symbol.dispose](); // Removed for ES2021 compatibility
 
       expect(a.subscriberCount()).toBe(0);
 

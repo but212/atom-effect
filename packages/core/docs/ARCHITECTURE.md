@@ -203,7 +203,7 @@ Lenses utilize recursive utility types (`Paths<T>`, `PathValue<T, P>`) to enforc
 
 ### Subscription Lifecycle
 
-Every lens maintains an internal set of parent atom subscriptions. Calling `lens.dispose()` (or using `[Symbol.dispose]()` via the `using` keyword) shuts down these bridges, ensuring zero memory usage for high-churn patterns (e.g., dynamic forms or list item lensing). Improved type safety in `PathValue` and `Paths` now correctly handles nullable and optional properties within the state tree.
+Every lens maintains an internal set of parent atom subscriptions. Calling `lens.dispose()` shuts down these bridges, ensuring zero memory usage for high-churn patterns (e.g., dynamic forms or list item lensing). Improved type safety in `PathValue` and `Paths` now correctly handles nullable and optional properties within the state tree.
 
 ---
 
