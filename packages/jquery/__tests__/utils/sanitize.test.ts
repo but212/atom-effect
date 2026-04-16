@@ -240,7 +240,8 @@ describe('API Integration: XSS Guards', () => {
     it('supports re-entrant sanitization calls', () => {
       // Verifies that calling sanitizeHtml inside a sanitization walk (e.g. for srcdoc)
       // does not corrupt the outer template state.
-      const payload = '<div id="outer"><iframe srcdoc="<div id=\'inner\'></div>"></iframe><p>Keep</p></div>';
+      const payload =
+        '<div id="outer"><iframe srcdoc="<div id=\'inner\'></div>"></iframe><p>Keep</p></div>';
       const sanitized = sanitizeHtml(payload);
 
       expect(sanitized).toContain('id="outer"');
