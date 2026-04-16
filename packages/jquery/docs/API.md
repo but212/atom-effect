@@ -95,9 +95,9 @@ $el.atomBind({ text: [count, c => `Count: ${c}`] });
 Updates `innerHTML`.
 
 > **🛡️ Security Note**:
-> This method uses a **DOM-based Sanitizer** (via inert `<template>`) for maximum reliability. It neutralizes `<script>` tags, `on*` event attributes, and dangerous protocols (`javascript:`, `data:`, etc.) by walking the actual DOM fragment. It also includes **DOM Clobbering Protection** to prevent malicious inputs from shadowing internal element properties used during sanitization.
+> This method uses a **multi-layered DOM-based Sanitizer** (via inert `<template>`) for maximum reliability. It includes an **O(n) fast-path scanner** to skip processing for safe strings, and a **recursive tree-walker** that transforms dangerous tags (`<script>`, `<iframe>`, etc.) into inert `<span>` wrappers while stripping `on*` attributes and dangerous protocols (`javascript:`, `data:`, etc.). It also features **DOM Clobbering Protection** to prevent malicious inputs from shadowing internal element properties used during sanitization.
 >
-> While efficient for most cases, [DOMPurify](https://github.com/cure53/DOMPurify) is recommended for complex, user-generated content to ensure maximum security.
+> While highly efficient, [DOMPurify](https://github.com/cure53/DOMPurify) is recommended for complex, user-generated content to ensure maximum security.
 > See the [Security Guide](./SECURITY.md) for details.
 >
 > ```javascript

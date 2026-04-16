@@ -298,13 +298,14 @@ To prevent memory leaks and "zombie" resolutions (where a request resolves but i
 
 The binding layer includes defensive measures against XSS and prototype pollution:
 
-- `bindHtml`: Sanitizes content via `sanitizeHtml()`. Switched from a regex-based engine to a **DOM-based Sanitizer** using an inert `<template>` fragment. It employs a **walkAndScrub** strategy that recursively cleans the DOM tree, including nested `<template>` contents.
+- `bindHtml`: Sanitizes content via `sanitizeHtml()`. Switched from a regex-based engine to a **multi-layered DOM-based Sanitizer** using an inert `<template>` fragment and a **TEMPLATE_POOL** for re-entrant efficiency. It employs a **walkAndScrub** strategy that recursively cleans the DOM tree, transforming dangerous tags into inert `<span>` wrappers while preserving safe structure.
 - **DOM Clobbering Protection**: Implemented `DOM_BRIDGE` to access element properties (like `.attributes`) and methods (like `.removeAttribute`) directly from the `Element.prototype`. This prevents malicious HTML from "clobbering" these properties and bypassing security checks.
-- `bindAttr`: Blocks `on*` event handler attributes and dangerous URL protocols using a centralized matcher. This protection covers standard and SVG-specific attributes (`fill`, `filter`, `mask`, etc.) and includes `srcdoc` and `srcset` monitoring.
+- `bindAttr`: Blocks `on*` event handler attributes (replaces them with `data-unsafe-attr` markers) and dangerous URL protocols using a centralized matcher. This protection covers standard and SVG-specific attributes (`fill`, `filter`, `mask`, etc.) and includes `srcdoc` and `srcset` monitoring.
 - `srcdoc` Protection: Specifically monitors `srcdoc` as a high-risk HTML sink, applying tag-based sanitization checks before binding.
 - `bindCss`: Blocks CSS values containing `expression()`, `behavior:`, and `url(javascript:)` protocols.
 - `bindProp`: Blocks dangerous properties (`innerHTML`, `outerHTML`) and prototype pollution vectors (`__proto__`, `constructor`, `prototype`). It also enforces protocol security on properties mapped to `URL_ATTRS`.
 - Centralized Engine: Security patterns and monitoring lists are centralized in `utils/sanitize.ts` and `constants.ts` to ensure consistent enforcement across the entire library.
+- **O(n) Fast-path**: `sanitizeHtml` includes an early scan (`needsSanitization`) to bypass expensive DOM parsing for safe strings. The implementation uses a **multi-layered defense** strategy: normalization (entity decoding, control stripping), recursive tag transformation, and protocol/CSS neutralization.
 
 These are **first-pass filters** using optimized regular expressions. For user-generated content, [DOMPurify](https://github.com/cure53/DOMPurify) is recommended. See the [Security Guide](./SECURITY.md) for integration patterns.
 
@@ -375,11 +376,11 @@ Unlike traditional PJAX libraries that rely on sequential event handlers, `$.ato
 
 ## 12. Performance & Memory Management
 
-### 10.1 Object & Array Pooling
+### 12.1 Object & Array Pooling
 
 To minimize Garbage Collection (GC) pressure in highly dynamic applications (e.g., large lists, frequent component mounting), the library implements structured pooling for short-lived objects and arrays.
 
-#### 10.1.1 `ObjectPool<T>`
+#### 12.1.1 `ObjectPool<T>`
 
 The `ObjectPool` utility (`utils/object-pool.ts`) manages a stack of reusable plain objects.
 
@@ -389,28 +390,28 @@ The `ObjectPool` utility (`utils/object-pool.ts`) manages a stack of reusable pl
 - **Mandatory Clear on Overflow**: Resources are reset even if the pool reached its `limit` to break element references immediately and assist the Garbage Collector.
 - **Double-Release Protection**: Implements `indexOf` checks during `release()` cycles to prevent the same instance from being stored twice, which would otherwise lead to catastrophic shared state corruption.
 
-#### 10.1.2 Reused Structures
+#### 12.1.2 Reused Structures
 
 1. **`BindingRecord`**: Created per bound element. Pooling these avoids thousands of micro-allocations during hydration. Its `reset` logic orchestrates the cleanup of nested arrays.
 2. **Reused Buffers**: Pre-allocated `Uint8Array` and `Int32Array` buffers are grown dynamically and reused across `atomList` cycles.
 3. **`ArrayPool`**: Reuses arrays for `effects` and `cleanups` within a `BindingRecord`. Its `limit` (128) is synchronized with the record pool for maximum reuse.
 
-### 10.2 Dense Monomorphic Strategy
+### 12.2 Dense Monomorphic Strategy
 
 All internal state records (e.g., `BindingRecord`, `InputBinding`) are initialized with a fixed, dense set of fields from the constructor. By strictly avoiding "shape transitions" (dynamically adding or deleting properties), the objects remain **Monomorphic**. This allows V8 to utilize **Inline Caches (IC)** at every property access point, achieving near-native performance for reactive propagation and DOM updates.
 
-### 10.3 Flat Buffer Reconciliation
+### 12.3 Flat Buffer Reconciliation
 
 By using `Uint8Array` and `Int32Array` for diffing state tracking, `atomList` eliminates the "GC hum" commonly associated with virtual DOM diffing in large lists. The reconciliation state is stored in a continuous memory block, maximizing CPU cache efficiency and minimizing allocation-time overhead.
 
-- **Sanitization Fast-path**: `sanitizeHtml` includes an early scan (`needsSanitization`) to bypass expensive DOM parsing for safe strings. The implementation uses a **Recursive DOM Scrub** strategy that replaces dangerous tags with inert `<span>` elements while preserving safe structure.
+- **Sanitization Fast-path**: `sanitizeHtml` includes an early scan (`needsSanitization`) to bypass expensive DOM parsing for safe strings. The implementation uses a **multi-layered defense** strategy: normalization (entity decoding, control stripping), recursive tag transformation to inert `<span>` elements, and protocol/CSS neutralization.
 - **Robust Equality**: `shallowEqual` uses `Object.keys()` and `Object.is()` for reliable comparison, correctly handling `NaN` and edge cases while maintaining an efficient linear scan.
 
-## 12. CPU Branch Prediction Optimizations
+## 13. CPU Branch Prediction Optimizations
 
 To achieve zero-overhead reactive updates, the library implements several techniques to maximize **Pipeline Efficiency** by reducing branch mispredictions in the hot-path.
 
-### 12.1 Monomorphic Singleton Swap
+### 13.1 Monomorphic Singleton Swap
 
 Instead of checking `if (debug.enabled)` in the hot paths and relying on complex dynamic method replacement, the debugging subsystem utilizes a **Monomorphic Singleton Swap** pattern (identical to the Core package).
 
@@ -419,7 +420,7 @@ Instead of checking `if (debug.enabled)` in the hot paths and relying on complex
 
 This eliminates thousands of conditional branches from the execution pipeline, keeping the CPU's Branch Target Buffer (BTB) clear for business logic while ensuring zero cost for shipping debug instrumentation to production.
 
-### 11.2 Bitmask Dispatch (`atomBind`)
+### 13.2 Bitmask Dispatch (`atomBind`)
 
 The sequential 12-way `if` chain in `atomBind` was replaced with a **Bitmask Dispatch table**.
 
@@ -428,7 +429,7 @@ The sequential 12-way `if` chain in `atomBind` was replaced with a **Bitmask Dis
 3. The bit index is calculated using `31 - Math.clz32(bit)`, which V8 compiles to a single `BSR` (Bit Scan Reverse) instruction.
 4. The corresponding handler is looked up in the monomorphic `BIND_HANDLERS` table, achieving O(1) jump table dispatching. Tuple arguments (e.g. `[source, formatter]`) are efficiently unpacked using a shared `unpack` utility which recognizes valid options/formatters via property-checking on the second element.
 
-### 11.3 Strategy Specialization (`InputBinding`)
+### 13.3 Strategy Specialization (`InputBinding`)
 
 Two-way input bindings often branch based on element type (Text vs. Select-Multiple) and focus state. These branches were eliminated by:
 
@@ -438,19 +439,19 @@ Two-way input bindings often branch based on element type (Text vs. Select-Multi
 
 This ensures the updater function's control flow remains identical for a given element type, allowing the CPU to perfectly predict the execution path.
 
-### 11.4 Static Snapshot for Registry Cleanup
+### 13.4 Static Snapshot for Registry Cleanup
 
 Live DOM collections (e.g. `HTMLCollection`) change their length as elements are removed, which causes "unstable loop prediction". `cleanupDescendants` now converts the result to a **static array snapshot**. This stabilizes the loop's iteration count and branch targets, preventing stalls during large DOM teardowns.
 
-### 11.5 Fast-path Sanitization Scan
+### 13.5 Fast-path Sanitization Scan
 
-`sanitizeHtml` performs an O(n) scan for safe characters (`<`, `&`, controls) before running the regex pipeline. For the vast majority of "safe" updates (numbers, plain text), this skips the computationally expensive and branch-heavy regex logic entirely.
+`sanitizeHtml` performs an O(n) scan for safe characters (`<`, `&`, controls) and attribute prefixes before running the DOM engine. For the vast majority of "safe" updates (numbers, plain text), this skips the computationally expensive and branch-heavy logic entirely.
 
-## 13. Lenses & Structural Sharing
+## 14. Lenses & Structural Sharing
 
 `$.atomLens` and related utilities are now **re-exported from the Core package**. The jQuery layer provides these via the `$` namespace while delegating the recursive structural sharing logic to the core engine.
 
-### 12.1 Integration with `atomForm`
+### 14.1 Integration with `atomForm`
 
 `atomForm` (`bindings/form.ts`) leverages core's `setDeepValue` and `getPathValue` utilities for O(1) performance on large forms, managed by the `FormBinder` orchestrator.
 
@@ -464,11 +465,11 @@ Live DOM collections (e.g. `HTMLCollection`) change their length as elements are
 5. Recursive Path Support: Supports nested property access and array indexing (e.g., `user.profile.name`, `items[0].text`) by normalizing name attributes into standard dot-notation paths.
 6. Toggle Groups: Radio and Checkbox groups are handled via a specialized `bindToggle` strategy that manages array-based values for multi-check boxes and string/boolean states for radio and single checks.
 
-## 14. Debugging & Visual Highlighting
+## 15. Debugging & Visual Highlighting
 
 The `DebugController` (`utils/debug.ts`) provides visual feedback for DOM updates when enabled.
 
-### 14.1 Visual Highlighting
+### 15.1 Visual Highlighting
 
 To provide immediate visual feedback during reactive updates, the controller applies a temporary outline highlight to the target element.
 
@@ -478,7 +479,7 @@ To provide immediate visual feedback during reactive updates, the controller app
 - **Smooth Fade-out**: To fix abrupt transitions when the highlight class is removed, the CSS `transition` is attached to a persistent attribute selector (`[data-atom-debug]`). The highlight class itself is purely additive, enabling a graceful exit transition handled by the browser's CSS engine.
 - **Dynamic Style Injection**: Injects necessary CSS exactly once into the document head, with checks for existing style markers to avoid duplication.
 
-### 14.2 Selector Logic (`getSelector`)
+### 15.2 Selector Logic (`getSelector`)
 
 The `getSelector` utility in `utils/index.ts` generates human-readable identifier strings for elements in logs:
 
