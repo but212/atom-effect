@@ -64,9 +64,9 @@ describe('Pool Integration', () => {
       registry.trackCleanup(el, cleanupFn);
       registry.trackEffect(el, {
         dispose: vi.fn(),
-        [Symbol.dispose]() {
-          this.dispose();
-        },
+        // [Symbol.dispose]() {
+        //   this.dispose();
+        // },
         run: () => {},
         isDisposed: false,
         isExecuting: false,
@@ -94,9 +94,9 @@ describe('Pool Integration', () => {
 
       const mockEffect = {
         dispose: vi.fn(),
-        [Symbol.dispose]() {
-          this.dispose();
-        },
+        // [Symbol.dispose]() {
+        //   this.dispose();
+        // },
         run: () => {},
         isDisposed: false,
         isExecuting: false,
@@ -139,9 +139,9 @@ describe('Pool Integration', () => {
 
         registry.trackEffect(el, {
           dispose: () => {},
-          [Symbol.dispose]() {
-            this.dispose();
-          },
+          // [Symbol.dispose]() {
+          //   this.dispose();
+          // },
           run: () => {},
           isDisposed: false,
           isExecuting: false,
