@@ -37,6 +37,22 @@ export const URL_ATTRS = new Set([
   'marker-end',
   'clip-path',
   'srcdoc',
+  'srcset',
+]);
+
+const DANGEROUS_TAGS = new Set([
+  'script',
+  'iframe',
+  'object',
+  'embed',
+  'base',
+  'meta',
+  'applet',
+  'noscript',
+  'form',
+  'style',
+  'link',
+  'title',
 ]);
 
 const NAMED_ENTITY_MAP: Record<string, string> = {
@@ -52,11 +68,10 @@ const NAMED_ENTITY_MAP: Record<string, string> = {
 const RE_NUMERIC_ENTITY = /&#x([0-9a-f]+);?|&#([0-9]+);?/gi;
 const RE_NAMED_ENTITY = /&(colon|tab|newline);?/gi;
 // biome-ignore lint/suspicious/noControlCharactersInRegex: Intentionally matching control characters for XSS sanitization
-const RE_STRIP_CTRL = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g;
+const RE_STRIP_CTRL = /[\x00-\x1f\x7f]/g;
 // biome-ignore lint/suspicious/noControlCharactersInRegex: Intentionally matching control characters for XSS sanitization
 const RE_FAST_SCAN = /[<&\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/;
 
-const RE_STRIP_XML = /<\?[\s\S]*?\?>/g;
 const RE_DANGEROUS_TAG =
   /(<(script|iframe|object|embed|base|meta|applet|noscript|form|style|link)\b[^>]*>([\s\S]*?)<\/\2>|<(script|iframe|object|embed|base|meta|applet|noscript|form|style|link)\b[^>]*\/?>)/gi;
 const RE_UNSAFE_ATTR = /\bon\w+\s*=/gim;
@@ -73,7 +88,6 @@ const RE_DANGEROUS_DATA_URI =
 
 /** CSS Sanitization: Optimized to avoid over-matching standard HTML attributes */
 const CSS_KEYWORD_PATTERN = `(?:expression\\s*\\(|behavior\\s*:|-moz-binding\\s*:|url\\s*\\(\\s*["']?\\s*${PROTOCOL_PATTERN}(?!image\\/)|data\\s*:\\s*(?!image\\/))`;
-const RE_DANGEROUS_CSS_GLOBAL = new RegExp(CSS_KEYWORD_PATTERN, 'gim');
 const RE_DANGEROUS_CSS_SINGLE = new RegExp(CSS_KEYWORD_PATTERN, 'im');
 
 // ============================================================================
@@ -99,7 +113,6 @@ function hasDangerousProtocol(s: string): boolean {
 
 /** Checks for high-risk HTML content (tags, on* handlers, embedded protocols). */
 function isDangerousHtmlContent(s: string): boolean {
-  // Use sequential tests for short-circuiting; individual tests are often faster than one giant regex
   return RE_DANGEROUS_TAG.test(s) || RE_UNSAFE_ATTR.test(s) || RE_DANGEROUS_PROTOCOL_GLOBAL.test(s);
 }
 
@@ -122,8 +135,125 @@ function needsSanitization(s: string): boolean {
 // ============================================================================
 
 /**
- * HTML sanitization for XSS mitigation.
- * Optimized with an early-exit fast-path.
+ * Template Pool for re-entrant efficiency.
+ * Minimizes GC pressure by reusing template elements across calls.
+ */
+const TEMPLATE_POOL: HTMLTemplateElement[] = [];
+
+function acquireTemplate(): HTMLTemplateElement {
+  return TEMPLATE_POOL.pop() || document.createElement('template');
+}
+
+function releaseTemplate(t: HTMLTemplateElement): void {
+  t.innerHTML = '';
+  TEMPLATE_POOL.push(t);
+}
+
+/**
+ * DOM_BRIDGE: Low-level access to Element prototypes.
+ * Bypasses DOM Clobbering by avoiding direct property access on potentially shadowed elements.
+ */
+const DOM_BRIDGE = {
+  getAttributes: (el: Element) =>
+    Object.getOwnPropertyDescriptor(Element.prototype, 'attributes')!.get!.call(el) as NamedNodeMap,
+  removeAttribute: (el: Element, name: string) => Element.prototype.removeAttribute.call(el, name),
+  replaceWith: (oldEl: Element, newEl: Node) => Element.prototype.replaceWith.call(oldEl, newEl),
+};
+
+/**
+ * Scrubs attributes for dangerous patterns (on*, javascript:, srcdoc).
+ */
+function scrubAttributes(el: HTMLElement): void {
+  const attrs = DOM_BRIDGE.getAttributes(el);
+  if (!attrs || attrs.length === 0) return;
+
+  for (let i = attrs.length - 1; i >= 0; i--) {
+    const attr = attrs[i];
+    if (!attr) continue;
+
+    const name = attr.name;
+    const lowerName = name.toLowerCase();
+    const value = attr.value;
+
+    if (lowerName.startsWith('on')) {
+      DOM_BRIDGE.removeAttribute(el, name);
+      el.setAttribute('data-unsafe-attr', name);
+    } else if (URL_ATTRS.has(lowerName)) {
+      const normalized = normalize(value);
+      if (lowerName === 'srcdoc') {
+        // Fast-path for safe srcdoc content
+        if (needsSanitization(normalized)) {
+          const sanitized = sanitizeHtml(normalized);
+          if (sanitized !== value) el.setAttribute(name, sanitized);
+        }
+      } else if (hasDangerousProtocol(normalized)) {
+        el.setAttribute(name, 'data-unsafe-protocol:');
+      }
+    } else if (lowerName === 'style') {
+      if (isDangerousCssValue(value)) {
+        el.setAttribute('style', 'data-unsafe-css:');
+      }
+    }
+  }
+}
+
+/**
+ * Transforms dangerous nodes into inert <span> wrappers.
+ */
+function transformNode(el: HTMLElement): void {
+  if (!DANGEROUS_TAGS.has(el.localName)) return;
+
+  const span = document.createElement('span');
+  const attrs = DOM_BRIDGE.getAttributes(el);
+
+  for (let i = 0; i < attrs.length; i++) {
+    const a = attrs[i];
+    if (a) span.setAttribute(a.name, a.value);
+  }
+
+  while (el.firstChild) {
+    span.appendChild(el.firstChild);
+  }
+
+  DOM_BRIDGE.replaceWith(el, span);
+}
+
+/**
+ * Scrubs a single element for dangerous tags and attributes.
+ */
+function scrubElement(el: HTMLElement): void {
+  // 1. Sanitize Attributes FIRST
+  scrubAttributes(el);
+  // 2. Wrap dangerous tags in spans
+  transformNode(el);
+}
+
+/**
+ * Exhaustive Tree Traversal.
+ * Correctly handles <template> shadowing by descending into .content.
+ */
+function walkAndScrub(root: Node | DocumentFragment): void {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+  let el = walker.nextNode() as HTMLElement | null;
+
+  // We use a manual loop because replacing nodes during TreeWalker iteration can be tricky.
+  // Collecting elements to transform is safer and still high-performance.
+  const toScrub: HTMLElement[] = [];
+  while (el) {
+    toScrub.push(el);
+    if (el.localName === 'template') {
+      walkAndScrub((el as HTMLTemplateElement).content);
+    }
+    el = walker.nextNode() as HTMLElement | null;
+  }
+
+  for (let i = 0; i < toScrub.length; i++) {
+    scrubElement(toScrub[i]!);
+  }
+}
+
+/**
+ * HTML sanitization for XSS mitigation using inert fragments.
  */
 export function sanitizeHtml(html: string | null | undefined): string {
   if (!html) return '';
@@ -131,24 +261,14 @@ export function sanitizeHtml(html: string | null | undefined): string {
 
   if (!needsSanitization(sInit)) return sInit;
 
-  let s = normalize(sInit);
-
-  // 1. Tag Stripping (Recursive)
-  if (s.includes('<')) {
-    s = s.replace(RE_STRIP_XML, '');
-    let prev: string;
-    do {
-      prev = s;
-      s = s.replace(RE_DANGEROUS_TAG, '');
-    } while (s !== prev);
+  const template = acquireTemplate();
+  try {
+    template.innerHTML = sInit;
+    walkAndScrub(template.content);
+    return template.innerHTML;
+  } finally {
+    releaseTemplate(template);
   }
-
-  // 2. Neutralization (Multi-pass but deterministic)
-  return s
-    .replace(RE_DANGEROUS_CSS_GLOBAL, 'data-unsafe-css:')
-    .replace(RE_DANGEROUS_PROTOCOL_GLOBAL, 'data-unsafe-protocol:')
-    .replace(RE_DANGEROUS_DATA_URI, 'data-unsafe-protocol:')
-    .replace(RE_UNSAFE_ATTR, 'data-unsafe-attr=');
 }
 
 /** Checks for dangerous patterns in URL-bearing attributes or HTML sinks. */
@@ -158,7 +278,6 @@ export const isDangerousUrl = (attr: string, val: string): boolean => {
 
   const normalized = normalize(val);
 
-  // srcdoc is effectively an innerHTML sink for iframes
   if (lowerAttr === 'srcdoc') {
     return isDangerousHtmlContent(normalized);
   }

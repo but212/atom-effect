@@ -35,6 +35,9 @@ jobs:
       - name: Type check
         run: pnpm typecheck
 
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps chromium
+
       - name: Test
         if: matrix.node-version != '22.x'
         run: pnpm test:run

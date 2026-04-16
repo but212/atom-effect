@@ -3,8 +3,8 @@
  * @description Scenarios simulating real app behavior: Batching efficiency, UI latency, and memory stability.
  */
 
-import { beforeEach, bench, describe } from 'vitest';
-import { aeNextTick, atom, batch, computed, effect } from '../../dist';
+import { bench, describe } from 'vitest';
+import { atom, batch, computed, effect } from '../../dist';
 import {
   benchEffectOptions,
   forceGC,
@@ -78,37 +78,6 @@ describe('Efficiency: Batching vs Manual Propagation', () => {
       keep(_syncSink);
     },
     macroBenchOptions
-  );
-});
-
-describe('UX: Input & UI Latency', () => {
-  const mockData = Array.from({ length: 1000 }, (_, i) => `Item ${i}`);
-  const searchQuery = atom('');
-  const results = computed(() => mockData.filter((item) => item.includes(searchQuery.value)));
-  const displayResults = computed(() =>
-    results.value.slice(0, 20).map((item: string) => `<div class="item">${item}</div>`)
-  );
-
-  let _lastRender = '';
-  effect(() => {
-    _lastRender = displayResults.value.join('');
-  }, benchEffectOptions);
-
-  beforeEach(() => {
-    searchQuery.value = '';
-  });
-
-  bench(
-    `input-to-render latency (async typing simulation)`,
-    async () => {
-      const input = 'Item 1';
-      for (const char of input) {
-        searchQuery.value += char;
-        await aeNextTick();
-      }
-      keep(_lastRender);
-    },
-    { ...microBenchOptions, iterations: 10 }
   );
 });
 

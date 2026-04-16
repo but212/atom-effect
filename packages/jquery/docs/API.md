@@ -95,7 +95,7 @@ $el.atomBind({ text: [count, c => `Count: ${c}`] });
 Updates `innerHTML`.
 
 > **🛡️ Security Note**:
-> This method uses a high-performance regex-based sanitizer for speed. It neutralizes `<script>` tags, `on*` event attributes, and dangerous protocols (`javascript:`, `vbscript:`, `data:`). The implementation includes a **hardened normalization layer** (handling case-sensitive/semicolon-less entity encoding and control character smuggling) and a **robust fast-path** to ensure security without sacrificing update performance.
+> This method uses a **DOM-based Sanitizer** (via inert `<template>`) for maximum reliability. It neutralizes `<script>` tags, `on*` event attributes, and dangerous protocols (`javascript:`, `data:`, etc.) by walking the actual DOM fragment. It also includes **DOM Clobbering Protection** to prevent malicious inputs from shadowing internal element properties used during sanitization.
 >
 > While efficient for most cases, [DOMPurify](https://github.com/cure53/DOMPurify) is recommended for complex, user-generated content to ensure maximum security.
 > See the [Security Guide](./SECURITY.md) for details.
@@ -449,7 +449,7 @@ $.isPromise(v);        // true for Promise or Thenable (including thenable funct
 
 ### `$.nextTick()`
 
-Returns a `Promise` that resolves after the next scheduler flush. Effects are processed in microtasks, so `nextTick` (via `Promise.resolve()`) runs immediately after all pending effects in the current tick complete.
+Returns a `Promise` that resolves after the next scheduler flush. Unlike a generic `Promise.resolve()`, this uses the core `aeNextTick()` implementation, ensuring it waits for all pending reactive effects and benefits from internal promise deduplication for better performance and lower allocation overhead.
 
 ```javascript
 countAtom.value = 1;
@@ -607,6 +607,7 @@ A state-driven lightweight navigation module (PJAX) for jQuery. It intercepts li
 - `onBeforeLoad`: `(url) => boolean | Promise<boolean>` (Optional) — Return `false` to cancel navigation.
 - `onMount`: `($container, url) => void` (Optional) — Called after content is injected.
 - `onUnmount`: `($container, oldUrl) => void` (Optional) — Called before content is replaced.
+- `onError`: `(err, url) => boolean | undefined | void` (Optional) — Callback triggered when a navigation error occurs. Return `false` to prevent default fallback to full page load.
 - `scrollToTop`: `boolean` (Optional) — Whether to scroll to top on nav. Defaults to `true`.
 - `syncTitle`: `boolean` (Optional) — Whether to sync `document.title` from response `<title>` tags. Defaults to `true`.
 

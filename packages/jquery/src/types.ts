@@ -189,10 +189,14 @@ export interface AtomNavOptions {
   onMount?: ($container: JQuery, url: string) => void;
   /** Callback before content is replaced. */
   onUnmount?: ($container: JQuery, oldUrl: string) => void;
+  /** Callback triggered when a navigation error occurs. Return false to prevent default fallback. */
+  onError?: (err: unknown, url: string) => boolean | undefined;
   /** Whether to scroll to top on navigation. Defaults to true. */
   scrollToTop?: boolean;
   /** Whether to sync document.title from response. Defaults to true. */
   syncTitle?: boolean;
+  /** Custom window object for dependency injection (testing). Defaults to global window. */
+  window?: Window & typeof globalThis;
 }
 
 export interface AtomNav {

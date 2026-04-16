@@ -38,6 +38,7 @@ $(() => {
 export { disablejQueryOverrides, enablejQueryOverrides } from '@/core/jquery-patch';
 export { nextTick } from '@/core/namespace';
 export type {
+  AtomNavOptions,
   BindingOptions,
   ComponentFn,
   ComputedAtom,

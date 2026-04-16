@@ -298,8 +298,9 @@ To prevent memory leaks and "zombie" resolutions (where a request resolves but i
 
 The binding layer includes defensive measures against XSS and prototype pollution:
 
-- `bindHtml`: Sanitizes content via `sanitizeHtml()` (removes `<script>`, `on*` events, and dangerous protocols). Uses a **Normalize → Strip Tags → Neutralize** pipeline. The normalization layer is hardened against case-sensitive and semicolon-less entity bypasses (e.g., `&Colon;`, `&tab`).
-- `bindAttr`: Blocks `on*` event handler attributes and dangerous URL protocols using a centralized matcher. This protection covers standard and SVG-specific attributes (`fill`, `filter`, `mask`, etc.) which may contain `url(javascript:...)` patterns.
+- `bindHtml`: Sanitizes content via `sanitizeHtml()`. Switched from a regex-based engine to a **DOM-based Sanitizer** using an inert `<template>` fragment. It employs a **walkAndScrub** strategy that recursively cleans the DOM tree, including nested `<template>` contents.
+- **DOM Clobbering Protection**: Implemented `DOM_BRIDGE` to access element properties (like `.attributes`) and methods (like `.removeAttribute`) directly from the `Element.prototype`. This prevents malicious HTML from "clobbering" these properties and bypassing security checks.
+- `bindAttr`: Blocks `on*` event handler attributes and dangerous URL protocols using a centralized matcher. This protection covers standard and SVG-specific attributes (`fill`, `filter`, `mask`, etc.) and includes `srcdoc` and `srcset` monitoring.
 - `srcdoc` Protection: Specifically monitors `srcdoc` as a high-risk HTML sink, applying tag-based sanitization checks before binding.
 - `bindCss`: Blocks CSS values containing `expression()`, `behavior:`, and `url(javascript:)` protocols.
 - `bindProp`: Blocks dangerous properties (`innerHTML`, `outerHTML`) and prototype pollution vectors (`__proto__`, `constructor`, `prototype`). It also enforces protocol security on properties mapped to `URL_ATTRS`.
@@ -315,7 +316,7 @@ packages/jquery/src/
   constants.ts      — Internal constants and log prefixes
   types.ts          — TypeScript global and internal type definitions
   core/
-    namespace.ts      — $.atom, $.computed, $.effect, $.nextTick statics
+    namespace.ts      — $.atom, $.computed, $.effect, $.nextTick (standardized scheduler-aware tick)
     dom.ts            — Core DOM engine (atomEachElement, createContext, unpack)
     effect-factory.ts — registerReactiveEffect (creates and registers effects)
     registry.ts       — WeakMap-based binding registry + MutationObserver cleanup
@@ -400,7 +401,7 @@ All internal state records (e.g., `BindingRecord`, `InputBinding`) are initializ
 
 By using `Uint8Array` and `Int32Array` for diffing state tracking, `atomList` eliminates the "GC hum" commonly associated with virtual DOM diffing in large lists. The reconciliation state is stored in a continuous memory block, maximizing CPU cache efficiency and minimizing allocation-time overhead.
 
-- **Sanitization Fast-path**: `sanitizeHtml` includes an early scan (`needsSanitization`) to bypass expensive regex scanning for safe strings. The implementation uses recursive "on" handler detection and meta-character filtering to prevent bypasses while remaining highly performant.
+- **Sanitization Fast-path**: `sanitizeHtml` includes an early scan (`needsSanitization`) to bypass expensive DOM parsing for safe strings. The implementation uses a **Recursive DOM Scrub** strategy that replaces dangerous tags with inert `<span>` elements while preserving safe structure.
 - **Robust Equality**: `shallowEqual` uses `Object.keys()` and `Object.is()` for reliable comparison, correctly handling `NaN` and edge cases while maintaining an efficient linear scan.
 
 ## 12. CPU Branch Prediction Optimizations
