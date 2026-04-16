@@ -17,9 +17,6 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Install Playwright Browsers
-        run: npx -y playwright install --with-deps chromium
-
       - name: Run micro benchmarks
         working-directory: packages/core
         run: pnpm bench:micro | tee ../../benchmark-micro.txt
