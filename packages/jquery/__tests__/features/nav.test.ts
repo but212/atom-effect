@@ -182,13 +182,43 @@ describe('$.atomNav', () => {
       expect($target.hasClass('new-theme')).toBe(true);
       expect($target.hasClass('old-theme')).toBe(false);
       expect($target.attr('data-new')).toBe('true');
-      expect($target.attr('data-keep')).toBe('alive');
+      expect($target.attr('data-keep')).toBeUndefined();
 
       // Fragment Extraction
       expect($target.html()).not.toContain('id="ignore"');
 
       $desc.remove();
       $key.remove();
+    });
+
+    it('should remove attributes that are not present in the new response', async () => {
+      mockAjax('<div id="main-content">New Content</div>');
+      $target.attr('data-stale', 'true').addClass('stale-class');
+
+      const nav = createNav({ target: '#main-content' });
+      await nav.navigate('/cleanup');
+
+      await vi.waitFor(() => {
+        expect($target.attr('data-stale')).toBeUndefined();
+        expect($target.hasClass('stale-class')).toBe(false);
+      });
+    });
+
+    it('should remove meta tags that are missing in the new response', async () => {
+      const $desc = $('<meta name="description" content="stale-description">').appendTo('head');
+      // Response has no meta tags
+      mockAjax('<html><body><div id="main-content">No Meta</div></body></html>');
+
+      const nav = createNav({ target: '#main-content' });
+      await nav.navigate('/no-meta');
+
+      try {
+        await vi.waitFor(() => {
+          expect($('meta[name="description"]').length).toBe(0);
+        });
+      } finally {
+        $desc.remove();
+      }
     });
 
     it('should manage lifecycle hooks and pending state transitions', async () => {
@@ -312,7 +342,7 @@ describe('$.atomNav', () => {
       await vi.waitFor(() => expect(assignMock).toHaveBeenCalledWith('/fail'));
     });
 
-    it('should ensure memory safety and properly scope unbind actions', async () => {
+    it('should clean up internal resources and DOM markers on destroy', async () => {
       const abortSpy = vi.fn();
       mockAjax().mockImplementation(() => {
         const p = new Promise<string>(() => {});
@@ -323,14 +353,17 @@ describe('$.atomNav', () => {
       const currentUrlAtom = nav.currentUrl;
       vi.spyOn(currentUrlAtom, 'dispose');
 
-      // 1. Pending request to test abort
+      expect($target.attr('data-atom-nav-target')).toBe('true');
+
+      // 1. Pending request should be aborted
       nav.navigate('/pending');
       await vi.waitFor(() => expect(nav.isPending.value).toBe(true));
 
-      // 2. Destroy should cleanup resources
+      // 2. Destroy should cleanup everything
       nav.destroy();
       expect(abortSpy).toHaveBeenCalled();
       expect(currentUrlAtom.dispose).toHaveBeenCalled();
+      expect($target.attr('data-atom-nav-target')).toBeUndefined();
     });
   });
 });

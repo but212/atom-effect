@@ -21,6 +21,12 @@ interface NavState {
   type: NavigationType;
 }
 
+const META_CONFIG = {
+  description: { selector: 'meta[name="description"]', attr: 'content' },
+  keywords: { selector: 'meta[name="keywords"]', attr: 'content' },
+  canonical: { selector: 'link[rel="canonical"]', attr: 'href' },
+} as const;
+
 interface ContentState {
   html: string;
   title: string | null;
@@ -65,17 +71,11 @@ const NavHelpers = {
       }
     }
 
-    // Extract Meta Data (Issue #16)
+    // Extract Meta Data
     const meta: Record<string, string> = {};
-    const metaSelectors = {
-      description: 'meta[name="description"]',
-      keywords: 'meta[name="keywords"]',
-      canonical: 'link[rel="canonical"]',
-    };
-
-    for (const [key, selector] of Object.entries(metaSelectors)) {
-      const el = doc.querySelector(selector);
-      const val = el?.getAttribute(key === 'canonical' ? 'href' : 'content');
+    for (const [key, config] of Object.entries(META_CONFIG)) {
+      const el = doc.querySelector(config.selector);
+      const val = el?.getAttribute(config.attr);
       if (val) meta[key] = val;
     }
 
@@ -159,7 +159,7 @@ class AtomNavigator implements AtomNav {
     const { target, selector = 'a[data-nav]', headers = {} } = options;
 
     this._win = options.window ?? (window as Window & typeof globalThis);
-    this._$target = typeof target === 'string' ? $(target) : $(target);
+    this._$target = $(target as string);
     this._$target.attr('data-atom-nav-target', 'true');
 
     // 1. Initialize State with Debug Names
@@ -294,9 +294,7 @@ class AtomNavigator implements AtomNav {
 
       const el = this._$target[0] as HTMLElement | undefined;
       if (el && state.attributes) {
-        for (const [name, value] of Object.entries(state.attributes)) {
-          if (el.getAttribute(name) !== value) el.setAttribute(name, value);
-        }
+        this._updateAttributes(el, state.attributes);
       }
 
       this._$target.html(state.html);
@@ -304,29 +302,47 @@ class AtomNavigator implements AtomNav {
     });
   }
 
+  private _updateAttributes(el: HTMLElement, next: Record<string, string>): void {
+    const current = el.attributes;
+    // 1. Remove stale attributes (backward loop for safety)
+    for (let i = current.length - 1; i >= 0; i--) {
+      const attr = current[i];
+      if (!attr) continue;
+      const { name } = attr;
+      if (name !== 'id' && name !== 'data-atom-nav-target' && !(name in next)) {
+        el.removeAttribute(name);
+      }
+    }
+    // 2. Sync values
+    for (const [name, value] of Object.entries(next)) {
+      if (el.getAttribute(name) !== value) {
+        el.setAttribute(name, value);
+      }
+    }
+  }
+
   private _syncMetaData(meta?: Record<string, string>): void {
-    if (!meta) return;
     const { head, createElement } = this._win.document;
 
-    const tags = {
-      description: { selector: 'meta[name="description"]', attr: 'content' },
-      keywords: { selector: 'meta[name="keywords"]', attr: 'content' },
-      canonical: { selector: 'link[rel="canonical"]', attr: 'href' },
-    };
+    for (const [key, config] of Object.entries(META_CONFIG)) {
+      const value = meta?.[key];
+      const el = head.querySelector(config.selector);
 
-    for (const [key, config] of Object.entries(tags)) {
-      const value = meta[key as keyof typeof tags];
-      if (!value) continue;
-
-      let el = head.querySelector(config.selector);
-      if (!el) {
-        el = createElement(key === 'canonical' ? 'link' : 'meta');
-        if (key === 'canonical') el.setAttribute('rel', 'canonical');
-        else el.setAttribute('name', key);
-        head.appendChild(el);
+      if (!value) {
+        if (el) el.remove();
+        continue;
       }
-      if (el.getAttribute(config.attr) !== value) {
-        el.setAttribute(config.attr, value);
+
+      let targetEl = el;
+      if (!targetEl) {
+        targetEl = createElement(key === 'canonical' ? 'link' : 'meta');
+        if (key === 'canonical') targetEl.setAttribute('rel', 'canonical');
+        else targetEl.setAttribute('name', key);
+        head.appendChild(targetEl);
+      }
+
+      if (targetEl.getAttribute(config.attr) !== value) {
+        targetEl.setAttribute(config.attr, value);
       }
     }
   }
@@ -453,9 +469,17 @@ class AtomNavigator implements AtomNav {
     this._navController?.abort();
     this._navEffect.dispose();
     this._content.dispose();
+    this._$target.removeAttr('data-atom-nav-target');
 
     const dispose = (a: ReadonlyAtom) => a.dispose?.();
-    [this._normalizedState, this.currentUrl, this.isPending, this.hasError].forEach(dispose);
+    [
+      this._navState,
+      this._isHookPending,
+      this._normalizedState,
+      this.currentUrl,
+      this.isPending,
+      this.hasError,
+    ].forEach(dispose);
   }
 }
 
