@@ -28,6 +28,7 @@ describe('$.route() - SPA Routing', () => {
     document.body.innerHTML = '';
     window.location.hash = '';
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   describe('Core Navigation & Path Discovery', () => {
@@ -295,11 +296,7 @@ describe('$.route() - SPA Routing', () => {
       expect(router.currentRoute.value).toBe('about');
 
       // Simulate browser "Back" but blocked by onLeave
-      Object.defineProperty(window, 'location', {
-        value: { ...window.location, pathname: '/home' },
-        writable: true,
-        configurable: true,
-      });
+      window.history.replaceState(null, '', '/home');
       window.dispatchEvent(new window.Event('popstate'));
       await $.nextTick();
 
@@ -310,11 +307,7 @@ describe('$.route() - SPA Routing', () => {
     });
 
     it('should handle exact basePath matching and search params', async () => {
-      Object.defineProperty(window, 'location', {
-        value: { ...window.location, pathname: '/app/detail', search: '?id=99' },
-        writable: true,
-        configurable: true,
-      });
+      window.history.replaceState(null, '', '/app/detail?id=99');
 
       const router = $.route({
         target: '#app',
@@ -336,11 +329,7 @@ describe('$.route() - SPA Routing', () => {
       expect(document.querySelector('#app')?.innerHTML).toContain('ID: 99');
 
       // Negative check for basePath prefix match vs exact segment match
-      Object.defineProperty(window, 'location', {
-        value: { ...window.location, pathname: '/app-settings' },
-        writable: true,
-        configurable: true,
-      });
+      window.history.replaceState(null, '', '/app-settings');
       // A new router starting at /app-settings with base /app should go to default if not matched
       const router2 = $.route({
         target: '#app',

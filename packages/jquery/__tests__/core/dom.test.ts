@@ -16,6 +16,9 @@ vi.mock('@/core/registry', () => ({
 
 vi.mock('@/core/jquery-patch', () => ({
   enablejQueryOverrides: vi.fn(),
+  disablejQueryOverrides: vi.fn(),
+  INTERNAL_HANDLER: Symbol.for('atom-effect-internal'),
+  WRAPPED_HANDLER: Symbol.for('atom-effect-wrapped'),
 }));
 
 vi.mock('@/utils/debug', () => ({

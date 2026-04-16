@@ -1,5 +1,6 @@
 // vite.config.ts
 
+import { playwright } from '@vitest/browser-playwright';
 import dts from 'vite-plugin-dts';
 import { defineConfig } from 'vitest/config';
 
@@ -32,7 +33,11 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [dts({ rollupTypes: true, exclude: ['src/**/*.test.ts', '__tests__/**/*'] })],
   test: {
-    environment: 'jsdom',
+    browser: {
+      enabled: true,
+      provider: playwright(),
+      instances: [{ browser: 'chromium' }],
+    },
     setupFiles: ['./__tests__/setup.ts'],
   },
 }));

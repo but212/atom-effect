@@ -4,6 +4,11 @@ import type { BindingContext, EffectCleanup } from '@/types';
 import { debug } from '@/utils/debug';
 
 /**
+ * Shared DOMParser instance for efficient parsing across the package.
+ */
+export const SHARED_PARSER = new DOMParser();
+
+/**
  * Creates a binding context for a DOM element.
  *
  * This context is passed to binding functions and provides:

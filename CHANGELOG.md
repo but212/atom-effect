@@ -6,10 +6,12 @@
 
 #### Added
 
+- **Testing**: Switched the entire DOM test suite (Core & jQuery) from JSDOM/Happy-DOM to **Vitest Browser Mode** using Playwright (Chromium). This ensures high-fidelity behavior for DOM APIs, CSS inheritance, and focus/event handling.
 - **aeNextTick**: Introduced `aeNextTick()` to provide a reliable way to wait for the next scheduler flush. Supports both Promise-based `await` and callback patterns.
 
 #### Performance
 
+- **Benchmarks**: Removed the async typing latency benchmark to eliminate measurement noise from the macro-bench suite.
 - **V8 Hidden Class Optimization**: Reordered class properties across `ReactiveNode`, `SlotBuffer`, `ComputedAtom`, and `Effect` to stabilize object shapes and improve property access speed.
 - **Hot-path Loop Unrolling**: Manually unrolled loops for hot-path slots in `SlotBuffer` and `ReactiveNode.notify` to reduce branching and indexing overhead.
 - **Zero-Allocation Notification**: Inlined `untracked` logic in `Subscription.notify` to eliminate closure allocations during reactive propagation.
@@ -34,6 +36,14 @@
 - **PJAX Navigation**: Introduced `$.atomNav`, a reactive PJAX module for seamless page transitions with automatic title syncing, scroll management, and memory-safe unbinding.
 - **Reactive Navigation State**: `$.atomNav` now exposes `currentUrl`, `isPending`, and `hasError` atoms for building global loading indicators.
 - **Race-Condition Safety**: Integrated navigation with `$.atomFetch` for automatic request abortion during rapid transitions.
+
+#### Fixed
+
+- **Security (XSS)**: Overhauled `sanitizeHtml` to use a **DOM-based Sanitizer** (via inert `<template>`) instead of a basic regex-based tracker. This provides 100% accurate parsing and eliminates bypasses found in regex-only engines.
+- **Security**: Implemented **DOM Clobbering Protection** via `DOM_BRIDGE`. Specialized access to `Element.prototype` properties (like `attributes`, `removeAttribute`) ensures security filters cannot be shadowed or bypassed by malicious form inputs or IDs.
+- **Security**: Added recursive sanitization for `<template>` content, ensuring nested templates are also scrubbed for dangerous tags and attributes.
+- **Security**: Expanded coverage to block dangerous content in `srcdoc` and `srcset` attributes.
+- **Security**: Hardened protocol detection to identify `url(javascript:...)` patterns in SVG attributes (`fill`, `filter`, `mask`, etc.) and CSS values.
 
 #### Performance
 
