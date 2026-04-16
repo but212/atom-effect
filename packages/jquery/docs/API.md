@@ -475,9 +475,10 @@ Declarative AJAX primitive. Wraps core's async `computed` with jQuery's `$.ajax`
 - `urlOrFn`: `string | () => string` — Static URL or a function that reads atoms (auto-refetches on change).
 - `options`: `FetchOptions<T>`
   - `defaultValue`: `T` (Required) — Value before first response.
+  - `name`: `string` (Optional) — Debug name for the atom.
   - `method`: `string` — HTTP method (default: `'GET'`).
   - `headers`: `Record<string, string>` — Request headers.
-  - `transform`: `(raw: unknown) => T` — Response transformer.
+  - `transform`: `(raw: unknown, xhr: JQuery.jqXHR) => T` — Response transformer. Receives the raw data and the jQuery XHR object.
   - `ajaxOptions`: `JQuery.AjaxSettings | () => JQuery.AjaxSettings` — Full `$.ajax` passthrough. When a **function** is provided, it is called on every request and its atom reads are automatically tracked, enabling reactive request payloads (e.g., dynamic headers or body). Static options (`method`, `headers`) are merged as the base, with dynamic values on top. Note: the top-level `method` option only overrides `ajaxOptions.method` if it is explicitly provided.
 
 **Returns**: `ComputedAtom<T>` — reactive value with:
@@ -614,10 +615,10 @@ A state-driven lightweight navigation module (PJAX) for jQuery. It intercepts li
 **Returns**: `AtomNav` object:
 
 - `currentUrl`: `ReadonlyAtom<string>` — Reactive current URL.
-- `isPending`: `ReadonlyAtom<boolean>` — Loading state.
+- `isPending`: `ReadonlyAtom<boolean>` — Loading state (includes network and `onBeforeLoad` hook duration).
 - `hasError`: `ReadonlyAtom<boolean>` — Error state.
-- `navigate(url)`: Programmatically navigate.
-- `destroy()`: Cleanup listeners and resources.
+- `navigate(url, options?)`: Programmatically navigate. `options.replace` can be used for history replacement. Returns a `Promise<void>` that resolves when navigation/hydration is complete.
+- `destroy()`: Cleanup listeners, abort pending requests, and dispose atoms.
 
 ```javascript
 const nav = $.atomNav({

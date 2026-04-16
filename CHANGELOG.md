@@ -33,9 +33,15 @@
 - **Dynamic Routing**: Full support for dynamic route segments (e.g., `user/:id`) with automatic regex compilation and value extraction.
 - **Zero-Config Discovery**: Automatically detect routes from `<template data-path="..." data-default>` elements if no explicit routes are provided.
 - **Reactive Params Atom**: Added a dedicated `params` atom to the `Router`, providing a unified reactive view of path and query parameters.
-- **PJAX Navigation**: Introduced `$.atomNav`, a reactive PJAX module for seamless page transitions with automatic title syncing, scroll management, and memory-safe unbinding.
-- **Reactive Navigation State**: `$.atomNav` now exposes `currentUrl`, `isPending`, and `hasError` atoms for building global loading indicators.
-- **Race-Condition Safety**: Integrated navigation with `$.atomFetch` for automatic request abortion during rapid transitions.
+- **PJAX Navigation**: Introduced `$.atomNav`, a reactive PJAX module for seamless page transitions with automatic title/meta syncing, container attribute reconciliation, and memory-safe unbinding.
+- **Enhanced Navigation Control**: `atomNav.navigate()` now returns a `Promise<void>` and supports a `replace` option. The `onBeforeLoad` hook now receives an `AbortSignal`.
+- **Server-Side Redirects**: Added support for `X-PJAX-URL` header in navigation responses to handle server-side redirects efficiently.
+- **Resource Safety**: Integrated `AbortController` per navigation to prevent race conditions and ensure clean cleanup.
+- **Fetch Enhancements**: `$.atomFetch` now passes the `jqXHR` object to the `transform` function and supports a `name` option for debugging.
+
+#### Removed
+
+- **`[Symbol.dispose]`**: Removed support for `[Symbol.dispose]` in favor of manual disposal for ES2021 compatibility.
 
 #### Fixed
 

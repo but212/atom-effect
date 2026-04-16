@@ -19,6 +19,7 @@ export type EqualFn<T> = (a: T, b: T) => boolean;
 
 export interface AtomOptions extends BaseAtomOptions {
   name?: string;
+  sync?: boolean;
 }
 
 /**
@@ -117,9 +118,10 @@ export interface FormOptions<T> extends ValOptions<T> {
 
 export interface FetchOptions<T> {
   defaultValue: T;
+  name?: string;
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS' | (string & {});
   headers?: Record<string, string>;
-  transform?: (raw: unknown) => T;
+  transform?: (raw: unknown, xhr: JQuery.jqXHR) => T;
   ajaxOptions?: JQuery.AjaxSettings | (() => JQuery.AjaxSettings);
   onError?: (err: unknown) => void;
   eager?: boolean;
@@ -207,7 +209,7 @@ export interface AtomNav {
   /** Error state as a reactive atom. */
   hasError: ReadonlyAtom<boolean>;
   /** Function to programmatically navigate to a URL. */
-  navigate: (url: string) => void;
+  navigate(url: string, options?: { replace?: boolean }): Promise<void>;
   /** Cleans up global event listeners and resources. */
   destroy: () => void;
 }
@@ -234,7 +236,10 @@ declare global {
       fn: () => Promise<T>,
       opts: ComputedOptions<T> & { defaultValue: T }
     ): ComputedAtom<T>;
-    effect(fn: () => EffectResult): EffectObject;
+    effect(
+      fn: () => EffectResult,
+      opts?: import('@but212/atom-effect').EffectOptions
+    ): EffectObject;
     batch(fn: () => void): void;
     untracked<T>(fn: () => T): T;
     isAtom(v: unknown): boolean;

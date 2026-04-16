@@ -24,7 +24,7 @@ class FetchContext<T> {
   private readonly isStaticUrl: boolean;
   private readonly staticUrl: string | undefined;
 
-  private readonly transformFn: ((val: unknown) => T) | undefined;
+  private readonly transformFn: ((val: unknown, xhr: JQuery.jqXHR) => T) | undefined;
   private readonly onErrorFn: ((err: unknown) => void) | undefined;
 
   constructor(urlOrFn: string | (() => string), options: FetchOptions<T>) {
@@ -95,7 +95,7 @@ class FetchContext<T> {
       if (signal.aborted) xhr.abort();
 
       const raw = await xhr;
-      return this.transformFn ? this.transformFn(raw) : (raw as T);
+      return this.transformFn ? this.transformFn(raw, xhr) : (raw as T);
     } catch (err) {
       if (signal.aborted) throw this.createAbortError();
       return this.handleError(err);
@@ -141,6 +141,7 @@ function atomFetch<T>(urlOrFn: string | (() => string), options: FetchOptions<T>
   const atomVal = computed(ctx.execute, {
     defaultValue: options.defaultValue,
     lazy: options.eager === false,
+    ...(options.name !== undefined ? { name: options.name } : {}),
   });
 
   const originalDispose = atomVal.dispose.bind(atomVal);
