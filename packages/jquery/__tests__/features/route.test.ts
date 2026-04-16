@@ -127,10 +127,17 @@ describe('$.route() - SPA Routing', () => {
       expect(aboutLink.classList.contains('active')).toBe(true);
       expect(aboutLink.getAttribute('aria-current')).toBe('page');
 
-      // Interception should ignore cross-origin / standard overrides
+      // Interception should ignore cross-origin / standard overrides.
+      // We must prevent default manually in the test to avoid the browser
+      // actually navigating away, which would break the Vitest iframe connection.
+      const preventDefault = (e: MouseEvent) => e.preventDefault();
+      externalLink.addEventListener('click', preventDefault);
+
       externalLink.click();
       await $.nextTick();
+
       expect(router.currentRoute.value).toBe('about'); // unchanged
+      externalLink.removeEventListener('click', preventDefault);
 
       router.destroy();
     });
