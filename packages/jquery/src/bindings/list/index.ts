@@ -45,6 +45,7 @@ function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptio
 
         const isActuallyInitial = ctx.oldKeys.length === 0 && ctx.removingKeys.size === 0;
 
+        ctx.keyToIndex.clear();
         const diff = buildIndices(ctx, items, count, getKey, options.update, options.isEqual);
 
         const frag = renderItems(diff, options, isActuallyInitial);
