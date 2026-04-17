@@ -29,7 +29,6 @@
 
 #### Fixed
 
-- **Benchmark Integrity**: Eliminated deceptive "fast-path" optimizations (e.g., `size === 0` subscriber guards) from the core library. This ensures micro-benchmarks accurately reflect real-world performance in subscriber-heavy reactive graphs.
 - **Benchmark Refinement**: Strengthened the `keep` utility with non-deterministic branching to prevent JIT Dead Code Elimination (DCE). Updated `micro.bench.ts` to use active subscribers for all scenarios, providing honest and reliable metrics.
 
 ### jQuery

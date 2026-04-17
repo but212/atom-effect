@@ -179,7 +179,7 @@ export abstract class ReactiveNode<T> {
    */
   protected _notifySubscribers(newValue: T | undefined, oldValue: T | undefined): void {
     const slots = this._slots;
-    if (slots === null) return;
+    if (slots === null || slots.size === 0) return;
 
     this._notifying++;
     try {

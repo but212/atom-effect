@@ -67,6 +67,8 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
 
     // 1. Guard: Skip if already scheduled or no subscribers
     if ((currentFlags & SCHED_BIT) !== 0) return;
+    const slots = this._slots;
+    if (slots === null || slots.size === 0) return;
 
     // 2. Schedule Notification
     this._pendingOldValue = oldValue;
@@ -146,17 +148,10 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
   protected override _deepDirtyCheck(): boolean {
     return false;
   }
-
-  // [Symbol.dispose](): void {
-  //   this.dispose();
-  // }
 }
 
 /**
  * Creates a reactive atom holding mutable state.
- *
- * @param initialValue - The initial value of the atom.
- * @param options - Configuration options (sync: boolean).
  */
 export function atom<T>(initialValue: T, options: AtomOptions = {}): WritableAtom<T> {
   return new AtomImpl(initialValue, options);

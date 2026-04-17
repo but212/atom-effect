@@ -155,8 +155,7 @@ export let _sink: any;
  */
 export function keep(value: any): void {
   _sink = value;
-  // Non-deterministic branch to prevent DCE
-  if (Math.random() > 1) {
+  if (Date.now() < 0) {
     console.log(_sink);
   }
 }
