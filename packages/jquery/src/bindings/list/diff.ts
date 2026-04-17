@@ -1,8 +1,3 @@
-/**
- * @module
- * Differences calculation and state determination for list binding.
- * Uses a 3-pass algorithm (prefix, suffix, and middle) for reconcilation.
- */
 import { ERROR_MESSAGES, LOG_PREFIXES } from '@/constants';
 import type { ListKey, ListKeyFn, ListOptions } from '@/types';
 import { shallowEqual } from '@/utils';
@@ -10,15 +5,6 @@ import { debug } from '@/utils/debug';
 import type { ListContext } from './context';
 import { ItemState, type PreparedDiff } from './types';
 
-/**
- * Generates a change map by comparing the current list with new data.
- * Proceeds in 3 stages:
- * 1. Prefix comparison: Skips the unchanged beginning.
- * 2. Suffix comparison: Skips the unchanged end.
- * 3. Middle comparison: Determines the state and index mapping for the remaining changed area.
- *
- * Constraint: If duplicate keys are found, a warning is issued and the item may be excluded from rendering.
- */
 export function buildIndices<T>(
   ctx: ListContext<T>,
   items: T[],
@@ -43,7 +29,6 @@ export function buildIndices<T>(
   const newIndices: number[] = new Array(itemCount);
   const toRender: { key: ListKey; item: T; index: number }[] = [];
 
-  // 1. Prefix
   while (startIndex <= oldEndIndex && startIndex <= newEndIndex) {
     const item = items[startIndex]!,
       k = getKey(item, startIndex);
@@ -52,7 +37,6 @@ export function buildIndices<T>(
     keyToIndex.set(k, startIndex++);
   }
 
-  // 2. Suffix
   while (oldEndIndex >= startIndex && newEndIndex >= startIndex) {
     const item = items[newEndIndex]!,
       k = getKey(item, newEndIndex);
@@ -62,7 +46,6 @@ export function buildIndices<T>(
     oldEndIndex--;
   }
 
-  // Initial pass to fill trimmed sections
   for (let i = 0; i < startIndex; i++) {
     const k = oldKeys[i]!;
     newKeys[i] = k;
@@ -85,7 +68,6 @@ export function buildIndices<T>(
   const oldIndexMap = new Map<ListKey, number>();
   for (let i = startIndex; i <= oldEndIndex; i++) oldIndexMap.set(oldKeys[i]!, i);
 
-  // 3. Middle
   for (let i = startIndex; i <= newEndIndex; i++) {
     const item = items[i]!,
       k = getKey(item, i);
@@ -94,7 +76,7 @@ export function buildIndices<T>(
     keyToIndex.set(k, i);
 
     if (newKeySet.has(k)) {
-      debug.warn(LOG_PREFIXES.LIST, ERROR_MESSAGES.LIST.DUPLICATE_KEY(k, i, ctx.containerSelector));
+      debug.warn(LOG_PREFIXES.LIST, ERROR_MESSAGES.LIST.DUPLICATE_KEY(k, i));
       newIndices[i] = -1;
       continue;
     }

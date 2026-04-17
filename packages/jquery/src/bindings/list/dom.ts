@@ -1,8 +1,3 @@
-/**
- * @module
- * DOM manipulation based on calculated diff information.
- * Handles HTML rendering, batch sanitization, and node repositioning.
- */
 import $ from 'jquery';
 import { LOG_PREFIXES } from '@/constants';
 import type { ListOptions } from '@/types';
@@ -63,13 +58,6 @@ export function handleEmpty<T>(
   ctx.oldNodes = [];
 }
 
-/**
- * Renders the items that require updates.
- *
- * During initial render, if all results are HTML strings and there are
- * no extra events or bindings, it generates and returns the entire HTML
- * at once for direct insertion.
- */
 export function renderItems<T>(
   diff: PreparedDiff<T>,
   options: ListOptions<T>,
@@ -144,15 +132,6 @@ export function cleanupRemoved<T>(ctx: ListContext<T>, diff: PreparedDiff<T>): v
   }
 }
 
-/**
- * Places rendered items into the DOM and invokes callbacks (bind, update, onAdd).
- *
- * Placement Algorithm:
- * 1. If htmlFragments exist, they replace the entire container's innerHTML.
- * 2. If there was no previous data, a DocumentFragment is used for batch insertion.
- * 3. During incremental updates, reverse traversal is performed, referencing nextNode for insertBefore.
- *    (A greedy strategy for minimal movement).
- */
 export function placeItems<T>(
   ctx: ListContext<T>,
   diff: PreparedDiff<T>,

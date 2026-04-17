@@ -74,6 +74,7 @@
 #### Refactor
 
 - **Global Cleanup**: Significant architectural simplification across the library
+- **Error Handling**: Simplified "Duplicate Key" warnings in `atomList` by removing redundant container selector context.
 - **Sanitization**: Removed the redundant `needsSanitization` fast-path scanner in `sanitize.ts` and simplified collection types to native arrays for better maintainability.
 - **Router Refactor**: Refactored `$.route`.
   - **Strategy Pattern**: Introduced `UrlAdapter` for History and Hash navigation modes.
