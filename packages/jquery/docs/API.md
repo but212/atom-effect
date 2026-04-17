@@ -198,7 +198,7 @@ $('ul').atomList(usersAtom, {
 
 ### Internal Performance Note
 
-The `atomList` reconciliation engine uses a **1D flat buffer strategy** combined with native DOM APIs (`insertBefore`, `appendChild`) for structural updates. This bypasses jQuery's internal overhead (script scanning, context normalization) during the rendering hot path, ensuring O(N) performance even for lists with thousands of items.
+The `atomList` synchronization engine uses a **1D flat buffer strategy** combined with native DOM APIs (`insertBefore`, `appendChild`) for structural updates. This bypasses jQuery's internal overhead (script scanning, context normalization) during the rendering hot path, ensuring O(N) performance even for lists with thousands of items.
 
 #### Memory & Async Safety
 
@@ -256,7 +256,7 @@ Fully automated two-way binding for an entire form. Binds every input, select, a
 - **Dynamic DOM**: Automatically detects and binds new form controls added to the DOM after the initial call using `MutationObserver`. Also handles field renaming and removal (via ref-counting).
 - **Radio & Checkbox Groups**: Native support for radio groups and checkbox groups. Checks are automatically mapped to boolean, string, or array values based on input type and name collision.
 - **Circular Protection**: Built-in protection against infinite sync loops between Leaf (element) and Root (atom) states.
-- **Optimized**: Uses `form.elements` for O(1) element access and a centralized dispatcher to avoid O(N) effect fan-out on large forms, ensuring typing performance remains constant regardless of form size.
+- **Form access**: Uses `form.elements` for O(1) element access and a centralized dispatcher to avoid O(N) effect fan-out on large forms, ensuring typing performance remains constant regardless of form size.
 
 **Options**:
 
