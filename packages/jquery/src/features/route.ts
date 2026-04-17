@@ -1,758 +1,757 @@
-import type { ReadonlyAtom } from '@but212/atom-effect';
-import { computed, atom as createAtom, effect, untracked } from '@but212/atom-effect';
+import {
+  computed,
+  atom as createAtom,
+  effect,
+  type ReadonlyAtom,
+  untracked,
+} from '@but212/atom-effect';
 import $ from 'jquery';
 import { ERROR_MESSAGES, LOG_PREFIXES, ROUTE_DEFAULTS } from '@/constants';
 import { registry } from '@/core/registry';
 import type { RouteConfig, RouteDefinition, Router, WritableAtom } from '@/types';
 import { debug } from '@/utils/debug';
 
-// --- Helper: Safe History API Wrappers ---
-
-function safePushState(data: unknown, url: string | URL | null): void {
-  try {
-    history.pushState(data, '', url);
-  } catch (e) {
-    debug.warn(
-      LOG_PREFIXES.ROUTE,
-      'PushState failed (likely file:// protocol or security restriction). UI will update, but URL will not.',
-      e
-    );
-  }
-}
-
-interface CompiledRoute {
-  pattern: string;
-  regex: RegExp | null;
-  paramNames: string[];
-  def: RouteDefinition;
-}
+// --- Pure Utilities (Stateless) ---
 
 /**
- * Router implementation for Single Page Applications (SPA).
- *
- * This router supports:
- * 1. Static and Dynamic routes (regex-based parameter extraction).
- * 2. History (pushState) and Hash navigation modes.
- * 3. Implicit route discovery from DOM templates.
- * 4. Reactive parameter management via atoms.
- * 5. Lifecycle hooks (before/after transition, onEnter, onMount, onLeave).
+ * Internal utilities for path manipulation and comparison.
  */
-class RouterImpl implements Router {
-  /** Reactive state: The name of the current active route pattern. */
-  public currentRoute: ReadonlyAtom<string>;
-  /** Reactive state: Current URL query parameters. */
-  public queryParams: ReadonlyAtom<Record<string, string>>;
-  /** Reactive state: Merged route parameters and query parameters. */
-  public params: ReadonlyAtom<Record<string, string>>;
-
-  /** Normalized configuration. */
-  private config: Required<RouteConfig> & { routes: Record<string, RouteDefinition> };
-  /** O(1) lookup map for static routes without parameters. */
-  private exactRoutes = new Map<string, CompiledRoute>();
-  /** Array for sequential regex matching for dynamic routes (e.g., /user/:id). */
-  private regexRoutes: CompiledRoute[] = [];
-
-  private readonly isHistoryMode: boolean;
-  private readonly basePath: string;
-  private readonly activeClass: string;
-
-  private isDestroyed = false;
-  /** Tracks the pattern name of the previous route for transition hooks. */
-  private previousRoute = '';
-  /** Tracks the full last URL to support restoration on navigation guard rejection. */
-  private previousUrl: string;
-  /** Global cleanups for window events and effects. */
-  private cleanups: Array<() => void> = [];
-  /** Target container for rendering. */
-  private $target: JQuery;
-
-  private currentRouteAtom: WritableAtom<string>;
-  private queryParamsAtom: WritableAtom<Record<string, string>>;
-  private paramsAtom: WritableAtom<Record<string, string>>;
-
-  /** Cache for HTMLTemplateElements to avoid repeated DOM lookups. */
-  private templateCache = new Map<string, HTMLTemplateElement>();
-  /** Cleanup functions specific to the current route's lifecycle. */
-  private routeCleanups: Array<() => void> = [];
-
-  /** Performance optimization: Cache raw query string to avoid re-parsing if unchanged. */
-  private lastRawQuery = '';
-  private cachedQueryParams: Record<string, string> = {};
-  /** Performance optimization: Cache resolved route names for [data-route] links. */
-  private linkRouteCache = new WeakMap<HTMLElement, string>();
+const PathUtils = {
+  /**
+   * Removes leading and trailing slashes from a path.
+   * @param path The path string to normalize.
+   * @returns Normalized path string without surrounding slashes.
+   */
+  normalize: (path: string): string => path.replace(/(^\/+|\/+$)/g, ''),
 
   /**
-   * Parses a query string into a key-value record.
-   * Uses URLSearchParams for spec-compliance and simplicity.
+   * Splits a URL-like string into its path and query parts.
+   * @param path Full path string possibly containing query parameters.
+   * @returns An object with normalized `route` and raw `query` string.
    */
-  private parseQueryParams(raw: string): Record<string, string> {
-    const res: Record<string, string> = {};
-    if (!raw) return res;
+  split: (path: string): { route: string; query: string | undefined } => {
+    const [route, query] = path.split('?');
+    return { route: PathUtils.normalize(route || ''), query };
+  },
+
+  /**
+   * Simple shallow equality check for parameter records.
+   * @param a First parameters object.
+   * @param b Second parameters object.
+   * @returns True if both objects have the same keys and values.
+   */
+  isSameParams: (a: Record<string, string>, b: Record<string, string>): boolean => {
+    if (a === b) return true;
+    const ka = Object.keys(a),
+      kb = Object.keys(b);
+    return ka.length === kb.length && ka.every((k) => a[k] === b[k]);
+  },
+};
+
+/**
+ * Parses a raw query string into a key-value record.
+ * @param raw The query string (excluding the leading '?').
+ * @returns Object mapping parameter names to their decoded values.
+ */
+function parseQueryParams(raw: string): Record<string, string> {
+  const res: Record<string, string> = {};
+  if (!raw) return res;
+  try {
+    // Check for encoded sequences before parsing to provide better debug warnings
+    if (raw.includes('%')) decodeURIComponent(raw);
     new URLSearchParams(raw).forEach((v, k) => {
       res[k] = v;
     });
-    return res;
+  } catch {
+    debug.warn(LOG_PREFIXES.ROUTE, ERROR_MESSAGES.ROUTE.MALFORMED_URI(raw));
+  }
+  return res;
+}
+
+// --- Domain Models & Adapters ---
+
+/**
+ * Represents the current state of the browser's URL.
+ */
+type URLState = {
+  /** Normalized path part. */
+  readonly path: string;
+  /** Parsed query parameters. */
+  readonly query: Record<string, string>;
+  /** The full raw URL as stored in the browser. */
+  readonly url: string;
+};
+
+/**
+ * Strategy interface for interacting with different browser navigation modes.
+ * Abstracts the differences between History API and Hash-based routing.
+ */
+interface UrlAdapter {
+  /** Fetches the current state from the browser location. */
+  readonly getBrowserState: () => URLState;
+  /** Persists a new path to the browser location and returns the new state. */
+  readonly commit: (fullPath: string) => URLState;
+  /** Reverts the browser location to a previous URL. */
+  readonly revert: (previousUrl: string) => void;
+  /** Extracts the logical route path from a clicked anchor element. */
+  readonly resolveAnchor: (el: HTMLAnchorElement) => string;
+  /** Registers a listener for browser navigation events (back/forward). */
+  readonly setupListener: (handler: () => void) => () => void;
+}
+
+/**
+ * Implementation of UrlAdapter using the standard History API.
+ */
+const createHistoryAdapter = (basePathRaw?: string): UrlAdapter => {
+  const basePath = basePathRaw ? `/${PathUtils.normalize(basePathRaw)}` : '';
+  const absoluteBase = `${location.origin}${basePath}/`.replace(/\/+$/, '/');
+
+  return {
+    getBrowserState: () => {
+      let p = location.pathname;
+      if (basePath && p.startsWith(basePath)) p = p.substring(basePath.length);
+      return {
+        path: PathUtils.normalize(p),
+        query: parseQueryParams(location.search.substring(1)),
+        url: location.pathname + location.search,
+      };
+    },
+    commit: (fullPath) => {
+      const { route, query } = PathUtils.split(fullPath);
+      const url = new URL(route, absoluteBase);
+      if (query) url.search = query;
+      const urlStr = url.pathname + url.search;
+      try {
+        history.pushState(null, '', urlStr);
+      } catch {}
+      return {
+        path: PathUtils.normalize(route),
+        query: parseQueryParams(query || ''),
+        url: urlStr,
+      };
+    },
+    revert: (previousUrl) => {
+      const current = location.pathname + location.search;
+      if (current !== previousUrl) {
+        try {
+          history.replaceState(null, '', previousUrl);
+        } catch {}
+      }
+    },
+    resolveAnchor: (el) => {
+      let p = el.pathname;
+      if (basePath && p.startsWith(basePath)) p = p.substring(basePath.length);
+      return PathUtils.normalize(p) + el.search;
+    },
+    setupListener: (handler) => {
+      window.addEventListener('popstate', handler);
+      return () => window.removeEventListener('popstate', handler);
+    },
+  };
+};
+
+/**
+ * Implementation of UrlAdapter using location.hash for older browsers or simple deployments.
+ */
+const createHashAdapter = (): UrlAdapter => {
+  return {
+    getBrowserState: () => {
+      const hash = location.hash;
+      const raw = hash.startsWith('#') ? hash.substring(1) : hash;
+      const { route, query } = PathUtils.split(raw);
+      return { path: route, query: parseQueryParams(query || ''), url: hash };
+    },
+    commit: (fullPath) => {
+      const { route, query } = PathUtils.split(fullPath);
+      const url = `#${query ? `${route}?${query}` : route}`;
+      location.hash = url;
+      return { path: PathUtils.normalize(route), query: parseQueryParams(query || ''), url };
+    },
+    revert: (previousUrl) => {
+      if (location.hash !== previousUrl) location.hash = previousUrl;
+    },
+    resolveAnchor: (el) => {
+      return el.hash.startsWith('#') ? PathUtils.normalize(el.hash.substring(1)) : '';
+    },
+    setupListener: (handler) => {
+      window.addEventListener('hashchange', handler);
+      return () => window.removeEventListener('hashchange', handler);
+    },
+  };
+};
+
+/**
+ * Represents a route that has been processed for matching.
+ */
+type CompiledRoute =
+  | {
+      /** Simple static route that doesn't contain placeholders. */
+      readonly kind: 'exact';
+      readonly pattern: string;
+      readonly def: RouteDefinition;
+    }
+  | {
+      /** Dynamic route with path parameters (e.g., /user/:id). */
+      readonly kind: 'dynamic';
+      readonly pattern: string;
+      readonly regex: RegExp;
+      readonly paramNames: readonly string[];
+      readonly def: RouteDefinition;
+    };
+
+/**
+ * Result of a matching operation.
+ */
+type MatchResult =
+  | {
+      readonly kind: 'found';
+      readonly route: CompiledRoute;
+      readonly params: Record<string, string>;
+    }
+  | { readonly kind: 'not-found' };
+
+/**
+ * Manage the registration and matching of routes against URL paths.
+ * Pre-computes regular expressions for efficient lookup.
+ */
+class RouteMatcher {
+  private readonly exact = new Map<string, CompiledRoute>();
+  private readonly dynamic: Extract<CompiledRoute, { kind: 'dynamic' }>[] = [];
+
+  constructor(routes: Record<string, RouteDefinition>) {
+    Object.entries(routes).forEach(([path, def]) => {
+      const normalized = PathUtils.normalize(path);
+      if (!normalized.includes(':')) {
+        this.exact.set(normalized, { kind: 'exact', pattern: normalized, def });
+      } else {
+        const paramNames: string[] = [];
+        const regexStr = normalized
+          .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+          .replace(/:(\w+)/g, (_, name) => {
+            paramNames.push(name);
+            return '([^/]+)';
+          });
+
+        this.dynamic.push({
+          kind: 'dynamic',
+          pattern: normalized,
+          regex: new RegExp(`^${regexStr}$`),
+          paramNames,
+          def,
+        });
+      }
+    });
   }
 
   /**
-   * Universal path normalization: removes leading and trailing slashes.
-   * This ensures that '/home/', '/home', 'home/', and 'home' are treated identically.
+   * Matches a path against registered routes.
+   * Priority: Static Match > Dynamic Match > Not Found.
+   *
+   * @param path The path to match.
+   * @returns Match result containing the definition and extracted parameters.
    */
-  private normalizePath(path: string): string {
-    return path.replace(/(^\/+|\/+$)/g, '');
+  match(path: string): MatchResult {
+    const normalized = PathUtils.normalize(path);
+    const exactMatch = this.exact.get(normalized);
+    if (exactMatch) return { kind: 'found', route: exactMatch, params: {} };
+
+    for (const route of this.dynamic) {
+      const match = normalized.match(route.regex);
+      if (match) {
+        const params = route.paramNames.reduce(
+          (acc, name, i) => {
+            try {
+              acc[name] = decodeURIComponent(match[i + 1] || '');
+            } catch {
+              acc[name] = match[i + 1] || '';
+            }
+            return acc;
+          },
+          {} as Record<string, string>
+        );
+        return { kind: 'found', route, params };
+      }
+    }
+    return { kind: 'not-found' };
   }
+}
 
+/**
+ * Main implementation of the SPA Router.
+ *
+ * Manages the marriage between browser navigation (history/hash) and
+ * reactive state (atoms). It handles route discovery from DOM,
+ * link interception, guard execution, and efficient DOM swap.
+ */
+class RouterImpl implements Router {
+  /** Reactive name of the current active route pattern. */
+  public currentRoute: ReadonlyAtom<string>;
+  /** Reactive record of current query parameters from the URL. */
+  public queryParams: ReadonlyAtom<Record<string, string>>;
+  /** Integrated reactive record of both route path parameters and query parameters. */
+  public params: ReadonlyAtom<Record<string, string>>;
+
+  private readonly matcher: RouteMatcher;
+  private readonly config: Required<RouteConfig> & { routes: Record<string, RouteDefinition> };
+  private readonly urlAdapter: UrlAdapter;
+  private readonly $target: JQuery<HTMLElement>;
+  private readonly activeClass: string;
+
+  private readonly currentRouteAtom: WritableAtom<string>;
+  private readonly queryParamsAtom: WritableAtom<Record<string, string>>;
+  private readonly paramsAtom: WritableAtom<Record<string, string>>;
+
+  private isDestroyed = false;
+  private previousPath = '';
+  private previousUrl = '';
+
+  private cleanups: (() => void)[] = [];
+  private routeCleanups: (() => void)[] = [];
+  private readonly templateCache = new Map<string, HTMLTemplateElement>();
+  private readonly linkRouteCache = new WeakMap<HTMLElement, string>();
+
+  /**
+   * Initializes the router and starts listening for events.
+   * @param config User-provided configuration.
+   */
   constructor(config: RouteConfig) {
-    // Merge defaults with user config, ensuring routes and lifecycle hooks represent valid defaults.
-    this.config = {
-      mode: ROUTE_DEFAULTS.mode,
-      basePath: ROUTE_DEFAULTS.basePath,
-      autoBindLinks: ROUTE_DEFAULTS.autoBindLinks,
-      activeClass: ROUTE_DEFAULTS.activeClass,
-      notFound: config.notFound || '',
-      beforeTransition: config.beforeTransition || (() => {}),
-      afterTransition: config.afterTransition || (() => {}),
-      default: config.default || '',
-      ...config,
-      routes: config.routes || {},
-    } as Required<RouteConfig> & { routes: Record<string, RouteDefinition> };
-
-    this.isHistoryMode = this.config.mode === 'history';
-    this.basePath = this.config.basePath ? this.config.basePath.replace(/\/$/, '') : '';
+    this.config = this.parseConfig(config);
     this.activeClass = this.config.activeClass;
+
+    // Resolve target element safely for both jQuery and DOM users
     const target = this.config.target;
     if (typeof target === 'string') {
       this.$target = $(target);
     } else if (target instanceof HTMLElement) {
       this.$target = $(target);
     } else {
-      this.$target = target as JQuery;
+      this.$target = target as JQuery<HTMLElement>;
     }
-    this.previousUrl = this.isHistoryMode ? location.pathname + location.search : location.hash;
 
-    // Phase 1: Discover routes from DOM templates if 'routes' config is empty.
-    this.discoverRoutes();
+    // Initialize navigation mode strategy
+    this.urlAdapter =
+      this.config.mode === 'history'
+        ? createHistoryAdapter(this.config.basePath)
+        : createHashAdapter();
 
-    // Phase 2: Compile route definitions into static/regex lookups.
-    this.compileRoutes();
+    // Setup routes and synchronization
+    this.discoverRoutesFromDOM();
+    this.matcher = new RouteMatcher(this.config.routes);
 
-    // Phase 3: Initialize reactive state.
-    const initialRoute = this.getRouteName();
-    this.currentRouteAtom = createAtom(initialRoute);
+    const initState = this.urlAdapter.getBrowserState();
+    this.previousUrl = initState.url;
+
+    // Setup reactive synchronization
+    const initialPath = initState.path || this.config.default;
+    this.currentRouteAtom = createAtom(initialPath);
     this.currentRoute = this.currentRouteAtom;
 
-    this.queryParamsAtom = createAtom(this.getQueryParams());
+    this.queryParamsAtom = createAtom(initState.query);
     this.queryParams = computed(() => this.queryParamsAtom.value);
 
-    const initialMatch = this.matchRoute(initialRoute);
-    this.paramsAtom = createAtom(initialMatch.params);
+    const firstMatch = this.matcher.match(initialPath);
+    const initialParams = firstMatch.kind === 'found' ? firstMatch.params : {};
+    this.paramsAtom = createAtom({ ...initState.query, ...initialParams });
     this.params = computed(() => this.paramsAtom.value);
 
-    // Phase 4: Setup event listeners and effects.
-    this.init();
+    this.setupLifecycle();
   }
 
   /**
-   * Scans the document for <template data-path="..."> elements.
-   * This enables zero-config routing by deriving paths directly from the DOM.
+   * Merges user config with project defaults.
    */
-  private discoverRoutes() {
-    let hasRoutes = false;
-    for (const _ in this.config.routes) {
-      hasRoutes = true;
-      break;
-    }
-    if (hasRoutes || !this.$target[0]) return;
-
-    try {
-      const templates = document.querySelectorAll<HTMLTemplateElement>(`template[data-path]`);
-      const len = templates.length;
-      const routes = this.config.routes;
-
-      for (let i = 0; i < len; i++) {
-        const tmpl = templates[i]!;
-        const rawPath = tmpl.getAttribute('data-path');
-        if (rawPath == null) continue;
-
-        const path = this.normalizePath(rawPath);
-        const isDefault = tmpl.hasAttribute('data-default');
-
-        // Assign a unique ID if missing for selector performance.
-        if (!tmpl.id) tmpl.id = `route-tmpl-${Math.random().toString(36).substring(2, 11)}`;
-        routes[path] = { template: `#${tmpl.id}` };
-
-        if (isDefault && !this.config.default) {
-          this.config.default = path;
-        }
-      }
-    } catch (e) {
-      debug.warn(LOG_PREFIXES.ROUTE, 'Route discovery failed:', e);
-    }
-  }
-
-  /**
-   * Pre-compiles route strings into regex patterns for efficient matching.
-   * Splits routes into 'exact' (no markers) and 'regex' (with :param) lookups.
-   */
-  private compileRoutes() {
-    this.exactRoutes.clear();
-    this.regexRoutes = [];
-    const routes = this.config.routes;
-    const keys = Object.keys(routes);
-    const len = keys.length;
-
-    for (let i = 0; i < len; i++) {
-      const rawKey = keys[i]!;
-      const key = this.normalizePath(rawKey);
-      const def = routes[rawKey]!;
-
-      // Static path optimization
-      if (key.indexOf(':') === -1) {
-        this.exactRoutes.set(key, { pattern: key, regex: null, paramNames: [], def });
-      } else {
-        // Dynamic path: convert :name into regex capture groups.
-        const paramNames: string[] = [];
-        const regexStr = key
-          .replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // Escape regex special chars in static parts
-          .replace(/:(\w+)/g, (_, paramName) => {
-            paramNames.push(paramName);
-            return '([^/]+)';
-          });
-
-        this.regexRoutes.push({
-          pattern: key,
-          regex: new RegExp(`^${regexStr === '' ? '^$' : regexStr}$`),
-          paramNames,
-          def,
-        });
-      }
-    }
-  }
-
-  /**
-   * Finds the best matching route for a given path.
-   * Prioritizes exact matches before trying dynamic regex patterns.
-   */
-  private matchRoute(path: string): {
-    compiled: CompiledRoute | undefined;
-    params: Record<string, string>;
-  } {
-    const exact = this.exactRoutes.get(path);
-    if (exact) return { compiled: exact, params: {} };
-
-    const regexRoutes = this.regexRoutes;
-    const len = regexRoutes.length;
-
-    for (let i = 0; i < len; i++) {
-      const route = regexRoutes[i]!;
-      const match = path.match(route.regex!);
-      if (match) {
-        const params: Record<string, string> = {};
-        const paramNames = route.paramNames;
-        const pLen = paramNames.length;
-        for (let j = 0; j < pLen; j++) {
-          params[paramNames[j]!] = decodeURIComponent(match[j + 1] || '');
-        }
-        return { compiled: route, params };
-      }
-    }
-    return { compiled: undefined, params: {} };
-  }
-
-  /**
-   * Sets up history/hash change listeners and reactive rendering effects.
-   */
-  private init() {
-    const event = this.isHistoryMode ? 'popstate' : 'hashchange';
-    const handler = this.handleUrlChange.bind(this);
-    window.addEventListener(event, handler);
-    this.cleanups.push(() => window.removeEventListener(event, handler));
-
-    // Core rendering effect: runs whenever currentRouteAtom changes.
-    const renderEffect = effect(() => {
-      const routeName = this.currentRouteAtom.value;
-      untracked(() => {
-        // Execute cleanups from the previous route (if any).
-        const routeCleanups = this.routeCleanups;
-        const len = routeCleanups.length;
-        for (let i = 0; i < len; i++) {
-          try {
-            routeCleanups[i]!();
-          } catch {}
-        }
-        routeCleanups.length = 0;
-      });
-      this.renderRoute(routeName);
-    });
-    this.cleanups.push(() => renderEffect.dispose());
-
-    // Setup global click listener if autoBindLinks is enabled.
-    this.setupAutoBindLinks();
-
-    // Automatic destruction when the target container is removed from the DOM.
-    const targetEl = this.$target[0];
-    if (targetEl) {
-      registry.trackCleanup(targetEl, () => this.destroy());
-    }
-  }
-
-  /**
-   * Resolves the current route name from the URL, accounting for basePath and mode.
-   */
-  private getRouteName(): string {
-    const defaultRoute = this.config.default || '';
-    if (this.isHistoryMode) {
-      const base = this.basePath;
-      let path = location.pathname;
-      if (base && path.startsWith(base)) {
-        if (path.length === base.length || path[base.length] === '/') {
-          path = path.substring(base.length);
-        }
-      }
-      return this.normalizePath(path) || defaultRoute;
-    }
-    const hash = location.hash;
-    const path = hash.startsWith('#') ? hash.substring(1) : hash;
-    const { route } = this.splitPath(path);
-    return route || defaultRoute;
-  }
-
-  /**
-   * Retrieves and parses current query parameters with caching.
-   */
-  private getQueryParams(): Record<string, string> {
-    const raw = this.getCurrentRawQuery();
-    if (raw === this.lastRawQuery) return this.cachedQueryParams;
-    this.lastRawQuery = raw;
-
-    const res = this.parseQueryParams(raw);
-    if (this.areParamsEqual(res, this.cachedQueryParams)) return this.cachedQueryParams;
-
-    // Check for malformed URI encoding to avoid silent failures.
-    if (raw.indexOf('%') !== -1) {
-      try {
-        decodeURIComponent(raw);
-      } catch {
-        debug.warn(LOG_PREFIXES.ROUTE, ERROR_MESSAGES.ROUTE.MALFORMED_URI(raw));
-      }
-    }
-    this.cachedQueryParams = res;
-    return res;
-  }
-
-  private getCurrentRawQuery(): string {
-    if (this.isHistoryMode) return location.search.substring(1);
-    const hash = location.hash;
-    const queryIndex = hash.indexOf('?');
-    return queryIndex !== -1 ? hash.substring(queryIndex + 1) : '';
-  }
-
-  /**
-   * Shallow equality check for parameter records.
-   */
-  private areParamsEqual(a: Record<string, string>, b: Record<string, string>): boolean {
-    if (a === b) return true;
-    const keysA = Object.keys(a);
-    const keysB = Object.keys(b);
-    const len = keysA.length;
-    if (len !== keysB.length) return false;
-
-    for (let i = 0; i < len; i++) {
-      const k = keysA[i]!;
-      if (a[k] !== b[k]) return false;
-    }
-    return true;
-  }
-
-  /**
-   * Utility to split a URL path into its route and query segments.
-   */
-  private splitPath(path: string): { route: string; query: string | undefined } {
-    const queryIndex = path.indexOf('?');
-    if (queryIndex === -1) {
-      return { route: this.normalizePath(path), query: undefined };
-    }
+  private parseConfig(c: RouteConfig) {
     return {
-      route: this.normalizePath(path.slice(0, queryIndex)),
-      query: path.slice(queryIndex + 1),
-    };
+      mode: ROUTE_DEFAULTS.mode,
+      basePath: ROUTE_DEFAULTS.basePath,
+      autoBindLinks: ROUTE_DEFAULTS.autoBindLinks,
+      activeClass: ROUTE_DEFAULTS.activeClass,
+      notFound: c.notFound || '',
+      beforeTransition: c.beforeTransition || (() => {}),
+      afterTransition: c.afterTransition || (() => {}),
+      default: c.default || '',
+      ...c,
+      routes: c.routes || {},
+    } as Required<RouteConfig> & { routes: Record<string, RouteDefinition> };
   }
 
   /**
-   * Actual History/Hash manipulation.
+   * Attaches global listeners and sets up the reactive rendering cycle.
    */
-  private setUrl(name: string): void {
-    const { route, query } = this.splitPath(name);
-    const fullPath = query ? `${route}?${query}` : route;
+  private setupLifecycle() {
+    this.cleanups.push(this.urlAdapter.setupListener(() => this.handleBrowserSync()));
 
-    if (this.isHistoryMode) {
-      const url = `${this.basePath}/${fullPath}`;
-      safePushState(null, url);
-      this.previousUrl = url;
-    } else {
-      const url = `#${fullPath}`;
-      location.hash = url;
-      this.previousUrl = location.hash;
+    // Essential Rendering Effect: Redraws UI whenever URL state (path/query) changes
+    const renderSub = effect(() => {
+      const path = this.currentRouteAtom.value;
+      this.queryParamsAtom.value;
+
+      untracked(() => {
+        this.runRouteCleanups();
+        this.render(path);
+      });
+    });
+    this.cleanups.push(() => renderSub.dispose());
+
+    // Link Interception and Global Registry Cleanup
+    if (this.config.autoBindLinks) this.setupInterception();
+    if (this.$target[0]) {
+      registry.trackCleanup(this.$target[0], () => this.destroy());
     }
   }
 
   /**
-   * Reverts URL back to the last known valid state.
+   * Programmatically navigates to a new destination.
+   * Runs leave guards and updates the browser URL and internal state.
+   *
+   * @param path Target URL part (e.g., 'home', 'user/123', 'search?q=query').
    */
-  private restoreUrl(): void {
-    try {
-      if (this.isHistoryMode) {
-        history.replaceState(null, '', this.previousUrl);
-      } else {
-        location.hash = this.previousUrl;
+  public navigate(path: string): void {
+    if (this.isDestroyed || !this.canLeave()) return;
+
+    const { route, query } = PathUtils.split(path);
+    const targetPath = route || this.config.default;
+    if (!targetPath) return;
+
+    const fullPath = query ? `${targetPath}?${query}` : targetPath;
+
+    // Atomically update state to prevent multiple render cycles
+    $.batch(() => {
+      const nextState = this.urlAdapter.commit(fullPath);
+      this.previousUrl = nextState.url;
+
+      if (!PathUtils.isSameParams(this.queryParamsAtom.peek(), nextState.query)) {
+        this.queryParamsAtom.value = nextState.query;
       }
-    } catch (e) {
-      debug.warn(LOG_PREFIXES.ROUTE, 'Restore URL failed', e);
-    }
+
+      const current = this.currentRouteAtom.peek();
+      if (current !== nextState.path) {
+        this.currentRouteAtom.value = nextState.path;
+      }
+    });
   }
 
   /**
-   * Executes the full rendering and transition logic for a requested route.
+   * Responds to browser 'back' and 'forward' actions.
    */
-  private renderRoute(requestedPath: string): void {
-    const target = this.$target[0];
-    if (this.isDestroyed || !target) return;
+  private handleBrowserSync() {
+    if (this.isDestroyed) return;
+    const state = this.urlAdapter.getBrowserState();
+    if (state.url === this.previousUrl) return;
 
-    const { compiled, params } = this.matchRoute(requestedPath);
-    let cfg = compiled?.def;
-
-    // Fallback if the route is not defined.
-    if (!cfg) {
-      const notFoundRoute = this.config.notFound;
-      cfg = notFoundRoute ? this.config.routes[notFoundRoute] : undefined;
-      if (!cfg) {
-        debug.warn(LOG_PREFIXES.ROUTE, ERROR_MESSAGES.ROUTE.NOT_FOUND(requestedPath));
+    const nextPath = state.path || this.config.default;
+    if (this.currentRouteAtom.peek() !== nextPath) {
+      if (!this.canLeave()) {
+        this.urlAdapter.revert(this.previousUrl);
         return;
       }
+      this.currentRouteAtom.value = nextPath;
     }
 
-    const queryParams = this.getQueryParams();
-    const from = this.previousRoute;
-    const name = compiled ? compiled.pattern : requestedPath;
+    this.queryParamsAtom.value = state.query;
+    this.previousUrl = state.url;
+  }
 
-    const beforeHook = this.config.beforeTransition;
-    if (beforeHook) untracked(() => beforeHook(from, name));
+  /**
+   * Executes the full transition logic for a requested path.
+   * 1. Resolution & Matching
+   * 2. Guards & Lifecycle Hook (beforeTransition, onEnter)
+   * 3. DOM Update & Cleanup
+   * 4. Post-Navigation Actions (afterTransition, A11y focus)
+   *
+   * @param requestedPath Normalized path to render.
+   */
+  private render(requestedPath: string): void {
+    const matchResult = this.matcher.match(requestedPath);
+    const def =
+      matchResult.kind === 'found'
+        ? matchResult.route.def
+        : this.config.routes[this.config.notFound];
 
-    // Clear target container efficiently using native DOM removal.
-    while (target.firstChild) {
-      target.removeChild(target.firstChild);
+    if (!def) {
+      debug.warn(LOG_PREFIXES.ROUTE, ERROR_MESSAGES.ROUTE.NOT_FOUND(requestedPath));
+      return;
     }
 
-    // Merge parameters: Query Params + Path Params.
-    let allParams = Object.assign({}, queryParams, params);
+    const routeName = matchResult.kind === 'found' ? matchResult.route.pattern : requestedPath;
+    const pathParams = matchResult.kind === 'found' ? matchResult.params : {};
+    const mergedParams = { ...this.queryParamsAtom.peek(), ...pathParams };
 
-    // onEnter hook: allow data fetching or param modification before rendering.
-    if (cfg.onEnter) {
-      const res = untracked(() => cfg!.onEnter!(allParams, this));
-      if (res) allParams = Object.assign(allParams, res);
+    untracked(() => this.config.beforeTransition(this.previousPath, routeName));
+
+    if (def.onEnter) {
+      const hookResult = untracked(() => def.onEnter!(mergedParams, this));
+      if (hookResult === false) {
+        this.urlAdapter.revert(this.previousUrl);
+        return;
+      }
+      if (hookResult) Object.assign(mergedParams, hookResult);
     }
 
-    // Update the reactive params atom if they have changed.
-    if (!this.areParamsEqual(this.paramsAtom.peek(), allParams)) {
-      this.paramsAtom.value = allParams;
+    // Refresh params atom with merged view
+    if (!PathUtils.isSameParams(this.paramsAtom.peek(), mergedParams)) {
+      this.paramsAtom.value = mergedParams;
     }
+
+    // Reflect metadata and content to DOM
+    if (def.title) document.title = def.title;
+    this.updateDom(def, routeName, mergedParams);
+
+    untracked(() => this.config.afterTransition(this.previousPath, routeName));
+    this.finalizeNavigation(routeName, mergedParams);
+  }
+
+  /**
+   * Swaps the target container content based on the route definition.
+   */
+  private updateDom(def: RouteDefinition, name: string, params: Record<string, string>) {
+    const container = this.$target[0];
+    if (!container) return;
+    container.replaceChildren(); // High performance DOM clearing
 
     const onUnmount = (fn: () => void) => this.routeCleanups.push(fn);
 
-    // Method A: Manual rendering function.
-    if (cfg.render) {
-      cfg.render(target, name, allParams, onUnmount, this);
-    }
-    // Method B: Template-based rendering.
-    else if (cfg.template) {
-      let tmpl = this.templateCache.get(cfg.template);
-      if (!tmpl) {
-        const el = document.querySelector(cfg.template);
-        if (el instanceof HTMLTemplateElement) {
-          tmpl = el;
-          this.templateCache.set(cfg.template, tmpl);
-        } else {
-          debug.warn(LOG_PREFIXES.ROUTE, ERROR_MESSAGES.ROUTE.TEMPLATE_NOT_FOUND(cfg.template));
-          return;
-        }
-      }
-      // Clone template content once for performance.
-      target.appendChild(tmpl.content.cloneNode(true));
-      if (cfg.onMount) {
-        cfg.onMount($(target).children(), onUnmount, this);
+    if (def.render) {
+      def.render(container, name, params, onUnmount, this);
+    } else if (def.template) {
+      const tmpl = this.getTemplate(def.template);
+      if (tmpl) {
+        container.appendChild(tmpl.content.cloneNode(true));
+        def.onMount?.($(container).children(), onUnmount, this);
       }
     }
-
-    const afterHook = this.config.afterTransition;
-    if (afterHook) untracked(() => afterHook(from, name));
-    this.previousRoute = name;
   }
 
   /**
-   * Listener for browser navigation events (back/forward or manual URL change).
+   * Scans the document for <template data-path="..."> to auto-register routes.
    */
-  private handleUrlChange(): void {
-    if (this.isDestroyed) return;
+  private discoverRoutesFromDOM() {
+    document.querySelectorAll<HTMLTemplateElement>('template[data-path]').forEach((tmpl) => {
+      const path = PathUtils.normalize(tmpl.getAttribute('data-path') || '');
+      const title = tmpl.getAttribute('title') || tmpl.getAttribute('data-title');
 
-    const currentUrl = this.isHistoryMode ? location.pathname + location.search : location.hash;
-    // Debounce if URLs are identical.
-    if (currentUrl === this.previousUrl) return;
-
-    const nextRoute = this.getRouteName();
-    const oldRouteAtom = this.currentRouteAtom;
-    const oldRoute = oldRouteAtom.peek();
-
-    if (oldRoute !== nextRoute) {
-      const { compiled: oldCompiled } = this.matchRoute(oldRoute);
-      const oldCfg = oldCompiled
-        ? oldCompiled.def
-        : this.config.notFound
-          ? this.config.routes[this.config.notFound]
-          : undefined;
-
-      // check 'onLeave' guard. Revert URL if it returns false.
-      if (oldCfg?.onLeave) {
-        if (untracked(() => oldCfg.onLeave!(this)) === false) {
-          this.restoreUrl();
-          return;
-        }
+      const existing = this.config.routes[path];
+      if (!existing) {
+        if (!tmpl.id) tmpl.id = `route-${Math.random().toString(36).substring(2, 9)}`;
+        this.config.routes[path] = {
+          template: `#${tmpl.id}`,
+          ...(title ? { title } : {}),
+        };
+      } else if (title && !existing.title) {
+        existing.title = title;
       }
 
-      oldRouteAtom.value = nextRoute;
-    }
-
-    this.queryParamsAtom.value = this.getQueryParams();
-
-    // Ensure path parameters are updated as well for the next route.
-    const { params } = this.matchRoute(oldRouteAtom.peek());
-    const paramsAtom = this.paramsAtom;
-    if (!this.areParamsEqual(paramsAtom.peek(), params)) {
-      paramsAtom.value = params;
-    }
-    this.previousUrl = currentUrl;
+      if (tmpl.hasAttribute('data-default') && !this.config.default) {
+        this.config.default = path;
+      }
+    });
   }
 
   /**
-   * Hardens SPAs by intercepting <a> tags and [data-route] elements.
-   * Standardizes navigation behaviors (Ctrl+click, meta, etc.).
+   * Sets up delegation to intercept clicks on anchors or [data-route] elements.
    */
-  private setupAutoBindLinks(): void {
-    if (!this.config.autoBindLinks) return;
-
+  private setupInterception() {
     const onClick = (e: JQuery.TriggeredEvent) => {
-      const oe = e.originalEvent as MouseEvent;
-      // Standard browser patterns: allow Ctrl/Command/Shift clicks to bypass SPA router.
-      if (oe && (oe.ctrlKey || oe.metaKey || oe.altKey || oe.shiftKey || oe.button !== 0)) return;
+      const me = e.originalEvent as MouseEvent;
+      // Allow standard browser behavior for modifier keys (Ctrl/Cmd click)
+      if (me && (me.ctrlKey || me.metaKey || me.altKey || me.shiftKey || me.button !== 0)) return;
 
       const el = e.currentTarget as HTMLElement;
-      const dataRoute = el.dataset.route;
-
-      // Skip elements explicitly ignored via data-ignore.
       if (el.hasAttribute('data-ignore')) return;
 
-      if (el.tagName === 'A') {
-        const anchor = el as HTMLAnchorElement;
-        // Skip external, download, or non-origin links.
-        if (anchor.rel === 'external') return;
-
-        let routeName = dataRoute || '';
-        if (!routeName) {
-          if (anchor.target && anchor.target !== '_self') return;
-          if (anchor.hasAttribute('download')) return;
-          if (anchor.origin !== location.origin) return;
-
-          if (this.isHistoryMode) {
-            // Avoid interceptions for in-page hash changes.
-            if (
-              anchor.pathname === location.pathname &&
-              anchor.search === location.search &&
-              anchor.hash
-            ) {
-              return;
-            }
-            let path = anchor.pathname;
-            const base = this.basePath;
-            if (base && (path === base || path.startsWith(`${base}/`))) {
-              path = path.substring(base.length);
-            }
-            routeName = this.normalizePath(path) + anchor.search;
-          } else {
-            if (!anchor.hash || anchor.hash[0] !== '#') return;
-            routeName = this.normalizePath(anchor.hash.substring(1));
-          }
-        }
-
-        const { route } = this.splitPath(routeName);
-        const match = this.matchRoute(route);
-
-        // Intercept ONLY if the route exists within the configuration.
-        if (match.compiled || (this.config.notFound && this.config.routes[this.config.notFound])) {
-          e.preventDefault();
-          this.navigate(routeName);
-        }
-      } else if (dataRoute != null) {
+      const path = this.resolvePathFromElement(el);
+      if (path && this.shouldIntercept(path, el)) {
         e.preventDefault();
-        this.navigate(dataRoute);
+        this.navigate(path);
       }
     };
 
-    $(document).on('click', '[data-route]', onClick);
-    this.cleanups.push(() => $(document).off('click', '[data-route]', onClick));
+    $(document).on('click', 'a, [data-route]', onClick);
+    this.cleanups.push(() => $(document).off('click', 'a, [data-route]', onClick));
+    this.setupActiveEffect();
+  }
 
-    // Side effect to maintain the 'activeClass' on bound link elements.
-    let previousActiveNodes: HTMLElement[] = [];
-    const activeLinkEffect = effect(() => {
-      const activePath = this.currentRouteAtom.value;
-      const activeClass = this.activeClass;
+  /**
+   * Automatically adds and removes active CSS class on links matching current route.
+   */
+  private setupActiveEffect() {
+    let activeNodes: HTMLElement[] = [];
+    const activeSub = effect(() => {
+      const current = this.currentRouteAtom.value;
+      const matchResult = this.matcher.match(current);
+      const pattern = matchResult.kind === 'found' ? matchResult.route.pattern : '';
 
       untracked(() => {
-        const { compiled: activeCompiled } = this.matchRoute(activePath);
-        const activePattern = activeCompiled ? activeCompiled.pattern : '';
+        // Cleanup previous state
+        activeNodes.forEach((n) => {
+          n.classList.remove(this.activeClass);
+          n.removeAttribute('aria-current');
+        });
+        activeNodes = [];
 
-        // Optimized: Clear previous active nodes first.
-        const pLen = previousActiveNodes.length;
-        for (let i = 0; i < pLen; i++) {
-          const el = previousActiveNodes[i]!;
-          el.classList.remove(activeClass);
-          el.removeAttribute('aria-current');
-        }
-
-        try {
-          const nodes = document.querySelectorAll<HTMLElement>('[data-route]');
-          const nLen = nodes.length;
-          const nextActiveNodes: HTMLElement[] = [];
-
-          const historyMode = this.isHistoryMode;
-          const basePath = this.basePath;
-          const cache = this.linkRouteCache;
-
-          for (let i = 0; i < nLen; i++) {
-            const el = nodes[i]!;
-            let elRouteName = cache.get(el);
-
-            // Lazy resolve the route name for each link element to minimize string ops.
-            if (elRouteName === undefined) {
-              const dataRoute = el.dataset.route;
-              elRouteName = dataRoute || '';
-
-              if (dataRoute && dataRoute.indexOf('?') !== -1) {
-                elRouteName = dataRoute.substring(0, dataRoute.indexOf('?'));
-              } else if (!elRouteName && el.tagName === 'A') {
-                const anchor = el as HTMLAnchorElement;
-                if (historyMode) {
-                  let path = anchor.pathname;
-                  if (basePath && path.startsWith(basePath)) path = path.substring(basePath.length);
-                  elRouteName = this.normalizePath(path);
-                } else if (anchor.hash && anchor.hash[0] === '#') {
-                  const rawHash = anchor.hash.substring(1);
-                  const qIdx = rawHash.indexOf('?');
-                  elRouteName = this.normalizePath(
-                    qIdx !== -1 ? rawHash.substring(0, qIdx) : rawHash
-                  );
-                }
-              }
-              cache.set(el, elRouteName);
-            }
-
-            if (!elRouteName) continue;
-
-            // Mark nodes as active if they point to the current active route pattern or path.
-            if (elRouteName === activePath || elRouteName === activePattern) {
-              el.classList.add(activeClass);
-              el.setAttribute('aria-current', 'page');
-              nextActiveNodes.push(el);
-            }
+        // Update nodes matching current route
+        document.querySelectorAll<HTMLElement>('a, [data-route]').forEach((el) => {
+          const path = this.resolvePathFromElement(el, true);
+          if (path === current || path === pattern) {
+            el.classList.add(this.activeClass);
+            el.setAttribute('aria-current', 'page');
+            activeNodes.push(el);
           }
-          previousActiveNodes = nextActiveNodes;
-        } catch {
-          previousActiveNodes = [];
-        }
+        });
       });
     });
-
-    this.cleanups.push(() => {
-      activeLinkEffect.dispose();
-      previousActiveNodes.length = 0;
-    });
+    this.cleanups.push(() => activeSub.dispose());
   }
 
   /**
-   * Programmatically navigate to a route.
-   * @param name - String path (e.g., 'home', 'user/42', or 'search?q=foo').
+   * Resolves the target route path from an element's attributes (dataset or href).
    */
-  public navigate(name: string): void {
-    if (this.isDestroyed) return;
-
-    const old = this.currentRouteAtom.peek();
-    const { compiled: oldCompiled } = this.matchRoute(old);
-    const oldCfg = oldCompiled
-      ? oldCompiled.def
-      : this.config.notFound
-        ? this.config.routes[this.config.notFound]
-        : undefined;
-
-    // Run 'onLeave' guard before starting navigation.
-    if (oldCfg?.onLeave && untracked(() => oldCfg.onLeave!(this)) === false) return;
-
-    const { route: routePart, query: queryPart } = this.splitPath(name);
-    const resolvedRoute = routePart || this.config.default || '';
-    if (!resolvedRoute) return;
-
-    $.batch(() => {
-      this.setUrl(name);
-
-      const queryParamsAtom = this.queryParamsAtom;
-      const nextParams = queryPart ? this.parseQueryParams(queryPart) : {};
-      if (!this.areParamsEqual(nextParams, queryParamsAtom.peek())) {
-        queryParamsAtom.value = nextParams;
+  private resolvePathFromElement(el: HTMLElement, stripQuery = false): string {
+    let path = this.linkRouteCache.get(el);
+    if (path === undefined) {
+      path = el.dataset.route || '';
+      if (!path && el instanceof HTMLAnchorElement) {
+        path = this.urlAdapter.resolveAnchor(el);
       }
-
-      this.currentRouteAtom.value = resolvedRoute;
-
-      // Match again to resolve parameters for the target route.
-      const { params } = this.matchRoute(resolvedRoute);
-      const paramsAtom = this.paramsAtom;
-      if (!this.areParamsEqual(paramsAtom.peek(), params)) {
-        paramsAtom.value = params;
-      }
-    });
+      this.linkRouteCache.set(el, path);
+    }
+    return stripQuery ? PathUtils.split(path).route : path;
   }
 
   /**
-   * Tears down the router, removes global event listeners, and releases memory.
+   * Determines if a click event should be intercepted and handled by the router.
+   */
+  private shouldIntercept(path: string, el: HTMLElement): boolean {
+    if (el instanceof HTMLAnchorElement) {
+      if (
+        el.rel === 'external' ||
+        (el.target && el.target !== '_self') ||
+        el.hasAttribute('download')
+      )
+        return false;
+      if (el.origin !== location.origin) return false;
+
+      // Do not intercept links with extensions (likely files) unless they are registered routes
+      const last = path.split('/').pop() || '';
+      if (
+        last.includes('.') &&
+        this.matcher.match(PathUtils.split(path).route).kind === 'not-found'
+      )
+        return false;
+    }
+    const { route } = PathUtils.split(path);
+    return this.matcher.match(route).kind === 'found' || !!this.config.notFound;
+  }
+
+  /**
+   * Runs the current route's onLeave guard.
+   * @returns true if navigation is allowed, false to stay on current page.
+   */
+  private canLeave(): boolean {
+    const matchResult = this.matcher.match(this.currentRouteAtom.peek());
+    const def =
+      matchResult.kind === 'found'
+        ? matchResult.route.def
+        : this.config.routes[this.config.notFound];
+    return def?.onLeave ? untracked(() => def.onLeave!(this)) !== false : true;
+  }
+
+  /**
+   * Internal cache-based selector for HTML Template elements.
+   */
+  private getTemplate(selector: string) {
+    let tmpl = this.templateCache.get(selector);
+    if (!tmpl) {
+      const el = document.querySelector(selector);
+      if (el instanceof HTMLTemplateElement) {
+        tmpl = el;
+        this.templateCache.set(selector, tmpl);
+      }
+    }
+    return tmpl || null;
+  }
+
+  /**
+   * Runs all cleanup functions accumulated during the lifespan of the current route.
+   */
+  private runRouteCleanups() {
+    this.routeCleanups.forEach((fn) => {
+      try {
+        fn();
+      } catch {}
+    });
+    this.routeCleanups = [];
+  }
+
+  /**
+   * Performs post-navigation global tasks like event dispatching and accessibility focus.
+   */
+  private finalizeNavigation(routeName: string, params: Record<string, string>) {
+    window.dispatchEvent(
+      new CustomEvent('route-change', {
+        detail: { from: this.previousPath, to: routeName, params },
+      })
+    );
+
+    // Manage A11y focus by targeting heading or container
+    const targetElement = this.$target[0];
+    if (!targetElement) return;
+
+    const heading = targetElement.querySelector('h1, [role="heading"]');
+    const focusTarget = heading instanceof HTMLElement ? heading : targetElement;
+    focusTarget.tabIndex = -1;
+    focusTarget.focus();
+
+    this.previousPath = routeName;
+  }
+
+  /**
+   * Completely destroys the router instance, cleaning up all global listeners and effects.
    */
   public destroy(): void {
     if (this.isDestroyed) return;
     this.isDestroyed = true;
-
-    const cleanups = this.cleanups;
-    const len = cleanups.length;
-    for (let i = 0; i < len; i++) {
+    this.runRouteCleanups();
+    this.cleanups.forEach((fn) => {
       try {
-        cleanups[i]!();
+        fn();
       } catch {}
-    }
-    cleanups.length = 0;
+    });
+    this.cleanups = [];
     this.templateCache.clear();
   }
 }
 
 /**
- * Factory function to create a new SPA Router.
+ * Factory function to create and initialize a new Router instance.
  *
  * @example
  * ```ts
  * const router = $.route({
- *   target: '#app',
+ *   target: '#app-root',
+ *   mode: 'history',
+ *   default: 'home',
  *   routes: {
- *     'home': { template: '#tpl-home' },
- *     'user/:id': { onEnter: (params) => { ... } }
+ *     'home': { template: '#tpl-home', title: 'Home' },
+ *     'profile/:userId': {
+ *       onEnter: (params) => { console.log(`Profile ${params.userId} loaded`); },
+ *       render: (container, name, params) => {
+ *         $(container).html(`<h1>Profile of ${params.userId}</h1>`);
+ *       }
+ *     }
  *   }
  * });
+ *
+ * // Programming navigation
+ * router.navigate('profile/42');
  * ```
+ *
+ * @param config Configuration object for the router.
+ * @returns An instance of RouterImpl.
  */
 export function route(config: RouteConfig): Router {
   return new RouterImpl(config);
 }
 
+// Register as jQuery static extension
 $.extend({ route });
