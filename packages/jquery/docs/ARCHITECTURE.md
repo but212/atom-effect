@@ -164,21 +164,23 @@ The binding maintains closure references internally, but utilizes a strict teard
 
 ## 5. List Reconciliation
 
-`atomList` (`list.ts`) renders reactive arrays using a high-performance **1D flat buffer reconciliation** algorithm:
+`atomList` (`bindings/list/`) renders reactive arrays using a high-performance **3-pass reconciliation** algorithm:
 
-1. **Prefix/Suffix Trimming**: Identifies and skips common items at the start and end of the list.
-2. **Key Mapping**: Maps remaining items to unique keys for diffing.
-3. **Flat Buffer Diffing**: Uses typed arrays (`Uint8Array` for states, `Int32Array` for moves) instead of intermediate objects to track transitions (added, removed, replaced, moved). Items with identical keys but different contents are marked for `update`.
-4. **Patching**: Synchronizes the DOM using the calculated transition map with minimal moves and removals. Uses **pure DOM APIs** (`target.insertBefore`, `target.appendChild`) for structural changes during the reconciliation loop to bypass jQuery's internal overhead and achieving O(N) performance for large datasets.
-5. **Fast Initial Render**: When possible, it uses `innerHTML` with bulk-sanitized fragments for the first render to maximize hydration speed.
+1. **Prefix Trimming**: Identifies and skips common items at the start of the list.
+2. **Suffix Trimming**: Identifies and skips common items at the end of the list.
+3. **Middle Diffing**: Reconciles the middle range that has changed.
+   - Uses **Bitwise ItemState Flags** (`New`, `Existing`, `ForceReplace`, `Unchanged`) to track the lifecycle of each item in the new list.
+   - Employs a **Key Mapping** strategy for O(1) item lookup during diffing.
+4. **Patching**: Synchronizes the DOM using a **greedy placement strategy** during a reverse traversal. It uses **pure DOM APIs** (`target.insertBefore`, `target.appendChild`) to bypass jQuery's internal overhead, ensuring O(N) performance for large datasets.
+5. **Fast Initial Render**: When possible (string output, no complex bindings), it uses `innerHTML` with bulk-sanitized fragments for the first render to maximize hydration speed.
 
-### 5.1 Memory Efficiency (Pooling)
+### 5.1 Reconciliation Lifecycle
 
-In dynamic lists with high item churn, the library uses centralized pools (`internal/pool.ts`):
+The reconciliation process is modularized into dedicated units:
 
-- `ObjectPool`: Reuses `Map` and `Set` instances used for indexing during diffing.
-- `ArrayPool`: Reuses arrays for keys, items, and DOM nodes returned by the reaper.
-- `Buffer Recovery`: Pre-allocated `Uint8Array` and `Int32Array` buffers are grown dynamically and reused across update cycles to eliminate per-update allocations.
+- **`diff.ts`**: Calculates the difference between the old and new state, yielding a `PreparedDiff`.
+- **`dom.ts`**: Handles physical DOM manipulations and lifecycle callback execution based on the diff.
+- **`context.ts`**: Manages the state and asynchronous cleanup of the container.
 
 ### Lifecycle Hooks
 
@@ -407,16 +409,15 @@ The `ObjectPool` utility (`utils/object-pool.ts`) manages a stack of reusable pl
 #### 12.1.2 Reused Structures
 
 1. **`BindingRecord`**: Created per bound element. Pooling these avoids thousands of micro-allocations during hydration. Its `reset` logic orchestrates the cleanup of nested arrays.
-2. **Reused Buffers**: Pre-allocated `Uint8Array` and `Int32Array` buffers are grown dynamically and reused across `atomList` cycles.
-3. **`ArrayPool`**: Reuses arrays for `effects` and `cleanups` within a `BindingRecord`. Its `limit` (128) is synchronized with the record pool for maximum reuse.
+2. **`ArrayPool`**: Reuses arrays for `effects` and `cleanups` within a `BindingRecord`. Its `limit` (128) is synchronized with the record pool for maximum reuse.
 
 ### 12.2 Dense Monomorphic Strategy
 
 All internal state records (e.g., `BindingRecord`, `InputBinding`) are initialized with a fixed, dense set of fields from the constructor. By strictly avoiding "shape transitions" (dynamically adding or deleting properties), the objects remain **Monomorphic**. This allows V8 to utilize **Inline Caches (IC)** at every property access point, achieving near-native performance for reactive propagation and DOM updates.
 
-### 12.3 Flat Buffer Reconciliation
+### 12.3 Efficient Reconciliation
 
-By using `Uint8Array` and `Int32Array` for diffing state tracking, `atomList` eliminates the "GC hum" commonly associated with virtual DOM diffing in large lists. The reconciliation state is stored in a continuous memory block, maximizing CPU cache efficiency and minimizing allocation-time overhead.
+By moving from binary buffers and manual pooling to a simplified 3-pass algorithm, `atomList` leverages modern JS engine optimizations (V8's Map and Array optimizations) for reconciliation. This reduces architectural complexity while maintaining high performance.
 
 - **Sanitization Fast-path**: `sanitizeHtml` includes an early scan (`needsSanitization`) to bypass expensive DOM parsing for safe strings. The implementation uses a **multi-layered defense** strategy: normalization (entity decoding, control stripping), recursive tag transformation to inert `<span>` elements, and protocol/CSS neutralization.
 - **Robust Equality**: `shallowEqual` uses `Object.keys()` and `Object.is()` for reliable comparison, correctly handling `NaN` and edge cases while maintaining an efficient linear scan.
