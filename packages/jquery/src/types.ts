@@ -134,8 +134,12 @@ export interface FetchError extends Error {
 export type ComponentFn<P = Record<string, unknown>> = ($el: JQuery, props: P) => EffectResult;
 
 export interface RouteLifecycle {
-  onEnter?: (params: Record<string, string>, router: Router) => Record<string, string> | undefined;
+  onEnter?: (
+    params: Record<string, string>,
+    router: Router
+  ) => Record<string, string> | undefined | false;
   onLeave?: (router: Router) => boolean | undefined;
+  title?: string;
 }
 
 export interface TemplateRoute extends RouteLifecycle {
@@ -158,7 +162,7 @@ export interface RenderRoute extends RouteLifecycle {
 export type RouteDefinition = TemplateRoute | RenderRoute;
 
 export interface RouteConfig {
-  target: string | JQuery | HTMLElement;
+  target: string | JQuery<HTMLElement> | HTMLElement;
   default?: string;
   routes?: Record<string, RouteDefinition>;
   mode?: 'hash' | 'history';
@@ -180,7 +184,7 @@ export interface Router {
 
 export interface AtomNavOptions {
   /** Target element or selector where the content will be injected. */
-  target: string | JQuery | HTMLElement;
+  target: string | JQuery<HTMLElement> | HTMLElement;
   /** Selector for links to intercept. Defaults to 'a[data-nav]'. */
   selector?: string;
   /** Custom headers to send with the AJAX request (e.g., X-PJAX). */

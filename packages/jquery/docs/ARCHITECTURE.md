@@ -225,38 +225,44 @@ $el.atomMount((el, props) => {
 
 ## 7. SPA Router
 
-`$.route()` (`route.ts`) provides SPA routing with reactive state. Supports both **hash** (`location.hash` / `hashchange`) and **history** (`pushState` / `popstate`) modes.
+The router is entirely **reactive**. Navigation (`navigate()` or URL change) updates the `currentRoute` and `queryParams` atoms.
 
-```text
-Hash mode:    window.location.hash  ──▶  currentRoute (atom)  ──▶  renderEffect (effect)
-History mode: window.location.pathname ──▶  currentRoute (atom)   ──▶  renderRoute()
-              window.location.search   ──▶  queryParams (atom)
-```
+### 7.1 Mode Abstraction (`UrlAdapter`)
 
-The router is entirely **reactive**. Navigation (`navigate()` or URL change) updates the `currentRoute` and `queryParams` atoms. A single core `effect` (`renderEffect`) observes these atoms and triggers `renderRoute()` when they change.
+The router decouples browser navigation from the core logic using a **Strategy Pattern** (`UrlAdapter`). This isolates mode-specific logic (History API vs. location.hash) into specialized adapters:
 
-### 7.1 Initialization & Compilation
+- `getBrowserState()`: Fetches normalized path and parsed query params.
+- `commit(path)`: Persists new state to the URL.
+- `revert(url)`: Restores previous URL on guard rejection.
+- `resolveAnchor(el)`: Extracts logical path from standard `<a>` elements.
 
-- **Auto-Discovery**: If no routes are provided, the router scans for `<template data-path="...">` elements and populates the config automatically.
-- **Compilation**: Route paths are compiled into `CompiledRoute` objects.
-  - **Static Routes**: Stored in an `exactRoutes` Map for O(1) matching.
-  - **Dynamic Routes**: Paths with `:param` segments are converted to Regular Expressions (with named capture groups where possible) and stored in a `regexRoutes` array.
+### 7.2 Matching Engine (`RouteMatcher`)
 
-### 7.2 Matching Engine
+Route registration pre-compiles paths into specialized lookups:
 
-1. **Normalized Path Lookup**: The current URL path is first checked against the `exactRoutes` Map.
-2. **Regex Scan**: If no static match is found, the path is tested against the `regexRoutes` array in order.
-3. **Param Extraction**: Matching regexes extract capture groups into a `params` object, ensuring dynamic values like `:id` are reactive.
+1. **Exact Match (O(1))**: Static paths are stored in a `Map` for instant resolution.
+2. **Dynamic Match (Regex)**: Paths with `:param` segments are compiled into Regular Expressions with captured groups.
+3. **Implicit Auto-Discovery**: If no routes are provided, the router scans for `<template data-path="..." title="...">` elements.
 
-### 7.3 Performance Optimizations
+### 7.3 Transition Lifecycle
 
-- **Link Resolution Cache**: A `WeakMap` caches the resolved route name for every `[data-route]` element. This eliminates repeated URL parsing and string manipulation during the active-link synchronization pass.
-- **Invariant Hoisting**: The synchronization pass hoists environment-stable values (like `basePath` and `historyMode`) outside its Hot Loop to minimize property access overhead.
-- **Reactive Param Diffing**: Navigations only trigger re-renders if the merged path/query parameters have meaningfully changed (checked via shallow equality).
+Every navigation follows a strict reactive pipeline:
 
-### 7.4 Mode Abstraction
+1. **Link Interception / Programmatic Call**: Normalizes the target path.
+2. **Leave Guards**: Executes `onLeave` for the current route.
+3. **Browser Sync**: `UrlAdapter` updates the browser URL (or reverts if blocked).
+4. **Enter Guards**: Executes `onEnter`. Returning `false` triggers a URL restoration.
+5. **Reactive State Update**: `currentRoute` and `queryParams` atoms are updated.
+6. **DOM Render Effect**: Clears container, clones template or calls `render()`, and manages `onMount`.
+7. **Accessibility Finalization**: Synchronizes `document.title` and shifts focus to the new content's primary heading (`<h1>`).
 
-The hash/history difference is isolated to internal functions:
+### 7.4 Performance & Resilience
+
+- **Link Resolution Cache**: A `WeakMap` caches resolved route names for `<a>` and `[data-route]` elements, skipping repetitive URL parsing.
+- **Stateless PathUtils**: All string manipulation (normalization, splitting) is centralized in a pure utility object.
+- **Asset Links**: The interception engine identifies and ignores links to files (containing dots) to prevent interference with standard downloads or external assets.
+
+### 7.5 Mode Abstraction Logic
 
 | Function | Hash mode | History mode |
 | --- | --- | --- |
@@ -274,7 +280,7 @@ The hash/history difference is isolated to internal functions:
 - **Active State**: Active-link class management uses a reactive `effect` that re-runs whenever `currentRoute` changes, updating all `[data-route]` links in a single pass using **manual loops** for performance.
 - **Backwards Compatible**: Default mode is `'hash'`, preserving existing behavior.
 
-### 7.5 Nav & Router Synergy (Traffic Control)
+### 7.6 Nav & Router Synergy (Traffic Control)
 
 The library provides a specialized "Traffic Control" strategy to allow `$.atomNav` (top-level PJAX) and `$.route` (nested SPA routing) to coexist in the same application without conflict:
 

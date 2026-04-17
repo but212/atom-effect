@@ -7,7 +7,8 @@
     "lib": ["ES2021", "DOM", "DOM.Iterable"],
     "outDir": "./dist",
     "rootDir": ".",
-    "types": ["node"]
+    "types": ["node"],
+    "noImplicitAny": true
   },
   "include": ["src/**/*", "__tests__/**/*", "__benchmarks__/**/*", "*.config.ts"],
   "exclude": ["node_modules", "dist"]

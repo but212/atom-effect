@@ -20,8 +20,9 @@
 - **Scheduler Efficiency**: Replaced array-tuple buffers with discrete fields and optimized batch merging to reduce engine-level overhead.
 - **Type Guard Optimization**: Refactored `isPromise` and `isBranded` for faster early-exit on non-matching types.
 
-#### Refactor
+#### Changed
 
+- **TypeScript**: Enabled `noImplicitAny: true` in `packages/core/tsconfig.json` to enforce stricter type safety for the core library.
 - **Lens**: Replaced Regex-based safety checks with string comparisons and implemented local value caching in `atomLens.subscribe` to reduce redundant path traversal.
 - **Debug**: Switched from `Object.defineProperties` to direct symbol assignment for peak node initialization performance.
 - **Error Handling**: Optimized `AtomError.getChain` to only allocate tracking `Set` for deep exception chains (>3 levels).
@@ -31,7 +32,6 @@
 #### Added
 
 - **Dynamic Routing**: Full support for dynamic route segments (e.g., `user/:id`) with automatic regex compilation and value extraction.
-- **Zero-Config Discovery**: Automatically detect routes from `<template data-path="..." data-default>` elements if no explicit routes are provided.
 - **Reactive Params Atom**: Added a dedicated `params` atom to the `Router`, providing a unified reactive view of path and query parameters.
 - **PJAX Navigation**: Introduced `$.atomNav`, a reactive PJAX module for seamless page transitions with automatic title/meta syncing, container attribute reconciliation, and memory-safe unbinding.
 - **Enhanced Navigation Control**: `atomNav.navigate()` now returns a `Promise<void>` and supports a `replace` option. The `onBeforeLoad` hook now receives an `AbortSignal`.
@@ -63,6 +63,22 @@
 
 - **Hardened Link Interception**: Enhanced `setupAutoBindLinks` to correctly respect modifier keys (Ctrl/Cmd), `rel="external"`, cross-origin navigation, and download attributes.
 - **$.nextTick**: Standardized to use core's `aeNextTick()` for unified scheduler synchronization and improved performance via promise deduplication.
+
+#### Refactor
+
+- **Router Overhaul**: Re-architected `$.route` for better modularity, performance, and accessibility.
+  - **Strategy Pattern**: Introduced `UrlAdapter` to abstract differences between History and Hash navigation modes.
+  - **Compiled Matcher**: Implemented `RouteMatcher` which separates O(1) exact matches from regex-based dynamic segments.
+  - **Metadata Protocol**: Added `title` support to route definitions and templates for automatic document title updates.
+  - **Functional Guards**:
+    - `onEnter`: Hook called before rendering. Can return an object to merge into `params`, or `false` to block navigation.
+    - `onLeave`: Hook called before navigating away. Return `false` to block.
+  - **Lifecycle & Metadata**:
+    - `onMount`: `($content: JQuery, onUnmount, router) => void` — **Template routes only.** Called after template content is appended.
+    - `title`: (Optional) String to set as `document.title` when this route is active.
+  - **Configuration**: Support for `JQuery<HTMLElement>` objects as `target` and improved `mode` initialization logic (hash/history).
+  - **Robust Interception**: Enhanced link interception to skip non-route asset links (e.g., .pdf) even if a `notFound` route is defined.
+  - **Path Utilities**: Consolidated path logic into a stateless `PathUtils` for reliable normalization and query splitting.
 
 ## [0.30.1] - 2026-04-14
 

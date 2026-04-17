@@ -537,9 +537,10 @@ Creates an SPA router with reactive state management. Supports both hash-based a
   - `template`: Selector for a `<template>` element to clone.
   - `render`: Custom function `(container, name, params, onUnmount, router) => void`.
     - `onUnmount`: Callback `(cleanupFn) => void` to register side-effect cleanups for the route.
-  - `onEnter`: Hook called before rendering. Can return an object to merge into `params`.
-  - `onLeave`: Hook called before navigating away. Return `false` to cancel.
+  - `onEnter`: Hook called before rendering. Can return an object to merge into `params`, or `false` to block navigation.
+  - `onLeave`: Hook called before navigating away. Return `false` to block.
   - `onMount`: `($content: JQuery, onUnmount, router) => void` — **Template routes only.** Called after template content is appended.
+  - `title`: (Optional) String to set as `document.title` when this route is active.
 - `mode`: (Optional) `'hash'` (default) or `'history'`.
 - `basePath`: (Optional) Base path prefix for history mode (e.g., `'/app'`).
 - `notFound`: (Optional) Route name to use when no match is found.
