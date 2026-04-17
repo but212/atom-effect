@@ -152,6 +152,9 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
 
 /**
  * Creates a reactive atom holding mutable state.
+ *
+ * @param initialValue - The initial value of the atom.
+ * @param options - Configuration options (sync: boolean).
  */
 export function atom<T>(initialValue: T, options: AtomOptions = {}): WritableAtom<T> {
   return new AtomImpl(initialValue, options);
