@@ -171,13 +171,40 @@ describe('$.route() - SPA Routing', () => {
       debug.enabled = true;
       const router = $.route({ target: '#app' });
 
-      // Malformed URI
+      // Malformed URI in query
       router.navigate('home?bad=%FF');
       await $.nextTick();
       expect(warnSpy).toHaveBeenCalledWith(
         LOG_PREFIXES.ROUTE,
         expect.stringContaining('Malformed')
       );
+
+      router.destroy();
+    });
+
+    it('should handle malformed path segments gracefully', async () => {
+      const router = $.route({ target: '#app' });
+
+      // %FF is invalid URI encoding for decodeURIComponent
+      router.navigate('user/%FF');
+      await $.nextTick();
+
+      // Should fall back to raw string and not crash
+      expect(router.params.value.id).toBe('%FF');
+      expect(router.currentRoute.value).toBe('user/%FF');
+
+      router.destroy();
+    });
+
+    it('should not throw if the target container is missing', async () => {
+      // Intentionally use a non-existent selector
+      const router = $.route({ target: '#non-existent' });
+
+      // Navigation should not crash despite missing container
+      router.navigate('home');
+      await $.nextTick();
+
+      expect(router.currentRoute.value).toBe('home');
 
       router.destroy();
     });

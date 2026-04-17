@@ -235,7 +235,7 @@ class RouteMatcher {
         this.dynamic.push({
           kind: 'dynamic',
           pattern: normalized,
-          regex: new RegExp(`^${regexStr === '' ? '^$' : regexStr}$`),
+          regex: new RegExp(`^${regexStr}$`),
           paramNames,
           def,
         });
@@ -260,7 +260,11 @@ class RouteMatcher {
       if (match) {
         const params = route.paramNames.reduce(
           (acc, name, i) => {
-            acc[name] = decodeURIComponent(match[i + 1] || '');
+            try {
+              acc[name] = decodeURIComponent(match[i + 1] || '');
+            } catch {
+              acc[name] = match[i + 1] || '';
+            }
             return acc;
           },
           {} as Record<string, string>
@@ -501,7 +505,8 @@ class RouterImpl implements Router {
    * Swaps the target container content based on the route definition.
    */
   private updateDom(def: RouteDefinition, name: string, params: Record<string, string>) {
-    const container = this.$target[0]!;
+    const container = this.$target[0];
+    if (!container) return;
     container.replaceChildren(); // High performance DOM clearing
 
     const onUnmount = (fn: () => void) => this.routeCleanups.push(fn);
@@ -689,7 +694,9 @@ class RouterImpl implements Router {
     );
 
     // Manage A11y focus by targeting heading or container
-    const targetElement = this.$target[0]!;
+    const targetElement = this.$target[0];
+    if (!targetElement) return;
+
     const heading = targetElement.querySelector('h1, [role="heading"]');
     const focusTarget = heading instanceof HTMLElement ? heading : targetElement;
     focusTarget.tabIndex = -1;
