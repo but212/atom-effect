@@ -2,93 +2,36 @@
 
 ## [Unreleased]
 
-### Core
+### Added
 
-#### Added
+- **PJAX Navigation**: Introduced `$.atomNav` for seamless page transitions with automatic title, meta-tag, and attribute synchronization.
+- **Dynamic Routing**: Added support for dynamic route segments (e.g., `:id`) and a reactive `params` atom to the router.
+- **Navigation Control**: Enhanced `navigate()` with Promise support, `replace` options, and cancellation via `AbortSignal`.
+- **Router Hooks & Metadata**: Added `onEnter` and `onLeave` guards for navigation control and `title` support for automatic document title updates.
+- **Flexible Routing Targets**: `$.route` now supports `HTMLElement` and `JQuery` objects as injection targets.
+- **Scheduler Synchronization**: Introduced `aeNextTick()` for precise internal and external scheduler synchronization.
+- **Server Integration**: Added support for `X-PJAX-URL` headers to handle server-side redirects during PJAX navigation.
 
-- **Testing**: Switched the entire DOM test suite (Core & jQuery) from JSDOM/Happy-DOM to **Vitest Browser Mode** using Playwright (Chromium) for native browser environment testing.
-- **aeNextTick**: Introduced `aeNextTick()` for scheduler synchronization using Promise and callback patterns.
+### Changed
 
-#### Performance
+- **Performance Optimization**: Significant throughput improvements by operating reactive bindings directly on `HTMLElement` and removing manual resource pooling.
+- **Modern Link Interception**: Updated link handling to respect modifier keys (Ctrl/Cmd), `rel="external"`, cross-origin targets, and download attributes.
+- **Initialization Reliability**: Modified `atomMount` to throw errors during initialization ("Fail Loud") for improved debuggability.
+- **Unified Utilities**: Standardized `$.nextTick` to use core's `aeNextTick()` for consistent scheduling behavior.
 
-- **Benchmarks**: Removed the async typing latency benchmark.
-- **Loop Unrolling**: Unrolled loops for hot-path slots in `SlotBuffer` and `ReactiveNode.notify`.
-- **Allocation**: Inlined `untracked` logic in `Subscription.notify` to reduce closure allocations during propagation.
-- **Dependency Tracking**: Implemented `hotIndex` caching in `ComputedAtom` and `Effect` for O(1) dirty checking.
-- **Buffering**: Added path in `SlotBuffer` that bypasses null checks when fully occupied.
-- **Scheduler**: Replaced array-tuple buffers with discrete fields and updated batch merging.
-- **Type Guards**: Refactored `isPromise` and `isBranded` for early-exit.
+### Fixed
 
-#### Changed
+- **Error Messaging**: Simplified "Duplicate Key" warnings in `atomList` for better clarity and less noise.
 
-- **TypeScript**: Enabled `noImplicitAny: true` in `packages/core/tsconfig.json`.
-- **Lens**: Replaced Regex checks with string comparisons and implemented local value caching in `atomLens.subscribe`.
-- **Debug**: Switched from `Object.defineProperties` to direct symbol assignment for initialization.
-- **Error Handling**: Updated `AtomError.getChain` to use `Set` only for deep exception chains (>3 levels).
+### Removed
 
-#### Fixed
+- **Compatibility Adjustment**: Removed support for `[Symbol.dispose]` to maintain compatibility with ES2021 environments.
 
-- **Benchmark Refinement**: Updated `keep` utility with non-deterministic branching and updated `micro.bench.ts` to use active subscribers.
+### Security
 
-### jQuery
-
-#### Added
-
-- **Dynamic Routing**: Added support for dynamic route segments (e.g., `user/:id`) with regex compilation.
-- **Reactive Params Atom**: Added `params` atom to the `Router`.
-- **PJAX Navigation**: Introduced `$.atomNav` for page transitions with title/meta/attr synchronization.
-- **Navigation Control**: `atomNav.navigate()` now returns a `Promise<void>` and supports a `replace` option; `onBeforeLoad` receives an `AbortSignal`.
-- **Server-Side Redirects**: Added support for `X-PJAX-URL` header.
-- **Resource Management**: Integrated `AbortController` per navigation for lifecycle cleanup.
-- **Routing**: `$.route` now supports `HTMLElement` and `JQuery` objects as the injection `target`.
-- **Integration**: Verified coexistence of `atomNav` and `$.route`.
-- **Fetch Enhancements**: `$.atomFetch` now passes `jqXHR` to the `transform` function.
-
-#### Removed
-
-- **`[Symbol.dispose]`**: Removed support for `[Symbol.dispose]` in favor of manual disposal for ES2021 compatibility.
-
-#### Fixed
-
-- **Security**: Hardened protocol detection in `sanitizeHtml` by stripping all whitespace (`\s+`) from attributes before regex matching, preventing bypasses like `java script:`.
-- **Security (XSS)**: Refactored `sanitizeHtml` to use a **DOM-based Sanitizer** (via inert `<template>`).
-- **Security**: Added `DOM_BRIDGE` for `Element.prototype` access to mitigate DOM Clobbering.
-- **Security**: Added recursive sanitization for `<template>` content.
-- **Security**: Added coverage for `srcdoc` and `srcset` attributes.
-- **Security**: Updated protocol detection for `url(javascript:...)` in SVG and CSS.
-
-#### Performance
-
-- **Architecture Cleanup**: Removed all manual resource pooling (`BindingRecordPool`, `ArrayPool`, `ObjectPool`) and unified binding records into plain objects, leveraging modern JS engine optimizations for higher throughput and reduced complexity.
-- **Direct Binding**: Eliminated `BindingContext` and `createContext` abstractions; all reactive bindings now operate directly on `HTMLElement` for minimal object overhead.
-- **Router Link Caching**: Implemented `WeakMap` caching for route names.
-- **Router Matching**: Bifurcated matching engine with exact map lookup and regex fallback.
-- **Monomorphic Parameters**: Standardized parameter comparison in the router.
-
-#### Changed
-
-- **Link Interception**: Updated `setupAutoBindLinks` to respect modifier keys (Ctrl/Cmd), `rel="external"`, cross-origin navigation, and download attributes.
-- **$.nextTick**: Standardized to use core's `aeNextTick()` for unified scheduler synchronization.
-- **Lifecycle**: Modified `atomMount` to throw errors during initialization ("Fail Loud") for better debuggability, while keeping cleanup errors as logged warnings.
-
-#### Refactor
-
-- **Global Cleanup**: Significant architectural simplification across the library
-- **Error Handling**: Simplified "Duplicate Key" warnings in `atomList` by removing redundant container selector context.
-- **Sanitization**: Removed the redundant `needsSanitization` fast-path scanner in `sanitize.ts` and simplified collection types to native arrays for better maintainability.
-- **Router Refactor**: Refactored `$.route`.
-  - **Strategy Pattern**: Introduced `UrlAdapter` for History and Hash navigation modes.
-  - **Matcher**: Implemented `RouteMatcher` for exact matches and dynamic segments.
-  - **Metadata Protocol**: Added `title` support for document title updates.
-  - **Functional Guards**:
-    - `onEnter`: Hook called before rendering. Can return an object to merge into `params`, or `false` to block navigation.
-    - `onLeave`: Hook called before navigating away. Return `false` to block.
-  - **Lifecycle & Metadata**:
-    - `onMount`: `($content: JQuery, onUnmount, router) => void` — **Template routes only.** Called after template content is appended.
-    - `title`: (Optional) String to set as `document.title` when this route is active.
-  - **Configuration**: Support for `JQuery<HTMLElement>` objects as `target` and improved `mode` initialization logic (hash/history).
-  - **Interception**: Updated link interception to skip non-route asset links (e.g., .pdf).
-  - **Path Utilities**: Consolidated path logic into `PathUtils`.
+- **XSS Prevention**: Hardened `sanitizeHtml` using a DOM-based sanitizer and improved protocol detection to block bypasses like `java script:`.
+- **DOM Clobbering Protection**: Implemented `DOM_BRIDGE` for safe element access, mitigating risks from third-party script injection.
+- **Expanded Sanitization**: Added coverage for `srcdoc`, `srcset`, and SVG/CSS `url()` protocols.
 
 ## [0.30.1] - 2026-04-14
 
