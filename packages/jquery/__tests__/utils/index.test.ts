@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import $ from '@/index';
-import { getSelector, isPromise, isReactive, shallowEqual } from '@/utils';
+import { getSelector, isPromise, shallowEqual } from '@/utils';
 import { sanitizeHtml } from '@/utils/sanitize';
 
 describe('Utils', () => {
@@ -30,11 +30,11 @@ describe('Utils', () => {
   });
 
   describe('Reactivity & Promises', () => {
-    it('isReactive identifies atoms', () => {
-      expect(isReactive($.atom(1))).toBe(true);
-      expect(isReactive(1)).toBe(false);
-      expect(isReactive(null)).toBe(false);
-      expect(isReactive({ value: 1, subscribe: () => {} })).toBe(false);
+    it('isAtom identifies atoms', () => {
+      expect($.isAtom($.atom(1))).toBe(true);
+      expect($.isAtom(1)).toBe(false);
+      expect($.isAtom(null)).toBe(false);
+      expect($.isAtom({ value: 1, subscribe: () => {} })).toBe(false);
     });
 
     it('isPromise identifies thenables including functions', () => {

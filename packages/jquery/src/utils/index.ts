@@ -1,51 +1,27 @@
-import type { ReadonlyAtom } from '@but212/atom-effect';
-import { isAtom } from '@but212/atom-effect';
 import type { RenderRoute, RouteDefinition, TemplateRoute } from '@/types';
 
-// ============================================================================
-// Internal Helpers
-// ============================================================================
-
-const isObject = (v: unknown): v is object => v !== null && typeof v === 'object';
-
-// ============================================================================
-// Reactive helpers
-// ============================================================================
-
-/** Checks if a given value is a reactive node (Atom or Computed). */
-export const isReactive = (v: unknown): v is ReadonlyAtom<unknown> => isAtom(v);
-
-/**
- * Checks if value is a Promise or Thenable.
- */
 export const isPromise = <T>(v: unknown): v is Promise<T> =>
-  (isObject(v) || typeof v === 'function') &&
-  typeof (v as Record<string, unknown>).then === 'function';
+  v !== null &&
+  (typeof v === 'object' || typeof v === 'function') &&
+  typeof (v as PromiseLike<T>).then === 'function';
 
-/** Generates a human-readable selector string for debug. */
 export function getSelector(el: Element): string {
   const { localName: tag, id, className } = el;
   let res = tag;
   if (id) res += `#${id}`;
 
-  // Handle SVG className which returns SVGAnimatedString instead of string
   const classStr =
     typeof className === 'string'
       ? className
-      : (className as unknown as { baseVal: string }).baseVal;
+      : (className as unknown as SVGAnimatedString)?.baseVal;
 
-  if (typeof classStr === 'string') {
-    const trimmed = classStr.trim();
-    if (trimmed) {
-      res += `.${trimmed.replace(/\s+/g, '.')}`;
-    }
+  if (classStr) {
+    const trimmed = classStr.trim().replace(/\s+/g, '.');
+    if (trimmed) res += `.${trimmed}`;
   }
 
-  // Include type attribute for inputs/buttons for extra context
-  const type = (el as HTMLInputElement | HTMLButtonElement).type;
-  if (type && typeof type === 'string' && type !== 'text') {
-    res += `.${type}`;
-  }
+  const type = (el as { type?: string }).type;
+  if (type && type !== 'text') res += `.${type}`;
 
   return res;
 }
@@ -53,32 +29,22 @@ export function getSelector(el: Element): string {
 export const hasOwn = Object.prototype.hasOwnProperty;
 
 export const isTemplateRoute = (r: RouteDefinition): r is TemplateRoute =>
-  isObject(r) && 'template' in r && typeof r.template === 'string';
+  r !== null && typeof r === 'object' && 'template' in r;
 
 export const isRenderRoute = (r: RouteDefinition): r is RenderRoute =>
-  isObject(r) && 'render' in r && typeof r.render === 'function';
+  r !== null && typeof r === 'object' && 'render' in r;
 
-/**
- * Shallow equality check for objects.
- * Handles NaN correctly using Object.is.
- */
 export function shallowEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
-  if (!isObject(a) || !isObject(b)) return false;
+  if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return false;
 
   const objA = a as Record<string, unknown>;
   const objB = b as Record<string, unknown>;
-
   const keysA = Object.keys(objA);
-  const keysB = Object.keys(objB);
-
-  if (keysA.length !== keysB.length) return false;
+  if (keysA.length !== Object.keys(objB).length) return false;
 
   for (const key of keysA) {
-    if (!hasOwn.call(objB, key) || !Object.is(objA[key], objB[key])) {
-      return false;
-    }
+    if (!hasOwn.call(objB, key) || !Object.is(objA[key], objB[key])) return false;
   }
-
   return true;
 }
