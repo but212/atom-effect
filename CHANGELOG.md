@@ -12,7 +12,6 @@
 #### Performance
 
 - **Benchmarks**: Removed the async typing latency benchmark.
-- **V8 Object Shapes**: Reordered class properties across `ReactiveNode`, `SlotBuffer`, `ComputedAtom`, and `Effect` to stabilize object shapes.
 - **Loop Unrolling**: Unrolled loops for hot-path slots in `SlotBuffer` and `ReactiveNode.notify`.
 - **Allocation**: Inlined `untracked` logic in `Subscription.notify` to reduce closure allocations during propagation.
 - **Dependency Tracking**: Implemented `hotIndex` caching in `ComputedAtom` and `Effect` for O(1) dirty checking.
@@ -51,6 +50,7 @@
 
 #### Fixed
 
+- **Security**: Hardened protocol detection in `sanitizeHtml` by stripping all whitespace (`\s+`) from attributes before regex matching, preventing bypasses like `java script:`.
 - **Security (XSS)**: Refactored `sanitizeHtml` to use a **DOM-based Sanitizer** (via inert `<template>`).
 - **Security**: Added `DOM_BRIDGE` for `Element.prototype` access to mitigate DOM Clobbering.
 - **Security**: Added recursive sanitization for `<template>` content.
@@ -59,7 +59,8 @@
 
 #### Performance
 
-- **List Rendering**: Simplified reconciliation by removing manual resource pooling and pre-allocated buffers, leveraging modern JS engine optimizations for better overall throughput.
+- **Architecture Cleanup**: Removed all manual resource pooling (`BindingRecordPool`, `ArrayPool`, `ObjectPool`) and unified binding records into plain objects, leveraging modern JS engine optimizations for higher throughput and reduced complexity.
+- **Direct Binding**: Eliminated `BindingContext` and `createContext` abstractions; all reactive bindings now operate directly on `HTMLElement` for minimal object overhead.
 - **Router Link Caching**: Implemented `WeakMap` caching for route names.
 - **Router Matching**: Bifurcated matching engine with exact map lookup and regex fallback.
 - **Monomorphic Parameters**: Standardized parameter comparison in the router.
@@ -68,14 +69,12 @@
 
 - **Link Interception**: Updated `setupAutoBindLinks` to respect modifier keys (Ctrl/Cmd), `rel="external"`, cross-origin navigation, and download attributes.
 - **$.nextTick**: Standardized to use core's `aeNextTick()` for unified scheduler synchronization.
+- **Lifecycle**: Modified `atomMount` to throw errors during initialization ("Fail Loud") for better debuggability, while keeping cleanup errors as logged warnings.
 
 #### Refactor
 
-- **List Rendering**: Overhauled `atomList` implementation for improved maintainability:
-  - Introduced `ItemState` bitwise flags to manage item lifecycle states (New, Existing, ForceReplace).
-  - Simplified the 3-pass diffing algorithm (Prefix, Suffix, Middle) into a more readable structure.
-  - Added comprehensive TSDoc module documentation and internal comments.
-  - Improved initial render detection and batch sanitization logic.
+- **Global Cleanup**: Significant architectural simplification across the library
+- **Sanitization**: Removed the redundant `needsSanitization` fast-path scanner in `sanitize.ts` and simplified collection types to native arrays for better maintainability.
 - **Router Refactor**: Refactored `$.route`.
   - **Strategy Pattern**: Introduced `UrlAdapter` for History and Hash navigation modes.
   - **Matcher**: Implemented `RouteMatcher` for exact matches and dynamic segments.
