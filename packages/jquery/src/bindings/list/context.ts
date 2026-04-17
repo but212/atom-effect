@@ -1,12 +1,16 @@
+/**
+ * @module
+ * Manages the lifecycle and state of list bindings.
+ * Responsible for asynchronous removal, item index mapping, and resource cleanup.
+ */
 import { LOG_PREFIXES } from '@/constants';
 import type { EffectObject, ListKey } from '@/types';
 import { debug } from '@/utils/debug';
 import { setAtomKey } from './utils';
 
 /**
- * ListContext manages the state of a single atomList instance.
- * It tracks current keys, items, and DOM nodes to perform efficient reconciliation.
- * It also handles asynchronous removal of items and maintains reusable buffers.
+ * Manages the internal state for a single atomList instance.
+ * Used to reference the previous state (Keys, Items, Nodes) during reconciliation.
  */
 export class ListContext<T> {
   /** Keys of the items currently in the DOM. */
@@ -25,11 +29,6 @@ export class ListContext<T> {
   /** The reactive effect managing this list. */
   fx?: EffectObject;
 
-  /** Pre-allocated buffer for storing item states during diffing. */
-  statesBuffer = new Uint8Array(256);
-  /** Pre-allocated buffer for storing item indices during diffing. */
-  indicesBuffer = new Int32Array(256);
-
   constructor(
     public readonly $container: JQuery,
     /** @internal */
@@ -38,16 +37,15 @@ export class ListContext<T> {
   ) {}
 
   /**
-   * Schedules the removal of an element, optionally waiting for a promise returned by onRemove.
+   * Schedules the removal of an element.
+   * If the onRemove callback returns a Promise, removal is deferred.
    *
-   * @param k - The key of the item being removed.
-   * @param $el - The jQuery collection representing the item's DOM nodes.
+   * Note: A new item with the same key might be added while removal is pending.
+   * The data-atom-key and connection status are re-verified at commit time to ensure consistency.
    */
   scheduleRemoval(k: ListKey, $el: JQuery): void {
     const commit = () => {
       if (this.fx?.isDisposed) return;
-      // Race condition check: If the element has been re-added to the list
-      // (indicated by having a data-atom-key again), we must NOT remove it.
       if ($el[0] instanceof Element && $el[0].hasAttribute('data-atom-key')) return;
 
       if ($el[0]?.isConnected) $el.remove();
@@ -62,12 +60,9 @@ export class ListContext<T> {
 
   /**
    * Initiates the removal process for an item.
-   *
-   * @param k - The key of the item.
-   * @param $el - The jQuery collection of the item.
    */
   removeItem(k: ListKey, $el: JQuery): void {
-    setAtomKey($el, null); // Clear the key to allow re-addition detection
+    setAtomKey($el, null);
     this.removingKeys.add(k);
     this.scheduleRemoval(k, $el);
   }
@@ -77,27 +72,11 @@ export class ListContext<T> {
    */
   dispose(): void {
     this.removingKeys.clear();
-    this.oldKeys.length = 0;
-    this.oldItems.length = 0;
-    this.oldNodes.length = 0;
+    this.oldKeys = [];
+    this.oldItems = [];
+    this.oldNodes = [];
     this.keyToIndex.clear();
     this.$emptyEl?.remove();
     this.$container.off('.atomList');
-    this.statesBuffer = new Uint8Array(0);
-    this.indicesBuffer = new Int32Array(0);
-  }
-
-  /**
-   * Ensures that the internal buffers are large enough for the given size.
-   *
-   * @param size - The required capacity of the buffers.
-   */
-  ensureBuffers(size: number): void {
-    if (this.statesBuffer.length < size) {
-      this.statesBuffer = new Uint8Array(Math.max(size, this.statesBuffer.length * 2));
-    }
-    if (this.indicesBuffer.length < size) {
-      this.indicesBuffer = new Int32Array(Math.max(size, this.indicesBuffer.length * 2));
-    }
   }
 }

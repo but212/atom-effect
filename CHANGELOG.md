@@ -59,6 +59,7 @@
 
 #### Performance
 
+- **List Rendering**: Simplified reconciliation by removing manual resource pooling and pre-allocated buffers, leveraging modern JS engine optimizations for better overall throughput.
 - **Router Link Caching**: Implemented `WeakMap` caching for route names.
 - **Router Matching**: Bifurcated matching engine with exact map lookup and regex fallback.
 - **Monomorphic Parameters**: Standardized parameter comparison in the router.
@@ -70,6 +71,11 @@
 
 #### Refactor
 
+- **List Rendering**: Overhauled `atomList` implementation for improved maintainability:
+  - Introduced `ItemState` bitwise flags to manage item lifecycle states (New, Existing, ForceReplace).
+  - Simplified the 3-pass diffing algorithm (Prefix, Suffix, Middle) into a more readable structure.
+  - Added comprehensive TSDoc module documentation and internal comments.
+  - Improved initial render detection and batch sanitization logic.
 - **Router Refactor**: Refactored `$.route`.
   - **Strategy Pattern**: Introduced `UrlAdapter` for History and Hash navigation modes.
   - **Matcher**: Implemented `RouteMatcher` for exact matches and dynamic segments.

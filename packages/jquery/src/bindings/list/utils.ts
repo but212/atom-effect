@@ -1,3 +1,7 @@
+/**
+ * @module
+ * Defines utility functions commonly used within list bindings.
+ */
 import $ from 'jquery';
 import { registry } from '@/core/registry';
 
@@ -9,11 +13,12 @@ export function wrap($el: Element | JQuery<Element>): JQuery {
 }
 
 /**
- * Sets or removes the 'data-atom-key' attribute on a DOM node or a jQuery collection.
- * This attribute is crucial for tracking which item an element belongs to.
+ * Sets or removes the 'data-atom-key' attribute on a DOM node or jQuery object.
+ * This attribute is used to identify which data item an element corresponds to
+ * during event delegation and reconciliation.
  *
- * @param node - The DOM element, node, or jQuery object.
- * @param key - The key string to set, or null to remove it.
+ * @param node The target DOM element or jQuery object.
+ * @param key The key string to set (or null to remove the attribute).
  */
 export function setAtomKey(node: Element | Node | JQuery, key: string | null): void {
   if (node instanceof Element) {
@@ -33,9 +38,11 @@ export function setAtomKey(node: Element | Node | JQuery, key: string | null): v
 }
 
 /**
- * Cleans up the registry and effects associated with a tree of DOM nodes.
+ * Executes and cleans up all registered effects and cleanup handlers
+ * for the specified node and its entire subtree.
+ * Should be called when a node is physically removed from the DOM to prevent memory leaks.
  *
- * @param node - The root element or a jQuery collection potentially containing multiple roots.
+ * @param node The root element or jQuery object to clean up.
  */
 export function cleanupNodes(node: Element | JQuery): void {
   if (node instanceof Element) {
