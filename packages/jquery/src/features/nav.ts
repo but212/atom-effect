@@ -393,16 +393,18 @@ class AtomNavigator implements AtomNav {
    * Minimalist approach: Wipe non-essential internal attributes and set new ones.
    */
   private _updateAttributes(el: HTMLElement, next: Record<string, string>): void {
-    // 1. Remove non-protected attributes
+    // 1. Remove stale attributes
     for (const attr of Array.from(el.attributes)) {
       const { name } = attr;
-      if (name !== 'id' && name !== 'data-atom-nav-target') {
+      if (name !== 'id' && name !== 'data-atom-nav-target' && !(name in next)) {
         el.removeAttribute(name);
       }
     }
-    // 2. Assign new attributes
+    // 2. Sync values: only set if changed
     for (const [name, value] of Object.entries(next)) {
-      el.setAttribute(name, value);
+      if (el.getAttribute(name) !== value) {
+        el.setAttribute(name, value);
+      }
     }
   }
 
