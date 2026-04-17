@@ -41,7 +41,7 @@ describe('$.atomList (Integration)', () => {
     expect($container.find('p').length).toBe(0);
     expect($container.find('span').text()).toBe('b');
 
-    // [Stability] Releasing empty list multiple times should not corrupt internal pools
+    // [Stability] Releasing empty list multiple times should not corrupt internal state
     list.value = [];
     list.value = [];
     list.value = ['c'];
