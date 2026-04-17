@@ -37,7 +37,6 @@ describe('Atoms: Core Operations', () => {
       for (let i = 0; i < REPEATS; i++) {
         atoms[i]!.value = i + 1;
         sum += atoms[i]!.value;
-        sum += atoms[i]!.peek();
       }
       keep(sum);
     },
