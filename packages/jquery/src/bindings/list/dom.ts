@@ -194,14 +194,18 @@ export function placeItems<T>(
     container.appendChild(frag);
   } else {
     let next: Node | null = null,
-      min = 999999;
+      min = Infinity;
     for (let i = count - 1; i >= 0; i--) {
       const idx = newIndices[i]!,
         node = newNodes[i];
       if (!node) continue;
-      if (idx !== -1 && idx < min) min = idx;
-      else insertOrAppend(node as Element | JQuery, next, container);
-      next = node instanceof Element ? node : (node as JQuery)[0]!;
+
+      const first = node instanceof Element ? node : (node as JQuery)[0];
+      if (first) {
+        if (idx !== -1 && idx < min) min = idx;
+        else insertOrAppend(node as Element | JQuery, next, container);
+        next = first;
+      }
     }
   }
 
