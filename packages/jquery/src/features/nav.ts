@@ -50,7 +50,7 @@ interface ContentState {
 }
 
 /**
- * Optimized URL and DOM manipulation helpers for navigation.
+ * URL and DOM manipulation helpers for navigation.
  */
 const NavHelpers = {
   /**
@@ -81,7 +81,7 @@ const NavHelpers = {
 
   /**
    * Parses raw HTML response into a structured ContentState.
-   * Handles title extraction, fragment resolution, and attribute syncing.
+   * Handles title extraction and fragment resolution.
    *
    * @param html - Raw HTML source
    * @param selector - Optional CSS selector to extract a fragment
@@ -95,20 +95,18 @@ const NavHelpers = {
     const contentNode = selector ? doc.querySelector(selector) : null;
     const rawHtml = contentNode ? contentNode.innerHTML : doc.body?.innerHTML || html;
 
-    // Extract attributes for differential update (classes, data-attrs, etc)
+    // Extract attributes for sync
     const attributes: Record<string, string> = {};
     if (contentNode) {
-      for (const attr of contentNode.attributes) {
-        // Skip 'id' to prevent fragmentation conflicts
-        if (attr.name !== 'id') attributes[attr.name] = attr.value;
+      for (const { name, value } of Array.from(contentNode.attributes)) {
+        if (name !== 'id') attributes[name] = value;
       }
     }
 
-    // Extract Meta Data based on META_CONFIG
+    // Extract Meta Data
     const meta: Record<string, string> = {};
     for (const [key, config] of Object.entries(META_CONFIG)) {
-      const el = doc.querySelector(config.selector);
-      const val = el?.getAttribute(config.attr);
+      const val = doc.querySelector(config.selector)?.getAttribute(config.attr);
       if (val) meta[key] = val;
     }
 
@@ -116,7 +114,6 @@ const NavHelpers = {
       html: sanitizeHtml(rawHtml).trim(),
       title,
       attributes,
-      // Check for X-PJAX-URL header to handle server-side redirects
       redirectUrl: xhr?.getResponseHeader?.('X-PJAX-URL') || undefined,
       meta,
     };
@@ -197,7 +194,7 @@ class AtomNavigator implements AtomNav {
   /** Controller for the current active fetch/hook cycle */
   private _navController: AbortController | null = null;
 
-  /** Optimized internal state for tracking changes during sync effect */
+  /** Internal state for tracking changes during sync effect */
   private readonly _normalizedState: ComputedAtom<{
     url: string;
     pathAndSearch: string;
@@ -276,7 +273,6 @@ class AtomNavigator implements AtomNav {
 
   /**
    * Main synchronization loop. triggered whenever normalized state or content changes.
-   * Orchestrates redirects, initial loads, and DOM reconciliation.
    */
   private _syncUI(): undefined {
     const { url, pathAndSearch, hash, type } = this._normalizedState.value;
@@ -377,7 +373,7 @@ class AtomNavigator implements AtomNav {
       // 4. Cleanup reactive bindings within the stale content
       this._$target.children().atomUnbind();
 
-      // 5. Sync Target Attributes (classes, data-attrs, etc)
+      // 5. Sync Target Attributes (Ensures container state matches the new response)
       const el = this._$target[0] as HTMLElement | undefined;
       if (el && state.attributes) {
         this._updateAttributes(el, state.attributes);
@@ -392,18 +388,14 @@ class AtomNavigator implements AtomNav {
   }
 
   /**
-   * Performs differential attribute update for the target element.
-   * Ensures stale attributes are removed while keeping internal markers.
+   * Performs attribute synchronization to ensure the target container state
+   * matches the extracted fragment.
+   * Minimalist approach: Wipe non-essential internal attributes and set new ones.
    */
   private _updateAttributes(el: HTMLElement, next: Record<string, string>): void {
-    const current = el.attributes;
-    // 1. Remove stale attributes (backward loop for safety)
-    for (let i = current.length - 1; i >= 0; i--) {
-      const attr = current[i];
-      if (!attr) continue;
+    // 1. Remove stale attributes
+    for (const attr of Array.from(el.attributes)) {
       const { name } = attr;
-
-      // Protection: Do not remove ID or internal atomNav markers
       if (name !== 'id' && name !== 'data-atom-nav-target' && !(name in next)) {
         el.removeAttribute(name);
       }

@@ -6,44 +6,44 @@
 
 #### Added
 
-- **Testing**: Switched the entire DOM test suite (Core & jQuery) from JSDOM/Happy-DOM to **Vitest Browser Mode** using Playwright (Chromium). This ensures high-fidelity behavior for DOM APIs, CSS inheritance, and focus/event handling.
-- **aeNextTick**: Introduced `aeNextTick()` to provide a reliable way to wait for the next scheduler flush. Supports both Promise-based `await` and callback patterns.
+- **Testing**: Switched the entire DOM test suite (Core & jQuery) from JSDOM/Happy-DOM to **Vitest Browser Mode** using Playwright (Chromium) for native browser environment testing.
+- **aeNextTick**: Introduced `aeNextTick()` for scheduler synchronization using Promise and callback patterns.
 
 #### Performance
 
-- **Benchmarks**: Removed the async typing latency benchmark to eliminate measurement noise from the macro-bench suite.
-- **V8 Hidden Class Optimization**: Reordered class properties across `ReactiveNode`, `SlotBuffer`, `ComputedAtom`, and `Effect` to stabilize object shapes and improve property access speed.
-- **Hot-path Loop Unrolling**: Manually unrolled loops for hot-path slots in `SlotBuffer` and `ReactiveNode.notify` to reduce branching and indexing overhead.
-- **Zero-Allocation Notification**: Inlined `untracked` logic in `Subscription.notify` to eliminate closure allocations during reactive propagation.
-- **Dependency Tracking**: Implemented `hotIndex` caching in `ComputedAtom` and `Effect` to achieve O(1) dirty checking for high-frequency dependencies.
-- **Fast-path Buffering**: Optimized `SlotBuffer` with a "Dense Optimization" path that bypasses null checks when the buffer is fully occupied.
-- **Scheduler Efficiency**: Replaced array-tuple buffers with discrete fields and optimized batch merging to reduce engine-level overhead.
-- **Type Guard Optimization**: Refactored `isPromise` and `isBranded` for faster early-exit on non-matching types.
+- **Benchmarks**: Removed the async typing latency benchmark.
+- **V8 Object Shapes**: Reordered class properties across `ReactiveNode`, `SlotBuffer`, `ComputedAtom`, and `Effect` to stabilize object shapes.
+- **Loop Unrolling**: Unrolled loops for hot-path slots in `SlotBuffer` and `ReactiveNode.notify`.
+- **Allocation**: Inlined `untracked` logic in `Subscription.notify` to reduce closure allocations during propagation.
+- **Dependency Tracking**: Implemented `hotIndex` caching in `ComputedAtom` and `Effect` for O(1) dirty checking.
+- **Buffering**: Added path in `SlotBuffer` that bypasses null checks when fully occupied.
+- **Scheduler**: Replaced array-tuple buffers with discrete fields and updated batch merging.
+- **Type Guards**: Refactored `isPromise` and `isBranded` for early-exit.
 
 #### Changed
 
-- **TypeScript**: Enabled `noImplicitAny: true` in `packages/core/tsconfig.json` to enforce stricter type safety for the core library.
-- **Lens**: Replaced Regex-based safety checks with string comparisons and implemented local value caching in `atomLens.subscribe` to reduce redundant path traversal.
-- **Debug**: Switched from `Object.defineProperties` to direct symbol assignment for peak node initialization performance.
-- **Error Handling**: Optimized `AtomError.getChain` to only allocate tracking `Set` for deep exception chains (>3 levels).
+- **TypeScript**: Enabled `noImplicitAny: true` in `packages/core/tsconfig.json`.
+- **Lens**: Replaced Regex checks with string comparisons and implemented local value caching in `atomLens.subscribe`.
+- **Debug**: Switched from `Object.defineProperties` to direct symbol assignment for initialization.
+- **Error Handling**: Updated `AtomError.getChain` to use `Set` only for deep exception chains (>3 levels).
 
 #### Fixed
 
-- **Benchmark Refinement**: Strengthened the `keep` utility with non-deterministic branching to prevent JIT Dead Code Elimination (DCE). Updated `micro.bench.ts` to use active subscribers for all scenarios, providing honest and reliable metrics.
+- **Benchmark Refinement**: Updated `keep` utility with non-deterministic branching and updated `micro.bench.ts` to use active subscribers.
 
 ### jQuery
 
 #### Added
 
-- **Dynamic Routing**: Full support for dynamic route segments (e.g., `user/:id`) with automatic regex compilation and value extraction.
-- **Reactive Params Atom**: Added a dedicated `params` atom to the `Router`, providing a unified reactive view of path and query parameters.
-- **PJAX Navigation**: Introduced `$.atomNav`, a reactive PJAX module for seamless page transitions with automatic title/meta syncing, container attribute reconciliation, and memory-safe unbinding.
-- **Enhanced Navigation Control**: `atomNav.navigate()` now returns a `Promise<void>` and supports a `replace` option. The `onBeforeLoad` hook now receives an `AbortSignal`.
-- **Server-Side Redirects**: Added support for `X-PJAX-URL` header in navigation responses to handle server-side redirects efficiently.
-- **Resource Safety**: Integrated `AbortController` per navigation to prevent race conditions and ensure clean cleanup.
-- **Routing**: `$.route` now supports `HTMLElement` and `JQuery` objects as the injection `target`, enabling nested route management inside components or `atomNav` layouts.
-- **Integration**: Introduced deep synergy between `atomNav` and `$.route`. Verified selector and base-path isolation to allow both PJAX and SPA routing to coexist on the same page without interference.
-- **Fetch Enhancements**: `$.atomFetch` now passes the `jqXHR` object to the `transform` function and supports a `name` option for debugging.
+- **Dynamic Routing**: Added support for dynamic route segments (e.g., `user/:id`) with regex compilation.
+- **Reactive Params Atom**: Added `params` atom to the `Router`.
+- **PJAX Navigation**: Introduced `$.atomNav` for page transitions with title/meta/attr synchronization.
+- **Navigation Control**: `atomNav.navigate()` now returns a `Promise<void>` and supports a `replace` option; `onBeforeLoad` receives an `AbortSignal`.
+- **Server-Side Redirects**: Added support for `X-PJAX-URL` header.
+- **Resource Management**: Integrated `AbortController` per navigation for lifecycle cleanup.
+- **Routing**: `$.route` now supports `HTMLElement` and `JQuery` objects as the injection `target`.
+- **Integration**: Verified coexistence of `atomNav` and `$.route`.
+- **Fetch Enhancements**: `$.atomFetch` now passes `jqXHR` to the `transform` function.
 
 #### Removed
 
@@ -51,29 +51,29 @@
 
 #### Fixed
 
-- **Security (XSS)**: Overhauled `sanitizeHtml` to use a **DOM-based Sanitizer** (via inert `<template>`) instead of a basic regex-based tracker. This provides 100% accurate parsing and eliminates bypasses found in regex-only engines.
-- **Security**: Implemented **DOM Clobbering Protection** via `DOM_BRIDGE`. Specialized access to `Element.prototype` properties (like `attributes`, `removeAttribute`) ensures security filters cannot be shadowed or bypassed by malicious form inputs or IDs.
-- **Security**: Added recursive sanitization for `<template>` content, ensuring nested templates are also scrubbed for dangerous tags and attributes.
-- **Security**: Expanded coverage to block dangerous content in `srcdoc` and `srcset` attributes.
-- **Security**: Hardened protocol detection to identify `url(javascript:...)` patterns in SVG attributes (`fill`, `filter`, `mask`, etc.) and CSS values.
+- **Security (XSS)**: Refactored `sanitizeHtml` to use a **DOM-based Sanitizer** (via inert `<template>`).
+- **Security**: Added `DOM_BRIDGE` for `Element.prototype` access to mitigate DOM Clobbering.
+- **Security**: Added recursive sanitization for `<template>` content.
+- **Security**: Added coverage for `srcdoc` and `srcset` attributes.
+- **Security**: Updated protocol detection for `url(javascript:...)` in SVG and CSS.
 
 #### Performance
 
-- **Router Link Caching**: Implemented `WeakMap` caching for resolved route names, reducing string parsing overhead during link highlighting.
-- **Router Matching Optimization**: Bifurcated matching engine with O(1) exact map lookup and O(N) regex fallback.
-- **Monomorphic Parameters**: Standardized parameter comparison in the router using shallow equality guards to prevent unnecessary re-renders.
+- **Router Link Caching**: Implemented `WeakMap` caching for route names.
+- **Router Matching**: Bifurcated matching engine with exact map lookup and regex fallback.
+- **Monomorphic Parameters**: Standardized parameter comparison in the router.
 
 #### Changed
 
-- **Hardened Link Interception**: Enhanced `setupAutoBindLinks` to correctly respect modifier keys (Ctrl/Cmd), `rel="external"`, cross-origin navigation, and download attributes.
-- **$.nextTick**: Standardized to use core's `aeNextTick()` for unified scheduler synchronization and improved performance via promise deduplication.
+- **Link Interception**: Updated `setupAutoBindLinks` to respect modifier keys (Ctrl/Cmd), `rel="external"`, cross-origin navigation, and download attributes.
+- **$.nextTick**: Standardized to use core's `aeNextTick()` for unified scheduler synchronization.
 
 #### Refactor
 
-- **Router Overhaul**: Re-architected `$.route` for better modularity, performance, and accessibility.
-  - **Strategy Pattern**: Introduced `UrlAdapter` to abstract differences between History and Hash navigation modes.
-  - **Compiled Matcher**: Implemented `RouteMatcher` which separates O(1) exact matches from regex-based dynamic segments.
-  - **Metadata Protocol**: Added `title` support to route definitions and templates for automatic document title updates.
+- **Router Refactor**: Refactored `$.route`.
+  - **Strategy Pattern**: Introduced `UrlAdapter` for History and Hash navigation modes.
+  - **Matcher**: Implemented `RouteMatcher` for exact matches and dynamic segments.
+  - **Metadata Protocol**: Added `title` support for document title updates.
   - **Functional Guards**:
     - `onEnter`: Hook called before rendering. Can return an object to merge into `params`, or `false` to block navigation.
     - `onLeave`: Hook called before navigating away. Return `false` to block.
@@ -81,8 +81,8 @@
     - `onMount`: `($content: JQuery, onUnmount, router) => void` — **Template routes only.** Called after template content is appended.
     - `title`: (Optional) String to set as `document.title` when this route is active.
   - **Configuration**: Support for `JQuery<HTMLElement>` objects as `target` and improved `mode` initialization logic (hash/history).
-  - **Robust Interception**: Enhanced link interception to skip non-route asset links (e.g., .pdf) even if a `notFound` route is defined.
-  - **Path Utilities**: Consolidated path logic into a stateless `PathUtils` for reliable normalization and query splitting.
+  - **Interception**: Updated link interception to skip non-route asset links (e.g., .pdf).
+  - **Path Utilities**: Consolidated path logic into `PathUtils`.
 
 ## [0.30.1] - 2026-04-14
 
@@ -90,17 +90,17 @@
 
 #### Fixed
 
-- **Lens**: Implemented strict prototype pollution protection in `setDeepValue` and `getPathValue` by blocking `__proto__`, `constructor`, and `prototype` keys.
+- **Lens**: Added prototype pollution protection in `setDeepValue` and `getPathValue` for `__proto__`, `constructor`, and `prototype` keys.
 
 ### jQuery
 
 #### Fixed
 
-- **Core**: Fixed a logic flaw in the `unpack` utility where static values (strings, numbers, null) and plain objects were not correctly identified as part of a `[source, options]` tuple.
-- **Security**: Hardened `sanitizeHtml` against XSS bypasses using case-sensitive or semicolon-less HTML entities (e.g., `&Colon;`, `&tab`).
-- **Security**: Added `srcdoc` to monitored URL attributes and implemented HTML injection filtering for it.
-- **Security**: Improved protocol detection to identify `url(javascript:...)` patterns in SVG attributes (`fill`, `filter`, `mask`, etc.) and CSS values.
-- **Security**: Refined CSS sanitization regex to prevent over-matching HTML attribute quotes.
+- **Core**: Fixed bug in `unpack` utility where static values were not identified in `[source, options]` tuples.
+- **Security**: Updated `sanitizeHtml` for XSS bypasses using case-sensitive or semicolon-less entities.
+- **Security**: Added `srcdoc` to monitored URL attributes.
+- **Security**: Updated protocol detection for `url(javascript:...)` in SVG and CSS.
+- **Security**: Refined CSS sanitization regex.
 
 #### Refactor
 
@@ -109,7 +109,7 @@
 
 #### Changed
 
-- **Performance**: Optimized the `atomEachElement` engine by caching context requirements and collection length, reducing property lookup overhead in hot loops.
+- **Performance**: Updated `atomEachElement` engine to cache context requirements and collection length.
 
 ## [0.30.0] - 2026-04-12
 
