@@ -37,6 +37,8 @@
 - **Enhanced Navigation Control**: `atomNav.navigate()` now returns a `Promise<void>` and supports a `replace` option. The `onBeforeLoad` hook now receives an `AbortSignal`.
 - **Server-Side Redirects**: Added support for `X-PJAX-URL` header in navigation responses to handle server-side redirects efficiently.
 - **Resource Safety**: Integrated `AbortController` per navigation to prevent race conditions and ensure clean cleanup.
+- **Routing**: `$.route` now supports `HTMLElement` and `JQuery` objects as the injection `target`, enabling nested route management inside components or `atomNav` layouts.
+- **Integration**: Introduced deep synergy between `atomNav` and `$.route`. Verified selector and base-path isolation to allow both PJAX and SPA routing to coexist on the same page without interference.
 - **Fetch Enhancements**: `$.atomFetch` now passes the `jqXHR` object to the `transform` function and supports a `name` option for debugging.
 
 #### Removed

@@ -274,6 +274,14 @@ The hash/history difference is isolated to internal functions:
 - **Active State**: Active-link class management uses a reactive `effect` that re-runs whenever `currentRoute` changes, updating all `[data-route]` links in a single pass using **manual loops** for performance.
 - **Backwards Compatible**: Default mode is `'hash'`, preserving existing behavior.
 
+### 7.5 Nav & Router Synergy (Traffic Control)
+
+The library provides a specialized "Traffic Control" strategy to allow `$.atomNav` (top-level PJAX) and `$.route` (nested SPA routing) to coexist in the same application without conflict:
+
+- **Selector isolation**: `$.atomNav` intercepts links based on a specific selector (defaulting to `a[data-nav]`). By keeping layout links as `data-nav` and sub-view links as `data-route`, the two systems never fight over the same click event.
+- **Base Path isolation**: The Router's `basePath` ensures that it only responds to URLs within its domain. If a link points outside the `basePath`, the router naturally ignores it, allowing the standard browser behavior or `$.atomNav` to take over.
+- **Nested Teardown**: Because `$.route` tracks its target element in the `registry`, it is automatically destroyed when `$.atomNav` replaces its parent container. This ensures that route effects and listeners are cleaned up exactly when the layout that contains them is swapped out.
+
 ## 8. Reactive Data Fetching (`$.atomFetch`)
 
 `$.atomFetch` (`fetch.ts`) is a high-level primitive that integrates jQuery's `$.ajax` with `@but212/atom-effect` core's async `computed` atoms.

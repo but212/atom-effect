@@ -530,7 +530,7 @@ Creates an SPA router with reactive state management. Supports both hash-based a
 
 **Configuration**:
 
-- `target`: Selector for the container element where routes will be rendered.
+- `target`: `string | JQuery | HTMLElement` — Selector or element where routes will be rendered. Supporting object references allows initializing routers inside dynamic layouts or `atomNav` containers.
 - `default`: Name of the default route to load if the URL is empty.
 - `routes`: (Optional) Object mapping route names to definitions. If omitted, the router will attempt **Implicit Auto-Discovery** (see below). Each route must specify **either** `template` **or** `render`, but not both.
   - Supports **Dynamic Segments**: Use `:paramName` (e.g., `'user/:id'`). Parameters are automatically extracted and available in the `params` atom.
@@ -547,6 +547,14 @@ Creates an SPA router with reactive state management. Supports both hash-based a
 - `activeClass`: (Optional) CSS class for active links (default: `'active'`).
 - `beforeTransition`: (Optional) Global hook `(from, to) => void`.
 - `afterTransition`: (Optional) Global hook `(from, to) => void`.
+
+### Nav & Router Synergy (Traffic Control)
+
+`$.atomNav` and `$.route` are designed to work together in hybrid applications. You can use `atomNav` for top-level layout transitions (PJAX) and `$.route` for sub-view management within those layouts.
+
+- **Selector Isolation**: Use the `selector` option in `atomNav` (e.g., `a[data-nav]`) to ensure it only intercepts layout-level links, while `$.route` handles `[data-route]` links.
+- **Base Path Isolation**: Use `basePath` in `$.route` (History mode) to restrict the SPA router to a specific URL sub-tree, allowing `atomNav` to handle the rest of the site.
+- **Automatic Cleanup**: When `atomNav` replaces a container, any `$.route` instance initialized inside that container is automatically destroyed via the `registry`'s `MutationObserver`.
 
 #### Implicit Auto-Discovery
 

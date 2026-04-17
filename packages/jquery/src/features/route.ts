@@ -120,7 +120,14 @@ class RouterImpl implements Router {
     this.isHistoryMode = this.config.mode === 'history';
     this.basePath = this.config.basePath ? this.config.basePath.replace(/\/$/, '') : '';
     this.activeClass = this.config.activeClass;
-    this.$target = $(this.config.target);
+    const target = this.config.target;
+    if (typeof target === 'string') {
+      this.$target = $(target);
+    } else if (target instanceof HTMLElement) {
+      this.$target = $(target);
+    } else {
+      this.$target = target as JQuery;
+    }
     this.previousUrl = this.isHistoryMode ? location.pathname + location.search : location.hash;
 
     // Phase 1: Discover routes from DOM templates if 'routes' config is empty.

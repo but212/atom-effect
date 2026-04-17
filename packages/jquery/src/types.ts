@@ -158,7 +158,7 @@ export interface RenderRoute extends RouteLifecycle {
 export type RouteDefinition = TemplateRoute | RenderRoute;
 
 export interface RouteConfig {
-  target: string;
+  target: string | JQuery | HTMLElement;
   default?: string;
   routes?: Record<string, RouteDefinition>;
   mode?: 'hash' | 'history';
