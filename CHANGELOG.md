@@ -27,6 +27,10 @@
 - **Debug**: Switched from `Object.defineProperties` to direct symbol assignment for peak node initialization performance.
 - **Error Handling**: Optimized `AtomError.getChain` to only allocate tracking `Set` for deep exception chains (>3 levels).
 
+#### Fixed
+
+- **Benchmark Refinement**: Strengthened the `keep` utility with non-deterministic branching to prevent JIT Dead Code Elimination (DCE). Updated `micro.bench.ts` to use active subscribers for all scenarios, providing honest and reliable metrics.
+
 ### jQuery
 
 #### Added

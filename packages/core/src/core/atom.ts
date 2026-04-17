@@ -148,10 +148,6 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
   protected override _deepDirtyCheck(): boolean {
     return false;
   }
-
-  // [Symbol.dispose](): void {
-  //   this.dispose();
-  // }
 }
 
 /**
