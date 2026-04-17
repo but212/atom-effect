@@ -16,7 +16,7 @@ This guide explains the built-in sanitization layer and how to integrate [DOMPur
 | ------ | ------ |
 | `<script>`, `<iframe>`, `<object>`, `<embed>`, `<base>`, `<meta>`, `<applet>`, `<noscript>`, `<form>`, `<style>`, `<link>` | Tag removed entirely (loop until stable) |
 | `onclick`, `onerror`, etc. (`on*` attributes) | Replaced with `data-unsafe-attr=` |
-| `javascript:`, `vbscript:`, `data:` protocols | Neutralized (Replaced with `data-unsafe-protocol:`). Strengthened to handle internal whitespace and control character smuggling. |
+| `javascript:`, `vbscript:`, `data:` protocols | Neutralized (Replaced with `data-unsafe-protocol:`). Strips all internal whitespace (`\s+`) from attributes before matching to prevent bypasses like `java script:`. |
 | Dangerous data URIs (`text/html`, `application/javascript`, `image/svg+xml`, etc.) | Neutralized. |
 | CSS `expression()`, `behavior:`, `-moz-binding:`, obfuscated protocol sequences | Replaced with `data-unsafe-css:` |
 | Entities (`&#NNN;`, `&#xHH;`, `&colon;`, `&Tab;`, `&NewLine;`) | **Decoded first** in the normalization phase to prevent protocol smuggling. |

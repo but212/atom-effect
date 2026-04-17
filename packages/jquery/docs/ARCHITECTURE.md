@@ -316,12 +316,12 @@ The binding layer includes defensive measures against XSS and prototype pollutio
 
 - `bindHtml`: Sanitizes content via `sanitizeHtml()`. Switched from a regex-based engine to a **multi-layered DOM-based Sanitizer** using an inert `<template>` fragment and a **TEMPLATE_POOL** for re-entrant efficiency. It employs a **walkAndScrub** strategy that recursively cleans the DOM tree, transforming dangerous tags into inert `<span>` wrappers while preserving safe structure.
 - **DOM Clobbering Protection**: Implemented `DOM_BRIDGE` to access element properties (like `.attributes`) and methods (like `.removeAttribute`) directly from the `Element.prototype`. This prevents malicious HTML from "clobbering" these properties and bypassing security checks.
-- `bindAttr`: Blocks `on*` event handler attributes (replaces them with `data-unsafe-attr` markers) and dangerous URL protocols using a centralized matcher. This protection covers standard and SVG-specific attributes (`fill`, `filter`, `mask`, etc.) and includes `srcdoc` and `srcset` monitoring.
+- `bindAttr`: Blocks `on*` event handler attributes (replaces them with `data-unsafe-attr` markers) and dangerous URL protocols using a centralized matcher. This protection covers standard and SVG-specific attributes (`fill`, `filter`, `mask`, etc.) and includes `srcdoc` and `srcset` monitoring. It also strips all whitespace from attributes BEFORE protocol matching to prevent bypasses like `java script:`.
 - `srcdoc` Protection: Specifically monitors `srcdoc` as a high-risk HTML sink, applying tag-based sanitization checks before binding.
 - `bindCss`: Blocks CSS values containing `expression()`, `behavior:`, and `url(javascript:)` protocols.
 - `bindProp`: Blocks dangerous properties (`innerHTML`, `outerHTML`) and prototype pollution vectors (`__proto__`, `constructor`, `prototype`). It also enforces protocol security on properties mapped to `URL_ATTRS`.
 - Centralized Engine: Security patterns and monitoring lists are centralized in `utils/sanitize.ts` and `constants.ts` to ensure consistent enforcement across the entire library.
-- **O(n) Fast-path**: `sanitizeHtml` includes an early scan (`needsSanitization`) to bypass expensive DOM parsing for safe strings. The implementation uses a **multi-layered defense** strategy: normalization (entity decoding, control stripping), recursive tag transformation, and protocol/CSS neutralization.
+- **Sanitization Engine**: `sanitizeHtml` uses a **multi-layered defense** strategy: normalization (entity decoding, control stripping), recursive tag transformation, and protocol/CSS neutralization.
 
 These are **first-pass filters** using optimized regular expressions. For user-generated content, [DOMPurify](https://github.com/cure53/DOMPurify) is recommended. See the [Security Guide](./SECURITY.md) for integration patterns.
 
@@ -419,7 +419,7 @@ All internal state records (e.g., `BindingRecord`, `InputBinding`) are initializ
 
 By moving from binary buffers and manual pooling to a simplified 3-pass algorithm, `atomList` leverages modern JS engine optimizations (V8's Map and Array optimizations) for reconciliation. This reduces architectural complexity while maintaining high performance.
 
-- **Sanitization Fast-path**: `sanitizeHtml` includes an early scan (`needsSanitization`) to bypass expensive DOM parsing for safe strings. The implementation uses a **multi-layered defense** strategy: normalization (entity decoding, control stripping), recursive tag transformation to inert `<span>` elements, and protocol/CSS neutralization.
+- **Sanitization Engine**: `sanitizeHtml` implementation uses a **multi-layered defense** strategy: normalization (entity decoding, control stripping), recursive tag transformation to inert `<span>` elements, and protocol/CSS neutralization.
 - **Robust Equality**: `shallowEqual` uses `Object.keys()` and `Object.is()` for reliable comparison, correctly handling `NaN` and edge cases while maintaining an efficient linear scan.
 
 ## 13. CPU Branch Prediction Optimizations
@@ -457,10 +457,6 @@ This ensures the updater function's control flow remains identical for a given e
 ### 13.4 Static Snapshot for Registry Cleanup
 
 Live DOM collections (e.g. `HTMLCollection`) change their length as elements are removed, which causes "unstable loop prediction". `cleanupDescendants` now converts the result to a **static array snapshot**. This stabilizes the loop's iteration count and branch targets, preventing stalls during large DOM teardowns.
-
-### 13.5 Fast-path Sanitization Scan
-
-`sanitizeHtml` performs an O(n) scan for safe characters (`<`, `&`, controls) and attribute prefixes before running the DOM engine. For the vast majority of "safe" updates (numbers, plain text), this skips the computationally expensive and branch-heavy logic entirely.
 
 ## 14. Lenses & Structural Sharing
 
