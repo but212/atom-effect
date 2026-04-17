@@ -148,11 +148,15 @@ export function forceGC(): void {
   }
 }
 
-let _sink: any;
+export let _sink: any;
 /**
  * Prevents Dead Code Elimination (DCE) by assigning the value to a sink.
  * Use this in benchmarks for values that aren't otherwise consumed.
  */
 export function keep(value: any): void {
   _sink = value;
+  // Non-deterministic branch to prevent DCE
+  if (Math.random() > 1) {
+    console.log(_sink);
+  }
 }

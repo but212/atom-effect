@@ -67,8 +67,6 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
 
     // 1. Guard: Skip if already scheduled or no subscribers
     if ((currentFlags & SCHED_BIT) !== 0) return;
-    const slots = this._slots;
-    if (slots === null || slots.size === 0) return;
 
     // 2. Schedule Notification
     this._pendingOldValue = oldValue;
