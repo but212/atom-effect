@@ -37,7 +37,7 @@ describe('Binding Registry', () => {
     it('should handle errors gracefully during all cleanup phases', () => {
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const el = document.createElement('div');
-      $.atom.debug = true;
+      $.debug.enabled = true;
 
       registry.trackEffect(el, {
         dispose: () => {

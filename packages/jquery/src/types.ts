@@ -9,10 +9,6 @@ import type {
   WritableAtom,
 } from '@but212/atom-effect';
 
-// ============================================================================
-// Shared API Types
-// ============================================================================
-
 export type EffectCleanup = () => void;
 export type EffectResult = undefined | EffectCleanup;
 export type EqualFn<T> = (a: T, b: T) => boolean;
@@ -22,30 +18,21 @@ export interface AtomOptions extends BaseAtomOptions {
   sync?: boolean;
 }
 
-/**
- * Represents a value that can be tracked by the reactive system.
- * - T: Static value (one-time bind)
- * - ReadonlyAtom<T>: Reactive value (updates DOM when atom changes)
- * - () => T: Reactive function (updates DOM when any atom read inside changes)
- */
 export type ReactiveValue<T> = T | ReadonlyAtom<T> | (() => T);
 
-/**
- * An extension of ReactiveValue that also supports Promises and async functions.
- * The binding system automatically handles the promise lifecycle, showing the
- * latest resolved value and ignoring stale ones (race condition protection).
- */
 export type AsyncReactiveValue<T> =
   | T
   | ReadonlyAtom<T | Promise<T>>
   | Promise<T>
   | (() => T | Promise<T>);
+
 export type PrimitiveValue = string | number | boolean | null | undefined;
 type KeysOfType<T, V> = { [K in keyof T]: T[K] extends V ? K : never }[keyof T];
 
 export type CssValue =
   | AsyncReactiveValue<string | number>
   | [source: AsyncReactiveValue<number>, unit: string];
+
 export type CssBindings = Record<string, CssValue>;
 
 export interface BindingOptions<T = unknown> {
@@ -90,25 +77,14 @@ export interface ListOptions<T> {
   isEqual?: (a: T, b: T) => boolean;
 }
 
-/**
- * Options for `atomVal`, `atomChecked`, and `atomForm` bindings.
- */
 export interface ValOptions<T> {
-  /** Debounce duration in milliseconds for DOM -> Atom sync. Defaults to 0. */
   debounce?: number;
-  /** jQuery event name(s) to listen to. Defaults to "input". */
   event?: string;
-  /** Custom function to parse DOM string to atom type T. */
   parse?: (v: string) => T;
-  /** Custom function to format atom type T to DOM string. */
   format?: (v: T) => string;
-  /** Custom equality check to prevent redundant atom updates. */
   equal?: EqualFn<T>;
 }
 
-/**
- * Options for `atomForm` binding.
- */
 export interface FormOptions<T> extends ValOptions<T> {
   /** Custom function to transform field value based on path before atomic sync. */
   transform?: (path: string, value: unknown) => unknown;
@@ -183,38 +159,24 @@ export interface Router {
 }
 
 export interface AtomNavOptions {
-  /** Target element or selector where the content will be injected. */
   target: string | JQuery<HTMLElement> | HTMLElement;
-  /** Selector for links to intercept. Defaults to 'a[data-nav]'. */
   selector?: string;
-  /** Custom headers to send with the AJAX request (e.g., X-PJAX). */
   headers?: Record<string, string>;
-  /** Callback before loading starts. Return false to cancel. */
   onBeforeLoad?: (url: string) => boolean | undefined | Promise<boolean | undefined>;
-  /** Callback after new content is mounted. */
   onMount?: ($container: JQuery, url: string) => void;
-  /** Callback before content is replaced. */
   onUnmount?: ($container: JQuery, oldUrl: string) => void;
-  /** Callback triggered when a navigation error occurs. Return false to prevent default fallback. */
   onError?: (err: unknown, url: string) => boolean | undefined;
-  /** Whether to scroll to top on navigation. Defaults to true. */
   scrollToTop?: boolean;
-  /** Whether to sync document.title from response. Defaults to true. */
   syncTitle?: boolean;
-  /** Custom window object for dependency injection (testing). Defaults to global window. */
+
   window?: Window & typeof globalThis;
 }
 
 export interface AtomNav {
-  /** Current URL as a reactive atom. */
   currentUrl: ReadonlyAtom<string>;
-  /** Loading state as a reactive atom. */
   isPending: ReadonlyAtom<boolean>;
-  /** Error state as a reactive atom. */
   hasError: ReadonlyAtom<boolean>;
-  /** Function to programmatically navigate to a URL. */
   navigate(url: string, options?: { replace?: boolean }): Promise<void>;
-  /** Cleans up global event listeners and resources. */
   destroy: () => void;
 }
 
@@ -227,14 +189,9 @@ export enum BindingFlags {
   Busy = Composing | SyncingToAtom | SyncingToDom,
 }
 
-export interface BindingContext {
-  readonly el: HTMLElement;
-  readonly trackCleanup: (fn: EffectCleanup) => void;
-}
-
 declare global {
   interface JQueryStatic {
-    atom: { <T>(v: T, opts?: AtomOptions): WritableAtom<T>; debug: boolean };
+    atom<T>(v: T, opts?: AtomOptions): WritableAtom<T>;
     computed<T>(fn: () => T, opts?: ComputedOptions<T>): ComputedAtom<T>;
     computed<T>(
       fn: () => Promise<T>,
@@ -248,8 +205,15 @@ declare global {
     untracked<T>(fn: () => T): T;
     isAtom(v: unknown): boolean;
     isComputed(v: unknown): boolean;
-    isReactive(v: unknown): boolean;
     nextTick(): Promise<void>;
+
+    debug: {
+      enabled: boolean;
+      warn(prefix: string, message: string, ...rest: unknown[]): void;
+      error(prefix: string, message: string, cause: unknown): void;
+      domUpdated(prefix: string, target: Element | JQuery, type: string, value: unknown): void;
+    };
+
     atomLens<T extends object, P extends Paths<T>>(
       atom: WritableAtom<T>,
       path: P
@@ -262,6 +226,7 @@ declare global {
       atom: WritableAtom<T>
     ): <P extends Paths<T>>(p: P) => DisposableWritableAtom<PathValue<T, P>>;
     route(config: RouteConfig): Router;
+
     atomFetch<T>(
       url: string | (() => string),
       opts: FetchOptions<T>
@@ -282,14 +247,22 @@ declare global {
     atomProp(map: Record<string, AsyncReactiveValue<unknown>>): this;
     atomShow(cond: AsyncReactiveValue<boolean>): this;
     atomHide(cond: AsyncReactiveValue<boolean>): this;
+
     atomVal<T>(atom: WritableAtom<T>, opts?: ValOptions<T>): this;
+
     atomChecked(atom: WritableAtom<boolean>): this;
+
     atomForm<T extends object>(atom: WritableAtom<T>, opts?: FormOptions<T>): this;
+
     atomOn(event: string, handler: (e: JQuery.Event) => void): this;
+
     atomBind<T = unknown>(opts: BindingOptions<T>): this;
+
     atomList<T>(src: ReadonlyAtom<T[]>, opts: ListOptions<T>): this;
+
     atomMount<P>(comp: ComponentFn<P>, props?: P): this;
     atomUnmount(): this;
+
     atomUnbind(): this;
   }
 }

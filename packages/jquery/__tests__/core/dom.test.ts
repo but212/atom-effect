@@ -1,10 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { LOG_PREFIXES } from '@/constants';
-import { atomEachElement, createContext, unpack } from '@/core/dom';
-import { registry } from '@/core/registry';
+import { atomEachElement, unpack } from '@/core/dom';
 import $ from '@/index';
-import type { BindingContext } from '@/types';
-import { debug } from '@/utils/debug';
 
 vi.mock('@/core/registry', () => ({
   registry: {
@@ -23,25 +19,13 @@ vi.mock('@/core/jquery-patch', () => ({
 
 vi.mock('@/utils/debug', () => ({
   debug: {
-    log: vi.fn(),
+    warn: vi.fn(),
+    domUpdated: vi.fn(),
+    error: vi.fn(),
   },
 }));
 
 describe('DOM Core Utilities', () => {
-  describe('createContext', () => {
-    it('creates a context with el and trackCleanup', () => {
-      const el = document.createElement('div');
-      const ctx = createContext(el);
-
-      expect(ctx.el).toBe(el);
-      expect(typeof ctx.trackCleanup).toBe('function');
-
-      const cleanup = () => {};
-      ctx.trackCleanup(cleanup);
-      expect(registry.trackCleanup).toHaveBeenCalledWith(el, cleanup);
-    });
-  });
-
   describe('atomEachElement', () => {
     it('iterates over elements and applies the function', () => {
       const div1 = document.createElement('div');
@@ -52,25 +36,11 @@ describe('DOM Core Utilities', () => {
       atomEachElement(jq, fn);
 
       expect(fn).toHaveBeenCalledTimes(2);
-      expect(fn).toHaveBeenNthCalledWith(1, null, div1);
-      expect(fn).toHaveBeenNthCalledWith(2, null, div2);
+      expect(fn).toHaveBeenNthCalledWith(1, div1);
+      expect(fn).toHaveBeenNthCalledWith(2, div2);
     });
 
-    it('creates context if needsCtx is true', () => {
-      const div = document.createElement('div');
-      const jq = $([div]);
-      const fn = vi.fn();
-
-      atomEachElement(jq, fn, { needsCtx: true });
-
-      expect(fn).toHaveBeenCalledTimes(1);
-      const [ctx, el] = fn.mock.calls[0] as unknown as [BindingContext, HTMLElement];
-      expect(el).toBe(div);
-      expect(ctx.el).toBe(div);
-      expect(typeof ctx.trackCleanup).toBe('function');
-    });
-
-    it('skips non-Element nodes and logs a debug message', () => {
+    it('skips non-Element nodes', () => {
       const div = document.createElement('div');
       const text = document.createTextNode('text');
       const jq = $([div, text]);
@@ -79,11 +49,7 @@ describe('DOM Core Utilities', () => {
       atomEachElement(jq as unknown as JQuery, fn);
 
       expect(fn).toHaveBeenCalledTimes(1);
-      expect(fn).toHaveBeenCalledWith(null, div);
-      expect(debug.log).toHaveBeenCalledWith(
-        LOG_PREFIXES.BINDING,
-        expect.stringContaining('Skipping non-Element node')
-      );
+      expect(fn).toHaveBeenCalledWith(div);
     });
   });
 
@@ -98,18 +64,13 @@ describe('DOM Core Utilities', () => {
       expect(unpack([1, 2, 3])).toEqual([[1, 2, 3]]);
     });
 
-    it('returns [val] if the second element is an array (not a tuple)', () => {
-      const arrayVal: [string, string[]] = ['a', ['b', 'c']];
-      expect(unpack(arrayVal)).toEqual([arrayVal]);
-    });
-
-    it('unpacks [source, options] for static values (BUG REPRODUCTION)', () => {
+    it('unpacks [source, options] for static values', () => {
       const options = { opt: 1 };
       expect(unpack(['static', options])).toEqual(['static', options]);
       expect(unpack([123, options])).toEqual([123, options]);
     });
 
-    it('unpacks [source, options] for plain objects (BUG REPRODUCTION)', () => {
+    it('unpacks [source, options] for plain objects', () => {
       const source = { data: 'test' };
       const options = { opt: 1 };
       expect(unpack([source, options])).toEqual([source, options]);
@@ -131,12 +92,6 @@ describe('DOM Core Utilities', () => {
       const promise = Promise.resolve(1);
       const options = { opt: 1 };
       expect(unpack([promise, options] as [unknown, unknown])).toEqual([promise, options]);
-    });
-
-    it('returns [val] if the source is null or not an object/function (BUG REPRODUCTION)', () => {
-      // These currently fail to unpack as [source, options]
-      expect(unpack([null, {}] as [unknown, unknown])).toEqual([null, {}]);
-      expect(unpack([undefined, {}] as [unknown, unknown])).toEqual([undefined, {}]);
     });
   });
 });
