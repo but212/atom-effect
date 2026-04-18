@@ -10,15 +10,14 @@ import {
   bindOn,
   bindProp,
   bindText,
-  bindUnbind,
   bindVal,
   bindVisibility,
 } from '@/bindings/unified';
 import { ERROR_MESSAGES, LOG_PREFIXES } from '@/constants';
 import { atomEachElement, unpack } from '@/core/dom';
+import { registry } from '@/core/registry';
 import type {
   AsyncReactiveValue,
-  BindingContext,
   BindingOptions,
   CssBindings,
   FormOptions,
@@ -30,23 +29,14 @@ import type {
 
 import { debug } from '@/utils/debug';
 
-/**
- * Binds element `textContent` to a reactive source.
- */
 $.fn.atomText = function <T>(source: AsyncReactiveValue<T>, formatter?: (v: T) => string): JQuery {
-  return atomEachElement(this, (ctx) => bindText(ctx!, source, formatter), { needsCtx: true });
+  return atomEachElement(this, (el) => bindText(el, source, formatter));
 };
 
-/**
- * Binds element `innerHTML` to a reactive string source.
- */
 $.fn.atomHtml = function (source: AsyncReactiveValue<string>): JQuery {
-  return atomEachElement(this, (ctx) => bindHtml(ctx!, source), { needsCtx: true });
+  return atomEachElement(this, (el) => bindHtml(el, source));
 };
 
-/**
- * Toggles one or more CSS classes based on reactive boolean conditions.
- */
 $.fn.atomClass = function (
   this: JQuery,
   classNameOrMap: string | Record<string, AsyncReactiveValue<boolean>>,
@@ -66,12 +56,9 @@ $.fn.atomClass = function (
     return this;
   }
 
-  return atomEachElement(this, (ctx) => bindClass(ctx!, map), { needsCtx: true });
+  return atomEachElement(this, (el) => bindClass(el, map));
 };
 
-/**
- * Binds one or more CSS style properties to reactive values.
- */
 $.fn.atomCss = function (
   this: JQuery,
   propOrMap: string | CssBindings,
@@ -90,12 +77,9 @@ $.fn.atomCss = function (
     return this;
   }
 
-  return atomEachElement(this, (ctx) => bindCss(ctx!, map as CssBindings), { needsCtx: true });
+  return atomEachElement(this, (el) => bindCss(el, map as CssBindings));
 };
 
-/**
- * Binds one or more HTML attributes to reactive values with security guards.
- */
 $.fn.atomAttr = function (
   this: JQuery,
   nameOrMap: string | Record<string, AsyncReactiveValue<PrimitiveValue>>,
@@ -113,12 +97,9 @@ $.fn.atomAttr = function (
     return this;
   }
 
-  return atomEachElement(this, (ctx) => bindAttr(ctx!, map), { needsCtx: true });
+  return atomEachElement(this, (el) => bindAttr(el, map));
 };
 
-/**
- * Binds one or more DOM properties to reactive values.
- */
 $.fn.atomProp = function <T>(
   this: JQuery,
   nameOrMap: string | Record<string, AsyncReactiveValue<T>>,
@@ -136,136 +117,108 @@ $.fn.atomProp = function <T>(
     return this;
   }
 
-  return atomEachElement(this, (ctx) => bindProp(ctx!, map), { needsCtx: true });
+  return atomEachElement(this, (el) => bindProp(el, map));
 };
 
-/**
- * Shows the element when `condition` is truthy (`display: ''`).
- */
 $.fn.atomShow = function (condition: AsyncReactiveValue<boolean>): JQuery {
-  return atomEachElement(this, (ctx) => bindVisibility(ctx!, condition, false), {
-    needsCtx: true,
-  });
+  return atomEachElement(this, (el) => bindVisibility(el, condition, false));
 };
 
-/**
- * Hides the element when `condition` is truthy (`display: 'none'`).
- */
 $.fn.atomHide = function (condition: AsyncReactiveValue<boolean>): JQuery {
-  return atomEachElement(this, (ctx) => bindVisibility(ctx!, condition, true), {
-    needsCtx: true,
-  });
+  return atomEachElement(this, (el) => bindVisibility(el, condition, true));
 };
 
-/**
- * Two-way binding for `<input>`, `<select>`, and `<textarea>` values.
- */
 $.fn.atomVal = function <T>(atom: WritableAtom<T>, options: ValOptions<T> = {}): JQuery {
-  return atomEachElement(
-    this,
-    (ctx) => bindVal(ctx!, atom as WritableAtom<unknown>, options as ValOptions<unknown>),
-    { needsCtx: true }
+  return atomEachElement(this, (el) =>
+    bindVal(el, atom as WritableAtom<unknown>, options as ValOptions<unknown>)
   );
 };
 
-/**
- * Two-way binding for checkbox and radio button `checked` state.
- */
 $.fn.atomChecked = function (atom: WritableAtom<boolean>): JQuery {
-  return atomEachElement(this, (ctx) => bindChecked(ctx!, atom), { needsCtx: true });
+  return atomEachElement(this, (el) => bindChecked(el, atom));
 };
 
-/**
- * Two-way binding for an entire form.
- */
 $.fn.atomForm = function <T extends object>(
   atom: WritableAtom<T>,
   options: FormOptions<T> = {}
 ): JQuery {
-  return atomEachElement(
-    this,
-    (_, el) => {
+  return atomEachElement(this, (el) => {
+    if (el instanceof HTMLFormElement) {
+      bindForm(el, atom as WritableAtom<object>, options as unknown as FormOptions<unknown>);
+    } else {
+      debug.warn(LOG_PREFIXES.BINDING, 'Skipping non-Form element for atomForm');
+    }
+  });
+};
+
+$.fn.atomOn = function (event: string, handler: (e: JQuery.Event) => void): JQuery {
+  return atomEachElement(this, (el) => bindOn(el, event, handler));
+};
+
+interface BindingTask {
+  key: keyof BindingOptions<unknown>;
+  run: (el: HTMLElement, val: unknown) => void;
+}
+
+const BINDING_TASKS: BindingTask[] = [
+  {
+    key: 'text',
+    run: (el, v) =>
+      bindText(el, ...(unpack(v) as [AsyncReactiveValue<unknown>, (v: unknown) => string])),
+  },
+  { key: 'html', run: (el, v) => bindHtml(el, v as AsyncReactiveValue<string>) },
+  {
+    key: 'class',
+    run: (el, v) => bindClass(el, v as Record<string, AsyncReactiveValue<boolean>>),
+  },
+  { key: 'css', run: (el, v) => bindCss(el, v as CssBindings) },
+  {
+    key: 'attr',
+    run: (el, v) => bindAttr(el, v as Record<string, AsyncReactiveValue<PrimitiveValue>>),
+  },
+  {
+    key: 'prop',
+    run: (el, v) => bindProp(el, v as Record<string, AsyncReactiveValue<unknown>>),
+  },
+  { key: 'show', run: (el, v) => bindVisibility(el, v as AsyncReactiveValue<boolean>, false) },
+  { key: 'hide', run: (el, v) => bindVisibility(el, v as AsyncReactiveValue<boolean>, true) },
+  {
+    key: 'val',
+    run: (el, v) => bindVal(el, ...(unpack(v) as [WritableAtom<unknown>, ValOptions<unknown>])),
+  },
+  { key: 'checked', run: (el, v) => bindChecked(el, v as WritableAtom<boolean>) },
+  {
+    key: 'form',
+    run: (el, v) => {
       if (el instanceof HTMLFormElement) {
-        bindForm(el, atom as WritableAtom<object>, options as unknown as FormOptions<unknown>);
-      } else {
-        debug.log(LOG_PREFIXES.BINDING, 'Skipping non-Form element for atomForm');
+        bindForm(el, ...(unpack(v) as [WritableAtom<object>, FormOptions<unknown>]));
       }
     },
-    { needsCtx: false }
-  );
-};
-
-/**
- * Attaches a lifecycle-aware event handler using the jQuery event system.
- */
-$.fn.atomOn = function (event: string, handler: (e: JQuery.Event) => void): JQuery {
-  return atomEachElement(this, (ctx) => bindOn(ctx!, event, handler), { needsCtx: true });
-};
-
-/**
- * Lookup table for reactive binding handlers.
- * Ordered to match the bitmask bits in atomBind.
- */
-const BIND_HANDLERS: Array<(ctx: BindingContext, options: BindingOptions<unknown>) => void> = [
-  (ctx, o) =>
-    bindText(ctx, ...(unpack(o.text!) as [AsyncReactiveValue<unknown>, (v: unknown) => string])), // 1 << 0
-  (ctx, o) => bindHtml(ctx, o.html!), // 1 << 1
-  (ctx, o) => bindClass(ctx, o.class!), // 1 << 2
-  (ctx, o) => bindCss(ctx, o.css!), // 1 << 3
-  (ctx, o) => bindAttr(ctx, o.attr!), // 1 << 4
-  (ctx, o) => bindProp(ctx, o.prop as Record<string, AsyncReactiveValue<unknown>>), // 1 << 5
-  (ctx, o) => bindVisibility(ctx, o.show!, false), // 1 << 6
-  (ctx, o) => bindVisibility(ctx, o.hide!, true), // 1 << 7
-  (ctx, o) => bindVal(ctx, ...(unpack(o.val!) as [WritableAtom<unknown>, ValOptions<unknown>])), // 1 << 8
-  (ctx, o) => bindChecked(ctx, o.checked!), // 1 << 9
-  (ctx, o) => {
-    // 1 << 10: form
-    if (ctx.el instanceof HTMLFormElement) {
-      bindForm(ctx.el, ...(unpack(o.form!) as [WritableAtom<object>, FormOptions<unknown>]));
-    }
   },
-  (ctx, o) => bindEvents(ctx, o.on!), // 1 << 11
+  { key: 'on', run: (el, v) => bindEvents(el, v as Record<string, (e: JQuery.Event) => void>) },
 ];
 
-/**
- * Integrated multi-behavior reactive binding.
- * Uses a bitmask dispatch strategy to minimize branch mispredictions in hot-path.
- */
 $.fn.atomBind = function <T>(this: JQuery, options: BindingOptions<T>): JQuery {
-  let mask = 0;
-  if (options.text !== undefined) mask |= 1 << 0;
-  if (options.html !== undefined) mask |= 1 << 1;
-  if (options.class !== undefined) mask |= 1 << 2;
-  if (options.css !== undefined) mask |= 1 << 3;
-  if (options.attr !== undefined) mask |= 1 << 4;
-  if (options.prop !== undefined) mask |= 1 << 5;
-  if (options.show !== undefined) mask |= 1 << 6;
-  if (options.hide !== undefined) mask |= 1 << 7;
-  if (options.val !== undefined) mask |= 1 << 8;
-  if (options.checked !== undefined) mask |= 1 << 9;
-  if (options.form !== undefined) mask |= 1 << 10;
-  if (options.on !== undefined) mask |= 1 << 11;
+  const activeTasks: BindingTask[] = [];
+  const opt = options as Record<string, unknown>;
 
-  if (mask === 0) return this;
+  for (let i = 0, len = BINDING_TASKS.length; i < len; i++) {
+    const task = BINDING_TASKS[i]!;
+    if (opt[task.key] !== undefined) {
+      activeTasks.push(task);
+    }
+  }
 
-  return atomEachElement(
-    this,
-    (ctx) => {
-      let m = mask;
-      while (m > 0) {
-        const bit = m & -m;
-        const idx = 31 - Math.clz32(bit);
-        BIND_HANDLERS[idx]!(ctx!, options as BindingOptions<unknown>);
-        m ^= bit;
-      }
-    },
-    { needsCtx: true }
-  );
+  if (activeTasks.length === 0) return this;
+
+  return atomEachElement(this, (el) => {
+    for (let i = 0, len = activeTasks.length; i < len; i++) {
+      const task = activeTasks[i]!;
+      task.run(el, opt[task.key]);
+    }
+  });
 };
 
-/**
- * Destroys all reactive bindings on the selected elements **and their descendants**.
- */
 $.fn.atomUnbind = function (this: JQuery): JQuery {
-  return atomEachElement(this, (_, el) => bindUnbind(el), { needsCtx: false });
+  return atomEachElement(this, (el) => registry.cleanupTree(el));
 };

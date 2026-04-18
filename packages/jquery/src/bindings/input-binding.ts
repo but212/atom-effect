@@ -5,18 +5,10 @@ import type { EffectObject, ValOptions, WritableAtom } from '@/types';
 import { BindingFlags } from '@/types';
 import { debug } from '@/utils/debug';
 
-// Monotonically increasing counter used to generate per-instance event
-// namespaces, preventing cleanup of sibling bindings on the same element.
 let instanceCounter = 0;
 
 type InputEl = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
 
-/**
- * Marks a handler as library-internal so the jQuery patch skips batch() wrapping.
- * All handlers registered by InputBinding must be marked — unmarked handlers are
- * wrapped in batch() by the jQuery override, which is redundant and potentially
- * harmful here since InputBinding manages atom writes directly.
- */
 function markInternal(fn: Function): void {
   (fn as unknown as Record<symbol, true>)[INTERNAL_HANDLER] = true;
 }
@@ -35,14 +27,9 @@ class InputBinding<T> {
   private readonly getRawDom: () => string | string[];
   private readonly writeDom: (val: T, formatted: string) => void;
 
-  /**
-   * Internal state flags using bitwise operations for zero-overhead tracking.
-   * Tracks focus, IME composition, and sync direction to prevent infinite loops.
-   */
   private flags = 0;
   private timeoutId: ReturnType<typeof setTimeout> | undefined = undefined;
 
-  /** Per-instance jQuery event namespace — prevents cleanup collisions. */
   private readonly ns: string;
   private readonly handleInput: () => void;
 
@@ -56,7 +43,6 @@ class InputBinding<T> {
     this.isTextControl = tagName === 'INPUT' || tagName === 'TEXTAREA';
     this.ns = `.atomBind-${++instanceCounter}`;
 
-    // Initialize strategies based on element type
     const { parse, format, equal, readDom, getRawDom, writeDom } = this.initStrategies(options);
     this.parse = parse;
     this.format = format;
@@ -89,10 +75,6 @@ class InputBinding<T> {
     this.bindEvents(options.event ?? INPUT_DEFAULTS.EVENT);
   }
 
-  /**
-   * Specializes binding strategies at construction.
-   * This avoids branching in the sync hot-paths (syncDomFromAtom / syncAtomFromDom).
-   */
   private initStrategies(options: ValOptions<T>) {
     const parse = options.parse ?? ((v: string) => v as unknown as T);
     const baseEqual = options.equal ?? Object.is;
@@ -155,17 +137,13 @@ class InputBinding<T> {
     }
   }
 
-  // --- Event Handlers ---
-
   private readonly handleCompositionStart = () => {
-    // We ignore input events while the user is still composing characters
-    // (e.g., CJK character selection) to avoid syncing incomplete/partial data.
     this.flags |= BindingFlags.Composing;
   };
 
   private readonly handleCompositionEnd = () => {
     this.flags &= ~BindingFlags.Composing;
-    // Trigger sync once composition is finished to capture the final character.
+
     this.handleInput();
   };
 
@@ -178,20 +156,14 @@ class InputBinding<T> {
     const wasComposing = !!(this.flags & BindingFlags.Composing);
     this.flags &= ~BindingFlags.Composing;
 
-    // Ensure any pending debounced change is committed immediately on blur.
     const flushed = this.flushPendingDebounce();
 
-    // If composition was interrupted by blur (e.g. clicking away),
-    // and no debounced sync happened, we must perform a final sync.
     if (wasComposing && !flushed) {
       this.syncAtomFromDom();
     }
 
-    // Restore the strict formatted value from the atom.
     this.normalizeDomValue();
   };
-
-  // --- Helpers ---
 
   private flushPendingDebounce(): boolean {
     if (this.timeoutId !== undefined) {
@@ -237,11 +209,8 @@ class InputBinding<T> {
   }
 
   public readonly syncDomFromAtom = () => {
-    // Always read the value first to ensure the effect tracks this atom,
-    // even if we skip the DOM update due to composition or atom syncing.
     const val = this.atom.value;
 
-    // Skip DOM update if we are currently composing IME or syncing in either direction.
     if (this.flags & BindingFlags.Busy) return;
 
     untracked(() => {
@@ -258,7 +227,6 @@ class InputBinding<T> {
     });
   };
 
-  /** Check if the DOM value is functionally equivalent to the atom value. */
   private isDomUpToDate(atomVal: T): boolean {
     const raw = this.getRawDom();
 
@@ -269,13 +237,10 @@ class InputBinding<T> {
     const formatted = this.format(atomVal);
     if (raw === formatted) return true;
 
-    // If focused, also check via parse to avoid overwriting "1.0" with "1" if parse("1.0") === 1
     if (this.flags & BindingFlags.Focused) {
       try {
         return this.equal(this.readDom(), atomVal);
-      } catch {
-        // Ignore parse errors on check-only read
-      }
+      } catch {}
     }
 
     return false;
@@ -304,9 +269,6 @@ class InputBinding<T> {
   }
 }
 
-/**
- * Applies two-way data binding between a writable atom and an input element.
- */
 export function applyInputBinding<T>(
   $el: JQuery,
   atom: WritableAtom<T>,
