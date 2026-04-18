@@ -110,7 +110,10 @@ class BindingRegistry {
   }
 
   cleanupDescendants(el: Element | DocumentFragment | ShadowRoot): void {
-    const nodes = el.querySelectorAll(`.${AES_BOUND}`);
+    const nodes =
+      'getElementsByClassName' in el
+        ? (el as Element).getElementsByClassName(AES_BOUND)
+        : el.querySelectorAll(`.${AES_BOUND}`);
 
     for (let i = nodes.length - 1; i >= 0; i--) {
       this.cleanup(nodes[i]!);

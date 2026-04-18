@@ -58,7 +58,7 @@ function isSafeBinding(name: string, isProp: boolean): boolean {
     console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_EVENT_HANDLER(name)}`);
     return false;
   }
-  if (isProp && DANGEROUS_PROPS.includes(name)) {
+  if (isProp && DANGEROUS_PROPS.has(name)) {
     console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_PROP(name)}`);
     return false;
   }
@@ -298,7 +298,7 @@ export function bindVal(
   options: ValOptions<unknown> = {}
 ): void {
   const tag = el.tagName.toLowerCase();
-  if (!VALID_INPUT_TAGS.includes(tag)) {
+  if (!VALID_INPUT_TAGS.has(tag)) {
     console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BINDING.INVALID_INPUT_ELEMENT(tag)}`);
     return;
   }

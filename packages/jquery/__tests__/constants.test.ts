@@ -14,7 +14,7 @@ describe('Constants', () => {
         [ERROR_MESSAGES.SECURITY.BLOCKED_PROTOCOL('href'), 'href'],
         [ERROR_MESSAGES.SECURITY.BLOCKED_PROP('innerHTML'), 'innerHTML'],
         [ERROR_MESSAGES.BINDING.INVALID_INPUT_ELEMENT('div'), 'div'],
-        [ERROR_MESSAGES.LIST.DUPLICATE_KEY('id-1', 5, '#list'), 'id-1'],
+        [ERROR_MESSAGES.LIST.DUPLICATE_KEY('id-1', 5), 'id-1'],
         [ERROR_MESSAGES.BINDING.MISSING_SOURCE('atomAttr'), 'atomAttr'],
         [ERROR_MESSAGES.BINDING.MISSING_CONDITION('atomClass'), 'atomClass'],
       ];

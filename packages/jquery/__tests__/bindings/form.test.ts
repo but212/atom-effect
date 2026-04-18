@@ -87,7 +87,7 @@ describe('Form Binding (atomForm)', () => {
 
     $form.atomForm(data, {
       debounce: 30,
-      transform: (p, v) => {
+      transform: (p: string, v: unknown) => {
         if (p === 'age') return Number(v);
         if (p === 'ids' && Array.isArray(v)) return v.map(Number);
         return v;

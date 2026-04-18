@@ -99,6 +99,25 @@ export function registerMapEffect<T>(
   updater: (map: Record<string, T>) => void,
   debugType: BindingDebugType
 ): void {
+  const keys = Object.keys(map);
+  const reactiveKeys: string[] = [];
+  const reactiveSources: AsyncReactiveValue<T>[] = [];
+  const sourceIsAtom: boolean[] = [];
+  const staticValues: Record<string, T | Promise<T>> = {};
+
+  for (let i = 0, len = keys.length; i < len; i++) {
+    const key = keys[i]!;
+    const val = map[key]!;
+    const isAtomVal = isAtom(val);
+    if (isAtomVal || typeof val === 'function') {
+      reactiveKeys.push(key);
+      reactiveSources.push(val);
+      sourceIsAtom.push(isAtomVal);
+    } else {
+      staticValues[key] = val;
+    }
+  }
+
   const state = {
     latestId: 0,
     isDisposed: false,
@@ -167,31 +186,18 @@ export function registerMapEffect<T>(
     }
   };
 
-  let hasReactive = false;
-  for (const key in map) {
-    const val = map[key]!;
-    if (isAtom(val) || typeof val === 'function') {
-      hasReactive = true;
-      break;
-    }
-  }
-
-  if (hasReactive) {
+  if (reactiveKeys.length > 0) {
     registry.trackEffect(
       el,
       effect(
         () => {
-          const currentMap: Record<string, T | Promise<T>> = {};
-
-          for (const key in map) {
-            const val = map[key]!;
-            if (isAtom(val)) {
-              currentMap[key] = (val as ReadonlyAtom<T | Promise<T>>).value;
-            } else if (typeof val === 'function') {
-              currentMap[key] = (val as () => T | Promise<T>)();
-            } else {
-              currentMap[key] = val as T;
-            }
+          const currentMap: Record<string, T | Promise<T>> = { ...staticValues };
+          for (let i = 0, len = reactiveKeys.length; i < len; i++) {
+            const key = reactiveKeys[i]!;
+            const source = reactiveSources[i]!;
+            currentMap[key] = sourceIsAtom[i]
+              ? (source as ReadonlyAtom<T | Promise<T>>).value
+              : (source as () => T | Promise<T>)();
           }
           runUpdater(currentMap);
         },
@@ -199,6 +205,6 @@ export function registerMapEffect<T>(
       )
     );
   } else {
-    runUpdater(map as Record<string, T | Promise<T>>);
+    runUpdater(staticValues);
   }
 }

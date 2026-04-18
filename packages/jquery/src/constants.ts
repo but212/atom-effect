@@ -15,9 +15,9 @@ export const ROUTE_DEFAULTS = Object.freeze({
 export const INPUT_DEFAULTS = Object.freeze({ EVENT: 'input', DEBOUNCE: 0 } as const);
 export const DEBUG_DEFAULTS = Object.freeze({ HIGHLIGHT_DURATION_MS: 500 } as const);
 
-export const VALID_INPUT_TAGS = ['input', 'select', 'textarea'];
+export const VALID_INPUT_TAGS: ReadonlySet<string> = new Set(['input', 'select', 'textarea']);
 
-export const URL_PROPS = [
+export const URL_PROPS: ReadonlySet<string> = new Set([
   'src',
   'href',
   'action',
@@ -32,18 +32,20 @@ export const URL_PROPS = [
   'classid',
   'codebase',
   'xlink:href',
-];
+]);
 
-export const DANGEROUS_PROPS = [
+export const DANGEROUS_PROPS: ReadonlySet<string> = new Set([
   'innerHTML',
   'outerHTML',
   'srcdoc',
   '__proto__',
   'constructor',
   'prototype',
-];
+]);
 
-export const DANGEROUS_PROTOCOL_PATTERN = '(?:javascript|vbscript)';
+/** Regex-like pattern for dangerous protocols (javascript, vbscript) with optional whitespace. */
+export const DANGEROUS_PROTOCOL_PATTERN =
+  '(?:j\\s*a\\s*v\\s*a\\s*s\\s*c\\s*r\\s*i\\s*p\\s*t|v\\s*b\\s*s\\s*c\\s*r\\s*i\\s*p\\s*t)';
 
 export const ERROR_MESSAGES = {
   ROUTE: {

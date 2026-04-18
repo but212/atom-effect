@@ -86,6 +86,9 @@ export interface ValOptions<T> {
 }
 
 export interface FormOptions<T> extends ValOptions<T> {
+  /** Custom function to transform field value based on path before atomic sync. */
+  transform?: (path: string, value: unknown) => unknown;
+  /** Callback triggered when a field value changes. */
   onChange?: (path: string, value: unknown) => void;
 }
 
