@@ -28,8 +28,7 @@ function resolveInitialState(): boolean {
     process?: { env?: { NODE_ENV?: string } };
   };
   if (g.__ATOM_DEBUG__ !== undefined) return !!g.__ATOM_DEBUG__;
-  if (g.process?.env?.NODE_ENV === 'production') return false;
-  return true;
+  return g.process?.env?.NODE_ENV !== 'production' && g.process?.env?.NODE_ENV !== undefined;
 }
 
 const IS_DEV = resolveInitialState();
