@@ -14,7 +14,7 @@ function getAjaxSettings<T>(getUrl: () => string, options: FetchOptions<T>): JQu
     ...baseAjax,
     ...dynamicOptions,
     url: getUrl(),
-    method: options.method || baseAjax.method,
+    method: options.method || dynamicOptions.method || baseAjax.method,
     headers: {
       ...(baseAjax as JQuery.AjaxSettings)?.headers,
       ...options.headers,

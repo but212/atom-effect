@@ -310,16 +310,69 @@ describe('$.atomNav', () => {
   });
 
   describe('Advanced Routing & Resource Safety', () => {
-    it('should handle server-side redirects via X-PJAX-URL efficiently', async () => {
-      const ajaxSpy = mockAjax('Redirected', false, { 'X-PJAX-URL': '/final' });
-      const nav = createNav({ target: '#main-content' });
+    it('should handle server-side redirects via X-PJAX-URL efficiently and trigger hooks with correct final URL', async () => {
+      const mountSpy = vi.fn();
+      const unmountSpy = vi.fn();
+      mockAjax('Redirected', false, { 'X-PJAX-URL': '/final' });
+
+      const nav = createNav({
+        target: '#main-content',
+        onMount: mountSpy,
+        onUnmount: unmountSpy,
+      });
+
+      await $.nextTick();
+      mountSpy.mockClear();
 
       await nav.navigate('/start');
       await vi.waitFor(() => {
         expect(nav.currentUrl.value).toBe('/final');
         expect(window.location.pathname).toBe('/final');
       });
+
+      // Verification of the fix: onMount should be called with '/final'
+      // and onUnmount should be called with the original mounting URL '/'
+      expect(unmountSpy).toHaveBeenCalledWith(expect.anything(), '/');
+      expect(mountSpy).toHaveBeenCalledWith(expect.anything(), '/final');
+
+      // Verification of state consistency: _renderedState should NOT be overwritten by /start
+      // Use internal-ish check or verify next navigation
+      mountSpy.mockClear();
+      mockAjax('Next Page');
+      await nav.navigate('/next');
+      await vi.waitFor(() => expect(nav.currentUrl.value).toBe('/next'));
+      expect(unmountSpy).toHaveBeenCalledWith(expect.anything(), '/final');
+    });
+
+    it('should handle server-resolved redirect chains without re-fetching', async () => {
+      // In real HTTP, 3xx redirect chains are followed automatically by the browser/jQuery.
+      // The X-PJAX-URL header reports the FINAL destination after all redirects.
+      // The client should apply this final URL without triggering additional fetches.
+      const ajaxSpy = vi.spyOn($, 'ajax').mockImplementation(() => {
+        const promise = Promise.resolve('Final Content');
+        return Object.assign(promise, {
+          abort: vi.fn(),
+          getResponseHeader: vi.fn((name: string) =>
+            name === 'X-PJAX-URL' ? '/final-destination' : null
+          ),
+          getAllResponseHeaders: vi.fn(),
+          setRequestHeader: vi.fn(),
+          statusCode: vi.fn(),
+          promise: () => promise,
+        }) as unknown as JQuery.jqXHR;
+      });
+
+      const nav = createNav({ target: '#main-content' });
+      await nav.navigate('/original');
+
+      await vi.waitFor(() => {
+        expect(nav.currentUrl.value).toBe('/final-destination');
+        expect(window.location.pathname).toBe('/final-destination');
+      });
+
+      // Only 1 AJAX call should happen; the redirect chain is resolved server-side
       expect(ajaxSpy).toHaveBeenCalledTimes(1);
+      expect($target.text()).toBe('Final Content');
     });
 
     it('should fallback to hard navigation on critical failures', async () => {
