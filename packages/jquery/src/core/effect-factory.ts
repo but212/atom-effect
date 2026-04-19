@@ -18,6 +18,17 @@ export type BindingDebugType =
   | `prop.${string & {}}`
   | (string & {});
 
+/**
+ * Orchestrates a reactive relationship between a single source and a DOM element.
+ *
+ * Logic:
+ * - Race Condition Protection: Uses 'latestId' to ensure that if multiple async updates
+ *   trigger in sequence, only the resolution from the MOST RECENT one is applied to the DOM.
+ * - Cleanup: Safely ignores resolved promises if the target element was unmounted
+ *   (disposed) during the async wait.
+ * - Dependency Isolation: Runs the 'updater' inside an 'untracked' block to ensure
+ *   reactive tracking doesn't leak into the DOM manipulation logic.
+ */
 export function registerReactiveEffect<T>(
   el: Element,
   source: AsyncReactiveValue<T>,
@@ -54,6 +65,7 @@ export function registerReactiveEffect<T>(
     const myId = ++state.latestId;
     val
       .then((resolved) => {
+        // Condition: Stale or Disposed updates are discarded.
         if (myId === state.latestId && !state.isDisposed) {
           untracked(() => {
             try {
@@ -93,6 +105,15 @@ export function registerReactiveEffect<T>(
   }
 }
 
+/**
+ * Orchestrates reactive updates for a collection of values (e.g. classes or styles).
+ *
+ * Optimization:
+ * - Efficiently separates static and reactive keys.
+ * - If only static values are passed, it avoids creating a reactive effect entirely.
+ * - For async resolution, it waits for all pending promises in the map via
+ *   Promise.all before applying a single, atomic update to the DOM.
+ */
 export function registerMapEffect<T>(
   el: Element,
   map: Record<string, AsyncReactiveValue<T>>,

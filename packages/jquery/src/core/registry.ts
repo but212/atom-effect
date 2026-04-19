@@ -5,6 +5,11 @@ import { debug } from '@/utils/debug';
 
 let autoCleanupScheduled = false;
 
+/**
+ * Optimization: Elements with active bindings are marked with this class.
+ * This allows cleanupDescendants to perform a high-performance scoped query
+ * (getElementsByClassName) instead of a slow, full-tree recursive walk.
+ */
 const AES_BOUND = '_aes-bound';
 
 export interface BindingRecord {
@@ -12,6 +17,14 @@ export interface BindingRecord {
   componentCleanup?: (() => void) | undefined;
 }
 
+/**
+ * Manages the lifecycle of reactive bindings and component effects.
+ *
+ * Safety Rationale:
+ * - Uses WeakMap for records to avoid holding strong references that prevent GC.
+ * - Uses WeakSet for node flags (kept/ignored) to ensure the registry doesn't leak
+ *   memory even for nodes that were "lost" without a cleanup call.
+ */
 class BindingRegistry {
   private records = new WeakMap<Element, BindingRecord>();
 
@@ -19,12 +32,14 @@ class BindingRegistry {
 
   private ignoredNodes = new WeakSet<Node>();
 
+  /** Mark a node to preserve its effects even if detached from the DOM (e.g., jQuery .detach()). */
   keep(node: Node): void {
     this.preservedNodes.add(node);
   }
   isKept(node: Node): boolean {
     return this.preservedNodes.has(node);
   }
+  /** Temporary flag to block redundant cleanup cycles for the same node. */
   markIgnored(node: Node): void {
     this.ignoredNodes.add(node);
   }
@@ -33,6 +48,7 @@ class BindingRegistry {
   }
 
   private getOrCreateRecord(el: Element): BindingRecord {
+    // Lazy-init: The mutation observer only starts when the first binding is created.
     if (!autoCleanupScheduled && typeof document !== 'undefined' && document.body) {
       autoCleanupScheduled = true;
       enableAutoCleanup(document.body);
@@ -52,6 +68,7 @@ class BindingRegistry {
     record.cleanups.push(fn);
   }
 
+  /** Registers a reactive effect instance to be disposed when the element is removed. */
   trackEffect(el: Element, fx: EffectObject): void {
     const selector = getSelector(el);
     this.addCleanup(el, () => {
@@ -63,6 +80,7 @@ class BindingRegistry {
     });
   }
 
+  /** Registers a generic cleanup closure to be executed when the element is removed. */
   trackCleanup(el: Element, fn: () => void): void {
     const selector = getSelector(el);
     this.addCleanup(el, () => {
@@ -74,6 +92,7 @@ class BindingRegistry {
     });
   }
 
+  /** Sets the optional teardown function returned by a mounted component. */
   setComponentCleanup(el: Element, fn: (() => void) | undefined): void {
     this.getOrCreateRecord(el).componentCleanup = fn;
   }
@@ -82,6 +101,10 @@ class BindingRegistry {
     return this.records.has(el);
   }
 
+  /**
+   * Performs the actual destruction of all resources bound to the node.
+   * This clears the record, removes the tracking CSS class, and executes all callbacks.
+   */
   cleanup(el: Node): void {
     this.preservedNodes.delete(el);
     this.ignoredNodes.delete(el);
@@ -109,7 +132,9 @@ class BindingRegistry {
     }
   }
 
+  /** Rapidly cleans up all child elements that have active reactive bindings. */
   cleanupDescendants(el: Element | DocumentFragment | ShadowRoot): void {
+    // Logic: Scopes the cleanup to only elements marked with AES_BOUND for performance.
     const nodes =
       'getElementsByClassName' in el
         ? (el as Element).getElementsByClassName(AES_BOUND)
@@ -120,6 +145,7 @@ class BindingRegistry {
     }
   }
 
+  /** Destroys the reactive state of the element and its entire sub-tree. */
   cleanupTree(el: Node): void {
     if (el.nodeType === 1 || el.nodeType === 11) {
       this.cleanupDescendants(el as Element | DocumentFragment | ShadowRoot);
@@ -132,6 +158,11 @@ export const registry = new BindingRegistry();
 
 const observers = new Map<Node, MutationObserver>();
 
+/**
+ * Requirement: Native browser operations (like el.innerHTML = '') bypass jQuery hooks.
+ * This observer serves as a safety net, detecting removed nodes that missed the
+ * patched jQuery .remove() or .empty() calls.
+ */
 export function enableAutoCleanup(root: Element | ShadowRoot | DocumentFragment): void {
   if (observers.has(root)) return;
 
@@ -141,6 +172,8 @@ export function enableAutoCleanup(root: Element | ShadowRoot | DocumentFragment)
       for (let j = 0, rLen = removedNodes.length; j < rLen; j++) {
         const node = removedNodes[j]!;
 
+        // Condition: We only clean up nodes that are genuinely disconnected from the DOM
+        // AND are not marked for preservation.
         if (node.nodeType !== 1 || (node as Element).isConnected) continue;
 
         const el = node as Element;

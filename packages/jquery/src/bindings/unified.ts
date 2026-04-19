@@ -20,6 +20,7 @@ import { debug } from '@/utils/debug';
 
 import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '@/utils/sanitize';
 
+/** Optimization: Pre-caches camelCased versions of CSS property names. */
 const camelCache = new Map<string, string>();
 function getCamelCase(prop: string): string {
   let cached = camelCache.get(prop);
@@ -30,6 +31,11 @@ function getCamelCase(prop: string): string {
   return cached;
 }
 
+/**
+ * Optimization: Caches sanitization computed-atoms keyed by the source identity.
+ * This prevents creating multiple sanitizing effects for the same source atom used
+ * across different DOM nodes.
+ */
 const htmlSanitizeCache = new WeakMap<
   ReadonlyAtom<string | Promise<string>>,
   ReadonlyAtom<string | Promise<string>>
@@ -52,6 +58,10 @@ function getSanitizedHtml(
   return cached;
 }
 
+/**
+ * Security: Blocks 'on*' event attributes and dangerous properties like innerHTML
+ * from being bound as standard attributes/props to prevent XSS.
+ */
 function isSafeBinding(name: string, isProp: boolean): boolean {
   const lower = name.toLowerCase();
   if (lower.startsWith('on')) {
@@ -65,6 +75,7 @@ function isSafeBinding(name: string, isProp: boolean): boolean {
   return true;
 }
 
+/** Syncs element text content with a reactive source. */
 export function bindText<T = unknown>(
   el: HTMLElement,
   value: AsyncReactiveValue<T>,
@@ -81,6 +92,10 @@ export function bindText<T = unknown>(
   );
 }
 
+/**
+ * Binds sanitized HTML content to an element.
+ * Note: Descendant bindings are automatically cleaned up before re-writing innerHTML.
+ */
 export function bindHtml(el: HTMLElement, value: AsyncReactiveValue<string>): void {
   const source = isAtom(value)
     ? getSanitizedHtml(value as ReadonlyAtom<string | Promise<string>>)
@@ -103,6 +118,10 @@ export function bindHtml(el: HTMLElement, value: AsyncReactiveValue<string>): vo
   );
 }
 
+/**
+ * Manages element classes reactively using a boolean map.
+ * Case handling: Correctly removes tokens only if no other active class definition in the map requires them.
+ */
 export function bindClass(
   el: HTMLElement,
   classMap: Record<string, AsyncReactiveValue<boolean>>
@@ -131,6 +150,7 @@ export function bindClass(
         } else {
           for (const token of tokens) {
             let stillNeeded = false;
+            // Check if this token is shared with another 'true' entry in the map
             for (const otherK in states) {
               if (otherK !== k && states[otherK] && tokenMap[otherK]!.includes(token)) {
                 stillNeeded = true;
@@ -147,6 +167,7 @@ export function bindClass(
   );
 }
 
+/** Reactively updates inline styles while blocking potentially harmful CSS values. */
 export function bindCss(el: HTMLElement, cssMap: Record<string, CssValue>): void {
   const style = el.style as unknown as Record<string, string | null>;
   const reactiveMap: Record<string, ReactiveValue<unknown>> = {};
@@ -184,6 +205,11 @@ export function bindCss(el: HTMLElement, cssMap: Record<string, CssValue>): void
   );
 }
 
+/**
+ * Syncs DOM attributes.
+ * Note: Handles specific logic for boolean attributes (like 'disabled')
+ * and protocol-validation for URLs (href/src).
+ */
 export function bindAttr(
   el: HTMLElement,
   attrMap: Record<string, AsyncReactiveValue<PrimitiveValue>>
@@ -232,6 +258,7 @@ export function bindAttr(
   );
 }
 
+/** Directly maps reactive values to DOM element properties with URL validation. */
 export function bindProp(
   el: HTMLElement,
   propMap: Record<string, AsyncReactiveValue<unknown>>
@@ -267,6 +294,7 @@ export function bindProp(
   );
 }
 
+/** Toggles display style between 'none' and its original state. */
 export function bindVisibility(
   el: HTMLElement,
   condition: AsyncReactiveValue<boolean>,
@@ -292,6 +320,7 @@ export function bindVisibility(
   );
 }
 
+/** Entry point for input/value bindings; delegates to the InputBinding engine. */
 export function bindVal(
   el: HTMLElement,
   atom: WritableAtom<unknown>,
@@ -307,6 +336,11 @@ export function bindVal(
   registry.trackCleanup(el, cleanup);
 }
 
+/**
+ * Requirement: Radio buttons in the same name group don't fire 'change'
+ * when they are automatically unchecked by another radio selection.
+ * We manually trigger a sync for the rest of the group.
+ */
 function syncRadioGroup(el: HTMLInputElement): void {
   if (el.type === 'radio' && el.name) {
     (el.form ? $(el.form) : $(document))
@@ -316,6 +350,7 @@ function syncRadioGroup(el: HTMLInputElement): void {
   }
 }
 
+/** Specialized two-way binding for checkbox and radio 'checked' states. */
 export function bindChecked(el: HTMLElement, atom: WritableAtom<boolean>): void {
   if (!(el instanceof HTMLInputElement)) {
     console.warn(`${LOG_PREFIXES.BINDING} atomChecked called on non-input element`);
@@ -350,12 +385,14 @@ export function bindChecked(el: HTMLElement, atom: WritableAtom<boolean>): void 
   );
 }
 
+/** Registers flat event maps with automatic lifecycle cleanup. */
 export function bindEvents(el: HTMLElement, eventMap: NonNullable<BindingOptions['on']>): void {
   const $el = $(el);
   $el.on(eventMap);
   registry.trackCleanup(el, () => $el.off(eventMap));
 }
 
+/** Registers a single event listener with automatic lifecycle cleanup. */
 export function bindOn(
   el: HTMLElement,
   event: string,

@@ -1,3 +1,7 @@
+/**
+ * Modular telemetry prefixes for consistent terminal logging.
+ * Allows users to filter specific library subsystems in the console.
+ */
 export const LOG_PREFIXES = {
   ROUTE: '[atom-route]',
   BINDING: '[atom-binding]',
@@ -5,6 +9,10 @@ export const LOG_PREFIXES = {
   MOUNT: '[atom-mount]',
 } as const;
 
+/**
+ * Router baseline configuration.
+ * Note: 'hash' mode is the default for maximum compatibility with static file systems.
+ */
 export const ROUTE_DEFAULTS = Object.freeze({
   mode: 'hash',
   basePath: '',
@@ -13,10 +21,14 @@ export const ROUTE_DEFAULTS = Object.freeze({
 } as const);
 
 export const INPUT_DEFAULTS = Object.freeze({ EVENT: 'input', DEBOUNCE: 0 } as const);
+
+/** Visual feedback duration for the debug highlight utility. */
 export const DEBUG_DEFAULTS = Object.freeze({ HIGHLIGHT_DURATION_MS: 500 } as const);
 
+/** Elements permitted to use two-way data binding ($.val). */
 export const VALID_INPUT_TAGS: ReadonlySet<string> = new Set(['input', 'select', 'textarea']);
 
+/** Properties that are subject to strict protocol sanitization (e.g., preventing javascript:). */
 export const URL_PROPS: ReadonlySet<string> = new Set([
   'src',
   'href',
@@ -34,6 +46,13 @@ export const URL_PROPS: ReadonlySet<string> = new Set([
   'xlink:href',
 ]);
 
+/**
+ * Security Barrier: Properties strictly forbidden from direct reactive injection.
+ *
+ * Reason:
+ * - innerHTML/outerHTML/srcdoc: Primary XSS vectors. Use explicitly sanitized paths instead.
+ * - __proto__/constructor/prototype: Protection against Prototype Pollution attacks.
+ */
 export const DANGEROUS_PROPS: ReadonlySet<string> = new Set([
   'innerHTML',
   'outerHTML',
@@ -43,10 +62,17 @@ export const DANGEROUS_PROPS: ReadonlySet<string> = new Set([
   'prototype',
 ]);
 
-/** Regex-like pattern for dangerous protocols (javascript, vbscript) with optional whitespace. */
+/**
+ * Obfuscation-resistant regex pattern for dangerous protocols (javascript, vbscript).
+ * Logic: Matches protocols even if split by internal whitespace (e.g., 'j a v a...').
+ */
 export const DANGEROUS_PROTOCOL_PATTERN =
   '(?:j\\s*a\\s*v\\s*a\\s*s\\s*c\\s*r\\s*i\\s*p\\s*t|v\\s*b\\s*s\\s*c\\s*r\\s*i\\s*p\\s*t)';
 
+/**
+ * Centralized Error Registry.
+ * Organized by subsystem to facilitate precise diagnostics and unified messaging.
+ */
 export const ERROR_MESSAGES = {
   ROUTE: {
     NOT_FOUND: (n: string) => `Route "${n}" not found`,
