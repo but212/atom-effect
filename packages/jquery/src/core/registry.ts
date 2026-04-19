@@ -8,7 +8,7 @@ let autoCleanupScheduled = false;
 /**
  * Optimization: Elements with active bindings are marked with this class.
  * This allows cleanupDescendants to perform a high-performance scoped query
- * (getElementsByClassName) instead of a slow, full-tree recursive walk.
+ * (querySelectorAll) instead of a slow, full-tree recursive walk.
  */
 const AES_BOUND = '_aes-bound';
 
@@ -132,16 +132,15 @@ class BindingRegistry {
     }
   }
 
-  /** Rapidly cleans up all child elements that have active reactive bindings. */
   cleanupDescendants(el: Element | DocumentFragment | ShadowRoot): void {
-    // Logic: Scopes the cleanup to only elements marked with AES_BOUND for performance.
-    const nodes =
-      'getElementsByClassName' in el
-        ? (el as Element).getElementsByClassName(AES_BOUND)
-        : el.querySelectorAll(`.${AES_BOUND}`);
+    // Strategy: Use querySelectorAll to obtain a static NodeList snapshot.
+    // This ensures loop stability by preventing index shifting if items are removed
+    // or their classes are modified (via classList.remove) during the cleanup cycle.
+    const nodes = el.querySelectorAll(`.${AES_BOUND}`);
 
-    for (let i = nodes.length - 1; i >= 0; i--) {
-      this.cleanup(nodes[i]!);
+    for (let i = 0, len = nodes.length; i < len; i++) {
+      const node = nodes[i];
+      if (node) this.cleanup(node);
     }
   }
 
