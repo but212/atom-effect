@@ -234,6 +234,12 @@ describe('Security: Anti-Bypass & Regressions', () => {
 			expect(result).not.toContain('&lt;script');
 		});
 
+		it('detects dangerous data: URIs in srcdoc via isDangerousUrl', () => {
+			// Regression: srcdoc sniffer must include data: protocols
+			expect(isDangerousUrl('srcdoc', 'data:text/html,xss')).toBe(true);
+			expect(isDangerousUrl('srcdoc', 'data:application/javascript,xss')).toBe(true);
+		});
+
 		it('supports re-entrant sanitization calls', () => {
 			const payload = '<div id="outer"><iframe srcdoc="<div id=\'inner\'></div>"></iframe><p>Keep</p></div>';
 			const result = sanitizeHtml(payload);

@@ -48,12 +48,10 @@ const HTML_ENTITY_LOOKUP: Record<string, string> = {
   colon: ':',
   tab: '\t',
   newline: '\n',
-  'tab;': '\t',
-  'newline;': '\n',
 };
 
 const RE_NUMERIC_ENTITY = /&#x([0-9a-f]+);?|&#([0-9]+);?/gi;
-const RE_NAMED_ENTITY = /&(tab;|newline;|colon|tab|newline)/gi;
+const RE_NAMED_ENTITY = /&(colon|tab|newline);?/gi;
 // biome-ignore lint/suspicious/noControlCharactersInRegex: necessary for protocol normalization
 const RE_CONTROL_CHARS = /[\x00-\x1f\x7f]/g;
 
@@ -71,7 +69,7 @@ const RE_CSS_EXPRESSIONS = new RegExp(
 );
 
 const RE_DANGEROUS_CONTENT_SNIFFER = new RegExp(
-  `(<(script|iframe|object|embed|base|meta|applet|noscript|form|style|link)\\b[^>]*>([\\s\\S]*?)<\\/\\2>|<(script|iframe|object|embed|base|meta|applet|noscript|form|style|link)\\b[^>]*\\/?>)|\\bon\\w+\\s*=|${DANGEROUS_PROTOCOL_REGEX_STR}`,
+  `(<(script|iframe|object|embed|base|meta|applet|noscript|form|style|link)\\b[^>]*>([\\s\\S]*?)<\\/\\2>|<(script|iframe|object|embed|base|meta|applet|noscript|form|style|link)\\b[^>]*\\/?>)|\\bon\\w+\\s*=|${DANGEROUS_PROTOCOL_REGEX_STR}|${RE_DANGEROUS_DATA_URI.source}`,
   'i'
 );
 
