@@ -19,7 +19,7 @@ function markInternal(fn: Function): void {
 
 /**
  * A robust engine for two-way data binding between form controls and WritableAtoms.
- * 
+ *
  * Major UX challenges solved:
  * 1. Cursor Jumping: Restores selection ranges when updating focused text controls.
  * 2. IME Composition: Defers atom updates until a multi-stroke character (e.g., 한글) is finalized.
@@ -245,7 +245,7 @@ class InputBinding<T> {
     }
   }
 
-  /** 
+  /**
    * Reactive effect that updates the DOM whenever the Atom value changes.
    * This method is designed to be passed to the effect() function.
    */
@@ -278,7 +278,7 @@ class InputBinding<T> {
     const formatted = this.format(atomVal);
     if (raw === formatted) return true;
 
-    // While focused, the 'raw' value in DOM might technically differ from 
+    // While focused, the 'raw' value in DOM might technically differ from
     // formatted version due to user typing, so we check the 'parsed' version for logical equality.
     if (this.flags & BindingFlags.Focused) {
       try {
@@ -314,8 +314,8 @@ class InputBinding<T> {
 
 /**
  * Initializes a two-way input binding.
- * 
- * Returns an EffectObject for the Atom-to-DOM sync and a 
+ *
+ * Returns an EffectObject for the Atom-to-DOM sync and a
  * cleanup function to unbind DOM events.
  */
 export function applyInputBinding<T>(

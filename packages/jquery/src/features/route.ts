@@ -579,13 +579,13 @@ class RouterImpl implements Router {
 
 /**
  * Initializes a client-side router for the application.
- * 
+ *
  * Capabilities:
  * - Multi-mode support: 'history' (pushState) or 'hash'.
  * - Dynamic matching: Extract parameters from routes like '/user/:id'.
  * - Reactive state: Track route and params via atoms.
  * - Lifecycle hooks: Intercept navigation via onEnter and onLeave.
- * 
+ *
  * @example
  * const router = $.route({
  *   target: '#app',

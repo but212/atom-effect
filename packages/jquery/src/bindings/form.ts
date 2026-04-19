@@ -34,7 +34,7 @@ const SELECTOR = 'input, select, textarea';
 
 /**
  * Engine for synchronizing a complex object (Atom) with a flat HTML Form.
- * 
+ *
  * Design Intent:
  * - Decouples individual field updates from the large root object for better performance.
  * - Supports nested object paths through standard form 'name' attributes.
@@ -253,7 +253,7 @@ class FormBinder<T extends object> {
 
 /**
  * Initializes a reactive whole-form binding.
- * 
+ *
  * @param form The target form element.
  * @param atom A writable atom holding the form's state object.
  */
