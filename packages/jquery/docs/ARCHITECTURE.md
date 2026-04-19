@@ -306,14 +306,13 @@ To prevent memory leaks and "zombie" resolutions (where a request resolves but i
 
 The binding layer includes defensive measures against XSS and prototype pollution:
 
-- `bindHtml`: Sanitizes content via `sanitizeHtml()`. Switched from a regex-based engine to a **multi-layered DOM-based Sanitizer** using an inert `<template>` fragment and a **TEMPLATE_POOL** for re-entrant efficiency. It employs a **walkAndScrub** strategy that recursively cleans the DOM tree, transforming dangerous tags into inert `<span>` wrappers while preserving safe structure.
-- **DOM Clobbering Protection**: Implemented `DOM_BRIDGE` to access element properties (like `.attributes`) and methods (like `.removeAttribute`) directly from the `Element.prototype`. This prevents malicious HTML from "clobbering" these properties and bypassing security checks.
-- `bindAttr`: Blocks `on*` event handler attributes (replaces them with `data-unsafe-attr` markers) and dangerous URL protocols using a centralized matcher. This protection covers standard and SVG-specific attributes (`fill`, `filter`, `mask`, etc.) and includes `srcdoc` and `srcset` monitoring. It also strips all whitespace from attributes BEFORE protocol matching to prevent bypasses like `java script:`.
-- `srcdoc` Protection: Specifically monitors `srcdoc` as a high-risk HTML sink, applying tag-based sanitization checks before binding.
-- `bindCss`: Blocks CSS values containing `expression()`, `behavior:`, and `url(javascript:)` protocols.
-- `bindProp`: Blocks dangerous properties (`innerHTML`, `outerHTML`) and prototype pollution vectors (`__proto__`, `constructor`, `prototype`). It also enforces protocol security on properties mapped to `URL_ATTRS`.
-- Centralized Engine: Security patterns and monitoring lists are centralized in `utils/sanitize.ts` and `constants.ts` to ensure consistent enforcement across the entire library.
-- **Sanitization Engine**: `sanitizeHtml` uses a **multi-layered defense** strategy: normalization (entity decoding, control stripping), recursive tag transformation, and protocol/CSS neutralization.
+- `bindHtml`: Sanitizes content via `sanitizeHtml()`. It uses a **multi-layered DOM-based Sanitizer** that employs a **walkAndScrub** strategy. It recursively cleans the DOM tree, transforming dangerous tags into inert `<span>` wrappers while preserving safe structure.
+- **DOM Clobbering Protection**: All element interactions are routed through `DOM_PROTOTYPE_BRIDGE`, which accesses properties and methods directly from `Element.prototype` and `Node.prototype` via descriptors. This prevents malicious HTML from "clobbering" instance properties to bypass security checks.
+- `bindAttr`: Blocks `on*` event handler attributes (collects them into a comma-separated `data-unsafe-attr` list) and dangerous URL protocols using a centralized matcher. This protection covers standard and SVG-specific attributes and includes individual URL monitoring for `srcset`. It also strips all whitespace and decodes entities BEFORE protocol matching.
+- `srcdoc` Protection: Specifically monitors `srcdoc` as a high-risk HTML sink, applying recursive sanitization checks via `REGEX_DANGEROUS_SNIFFER`.
+- `bindCss`: Blocks CSS values containing dangerous patterns. It strips CSS comments (`/* ... */`) before validation to prevent obfuscation bypasses and matches against an array of known threat patterns (`CSS_DANGER_PATTERNS`).
+- `bindProp`: Blocks dangerous properties (`innerHTML`, `outerHTML`) and prototype pollution vectors (`__proto__`, `constructor`, `prototype`).
+- **Sanitization Engine**: `sanitizeHtml` implementation uses a **Dumb Code, Smart Data** strategy (Rob Pike's Rule 5): normalization (entity decoding with optional semicolon support), recursive tag transformation, and data-driven attribute/CSS neutralization.
 
 These are **first-pass filters** using optimized regular expressions. For user-generated content, [DOMPurify](https://github.com/cure53/DOMPurify) is recommended. See the [Security Guide](./SECURITY.md) for integration patterns.
 
@@ -388,7 +387,7 @@ All internal state records (e.g., `BindingRecord`, `InputBinding`) are initializ
 
 By moving from binary buffers and manual pooling to a simplified 3-pass algorithm, `atomList` leverages modern JS engine optimizations (V8's Map and Array optimizations) for reconciliation. This reduces architectural complexity while maintaining high performance.
 
-- **Sanitization Engine**: `sanitizeHtml` implementation uses a **multi-layered defense** strategy: normalization (entity decoding, control stripping), recursive tag transformation to inert `<span>` elements, and protocol/CSS neutralization.
+- **Sanitization Engine**: `sanitizeHtml` implementation uses a data-driven strategy: normalization (entity decoding, control stripping), recursive tag transformation to inert `<span>` elements, and protocol/CSS neutralization.
 - **Robust Equality**: `shallowEqual` uses `Object.keys()` and `Object.is()` for reliable comparison, correctly handling `NaN` and edge cases while maintaining an efficient linear scan.
 
 ## 13. CPU Branch Prediction Optimizations

@@ -15,6 +15,7 @@
 ### Changed
 
 - **Performance Optimization**: Significant throughput improvements by operating reactive bindings directly on `HTMLElement` and removing manual resource pooling (O(1) memory management).
+- **Data-Driven Sanitizer**: Refactored the security engine into a data-driven architecture, consolidating policies into declarative maps and sets for better maintainability and performance.
 - **Binding Engine Cleanup**: Simplified `atomEachElement` by removing manual context creation (`createContext`) and streamlining the iteration loop for better performance.
 - **Event Patching Refactor**: Refactored `jquery-patch` to simplify internal event handler tracking, removing redundant metadata symbols and streamlining unbinding logic.
 - **Effect Factory Simplification**: Streamlined `registerMapEffect` and `registerReactiveEffect` by removing internal resolution caching and using core `isAtom` checks, reducing overhead.
@@ -40,9 +41,11 @@
 
 ### Security
 
-- **XSS Prevention**: Hardened `sanitizeHtml` using a DOM-based sanitizer and improved protocol detection to block bypasses like `java script:`.
-- **DOM Clobbering Protection**: Implemented `DOM_BRIDGE` for safe element access, mitigating risks from third-party script injection.
-- **Expanded Sanitization**: Added coverage for `srcdoc`, `srcset`, and SVG/CSS `url()` protocols.
+- **Hardened Sanitization**: Rewrote `sanitizeHtml` with a robust multi-layered defense including individual `srcset` URL validation, recursive `srcdoc` cleaning, and immediate scrubbing for transformed nodes.
+- **DOM Clobbering Immunity**: Upgraded `DOM_PROTOTYPE_BRIDGE` to use prototype descriptors for all sensitive element properties (`attributes`, `localName`, `firstChild`, etc.), neutralizing property shadowing attacks.
+- **CSS Security**: Implemented comment-aware CSS sanitization that strips `/*...*/` before validating against a data-driven threat pattern array.
+- **Enhanced Entity Normalization**: Fixed a vulnerability in named entity decoding (e.g., `&colon;`) by ensuring optional semicolons are correctly consumed before protocol detection.
+- **Improved Auditability**: `data-unsafe-attr` now preserves all blocked handlers in a comma-separated list instead of only the last one.
 
 ## [0.30.1] - 2026-04-14
 
