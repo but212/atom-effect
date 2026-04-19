@@ -31,6 +31,7 @@ The following utilities and constants are available on the global `AtomEffectJQu
 - `enablejQueryOverrides()`: Manually enable patches for jQuery's native methods (like `.empty()` and `.remove()`).
 - `nextTick()`: Utility for waiting until the next reactive flush.
 - `registry`: Access to the internal element-effect registry.
+- `debug`: Access to the runtime-toggleable debug controller.
 
 ### Manual Initialization
 
@@ -54,7 +55,7 @@ The library automatically extends the global `jQuery` (or `$`) object. Methods l
 
 ### `.atomBind(bindings)`
 
-The preferred way to apply multiple bindings at once. This method uses a **bitmask dispatch strategy** to minimize CPU branch mispredictions, ensuring constant-time (O(1)) invocation overhead even for complex binding maps.
+The preferred way to apply multiple bindings at once. This method uses a **task-based loop strategy** to minimize overhead, ensuring efficient invocation even for complex binding maps by pre-filtering active tasks before iterating over elements.
 
 ```javascript
 $('.user-card').atomBind({
@@ -202,7 +203,7 @@ The `atomList` synchronization engine uses a **greedy placement strategy** combi
 
 #### Memory & Async Safety
 
-All reactive bindings (`atomBind`, `atomText`, etc.) include built-in **Zombie Prevention**. This ensures that asynchronous updates (promises) are automatically discarded if the element is disconnected from the DOM before the resolution completes. Additionally, the library employs a **Hardened Memory Pool** with double-release protection and synchronized resource orchestration to ensure zero memory leaks even in highly dynamic states. `atomBind` (via `registerMapEffect`) also optimizes multi-promise maps by caching resolved values, allowing subsequent reactive updates to skip redundant async delays.
+All reactive bindings (`atomBind`, `atomText`, etc.) include built-in **Zombie Prevention**. This ensures that asynchronous updates (promises) are automatically discarded if the element is disconnected from the DOM before the resolution completes. Additionally, the library ensures zero memory leaks even in highly dynamic states through its internal registry. `atomBind` (via `registerMapEffect`) also optimizes multi-promise maps by synchronizing multiple asynchronous dependencies, preventing partial updates and flickering during complex state transitions.
 
 ---
 
@@ -436,15 +437,13 @@ $.effect(() => {
 });
 ```
 
-### `$.isAtom(v)`, `$.isComputed(v)`, `$.isReactive(v)`, `$.isPromise(v)`
+### `$.isAtom(v)`, `$.isComputed(v)`
 
-Runtime type checks for reactive nodes and thenables.
+Runtime type checks for reactive nodes.
 
 ```javascript
-$.isAtom(myAtom);      // true for WritableAtom
-$.isComputed(myComp);  // true for ComputedAtom
-$.isReactive(v);       // true for any reactive node (atom or computed)
-$.isPromise(v);        // true for Promise or Thenable (including thenable functions)
+$.isAtom(myAtom);      // true
+$.isComputed(myComp);  // true
 ```
 
 ### `$.nextTick()`
@@ -652,15 +651,14 @@ The library includes a built-in debug mode to help you visualize reactive update
 You can enable debug mode in several ways:
 
 1. **Global Toggle**: Set `window.__ATOM_DEBUG__ = true` **before** the library script evaluates.
-2. **Session Storage**: Because the library utilizes a zero-overhead architecture by swapping the debug implementation precisely at load time, you can still seamlessly activate debug functionality on production builds by setting `sessionStorage.setItem('__ATOM_DEBUG__', 'true')` and refreshing the page.
-3. **Environment Variable**: Set `VITE_ATOM_DEBUG=true` in your `.env` file (for Vite projects).
+2. **Implicit**: Enabled by default in non-production environments (`process.env.NODE_ENV !== 'production'`).
 
-> **Note**: Toggling `debug.enabled = true` from the browser console dynamically is no longer supported since the production implementation explicitly strips out all formatting and branch logic at initialization time.
+> **Note**: You can toggle `$.debug.enabled` at runtime from the console to enable or disable visual feedback and logging.
 
 ### Visual Feedback
 
 When enabled:
 
-- **Console Logs**: Every DOM update is logged with its selector (e.g., `[atom-binding] DOM updated: div#app.main.text = new value`).
+- **Console Logs**: Every DOM update is logged with its selector (e.g., `[atom-binding] DOM updated: div#app.main.text = value`).
 - **Visual Highlighting**: Updated elements are temporarily outlined with a red border. This highlight uses a non-blocking `requestAnimationFrame` loop and is automatically cleaned up after a short duration, even if the element is removed from the DOM.
 - **Selector Precision**: Logs use a precise `tag#id.class` format (including SVG support) to help you identify the exact source of a change.
