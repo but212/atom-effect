@@ -14,13 +14,17 @@ import { registry } from '@/core/registry';
 import type { FormOptions } from '@/types';
 import { bindVal } from './unified';
 
+/** Internal metadata for a single bound form field. */
 interface FieldEntry {
+  /** Individual atom for this specific field to isolate reactive noise from the root object. */
   atom: WritableAtom<unknown>;
 
+  /** Tokenized path segments for deep object traversal. */
   parts: string[];
 
   name: string;
 
+  /** Reference count to determine when to safely dispose of the field effect. */
   refCount: number;
 
   effect: EffectObject | null;
@@ -28,6 +32,14 @@ interface FieldEntry {
 
 const SELECTOR = 'input, select, textarea';
 
+/**
+ * Engine for synchronizing a complex object (Atom) with a flat HTML Form.
+ * 
+ * Design Intent:
+ * - Decouples individual field updates from the large root object for better performance.
+ * - Supports nested object paths through standard form 'name' attributes.
+ * - Observes DOM mutations to handle form fields added or removed after initialization.
+ */
 class FormBinder<T extends object> {
   private fieldMap = new Map<string, FieldEntry>();
 
@@ -35,6 +47,7 @@ class FormBinder<T extends object> {
 
   private elementNames = new WeakMap<Element, string>();
 
+  /** Prevents feedback loops where a leaf update triggers a redundant root sync. */
   private isSyncingFromLeaf = false;
 
   constructor(
@@ -46,6 +59,8 @@ class FormBinder<T extends object> {
   }
 
   private init(): void {
+    // Root-to-Leaf Synchronization:
+    // When the main atom changes externally, propagate values down to each field-level atom.
     const rootDispatcher = effect(() => {
       const rootValue = this.atom.value;
 
@@ -57,6 +72,7 @@ class FormBinder<T extends object> {
             const f = this.fields[i]!;
             const newVal = getPathValue(rootValue, f.parts);
 
+            // Optimization: Only update the field atom if the value has truly changed.
             if (!Object.is(f.atom.peek(), newVal)) f.atom.value = newVal;
           }
         });
@@ -68,6 +84,7 @@ class FormBinder<T extends object> {
     this.setupObserver();
   }
 
+  /** Scans an element or its descendants for bindable form controls. */
   public bindElement(el: Element): void {
     const targets = el.matches?.(SELECTOR)
       ? [el]
@@ -77,6 +94,7 @@ class FormBinder<T extends object> {
     }
   }
 
+  /** Configures a single form control with two-way binding. */
   private bindControl(el: Element): void {
     if (
       !(
@@ -91,6 +109,7 @@ class FormBinder<T extends object> {
     const name = control.name;
     if (!name) return;
 
+    // Handle 'name' attribute changes reactively
     const oldName = this.elementNames.get(control);
     if (oldName !== undefined && oldName !== name) registry.cleanup(control);
 
@@ -111,6 +130,7 @@ class FormBinder<T extends object> {
     }
   }
 
+  /** Specialized internal logic for radio buttons and multi-value checkboxes. */
   private bindToggle(
     el: HTMLInputElement,
     atom: WritableAtom<unknown>,
@@ -120,6 +140,7 @@ class FormBinder<T extends object> {
     const handler = () => {
       const curr = atom.peek();
       if (isCheck && Array.isArray(curr)) {
+        // Multi-checkbox mode: manages an array of selected values
         const s = new Set(curr.map(String));
         el.checked ? s.add(val) : s.delete(val);
         atom.value = Array.from(s);
@@ -146,6 +167,10 @@ class FormBinder<T extends object> {
     );
   }
 
+  /**
+   * Leaf-to-Root Synchronization:
+   * Resolves or creates a field-level atom and binds its changes back to the root object.
+   */
   private acquireField(name: string): FieldEntry {
     let entry = this.fieldMap.get(name);
     if (entry) {
@@ -153,6 +178,7 @@ class FormBinder<T extends object> {
       return entry;
     }
 
+    // Convert flat names (e.g., 'user.info[0]') into token paths
     const parts = name
       .replace(/\[(\w+)\]/g, '.$1')
       .split('.')
@@ -167,14 +193,13 @@ class FormBinder<T extends object> {
       if (this.options.transform) val = this.options.transform(name, val);
 
       const root = this.atom.peek();
-
+      // Immutable update of the root object via nested path patching
       const next = setDeepValue(root, parts, 0, val);
 
       if (next !== root) {
         this.isSyncingFromLeaf = true;
         try {
           this.atom.value = next as T;
-
           if (this.options.onChange) untracked(() => this.options.onChange!(name, val));
         } finally {
           this.isSyncingFromLeaf = false;
@@ -198,6 +223,7 @@ class FormBinder<T extends object> {
     registry.cleanup(el);
   }
 
+  /** Monitors the form DOM for structural changes (AJAX loads, dynamic inputs). */
   private setupObserver(): void {
     const observer = new MutationObserver((ms) => {
       for (let i = 0, len = ms.length; i < len; i++) {
@@ -208,6 +234,7 @@ class FormBinder<T extends object> {
             if (node.nodeType === 1) this.bindElement(node as Element);
           }
         } else if (m.attributeName === 'name') {
+          // Re-bind if a 'name' attribute is changed on the fly
           this.bindElement(m.target as Element);
         }
       }
@@ -224,6 +251,12 @@ class FormBinder<T extends object> {
   }
 }
 
+/**
+ * Initializes a reactive whole-form binding.
+ * 
+ * @param form The target form element.
+ * @param atom A writable atom holding the form's state object.
+ */
 export function bindForm<T extends object>(
   form: HTMLFormElement,
   atom: WritableAtom<T>,

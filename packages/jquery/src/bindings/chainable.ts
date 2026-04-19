@@ -29,14 +29,31 @@ import type {
 
 import { debug } from '@/utils/debug';
 
+/**
+ * Binds an atom's value to the text content of the matching elements.
+ *
+ * @example
+ * $('.count').atomText(counterAtom, (v) => `Current: ${v}`);
+ */
 $.fn.atomText = function <T>(source: AsyncReactiveValue<T>, formatter?: (v: T) => string): JQuery {
   return atomEachElement(this, (el) => bindText(el, source, formatter));
 };
 
+/**
+ * Binds an atom's value to the innerHTML of the matching elements.
+ * Warning: Ensure the source data is trusted to prevent XSS.
+ */
 $.fn.atomHtml = function (source: AsyncReactiveValue<string>): JQuery {
   return atomEachElement(this, (el) => bindHtml(el, source));
 };
 
+/**
+ * Reactively toggles CSS classes.
+ *
+ * Supports two patterns:
+ * 1. Single class: .atomClass('active', conditionAtom)
+ * 2. Class map: .atomClass({ 'is-loading': loadingAtom, 'is-hidden': hiddenAtom })
+ */
 $.fn.atomClass = function (
   this: JQuery,
   classNameOrMap: string | Record<string, AsyncReactiveValue<boolean>>,
@@ -59,6 +76,13 @@ $.fn.atomClass = function (
   return atomEachElement(this, (el) => bindClass(el, map));
 };
 
+/**
+ * Reactively updates CSS properties.
+ *
+ * Supports two patterns:
+ * 1. Single property: .atomCss('opacity', valueAtom)
+ * 2. Property map: .atomCss({ width: '100px', height: heightAtom })
+ */
 $.fn.atomCss = function (
   this: JQuery,
   propOrMap: string | CssBindings,
@@ -80,6 +104,7 @@ $.fn.atomCss = function (
   return atomEachElement(this, (el) => bindCss(el, map as CssBindings));
 };
 
+/** Reactively updates DOM attributes based on atom changes. */
 $.fn.atomAttr = function (
   this: JQuery,
   nameOrMap: string | Record<string, AsyncReactiveValue<PrimitiveValue>>,
@@ -100,6 +125,7 @@ $.fn.atomAttr = function (
   return atomEachElement(this, (el) => bindAttr(el, map));
 };
 
+/** Reactively updates DOM properties (e.g., 'disabled', 'readOnly'). */
 $.fn.atomProp = function <T>(
   this: JQuery,
   nameOrMap: string | Record<string, AsyncReactiveValue<T>>,
@@ -120,24 +146,35 @@ $.fn.atomProp = function <T>(
   return atomEachElement(this, (el) => bindProp(el, map));
 };
 
+/** Toggles visibility (display: none) when the condition is true. */
 $.fn.atomShow = function (condition: AsyncReactiveValue<boolean>): JQuery {
   return atomEachElement(this, (el) => bindVisibility(el, condition, false));
 };
 
+/** Hides the element (display: none) when the condition is true. */
 $.fn.atomHide = function (condition: AsyncReactiveValue<boolean>): JQuery {
   return atomEachElement(this, (el) => bindVisibility(el, condition, true));
 };
 
+/**
+ * Two-way binding for form input values.
+ * Automatically synchronizes the input state with the writable atom.
+ */
 $.fn.atomVal = function <T>(atom: WritableAtom<T>, options: ValOptions<T> = {}): JQuery {
   return atomEachElement(this, (el) =>
     bindVal(el, atom as WritableAtom<unknown>, options as ValOptions<unknown>)
   );
 };
 
+/** Two-way binding for checkboxes and radio buttons. */
 $.fn.atomChecked = function (atom: WritableAtom<boolean>): JQuery {
   return atomEachElement(this, (el) => bindChecked(el, atom));
 };
 
+/**
+ * Orchestrates two-way binding for an entire form.
+ * Maps form fields to properties of a reactive object.
+ */
 $.fn.atomForm = function <T extends object>(
   atom: WritableAtom<T>,
   options: FormOptions<T> = {}
@@ -151,6 +188,7 @@ $.fn.atomForm = function <T extends object>(
   });
 };
 
+/** Configures a standard event listener with automatic cleanup. */
 $.fn.atomOn = function (event: string, handler: (e: JQuery.Event) => void): JQuery {
   return atomEachElement(this, (el) => bindOn(el, event, handler));
 };
@@ -160,6 +198,10 @@ interface BindingTask {
   run: (el: HTMLElement, val: unknown) => void;
 }
 
+/**
+ * Registry of available binding tasks for the unified .atomBind() method.
+ * Note: Keeps the order of execution consistent during multi-binding.
+ */
 const BINDING_TASKS: BindingTask[] = [
   {
     key: 'text',
@@ -198,10 +240,21 @@ const BINDING_TASKS: BindingTask[] = [
   { key: 'on', run: (el, v) => bindEvents(el, v as Record<string, (e: JQuery.Event) => void>) },
 ];
 
+/**
+ * Unified entry point for declaring multiple reactive bindings in a single call.
+ *
+ * @example
+ * $('.btn').atomBind({
+ *   text: labelAtom,
+ *   class: { 'is-primary': primaryAtom },
+ *   on: { click: handleClick }
+ * });
+ */
 $.fn.atomBind = function <T>(this: JQuery, options: BindingOptions<T>): JQuery {
   const activeTasks: BindingTask[] = [];
   const opt = options as Record<string, unknown>;
 
+  // Performance: Pre-filter tasks so we only iterate over relevant bindings per element.
   for (let i = 0, len = BINDING_TASKS.length; i < len; i++) {
     const task = BINDING_TASKS[i]!;
     if (opt[task.key] !== undefined) {
@@ -219,6 +272,7 @@ $.fn.atomBind = function <T>(this: JQuery, options: BindingOptions<T>): JQuery {
   });
 };
 
+/** Manually destroys all reactive bindings associated with the elements in the collection. */
 $.fn.atomUnbind = function (this: JQuery): JQuery {
   return atomEachElement(this, (el) => registry.cleanupTree(el));
 };

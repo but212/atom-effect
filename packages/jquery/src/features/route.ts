@@ -12,6 +12,7 @@ import { registry } from '@/core/registry';
 import type { RouteConfig, RouteDefinition, Router, WritableAtom } from '@/types';
 import { debug } from '@/utils/debug';
 
+/** Internal utilities for consistent path manipulation across adapters. */
 const PathUtils = {
   normalize: (path: string): string => path.replace(/(^\/+|\/+$)/g, ''),
 
@@ -48,24 +49,20 @@ function parseQueryParams(raw: string): Record<string, string> {
 
 type URLState = {
   readonly path: string;
-
   readonly query: Record<string, string>;
-
   readonly url: string;
 };
 
+/** Abstract interface for synchronizing the router with different browser URL mechanisms. */
 interface UrlAdapter {
   readonly getBrowserState: () => URLState;
-
   readonly commit: (fullPath: string) => URLState;
-
   readonly revert: (previousUrl: string) => void;
-
   readonly resolveAnchor: (el: HTMLAnchorElement) => string;
-
   readonly setupListener: (handler: () => void) => () => void;
 }
 
+/** Implementation for modern browsers using the HTML5 History API (pushState). */
 const createHistoryAdapter = (basePathRaw?: string): UrlAdapter => {
   const basePath = basePathRaw ? `/${PathUtils.normalize(basePathRaw)}` : '';
   const absoluteBase = `${location.origin}${basePath}/`.replace(/\/+$/, '/');
@@ -114,6 +111,7 @@ const createHistoryAdapter = (basePathRaw?: string): UrlAdapter => {
   };
 };
 
+/** Implementation for legacy support or static environments using URL fragments (#). */
 const createHashAdapter = (): UrlAdapter => {
   return {
     getBrowserState: () => {
@@ -163,6 +161,7 @@ type MatchResult =
     }
   | { readonly kind: 'not-found' };
 
+/** Compiles string route patterns into Regex for high-performance URL matching and param extraction. */
 class RouteMatcher {
   private readonly routes: CompiledRoute[] = [];
 
@@ -173,6 +172,7 @@ class RouteMatcher {
         this.routes.push({ kind: 'exact', pattern: normalized, def });
       } else {
         const paramNames: string[] = [];
+        // Regex Transformation: Converts '/user/:id' into a regex with capture groups.
         const regexStr = normalized
           .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
           .replace(/:(\w+)/g, (_, name) => {
@@ -219,11 +219,13 @@ class RouteMatcher {
   }
 }
 
+/** Orchestrates the reactive routing logic, History/Hash adaptation, and view rendering. */
 class RouterImpl implements Router {
+  /** Reactive current path (read-only). */
   public currentRoute: ReadonlyAtom<string>;
-
+  /** Reactive key-value map of URL query parameters. */
   public queryParams: ReadonlyAtom<Record<string, string>>;
-
+  /** Combined reactive map of route params (e.g. :id) and query params. */
   public params: ReadonlyAtom<Record<string, string>>;
 
   private readonly matcher: RouteMatcher;
@@ -302,7 +304,7 @@ class RouterImpl implements Router {
 
     const renderSub = effect(() => {
       const path = this.currentRouteAtom.value;
-
+      // Dependency: Implicitly tracks queryParamsAtom to re-render if query changes.
       this.queryParamsAtom.value;
 
       untracked(() => {
@@ -318,6 +320,7 @@ class RouterImpl implements Router {
     }
   }
 
+  /** Navigates to a new path. Aborts if the 'onLeave' guard returns false. */
   public navigate(path: string): void {
     if (this.isDestroyed || !this.canLeave()) return;
 
@@ -342,6 +345,7 @@ class RouterImpl implements Router {
     });
   }
 
+  /** Syncs internal state with browser back/forward button events. Supports nav guards. */
   private handleBrowserSync() {
     if (this.isDestroyed) return;
     const state = this.urlAdapter.getBrowserState();
@@ -350,6 +354,7 @@ class RouterImpl implements Router {
     const nextPath = state.path || this.config.default;
     if (this.currentRouteAtom.peek() !== nextPath) {
       if (!this.canLeave()) {
+        // Revert: If navigation is blocked by a guard, force the browser URL back to the previous state.
         this.urlAdapter.revert(this.previousUrl);
         return;
       }
@@ -360,6 +365,7 @@ class RouterImpl implements Router {
     this.previousUrl = state.url;
   }
 
+  /** Executes the route transition lifecycle: beforeTransition -> onEnter -> render -> afterTransition. */
   private render(requestedPath: string): void {
     const matchResult = this.matcher.match(requestedPath);
     const def =
@@ -379,6 +385,7 @@ class RouterImpl implements Router {
     untracked(() => this.config.beforeTransition(this.previousPath, routeName));
 
     if (def.onEnter) {
+      // Guard: Allows synchronous blocking of the current navigation.
       const hookResult = untracked(() => def.onEnter!(mergedParams, this));
       if (hookResult === false) {
         this.urlAdapter.revert(this.previousUrl);
@@ -398,6 +405,7 @@ class RouterImpl implements Router {
     this.finalizeNavigation(routeName, mergedParams);
   }
 
+  /** Performs the actual HTML injection and executes onMount hooks. */
   private updateDom(def: RouteDefinition, name: string, params: Record<string, string>) {
     const container = this.$target[0];
     if (!container) return;
@@ -416,6 +424,7 @@ class RouterImpl implements Router {
     }
   }
 
+  /** Scans the DOM for <template data-path="..."> elements to automatically register routes. */
   private discoverRoutesFromDOM() {
     document.querySelectorAll<HTMLTemplateElement>('template[data-path]').forEach((tmpl) => {
       const path = PathUtils.normalize(tmpl.getAttribute('data-path') || '');
@@ -438,6 +447,7 @@ class RouterImpl implements Router {
     });
   }
 
+  /** Global click hijacker for link-based navigation. Filters out external links and modifier clicks. */
   private setupInterception() {
     const onClick = (e: JQuery.TriggeredEvent) => {
       const me = e.originalEvent as MouseEvent;
@@ -458,6 +468,7 @@ class RouterImpl implements Router {
     this.setupActiveEffect();
   }
 
+  /** Reactive effect that automatically toggles the 'activeClass' on links matching the current route. */
   private setupActiveEffect() {
     const activeSub = effect(() => {
       const current = this.currentRouteAtom.value;
@@ -469,6 +480,7 @@ class RouterImpl implements Router {
           const path = this.resolvePathFromElement(el, true);
           const active = path === current || path === pattern;
           el.classList.toggle(this.activeClass, active);
+          // Accessibility: Updates aria-current to signal active navigation for screen readers.
           if (active) el.setAttribute('aria-current', 'page');
           else el.removeAttribute('aria-current');
         });
@@ -485,6 +497,7 @@ class RouterImpl implements Router {
     return stripQuery ? PathUtils.split(path).route : path;
   }
 
+  /** Heuristics to decide if a link click should be handled by the router or allowed to reload the page. */
   private shouldIntercept(path: string, el: HTMLElement): boolean {
     if (el instanceof HTMLAnchorElement) {
       if (
@@ -495,6 +508,7 @@ class RouterImpl implements Router {
         return false;
       if (el.origin !== location.origin) return false;
 
+      // Logic: Ignore clicks to file paths (.jpg, .pdf) that don't match a registered route.
       const last = path.split('/').pop() || '';
       if (
         last.includes('.') &&
@@ -529,6 +543,7 @@ class RouterImpl implements Router {
     this.routeCleanups = [];
   }
 
+  /** Finalizes a successful navigation event: events, logging, and accessibility focus reset. */
   private finalizeNavigation(routeName: string, params: Record<string, string>) {
     window.dispatchEvent(
       new CustomEvent('route-change', {
@@ -539,6 +554,7 @@ class RouterImpl implements Router {
     const targetElement = this.$target[0];
     if (!targetElement) return;
 
+    // Accessibility: Reset focus to the main heading or container to handle SPA navigation for screen readers.
     const heading = targetElement.querySelector('h1, [role="heading"]');
     const focusTarget = heading instanceof HTMLElement ? heading : targetElement;
     focusTarget.tabIndex = -1;
@@ -547,6 +563,7 @@ class RouterImpl implements Router {
     this.previousPath = routeName;
   }
 
+  /** Destroys the router instance, cleaning up all event listeners and reactive subscriptions. */
   public destroy(): void {
     if (this.isDestroyed) return;
     this.isDestroyed = true;
@@ -560,6 +577,24 @@ class RouterImpl implements Router {
   }
 }
 
+/**
+ * Initializes a client-side router for the application.
+ * 
+ * Capabilities:
+ * - Multi-mode support: 'history' (pushState) or 'hash'.
+ * - Dynamic matching: Extract parameters from routes like '/user/:id'.
+ * - Reactive state: Track route and params via atoms.
+ * - Lifecycle hooks: Intercept navigation via onEnter and onLeave.
+ * 
+ * @example
+ * const router = $.route({
+ *   target: '#app',
+ *   routes: {
+ *     '/': { template: '#home-tmpl' },
+ *     '/user/:id': { render: (el, name, params) => ... }
+ *   }
+ * });
+ */
 export function route(config: RouteConfig): Router {
   return new RouterImpl(config);
 }

@@ -18,10 +18,6 @@ interface ContentState {
   meta?: Record<string, string>;
 }
 
-// ============================================================================
-// Utilities: URL & Content Parsing
-// ============================================================================
-
 function getAbsoluteUrl(url: string, base: string): URL {
   try {
     return new URL(url, base);
@@ -39,6 +35,12 @@ function getPathAndSearch(urlObj: URL): string {
   return urlObj.pathname + urlObj.search;
 }
 
+/**
+ * Parses raw HTML into a structured ContentState.
+ *
+ * Performance: Uses SHARED_PARSER to avoid the high overhead of repeatedly
+ * spawning full DOMParser instances or using invisible iframes for extraction.
+ */
 function extractContent(html: string, selector?: string, xhr?: JQuery.jqXHR): ContentState {
   const doc = SHARED_PARSER.parseFromString(html, 'text/html');
   const title = doc.querySelector('title')?.textContent?.trim() || null;
@@ -72,10 +74,7 @@ function extractContent(html: string, selector?: string, xhr?: JQuery.jqXHR): Co
   };
 }
 
-// ============================================================================
-// Internal Side Effects: DOM, Metadata, Scroll
-// ============================================================================
-
+/** Synchronizes <head> metadata with the new content state to maintain SEO/Social integrity. */
 function syncMetaData(win: Window, meta?: Record<string, string>): void {
   const doc = win.document;
   const head = doc.head;
@@ -101,6 +100,7 @@ function syncMetaData(win: Window, meta?: Record<string, string>): void {
   sync('link[rel="canonical"]', meta?.canonical, 'canonical', true);
 }
 
+/** Updates attributes on the container element (classes, aria-labels) while preserving internal IDs. */
 function updateAttributes(el: HTMLElement, next: Record<string, string>): void {
   for (const attr of Array.from(el.attributes)) {
     const { name } = attr;
@@ -115,6 +115,7 @@ function updateAttributes(el: HTMLElement, next: Record<string, string>): void {
   }
 }
 
+/** Handles smooth scroll-to-hash or page-top behavior after navigation. */
 function performScroll(win: Window, hash?: string, fallbackToTop = false): void {
   if (hash) {
     const el = win.document.getElementById(decodeURIComponent(hash));
@@ -127,10 +128,22 @@ function performScroll(win: Window, hash?: string, fallbackToTop = false): void 
   win.scrollTo(0, 0);
 }
 
-// ============================================================================
-// atomNav Implementation
-// ============================================================================
-
+/**
+ * Initializes a reactive Single Page Application (SPA) navigation system.
+ *
+ * Responsibilities:
+ * 1. History Sync: Manages browser pushState/replaceState and popstate.
+ * 2. Partial Loading: Fetches fragments of new pages and injects them into the target.
+ * 3. Interception: Globally intercepts link clicks to prevent full page reloads.
+ * 4. Automatic SEO: Updates <title> and <meta> tags on every navigation event.
+ *
+ * @example
+ * const nav = $.atomNav({
+ *   target: '#main-content',
+ *   selector: 'a[data-nav]',
+ *   onMount: ($target, url) => console.log('Arrived at:', url)
+ * });
+ */
 export function atomNav(options: AtomNavOptions): AtomNav {
   const { target, selector = 'a[data-nav]', headers = {}, syncTitle = true } = options;
   const win = options.window ?? (window as Window & typeof globalThis);
@@ -142,12 +155,10 @@ export function atomNav(options: AtomNavOptions): AtomNav {
   const initialUrlObj = getAbsoluteUrl(initialUrl, win.location.href);
   const initialPath = getPathAndSearch(initialUrlObj);
 
-  // --- State atoms ---
   const _navState = $.atom<NavState>({ url: initialUrl, type: 'init' }, { name: 'nav:state' });
   const _pendingHookCount = $.atom(0, { name: 'nav:hook-pending-count' });
   const _renderedState = $.atom({ url: initialUrl, path: initialPath }, { name: 'nav:rendered' });
 
-  // --- Computed lifecycle ---
   const _normalizedState = $.computed(
     () => {
       const { url, type } = _navState.value;
@@ -189,8 +200,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
     return controller;
   }
 
-  // --- Core Side Effects (Orchestration) ---
-
+  /** Performs the actual DOM manipulation, ensuring reactive elements are properly unbound before removal. */
   function reconcileDOM(state: ContentState, url: string, previousUrl: string): void {
     $.untracked(() => {
       const doc = win.document;
@@ -201,6 +211,8 @@ export function atomNav(options: AtomNavOptions): AtomNav {
       syncMetaData(win, state.meta);
       options.onUnmount?.($target, previousUrl);
 
+      // Clean up: Manually unbind any reactive elements within the target areas
+      // BEFORE jQuery overwrites the HTML to prevent memory leaks.
       $target.children().atomUnbind();
 
       const el = $target[0] as HTMLElement | undefined;
@@ -213,10 +225,12 @@ export function atomNav(options: AtomNavOptions): AtomNav {
     });
   }
 
+  /** Central UI synchronization effect. Decides whether to re-fetch, re-render, or just scroll. */
   function syncUI(): undefined {
     const { url, pathAndSearch, hash, type } = _normalizedState.value;
     const rendered = _renderedState.value;
 
+    // Optimization: Skip re-fetching if only the hash changed. Just perform scroll.
     if (type === 'init' && pathAndSearch === rendered.path) {
       if (hash) performScroll(win, hash);
       options.onMount?.($target, url);
@@ -226,6 +240,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
     if (_content.hasError) {
       const error = _content.lastError;
       if (error instanceof Error && error.name === 'AbortError') return;
+      // Fail-over: If AJAX navigation fails, fall back to a standard browser refresh.
       if (options.onError?.(error, url) !== false) {
         win.location.assign(url);
       }
@@ -245,6 +260,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
 
     $.batch(() => {
       if (isRedirect) {
+        // Handle server-side redirects detected via headers (e.g. X-PJAX-URL).
         win.history.replaceState(null, '', finalUrl);
       }
 
@@ -270,8 +286,6 @@ export function atomNav(options: AtomNavOptions): AtomNav {
 
   const _navEffect = $.effect(() => syncUI(), { name: 'nav:sync-effect' });
 
-  // --- Listeners Setup ---
-
   const handlePopState = (): void => {
     _renewAbortSignal();
     const currentUrl = getCurrentFullUrl(win);
@@ -279,6 +293,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
   };
 
   const doc = win.document;
+  /** Global Link Interceptor: Hijacks clicks on <a> tags that match the provided selector. */
   doc.addEventListener(
     'click',
     (e) => {
@@ -289,6 +304,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
       const myId = $target.attr('id');
       const isExplicitTarget = targetAttr && myId && targetAttr === `#${myId}`;
 
+      // Logic: Only intercept if the link targets this specific nav instance.
       if (targetAttr && !isExplicitTarget) return;
 
       const closestNavTarget = $(el).closest('[data-atom-nav-target="true"]')[0];
@@ -302,6 +318,8 @@ export function atomNav(options: AtomNavOptions): AtomNav {
         (e as unknown as { originalEvent?: { defaultPrevented?: boolean } }).originalEvent
           ?.defaultPrevented;
 
+      // Heuristic: Ignore clicks with modifier keys (Ctrl/Cmd/Shift) or non-primary mouse buttons
+      // to preserve standard "Open in new tab" OS behavior.
       if (isPrevented || mouse.ctrlKey || mouse.metaKey || mouse.shiftKey || mouse.button > 0)
         return;
 
@@ -324,17 +342,13 @@ export function atomNav(options: AtomNavOptions): AtomNav {
             e.preventDefault();
             navigator.navigate(el.href);
           }
-        } catch {
-          /* ignore invalid URLs */
-        }
+        } catch {}
       }
     },
     { signal: _lifecycleController.signal }
   );
 
   win.addEventListener('popstate', handlePopState, { signal: _lifecycleController.signal });
-
-  // --- Public API ---
 
   const navigator: AtomNav = {
     currentUrl: $.computed(() => _renderedState.value.url, { name: 'nav:public-url' }),
@@ -343,12 +357,14 @@ export function atomNav(options: AtomNavOptions): AtomNav {
     }),
     hasError: $.computed(() => _content.hasError, { name: 'nav:hasError' }),
 
+    /** Programmatically trigger a navigation event. Supports 'replace' and 'onBeforeLoad' hooks. */
     async navigate(url: string, navOptions: { replace?: boolean } = {}): Promise<void> {
       const { signal } = _renewAbortSignal();
 
       if (options.onBeforeLoad) {
         _pendingHookCount.value++;
         try {
+          // Hook: Allows the application to cancel or redirect navigation before AJAX starts.
           const ok = await (
             options.onBeforeLoad as (url: string, signal: AbortSignal) => Promise<boolean> | boolean
           )(url, signal);
@@ -361,6 +377,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
       const base = win.document.baseURI ?? win.location.href;
       const targetObj = getAbsoluteUrl(url, base);
 
+      // Condition: Always perform a full page reload if the origin changed.
       if (targetObj.origin !== win.location.origin) {
         win.location.assign(url);
         return;
@@ -384,6 +401,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
       }
     },
 
+    /** Destroys the navigator instance, stripping listeners and cleaning up reactive memory. */
     destroy() {
       _lifecycleController.abort();
       _navController?.abort();

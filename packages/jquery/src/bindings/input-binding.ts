@@ -9,28 +9,52 @@ let instanceCounter = 0;
 
 type InputEl = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
 
+/**
+ * Marks a function as an internal atom-effect handler.
+ * Used for debugging and filtering events in the registry.
+ */
 function markInternal(fn: Function): void {
   (fn as unknown as Record<symbol, true>)[INTERNAL_HANDLER] = true;
 }
 
+/**
+ * A robust engine for two-way data binding between form controls and WritableAtoms.
+ * 
+ * Major UX challenges solved:
+ * 1. Cursor Jumping: Restores selection ranges when updating focused text controls.
+ * 2. IME Composition: Defers atom updates until a multi-stroke character (e.g., 한글) is finalized.
+ * 3. Feedback Loops: Prevents DOM-to-Atom updates from triggering Atom-to-DOM updates.
+ * 4. Multi-Select normalization: Handles array-based values for select[multiple] elements.
+ */
 class InputBinding<T> {
   private readonly $el: JQuery;
+
   private readonly el: InputEl;
+
   private readonly atom: WritableAtom<T>;
+
   private readonly isMultipleSelect: boolean;
+
   private readonly isTextControl: boolean;
 
   private readonly parse: (v: string) => T;
+
   private readonly format: (v: T) => string;
+
   private readonly equal: (a: T, b: T) => boolean;
+
   private readonly readDom: () => T;
+
   private readonly getRawDom: () => string | string[];
+
   private readonly writeDom: (val: T, formatted: string) => void;
 
   private flags = 0;
+
   private timeoutId: ReturnType<typeof setTimeout> | undefined = undefined;
 
   private readonly ns: string;
+
   private readonly handleInput: () => void;
 
   constructor($el: JQuery, atom: WritableAtom<T>, options: ValOptions<T>) {
@@ -41,6 +65,7 @@ class InputBinding<T> {
     const tagName = this.el.tagName;
     this.isMultipleSelect = tagName === 'SELECT' && (this.el as HTMLSelectElement).multiple;
     this.isTextControl = tagName === 'INPUT' || tagName === 'TEXTAREA';
+    // Reason: Instance-specific namespace prevents accidental 'off()' interference.
     this.ns = `.atomBind-${++instanceCounter}`;
 
     const { parse, format, equal, readDom, getRawDom, writeDom } = this.initStrategies(options);
@@ -54,6 +79,7 @@ class InputBinding<T> {
     const debounce = options.debounce ?? 0;
     if (debounce > 0) {
       this.handleInput = () => {
+        // Caution: Never sync while the user is still composing an IME character.
         if (this.flags & BindingFlags.Composing) return;
         clearTimeout(this.timeoutId);
         this.timeoutId = setTimeout(() => this.syncAtomFromDom(), debounce);
@@ -75,11 +101,13 @@ class InputBinding<T> {
     this.bindEvents(options.event ?? INPUT_DEFAULTS.EVENT);
   }
 
+  /** Selects optimized read/write logic based on the element's behavior. */
   private initStrategies(options: ValOptions<T>) {
     const parse = options.parse ?? ((v: string) => v as unknown as T);
     const baseEqual = options.equal ?? Object.is;
 
     if (this.isMultipleSelect) {
+      // Logic: multiple selects map to arrays of strings.
       const format =
         options.format ?? ((v: T) => (Array.isArray(v) ? v : v ? [String(v)] : []).join(','));
 
@@ -118,6 +146,10 @@ class InputBinding<T> {
     return { parse, format, equal: baseEqual, readDom, getRawDom, writeDom };
   }
 
+  /**
+   * Updates the value while attempting to keep the cursor in the same position.
+   * Necessity: Updating 'el.value' while an input is focused normally drops the cursor to the end.
+   */
   private writeTextValue(formatted: string): void {
     const el = this.el as HTMLInputElement;
     if (this.flags & BindingFlags.Focused) {
@@ -127,6 +159,7 @@ class InputBinding<T> {
         el.value = formatted;
         const len = formatted.length;
         if (start !== null && end !== null) {
+          // Keep the selection within the boundaries of the new value
           el.setSelectionRange(Math.min(start, len), Math.min(end, len));
         }
       } catch {
@@ -143,7 +176,7 @@ class InputBinding<T> {
 
   private readonly handleCompositionEnd = () => {
     this.flags &= ~BindingFlags.Composing;
-
+    // Finalize the last character change now that composition is done.
     this.handleInput();
   };
 
@@ -158,6 +191,7 @@ class InputBinding<T> {
 
     const flushed = this.flushPendingDebounce();
 
+    // If focus is lost while still composing (e.g. clicking away), force a sync.
     if (wasComposing && !flushed) {
       this.syncAtomFromDom();
     }
@@ -175,6 +209,7 @@ class InputBinding<T> {
     return false;
   }
 
+  /** Ensures the DOM value strictly matches the Atom state when interactions end. */
   private normalizeDomValue(): void {
     const val = this.atom.peek();
     const formatted = this.format(val);
@@ -189,7 +224,9 @@ class InputBinding<T> {
     }
   }
 
+  /** Propagates the DOM value back to the Atom. */
   private syncAtomFromDom(): void {
+    // Prevent recursive updates if the Atom sync was triggered by an Atom-to-DOM sync.
     if (this.flags & BindingFlags.Busy) return;
     this.flags |= BindingFlags.SyncingToAtom;
     try {
@@ -208,6 +245,10 @@ class InputBinding<T> {
     }
   }
 
+  /** 
+   * Reactive effect that updates the DOM whenever the Atom value changes.
+   * This method is designed to be passed to the effect() function.
+   */
   public readonly syncDomFromAtom = () => {
     const val = this.atom.value;
 
@@ -237,6 +278,8 @@ class InputBinding<T> {
     const formatted = this.format(atomVal);
     if (raw === formatted) return true;
 
+    // While focused, the 'raw' value in DOM might technically differ from 
+    // formatted version due to user typing, so we check the 'parsed' version for logical equality.
     if (this.flags & BindingFlags.Focused) {
       try {
         return this.equal(this.readDom(), atomVal);
@@ -269,6 +312,12 @@ class InputBinding<T> {
   }
 }
 
+/**
+ * Initializes a two-way input binding.
+ * 
+ * Returns an EffectObject for the Atom-to-DOM sync and a 
+ * cleanup function to unbind DOM events.
+ */
 export function applyInputBinding<T>(
   $el: JQuery,
   atom: WritableAtom<T>,

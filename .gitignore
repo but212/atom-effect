@@ -23,3 +23,6 @@ benchmarks/results/
 
 # Performance baseline (optional - commit if you want to track baseline)
 .performance/
+
+# Graphify
+graphify-out/

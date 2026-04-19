@@ -5,11 +5,19 @@ const HIGHLIGHT_CLASS = 'atom-debug-highlight';
 const ATTR_MARKER = 'data-atom-debug';
 const IS_BROWSER = typeof window !== 'undefined';
 
+/**
+ * Memory Safety: Uses WeakMaps to associate temporal debug state with DOM
+ * elements without preventing garbage collection of the elements themselves.
+ */
 const timers = new WeakMap<Element, ReturnType<typeof setTimeout>>();
 const rafs = new WeakMap<Element, number>();
 
 let styleInjected = false;
 
+/**
+ * Minimal Footprint: Injects utility styles once per session.
+ * Transition duration is linked to DEBUG_DEFAULTS for configuration consistency.
+ */
 function injectStyle(): void {
   if (styleInjected || !IS_BROWSER) return;
   const style = document.createElement('style');
@@ -22,6 +30,10 @@ function injectStyle(): void {
   styleInjected = true;
 }
 
+/**
+ * Feature Detection: Determines the initial debug state.
+ * Priority: 1. Manual global flag -> 2. NODE_ENV check -> 3. Default off.
+ */
 function resolveInitialState(): boolean {
   const g = globalThis as typeof globalThis & {
     __ATOM_DEBUG__?: boolean;
@@ -33,6 +45,10 @@ function resolveInitialState(): boolean {
 
 const IS_DEV = resolveInitialState();
 
+/**
+ * Global diagnostic logger.
+ * Toggle `debug.enabled` at runtime to activate/deactivate instrumentation.
+ */
 export const debug = {
   enabled: IS_DEV,
 
@@ -42,9 +58,15 @@ export const debug = {
   error: (prefix: string, message: string, cause: unknown) =>
     console.error(`${prefix} ${message}`, cause),
 
+  /**
+   * Tracks a reactive DOM mutation.
+   * Logic: Logs the specific property update and triggers a visual "flash"
+   * to help developers locate the change on potentially complex pages.
+   */
   domUpdated(prefix: string, target: Element | JQuery, type: string, value: unknown) {
     if (!this.enabled) return;
     const el = 'jquery' in target ? target[0] : target;
+    // Safety: Only instrument elements that are currently live in the document.
     if (el && el.nodeType === 1 && el.isConnected) {
       console.log(`${prefix} DOM updated: ${getSelector(el as Element)}.${type} =`, value);
       triggerVisualHighlight(el as Element);
@@ -52,6 +74,14 @@ export const debug = {
   },
 };
 
+/**
+ * Orchestrates a temporary visual highlight on the targeted element.
+ *
+ * Logic:
+ * 1. Debouncing: Cancels pending animations/timers for the same element.
+ * 2. RAF: Ensures class addition occurs in the next available paint cycle.
+ * 3. GC: Automatically cleans up WeakMap entries after the timeout.
+ */
 function triggerVisualHighlight(el: Element): void {
   const g = globalThis;
   if (!IS_BROWSER || typeof g.requestAnimationFrame !== 'function') return;

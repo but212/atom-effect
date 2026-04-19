@@ -5,6 +5,10 @@ import type { ComputedAtom, FetchError, FetchOptions } from '@/types';
 /**
  * Derives JQuery.AjaxSettings from FetchOptions.
  * Data-focused transformation without hidden state.
+ *
+ * Transforms high-level FetchOptions into standard jQuery.AjaxSettings.
+ * Logic: Forces callback removal (success/error/complete) to ensure
+ * the library’s internal async orchestration remains the single source of truth.
  */
 function getAjaxSettings<T>(getUrl: () => string, options: FetchOptions<T>): JQuery.AjaxSettings {
   const baseAjax = typeof options.ajaxOptions === 'object' ? options.ajaxOptions : {};
@@ -20,7 +24,7 @@ function getAjaxSettings<T>(getUrl: () => string, options: FetchOptions<T>): JQu
       ...options.headers,
       ...dynamicOptions.headers,
     },
-    // Reset callbacks to prevent interference with atom-effect's logic
+    // Reset callbacks to prevent interference with atom-effect's internal lifecycle logic
     success: undefined,
     error: undefined,
     complete: undefined,
@@ -28,7 +32,9 @@ function getAjaxSettings<T>(getUrl: () => string, options: FetchOptions<T>): JQu
 }
 
 /**
- * Handles fetch errors by normalizing them and triggering the onError hook.
+ * Normalizes jQuery-specific jqXHR errors into standard JS Error objects.
+ * Logic: Preserves the original jqXHR instance on the error object for
+ * advanced debugging/logging in the 'onError' hook.
  */
 function handleFetchError(err: unknown, onError?: (err: unknown) => void): never {
   let final: Error;
@@ -45,22 +51,38 @@ function handleFetchError(err: unknown, onError?: (err: unknown) => void): never
     try {
       onError(final);
     } catch {
-      // Ignore user-defined hook errors during error handling
+      // Logic: Ignore user-hook errors to prevent breaking the core fetch promise chain.
     }
   }
   throw final;
 }
 
 /**
- * atomFetch: A reactive fetch atom that wraps jQuery.ajax.
- * Simplicity over complexity: No classes, just data and functions.
+ * Creates a reactive fetch atom powered by jQuery.ajax.
+ *
+ * When to use:
+ * - Best for fetching data that depends on other reactive stores (e.g., search queries, ID-based details).
+ *
+ * Built-in Features:
+ * 1. Concurrency Management: Automatically aborts the previous request if the URL/atom re-evaluates.
+ * 2. Lifecycle Cleanup: Terminates any pending network request when the atom is disposed.
+ * 3. Reactive Integration: Exposes the result as a standard ComputedAtom.
+ *
+ * @example
+ * const userId = $.atom(123);
+ * const user = $.atomFetch(() => `/api/users/${userId.value}`, {
+ *   defaultValue: { name: 'Loading...' },
+ *   eager: true
+ * });
+ *
+ * $.effect(() => console.log(user.value.name));
  */
 function atomFetch<T>(urlOrFn: string | (() => string), options: FetchOptions<T>): ComputedAtom<T> {
   const getUrl = typeof urlOrFn === 'string' ? () => urlOrFn : urlOrFn;
   let abortController: AbortController | null = null;
 
   const execute = async (): Promise<T> => {
-    // Cancel previous execution if still pending
+    // Logic: Aborts the previous execution to prevent out-of-order async race conditions.
     abortController?.abort();
 
     const controller = new AbortController();
@@ -104,6 +126,7 @@ function atomFetch<T>(urlOrFn: string | (() => string), options: FetchOptions<T>
     ...(options.name !== undefined ? { name: options.name } : {}),
   });
 
+  // Lifecycle: Ensures the network request is canceled when the atom itself is destroyed.
   const originalDispose = atomVal.dispose.bind(atomVal);
   atomVal.dispose = () => {
     abortController?.abort();

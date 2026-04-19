@@ -14,18 +14,29 @@
 
 ### Changed
 
-- **Performance Optimization**: Significant throughput improvements by operating reactive bindings directly on `HTMLElement` and removing manual resource pooling.
+- **Performance Optimization**: Significant throughput improvements by operating reactive bindings directly on `HTMLElement` and removing manual resource pooling (O(1) memory management).
+- **Binding Engine Cleanup**: Simplified `atomEachElement` by removing manual context creation (`createContext`) and streamlining the iteration loop for better performance.
+- **Event Patching Refactor**: Refactored `jquery-patch` to simplify internal event handler tracking, removing redundant metadata symbols and streamlining unbinding logic.
+- **Effect Factory Simplification**: Streamlined `registerMapEffect` and `registerReactiveEffect` by removing internal resolution caching and using core `isAtom` checks, reducing overhead.
+- **Debug Module**: Simplified the debug implementation, removing redundant logging methods (`log`, `atomChanged`, `cleanup`) and the complex singleton swap in favor of a simpler, runtime-toggleable debug object.
+- **Static Utilities**: Removed `isReactive` from the public static namespace and refactored `isPromise` and `getSelector` for better performance and reliability.
 - **Modern Link Interception**: Updated link handling to respect modifier keys (Ctrl/Cmd), `rel="external"`, cross-origin targets, and download attributes.
+- **Refactored Feature Modules**: Simplified `atomFetch`, `atomNav`, and `$.route` implementations by removing internal classes and redundant caches (`FetchContext`, `templateCache`, `linkRouteCache`) in favor of direct functional approaches and optimized reactive state management.
+- **Navigation State Optimization**: Improved `AtomNavigator` synchronization logic by using dedicated atoms for rendered state and pending hook counts, enhancing reliability and performance.
 - **Initialization Reliability**: Modified `atomMount` to throw errors during initialization ("Fail Loud") for improved debuggability.
 - **Unified Utilities**: Standardized `$.nextTick` to use core's `aeNextTick()` for consistent scheduling behavior.
 
 ### Fixed
 
+- **Navigation Redirects**: Fixed a logic error where lifecycle hooks and state were not correctly updated during PJAX redirects in `$.atomNav`.
+- **Fetch Method Resolution**: Fixed a bug in `$.atomFetch` where HTTP methods provided via dynamic `ajaxOptions` functions were ignored.
 - **Error Messaging**: Simplified "Duplicate Key" warnings in `atomList` for better clarity and less noise.
 
 ### Removed
 
 - **Compatibility Adjustment**: Removed support for `[Symbol.dispose]` to maintain compatibility with ES2021 environments.
+- **Internal Pooling**: Removed `utils/pool.ts` and internal object/array pooling for `BindingRecord` and effects, reducing architectural complexity while leveraging modern JS engine optimizations.
+- **Registry Simplification**: Simplified `BindingRecord` and `BindingRegistry` logic, removing internal abstractions to minimize overhead in the binding lifecycle.
 
 ### Security
 

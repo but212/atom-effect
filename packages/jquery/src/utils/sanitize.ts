@@ -1,5 +1,6 @@
 import { DANGEROUS_PROTOCOL_PATTERN } from '@/constants';
 
+/** Comprehensive list of attributes that can contain URI payloads or script contexts. */
 export const URL_ATTRS = [
   'href',
   'src',
@@ -26,6 +27,7 @@ export const URL_ATTRS = [
   'srcset',
 ];
 
+/** Tags that are stripped or transformed because they can execute scripts or hijack the context. */
 const DANGEROUS_TAGS = [
   'script',
   'iframe',
@@ -68,6 +70,12 @@ const RE_DANGEROUS_DATA_URI =
 const CSS_KEYWORD_PATTERN = `(?:expression\\s*\\(|behavior\\s*:|-moz-binding\\s*:|url\\s*\\(\\s*["']?\\s*${PROTOCOL_PATTERN}(?!image\\/)|data\\s*:\\s*(?!image\\/))`;
 const RE_DANGEROUS_CSS_SINGLE = new RegExp(CSS_KEYWORD_PATTERN, 'im');
 
+/**
+ * Decodes HTML entities and strips control characters to reveal hidden protocols.
+ *
+ * Why: Attackers use entities like `j&#x61;vascript:` to bypass regex filters.
+ * We must normalize the string to its plain-text representation before validation.
+ */
 function normalize(s: string): string {
   if (typeof s !== 'string') return '';
   return s
@@ -88,6 +96,10 @@ function isDangerousHtmlContent(s: string): boolean {
   return RE_DANGEROUS_TAG.test(s) || RE_UNSAFE_ATTR.test(s) || RE_DANGEROUS_PROTOCOL_GLOBAL.test(s);
 }
 
+/**
+ * Optimization: Reuses <template> nodes to avoid the high cost of
+ * repeatedly creating DOM nodes during rapid reactive updates.
+ */
 const TEMPLATE_POOL: HTMLTemplateElement[] = [];
 
 function acquireTemplate(): HTMLTemplateElement {
@@ -99,6 +111,10 @@ function releaseTemplate(t: HTMLTemplateElement): void {
   TEMPLATE_POOL.push(t);
 }
 
+/**
+ * Security Bridge: Accesses DOM properties via descriptors to prevent
+ * bypass attacks that use Object.defineProperty on element instances.
+ */
 const DOM_BRIDGE = {
   getAttributes: (el: Element) =>
     Object.getOwnPropertyDescriptor(Element.prototype, 'attributes')!.get!.call(el) as NamedNodeMap,
@@ -106,6 +122,7 @@ const DOM_BRIDGE = {
   replaceWith: (oldEl: Element, newEl: Node) => Element.prototype.replaceWith.call(oldEl, newEl),
 };
 
+/** Scrubs event listeners (on*) and malicious protocols from individual element attributes. */
 function scrubAttributes(el: HTMLElement): void {
   const attrs = DOM_BRIDGE.getAttributes(el);
   if (!attrs) return;
@@ -123,6 +140,7 @@ function scrubAttributes(el: HTMLElement): void {
     } else if (URL_ATTRS.includes(lowerName)) {
       const normalized = normalize(attr.value);
       if (lowerName === 'srcdoc') {
+        // Recursive Check: srcdoc attribute is itself a nested HTML payload.
         el.setAttribute(name, sanitizeHtml(normalized));
       } else if (hasDangerousProtocol(normalized)) {
         el.setAttribute(name, 'data-unsafe-protocol:');
@@ -133,6 +151,10 @@ function scrubAttributes(el: HTMLElement): void {
   }
 }
 
+/**
+ * Neutralizes dangerous tags (like <script>) by converting them to <span>,
+ * effectively disabling their execution while preserving their content for debugging.
+ */
 function transformNode(el: HTMLElement): void {
   if (!DANGEROUS_TAGS.includes(el.localName)) return;
 
@@ -151,6 +173,7 @@ function transformNode(el: HTMLElement): void {
   DOM_BRIDGE.replaceWith(el, span);
 }
 
+/** Recursive walker that processes a document fragment and its nested templates. */
 function walkAndScrub(root: Node | DocumentFragment): void {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
   let el = walker.nextNode() as HTMLElement | null;
@@ -159,6 +182,7 @@ function walkAndScrub(root: Node | DocumentFragment): void {
   while (el) {
     toScrub.push(el);
     if (el.localName === 'template') {
+      // Logic: walker skips template contents, so we must recurse manually.
       walkAndScrub((el as HTMLTemplateElement).content);
     }
     el = walker.nextNode() as HTMLElement | null;
@@ -170,6 +194,15 @@ function walkAndScrub(root: Node | DocumentFragment): void {
   }
 }
 
+/**
+ * Sanitizes a raw HTML string by stripping dangerous tags, attributes, and protocols.
+ *
+ * Strategy:
+ * 1. Uses a headless <template> element for native browser-speed parsing.
+ * 2. Decodes obfuscated entities (numeric/named) before validation.
+ * 3. Transforms blacklisted tags (script, iframe) into safe <span> containers.
+ * 4. Sanitizes URL-based attributes (href, src) against malicious protocols.
+ */
 export function sanitizeHtml(html: string | null | undefined): string {
   if (!html) return '';
   const sInit = String(html);

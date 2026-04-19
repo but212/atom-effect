@@ -18,8 +18,16 @@ export interface AtomOptions extends BaseAtomOptions {
   sync?: boolean;
 }
 
+/**
+ * Flexible value container.
+ * Supports raw T, reactive Atoms, or functional getters for deferred execution.
+ */
 export type ReactiveValue<T> = T | ReadonlyAtom<T> | (() => T);
 
+/**
+ * Extension of ReactiveValue that permits Promises.
+ * Used primarily for CSS and Attribute bindings that might rely on async fetching.
+ */
 export type AsyncReactiveValue<T> =
   | T
   | ReadonlyAtom<T | Promise<T>>
@@ -35,6 +43,10 @@ export type CssValue =
 
 export type CssBindings = Record<string, CssValue>;
 
+/**
+ * Central DSL for declarative jQuery bindings.
+ * Maps reactive sources to specific DOM manipulation strategies.
+ */
 export interface BindingOptions<T = unknown> {
   text?:
     | AsyncReactiveValue<unknown>
@@ -65,6 +77,10 @@ export type ListKey = string | number;
 export type ListRenderResult = string | Element | DocumentFragment | JQuery;
 export type ListKeyFn<T> = (item: T, index: number) => ListKey;
 
+/**
+ * Configuration for high-performance list reconciliation.
+ * Uses 'key' for identity tracking to minimize DOM churn.
+ */
 export interface ListOptions<T> {
   key: KeysOfType<T, ListKey> | ListKeyFn<T>;
   render: (item: T, index: number) => ListRenderResult;
@@ -107,6 +123,7 @@ export interface FetchError extends Error {
   jqXHR?: JQuery.jqXHR;
 }
 
+/** Definition for a mountable component that manages its own lifecycle. */
 export type ComponentFn<P = Record<string, unknown>> = ($el: JQuery, props: P) => EffectResult;
 
 export interface RouteLifecycle {
@@ -180,6 +197,10 @@ export interface AtomNav {
   destroy: () => void;
 }
 
+/**
+ * Bitwise Synchronization Guard: Prevents recursive feedback loops
+ * between the DOM and Atoms during two-way data flow.
+ */
 export enum BindingFlags {
   None = 0,
   Focused = 1 << 0,
@@ -190,6 +211,7 @@ export enum BindingFlags {
 }
 
 declare global {
+  /** Global jQuery namespace extensions ($). */
   interface JQueryStatic {
     atom<T>(v: T, opts?: AtomOptions): WritableAtom<T>;
     computed<T>(fn: () => T, opts?: ComputedOptions<T>): ComputedAtom<T>;
@@ -234,6 +256,7 @@ declare global {
     atomNav(options: AtomNavOptions): AtomNav;
   }
 
+  /** jQuery Instance Method extensions ($('...').method()). */
   interface JQuery {
     atomText<T>(src: AsyncReactiveValue<T>, fmt?: (v: T) => string): this;
     atomHtml(src: AsyncReactiveValue<string>): this;
