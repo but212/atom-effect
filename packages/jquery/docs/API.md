@@ -96,7 +96,12 @@ $el.atomBind({ text: [count, c => `Count: ${c}`] });
 Updates `innerHTML`.
 
 > **🛡️ Security Note**:
-> This method uses a **multi-layered DOM-based Sanitizer** (via inert `<template>`) for maximum reliability. It uses a **recursive tree-walker** that transforms dangerous tags (`<script>`, `<iframe>`, etc.) into inert `<span>` wrappers while stripping `on*` attributes and dangerous protocols (`javascript:`, `data:`, etc.). It also features **DOM Clobbering Protection** to prevent malicious inputs from shadowing internal element properties used during sanitization.
+> This method uses a **multi-layered DOM-based Sanitizer** (via inert `<template>`) for maximum reliability. It uses a **recursive tree-walker** that transforms dangerous tags (`<script>`, `<iframe>`, etc.) into inert `<span>` wrappers while stripping `on*` attributes and dangerous protocols (`javascript:`, `data:`, etc.).
+>
+> **Key Security Features**:
+> - **DOM Clobbering Protection**: Uses prototype-level descriptors to prevent malicious inputs from shadowing internal element properties.
+> - **Immediate Scrubbing**: All attributes from transformed nodes (e.g., `<script onerror=...>` → `<span data-unsafe-attr=...>`) are immediately processed.
+> - **Recursive Trust**: Automatically cleanses nested contexts including `<template>` content and `srcdoc` sinks.
 >
 > While highly efficient, [DOMPurify](https://github.com/cure53/DOMPurify) is recommended for complex, user-generated content to ensure maximum security.
 > See the [Security Guide](./SECURITY.md) for details.
