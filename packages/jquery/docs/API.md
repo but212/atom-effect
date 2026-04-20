@@ -262,7 +262,7 @@ Fully automated two-way binding for an entire form. Binds every input, select, a
 - **Deep Paths**: Supports dot-notation and array access in `name` attributes (e.g., `name="user.profile.name"`, `name="items[0].text"`) to bind to nested object properties using `atomLens`.
 - **Dynamic DOM**: Automatically detects and binds new form controls added to the DOM after the initial call using `MutationObserver`. Also handles field renaming and removal (via ref-counting).
 - **Radio & Checkbox Groups**: Native support for radio groups and checkbox groups. Checks are automatically mapped to boolean, string, or array values based on input type and name collision.
-- **Data-Driven Sync**: Follows Rob Pike's rules by prioritizing core `atomLens` data structures over complex dual-sync algorithms. This naturally prevents infinite feedback loops and ensures that "leaf" updates (DOM) and "root" updates (Atom) remain perfectly synchronized with zero redundant propagation.
+- **Data-Driven Sync**: Prioritizes core `atomLens` data structures over complex dual-sync algorithms. This naturally prevents infinite feedback loops and ensures that "leaf" updates (DOM) and "root" updates (Atom) remain perfectly synchronized with zero redundant propagation.
 - **Performance**: Leverages the optimized lens recursive update engine, ensuring typing performance remains constant for O(1) leaf updates even in massive, deeply nested forms.
 
 **Options**:

@@ -72,8 +72,6 @@ describe('Atom Mount (Component Lifecycle)', () => {
 
   it('should throw error during mount', () => {
     const $el = $('<div>').appendTo(document.body);
-
-    // Pike's Rule: Fail loud during component initialization.
     expect(() => {
       $el.atomMount(() => {
         throw new Error('mount fail');

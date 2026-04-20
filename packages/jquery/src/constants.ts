@@ -1,6 +1,6 @@
 /**
  * Subsystem Definitions: Grouping prefixes, defaults, and error messages
- * into cohesive logical units according to Rob Pike's Rule 5.
+ * into cohesive logical units.
  */
 
 export const SYSTEM_CORE = {
