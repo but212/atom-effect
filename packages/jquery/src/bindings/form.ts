@@ -1,10 +1,8 @@
 import {
-  batch,
-  atom as createAtom,
-  type EffectObject,
+  atomLens,
   effect,
-  getPathValue,
-  setDeepValue,
+  type Paths,
+  type PathValue,
   untracked,
   type WritableAtom,
 } from '@but212/atom-effect';
@@ -14,20 +12,14 @@ import { registry } from '@/core/registry';
 import type { FormOptions } from '@/types';
 import { bindVal } from './unified';
 
-/** Internal metadata for a single bound form field. */
 interface FieldEntry {
-  /** Individual atom for this specific field to isolate reactive noise from the root object. */
+  /** Individual atom (lens) for this specific field. */
   atom: WritableAtom<unknown>;
-
-  /** Tokenized path segments for deep object traversal. */
-  parts: string[];
 
   name: string;
 
   /** Reference count to determine when to safely dispose of the field effect. */
   refCount: number;
-
-  effect: EffectObject | null;
 }
 
 const SELECTOR = 'input, select, textarea';
@@ -36,7 +28,7 @@ const SELECTOR = 'input, select, textarea';
  * Engine for synchronizing a complex object (Atom) with a flat HTML Form.
  *
  * Design Intent:
- * - Decouples individual field updates from the large root object for better performance.
+ * - Follows Rob Pike's rules: Uses simple data structures (`atomLens`) over fancy dual-sync algorithms.
  * - Supports nested object paths through standard form 'name' attributes.
  * - Observes DOM mutations to handle form fields added or removed after initialization.
  */
@@ -47,9 +39,6 @@ class FormBinder<T extends object> {
 
   private elementNames = new WeakMap<Element, string>();
 
-  /** Prevents feedback loops where a leaf update triggers a redundant root sync. */
-  private isSyncingFromLeaf = false;
-
   constructor(
     private form: HTMLFormElement,
     private atom: WritableAtom<T>,
@@ -59,27 +48,6 @@ class FormBinder<T extends object> {
   }
 
   private init(): void {
-    // Root-to-Leaf Synchronization:
-    // When the main atom changes externally, propagate values down to each field-level atom.
-    const rootDispatcher = effect(() => {
-      const rootValue = this.atom.value;
-
-      if (this.isSyncingFromLeaf || !this.fields.length) return;
-
-      batch(() => {
-        untracked(() => {
-          for (let i = 0; i < this.fields.length; i++) {
-            const f = this.fields[i]!;
-            const newVal = getPathValue(rootValue, f.parts);
-
-            // Optimization: Only update the field atom if the value has truly changed.
-            if (!Object.is(f.atom.peek(), newVal)) f.atom.value = newVal;
-          }
-        });
-      });
-    });
-
-    registry.trackEffect(this.form, rootDispatcher);
     this.bindElement(this.form);
     this.setupObserver();
   }
@@ -168,8 +136,7 @@ class FormBinder<T extends object> {
   }
 
   /**
-   * Leaf-to-Root Synchronization:
-   * Resolves or creates a field-level atom and binds its changes back to the root object.
+   * Resolves or creates a field-level lens and binds it to the root object.
    */
   private acquireField(name: string): FieldEntry {
     let entry = this.fieldMap.get(name);
@@ -178,34 +145,27 @@ class FormBinder<T extends object> {
       return entry;
     }
 
-    // Convert flat names (e.g., 'user.info[0]') into token paths
-    const parts = name
-      .replace(/\[(\w+)\]/g, '.$1')
-      .split('.')
-      .filter(Boolean);
+    // Convert flat names (e.g., 'user.info[0]') into dot paths
+    const dotPath = name.replace(/\[(\w+)\]/g, '.$1').replace(/^\./, '');
 
-    const fieldAtom = createAtom(getPathValue(this.atom.peek(), parts));
-    entry = { atom: fieldAtom, parts, name, refCount: 1, effect: null };
+    const baseLens = atomLens(this.atom, dotPath as Paths<T>);
+    const customLens = Object.create(baseLens);
 
-    entry.effect = effect(() => {
-      let val = fieldAtom.value;
+    // Explicitly destructure options to avoid 'this' context issues in the setter
+    const { transform, onChange } = this.options;
 
-      if (this.options.transform) val = this.options.transform(name, val);
-
-      const root = this.atom.peek();
-      // Immutable update of the root object via nested path patching
-      const next = setDeepValue(root, parts, 0, val);
-
-      if (next !== root) {
-        this.isSyncingFromLeaf = true;
-        try {
-          this.atom.value = next as T;
-          if (this.options.onChange) untracked(() => this.options.onChange!(name, val));
-        } finally {
-          this.isSyncingFromLeaf = false;
-        }
-      }
+    Object.defineProperty(customLens, 'value', {
+      get() {
+        return baseLens.value;
+      },
+      set(val: unknown) {
+        const transformed = transform ? transform(name, val) : val;
+        baseLens.value = transformed as PathValue<T, Paths<T>>;
+        if (onChange) untracked(() => onChange(name, transformed));
+      },
     });
+
+    entry = { atom: customLens as WritableAtom<unknown>, name, refCount: 1 };
 
     this.fieldMap.set(name, entry);
     this.fields.push(entry);
@@ -217,7 +177,10 @@ class FormBinder<T extends object> {
     if (entry && --entry.refCount <= 0) {
       const idx = this.fields.indexOf(entry);
       if (idx !== -1) this.fields.splice(idx, 1);
-      entry.effect?.dispose();
+      const disposableAtom = entry.atom as Partial<{ dispose: () => void }>;
+      if (typeof disposableAtom.dispose === 'function') {
+        disposableAtom.dispose();
+      }
       this.fieldMap.delete(name);
     }
     registry.cleanup(el);
