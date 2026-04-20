@@ -111,7 +111,7 @@ Production-like scenarios:
 | Benchmark | Result | Analysis |
 | ---------- | ------ | -------- |
 | Atom untracked (100x) | 1.36M ops/sec | Near-native performance |
-| Computed read (100x) | 80.6K ops/sec | Low-overhead tracking |
+| Computed read (100x) | 176.2K ops/sec | Low-overhead tracking |
 | Effect propagation (atom→comp→effect) | 1.50M ops/sec | Efficient subscriber notify |
 | Todo workflow | 96.8K ops/sec | Production-ready (Full workflow) |
 | Frame Budget (100 atoms) | 0.0154ms | Well under 16ms |
