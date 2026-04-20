@@ -165,4 +165,77 @@ describe('Input Bindings (Two-way)', () => {
 
     $el.remove();
   });
+
+  // --- 6. Performance & Strict Normalization ---
+  it('should normalize DOM value on blur even if parsed value matches atom', async () => {
+    const val = $.atom(10);
+    const $el = $('<input>').appendTo(document.body);
+
+    $el.atomVal(val, {
+      parse: (v) => parseInt(v, 10),
+      format: (v) => `V:${v}`,
+    });
+
+    await $.nextTick();
+    expect($el.val()).toBe('V:10');
+
+    // 1. Focus and type something functionally equivalent but string-different
+    $el.trigger('focus');
+    $el.val('10.0'); // parse("10.0") is 10, which matches atom.peek()
+    $el.trigger('input');
+
+    expect(val.value).toBe(10);
+    expect($el.val()).toBe('10.0'); // DOM preserved while focused (Focus Stability)
+
+    // 2. Blur the element
+    $el.trigger('blur');
+
+    // DOM SHOULD be normalized back to "V:10" now that focus is lost
+    expect($el.val()).toBe('V:10');
+
+    $el.remove();
+  });
+
+  it('should not perform redundant DOM writes if value is up-to-date', async () => {
+    const val = $.atom('initial');
+    const $el = $('<input>').appendTo(document.body);
+    const el = $el[0] as HTMLInputElement;
+
+    $el.atomVal(val);
+    await $.nextTick();
+
+    let writeCount = 0;
+    const originalDescriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+
+    // Spy on the element.value setter
+    Object.defineProperty(el, 'value', {
+      get: function () {
+        return originalDescriptor?.get?.call(this);
+      },
+      set: function (v) {
+        writeCount++;
+        originalDescriptor?.set?.call(this, v);
+      },
+      configurable: true,
+    });
+
+    // Case: Atom updates normally
+    writeCount = 0;
+    val.value = 'second';
+    await $.nextTick();
+    expect(writeCount).toBe(1);
+
+    // Case: User types something, Atom updates, Effect triggers.
+    // In this case, DOM is ALREADY 'third'. The effect should see this and NOT write again.
+    $el.val('third');
+    writeCount = 0;
+    $el.trigger('input');
+    expect(val.value).toBe('third');
+    await $.nextTick();
+
+    // Redundant write count should be 0
+    expect(writeCount).toBe(0);
+
+    $el.remove();
+  });
 });
