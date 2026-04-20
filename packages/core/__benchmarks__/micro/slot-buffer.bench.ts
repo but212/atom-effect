@@ -1,6 +1,6 @@
 import { bench, describe } from 'vitest';
 import { SlotBuffer } from '@/core/buffers';
-import { microBenchOptions } from '../utils/setup.js';
+import { keep, microBenchOptions } from '../utils/setup.js';
 
 const REPEATS = 100;
 
@@ -136,15 +136,14 @@ describe('SlotBuffer: Iteration', () => {
   bench(
     `forEach 4 items (SlotBuffer) X${REPEATS}`,
     () => {
-      let lastSum;
+      let sum = 0;
       for (let i = 0; i < REPEATS; i++) {
-        let sum = 0;
+        sum = 0;
         inlineBuf.forEach((item) => {
           sum += item;
         });
-        lastSum = sum;
       }
-      return lastSum as any;
+      keep(sum);
     },
     microBenchOptions
   );
@@ -152,15 +151,14 @@ describe('SlotBuffer: Iteration', () => {
   bench(
     `forEach 4 items (Array) X${REPEATS}`,
     () => {
-      let lastSum;
+      let sum = 0;
       for (let i = 0; i < REPEATS; i++) {
-        let sum = 0;
+        sum = 0;
         inlineArr.forEach((item) => {
           sum += item;
         });
-        lastSum = sum;
       }
-      return lastSum as any;
+      keep(sum);
     },
     microBenchOptions
   );
@@ -168,15 +166,14 @@ describe('SlotBuffer: Iteration', () => {
   bench(
     `forEach 16 items (SlotBuffer) X${REPEATS}`,
     () => {
-      let lastSum;
+      let sum = 0;
       for (let i = 0; i < REPEATS; i++) {
-        let sum = 0;
+        sum = 0;
         overflowBuf.forEach((item) => {
           sum += item;
         });
-        lastSum = sum;
       }
-      return lastSum as any;
+      keep(sum);
     },
     microBenchOptions
   );
@@ -184,15 +181,14 @@ describe('SlotBuffer: Iteration', () => {
   bench(
     `forEach 16 items (Array) X${REPEATS}`,
     () => {
-      let lastSum;
+      let sum = 0;
       for (let i = 0; i < REPEATS; i++) {
-        let sum = 0;
+        sum = 0;
         overflowArr.forEach((item) => {
           sum += item;
         });
-        lastSum = sum;
       }
-      return lastSum as any;
+      keep(sum);
     },
     microBenchOptions
   );
