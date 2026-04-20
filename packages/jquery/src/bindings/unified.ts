@@ -1,5 +1,4 @@
-import { computed, effect, isAtom, type ReadonlyAtom, untracked } from '@but212/atom-effect';
-
+import { effect, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
 import { applyInputBinding } from '@/bindings/input-binding';
 import { DANGEROUS_PROPS, ERROR_MESSAGES, LOG_PREFIXES, VALID_INPUT_TAGS } from '@/constants';
@@ -15,60 +14,28 @@ import type {
   ValOptions,
   WritableAtom,
 } from '@/types';
-import { hasOwn, isPromise } from '@/utils';
 import { debug } from '@/utils/debug';
 
 import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '@/utils/sanitize';
 
-/** Optimization: Pre-caches camelCased versions of CSS property names. */
-const camelCache = new Map<string, string>();
-function getCamelCase(prop: string): string {
-  let cached = camelCache.get(prop);
-  if (cached !== undefined) return cached;
-
-  cached = prop.includes('-') ? prop.replace(/-./g, (m) => m[1]!.toUpperCase()) : prop;
-  camelCache.set(prop, cached);
-  return cached;
-}
-
-/**
- * Optimization: Caches sanitization computed-atoms keyed by the source identity.
- * This prevents creating multiple sanitizing effects for the same source atom used
- * across different DOM nodes.
- */
-const htmlSanitizeCache = new WeakMap<
-  ReadonlyAtom<string | Promise<string>>,
-  ReadonlyAtom<string | Promise<string>>
->();
-
-function getSanitizedHtml(
-  source: ReadonlyAtom<string | Promise<string>>
-): ReadonlyAtom<string | Promise<string>> {
-  let cached = htmlSanitizeCache.get(source);
-  if (!cached) {
-    cached = computed(() => {
-      const val = source.value;
-      if (isPromise(val)) {
-        return val.then((v: string) => sanitizeHtml(v));
-      }
-      return sanitizeHtml(val);
-    });
-    htmlSanitizeCache.set(source, cached);
-  }
-  return cached;
+/** Converts kebab-case CSS properties to camelCase. */
+function getCamelCase(property: string): string {
+  return property.includes('-')
+    ? property.replace(/-./g, (match) => match[1]!.toUpperCase())
+    : property;
 }
 
 /**
  * Security: Blocks 'on*' event attributes and dangerous properties like innerHTML
  * from being bound as standard attributes/props to prevent XSS.
  */
-function isSafeBinding(name: string, isProp: boolean): boolean {
-  const lower = name.toLowerCase();
-  if (lower.startsWith('on')) {
+function isSafeBinding(name: string, isProperty: boolean): boolean {
+  const lowerName = name.toLowerCase();
+  if (lowerName.startsWith('on')) {
     console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_EVENT_HANDLER(name)}`);
     return false;
   }
-  if (isProp && DANGEROUS_PROPS.has(name)) {
+  if (isProperty && DANGEROUS_PROPS.includes(name)) {
     console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_PROP(name)}`);
     return false;
   }
@@ -77,16 +44,16 @@ function isSafeBinding(name: string, isProp: boolean): boolean {
 
 /** Syncs element text content with a reactive source. */
 export function bindText<T = unknown>(
-  el: HTMLElement,
+  element: HTMLElement,
   value: AsyncReactiveValue<T>,
-  formatter?: (val: T) => string
+  formatter?: (value: T) => string
 ): void {
   registerReactiveEffect(
-    el,
+    element,
     value,
-    (val) => {
-      const text = formatter ? formatter(val) : String(val ?? '');
-      if (el.textContent !== text) el.textContent = text;
+    (currentValue) => {
+      const textContent = formatter ? formatter(currentValue) : String(currentValue ?? '');
+      if (element.textContent !== textContent) element.textContent = textContent;
     },
     'text'
   );
@@ -96,22 +63,18 @@ export function bindText<T = unknown>(
  * Binds sanitized HTML content to an element.
  * Note: Descendant bindings are automatically cleaned up before re-writing innerHTML.
  */
-export function bindHtml(el: HTMLElement, value: AsyncReactiveValue<string>): void {
-  const source = isAtom(value)
-    ? getSanitizedHtml(value as ReadonlyAtom<string | Promise<string>>)
-    : value;
-
+export function bindHtml(element: HTMLElement, value: AsyncReactiveValue<string>): void {
   let lastHtml: string | null = null;
 
   registerReactiveEffect(
-    el,
-    source,
-    (val) => {
-      const html = source === value ? sanitizeHtml(val) : val;
-      if (lastHtml !== html) {
-        registry.cleanupDescendants(el);
-        el.innerHTML = html;
-        lastHtml = html;
+    element,
+    value,
+    (currentValue) => {
+      const sanitizedHtml = sanitizeHtml(currentValue as string);
+      if (lastHtml !== sanitizedHtml) {
+        registry.cleanupDescendants(element);
+        element.innerHTML = sanitizedHtml;
+        lastHtml = sanitizedHtml;
       }
     },
     'html'
@@ -123,81 +86,78 @@ export function bindHtml(el: HTMLElement, value: AsyncReactiveValue<string>): vo
  * Case handling: Correctly removes tokens only if no other active class definition in the map requires them.
  */
 export function bindClass(
-  el: HTMLElement,
+  element: HTMLElement,
   classMap: Record<string, AsyncReactiveValue<boolean>>
 ): void {
   const tokenMap: Record<string, string[]> = {};
-  const prevStates: Record<string, boolean> = {};
+  let lastActiveTokens = new Set<string>();
 
-  for (const k in classMap) {
-    if (hasOwn.call(classMap, k)) {
-      const trimmed = k.trim();
-      tokenMap[k] = /\s/.test(trimmed) ? trimmed.split(/\s+/).filter(Boolean) : [trimmed];
-    }
+  for (const key of Object.keys(classMap)) {
+    const trimmedKey = key.trim();
+    tokenMap[key] = trimmedKey.includes(' ')
+      ? trimmedKey.split(/\s+/).filter(Boolean)
+      : [trimmedKey];
   }
 
   registerMapEffect(
-    el,
+    element,
     classMap,
     (states) => {
-      for (const k in states) {
-        const val = !!states[k];
-        if (prevStates[k] === val) continue;
-
-        const tokens = tokenMap[k]!;
-        if (val) {
-          el.classList.add(...tokens);
-        } else {
-          for (const token of tokens) {
-            let stillNeeded = false;
-            // Check if this token is shared with another 'true' entry in the map
-            for (const otherK in states) {
-              if (otherK !== k && states[otherK] && tokenMap[otherK]!.includes(token)) {
-                stillNeeded = true;
-                break;
-              }
-            }
-            if (!stillNeeded) el.classList.remove(token);
+      const currentActiveTokens = new Set<string>();
+      for (const [key, isActive] of Object.entries(states)) {
+        if (isActive) {
+          for (const token of tokenMap[key]!) {
+            currentActiveTokens.add(token);
           }
         }
-        prevStates[k] = val;
       }
+
+      // Add new tokens
+      for (const token of currentActiveTokens) {
+        if (!lastActiveTokens.has(token)) {
+          element.classList.add(token);
+        }
+      }
+
+      // Remove tokens that are no longer active
+      for (const token of lastActiveTokens) {
+        if (!currentActiveTokens.has(token)) {
+          element.classList.remove(token);
+        }
+      }
+
+      lastActiveTokens = currentActiveTokens;
     },
     'class'
   );
 }
 
 /** Reactively updates inline styles while blocking potentially harmful CSS values. */
-export function bindCss(el: HTMLElement, cssMap: Record<string, CssValue>): void {
-  const style = el.style as unknown as Record<string, string | null>;
+export function bindCss(element: HTMLElement, cssMap: Record<string, CssValue>): void {
+  const style = element.style as unknown as Record<string, string | null>;
   const reactiveMap: Record<string, ReactiveValue<unknown>> = {};
-  const meta: Record<string, { camel: string; unit: string }> = {};
-  const prevValues: Record<string, string | null> = {};
+  const metadataMap: Record<string, { camelCase: string; unit: string }> = {};
+  const previousValues: Record<string, string | null> = {};
 
-  for (const p in cssMap) {
-    if (hasOwn.call(cssMap, p)) {
-      const val = cssMap[p]!;
-      const [src, unit] = Array.isArray(val) ? val : ([val, ''] as const);
-      reactiveMap[p] = src;
-      meta[p] = { camel: getCamelCase(p), unit };
-    }
+  for (const [property, value] of Object.entries(cssMap)) {
+    const [source, unit] = Array.isArray(value) ? value : [value, ''];
+    reactiveMap[property] = source;
+    metadataMap[property] = { camelCase: getCamelCase(property), unit };
   }
 
   registerMapEffect(
-    el,
+    element,
     reactiveMap,
     (states) => {
-      for (const p in states) {
-        const m = meta[p]!;
-        const val = states[p];
-        const str = m.unit ? `${val}${m.unit}` : String(val);
-        const camel = m.camel;
+      for (const [property, value] of Object.entries(states)) {
+        const metadata = metadataMap[property]!;
+        const valueString = metadata.unit ? `${value}${metadata.unit}` : String(value);
 
-        if (prevValues[p] !== str) {
-          if (!isDangerousCssValue(str)) {
-            style[camel] = str;
+        if (previousValues[property] !== valueString) {
+          if (!isDangerousCssValue(valueString)) {
+            style[metadata.camelCase] = valueString;
           }
-          prevValues[p] = str;
+          previousValues[property] = valueString;
         }
       }
     },
@@ -211,46 +171,43 @@ export function bindCss(el: HTMLElement, cssMap: Record<string, CssValue>): void
  * and protocol-validation for URLs (href/src).
  */
 export function bindAttr(
-  el: HTMLElement,
+  element: HTMLElement,
   attrMap: Record<string, AsyncReactiveValue<PrimitiveValue>>
 ): void {
-  const safeMap: Record<string, AsyncReactiveValue<PrimitiveValue>> = {};
-  const metaMap: Record<string, { isAria: boolean }> = {};
+  const safeEntries = Object.entries(attrMap).filter(([name]) => isSafeBinding(name, false));
+  const safeMap = Object.fromEntries(safeEntries);
+  const metadataMap: Record<string, { isAria: boolean }> = {};
   const cache: Record<string, string | null> = {};
 
-  for (const name in attrMap) {
-    if (!hasOwn.call(attrMap, name)) continue;
-    if (!isSafeBinding(name, false)) continue;
-
-    const lower = name.toLowerCase();
-    safeMap[name] = attrMap[name]!;
-    metaMap[name] = { isAria: lower.startsWith('aria-') };
-    cache[name] = el.getAttribute(name);
+  for (const [name] of safeEntries) {
+    metadataMap[name] = { isAria: name.toLowerCase().startsWith('aria-') };
+    cache[name] = element.getAttribute(name);
   }
 
   registerMapEffect(
-    el,
+    element,
     safeMap,
     (states) => {
-      for (const name in states) {
-        const m = metaMap[name]!;
-        const val = states[name] as PrimitiveValue;
+      for (const [name, value] of Object.entries(states)) {
+        const metadata = metadataMap[name]!;
+        const primitiveValue = value as PrimitiveValue;
 
-        if (val == null || (val === false && !m.isAria)) {
-          if (cache[name] !== null) el.removeAttribute(name);
+        if (primitiveValue == null || (primitiveValue === false && !metadata.isAria)) {
+          if (cache[name] !== null) element.removeAttribute(name);
           cache[name] = null;
           continue;
         }
 
-        const newVal = val === true ? (m.isAria ? 'true' : name) : String(val);
-        if (isDangerousUrl(name, newVal)) {
+        const newValue =
+          primitiveValue === true ? (metadata.isAria ? 'true' : name) : String(primitiveValue);
+        if (isDangerousUrl(name, newValue)) {
           console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_PROTOCOL(name)}`);
           continue;
         }
 
-        if (cache[name] !== newVal) {
-          el.setAttribute(name, newVal);
-          cache[name] = newVal;
+        if (cache[name] !== newValue) {
+          element.setAttribute(name, newValue);
+          cache[name] = newValue;
         }
       }
     },
@@ -260,34 +217,28 @@ export function bindAttr(
 
 /** Directly maps reactive values to DOM element properties with URL validation. */
 export function bindProp(
-  el: HTMLElement,
+  element: HTMLElement,
   propMap: Record<string, AsyncReactiveValue<unknown>>
 ): void {
-  const target = el as unknown as Record<string, unknown>;
-  const safeMap: Record<string, AsyncReactiveValue<unknown>> = {};
-  const prevValues: Record<string, unknown> = {};
-  for (const name in propMap) {
-    if (!hasOwn.call(propMap, name)) continue;
-    if (!isSafeBinding(name, true)) continue;
-
-    safeMap[name] = propMap[name]!;
-  }
+  const target = element as unknown as Record<string, unknown>;
+  const safeEntries = Object.entries(propMap).filter(([name]) => isSafeBinding(name, true));
+  const safeMap = Object.fromEntries(safeEntries);
+  const previousValues: Record<string, unknown> = {};
 
   registerMapEffect(
-    el,
+    element,
     safeMap,
     (states) => {
-      for (const name in states) {
-        const val = states[name];
-        if (prevValues[name] === val) continue;
+      for (const [name, value] of Object.entries(states)) {
+        if (previousValues[name] === value) continue;
 
-        if (typeof val === 'string' && isDangerousUrl(name, val)) {
+        if (typeof value === 'string' && isDangerousUrl(name, value)) {
           console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_PROTOCOL(name)}`);
           continue;
         }
 
-        target[name] = val;
-        prevValues[name] = val;
+        target[name] = value;
+        previousValues[name] = value;
       }
     },
     'prop'
@@ -296,24 +247,24 @@ export function bindProp(
 
 /** Toggles display style between 'none' and its original state. */
 export function bindVisibility(
-  el: HTMLElement,
+  element: HTMLElement,
   condition: AsyncReactiveValue<boolean>,
   invert: boolean
 ): void {
-  let lastDisplay = el.style.display === 'none' ? '' : el.style.display;
+  let lastDisplay = element.style.display === 'none' ? '' : element.style.display;
 
   registerReactiveEffect(
-    el,
+    element,
     condition,
-    (val) => {
-      const isVisible = invert !== !!val;
+    (value) => {
+      const isVisible = invert !== !!value;
       if (isVisible) {
-        if (el.style.display === 'none') {
-          el.style.display = lastDisplay;
+        if (element.style.display === 'none') {
+          element.style.display = lastDisplay;
         }
-      } else if (el.style.display !== 'none') {
-        lastDisplay = el.style.display;
-        el.style.display = 'none';
+      } else if (element.style.display !== 'none') {
+        lastDisplay = element.style.display;
+        element.style.display = 'none';
       }
     },
     invert ? 'hide' : 'show'
@@ -322,18 +273,20 @@ export function bindVisibility(
 
 /** Entry point for input/value bindings; delegates to the InputBinding engine. */
 export function bindVal(
-  el: HTMLElement,
+  element: HTMLElement,
   atom: WritableAtom<unknown>,
   options: ValOptions<unknown> = {}
 ): void {
-  const tag = el.tagName.toLowerCase();
-  if (!VALID_INPUT_TAGS.has(tag)) {
-    console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BINDING.INVALID_INPUT_ELEMENT(tag)}`);
+  const tagName = element.tagName.toLowerCase();
+  if (!VALID_INPUT_TAGS.includes(tagName)) {
+    console.warn(
+      `${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BINDING.INVALID_INPUT_ELEMENT(tagName)}`
+    );
     return;
   }
-  const { fx, cleanup } = applyInputBinding($(el), atom, options);
-  registry.trackEffect(el, fx);
-  registry.trackCleanup(el, cleanup);
+  const { reactiveEffect, cleanup } = applyInputBinding($(element), atom, options);
+  registry.trackEffect(element, reactiveEffect);
+  registry.trackCleanup(element, cleanup);
 }
 
 /**
@@ -341,44 +294,46 @@ export function bindVal(
  * when they are automatically unchecked by another radio selection.
  * We manually trigger a sync for the rest of the group.
  */
-function syncRadioGroup(el: HTMLInputElement): void {
-  if (el.type === 'radio' && el.name) {
-    (el.form ? $(el.form) : $(document))
-      .find(`input[type="radio"][name="${$.escapeSelector(el.name)}"]`)
-      .not(el)
+function synchronizeRadioGroup(element: HTMLInputElement): void {
+  if (element.type === 'radio' && element.name) {
+    (element.form ? $(element.form) : $(document))
+      .find(`input[type="radio"][name="${$.escapeSelector(element.name)}"]`)
+      .not(element)
       .trigger('change.atomRadioSync');
   }
 }
 
 /** Specialized two-way binding for checkbox and radio 'checked' states. */
-export function bindChecked(el: HTMLElement, atom: WritableAtom<boolean>): void {
-  if (!(el instanceof HTMLInputElement)) {
+export function bindChecked(element: HTMLElement, atom: WritableAtom<boolean>): void {
+  if (!(element instanceof HTMLInputElement)) {
     console.warn(`${LOG_PREFIXES.BINDING} atomChecked called on non-input element`);
     return;
   }
-  const input = el;
-  const $el = $(input);
+  const inputElement = element;
+  const $element = $(inputElement);
 
-  const handler = () => {
-    if (atom.peek() !== input.checked) {
-      atom.value = input.checked;
-      syncRadioGroup(input);
+  const changeHandler = () => {
+    if (atom.peek() !== inputElement.checked) {
+      atom.value = inputElement.checked;
+      synchronizeRadioGroup(inputElement);
     }
   };
-  (handler as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
+  (changeHandler as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
 
-  $el.on('change change.atomRadioSync', handler);
-  registry.trackCleanup(input, () => $el.off('change change.atomRadioSync', handler));
+  $element.on('change change.atomRadioSync', changeHandler);
+  registry.trackCleanup(inputElement, () =>
+    $element.off('change change.atomRadioSync', changeHandler)
+  );
 
   registry.trackEffect(
-    input,
+    inputElement,
     effect(() => {
-      const val = !!atom.value;
+      const isChecked = !!atom.value;
       untracked(() => {
-        if (input.checked !== val) {
-          input.checked = val;
-          debug.domUpdated(LOG_PREFIXES.BINDING, input, 'checked', val);
-          if (val) syncRadioGroup(input);
+        if (inputElement.checked !== isChecked) {
+          inputElement.checked = isChecked;
+          debug.domUpdated(LOG_PREFIXES.BINDING, inputElement, 'checked', isChecked);
+          if (isChecked) synchronizeRadioGroup(inputElement);
         }
       });
     })
@@ -386,19 +341,22 @@ export function bindChecked(el: HTMLElement, atom: WritableAtom<boolean>): void 
 }
 
 /** Registers flat event maps with automatic lifecycle cleanup. */
-export function bindEvents(el: HTMLElement, eventMap: NonNullable<BindingOptions['on']>): void {
-  const $el = $(el);
-  $el.on(eventMap);
-  registry.trackCleanup(el, () => $el.off(eventMap));
+export function bindEvents(
+  element: HTMLElement,
+  eventMap: NonNullable<BindingOptions['on']>
+): void {
+  const $element = $(element);
+  $element.on(eventMap);
+  registry.trackCleanup(element, () => $element.off(eventMap));
 }
 
 /** Registers a single event listener with automatic lifecycle cleanup. */
 export function bindOn(
-  el: HTMLElement,
+  element: HTMLElement,
   event: string,
-  handler: (e: JQuery.TriggeredEvent) => void
+  handler: (event: JQuery.TriggeredEvent) => void
 ): void {
-  const $el = $(el);
-  $el.on(event, handler);
-  registry.trackCleanup(el, () => $el.off(event, handler));
+  const $element = $(element);
+  $element.on(event, handler);
+  registry.trackCleanup(element, () => $element.off(event, handler));
 }

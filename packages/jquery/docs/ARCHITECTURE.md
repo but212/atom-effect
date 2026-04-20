@@ -42,12 +42,12 @@ $.fn.atomText(atom)
 
 ### 2.1 Effect Factory
 
-`registerReactiveEffect` (`effect-factory.ts`) is the centralized entry point that creates a core `effect` and registers it with the binding registry:
+`registerReactiveEffect` and `registerMapEffect` (`effect-factory.ts`) utilize a shared `createAsyncRunner` utility to manage reactive updates. This internal helper encapsulates:
 
-- If the source is **reactive** (atom/computed): creates an `effect` that reads `.value` and calls the updater.
-- If the source is **static**: calls the updater once immediately (no effect created).
-- **Async Support**: If the value (from atom or static source) is a **Promise**, `registerReactiveEffect` handles the resolution automatically. It includes race condition protection using numeric `latestId` tracking to ensure only the most recently assigned promise's result is applied to the DOM.
-- **Zombie Prevention**: Every effect registration includes an `isDisposed` flag managed by `registry.trackCleanup`. This ensures that async callbacks (promises) return early if the element has been removed from the DOM, preventing memory leaks and stale updates.
+- **Async Resolution**: Automatically handles `Promise` values from any source.
+- **Race Condition Protection**: Uses a monotonic `latestId` to ensure only the result of the most recent async operation is applied to the DOM.
+- **Zombie Prevention**: Automatically tracks disposal state via `registry.trackCleanup`, ensuring stale async results are discarded if the element is disconnected during resolution.
+- **Monomorphic Updates**: The runner ensures that updaters are consistently executed inside an `untracked` block to isolate reactive dependencies.
 
 This eliminates boilerplate across all binding types and ensures robust, memory-safe async behavior.
 
@@ -125,7 +125,7 @@ The global `MutationObserver` (on `document.body`) does not cross Shadow DOM bou
 | `.on()` | Wraps handlers in `batch()` for automatic update coalescing. Supports maps and `.one()`. |
 | `.off()` | Resolves wrapped handlers via WeakMap for correct unbinding |
 
-The `.on()` and `.one()` patches use `Symbol.for('atom-effect-internal')` to mark wrapped handlers, ensuring compatibility across different library instances or bundles.
+The `.on()` and `.one()` patches use `INTERNAL_HANDLER` (a `Symbol.for('atom-effect-internal')`) to mark wrapped handlers, ensuring compatibility across different library instances or bundles.
 
 The `.on()` patch ensures that multiple atom writes inside a single jQuery event handler are batched into one synchronous flush:
 
@@ -152,11 +152,10 @@ The binding maintains closure references internally, but utilizes a strict teard
 
 ### Features
 
-- **IME Support**: `compositionstart`/`compositionend` events gate sync to prevent partial character commits. External atom updates are ignored while `Composing` bit is set to preserve terminal IME windows.
-- **Debounce**: Optional delay before DOM→Atom sync, with atomic flush on blur to prevent data loss.
-- **Focus Awareness**: Preserves cursor position when atom updates while input is focused. Uses `isDomUpToDate` to check functional equality (via `parse`) to avoid overwriting user typing (e.g. "1.0" vs atom 1).
-- **Cycle Prevention**: `BindingFlags` bitfield prevents sync loops (SyncingToAtom/SyncingToDom) and tracks Focus/IME state.
-- **Parse/Format**: Custom transform functions for type coercion (e.g., string ↔ number).
+- **Strategy Specialization**: Uses `createStrategies` to select optimized `read`/`write`/`equal`/`format` logic at initialization. This avoids constant branching by assigning specialized functional strategies based on element type (e.g., standard inputs vs. `select[multiple]`).
+- **Cursor Preservation**: Focused text controls use a selection-range buffer during writes to prevent "jumping" when the atom value is updated externally.
+- **Cycle Prevention**: A bitmask-based state gate (`Busy`, `SyncingToAtom`, `SyncingToDom`) ensures that state synchronization remains uni-directional at any given moment, preventing infinite loops.
+- **IME & Composition**: Gathers character entries during composition using `compositionstart`/`compositionend` events, deferring atom updates until strings are finalized.
 
 ## 5. List Reconciliation
 
@@ -325,7 +324,7 @@ packages/jquery/src/
   types.ts          — TypeScript global and internal type definitions
   core/
     namespace.ts      — $.atom, $.computed, $.effect, $.nextTick (standardized scheduler-aware tick)
-    dom.ts            — Core DOM engine (atomEachElement, createContext, unpack)
+    dom.ts            — Core DOM engine (atomEachElement, unpack)
     effect-factory.ts — registerReactiveEffect (creates and registers effects)
     registry.ts       — WeakMap-based binding registry + MutationObserver cleanup
     jquery-patch.ts   — jQuery method patches (.on batch, .remove cleanup)
@@ -408,14 +407,14 @@ The implementation of `atomBind` optimizes multi-binding dispatch through a **Ta
 1. `atomBind` identifies active binding keys from the input options.
 2. It constructs a **monomorphic array of `BindingTask` objects** specifically for the current call.
 3. During element iteration, it iterates through this pre-filtered task list, calling the specific handler (`run`) for each active binding.
-4. This approach minimizes branching inside the element loop and avoids the overhead of checking inactive keys for every single element in a jQuery set. Tuple arguments (e.g. `[source, formatter]`) are efficiently unpacked using a shared `unpack` utility which recognizes valid options/formatters via property-checking.
+4. This approach minimizes branching inside the element loop and avoids the overhead of checking inactive keys for every single element in a jQuery set. The loop iterates through the static `BINDING_TASKS` collection, performing a single `undefined` check per task. Unified property resolution (supporting both single values and maps) is handled by the centralized `resolveMap` utility in `chainable.ts`.
 
 ### 13.3 Strategy Specialization (`InputBinding`)
 
-Two-way input bindings often branch based on element type (Text vs. Select-Multiple) and focus state. These branches were eliminated by:
+Two-way input bindings often branch based on element type (Text vs. Select-Multiple). These branches were eliminated by:
 
-- **Monomorphic `initStrategies`**: Pre-specializing `readDom`, `writeDom`, `equal`, and `format` functions in the constructor.
-- **Consolidated `isDomUpToDate`**: Encapsulates functional equality checks (including `parse`-based checks while focused) into a single, predictable path.
+- **Monomorphic Strategies**: Pre-specializing `read`, `write`, `equal`, and `format` functions in the constructor via `createStrategies`.
+- **Functional Equality**: Encapsulates functional equality checks directly into the specialized `equal` strategy, providing a single, predictable execution path.
 - **Bitmask Guards**: Uses the `Busy` mask (Composing | SyncingToAtom | SyncingToDom) for constant-time synchronization gates.
 
 This ensures the updater function's control flow remains identical for a given element type, allowing the CPU to perfectly predict the execution path.

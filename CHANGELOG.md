@@ -2,50 +2,53 @@
 
 ## [Unreleased]
 
-### Added
+### Core
+
+#### Added
+
+- **Scheduler**: Introduced `aeNextTick()` for precise internal and external scheduler synchronization.
+
+#### Removed
+
+- **Compatibility**: Removed `[Symbol.dispose]` support from all primitives to maintain ES2021 compatibility.
+
+### jQuery
+
+#### Added
 
 - **PJAX Navigation**: Introduced `$.atomNav` for seamless page transitions with automatic title, meta-tag, and attribute synchronization.
-- **Dynamic Routing**: Added support for dynamic route segments (e.g., `:id`) and a reactive `params` atom to the router.
+- **Dynamic Routing**: Added support for dynamic route segments (e.g., `:id`) and a reactive `params` atom to `$.route`.
 - **Navigation Control**: Enhanced `navigate()` with Promise support, `replace` options, and cancellation via `AbortSignal`.
-- **Router Hooks & Metadata**: Added `onEnter` and `onLeave` guards for navigation control and `title` support for automatic document title updates.
-- **Flexible Routing Targets**: `$.route` now supports `HTMLElement` and `JQuery` objects as injection targets.
-- **Scheduler Synchronization**: Introduced `aeNextTick()` for precise internal and external scheduler synchronization.
-- **Server Integration**: Added support for `X-PJAX-URL` headers to handle server-side redirects during PJAX navigation.
+- **Routing**: Support for `HTMLElement` and `JQuery` objects as injection targets in `$.route`, along with `title` metadata for automatic document title updates.
+- **Server-Side**: `X-PJAX-URL` header support for handling redirects during navigation.
 
-### Changed
+#### Changed
 
-- **Performance Optimization**: Significant throughput improvements by operating reactive bindings directly on `HTMLElement` and removing manual resource pooling (O(1) memory management).
-- **Data-Driven Sanitizer**: Refactored the security engine into a data-driven architecture, consolidating policies into declarative maps and sets for better maintainability and performance.
-- **Binding Engine Cleanup**: Simplified `atomEachElement` by removing manual context creation (`createContext`) and streamlining the iteration loop for better performance.
-- **Event Patching Refactor**: Refactored `jquery-patch` to simplify internal event handler tracking, removing redundant metadata symbols and streamlining unbinding logic.
-- **Effect Factory Simplification**: Streamlined `registerMapEffect` and `registerReactiveEffect` by removing internal resolution caching and using core `isAtom` checks, reducing overhead.
-- **Debug Module**: Simplified the debug implementation, removing redundant logging methods (`log`, `atomChanged`, `cleanup`) and the complex singleton swap in favor of a simpler, runtime-toggleable debug object.
-- **Static Utilities**: Removed `isReactive` from the public static namespace and refactored `isPromise` and `getSelector` for better performance and reliability.
-- **Modern Link Interception**: Updated link handling to respect modifier keys (Ctrl/Cmd), `rel="external"`, cross-origin targets, and download attributes.
-- **Refactored Feature Modules**: Simplified `atomFetch`, `atomNav`, and `$.route` implementations by removing internal classes and redundant caches (`FetchContext`, `templateCache`, `linkRouteCache`) in favor of direct functional approaches and optimized reactive state management.
-- **Navigation State Optimization**: Improved `AtomNavigator` synchronization logic by using dedicated atoms for rendered state and pending hook counts, enhancing reliability and performance.
-- **Initialization Reliability**: Modified `atomMount` to throw errors during initialization ("Fail Loud") for improved debuggability.
-- **Unified Utilities**: Standardized `$.nextTick` to use core's `aeNextTick()` for consistent scheduling behavior.
+- **Architecture**: Reorganized `constants.ts` into focused subsystem namespaces for better modularity.
+- **Performance**: Optimized reactive bindings by operating directly on native `HTMLElement` nodes.
+- **Engines**: Overhauled `InputBinding` (strategy-based) and Security (data-driven) architectures.
+- **Reactivity**: Unified async race-condition protection via `createAsyncRunner`.
+- **Lifecycle**: Enhanced `atomMount` with "Fail Loud" initialization and structured `ComponentLifecycle` support.
+- **Interception**: Improved link handling to respect modifier keys, external links, and download attributes.
+- **Standardization**: Unified `$.nextTick` to use core's `aeNextTick()` for consistent scheduling.
 
-### Fixed
+#### Fixed
 
-- **Navigation Redirects**: Fixed a logic error where lifecycle hooks and state were not correctly updated during PJAX redirects in `$.atomNav`.
-- **Fetch Method Resolution**: Fixed a bug in `$.atomFetch` where HTTP methods provided via dynamic `ajaxOptions` functions were ignored.
-- **Error Messaging**: Simplified "Duplicate Key" warnings in `atomList` for better clarity and less noise.
+- **Navigation**: Resolved state synchronization issues during PJAX redirects.
+- **Fetch**: Fixed dynamic HTTP method resolution in `$.atomFetch`.
+- **Diagnostics**: Clarified `atomList` duplicate key warnings.
 
-### Removed
+#### Removed
 
-- **Compatibility Adjustment**: Removed support for `[Symbol.dispose]` to maintain compatibility with ES2021 environments.
-- **Internal Pooling**: Removed `utils/pool.ts` and internal object/array pooling for `BindingRecord` and effects, reducing architectural complexity while leveraging modern JS engine optimizations.
-- **Registry Simplification**: Simplified `BindingRecord` and `BindingRegistry` logic, removing internal abstractions to minimize overhead in the binding lifecycle.
+- **Internal**: Removed shared `DOMParser` singleton to prevent global state leaks.
+- **Legacy**: Cleaned up internal type exports (`RenderRoute`, `TemplateRoute`) and redundant abstractions.
 
-### Security
+#### Security
 
-- **Hardened Sanitization**: Rewrote `sanitizeHtml` with a robust multi-layered defense including individual `srcset` URL validation, recursive `srcdoc` cleaning, and immediate scrubbing for transformed nodes.
-- **DOM Clobbering Immunity**: Upgraded `DOM_PROTOTYPE_BRIDGE` to use prototype descriptors for all sensitive element properties (`attributes`, `localName`, `firstChild`, etc.), neutralizing property shadowing attacks.
-- **CSS Security**: Implemented comment-aware CSS sanitization that strips `/*...*/` before validating against a data-driven threat pattern array.
-- **Enhanced Entity Normalization**: Fixed a vulnerability in named entity decoding (e.g., `&colon;`) by ensuring optional semicolons are correctly consumed before protocol detection.
-- **Improved Auditability**: `data-unsafe-attr` now preserves all blocked handlers in a comma-separated list instead of only the last one.
+- **Sanitization**: Hardened `sanitizeHtml` with multi-layered defense, including `srcset` and `srcdoc` cleaning.
+- **Hardening**: Neutralized DOM Clobbering attacks via element prototype descriptors.
+- **CSS Security**: Implemented comment-aware CSS sanitization and protocol validation.
+- **Decorum**: Improved auditability of blocked handlers in `data-unsafe-attr`.
 
 ## [0.30.1] - 2026-04-14
 

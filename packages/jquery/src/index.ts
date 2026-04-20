@@ -57,12 +57,10 @@ export type {
   PrimitiveValue,
   ReactiveValue,
   ReadonlyAtom,
-  RenderRoute,
   RouteConfig,
   RouteDefinition,
   RouteLifecycle,
   Router,
-  TemplateRoute,
   ValOptions,
   WritableAtom,
 } from '@/types';

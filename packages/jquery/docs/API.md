@@ -99,6 +99,7 @@ Updates `innerHTML`.
 > This method uses a **multi-layered DOM-based Sanitizer** (via inert `<template>`) for maximum reliability. It uses a **recursive tree-walker** that transforms dangerous tags (`<script>`, `<iframe>`, etc.) into inert `<span>` wrappers while stripping `on*` attributes and dangerous protocols (`javascript:`, `data:`, etc.).
 >
 > **Key Security Features**:
+>
 > - **DOM Clobbering Protection**: Uses prototype-level descriptors to prevent malicious inputs from shadowing internal element properties.
 > - **Immediate Scrubbing**: All attributes from transformed nodes (e.g., `<script onerror=...>` → `<span data-unsafe-attr=...>`) are immediately processed.
 > - **Recursive Trust**: Automatically cleanses nested contexts including `<template>` content and `srcdoc` sinks.
@@ -151,7 +152,7 @@ $('img').atomAttr('src', imageUrl);
 Updates a DOM property (e.g., `checked`, `disabled`, `value`).
 
 - **Flexible**: Employs `unknown` instead of `any` to satisfy strict linting while maintaining 100% flexibility for heterogeneous property types.
-- **Security**: Blocks dangerous properties (`innerHTML`, `outerHTML`) and prototype pollution vectors (`__proto__`, `constructor`, `prototype`).
+- **Security**: Directly blocks dangerous properties (`innerHTML`, `outerHTML`, `srcdoc`) and prototype pollution vectors (`__proto__`, `constructor`, `prototype`) through a unified security subsystem.
 
 ```javascript
 $('input').atomProp('disabled', shouldDisable);
@@ -326,7 +327,8 @@ Mounts a functional component to each selected element. Automatically handles cl
 - **Isolation**: Executed within an `untracked()` block to prevent component logic from subscribing to a parent reactive context.
 - **Error Handling**: Mount and cleanup errors are caught and logged as `[atom-mount] Mount/Cleanup error`.
 
-- **component**: `($el, props) => EffectResult` (Function returning an optional cleanup).
+- **component**: `($element, props) => EffectResult` (Function returning an optional teardown).
+  - **EffectResult**: Can be `undefined`, a single cleanup function, or a `ComponentLifecycle` object containing an `unmount()` method.
 - **props**: Optional initial data object.
 
 ```javascript
@@ -480,10 +482,10 @@ Declarative AJAX primitive. Wraps core's async `computed` with jQuery's `$.ajax`
 - `options`: `FetchOptions<T>`
   - `defaultValue`: `T` (Required) — Value before first response.
   - `name`: `string` (Optional) — Debug name for the atom.
-  - `method`: `string` — HTTP method (default: `'GET'`).
+  - `method`: `string` — HTTP method (default: `'GET'`). Note: the top-level `method` option takes precedence over `ajaxOptions.method`.
   - `headers`: `Record<string, string>` — Request headers.
   - `transform`: `(raw: unknown, xhr: JQuery.jqXHR) => T` — Response transformer. Receives the raw data and the jQuery XHR object.
-  - `ajaxOptions`: `JQuery.AjaxSettings | () => JQuery.AjaxSettings` — Full `$.ajax` passthrough. When a **function** is provided, it is called on every request and its atom reads are automatically tracked, enabling reactive request payloads (e.g., dynamic headers or body). Static options (`method`, `headers`) are merged as the base, with dynamic values on top. Note: the top-level `method` option only overrides `ajaxOptions.method` if it is explicitly provided.
+  - `ajaxOptions`: `JQuery.AjaxSettings | () => JQuery.AjaxSettings` — Full `$.ajax` passthrough. When a **function** is provided, it is called on every request and its atom reads are automatically tracked, enabling reactive request payloads (e.g., dynamic headers or body). Static options (`method`, `headers`) are merged as the base, with dynamic values on top.
 
 **Returns**: `ComputedAtom<T>` — reactive value with:
 
@@ -536,14 +538,14 @@ Creates an SPA router with reactive state management. Supports both hash-based a
 
 - `target`: `string | JQuery | HTMLElement` — Selector or element where routes will be rendered. Supporting object references allows initializing routers inside dynamic layouts or `atomNav` containers.
 - `default`: Name of the default route to load if the URL is empty.
-- `routes`: (Optional) Object mapping route names to definitions. If omitted, the router will attempt **Implicit Auto-Discovery** (see below). Each route must specify **either** `template` **or** `render`, but not both.
+- `routes`: (Optional) Object mapping route names to unified `RouteDefinition` objects. If omitted, the router will attempt **Implicit Auto-Discovery**.
   - Supports **Dynamic Segments**: Use `:paramName` (e.g., `'user/:id'`). Parameters are automatically extracted and available in the `params` atom.
   - `template`: Selector for a `<template>` element to clone.
   - `render`: Custom function `(container, name, params, onUnmount, router) => void`.
     - `onUnmount`: Callback `(cleanupFn) => void` to register side-effect cleanups for the route.
   - `onEnter`: Hook called before rendering. Can return an object to merge into `params`, or `false` to block navigation.
   - `onLeave`: Hook called before navigating away. Return `false` to block.
-  - `onMount`: `($content: JQuery, onUnmount, router) => void` — **Template routes only.** Called after template content is appended.
+  - `onMount`: `($content: JQuery, onUnmount, router) => void` — Called after the route content (both template and rendered) is appended.
   - `title`: (Optional) String to set as `document.title` when this route is active.
 - `mode`: (Optional) `'hash'` (default) or `'history'`.
 - `basePath`: (Optional) Base path prefix for history mode (e.g., `'/app'`).
@@ -578,7 +580,7 @@ A `Router` object with:
 - `queryParams`: `ReadonlyAtom<Record<string, string>>` reactive map of URL query parameters.
 - `params`: `ReadonlyAtom<Record<string, string>>` merged reactive map of path parameters and query parameters.
 - `navigate(route)`: Programmatically change route. Supports dynamic paths (e.g., `navigate('user/42')`) and query strings.
-- `destroy()`: Cleanup listeners, effects, and template cache.
+- `destroy()`: Cleanup listeners, effects, and active subscriptions.
 
 **Example**:
 

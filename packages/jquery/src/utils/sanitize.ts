@@ -3,7 +3,7 @@ import { DANGEROUS_PROTOCOL_PATTERN } from '@/constants';
 // --- Configuration & Security Constants ---
 
 /** Attributes that must be checked for dangerous URI protocols. */
-const URL_ATTRIBUTES = new Set([
+const URL_ATTRIBUTES = [
   'href',
   'src',
   'action',
@@ -27,10 +27,10 @@ const URL_ATTRIBUTES = new Set([
   'clip-path',
   'srcdoc',
   'srcset',
-]);
+];
 
 /** Tags that are dangerous and must be neutralized by transforming them into safe containers. */
-const BLACKLISTED_TAGS = new Set([
+const BLACKLISTED_TAGS = [
   'script',
   'iframe',
   'object',
@@ -43,7 +43,7 @@ const BLACKLISTED_TAGS = new Set([
   'style',
   'link',
   'title',
-]);
+];
 
 /** List of patterns that are forbidden within CSS contexts. */
 const CSS_DANGER_PATTERNS = [
@@ -85,7 +85,7 @@ const REGEX_PROTOCOL_STRICT = new RegExp(
  */
 const REGEX_DANGEROUS_SNIFFER = new RegExp(
   [
-    `(<(${Array.from(BLACKLISTED_TAGS).join('|')})\\b[^>]*>([\\s\\S]*?)<\\/\\2>|<(${Array.from(BLACKLISTED_TAGS).join('|')})\\b[^>]*\\/?>)`,
+    `(<(${BLACKLISTED_TAGS.join('|')})\\b[^>]*>([\\s\\S]*?)<\\/\\2>|<(${BLACKLISTED_TAGS.join('|')})\\b[^>]*\\/?>)`,
     '\\bon\\w+\\s*=',
     `${DANGEROUS_PROTOCOL_PATTERN}\\s*:`,
     REGEX_DATA_URI_HTML.source,
@@ -225,7 +225,7 @@ function applySecurityPolicy(element: HTMLElement): void {
 
     if (ATTRIBUTE_HANDLERS[lowerName]) {
       ATTRIBUTE_HANDLERS[lowerName]!(element, name, value);
-    } else if (URL_ATTRIBUTES.has(lowerName)) {
+    } else if (URL_ATTRIBUTES.includes(lowerName)) {
       const normalizedValue = normalizeValue(value);
       if (isDangerousProtocol(normalizedValue)) {
         DOM_PROTOTYPE_BRIDGE.setAttribute(element, name, 'data-unsafe-protocol:');
@@ -242,7 +242,7 @@ function applySecurityPolicy(element: HTMLElement): void {
  * Neutralizes dangerous tags (like <script>) by converting them to <span>.
  */
 function neutralizeDangerousNode(element: HTMLElement): void {
-  if (!BLACKLISTED_TAGS.has(DOM_PROTOTYPE_BRIDGE.getLocalName(element))) return;
+  if (!BLACKLISTED_TAGS.includes(DOM_PROTOTYPE_BRIDGE.getLocalName(element))) return;
 
   const safeReplacement = document.createElement('span');
   const attributes = DOM_PROTOTYPE_BRIDGE.getAttributes(element);
@@ -328,7 +328,7 @@ export function sanitizeHtml(html: string | null | undefined): string {
  */
 export const isDangerousUrl = (attribute: string, value: string): boolean => {
   const lowerAttribute = attribute.toLowerCase();
-  if (!URL_ATTRIBUTES.has(lowerAttribute)) return false;
+  if (!URL_ATTRIBUTES.includes(lowerAttribute)) return false;
 
   const normalizedValue = normalizeValue(value);
   return lowerAttribute === 'srcdoc'

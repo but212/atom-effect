@@ -20,14 +20,34 @@ import type {
   AsyncReactiveValue,
   BindingOptions,
   CssBindings,
+  CssValue,
   FormOptions,
   PrimitiveValue,
-  ReactiveValue,
   ValOptions,
   WritableAtom,
 } from '@/types';
 
 import { debug } from '@/utils/debug';
+
+/**
+ * Resolves a single key-value pair or a map into a uniform map.
+ * Used to simplify multiple binding methods.
+ */
+function resolveMap<V>(
+  keyOrMap: string | Record<string, V>,
+  value: V | undefined,
+  methodName: string,
+  errorMsg: string = ERROR_MESSAGES.BINDING.MISSING_SOURCE(methodName)
+): Record<string, V> | null {
+  const map =
+    typeof keyOrMap === 'string' ? (value === undefined ? null : { [keyOrMap]: value }) : keyOrMap;
+
+  if (!map) {
+    console.warn(`${LOG_PREFIXES.BINDING} ${errorMsg}`);
+    return null;
+  }
+  return map;
+}
 
 /**
  * Binds an atom's value to the text content of the matching elements.
@@ -59,21 +79,13 @@ $.fn.atomClass = function (
   classNameOrMap: string | Record<string, AsyncReactiveValue<boolean>>,
   condition?: AsyncReactiveValue<boolean>
 ): JQuery {
-  const map =
-    typeof classNameOrMap === 'string'
-      ? condition === undefined
-        ? null
-        : { [classNameOrMap]: condition }
-      : classNameOrMap;
-
-  if (!map) {
-    console.warn(
-      `${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BINDING.MISSING_CONDITION('atomClass')}`
-    );
-    return this;
-  }
-
-  return atomEachElement(this, (el) => bindClass(el, map));
+  const map = resolveMap(
+    classNameOrMap,
+    condition,
+    'atomClass',
+    ERROR_MESSAGES.BINDING.MISSING_CONDITION('atomClass')
+  );
+  return map ? atomEachElement(this, (el) => bindClass(el, map)) : this;
 };
 
 /**
@@ -89,19 +101,11 @@ $.fn.atomCss = function (
   source?: AsyncReactiveValue<string | number>,
   unit?: string
 ): JQuery {
-  const map =
-    typeof propOrMap === 'string'
-      ? source === undefined
-        ? null
-        : { [propOrMap]: unit ? [source as ReactiveValue<number>, unit] : source! }
-      : propOrMap;
+  const value: CssValue | undefined =
+    source !== undefined && unit ? [source as AsyncReactiveValue<number>, unit] : source;
+  const map = resolveMap<CssValue>(propOrMap, value, 'atomCss');
 
-  if (!map) {
-    console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BINDING.MISSING_SOURCE('atomCss')}`);
-    return this;
-  }
-
-  return atomEachElement(this, (el) => bindCss(el, map as CssBindings));
+  return map ? atomEachElement(this, (el) => bindCss(el, map as CssBindings)) : this;
 };
 
 /** Reactively updates DOM attributes based on atom changes. */
@@ -110,19 +114,8 @@ $.fn.atomAttr = function (
   nameOrMap: string | Record<string, AsyncReactiveValue<PrimitiveValue>>,
   source?: AsyncReactiveValue<PrimitiveValue>
 ): JQuery {
-  const map =
-    typeof nameOrMap === 'string'
-      ? source === undefined
-        ? null
-        : { [nameOrMap]: source }
-      : nameOrMap;
-
-  if (!map) {
-    console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BINDING.MISSING_SOURCE('atomAttr')}`);
-    return this;
-  }
-
-  return atomEachElement(this, (el) => bindAttr(el, map));
+  const map = resolveMap(nameOrMap, source, 'atomAttr');
+  return map ? atomEachElement(this, (el) => bindAttr(el, map)) : this;
 };
 
 /** Reactively updates DOM properties (e.g., 'disabled', 'readOnly'). */
@@ -131,19 +124,12 @@ $.fn.atomProp = function <T>(
   nameOrMap: string | Record<string, AsyncReactiveValue<T>>,
   source?: AsyncReactiveValue<T>
 ): JQuery {
-  const map =
-    typeof nameOrMap === 'string'
-      ? source === undefined
-        ? null
-        : ({ [nameOrMap]: source } as Record<string, AsyncReactiveValue<unknown>>)
-      : (nameOrMap as Record<string, AsyncReactiveValue<unknown>>);
-
-  if (!map) {
-    console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BINDING.MISSING_SOURCE('atomProp')}`);
-    return this;
-  }
-
-  return atomEachElement(this, (el) => bindProp(el, map));
+  const map = resolveMap(nameOrMap, source, 'atomProp');
+  return map
+    ? atomEachElement(this, (el) =>
+        bindProp(el, map as Record<string, AsyncReactiveValue<unknown>>)
+      )
+    : this;
 };
 
 /** Toggles visibility (display: none) when the condition is true. */
@@ -251,23 +237,25 @@ const BINDING_TASKS: BindingTask[] = [
  * });
  */
 $.fn.atomBind = function <T>(this: JQuery, options: BindingOptions<T>): JQuery {
-  const activeTasks: BindingTask[] = [];
   const opt = options as Record<string, unknown>;
+  let hasTasks = false;
 
-  // Performance: Pre-filter tasks so we only iterate over relevant bindings per element.
   for (let i = 0, len = BINDING_TASKS.length; i < len; i++) {
-    const task = BINDING_TASKS[i]!;
-    if (opt[task.key] !== undefined) {
-      activeTasks.push(task);
+    if (opt[BINDING_TASKS[i]!.key] !== undefined) {
+      hasTasks = true;
+      break;
     }
   }
 
-  if (activeTasks.length === 0) return this;
+  if (!hasTasks) return this;
 
   return atomEachElement(this, (el) => {
-    for (let i = 0, len = activeTasks.length; i < len; i++) {
-      const task = activeTasks[i]!;
-      task.run(el, opt[task.key]);
+    for (let i = 0, len = BINDING_TASKS.length; i < len; i++) {
+      const task = BINDING_TASKS[i]!;
+      const val = opt[task.key];
+      if (val !== undefined) {
+        task.run(el, val);
+      }
     }
   });
 };

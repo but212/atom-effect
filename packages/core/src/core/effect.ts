@@ -87,10 +87,6 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     this._deps?.disposeAll();
   }
 
-  // [Symbol.dispose](): void {
-  //   this.dispose();
-  // }
-
   public addDependency(dep: Dependency): void {
     if ((this.flags & EFFECT_STATE_FLAGS.EXECUTING) === 0) return;
 

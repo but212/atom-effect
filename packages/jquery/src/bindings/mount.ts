@@ -20,27 +20,28 @@ const EMPTY_PROPS = Object.freeze({});
  *
  * @example
  * // Define a component
- * const MyComp = ($el, props) => {
- *   const fx = effect(() => $el.text(props.label));
- *   return () => fx.dispose(); // Optional teardown
+ * const MyComponent = ($element, props) => {
+ *   const reactiveEffect = effect(() => $element.text(props.label));
+ *   return () => reactiveEffect.dispose(); // Optional teardown
  * };
  *
  * // Mount it
- * $('.tab').atomMount(MyComp, { label: 'Home' });
+ * $('.tab').atomMount(MyComponent, { label: 'Home' });
  */
 $.fn.atomMount = function <P>(this: JQuery, component: ComponentFn<P>, props?: P): JQuery {
-  const p = (props ?? EMPTY_PROPS) as P;
+  const componentProps = (props ?? EMPTY_PROPS) as P;
 
-  return atomEachElement(this, (el) => {
+  return atomEachElement(this, (element) => {
     // Reason: Prevents memory leaks and conflicting effects if mounting on a non-empty element.
-    registry.cleanupTree(el);
+    registry.cleanupTree(element);
 
     // Reason: 'untracked' ensures component initialization doesn't establish dependency
     // loops with the parent caller. 'batch' ensures initial DOM updates are atomic.
-    const teardown = untracked(() => batch(() => component($(el), p)));
+    const result = untracked(() => batch(() => component($(element), componentProps)));
 
-    if (typeof teardown === 'function') {
-      registry.setComponentCleanup(el, teardown);
+    if (result) {
+      const teardown = typeof result === 'function' ? result : result.unmount;
+      registry.setComponentCleanup(element, teardown);
     }
   });
 };
@@ -49,5 +50,5 @@ $.fn.atomMount = function <P>(this: JQuery, component: ComponentFn<P>, props?: P
  * Manually triggers the teardown phase for the component(s) and all nested bindings.
  */
 $.fn.atomUnmount = function (this: JQuery): JQuery {
-  return atomEachElement(this, (el) => registry.cleanupTree(el));
+  return atomEachElement(this, (element) => registry.cleanupTree(element));
 };

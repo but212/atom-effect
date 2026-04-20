@@ -1,10 +1,4 @@
 /**
- * Optimization: Reuses a single parser instance across the library to minimize
- * memory pressure and initialization overhead during HTML string sanitization.
- */
-export const SHARED_PARSER = new DOMParser();
-
-/**
  * Iterates through a jQuery collection and executes the callback only for
  * valid HTMLElement (nodeType 1) nodes.
  *

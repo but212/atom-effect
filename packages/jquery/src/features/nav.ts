@@ -1,5 +1,4 @@
 import $ from 'jquery';
-import { SHARED_PARSER } from '@/core/dom';
 import type { AtomNav, AtomNavOptions, ReadonlyAtom } from '@/types';
 import { sanitizeHtml } from '@/utils/sanitize';
 
@@ -38,11 +37,12 @@ function getPathAndSearch(urlObj: URL): string {
 /**
  * Parses raw HTML into a structured ContentState.
  *
- * Performance: Uses SHARED_PARSER to avoid the high overhead of repeatedly
- * spawning full DOMParser instances or using invisible iframes for extraction.
+ * Performance: Uses isolated DOMParser instances to extract clean fragments
+ * without the high overhead of invisible iframes or global parser state.
  */
 function extractContent(html: string, selector?: string, xhr?: JQuery.jqXHR): ContentState {
-  const doc = SHARED_PARSER.parseFromString(html, 'text/html');
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
   const title = doc.querySelector('title')?.textContent?.trim() || null;
 
   const contentNode = selector ? doc.querySelector(selector) : null;

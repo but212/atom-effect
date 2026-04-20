@@ -1,4 +1,4 @@
-import type { RenderRoute, RouteDefinition, TemplateRoute } from '@/types';
+import type { RouteDefinition } from '@/types';
 
 /** Standard type guard for thenable objects (Promises). */
 export const isPromise = <T>(v: unknown): v is Promise<T> =>
@@ -44,12 +44,12 @@ export function getSelector(el: Element): string {
 export const hasOwn = Object.prototype.hasOwnProperty;
 
 /** Route Type Guard: Identifies routes defined via <template> selectors. */
-export const isTemplateRoute = (r: RouteDefinition): r is TemplateRoute =>
-  r !== null && typeof r === 'object' && 'template' in r;
+export const isTemplateRoute = (r: RouteDefinition): boolean =>
+  r !== null && typeof r === 'object' && typeof r.template === 'string';
 
 /** Route Type Guard: Identifies routes defined via functional renderers. */
-export const isRenderRoute = (r: RouteDefinition): r is RenderRoute =>
-  r !== null && typeof r === 'object' && 'render' in r;
+export const isRenderRoute = (r: RouteDefinition): boolean =>
+  r !== null && typeof r === 'object' && typeof r.render === 'function';
 
 /**
  * Performs a shallow comparison between two objects.

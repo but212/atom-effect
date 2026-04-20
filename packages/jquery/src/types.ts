@@ -10,7 +10,10 @@ import type {
 } from '@but212/atom-effect';
 
 export type EffectCleanup = () => void;
-export type EffectResult = undefined | EffectCleanup;
+export interface ComponentLifecycle {
+  unmount: EffectCleanup;
+}
+export type EffectResult = undefined | EffectCleanup | ComponentLifecycle;
 export type EqualFn<T> = (a: T, b: T) => boolean;
 
 export interface AtomOptions extends BaseAtomOptions {
@@ -35,7 +38,6 @@ export type AsyncReactiveValue<T> =
   | (() => T | Promise<T>);
 
 export type PrimitiveValue = string | number | boolean | null | undefined;
-type KeysOfType<T, V> = { [K in keyof T]: T[K] extends V ? K : never }[keyof T];
 
 export type CssValue =
   | AsyncReactiveValue<string | number>
@@ -82,7 +84,7 @@ export type ListKeyFn<T> = (item: T, index: number) => ListKey;
  * Uses 'key' for identity tracking to minimize DOM churn.
  */
 export interface ListOptions<T> {
-  key: KeysOfType<T, ListKey> | ListKeyFn<T>;
+  key: keyof T | ListKeyFn<T>;
   render: (item: T, index: number) => ListRenderResult;
   bind?: ($el: JQuery, item: T, index: number) => void;
   update?: ($el: JQuery, item: T, index: number) => void;
@@ -135,24 +137,17 @@ export interface RouteLifecycle {
   title?: string;
 }
 
-export interface TemplateRoute extends RouteLifecycle {
-  template: string;
-  render?: never;
-  onMount?: ($content: JQuery, onUnmount: (cleanupFn: () => void) => void, router: Router) => void;
-}
-
-export interface RenderRoute extends RouteLifecycle {
-  render: (
+export interface RouteDefinition extends RouteLifecycle {
+  template?: string;
+  render?: (
     container: HTMLElement,
     route: string,
     params: Record<string, string>,
     onUnmount: (cleanupFn: () => void) => void,
     router: Router
   ) => void;
-  template?: never;
+  onMount?: ($content: JQuery, onUnmount: (cleanupFn: () => void) => void, router: Router) => void;
 }
-
-export type RouteDefinition = TemplateRoute | RenderRoute;
 
 export interface RouteConfig {
   target: string | JQuery<HTMLElement> | HTMLElement;

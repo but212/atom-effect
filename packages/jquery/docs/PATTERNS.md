@@ -189,6 +189,14 @@ lastName.value = 'Smith';
 // Effects run once, asynchronously (next microtask)
 ```
 
+If you need to wait for these asynchronous updates without forcing a synchronous flush, use `$.nextTick()`:
+
+```javascript
+firstName.value = 'Alice';
+await $.nextTick();
+// DOM is now guaranteed to be updated
+```
+
 Use `$.batch` only when you need effects to flush **synchronously and immediately** after the writes — for example, to read an updated DOM value in the same call stack.
 
 ```javascript
@@ -201,7 +209,7 @@ const updatedText = $('#name').text(); // reflects new values
 ```
 
 > jQuery's `.on()` patch automatically wraps event handlers in `$.batch()`, so effects triggered by user interactions always flush synchronously within the handler.
-> See [`$.batch`](./API.md#batchfn) in the API reference and [Architecture §3.4](./ARCHITECTURE.md#34-jquery-method-patches) for how the `.on()` patch works.
+> See [`$.batch`](./API.md#batchfn) in the API reference and [Architecture §3.5](./ARCHITECTURE.md#35-jquery-method-patches) for how the `.on()` patch works.
 
 ## 6. Typed Form Inputs
 
@@ -306,4 +314,4 @@ $('#card-root').atomUnmount();
 > See [`.atomMount`](./API.md#atommountcomponent-props) and [`.atomUnmount`](./API.md#atomUnmount) in the API reference.
 > For component lifecycle internals, see [Architecture §6](./ARCHITECTURE.md#6-component-mounting).
 > When rendering user-supplied HTML inside a component, see the [Security Guide](./SECURITY.md) for DOMPurify integration.
-> **Shadow DOM:** If your component mounts into a Shadow Root, the automatic `MutationObserver` cannot detect when descendants inside the shadow tree are removed. You must manually call `registry.cleanupTree(shadowRoot)` in your component's cleanup function.
+> **Shadow DOM:** The global `MutationObserver` cannot detect when elements inside a Shadow Root are removed. To enable automatic cleanup for shadow descendants, call `$.enableAutoCleanup(this.shadowRoot)` in your component's setup, or manually call `$.registry.cleanupTree(this.shadowRoot)` during unmount.

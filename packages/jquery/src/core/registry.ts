@@ -36,81 +36,88 @@ class BindingRegistry {
   keep(node: Node): void {
     this.preservedNodes.add(node);
   }
+
   isKept(node: Node): boolean {
     return this.preservedNodes.has(node);
   }
+
   /** Temporary flag to block redundant cleanup cycles for the same node. */
   markIgnored(node: Node): void {
     this.ignoredNodes.add(node);
   }
+
   isIgnored(node: Node): boolean {
     return this.ignoredNodes.has(node);
   }
 
-  private getOrCreateRecord(el: Element): BindingRecord {
+  private getOrCreateRecord(element: Element): BindingRecord {
     // Lazy-init: The mutation observer only starts when the first binding is created.
     if (!autoCleanupScheduled && typeof document !== 'undefined' && document.body) {
       autoCleanupScheduled = true;
       enableAutoCleanup(document.body);
     }
-    let res = this.records.get(el);
-    if (!res) {
-      res = {};
-      this.records.set(el, res);
-      el.classList.add(AES_BOUND);
+    let result = this.records.get(element);
+    if (!result) {
+      result = {};
+      this.records.set(element, result);
+      element.classList.add(AES_BOUND);
     }
-    return res;
+    return result;
   }
 
-  private addCleanup(el: Element, fn: () => void): void {
-    const record = this.getOrCreateRecord(el);
+  private addCleanup(element: Element, cleanupFunction: () => void): void {
+    const record = this.getOrCreateRecord(element);
     if (!record.cleanups) record.cleanups = [];
-    record.cleanups.push(fn);
+    record.cleanups.push(cleanupFunction);
   }
 
   /** Registers a reactive effect instance to be disposed when the element is removed. */
-  trackEffect(el: Element, fx: EffectObject): void {
-    const selector = getSelector(el);
-    this.addCleanup(el, () => {
+  trackEffect(element: Element, reactiveEffect: EffectObject): void {
+    const selector = getSelector(element);
+    this.addCleanup(element, () => {
       try {
-        fx.dispose();
-      } catch (e) {
-        debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.CORE.EFFECT_DISPOSE_ERROR(selector), e);
+        reactiveEffect.dispose();
+      } catch (error) {
+        debug.error(
+          LOG_PREFIXES.BINDING,
+          ERROR_MESSAGES.CORE.EFFECT_DISPOSE_ERROR(selector),
+          error
+        );
       }
     });
   }
 
   /** Registers a generic cleanup closure to be executed when the element is removed. */
-  trackCleanup(el: Element, fn: () => void): void {
-    const selector = getSelector(el);
-    this.addCleanup(el, () => {
+  trackCleanup(element: Element, cleanupFunction: () => void): void {
+    const selector = getSelector(element);
+    this.addCleanup(element, () => {
       try {
-        fn();
-      } catch (e) {
-        debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.CLEANUP_ERROR(selector), e);
+        cleanupFunction();
+      } catch (error) {
+        debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.CLEANUP_ERROR(selector), error);
       }
     });
   }
 
   /** Sets the optional teardown function returned by a mounted component. */
-  setComponentCleanup(el: Element, fn: (() => void) | undefined): void {
-    this.getOrCreateRecord(el).componentCleanup = fn;
+  setComponentCleanup(element: Element, teardownFunction: (() => void) | undefined): void {
+    this.getOrCreateRecord(element).componentCleanup = teardownFunction;
   }
 
-  hasBind(el: Element): boolean {
-    return this.records.has(el);
+  hasBind(element: Element): boolean {
+    return this.records.has(element);
   }
 
   /**
    * Performs the actual destruction of all resources bound to the node.
    * This clears the record, removes the tracking CSS class, and executes all callbacks.
    */
-  cleanup(el: Node): void {
-    this.preservedNodes.delete(el);
-    this.ignoredNodes.delete(el);
+  cleanup(node: Node): void {
+    this.preservedNodes.delete(node);
+    this.ignoredNodes.delete(node);
 
-    if (el.nodeType !== 1) return;
-    const element = el as Element;
+    if (node.nodeType !== 1) return;
+    const element = node as Element;
     const record = this.records.get(element);
 
     this.records.delete(element);
@@ -121,35 +128,35 @@ class BindingRegistry {
     if (record.componentCleanup) {
       try {
         record.componentCleanup();
-      } catch (e) {
+      } catch (error) {
         const selector = getSelector(element);
-        debug.error(LOG_PREFIXES.MOUNT, ERROR_MESSAGES.MOUNT.CLEANUP_ERROR(selector), e);
+        debug.error(LOG_PREFIXES.MOUNT, ERROR_MESSAGES.MOUNT.CLEANUP_ERROR(selector), error);
       }
     }
 
     if (record.cleanups) {
-      for (const fn of record.cleanups) fn();
+      for (const cleanupFunction of record.cleanups) cleanupFunction();
     }
   }
 
-  cleanupDescendants(el: Element | DocumentFragment | ShadowRoot): void {
+  cleanupDescendants(root: Element | DocumentFragment | ShadowRoot): void {
     // Strategy: Use querySelectorAll to obtain a static NodeList snapshot.
     // This ensures loop stability by preventing index shifting if items are removed
     // or their classes are modified (via classList.remove) during the cleanup cycle.
-    const nodes = el.querySelectorAll(`.${AES_BOUND}`);
+    const nodes = root.querySelectorAll(`.${AES_BOUND}`);
 
-    for (let i = 0, len = nodes.length; i < len; i++) {
+    for (let i = 0, length = nodes.length; i < length; i++) {
       const node = nodes[i];
       if (node) this.cleanup(node);
     }
   }
 
   /** Destroys the reactive state of the element and its entire sub-tree. */
-  cleanupTree(el: Node): void {
-    if (el.nodeType === 1 || el.nodeType === 11) {
-      this.cleanupDescendants(el as Element | DocumentFragment | ShadowRoot);
+  cleanupTree(node: Node): void {
+    if (node.nodeType === 1 || node.nodeType === 11) {
+      this.cleanupDescendants(node as Element | DocumentFragment | ShadowRoot);
     }
-    this.cleanup(el);
+    this.cleanup(node);
   }
 }
 
@@ -166,20 +173,20 @@ export function enableAutoCleanup(root: Element | ShadowRoot | DocumentFragment)
   if (observers.has(root)) return;
 
   const observer = new MutationObserver((mutations) => {
-    for (let i = 0, mLen = mutations.length; i < mLen; i++) {
+    for (let i = 0, mutationsLength = mutations.length; i < mutationsLength; i++) {
       const removedNodes = mutations[i]!.removedNodes;
-      for (let j = 0, rLen = removedNodes.length; j < rLen; j++) {
+      for (let j = 0, removedNodesLength = removedNodes.length; j < removedNodesLength; j++) {
         const node = removedNodes[j]!;
 
         // Condition: We only clean up nodes that are genuinely disconnected from the DOM
         // AND are not marked for preservation.
         if (node.nodeType !== 1 || (node as Element).isConnected) continue;
 
-        const el = node as Element;
+        const element = node as Element;
 
-        if (registry.isKept(el) || registry.isIgnored(el)) continue;
+        if (registry.isKept(element) || registry.isIgnored(element)) continue;
 
-        registry.cleanupTree(el);
+        registry.cleanupTree(element);
       }
     }
   });
@@ -193,6 +200,6 @@ export function setAutoCleanupScheduled(scheduled: boolean): void {
 }
 
 export function disableAutoCleanup(): void {
-  observers.forEach((obs) => obs.disconnect());
+  observers.forEach((observer) => observer.disconnect());
   observers.clear();
 }
