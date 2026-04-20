@@ -28,7 +28,7 @@ const SELECTOR = 'input, select, textarea';
  * Engine for synchronizing a complex object (Atom) with a flat HTML Form.
  *
  * Design Intent:
- * - Follows Rob Pike's rules: Uses simple data structures (`atomLens`) over fancy dual-sync algorithms.
+ * - Uses simple data structures (`atomLens`) over fancy dual-sync algorithms.
  * - Supports nested object paths through standard form 'name' attributes.
  * - Observes DOM mutations to handle form fields added or removed after initialization.
  */

@@ -311,7 +311,7 @@ The binding layer includes defensive measures against XSS and prototype pollutio
 - `srcdoc` Protection: Specifically monitors `srcdoc` as a high-risk HTML sink, applying recursive sanitization checks via `REGEX_DANGEROUS_SNIFFER`.
 - `bindCss`: Blocks CSS values containing dangerous patterns. It strips CSS comments (`/* ... */`) before validation to prevent obfuscation bypasses and matches against an array of known threat patterns (`CSS_DANGER_PATTERNS`).
 - `bindProp`: Blocks dangerous properties (`innerHTML`, `outerHTML`) and prototype pollution vectors (`__proto__`, `constructor`, `prototype`).
-- **Sanitization Engine**: `sanitizeHtml` implementation uses a **Dumb Code, Smart Data** strategy (Rob Pike's Rule 5): normalization (entity decoding with optional semicolon support), recursive tag transformation, and data-driven attribute/CSS neutralization.
+- **Sanitization Engine**: `sanitizeHtml` implementation uses a **Dumb Code, Smart Data** strategy: normalization (entity decoding with optional semicolon support), recursive tag transformation, and data-driven attribute/CSS neutralization.
 
 These are **first-pass filters** using optimized regular expressions. For user-generated content, [DOMPurify](https://github.com/cure53/DOMPurify) is recommended. See the [Security Guide](./SECURITY.md) for integration patterns.
 
