@@ -122,7 +122,6 @@ effectHandle.dispose();
 `effect()` returns an `EffectObject` with the following properties:
 
 - `dispose()`: Stops the effect and runs cleanup.
-- `[Symbol.dispose]()`: Support for explicit resource management (TS 5.2+).
 - `run()`: Manually re-executes the effect.
 - `isDisposed`: Whether the effect has been disposed.
 - `isExecuting`: Whether the effect is currently running.
@@ -209,6 +208,35 @@ const result = batch(() => {
   count.value = 10;
   return count.value * 2;
 }); // result === 20
+```
+
+## `aeNextTick(fn?: () => void): Promise<void>`
+
+Returns a promise that resolves after the next scheduler flush. This is the recommended way to wait for all asynchronous effects to be processed and the DOM to be in a consistent state.
+
+- **Deduplication**: Optimized for performance. Multiple calls without a callback share a single pending promise and scheduler job, significantly reducing allocations. Calls with callbacks resolve in the order they were queued within the same flush cycle.
+- **Batch Awareness**: If called within a `batch()` block, it waits for the synchronous flush triggered at the end of the batch.
+- **Callback Support**: Accepts an optional callback for non-async/await usage.
+
+### Example - aeNextTick
+
+```typescript
+import { atom, effect, aeNextTick } from '@but212/atom-effect';
+
+const count = atom(0);
+let title = '';
+
+effect(() => {
+  title = `Count is ${count.value}`;
+});
+
+count.value = 1;
+
+// Title is still '' because the effect is queued in a microtask
+await aeNextTick();
+
+// Now title is 'Count is 1'
+console.log(title);
 ```
 
 ## `untracked<T>(fn: () => T): T`

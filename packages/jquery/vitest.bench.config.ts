@@ -1,9 +1,9 @@
 import path from 'node:path';
+import { playwright } from '@vitest/browser-playwright';
 import { defineConfig } from 'vitest/config';
 
 /**
- * Vitest configuration for benchmarks
- * Separate from test/build configuration to avoid conflicts
+ * Vitest configuration for benchmarks in real browser engine
  */
 export default defineConfig({
   resolve: {
@@ -12,7 +12,12 @@ export default defineConfig({
     },
   },
   test: {
-    environment: 'jsdom',
+    browser: {
+      enabled: true,
+      provider: playwright(),
+      headless: true,
+      instances: [{ browser: 'chromium' }],
+    },
     setupFiles: ['./__benchmarks__/utils/global-setup.ts'],
     benchmark: {
       include: ['__benchmarks__/**/*.bench.ts'],

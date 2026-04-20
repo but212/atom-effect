@@ -14,12 +14,13 @@ This guide explains the built-in sanitization layer and how to integrate [DOMPur
 
 | Vector | Action |
 | ------ | ------ |
-| `<script>`, `<iframe>`, `<object>`, `<embed>`, `<base>`, `<meta>`, `<applet>`, `<noscript>`, `<form>`, `<style>`, `<link>` | Tag removed entirely (loop until stable) |
-| `onclick`, `onerror`, etc. (`on*` attributes) | Replaced with `data-unsafe-attr=` |
-| `javascript:`, `vbscript:`, `data:` protocols | Neutralized (Replaced with `data-unsafe-protocol:`). Strengthened to handle internal whitespace and control character smuggling. |
-| Dangerous data URIs (`text/html`, `application/javascript`, `image/svg+xml`, etc.) | Neutralized. |
-| CSS `expression()`, `behavior:`, `-moz-binding:`, obfuscated protocol sequences | Replaced with `data-unsafe-css:` |
-| Entities (`&#NNN;`, `&#xHH;`, `&colon;`, `&Tab;`, `&NewLine;`) | **Decoded first** in the normalization phase to prevent protocol smuggling. |
+| `<script>`, `<iframe>`, `<object>`, `<embed>`, `<base>`, `<meta>`, `<applet>`, `<noscript>`, `<form>`, `<style>`, `<link>` | Tag stripped and transformed into safe `<span>` wrappers. |
+| `onclick`, `onerror`, etc. (`on*` attributes) | Replaced with a single, comma-separated `data-unsafe-attr` list. |
+| `javascript:`, `vbscript:`, `data:` protocols | Neutralized (Replaced with `data-unsafe-protocol:`). Strips all internal whitespace and handles obfuscated entities. |
+| `srcset` hijacking | Each comma-separated URL is individually normalized and validated. |
+| Dangerous data URIs (`text/html`, `application/javascript`, `image/svg+xml`, etc.) | Neutralized. Covers both standalone attributes and `srcdoc` sinks. |
+| CSS expressions & protocol smuggling | Normalizes CSS by **stripping comments** (`/*...*/`) first, then matches against a data-driven array of danger patterns. |
+| Entities (`&#NNN;`, `&#xHH;`, `&colon;`, etc.) | **Decoded first** in the normalization phase. Correctively handles optional trailing semicolons. |
 | Null bytes / control characters | **Stripped after entity decoding** to catch hidden payloads. |
 | XML processing instructions (`<?...?>`) | Stripped |
 
@@ -28,8 +29,9 @@ This guide explains the built-in sanitization layer and how to integrate [DOMPur
 | Vector | Action |
 | ------ | ------ |
 | `on*` attribute names (e.g., `onclick`) | Silently blocked (attribute not set) |
-| `javascript:` / `vbscript:` / `data:` in URL attributes (`href`, `src`, `action`, etc.) | Silently blocked |
-| SVG URL attributes (`fill`, `filter`, `mask`, `marker-*`, `clip-path`) | Sanitized for dangerous protocols |
+| `javascript:` / `vbscript:` / `data:` in URL attributes | Silently blocked. Returns normalized safe URLs to prevent entity bypasses. |
+| SVG URL attributes (`fill`, `filter`, `mask`, etc.) | Sanitized for dangerous protocols |
+| `srcset` and `srcdoc` | Subject to individual URL validation and recursive sniffer checks respectively. |
 
 `bindCss` (used by `atomCss` / `atomBind.css`):
 

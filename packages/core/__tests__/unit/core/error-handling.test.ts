@@ -4,10 +4,8 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { EMPTY_ERROR_ARRAY } from '@/constants';
-import { atom } from '@/core/atom';
-import { computed } from '@/core/computed';
-import { effect } from '@/core/effect';
-import { sleep, waitForScheduler } from '../../utils/test-helpers';
+import { aeNextTick, atom, computed, effect } from '@/index';
+import { sleep } from '../../utils/test-helpers';
 
 describe('Core - Error Handling and Propagation', () => {
   describe('Sync Error Propagation & Recovery', () => {
@@ -125,10 +123,10 @@ describe('Core - Error Handling and Propagation', () => {
         { onError: errHandler }
       );
 
-      await waitForScheduler();
+      await aeNextTick();
 
       a.value = 1;
-      await waitForScheduler();
+      await aeNextTick();
 
       expect(goodWorker).toHaveBeenCalledTimes(1);
       expect(errHandler).toHaveBeenCalledTimes(1);

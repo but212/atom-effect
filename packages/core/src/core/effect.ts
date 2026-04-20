@@ -28,6 +28,16 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
   /** @internal */
   readonly [BRAND] = BrandFlags.Effect;
 
+  // Bookkeeping fields grouped at top for V8 layout optimization
+  private _currentEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
+  private _lastFlushEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
+  private _executionsInEpoch = 0;
+  private _executionCount = 0;
+  private _windowStart = 0;
+  private _windowCount = 0;
+  private _execId = 0;
+  private _trackCount = 0;
+
   private _cleanup: (() => void) | null = null;
   /** Initialized in constructor to maintain God Class object shape */
   _deps = new DepSlotBuffer();
@@ -37,21 +47,10 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
 
   private readonly _onError: ((error: unknown) => void) | null;
 
-  // Cycle detection
-  private _currentEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
-  private _lastFlushEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
-  private _executionsInEpoch: number;
-
   private readonly _fn: EffectFunction;
   private readonly _sync: boolean;
   private readonly _maxExecutions: number;
   private readonly _maxExecutionsPerFlush: number;
-  // Frequency tracking (Dev)
-  private _executionCount: number;
-  private _windowStart: number;
-  private _windowCount: number;
-  private _execId: number;
-  private _trackCount: number;
 
   constructor(fn: EffectFunction, options: EffectOptions = {}) {
     super();
@@ -62,13 +61,6 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
       options.maxExecutionsPerSecond ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_SECOND;
     this._maxExecutionsPerFlush =
       options.maxExecutionsPerFlush ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_EFFECT;
-
-    this._executionsInEpoch = 0;
-    this._executionCount = 0;
-    this._windowStart = 0;
-    this._windowCount = 0;
-    this._execId = 0;
-    this._trackCount = 0;
 
     // Pre-allocate callbacks once — eliminates per-dependency closure allocation
     if (this._sync) {
@@ -95,63 +87,44 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     this._deps?.disposeAll();
   }
 
-  [Symbol.dispose](): void {
-    this.dispose();
-  }
-
   public addDependency(dep: Dependency): void {
-    const flags = this.flags;
-    if ((flags & EFFECT_STATE_FLAGS.EXECUTING) === 0) return;
+    if ((this.flags & EFFECT_STATE_FLAGS.EXECUTING) === 0) return;
 
-    const startEpoch = this._currentEpoch;
-    if (dep._lastSeenEpoch === startEpoch) return;
-    dep._lastSeenEpoch = startEpoch;
+    if (dep._lastSeenEpoch === this._currentEpoch) return;
+    dep._lastSeenEpoch = this._currentEpoch;
 
     const trackIndex = this._trackCount++;
     const deps = this._deps;
+    const version = dep.version;
 
-    // Optimized: Direct access to inline slots for the hottest 4 dependencies
-    let existing: DependencyLink | null;
-    switch (trackIndex) {
-      case 0:
-        existing = deps._s0;
-        break;
-      case 1:
-        existing = deps._s1;
-        break;
-      case 2:
-        existing = deps._s2;
-        break;
-      case 3:
-        existing = deps._s3;
-        break;
-      default:
-        existing = deps.getAt(trackIndex);
+    // [Optimization] Fast-path lookup bypassing SlotBuffer.getAt() or switch statements
+    let existing: DependencyLink | null = null;
+    if (trackIndex < 4) {
+      if (trackIndex === 0) existing = deps._s0;
+      else if (trackIndex === 1) existing = deps._s1;
+      else if (trackIndex === 2) existing = deps._s2;
+      else existing = deps._s3;
+    } else {
+      const ov = deps._overflow;
+      if (ov !== null) existing = ov[trackIndex - 4] ?? null;
     }
 
-    // 1. Stable Path: dependency index remains the same
-    if (existing != null && existing.node === dep) {
-      existing.version = dep.version;
-    }
-    // 2. Diverged Path: lookup or insert
-    else if (deps.claimExisting(dep, trackIndex)) {
-      // Version updated in claimExisting
-    }
-    // 3. New dependency
-    else {
-      this._insertNewDependency(dep, trackIndex);
+    if (existing !== null && existing.node === dep) {
+      existing.version = version;
+    } else if (!deps.claimExisting(dep, trackIndex)) {
+      this._insertNewDependency(dep, trackIndex, version);
     }
 
-    if (dep.isComputed) {
+    if (dep.isComputed && !deps.hasComputeds) {
       deps.hasComputeds = true;
     }
   }
 
-  private _insertNewDependency(dep: Dependency, trackIndex: number): void {
+  private _insertNewDependency(dep: Dependency, trackIndex: number, version: number): void {
     let link: DependencyLink;
     try {
       const unsubscribe = dep.subscribe(this._notifyCallback);
-      link = new DependencyLink(dep, dep.version, unsubscribe);
+      link = new DependencyLink(dep, version, unsubscribe);
     } catch (error) {
       const wrapped = wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_EXECUTION_FAILED);
       console.error(wrapped);
@@ -160,10 +133,10 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
           this._onError(wrapped);
         } catch {}
       }
-      link = new DependencyLink(dep, dep.version, undefined);
+      link = new DependencyLink(dep, version, undefined);
     }
 
-    this._deps!.insertNew(trackIndex, link);
+    this._deps.insertNew(trackIndex, link);
   }
 
   /**
@@ -176,7 +149,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
 
     // Skip if not dirty or forced
     const deps = this._deps;
-    if (!force && deps.size > 0 && !this._isDirty()) return;
+    if (!force && deps.physicalSize > 0 && !this._isDirty()) return;
 
     this._checkInfiniteLoops();
     debug.trackUpdate(this.id, debug.getDebugName(this));
@@ -195,14 +168,15 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
 
       // Clean up any remaining trailing dependencies
       deps.truncateFrom(this._trackCount);
-
       committed = true;
 
       // Handle result
-      if (isPromise(result)) {
+      if (typeof result === 'function') {
+        this._cleanup = result as () => void;
+      } else if (isPromise(result)) {
         this._handleAsyncResult(result);
       } else {
-        this._cleanup = typeof result === 'function' ? result : null;
+        this._cleanup = null;
       }
     } catch (error) {
       // Commit on error gracefully to maintain state for recovery
@@ -226,8 +200,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     const execId = ++this._execId;
     promise.then(
       (cleanup) => {
-        // Guard against race conditions (new execution or disposal happened)
-        if (execId !== this._execId || this.isDisposed) {
+        if (execId !== this._execId || (this.flags & EFFECT_STATE_FLAGS.DISPOSED) !== 0) {
           if (typeof cleanup === 'function') {
             try {
               cleanup();
@@ -243,20 +216,49 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     );
   }
 
+  protected override _isDirty(): boolean {
+    const deps = this._deps;
+    const size = deps.size;
+    if (size === 0) return false;
+
+    // Fast path: Check hot index first without switching context
+    const hotIndex = this._hotIndex;
+    if (hotIndex !== -1 && hotIndex < size) {
+      const link = deps.getAt(hotIndex);
+      if (link !== null) {
+        const dep = link.node;
+        // Correctness: Only non-computed deps can skip context switch/deep check
+        if (!dep.isComputed && dep.version !== link.version) return true;
+      }
+    }
+
+    return this._deepDirtyCheck();
+  }
+
   protected override _deepDirtyCheck(): boolean {
+    const deps = this._deps;
+    const size = deps.size;
+    const hotIdx = this._hotIndex;
+
     const prevContext = trackingContext.current;
     trackingContext.current = null;
-    const deps = this._deps!;
 
     try {
-      const size = deps.size;
+      // Priority 1: Check others with hotIdx skip
       for (let i = 0; i < size; i++) {
+        if (i === hotIdx) continue;
         const link = deps.getAt(i);
-        if (link == null) continue;
+        if (link === null) continue;
 
         const dep = link.node;
         if (dep.isComputed) {
-          this._tryPullComputed(dep);
+          try {
+            void (dep as { value: unknown }).value;
+          } catch {
+            if (IS_DEV) {
+              console.warn(`[atom-effect] Dependency #${dep.id} error in check`);
+            }
+          }
         }
 
         if (dep.version !== link.version) {
@@ -264,20 +266,10 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
           return true;
         }
       }
+      this._hotIndex = -1;
       return false;
     } finally {
       trackingContext.current = prevContext;
-    }
-  }
-
-  private _tryPullComputed(dep: Dependency): void {
-    try {
-      // Force computed to re-evaluate so version reflects latest state
-      void (dep as { value: unknown }).value;
-    } catch {
-      if (IS_DEV) {
-        console.warn(`[atom-effect] Dependency #${dep.id} threw during dirty check`);
-      }
     }
   }
 

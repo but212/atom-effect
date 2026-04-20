@@ -1,6 +1,6 @@
 import { atom } from '@but212/atom-effect';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { enablejQueryOverrides, INTERNAL_HANDLER, WRAPPED_HANDLER } from '@/core/jquery-patch';
+import { enablejQueryOverrides, INTERNAL_HANDLER } from '@/core/jquery-patch';
 import { disableAutoCleanup, enableAutoCleanup, registry } from '@/core/registry';
 import $ from '@/index';
 
@@ -14,7 +14,6 @@ interface JQueryInternal extends JQueryStatic {
 
 interface HandlerMetadata extends Function {
   [INTERNAL_HANDLER]?: boolean;
-  [WRAPPED_HANDLER]?: JQuery.EventHandlerBase<unknown, JQuery.TriggeredEvent>;
 }
 
 describe('jQuery Patch (Lifecycle & Events)', () => {
@@ -98,26 +97,27 @@ describe('jQuery Patch (Lifecycle & Events)', () => {
       $btn.remove();
     });
 
-    it('should ensure handler identification and cross-bundle compatibility', () => {
+    it('should ensure handler identification and unbinding works correctly', () => {
       const $el = $('<div>');
       const handler = () => {};
 
-      // 1. Property-based marking for cross-instance unbinding
+      // 1. Verify internal wrapping and identification for unbinding
       $el.on('click', handler);
-      expect(
-        (handler as HandlerMetadata)[WRAPPED_HANDLER],
-        'Missing wrapped pointer'
-      ).toBeDefined();
 
       const events = ($ as unknown as JQueryInternal)._data($el[0]!, 'events');
       const registered = events?.click?.[0]?.handler as HandlerMetadata;
       expect(registered[INTERNAL_HANDLER], 'Handler not marked as internal').toBe(true);
 
+      // Unbinding with ORIGINAL handler should work via resolveWrapped/handlerMap
+      $el.off('click', handler);
+      const postEvents = ($ as unknown as JQueryInternal)._data($el[0]!, 'events');
+      expect(postEvents?.click).toBeUndefined();
+
       // 2. Special handler (boolean false) compatibility
       $el.on('submit', false);
       $el.off('submit', false);
-      const postEvents = ($ as unknown as JQueryInternal)._data($el[0]!, 'events');
-      expect(postEvents?.submit).toBeUndefined();
+      const postSubmitEvents = ($ as unknown as JQueryInternal)._data($el[0]!, 'events');
+      expect(postSubmitEvents?.submit).toBeUndefined();
     });
   });
 });

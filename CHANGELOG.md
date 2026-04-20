@@ -1,22 +1,72 @@
 # Changelog
 
+## [Unreleased]
+
+### Core
+
+#### Added
+
+- **Scheduler**: Introduced `aeNextTick()` for precise internal and external scheduler synchronization.
+
+#### Removed
+
+- **Compatibility**: Removed `[Symbol.dispose]` support from all primitives to maintain ES2021 compatibility.
+
+### jQuery
+
+#### Added
+
+- **PJAX Navigation**: Introduced `$.atomNav` for seamless page transitions with automatic title, meta-tag, and attribute synchronization.
+- **Dynamic Routing**: Added support for dynamic route segments (e.g., `:id`) and a reactive `params` atom to `$.route`.
+- **Navigation Control**: Enhanced `navigate()` with Promise support, `replace` options, and cancellation via `AbortSignal`.
+- **Routing**: Support for `HTMLElement` and `JQuery` objects as injection targets in `$.route`, along with `title` metadata for automatic document title updates.
+- **Server-Side**: `X-PJAX-URL` header support for handling redirects during navigation.
+
+#### Changed
+
+- **Architecture**: Reorganized `constants.ts` into focused subsystem namespaces for better modularity.
+- **Performance**: Optimized reactive bindings by operating directly on native `HTMLElement` nodes.
+- **Engines**: Overhauled `InputBinding` (strategy-based) and Security (data-driven) architectures.
+- **Reactivity**: Unified async race-condition protection via `createAsyncRunner`.
+- **Lifecycle**: Enhanced `atomMount` with "Fail Loud" initialization and structured `ComponentLifecycle` support.
+- **Interception**: Improved link handling to respect modifier keys, external links, and download attributes.
+- **Standardization**: Unified `$.nextTick` to use core's `aeNextTick()` for consistent scheduling.
+
+#### Fixed
+
+- **Navigation**: Resolved state synchronization issues during PJAX redirects.
+- **Fetch**: Fixed dynamic HTTP method resolution in `$.atomFetch`.
+- **Diagnostics**: Clarified `atomList` duplicate key warnings.
+
+#### Removed
+
+- **Internal**: Removed shared `DOMParser` singleton to prevent global state leaks.
+- **Legacy**: Cleaned up internal type exports (`RenderRoute`, `TemplateRoute`) and redundant abstractions.
+
+#### Security
+
+- **Sanitization**: Hardened `sanitizeHtml` with multi-layered defense, including `srcset` and `srcdoc` cleaning.
+- **Hardening**: Neutralized DOM Clobbering attacks via element prototype descriptors.
+- **CSS Security**: Implemented comment-aware CSS sanitization and protocol validation.
+- **Decorum**: Improved auditability of blocked handlers in `data-unsafe-attr`.
+
 ## [0.30.1] - 2026-04-14
 
 ### Core
 
 #### Fixed
 
-- **Lens**: Implemented strict prototype pollution protection in `setDeepValue` and `getPathValue` by blocking `__proto__`, `constructor`, and `prototype` keys.
+- **Lens**: Added prototype pollution protection in `setDeepValue` and `getPathValue` for `__proto__`, `constructor`, and `prototype` keys.
 
 ### jQuery
 
 #### Fixed
 
-- **Core**: Fixed a logic flaw in the `unpack` utility where static values (strings, numbers, null) and plain objects were not correctly identified as part of a `[source, options]` tuple.
-- **Security**: Hardened `sanitizeHtml` against XSS bypasses using case-sensitive or semicolon-less HTML entities (e.g., `&Colon;`, `&tab`).
-- **Security**: Added `srcdoc` to monitored URL attributes and implemented HTML injection filtering for it.
-- **Security**: Improved protocol detection to identify `url(javascript:...)` patterns in SVG attributes (`fill`, `filter`, `mask`, etc.) and CSS values.
-- **Security**: Refined CSS sanitization regex to prevent over-matching HTML attribute quotes.
+- **Core**: Fixed bug in `unpack` utility where static values were not identified in `[source, options]` tuples.
+- **Security**: Updated `sanitizeHtml` for XSS bypasses using case-sensitive or semicolon-less entities.
+- **Security**: Added `srcdoc` to monitored URL attributes.
+- **Security**: Updated protocol detection for `url(javascript:...)` in SVG and CSS.
+- **Security**: Refined CSS sanitization regex.
 
 #### Refactor
 
@@ -25,7 +75,7 @@
 
 #### Changed
 
-- **Performance**: Optimized the `atomEachElement` engine by caching context requirements and collection length, reducing property lookup overhead in hot loops.
+- **Performance**: Updated `atomEachElement` engine to cache context requirements and collection length.
 
 ## [0.30.0] - 2026-04-12
 

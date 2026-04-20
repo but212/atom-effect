@@ -15,8 +15,18 @@ export const DEBUG_TYPE = Symbol('AtomEffect.Type');
 /** Symbol used as a sentinel value to indicate that no default value was provided. */
 export const NO_DEFAULT_VALUE = Symbol('AtomEffect.NoDefaultValue');
 
+/** @internal */
+interface DebugMetadata {
+  [DEBUG_NAME]?: string;
+  [DEBUG_ID]?: DependencyId;
+  [DEBUG_TYPE]?: string;
+}
+
 /** Log prefix for Atom Effect console messages. */
 const PREFIX = '[Atom Effect]';
+
+/** Shared no-op function to reduce memory footprint and call overhead in production. */
+const noop = () => {};
 
 /**
  * Optimized Debug controller implementation for development environments.
@@ -70,6 +80,10 @@ class DevDebugController implements DebugConfig {
   /**
    * Attaches debug metadata to a runtime object.
    *
+   * @remarks
+   * Optimized with direct property assignment instead of 'Object.defineProperties'
+   * for significantly faster node initialization in hot paths.
+   *
    * @param obj - The object to attach info to.
    * @param type - The type of the node (e.g., 'atom', 'selector', 'effect').
    * @param id - The unique internal identifier.
@@ -83,11 +97,11 @@ class DevDebugController implements DebugConfig {
   ): void => {
     if (!this.enabled) return;
 
-    Object.defineProperties(obj, {
-      [DEBUG_NAME]: { value: customName ?? `${type}_${id}`, configurable: true },
-      [DEBUG_ID]: { value: id, configurable: true },
-      [DEBUG_TYPE]: { value: type, configurable: true },
-    });
+    // Use direct symbol access for peak V8 assignment performance
+    const meta = obj as DebugMetadata;
+    meta[DEBUG_NAME] = customName ?? `${type}_${id}`;
+    meta[DEBUG_ID] = id;
+    meta[DEBUG_TYPE] = type;
 
     this.registerNode(obj as { id: DependencyId });
   };
@@ -116,9 +130,8 @@ class DevDebugController implements DebugConfig {
 
     if (!this._cleanupScheduled) {
       this._cleanupScheduled = true;
-      // Reset counts at the end of the current microtask to prevent memory leaks
-      // and false positives across different execution cycles.
-      Promise.resolve().then(() => {
+      // Reset counts at the end of the current microtask using lightweight mechanism
+      queueMicrotask(() => {
         this._updateCounts.clear();
         this._cleanupScheduled = false;
       });
@@ -157,8 +170,8 @@ class DevDebugController implements DebugConfig {
    * @returns The human-readable name or undefined.
    */
   public getDebugName = (obj: object | null | undefined): string | undefined => {
-    if (!obj) return undefined;
-    return (obj as Record<symbol, unknown>)[DEBUG_NAME] as string | undefined;
+    if (obj == null) return undefined;
+    return (obj as DebugMetadata)[DEBUG_NAME];
   };
 
   /**
@@ -168,14 +181,14 @@ class DevDebugController implements DebugConfig {
    * @returns The type identifier or undefined.
    */
   public getDebugType = (obj: object | null | undefined): string | undefined => {
-    if (!obj) return undefined;
-    return (obj as Record<symbol, unknown>)[DEBUG_TYPE] as string | undefined;
+    if (obj == null) return undefined;
+    return (obj as DebugMetadata)[DEBUG_TYPE];
   };
 }
 
 /**
  * Inert implementation of the Debug controller for production environments.
- * All operations are no-ops to ensure maximum performance and minimal bundle size.
+ * All operations are no-ops using shared handlers for minimal overhead.
  *
  * @internal
  * @implements {DebugConfig}
@@ -183,10 +196,10 @@ class DevDebugController implements DebugConfig {
 const ProdDebugController: DebugConfig = {
   enabled: false,
   warnInfiniteLoop: false,
-  warn: () => {},
-  registerNode: () => {},
-  attachDebugInfo: () => {},
-  trackUpdate: () => {},
+  warn: noop,
+  registerNode: noop,
+  attachDebugInfo: noop,
+  trackUpdate: noop,
   dumpGraph: () => [],
   getDebugName: () => undefined,
   getDebugType: () => undefined,
@@ -194,11 +207,7 @@ const ProdDebugController: DebugConfig = {
 
 /**
  * The global debug singleton instance.
- * Automatically switches between development and production implementations
- * based on the environment configuration (IS_DEV).
- *
- * In production, this becomes a lightweight object with empty methods,
- * allowing engines to inline or ignore calls, effectively providing zero overhead.
+ * Automatically switches between development and production implementations.
  *
  * @public
  */
@@ -212,7 +221,7 @@ let nextId = 1;
 
 /**
  * Generates a unique, monotonically increasing integer ID.
- * Casts to DependencyId type for internal type safety.
+ * Performance: Uses SMI bitwise optimization.
  *
  * @returns A fresh DependencyId.
  * @public

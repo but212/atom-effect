@@ -1,7 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { atom, computed, effect } from '@/core';
-
-import { flush } from './utils/test-helpers';
+import { aeNextTick, atom, computed, effect } from '@/index';
 
 describe('DOM Integration', () => {
   let container: HTMLDivElement;
@@ -31,7 +29,7 @@ describe('DOM Integration', () => {
       element.classList.toggle('highlight', isActive.value);
     });
 
-    await flush();
+    await aeNextTick();
     expect(element.textContent).toBe('Hello');
     expect(element.className).toBe('inactive');
     expect(element.style.transform).toBe('translate(0px, 0px)');
@@ -39,7 +37,7 @@ describe('DOM Integration', () => {
     text.value = 'World';
     isActive.value = true;
     x.value = 100;
-    await flush();
+    await aeNextTick();
     expect(element.textContent).toBe('World');
     expect(element.className).toContain('active');
     expect(element.style.transform).toBe('translate(100px, 0px)');
@@ -87,13 +85,13 @@ describe('DOM Integration', () => {
     });
     container.appendChild(select);
 
-    await flush();
+    await aeNextTick();
 
     // Model -> View
     inputValue.value = 'Initial';
     isChecked.value = true;
     selection.value = 'A';
-    await flush();
+    await aeNextTick();
     expect(input.value).toBe('Initial');
     expect(checkbox.checked).toBe(true);
     expect(select.value).toBe('A');
@@ -131,15 +129,15 @@ describe('DOM Integration', () => {
       }
     });
 
-    await flush();
+    await aeNextTick();
     expect(ul.children.length).toBe(2);
 
     items.value = [...items.value, 'Cherry'];
-    await flush();
+    await aeNextTick();
     expect(ul.children.length).toBe(3);
 
     show.value = false;
-    await flush();
+    await aeNextTick();
     expect(container.contains(ul)).toBe(false);
   });
 
@@ -161,7 +159,7 @@ describe('DOM Integration', () => {
       return () => button.removeEventListener('click', handler);
     });
 
-    await flush();
+    await aeNextTick();
     expect(el.textContent).toBe('on');
     button.click();
     expect(clickCount).toBe(1);
@@ -174,7 +172,7 @@ describe('DOM Integration', () => {
 
     // DOM no longer updates
     label.value = 'off';
-    await flush();
+    await aeNextTick();
     expect(el.textContent).toBe('on');
   });
 
@@ -192,14 +190,14 @@ describe('DOM Integration', () => {
       el2.textContent = title.value.toUpperCase();
     });
 
-    await flush();
+    await aeNextTick();
     expect(el1.textContent).toBe('init');
     expect(el2.textContent).toBe('INIT');
 
     e1.dispose();
 
     title.value = 'updated';
-    await flush();
+    await aeNextTick();
 
     expect(el1.textContent).toBe('init'); // disposed — unchanged
     expect(el2.textContent).toBe('UPDATED'); // still active

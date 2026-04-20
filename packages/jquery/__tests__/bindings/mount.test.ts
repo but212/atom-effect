@@ -70,20 +70,23 @@ describe('Atom Mount (Component Lifecycle)', () => {
     expect(cleanup2).toHaveBeenCalled();
   });
 
-  it('should handle and log lifecycle errors gracefully', () => {
+  it('should throw error during mount', () => {
+    const $el = $('<div>').appendTo(document.body);
+
+    // Pike's Rule: Fail loud during component initialization.
+    expect(() => {
+      $el.atomMount(() => {
+        throw new Error('mount fail');
+      });
+    }).toThrow('mount fail');
+  });
+
+  it('should log cleanup errors during unmount', () => {
     const $el = $('<div>').appendTo(document.body);
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    // Mount error
-    $el.atomMount(() => {
-      throw new Error('mount fail');
-    });
-    expect(spy).toHaveBeenCalledWith(
-      expect.stringContaining('[atom-mount] Mount error'),
-      expect.any(Error)
-    );
-
-    // Cleanup error
+    // Cleanup errors are logged to ensure all resources are disposed
+    // even if one part of the cleanup fails.
     $el.atomMount(() => () => {
       throw new Error('cleanup fail');
     });

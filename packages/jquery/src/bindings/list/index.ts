@@ -1,52 +1,35 @@
 import { effect, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
-import { LOG_PREFIXES } from '@/constants';
 import { registry } from '@/core/registry';
 import type { EffectObject, ListKey, ListKeyFn, ListOptions, ReadonlyAtom } from '@/types';
 import { getSelector, hasOwn } from '@/utils';
-import { debug } from '@/utils/debug';
-import { ArrayPool, ObjectPool } from '@/utils/pool';
 import { ListContext } from './context';
 import { buildIndices } from './diff';
 import { cleanupRemoved, handleEmpty, placeItems, renderItems } from './dom';
 import type { PlaceCallbacks } from './types';
 
+/** Provides metadata storage for container-to-context associations. */
 const listInstances = new WeakMap<Element, { fx: EffectObject; ctx: ListContext<unknown> }>();
 
 /**
- * Pool for reusing Map objects to minimize GC pressure during diffing.
- */
-const mapPool = new ObjectPool<Map<ListKey, number>>(
-  () => new Map(),
-  (m) => m.clear()
-);
-
-/**
- * Pool for reusing Set objects during diffing.
- */
-const setPool = new ObjectPool<Set<ListKey>>(
-  () => new Set(),
-  (s) => s.clear()
-);
-
-/**
- * Pool for reusing arrays during diffing.
- */
-const arrayPool = new ArrayPool<unknown>(100, 1024);
-
-const pools = {
-  map: mapPool,
-  set: setPool,
-  array: arrayPool,
-};
-
-/**
- * atomList binding for jQuery.
- * Efficiently renders and reconciles a list of items based on an Atom source.
+ * Binds a reactive atom array to a jQuery container for automated list rendering.
  *
- * @param source - The ReadonlyAtom containing the array of items.
- * @param options - Configuration for rendering, keys, and lifecycle hooks.
- * @returns The original jQuery collection for chaining.
+ * When to use:
+ * - Use this to render dynamic lists that stay in sync with an atom's value.
+ * - Ideal for high-performance dashboard rows, item feeds, or state-driven UI components.
+ *
+ * Performance:
+ * - Uses a diffing algorithm to minimize DOM operations (only moves or updates what's changed).
+ * - Implements batch rendering and sanitization for cold starts.
+ *
+ * @example
+ * $('#my-list').atomList(itemAtom, {
+ *   key: 'id',
+ *   render: (item) => `<li>${item.name}</li>`,
+ *   events: {
+ *     'click li': (item, index, e) => console.log(item.id)
+ *   }
+ * });
  */
 function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptions<T>): JQuery {
   const getKey: ListKeyFn<T> =
@@ -62,13 +45,11 @@ function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptio
     events: options.events,
   };
 
-  // Each element in the jQuery collection can host a separate list instance.
-  for (let cIdx = 0, cLen = this.length; cIdx < cLen; cIdx++) {
-    const raw = this[cIdx]!,
+  for (let i = 0, len = this.length; i < len; i++) {
+    const raw = this[i]!,
       $c = $(raw);
 
-    // Clean up existing instance if any
-    $c.off('.atomList');
+    // Teardown previous binding if re-applying to the same element
     const old = listInstances.get(raw);
     if (old) {
       old.fx.dispose();
@@ -76,94 +57,86 @@ function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptio
     }
 
     const ctx = new ListContext<T>($c, getSelector(raw), options.onRemove);
-
-    // Create a reactive effect that automatically re-runs when 'source' changes
     const fx = effect(() => {
       const items = source.value,
-        len = items.length;
+        count = items.length;
 
-      // Reconcilation is performance critical, use untracked to avoid
-      // accidental dependencies inside the complex logic.
+      // Reason: DOM synchronization and diffing should not contribute to
+      // reactive dependency tracking to prevent infinite loops or over-execution.
       untracked(() => {
-        // 1. Handle empty state
-        handleEmpty(ctx, len, $c, options.empty, arrayPool);
-        if (len === 0) return;
+        handleEmpty(ctx, count, $c, options.empty);
+        if (count === 0) return;
 
-        debug.log(LOG_PREFIXES.LIST, `${ctx.containerSelector} updating with ${len} items`);
+        const isActuallyInitial = ctx.oldKeys.length === 0 && ctx.removingKeys.size === 0;
 
-        // 2. Build diff information (reconciliation)
-        const diff = buildIndices(ctx, items, len, getKey, options.update, options.isEqual, pools);
+        ctx.keyToIndex.clear();
+        const diff = buildIndices(ctx, items, count, getKey, options.update, options.isEqual);
 
-        // 3. Render new items (or update existing ones if strings provided)
-        const frag = renderItems(diff, options, ctx.oldKeys.length === 0);
+        const frag = renderItems(diff, options, isActuallyInitial);
 
-        // 4. Mark removed items for deletion (handles async transitions)
         cleanupRemoved(ctx, diff);
-
-        // 5. Place nodes in the DOM and call lifecycle hooks
         placeItems(ctx, diff, raw, callbacks, frag);
 
-        // Update event mapping if needed
-        if (options.events) {
-          for (let i = diff.startIndex; i <= diff.oldEndIndex; i++) {
-            if (!diff.newKeySet.has(ctx.oldKeys[i]!)) ctx.keyToIndex.delete(ctx.oldKeys[i]!);
-          }
-        }
-
-        // Release old memory back to pools
-        arrayPool.release(ctx.oldKeys);
-        arrayPool.release(ctx.oldItems);
-        arrayPool.release(ctx.oldNodes as unknown[]);
-
-        // Sync context with new state
+        // Update context with the new state for the next reconciliation cycle
         ctx.oldKeys = diff.newKeys;
         ctx.oldItems = diff.newItems;
         ctx.oldNodes = diff.newNodes;
-
-        // Release diff-specific structures
-        setPool.release(diff.newKeySet);
-        arrayPool.release(diff.trKeys);
-        arrayPool.release(diff.trItems);
-        arrayPool.release(diff.trIdxs);
       });
     });
 
     ctx.fx = fx;
+    if (options.events) setupEvents(ctx, $c, options.events);
 
-    // Event delegation support
-    if (options.events) {
-      for (const ek in options.events) {
-        if (!hasOwn.call(options.events, ek)) continue;
-        const s = ek.indexOf(' '),
-          type = s === -1 ? ek : ek.slice(0, s),
-          sel = s === -1 ? '> *' : ek.slice(s + 1).trim();
-        const handler = options.events[ek]!;
-
-        $c.on(`${type}.atomList`, sel, function (this: Element, e: JQuery.TriggeredEvent) {
-          // Use data-atom-key to find the corresponding item in the context
-          const itemEl = (e.target as Element).closest?.('[data-atom-key]') as HTMLElement | null;
-          const rk = itemEl?.getAttribute('data-atom-key');
-          if (rk === null || rk === undefined) return;
-
-          let k: ListKey = rk;
-          if (!ctx.keyToIndex.has(rk)) {
-            const nk = Number(rk); // Try converting to number for key lookup
-            if (!Number.isNaN(nk) && ctx.keyToIndex.has(nk)) k = nk;
-          }
-          const idx = ctx.keyToIndex.get(k);
-          if (idx !== undefined) handler.call(itemEl as HTMLElement, ctx.oldItems[idx]!, idx, e);
-        });
-      }
-    }
-
+    // Lifecycle: Automatic cleanup when the element or parent effect is destroyed
     registry.trackEffect(raw, fx);
     listInstances.set(raw, { fx, ctx });
+
     registry.trackCleanup(raw, () => {
       ctx.dispose();
       listInstances.delete(raw);
     });
   }
   return this;
+}
+
+/**
+ * Configures delegated event listeners on the container.
+ *
+ * Logic:
+ * - Uses event delegation for performance (single listener per container).
+ * - Resolves the clicked DOM element back to the original data item using 'data-atom-key'.
+ */
+function setupEvents<T>(
+  ctx: ListContext<T>,
+  $container: JQuery,
+  events: Record<string, Function>
+): void {
+  for (const ek in events) {
+    if (!hasOwn.call(events, ek)) continue;
+    const s = ek.indexOf(' '),
+      type = s === -1 ? ek : ek.slice(0, s),
+      sel = s === -1 ? '> *' : ek.slice(s + 1).trim();
+    const handler = events[ek]!;
+
+    $container.on(`${type}.atomList`, sel, function (this: HTMLElement, e: JQuery.TriggeredEvent) {
+      const itemEl = e.target.closest?.('[data-atom-key]') as HTMLElement | null;
+      const rk = itemEl?.getAttribute('data-atom-key');
+      if (rk === null || rk === undefined) return;
+
+      let key: ListKey = rk;
+
+      // Handle cases where Number-based keys were serialized to Strings in the DOM
+      if (!ctx.keyToIndex.has(rk)) {
+        const nk = Number(rk);
+        if (!Number.isNaN(nk) && ctx.keyToIndex.has(nk)) key = nk;
+      }
+
+      const idx = ctx.keyToIndex.get(key);
+      if (idx !== undefined) {
+        handler.call(itemEl as HTMLElement, ctx.oldItems[idx]!, idx, e);
+      }
+    });
+  }
 }
 
 $.fn.atomList = atomList;

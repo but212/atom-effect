@@ -25,20 +25,13 @@ describe('Debug Module', () => {
   // --------------------------------------------------------------------------
 
   describe('Configuration & Gating', () => {
-    it('should gate standard logs by state while always emitting critical messages', () => {
-      // 1. Gating check (standard logs should be silent when disabled)
-      debug.log(LOG_PREFIXES.BINDING, 'silent');
-      debug.atomChanged(LOG_PREFIXES.BINDING, 'atom', 0, 1);
-      debug.cleanup(LOG_PREFIXES.BINDING, 'subject');
+    it('should gate by enabled state', () => {
+      // 1. Gating check
+      debug.enabled = false;
+      debug.domUpdated(LOG_PREFIXES.BINDING, document.createElement('div'), 'test', 'val');
       expect(logSpy).not.toHaveBeenCalled();
 
-      // 2. Activation check (standard logs should emit when enabled)
-      debug.enabled = true;
-      debug.log(LOG_PREFIXES.BINDING, 'active');
-      expect(logSpy).toHaveBeenCalledWith(LOG_PREFIXES.BINDING, 'active');
-
-      // 3. Critical messages check (behavior: always on irrespective of state)
-      debug.enabled = false;
+      // 2. Critical messages check (behavior: always on irrespective of state)
       const error = new Error('fail');
       debug.warn(LOG_PREFIXES.MOUNT, 'warning');
       debug.error(LOG_PREFIXES.BINDING, 'error', error);

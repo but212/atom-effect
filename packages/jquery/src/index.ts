@@ -1,42 +1,49 @@
 /**
- * atom-effect-jquery
+ * atom-effect-jquery: Main Entry Point
  *
- * Brings reactivity to jQuery.
- *
- * Features:
- * - Full CJK IME Support (Input Method Editor).
- * - Auto-cleanup via MutationObserver (No memory leaks).
- * - Debug Mode: Console logging + Visual Highlighting.
- *
- * Type augmentation note:
- * This package extends both `JQuery` and `JQueryStatic` via global interface
- * merging in `types.ts`. Consumers using the `export default $` path will
- * receive the augmented type automatically because the module's side-effect
- * imports apply the augmentation at import time.
+ * This module orchestrates the automatic integration of reactive atoms
+ * into the jQuery ecosystem. By importing this module, the following
+ * actions occur automatically:
+ * 1. jQuery prototypes are patched for lifecycle safety.
+ * 2. Reactive chainable methods ($().atomText, etc.) are registered.
+ * 3. The MutationObserver safety-net is activated for automated cleanup.
  */
-
 import $ from 'jquery';
-import '@/core/namespace'; // $.atom, $.computed, etc.
-import '@/bindings/chainable'; // $.fn.atomText, etc.
-import '@/bindings/list'; // $.fn.atomList
-import '@/bindings/mount'; // $.fn.atomMount
-import '@/features/route'; // $.route
-import '@/features/fetch'; // $.atomFetch
+
+// side-effectful imports: these register methods and features into the $ namespace.
+import '@/core/namespace';
+import '@/bindings/chainable';
+import '@/bindings/list';
+import '@/bindings/mount';
+import '@/features/route';
+import '@/features/fetch';
+import '@/features/nav';
 
 import { enablejQueryOverrides } from '@/core/jquery-patch';
 import { disableAutoCleanup, enableAutoCleanup, registry } from '@/core/registry';
 
-// Global initialization on DOM ready.
+/**
+ * Auto-Initialize:
+ * Logic: Hooks into jQuery's ready event to guarantee that overrides
+ * and lifecycle observers are anchored to a valid DOM tree.
+ */
 $(() => {
   enablejQueryOverrides();
   if (document.body) {
+    // Rationale: document.body is the standard root for the MutationObserver 'safety-net'.
     enableAutoCleanup(document.body);
   }
 });
 
 export { disablejQueryOverrides, enablejQueryOverrides } from '@/core/jquery-patch';
 export { nextTick } from '@/core/namespace';
+
+/**
+ * Public API Surface:
+ * Re-exports the definitive types used for building reactive components and bindings.
+ */
 export type {
+  AtomNavOptions,
   BindingOptions,
   ComponentFn,
   ComputedAtom,
@@ -50,16 +57,15 @@ export type {
   PrimitiveValue,
   ReactiveValue,
   ReadonlyAtom,
-  RenderRoute,
   RouteConfig,
   RouteDefinition,
   RouteLifecycle,
   Router,
-  TemplateRoute,
   ValOptions,
   WritableAtom,
 } from '@/types';
-export { isReactive } from '@/utils';
+
 export { disableAutoCleanup, enableAutoCleanup, registry };
 
+/** The augmented jQuery object is the default export. */
 export default $;

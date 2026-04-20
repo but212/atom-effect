@@ -5,11 +5,8 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { AsyncState } from '@/constants';
-import { atom } from '@/core/atom';
-import { computed } from '@/core/computed';
-import { effect } from '@/core/effect';
 import { resetFlushState } from '@/core/scheduler';
+import { AsyncState, atom, computed, effect } from '@/index';
 import { sleep } from '../../utils/test-helpers';
 
 describe('Async Drift Constraint & Recovery', () => {

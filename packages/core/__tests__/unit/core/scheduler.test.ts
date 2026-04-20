@@ -4,9 +4,8 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SCHEDULER_CONFIG } from '@/constants';
-import { batch, resetFlushState, runInFlushScope, scheduler } from '@/core/scheduler';
-import { SchedulerError } from '@/errors';
-import { atom, computed, effect } from '@/index';
+import { resetFlushState, runInFlushScope, scheduler } from '@/core/scheduler';
+import { aeNextTick, atom, batch, computed, effect, SchedulerError } from '@/index';
 import { sleep } from '../../utils/test-helpers';
 
 describe('Scheduler', () => {
@@ -100,6 +99,37 @@ describe('Scheduler', () => {
       };
 
       expect(() => fn(depth)).not.toThrow();
+    });
+  });
+
+  describe('aeNextTick', () => {
+    it('should wait for all reactive updates to be flushed', async () => {
+      const a = atom(0);
+      let capturedValue = -1;
+      effect(() => {
+        capturedValue = a.value;
+      });
+
+      a.value = 42;
+      expect(capturedValue).toBe(0); // Queued
+
+      await aeNextTick();
+      expect(capturedValue).toBe(42); // Flushed
+    });
+
+    it('should execute optional callback and resolve correctly', async () => {
+      const cb = vi.fn();
+      await aeNextTick(cb);
+      expect(cb).toHaveBeenCalled();
+    });
+
+    it('should propagate errors from the callback', async () => {
+      const error = new Error('tick-fail');
+      await expect(
+        aeNextTick(() => {
+          throw error;
+        })
+      ).rejects.toThrow('tick-fail');
     });
   });
 

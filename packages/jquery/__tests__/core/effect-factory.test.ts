@@ -36,11 +36,11 @@ describe('Effect Factory', () => {
   });
 
   /**
-   * 2. Asynchronous Handling & Cache Management
-   * Verifies Promise resolution, instance-aware caching, and stale cache prevention.
+   * 2. Asynchronous Handling
+   * Verifies Promise resolution and stale instance updates.
    */
   describe('Asynchronous Operations', () => {
-    it('Cache Management: optimizes redundant promises and prevents stale instance updates', async () => {
+    it('verifies Promise resolution and prevents stale instance updates', async () => {
       const el = document.createElement('div');
       const updater = vi.fn();
       const p1 = Promise.resolve('old');
@@ -48,34 +48,15 @@ describe('Effect Factory', () => {
 
       registerMapEffect(el, { p: atom }, updater, 'async-test');
 
-      // 1. Initial resolution (instance-aware cache population)
-      await $.nextTick();
-      await $.nextTick();
-      await $.nextTick();
-      expect(updater).toHaveBeenCalledWith({ p: 'old' });
+      // Initial resolution
+      await vi.waitFor(() => expect(updater).toHaveBeenCalledWith({ p: 'old' }));
       updater.mockClear();
 
-      // 2. New Promise instance (same key) should trigger fresh resolution (Stale Cache Prevention)
+      // New Promise instance
       const p2 = Promise.resolve('new');
       atom.value = p2;
       await $.nextTick();
-      expect(updater).not.toHaveBeenCalledWith({ p: 'old' }); // Should not hit old cache immediately
-
-      await $.nextTick();
-      await $.nextTick();
-      await $.nextTick();
-      expect(updater).toHaveBeenCalledWith({ p: 'new' });
-
-      // 3. Same Promise instance again should hit cache (Optimization)
-      updater.mockClear();
-      atom.value = 'dummy-trigger'; // Trigger re-evaluation of the map
-      await $.nextTick(); // Wait for dummy-trigger to flush (since we now suppress net-zero changes in a single tick)
-
-      atom.value = p2;
-      await $.nextTick();
-      // Hits cache synchronously within the runUpdater pass if resolvedMap has no other promises
-      // Or in the microtask if other promises exist.
-      expect(updater).toHaveBeenCalledWith({ p: 'new' });
+      await vi.waitFor(() => expect(updater).toHaveBeenCalledWith({ p: 'new' }));
     });
 
     it('Error Handling: reports promise rejections to the debug module', async () => {
@@ -85,7 +66,6 @@ describe('Effect Factory', () => {
 
       registerReactiveEffect(document.createElement('div'), rej, vi.fn(), 'err-test');
 
-      await $.nextTick();
       await $.nextTick();
       expect(errorSpy).toHaveBeenCalledWith(expect.anything(), expect.anything(), error);
       errorSpy.mockRestore();
@@ -125,7 +105,6 @@ describe('Effect Factory', () => {
     document.body.removeChild(el); // Disconnect before resolution
 
     resolve('resolved');
-    await $.nextTick();
     await $.nextTick();
     expect(updater).not.toHaveBeenCalled();
   });

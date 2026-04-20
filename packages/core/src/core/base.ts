@@ -41,15 +41,18 @@ export abstract class ReactiveNode<T> {
   _hotIndex: number;
 
   constructor() {
+    // Reordered for V8 Hidden Class (integers/numbers first)
     this.flags = 0;
     this.version = 0;
     this._lastSeenEpoch = EPOCH_CONSTANTS.UNINITIALIZED;
-    this._nextEpoch = undefined;
     this._notifying = 0;
     this._hotIndex = -1;
+    this.id = generateId() & SMI_MAX;
+
+    // References/Nullable last
+    this._nextEpoch = undefined;
     this._slots = null;
     this._deps = null;
-    this.id = generateId() & SMI_MAX;
   }
 
   /**
@@ -85,7 +88,8 @@ export abstract class ReactiveNode<T> {
    */
   subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
     const isFn = typeof listener === 'function';
-    if (!isFn && (!listener || typeof (listener as Subscriber).execute !== 'function')) {
+    // [Guard Clause] 중첩 최소화 및 타입 안전성 확보
+    if (!isFn && (listener === null || typeof (listener as Subscriber).execute !== 'function')) {
       throw wrapError(
         new TypeError('Invalid subscriber'),
         AtomError,
@@ -94,46 +98,53 @@ export abstract class ReactiveNode<T> {
     }
 
     let slots = this._slots;
-    if (!slots) {
+    if (slots === null) {
       slots = new SlotBuffer<Subscription<T>>();
       this._slots = slots;
     }
 
-    // Duplicate check: Unrolled for performance + early exit
-    let duplicate = false;
-    if (slots._s0 != null && (isFn ? slots._s0.fn === listener : slots._s0.sub === listener)) {
-      duplicate = true;
-    } else if (
-      slots._s1 != null &&
-      (isFn ? slots._s1.fn === listener : slots._s1.sub === listener)
-    ) {
-      duplicate = true;
-    } else if (
-      slots._s2 != null &&
-      (isFn ? slots._s2.fn === listener : slots._s2.sub === listener)
-    ) {
-      duplicate = true;
-    } else if (
-      slots._s3 != null &&
-      (isFn ? slots._s3.fn === listener : slots._s3.sub === listener)
-    ) {
-      duplicate = true;
-    } else {
-      const ov = slots._overflow;
-      if (ov != null) {
-        for (let i = 0, len = ov.length; i < len; i++) {
-          const s = ov[i];
-          if (s != null && (isFn ? s.fn === listener : s.sub === listener)) {
-            duplicate = true;
-            break;
+    // Optimization: Skip duplicate check if empty
+    if (slots.size > 0) {
+      let duplicate = false;
+
+      // Unrolled check using unified comparison to reduce branching
+      // Since Subscription stores fn/sub and one is always undefined, we can check both
+      if (
+        (slots._s0 !== null && (slots._s0.fn === listener || slots._s0.sub === listener)) ||
+        (slots._s1 !== null && (slots._s1.fn === listener || slots._s1.sub === listener)) ||
+        (slots._s2 !== null && (slots._s2.fn === listener || slots._s2.sub === listener)) ||
+        (slots._s3 !== null && (slots._s3.fn === listener || slots._s3.sub === listener))
+      ) {
+        duplicate = true;
+      } else {
+        const ov = slots._overflow;
+        if (ov !== null) {
+          const len = ov.length;
+          // Hoisted invariant check (isFn) to avoid branching inside the loop
+          if (isFn) {
+            for (let i = 0; i < len; i++) {
+              const s = ov[i];
+              if (s !== null && s?.fn === listener) {
+                duplicate = true;
+                break;
+              }
+            }
+          } else {
+            for (let i = 0; i < len; i++) {
+              const s = ov[i];
+              if (s !== null && s?.sub === listener) {
+                duplicate = true;
+                break;
+              }
+            }
           }
         }
       }
-    }
 
-    if (duplicate) {
-      if (IS_DEV) console.warn(`[atom-effect] Duplicate subscription ignored on node ${this.id}`);
-      return () => {};
+      if (duplicate) {
+        if (IS_DEV) console.warn(`[atom-effect] Duplicate subscription ignored on node ${this.id}`);
+        return () => {};
+      }
     }
 
     const link = new Subscription<T>(
@@ -147,7 +158,7 @@ export abstract class ReactiveNode<T> {
 
   protected _unsubscribe(link: Subscription<T>): void {
     const slots = this._slots;
-    if (!slots) return;
+    if (slots === null) return;
 
     slots.remove(link);
     if (this._notifying === 0) {
@@ -172,35 +183,31 @@ export abstract class ReactiveNode<T> {
 
     this._notifying++;
     try {
-      // 1. Inline slots: Manual unroll to avoid closure allocation
-      let s = slots._s0;
-      if (s != null) {
+      // 1. Inline slots: Manual unroll for hot-path performance
+      if (slots._s0 !== null) {
         try {
-          s.notify(newValue, oldValue);
+          slots._s0.notify(newValue, oldValue);
         } catch (e) {
           this._logNotifyError(e);
         }
       }
-      s = slots._s1;
-      if (s != null) {
+      if (slots._s1 !== null) {
         try {
-          s.notify(newValue, oldValue);
+          slots._s1.notify(newValue, oldValue);
         } catch (e) {
           this._logNotifyError(e);
         }
       }
-      s = slots._s2;
-      if (s != null) {
+      if (slots._s2 !== null) {
         try {
-          s.notify(newValue, oldValue);
+          slots._s2.notify(newValue, oldValue);
         } catch (e) {
           this._logNotifyError(e);
         }
       }
-      s = slots._s3;
-      if (s != null) {
+      if (slots._s3 !== null) {
         try {
-          s.notify(newValue, oldValue);
+          slots._s3.notify(newValue, oldValue);
         } catch (e) {
           this._logNotifyError(e);
         }
@@ -208,12 +215,12 @@ export abstract class ReactiveNode<T> {
 
       // 2. Overflow scan: Standard loop for performance
       const ov = slots._overflow;
-      if (ov != null) {
+      if (ov !== null) {
         for (let i = 0, len = ov.length; i < len; i++) {
           const sub = ov[i];
-          if (sub != null) {
+          if (sub !== null) {
             try {
-              sub.notify(newValue, oldValue);
+              sub?.notify(newValue, oldValue);
             } catch (e) {
               this._logNotifyError(e);
             }
@@ -247,7 +254,7 @@ export abstract class ReactiveNode<T> {
     const hotIndex = this._hotIndex;
     if (hotIndex !== -1) {
       const hotLink = deps.getAt(hotIndex);
-      if (hotLink != null && hotLink.node.version !== hotLink.version) {
+      if (hotLink !== null && hotLink.node.version !== hotLink.version) {
         return true;
       }
     }

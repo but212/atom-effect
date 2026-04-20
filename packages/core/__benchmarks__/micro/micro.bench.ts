@@ -27,14 +27,16 @@ describe('Atoms: Core Operations', () => {
   );
 
   const atoms = Array.from({ length: REPEATS }, (_, i) => atom(i));
+  // Force active subscriptions to bypass 'size === 0' optimization
+  atoms.forEach((a) => effect(() => keep(a.value), benchEffectOptions));
+
   bench(
-    `read/write performance (x${REPEATS})`,
+    `read/write performance: active (x${REPEATS})`,
     () => {
       let sum = 0;
       for (let i = 0; i < REPEATS; i++) {
-        atoms[i]!.value = i;
+        atoms[i]!.value++;
         sum += atoms[i]!.value;
-        sum += atoms[i]!.peek();
       }
       keep(sum);
     },
@@ -42,7 +44,7 @@ describe('Atoms: Core Operations', () => {
   );
 
   bench(
-    `untracked read (x${REPEATS})`,
+    `untracked read: active (x${REPEATS})`,
     () => {
       untracked(() => {
         let sum = 0;
@@ -55,17 +57,15 @@ describe('Atoms: Core Operations', () => {
 });
 
 describe('Batching & Synchronization', () => {
-  const atoms100 = Array.from({ length: 100 }, () => atom(0));
+  const atoms = Array.from({ length: REPEATS }, (_, i) => atom(i));
+  atoms.forEach((a) => effect(() => keep(a.value), benchEffectOptions));
 
   bench(
-    `batch update 100 atoms (x${REPEATS})`,
+    `batch update 100 atoms: active (x${REPEATS})`,
     () => {
-      for (let j = 0; j < REPEATS; j++) {
-        const val = j % 2;
-        batch(() => {
-          for (let i = 0; i < 100; i++) atoms100[i]!.value = val;
-        });
-      }
+      batch(() => {
+        for (let i = 0; i < REPEATS; i++) atoms[i]!.value++;
+      });
     },
     microBenchOptions
   );

@@ -148,18 +148,14 @@ export function forceGC(): void {
   }
 }
 
-/**
- * Resolves after all pending microtask-scheduled reactive effects have flushed.
- */
-export function nextTick(): Promise<void> {
-  return new Promise<void>((resolve) => setTimeout(resolve, 0));
-}
-
-let _sink: any;
+export let _sink: any;
 /**
  * Prevents Dead Code Elimination (DCE) by assigning the value to a sink.
  * Use this in benchmarks for values that aren't otherwise consumed.
  */
 export function keep(value: any): void {
   _sink = value;
+  if (Date.now() < 0) {
+    console.log(_sink);
+  }
 }

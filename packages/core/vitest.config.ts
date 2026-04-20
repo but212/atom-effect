@@ -1,8 +1,8 @@
 import path from 'node:path';
+import { playwright } from '@vitest/browser-playwright';
 import { defineConfig } from 'vitest/config';
 
 const SRC_PATH = path.resolve(__dirname, 'src');
-
 export default defineConfig({
   resolve: {
     alias: {
@@ -48,7 +48,11 @@ export default defineConfig({
         },
         test: {
           name: 'dom',
-          environment: 'happy-dom',
+          browser: {
+            enabled: true,
+            provider: playwright(),
+            instances: [{ browser: 'chromium' }],
+          },
           include: ['__tests__/dom/**/*.test.ts', '**/*.dom.test.ts'],
         },
       },

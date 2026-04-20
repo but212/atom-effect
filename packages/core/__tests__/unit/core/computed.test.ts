@@ -4,11 +4,8 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { atom } from '@/core/atom';
-import { computed } from '@/core/computed';
-import { AtomError, ComputedError } from '@/errors';
-import { isComputed } from '@/utils/type-guards';
-import { sleep, waitForScheduler } from '../../utils/test-helpers';
+import { AtomError, aeNextTick, atom, ComputedError, computed, isComputed } from '@/index';
+import { sleep } from '../../utils/test-helpers';
 
 /**
  * Internal interface for testing purposes to access non-public metadata
@@ -55,7 +52,7 @@ describe('Computed', () => {
 
       // Recompute: only after dependency change and subsequent re-access
       src.value = 5;
-      await waitForScheduler();
+      await aeNextTick();
       expect(fn).toHaveBeenCalledTimes(1); // Still cached until explicitly read
       expect(c.value).toBe(10);
       expect(fn).toHaveBeenCalledTimes(2);
@@ -72,7 +69,7 @@ describe('Computed', () => {
       const version = (c as unknown as LocalTestComputed).version;
 
       src.value = { x: 1 }; // Structurally different, but logically identical
-      await waitForScheduler();
+      await aeNextTick();
 
       expect(c.value).toEqual({ x: 1 });
       expect((c as unknown as LocalTestComputed).version).toBe(version); // Version should not bump
@@ -166,7 +163,7 @@ describe('Computed', () => {
       expect(c.subscriberCount()).toBe(1);
 
       a.value = 5;
-      await waitForScheduler();
+      await aeNextTick();
       expect(spy).toHaveBeenCalled();
       expect(c.value).toBe(12);
 

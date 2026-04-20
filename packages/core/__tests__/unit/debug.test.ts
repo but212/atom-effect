@@ -1,9 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEBUG_CONFIG } from '@/constants';
-import { atom } from '@/core/atom';
-import { computed } from '@/core/computed';
-import { effect } from '@/core/effect';
-import type { Dependency } from '@/types';
+import { atom, computed, type Dependency, effect } from '@/index';
 import { debug, generateId, NO_DEFAULT_VALUE } from '@/utils/debug';
 
 describe('Debug System', () => {

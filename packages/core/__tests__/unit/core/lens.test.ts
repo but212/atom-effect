@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { atom } from '@/core/atom';
-import { effect } from '@/core/effect';
-import { atomLens, composeLens, lensFor } from '@/core/lens';
-import { nextTick } from '../../utils/test-helpers';
+import { aeNextTick, atom, atomLens, composeLens, effect, lensFor } from '@/index';
 
 describe('atomLens', () => {
   it('should create a two-way lens for a single-level property', () => {
@@ -106,14 +103,14 @@ describe('atomLens', () => {
 
     // 2. Update the lensed property directly
     nameLens.value = 'Bob';
-    await nextTick();
+    await aeNextTick();
     expect(callCount).toBe(1);
     expect(lastValue).toBe('Bob');
     expect(oldVal).toBe('Alice');
 
     // 3. Update parent atom with same lensed value
     store.value = { ...store.value, profile: { ...store.value.profile, name: 'Bob' } };
-    await nextTick();
+    await aeNextTick();
     expect(callCount).toBe(1); // Should NOT notify (Object.is check)
   });
 
@@ -143,11 +140,11 @@ describe('atomLens', () => {
     expect(nameLens.value).toBe('Alice');
 
     nameLens.value = 'Bob';
-    await nextTick();
+    await aeNextTick();
     expect(store.value.user.profile.name).toBe('Bob');
 
     userLens.value = { profile: { name: 'Charlie' } };
-    await nextTick();
+    await aeNextTick();
     expect(nameLens.value).toBe('Charlie');
   });
 
@@ -159,7 +156,7 @@ describe('atomLens', () => {
 
     expect(abcd.value).toBe(11);
     abcd.value = 22;
-    await nextTick();
+    await aeNextTick();
     expect(store.value.a.b.c.d).toBe(22);
     expect(abc.value.d).toBe(22);
     expect(ab.value.c.d).toBe(22);
@@ -178,7 +175,7 @@ describe('atomLens', () => {
     expect(firstTextLens.value).toBe('First');
 
     firstTextLens.value = 'Updated First';
-    await nextTick();
+    await aeNextTick();
     expect(store.value.items[0]!.text).toBe('Updated First');
   });
 
@@ -193,13 +190,13 @@ describe('atomLens', () => {
 
     // Initial update
     store.value = { name: 'Bob' };
-    await nextTick();
+    await aeNextTick();
     expect(callCount).toBe(1);
 
     // Dispose and update
     lens.dispose();
     store.value = { name: 'Charlie' };
-    await nextTick();
+    await aeNextTick();
     expect(callCount).toBe(1); // Should not increase
   });
 

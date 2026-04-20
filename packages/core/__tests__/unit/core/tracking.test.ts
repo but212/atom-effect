@@ -3,15 +3,14 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { atom, computed } from '@/core';
 import {
   type DependencySubscriber,
   Subscription,
   trackingContext,
   untracked,
 } from '@/core/tracking';
+import { aeNextTick, atom, computed } from '@/index';
 import type { Subscriber } from '@/types';
-import { flush } from '../../utils/test-helpers';
 
 describe('Tracking Context & untracked()', () => {
   it('untracked() suppresses dependency collection while allowing value access', async () => {
@@ -29,13 +28,13 @@ describe('Tracking Context & untracked()', () => {
 
     // 1. Untracked change: must NOT trigger re-computation
     b.value = 20;
-    await flush();
+    await aeNextTick();
     expect(c.value).toBe(11); // Stale value is expected until 'a' changes
     expect(computeCount).toBe(1);
 
     // 2. Tracked change: must trigger re-computation and pick up latest untracked value
     a.value = 2;
-    await flush();
+    await aeNextTick();
     expect(c.value).toBe(22); // 2 + 20
     expect(computeCount).toBe(2);
 

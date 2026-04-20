@@ -1,6 +1,5 @@
-import $ from 'jquery';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import '@/index';
+import $ from '@/index';
 
 describe('$.atomList (Integration)', () => {
   const EXPANDO = 'data-test-expando';
@@ -42,11 +41,9 @@ describe('$.atomList (Integration)', () => {
     expect($container.find('p').length).toBe(0);
     expect($container.find('span').text()).toBe('b');
 
-    // [Stability] Releasing empty list multiple times should not corrupt internal pools
+    // [Stability] Releasing empty list multiple times should not corrupt internal state
     list.value = [];
-    await $.nextTick();
     list.value = [];
-    await $.nextTick();
     list.value = ['c'];
     await $.nextTick();
     expect($container.find('span').text()).toBe('c');
@@ -323,7 +320,7 @@ describe('$.atomList (Integration)', () => {
 
     // Complete the old removal
     resolveRemove();
-    await new Promise((r) => setTimeout(r, 0));
+    await $.nextTick();
 
     // The item should STILL be there because it was re-added
     expect($container.find('.item-1').length).toBe(1);

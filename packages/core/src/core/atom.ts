@@ -1,4 +1,4 @@
-import { ATOM_STATE_FLAGS } from '@/constants';
+import { ATOM_STATE_FLAGS, IS_DEV } from '@/constants';
 import { ReactiveNode } from '@/core/base';
 import { BRAND, BrandFlags } from '@/symbols';
 import type { AtomOptions, WritableAtom } from '@/types';
@@ -28,7 +28,9 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
       this.flags |= ATOM_STATE_FLAGS.SYNC;
     }
 
-    debug.attachDebugInfo(this, 'atom', this.id, options.name);
+    if (IS_DEV) {
+      debug.attachDebugInfo(this, 'atom', this.id, options.name);
+    }
   }
 
   /** @internal */
@@ -55,27 +57,34 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
 
     this._value = newValue;
     this.version = nextVersion(this.version);
-    debug.trackUpdate(this.id, debug.getDebugName(this));
 
-    // 1. Double check: schedule pending or no slots
-    if ((this.flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED) !== 0) return;
+    if (IS_DEV) {
+      debug.trackUpdate(this.id, debug.getDebugName(this));
+    }
 
+    const currentFlags = this.flags;
+    const SCHED_BIT = ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
+
+    // 1. Guard: Skip if already scheduled or no subscribers
+    if ((currentFlags & SCHED_BIT) !== 0) return;
     const slots = this._slots;
-    if (slots == null || slots.size === 0) return;
+    if (slots === null || slots.size === 0) return;
 
+    // 2. Schedule Notification
     this._pendingOldValue = oldValue;
-    this.flags |= ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
+    const nextFlags = currentFlags | SCHED_BIT;
+    this.flags = nextFlags;
 
-    // 2. Schedule or flush (inline bitwise)
-    if ((this.flags & ATOM_STATE_FLAGS.SYNC) !== 0 && !scheduler.isBatching) {
-      // If not already notifying, start the flush loop.
-      // If already notifying, the existing loop will pick up the new flag.
+    // 3. Choice: Flush now or Schedule for later
+    const SYNC_BIT = ATOM_STATE_FLAGS.SYNC;
+    if ((nextFlags & SYNC_BIT) !== 0 && !scheduler.isBatching) {
       if (this._notifying === 0) {
         this._flushNotifications();
       }
-    } else {
-      scheduler.schedule(this);
+      return;
     }
+
+    scheduler.schedule(this);
   }
 
   /**
@@ -93,21 +102,26 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
     const SCHED_BIT = ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
     const DISP_BIT = ATOM_STATE_FLAGS.DISPOSED;
     const SYNC_BIT = ATOM_STATE_FLAGS.SYNC;
+    const LOOP_MASK = SCHED_BIT | DISP_BIT;
 
+    let flags = this.flags;
     // Loop to handle re-entrant sync updates in breadth-first order
-    while ((this.flags & (SCHED_BIT | DISP_BIT)) === SCHED_BIT) {
+    while ((flags & LOOP_MASK) === SCHED_BIT) {
       const oldValue = this._pendingOldValue as T;
       this._pendingOldValue = undefined;
-      this.flags &= ~SCHED_BIT;
+
+      // Update bitwise state
+      this.flags = flags &= ~SCHED_BIT;
 
       // Net-zero check: if value returned to original during batching, skip notification
-      if (!this._equal(this._value, oldValue)) {
-        this._notifySubscribers(this._value, oldValue);
+      const currentVal = this._value;
+      if (!this._equal(currentVal, oldValue)) {
+        this._notifySubscribers(currentVal, oldValue);
       }
 
+      flags = this.flags;
       // Only continue looping if we are in sync mode and not batching.
-      // For async mode, the scheduler handles subsequent executions.
-      if ((this.flags & SYNC_BIT) === 0 || scheduler.isBatching) {
+      if ((flags & SYNC_BIT) === 0 || scheduler.isBatching) {
         break;
       }
     }
@@ -119,10 +133,12 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
 
   dispose(): void {
     const flags = this.flags;
-    if ((flags & ATOM_STATE_FLAGS.DISPOSED) !== 0) return;
+    const DISP_BIT = ATOM_STATE_FLAGS.DISPOSED;
+    if ((flags & DISP_BIT) !== 0) return;
 
+    this.flags = flags | DISP_BIT;
     this._slots?.clear();
-    this.flags = flags | ATOM_STATE_FLAGS.DISPOSED;
+
     // Release references
     this._value = undefined as T;
     this._pendingOldValue = undefined;
@@ -131,10 +147,6 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
 
   protected override _deepDirtyCheck(): boolean {
     return false;
-  }
-
-  [Symbol.dispose](): void {
-    this.dispose();
   }
 }
 
