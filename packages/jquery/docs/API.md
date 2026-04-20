@@ -31,6 +31,7 @@ The following utilities and constants are available on the global `AtomEffectJQu
 - `enablejQueryOverrides()`: Manually enable patches for jQuery's native methods (like `.empty()` and `.remove()`).
 - `nextTick()`: Utility for waiting until the next reactive flush.
 - `registry`: Access to the internal element-effect registry.
+- `debug`: Access to the runtime-toggleable debug controller.
 
 ### Manual Initialization
 
@@ -54,7 +55,7 @@ The library automatically extends the global `jQuery` (or `$`) object. Methods l
 
 ### `.atomBind(bindings)`
 
-The preferred way to apply multiple bindings at once. This method uses a **bitmask dispatch strategy** to minimize CPU branch mispredictions, ensuring constant-time (O(1)) invocation overhead even for complex binding maps.
+The preferred way to apply multiple bindings at once. This method uses a **task-based loop strategy** to minimize overhead, ensuring efficient invocation even for complex binding maps by pre-filtering active tasks before iterating over elements.
 
 ```javascript
 $('.user-card').atomBind({
@@ -95,7 +96,13 @@ $el.atomBind({ text: [count, c => `Count: ${c}`] });
 Updates `innerHTML`.
 
 > **🛡️ Security Note**:
-> This method uses a **multi-layered DOM-based Sanitizer** (via inert `<template>`) for maximum reliability. It includes an **O(n) fast-path scanner** to skip processing for safe strings, and a **recursive tree-walker** that transforms dangerous tags (`<script>`, `<iframe>`, etc.) into inert `<span>` wrappers while stripping `on*` attributes and dangerous protocols (`javascript:`, `data:`, etc.). It also features **DOM Clobbering Protection** to prevent malicious inputs from shadowing internal element properties used during sanitization.
+> This method uses a **multi-layered DOM-based Sanitizer** (via inert `<template>`) for maximum reliability. It uses a **recursive tree-walker** that transforms dangerous tags (`<script>`, `<iframe>`, etc.) into inert `<span>` wrappers while stripping `on*` attributes and dangerous protocols (`javascript:`, `data:`, etc.).
+>
+> **Key Security Features**:
+>
+> - **DOM Clobbering Protection**: Uses prototype-level descriptors to prevent malicious inputs from shadowing internal element properties.
+> - **Immediate Scrubbing**: All attributes from transformed nodes (e.g., `<script onerror=...>` → `<span data-unsafe-attr=...>`) are immediately processed.
+> - **Recursive Trust**: Automatically cleanses nested contexts including `<template>` content and `srcdoc` sinks.
 >
 > While highly efficient, [DOMPurify](https://github.com/cure53/DOMPurify) is recommended for complex, user-generated content to ensure maximum security.
 > See the [Security Guide](./SECURITY.md) for details.
@@ -145,7 +152,7 @@ $('img').atomAttr('src', imageUrl);
 Updates a DOM property (e.g., `checked`, `disabled`, `value`).
 
 - **Flexible**: Employs `unknown` instead of `any` to satisfy strict linting while maintaining 100% flexibility for heterogeneous property types.
-- **Security**: Blocks dangerous properties (`innerHTML`, `outerHTML`) and prototype pollution vectors (`__proto__`, `constructor`, `prototype`).
+- **Security**: Directly blocks dangerous properties (`innerHTML`, `outerHTML`, `srcdoc`) and prototype pollution vectors (`__proto__`, `constructor`, `prototype`) through a unified security subsystem.
 
 ```javascript
 $('input').atomProp('disabled', shouldDisable);
@@ -202,7 +209,7 @@ The `atomList` synchronization engine uses a **greedy placement strategy** combi
 
 #### Memory & Async Safety
 
-All reactive bindings (`atomBind`, `atomText`, etc.) include built-in **Zombie Prevention**. This ensures that asynchronous updates (promises) are automatically discarded if the element is disconnected from the DOM before the resolution completes. Additionally, the library employs a **Hardened Memory Pool** with double-release protection and synchronized resource orchestration to ensure zero memory leaks even in highly dynamic states. `atomBind` (via `registerMapEffect`) also optimizes multi-promise maps by caching resolved values, allowing subsequent reactive updates to skip redundant async delays.
+All reactive bindings (`atomBind`, `atomText`, etc.) include built-in **Zombie Prevention**. This ensures that asynchronous updates (promises) are automatically discarded if the element is disconnected from the DOM before the resolution completes. Additionally, the library ensures zero memory leaks even in highly dynamic states through its internal registry. `atomBind` (via `registerMapEffect`) also optimizes multi-promise maps by synchronizing multiple asynchronous dependencies, preventing partial updates and flickering during complex state transitions.
 
 ---
 
@@ -320,7 +327,8 @@ Mounts a functional component to each selected element. Automatically handles cl
 - **Isolation**: Executed within an `untracked()` block to prevent component logic from subscribing to a parent reactive context.
 - **Error Handling**: Mount and cleanup errors are caught and logged as `[atom-mount] Mount/Cleanup error`.
 
-- **component**: `($el, props) => EffectResult` (Function returning an optional cleanup).
+- **component**: `($element, props) => EffectResult` (Function returning an optional teardown).
+  - **EffectResult**: Can be `undefined`, a single cleanup function, or a `ComponentLifecycle` object containing an `unmount()` method.
 - **props**: Optional initial data object.
 
 ```javascript
@@ -436,15 +444,13 @@ $.effect(() => {
 });
 ```
 
-### `$.isAtom(v)`, `$.isComputed(v)`, `$.isReactive(v)`, `$.isPromise(v)`
+### `$.isAtom(v)`, `$.isComputed(v)`
 
-Runtime type checks for reactive nodes and thenables.
+Runtime type checks for reactive nodes.
 
 ```javascript
-$.isAtom(myAtom);      // true for WritableAtom
-$.isComputed(myComp);  // true for ComputedAtom
-$.isReactive(v);       // true for any reactive node (atom or computed)
-$.isPromise(v);        // true for Promise or Thenable (including thenable functions)
+$.isAtom(myAtom);      // true
+$.isComputed(myComp);  // true
 ```
 
 ### `$.nextTick()`
@@ -476,10 +482,10 @@ Declarative AJAX primitive. Wraps core's async `computed` with jQuery's `$.ajax`
 - `options`: `FetchOptions<T>`
   - `defaultValue`: `T` (Required) — Value before first response.
   - `name`: `string` (Optional) — Debug name for the atom.
-  - `method`: `string` — HTTP method (default: `'GET'`).
+  - `method`: `string` — HTTP method (default: `'GET'`). Note: the top-level `method` option takes precedence over `ajaxOptions.method`.
   - `headers`: `Record<string, string>` — Request headers.
   - `transform`: `(raw: unknown, xhr: JQuery.jqXHR) => T` — Response transformer. Receives the raw data and the jQuery XHR object.
-  - `ajaxOptions`: `JQuery.AjaxSettings | () => JQuery.AjaxSettings` — Full `$.ajax` passthrough. When a **function** is provided, it is called on every request and its atom reads are automatically tracked, enabling reactive request payloads (e.g., dynamic headers or body). Static options (`method`, `headers`) are merged as the base, with dynamic values on top. Note: the top-level `method` option only overrides `ajaxOptions.method` if it is explicitly provided.
+  - `ajaxOptions`: `JQuery.AjaxSettings | () => JQuery.AjaxSettings` — Full `$.ajax` passthrough. When a **function** is provided, it is called on every request and its atom reads are automatically tracked, enabling reactive request payloads (e.g., dynamic headers or body). Static options (`method`, `headers`) are merged as the base, with dynamic values on top.
 
 **Returns**: `ComputedAtom<T>` — reactive value with:
 
@@ -532,14 +538,14 @@ Creates an SPA router with reactive state management. Supports both hash-based a
 
 - `target`: `string | JQuery | HTMLElement` — Selector or element where routes will be rendered. Supporting object references allows initializing routers inside dynamic layouts or `atomNav` containers.
 - `default`: Name of the default route to load if the URL is empty.
-- `routes`: (Optional) Object mapping route names to definitions. If omitted, the router will attempt **Implicit Auto-Discovery** (see below). Each route must specify **either** `template` **or** `render`, but not both.
+- `routes`: (Optional) Object mapping route names to unified `RouteDefinition` objects. If omitted, the router will attempt **Implicit Auto-Discovery**.
   - Supports **Dynamic Segments**: Use `:paramName` (e.g., `'user/:id'`). Parameters are automatically extracted and available in the `params` atom.
   - `template`: Selector for a `<template>` element to clone.
   - `render`: Custom function `(container, name, params, onUnmount, router) => void`.
     - `onUnmount`: Callback `(cleanupFn) => void` to register side-effect cleanups for the route.
   - `onEnter`: Hook called before rendering. Can return an object to merge into `params`, or `false` to block navigation.
   - `onLeave`: Hook called before navigating away. Return `false` to block.
-  - `onMount`: `($content: JQuery, onUnmount, router) => void` — **Template routes only.** Called after template content is appended.
+  - `onMount`: `($content: JQuery, onUnmount, router) => void` — Called after the route content (both template and rendered) is appended.
   - `title`: (Optional) String to set as `document.title` when this route is active.
 - `mode`: (Optional) `'hash'` (default) or `'history'`.
 - `basePath`: (Optional) Base path prefix for history mode (e.g., `'/app'`).
@@ -574,7 +580,7 @@ A `Router` object with:
 - `queryParams`: `ReadonlyAtom<Record<string, string>>` reactive map of URL query parameters.
 - `params`: `ReadonlyAtom<Record<string, string>>` merged reactive map of path parameters and query parameters.
 - `navigate(route)`: Programmatically change route. Supports dynamic paths (e.g., `navigate('user/42')`) and query strings.
-- `destroy()`: Cleanup listeners, effects, and template cache.
+- `destroy()`: Cleanup listeners, effects, and active subscriptions.
 
 **Example**:
 
@@ -652,15 +658,14 @@ The library includes a built-in debug mode to help you visualize reactive update
 You can enable debug mode in several ways:
 
 1. **Global Toggle**: Set `window.__ATOM_DEBUG__ = true` **before** the library script evaluates.
-2. **Session Storage**: Because the library utilizes a zero-overhead architecture by swapping the debug implementation precisely at load time, you can still seamlessly activate debug functionality on production builds by setting `sessionStorage.setItem('__ATOM_DEBUG__', 'true')` and refreshing the page.
-3. **Environment Variable**: Set `VITE_ATOM_DEBUG=true` in your `.env` file (for Vite projects).
+2. **Implicit**: Enabled by default in non-production environments (`process.env.NODE_ENV !== 'production'`).
 
-> **Note**: Toggling `debug.enabled = true` from the browser console dynamically is no longer supported since the production implementation explicitly strips out all formatting and branch logic at initialization time.
+> **Note**: You can toggle `$.debug.enabled` at runtime from the console to enable or disable visual feedback and logging.
 
 ### Visual Feedback
 
 When enabled:
 
-- **Console Logs**: Every DOM update is logged with its selector (e.g., `[atom-binding] DOM updated: div#app.main.text = new value`).
+- **Console Logs**: Every DOM update is logged with its selector (e.g., `[atom-binding] DOM updated: div#app.main.text = value`).
 - **Visual Highlighting**: Updated elements are temporarily outlined with a red border. This highlight uses a non-blocking `requestAnimationFrame` loop and is automatically cleaned up after a short duration, even if the element is removed from the DOM.
 - **Selector Precision**: Logs use a precise `tag#id.class` format (including SVG support) to help you identify the exact source of a change.

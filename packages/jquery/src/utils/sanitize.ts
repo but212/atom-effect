@@ -1,20 +1,9 @@
-/**
- * HTML sanitization and security guards for XSS mitigation.
- *
- * This module provides a multi-layered defense:
- * 1. Fast-path scanner for O(n) safety checks.
- * 2. Hardened normalization (Entity decoding, Control character removal).
- * 3. Recursive tag stripping.
- * 4. Protocol and CSS neutralizers.
- */
 import { DANGEROUS_PROTOCOL_PATTERN } from '@/constants';
 
-// ============================================================================
-// Constants & Configuration
-// ============================================================================
+// --- Configuration & Security Constants ---
 
-/** Attributes that carry a URL or raw HTML (srcdoc). */
-export const URL_ATTRS = new Set([
+/** Attributes that must be checked for dangerous URI protocols. */
+const URL_ATTRIBUTES = [
   'href',
   'src',
   'action',
@@ -38,9 +27,10 @@ export const URL_ATTRS = new Set([
   'clip-path',
   'srcdoc',
   'srcset',
-]);
+];
 
-const DANGEROUS_TAGS = new Set([
+/** Tags that are dangerous and must be neutralized by transforming them into safe containers. */
+const BLACKLISTED_TAGS = [
   'script',
   'iframe',
   'object',
@@ -53,239 +43,313 @@ const DANGEROUS_TAGS = new Set([
   'style',
   'link',
   'title',
-]);
+];
 
-const NAMED_ENTITY_MAP: Record<string, string> = {
+/** List of patterns that are forbidden within CSS contexts. */
+const CSS_DANGER_PATTERNS = [
+  /expression\s*\(/i, // IE legacy expressions
+  /behavior\s*:/i, // IE legacy behaviors
+  /-moz-binding\s*:/i, // Old Firefox XBL bindings
+  /@import/i, // External stylesheet imports
+  new RegExp(`url\\s*\\(\\s*["']?\\s*${DANGEROUS_PROTOCOL_PATTERN}\\s*:`, 'i'), // url(javascript:...)
+  /data\s*:\s*(?!image\/)/i, // data: URIs that aren't images
+];
+
+/** Mapping of obfuscated HTML entities to their plain-text equivalents. */
+const HTML_ENTITY_LOOKUP: Record<string, string> = {
   colon: ':',
   tab: '\t',
   newline: '\n',
 };
 
-// ============================================================================
-// Regex Engine (Pre-compiled for performance)
-// ============================================================================
+// --- Regex Definitions ---
 
-const RE_NUMERIC_ENTITY = /&#x([0-9a-f]+);?|&#([0-9]+);?/gi;
-const RE_NAMED_ENTITY = /&(colon|tab|newline);?/gi;
-// biome-ignore lint/suspicious/noControlCharactersInRegex: Intentionally matching control characters for XSS sanitization
-const RE_STRIP_CTRL = /[\x00-\x1f\x7f]/g;
-// biome-ignore lint/suspicious/noControlCharactersInRegex: Intentionally matching control characters for XSS sanitization
-const RE_FAST_SCAN = /[<&\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/;
+const REGEX_NUMERIC_ENTITY = /&#x([0-9a-f]+);?|&#([0-9]+);?/gi;
+const REGEX_NAMED_ENTITY = /&(colon|tab|newline);?/gi;
 
-const RE_DANGEROUS_TAG =
-  /(<(script|iframe|object|embed|base|meta|applet|noscript|form|style|link)\b[^>]*>([\s\S]*?)<\/\2>|<(script|iframe|object|embed|base|meta|applet|noscript|form|style|link)\b[^>]*\/?>)/gi;
-const RE_UNSAFE_ATTR = /\bon\w+\s*=/gim;
+// biome-ignore lint/suspicious/noControlCharactersInRegex: necessary for protocol normalization
+const REGEX_CONTROL_CHARS = /[\x00-\x1f\x7f]/g;
 
-const PROTOCOL_PATTERN = `${DANGEROUS_PROTOCOL_PATTERN}\\s*:`;
-const RE_DANGEROUS_PROTOCOL_GLOBAL = new RegExp(PROTOCOL_PATTERN, 'gi');
-const RE_DANGEROUS_PROTOCOL_CONTEXT = new RegExp(
-  `(?:^|url\\s*\\(\\s*["']?)\\s*${PROTOCOL_PATTERN}`,
+const REGEX_DATA_URI_HTML =
+  /data\s*:\s*(?:text\/(?:html|javascript|vbscript|xml)|application\/(?:javascript|xhtml\+xml|xml|x-shockwave-flash)|image\/svg\+xml)/i;
+
+/** Optimization: Pre-compiled strict protocol pattern */
+const REGEX_PROTOCOL_STRICT = new RegExp(
+  `(?:^|url\\s*\\(\\s*["']?)\\s*${DANGEROUS_PROTOCOL_PATTERN}\\s*:`,
   'i'
 );
 
-const RE_DANGEROUS_DATA_URI =
-  /data\s*:\s*(?:text\/(?:html|javascript|vbscript|xml)|application\/(?:javascript|xhtml\+xml|xml|x-shockwave-flash)|image\/svg\+xml)/gi;
+/**
+ * Logic: A combined pattern used for fast-path sniffing of dangerous content.
+ * Synchronized automatically with BLACKLISTED_TAGS.
+ */
+const REGEX_DANGEROUS_SNIFFER = new RegExp(
+  [
+    `(<(${BLACKLISTED_TAGS.join('|')})\\b[^>]*>([\\s\\S]*?)<\\/\\2>|<(${BLACKLISTED_TAGS.join('|')})\\b[^>]*\\/?>)`,
+    '\\bon\\w+\\s*=',
+    `${DANGEROUS_PROTOCOL_PATTERN}\\s*:`,
+    REGEX_DATA_URI_HTML.source,
+  ].join('|'),
+  'i'
+);
 
-/** CSS Sanitization: Optimized to avoid over-matching standard HTML attributes */
-const CSS_KEYWORD_PATTERN = `(?:expression\\s*\\(|behavior\\s*:|-moz-binding\\s*:|url\\s*\\(\\s*["']?\\s*${PROTOCOL_PATTERN}(?!image\\/)|data\\s*:\\s*(?!image\\/))`;
-const RE_DANGEROUS_CSS_SINGLE = new RegExp(CSS_KEYWORD_PATTERN, 'im');
-
-// ============================================================================
-// Internal Helpers
-// ============================================================================
-
-/** Normalizes a string by decoding entities and stripping control characters. */
-function normalize(s: string): string {
-  if (typeof s !== 'string') return '';
-  return s
-    .replace(RE_NUMERIC_ENTITY, (_, hex, dec) => {
-      const cp = hex ? parseInt(hex, 16) : parseInt(dec, 10);
-      return cp >= 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : '';
-    })
-    .replace(RE_NAMED_ENTITY, (_, name) => NAMED_ENTITY_MAP[name.toLowerCase()] ?? '')
-    .replace(RE_STRIP_CTRL, '');
-}
-
-/** Returns true if the string contains a dangerous protocol or data URI. */
-function hasDangerousProtocol(s: string): boolean {
-  return RE_DANGEROUS_PROTOCOL_CONTEXT.test(s) || RE_DANGEROUS_DATA_URI.test(s);
-}
-
-/** Checks for high-risk HTML content (tags, on* handlers, embedded protocols). */
-function isDangerousHtmlContent(s: string): boolean {
-  return RE_DANGEROUS_TAG.test(s) || RE_UNSAFE_ATTR.test(s) || RE_DANGEROUS_PROTOCOL_GLOBAL.test(s);
-}
-
-/** O(n) scan to skip sanitization for safe strings. */
-function needsSanitization(s: string): boolean {
-  if (RE_FAST_SCAN.test(s) || s.includes(':')) return true;
-
-  const lower = s.toLowerCase();
-  let onIdx = lower.indexOf('on');
-  while (onIdx !== -1 && onIdx < s.length - 2) {
-    const nextChar = lower.charCodeAt(onIdx + 2);
-    if (nextChar >= 97 && nextChar <= 122) return true; // a-z
-    onIdx = lower.indexOf('on', onIdx + 1);
-  }
-  return false;
-}
-
-// ============================================================================
-// Public API
-// ============================================================================
+// --- Safe DOM Access ---
 
 /**
- * Template Pool for re-entrant efficiency.
- * Minimizes GC pressure by reusing template elements across calls.
+ * Security Bridge: Accesses DOM properties via prototypes to prevent bypass attacks
+ * that use Object.defineProperty on element instances (DOM Clobbering).
  */
-const TEMPLATE_POOL: HTMLTemplateElement[] = [];
-
-function acquireTemplate(): HTMLTemplateElement {
-  return TEMPLATE_POOL.pop() || document.createElement('template');
-}
-
-function releaseTemplate(t: HTMLTemplateElement): void {
-  t.innerHTML = '';
-  TEMPLATE_POOL.push(t);
-}
-
-/**
- * DOM_BRIDGE: Low-level access to Element prototypes.
- * Bypasses DOM Clobbering by avoiding direct property access on potentially shadowed elements.
- */
-const DOM_BRIDGE = {
-  getAttributes: (el: Element) =>
-    Object.getOwnPropertyDescriptor(Element.prototype, 'attributes')!.get!.call(el) as NamedNodeMap,
-  removeAttribute: (el: Element, name: string) => Element.prototype.removeAttribute.call(el, name),
-  replaceWith: (oldEl: Element, newEl: Node) => Element.prototype.replaceWith.call(oldEl, newEl),
+const DOM_PROTOTYPE_BRIDGE = {
+  getAttributes: (element: Element) =>
+    Object.getOwnPropertyDescriptor(Element.prototype, 'attributes')!.get!.call(
+      element
+    ) as NamedNodeMap,
+  setAttribute: (element: Element, name: string, value: string) =>
+    Element.prototype.setAttribute.call(element, name, value),
+  removeAttribute: (element: Element, name: string) =>
+    Element.prototype.removeAttribute.call(element, name),
+  replaceElement: (oldElement: Element, newElement: Node) =>
+    Element.prototype.replaceWith.call(oldElement, newElement),
+  getLocalName: (element: Element) =>
+    Object.getOwnPropertyDescriptor(Element.prototype, 'localName')!.get!.call(element) as string,
+  getFirstChild: (node: Node) =>
+    Object.getOwnPropertyDescriptor(Node.prototype, 'firstChild')!.get!.call(
+      node
+    ) as ChildNode | null,
 };
 
+// --- Normalization & Validation Logic ---
+
 /**
- * Scrubs attributes for dangerous patterns (on*, javascript:, srcdoc).
+ * Decodes HTML entities and strips control characters to reveal hidden protocols.
  */
-function scrubAttributes(el: HTMLElement): void {
-  const attrs = DOM_BRIDGE.getAttributes(el);
-  if (!attrs || attrs.length === 0) return;
+function normalizeValue(input: string): string {
+  if (typeof input !== 'string') return '';
+  return input
+    .replace(REGEX_NUMERIC_ENTITY, (_, hex, dec) => {
+      const codePoint = hex ? parseInt(hex, 16) : parseInt(dec, 10);
+      return codePoint >= 0 && codePoint <= 0x10ffff ? String.fromCodePoint(codePoint) : '';
+    })
+    .replace(REGEX_NAMED_ENTITY, (_, name) => HTML_ENTITY_LOOKUP[name.toLowerCase()] ?? '')
+    .replace(REGEX_CONTROL_CHARS, '');
+}
 
-  for (let i = attrs.length - 1; i >= 0; i--) {
-    const attr = attrs[i];
-    if (!attr) continue;
+/**
+ * Returns true if the string contains a dangerous URI protocol.
+ */
+function isDangerousProtocol(value: string): boolean {
+  const cleanedValue = value.replace(/\s+/g, '');
+  return REGEX_PROTOCOL_STRICT.test(cleanedValue) || REGEX_DATA_URI_HTML.test(cleanedValue);
+}
 
-    const name = attr.name;
+/**
+ * Security Patch: srcset can contain comma-separated URLs.
+ * Each must be sanitized individually to prevent protocol smuggling.
+ */
+function scrubSrcset(value: string): string {
+  return value
+    .split(',')
+    .map((part) => {
+      const trimmedPart = part.trim();
+      if (!trimmedPart) return part;
+      const [url, ...metadata] = trimmedPart.split(/\s+/);
+      const normalizedUrl = normalizeValue(url!);
+      return isDangerousProtocol(normalizedUrl)
+        ? ['data-unsafe-protocol:', ...metadata].join(' ')
+        : [normalizedUrl, ...metadata].join(' ');
+    })
+    .join(',');
+}
+
+/**
+ * Normalizes CSS by removing comments and extra whitespace
+ * to reveal hidden keywords or protocols.
+ */
+function normalizeCss(value: string): string {
+  const normalized = normalizeValue(value);
+  // Strip CSS comments: /* ... */
+  return normalized.replace(/\/\*[\s\S]*?\*\//g, '');
+}
+
+/** Returns true if any dangerous CSS patterns are detected. */
+function isCssDangerous(value: string): boolean {
+  const cleanCss = normalizeCss(value);
+  return CSS_DANGER_PATTERNS.some((pattern) => pattern.test(cleanCss));
+}
+
+// --- Attribute Specific Scrubbers ---
+
+/**
+ * Logic: Handlers for attributes that require specialized sanitization logic.
+ */
+const ATTRIBUTE_HANDLERS: Record<
+  string,
+  (element: HTMLElement, name: string, value: string) => void
+> = {
+  srcdoc: (element, name, value) => {
+    const normalizedValue = normalizeValue(value);
+    DOM_PROTOTYPE_BRIDGE.setAttribute(element, name, sanitizeHtml(normalizedValue));
+  },
+  srcset: (element, name, value) => {
+    DOM_PROTOTYPE_BRIDGE.setAttribute(element, name, scrubSrcset(value));
+  },
+  style: (element, _, value) => {
+    if (isCssDangerous(value)) {
+      DOM_PROTOTYPE_BRIDGE.setAttribute(element, 'style', 'data-unsafe-css:');
+    }
+  },
+};
+
+// --- Scrubber Core ---
+
+/**
+ * Scrubs event listeners (on*) and malicious protocols from individual element attributes.
+ */
+function applySecurityPolicy(element: HTMLElement): void {
+  const attributes = DOM_PROTOTYPE_BRIDGE.getAttributes(element);
+  if (!attributes) return;
+
+  const scrubbedEventHandlers: string[] = [];
+
+  for (let i = attributes.length - 1; i >= 0; i--) {
+    const attribute = attributes[i]!;
+    const name = attribute.name;
     const lowerName = name.toLowerCase();
-    const value = attr.value;
+    const value = attribute.value;
 
     if (lowerName.startsWith('on')) {
-      DOM_BRIDGE.removeAttribute(el, name);
-      el.setAttribute('data-unsafe-attr', name);
-    } else if (URL_ATTRS.has(lowerName)) {
-      const normalized = normalize(value);
-      if (lowerName === 'srcdoc') {
-        // Fast-path for safe srcdoc content
-        if (needsSanitization(normalized)) {
-          const sanitized = sanitizeHtml(normalized);
-          if (sanitized !== value) el.setAttribute(name, sanitized);
-        }
-      } else if (hasDangerousProtocol(normalized)) {
-        el.setAttribute(name, 'data-unsafe-protocol:');
-      }
-    } else if (lowerName === 'style') {
-      if (isDangerousCssValue(value)) {
-        el.setAttribute('style', 'data-unsafe-css:');
+      DOM_PROTOTYPE_BRIDGE.removeAttribute(element, name);
+      scrubbedEventHandlers.push(name);
+      continue;
+    }
+
+    if (ATTRIBUTE_HANDLERS[lowerName]) {
+      ATTRIBUTE_HANDLERS[lowerName]!(element, name, value);
+    } else if (URL_ATTRIBUTES.includes(lowerName)) {
+      const normalizedValue = normalizeValue(value);
+      if (isDangerousProtocol(normalizedValue)) {
+        DOM_PROTOTYPE_BRIDGE.setAttribute(element, name, 'data-unsafe-protocol:');
       }
     }
   }
+
+  if (scrubbedEventHandlers.length > 0) {
+    DOM_PROTOTYPE_BRIDGE.setAttribute(element, 'data-unsafe-attr', scrubbedEventHandlers.join(','));
+  }
 }
 
 /**
- * Transforms dangerous nodes into inert <span> wrappers.
+ * Neutralizes dangerous tags (like <script>) by converting them to <span>.
  */
-function transformNode(el: HTMLElement): void {
-  if (!DANGEROUS_TAGS.has(el.localName)) return;
+function neutralizeDangerousNode(element: HTMLElement): void {
+  if (!BLACKLISTED_TAGS.includes(DOM_PROTOTYPE_BRIDGE.getLocalName(element))) return;
 
-  const span = document.createElement('span');
-  const attrs = DOM_BRIDGE.getAttributes(el);
+  const safeReplacement = document.createElement('span');
+  const attributes = DOM_PROTOTYPE_BRIDGE.getAttributes(element);
 
-  for (let i = 0; i < attrs.length; i++) {
-    const a = attrs[i];
-    if (a) span.setAttribute(a.name, a.value);
+  for (let i = 0; i < attributes.length; i++) {
+    const attr = attributes[i];
+    if (attr) safeReplacement.setAttribute(attr.name, attr.value);
   }
 
-  while (el.firstChild) {
-    span.appendChild(el.firstChild);
+  // Scrub attributes copied from dangerous nodes
+  applySecurityPolicy(safeReplacement);
+
+  let child = DOM_PROTOTYPE_BRIDGE.getFirstChild(element);
+  while (child) {
+    safeReplacement.appendChild(child);
+    child = DOM_PROTOTYPE_BRIDGE.getFirstChild(element);
   }
 
-  DOM_BRIDGE.replaceWith(el, span);
+  DOM_PROTOTYPE_BRIDGE.replaceElement(element, safeReplacement);
 }
 
 /**
- * Scrubs a single element for dangerous tags and attributes.
+ * Recursive walker that processes a document fragment and its nested templates.
  */
-function scrubElement(el: HTMLElement): void {
-  // 1. Sanitize Attributes FIRST
-  scrubAttributes(el);
-  // 2. Wrap dangerous tags in spans
-  transformNode(el);
-}
-
-/**
- * Exhaustive Tree Traversal.
- * Correctly handles <template> shadowing by descending into .content.
- */
-function walkAndScrub(root: Node | DocumentFragment): void {
+function executeSanitizationWalk(root: Node | DocumentFragment): void {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
-  let el = walker.nextNode() as HTMLElement | null;
+  const processingQueue: HTMLElement[] = [];
 
-  // We use a manual loop because replacing nodes during TreeWalker iteration can be tricky.
-  // Collecting elements to transform is safer and still high-performance.
-  const toScrub: HTMLElement[] = [];
-  while (el) {
-    toScrub.push(el);
-    if (el.localName === 'template') {
-      walkAndScrub((el as HTMLTemplateElement).content);
+  let currentElement = walker.nextNode() as HTMLElement | null;
+  while (currentElement) {
+    processingQueue.push(currentElement);
+    if (DOM_PROTOTYPE_BRIDGE.getLocalName(currentElement) === 'template') {
+      executeSanitizationWalk((currentElement as HTMLTemplateElement).content);
     }
-    el = walker.nextNode() as HTMLElement | null;
+    currentElement = walker.nextNode() as HTMLElement | null;
   }
 
-  for (let i = 0; i < toScrub.length; i++) {
-    scrubElement(toScrub[i]!);
+  for (const node of processingQueue) {
+    applySecurityPolicy(node);
+    neutralizeDangerousNode(node);
   }
 }
 
+// --- Public APIs ---
+
 /**
- * HTML sanitization for XSS mitigation using inert fragments.
+ * Sanitizes a raw HTML string by stripping dangerous tags, attributes, and protocols.
+ *
+ * When to use:
+ * - Before injecting untrusted HTML strings into the DOM via $.fn.atomHtml.
+ * - When processing user-provided markup to prevent XSS.
+ *
+ * @param html The raw HTML string to cleanse.
+ * @returns A sanitized HTML string safe for browser execution.
+ *
+ * @example
+ * const dirty = '<img src=x onerror=alert(1)>';
+ * const clean = sanitizeHtml(dirty);
+ * // Result: <img src="x" data-unsafe-attr="onerror">
  */
 export function sanitizeHtml(html: string | null | undefined): string {
   if (!html) return '';
-  const sInit = String(html);
-
-  if (!needsSanitization(sInit)) return sInit;
-
-  const template = acquireTemplate();
-  try {
-    template.innerHTML = sInit;
-    walkAndScrub(template.content);
-    return template.innerHTML;
-  } finally {
-    releaseTemplate(template);
-  }
+  // Use a fresh template per call to avoid complex state management.
+  const template = document.createElement('template');
+  template.innerHTML = String(html);
+  executeSanitizationWalk(template.content);
+  return template.innerHTML;
 }
 
-/** Checks for dangerous patterns in URL-bearing attributes or HTML sinks. */
-export const isDangerousUrl = (attr: string, val: string): boolean => {
-  const lowerAttr = attr.toLowerCase();
-  if (!URL_ATTRS.has(lowerAttr)) return false;
+/**
+ * Checks if a specific attribute/value pair contains dangerous content or protocols.
+ *
+ * When to use:
+ * - To validate individual attribute updates in $.fn.atomAttr.
+ *
+ * @param attribute The name of the HTML attribute (e.g., 'href').
+ * @param value The value to validate.
+ * @returns True if the value contains a dangerous protocol or script context.
+ *
+ * @example
+ * isDangerousUrl('href', 'javascript:alert(1)'); // true
+ * isDangerousUrl('src', 'https://safe.com/img.png'); // false
+ */
+export const isDangerousUrl = (attribute: string, value: string): boolean => {
+  const lowerAttribute = attribute.toLowerCase();
+  if (!URL_ATTRIBUTES.includes(lowerAttribute)) return false;
 
-  const normalized = normalize(val);
-
-  if (lowerAttr === 'srcdoc') {
-    return isDangerousHtmlContent(normalized);
-  }
-
-  return hasDangerousProtocol(normalized);
+  const normalizedValue = normalizeValue(value);
+  return lowerAttribute === 'srcdoc'
+    ? REGEX_DANGEROUS_SNIFFER.test(normalizedValue)
+    : isDangerousProtocol(normalizedValue);
 };
 
-/** Checks for protocols/expressions inside CSS. */
-export const isDangerousCssValue = (val: string): boolean => {
-  return RE_DANGEROUS_CSS_SINGLE.test(normalize(val));
+/**
+ * Checks if a CSS value contains dangerous expressions or forbidden protocols.
+ *
+ * When to use:
+ * - To validate dynamic style updates in $.fn.atomCss.
+ *
+ * @param value The CSS property value to validate.
+ * @returns True if the value contains patterns like expression() or url(javascript:...).
+ *
+ * @example
+ * isDangerousCssValue('url(javascript:alert(1))'); // true
+ * isDangerousCssValue('red'); // false
+ */
+export const isDangerousCssValue = (value: string): boolean => {
+  const cleanCss = normalizeValue(value).replace(/\/\*[\s\S]*?\*\//g, '');
+  return CSS_DANGER_PATTERNS.some((pattern) => pattern.test(cleanCss));
 };

@@ -55,19 +55,20 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
   _deps = new DepSlotBuffer();
 
   private readonly _equal: (a: T, b: T) => boolean;
-  private readonly _fn: () => T | Promise<T>;
+  private readonly _computation: () => T | Promise<T>;
   private readonly _defaultValue: T;
   private readonly _onError: ((error: Error) => void) | null;
 
-  constructor(fn: () => T | Promise<T>, options: ComputedOptions<T> = {}) {
-    if (typeof fn !== 'function') throw new ComputedError(ERROR_MESSAGES.COMPUTED_MUST_BE_FUNCTION);
+  constructor(computation: () => T | Promise<T>, options: ComputedOptions<T> = {}) {
+    if (typeof computation !== 'function')
+      throw new ComputedError(ERROR_MESSAGES.COMPUTED_MUST_BE_FUNCTION);
     super();
 
     this._value = undefined as T;
     // Start dirty so first access triggers computation
     this.flags = IS_COMPUTED | DIRTY | IDLE;
     this._equal = options.equal ?? Object.is;
-    this._fn = fn;
+    this._computation = computation;
     this._defaultValue = 'defaultValue' in options ? options.defaultValue : (NO_DEFAULT_VALUE as T);
     this._onError = options.onError ?? null;
 
@@ -107,8 +108,8 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
   }
 
   get value(): T {
-    const ctx = trackingContext.current;
-    if (ctx !== null) ctx.addDependency(this);
+    const context = trackingContext.current;
+    if (context !== null) context.addDependency(this);
 
     const flags = this.flags;
     // 1. Fast path: Stable and Resolved. Masking multiple flags for single-branch optimization.
@@ -120,17 +121,17 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     if ((flags & DISPOSED) !== 0) throw new ComputedError(ERROR_MESSAGES.COMPUTED_DISPOSED);
 
     if ((flags & RECOMPUTING) !== 0) {
-      const def = this._defaultValue;
-      if (def !== (NO_DEFAULT_VALUE as T)) return def;
+      const defaultValue = this._defaultValue;
+      if (defaultValue !== (NO_DEFAULT_VALUE as T)) return defaultValue;
       throw new ComputedError(ERROR_MESSAGES.COMPUTED_CIRCULAR_DEPENDENCY);
     }
 
     // 3. Evaluation path (Lazy Stale Check)
     if ((flags & (DIRTY | IDLE)) !== 0) {
-      const deps = this._deps;
+      const dependencies = this._deps;
       // Force computation if idle, forced, has no deps (initial), or deep check failed
       const shouldRecompute =
-        (flags & (IDLE | FORCE_COMPUTE)) !== 0 || deps.size === 0 || this._isDirty();
+        (flags & (IDLE | FORCE_COMPUTE)) !== 0 || dependencies.size === 0 || this._isDirty();
 
       if (!shouldRecompute) {
         this.flags &= ~DIRTY;
@@ -141,16 +142,16 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     }
 
     // 4. Async/Error handled after recomputation check
-    const def = this._defaultValue;
-    const hasDefault = def !== (NO_DEFAULT_VALUE as T);
+    const defaultValue = this._defaultValue;
+    const hasDefault = defaultValue !== (NO_DEFAULT_VALUE as T);
 
     if ((this.flags & PENDING) !== 0) {
-      if (hasDefault) return def;
+      if (hasDefault) return defaultValue;
       throw new ComputedError(ERROR_MESSAGES.COMPUTED_ASYNC_PENDING_NO_DEFAULT);
     }
 
     if ((this.flags & REJECTED) !== 0) {
-      if (hasDefault) return def;
+      if (hasDefault) return defaultValue;
       throw this._error;
     }
 
@@ -162,8 +163,8 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
   }
 
   get state(): AsyncStateType {
-    const ctx = trackingContext.current;
-    if (ctx !== null) ctx.addDependency(this);
+    const context = trackingContext.current;
+    if (context !== null) context.addDependency(this);
     const flags = this.flags;
     if ((flags & RESOLVED) !== 0) return AsyncState.RESOLVED;
     if ((flags & PENDING) !== 0) return AsyncState.PENDING;
@@ -172,19 +173,19 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
   }
 
   get hasError(): boolean {
-    const ctx = trackingContext.current;
-    if (ctx !== null) ctx.addDependency(this);
+    const context = trackingContext.current;
+    if (context !== null) context.addDependency(this);
 
     const flags = this.flags;
     if ((flags & (REJECTED | HAS_ERROR)) !== 0) return true;
 
-    const deps = this._deps;
-    if (!deps.hasComputeds) return false;
+    const dependencies = this._deps;
+    if (!dependencies.hasComputeds) return false;
 
     return untracked(() => {
-      const size = deps.size;
+      const size = dependencies.size;
       for (let i = 0; i < size; i++) {
-        const link = deps.getAt(i);
+        const link = dependencies.getAt(i);
         if (link?.node.hasError) return true;
       }
       return false;
@@ -196,27 +197,27 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
   }
 
   get errors(): readonly Error[] {
-    const ctx = trackingContext.current;
-    if (ctx !== null) ctx.addDependency(this);
+    const context = trackingContext.current;
+    if (context !== null) context.addDependency(this);
 
-    const selfErr = this._error;
-    const deps = this._deps;
+    const selfError = this._error;
+    const dependencies = this._deps;
 
-    if (!deps.hasComputeds) {
-      if (selfErr === null) return EMPTY_ERROR_ARRAY;
-      return Object.freeze([selfErr]);
+    if (!dependencies.hasComputeds) {
+      if (selfError === null) return EMPTY_ERROR_ARRAY;
+      return Object.freeze([selfError]);
     }
 
     const collected: Error[] = [];
-    if (selfErr !== null) collected.push(selfErr);
+    if (selfError !== null) collected.push(selfError);
 
     untracked(() => {
-      const size = deps.size;
+      const size = dependencies.size;
       for (let i = 0; i < size; i++) {
-        const link = deps.getAt(i);
-        const depNode = link?.node;
-        if (depNode !== undefined && (depNode.flags & IS_COMPUTED) !== 0) {
-          this._accumulateErrors(depNode as unknown as ComputedAtomImpl<unknown>, collected);
+        const link = dependencies.getAt(i);
+        const dependencyNode = link?.node;
+        if (dependencyNode !== undefined && (dependencyNode.flags & IS_COMPUTED) !== 0) {
+          this._accumulateErrors(dependencyNode as unknown as ComputedAtomImpl<unknown>, collected);
         }
       }
     });
@@ -224,18 +225,18 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     return collected.length === 0 ? EMPTY_ERROR_ARRAY : Object.freeze(collected);
   }
 
-  private _accumulateErrors(dep: ComputedAtomImpl<unknown>, collected: Error[]): void {
-    const err = dep._error;
-    if (err !== null && !collected.includes(err)) {
-      collected.push(err);
+  private _accumulateErrors(dependency: ComputedAtomImpl<unknown>, collected: Error[]): void {
+    const error = dependency._error;
+    if (error !== null && !collected.includes(error)) {
+      collected.push(error);
     }
 
-    const deps = dep._deps;
-    if (!deps.hasComputeds) return;
+    const dependencies = dependency._deps;
+    if (!dependencies.hasComputeds) return;
 
-    const size = deps.size;
+    const size = dependencies.size;
     for (let i = 0; i < size; i++) {
-      const link = deps.getAt(i);
+      const link = dependencies.getAt(i);
       const node = link?.node;
       if (node !== undefined && (node.flags & IS_COMPUTED) !== 0) {
         this._accumulateErrors(node as unknown as ComputedAtomImpl<unknown>, collected);
@@ -244,20 +245,20 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
   }
 
   get lastError(): Error | null {
-    const ctx = trackingContext.current;
-    if (ctx !== null) ctx.addDependency(this);
+    const context = trackingContext.current;
+    if (context !== null) context.addDependency(this);
     return this._error;
   }
 
   get isPending(): boolean {
-    const ctx = trackingContext.current;
-    if (ctx !== null) ctx.addDependency(this);
+    const context = trackingContext.current;
+    if (context !== null) context.addDependency(this);
     return (this.flags & PENDING) !== 0;
   }
 
   get isResolved(): boolean {
-    const ctx = trackingContext.current;
-    if (ctx !== null) ctx.addDependency(this);
+    const context = trackingContext.current;
+    if (context !== null) context.addDependency(this);
     return (this.flags & RESOLVED) !== 0;
   }
 
@@ -282,41 +283,37 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     this._hotIndex = -1;
   }
 
-  // [Symbol.dispose](): void {
-  //   this.dispose();
-  // }
-
-  addDependency(dep: Dependency): void {
+  addDependency(dependency: Dependency): void {
     const trackEpoch = this._trackEpoch;
-    if (dep._lastSeenEpoch === trackEpoch) return;
-    dep._lastSeenEpoch = trackEpoch;
+    if (dependency._lastSeenEpoch === trackEpoch) return;
+    dependency._lastSeenEpoch = trackEpoch;
 
     const trackIndex = this._trackCount++;
-    const deps = this._deps;
+    const dependencies = this._deps;
 
     // Unrolled hot-path check for existing dependencies
     let existing: DependencyLink | null = null;
     if (trackIndex < 4) {
-      if (trackIndex === 0) existing = deps._s0;
-      else if (trackIndex === 1) existing = deps._s1;
-      else if (trackIndex === 2) existing = deps._s2;
-      else existing = deps._s3;
+      if (trackIndex === 0) existing = dependencies._s0;
+      else if (trackIndex === 1) existing = dependencies._s1;
+      else if (trackIndex === 2) existing = dependencies._s2;
+      else existing = dependencies._s3;
     } else {
-      const ov = deps._overflow;
-      if (ov !== null) existing = ov[trackIndex - 4] ?? null;
+      const overflow = dependencies._overflow;
+      if (overflow !== null) existing = overflow[trackIndex - 4] ?? null;
     }
 
-    if (existing !== null && existing.node === dep) {
-      existing.version = dep.version;
-    } else if (deps.claimExisting(dep, trackIndex)) {
+    if (existing !== null && existing.node === dependency) {
+      existing.version = dependency.version;
+    } else if (dependencies.claimExisting(dependency, trackIndex)) {
       // Version and relocation handled inside claimExisting
     } else {
-      const link = new DependencyLink(dep, dep.version, dep.subscribe(this));
-      deps.insertNew(trackIndex, link);
+      const link = new DependencyLink(dependency, dependency.version, dependency.subscribe(this));
+      dependencies.insertNew(trackIndex, link);
     }
 
-    if ((dep.flags & IS_COMPUTED) !== 0) {
-      deps.hasComputeds = true;
+    if ((dependency.flags & IS_COMPUTED) !== 0) {
+      dependencies.hasComputeds = true;
     }
   }
 
@@ -331,7 +328,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
 
     let committed = false;
     try {
-      const result = trackingContext.run(this, this._fn);
+      const result = trackingContext.run(this, this._computation);
       this._deps.truncateFrom(this._trackCount);
       committed = true;
 
@@ -344,9 +341,9 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
       if (!committed) {
         try {
           this._deps.truncateFrom(this._trackCount);
-        } catch (commitErr) {
+        } catch (commitError) {
           if (IS_DEV) {
-            console.warn('[atom-effect] _commitDeps failed during error recovery:', commitErr);
+            console.warn('[atom-effect] _commitDeps failed during error recovery:', commitError);
           }
         }
       }
@@ -366,39 +363,39 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     const promiseId = this._promiseId;
 
     promise.then(
-      (res) => {
+      (result) => {
         if (promiseId !== this._promiseId) return;
         if (this._isDirty()) return this._markDirty();
 
-        this._finalizeResolution(res);
-        this._notifySubscribers(res, undefined);
+        this._finalizeResolution(result);
+        this._notifySubscribers(result, undefined);
       },
-      (err) =>
+      (error) =>
         promiseId === this._promiseId &&
-        this._handleError(err, ERROR_MESSAGES.COMPUTED_ASYNC_COMPUTATION_FAILED)
+        this._handleError(error, ERROR_MESSAGES.COMPUTED_ASYNC_COMPUTATION_FAILED)
     );
   }
 
-  private _handleError(err: unknown, msg: string, throwErr = false): void {
-    const error = wrapError(err, ComputedError, msg);
+  private _handleError(error: unknown, message: string, shouldThrow = false): void {
+    const wrappedError = wrapError(error, ComputedError, message);
 
-    if (!this.isRejected || this._error !== error) {
+    if (!this.isRejected || this._error !== wrappedError) {
       this.version = nextVersion(this.version);
     }
 
-    this._error = error;
+    this._error = wrappedError;
     this.flags = (this.flags & ~(IDLE | DIRTY | PENDING | RESOLVED)) | REJECTED | HAS_ERROR;
 
     if (this._onError) {
       try {
-        this._onError(error);
+        this._onError(wrappedError);
       } catch (e) {
         console.error(ERROR_MESSAGES.CALLBACK_ERROR_IN_ERROR_HANDLER, e);
       }
     }
 
     this._notifySubscribers(undefined, undefined);
-    if (throwErr) throw error;
+    if (shouldThrow) throw wrappedError;
   }
 
   private _finalizeResolution(value: T): void {
@@ -430,21 +427,21 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
    * Optimized with hot-index caching and unrolled scanning.
    */
   protected override _deepDirtyCheck(): boolean {
-    const deps = this._deps;
-    const size = deps.size;
-    const hotIdx = this._hotIndex;
+    const dependencies = this._deps;
+    const size = dependencies.size;
+    const hotIndex = this._hotIndex;
 
     return untracked(() => {
       // 1. Try last known dirty dependency first
-      if (hotIdx !== -1 && hotIdx < size) {
-        const link = deps.getAt(hotIdx);
+      if (hotIndex !== -1 && hotIndex < size) {
+        const link = dependencies.getAt(hotIndex);
         if (link !== null && this._checkLinkDirty(link)) return true;
       }
 
       // 2. Scan from beginning, skipping hot entry
       for (let i = 0; i < size; i++) {
-        if (i === hotIdx) continue;
-        const link = deps.getAt(i);
+        if (i === hotIndex) continue;
+        const link = dependencies.getAt(i);
         if (link !== null && this._checkLinkDirty(link)) {
           this._hotIndex = i;
           return true;
@@ -457,21 +454,21 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
   }
 
   private _checkLinkDirty(link: DependencyLink): boolean {
-    const dep = link.node;
-    if ((dep.flags & IS_COMPUTED) !== 0) {
+    const dependency = link.node;
+    if ((dependency.flags & IS_COMPUTED) !== 0) {
       try {
-        void (dep as { value: unknown }).value;
+        void (dependency as { value: unknown }).value;
       } catch {
-        if (IS_DEV) console.warn(`[atom-effect] Dependency #${dep.id} threw during check`);
+        if (IS_DEV) console.warn(`[atom-effect] Dependency #${dependency.id} threw during check`);
       }
     }
-    return dep.version !== link.version;
+    return dependency.version !== link.version;
   }
 }
 
 /**
  * Creates a computed value.
- * @param fn - Computation function
+ * @param computation - Computation function
  * @param options - Options object
  */
 export function computed<T>(fn: () => T, options?: ComputedOptions<T>): ComputedAtom<T>;

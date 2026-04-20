@@ -1,56 +1,61 @@
-/**
- * @module
- * Manages the lifecycle and state of list bindings.
- * Responsible for asynchronous removal, item index mapping, and resource cleanup.
- */
-import { LOG_PREFIXES } from '@/constants';
 import type { EffectObject, ListKey } from '@/types';
-import { debug } from '@/utils/debug';
 import { setAtomKey } from './utils';
 
 /**
- * Manages the internal state for a single atomList instance.
- * Used to reference the previous state (Keys, Items, Nodes) during reconciliation.
+ * Manages the internal state and lifecycle for $.fn.atomList.
+ *
+ * Responsibilities:
+ * - Stores previous state (Keys, Items, Nodes) for the diffing algorithm.
+ * - Tracks elements undergoing asynchronous removal (animations) to prevent conflicts.
+ * - Handles container-level event cleanup and memory management.
  */
 export class ListContext<T> {
-  /** Keys of the items currently in the DOM. */
+  /** Reference storage for diffing and DOM reuse */
   oldKeys: ListKey[] = [];
-  /** Actual items currently in the DOM. */
+
   oldItems: T[] = [];
-  /** DOM elements or collections corresponding to the items. */
+
   oldNodes: (Element | JQuery | undefined)[] = [];
 
-  /** Keys that are currently in the process of being removed (e.g., during an animation). */
+  /**
+   * Tracks keys of items currently in the middle of a removal animation.
+   * Reason: Prevents the reconciliation logic from attempting to re-add or manipulate
+   * an element that is still being transitioned out of the DOM.
+   */
   readonly removingKeys = new Set<ListKey>();
-  /** The element displayed when the list is empty. */
+
+  /** Cached element to display when the list is empty */
   $emptyEl: JQuery | null = null;
-  /** Mapping from key to its current index in the oldKeys/oldItems arrays. */
+
+  /** Fast lookup map to find the previous index of a key during diffing */
   readonly keyToIndex = new Map<ListKey, number>();
-  /** The reactive effect managing this list. */
+
+  /** The parent Effect. If disposed, all DOM manipulations must cease immediately. */
   fx?: EffectObject;
 
   constructor(
     public readonly $container: JQuery,
-    /** @internal */
     public readonly containerSelector: string,
     public readonly onRemove: (($el: JQuery) => Promise<void> | void) | undefined
   ) {}
 
   /**
-   * Schedules the removal of an element.
-   * If the onRemove callback returns a Promise, removal is deferred.
+   * Orchestrates the removal of an element, respecting the optional `onRemove` hook.
    *
-   * Note: A new item with the same key might be added while removal is pending.
-   * The data-atom-key and connection status are re-verified at commit time to ensure consistency.
+   * Constraints:
+   * 1. Aborts if the effect has been disposed.
+   * 2. Aborts if the element was reclaimed by another binding (checked via `data-atom-key`).
    */
   scheduleRemoval(k: ListKey, $el: JQuery): void {
     const commit = () => {
+      // Reason: If the effect is disposed or the element has been re-assigned to a new key
+      // during the async delay, we must not remove it from the DOM.
       if (this.fx?.isDisposed) return;
+
       if ($el[0] instanceof Element && $el[0].hasAttribute('data-atom-key')) return;
 
       if ($el[0]?.isConnected) $el.remove();
       this.removingKeys.delete(k);
-      debug.log(LOG_PREFIXES.LIST, `${this.containerSelector} removed item:`, k);
     };
 
     const res = this.onRemove?.($el);
@@ -59,16 +64,22 @@ export class ListContext<T> {
   }
 
   /**
-   * Initiates the removal process for an item.
+   * Marks an item for removal and initiates the teardown process.
+   *
+   * @example
+   * context.removeItem('item_id_1', $itemElement);
    */
   removeItem(k: ListKey, $el: JQuery): void {
+    // Note: Clear the atom-key immediately so rendering cycles don't treat this
+    // element as "active" while the removal animation is pending.
     setAtomKey($el, null);
     this.removingKeys.add(k);
     this.scheduleRemoval(k, $el);
   }
 
   /**
-   * Resets the context and cleans up resources.
+   * Clears all references and unbinds container events.
+   * Crucial for preventing memory leaks in large, frequently updated lists.
    */
   dispose(): void {
     this.removingKeys.clear();
@@ -77,6 +88,8 @@ export class ListContext<T> {
     this.oldNodes = [];
     this.keyToIndex.clear();
     this.$emptyEl?.remove();
+
+    // Use namespaced off() to avoid removing user-defined handlers on the same container
     this.$container.off('.atomList');
   }
 }

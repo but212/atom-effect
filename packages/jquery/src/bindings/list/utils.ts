@@ -1,31 +1,25 @@
-/**
- * @module
- * Defines utility functions commonly used within list bindings.
- */
 import $ from 'jquery';
 import { registry } from '@/core/registry';
 
 /**
- * Ensures an element or jQuery collection is wrapped in a jQuery object.
+ * Normalizes an Element or a jQuery collection into a standard jQuery object.
  */
 export function wrap($el: Element | JQuery<Element>): JQuery {
   return ($el instanceof Element ? $($el) : $el) as unknown as JQuery;
 }
 
 /**
- * Sets or removes the 'data-atom-key' attribute on a DOM node or jQuery object.
- * This attribute is used to identify which data item an element corresponds to
- * during event delegation and reconciliation.
+ * Manages the `data-atom-key` attribute used for list reconciliation.
  *
- * @param node The target DOM element or jQuery object.
- * @param key The key string to set (or null to remove the attribute).
+ * Note: This key allows the diffing algorithm to identify and reuse DOM nodes
+ * across different rendering cycles.
  */
 export function setAtomKey(node: Element | Node | JQuery, key: string | null): void {
   if (node instanceof Element) {
     if (key === null) node.removeAttribute('data-atom-key');
     else node.setAttribute('data-atom-key', key);
   } else if (!(node as Node).nodeType) {
-    // JQuery object
+    // Handling jQuery collections
     const elOrJq = node as JQuery;
     for (let i = 0, len = elOrJq.length; i < len; i++) {
       const el = elOrJq[i];
@@ -38,11 +32,11 @@ export function setAtomKey(node: Element | Node | JQuery, key: string | null): v
 }
 
 /**
- * Executes and cleans up all registered effects and cleanup handlers
- * for the specified node and its entire subtree.
- * Should be called when a node is physically removed from the DOM to prevent memory leaks.
+ * Triggers the mandatory teardown for reactive bindings associated with the target nodes.
  *
- * @param node The root element or jQuery object to clean up.
+ * Important:
+ * This must be called before an element is permanently removed or replaced
+ * to prevent memory leaks from stale reactive effects in the registry.
  */
 export function cleanupNodes(node: Element | JQuery): void {
   if (node instanceof Element) {

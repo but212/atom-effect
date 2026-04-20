@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import $ from '@/index';
 import type { FetchError } from '@/types';
 
@@ -257,12 +257,61 @@ describe('$.atomFetch (Reactivity and Atom State)', () => {
     expect(data.lastError?.message).toContain('bad shape');
   });
 
-  describe('Architecture Flaws', () => {
-    it('1. onError SHOULD be called if transform throws an error', async () => {
+  describe('Method Prioritization', () => {
+    let capturedOptions: JQuery.AjaxSettings | undefined;
+
+    beforeEach(() => {
+      capturedOptions = undefined;
+      vi.spyOn($, 'ajax').mockImplementation((opts) => {
+        capturedOptions = opts;
+        return Promise.resolve({ ok: true }) as unknown as JQuery.jqXHR;
+      });
+    });
+
+    it('should prioritize explicit options.method over others', async () => {
+      $.atomFetch('/api/test', {
+        defaultValue: null,
+        method: 'PUT',
+        ajaxOptions: () => ({ method: 'POST' }),
+      });
+      await $.nextTick();
+      expect(capturedOptions?.method).toBe('PUT');
+
+      const data2 = $.atomFetch('/api/test', {
+        defaultValue: null,
+        method: 'PUT',
+        ajaxOptions: { method: 'GET' },
+      });
+      void data2.value;
+      await $.nextTick();
+      expect(capturedOptions?.method).toBe('PUT');
+    });
+
+    it('should prioritize dynamicOptions.method over baseAjax.method', async () => {
+      $.atomFetch('/api/test', {
+        defaultValue: null,
+        ajaxOptions: () => ({ method: 'DELETE' }),
+      });
+      await $.nextTick();
+      expect(capturedOptions?.method).toBe('DELETE');
+    });
+
+    it('should use baseAjax.method if others are undefined', async () => {
+      $.atomFetch('/api/test', {
+        defaultValue: null,
+        ajaxOptions: { method: 'PATCH' } as unknown as JQuery.AjaxSettings,
+      });
+      await $.nextTick();
+      expect(capturedOptions?.method).toBe('PATCH');
+    });
+  });
+
+  describe('Advanced Lifecycle & Edge Cases', () => {
+    it('should call onError if transform throws an error', async () => {
       vi.spyOn($, 'ajax').mockResolvedValue({ raw: true });
       const onError = vi.fn();
 
-      const _data = $.atomFetch('/api/data', {
+      $.atomFetch('/api/data', {
         defaultValue: null,
         onError,
         transform: () => {
@@ -276,7 +325,7 @@ describe('$.atomFetch (Reactivity and Atom State)', () => {
       expect((onError.mock.calls[0]![0] as Error).message).toContain('transform parse error');
     });
 
-    it('2. Static Payload Trap: ajaxOptions should reflect updated atom values upon refetch', async () => {
+    it('should reflect updated atom values in ajaxOptions upon refetch', async () => {
       const searchUrl = $.atom('/api/search');
       let capturedOptions: JQuery.AjaxSettings | undefined;
 

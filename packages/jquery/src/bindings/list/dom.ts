@@ -1,8 +1,3 @@
-/**
- * @module
- * DOM manipulation based on calculated diff information.
- * Handles HTML rendering, batch sanitization, and node repositioning.
- */
 import $ from 'jquery';
 import { LOG_PREFIXES } from '@/constants';
 import type { ListOptions } from '@/types';
@@ -12,6 +7,10 @@ import type { ListContext } from './context';
 import { ItemState, type PlaceCallbacks, type PreparedDiff } from './types';
 import { cleanupNodes, setAtomKey, wrap } from './utils';
 
+/**
+ * Low-level DOM helper to insert elements before a reference node.
+ * Supports both raw Elements and jQuery collections.
+ */
 export function insertOrAppend(
   elOrJq: Element | JQuery | undefined,
   nextNode: Node | null,
@@ -29,6 +28,13 @@ export function insertOrAppend(
   }
 }
 
+/**
+ * Synchronizes the container state with the 'empty' option.
+ *
+ * Logic:
+ * - If onRemove exists, we must trigger the async removal flow for each item
+ *   instead of a destructive $container.empty().
+ */
 export function handleEmpty<T>(
   ctx: ListContext<T>,
   itemCount: number,
@@ -45,6 +51,7 @@ export function handleEmpty<T>(
   if (!onRemove) {
     $container.empty();
   } else {
+    // Reason: Must trigger coordinated animations for every existing row.
     for (let i = 0, len = oldKeys.length; i < len; i++) {
       const k = oldKeys[i]!,
         node = oldNodes[i];
@@ -64,11 +71,11 @@ export function handleEmpty<T>(
 }
 
 /**
- * Renders the items that require updates.
+ * Orchestrates the rendering of new or updated items.
  *
- * During initial render, if all results are HTML strings and there are
- * no extra events or bindings, it generates and returns the entire HTML
- * at once for direct insertion.
+ * Performance Optimization:
+ * If all items are HTML strings and it's a cold start, returns sanitized HTML
+ * parts for direct innerHTML injection to bypass slow jQuery object creation.
  */
 export function renderItems<T>(
   diff: PreparedDiff<T>,
@@ -93,6 +100,7 @@ export function renderItems<T>(
   let sanitized: string[] | null = null;
   if (htmlParts.length > 0) sanitized = batchSanitize(htmlParts);
 
+  // High-perf path: Cold start with string-only templates
   if (
     isInitial &&
     isAllStrings &&
@@ -114,6 +122,7 @@ export function renderItems<T>(
 
     setAtomKey($el, String(key));
 
+    // Choice: ForceReplace occurs when identity matches but patching is not allowed.
     if (newStates[targetIdx] === ItemState.ForceReplace && newNodes[targetIdx]) {
       const node = newNodes[targetIdx]!;
       cleanupNodes(node as Element | JQuery);
@@ -128,16 +137,25 @@ export function renderItems<T>(
   return null;
 }
 
+/**
+ * Batch sanitizes multiple HTML fragments using a unique template separator.
+ * Reason: Massive performance gain by reducing DOMPurify/Sanitizer calls to one.
+ */
 function batchSanitize(parts: string[]): string[] {
   if (parts.length === 1) return [sanitizeHtml(parts[0]!)];
   const sep = `<template data-atom-sep="s${Math.random().toString(36).slice(2)}"></template>`;
   return sanitizeHtml(parts.join(sep)).split(sep);
 }
 
+/**
+ * Identifies and removes items that are no longer present in the dataset.
+ */
 export function cleanupRemoved<T>(ctx: ListContext<T>, diff: PreparedDiff<T>): void {
   const { startIndex, oldEndIndex, newKeySet } = diff;
   for (let i = startIndex; i <= oldEndIndex; i++) {
     const k = ctx.oldKeys[i]!;
+    // Note: Items in the "moving" middle section are already filtered.
+    // Here we only target items that don't exist in the new key set at all.
     if (!newKeySet.has(k) && ctx.oldNodes[i]) {
       ctx.removeItem(k, wrap(ctx.oldNodes[i] as Element | JQuery<Element>));
     }
@@ -145,13 +163,7 @@ export function cleanupRemoved<T>(ctx: ListContext<T>, diff: PreparedDiff<T>): v
 }
 
 /**
- * Places rendered items into the DOM and invokes callbacks (bind, update, onAdd).
- *
- * Placement Algorithm:
- * 1. If htmlFragments exist, they replace the entire container's innerHTML.
- * 2. If there was no previous data, a DocumentFragment is used for batch insertion.
- * 3. During incremental updates, reverse traversal is performed, referencing nextNode for insertBefore.
- *    (A greedy strategy for minimal movement).
+ * Final step: Physically places or moves the nodes into their correct positions.
  */
 export function placeItems<T>(
   ctx: ListContext<T>,
@@ -163,6 +175,7 @@ export function placeItems<T>(
   const { newKeys, newItems, newNodes, newStates, newIndices } = diff;
   const count = newKeys.length;
 
+  // Path A: The fastest possible start using direct innerHTML.
   if (htmlFragments) {
     container.innerHTML = htmlFragments.join('');
     let el = container.firstElementChild;
@@ -177,6 +190,7 @@ export function placeItems<T>(
     return;
   }
 
+  // Path B: Fragment-based batch injection for clean starts.
   if (ctx.oldKeys.length === 0 && ctx.removingKeys.size === 0) {
     const frag = document.createDocumentFragment();
     for (const node of newNodes) {
@@ -193,6 +207,8 @@ export function placeItems<T>(
     container.innerHTML = '';
     container.appendChild(frag);
   } else {
+    // Path C: Complex move logic.
+    // Optimization: Loop backwards to maintain order using insertBefore(next).
     let next: Node | null = null,
       min = Infinity;
     for (let i = count - 1; i >= 0; i--) {
@@ -202,6 +218,9 @@ export function placeItems<T>(
 
       const first = node instanceof Element ? node : (node as JQuery)[0];
       if (first) {
+        // Deterministic Move Logic:
+        // idx !== -1 ensures it's an existing item.
+        // idx < min tracks the relative order; if broken, the item must be moved.
         if (idx !== -1 && idx < min) min = idx;
         else insertOrAppend(node as Element | JQuery, next, container);
         next = first;
@@ -209,6 +228,7 @@ export function placeItems<T>(
     }
   }
 
+  // Finalize: Trigger callbacks (bind, update, onAdd) for the current frame.
   for (let i = 0; i < count; i++) {
     const state = newStates[i]!;
     if (state === ItemState.Unchanged) continue;
@@ -223,7 +243,7 @@ export function placeItems<T>(
       callbacks.bind?.($el, item, i);
       if (state === ItemState.New) {
         callbacks.onAdd?.($el);
-        ctx.removingKeys.delete(newKeys[i]!);
+        ctx.removingKeys.delete(newKeys[i]!); // Stop tracking now that it's back in the active DOM.
         debug.domUpdated(LOG_PREFIXES.LIST, $el, 'list.add', item);
       }
     }

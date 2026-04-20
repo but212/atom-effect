@@ -2,158 +2,142 @@ import { computed } from '@but212/atom-effect';
 import $ from 'jquery';
 import type { ComputedAtom, FetchError, FetchOptions } from '@/types';
 
-// ============================================================================
-// atomFetch
-// ============================================================================
+/**
+ * Derives JQuery.AjaxSettings from FetchOptions.
+ * Data-focused transformation without hidden state.
+ *
+ * Transforms high-level FetchOptions into standard jQuery.AjaxSettings.
+ * Logic: Forces callback removal (success/error/complete) to ensure
+ * the library’s internal async orchestration remains the single source of truth.
+ */
+function getAjaxSettings<T>(getUrl: () => string, options: FetchOptions<T>): JQuery.AjaxSettings {
+  const baseAjax = typeof options.ajaxOptions === 'object' ? options.ajaxOptions : {};
+  const dynamicOptions = typeof options.ajaxOptions === 'function' ? options.ajaxOptions() : {};
+
+  return {
+    ...baseAjax,
+    ...dynamicOptions,
+    url: getUrl(),
+    method: options.method || dynamicOptions.method || baseAjax.method,
+    headers: {
+      ...(baseAjax as JQuery.AjaxSettings)?.headers,
+      ...options.headers,
+      ...dynamicOptions.headers,
+    },
+    // Reset callbacks to prevent interference with atom-effect's internal lifecycle logic
+    success: undefined,
+    error: undefined,
+    complete: undefined,
+  };
+}
 
 /**
- * Context for a reactive fetch operation.
- * Manages the lifecycle of a single $.ajax request, including automatic
- * cancellation (via AbortController) and reactive URL/option resolution.
+ * Normalizes jQuery-specific jqXHR errors into standard JS Error objects.
+ * Logic: Preserves the original jqXHR instance on the error object for
+ * advanced debugging/logging in the 'onError' hook.
  */
-class FetchContext<T> {
-  private abortController: AbortController | null = null;
-  private readonly staticOptions: JQuery.AjaxSettings;
-  private readonly ajaxOptionsFn: (() => JQuery.AjaxSettings) | undefined;
-  private readonly getUrl: () => string;
+function handleFetchError(err: unknown, onError?: (err: unknown) => void): never {
+  let final: Error;
 
-  /**
-   * Optimization: If true, the URL is a static string and doesn't need to be
-   * re-evaluated within a reactive scope.
-   */
-  private readonly isStaticUrl: boolean;
-  private readonly staticUrl: string | undefined;
-
-  private readonly transformFn: ((val: unknown, xhr: JQuery.jqXHR) => T) | undefined;
-  private readonly onErrorFn: ((err: unknown) => void) | undefined;
-
-  constructor(urlOrFn: string | (() => string), options: FetchOptions<T>) {
-    const isStatic = typeof urlOrFn === 'string';
-    this.isStaticUrl = isStatic;
-    if (isStatic) {
-      this.staticUrl = urlOrFn as string;
-      this.getUrl = () => this.staticUrl!;
-    } else {
-      this.getUrl = urlOrFn as () => string;
-    }
-
-    this.ajaxOptionsFn =
-      typeof options.ajaxOptions === 'function' ? options.ajaxOptions : undefined;
-
-    const baseAjax = typeof options.ajaxOptions === 'object' ? options.ajaxOptions : {};
-    this.staticOptions = {
-      ...baseAjax,
-      headers: { ...(baseAjax as JQuery.AjaxSettings)?.headers, ...options.headers },
-    };
-    if (options.method) {
-      this.staticOptions.method = options.method;
-    }
-
-    this.transformFn = options.transform;
-    this.onErrorFn = options.onError;
+  if (err && typeof (err as JQuery.jqXHR).readyState !== 'undefined') {
+    const x = err as JQuery.jqXHR;
+    final = new Error(`Network Error: ${x.statusText || 'Unknown'} (${x.status})`);
+    (final as FetchError).jqXHR = x;
+  } else {
+    final = err instanceof Error ? err : new Error(String(err ?? 'Unknown error'));
   }
 
-  public abort(): void {
-    this.abortController?.abort();
-  }
-
-  private handleError(err: unknown): never {
-    let final: Error;
-    if (err && typeof (err as JQuery.jqXHR).readyState !== 'undefined') {
-      const x = err as JQuery.jqXHR;
-      final = new Error(`Network Error: ${x.statusText || 'Unknown'} (${x.status})`);
-      (final as FetchError).jqXHR = x;
-    } else {
-      final = err instanceof Error ? err : new Error(String(err ?? 'Unknown error'));
+  if (onError) {
+    try {
+      onError(final);
+    } catch {
+      // Logic: Ignore user-hook errors to prevent breaking the core fetch promise chain.
     }
-
-    if (this.onErrorFn) {
-      try {
-        this.onErrorFn(final);
-      } catch {
-        // Suppress errors in error callback
-      }
-    }
-    throw final;
   }
+  throw final;
+}
 
-  public execute = async (): Promise<T> => {
-    this.abort();
+/**
+ * Creates a reactive fetch atom powered by jQuery.ajax.
+ *
+ * When to use:
+ * - Best for fetching data that depends on other reactive stores (e.g., search queries, ID-based details).
+ *
+ * Built-in Features:
+ * 1. Concurrency Management: Automatically aborts the previous request if the URL/atom re-evaluates.
+ * 2. Lifecycle Cleanup: Terminates any pending network request when the atom is disposed.
+ * 3. Reactive Integration: Exposes the result as a standard ComputedAtom.
+ *
+ * @example
+ * const userId = $.atom(123);
+ * const user = $.atomFetch(() => `/api/users/${userId.value}`, {
+ *   defaultValue: { name: 'Loading...' },
+ *   eager: true
+ * });
+ *
+ * $.effect(() => console.log(user.value.name));
+ */
+function atomFetch<T>(urlOrFn: string | (() => string), options: FetchOptions<T>): ComputedAtom<T> {
+  const getUrl = typeof urlOrFn === 'string' ? () => urlOrFn : urlOrFn;
+  let abortController: AbortController | null = null;
+
+  const execute = async (): Promise<T> => {
+    // Logic: Aborts the previous execution to prevent out-of-order async race conditions.
+    abortController?.abort();
+
     const controller = new AbortController();
-    this.abortController = controller;
+    abortController = controller;
     const { signal } = controller;
 
+    const settings = getAjaxSettings(getUrl, options);
+    let xhr: JQuery.jqXHR | undefined;
     let onAbort: (() => void) | undefined;
 
     try {
-      const settings = this.prepareSettings();
-      const xhr = $.ajax(settings);
-
-      // Link AbortSignal to jqXHR
-      onAbort = () => xhr.abort();
+      xhr = $.ajax(settings);
+      const currentXhr = xhr;
+      onAbort = () => currentXhr.abort();
       signal.addEventListener('abort', onAbort);
-      if (signal.aborted) xhr.abort();
 
-      const raw = await xhr;
-      return this.transformFn ? this.transformFn(raw, xhr) : (raw as T);
+      if (signal.aborted) currentXhr.abort();
+
+      const raw = await currentXhr;
+      return options.transform ? options.transform(raw, currentXhr) : (raw as T);
     } catch (err) {
-      if (signal.aborted) throw this.createAbortError();
-      return this.handleError(err);
+      if (signal.aborted) {
+        const e = new Error('AbortError');
+        e.name = 'AbortError';
+        throw e;
+      }
+      return handleFetchError(err, options.onError);
     } finally {
-      if (onAbort) signal.removeEventListener('abort', onAbort);
-      if (this.abortController === controller) {
-        this.abortController = null;
+      if (onAbort) {
+        signal.removeEventListener('abort', onAbort);
+      }
+      if (abortController === controller) {
+        abortController = null;
       }
     }
   };
 
-  private prepareSettings(): JQuery.AjaxSettings {
-    const dynamicOptions = this.ajaxOptionsFn?.() ?? {};
-    return {
-      ...this.staticOptions,
-      ...dynamicOptions,
-      headers: { ...this.staticOptions.headers, ...dynamicOptions.headers },
-      url: this.isStaticUrl ? this.staticUrl : this.getUrl(),
-      success: undefined,
-      error: undefined,
-      complete: undefined,
-    };
-  }
-
-  private createAbortError(): Error {
-    const e = new Error('AbortError');
-    e.name = 'AbortError';
-    return e;
-  }
-}
-
-/**
- * Creates a declarative reactive AJAX primitive.
- * Wraps core's async `computed` with jQuery's `$.ajax`.
- *
- * Features:
- * - Auto-Cancellation: Aborts pending requests when dependencies change.
- * - Reactive URL: Re-fetches automatically if `urlOrFn` depends on atoms.
- * - Error Isolation: Network errors are captured in .hasError/.lastError.
- */
-function atomFetch<T>(urlOrFn: string | (() => string), options: FetchOptions<T>): ComputedAtom<T> {
-  const ctx = new FetchContext<T>(urlOrFn, options);
-  const atomVal = computed(ctx.execute, {
+  const atomVal = computed(execute, {
     defaultValue: options.defaultValue,
     lazy: options.eager === false,
     ...(options.name !== undefined ? { name: options.name } : {}),
   });
 
+  // Lifecycle: Ensures the network request is canceled when the atom itself is destroyed.
   const originalDispose = atomVal.dispose.bind(atomVal);
   atomVal.dispose = () => {
-    ctx.abort();
+    abortController?.abort();
     originalDispose();
   };
 
   return Object.assign(atomVal, {
-    abort: () => ctx.abort(),
+    abort: () => abortController?.abort(),
   }) as ComputedAtom<T> & { abort: () => void };
 }
+
 $.extend({
   atomFetch,
 });
