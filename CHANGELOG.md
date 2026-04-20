@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+### jQuery
+
+#### Fixed
+
+- **Navigation**: Ignore navigating to the exact same URL to prevent hook freezes and redundant pushes, with support for hash-only internal transition.
+
 ## [0.31.0]
 
 ### Core

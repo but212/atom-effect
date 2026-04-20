@@ -359,25 +359,10 @@ export function atomNav(options: AtomNavOptions): AtomNav {
 
     /** Programmatically trigger a navigation event. Supports 'replace' and 'onBeforeLoad' hooks. */
     async navigate(url: string, navOptions: { replace?: boolean } = {}): Promise<void> {
-      const { signal } = _renewAbortSignal();
-
-      if (options.onBeforeLoad) {
-        _pendingHookCount.value++;
-        try {
-          // Hook: Allows the application to cancel or redirect navigation before AJAX starts.
-          const ok = await (
-            options.onBeforeLoad as (url: string, signal: AbortSignal) => Promise<boolean> | boolean
-          )(url, signal);
-          if (signal.aborted || ok === false) return;
-        } finally {
-          _pendingHookCount.value = Math.max(0, _pendingHookCount.value - 1);
-        }
-      }
-
       const base = win.document.baseURI ?? win.location.href;
       const targetObj = getAbsoluteUrl(url, base);
 
-      // Condition: Always perform a full page reload if the origin changed.
+      // Phase 1: External Origin (Full browser handoff)
       if (targetObj.origin !== win.location.origin) {
         win.location.assign(url);
         return;
@@ -386,19 +371,56 @@ export function atomNav(options: AtomNavOptions): AtomNav {
       const targetPath = getPathAndSearch(targetObj);
       const currentUrlObj = getAbsoluteUrl(win.location.href, base);
       const currentPath = getPathAndSearch(currentUrlObj);
-      const finalUrl = targetPath + targetObj.hash;
 
-      const isSameLoc = targetPath === currentPath && targetObj.hash === (win.location.hash || '');
+      const targetHash = targetObj.hash || '';
+      const currentHash = win.location.hash || '';
 
-      if (!isSameLoc || navOptions.replace) {
+      const isSamePath = targetPath === currentPath;
+      const isSameHash = targetHash === currentHash;
+      const isSameLoc = isSamePath && isSameHash;
+
+      // Phase 2: Exact same location shortcut (prevent hook freezes and redundant pushes)
+      if (isSameLoc && !navOptions.replace) {
+        // Enforce scroll if explicitly requested via hash links (or "#") without triggering state pushes
+        if (url.includes('#') || targetHash) {
+          performScroll(win, targetHash.slice(1), true);
+        }
+        return;
+      }
+
+      const finalUrl = targetPath + targetHash;
+
+      // Phase 3: Hash-only internal transition (Fast-path without AJAX hooks)
+      if (isSamePath) {
         $.batch(() => {
           const method = navOptions.replace ? 'replaceState' : 'pushState';
           win.history[method](null, '', finalUrl);
           _navState.value = { url: finalUrl, type: navOptions.replace ? 'replace' : 'push' };
         });
-      } else if (url.includes('#') || targetObj.hash) {
-        performScroll(win, targetObj.hash.slice(1), true);
+        return;
       }
+
+      // Phase 4: Full single-page navigation via AJAX fetch with Hooks
+      const { signal } = _renewAbortSignal();
+
+      if (options.onBeforeLoad) {
+        _pendingHookCount.value++;
+        try {
+          // Hook: Allows the application to cancel or redirect navigation before AJAX starts.
+          const hookResult = (options.onBeforeLoad as Function)(url, signal);
+          const ok = hookResult instanceof Promise ? await hookResult : hookResult;
+          if (signal.aborted || ok === false) return;
+        } finally {
+          _pendingHookCount.value = Math.max(0, _pendingHookCount.value - 1);
+        }
+      }
+
+      // Final synchronization after hook resolves
+      $.batch(() => {
+        const method = navOptions.replace ? 'replaceState' : 'pushState';
+        win.history[method](null, '', finalUrl);
+        _navState.value = { url: finalUrl, type: navOptions.replace ? 'replace' : 'push' };
+      });
     },
 
     /** Destroys the navigator instance, stripping listeners and cleaning up reactive memory. */

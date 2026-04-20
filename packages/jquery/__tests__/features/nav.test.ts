@@ -275,6 +275,24 @@ describe('$.atomNav', () => {
       await vi.waitFor(() => expect($target.text()).toBe('Page B'));
       expect(mountSpy).toHaveBeenCalledTimes(2); // Initial + Page B (Page A skipped)
     });
+
+    it('should ignore navigating to the exact same URL to prevent hook freezes', async () => {
+      const beforeSpy = vi.fn();
+      const nav = createNav({
+        target: '#main-content',
+        onBeforeLoad: beforeSpy,
+      });
+
+      await $.nextTick(); // Wait for initial mount
+      beforeSpy.mockClear();
+
+      // Navigate to the same URL
+      await nav.navigate('/');
+
+      // Should completely ignore the navigation and not trigger pending
+      expect(beforeSpy).not.toHaveBeenCalled();
+      expect(nav.isPending.value).toBe(false);
+    });
   });
 
   describe('Scroll Management', () => {

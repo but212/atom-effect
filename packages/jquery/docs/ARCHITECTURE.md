@@ -368,6 +368,7 @@ Unlike traditional PJAX libraries that rely on sequential event handlers, `$.ato
 - **Metadata Synchronization**: It automatically synchronizes `<title>`, and meta tags (`description`, `keywords`, `canonical`) from the response.
 - **Attribute Synchronization**: Container attributes (excluding `id`) are synchronized with the incoming fragment's attributes.
 - **Abort Protection**: Each navigation life-cycle is managed by an `AbortController`. Programmatic navigations and `popstate` events trigger a new signal, automatically cancelling stale requests and pending hooks.
+- **Phase Transitions**: Navigation is broken down into fast-paths. External origins hand off to the browser. Navigating to the exact same location is ignored to prevent hook freezes. Hash-only transitions bypass AJAX hooks entirely for immediate performance.
 - **Redirect Support**: Respects `X-PJAX-URL` headers for server-side redirects, updating the browser history and reactive state accordingly.
 
 ### 11.3 Lifecycle Hooks
