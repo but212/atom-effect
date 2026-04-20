@@ -99,14 +99,6 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     return (this.flags & RECOMPUTING) !== 0;
   }
 
-  private get _hasErrorInternal(): boolean {
-    return (this.flags & HAS_ERROR) !== 0;
-  }
-
-  private _track(): void {
-    trackingContext.current?.addDependency(this);
-  }
-
   get value(): T {
     const context = trackingContext.current;
     if (context !== null) context.addDependency(this);
