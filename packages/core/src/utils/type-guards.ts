@@ -28,8 +28,6 @@ function isBranded<T>(obj: unknown, flag: number): obj is T {
 }
 
 /**
- * Checks if a value is an atom (either Readonly or Writable).
- *
  * When to use:
  * - Validating user input in APIs that expect atoms.
  * - Discriminating between raw values and reactive containers.
@@ -51,8 +49,6 @@ export function isAtom(obj: unknown): obj is ReadonlyAtom {
 }
 
 /**
- * Checks if a value is a Writable atom.
- *
  * When to use:
  * - Ensuring an atom can be modified before calling `.set()` or `.update()`.
  *
@@ -73,8 +69,6 @@ export function isWritable(obj: unknown): obj is WritableAtom {
 }
 
 /**
- * Checks if a value is a Computed atom.
- *
  * When to use:
  * - Identifying derived state containers that may have dependencies.
  *
@@ -95,8 +89,6 @@ export function isComputed(obj: unknown): obj is ComputedAtom {
 }
 
 /**
- * Checks if a value is an Effect object.
- *
  * When to use:
  * - Validating objects that manage side-effects.
  *
@@ -117,16 +109,8 @@ export function isEffect(obj: unknown): obj is EffectObject {
 }
 
 /**
- * Validates if a value is a Promise or a Thenable.
- *
- * When to use:
- * - Normalizing potentially asynchronous results.
- * - Supporting third-party Promise libraries (Thenables).
- *
- * Logic:
- * 1. Checks for native `Promise` using `instanceof` (Fast path).
- * 2. Eagerly exits for primitives to avoid expensive property lookups.
- * 3. Falls back to duck-typing for cross-library compatibility.
+ * Logic: Multi-tiered detection strategy that prioritizes native `Promise` performance
+ * before falling back to duck-typed thenable identification for cross-library safety.
  *
  * @param value - The value to examine.
  * @returns True if the value has a `.then()` method.
@@ -141,12 +125,9 @@ export function isEffect(obj: unknown): obj is EffectObject {
  * @public
  */
 export function isPromise<T>(value: unknown): value is Promise<T> {
-  // Optimization: Fast-path for native promises
   if (value instanceof Promise) return true;
 
-  // Optimization: Eager-exit for primitives and null to avoid property indexing
   if (value === null || typeof value !== 'object') return false;
 
-  // Logic: Duck-typed thenable (supports 3rd party libs)
   return typeof (value as Thenable).then === 'function';
 }

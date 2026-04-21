@@ -166,8 +166,6 @@ type MatchResult =
   | { readonly kind: 'not-found' };
 
 /**
- * Compiles route patterns into Regex for high-performance URL matching.
- *
  * Logic: Regex Transformation
  * Converts path patterns (e.g., `/user/:id`) into anchored regular expressions.
  * Escapes special characters while transforming `:param` tokens into
@@ -185,7 +183,6 @@ class RouteMatcher {
         this.routes.push({ kind: 'exact', pattern: normalized, def });
       } else {
         const paramNames: string[] = [];
-        // Regex Transformation: Converts '/user/:id' into a regex with capture groups.
         const regexStr = normalized
           .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
           .replace(/:(\w+)/g, (_, name) => {
@@ -232,7 +229,6 @@ class RouteMatcher {
   }
 }
 
-/** Orchestrates the reactive routing logic, History/Hash adaptation, and view rendering. */
 class RouterImpl implements Router {
   /** Reactive current path (read-only). */
   public currentRoute: ReadonlyAtom<string>;
@@ -334,8 +330,6 @@ class RouterImpl implements Router {
   }
 
   /**
-   * Navigates to a new path.
-   *
    * Logic: Navigation Guard
    * Intercepts the transition and executes the `onLeave` guard. If any
    * guard returns `false`, the navigation is aborted, preventing
@@ -365,7 +359,7 @@ class RouterImpl implements Router {
     });
   }
 
-  /** Syncs internal state with browser back/forward button events. Supports nav guards. */
+  /** @internal */
   private handleBrowserSync() {
     if (this.isDestroyed) return;
     const state = this.urlAdapter.getBrowserState();
@@ -386,8 +380,6 @@ class RouterImpl implements Router {
   }
 
   /**
-   * Executes the route transition lifecycle.
-   *
    * Lifecycle: Transition Stages
    * 1. `beforeTransition`: Global hook execution.
    * 2. `onEnter`: Route-specific guard and parameter pre-processing.
@@ -434,7 +426,7 @@ class RouterImpl implements Router {
     this.finalizeNavigation(routeName, mergedParams);
   }
 
-  /** Performs the actual HTML injection and executes onMount hooks. */
+  /** @internal */
   private updateDom(def: RouteDefinition, name: string, params: Record<string, string>) {
     const container = this.$target[0];
     if (!container) return;
@@ -453,7 +445,7 @@ class RouterImpl implements Router {
     }
   }
 
-  /** Scans the DOM for <template data-path="..."> elements to automatically register routes. */
+  /** @internal */
   private discoverRoutesFromDOM() {
     document.querySelectorAll<HTMLTemplateElement>('template[data-path]').forEach((tmpl) => {
       const path = PathUtils.normalize(tmpl.getAttribute('data-path') || '');
@@ -476,7 +468,7 @@ class RouterImpl implements Router {
     });
   }
 
-  /** Global click hijacker for link-based navigation. Filters out external links and modifier clicks. */
+  /** @internal */
   private setupInterception() {
     const onClick = (e: JQuery.TriggeredEvent) => {
       const me = e.originalEvent as MouseEvent;
@@ -497,7 +489,7 @@ class RouterImpl implements Router {
     this.setupActiveEffect();
   }
 
-  /** Reactive effect that automatically toggles the 'activeClass' on links matching the current route. */
+  /** @internal */
   private setupActiveEffect() {
     const activeSub = effect(() => {
       const current = this.currentRouteAtom.value;
@@ -527,8 +519,6 @@ class RouterImpl implements Router {
   }
 
   /**
-   * Heuristics to decide if a link click should be handled by the router.
-   *
    * Logic: Link Interception Policy
    * Bypasses interception for:
    * - External domains or `rel="external"` links.
@@ -581,8 +571,6 @@ class RouterImpl implements Router {
   }
 
   /**
-   * Finalizes a successful navigation event.
-   *
    * Accessibility: SPA Focus Management
    * Resets the document focus to the main heading (`h1`) or the target
    * container to ensure that screen readers announce the new page content
@@ -607,7 +595,7 @@ class RouterImpl implements Router {
     this.previousPath = routeName;
   }
 
-  /** Destroys the router instance, cleaning up all event listeners and reactive subscriptions. */
+  /** @internal */
   public destroy(): void {
     if (this.isDestroyed) return;
     this.isDestroyed = true;
@@ -622,8 +610,6 @@ class RouterImpl implements Router {
 }
 
 /**
- * Initializes a client-side router for the application.
- *
  * Logic: Reactive Routing
  * Orchestrates URL synchronization, path matching, and dynamic view rendering.
  * Uses atoms to provide reactive access to `currentRoute` and `params`,

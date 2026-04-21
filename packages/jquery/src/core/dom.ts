@@ -1,7 +1,4 @@
 /**
- * Iterates through a jQuery collection and executes the callback ONLY for
- * valid HTMLElement (nodeType 1) nodes.
- *
  * Reason: jQuery collections can contain text or comment nodes. This utility
  * provides a safe, element-only iteration path required for setting up
  * reactive bindings and event listeners.
@@ -20,9 +17,6 @@ export function atomEachElement(jq: JQuery, fn: (el: HTMLElement) => void): JQue
 }
 
 /**
- * Normalizes binding arguments that can be either a single reactive value or a
- * [Value, Option] tuple (e.g., `.atomCss('prop', [atom, 'px'])`).
- *
  * Logic:
  * Uses heuristics to determine if an input array represents a configuration
  * tuple or just an array-based data value.

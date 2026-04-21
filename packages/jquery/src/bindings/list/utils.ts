@@ -11,8 +11,6 @@ export function wrap($el: Element | JQuery<Element>): JQuery {
 }
 
 /**
- * Manages the `data-atom-key` attribute used for list reconciliation.
- *
  * Logic: This attribute serves as the primary stable identifier for DOM nodes,
  * allowing the diffing algorithm to perform O(N) re-ordering and reuse
  * instead of expensive O(N^2) positional checks.
@@ -37,8 +35,6 @@ export function setAtomKey(node: Element | Node | JQuery, key: string | null): v
 }
 
 /**
- * Triggers the mandatory teardown for reactive bindings associated with target nodes.
- *
  * Caution:
  * This must be executed before an element is permanently detached from the DOM
  * or replaced. Failing to do so creates "zombie" reactive effects in the

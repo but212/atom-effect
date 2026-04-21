@@ -138,11 +138,9 @@ export class SlotBuffer<T> {
 
     this._rawWrite(index, item);
 
-    // Logic: Sync logical count (Active items tracking)
     if (old === null) this._actualCount++;
     else if (item === null) this._actualCount--;
 
-    // Logic: Sync physical high-water mark (Iteration boundary tracking)
     if (item !== null) {
       if (index >= this._count) this._count = index + 1;
     } else {
@@ -182,7 +180,6 @@ export class SlotBuffer<T> {
    * Normalizes the high-water mark even if the current count is 0.
    */
   truncateFrom(index: number): void {
-    // 1. Cleanup inline slots
     if (index <= 3) {
       if (index <= 3 && this._s3 !== null) {
         this._onItemRemoved(this._s3!);
@@ -206,7 +203,6 @@ export class SlotBuffer<T> {
       }
     }
 
-    // 2. Cleanup overflow array
     const ov = this._overflow;
     if (ov !== null) {
       const ovStart = index > 4 ? index - 4 : 0;
@@ -433,7 +429,6 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
     link.unsub?.();
   }
 
-  /** Synchronizes the Node->Index Map when setting entries directly. */
   override setAt(index: number, item: DependencyLink | null): void {
     const old = this.getAt(index);
     super.setAt(index, item);
@@ -458,7 +453,6 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
     const length = this._count;
     if (length <= trackIndex) return false;
 
-    // Optimization: 1. Direct hit check (Unrolled for performance)
     let current: DependencyLink | null = null;
     if (trackIndex < 4) {
       if (trackIndex === 0) current = this._s0;
@@ -474,12 +468,10 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
       return true;
     }
 
-    // Logic: 2. Map lookup
     if (this._map !== null || length - trackIndex > this._SCAN_THRESHOLD) {
       return this._claimViaMap(dep, trackIndex);
     }
 
-    // Logic: 3. Sequential search: Unrolled for the first 4 slots
     let foundIdx = -1;
     let foundLink: DependencyLink | null = null;
 

@@ -59,7 +59,6 @@ class FormBinder<T extends object> {
     this.setupObserver();
   }
 
-  /** Scans an element or its descendants for bindable form controls. */
   public bindElement(el: Element): void {
     const targets = el.matches?.(SELECTOR)
       ? [el]
@@ -69,7 +68,6 @@ class FormBinder<T extends object> {
     }
   }
 
-  /** Configures a single form control with two-way binding. */
   private bindControl(el: Element): void {
     if (
       !(
@@ -105,7 +103,6 @@ class FormBinder<T extends object> {
     }
   }
 
-  /** Specialized internal logic for radio buttons and multi-value checkboxes. */
   private bindToggle(
     el: HTMLInputElement,
     atom: WritableAtom<unknown>,
@@ -144,8 +141,6 @@ class FormBinder<T extends object> {
   }
 
   /**
-   * Resolves or creates a field-level lens and binds it to the root object.
-   *
    * Logic: Converts flat name attributes (e.g., 'user.info[0]') into
    * reactive dot-paths that `atomLens` can understand.
    */
@@ -156,7 +151,6 @@ class FormBinder<T extends object> {
       return entry;
     }
 
-    // Convert flat names (e.g., 'user.info[0]') into dot paths
     const dotPath = name.replace(/\[(\w+)\]/g, '.$1').replace(/^\./, '');
 
     const baseLens = atomLens(this.atom, dotPath as Paths<T>);
@@ -198,8 +192,6 @@ class FormBinder<T extends object> {
   }
 
   /**
-   * Monitors the form DOM for structural changes (AJAX loads, dynamic inputs).
-   *
    * Logic: Leverages MutationObserver to detect child element injections
    * and 'name' attribute changes, ensuring newly added fields are
    * automatically enrolled in the two-way binding system.
@@ -214,7 +206,6 @@ class FormBinder<T extends object> {
             if (node.nodeType === 1) this.bindElement(node as Element);
           }
         } else if (m.attributeName === 'name') {
-          // Re-bind if a 'name' attribute is changed on the fly
           this.bindElement(m.target as Element);
         }
       }
@@ -232,8 +223,6 @@ class FormBinder<T extends object> {
 }
 
 /**
- * Initializes a reactive whole-form binding.
- *
  * When to use:
  * - Bridging a standard `<form>` element with a reactive object atom.
  *

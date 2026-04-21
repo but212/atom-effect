@@ -143,9 +143,7 @@ function normalizeValue(input: string): string {
     .replace(REGEX_CONTROL_CHARS, '');
 }
 
-/**
- * Returns true if the string contains a dangerous URI protocol.
- */
+/** @internal */
 function isDangerousProtocol(value: string): boolean {
   const cleanedValue = value.replace(/\s+/g, '');
   return REGEX_PROTOCOL_STRICT.test(cleanedValue) || REGEX_DATA_URI_HTML.test(cleanedValue);
@@ -174,17 +172,14 @@ function scrubSrcset(value: string): string {
     .join(',');
 }
 
-/**
- * Normalizes CSS by removing comments and extra whitespace
- * to reveal hidden keywords or protocols.
- */
+/** @internal */
 function normalizeCss(value: string): string {
   const normalized = normalizeValue(value);
   // Strip CSS comments: /* ... */
   return normalized.replace(/\/\*[\s\S]*?\*\//g, '');
 }
 
-/** Returns true if any dangerous CSS patterns are detected. */
+/** @internal */
 function isCssDangerous(value: string): boolean {
   const cleanCss = normalizeCss(value);
   return CSS_DANGER_PATTERNS.some((pattern) => pattern.test(cleanCss));
@@ -215,9 +210,7 @@ const ATTRIBUTE_HANDLERS: Record<
 
 // --- Scrubber Core ---
 
-/**
- * Scrubs event listeners (on*) and malicious protocols from individual element attributes.
- */
+/** @internal */
 function applySecurityPolicy(element: HTMLElement): void {
   const attributes = DOM_PROTOTYPE_BRIDGE.getAttributes(element);
   if (!attributes) return;
@@ -281,9 +274,7 @@ function neutralizeDangerousNode(element: HTMLElement): void {
   DOM_PROTOTYPE_BRIDGE.replaceElement(element, safeReplacement);
 }
 
-/**
- * Recursive walker that processes a document fragment and its nested templates.
- */
+/** @internal */
 function executeSanitizationWalk(root: Node | DocumentFragment): void {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
   const processingQueue: HTMLElement[] = [];
@@ -306,8 +297,6 @@ function executeSanitizationWalk(root: Node | DocumentFragment): void {
 // --- Public APIs ---
 
 /**
- * Sanitizes a raw HTML string by stripping dangerous tags, attributes, and protocols.
- *
  * When to use:
  * - Before injecting untrusted HTML strings into the DOM via `$.fn.atomHtml`.
  * - Processing user-provided markup to prevent Cross-Site Scripting (XSS).
@@ -338,8 +327,6 @@ export function sanitizeHtml(html: string | null | undefined): string {
 }
 
 /**
- * Checks if a specific attribute/value pair contains dangerous content.
- *
  * When to use:
  * - To validate individual attribute updates in `$.fn.atomAttr`.
  * - Preventing protocol smuggling in property-level bindings.
@@ -367,8 +354,6 @@ export const isDangerousUrl = (attribute: string, value: string): boolean => {
 };
 
 /**
- * Checks if a CSS value contains dangerous expressions or forbidden protocols.
- *
  * When to use:
  * - To validate dynamic style updates in `$.fn.atomCss`.
  *

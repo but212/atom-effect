@@ -62,8 +62,6 @@ export interface PreparedDiff<T> {
 }
 
 /**
- * Internal collection of hooks and callbacks used during the node placement phase.
- *
  * @internal
  */
 export interface PlaceCallbacks<T> {

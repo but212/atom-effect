@@ -62,7 +62,6 @@ export function startFlush(): boolean {
   return true;
 }
 
-/** Ends the current flush cycle. */
 export function endFlush(): void {
   isFlushing = false;
 }
@@ -100,7 +99,6 @@ export function incrementFlushExecutionCount(): number {
   );
 }
 
-/** Resets all global flush-related states to their defaults. */
 export function resetFlushState(): void {
   _flushEpoch = 0;
   flushExecutionCount = 0;
@@ -190,7 +188,6 @@ class Scheduler {
     if (callback._nextEpoch === epoch) return;
     callback._nextEpoch = epoch;
 
-    // Logic: If batching or sync flushing, move to batch queue to ensure order and coalescence.
     if (this._batchDepth > 0 || this._isFlushingSync) {
       this._batchQueue[this._batchQueueSize++] = callback;
       return;
@@ -204,14 +201,12 @@ class Scheduler {
     }
   }
 
-  /** Initiates an asynchronous flush via microtask. */
   private _flush(): void {
     if (this._isProcessing || (this._size === 0 && this._batchQueueSize === 0)) return;
     this._isProcessing = true;
     queueMicrotask(this._boundRunLoop);
   }
 
-  /** Internal microtask execution loop. */
   private _runLoop(): void {
     try {
       if (this._size === 0 && this._batchQueueSize === 0) return;
@@ -240,9 +235,6 @@ class Scheduler {
     }
   }
 
-  /**
-   * Merges the temporal batch queue into the main active buffer.
-   */
   private _mergeBatchQueue(): void {
     const queueSize = this._batchQueueSize;
     if (queueSize === 0) return;
@@ -267,9 +259,6 @@ class Scheduler {
     if (bQueue.length > SCHEDULER_CONFIG.BATCH_QUEUE_SHRINK_THRESHOLD) bQueue.length = 0;
   }
 
-  /**
-   * Continuous loop that drains both main and batch queues.
-   */
   private _drainQueue(): void {
     let iterations = 0;
     while (this._size > 0 || this._batchQueueSize > 0) {
@@ -283,7 +272,6 @@ class Scheduler {
     }
   }
 
-  /** Executes all jobs currently in the primary buffer and swaps buffers. */
   private _processQueue(): void {
     const idx = this._bufferIndex;
     const jobs = idx === 0 ? this._buffer0 : this._buffer1;
@@ -309,7 +297,6 @@ class Scheduler {
     }
   }
 
-  /** Resets the scheduler state on infinite loop detection. */
   private _handleFlushOverflow(): void {
     const droppedCount = this._size + this._batchQueueSize;
     console.error(
@@ -332,12 +319,10 @@ class Scheduler {
     }
   }
 
-  /** Enters a new batching depth. */
   startBatch(): void {
     this._batchDepth++;
   }
 
-  /** Decrements batching depth. */
   endBatch(): void {
     if (this._batchDepth === 0) {
       if (IS_DEV) console.warn(ERROR_MESSAGES.SCHEDULER_END_BATCH_WITHOUT_START);
@@ -351,7 +336,6 @@ class Scheduler {
     }
   }
 
-  /** Configures the maximum safety iterations. */
   setMaxFlushIterations(max: number): void {
     if (max < SCHEDULER_CONFIG.MIN_FLUSH_ITERATIONS)
       throw new SchedulerError(
@@ -365,8 +349,6 @@ class Scheduler {
 export const scheduler = new Scheduler();
 
 /**
- * Groups multiple state updates into a single batch, preventing intermediate re-computations.
- *
  * When to use:
  * - When performing multiple related atom updates that should trigger effects only once.
  * - To improve performance by coalescing multiple updates into a single flush cycle.
@@ -404,8 +386,6 @@ export function batch<T>(fn: () => T): T {
 let sharedNextTickPromise: Promise<void> | null = null;
 
 /**
- * Returns a promise that resolves after the next scheduler flush.
- *
  * When to use:
  * - To wait for all asynchronous effects to be processed and settled.
  * - In testing, to ensure the state has fully propagated before asserting.

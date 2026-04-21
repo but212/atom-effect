@@ -19,8 +19,6 @@ import { debug } from '@/utils/debug';
 import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '@/utils/sanitize';
 
 /**
- * Converts kebab-case CSS properties to camelCase.
- *
  * @internal
  */
 function getCamelCase(property: string): string {
@@ -49,10 +47,12 @@ function isSafeBinding(name: string, isProperty: boolean): boolean {
 }
 
 /**
- * Syncs element text content with a reactive source.
- *
  * When to use:
  * - Rendering raw text that stays in sync with an atom.
+ *
+ * @param element - The target element.
+ * @param value - The reactive source.
+ * @param formatter - Optional function to format the value.
  *
  * @internal
  */
@@ -73,8 +73,6 @@ export function bindText<T = unknown>(
 }
 
 /**
- * Binds sanitized HTML content to an element.
- *
  * Logic: Descendant bindings are automatically cleaned up via the registry
  * before re-writing `innerHTML` to prevent memory leaks from detached nodes.
  *
@@ -83,6 +81,9 @@ export function bindText<T = unknown>(
  *
  * When to use:
  * - Rendering rich text or trusted HTML templates.
+ *
+ * @param element - The target element.
+ * @param value - The reactive source.
  *
  * @internal
  */
@@ -105,12 +106,13 @@ export function bindHtml(element: HTMLElement, value: AsyncReactiveValue<string>
 }
 
 /**
- * Manages element classes reactively using a boolean map.
- *
  * Logic: Token Management
  * - Supports space-separated class names in keys.
  * - Tracks active tokens in a `Set` to ensure classes are only removed if no
  *   other active definition in the map requires them.
+ *
+ * @param element - The target element.
+ * @param classMap - A map of class names to boolean sources.
  *
  * @internal
  */
@@ -162,10 +164,11 @@ export function bindClass(
 }
 
 /**
- * Reactively updates inline styles while blocking potentially harmful CSS values.
- *
  * Security: Blocks dangerous CSS values (like `url()` with javascript protocols)
  * to prevent XSS and style-based attacks.
+ *
+ * @param element - The target element.
+ * @param cssMap - A map of style properties to values.
  *
  * @internal
  */
@@ -202,12 +205,13 @@ export function bindCss(element: HTMLElement, cssMap: Record<string, CssValue>):
 }
 
 /**
- * Syncs DOM attributes.
- *
  * Logic:
  * - Handles specific logic for boolean attributes (like `disabled`).
  * - Validates URL protocols (href/src) before applying changes.
  * - Supports ARIA attributes with distinct boolean-to-string mapping.
+ *
+ * @param element - The target element.
+ * @param attrMap - A map of attribute names to values.
  *
  * @internal
  */
@@ -257,10 +261,11 @@ export function bindAttr(
 }
 
 /**
- * Directly maps reactive values to DOM element properties.
- *
  * Security: Blocks dangerous properties (e.g., `innerHTML`, `on*` events)
  * and validates URL-based properties to prevent injection attacks.
+ *
+ * @param element - The target element.
+ * @param propMap - A map of property names to values.
  *
  * @internal
  */
@@ -294,10 +299,12 @@ export function bindProp(
 }
 
 /**
- * Toggles display style between 'none' and its original state.
- *
  * Logic: Preserves the original `display` mode (e.g., `flex`, `block`)
  * so that visibility restoration returns the element to its intended layout state.
+ *
+ * @param element - The target element.
+ * @param condition - The visibility condition.
+ * @param invert - Whether to invert the condition.
  *
  * @internal
  */
@@ -327,8 +334,6 @@ export function bindVisibility(
 }
 
 /**
- * Entry point for input/value bindings; delegates to the `InputBinding` engine.
- *
  * @internal
  */
 export function bindVal(
@@ -367,8 +372,6 @@ function synchronizeRadioGroup(element: HTMLInputElement): void {
 }
 
 /**
- * Specialized two-way binding for checkbox and radio 'checked' states.
- *
  * @internal
  */
 export function bindChecked(element: HTMLElement, atom: WritableAtom<boolean>): void {
@@ -408,8 +411,6 @@ export function bindChecked(element: HTMLElement, atom: WritableAtom<boolean>): 
 }
 
 /**
- * Registers flat event maps with automatic lifecycle cleanup.
- *
  * @internal
  */
 export function bindEvents(
@@ -422,8 +423,6 @@ export function bindEvents(
 }
 
 /**
- * Registers a single event listener with automatic lifecycle cleanup.
- *
  * @internal
  */
 export function bindOn(

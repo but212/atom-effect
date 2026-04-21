@@ -107,7 +107,6 @@ export abstract class ReactiveNode<T> {
    */
   subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
     const isFn = typeof listener === 'function';
-    // Logic: Guard clause to ensure type safety before further processing.
     if (!isFn && (listener === null || typeof (listener as Subscriber).execute !== 'function')) {
       throw wrapError(
         new TypeError('Invalid subscriber'),
@@ -122,7 +121,6 @@ export abstract class ReactiveNode<T> {
       this._slots = slots;
     }
 
-    // Optimization: Skip duplicate check if empty
     if (slots.size > 0) {
       let duplicate = false;
 
@@ -204,16 +202,12 @@ export abstract class ReactiveNode<T> {
     return slots === null ? 0 : slots.size;
   }
 
-  /**
-   * Notifies all subscribers about a value update.
-   */
   protected _notifySubscribers(newValue: T | undefined, oldValue: T | undefined): void {
     const slots = this._slots;
     if (slots === null || slots.size === 0) return;
 
     this._notifying++;
     try {
-      // Optimization: 1. Inline slots: Manual unroll for hot-path performance.
       if (slots._s0 !== null) {
         try {
           slots._s0.notify(newValue, oldValue);
@@ -243,7 +237,6 @@ export abstract class ReactiveNode<T> {
         }
       }
 
-      // Optimization: 2. Overflow scan: Standard loop for performance.
       const ov = slots._overflow;
       if (ov !== null) {
         for (let i = 0, len = ov.length; i < len; i++) {
@@ -273,14 +266,14 @@ export abstract class ReactiveNode<T> {
   // ============================================================================
 
   /**
-   * Determines if the node is dirty by checking its dependency chain.
-   * Optimized with O(1) hot-path check.
+   * Optimization: Double-Phase Validation
+   * Combines an O(1) hot-path check of the primary dependency with an
+   * O(N) exhaustive validation of the full chain to minimize graph traversal.
    */
   protected _isDirty(): boolean {
     const deps = this._deps;
     if (deps === null || deps.size === 0) return false;
 
-    // Optimization: Phase 1: Hot-path Check - O(1)
     const hotIndex = this._hotIndex;
     if (hotIndex !== -1) {
       const hotLink = deps.getAt(hotIndex);
@@ -289,12 +282,8 @@ export abstract class ReactiveNode<T> {
       }
     }
 
-    // Phase 2: Standard Validation - O(N)
     return this._deepDirtyCheck();
   }
 
-  /**
-   * Deeply validates dependency versions.
-   */
   protected abstract _deepDirtyCheck(): boolean;
 }

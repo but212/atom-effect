@@ -47,9 +47,7 @@ const FLAGS = {
  * @public
  */
 export const STATE_MASKS = Object.freeze({
-  /** Matches all bits related to async states (Idle, Pending, Resolved, Rejected). */
   ASYNC_STATE: FLAGS.IDLE | FLAGS.PENDING | FLAGS.RESOLVED | FLAGS.REJECTED,
-  /** Matches all flags that indicate a computed node is dirty or recomputing. */
   COMPUTED_DIRTY_MASK: FLAGS.DIRTY | FLAGS.RECOMPUTING | FLAGS.FORCE_COMPUTE,
 });
 
@@ -75,17 +73,11 @@ export const AsyncState = Object.freeze({
   REJECTED: 'rejected',
 });
 
-/**
- * Effect flags.
- */
 export const EFFECT_STATE_FLAGS = Object.freeze({
   DISPOSED: FLAGS.DISPOSED,
   EXECUTING: FLAGS.EFFECT_EXECUTING,
 });
 
-/**
- * Computed flags.
- */
 export const COMPUTED_STATE_FLAGS = Object.freeze({
   DISPOSED: FLAGS.DISPOSED,
   IS_COMPUTED: FLAGS.IS_COMPUTED,
@@ -99,9 +91,6 @@ export const COMPUTED_STATE_FLAGS = Object.freeze({
   FORCE_COMPUTE: FLAGS.FORCE_COMPUTE,
 });
 
-/**
- * Writable Atom Flags.
- */
 export const ATOM_STATE_FLAGS = Object.freeze({
   DISPOSED: FLAGS.DISPOSED,
   SYNC: FLAGS.ATOM_SYNC,
@@ -166,11 +155,6 @@ export const DEBUG_CONFIG = Object.freeze({
   LOOP_THRESHOLD: 100,
 });
 
-/**
- * Computed node internal configuration.
- *
- * @public
- */
 export const COMPUTED_CONFIG = Object.freeze({
   /** Optimization: Use SMI range for promise tracking IDs to avoid box/unbox overhead. */
   MAX_PROMISE_ID: SMI_MAX,

@@ -35,8 +35,6 @@ function getPathAndSearch(urlObj: URL): string {
 }
 
 /**
- * Parses raw HTML into a structured ContentState.
- *
  * Optimization: DOM Extraction
  * Uses isolated `DOMParser` instances to extract clean fragments without
  * the high overhead of invisible iframes or global parser state.
@@ -78,8 +76,6 @@ function extractContent(html: string, selector?: string, xhr?: JQuery.jqXHR): Co
 }
 
 /**
- * Synchronization of `<head>` metadata with content state.
- *
  * Logic: SEO Continuity
  * Updates standard meta tags and canonical links to preserve SEO and social
  * sharing integrity during partial SPA transitions.
@@ -111,7 +107,7 @@ function syncMetaData(win: Window, meta?: Record<string, string>): void {
   sync('link[rel="canonical"]', meta?.canonical, 'canonical', true);
 }
 
-/** Updates attributes on the container element while preserving non-id internal identifiers. */
+/** @internal */
 function updateAttributes(el: HTMLElement, next: Record<string, string>): void {
   for (const attr of Array.from(el.attributes)) {
     const { name } = attr;
@@ -127,8 +123,6 @@ function updateAttributes(el: HTMLElement, next: Record<string, string>): void {
 }
 
 /**
- * Handles smooth scroll-to-hash or page-top behavior after navigation.
- *
  * @internal
  */
 function performScroll(win: Window, hash?: string, fallbackToTop = false): void {
@@ -144,8 +138,6 @@ function performScroll(win: Window, hash?: string, fallbackToTop = false): void 
 }
 
 /**
- * Initializes a reactive Single Page Application (SPA) navigation system.
- *
  * Logic: Progressive Enhancement
  * Hijacks standard link interactions and performs AJAX-based partial DOM
  * replacements, maintaining history via the `pushState` API. Handles
@@ -390,7 +382,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
 
   win.addEventListener('popstate', handlePopState, { signal: _lifecycleController.signal });
 
-  /** Commit state and history changes after internal navigation logic completes. */
+  /** @internal */
   const commitNavigation = (url: string, type: NavigationType): void => {
     $.batch(() => {
       const method = type === 'replace' ? 'replaceState' : 'pushState';
@@ -407,8 +399,6 @@ export function atomNav(options: AtomNavOptions): AtomNav {
     hasError: $.computed(() => _content.hasError, { name: 'nav:hasError' }),
 
     /**
-     * Programmatically triggers a navigation event.
-     *
      * Logic: Navigation Flow
      * 1. Resolution: Determines absolute URL and origin.
      * 2. Hand-off: Performs `location.assign` if the origin is external.

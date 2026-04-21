@@ -46,7 +46,6 @@ export function buildIndices<T>(
   const newIndices: number[] = new Array(itemCount);
   const toRender: { key: ListKey; item: T; index: number }[] = [];
 
-  // Optimization: 1. Skip unchanged prefix.
   // Reason: Fast-forward through items that haven't moved or changed at the start
   // to avoid mapping overhead for static sections.
   while (startIndex <= oldEndIndex && startIndex <= newEndIndex) {
@@ -57,7 +56,6 @@ export function buildIndices<T>(
     keyToIndex.set(k, startIndex++);
   }
 
-  // Optimization: 2. Skip unchanged suffix.
   // Reason: Narrow the "dirty" middle range by matching items from the end,
   // minimizing the O(N) complexity of the subsequent mapping phase.
   while (oldEndIndex >= startIndex && newEndIndex >= startIndex) {
@@ -69,7 +67,6 @@ export function buildIndices<T>(
     oldEndIndex--;
   }
 
-  // Process skip ranges as Unchanged
   for (let i = 0; i < startIndex; i++) {
     const k = oldKeys[i]!;
     newKeys[i] = k;
@@ -89,11 +86,9 @@ export function buildIndices<T>(
     newKeySet.add(k);
   }
 
-  // Map remaining old keys for fast lookup during middle-section diffing
   const oldIndexMap = new Map<ListKey, number>();
   for (let i = startIndex; i <= oldEndIndex; i++) oldIndexMap.set(oldKeys[i]!, i);
 
-  // Process the "dirty" middle section
   for (let i = startIndex; i <= newEndIndex; i++) {
     const item = items[i]!,
       k = getKey(item, i);
