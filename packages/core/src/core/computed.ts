@@ -106,17 +106,21 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     return (this.flags & RECOMPUTING) !== 0;
   }
 
+  /**
+   * Logic: Three-Path Evaluation
+   * 1. Fast Path: Returns the cached value immediately if stable and resolved.
+   * 2. Exception Path: Handles disposal and circularity (triggering default value recovery).
+   * 3. Evaluation Path: Validates dependencies and triggers re-computation if stale.
+   */
   get value(): T {
     const context = trackingContext.current;
     if (context !== null) context.addDependency(this);
 
     const flags = this.flags;
-    // Optimization: 1. Fast path: Stable and Resolved. Masking multiple flags for single-branch optimization.
     if ((flags & (RESOLVED | DIRTY | IDLE | DISPOSED | RECOMPUTING)) === RESOLVED) {
       return this._value;
     }
 
-    // 2. Exception paths (Disposed, Cycles)
     if ((flags & DISPOSED) !== 0) throw new ComputedError(ERROR_MESSAGES.COMPUTED_DISPOSED);
 
     if ((flags & RECOMPUTING) !== 0) {
@@ -125,10 +129,8 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
       throw new ComputedError(ERROR_MESSAGES.COMPUTED_CIRCULAR_DEPENDENCY);
     }
 
-    // Logic: 3. Evaluation path (Lazy Stale Check)
     if ((flags & (DIRTY | IDLE)) !== 0) {
       const dependencies = this._deps;
-      // Logic: Decisions for re-computation based on current flags and dependency state.
       const shouldRecompute =
         (flags & (IDLE | FORCE_COMPUTE)) !== 0 || dependencies.size === 0 || this._isDirty();
 
@@ -140,7 +142,6 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
       if ((this.flags & RESOLVED) !== 0) return this._value;
     }
 
-    // Logic: 4. Async/Error handled after recomputation check.
     const defaultValue = this._defaultValue;
     const hasDefault = defaultValue !== (NO_DEFAULT_VALUE as T);
 
@@ -157,16 +158,10 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     return this._value;
   }
 
-  /**
-   * Accesses the current cached value without triggering dependency tracking.
-   */
   peek(): T {
     return this._value;
   }
 
-  /**
-   * Returns the current lifecycle state of the computation.
-   */
   get state(): AsyncStateType {
     const context = trackingContext.current;
     if (context !== null) context.addDependency(this);
@@ -272,11 +267,6 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     this._markDirty();
   }
 
-  /**
-   * Cleans up computation resources.
-   *
-   * Logic: Disposes dependencies, clears subscribers, and resets internal state.
-   */
   dispose(): void {
     const flags = this.flags;
     if ((flags & DISPOSED) !== 0) return;
@@ -301,7 +291,6 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     const trackIndex = this._trackCount++;
     const dependencies = this._deps;
 
-    // Optimization: Unrolled hot-path check for existing dependencies.
     let existing: DependencyLink | null = null;
     if (trackIndex < 4) {
       if (trackIndex === 0) existing = dependencies._s0;
@@ -316,7 +305,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     if (existing !== null && existing.node === dependency) {
       existing.version = dependency.version;
     } else if (dependencies.claimExisting(dependency, trackIndex)) {
-      // Logic: Version and relocation handled inside claimExisting.
+      // Version and relocation handled inside claimExisting.
     } else {
       const link = new DependencyLink(dependency, dependency.version, dependency.subscribe(this));
       dependencies.insertNew(trackIndex, link);
@@ -327,11 +316,6 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     }
   }
 
-  /**
-   * Resets tracking and executes the computation in a new epoch.
-   *
-   * Logic: Manages dependency truncation and error recovery if the computation fails.
-   */
   private _recompute(): void {
     if ((this.flags & RECOMPUTING) !== 0) return;
     this.flags = (this.flags | RECOMPUTING) & ~FORCE_COMPUTE;
@@ -439,7 +423,10 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
 
   /**
    * Deep dirty check for computations.
-   * Optimized with hot-index caching and unrolled scanning.
+   *
+   * Optimization: Selective Hot-Index Re-validation
+   * Prioritizes the last known dirty dependency (hotIndex) to minimize average-case
+   * traversal time, falling back to a full scan if necessary.
    */
   protected override _deepDirtyCheck(): boolean {
     const dependencies = this._deps;
@@ -447,13 +434,11 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     const hotIndex = this._hotIndex;
 
     return untracked(() => {
-      // Optimization: 1. Try last known dirty dependency first.
       if (hotIndex !== -1 && hotIndex < size) {
         const link = dependencies.getAt(hotIndex);
         if (link !== null && this._checkLinkDirty(link)) return true;
       }
 
-      // Optimization: 2. Scan from beginning, skipping hot entry.
       for (let i = 0; i < size; i++) {
         if (i === hotIndex) continue;
         const link = dependencies.getAt(i);

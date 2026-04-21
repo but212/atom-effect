@@ -5,15 +5,15 @@ import type { Paths, PathValue, WritableAtom } from '../types';
  * Internal recursive helper for creating deep immutable copies with structural sharing.
  *
  * Logic: Recursively traverses the object path and creates new object/array instances
- * only for modified branches.
+ * only for modified branches to maintain structural sharing.
  *
- * Optimization: Avoids Regex overhead for path safety checks and minimizes object allocations.
+ * Optimization: Uses literal string comparisons instead of regular expressions
+ * to eliminate path-parsing overhead during deep updates.
  */
 export function setDeepValue(obj: unknown, keys: string[], index: number, value: unknown): unknown {
   if (index === keys.length) return value;
 
   const key = keys[index]!;
-  // Optimization: Fast string-based safety check instead of Regex.
   if (key === '__proto__' || key === 'constructor' || key === 'prototype') return obj;
 
   const isObj = obj != null && typeof obj === 'object';
@@ -21,7 +21,6 @@ export function setDeepValue(obj: unknown, keys: string[], index: number, value:
   const oldVal = curr[key];
   const newVal = setDeepValue(oldVal, keys, index + 1, value);
 
-  // Optimization: Return original if value is unchanged (structural sharing).
   if (Object.is(oldVal, newVal)) return obj;
 
   if (Array.isArray(curr)) {
@@ -53,7 +52,6 @@ export function getPathValue(source: unknown, parts: string[]): unknown {
   for (let i = 0; i < len; i++) {
     if (res == null) return undefined;
     const key = parts[i]!;
-    // Optimization: Fast string comparison avoids Regex overhead in hot paths.
     if (key === '__proto__' || key === 'constructor' || key === 'prototype') return undefined;
     res = (res as Record<string, unknown>)[key];
   }
@@ -126,21 +124,9 @@ export function atomLens<T extends object, P extends Paths<T>>(
   } as unknown as WritableAtom<PathValue<T, P>>;
 }
 
-/**
- * Composes an existing lens with a sub-path to create a deeper lens.
- */
 export const composeLens = <T extends object, P extends Paths<T>>(lens: WritableAtom<T>, path: P) =>
   atomLens(lens, path);
 
-/**
- * Creates a lens factory bound to a specific atom for easier path-based scoping.
- *
- * When to use:
- * - When you need to create multiple lenses from the same source atom.
- *
- * @param atom - The source atom.
- * @returns A factory function that takes a path.
- */
 export const lensFor =
   <T extends object>(atom: WritableAtom<T>) =>
   <P extends Paths<T>>(path: P) =>

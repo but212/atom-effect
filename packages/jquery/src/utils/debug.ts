@@ -60,8 +60,6 @@ function resolveInitialState(): boolean {
 const IS_DEV = resolveInitialState();
 
 /**
- * Global diagnostic logger for the Atom-Effect library.
- *
  * When to use:
  * - Debugging reactive updates and DOM mutations in real-time.
  * - Inspecting error causes in binding hooks.
@@ -87,8 +85,6 @@ export const debug = {
     console.error(`${prefix} ${message}`, cause),
 
   /**
-   * Tracks a reactive DOM mutation and provides visual feedback.
-   *
    * Logic: DOM Mutation Tracking
    * Logs the specific property update to the console and triggers a visual
    * "flash" effect to help locate the mutation on complex, dynamic pages.
@@ -105,15 +101,11 @@ export const debug = {
 };
 
 /**
- * Orchestrates a temporary visual highlight on a targeted element.
- *
  * Logic: Highlight Orchestration
- * 1. Debouncing: Cancels pending animations or timers if a new update
- *    occurs before the previous flash completes.
- * 2. Scheduling: Uses `requestAnimationFrame` to ensure the highlight
- *    class is added in sync with the next paint cycle.
- * 3. Cleanup: Automatically removes the highlight after the duration
- *    specified in constants.
+ * Synchronizes visual feedback with the browser paint cycle using rAF.
+ * Implements an idempotent debouncing strategy to handle high-frequency
+ * updates by canceling stale timers and animations before restarting
+ * the flash sequence.
  *
  * @internal
  */

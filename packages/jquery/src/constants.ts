@@ -103,9 +103,7 @@ export const SYSTEM_DEBUG = {
 
 /**
  * Logic: Backward Compatibility
- * Proxies for backward compatibility. These ensure that existing code
- * continues to work while the project transitions from the old flat
- * structure to the new subsystem-based organization.
+ * Ensures API continuity during the transition to subsystem-based organization.
  *
  * Reason: Migration
  * Allows for non-breaking internal refactoring of constant storage.
@@ -133,7 +131,6 @@ export const ROUTE_DEFAULTS = SYSTEM_ROUTE.DEFAULTS;
 export const INPUT_DEFAULTS = SYSTEM_BINDING.INPUT_DEFAULTS;
 export const DEBUG_DEFAULTS = SYSTEM_DEBUG.DEFAULTS;
 
-// Simplified collections (formerly Sets, now Arrays)
 export const VALID_INPUT_TAGS = SYSTEM_BINDING.VALID_INPUT_TAGS;
 export const URL_PROPS = SYSTEM_SECURITY.URL_PROPS;
 export const DANGEROUS_PROPS = SYSTEM_SECURITY.DANGEROUS_PROPS;

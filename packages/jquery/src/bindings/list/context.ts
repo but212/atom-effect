@@ -44,8 +44,6 @@ export class ListContext<T> {
   ) {}
 
   /**
-   * Orchestrates the removal of an element, respecting the optional `onRemove` hook.
-   *
    * Constraint:
    * - Aborts if the parent effect has been disposed to prevent memory leaks or invalid DOM mutations.
    * - Aborts if the element was reclaimed by a new rendering cycle (reversal check via `data-atom-key`).
@@ -68,8 +66,6 @@ export class ListContext<T> {
   }
 
   /**
-   * Marks an item for removal and initiates the teardown process.
-   *
    * Logic: Immediately decouples the element from its reactive key to allow
    * reuse or reclamation by subsequent rendering cycles while animations run.
    *
@@ -87,8 +83,6 @@ export class ListContext<T> {
   }
 
   /**
-   * Clears all references and unbinds container events.
-   *
    * Caution: Failure to call this will lead to memory leaks in large,
    * frequently updated lists as old DOM nodes and item references are retained.
    */

@@ -154,22 +154,17 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
   }
 
   /**
-   * Executes the effect function while capturing its dependencies.
-   *
-   * Logic:
-   * 1. Guards against re-entrant or disposed execution.
-   * 2. Checks for dirty state and infinite loops.
-   * 3. Runs the cleanup from the previous execution.
-   * 4. Executes the user function in a tracking context and captures results.
+   * Logic: Transactional Execution
+   * Manages re-entrancy protection, cleanup rotation, and dependency tracking
+   * during the user's side effect execution to ensure atomic updates and
+   * prevention of infinite reactive loops.
    *
    * @param force - If true, bypasses dirty check and executes immediately.
    */
   public execute(force = false): void {
     const flags = this.flags;
-    // Logic: Guard: Combined bitwise check for efficiency against disposed or already executing states.
     if ((flags & (EFFECT_STATE_FLAGS.DISPOSED | EFFECT_STATE_FLAGS.EXECUTING)) !== 0) return;
 
-    // Skip if not dirty or forced
     const deps = this._deps;
     if (!force && deps.physicalSize > 0 && !this._isDirty()) return;
 
@@ -243,7 +238,6 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     const size = deps.size;
     if (size === 0) return false;
 
-    // Optimization: Fast path: Check hot index first without switching context.
     const hotIndex = this._hotIndex;
     if (hotIndex !== -1 && hotIndex < size) {
       const link = deps.getAt(hotIndex);

@@ -28,8 +28,6 @@ type OriginalMethods = {
 let originals: OriginalMethods | null = null;
 
 /**
- * Wraps a standard jQuery event handler in a `batch()` block.
- *
  * Logic: Auto-Batching
  * This ensures that multiple atom updates triggered by a single event
  * (e.g., click) only trigger a single collective re-render, preventing
@@ -54,9 +52,6 @@ const getWrappedHandler = (fn: EventHandler): EventHandler => {
 };
 
 /**
- * Retrieves the wrapped version of a handler so it can be passed back
- * to jQuery's `.off()`.
- *
  * @internal
  */
 const resolveWrapped = (fn: EventHandler): EventHandler => {
@@ -86,9 +81,6 @@ function resolveOffEventMap(
 }
 
 /**
- * Utility to traverse and patch jQuery arguments whether they are
- * objects or individual parameters.
- *
  * @internal
  */
 function patchEventArguments(
@@ -118,8 +110,6 @@ function createEventHandlerPatch(origFn: Function) {
 }
 
 /**
- * Globally overrides specific jQuery prototype methods to automate library behavior.
- *
  * Logic: Global Patch Responsibilities
  * 1. Auto-Batching: Wraps all event handlers in `batch()` to prevent UI jitter.
  * 2. Lifecycle Sync: Hooking `.remove()`/`.empty()` to stop reactive effects
@@ -195,8 +185,6 @@ export function enablejQueryOverrides(): void {
 }
 
 /**
- * Restores original jQuery prototype methods to their clean, unpatched state.
- *
  * @internal
  */
 export function disablejQueryOverrides(): void {

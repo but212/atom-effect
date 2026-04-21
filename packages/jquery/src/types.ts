@@ -22,8 +22,6 @@ export interface AtomOptions extends BaseAtomOptions {
 }
 
 /**
- * Flexible value container for reactive bindings.
- *
  * Logic: Polymorphic Input
  * Supports raw values for static initialization, reactive Atoms for state-driven
  * updates, or functional getters for deferred execution of complex logic.
@@ -33,8 +31,6 @@ export interface AtomOptions extends BaseAtomOptions {
 export type ReactiveValue<T> = T | ReadonlyAtom<T> | (() => T);
 
 /**
- * Extension of `ReactiveValue` that permits asynchronous results.
- *
  * When to use:
  * - CSS or Attribute bindings that require data from an async source.
  * - Integration with fetch-based reactive atoms.
@@ -56,8 +52,6 @@ export type CssValue =
 export type CssBindings = Record<string, CssValue>;
 
 /**
- * Central DSL for declarative jQuery bindings.
- *
  * Logic: Binding Strategy Map
  * Maps reactive sources to specific DOM manipulation strategies (text, class,
  * val, etc.). This declarative structure allows the engine to batch
@@ -96,8 +90,6 @@ export type ListRenderResult = string | Element | DocumentFragment | JQuery;
 export type ListKeyFn<T> = (item: T, index: number) => ListKey;
 
 /**
- * Configuration for high-performance list reconciliation.
- *
  * Optimization: DOM Reconciliation
  * Uses a 'key' for identity tracking to minimize DOM churn by reordering
  * existing elements instead of re-rendering the entire list when
@@ -215,8 +207,6 @@ export interface AtomNav {
 }
 
 /**
- * Bitwise Synchronization Guard.
- *
  * Logic: Feedback Loop Protection
  * Prevents recursive update loops between the DOM and reactive Atoms
  * during two-way data flow (e.g., IME composition or rapid input events).
@@ -240,8 +230,6 @@ declare global {
    */
   interface JQueryStatic {
     /**
-     * Creates a reactive atom holding mutable state via `$.atom`.
-     *
      * When to use:
      * - When you need a source of truth for a specific piece of state.
      * - When that state needs to be updated manually (unlike Computeds).
@@ -259,8 +247,6 @@ declare global {
      */
     atom<T>(initialValue: T, options?: AtomOptions): WritableAtom<T>;
     /**
-     * Creates a reactive computation derived from other reactive sources via `$.computed`.
-     *
      * When to use:
      * - When a value needs to be automatically derived from other reactive sources.
      * - To optimize performance by caching expensive calculations.
@@ -285,8 +271,6 @@ declare global {
       options: ComputedOptions<T> & { defaultValue: T }
     ): ComputedAtom<T>;
     /**
-     * Creates and starts a reactive effect via `$.effect`.
-     *
      * When to use:
      * - To perform side effects (logging, async fetching, DOM updates) in response to state changes.
      * - To synchronize external systems with the reactive state.
@@ -311,8 +295,6 @@ declare global {
       options?: import('@but212/atom-effect').EffectOptions
     ): EffectObject;
     /**
-     * Groups multiple state updates into a single batch via `$.batch`.
-     *
      * When to use:
      * - When performing multiple related atom updates that should trigger effects only once.
      * - To improve performance by coalescing multiple updates into a single flush cycle.
@@ -333,8 +315,6 @@ declare global {
      */
     batch(fn: () => void): void;
     /**
-     * Executes a function without dependency tracking via `$.untracked`.
-     *
      * When to use:
      * - To read reactive state inside an effect without creating a dependency link.
      *
@@ -487,8 +467,6 @@ declare global {
     route(config: RouteConfig): Router;
 
     /**
-     * Creates a reactive fetch atom powered by `jQuery.ajax`.
-     *
      * When to use:
      * - Fetching data that depends on other reactive atoms (auto-refetch on dependency change).
      * - Implementing built-in concurrency management (automatic cancellation of stale requests).
@@ -564,8 +542,6 @@ declare global {
    */
   interface JQuery {
     /**
-     * Binds an atom's value to the text content of the matching elements.
-     *
      * When to use:
      * - Rendering raw text that should stay in sync with an atom.
      * - Automatically updating labels, counts, or status messages.
@@ -579,8 +555,6 @@ declare global {
      */
     atomText<T>(src: AsyncReactiveValue<T>, fmt?: (v: T) => string): this;
     /**
-     * Binds an atom's value to the `innerHTML` of the matching elements.
-     *
      * Caution: Ensure the source data is trusted. Rendering unsanitized HTML
      * from user input can lead to XSS vulnerabilities.
      *
@@ -617,14 +591,12 @@ declare global {
     atomClass(name: string, cond: AsyncReactiveValue<boolean>): this;
     atomClass(map: Record<string, AsyncReactiveValue<boolean>>): this;
     /**
-     * Reactively updates CSS properties.
-     *
-     * Logic: Normalizes properties and units (e.g., 'px') to ensure
-     * consistent style application across browsers.
-     *
      * When to use:
      * - Driving visual styles like opacity, width, or color from state.
      * - Dynamic layouts where dimensions depend on reactive calculations.
+     *
+     * Logic: Normalizes properties and units (e.g., 'px') to ensure
+     * consistent style application across browsers.
      *
      * @example
      * ```typescript
@@ -738,8 +710,6 @@ declare global {
     atomBind<T = unknown>(opts: BindingOptions<T>): this;
 
     /**
-     * Binds a reactive atom array to a jQuery container for automated list rendering.
-     *
      * Logic: Orchestrates the synchronization between a reactive data source and
      * the DOM tree. It manages a persistent `ListContext` for diffing.
      *
@@ -760,12 +730,10 @@ declare global {
     atomList<T>(src: ReadonlyAtom<T[]>, opts: ListOptions<T>): this;
 
     /**
-     * Mounts a functional component to the selected elements.
-     *
-     * Lifecycle:
-     * 1. Cleanup: Automatically destroys any existing bindings on the target.
-     * 2. Isolation: Executes the component inside `untracked` and `batch`.
-     * 3. Registration: Tracks the returned cleanup function via the registry.
+     * Logic: Lifecycle Orchestration
+     * Handles automatic teardown of existing bindings, isolated component
+     * execution within a safe reactive window, and registration of
+     * teardown hooks in the global registry.
      *
      * @example
      * ```typescript

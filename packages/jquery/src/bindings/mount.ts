@@ -7,8 +7,6 @@ import type { ComponentFn } from '@/types';
 const EMPTY_PROPS = Object.freeze({});
 
 /**
- * Mounts a functional component to the selected elements.
- *
  * Logic: Orchestrates the lifecycle of a discrete UI unit. It handles
  * pre-mount cleanup, executes the component within a safe reactive window,
  * and tracks individual teardown logic for future disposal.
@@ -58,8 +56,6 @@ $.fn.atomMount = function <P>(this: JQuery, component: ComponentFn<P>, props?: P
 };
 
 /**
- * Manually triggers the teardown phase for the component and all nested bindings.
- *
  * @public
  */
 $.fn.atomUnmount = function (this: JQuery): JQuery {

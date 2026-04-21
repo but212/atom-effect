@@ -81,8 +81,6 @@ function createAsyncRunner<T>(
 }
 
 /**
- * Orchestrates a reactive relationship between a single source and a DOM element.
- *
  * Lifecycle:
  * - Automatically registers the created `effect` with the global `registry`
  *   linked to the target element.
@@ -120,8 +118,6 @@ export function registerReactiveEffect<T>(
 }
 
 /**
- * Orchestrates reactive updates for a map of sources (e.g., classes or styles).
- *
  * Logic: Batch Resolution
  * - Detects if any property in the map is reactive (Atom or Function).
  * - Aggregates multiple async sources into a single `Promise.all` resolution

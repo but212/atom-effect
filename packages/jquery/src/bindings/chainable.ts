@@ -55,8 +55,6 @@ function resolveMap<V>(
 }
 
 /**
- * Binds an atom's value to the text content of the matching elements.
- *
  * When to use:
  * - Rendering raw text that should stay in sync with an atom.
  * - Automatically updating labels, counts, or status messages.
@@ -73,8 +71,6 @@ $.fn.atomText = function <T>(source: AsyncReactiveValue<T>, formatter?: (v: T) =
 };
 
 /**
- * Binds an atom's value to the `innerHTML` of the matching elements.
- *
  * Caution: Ensure the source data is trusted. Rendering unsanitized HTML
  * from user input can lead to XSS vulnerabilities.
  *
@@ -88,8 +84,6 @@ $.fn.atomHtml = function (source: AsyncReactiveValue<string>): JQuery {
 };
 
 /**
- * Reactively toggles CSS classes based on atom conditions.
- *
  * Logic: Supports both single class toggling and batch class management
  * via a mapping object.
  *
@@ -126,8 +120,6 @@ $.fn.atomClass = function (
 };
 
 /**
- * Reactively updates CSS properties.
- *
  * Logic: Normalizes properties and units (e.g., 'px') to ensure
  * consistent style application across browsers.
  *
@@ -163,8 +155,6 @@ $.fn.atomCss = function (
 };
 
 /**
- * Reactively updates DOM attributes based on atom changes.
- *
  * When to use:
  * - Updating `id`, `title`, `alt`, or `data-*` attributes.
  *
@@ -180,8 +170,6 @@ $.fn.atomAttr = function (
 };
 
 /**
- * Reactively updates DOM properties (e.g., `disabled`, `readOnly`).
- *
  * When to use:
  * - Toggling stateful properties that require boolean values or direct property access.
  *
@@ -201,8 +189,6 @@ $.fn.atomProp = function <T>(
 };
 
 /**
- * Toggles visibility (`display: none`) when the condition is true.
- *
  * @public
  */
 $.fn.atomShow = function (condition: AsyncReactiveValue<boolean>): JQuery {
@@ -210,8 +196,6 @@ $.fn.atomShow = function (condition: AsyncReactiveValue<boolean>): JQuery {
 };
 
 /**
- * Hides the element (`display: none`) when the condition is true.
- *
  * @public
  */
 $.fn.atomHide = function (condition: AsyncReactiveValue<boolean>): JQuery {
@@ -219,8 +203,6 @@ $.fn.atomHide = function (condition: AsyncReactiveValue<boolean>): JQuery {
 };
 
 /**
- * Two-way binding for form input values.
- *
  * Logic: Automatically synchronizes the input's `value` with a writable
  * atom, handling both atom-to-DOM updates and DOM-to-atom changes (input/change events).
  *
@@ -236,8 +218,6 @@ $.fn.atomVal = function <T>(atom: WritableAtom<T>, options: ValOptions<T> = {}):
 };
 
 /**
- * Two-way binding for checkboxes and radio buttons.
- *
  * @public
  */
 $.fn.atomChecked = function (atom: WritableAtom<boolean>): JQuery {
@@ -269,8 +249,6 @@ $.fn.atomForm = function <T extends object>(
 };
 
 /**
- * Configures a standard event listener with automatic cleanup.
- *
  * @public
  */
 $.fn.atomOn = function (event: string, handler: (e: JQuery.Event) => void): JQuery {
@@ -371,8 +349,6 @@ $.fn.atomBind = function <T>(this: JQuery, options: BindingOptions<T>): JQuery {
 };
 
 /**
- * Manually destroys all reactive bindings associated with the collection.
- *
  * @public
  */
 $.fn.atomUnbind = function (this: JQuery): JQuery {

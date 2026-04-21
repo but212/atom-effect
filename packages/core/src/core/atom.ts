@@ -17,7 +17,6 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
   private _value: T;
   /** Old value for notifications */
   private _pendingOldValue: T | undefined;
-  /** Equality comparator */
   private _equal: (a: T, b: T) => boolean;
 
   /** @internal */
@@ -70,42 +69,43 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
       debug.trackUpdate(this.id, debug.getDebugName(this));
     }
 
+    this._scheduleNotification(oldValue);
+  }
+
+  /**
+   * Logic: Atom State Synchronization
+   * Orchestrates notification scheduling. If synchronization is required (via `sync` option)
+   * and no batch is active, it flushes immediately; otherwise, it delegates to the global
+   * scheduler for microtask-based delivery.
+   */
+  private _scheduleNotification(oldValue: T): void {
     const currentFlags = this.flags;
     const SCHED_BIT = ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
 
-    // Logic: 1. Guard: Skip if already scheduled or no subscribers.
     if ((currentFlags & SCHED_BIT) !== 0) return;
     const slots = this._slots;
     if (slots === null || slots.size === 0) return;
 
-    // Logic: 2. Schedule Notification.
     this._pendingOldValue = oldValue;
     const nextFlags = currentFlags | SCHED_BIT;
     this.flags = nextFlags;
 
-    // Logic: 3. Choice: Flush now or Schedule for later.
     const SYNC_BIT = ATOM_STATE_FLAGS.SYNC;
     if ((nextFlags & SYNC_BIT) !== 0 && !scheduler.isBatching) {
       if (this._notifying === 0) {
         this._flushNotifications();
+        return;
       }
-      return;
     }
 
     scheduler.schedule(this);
   }
 
-  /**
-   * Executes scheduled notification.
-   * @internal
-   */
+  /** @internal */
   execute(): void {
     this._flushNotifications();
   }
 
-  /**
-   * Triggers notifications to all subscribers.
-   */
   private _flushNotifications(): void {
     const SCHED_BIT = ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
     const DISP_BIT = ATOM_STATE_FLAGS.DISPOSED;
@@ -118,7 +118,6 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
       const oldValue = this._pendingOldValue as T;
       this._pendingOldValue = undefined;
 
-      // Update bitwise state
       this.flags = flags &= ~SCHED_BIT;
 
       // Optimization: Net-zero check: if value returned to original during batching, skip notification.

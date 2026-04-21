@@ -31,8 +31,6 @@ export function insertOrAppend(
 }
 
 /**
- * Synchronizes the container state with the 'empty' option.
- *
  * Logic:
  * - If `onRemove` exists, we must trigger asynchronous removals for each item
  *   to allow for exit animations instead of a destructive `empty()`.
@@ -79,8 +77,6 @@ export function handleEmpty<T>(
 }
 
 /**
- * Orchestrates the rendering of new or updated items.
- *
  * Optimization:
  * If all items are HTML strings and it's a cold start, returns sanitized HTML
  * parts for direct `innerHTML` injection to bypass the overhead of jQuery
@@ -153,22 +149,20 @@ export function renderItems<T>(
 }
 
 /**
- * Batch sanitizes multiple HTML fragments using a unique template separator.
- *
- * Reason: Massive performance gain by reducing the number of costly sanitization
- * calls (DOMPurify/Sanitizer) to a single pass for the entire batch.
- *
  * @internal
  */
 function batchSanitize(parts: string[]): string[] {
   if (parts.length === 1) return [sanitizeHtml(parts[0]!)];
   const sep = `<template data-atom-sep="s${Math.random().toString(36).slice(2)}"></template>`;
+
+  /**
+   * Reason: Massive performance gain by reducing the number of costly sanitization
+   * calls (DOMPurify/Sanitizer) to a single pass for the entire batch.
+   */
   return sanitizeHtml(parts.join(sep)).split(sep);
 }
 
 /**
- * Identifies and removes items that are no longer present in the dataset.
- *
  * @internal
  */
 export function cleanupRemoved<T>(ctx: ListContext<T>, diff: PreparedDiff<T>): void {
@@ -184,8 +178,6 @@ export function cleanupRemoved<T>(ctx: ListContext<T>, diff: PreparedDiff<T>): v
 }
 
 /**
- * Final step: Physically places or moves the nodes into their correct positions.
- *
  * @internal
  */
 export function placeItems<T>(
@@ -253,7 +245,6 @@ export function placeItems<T>(
     }
   }
 
-  // Finalize: Trigger callbacks (bind, update, onAdd) for the current frame.
   for (let i = 0; i < count; i++) {
     const state = newStates[i]!;
     if (state === ItemState.Unchanged) continue;

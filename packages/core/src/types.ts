@@ -1,9 +1,6 @@
 import type { AsyncState } from '@/constants';
 import { BRAND } from '@/symbols';
 
-/**
- * Dependency ID.
- */
 export type DependencyId = number;
 
 // ============================================================================
@@ -13,7 +10,6 @@ export type DependencyId = number;
 /** Helper to convert numeric string to number for array indexing. */
 export type StringKeyToNumber<S extends string> = S extends `${infer N extends number}` ? N : S;
 
-/** Max recursion depth for dot-paths. */
 export type MaxDepth = 8;
 
 /** Types that should be treated as terminals (no further path exploration). */
@@ -98,14 +94,8 @@ export interface Disposable {
   // [Symbol.dispose](): void;
 }
 
-/**
- * Async state values.
- */
 export type AsyncStateType = (typeof AsyncState)[keyof typeof AsyncState];
 
-/**
- * Atom options.
- */
 export interface AtomOptions<T = unknown> {
   /** Optional name for debugging. */
   name?: string;
@@ -157,9 +147,6 @@ export interface ReadonlyAtom<T = unknown> extends Disposable {
    */
   peek(): T;
 
-  /**
-   * Returns the number of active subscribers.
-   */
   subscriberCount(): number;
 }
 
@@ -246,9 +233,6 @@ export interface Dependency<T = unknown> {
   readonly value: T;
 }
 
-/**
- * Computed options.
- */
 export interface ComputedOptions<T = unknown> {
   /** Optional name for debugging. */
   name?: string;
@@ -312,9 +296,6 @@ export interface Subscriber {
   execute(): void;
 }
 
-/**
- * Effect cleanup function signature.
- */
 export type EffectCleanup = () => void;
 
 /**
@@ -326,10 +307,6 @@ export type EffectCleanup = () => void;
 // biome-ignore lint/suspicious/noConfusingVoidType: void is required here for TypeScript return type compatibility
 export type EffectFunction = () => (void | EffectCleanup) | Promise<void | EffectCleanup>;
 
-/**
- * Configuration options for creating an effect.
- * @public
- */
 export interface EffectOptions {
   /** Human-readable name for debugging. */
   name?: string;

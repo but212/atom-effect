@@ -189,9 +189,6 @@ class InputBinding<T> {
     }
   }
 
-  /**
-   * Synchronizes the DOM element's value with the current Atom state.
-   */
   public readonly syncToDom = () => {
     const atomValue = this.atom.value;
     // Logic: Bitmask gate prevents infinite feedback loops between DOM events and Atom updates.
@@ -220,9 +217,6 @@ class InputBinding<T> {
     return this.formatValue(atomValue) === element.value;
   }
 
-  /**
-   * Removes all event listeners and clears pending timers.
-   */
   public cleanup(): void {
     // Constraint: Namespacing prevents collisions with other bindings or user-defined event listeners.
     this.$element.off(this.namespace);
@@ -231,8 +225,6 @@ class InputBinding<T> {
 }
 
 /**
- * Applies a two-way value binding between a jQuery selection and a reactive Atom.
- *
  * When to use:
  * - Synchronizing form inputs (text, textarea, select) with a `WritableAtom`.
  * - Enhancing UX with bitmask-gated cursor stability and IME composition support.

@@ -56,9 +56,6 @@ export class DependencyLink {
 
 /**
  * Subscription entry.
- *
- * Logic: Encapsulates the notification logic for a dependency change.
- * It manages both callback-based (fn) and object-based (sub) notifications.
  */
 export class Subscription<T> {
   constructor(
@@ -82,13 +79,11 @@ export class Subscription<T> {
     const fn = this.fn;
     const sub = this.sub;
 
-    // Fast path: nothing to notify
     if (fn === undefined && sub === undefined) return;
 
     const ctx = trackingContext;
     const prev = ctx.current;
 
-    // If already untracked, bypass context switching logic
     if (prev === null) {
       if (fn !== undefined) fn(newValue, oldValue);
       if (sub !== undefined) sub.execute();
@@ -110,9 +105,6 @@ export class Subscription<T> {
 
 /**
  * Tracking context implementation.
- *
- * Logic: Manages the global stack of active dependency collectors.
- * It coordinates which reactive node is currently authorized to record dependencies.
  */
 class TrackingContext {
   /** Active subscriber at the top of the stack. */
@@ -126,7 +118,6 @@ class TrackingContext {
    * @returns The result of `fn`.
    */
   public run<T>(subscriber: DependencySubscriber, fn: () => T): T {
-    // Fast path: already in the correct context
     if (this.current === subscriber) {
       return fn();
     }
@@ -135,12 +126,10 @@ class TrackingContext {
     this.current = subscriber;
 
     try {
-      // Small production optimization: direct return
       if (!IS_DEV) return fn();
 
       const result = fn();
 
-      // Async detection: check if the function returned a Promise
       debug.warn(
         isPromise(result),
         'Detected Promise returned within tracking context. ' +
@@ -190,7 +179,6 @@ export function untracked<T>(fn: () => T): T {
   const ctx = trackingContext;
   const prev = ctx.current;
 
-  // Optimization: Skip context switching if already untracked.
   if (prev === null) {
     return fn();
   }

@@ -43,13 +43,10 @@ const noop = () => {};
  * @implements {DebugConfig}
  */
 class DevDebugController implements DebugConfig {
-  /** Whether debugging features are currently active. */
   public enabled = true;
 
-  /** Whether to warn when a potential infinite loop is detected. */
   public warnInfiniteLoop = DEBUG_CONFIG.WARN_INFINITE_LOOP;
 
-  /** Tracks the number of updates per dependency within a single execution scope. */
   private _updateCounts = new Map<DependencyId, number>();
 
   /**
@@ -58,10 +55,8 @@ class DevDebugController implements DebugConfig {
    */
   private _nodeRegistry = new Map<DependencyId, WeakRef<object>>();
 
-  /** Threshold for triggering an infinite loop warning. */
   private _threshold = DEBUG_CONFIG.LOOP_THRESHOLD;
 
-  /** Prevents redundant cleanup scheduling. */
   private _cleanupScheduled = false;
 
   /**
@@ -186,8 +181,6 @@ class DevDebugController implements DebugConfig {
   };
 
   /**
-   * Retrieves the debug name from an object if it exists.
-   *
    * @param obj - the object to inspect.
    * @returns The human-readable name or undefined.
    *
@@ -202,8 +195,6 @@ class DevDebugController implements DebugConfig {
   };
 
   /**
-   * Retrieves the debug type from an object if it exists.
-   *
    * @param obj - the object to inspect.
    * @returns The type identifier or undefined.
    *

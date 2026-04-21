@@ -57,7 +57,6 @@ function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptio
     const raw = this[i]!,
       $c = $(raw);
 
-    // Teardown previous binding if re-applying to the same element
     const old = listInstances.get(raw);
     if (old) {
       old.fx.dispose();
@@ -85,7 +84,6 @@ function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptio
         cleanupRemoved(ctx, diff);
         placeItems(ctx, diff, raw, callbacks, frag);
 
-        // Update context with the new state for the next reconciliation cycle
         ctx.oldKeys = diff.newKeys;
         ctx.oldItems = diff.newItems;
         ctx.oldNodes = diff.newNodes;

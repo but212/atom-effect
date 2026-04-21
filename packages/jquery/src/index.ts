@@ -1,6 +1,5 @@
 import $ from 'jquery';
 
-// side-effectful imports: these register methods and features into the $ namespace.
 import '@/core/namespace';
 import '@/bindings/chainable';
 import '@/bindings/list';
@@ -13,14 +12,14 @@ import { enablejQueryOverrides } from '@/core/jquery-patch';
 import { disableAutoCleanup, enableAutoCleanup, registry } from '@/core/registry';
 
 /**
- * Auto-Initialize:
- * Logic: Hooks into jQuery's ready event to guarantee that overrides
+ * Logic: Auto-Initialization
+ * Hooks into jQuery's ready event to guarantee that overrides
  * and lifecycle observers are anchored to a valid DOM tree.
  */
 $(() => {
   enablejQueryOverrides();
   if (document.body) {
-    // Rationale: document.body is the standard root for the MutationObserver 'safety-net'.
+    // Logic: document.body is the standard root for the MutationObserver 'safety-net'.
     enableAutoCleanup(document.body);
   }
 });
@@ -28,10 +27,6 @@ $(() => {
 export { disablejQueryOverrides, enablejQueryOverrides } from '@/core/jquery-patch';
 export { nextTick } from '@/core/namespace';
 
-/**
- * Public API Surface:
- * Re-exports the definitive types used for building reactive components and bindings.
- */
 export type {
   AtomNavOptions,
   BindingOptions,
@@ -57,5 +52,4 @@ export type {
 
 export { disableAutoCleanup, enableAutoCleanup, registry };
 
-/** The augmented jQuery object is the default export. */
 export default $;

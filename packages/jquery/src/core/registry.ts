@@ -20,8 +20,6 @@ export interface BindingRecord {
 }
 
 /**
- * Manages the lifecycle of reactive bindings and component effects.
- *
  * Logic: Safety & Memory Management
  * - WeakMap Storage: Records are stored using `WeakMap` to avoid strong
  *   references, allowing the garbage collector to reclaim memory from
@@ -78,7 +76,7 @@ class BindingRegistry {
     record.cleanups.push(cleanupFunction);
   }
 
-  /** Registers a reactive effect instance to be disposed when the element is removed. */
+  /** @internal */
   trackEffect(element: Element, reactiveEffect: EffectObject): void {
     const selector = getSelector(element);
     this.addCleanup(element, () => {
@@ -94,7 +92,7 @@ class BindingRegistry {
     });
   }
 
-  /** Registers a generic cleanup closure to be executed when the element is removed. */
+  /** @internal */
   trackCleanup(element: Element, cleanupFunction: () => void): void {
     const selector = getSelector(element);
     this.addCleanup(element, () => {
@@ -106,7 +104,7 @@ class BindingRegistry {
     });
   }
 
-  /** Sets the optional teardown function returned by a mounted component. */
+  /** @internal */
   setComponentCleanup(element: Element, teardownFunction: (() => void) | undefined): void {
     this.getOrCreateRecord(element).componentCleanup = teardownFunction;
   }
@@ -115,10 +113,6 @@ class BindingRegistry {
     return this.records.has(element);
   }
 
-  /**
-   * Performs the actual destruction of all resources bound to the node.
-   * This clears the record, removes the tracking CSS class, and executes all callbacks.
-   */
   cleanup(node: Node): void {
     this.preservedNodes.delete(node);
     this.ignoredNodes.delete(node);
@@ -147,8 +141,6 @@ class BindingRegistry {
   }
 
   /**
-   * Cleans up all bound reactive state for descendant nodes.
-   *
    * Logic: Snapshot Strategy
    * Uses `querySelectorAll` to obtain a static `NodeList` snapshot before
    * starting the iteration. This ensures loop stability by preventing
@@ -164,7 +156,7 @@ class BindingRegistry {
     }
   }
 
-  /** Destroys the reactive state of the element and its entire sub-tree. */
+  /** @internal */
   cleanupTree(node: Node): void {
     if (node.nodeType === 1 || node.nodeType === 11) {
       this.cleanupDescendants(node as Element | DocumentFragment | ShadowRoot);

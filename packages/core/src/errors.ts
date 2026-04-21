@@ -66,9 +66,6 @@ export class AtomError extends Error {
   /**
    * Returns the entire error chain as an array.
    *
-   * Logic: Navigates through the `.cause` property of errors.
-   * Includes circular nodes in the result if a cycle is detected for visibility.
-   *
    * @returns Array containing historical causes.
    */
   getChain(): Array<AtomError | Error | unknown> {
@@ -82,7 +79,6 @@ export class AtomError extends Error {
     while (current !== null && current !== undefined) {
       chain.push(current);
 
-      // Logic: Cycle detection after push to include the circular node in the chain
       if (current === this || seen?.has(current)) break;
 
       if (current instanceof AtomError) {
@@ -116,7 +112,6 @@ export class AtomError extends Error {
    */
   toJSON(seen?: Set<unknown>): AtomErrorJSON {
     const s = seen ?? new Set<unknown>();
-    // Logic: Eager-exit on circular reference
     if (s.has(this)) {
       return {
         name: this.name,
@@ -149,9 +144,6 @@ export class AtomError extends Error {
     };
   }
 
-  /**
-   * Internal helper to format wrapped messages consistently.
-   */
   static format(source: string, context: string, message: string): string {
     return `${source} (${context}): ${message}`;
   }
@@ -251,7 +243,6 @@ export function wrapError(
   ErrorClass: AtomErrorConstructor,
   context: string
 ): AtomError {
-  // Logic: 1. Inherit AtomError context if already wrapped
   if (error instanceof AtomError) {
     return new ErrorClass(
       `${error.name} (${context}): ${error.message}`,
@@ -261,11 +252,9 @@ export function wrapError(
     );
   }
 
-  // Logic: 2. Transmute Native Error
   if (error instanceof Error) {
     return new ErrorClass(`${error.name || 'Error'} (${context}): ${error.message}`, error);
   }
 
-  // Logic: 3. Handle Unknown Types (Primitive strings, objects, etc.)
   return new ErrorClass(`Unexpected error (${context}): ${String(error)}`, error);
 }

@@ -1,14 +1,11 @@
 import type { RouteDefinition } from '@/types';
 
-/** Standard type guard for thenable objects (Promises). */
 export const isPromise = <T>(v: unknown): v is Promise<T> =>
   v !== null &&
   (typeof v === 'object' || typeof v === 'function') &&
   typeof (v as PromiseLike<T>).then === 'function';
 
 /**
- * Generates a human-readable CSS selector for an Element.
- *
  * Logic: Element Signature
  * Prioritizes tag name, `#id`, and `.classes` to create a concise reference
  * for debugging and logging purposes.
@@ -41,8 +38,6 @@ export function getSelector(el: Element): string {
 }
 
 /**
- * Compatibility Shim: Provides a safe alternative to `Object.hasOwn` (ES2022).
- *
  * Reason: Environment Compatibility
  * The project targets ES2021, but modern linting rules often mandate
  * the use of `hasOwn`. This shim satisfies static analysis without
@@ -52,21 +47,14 @@ export function getSelector(el: Element): string {
  */
 export const hasOwn = Object.prototype.hasOwnProperty;
 
-/** Route Type Guard: Identifies routes defined via <template> selectors. */
 export const isTemplateRoute = (r: RouteDefinition): boolean =>
   r !== null && typeof r === 'object' && typeof r.template === 'string';
 
-/**
- * Route Type Guard: Identifies routes defined via functional renderers.
- *
- * @internal
- */
+/** @internal */
 export const isRenderRoute = (r: RouteDefinition): boolean =>
   r !== null && typeof r === 'object' && typeof r.render === 'function';
 
 /**
- * Performs a shallow comparison between two objects.
- *
  * Logic: Equality Check
  * - Uses `Object.is` for correct comparison of `NaN` and signed zeros (`+0` vs `-0`).
  *

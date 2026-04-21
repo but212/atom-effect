@@ -3,8 +3,6 @@ import $ from 'jquery';
 import type { ComputedAtom, FetchError, FetchOptions } from '@/types';
 
 /**
- * Transforms high-level `FetchOptions` into `JQuery.AjaxSettings`.
- *
  * Logic: Priority Resolution
  * This is a pure data transformation layer that defines the precedence:
  * Direct Options > Dynamic Options > Static Options.
@@ -31,8 +29,6 @@ function toSettings<T>(url: string, options: FetchOptions<T>): JQuery.AjaxSettin
 }
 
 /**
- * Normalizes jQuery-specific `jqXHR` or network errors into standard JS `Error` objects.
- *
  * Logic: Error Normalization
  * Returns a standard `Error` while preserving the original `jqXHR` context
  * to enable advanced error diagnostics in reactive hooks.
@@ -52,8 +48,6 @@ function toError(err: unknown): Error {
 }
 
 /**
- * Creates a reactive fetch atom powered by `jQuery.ajax`.
- *
  * When to use:
  * - Fetching data that depends on other reactive atoms (auto-refetch on dependency change).
  * - Implementing built-in concurrency management (automatic cancellation of stale requests).
