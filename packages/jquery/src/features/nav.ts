@@ -37,8 +37,11 @@ function getPathAndSearch(urlObj: URL): string {
 /**
  * Parses raw HTML into a structured ContentState.
  *
- * Optimization: Uses isolated DOMParser instances to extract clean fragments
- * without the high overhead of invisible iframes or global parser state.
+ * Optimization: DOM Extraction
+ * Uses isolated `DOMParser` instances to extract clean fragments without
+ * the high overhead of invisible iframes or global parser state.
+ *
+ * @internal
  */
 function extractContent(html: string, selector?: string, xhr?: JQuery.jqXHR): ContentState {
   const parser = new DOMParser();
@@ -74,7 +77,15 @@ function extractContent(html: string, selector?: string, xhr?: JQuery.jqXHR): Co
   };
 }
 
-/** Synchronization of <head> metadata with content state for SEO/Social integrity. */
+/**
+ * Synchronization of `<head>` metadata with content state.
+ *
+ * Logic: SEO Continuity
+ * Updates standard meta tags and canonical links to preserve SEO and social
+ * sharing integrity during partial SPA transitions.
+ *
+ * @internal
+ */
 function syncMetaData(win: Window, meta?: Record<string, string>): void {
   const doc = win.document;
   const head = doc.head;
@@ -115,7 +126,11 @@ function updateAttributes(el: HTMLElement, next: Record<string, string>): void {
   }
 }
 
-/** Handles smooth scroll-to-hash or page-top behavior after navigation. */
+/**
+ * Handles smooth scroll-to-hash or page-top behavior after navigation.
+ *
+ * @internal
+ */
 function performScroll(win: Window, hash?: string, fallbackToTop = false): void {
   if (hash) {
     const el = win.document.getElementById(decodeURIComponent(hash));
@@ -131,21 +146,33 @@ function performScroll(win: Window, hash?: string, fallbackToTop = false): void 
 /**
  * Initializes a reactive Single Page Application (SPA) navigation system.
  *
+ * Logic: Progressive Enhancement
+ * Hijacks standard link interactions and performs AJAX-based partial DOM
+ * replacements, maintaining history via the `pushState` API. Handles
+ * meta-tag synchronization, scroll management, and automatic reactive cleanup.
+ *
  * When to use:
- * - When building AJAX-driven multi-page experiences within a jQuery ecosystem.
- * - When SEO-friendly link interception and partial DOM replacement are required.
+ * - Building AJAX-driven multi-page experiences within a jQuery ecosystem.
+ * - Requiring SEO-friendly link interception and partial DOM replacement.
  *
  * @param options - Configuration including target container and lifecycle hooks.
  * @returns A navigator interface for programmatic control and state monitoring.
  *
  * @example
+ * ```typescript
  * const nav = $.atomNav({
  *   target: '#main-content',
  *   selector: 'a[data-nav]',
  *   onMount: ($target, url) => {
- *     console.log('Content mounted for:', url);
+ *     console.log('Page loaded:', url);
  *   }
  * });
+ *
+ * // Trigger manual navigation
+ * nav.navigate('/profile');
+ * ```
+ *
+ * @public
  */
 export function atomNav(options: AtomNavOptions): AtomNav {
   const { target, selector = 'a[data-nav]', headers = {}, syncTitle = true } = options;
@@ -203,7 +230,16 @@ export function atomNav(options: AtomNavOptions): AtomNav {
     return controller;
   }
 
-  /** Logic: Executes DOM manipulation and ensures reactive cleanup of stale fragments. */
+  /**
+   * Logic: DOM Reconciliation
+   * Executes DOM manipulation and ensures reactive cleanup of stale fragments.
+   *
+   * Lifecycle:
+   * - Meta-sync: Updates SEO tags.
+   * - Teardown: Calls `onUnmount` for the previous fragment.
+   * - Memory: Triggers `.atomUnbind()` on the target subtree to prevent memory leaks.
+   * - Update: Replaces HTML and calls `onMount` for the new fragment.
+   */
   function reconcileDOM(state: ContentState, url: string, previousUrl: string): void {
     $.untracked(() => {
       const doc = win.document;
@@ -227,7 +263,10 @@ export function atomNav(options: AtomNavOptions): AtomNav {
     });
   }
 
-  /** Logic: Primary UI synchronization effect that orchestrates re-fetching and scrolling. */
+  /**
+   * Logic: UI Synchronization
+   * Primary effect that orchestrates re-fetching, history management, and scrolling.
+   */
   function syncUI(): undefined {
     const { url, pathAndSearch, hash, type } = _normalizedState.value;
     const rendered = _renderedState.value;
@@ -370,11 +409,19 @@ export function atomNav(options: AtomNavOptions): AtomNav {
     /**
      * Programmatically triggers a navigation event.
      *
+     * Logic: Navigation Flow
+     * 1. Resolution: Determines absolute URL and origin.
+     * 2. Hand-off: Performs `location.assign` if the origin is external.
+     * 3. Middleware: Executes `onBeforeLoad` async hook (can cancel navigation).
+     * 4. Commit: Updates history and triggers the reactive fetch.
+     *
      * @param url - The target location (absolute or relative string).
      * @param navOptions - Options for history manipulation and state control.
      *
      * @example
+     * ```typescript
      * nav.navigate('/settings', { replace: true });
+     * ```
      */
     async navigate(url: string, navOptions: { replace?: boolean } = {}): Promise<void> {
       // Reason: Aborting previous tasks at the entry point prevents state corruption during racing hooks.
@@ -417,7 +464,11 @@ export function atomNav(options: AtomNavOptions): AtomNav {
       commitNavigation(path + target.hash, type);
     },
 
-    /** Constraint: Proper disposal of reactive effects and listeners to avoid memory leaks. */
+    /**
+     * Constraint: Resource Teardown
+     * Prevents memory leaks by aborting pending network requests, disposing
+     * reactive effects, and removing global event listeners.
+     */
     destroy() {
       _lifecycleController.abort();
       _navController?.abort();

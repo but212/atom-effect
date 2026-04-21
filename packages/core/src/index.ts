@@ -1,9 +1,26 @@
-export { AsyncState, DEBUG_CONFIG, SCHEDULER_CONFIG } from '@/constants';
-export { atom, computed, effect } from '@/core';
-export { atomLens, composeLens, getPathValue, lensFor, setDeepValue } from '@/core/lens';
-export { aeNextTick, batch, scheduler as globalScheduler } from '@/core/scheduler';
-export { untracked } from '@/core/tracking';
-export { AtomError, ComputedError, EffectError, SchedulerError } from '@/errors';
+export { AsyncState } from '@/constants';
+export {
+  aeNextTick,
+  atom,
+  atomLens,
+  batch,
+  composeLens,
+  computed,
+  effect,
+  getPathValue,
+  lensFor,
+  scheduler as globalScheduler,
+  setDeepValue,
+  untracked,
+} from '@/core';
+
+export {
+  AtomError,
+  ComputedError,
+  EffectError,
+  SchedulerError,
+} from '@/errors';
+export { BRAND, BrandFlags } from '@/symbols';
 
 export type {
   AsyncStateType,
@@ -22,5 +39,11 @@ export type {
   WritableAtom,
 } from '@/types';
 
-export { debug as runtimeDebug } from '@/utils/debug';
-export { isAtom, isComputed, isEffect } from '@/utils/type-guards';
+export {
+  debug as runtimeDebug,
+  isAtom,
+  isComputed,
+  isEffect,
+  isPromise,
+  isWritable,
+} from '@/utils';

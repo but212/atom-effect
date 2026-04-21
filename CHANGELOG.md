@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Documentation
+
+- **Standards**: Established formal TSDoc and inline comment conventions in `docs/conventions/code_documentation_conventions.md`.
+- **Core & jQuery**: Applied comprehensive documentation across both packages, focusing on audience segmentation (User vs. Contributor) and the "3-Second Rule".
+- **Internal Logic**: Added specialized annotations (`Logic:`, `Optimization:`, `Constraint:`, `Reason:`) to explain V8 optimizations, security measures, and architectural decisions.
+
 ### jQuery
 
 #### Fixed

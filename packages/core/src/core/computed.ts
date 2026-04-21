@@ -36,7 +36,14 @@ const {
 } = COMPUTED_STATE_FLAGS;
 
 /**
- * Computed atom implementation.
+ * Internal {@link ComputedAtom} implementation.
+ *
+ * Logic: Manages lazy evaluation, caching, and dependency tracking for derived values.
+ * Evaluation is deferred until the `value` is accessed, at which point it captures
+ * all reactive dependencies accessed during the computation.
+ *
+ * Optimization: Uses a cached `_hotIndex` and multi-phase dirty checking to
+ * minimize traversal of the dependency graph during validation.
  */
 class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Subscriber {
   /** @internal */
@@ -104,7 +111,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     if (context !== null) context.addDependency(this);
 
     const flags = this.flags;
-    // 1. Fast path: Stable and Resolved. Masking multiple flags for single-branch optimization.
+    // Optimization: 1. Fast path: Stable and Resolved. Masking multiple flags for single-branch optimization.
     if ((flags & (RESOLVED | DIRTY | IDLE | DISPOSED | RECOMPUTING)) === RESOLVED) {
       return this._value;
     }
@@ -118,10 +125,10 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
       throw new ComputedError(ERROR_MESSAGES.COMPUTED_CIRCULAR_DEPENDENCY);
     }
 
-    // 3. Evaluation path (Lazy Stale Check)
+    // Logic: 3. Evaluation path (Lazy Stale Check)
     if ((flags & (DIRTY | IDLE)) !== 0) {
       const dependencies = this._deps;
-      // Force computation if idle, forced, has no deps (initial), or deep check failed
+      // Logic: Decisions for re-computation based on current flags and dependency state.
       const shouldRecompute =
         (flags & (IDLE | FORCE_COMPUTE)) !== 0 || dependencies.size === 0 || this._isDirty();
 
@@ -133,7 +140,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
       if ((this.flags & RESOLVED) !== 0) return this._value;
     }
 
-    // 4. Async/Error handled after recomputation check
+    // Logic: 4. Async/Error handled after recomputation check.
     const defaultValue = this._defaultValue;
     const hasDefault = defaultValue !== (NO_DEFAULT_VALUE as T);
 
@@ -150,10 +157,16 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     return this._value;
   }
 
+  /**
+   * Accesses the current cached value without triggering dependency tracking.
+   */
   peek(): T {
     return this._value;
   }
 
+  /**
+   * Returns the current lifecycle state of the computation.
+   */
   get state(): AsyncStateType {
     const context = trackingContext.current;
     if (context !== null) context.addDependency(this);
@@ -259,6 +272,11 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     this._markDirty();
   }
 
+  /**
+   * Cleans up computation resources.
+   *
+   * Logic: Disposes dependencies, clears subscribers, and resets internal state.
+   */
   dispose(): void {
     const flags = this.flags;
     if ((flags & DISPOSED) !== 0) return;
@@ -283,7 +301,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     const trackIndex = this._trackCount++;
     const dependencies = this._deps;
 
-    // Unrolled hot-path check for existing dependencies
+    // Optimization: Unrolled hot-path check for existing dependencies.
     let existing: DependencyLink | null = null;
     if (trackIndex < 4) {
       if (trackIndex === 0) existing = dependencies._s0;
@@ -298,7 +316,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     if (existing !== null && existing.node === dependency) {
       existing.version = dependency.version;
     } else if (dependencies.claimExisting(dependency, trackIndex)) {
-      // Version and relocation handled inside claimExisting
+      // Logic: Version and relocation handled inside claimExisting.
     } else {
       const link = new DependencyLink(dependency, dependency.version, dependency.subscribe(this));
       dependencies.insertNew(trackIndex, link);
@@ -309,6 +327,11 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     }
   }
 
+  /**
+   * Resets tracking and executes the computation in a new epoch.
+   *
+   * Logic: Manages dependency truncation and error recovery if the computation fails.
+   */
   private _recompute(): void {
     if ((this.flags & RECOMPUTING) !== 0) return;
     this.flags = (this.flags | RECOMPUTING) & ~FORCE_COMPUTE;
@@ -424,13 +447,13 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     const hotIndex = this._hotIndex;
 
     return untracked(() => {
-      // 1. Try last known dirty dependency first
+      // Optimization: 1. Try last known dirty dependency first.
       if (hotIndex !== -1 && hotIndex < size) {
         const link = dependencies.getAt(hotIndex);
         if (link !== null && this._checkLinkDirty(link)) return true;
       }
 
-      // 2. Scan from beginning, skipping hot entry
+      // Optimization: 2. Scan from beginning, skipping hot entry.
       for (let i = 0; i < size; i++) {
         if (i === hotIndex) continue;
         const link = dependencies.getAt(i);
@@ -459,9 +482,26 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
 }
 
 /**
- * Creates a computed value.
- * @param computation - Computation function
- * @param options - Options object
+ * Creates a reactive computation derived from other atoms or computed values.
+ *
+ * When to use:
+ * - When a value needs to be automatically derived from other reactive sources.
+ * - To optimize performance by caching expensive calculations (only recomputed when stale).
+ * - For projecting/filtering atom state into a read-only format.
+ *
+ * @param fn - The computation function.
+ * @param options - Configuration for custom equality, lazy evaluation, or default values.
+ * @returns A read-only reactive computed atom.
+ *
+ * @example
+ * ```typescript
+ * const count = atom(1);
+ * const doubled = computed(() => count.value * 2);
+ *
+ * console.log(doubled.value); // 2
+ * count.value = 5;
+ * console.log(doubled.value); // 10
+ * ```
  */
 export function computed<T>(fn: () => T, options?: ComputedOptions<T>): ComputedAtom<T>;
 export function computed<T>(

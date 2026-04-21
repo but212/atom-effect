@@ -16,24 +16,35 @@ import { debug } from '@/utils/debug';
 
 /**
  * Returns a promise that resolves after the next reactive tick.
- * Useful for waiting until all pending effects have updated the DOM.
+ *
+ * When to use:
+ * - Waiting until all pending effects have finished updating the DOM.
+ * - Coordinating manual DOM measurements with reactive state changes.
+ *
+ * @public
  */
 export const nextTick = (): Promise<void> => aeNextTick();
 
 /**
  * Integrates Atom-Effect reactive primitives into the global jQuery object.
  *
- * Why: This allows a unified development experience, where state management
- * and DOM manipulation can both be accessed through the standard '$' object.
+ * Reason: Provides a unified development experience by allowing developers
+ * to access both reactive state management and DOM manipulation through
+ * the standard `$` namespace, reducing context switching and boilerplate.
  *
  * @example
- * // Reactive state management via jQuery
+ * ```typescript
+ * // Reactive state management via jQuery namespace
  * const count = $.atom(0);
+ *
  * $.effect(() => {
  *   $('#counter').text(count.value);
  * });
  *
  * count.value++;
+ * ```
+ *
+ * @public
  */
 $.extend({
   atom,

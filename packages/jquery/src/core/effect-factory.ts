@@ -19,7 +19,14 @@ export type BindingDebugType =
   | (string & {});
 
 /**
- * Internal helper to manage async race conditions and cleanup.
+ * Internal helper to manage asynchronous race conditions and DOM lifecycle cleanup.
+ *
+ * Logic: Monotonic ID Tracking
+ * - Assigns a unique, incrementing ID to every update request.
+ * - Discards resolved promises if a newer update ID has been issued,
+ *   effectively solving the "out-of-order" async racing problem.
+ *
+ * @internal
  */
 function createAsyncRunner<T>(
   el: Element,
@@ -75,6 +82,13 @@ function createAsyncRunner<T>(
 
 /**
  * Orchestrates a reactive relationship between a single source and a DOM element.
+ *
+ * Lifecycle:
+ * - Automatically registers the created `effect` with the global `registry`
+ *   linked to the target element.
+ * - Ensures that the effect is disposed of when the element is removed or cleaned.
+ *
+ * @internal
  */
 export function registerReactiveEffect<T>(
   el: Element,
@@ -106,7 +120,14 @@ export function registerReactiveEffect<T>(
 }
 
 /**
- * Orchestrates reactive updates for a collection of values (e.g. classes or styles).
+ * Orchestrates reactive updates for a map of sources (e.g., classes or styles).
+ *
+ * Logic: Batch Resolution
+ * - Detects if any property in the map is reactive (Atom or Function).
+ * - Aggregates multiple async sources into a single `Promise.all` resolution
+ *   to minimize DOM thrashing and ensure atomic UI updates.
+ *
+ * @internal
  */
 export function registerMapEffect<T>(
   el: Element,

@@ -1,13 +1,3 @@
-/**
- * atom-effect-jquery: Main Entry Point
- *
- * This module orchestrates the automatic integration of reactive atoms
- * into the jQuery ecosystem. By importing this module, the following
- * actions occur automatically:
- * 1. jQuery prototypes are patched for lifecycle safety.
- * 2. Reactive chainable methods ($().atomText, etc.) are registered.
- * 3. The MutationObserver safety-net is activated for automated cleanup.
- */
 import $ from 'jquery';
 
 // side-effectful imports: these register methods and features into the $ namespace.
