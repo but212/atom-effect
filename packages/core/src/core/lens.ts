@@ -124,9 +124,31 @@ export function atomLens<T extends object, P extends Paths<T>>(
   } as unknown as WritableAtom<PathValue<T, P>>;
 }
 
+/**
+ * When to use:
+ * - Composing an existing lens with a sub-path to create a more specific view.
+ *
+ * @example
+ * ```typescript
+ * const userLens = atomLens(store, 'user');
+ * const nameLens = composeLens(userLens, 'name');
+ * ```
+ */
 export const composeLens = <T extends object, P extends Paths<T>>(lens: WritableAtom<T>, path: P) =>
   atomLens(lens, path);
 
+/**
+ * When to use:
+ * - Creating a lens factory bound to a specific root atom to reduce boilerplate
+ *   when creating multiple lenses.
+ *
+ * @example
+ * ```typescript
+ * const lensify = lensFor(store);
+ * const nameLens = lensify('user.name');
+ * const emailLens = lensify('user.email');
+ * ```
+ */
 export const lensFor =
   <T extends object>(atom: WritableAtom<T>) =>
   <P extends Paths<T>>(path: P) =>

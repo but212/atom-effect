@@ -349,8 +349,6 @@ class Scheduler {
 export const scheduler = new Scheduler();
 
 /**
- * Groups multiple state updates into a single batch, preventing intermediate re-computations.
- *
  * When to use:
  * - When performing multiple related atom updates that should trigger effects only once.
  * - To improve performance by coalescing multiple updates into a single flush cycle.
@@ -388,8 +386,6 @@ export function batch<T>(fn: () => T): T {
 let sharedNextTickPromise: Promise<void> | null = null;
 
 /**
- * Returns a promise that resolves after the next scheduler flush.
- *
  * When to use:
  * - To wait for all asynchronous effects to be processed and settled.
  * - In testing, to ensure the state has fully propagated before asserting.

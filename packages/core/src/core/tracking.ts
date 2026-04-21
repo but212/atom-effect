@@ -158,8 +158,6 @@ export type { TrackingContext };
 // ── Untracked ───────────────────────────────────────────────────────────
 
 /**
- * Executes a function without dependency tracking.
- *
  * When to use:
  * - To read reactive state without creating a dependency link.
  * - To perform side effects inside a computation that shouldn't trigger re-runs.
