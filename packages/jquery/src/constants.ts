@@ -1,6 +1,9 @@
 /**
- * Subsystem Definitions: Grouping prefixes, defaults, and error messages
- * into cohesive logical units.
+ * Logic: Subsystem Organization
+ * Group prefixes, defaults, and error messages into cohesive logical units
+ * to improve maintainability and provide clear namespaces across the library.
+ *
+ * @internal
  */
 
 export const SYSTEM_CORE = {
@@ -40,6 +43,11 @@ export const SYSTEM_BINDING = {
 } as const;
 
 export const SYSTEM_SECURITY = {
+  /**
+   * Security: Sanitization Schema
+   * Properties and URI patterns that are inherently dangerous and must
+   * be scrubbed to prevent XSS and DOM Clobbering.
+   */
   DANGEROUS_PROPS: [
     'innerHTML',
     'outerHTML',
@@ -94,9 +102,15 @@ export const SYSTEM_DEBUG = {
 } as const;
 
 /**
- * Legacy Exports: Proxies for backward compatibility.
- * These ensure that existing code continues to work while the project
- * transitions to the subsystem-based organization.
+ * Logic: Backward Compatibility
+ * Proxies for backward compatibility. These ensure that existing code
+ * continues to work while the project transitions from the old flat
+ * structure to the new subsystem-based organization.
+ *
+ * Reason: Migration
+ * Allows for non-breaking internal refactoring of constant storage.
+ *
+ * @internal
  */
 
 export const LOG_PREFIXES = {

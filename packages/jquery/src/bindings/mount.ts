@@ -9,24 +9,35 @@ const EMPTY_PROPS = Object.freeze({});
 /**
  * Mounts a functional component to the selected elements.
  *
+ * Logic: Orchestrates the lifecycle of a discrete UI unit. It handles
+ * pre-mount cleanup, executes the component within a safe reactive window,
+ * and tracks individual teardown logic for future disposal.
+ *
  * When to use:
- * - Use for complex UI modules that manage their own internal reactive effects or DOM listeners.
- * - Ideal for "Logic Units" that need a cleanup phase when removed.
+ * - Creating complex UI modules that manage internal reactive effects or listeners.
+ * - Building reusable "Logic Units" that require dedicated cleanup phases.
  *
  * Lifecycle:
- * 1. Automatically cleans up any existing component logic/effects on the target element.
- * 2. Executes the component function in an isolated reactive window (batch/untracked).
- * 3. Registers any returned cleanup function for future destruction.
+ * 1. Cleanup: Automatically destroys any existing bindings on the target element.
+ * 2. Isolation: Executes the component inside `untracked` and `batch` to prevent
+ *    dependency leaks and ensure atomic initial rendering.
+ * 3. Registration: Tracks the returned cleanup function via the global registry.
  *
  * @example
- * // Define a component
- * const MyComponent = ($element, props) => {
- *   const reactiveEffect = effect(() => $element.text(props.label));
- *   return () => reactiveEffect.dispose(); // Optional teardown
+ * ```typescript
+ * // 1. Define a component
+ * const MyCounter = ($el, props) => {
+ *   const count = atom(0);
+ *   const fx = effect(() => $el.text(`${props.title}: ${count.value}`));
+ *
+ *   return () => fx.dispose(); // Teardown
  * };
  *
- * // Mount it
- * $('.tab').atomMount(MyComponent, { label: 'Home' });
+ * // 2. Mount it
+ * $('.counter-host').atomMount(MyCounter, { title: 'Clicks' });
+ * ```
+ *
+ * @public
  */
 $.fn.atomMount = function <P>(this: JQuery, component: ComponentFn<P>, props?: P): JQuery {
   const componentProps = (props ?? EMPTY_PROPS) as P;
@@ -47,7 +58,9 @@ $.fn.atomMount = function <P>(this: JQuery, component: ComponentFn<P>, props?: P
 };
 
 /**
- * Manually triggers the teardown phase for the component(s) and all nested bindings.
+ * Manually triggers the teardown phase for the component and all nested bindings.
+ *
+ * @public
  */
 $.fn.atomUnmount = function (this: JQuery): JQuery {
   return atomEachElement(this, (element) => registry.cleanupTree(element));

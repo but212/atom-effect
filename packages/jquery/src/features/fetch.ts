@@ -3,10 +3,13 @@ import $ from 'jquery';
 import type { ComputedAtom, FetchError, FetchOptions } from '@/types';
 
 /**
- * Transforms high-level FetchOptions into JQuery.AjaxSettings.
+ * Transforms high-level `FetchOptions` into `JQuery.AjaxSettings`.
  *
- * Logic: This is a pure data transformation layer. It explicitly defines the priority
- * order of settings (Direct Options > Dynamic Options > Static Options).
+ * Logic: Priority Resolution
+ * This is a pure data transformation layer that defines the precedence:
+ * Direct Options > Dynamic Options > Static Options.
+ *
+ * @internal
  */
 function toSettings<T>(url: string, options: FetchOptions<T>): JQuery.AjaxSettings {
   const { ajaxOptions, method, headers } = options;
@@ -28,10 +31,13 @@ function toSettings<T>(url: string, options: FetchOptions<T>): JQuery.AjaxSettin
 }
 
 /**
- * Normalizes jQuery-specific jqXHR or network errors into standard JS Error objects.
+ * Normalizes jQuery-specific `jqXHR` or network errors into standard JS `Error` objects.
  *
- * Logic: Returns a standard Error while preserving the original jqXHR context to
- * enable advanced error diagnostics in reactive hooks.
+ * Logic: Error Normalization
+ * Returns a standard `Error` while preserving the original `jqXHR` context
+ * to enable advanced error diagnostics in reactive hooks.
+ *
+ * @internal
  */
 function toError(err: unknown): Error {
   if (err && typeof err === 'object' && 'readyState' in err) {
@@ -46,11 +52,16 @@ function toError(err: unknown): Error {
 }
 
 /**
- * Creates a reactive fetch atom powered by jQuery.ajax.
+ * Creates a reactive fetch atom powered by `jQuery.ajax`.
  *
  * When to use:
- * - When fetching data that depends on other reactive atoms (auto-refetch when dependencies change).
- * - When you need built-in concurrency management (automatic cancellation of out-of-order responses).
+ * - Fetching data that depends on other reactive atoms (auto-refetch on dependency change).
+ * - Implementing built-in concurrency management (automatic cancellation of stale requests).
+ *
+ * Logic: Concurrency Control
+ * - Uses `AbortController` and `jqXHR.abort()` to ensures that only the result
+ *   of the most recent request is reflected in the atom's state.
+ * - Discards older, "out-of-order" responses to prevent UI flickering.
  *
  * @param source - A static URL string or a reactive function that returns a URL.
  * @param options - Configuration for default values, custom headers, and response transformation.
@@ -58,6 +69,7 @@ function toError(err: unknown): Error {
  * @returns A computed atom that automatically manages the async lifecycle.
  *
  * @example
+ * ```typescript
  * const userId = $.atom(1);
  * const user = $.atomFetch(() => `/api/users/${userId.value}`, {
  *   defaultValue: { name: 'Loading...' },
@@ -67,6 +79,9 @@ function toError(err: unknown): Error {
  * $.effect(() => {
  *   console.log(`Current user: ${user.value.name}`);
  * });
+ * ```
+ *
+ * @public
  */
 function atomFetch<T>(source: string | (() => string), options: FetchOptions<T>): ComputedAtom<T> {
   const getUrl = typeof source === 'string' ? () => source : source;

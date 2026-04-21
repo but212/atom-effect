@@ -1,9 +1,12 @@
 /**
- * Iterates through a jQuery collection and executes the callback only for
+ * Iterates through a jQuery collection and executes the callback ONLY for
  * valid HTMLElement (nodeType 1) nodes.
  *
- * Why: jQuery collections can contain text or comment nodes; this utility
- * provides a safe, element-only iteration path for binding setup.
+ * Reason: jQuery collections can contain text or comment nodes. This utility
+ * provides a safe, element-only iteration path required for setting up
+ * reactive bindings and event listeners.
+ *
+ * @internal
  */
 export function atomEachElement(jq: JQuery, fn: (el: HTMLElement) => void): JQuery {
   for (let i = 0, len = jq.length; i < len; i++) {
@@ -18,11 +21,13 @@ export function atomEachElement(jq: JQuery, fn: (el: HTMLElement) => void): JQue
 
 /**
  * Normalizes binding arguments that can be either a single reactive value or a
- * [Value, Option] tuple (e.g., .atomCss('prop', [atom, 'px'])).
+ * [Value, Option] tuple (e.g., `.atomCss('prop', [atom, 'px'])`).
  *
  * Logic:
- * Uses heuristics (checking for functions or non-atom objects) to determine if
- * the input array represents a configuration tuple or just an array-based data value.
+ * Uses heuristics to determine if an input array represents a configuration
+ * tuple or just an array-based data value.
+ *
+ * @internal
  */
 export function unpack<T, O>(val: T | [T, O]): [T, O?] {
   if (!Array.isArray(val) || val.length !== 2) return [val as T];
@@ -30,7 +35,8 @@ export function unpack<T, O>(val: T | [T, O]): [T, O?] {
   const second = val[1];
 
   // Logic: Tuples usually contain a formatter function or a static options object.
-  // We explicitly check that the second element isn't itself a reactive 'atom' or 'promise'.
+  // We explicitly verify that the second element isn't itself a reactive 'atom'
+  // or 'promise' to avoid misidentifying array-based state values as options.
   const isTuple =
     typeof second === 'function' ||
     (second !== null && typeof second === 'object' && !('value' in second) && !('then' in second));

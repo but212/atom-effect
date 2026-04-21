@@ -14,22 +14,30 @@ const listInstances = new WeakMap<Element, { fx: EffectObject; ctx: ListContext<
 /**
  * Binds a reactive atom array to a jQuery container for automated list rendering.
  *
- * When to use:
- * - Use this to render dynamic lists that stay in sync with an atom's value.
- * - Ideal for high-performance dashboard rows, item feeds, or state-driven UI components.
+ * Logic: Orchestrates the synchronization between a reactive data source and
+ * the DOM tree. It manages a persistent `ListContext` for diffing, wraps
+ * rendering cycles in an `effect`, and ensures automatic teardown via the registry.
  *
- * Performance:
- * - Uses a diffing algorithm to minimize DOM operations (only moves or updates what's changed).
- * - Implements batch rendering and sanitization for cold starts.
+ * When to use:
+ * - Rendering dynamic, high-performance lists that stay in sync with an atom's state.
+ * - Building state-driven UI components like data grids, feeds, or dashboards.
+ *
+ * Optimization:
+ * - Employs a double-ended diffing algorithm to minimize DOM manipulations.
+ * - Uses sanitized batch-rendering for optimized cold-start performance.
  *
  * @example
- * $('#my-list').atomList(itemAtom, {
+ * ```typescript
+ * $('#my-list').atomList(itemsAtom, {
  *   key: 'id',
  *   render: (item) => `<li>${item.name}</li>`,
  *   events: {
  *     'click li': (item, index, e) => console.log(item.id)
  *   }
  * });
+ * ```
+ *
+ * @public
  */
 function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptions<T>): JQuery {
   const getKey: ListKeyFn<T> =
@@ -103,8 +111,11 @@ function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptio
  * Configures delegated event listeners on the container.
  *
  * Logic:
- * - Uses event delegation for performance (single listener per container).
- * - Resolves the clicked DOM element back to the original data item using 'data-atom-key'.
+ * 1. Efficient Delegation: Attaches a single listener to the container per event type.
+ * 2. Data Resolution: Maps clicked elements back to their original data items
+ *    using the stable `data-atom-key` identity and the context's lookup map.
+ * 3. Type Coercion: Automatically handles serializing/deserializing numeric
+ *    keys that become strings when stored in HTML attributes.
  */
 function setupEvents<T>(
   ctx: ListContext<T>,

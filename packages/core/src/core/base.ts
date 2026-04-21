@@ -8,7 +8,11 @@ import { Subscription } from './tracking';
 /**
  * Unified base class for all reactive nodes (Atoms, Computeds, Effects).
  *
- * Optimized for V8 Hidden Class Monomorphism by having a single, consistent
+ * When to use:
+ * - Internal base for implementing Atoms, Computeds, or Effects.
+ * - When a custom reactive primitive needs to integrate with the dependency graph.
+ *
+ * Optimization: Optimized for V8 Hidden Class Monomorphism by having a single, consistent
  * object shape for all reactive logic.
  *
  * @template T - The type of value produced by this node (used for subscriptions).
@@ -41,7 +45,7 @@ export abstract class ReactiveNode<T> {
   _hotIndex: number;
 
   constructor() {
-    // Reordered for V8 Hidden Class (integers/numbers first)
+    // Optimization: Reordered for V8 Hidden Class (integers/numbers first)
     this.flags = 0;
     this.version = 0;
     this._lastSeenEpoch = EPOCH_CONSTANTS.UNINITIALIZED;
@@ -85,10 +89,25 @@ export abstract class ReactiveNode<T> {
 
   /**
    * Adds subscriber for notifications.
+   *
+   * When to use:
+   * - When manual observation of value changes is required outside of reactive contexts.
+   *
+   * @param listener - The function or Subscriber object to receive updates.
+   * @returns Unsubscribe function to stop receiving notifications.
+   * @throws {AtomError} If the listener is neither a function nor a valid Subscriber.
+   *
+   * @example
+   * const node = someReactiveNode;
+   * const unsub = node.subscribe((next, prev) => {
+   *   console.log(`Changed from ${prev} to ${next}`);
+   * });
+   * // Later...
+   * unsub();
    */
   subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
     const isFn = typeof listener === 'function';
-    // [Guard Clause] 중첩 최소화 및 타입 안전성 확보
+    // Logic: Guard clause to ensure type safety before further processing.
     if (!isFn && (listener === null || typeof (listener as Subscriber).execute !== 'function')) {
       throw wrapError(
         new TypeError('Invalid subscriber'),
@@ -107,8 +126,8 @@ export abstract class ReactiveNode<T> {
     if (slots.size > 0) {
       let duplicate = false;
 
-      // Unrolled check using unified comparison to reduce branching
-      // Since Subscription stores fn/sub and one is always undefined, we can check both
+      // Optimization: Unrolled check using unified comparison to reduce branching.
+      // Since Subscription stores fn/sub and one is always undefined, we can check both.
       if (
         (slots._s0 !== null && (slots._s0.fn === listener || slots._s0.sub === listener)) ||
         (slots._s1 !== null && (slots._s1.fn === listener || slots._s1.sub === listener)) ||
@@ -120,7 +139,7 @@ export abstract class ReactiveNode<T> {
         const ov = slots._overflow;
         if (ov !== null) {
           const len = ov.length;
-          // Hoisted invariant check (isFn) to avoid branching inside the loop
+          // Optimization: Hoisted invariant check (isFn) to avoid branching inside the loop.
           if (isFn) {
             for (let i = 0; i < len; i++) {
               const s = ov[i];
@@ -168,6 +187,17 @@ export abstract class ReactiveNode<T> {
 
   /**
    * Returns current subscriber count.
+   *
+   * When to use:
+   * - Monitoring subscription leaks during development.
+   * - Conditional logic that depends on tracking state.
+   *
+   * @returns The number of active subscribers.
+   *
+   * @example
+   * if (node.subscriberCount() > 0) {
+   *   console.log('Node is currently being observed');
+   * }
    */
   subscriberCount(): number {
     const slots = this._slots;
@@ -183,7 +213,7 @@ export abstract class ReactiveNode<T> {
 
     this._notifying++;
     try {
-      // 1. Inline slots: Manual unroll for hot-path performance
+      // Optimization: 1. Inline slots: Manual unroll for hot-path performance.
       if (slots._s0 !== null) {
         try {
           slots._s0.notify(newValue, oldValue);
@@ -213,7 +243,7 @@ export abstract class ReactiveNode<T> {
         }
       }
 
-      // 2. Overflow scan: Standard loop for performance
+      // Optimization: 2. Overflow scan: Standard loop for performance.
       const ov = slots._overflow;
       if (ov !== null) {
         for (let i = 0, len = ov.length; i < len; i++) {
@@ -250,7 +280,7 @@ export abstract class ReactiveNode<T> {
     const deps = this._deps;
     if (deps === null || deps.size === 0) return false;
 
-    // Phase 1: Hot-path Check - O(1)
+    // Optimization: Phase 1: Hot-path Check - O(1)
     const hotIndex = this._hotIndex;
     if (hotIndex !== -1) {
       const hotLink = deps.getAt(hotIndex);

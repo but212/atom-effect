@@ -6,8 +6,13 @@ const ATTR_MARKER = 'data-atom-debug';
 const IS_BROWSER = typeof window !== 'undefined';
 
 /**
- * Memory Safety: Uses WeakMaps to associate temporal debug state with DOM
- * elements without preventing garbage collection of the elements themselves.
+ * Logic: Memory-Safe DOM Tracking
+ * Uses `WeakMap` to associate temporal debug state with DOM elements.
+ * This ensures that diagnostic metadata does not prevent the browser's
+ * garbage collector from reclaiming memory once an element is removed
+ * from the document.
+ *
+ * @internal
  */
 const timers = new WeakMap<Element, ReturnType<typeof setTimeout>>();
 const rafs = new WeakMap<Element, number>();
@@ -15,8 +20,12 @@ const rafs = new WeakMap<Element, number>();
 let styleInjected = false;
 
 /**
- * Minimal Footprint: Injects utility styles once per session.
- * Transition duration is linked to DEBUG_DEFAULTS for configuration consistency.
+ * Optimization: Style Injection
+ * Injects utility styles once per session to maintain a minimal footprint.
+ * Transition duration is linked to `DEBUG_DEFAULTS` to ensure configuration
+ * consistency throughout the library.
+ *
+ * @internal
  */
 function injectStyle(): void {
   if (styleInjected || !IS_BROWSER) return;
@@ -31,8 +40,13 @@ function injectStyle(): void {
 }
 
 /**
- * Feature Detection: Determines the initial debug state.
- * Priority: 1. Manual global flag -> 2. NODE_ENV check -> 3. Default off.
+ * Logic: Environment Resolution
+ * Determines the initial debug state based on the following priority:
+ * 1. Manual global flag (`__ATOM_DEBUG__`)
+ * 2. Node environment check (`NODE_ENV !== 'production'`)
+ * 3. Default off.
+ *
+ * @internal
  */
 function resolveInitialState(): boolean {
   const g = globalThis as typeof globalThis & {
@@ -46,8 +60,22 @@ function resolveInitialState(): boolean {
 const IS_DEV = resolveInitialState();
 
 /**
- * Global diagnostic logger.
- * Toggle `debug.enabled` at runtime to activate/deactivate instrumentation.
+ * Global diagnostic logger for the Atom-Effect library.
+ *
+ * When to use:
+ * - Debugging reactive updates and DOM mutations in real-time.
+ * - Inspecting error causes in binding hooks.
+ *
+ * Logic: Runtime Control
+ * Toggle `debug.enabled` at runtime (e.g., via browser console) to
+ * activate or deactivate visual instrumentation without a page reload.
+ *
+ * @example
+ * ```typescript
+ * $.debug.enabled = true; // Enable visual highlights
+ * ```
+ *
+ * @public
  */
 export const debug = {
   enabled: IS_DEV,
@@ -59,9 +87,11 @@ export const debug = {
     console.error(`${prefix} ${message}`, cause),
 
   /**
-   * Tracks a reactive DOM mutation.
-   * Logic: Logs the specific property update and triggers a visual "flash"
-   * to help developers locate the change on potentially complex pages.
+   * Tracks a reactive DOM mutation and provides visual feedback.
+   *
+   * Logic: DOM Mutation Tracking
+   * Logs the specific property update to the console and triggers a visual
+   * "flash" effect to help locate the mutation on complex, dynamic pages.
    */
   domUpdated(prefix: string, target: Element | JQuery, type: string, value: unknown) {
     if (!this.enabled) return;
@@ -75,12 +105,17 @@ export const debug = {
 };
 
 /**
- * Orchestrates a temporary visual highlight on the targeted element.
+ * Orchestrates a temporary visual highlight on a targeted element.
  *
- * Logic:
- * 1. Debouncing: Cancels pending animations/timers for the same element.
- * 2. RAF: Ensures class addition occurs in the next available paint cycle.
- * 3. GC: Automatically cleans up WeakMap entries after the timeout.
+ * Logic: Highlight Orchestration
+ * 1. Debouncing: Cancels pending animations or timers if a new update
+ *    occurs before the previous flash completes.
+ * 2. Scheduling: Uses `requestAnimationFrame` to ensure the highlight
+ *    class is added in sync with the next paint cycle.
+ * 3. Cleanup: Automatically removes the highlight after the duration
+ *    specified in constants.
+ *
+ * @internal
  */
 function triggerVisualHighlight(el: Element): void {
   const g = globalThis;

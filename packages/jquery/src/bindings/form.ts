@@ -27,10 +27,17 @@ const SELECTOR = 'input, select, textarea';
 /**
  * Engine for synchronizing a complex object (Atom) with a flat HTML Form.
  *
- * Design Intent:
- * - Uses simple data structures (`atomLens`) over fancy dual-sync algorithms.
- * - Supports nested object paths through standard form 'name' attributes.
- * - Observes DOM mutations to handle form fields added or removed after initialization.
+ * Logic:
+ * - Employs `atomLens` to create fine-grained reactive bridges between form controls
+ *   and nested object properties.
+ * - Utilizes a `MutationObserver` to maintain synchronization even as form fields
+ *   are dynamically added or removed via AJAX or scripts.
+ *
+ * When to use:
+ * - Managing complex, nested data models through standard HTML form interfaces.
+ * - Automated 2-way synchronization for entire form sections.
+ *
+ * @internal
  */
 class FormBinder<T extends object> {
   private fieldMap = new Map<string, FieldEntry>();
@@ -107,8 +114,9 @@ class FormBinder<T extends object> {
   ): void {
     const handler = () => {
       const curr = atom.peek();
+      // Logic: Multi-checkbox mode manages an array of selected values.
+      // Positional order is not guaranteed; we use a Set for efficiency.
       if (isCheck && Array.isArray(curr)) {
-        // Multi-checkbox mode: manages an array of selected values
         const s = new Set(curr.map(String));
         el.checked ? s.add(val) : s.delete(val);
         atom.value = Array.from(s);
@@ -137,6 +145,9 @@ class FormBinder<T extends object> {
 
   /**
    * Resolves or creates a field-level lens and binds it to the root object.
+   *
+   * Logic: Converts flat name attributes (e.g., 'user.info[0]') into
+   * reactive dot-paths that `atomLens` can understand.
    */
   private acquireField(name: string): FieldEntry {
     let entry = this.fieldMap.get(name);
@@ -186,7 +197,13 @@ class FormBinder<T extends object> {
     registry.cleanup(el);
   }
 
-  /** Monitors the form DOM for structural changes (AJAX loads, dynamic inputs). */
+  /**
+   * Monitors the form DOM for structural changes (AJAX loads, dynamic inputs).
+   *
+   * Logic: Leverages MutationObserver to detect child element injections
+   * and 'name' attribute changes, ensuring newly added fields are
+   * automatically enrolled in the two-way binding system.
+   */
   private setupObserver(): void {
     const observer = new MutationObserver((ms) => {
       for (let i = 0, len = ms.length; i < len; i++) {
@@ -217,8 +234,11 @@ class FormBinder<T extends object> {
 /**
  * Initializes a reactive whole-form binding.
  *
- * @param form The target form element.
- * @param atom A writable atom holding the form's state object.
+ * When to use:
+ * - Bridging a standard `<form>` element with a reactive object atom.
+ *
+ * @param form - The target form element.
+ * @param atom - A writable atom holding the form's state object.
  */
 export function bindForm<T extends object>(
   form: HTMLFormElement,

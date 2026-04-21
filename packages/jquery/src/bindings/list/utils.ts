@@ -3,6 +3,8 @@ import { registry } from '@/core/registry';
 
 /**
  * Normalizes an Element or a jQuery collection into a standard jQuery object.
+ *
+ * @internal
  */
 export function wrap($el: Element | JQuery<Element>): JQuery {
   return ($el instanceof Element ? $($el) : $el) as unknown as JQuery;
@@ -11,8 +13,11 @@ export function wrap($el: Element | JQuery<Element>): JQuery {
 /**
  * Manages the `data-atom-key` attribute used for list reconciliation.
  *
- * Note: This key allows the diffing algorithm to identify and reuse DOM nodes
- * across different rendering cycles.
+ * Logic: This attribute serves as the primary stable identifier for DOM nodes,
+ * allowing the diffing algorithm to perform O(N) re-ordering and reuse
+ * instead of expensive O(N^2) positional checks.
+ *
+ * @internal
  */
 export function setAtomKey(node: Element | Node | JQuery, key: string | null): void {
   if (node instanceof Element) {
@@ -32,11 +37,14 @@ export function setAtomKey(node: Element | Node | JQuery, key: string | null): v
 }
 
 /**
- * Triggers the mandatory teardown for reactive bindings associated with the target nodes.
+ * Triggers the mandatory teardown for reactive bindings associated with target nodes.
  *
- * Important:
- * This must be called before an element is permanently removed or replaced
- * to prevent memory leaks from stale reactive effects in the registry.
+ * Caution:
+ * This must be executed before an element is permanently detached from the DOM
+ * or replaced. Failing to do so creates "zombie" reactive effects in the
+ * global registry, leading to severe memory leaks.
+ *
+ * @internal
  */
 export function cleanupNodes(node: Element | JQuery): void {
   if (node instanceof Element) {

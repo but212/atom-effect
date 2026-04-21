@@ -11,8 +11,11 @@ type FormElement = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
 /**
  * Marks a function as an internal atom-effect handler.
  *
- * Reason: Bypasses the global jQuery batching patch to prevent redundant update cycles
- * since synchronization is already gated by internal bitmask flags.
+ * Reason: Bypasses the global jQuery batching patch to prevent redundant update cycles.
+ * Since synchronization is already gated by internal `BindingFlags` bitmasks,
+ * double-buffering at the jQuery level is unnecessary and slow.
+ *
+ * @internal
  */
 function markInternal(handlerFunction: Function): void {
   (handlerFunction as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
@@ -21,8 +24,16 @@ function markInternal(handlerFunction: Function): void {
 /**
  * Internal engine for two-way data binding between DOM inputs and reactive Atoms.
  *
- * Optimization: Specializes read/write/equal/format strategies at construction time
- * to ensure monomorphic execution paths, avoiding branching in high-frequency sync loops.
+ * Optimization: Specializes read/write/equal/format strategies at construction time.
+ * This ensures monomorphic execution paths in V8, avoiding expensive branching
+ * inside high-frequency synchronization loops.
+ *
+ * Logic:
+ * - Handles IME composition (Korean/Japanese/Chinese) to prevent partial data sync.
+ * - Maintains cursor position during atom-to-DOM updates for seamless typing.
+ * - Implements bitmask-based recursive update prevention.
+ *
+ * @internal
  */
 class InputBinding<T> {
   private readonly namespace = `.atomBind-${++instanceCounter}`;
@@ -67,7 +78,8 @@ class InputBinding<T> {
     } else {
       this.readValue = () => parse(element.value);
       this.writeToDom = (_, formatted) => {
-        // Logic: Cursor preservation prevents focus loss or "jumping" when updating focused text controls.
+        // Logic: Cursor preservation prevents focus loss or "jumping" when
+        // updating focused text controls in a reactive system.
         if (isTextControl && document.activeElement === element) {
           const input = element as HTMLInputElement;
           try {
@@ -222,8 +234,8 @@ class InputBinding<T> {
  * Applies a two-way value binding between a jQuery selection and a reactive Atom.
  *
  * When to use:
- * - To synchronize form inputs (text, textarea, select) with a WritableAtom.
- * - When cursor preservation or IME composition support is required for better UX.
+ * - Synchronizing form inputs (text, textarea, select) with a `WritableAtom`.
+ * - Enhancing UX with bitmask-gated cursor stability and IME composition support.
  *
  * @param $element - The jQuery wrapped form element to bind.
  * @param atom - The WritableAtom to synchronize with the element value.
@@ -232,11 +244,13 @@ class InputBinding<T> {
  * @returns An object containing the reactive effect and a cleanup function.
  *
  * @example
+ * ```typescript
  * const count = atom(0);
  * const { cleanup } = applyInputBinding($('#my-input'), count, {
  *   parse: (v) => parseInt(v, 10),
  *   debounce: 300
  * });
+ * ```
  */
 export function applyInputBinding<T>(
   $element: JQuery,

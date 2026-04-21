@@ -10,6 +10,8 @@ import { cleanupNodes, setAtomKey, wrap } from './utils';
 /**
  * Low-level DOM helper to insert elements before a reference node.
  * Supports both raw Elements and jQuery collections.
+ *
+ * @internal
  */
 export function insertOrAppend(
   elOrJq: Element | JQuery | undefined,
@@ -32,8 +34,13 @@ export function insertOrAppend(
  * Synchronizes the container state with the 'empty' option.
  *
  * Logic:
- * - If onRemove exists, we must trigger the async removal flow for each item
- *   instead of a destructive $container.empty().
+ * - If `onRemove` exists, we must trigger asynchronous removals for each item
+ *   to allow for exit animations instead of a destructive `empty()`.
+ *
+ * When to use:
+ * - Internal cleanup and placeholder rendering for `atomList`.
+ *
+ * @internal
  */
 export function handleEmpty<T>(
   ctx: ListContext<T>,
@@ -51,7 +58,8 @@ export function handleEmpty<T>(
   if (!onRemove) {
     $container.empty();
   } else {
-    // Reason: Must trigger coordinated animations for every existing row.
+    // Reason: Must trigger coordinated exit animations for every existing row
+    // to maintain visual consistency during batch updates.
     for (let i = 0, len = oldKeys.length; i < len; i++) {
       const k = oldKeys[i]!,
         node = oldNodes[i];
@@ -73,9 +81,15 @@ export function handleEmpty<T>(
 /**
  * Orchestrates the rendering of new or updated items.
  *
- * Performance Optimization:
+ * Optimization:
  * If all items are HTML strings and it's a cold start, returns sanitized HTML
- * parts for direct innerHTML injection to bypass slow jQuery object creation.
+ * parts for direct `innerHTML` injection to bypass the overhead of jQuery
+ * object construction for every element.
+ *
+ * When to use:
+ * - Generating DOM handles or HTML fragments for the reconciliation plan.
+ *
+ * @internal
  */
 export function renderItems<T>(
   diff: PreparedDiff<T>,
@@ -122,7 +136,8 @@ export function renderItems<T>(
 
     setAtomKey($el, String(key));
 
-    // Choice: ForceReplace occurs when identity matches but patching is not allowed.
+    // Choice: ForceReplace occurs when identity matches but patching is not permitted
+    // by user configuration. We must physically replace the old node with the new one.
     if (newStates[targetIdx] === ItemState.ForceReplace && newNodes[targetIdx]) {
       const node = newNodes[targetIdx]!;
       cleanupNodes(node as Element | JQuery);
@@ -139,7 +154,11 @@ export function renderItems<T>(
 
 /**
  * Batch sanitizes multiple HTML fragments using a unique template separator.
- * Reason: Massive performance gain by reducing DOMPurify/Sanitizer calls to one.
+ *
+ * Reason: Massive performance gain by reducing the number of costly sanitization
+ * calls (DOMPurify/Sanitizer) to a single pass for the entire batch.
+ *
+ * @internal
  */
 function batchSanitize(parts: string[]): string[] {
   if (parts.length === 1) return [sanitizeHtml(parts[0]!)];
@@ -149,6 +168,8 @@ function batchSanitize(parts: string[]): string[] {
 
 /**
  * Identifies and removes items that are no longer present in the dataset.
+ *
+ * @internal
  */
 export function cleanupRemoved<T>(ctx: ListContext<T>, diff: PreparedDiff<T>): void {
   const { startIndex, oldEndIndex, newKeySet } = diff;
@@ -164,6 +185,8 @@ export function cleanupRemoved<T>(ctx: ListContext<T>, diff: PreparedDiff<T>): v
 
 /**
  * Final step: Physically places or moves the nodes into their correct positions.
+ *
+ * @internal
  */
 export function placeItems<T>(
   ctx: ListContext<T>,
@@ -207,8 +230,9 @@ export function placeItems<T>(
     container.innerHTML = '';
     container.appendChild(frag);
   } else {
-    // Path C: Complex move logic.
-    // Optimization: Loop backwards to maintain order using insertBefore(next).
+    // Path C: Complex move logic for active lists.
+    // Optimization: Loop backwards to maintain order using insertBefore(next),
+    // which is more efficient than forward insertion in many engines.
     let next: Node | null = null,
       min = Infinity;
     for (let i = count - 1; i >= 0; i--) {
@@ -220,7 +244,8 @@ export function placeItems<T>(
       if (first) {
         // Deterministic Move Logic:
         // idx !== -1 ensures it's an existing item.
-        // idx < min tracks the relative order; if broken, the item must be moved.
+        // idx < min tracks the relative order; if broken, the item must be moved
+        // to its correct relative position.
         if (idx !== -1 && idx < min) min = idx;
         else insertOrAppend(node as Element | JQuery, next, container);
         next = first;

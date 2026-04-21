@@ -56,7 +56,9 @@ export class DependencyLink {
 
 /**
  * Subscription entry.
- * Encapsulates the notification logic for a dependency change.
+ *
+ * Logic: Encapsulates the notification logic for a dependency change.
+ * It manages both callback-based (fn) and object-based (sub) notifications.
  */
 export class Subscription<T> {
   constructor(
@@ -73,8 +75,8 @@ export class Subscription<T> {
   /**
    * Notifies the subscriber of a value change.
    *
-   * @remarks
-   * Optimized with inlined 'untracked' logic to eliminate closure allocation.
+   * Optimization: Inlined 'untracked' logic to eliminate closure allocation in notification hot-path.
+   * It ensures any reactive access during notification doesn't create accidental dependency cycles.
    */
   notify(newValue?: T, oldValue?: T): void {
     const fn = this.fn;
@@ -93,7 +95,7 @@ export class Subscription<T> {
       return;
     }
 
-    // Context switch required for notification safety
+    // Logic: Context switch required for notification safety.
     ctx.current = null;
     try {
       if (fn !== undefined) fn(newValue, oldValue);
@@ -108,7 +110,9 @@ export class Subscription<T> {
 
 /**
  * Tracking context implementation.
- * Manages the global stack of active dependency collectors.
+ *
+ * Logic: Manages the global stack of active dependency collectors.
+ * It coordinates which reactive node is currently authorized to record dependencies.
  */
 class TrackingContext {
   /** Active subscriber at the top of the stack. */
@@ -146,7 +150,7 @@ class TrackingContext {
 
       return result;
     } finally {
-      // Synchronous restoration is required for safety in multi-tasking environments
+      // Constraint: Synchronous restoration is required for safety in multi-tasking environments.
       this.current = prev;
     }
   }
@@ -167,14 +171,26 @@ export type { TrackingContext };
 /**
  * Executes a function without dependency tracking.
  *
+ * When to use:
+ * - To read reactive state without creating a dependency link.
+ * - To perform side effects inside a computation that shouldn't trigger re-runs.
+ *
  * @param fn - Function to execute.
  * @returns Result of `fn`.
+ *
+ * @example
+ * ```typescript
+ * effect(() => {
+ *   const val = untracked(() => someAtom.value);
+ *   console.log('Read without tracking:', val);
+ * });
+ * ```
  */
 export function untracked<T>(fn: () => T): T {
   const ctx = trackingContext;
   const prev = ctx.current;
 
-  // Optimized: Skip context switching if already untracked
+  // Optimization: Skip context switching if already untracked.
   if (prev === null) {
     return fn();
   }

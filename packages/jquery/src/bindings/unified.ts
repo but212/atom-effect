@@ -18,7 +18,11 @@ import { debug } from '@/utils/debug';
 
 import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '@/utils/sanitize';
 
-/** Converts kebab-case CSS properties to camelCase. */
+/**
+ * Converts kebab-case CSS properties to camelCase.
+ *
+ * @internal
+ */
 function getCamelCase(property: string): string {
   return property.includes('-')
     ? property.replace(/-./g, (match) => match[1]!.toUpperCase())
@@ -26,8 +30,10 @@ function getCamelCase(property: string): string {
 }
 
 /**
- * Security: Blocks 'on*' event attributes and dangerous properties like innerHTML
+ * Blocks 'on*' event attributes and dangerous properties like `innerHTML`
  * from being bound as standard attributes/props to prevent XSS.
+ *
+ * @internal
  */
 function isSafeBinding(name: string, isProperty: boolean): boolean {
   const lowerName = name.toLowerCase();
@@ -42,7 +48,14 @@ function isSafeBinding(name: string, isProperty: boolean): boolean {
   return true;
 }
 
-/** Syncs element text content with a reactive source. */
+/**
+ * Syncs element text content with a reactive source.
+ *
+ * When to use:
+ * - Rendering raw text that stays in sync with an atom.
+ *
+ * @internal
+ */
 export function bindText<T = unknown>(
   element: HTMLElement,
   value: AsyncReactiveValue<T>,
@@ -61,7 +74,17 @@ export function bindText<T = unknown>(
 
 /**
  * Binds sanitized HTML content to an element.
- * Note: Descendant bindings are automatically cleaned up before re-writing innerHTML.
+ *
+ * Logic: Descendant bindings are automatically cleaned up via the registry
+ * before re-writing `innerHTML` to prevent memory leaks from detached nodes.
+ *
+ * Caution: Even with sanitization, rendering unsanitized user content
+ * is a security risk. Use `bindText` whenever possible.
+ *
+ * When to use:
+ * - Rendering rich text or trusted HTML templates.
+ *
+ * @internal
  */
 export function bindHtml(element: HTMLElement, value: AsyncReactiveValue<string>): void {
   let lastHtml: string | null = null;
@@ -83,7 +106,13 @@ export function bindHtml(element: HTMLElement, value: AsyncReactiveValue<string>
 
 /**
  * Manages element classes reactively using a boolean map.
- * Case handling: Correctly removes tokens only if no other active class definition in the map requires them.
+ *
+ * Logic: Token Management
+ * - Supports space-separated class names in keys.
+ * - Tracks active tokens in a `Set` to ensure classes are only removed if no
+ *   other active definition in the map requires them.
+ *
+ * @internal
  */
 export function bindClass(
   element: HTMLElement,
@@ -132,7 +161,14 @@ export function bindClass(
   );
 }
 
-/** Reactively updates inline styles while blocking potentially harmful CSS values. */
+/**
+ * Reactively updates inline styles while blocking potentially harmful CSS values.
+ *
+ * Security: Blocks dangerous CSS values (like `url()` with javascript protocols)
+ * to prevent XSS and style-based attacks.
+ *
+ * @internal
+ */
 export function bindCss(element: HTMLElement, cssMap: Record<string, CssValue>): void {
   const style = element.style as unknown as Record<string, string | null>;
   const reactiveMap: Record<string, ReactiveValue<unknown>> = {};
@@ -167,8 +203,13 @@ export function bindCss(element: HTMLElement, cssMap: Record<string, CssValue>):
 
 /**
  * Syncs DOM attributes.
- * Note: Handles specific logic for boolean attributes (like 'disabled')
- * and protocol-validation for URLs (href/src).
+ *
+ * Logic:
+ * - Handles specific logic for boolean attributes (like `disabled`).
+ * - Validates URL protocols (href/src) before applying changes.
+ * - Supports ARIA attributes with distinct boolean-to-string mapping.
+ *
+ * @internal
  */
 export function bindAttr(
   element: HTMLElement,
@@ -215,7 +256,14 @@ export function bindAttr(
   );
 }
 
-/** Directly maps reactive values to DOM element properties with URL validation. */
+/**
+ * Directly maps reactive values to DOM element properties.
+ *
+ * Security: Blocks dangerous properties (e.g., `innerHTML`, `on*` events)
+ * and validates URL-based properties to prevent injection attacks.
+ *
+ * @internal
+ */
 export function bindProp(
   element: HTMLElement,
   propMap: Record<string, AsyncReactiveValue<unknown>>
@@ -245,7 +293,14 @@ export function bindProp(
   );
 }
 
-/** Toggles display style between 'none' and its original state. */
+/**
+ * Toggles display style between 'none' and its original state.
+ *
+ * Logic: Preserves the original `display` mode (e.g., `flex`, `block`)
+ * so that visibility restoration returns the element to its intended layout state.
+ *
+ * @internal
+ */
 export function bindVisibility(
   element: HTMLElement,
   condition: AsyncReactiveValue<boolean>,
@@ -271,7 +326,11 @@ export function bindVisibility(
   );
 }
 
-/** Entry point for input/value bindings; delegates to the InputBinding engine. */
+/**
+ * Entry point for input/value bindings; delegates to the `InputBinding` engine.
+ *
+ * @internal
+ */
 export function bindVal(
   element: HTMLElement,
   atom: WritableAtom<unknown>,
@@ -292,7 +351,11 @@ export function bindVal(
 /**
  * Requirement: Radio buttons in the same name group don't fire 'change'
  * when they are automatically unchecked by another radio selection.
- * We manually trigger a sync for the rest of the group.
+ *
+ * Logic: Manually triggers a `change.atomRadioSync` event for the entire group
+ * to ensure reactive consistency across the radio group.
+ *
+ * @internal
  */
 function synchronizeRadioGroup(element: HTMLInputElement): void {
   if (element.type === 'radio' && element.name) {
@@ -303,7 +366,11 @@ function synchronizeRadioGroup(element: HTMLInputElement): void {
   }
 }
 
-/** Specialized two-way binding for checkbox and radio 'checked' states. */
+/**
+ * Specialized two-way binding for checkbox and radio 'checked' states.
+ *
+ * @internal
+ */
 export function bindChecked(element: HTMLElement, atom: WritableAtom<boolean>): void {
   if (!(element instanceof HTMLInputElement)) {
     console.warn(`${LOG_PREFIXES.BINDING} atomChecked called on non-input element`);
@@ -340,7 +407,11 @@ export function bindChecked(element: HTMLElement, atom: WritableAtom<boolean>): 
   );
 }
 
-/** Registers flat event maps with automatic lifecycle cleanup. */
+/**
+ * Registers flat event maps with automatic lifecycle cleanup.
+ *
+ * @internal
+ */
 export function bindEvents(
   element: HTMLElement,
   eventMap: NonNullable<BindingOptions['on']>
@@ -350,7 +421,11 @@ export function bindEvents(
   registry.trackCleanup(element, () => $element.off(eventMap));
 }
 
-/** Registers a single event listener with automatic lifecycle cleanup. */
+/**
+ * Registers a single event listener with automatic lifecycle cleanup.
+ *
+ * @internal
+ */
 export function bindOn(
   element: HTMLElement,
   event: string,

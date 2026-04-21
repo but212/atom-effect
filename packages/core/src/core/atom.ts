@@ -8,6 +8,10 @@ import { trackingContext } from './tracking';
 
 /**
  * Internal {@link WritableAtom} implementation.
+ *
+ * Logic: Manages a single piece of mutable state and coordinates notification
+ * scheduling for its subscribers. Participation in the dependency graph is
+ * handled via the `value` getter/setter.
  */
 class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
   private _value: T;
@@ -43,8 +47,12 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
     return (this.flags & ATOM_STATE_FLAGS.SYNC) !== 0;
   }
 
+  /**
+   * Retrieves current value and registers a dependency if called in a reactive context.
+   */
   get value(): T {
     const ctx = trackingContext.current;
+    // Logic: Automatic dependency tracking during execution of Computeds/Effects.
     if (ctx != null) {
       ctx.addDependency(this);
     }
@@ -65,17 +73,17 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
     const currentFlags = this.flags;
     const SCHED_BIT = ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
 
-    // 1. Guard: Skip if already scheduled or no subscribers
+    // Logic: 1. Guard: Skip if already scheduled or no subscribers.
     if ((currentFlags & SCHED_BIT) !== 0) return;
     const slots = this._slots;
     if (slots === null || slots.size === 0) return;
 
-    // 2. Schedule Notification
+    // Logic: 2. Schedule Notification.
     this._pendingOldValue = oldValue;
     const nextFlags = currentFlags | SCHED_BIT;
     this.flags = nextFlags;
 
-    // 3. Choice: Flush now or Schedule for later
+    // Logic: 3. Choice: Flush now or Schedule for later.
     const SYNC_BIT = ATOM_STATE_FLAGS.SYNC;
     if ((nextFlags & SYNC_BIT) !== 0 && !scheduler.isBatching) {
       if (this._notifying === 0) {
@@ -96,7 +104,7 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
   }
 
   /**
-   * Triggers subscribers.
+   * Triggers notifications to all subscribers.
    */
   private _flushNotifications(): void {
     const SCHED_BIT = ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
@@ -113,7 +121,7 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
       // Update bitwise state
       this.flags = flags &= ~SCHED_BIT;
 
-      // Net-zero check: if value returned to original during batching, skip notification
+      // Optimization: Net-zero check: if value returned to original during batching, skip notification.
       const currentVal = this._value;
       if (!this._equal(currentVal, oldValue)) {
         this._notifySubscribers(currentVal, oldValue);
@@ -127,10 +135,18 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
     }
   }
 
+  /**
+   * Accesses the value without triggering dependency tracking.
+   */
   peek(): T {
     return this._value;
   }
 
+  /**
+   * Cleans up the atom and releases references to its state.
+   *
+   * Caution: Disposed atoms will throw if accessed or modified.
+   */
   dispose(): void {
     const flags = this.flags;
     const DISP_BIT = ATOM_STATE_FLAGS.DISPOSED;
@@ -139,7 +155,7 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
     this.flags = flags | DISP_BIT;
     this._slots?.clear();
 
-    // Release references
+    // Reason: Clear references to prevent memory leaks in long-lived applications.
     this._value = undefined as T;
     this._pendingOldValue = undefined;
     this._equal = Object.is; // Reset to default
@@ -153,8 +169,20 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
 /**
  * Creates a reactive atom holding mutable state.
  *
+ * When to use:
+ * - When you need a source of truth for a specific piece of state.
+ * - When that state needs to be updated manually (unlike Computeds).
+ *
  * @param initialValue - The initial value of the atom.
- * @param options - Configuration options (sync: boolean).
+ * @param options - Configuration options for sync mode, custom equality, or naming.
+ * @returns A writable reactive atom.
+ *
+ * @example
+ * ```typescript
+ * const count = atom(0);
+ * console.log(count.value); // 0
+ * count.value++;
+ * ```
  */
 export function atom<T>(initialValue: T, options: AtomOptions = {}): WritableAtom<T> {
   return new AtomImpl(initialValue, options);

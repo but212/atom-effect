@@ -6,9 +6,11 @@ import { debug } from '@/utils/debug';
 let autoCleanupScheduled = false;
 
 /**
- * Optimization: Elements with active bindings are marked with this class.
- * This allows cleanupDescendants to perform a high-performance scoped query
- * (querySelectorAll) instead of a slow, full-tree recursive walk.
+ * Optimization: Marker class for elements with active reactive bindings.
+ * This allows `cleanupDescendants` to perform a high-performance scoped query
+ * (`querySelectorAll`) instead of a computationally expensive, full-tree recursive walk.
+ *
+ * @internal
  */
 const AES_BOUND = '_aes-bound';
 
@@ -20,10 +22,15 @@ export interface BindingRecord {
 /**
  * Manages the lifecycle of reactive bindings and component effects.
  *
- * Safety Rationale:
- * - Uses WeakMap for records to avoid holding strong references that prevent GC.
- * - Uses WeakSet for node flags (kept/ignored) to ensure the registry doesn't leak
- *   memory even for nodes that were "lost" without a cleanup call.
+ * Logic: Safety & Memory Management
+ * - WeakMap Storage: Records are stored using `WeakMap` to avoid strong
+ *   references, allowing the garbage collector to reclaim memory from
+ *   elements even if they weren't explicitly unmounted.
+ * - Flag System: Uses `WeakSet` for `keep`/`ignored` states to ensure
+ *   tracking metadata doesn't leak memory for nodes that were "lost"
+ *   without a cleanup call.
+ *
+ * @internal
  */
 class BindingRegistry {
   private records = new WeakMap<Element, BindingRecord>();
@@ -139,10 +146,16 @@ class BindingRegistry {
     }
   }
 
+  /**
+   * Cleans up all bound reactive state for descendant nodes.
+   *
+   * Logic: Snapshot Strategy
+   * Uses `querySelectorAll` to obtain a static `NodeList` snapshot before
+   * starting the iteration. This ensures loop stability by preventing
+   * index shifting or missing nodes if elements are removed or their
+   * classes are modified during the cleanup cycle.
+   */
   cleanupDescendants(root: Element | DocumentFragment | ShadowRoot): void {
-    // Strategy: Use querySelectorAll to obtain a static NodeList snapshot.
-    // This ensures loop stability by preventing index shifting if items are removed
-    // or their classes are modified (via classList.remove) during the cleanup cycle.
     const nodes = root.querySelectorAll(`.${AES_BOUND}`);
 
     for (let i = 0, length = nodes.length; i < length; i++) {
@@ -165,9 +178,12 @@ export const registry = new BindingRegistry();
 const observers = new Map<Node, MutationObserver>();
 
 /**
- * Requirement: Native browser operations (like el.innerHTML = '') bypass jQuery hooks.
- * This observer serves as a safety net, detecting removed nodes that missed the
- * patched jQuery .remove() or .empty() calls.
+ * Logic: DOM Safety Net
+ * Native browser operations (e.g., `el.innerHTML = ''`) bypass jQuery hooks.
+ * This observer acts as a fallback system, detecting removed nodes that
+ * were not processed by patched jQuery methods like `.remove()` or `.empty()`.
+ *
+ * @internal
  */
 export function enableAutoCleanup(root: Element | ShadowRoot | DocumentFragment): void {
   if (observers.has(root)) return;
