@@ -473,32 +473,35 @@ Declarative AJAX primitive. Wraps core's async `computed` with jQuery's `$.ajax`
 
 **Key Features**:
 
-- **Auto-Cancellation**: Automatically aborts previous pending requests using `AbortController` when dependencies change, `.invalidate()` is called, or when the atom is manually **disposed**. Aborted requests are silently discarded — they do **not** set `hasError`.
-- **Reactive URL**: Re-fetches automatically if `urlOrFn` depends on atoms.
+- **Concurrency Management**: Automatically aborts previous requests using `AbortController` when dependencies change or the atom is disposed. Cancellations are silent and do **not** trigger error states.
+- **Error Normalization**: Standardizes `jqXHR` objects into native `Error` instances, providing reliable `status 0` (timeout/network) handling and descriptive messages.
+- **Reactive Integration**: Re-fetches automatically if parameters depend on other atoms.
 
 **Parameters**:
 
-- `urlOrFn`: `string | () => string` — Static URL or a function that reads atoms (auto-refetches on change).
+- `urlOrFn`: `string | () => string` — Static URL or a function that reads atoms.
 - `options`: `FetchOptions<T>`
   - `defaultValue`: `T` (Required) — Value before first response.
   - `name`: `string` (Optional) — Debug name for the atom.
-  - `method`: `string` — HTTP method (default: `'GET'`). Note: the top-level `method` option takes precedence over `ajaxOptions.method`.
+  - `method`: `string` — HTTP method.
   - `headers`: `Record<string, string>` — Request headers.
-  - `transform`: `(raw: unknown, xhr: JQuery.jqXHR) => T` — Response transformer. Receives the raw data and the jQuery XHR object.
-  - `ajaxOptions`: `JQuery.AjaxSettings | () => JQuery.AjaxSettings` — Full `$.ajax` passthrough. When a **function** is provided, it is called on every request and its atom reads are automatically tracked, enabling reactive request payloads (e.g., dynamic headers or body). Static options (`method`, `headers`) are merged as the base, with dynamic values on top.
+  - `transform`: `(raw: unknown, xhr: JQuery.jqXHR) => T` — Response transformer.
+  - `ajaxOptions`: `JQuery.AjaxSettings | () => JQuery.AjaxSettings` — Full passthrough. When provided as a function, its atom dependencies are tracked.
+
+**Priority Order**: Settings are merged in the order: `Direct Options > Dynamic Options (ajaxOptions function) > Static Options (ajaxOptions object)`. For example, a top-level `method` override always wins.
 
 **Returns**: `ComputedAtom<T>` — reactive value with:
 
 - `.value` — Resolved data (or `defaultValue` while pending).
 - `.isPending` — `true` during fetch.
-- `.hasError` / `.lastError` — Error state. Only set for real network/server errors; cancellations via abort are not treated as errors.
+- `.hasError` / `.lastError` — Error state.
 - `.abort()` — Cancels the current pending request.
 - `.invalidate()` — Triggers refetch.
 
 **Additional Options**:
 
-- `onError`: `(err: unknown) => void` — Called when the fetch fails with an error (not called on abort/cancellation).
-- `eager`: `boolean` — If `false`, the first fetch is deferred until `.invalidate()` is called or a dependency changes. Default: `true`.
+- `onError`: `(err: Error) => void` — Called on failure. Exceptions thrown inside this hook are caught and logged to prevent breaking the reactive chain.
+- `eager`: `boolean` — If `false`, the first fetch is deferred. Default: `true`.
 
 ```javascript
 const userId = $.atom(1);

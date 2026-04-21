@@ -289,17 +289,18 @@ The library provides a specialized "Traffic Control" strategy to allow `$.atomNa
 
 To prevent memory leaks and "zombie" resolutions (where a request resolves but its reactive node was already disposed or superseded), `$.atomFetch` implements a strict lifecycle:
 
-- **AbortController**: Each execution creates a new `AbortController`. The signal is linked to the `jqXHR` object via its `.abort()` method.
-- **Auto-Cleanup**: Event listeners on the `AbortSignal` are explicitly removed in a `finally` block to prevent leaks.
-- **Disposal**: The returned atom's `.dispose()` method is extended to automatically trigger the `FetchContext.abort()` method, ensuring all pending network activity stops immediately when the UI component using the data is unmounted.
+- **AbortController**: Each execution creates a new `AbortController`. The internal `cleanup` function links the signal to the `jqXHR.abort()` method.
+- **Auto-Cleanup**: Listeners on the `AbortSignal` are explicitly removed in a `finally` block.
+- **Disposal**: The atom's `.dispose()` method is patched to trigger an immediate abort, ensuring all pending network activity stops when the atom is destroyed.
 
 ### 8.2 Error Handling
 
 `$.atomFetch` provides robust error isolation:
 
-- **Synchronous Catching**: It wraps the `$.ajax` call in a `try/catch` to capture immediate errors (e.g., malformed URL, synchronous exceptions).
-- **Network Error Normalization**: Standardizes jQuery's `jqXHR` error objects into standard `Error` instances with attached metadata (e.g., `lastError.jqXHR`).
-- **Abort Silence (Zero Flickering)**: `$.atomFetch` does not require manual `if (error.name === 'AbortError')` checks. The core reactive engine (Signal) enforces a principle where any result—success or failure—from a superseded async execution is discarded. Consequently, `AbortError` from cancelled requests is naturally filtered out, preventing the "Error Flickering" common in traditional `useEffect` patterns during rapid state transitions.
+- **Data Normalization**: Uses internal `toSettings` and `toError` helpers to ensure consistent behavior across different network conditions and jQuery versions.
+- **Network Error Normalization**: Standardizes `jqXHR` objects into standard `Error` instances, with specialized handling for `status 0` (timeouts/network failures).
+- **Hook Isolation**: The `onError` user hook is wrapped in a dedicated `try/catch` block. Exceptions thrown within the hook are logged to the console but do not re-throw, preventing user-defined logic from breaking the internal reactive update cycle.
+- **Abort Silence (Zero Flickering)**: Cancellations (via `AbortError`) are caught internally and re-thrown as a named error that the core reactive engine understands but ignores for state updates, preventing "Error Flickering" during rapid re-evaluations.
 
 ## 9. Security
 
