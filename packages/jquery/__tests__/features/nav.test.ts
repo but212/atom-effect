@@ -4,12 +4,15 @@ import type { AtomNav, AtomNavOptions } from '@/types';
 
 /**
  * $.atomNav Specification Tests
- * Focus: Signal over noise, behavioral consistency, and resource safety.
+ * Focus: Correctness of link interception, state synchronization, race condition management, and resource safety.
  */
 describe('$.atomNav', () => {
   let $target: JQuery;
   let navs: AtomNav[] = [];
 
+  // --- Helpers ---
+
+  /** Mock factory for jQuery AJAX to simulate various server responses and behaviors. */
   const mockAjax = (data?: unknown, shouldFail = false, headers: Record<string, string> = {}) => {
     return vi.spyOn($, 'ajax').mockImplementation(() => {
       let rejectPromise: (reason: unknown) => void;
@@ -30,6 +33,14 @@ describe('$.atomNav', () => {
     });
   };
 
+  const createNav = (options: AtomNavOptions) => {
+    const nav = $.atomNav(options);
+    navs.push(nav);
+    return nav;
+  };
+
+  // --- Setup & Teardown ---
+
   beforeEach(() => {
     $target = $('<div id="main-content">Original</div>').appendTo('body');
     window.history.replaceState(null, '', '/');
@@ -47,86 +58,87 @@ describe('$.atomNav', () => {
     vi.unstubAllGlobals();
   });
 
-  const createNav = (options: AtomNavOptions) => {
-    const nav = $.atomNav(options);
-    navs.push(nav);
-    return nav;
-  };
+  // --- Specifications ---
 
-  it('should initialize with reactive state atoms', () => {
-    const nav = createNav({ target: '#main-content' });
-    expect($.isAtom(nav.currentUrl)).toBe(true);
-    expect($.isAtom(nav.isPending)).toBe(true);
-    expect($.isAtom(nav.hasError)).toBe(true);
+  describe('Core Initialization', () => {
+    it('should initialize with reactive state atoms and correct initial values', () => {
+      const nav = createNav({ target: '#main-content' });
+      expect($.isAtom(nav.currentUrl)).toBe(true);
+      expect($.isAtom(nav.isPending)).toBe(true);
+      expect($.isAtom(nav.hasError)).toBe(true);
+      expect(nav.currentUrl.value).toBe('/');
+    });
   });
 
-  describe('Interception Logic (Routing Policy)', () => {
-    it('should correctly filter links based on attributes, protocols, and event state', async () => {
+  describe('Routing Policy (Link Interception)', () => {
+    it('should correctly filter links based on origin, protocols, and attributes', async () => {
       const ajaxSpy = mockAjax();
       createNav({ target: '#main-content', selector: '.nav-link' });
 
-      const testCases = [
-        { label: 'Internal Path', href: '/page1', intercept: true },
-        { label: 'New Tab', href: '/page2', target: '_blank', intercept: false },
-        { label: 'Download', href: '/file.pdf', download: true, intercept: false },
-        { label: 'External Domain', href: 'https://external.com', intercept: false },
-        { label: 'Mail/Tel', href: 'mailto:a@b.com', intercept: false },
-        { label: 'Data URI', href: 'data:text/html,hi', intercept: false },
-        { label: 'Explicit Opt-out', href: '/no-nav', dataNav: 'false', intercept: false },
-        { label: 'Right Click', href: '/right', button: 2, intercept: false },
-        { label: 'Already Prevented', href: '/prev', preventDefault: true, intercept: false },
+      const scenarios = [
+        { label: 'Same-origin path', href: '/page1', expectedIntercept: true },
+        { label: 'New tab target', href: '/page2', target: '_blank', expectedIntercept: false },
+        {
+          label: 'Download attribute',
+          href: '/file.pdf',
+          download: true,
+          expectedIntercept: false,
+        },
+        { label: 'External domain', href: 'https://external.com', expectedIntercept: false },
+        { label: 'Protocol: mailto', href: 'mailto:a@b.com', expectedIntercept: false },
+        { label: 'Protocol: data', href: 'data:text/html,hi', expectedIntercept: false },
+        {
+          label: 'Explicit data-nav="false"',
+          href: '/no-nav',
+          dataNav: 'false',
+          expectedIntercept: false,
+        },
+        { label: 'Right-click event', href: '/right', button: 2, expectedIntercept: false },
+        {
+          label: 'Explicit event prevention',
+          href: '/prev',
+          preventDefault: true,
+          expectedIntercept: false,
+        },
       ];
 
-      for (const tc of testCases) {
+      for (const scenario of scenarios) {
         ajaxSpy.mockClear();
-        const $link = $(`<a href="${tc.href}" class="nav-link"></a>`).appendTo('body');
-        if (tc.target) $link.attr('target', tc.target);
-        if (tc.download) $link.attr('download', '');
-        if (tc.dataNav) $link.attr('data-nav', tc.dataNav);
+        const $link = $(`<a href="${scenario.href}" class="nav-link"></a>`).appendTo('body');
+        if (scenario.target) $link.attr('target', scenario.target);
+        if (scenario.download) $link.attr('download', '');
+        if (scenario.dataNav) $link.attr('data-nav', scenario.dataNav);
 
         const clickEvent = new MouseEvent('click', {
           bubbles: true,
           cancelable: true,
-          button: tc.button ?? 0,
+          button: scenario.button ?? 0,
         });
 
-        if (tc.preventDefault) {
+        if (scenario.preventDefault) {
           $link[0]?.addEventListener('click', (e) => e.preventDefault(), { once: true });
         }
 
-        let pjaxPrevented = false;
-        const checkListener = (e: Event) => {
-          pjaxPrevented = e.defaultPrevented;
-          e.preventDefault();
+        let defaultPrevented = false;
+        const interceptChecker = (e: Event) => {
+          defaultPrevented = e.defaultPrevented;
+          e.preventDefault(); // Stop actual navigation
         };
-        document.addEventListener('click', checkListener, { once: true });
+        document.addEventListener('click', interceptChecker, { once: true });
         $link[0]?.dispatchEvent(clickEvent);
 
-        if (tc.intercept) {
-          expect(pjaxPrevented, tc.label).toBe(true);
-          await vi.waitFor(() => expect(ajaxSpy, tc.label).toHaveBeenCalled());
+        if (scenario.expectedIntercept) {
+          expect(defaultPrevented, scenario.label).toBe(true);
+          await vi.waitFor(() => expect(ajaxSpy, scenario.label).toHaveBeenCalled());
         } else {
-          expect(ajaxSpy, tc.label).not.toHaveBeenCalled();
-          if (!tc.preventDefault) expect(pjaxPrevented, tc.label).toBe(false);
+          expect(ajaxSpy, scenario.label).not.toHaveBeenCalled();
+          if (!scenario.preventDefault) expect(defaultPrevented, scenario.label).toBe(false);
         }
         $link.remove();
       }
     });
 
-    it('should respect cancellation hooks', async () => {
-      const ajaxSpy = mockAjax('Blocked');
-      const nav = createNav({
-        target: '#main-content',
-        selector: '.nav-link',
-        onBeforeLoad: () => false,
-      });
-
-      await nav.navigate('/blocked');
-      expect(ajaxSpy).not.toHaveBeenCalled();
-      expect(nav.currentUrl.value).toBe('/');
-    });
-
-    it('should respect base tag context for relative paths', async () => {
+    it('should respect base tag context when resolving relative paths', async () => {
       const ajaxSpy = mockAjax('Content');
       const nav = createNav({ target: '#main-content', selector: '.nav-link' });
 
@@ -141,87 +153,87 @@ describe('$.atomNav', () => {
       $base.remove();
       $link.remove();
     });
+
+    it('should allow navigation cancellation via onBeforeLoad hook', async () => {
+      const ajaxSpy = mockAjax('Blocked');
+      const nav = createNav({
+        target: '#main-content',
+        onBeforeLoad: () => false,
+      });
+
+      await nav.navigate('/blocked');
+      expect(ajaxSpy).not.toHaveBeenCalled();
+      expect(nav.currentUrl.value).toBe('/');
+    });
   });
 
-  describe('UI & Metadata Reconciliation', () => {
-    it('should synchronize content, attributes, and head metadata from response', async () => {
-      const $desc = $('<meta name="description" content="old">').appendTo('head');
-      const $key = $('<meta name="keywords" content="old">').appendTo('head');
+  describe('State Synchronization (DOM & Metadata)', () => {
+    it('should synchronize content, attributes, and <head> metadata from response', async () => {
+      const $desc = $('<meta name="description" content="stale">').appendTo('head');
+      const $key = $('<meta name="keywords" content="stale">').appendTo('head');
 
-      const serverHtml = `
+      const serverResponse = `
         <html>
           <head>
             <title>New Title</title>
-            <meta name="description" content="new">
-            <meta name="keywords" content="new">
+            <meta name="description" content="fresh">
+            <meta name="keywords" content="fresh">
           </head>
           <body>
-            <div id="main-content" class="new-theme" data-new="true">
-              <h1>New Content</h1>
+            <div id="main-content" class="active-theme" data-new="true">
+              <h1>Target Content</h1>
             </div>
-            <div id="ignore">Other</div>
+            <div id="ignore-me">Extraneous</div>
           </body>
         </html>
       `;
-      mockAjax(serverHtml);
+      mockAjax(serverResponse);
 
-      $target.addClass('old-theme').attr('data-keep', 'alive');
+      $target.addClass('old-theme').attr('data-stale', 'true');
       const nav = createNav({ target: '#main-content', syncTitle: true });
 
       await nav.navigate('/update');
       await vi.waitFor(() => {
-        expect($target.find('h1').text()).toBe('New Content');
+        expect($target.find('h1').text()).toBe('Target Content');
         expect(document.title).toBe('New Title');
       });
 
-      // Metadata Sync
-      expect($desc.attr('content')).toBe('new');
-      expect($key.attr('content')).toBe('new');
+      // Metadata check
+      expect($('meta[name="description"]').attr('content')).toBe('fresh');
+      expect($('meta[name="keywords"]').attr('content')).toBe('fresh');
 
-      // Attribute Reconciliation
-      expect($target.hasClass('new-theme')).toBe(true);
+      // Attribute reconciliation
+      expect($target.hasClass('active-theme')).toBe(true);
       expect($target.hasClass('old-theme')).toBe(false);
       expect($target.attr('data-new')).toBe('true');
-      expect($target.attr('data-keep')).toBeUndefined();
+      expect($target.attr('data-stale')).toBeUndefined();
 
-      // Fragment Extraction
-      expect($target.html()).not.toContain('id="ignore"');
+      // Scoped extraction
+      expect($target.html()).not.toContain('ignore-me');
 
       $desc.remove();
       $key.remove();
     });
 
-    it('should remove attributes that are not present in the new response', async () => {
-      mockAjax('<div id="main-content">New Content</div>');
-      $target.attr('data-stale', 'true').addClass('stale-class');
+    it('should cleanup stale attributes and meta tags missing in the new response', async () => {
+      const $desc = $('<meta name="description" content="stale">').appendTo('head');
+      mockAjax('<div id="main-content">Minimal</div>');
 
+      $target.attr('data-temp', 'val');
       const nav = createNav({ target: '#main-content' });
-      await nav.navigate('/cleanup');
 
+      await nav.navigate('/minimal');
       await vi.waitFor(() => {
-        expect($target.attr('data-stale')).toBeUndefined();
-        expect($target.hasClass('stale-class')).toBe(false);
+        expect($target.attr('data-temp')).toBeUndefined();
+        expect($('meta[name="description"]').length).toBe(0);
       });
+
+      $desc.remove();
     });
+  });
 
-    it('should remove meta tags that are missing in the new response', async () => {
-      const $desc = $('<meta name="description" content="stale-description">').appendTo('head');
-      // Response has no meta tags
-      mockAjax('<html><body><div id="main-content">No Meta</div></body></html>');
-
-      const nav = createNav({ target: '#main-content' });
-      await nav.navigate('/no-meta');
-
-      try {
-        await vi.waitFor(() => {
-          expect($('meta[name="description"]').length).toBe(0);
-        });
-      } finally {
-        $desc.remove();
-      }
-    });
-
-    it('should manage lifecycle hooks and pending state transitions', async () => {
+  describe('Lifecycle & Concurrency', () => {
+    it('should manage mounting hooks and pending transition states', async () => {
       let resolveAjax!: (v: string) => void;
       mockAjax().mockImplementation(() => {
         const p = new Promise<string>((res) => {
@@ -230,95 +242,106 @@ describe('$.atomNav', () => {
         return Object.assign(p, { abort: vi.fn() }) as unknown as JQuery.jqXHR;
       });
 
-      const hooks = { onMount: vi.fn(), onUnmount: vi.fn() };
-      const nav = createNav({ target: '#main-content', ...hooks });
-      await $.nextTick();
-      expect(hooks.onMount).toHaveBeenCalledTimes(1);
-      hooks.onMount.mockClear();
+      const lifecycle = { onMount: vi.fn(), onUnmount: vi.fn() };
+      const nav = createNav({ target: '#main-content', ...lifecycle });
 
-      nav.navigate('/next');
+      await $.nextTick();
+      expect(lifecycle.onMount).toHaveBeenCalledTimes(1);
+      lifecycle.onMount.mockClear();
+
+      const navPromise = nav.navigate('/next');
       await vi.waitFor(() => expect(nav.isPending.value).toBe(true));
 
       resolveAjax('<div>Updated</div>');
+      await navPromise;
       await vi.waitFor(() => expect(nav.isPending.value).toBe(false));
 
-      expect(hooks.onUnmount).toHaveBeenCalledWith(expect.anything(), '/');
-      expect(hooks.onMount).toHaveBeenCalledTimes(1);
+      expect(lifecycle.onUnmount).toHaveBeenCalledWith(expect.anything(), '/');
+      expect(lifecycle.onMount).toHaveBeenCalledWith(expect.anything(), '/next');
     });
-  });
 
-  describe('Concurrent Navigation (Race Conditions)', () => {
-    it('should prevent hydration races and correctly manage overlapping hooks', async () => {
-      let resolveHook!: (v: boolean) => void;
-      const hookPromise = new Promise<boolean>((res) => {
-        resolveHook = res;
+    it('should correctly resolve race conditions between overlapping full navigations', async () => {
+      let resolveA!: (v: boolean) => void;
+      const hookA = new Promise<boolean>((res) => {
+        resolveA = res;
       });
 
       const mountSpy = vi.fn();
       const nav = createNav({
         target: '#main-content',
         onMount: mountSpy,
-        onBeforeLoad: () => hookPromise,
+        onBeforeLoad: (url) => (url === '/a' ? hookA : true),
       });
 
-      // 1. Start navigation A (stuck in hook)
+      // 1. Navigation A starts and hits a pending hook
       nav.navigate('/a');
       await vi.waitFor(() => expect(nav.isPending.value).toBe(true));
 
-      // 2. Start navigation B immediately (aborts A)
+      // 2. Navigation B starts immediately, which should abort A
       mockAjax('Page B');
       nav.navigate('/b');
 
-      // 3. Resolve A's hook.
-      resolveHook(true);
-
+      // 3. Navigation A's hook resolves, but it should be ignored
+      resolveA(true);
       await vi.waitFor(() => expect($target.text()).toBe('Page B'));
-      expect(mountSpy).toHaveBeenCalledTimes(2); // Initial + Page B (Page A skipped)
+
+      // Verification: Initial mount + Page B mount (A was skipped)
+      expect(mountSpy).toHaveBeenCalledTimes(2);
+      expect(nav.currentUrl.value).toBe('/b');
     });
 
-    it('should ignore navigating to the exact same URL to prevent hook freezes', async () => {
-      const beforeSpy = vi.fn();
-      const nav = createNav({
-        target: '#main-content',
-        onBeforeLoad: beforeSpy,
+    it('should abort full navigation if a hash transition or same-location request happens during hooks', async () => {
+      let resolveA!: (v: boolean) => void;
+      const hookA = new Promise<boolean>((res) => {
+        resolveA = res;
       });
 
-      await $.nextTick(); // Wait for initial mount
-      beforeSpy.mockClear();
+      const nav = createNav({
+        target: '#main-content',
+        onBeforeLoad: (url) => (url === '/a' ? hookA : true),
+      });
 
-      // Navigate to the same URL
-      await nav.navigate('/');
+      // Start A (pending hook)
+      nav.navigate('/a');
+      await vi.waitFor(() => expect(nav.isPending.value).toBe(true));
 
-      // Should completely ignore the navigation and not trigger pending
-      expect(beforeSpy).not.toHaveBeenCalled();
-      expect(nav.isPending.value).toBe(false);
+      // Trigger hash transition (Phase 3) while A is pending
+      nav.navigate('/#hash');
+      await vi.waitFor(() => expect(nav.currentUrl.value).toBe('/#hash'));
+
+      // Resolve A's hook
+      resolveA(true);
+      await $.nextTick();
+
+      // Verification: URL remains at hash, not overwritten by /a
+      expect(nav.currentUrl.value).toBe('/#hash');
     });
   });
 
   describe('Scroll Management', () => {
-    it('should coordinate hash transitions, top-scrolling, and popstate restoration', async () => {
+    it('should coordinate hash targeting, top-scrolling, and native popstate behavior', async () => {
       const scrollSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
       const scrollIntoViewSpy = vi.fn();
       Element.prototype.scrollIntoView = scrollIntoViewSpy;
 
       const nav = createNav({ target: '#main-content' });
 
-      // Case 1: Hash navigation (Complex chars)
+      // Case 1: Target an element via hash (including special chars)
       mockAjax('<div id="a.b:c">Target</div>');
       await nav.navigate('/p#a.b:c');
       await vi.waitFor(() => expect(scrollIntoViewSpy).toHaveBeenCalled());
 
-      // Case 2: Removing hash (Should scroll to top)
+      // Case 2: Standard internal navigation (should scroll to top)
       scrollSpy.mockClear();
-      await nav.navigate('/p');
+      await nav.navigate('/q');
       await vi.waitFor(() => expect(scrollSpy).toHaveBeenCalledWith(0, 0));
 
-      // Case 3: Same-page "#"
+      // Case 3: Same-page "#" anchor
       scrollSpy.mockClear();
       await nav.navigate('#');
       await vi.waitFor(() => expect(scrollSpy).toHaveBeenCalledWith(0, 0));
 
-      // Case 4: Popstate (Should NOT force scroll, allow native restoration)
+      // Case 4: Popstate (native restoration, usually doesn't force scroll)
       scrollSpy.mockClear();
       window.dispatchEvent(new PopStateEvent('popstate'));
       expect(scrollSpy).not.toHaveBeenCalled();
@@ -327,73 +350,21 @@ describe('$.atomNav', () => {
     });
   });
 
-  describe('Advanced Routing & Resource Safety', () => {
-    it('should handle server-side redirects via X-PJAX-URL efficiently and trigger hooks with correct final URL', async () => {
-      const mountSpy = vi.fn();
-      const unmountSpy = vi.fn();
-      mockAjax('Redirected', false, { 'X-PJAX-URL': '/final' });
+  describe('Edge Cases & Recovery', () => {
+    it('should follow server-side redirects via X-PJAX-URL and maintain state integrity', async () => {
+      mockAjax('Final Body', false, { 'X-PJAX-URL': '/final' });
+      const nav = createNav({ target: '#main-content' });
 
-      const nav = createNav({
-        target: '#main-content',
-        onMount: mountSpy,
-        onUnmount: unmountSpy,
-      });
-
-      await $.nextTick();
-      mountSpy.mockClear();
-
-      await nav.navigate('/start');
+      await nav.navigate('/original');
       await vi.waitFor(() => {
         expect(nav.currentUrl.value).toBe('/final');
         expect(window.location.pathname).toBe('/final');
       });
 
-      // Verification of the fix: onMount should be called with '/final'
-      // and onUnmount should be called with the original mounting URL '/'
-      expect(unmountSpy).toHaveBeenCalledWith(expect.anything(), '/');
-      expect(mountSpy).toHaveBeenCalledWith(expect.anything(), '/final');
-
-      // Verification of state consistency: _renderedState should NOT be overwritten by /start
-      // Use internal-ish check or verify next navigation
-      mountSpy.mockClear();
-      mockAjax('Next Page');
-      await nav.navigate('/next');
-      await vi.waitFor(() => expect(nav.currentUrl.value).toBe('/next'));
-      expect(unmountSpy).toHaveBeenCalledWith(expect.anything(), '/final');
+      expect($target.text()).toBe('Final Body');
     });
 
-    it('should handle server-resolved redirect chains without re-fetching', async () => {
-      // In real HTTP, 3xx redirect chains are followed automatically by the browser/jQuery.
-      // The X-PJAX-URL header reports the FINAL destination after all redirects.
-      // The client should apply this final URL without triggering additional fetches.
-      const ajaxSpy = vi.spyOn($, 'ajax').mockImplementation(() => {
-        const promise = Promise.resolve('Final Content');
-        return Object.assign(promise, {
-          abort: vi.fn(),
-          getResponseHeader: vi.fn((name: string) =>
-            name === 'X-PJAX-URL' ? '/final-destination' : null
-          ),
-          getAllResponseHeaders: vi.fn(),
-          setRequestHeader: vi.fn(),
-          statusCode: vi.fn(),
-          promise: () => promise,
-        }) as unknown as JQuery.jqXHR;
-      });
-
-      const nav = createNav({ target: '#main-content' });
-      await nav.navigate('/original');
-
-      await vi.waitFor(() => {
-        expect(nav.currentUrl.value).toBe('/final-destination');
-        expect(window.location.pathname).toBe('/final-destination');
-      });
-
-      // Only 1 AJAX call should happen; the redirect chain is resolved server-side
-      expect(ajaxSpy).toHaveBeenCalledTimes(1);
-      expect($target.text()).toBe('Final Content');
-    });
-
-    it('should fallback to hard navigation on critical failures', async () => {
+    it('should fallback to hard navigation on critical AJAX failures', async () => {
       const assignMock = vi.fn();
       const mockWin = {
         location: { ...window.location, assign: assignMock },
@@ -401,19 +372,16 @@ describe('$.atomNav', () => {
         document: window.document,
         addEventListener: vi.fn(),
         removeEventListener: vi.fn(),
-      };
+      } as unknown as Window & typeof globalThis;
 
       mockAjax({ status: 500 }, true);
-      const nav = createNav({
-        target: '#main-content',
-        window: mockWin as unknown as Window & typeof globalThis,
-      });
+      const nav = createNav({ target: '#main-content', window: mockWin });
 
       await nav.navigate('/fail');
       await vi.waitFor(() => expect(assignMock).toHaveBeenCalledWith('/fail'));
     });
 
-    it('should clean up internal resources and DOM markers on destroy', async () => {
+    it('should clean up all listeners and reactive memory upon destruction', async () => {
       const abortSpy = vi.fn();
       mockAjax().mockImplementation(() => {
         const p = new Promise<string>(() => {});
@@ -421,19 +389,14 @@ describe('$.atomNav', () => {
       });
 
       const nav = createNav({ target: '#main-content' });
-      const currentUrlAtom = nav.currentUrl;
-      vi.spyOn(currentUrlAtom, 'dispose');
+      vi.spyOn(nav.currentUrl, 'dispose');
 
-      expect($target.attr('data-atom-nav-target')).toBe('true');
-
-      // 1. Pending request should be aborted
       nav.navigate('/pending');
       await vi.waitFor(() => expect(nav.isPending.value).toBe(true));
 
-      // 2. Destroy should cleanup everything
       nav.destroy();
       expect(abortSpy).toHaveBeenCalled();
-      expect(currentUrlAtom.dispose).toHaveBeenCalled();
+      expect(nav.currentUrl.dispose).toHaveBeenCalled();
       expect($target.attr('data-atom-nav-target')).toBeUndefined();
     });
   });

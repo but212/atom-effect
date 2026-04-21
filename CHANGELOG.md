@@ -6,7 +6,7 @@
 
 #### Fixed
 
-- **Navigation**: Ignore navigating to the exact same URL to prevent hook freezes and redundant pushes, with support for hash-only internal transition.
+- **Navigation**: Resolved a race condition where pending async hooks could overwrite state after a subsequent navigation.
 
 ## [0.31.0]
 

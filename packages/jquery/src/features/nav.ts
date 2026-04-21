@@ -37,7 +37,7 @@ function getPathAndSearch(urlObj: URL): string {
 /**
  * Parses raw HTML into a structured ContentState.
  *
- * Performance: Uses isolated DOMParser instances to extract clean fragments
+ * Optimization: Uses isolated DOMParser instances to extract clean fragments
  * without the high overhead of invisible iframes or global parser state.
  */
 function extractContent(html: string, selector?: string, xhr?: JQuery.jqXHR): ContentState {
@@ -74,7 +74,7 @@ function extractContent(html: string, selector?: string, xhr?: JQuery.jqXHR): Co
   };
 }
 
-/** Synchronizes <head> metadata with the new content state to maintain SEO/Social integrity. */
+/** Synchronization of <head> metadata with content state for SEO/Social integrity. */
 function syncMetaData(win: Window, meta?: Record<string, string>): void {
   const doc = win.document;
   const head = doc.head;
@@ -100,7 +100,7 @@ function syncMetaData(win: Window, meta?: Record<string, string>): void {
   sync('link[rel="canonical"]', meta?.canonical, 'canonical', true);
 }
 
-/** Updates attributes on the container element (classes, aria-labels) while preserving internal IDs. */
+/** Updates attributes on the container element while preserving non-id internal identifiers. */
 function updateAttributes(el: HTMLElement, next: Record<string, string>): void {
   for (const attr of Array.from(el.attributes)) {
     const { name } = attr;
@@ -131,17 +131,20 @@ function performScroll(win: Window, hash?: string, fallbackToTop = false): void 
 /**
  * Initializes a reactive Single Page Application (SPA) navigation system.
  *
- * Responsibilities:
- * 1. History Sync: Manages browser pushState/replaceState and popstate.
- * 2. Partial Loading: Fetches fragments of new pages and injects them into the target.
- * 3. Interception: Globally intercepts link clicks to prevent full page reloads.
- * 4. Automatic SEO: Updates <title> and <meta> tags on every navigation event.
+ * When to use:
+ * - When building AJAX-driven multi-page experiences within a jQuery ecosystem.
+ * - When SEO-friendly link interception and partial DOM replacement are required.
+ *
+ * @param options - Configuration including target container and lifecycle hooks.
+ * @returns A navigator interface for programmatic control and state monitoring.
  *
  * @example
  * const nav = $.atomNav({
  *   target: '#main-content',
  *   selector: 'a[data-nav]',
- *   onMount: ($target, url) => console.log('Arrived at:', url)
+ *   onMount: ($target, url) => {
+ *     console.log('Content mounted for:', url);
+ *   }
  * });
  */
 export function atomNav(options: AtomNavOptions): AtomNav {
@@ -200,7 +203,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
     return controller;
   }
 
-  /** Performs the actual DOM manipulation, ensuring reactive elements are properly unbound before removal. */
+  /** Logic: Executes DOM manipulation and ensures reactive cleanup of stale fragments. */
   function reconcileDOM(state: ContentState, url: string, previousUrl: string): void {
     $.untracked(() => {
       const doc = win.document;
@@ -211,8 +214,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
       syncMetaData(win, state.meta);
       options.onUnmount?.($target, previousUrl);
 
-      // Clean up: Manually unbind any reactive elements within the target areas
-      // BEFORE jQuery overwrites the HTML to prevent memory leaks.
+      // Logic: Cleanup of reactive elements before subtree replacement to prevent memory leaks.
       $target.children().atomUnbind();
 
       const el = $target[0] as HTMLElement | undefined;
@@ -225,12 +227,12 @@ export function atomNav(options: AtomNavOptions): AtomNav {
     });
   }
 
-  /** Central UI synchronization effect. Decides whether to re-fetch, re-render, or just scroll. */
+  /** Logic: Primary UI synchronization effect that orchestrates re-fetching and scrolling. */
   function syncUI(): undefined {
     const { url, pathAndSearch, hash, type } = _normalizedState.value;
     const rendered = _renderedState.value;
 
-    // Optimization: Skip re-fetching if only the hash changed. Just perform scroll.
+    // Optimization: Skip re-fetching if the path is identical to the currently rendered path.
     if (type === 'init' && pathAndSearch === rendered.path) {
       if (hash) performScroll(win, hash);
       options.onMount?.($target, url);
@@ -293,7 +295,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
   };
 
   const doc = win.document;
-  /** Global Link Interceptor: Hijacks clicks on <a> tags that match the provided selector. */
+  /** Logic: Global link interceptor that hijacks clicks matching the navigation policy. */
   doc.addEventListener(
     'click',
     (e) => {
@@ -304,7 +306,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
       const myId = $target.attr('id');
       const isExplicitTarget = targetAttr && myId && targetAttr === `#${myId}`;
 
-      // Logic: Only intercept if the link targets this specific nav instance.
+      // Logic: Verification that the link explicitly targets this specific navigator instance.
       if (targetAttr && !isExplicitTarget) return;
 
       const closestNavTarget = $(el).closest('[data-atom-nav-target="true"]')[0];
@@ -318,8 +320,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
         (e as unknown as { originalEvent?: { defaultPrevented?: boolean } }).originalEvent
           ?.defaultPrevented;
 
-      // Heuristic: Ignore clicks with modifier keys (Ctrl/Cmd/Shift) or non-primary mouse buttons
-      // to preserve standard "Open in new tab" OS behavior.
+      // Logic: Preservation of native browser behavior for modified clicks (Ctrl, Cmd, etc.).
       if (isPrevented || mouse.ctrlKey || mouse.metaKey || mouse.shiftKey || mouse.button > 0)
         return;
 
@@ -350,6 +351,15 @@ export function atomNav(options: AtomNavOptions): AtomNav {
 
   win.addEventListener('popstate', handlePopState, { signal: _lifecycleController.signal });
 
+  /** Commit state and history changes after internal navigation logic completes. */
+  const commitNavigation = (url: string, type: NavigationType): void => {
+    $.batch(() => {
+      const method = type === 'replace' ? 'replaceState' : 'pushState';
+      win.history[method](null, '', url);
+      _navState.value = { url, type };
+    });
+  };
+
   const navigator: AtomNav = {
     currentUrl: $.computed(() => _renderedState.value.url, { name: 'nav:public-url' }),
     isPending: $.computed(() => _content.isPending || _pendingHookCount.value > 0, {
@@ -357,73 +367,57 @@ export function atomNav(options: AtomNavOptions): AtomNav {
     }),
     hasError: $.computed(() => _content.hasError, { name: 'nav:hasError' }),
 
-    /** Programmatically trigger a navigation event. Supports 'replace' and 'onBeforeLoad' hooks. */
+    /**
+     * Programmatically triggers a navigation event.
+     *
+     * @param url - The target location (absolute or relative string).
+     * @param navOptions - Options for history manipulation and state control.
+     *
+     * @example
+     * nav.navigate('/settings', { replace: true });
+     */
     async navigate(url: string, navOptions: { replace?: boolean } = {}): Promise<void> {
-      const base = win.document.baseURI ?? win.location.href;
-      const targetObj = getAbsoluteUrl(url, base);
+      // Reason: Aborting previous tasks at the entry point prevents state corruption during racing hooks.
+      const { signal } = _renewAbortSignal();
+      const type: NavigationType = navOptions.replace ? 'replace' : 'push';
 
-      // Phase 1: External Origin (Full browser handoff)
-      if (targetObj.origin !== win.location.origin) {
-        win.location.assign(url);
-        return;
+      const base = win.document.baseURI ?? win.location.href;
+      const target = getAbsoluteUrl(url, base);
+      const current = getAbsoluteUrl(win.location.href, base);
+
+      // Logic: Internal vs External origin determination for handoff logic.
+      if (target.origin !== current.origin) {
+        return win.location.assign(url);
       }
 
-      const targetPath = getPathAndSearch(targetObj);
-      const currentUrlObj = getAbsoluteUrl(win.location.href, base);
-      const currentPath = getPathAndSearch(currentUrlObj);
+      const path = getPathAndSearch(target);
+      const isSamePath = path === getPathAndSearch(current);
+      const isSameLoc = isSamePath && target.hash === (current.hash || '');
 
-      const targetHash = targetObj.hash || '';
-      const currentHash = win.location.hash || '';
-
-      const isSamePath = targetPath === currentPath;
-      const isSameHash = targetHash === currentHash;
-      const isSameLoc = isSamePath && isSameHash;
-
-      // Phase 2: Exact same location shortcut (prevent hook freezes and redundant pushes)
-      if (isSameLoc && !navOptions.replace) {
-        // Enforce scroll if explicitly requested via hash links (or "#") without triggering state pushes
-        if (url.includes('#') || targetHash) {
-          performScroll(win, targetHash.slice(1), true);
+      // Logic: Bypass for cases where the destination is identical to the current viewport and state.
+      if (isSameLoc && type === 'push') {
+        if (url.includes('#') || target.hash) {
+          performScroll(win, target.hash.slice(1), true);
         }
         return;
       }
 
-      const finalUrl = targetPath + targetHash;
-
-      // Phase 3: Hash-only internal transition (Fast-path without AJAX hooks)
-      if (isSamePath) {
-        $.batch(() => {
-          const method = navOptions.replace ? 'replaceState' : 'pushState';
-          win.history[method](null, '', finalUrl);
-          _navState.value = { url: finalUrl, type: navOptions.replace ? 'replace' : 'push' };
-        });
-        return;
-      }
-
-      // Phase 4: Full single-page navigation via AJAX fetch with Hooks
-      const { signal } = _renewAbortSignal();
-
-      if (options.onBeforeLoad) {
+      // Logic: Asynchronous hook execution for blocking or redirecting navigation requests.
+      if (!isSamePath && options.onBeforeLoad) {
         _pendingHookCount.value++;
         try {
-          // Hook: Allows the application to cancel or redirect navigation before AJAX starts.
-          const hookResult = (options.onBeforeLoad as Function)(url, signal);
-          const ok = hookResult instanceof Promise ? await hookResult : hookResult;
+          const ok = await (options.onBeforeLoad as Function)(url, signal);
           if (signal.aborted || ok === false) return;
         } finally {
           _pendingHookCount.value = Math.max(0, _pendingHookCount.value - 1);
         }
       }
 
-      // Final synchronization after hook resolves
-      $.batch(() => {
-        const method = navOptions.replace ? 'replaceState' : 'pushState';
-        win.history[method](null, '', finalUrl);
-        _navState.value = { url: finalUrl, type: navOptions.replace ? 'replace' : 'push' };
-      });
+      // Data synchronization after all checks pass
+      commitNavigation(path + target.hash, type);
     },
 
-    /** Destroys the navigator instance, stripping listeners and cleaning up reactive memory. */
+    /** Constraint: Proper disposal of reactive effects and listeners to avoid memory leaks. */
     destroy() {
       _lifecycleController.abort();
       _navController?.abort();
