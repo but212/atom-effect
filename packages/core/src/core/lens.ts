@@ -7,7 +7,7 @@ import type { Paths, PathValue, WritableAtom } from '../types';
  * Logic: Recursively traverses the object path and creates new object/array instances
  * only for modified branches.
  *
- * Optimization: Avoids Rexex overhead for path safety checks and minimizes object allocations.
+ * Optimization: Avoids Regex overhead for path safety checks and minimizes object allocations.
  */
 export function setDeepValue(obj: unknown, keys: string[], index: number, value: unknown): unknown {
   if (index === keys.length) return value;
