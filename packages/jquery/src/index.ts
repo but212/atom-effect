@@ -7,6 +7,7 @@ import '@/bindings/mount';
 import '@/features/route';
 import '@/features/fetch';
 import '@/features/nav';
+import '@/features/web-component';
 
 import { enablejQueryOverrides } from '@/core/jquery-patch';
 import { disableAutoCleanup, enableAutoCleanup, registry } from '@/core/registry';
@@ -25,7 +26,6 @@ $(() => {
 });
 
 export { disablejQueryOverrides, enablejQueryOverrides } from '@/core/jquery-patch';
-export { nextTick } from '@/core/namespace';
 
 export type {
   AtomNavOptions,

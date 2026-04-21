@@ -8,6 +8,8 @@ vi.mock('@/core/registry', () => ({
   },
   enableAutoCleanup: vi.fn(),
   disableAutoCleanup: vi.fn(),
+  disableAutoCleanupFor: vi.fn(),
+  deferredCleanup: vi.fn(),
 }));
 
 vi.mock('@/core/jquery-patch', () => ({

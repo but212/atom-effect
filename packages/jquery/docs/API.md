@@ -10,6 +10,8 @@ This package extends jQuery with reactive capabilities. All methods are availabl
 - [Control Flow](#control-flow)
 - [Form Bindings](#form-bindings)
 - [Components](#components)
+- [Web Components (`$.useAtomComponent`)](#web-components)
+- [Dependency Injection (`$.provideAtom`, `$.injectAtom`)](#dependency-injection)
 - [Static Methods](#static-methods)
 - [Data Fetching (`$.atomFetch`)](#data-fetching)
 - [Routing (`$.route`)](#routing)
@@ -341,6 +343,81 @@ const UserProfile = ($el, { id }) => {
 
 $('#root').atomMount(UserProfile, { id: 42 });
 ```
+
+---
+
+## Web Components
+
+### `$.useAtomComponent(element)`
+
+Composition-based helper for adding AEJ reactive features to standard Web Components (Custom Elements). It returns a controller to manage the component's reactive lifecycle.
+
+**Parameters**:
+
+- `element`: `HTMLElement` (usually `this` inside a class).
+
+**Returns**: `AtomComponentController` object with:
+
+- `$root`: `JQuery` instance scoped to the component's root (ShadowRoot or Host).
+- `setup(shadowRoot?)`: Initializes reactive lifecycle and MutationObserver. Pass `shadowRoot` for closed-mode components.
+- `teardown()`: Disposes all bindings and disconnects observers. Call in `disconnectedCallback`.
+- `provideAtom(key, val)`: Scoped provider registration.
+- `injectAtom(key)`: Scoped context injection.
+
+```javascript
+class MyComp extends HTMLElement {
+  private aej = $.useAtomComponent(this);
+  
+  connectedCallback() {
+    this.aej.setup();
+    this.aej.$root.find('.title').atomText($.atom('Hello'));
+  }
+  
+  disconnectedCallback() {
+    this.aej.teardown();
+  }
+}
+```
+
+---
+
+## Dependency Injection
+
+### `$.provideAtom(target, key, atom)`
+
+Registers an element as a provider for a reactive context.
+
+- **target**: `string | HTMLElement | JQuery` — The provider element(s).
+- **key**: `string | symbol` — Unique identifier.
+- **atom**: The value to share.
+
+### `$.injectAtom(target, key)`
+
+Injects a reactive context provided by an ancestor.
+
+- **target**: `string | HTMLElement | JQuery` — The requesting element.
+- **key**: `string | symbol` — The identifier to find.
+
+**Returns**: The injected value or `null`.
+
+#### Type Safety (`AEJContextMap`)
+
+Extend `AEJContextMap` via declaration merging to enable strict typing:
+
+```typescript
+declare module '@but212/atom-effect-jquery' {
+  interface AEJContextMap {
+    'user-theme': WritableAtom<'light' | 'dark'>;
+  }
+}
+
+// injectAtom will now return WritableAtom<'light' | 'dark'> | null
+const theme = $.injectAtom(el, 'user-theme');
+```
+
+#### Shadow DOM Traversal
+
+AEJ's DI system automatically traverses Shadow DOM boundaries. If a provider is not found via standard event bubbling, it manually walks up the Shadow Host chain until a provider is found or the document root is reached.
 
 ### `.atomUnmount()`
 

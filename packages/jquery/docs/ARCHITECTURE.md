@@ -98,6 +98,14 @@ Bound elements receive a `_aes-bound` CSS class marker. This enables O(M) cleanu
 
 `enableAutoCleanup(root)` installs a `MutationObserver` on the specified `root` (Element, ShadowRoot, or DocumentFragment) that watches for removed nodes. For the global DOM, this is lazily initialized via `ensureAutoCleanup()` upon registering the very first reactive binding. The logic is robust against early initialization; it performs a safety check for `document.body` and gracefully recovers if the binding occurs before the body is ready. Multiple roots can be observed concurrently (e.g., for micro-frontends).
 
+#### 3.3.1 Move Robustness (Deferred Cleanup)
+
+To support synchronous DOM moves (e.g., `parent2.appendChild(el)`), the library implements **Deferred Cleanup** via `registry.deferredCleanup(node)`.
+
+- When an element is disconnected, it is marked as "ignored" and a cleanup task is queued as a **microtask**.
+- If the element is re-connected before the microtask runs, the cleanup is cancelled.
+- This ensures that reactive state (atoms, effects) is preserved during common jQuery operations like repositioning elements.
+
 ```text
 DOM Removal Detected
   → Is element type? (skip text/comment nodes)
@@ -111,7 +119,12 @@ DOM Removal Detected
 
 ### 3.4 Shadow DOM
 
-The global `MutationObserver` (on `document.body`) does not cross Shadow DOM boundaries. However, `enableAutoCleanup` now supports `ShadowRoot` as a root element. If you use Web Components, you can call `enableAutoCleanup(this.shadowRoot)` in `connectedCallback` to enable automatic cleanup within that shadow subtree, or manually call `registry.cleanupTree(this.shadowRoot)` in `disconnectedCallback`.
+The global `MutationObserver` (on `document.body`) does not cross Shadow DOM boundaries. However, AEJ provides enhanced Shadow DOM support through the `BindingRegistry`:
+
+- **Host Marking**: When a component is initialized (via `useAtomComponent`), its host is marked with an `_aes-has-shadow` class.
+- **Efficient Traversal**: `cleanupTree` and `cleanupDescendants` use this marker to jump directly to shadow hosts, avoiding O(N) full-tree scans while ensuring all shadow subtrees are cleaned.
+- **Closed Shadow Support**: The registry maintains a `WeakMap` of host elements to their `ShadowRoot` objects, allowing AEJ to clean up "closed" mode shadows that are otherwise inaccessible.
+- **Scoped Observers**: `useAtomComponent` automatically attaches a `MutationObserver` to the component's root (Host or ShadowRoot). These observers are explicitly disconnected during `teardown()` to prevent memory leaks (releasing the Map's strong reference to the ShadowRoot).
 
 ### 3.5 jQuery Method Patches
 
@@ -463,3 +476,35 @@ The `getSelector` utility in `utils/index.ts` generates human-readable identifie
 
 - **Format**: Returns `tag#id.class1.class2.type` for maximum context during debugging.
 - **SVG Support**: Handles SVG elements where `.className` returns an `SVGAnimatedString` object by accessing its `.baseVal`.
+
+## 16. Web Component & DI Integration
+
+`features/web-component.ts` implements a composition-based model for modern Web Components.
+
+### 16.1 Composition via `useAtomComponent`
+
+Instead of forced inheritance, AEJ uses a controller pattern:
+
+```typescript
+private aej = $.useAtomComponent(this);
+```
+
+This controller manages:
+
+- **Scoped jQuery (`$root`)**: A jQuery instance restricted to the Shadow DOM (or host).
+- **Lifecycle Sync**: Bridges `connectedCallback` to `setup()` and `disconnectedCallback` to `teardown()`.
+- **Observer Management**: Handles the scoped `MutationObserver` lifecycle for the component's boundary.
+
+### 16.2 Dependency Injection (DI) Engine
+
+`provideAtom` and `injectAtom` implement a reactive DI system using DOM events.
+
+#### 16.2.1 Transport Mechanism
+
+1. **Event Dispatch**: `injectAtom` dispatches a `aej:context-request` CustomEvent.
+2. **Bubbling**: The event bubbles up the DOM. Providers listen for this event and stop propagation if they hold the requested key.
+3. **Shadow Traversal (Fallback)**: If bubbling fails (e.g., due to retargeting limits or framework boundaries), AEJ performs a **Manual Shadow Host chain traversal**. It recursively walks up `getRootNode().host` to ensure the request reaches providers in outer scopes.
+
+#### 16.2.2 Type Safety (`AEJContextMap`)
+
+Users can enable strict typing by extending the global `AEJContextMap` interface. This allows `injectAtom` to return the correct Atom type based on the key string, providing full IDE support and compile-time validation.

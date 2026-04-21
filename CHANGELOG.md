@@ -10,15 +10,35 @@
 
 ### jQuery
 
+#### Added
+
+- **Web Components**: Introduced `$.useAtomComponent` for seamless reactive integration with standard Custom Elements via composition.
+  - **Scoped Root**: Added `$root` getter for scoped jQuery access, automatically targeting ShadowRoot when present.
+  - **Lifecycle Management**: Integrated `setup()` and `teardown()` hooks with automatic `MutationObserver` attachment and cleanup.
+- **Dependency Injection (DI)**: Added `$.provideAtom` and `$.injectAtom` for reactive context sharing across the DOM.
+  - **Shadow DOM Support**: Implemented `composed: true` event dispatch and manual Shadow Host chain traversal for robust cross-boundary resolution.
+  - **Polymorphic API**: Supports CSS selectors, raw `HTMLElement` nodes, and jQuery collections as input.
+  - **Type Safety**: Introduced `AEJContextMap` for strictly typed DI via declaration merging.
+
 #### Fixed
 
+- **Memory Management**: Resolved a leak where `MutationObserver` instances were not disconnected on component teardown, holding strong references to ShadowRoot nodes.
+- **DI Boundary**: Fixed DI resolution failures in nested Shadow DOM environments by implementing an explicit host-traversal fallback mechanism.
 - **Navigation**: Resolved a race condition where pending async hooks could overwrite state after a subsequent navigation.
 
 #### Changed
 
+- **Registry**: Enhanced `BindingRegistry` with Shadow DOM awareness.
+  - Added `registerShadow` and `markHost` for efficient subtree tracking.
+  - Optimized `cleanupTree` and `cleanupDescendants` to jump directly to shadow hosts, avoiding expensive `querySelectorAll('*')` traversals.
+- **Lifecycle**: Added `deferredCleanup` (move-aware) to preserve reactive state when elements are synchronously moved in the DOM.
 - **Fetch**: Refactored `$.atomFetch` for improved robustness and predictability.
   - Enhanced error normalization for network timeouts (status 0) and isolated `onError` hooks to prevent breaking the reactive chain.
   - Explicitly prioritized option merging (Direct Options > Dynamic Options > Static Options) and fixed header merging logic.
+
+#### Refactor
+
+- **Core Features**: Refactored `provideAtom` and `injectAtom` to use native DOM APIs (`addEventListener`, `querySelectorAll`, `toArray`), eliminating jQuery-specific overload ambiguity and improving performance.
 
 ## [0.31.0]
 

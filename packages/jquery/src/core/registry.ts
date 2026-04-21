@@ -13,6 +13,7 @@ let autoCleanupScheduled = false;
  * @internal
  */
 const AES_BOUND = '_aes-bound';
+const AES_HAS_SHADOW = '_aes-has-shadow';
 
 export interface BindingRecord {
   cleanups?: Array<() => void>;
@@ -37,6 +38,8 @@ class BindingRegistry {
 
   private ignoredNodes = new WeakSet<Node>();
 
+  private closedShadows = new WeakMap<Element, ShadowRoot>();
+
   /** Mark a node to preserve its effects even if detached from the DOM (e.g., jQuery .detach()). */
   keep(node: Node): void {
     this.preservedNodes.add(node);
@@ -55,8 +58,71 @@ class BindingRegistry {
     return this.ignoredNodes.has(node);
   }
 
+  /**
+   * Internal: Removes the 'ignored' flag to re-enable automatic cleanup.
+   * @internal
+   */
+  unmarkIgnored(node: Node): void {
+    this.ignoredNodes.delete(node);
+  }
+
+  /**
+   * Performs a move-aware cleanup of a node and its descendants.
+   *
+   * Logic: Deferring cleanup to the next microtask allows elements to be
+   * moved (disconnected then reconnected) without losing their reactive state.
+   *
+   * @param node - The node to tentatively clean up.
+   */
+  deferredCleanup(node: Node): void {
+    this.ignoredNodes.add(node);
+    queueMicrotask(() => {
+      if (node.isConnected) {
+        this.ignoredNodes.delete(node);
+      } else {
+        this.cleanupTree(node);
+      }
+    });
+  }
+
+  /**
+   * Registers a ShadowRoot to a host element for AEJ lifecycle tracking.
+   *
+   * @example
+   * const sr = host.attachShadow({ mode: 'closed' });
+   * registry.registerShadow(host, sr);
+   *
+   * @internal
+   */
+  registerShadow(host: Element, sr: ShadowRoot): void {
+    this.closedShadows.set(host, sr);
+  }
+
+  /**
+   * Marks a host element to indicate it has a managed ShadowRoot.
+   *
+   * Optimization: This adds a CSS class used by `cleanupDescendants` to avoid
+   * expensive full-tree traversal (`querySelectorAll('*')`).
+   *
+   * Constraint: Must be called after the element is upgraded or connected to
+   * avoid violation of Custom Element constructor rules.
+   *
+   * @internal
+   */
+  markHost(host: Element): void {
+    host.classList.add(AES_HAS_SHADOW);
+  }
+
+  /**
+   * Retrieves the ShadowRoot for a host, including tracked 'closed' roots.
+   * @internal
+   */
+  getShadow(host: Element): ShadowRoot | null {
+    return host.shadowRoot || this.closedShadows.get(host) || null;
+  }
+
   private getOrCreateRecord(element: Element): BindingRecord {
-    // Lazy-init: The mutation observer only starts when the first binding is created.
+    // Logic: Lazy-init the mutation observer only when the first binding is created.
     if (!autoCleanupScheduled && typeof document !== 'undefined' && document.body) {
       autoCleanupScheduled = true;
       enableAutoCleanup(document.body);
@@ -76,12 +142,17 @@ class BindingRegistry {
     record.cleanups.push(cleanupFunction);
   }
 
-  /** @internal */
-  trackEffect(element: Element, reactiveEffect: EffectObject): void {
+  /**
+   * Core tracking for reactive effects.
+   *
+   * Constraint: Effects must be tracked to ensure synchronous disposal
+   * when the host element is removed from the DOM.
+   */
+  trackEffect(element: Element, effect: EffectObject): void {
     const selector = getSelector(element);
     this.addCleanup(element, () => {
       try {
-        reactiveEffect.dispose();
+        effect.dispose();
       } catch (error) {
         debug.error(
           LOG_PREFIXES.BINDING,
@@ -150,16 +221,38 @@ class BindingRegistry {
   cleanupDescendants(root: Element | DocumentFragment | ShadowRoot): void {
     const nodes = root.querySelectorAll(`.${AES_BOUND}`);
 
+    // Reason: Scoped cleanup prevents memory leaks in reactive bindings.
     for (let i = 0, length = nodes.length; i < length; i++) {
       const node = nodes[i];
       if (node) this.cleanup(node);
     }
+
+    // Logic: Marker-based traversal (Data Dominates).
+    // Optimization: Instead of walking the whole tree with `*`, we jump to
+    // elements known to have shadow roots. This keeps cleanup O(N_bound + N_hosts).
+    const shadowHosts = root.querySelectorAll(`.${AES_HAS_SHADOW}`);
+    for (let i = 0, length = shadowHosts.length; i < length; i++) {
+      const el = shadowHosts[i] as Element;
+      const sr = this.getShadow(el);
+      if (sr) this.cleanupTree(sr);
+    }
   }
 
-  /** @internal */
+  /**
+   * Performs a deep recursive cleanup on a node and its entire Shadow DOM subtrees.
+   * @internal
+   */
   cleanupTree(node: Node): void {
     if (node.nodeType === 1 || node.nodeType === 11) {
-      this.cleanupDescendants(node as Element | DocumentFragment | ShadowRoot);
+      const root = node as Element | DocumentFragment | ShadowRoot;
+      this.cleanupDescendants(root);
+
+      // Logic: Shadow DOM Recursion (Root level).
+      // Constraint: Recursive call is necessary because shadow roots are isolated from querySelectorAll.
+      if (node.nodeType === 1) {
+        const sr = this.getShadow(node as Element);
+        if (sr) this.cleanupTree(sr);
+      }
     }
     this.cleanup(node);
   }
@@ -210,4 +303,23 @@ export function setAutoCleanupScheduled(scheduled: boolean): void {
 export function disableAutoCleanup(): void {
   observers.forEach((observer) => observer.disconnect());
   observers.clear();
+}
+
+/**
+ * Disconnects and removes the MutationObserver registered for a specific root node.
+ *
+ * Logic: Component-scoped cleanup.
+ * Unlike `disableAutoCleanup` (which clears all observers globally), this
+ * targets a single boundary. Used by `useAtomComponent.teardown()` to release
+ * the strong reference the `observers` Map holds to ShadowRoot nodes,
+ * preventing memory leaks on permanent component removal.
+ *
+ * @internal
+ */
+export function disableAutoCleanupFor(root: Node): void {
+  const observer = observers.get(root);
+  if (observer) {
+    observer.disconnect();
+    observers.delete(root);
+  }
 }

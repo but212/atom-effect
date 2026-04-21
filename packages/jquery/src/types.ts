@@ -8,6 +8,7 @@ import type {
   ReadonlyAtom,
   WritableAtom,
 } from '@but212/atom-effect';
+import type { AtomComponentController } from './features/web-component';
 
 export type EffectCleanup = () => void;
 export interface ComponentLifecycle {
@@ -139,6 +140,22 @@ export interface FetchError extends Error {
   jqXHR?: JQuery.jqXHR;
 }
 
+/**
+ * Logic: Strongly Typed DI Context Map
+ * Users can extend this interface via declaration merging to enable
+ * strict typing for provideAtom and injectAtom.
+ *
+ * @example
+ * declare module '@but212/atom-effect-jquery' {
+ *   interface AEJContextMap {
+ *     'user-theme': WritableAtom<'light' | 'dark'>;
+ *   }
+ * }
+ *
+ * @public
+ */
+export type AEJContextMap = {};
+
 /** Definition for a mountable component that manages its own lifecycle. */
 export type ComponentFn<P = Record<string, unknown>> = ($el: JQuery, props: P) => EffectResult;
 
@@ -230,6 +247,8 @@ declare global {
    */
   interface JQueryStatic {
     /**
+     * Creates a writable reactive atom.
+     *
      * When to use:
      * - When you need a source of truth for a specific piece of state.
      * - When that state needs to be updated manually (unlike Computeds).
@@ -502,37 +521,88 @@ declare global {
     ): ComputedAtom<T> & { abort: () => void; dispose(): void };
 
     /**
-     * Initializes a reactive Single Page Application (SPA) navigation system.
-     *
-     * Logic: Progressive Enhancement
-     * Hijacks standard link interactions and performs AJAX-based partial DOM
-     * replacements, maintaining history via the `pushState` API. Handles
-     * meta-tag synchronization, scroll management, and automatic reactive cleanup.
+     * Composition-based helper for AEJ Web Components.
      *
      * When to use:
-     * - Building AJAX-driven multi-page experiences within a jQuery ecosystem.
-     * - Requiring SEO-friendly link interception and partial DOM replacement.
+     * - When adding reactive capabilities to standard Custom Elements.
+     * - When you want to avoid 'this' pollution and maintain perfect type safety.
      *
-     * @param options - Configuration including target container and lifecycle hooks.
-     * @returns A navigator interface for programmatic control and state monitoring.
+     * @param element - The host element (usually 'this').
+     * @returns A controller for managing reactive lifecycle and scoped root.
      *
      * @example
-     * ```typescript
-     * const nav = $.atomNav({
-     *   target: '#main-content',
-     *   selector: 'a[data-nav]',
-     *   onMount: ($target, url) => {
-     *     console.log('Page loaded:', url);
+     * class MyComp extends HTMLElement {
+     *   private aej = $.useAtomComponent(this);
+     *   connectedCallback() {
+     *     this.aej.setup();
+     *     this.aej.$root.text('Hello AEJ');
      *   }
-     * });
-     *
-     * // Trigger manual navigation
-     * nav.navigate('/profile');
-     * ```
+     *   disconnectedCallback() {
+     *     this.aej.teardown();
+     *   }
+     * }
      *
      * @public
      */
     atomNav(options: AtomNavOptions): AtomNav;
+
+    /**
+     * Registers an element (or multiple) as a provider for a reactive context.
+     *
+     * @param element - The host element, selector, or JQuery collection.
+     * @param key - Unique identifier for the context.
+     * @param val - The value (usually an Atom) to be shared.
+     *
+     * @public
+     */
+    provideAtom<K extends keyof AEJContextMap>(
+      element: HTMLElement | JQuery | string,
+      key: K,
+      val: AEJContextMap[K]
+    ): void;
+    provideAtom(element: HTMLElement | JQuery | string, key: string | symbol, val: unknown): void;
+
+    /**
+     * Injects a reactive context provided by an ancestor element.
+     *
+     * @param element - The element or selector requesting the context.
+     * @param key - The unique identifier of the context to find.
+     * @returns The injected value if a provider was found, otherwise `null`.
+     *
+     * @public
+     */
+    injectAtom<K extends keyof AEJContextMap>(
+      element: HTMLElement | JQuery | string,
+      key: K
+    ): AEJContextMap[K] | null;
+    injectAtom<T>(element: HTMLElement | JQuery | string, key: string | symbol): T | null;
+
+    /**
+     * Composition-based helper for AEJ Web Components.
+     *
+     * When to use:
+     * - When adding reactive capabilities to standard Custom Elements.
+     * - When you want to avoid 'this' pollution and maintain perfect type safety.
+     *
+     * @param element - The host element (usually 'this').
+     * @returns A controller for managing reactive lifecycle and scoped root.
+     *
+     * @example
+     * class MyComp extends HTMLElement {
+     *   // Safe: class field initializers run after super(), so capturing `this` here is valid.
+     *   private aej = $.useAtomComponent(this);
+     *   connectedCallback() {
+     *     this.aej.setup();
+     *     this.aej.$root.text('Hello AEJ');
+     *   }
+     *   disconnectedCallback() {
+     *     this.aej.teardown();
+     *   }
+     * }
+     *
+     * @public
+     */
+    useAtomComponent(element: HTMLElement): AtomComponentController;
   }
 
   /**
