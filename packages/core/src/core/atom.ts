@@ -94,8 +94,8 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
     if ((nextFlags & SYNC_BIT) !== 0 && !scheduler.isBatching) {
       if (this._notifying === 0) {
         this._flushNotifications();
-        return;
       }
+      return;
     }
 
     scheduler.schedule(this);
