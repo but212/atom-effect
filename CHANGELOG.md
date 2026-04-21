@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+### jQuery
+
+#### Fixed
+
+- **Navigation**: Resolved a race condition where pending async hooks could overwrite state after a subsequent navigation.
+
 ## [0.31.0]
 
 ### Core

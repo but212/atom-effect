@@ -632,7 +632,10 @@ A state-driven lightweight navigation module (PJAX) for jQuery. It intercepts li
 - `currentUrl`: `ReadonlyAtom<string>` — Reactive current URL.
 - `isPending`: `ReadonlyAtom<boolean>` — Loading state (includes network and `onBeforeLoad` hook duration).
 - `hasError`: `ReadonlyAtom<boolean>` — Error state.
-- `navigate(url, options?)`: Programmatically navigate. `options.replace` can be used for history replacement. Returns a `Promise<void>` that resolves when navigation/hydration is complete.
+- `navigate(url, options?)`: Programmatically navigate. Defaults to a `pushState` history entry. Pass `{ replace: true }` to use `replaceState`.
+  - **Optimization**: Navigating to the exact same location (same path and hash) is ignored to prevent redundant network requests and hook freezes, unless `replace` is requested.
+  - **Hash Transitions**: Internal hash transitions without path changes bypass AJAX hooks and trigger native scrolling immediately.
+  - Returns a `Promise<void>` that resolves when navigation/hydration is complete.
 - `destroy()`: Cleanup listeners, abort pending requests, and dispose atoms.
 
 ```javascript
