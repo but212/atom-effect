@@ -8,6 +8,12 @@
 
 - **Navigation**: Resolved a race condition where pending async hooks could overwrite state after a subsequent navigation.
 
+#### Changed
+
+- **Fetch**: Refactored `$.atomFetch` for improved robustness and predictability.
+  - Enhanced error normalization for network timeouts (status 0) and isolated `onError` hooks to prevent breaking the reactive chain.
+  - Explicitly prioritized option merging (Direct Options > Dynamic Options > Static Options) and fixed header merging logic.
+
 ## [0.31.0]
 
 ### Core
