@@ -288,5 +288,6 @@ export function bindForm<T extends object>(
   atom: WritableAtom<T>,
   options: FormOptions<unknown> = {}
 ): void {
+  registry.cleanup(form);
   new FormBinder(form, atom, options);
 }

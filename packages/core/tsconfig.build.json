@@ -1,25 +1,25 @@
 {
-  /** 
+  /**
    * Reason: Production Build Isolation
-   * Inherits from the local development configuration but restricts the 
-   * scope to production source code. 
+   * Inherits from the local development configuration but restricts the
+   * scope to production source code.
    */
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    /** 
+    /**
      * Constraint: Output Integrity
-     * Restricts the root directory to 'src' to ensure that the distribution 
-     * bundle contains only library logic, excluding configuration and test files. 
+     * Restricts the root directory to 'src' to ensure that the distribution
+     * bundle contains only library logic, excluding configuration and test files.
      */
     "rootDir": "./src",
     "outDir": "./dist",
     "types": ["node"]
   },
   "include": ["src/**/*"],
-  /** 
+  /**
    * Logic: Artifact Filtering
-   * Explicitly excludes tests and development artifacts from the production 
-   * build to minimize bundle size and prevent leakage of internal test utilities. 
+   * Explicitly excludes tests and development artifacts from the production
+   * build to minimize bundle size and prevent leakage of internal test utilities.
    */
   "exclude": ["node_modules", "dist", "**/*.test.ts", "__tests__", "__benchmarks__"]
 }

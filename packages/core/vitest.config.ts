@@ -7,9 +7,9 @@ const SRC_PATH = path.resolve(__dirname, 'src');
 
 /**
  * Vitest Configuration: Core Engine
- * 
- * Orchestrates the comprehensive testing suite for the core reactive engine. 
- * Splits testing into isolated projects to handle both pure logic (Node.js) 
+ *
+ * Orchestrates the comprehensive testing suite for the core reactive engine.
+ * Splits testing into isolated projects to handle both pure logic (Node.js)
  * and browser-specific DOM interactions (Playwright) efficiently.
  */
 export default defineConfig({
@@ -22,8 +22,8 @@ export default defineConfig({
     globals: true,
     /**
      * Logic: Coverage Instrumentation
-     * Configures V8-based coverage reporting, excluding build artifacts, 
-     * configuration files, and type definitions to ensure metrics focus on 
+     * Configures V8-based coverage reporting, excluding build artifacts,
+     * configuration files, and type definitions to ensure metrics focus on
      * executable logic.
      */
     coverage: {
@@ -44,7 +44,7 @@ export default defineConfig({
     projects: [
       /**
        * Logic: Unit Test Project
-       * Executes pure logic tests in a high-performance Node.js environment. 
+       * Executes pure logic tests in a high-performance Node.js environment.
        * Excludes DOM-dependent tests to maintain fast execution cycles.
        */
       {
@@ -62,7 +62,7 @@ export default defineConfig({
       },
       /**
        * Logic: DOM/Browser Test Project
-       * Uses Playwright to execute tests in a real Chromium instance, ensuring 
+       * Uses Playwright to execute tests in a real Chromium instance, ensuring
        * the core reactive logic interacts correctly with actual DOM APIs.
        */
       {

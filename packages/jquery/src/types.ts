@@ -40,7 +40,7 @@ export interface AtomOptions extends BaseAtomOptions {
  * A value that can be a static literal, a reactive atom, or a getter function.
  *
  * Logic: Polymorphic Input
- * Supports raw values for static initialization, reactive atoms for state-driven 
+ * Supports raw values for static initialization, reactive atoms for state-driven
  * updates, or functional getters for deferred execution of complex logic.
  *
  * @public
@@ -48,7 +48,7 @@ export interface AtomOptions extends BaseAtomOptions {
 export type ReactiveValue<T> = T | ReadonlyAtom<T> | (() => T);
 
 /**
- * A value that can be a static literal, a reactive atom, a promise, or a getter 
+ * A value that can be a static literal, a reactive atom, a promise, or a getter
  * function that returns any of these.
  *
  * When to use:
@@ -78,8 +78,8 @@ export type CssBindings = Record<string, CssValue>;
  * Declaration of reactive bindings for a DOM element.
  *
  * Logic: Binding Strategy Map
- * Maps reactive sources to specific DOM manipulation strategies (text, class, 
- * val, etc.). This declarative structure allows the engine to batch updates 
+ * Maps reactive sources to specific DOM manipulation strategies (text, class,
+ * val, etc.). This declarative structure allows the engine to batch updates
  * and optimize resource cleanup automatically.
  *
  * @public
@@ -137,7 +137,7 @@ export type ListKeyFn<T> = (item: T, index: number) => ListKey;
  * Configuration options for reactive list rendering.
  *
  * Optimization: DOM Reconciliation
- * Uses unique keys for identity tracking to minimize DOM churn by reordering 
+ * Uses unique keys for identity tracking to minimize DOM churn by reordering
  * existing elements instead of re-rendering the entire list when data changes.
  *
  * @public
@@ -216,16 +216,16 @@ export type ComponentFn<P = Record<string, unknown>> = ($el: JQuery, props: P) =
 
 /** Lifecycle hooks for navigating between application routes. */
 export interface RouteLifecycle {
-  /** 
-   * Hook triggered before entering a route. 
+  /**
+   * Hook triggered before entering a route.
    * Returning false aborts the navigation.
    */
   onEnter?: (
     params: Record<string, string>,
     router: Router
   ) => Record<string, string> | undefined | false;
-  /** 
-   * Hook triggered before leaving the current route. 
+  /**
+   * Hook triggered before leaving the current route.
    * Returning false prevents navigation away.
    */
   onLeave?: (router: Router) => boolean | undefined;
@@ -329,7 +329,7 @@ export interface AtomNav {
  * Internal state flags for two-way bindings.
  *
  * Logic: Feedback Loop Protection
- * Prevents recursive update loops between the DOM and reactive atoms 
+ * Prevents recursive update loops between the DOM and reactive atoms
  * during two-way data flow (e.g., IME composition or rapid input events).
  *
  * @internal
@@ -374,7 +374,7 @@ export interface PatchOptions {
  */
 export interface AEJConfig {
   /**
-   * Configuration for jQuery prototype patches. 
+   * Configuration for jQuery prototype patches.
    * Set to false to disable all automated overrides.
    */
   patch?: boolean | PatchOptions;
@@ -387,11 +387,11 @@ export interface AEJConfig {
 
 /**
  * A scoped version of the jQuery selector function.
- * 
+ *
  * Logic: Scope Enforcement
- * Restricts element selection to the component's internal DOM tree (ShadowRoot 
+ * Restricts element selection to the component's internal DOM tree (ShadowRoot
  * or host container) to ensure encapsulation and prevent cross-component leaks.
- * 
+ *
  * @public
  */
 export type JQueryScopedSelector = (
@@ -591,7 +591,7 @@ declare global {
      * - Inspecting error causes and call stacks in binding hooks.
      *
      * Logic: Runtime Control
-     * Toggle `debug.enabled` at runtime (e.g., via the browser console) to 
+     * Toggle `debug.enabled` at runtime (e.g., via the browser console) to
      * activate visual instrumentation without requiring a page reload.
      *
      * @example
@@ -657,8 +657,8 @@ declare global {
      * Initializes a client-side router for the application.
      *
      * Logic: Reactive Routing
-     * Orchestrates URL synchronization, path matching, and dynamic view 
-     * rendering. Uses atoms to provide reactive access to route state, 
+     * Orchestrates URL synchronization, path matching, and dynamic view
+     * rendering. Uses atoms to provide reactive access to route state,
      * enabling effortless synchronization of UI elements like breadcrumbs.
      *
      * Capabilities:
@@ -692,9 +692,9 @@ declare global {
      * Creates a computed atom that manages an asynchronous AJAX lifecycle.
      *
      * Logic: Concurrency Control
-     * - Uses `AbortController` and `jqXHR.abort()` to ensures that only the 
+     * - Uses `AbortController` and `jqXHR.abort()` to ensures that only the
      *   result of the most recent request is reflected in the atom's state.
-     * - Discards older, "out-of-order" responses to prevent UI flickering 
+     * - Discards older, "out-of-order" responses to prevent UI flickering
      *   and data race conditions.
      *
      * When to use:
@@ -719,11 +719,11 @@ declare global {
     atomFetch<T>(
       url: string | (() => string),
       opts: FetchOptions<T>
-    ): ComputedAtom<T> & { 
+    ): ComputedAtom<T> & {
       /** Aborts the currently active request. */
-      abort: () => void; 
+      abort: () => void;
       /** Releases all reactive resources and aborts pending requests. */
-      dispose(): void 
+      dispose(): void;
     };
 
     /**
@@ -766,8 +766,8 @@ declare global {
      * Injects a reactive context provided by an ancestor element.
      *
      * Logic: Hybrid Discovery
-     * Consumes state from ancestors without direct coupling. Returns a proxy 
-     * that automatically re-discovers providers if the element is moved within 
+     * Consumes state from ancestors without direct coupling. Returns a proxy
+     * that automatically re-discovers providers if the element is moved within
      * the DOM hierarchy.
      *
      * @param element - The element or selector requesting the context.
@@ -843,7 +843,7 @@ declare global {
      * Reactively synchronizes the element's inner HTML.
      *
      * Caution: Security Risk
-     * Rendering unsanitized HTML from user input can lead to XSS attacks. 
+     * Rendering unsanitized HTML from user input can lead to XSS attacks.
      * Always ensure the source data is trusted or sanitized.
      *
      * @param src - The reactive source for the HTML content.
@@ -853,7 +853,7 @@ declare global {
     /**
      * Toggles CSS classes based on reactive conditions.
      *
-     * Logic: Supports both individual class toggling and batch management 
+     * Logic: Supports both individual class toggling and batch management
      * via mapping objects.
      *
      * @example
@@ -867,7 +867,7 @@ declare global {
     /**
      * Reactively synchronizes CSS styles.
      *
-     * Logic: Normalizes property names and units (e.g., 'px') to ensure 
+     * Logic: Normalizes property names and units (e.g., 'px') to ensure
      * cross-browser consistency for dynamic layouts.
      *
      * @example
@@ -916,7 +916,7 @@ declare global {
      * Establishes a two-way binding for form input values.
      *
      * Logic: Synchronization Engine
-     * Automatically coordinates updates between the DOM's `value` and a 
+     * Automatically coordinates updates between the DOM's `value` and a
      * writable atom, handling cursor stability and IME composition.
      *
      * @param atom - The writable atom to synchronize with.
@@ -935,7 +935,7 @@ declare global {
      * Orchestrates two-way bindings for an entire form element.
      *
      * Logic: Path Mapping
-     * Maps form field `name` attributes to nested properties of a reactive 
+     * Maps form field `name` attributes to nested properties of a reactive
      * object atom, allowing for efficient synchronization of complex models.
      *
      * @param atom - The writable atom containing the form data object.
@@ -955,7 +955,7 @@ declare global {
      * Entry point for declaring multiple reactive bindings in a single call.
      *
      * Logic: Batch Initialization
-     * Iterates through the provided options and executes the corresponding 
+     * Iterates through the provided options and executes the corresponding
      * binding logic in a deterministic order for optimal performance.
      *
      * @param opts - A mapping of binding types to their reactive sources.
@@ -966,7 +966,7 @@ declare global {
      * Synchronizes a reactive data source with a list of DOM elements.
      *
      * Logic: List Reconciliation
-     * Employs a double-ended diffing algorithm to minimize DOM manipulations 
+     * Employs a double-ended diffing algorithm to minimize DOM manipulations
      * by identifying moves, additions, and deletions via unique keys.
      *
      * @param src - The read-only atom containing the source array.
@@ -978,7 +978,7 @@ declare global {
      * Mounts a reactive component and manages its isolated lifecycle.
      *
      * Logic: Component Sandbox
-     * Handles automatic teardown of existing content, isolated component 
+     * Handles automatic teardown of existing content, isolated component
      * execution, and registration of cleanup hooks in the global registry.
      *
      * @param comp - The component function to mount.

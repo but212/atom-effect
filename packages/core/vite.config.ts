@@ -4,14 +4,14 @@ import dts from 'vite-plugin-dts';
 
 /**
  * Vite Configuration: Atom-Effect Core
- * 
- * Orchestrates the build process for the core reactive engine, producing 
+ *
+ * Orchestrates the build process for the core reactive engine, producing
  * cross-environment bundles (ESM, CJS, UMD) and unified type definitions.
  */
 export default defineConfig(({ mode }) => ({
-  /** 
+  /**
    * Logic: Environment Injection
-   * Injects the current build mode into the bundle to allow for runtime 
+   * Injects the current build mode into the bundle to allow for runtime
    * branching (e.g., stripping development diagnostics in production).
    */
   define: {
@@ -40,9 +40,9 @@ export default defineConfig(({ mode }) => ({
     rollupOptions: {
       external: [],
       output: {
-        /** 
+        /**
          * Logic: Bundling Strategy
-         * Disables preserveModules to produce a single-file bundle for the 
+         * Disables preserveModules to produce a single-file bundle for the
          * core library, ensuring optimal load performance for CDN users.
          */
         preserveModules: false,
@@ -57,9 +57,9 @@ export default defineConfig(({ mode }) => ({
     /**
      * Logic: Declaration Orchestration
      * Generates and bundles TypeScript declaration files.
-     * 
+     *
      * Optimization: Unified Types
-     * Uses rollupTypes to merge internal declarations into a single public 
+     * Uses rollupTypes to merge internal declarations into a single public
      * d.ts file, providing a cleaner developer experience for consumers.
      */
     dts({

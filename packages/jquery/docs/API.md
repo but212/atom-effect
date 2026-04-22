@@ -122,7 +122,7 @@ Updates `innerHTML`.
 > $('#container').atomHtml(safeContent);
 > ```
 
-### `.atomClass(className, atom)` or `.atomClass({ class: atom })`
+### `.atomClass(className, atom)` or `.atomClass(classMap)`
 
 Toggles `className` based on the atom's truthiness. Supports multiple space-separated classes in a single key.
 
@@ -134,7 +134,7 @@ $('#btn').atomClass('disabled', isLoading);
 $el.atomClass({ 'active highlight': atom1, 'active large': atom2 });
 ```
 
-### `.atomCss(property, atom, unit?)`
+### `.atomCss(property, atom, unit?)` or `.atomCss(propertyMap)`
 
 Updates a single CSS property. An optional `unit` string (e.g. `'px'`) is appended to the value.
 
@@ -143,7 +143,7 @@ $('.box').atomCss('opacity', opacityLevel);
 $('.box').atomCss('width', widthAtom, 'px');
 ```
 
-### `.atomAttr(attribute, atom)`
+### `.atomAttr(attribute, atom)` or `.atomAttr(attributeMap)`
 
 Updates an HTML attribute.
 
@@ -155,7 +155,7 @@ Updates an HTML attribute.
 $('img').atomAttr('src', imageUrl);
 ```
 
-### `.atomProp(property, atom)`
+### `.atomProp(property, atom)` or `.atomProp(propertyMap)`
 
 Updates a DOM property.
 

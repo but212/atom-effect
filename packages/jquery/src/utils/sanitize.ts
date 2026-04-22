@@ -237,17 +237,17 @@ function isCssDangerous(value: string, policy: SanitizationPolicy): boolean {
  */
 const ATTRIBUTE_HANDLERS: Record<
   string,
-  (element: HTMLElement, name: string, value: string) => void
+  (element: HTMLElement, name: string, value: string, policy: SanitizationPolicy) => void
 > = {
-  srcdoc: (element, name, value) => {
+  srcdoc: (element, name, value, policy) => {
     const normalizedValue = normalizeValue(value);
-    DOM_PROTOTYPE_BRIDGE.setAttribute(element, name, sanitizeHtml(normalizedValue));
+    DOM_PROTOTYPE_BRIDGE.setAttribute(element, name, sanitizeHtml(normalizedValue, policy));
   },
   srcset: (element, name, value) => {
     DOM_PROTOTYPE_BRIDGE.setAttribute(element, name, scrubSrcset(value));
   },
-  style: (element, _, value) => {
-    if (isCssDangerous(value, DEFAULT_POLICY)) {
+  style: (element, _, value, policy) => {
+    if (isCssDangerous(value, policy)) {
       DOM_PROTOTYPE_BRIDGE.setAttribute(element, 'style', 'data-unsafe-css:');
     }
   },
@@ -283,7 +283,7 @@ function applySecurityPolicy(element: HTMLElement, policy: SanitizationPolicy): 
     }
 
     if (ATTRIBUTE_HANDLERS[lowerName]) {
-      ATTRIBUTE_HANDLERS[lowerName]!(element, name, value);
+      ATTRIBUTE_HANDLERS[lowerName]!(element, name, value, policy);
     } else if (policy.urlAttributes.includes(lowerName)) {
       const normalizedValue = normalizeValue(value);
       if (isDangerousProtocol(normalizedValue)) {
@@ -388,11 +388,14 @@ function executeSanitizationWalk(
  * // Result: <img src="x" data-unsafe-attr="onerror">
  * ```
  */
-export function sanitizeHtml(html: string | null | undefined): string {
+export function sanitizeHtml(
+  html: string | null | undefined,
+  policy: SanitizationPolicy = DEFAULT_POLICY
+): string {
   if (!html) return '';
   const template = document.createElement('template');
   template.innerHTML = String(html);
-  executeSanitizationWalk(template.content);
+  executeSanitizationWalk(template.content, policy);
   return template.innerHTML;
 }
 

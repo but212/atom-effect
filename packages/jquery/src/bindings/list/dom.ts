@@ -241,10 +241,12 @@ export function placeItems<T>(
     let el = container.firstElementChild;
     for (let i = 0; i < count; i++) {
       if (!el) break;
-      el.setAttribute('data-atom-key', String(newKeys[i]));
+      const key = newKeys[i]!;
+      const $el = $(el) as unknown as JQuery;
+      el.setAttribute('data-atom-key', String(key));
       newNodes[i] = el;
       newStates[i] = ItemState.Existing;
-      debug.domUpdated(SYSTEM_LIST.PREFIX, $(el) as unknown as JQuery, 'list.add', newItems[i]);
+      debug.domUpdated(SYSTEM_LIST.PREFIX, $el, 'list.add', newItems[i]);
       el = el.nextElementSibling;
     }
     return;
