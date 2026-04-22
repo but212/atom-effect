@@ -47,8 +47,8 @@ describe('Web Component Features', () => {
 
       const injected = $.injectAtom(consumer, 'key');
 
-      // 1. Identity & Writable access
-      expect(injected).toBe(atom);
+      // 1. Value access & Writable behavior
+      expect(injected?.value).toBe(atom.value);
       injected!.value = 'updated';
       expect(atom.value).toBe('updated');
 
@@ -78,6 +78,45 @@ describe('Web Component Features', () => {
       ctrl.teardown();
       await $.nextTick();
       expect(injected?.value).toBeNull();
+    });
+
+    it('should maintain reactivity when node is moved to a different provider', async () => {
+      const providerA = document.createElement('div');
+      const providerB = document.createElement('div');
+      const consumer = document.createElement('div');
+
+      const atomA = $.atom('A');
+      const atomB = $.atom('B');
+
+      $.provideAtom(providerA, 'data', atomA);
+      $.provideAtom(providerB, 'data', atomB);
+
+      providerA.appendChild(consumer);
+      const injected = $.injectAtom(consumer, 'data');
+
+      expect(injected?.value).toBe('A');
+
+      // Move consumer to providerB
+      providerB.appendChild(consumer);
+
+      // Expected: Injected atom proxy should now resolve to B's value
+      expect(injected?.value).toBe('B');
+    });
+
+    it('should have consistent API between $.injectAtom and controller.injectAtom', () => {
+      const el = document.createElement('div');
+      const atom = $.atom('val');
+      $.provideAtom(document.body, 'key', atom);
+      document.body.appendChild(el);
+
+      const ctrl = $.useAtomComponent(el);
+      const injectedFromStatic = $.injectAtom(el, 'key');
+      const injectedFromCtrl = ctrl.injectAtom('key');
+
+      // Both should return the same proxy atom
+      expect(typeof injectedFromStatic?.value).toBe('string');
+      expect(typeof injectedFromCtrl?.value).toBe('string');
+      expect(injectedFromCtrl).toBe(injectedFromStatic);
     });
   });
 

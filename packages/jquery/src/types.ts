@@ -286,7 +286,7 @@ export interface AtomComponentFeatures {
   /** Registers a reactive provider on this element. */
   provideAtom<T = unknown>(key: string | symbol, val: T): void;
   /** Injects a reactive value from an ancestor. */
-  injectAtom<T = unknown>(key: string | symbol): T | null;
+  injectAtom<T = unknown>(key: string | symbol): WritableAtom<T> | null;
 }
 
 /**

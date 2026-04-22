@@ -156,6 +156,23 @@ function findContext(target: HTMLElement, key: string | symbol): unknown | null 
  * @internal
  */
 function createContextProxy<T>(target: HTMLElement, key: string | symbol): WritableAtom<T> {
+  let _shared: WritableAtom<T> | null = null;
+
+  const getShared = () => {
+    if (!_shared) {
+      _shared = $.computed(() => {
+        // Reactivity: Track versions to ensure effect re-runs on provider changes
+        contextRegistry.globalVersion.value;
+        contextRegistry.getVersion(key).value;
+
+        // Freshness: Perform a synchronous lookup to catch DOM moves
+        const provider = findContext(target, key);
+        return (isAtom(provider) ? provider.value : provider) as T;
+      });
+    }
+    return _shared;
+  };
+
   const proxyAtom: WritableAtom<T> = {
     get value() {
       // Reactivity: Track versions to ensure effect re-runs on provider changes
@@ -176,13 +193,14 @@ function createContextProxy<T>(target: HTMLElement, key: string | symbol): Writa
       const provider = findContext(target, key);
       return (isAtom(provider) ? provider.peek() : provider) as T;
     },
-    subscribe: (fn) => {
-      // Logic: Bridge the dynamic lookup to standard subscribers via a computed
-      const lookup = $.computed(() => proxyAtom.value);
-      return lookup.subscribe(fn);
+    subscribe: (fn) => getShared().subscribe(fn),
+    subscriberCount: () => (_shared ? _shared.subscriberCount() : 0),
+    dispose: () => {
+      if (_shared) {
+        _shared.dispose();
+        _shared = null;
+      }
     },
-    subscriberCount: () => 0,
-    dispose: () => {},
 
     // Core Harmony: Officially branded to satisfy core type guards (isAtom/isWritable)
     [BRAND]: BrandFlags.Atom | BrandFlags.Writable,
@@ -258,9 +276,8 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       provideAtom(element, key, val);
     },
 
-    injectAtom<T = unknown>(key: string | symbol): T | null {
-      const atom = injectAtom(element, key);
-      return atom ? (atom.value as T) : null;
+    injectAtom<T = unknown>(key: string | symbol): WritableAtom<T> | null {
+      return injectAtom(element, key);
     },
 
     setup(shadowRoot?: ShadowRoot) {
@@ -396,15 +413,6 @@ export function injectAtom<T = unknown>(
 
   const cached = contextRegistry.getCache<T>(target, key);
   if (cached) return cached;
-
-  const initial = findContext(target, key);
-
-  // Optimization: Return the original atom instance directly if available to satisfy
-  // identity-based tests and maintain direct writability to the source atom.
-  if (isAtom(initial)) {
-    contextRegistry.setCache(target, key, initial);
-    return initial as WritableAtom<T>;
-  }
 
   const proxyAtom = createContextProxy<T>(target, key);
   contextRegistry.setCache(target, key, proxyAtom);
