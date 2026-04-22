@@ -5,7 +5,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { aeNextTick, atom, batch, type ComputedError, computed, effect, untracked } from '@/index';
-import { getNodeVersion } from './utils/test-helpers';
+import { getNodeVersion } from '../utils/test-helpers';
 
 // ─── 1. Version Semantics ───────────────────────────────────────────────────
 

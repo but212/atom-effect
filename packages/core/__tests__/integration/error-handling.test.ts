@@ -4,7 +4,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { aeNextTick, atom, computed, effect } from '@/index';
-import { sleep } from '../../utils/test-helpers';
+import { sleep } from '../utils/test-helpers';
 
 describe('Core - Error Handling and Propagation', () => {
   describe('Sync Error Propagation & Recovery', () => {
