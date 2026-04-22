@@ -197,4 +197,73 @@ describe('Web Component Features', () => {
       container.remove();
     });
   });
+
+  describe('Advanced Features (Automated Sync & Bridge)', () => {
+    it('should automatically bump version when node moves between providers', async () => {
+      const p1 = document.createElement('div');
+      const p2 = document.createElement('div');
+      const consumer = document.createElement('div');
+
+      $.provideAtom(p1, 'key', 'value1');
+      $.provideAtom(p2, 'key', 'value2');
+      p1.appendChild(consumer);
+      document.body.appendChild(p1);
+      document.body.appendChild(p2);
+
+      const injected = $.injectAtom(consumer, 'key');
+      const spy = vi.fn(() => injected?.value);
+      $.effect(() => {
+        spy();
+        return undefined;
+      });
+
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy).toHaveReturnedWith('value1');
+
+      // Move node - triggers globalTreeObserver MutationObserver
+      p2.appendChild(consumer);
+
+      // Wait for MutationObserver microtask and Effect flush
+      await $.nextTick();
+      await $.nextTick();
+
+      expect(spy).toHaveBeenCalledTimes(2);
+      expect(spy).toHaveReturnedWith('value2');
+    });
+
+    it('should synchronize provided atoms to CSS custom properties (CSS Bridge)', async () => {
+      const el = document.createElement('div');
+      const theme = $.atom('dark');
+      $.provideAtom(el, 'theme', theme);
+
+      expect(el.style.getPropertyValue('--aej-theme')).toBe('dark');
+
+      theme.value = 'light';
+      await $.nextTick();
+      expect(el.style.getPropertyValue('--aej-theme')).toBe('light');
+    });
+
+    it('should automatically synchronize observedAttributes to reactive atoms', async () => {
+      class AttrComp extends HTMLElement {
+        static observedAttributes = ['active'];
+        aej = $.useAtomComponent(this);
+      }
+      const randomName = `attr-comp-${Math.random().toString(36).slice(2, 7)}`;
+      customElements.define(randomName, AttrComp);
+
+      const el = document.createElement(randomName) as AttrComp;
+      el.setAttribute('active', 'true');
+      document.body.appendChild(el);
+      el.aej.setup();
+
+      const attrs = el.aej.attrs;
+      expect(attrs.active?.value).toBe('true');
+
+      el.setAttribute('active', 'false');
+      // Wait for MutationObserver batch
+      await $.nextTick();
+      await $.nextTick();
+      expect(attrs.active?.value).toBe('false');
+    });
+  });
 });

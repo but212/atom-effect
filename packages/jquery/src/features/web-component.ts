@@ -1,7 +1,7 @@
 import { BRAND, BrandFlags, isAtom, isWritable } from '@but212/atom-effect';
 import $ from 'jquery';
 import { disableAutoCleanupFor, enableAutoCleanup, registry } from '@/core/registry';
-import type { AtomComponentController, WritableAtom } from '@/types';
+import type { AtomComponentController, EffectObject, WritableAtom } from '@/types';
 
 // ─── Symbols & Internal Types ───────────────────────────────────────────────
 
@@ -21,35 +21,28 @@ const CLEANUP_MARKER = Symbol.for('aej:cleanup-enabled');
 interface AEJState {
   controller?: AtomComponentController;
   providers?: Map<string | symbol, unknown>;
+  /** Track effects used for CSS Bridge to ensure cleanup on override. */
+  providerEffects?: Map<string | symbol, EffectObject>;
+  /**
+   * Cache for injected atoms to prevent redundant proxy creation.
+   * Logic: Data locality ensures that cache follows the node lifecycle naturally.
+   */
+  injects?: Map<
+    string | symbol,
+    { globalVer: number; keyVer: number; atom: WritableAtom<unknown> }
+  >;
 }
 
 /** @internal */
 type AEJNode = Node & { [AEJ_STATE]?: AEJState; [CLEANUP_MARKER]?: boolean };
 
-// ─── Context Registry (Data Structure) ───────────────────────────────────────
-
 /**
- * Encapsulates the reactive context's versioning and caching logic.
- *
- * Optimization: Uses a version-aware WeakMap cache to prevent redundant tree
- * traversals while ensuring that provider overrides and DOM movements are
- * detected via version checks.
- *
- * Rule 5: Data dominates. Centralizing the state makes the algorithms self-evident.
+ * Central coordination for reactive context versioning.
  * @internal
  */
 const contextRegistry = {
   globalVersion: $.atom(0),
   keyVersions: new Map<string | symbol, WritableAtom<number>>(),
-
-  /**
-   * Cache structure: Node -> Key -> { versions, instance }
-   * Optimization: WeakMap ensures that cache entries are collected along with the Node.
-   */
-  injectCache: new WeakMap<
-    Node,
-    Map<string | symbol, { globalVer: number; keyVer: number; atom: WritableAtom<unknown> }>
-  >(),
 
   /**
    * Retrieves or initializes a version tracker for a specific context key.
@@ -75,10 +68,10 @@ const contextRegistry = {
   },
 
   /**
-   * Logic: Checks if a cached atom exists and is still valid based on current versions.
+   * Logic: Validates cached atoms against current global and key versions.
    */
-  getCache<T>(node: Node, key: string | symbol): WritableAtom<T> | null {
-    const entry = this.injectCache.get(node)?.get(key);
+  getCache<T>(node: HTMLElement, key: string | symbol): WritableAtom<T> | null {
+    const entry = getAEJState(node)?.injects?.get(key);
     if (
       entry &&
       entry.globalVer === this.globalVersion.value &&
@@ -90,21 +83,33 @@ const contextRegistry = {
   },
 
   /**
-   * Stores an atom in the cache with the current version snapshots.
+   * Stores a proxy atom with a version snapshot to detect stale lookups.
    */
-  setCache(node: Node, key: string | symbol, atom: WritableAtom<unknown>) {
-    let nodeMap = this.injectCache.get(node);
-    if (!nodeMap) {
-      nodeMap = new Map();
-      this.injectCache.set(node, nodeMap);
-    }
-    nodeMap.set(key, {
+  setCache(node: HTMLElement, key: string | symbol, atom: WritableAtom<unknown>) {
+    const s = getAEJState(node, true)!;
+    if (!s.injects) s.injects = new Map();
+    s.injects.set(key, {
       globalVer: this.globalVersion.value,
       keyVer: this.getVersion(key).value,
-      atom: atom as WritableAtom<unknown>,
+      atom,
     });
   },
 };
+
+let bumpTimer: ReturnType<typeof setTimeout> | null = null;
+const globalTreeObserver = new MutationObserver((mutations) => {
+  if (mutations.some((m) => m.addedNodes.length > 0 || m.removedNodes.length > 0)) {
+    if (bumpTimer) return;
+    bumpTimer = setTimeout(() => {
+      contextRegistry.bump();
+      bumpTimer = null;
+    }, 16); // Roughly 1 frame
+  }
+});
+
+if (typeof document !== 'undefined') {
+  globalTreeObserver.observe(document.documentElement, { childList: true, subtree: true });
+}
 
 // ─── Internal Helpers ─────────────────────────────────────────────────────────
 
@@ -119,10 +124,10 @@ const getAEJState = (node: Node, create = false): AEJState | undefined => {
 };
 
 /**
- * Traverses the composed tree to find a provided context value.
+ * Traverses the composed tree to find the nearest ancestor providing a key.
  *
  * Logic: Starts from the parent node to prevent an element from injecting
- * a context it provides itself (unless provided by a shadow host).
+ * a context it provides itself (unless provided via a shadow host).
  *
  * @internal
  */
@@ -137,7 +142,7 @@ function findContext(target: HTMLElement, key: string | symbol): unknown | null 
     if (next) {
       curr = next;
     } else if (curr.nodeType === 11) {
-      // DocumentFragment / ShadowRoot: Traverse up through the shadow host
+      // Logic: Traverse up through the shadow host for web components.
       curr = (curr as ShadowRoot).host || null;
     } else {
       curr = null;
@@ -161,11 +166,10 @@ function createContextProxy<T>(target: HTMLElement, key: string | symbol): Writa
   const getShared = () => {
     if (!_shared) {
       _shared = $.computed(() => {
-        // Reactivity: Track versions to ensure effect re-runs on provider changes
+        // Optimization: Track versions to ensure effect re-runs on provider changes
         contextRegistry.globalVersion.value;
         contextRegistry.getVersion(key).value;
 
-        // Freshness: Perform a synchronous lookup to catch DOM moves
         const provider = findContext(target, key);
         return (isAtom(provider) ? provider.value : provider) as T;
       });
@@ -175,11 +179,10 @@ function createContextProxy<T>(target: HTMLElement, key: string | symbol): Writa
 
   const proxyAtom: WritableAtom<T> = {
     get value() {
-      // Reactivity: Track versions to ensure effect re-runs on provider changes
+      // Optimization: Synchronous tracking for immediate reactivity.
       contextRegistry.globalVersion.value;
       contextRegistry.getVersion(key).value;
 
-      // Freshness: Perform a synchronous lookup to catch DOM moves
       const provider = findContext(target, key);
       return (isAtom(provider) ? provider.value : provider) as T;
     },
@@ -202,7 +205,7 @@ function createContextProxy<T>(target: HTMLElement, key: string | symbol): Writa
       }
     },
 
-    // Core Harmony: Officially branded to satisfy core type guards (isAtom/isWritable)
+    // Core Harmony: Branded to satisfy core type guards (isAtom/isWritable).
     [BRAND]: BrandFlags.Atom | BrandFlags.Writable,
   } as WritableAtom<T>;
 
@@ -212,28 +215,25 @@ function createContextProxy<T>(target: HTMLElement, key: string | symbol): Writa
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
- * Composition-based helper for creating AEJ-powered Web Components.
+ * Composition-based controller for AEJ-powered Web Components.
  *
  * When to use:
- * - When building standard Custom Elements with reactive state and scoped selection.
- * - When you want perfect type safety and predictable lifecycle management for components.
+ * - When building Custom Elements that need reactive state and scoped jQuery selection.
+ * - To manage complex component lifecycles with automatic resource cleanup.
  *
- * @param element - The host Custom Element (usually `this`).
- * @returns A controller for managing reactive lifecycle, providers, and scoped root.
+ * @param element - The host Custom Element instance.
+ * @returns A controller for managing reactivity, providers, and shadow root.
  *
  * @example
  * class MyComponent extends HTMLElement {
- *   // Capture 'this' as the reactive host
  *   private aej = $.useAtomComponent(this);
  *
  *   connectedCallback() {
- *     // Initialize shadow root and registry
  *     this.aej.setup();
- *     this.aej.$('button').on('click', () => console.log('Clicked!'));
+ *     this.aej.$('.btn').on('click', () => console.log('Clicked!'));
  *   }
  *
  *   disconnectedCallback() {
- *     // Clean up providers and observers
  *     this.aej.teardown();
  *   }
  * }
@@ -249,6 +249,10 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
   const reactive = {
     root: null as AEJNode | null,
     isInitialized: false,
+    attributeAtoms: new Map<string, WritableAtom<string | null>>(),
+    attributeObserver: null as MutationObserver | null,
+    treeObserver: null as MutationObserver | null,
+    attrsRecord: null as Record<string, WritableAtom<string | null>> | null,
   };
 
   const controller: AtomComponentController = {
@@ -256,6 +260,25 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
 
     get root() {
       return reactive.root;
+    },
+
+    get attrs() {
+      if (!reactive.attrsRecord) {
+        const observed =
+          (element.constructor as { observedAttributes?: string[] }).observedAttributes || [];
+        const result: Record<string, WritableAtom<string | null>> = {};
+
+        for (const name of observed) {
+          let atom = reactive.attributeAtoms.get(name);
+          if (!atom) {
+            atom = $.atom(element.getAttribute(name));
+            reactive.attributeAtoms.set(name, atom);
+          }
+          result[name] = atom;
+        }
+        reactive.attrsRecord = result;
+      }
+      return reactive.attrsRecord;
     },
 
     $: (selector, context) => {
@@ -293,9 +316,29 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       if (sr) {
         registry.markHost(element);
         registry.registerShadow(element, sr);
+        reactive.treeObserver = new MutationObserver(() => contextRegistry.bump());
+        reactive.treeObserver.observe(sr, { childList: true, subtree: true });
       }
 
       reactive.root = (sr ?? element) as AEJNode;
+
+      // Logic: Hook into attribute changes if observedAttributes are defined
+      const observed =
+        (element.constructor as { observedAttributes?: string[] }).observedAttributes || [];
+      if (observed.length > 0 && !reactive.attributeObserver) {
+        reactive.attributeObserver = new MutationObserver((mutations) => {
+          for (const m of mutations) {
+            if (m.type === 'attributes' && m.attributeName) {
+              const atom = reactive.attributeAtoms.get(m.attributeName);
+              if (atom) atom.value = element.getAttribute(m.attributeName);
+            }
+          }
+        });
+        reactive.attributeObserver.observe(element, {
+          attributes: true,
+          attributeFilter: observed,
+        });
+      }
 
       if (!reactive.root[CLEANUP_MARKER]) {
         enableAutoCleanup(reactive.root as Element | ShadowRoot);
@@ -316,10 +359,27 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
         for (const k of keys) contextRegistry.bump(k);
       }
 
+      if (state.providerEffects) {
+        for (const effect of state.providerEffects.values()) effect.dispose();
+        state.providerEffects.clear();
+      }
+
       if (!reactive.isInitialized) return;
 
       // Logic: Flag is set to false BEFORE cleanup to prevent re-entry if cleanup throws.
       reactive.isInitialized = false;
+
+      if (reactive.attributeObserver) {
+        reactive.attributeObserver.disconnect();
+        reactive.attributeObserver = null;
+      }
+
+      if (reactive.treeObserver) {
+        reactive.treeObserver.disconnect();
+        reactive.treeObserver = null;
+      }
+
+      reactive.attrsRecord = null;
 
       try {
         if (reactive.root?.[CLEANUP_MARKER]) {
@@ -338,19 +398,18 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
 }
 
 /**
- * Registers an element (or multiple) as a provider for a reactive context value.
+ * Registers an element as a provider for a reactive context value.
  *
  * When to use:
  * - When you need to share state (atoms) with deep descendant elements without prop drilling.
- * - To establish a theme, user session, or global configuration context at a specific root.
+ * - To establish theme or configuration contexts at specific DOM roots.
  *
- * @param element - The host element, selector, or JQuery collection to act as provider.
+ * @param element - The host element, selector, or JQuery collection.
  * @param key - Unique identifier for the context (string or symbol).
- * @param val - The value (usually an Atom) to be shared with descendants.
+ * @param val - The value or Atom to be shared.
  *
  * @example
- * // Parent provides a theme atom
- * const theme = $.atom('light');
+ * const theme = $.atom('dark');
  * $.provideAtom('#app-root', 'theme', theme);
  *
  * @public
@@ -370,7 +429,35 @@ export function provideAtom(
   for (const el of targets) {
     const s = getAEJState(el, true)!;
     if (!s.providers) s.providers = new Map();
+
+    // Logic: If overriding a provider, clean up the old CSS Bridge effect.
+    if (s.providerEffects?.has(key)) {
+      s.providerEffects.get(key)!.dispose();
+      s.providerEffects.delete(key);
+    }
+
     s.providers.set(key, val);
+
+    const keyStr = typeof key === 'symbol' ? key.description : String(key);
+    if (keyStr) {
+      const varName = `--aej-${keyStr}`;
+      const sync = (v: unknown) => {
+        el.style.setProperty(varName, v === null || v === undefined ? '' : String(v));
+      };
+
+      if (isAtom(val)) {
+        if (!s.providerEffects) s.providerEffects = new Map();
+        s.providerEffects.set(
+          key,
+          $.effect(() => {
+            sync(val.value);
+            return undefined;
+          })
+        );
+      } else {
+        sync(val);
+      }
+    }
   }
   // Reason: Notify lookups for this specific key.
   contextRegistry.bump(key);
@@ -380,21 +467,19 @@ export function provideAtom(
  * Injects a reactive context provided by an ancestor element.
  *
  * When to use:
- * - To consume state provided by a parent/ancestor component without direct coupling.
+ * - To consume state from an ancestor without direct coupling.
  * - To create "Context-Aware" components that adapt to their position in the DOM.
  *
  * @param element - The element or selector requesting the context.
  * @param key - The unique identifier of the context to find.
- * @returns A WritableAtom proxy that tracks the nearest ancestor provider.
+ * @returns A WritableAtom proxy tracking the nearest provider.
  *
  * @example
- * // Child consumes the provided theme
- * const theme = $.injectAtom('#child-element', 'theme');
- * if (theme) {
- *   $.effect(() => {
- *     console.log('Current theme:', theme.value);
- *   });
- * }
+ * const theme = $.injectAtom('#child', 'theme');
+ * $.effect(() => {
+ *   console.log('Active theme:', theme?.value);
+ *   return undefined;
+ * });
  *
  * @public
  */

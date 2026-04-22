@@ -369,6 +369,7 @@ Composition-based helper for adding AEJ reactive features to standard Web Compon
 - `$`: Scoped jQuery selector. Limited to selecting elements within the component.
 - `setup(shadowRoot?)`: Initializes reactive lifecycle. Pass `shadowRoot` for closed-mode components.
 - `teardown()`: Disposes all bindings. Call in `disconnectedCallback`.
+- `attrs`: Reactive atoms for `observedAttributes`. Only syncs attributes defined in the component's static `observedAttributes` array.
 - `provideAtom(key, val)`: Scoped provider registration.
 - `injectAtom(key)`: Scoped context injection.
 
@@ -399,6 +400,16 @@ Registers an element as a provider for a reactive context.
 - **key**: `string | symbol` — Unique identifier.
 - **atom**: The value to share.
 
+#### CSS Bridge
+
+`provideAtom` automatically synchronizes values to **CSS Custom Properties**. For any string or symbol key, a corresponding CSS variable `--aej-<key>` is set on the element's style. If the provided value is an atom, the CSS variable stays in sync reactively.
+
+```javascript
+const theme = $.atom('dark');
+$.provideAtom('#app', 'theme', theme);
+// #app now has style="--aej-theme: dark;"
+```
+
 ### `$.injectAtom(target, key)`
 
 Injects a reactive context provided by an ancestor.
@@ -408,9 +419,11 @@ Injects a reactive context provided by an ancestor.
 
 **Returns**: A `ReadonlyAtom<T>` wrapping the provided value, or `null` if no provider is found.
 
-#### Reactive Resolution
+#### Reactive Resolution & Automation
 
 Unlike standard DI, `injectAtom` returns a **reactive source**. If the provider changes the value at runtime, any effects or bindings using the injected atom will automatically update.
+
+**Context Automation**: AEJ uses a global `MutationObserver` to track DOM movements. If an element moves to a different part of the tree with a different provider, `injectAtom` proxies will automatically detect the change and re-evaluate, ensuring that components always reflect their current position in the context hierarchy.
 
 #### Late Binding (Custom Elements)
 
