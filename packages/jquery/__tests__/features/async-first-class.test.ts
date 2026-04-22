@@ -1,6 +1,5 @@
-import $ from 'jquery';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
-import '@/index';
+import $ from '@/index';
 
 describe('First-class Asynchronous Objects (AEJ)', () => {
   let $fixture: JQuery;

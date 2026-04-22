@@ -2,12 +2,16 @@ import type { EffectObject, ListKey } from '@/types';
 import { setAtomKey } from './utils';
 
 /**
- * Manages the internal state and lifecycle for $.fn.atomList.
+ * Manages the internal state and lifecycle for the `$.fn.atomList` binding.
  *
- * Responsibilities:
- * - Stores previous state (Keys, Items, Nodes) for the diffing algorithm.
- * - Tracks elements undergoing asynchronous removal (animations) to prevent conflicts.
- * - Handles container-level event cleanup and memory management.
+ * Logic: Orchestrates list reconciliation by maintaining a historical snapshot
+ * of the DOM and managing asynchronous item removals (animations).
+ *
+ * When to use:
+ * - Internal state management for dynamic list rendering.
+ * - Coordinating complex DOM transitions during list updates.
+ *
+ * @internal
  */
 export class ListContext<T> {
   /** Reference storage for diffing and DOM reuse */
@@ -40,11 +44,9 @@ export class ListContext<T> {
   ) {}
 
   /**
-   * Orchestrates the removal of an element, respecting the optional `onRemove` hook.
-   *
-   * Constraints:
-   * 1. Aborts if the effect has been disposed.
-   * 2. Aborts if the element was reclaimed by another binding (checked via `data-atom-key`).
+   * Constraint:
+   * - Aborts if the parent effect has been disposed to prevent memory leaks or invalid DOM mutations.
+   * - Aborts if the element was reclaimed by a new rendering cycle (reversal check via `data-atom-key`).
    */
   scheduleRemoval(k: ListKey, $el: JQuery): void {
     const commit = () => {
@@ -64,10 +66,13 @@ export class ListContext<T> {
   }
 
   /**
-   * Marks an item for removal and initiates the teardown process.
+   * Logic: Immediately decouples the element from its reactive key to allow
+   * reuse or reclamation by subsequent rendering cycles while animations run.
    *
    * @example
+   * ```typescript
    * context.removeItem('item_id_1', $itemElement);
+   * ```
    */
   removeItem(k: ListKey, $el: JQuery): void {
     // Note: Clear the atom-key immediately so rendering cycles don't treat this
@@ -78,8 +83,8 @@ export class ListContext<T> {
   }
 
   /**
-   * Clears all references and unbinds container events.
-   * Crucial for preventing memory leaks in large, frequently updated lists.
+   * Caution: Failure to call this will lead to memory leaks in large,
+   * frequently updated lists as old DOM nodes and item references are retained.
    */
   dispose(): void {
     this.removingKeys.clear();
@@ -89,7 +94,7 @@ export class ListContext<T> {
     this.keyToIndex.clear();
     this.$emptyEl?.remove();
 
-    // Use namespaced off() to avoid removing user-defined handlers on the same container
+    // Logic: Use namespaced off() to avoid removing user-defined handlers on the same container
     this.$container.off('.atomList');
   }
 }

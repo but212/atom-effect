@@ -3,13 +3,17 @@ import type { Paths, PathValue, WritableAtom } from '../types';
 
 /**
  * Internal recursive helper for creating deep immutable copies with structural sharing.
- * Optimized for performance: avoids Regex overhead and minimizes object allocations.
+ *
+ * Logic: Recursively traverses the object path and creates new object/array instances
+ * only for modified branches to maintain structural sharing.
+ *
+ * Optimization: Uses literal string comparisons instead of regular expressions
+ * to eliminate path-parsing overhead during deep updates.
  */
 export function setDeepValue(obj: unknown, keys: string[], index: number, value: unknown): unknown {
   if (index === keys.length) return value;
 
   const key = keys[index]!;
-  // Fast string-based safety check instead of Regex
   if (key === '__proto__' || key === 'constructor' || key === 'prototype') return obj;
 
   const isObj = obj != null && typeof obj === 'object';
@@ -17,13 +21,12 @@ export function setDeepValue(obj: unknown, keys: string[], index: number, value:
   const oldVal = curr[key];
   const newVal = setDeepValue(oldVal, keys, index + 1, value);
 
-  // Return original if value is unchanged (structural sharing)
   if (Object.is(oldVal, newVal)) return obj;
 
   if (Array.isArray(curr)) {
     const copy = curr.slice();
     const idx = +key;
-    // Check for valid array index (positive integer, non-empty)
+    // Logic: Check for valid array index (positive integer, non-empty) to preserve array dense layout.
     if (key.trim() !== '' && idx >= 0 && idx % 1 === 0) {
       copy[idx] = newVal;
     } else {
@@ -39,6 +42,9 @@ export function setDeepValue(obj: unknown, keys: string[], index: number, value:
 
 /**
  * Helper to retrieve a nested value from an object/array at a given path.
+ *
+ * Optimization: Uses a simple for-loop and fast string comparisons to avoid
+ * performance penalties in hot paths.
  */
 export function getPathValue(source: unknown, parts: string[]): unknown {
   let res = source;
@@ -46,7 +52,6 @@ export function getPathValue(source: unknown, parts: string[]): unknown {
   for (let i = 0; i < len; i++) {
     if (res == null) return undefined;
     const key = parts[i]!;
-    // Performance: Fast string comparison avoids Regex overhead in hot paths
     if (key === '__proto__' || key === 'constructor' || key === 'prototype') return undefined;
     res = (res as Record<string, unknown>)[key];
   }
@@ -56,11 +61,23 @@ export function getPathValue(source: unknown, parts: string[]): unknown {
 /**
  * Creates a two-way "lens" for a specific property path on an object-based atom.
  *
+ * When to use:
+ * - To read/write a specific nested property of an atom without boilerplate.
+ * - To create a scoped reactive view of a larger state object.
+ * - To pass a slice of state to a component or logic that only cares about a sub-property.
+ *
+ * @param atom - The source atom containing the object.
+ * @param path - Dot-separated path to the target property (e.g., 'user.profile.name').
+ * @returns A new writable atom that targets the specific path.
+ *
  * @example
+ * ```typescript
  * const store = atom({ user: { name: 'Alice' } });
  * const nameLens = atomLens(store, 'user.name');
+ *
  * console.log(nameLens.value); // 'Alice'
  * nameLens.value = 'Bob'; // Updates store.user.name immutably
+ * ```
  */
 export function atomLens<T extends object, P extends Paths<T>>(
   atom: WritableAtom<T>,
@@ -84,7 +101,7 @@ export function atomLens<T extends object, P extends Paths<T>>(
     },
     peek: () => getPathValue(atom.peek(), parts) as PathValue<T, P>,
     subscribe(listener: (nv: PathValue<T, P>, ov: PathValue<T, P>) => void) {
-      // Local tracking of prevValue cuts getPathValue calls by 50% during root updates
+      // Optimization: Local tracking of prevValue cuts getPathValue calls by 50% during root updates.
       let prevValue = getPathValue(atom.peek(), parts) as PathValue<T, P>;
 
       const unsub = atom.subscribe((np) => {
@@ -108,13 +125,29 @@ export function atomLens<T extends object, P extends Paths<T>>(
 }
 
 /**
- * Composes an existing lens with a sub-path to create a deeper lens.
+ * When to use:
+ * - Composing an existing lens with a sub-path to create a more specific view.
+ *
+ * @example
+ * ```typescript
+ * const userLens = atomLens(store, 'user');
+ * const nameLens = composeLens(userLens, 'name');
+ * ```
  */
 export const composeLens = <T extends object, P extends Paths<T>>(lens: WritableAtom<T>, path: P) =>
   atomLens(lens, path);
 
 /**
- * Creates a lens factory bound to a specific atom.
+ * When to use:
+ * - Creating a lens factory bound to a specific root atom to reduce boilerplate
+ *   when creating multiple lenses.
+ *
+ * @example
+ * ```typescript
+ * const lensify = lensFor(store);
+ * const nameLens = lensify('user.name');
+ * const emailLens = lensify('user.email');
+ * ```
  */
 export const lensFor =
   <T extends object>(atom: WritableAtom<T>) =>

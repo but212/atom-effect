@@ -1,5 +1,7 @@
 /**
- * Structured JSON representation of an AtomError.
+ * Structured JSON representation of an AtomError for external transport or logging.
+ *
+ * @public
  */
 export interface AtomErrorJSON {
   name: string;
@@ -11,7 +13,9 @@ export interface AtomErrorJSON {
 }
 
 /**
- * Constructor type for Atom errors.
+ * Constructor type signature for Atom-branded errors.
+ *
+ * @internal
  */
 export type AtomErrorConstructor = new (
   message: string,
@@ -22,7 +26,24 @@ export type AtomErrorConstructor = new (
 
 /**
  * Base error class for the Atom system.
- * Designed for high performance, traceability, and cycle protection.
+ *
+ * Logic: Provides high-performance traceability by maintaining an error chain
+ * and protecting against circular references during serialization.
+ *
+ * When to use:
+ * - Creating custom error types within the reactive engine.
+ * - Inspecting or logging complex failure chains.
+ *
+ * @example
+ * ```typescript
+ * try {
+ *   performComputation();
+ * } catch (err) {
+ *   throw new AtomError('Computation failed', err, true, 'ERR_COMP_01');
+ * }
+ * ```
+ *
+ * @public
  */
 export class AtomError extends Error {
   override readonly name: string = 'AtomError';
@@ -35,7 +56,8 @@ export class AtomError extends Error {
   ) {
     super(message);
 
-    // Maintain a stable object shape for V8
+    // Optimization: Maintain a stable object shape for V8 to ensure
+    // errors remain in the "fast" object optimization path.
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, this.constructor);
     }
@@ -43,7 +65,8 @@ export class AtomError extends Error {
 
   /**
    * Returns the entire error chain as an array.
-   * Includes the circular node if a cycle is detected.
+   *
+   * @returns Array containing historical causes.
    */
   getChain(): Array<AtomError | Error | unknown> {
     const cause = this.cause;
@@ -56,7 +79,6 @@ export class AtomError extends Error {
     while (current !== null && current !== undefined) {
       chain.push(current);
 
-      // Cycle detection after push to include the circular node in the chain
       if (current === this || seen?.has(current)) break;
 
       if (current instanceof AtomError) {
@@ -67,7 +89,8 @@ export class AtomError extends Error {
         break;
       }
 
-      // Initialize deep cycle detection only for long chains to minimize allocations
+      // Optimization: Initialize deep cycle detection only for long chains (>3)
+      // to minimize memory allocations for simple one-off errors.
       if (chain.length > 3) {
         if (seen === null) {
           seen = new Set(chain);
@@ -80,8 +103,12 @@ export class AtomError extends Error {
   }
 
   /**
-   * Serializes the error to a structured object for logging.
-   * Protected against circular references.
+   * Serializes the error to a structured object for external logging/storage.
+   *
+   * Caution: Heavily recursive for deep chains.
+   * Constraint: Must prevent circular references to avoid crashing serializers (e.g., JSON.stringify).
+   *
+   * @param seen - Internal tracking set to manage recursion.
    */
   toJSON(seen?: Set<unknown>): AtomErrorJSON {
     const s = seen ?? new Set<unknown>();
@@ -117,20 +144,23 @@ export class AtomError extends Error {
     };
   }
 
-  /**
-   * Internal helper to format wrapped messages consistently.
-   */
   static format(source: string, context: string, message: string): string {
     return `${source} (${context}): ${message}`;
   }
 }
 
-/** Thrown when a computation fails. */
+/**
+ * Thrown when a computation fails (e.g., in a selector or computed atom).
+ * @public
+ */
 export class ComputedError extends AtomError {
   override readonly name = 'ComputedError';
 }
 
-/** Thrown when an effect execution or cleanup fails. */
+/**
+ * Thrown when an effect execution or cleanup fails.
+ * @public
+ */
 export class EffectError extends AtomError {
   override readonly name = 'EffectError';
   constructor(message: string, cause: unknown = null, recoverable = false, code?: string) {
@@ -138,7 +168,10 @@ export class EffectError extends AtomError {
   }
 }
 
-/** Thrown by the execution engine or scheduler. */
+/**
+ * Thrown by the execution engine or internal scheduler.
+ * @public
+ */
 export class SchedulerError extends AtomError {
   override readonly name = 'SchedulerError';
   constructor(message: string, cause: unknown = null, recoverable = false, code?: string) {
@@ -147,7 +180,13 @@ export class SchedulerError extends AtomError {
 }
 
 /**
- * Registry of standardized error messages.
+ * Registry of standardized error messages for the entire system.
+ *
+ * When to use:
+ * - Providing consistent localized strings for error logging.
+ * - Comparing error messages in tests or diagnostic tools.
+ *
+ * @public
  */
 export const ERROR_MESSAGES = {
   // Computed Errors
@@ -182,18 +221,28 @@ export const ERROR_MESSAGES = {
 } as const;
 
 /**
- * Wraps any value into the Atom error hierarchy, preserving the trace and context.
+ * Wraps any caught value into the Atom error hierarchy, preserving the trace context.
+ *
+ * When to use:
+ * - Normalizing `catch (err)` blocks before rethrowing or logging.
+ * - Ensuring consistency across nested execution scopes.
  *
  * @param error - The raw error or object thrown.
- * @param ErrorClass - The specific AtomError subclass to use.
- * @param context - Human-readable description of where the error occurred.
+ * @param ErrorClass - The specific AtomError subclass to use as container.
+ * @param context - Human-readable description of the origin context.
+ *
+ * @example
+ * ```typescript
+ * wrapError(rawError, ComputedError, 'Computed compute() block');
+ * ```
+ *
+ * @public
  */
 export function wrapError(
   error: unknown,
   ErrorClass: AtomErrorConstructor,
   context: string
 ): AtomError {
-  // 1. AtomError (Chainable Trace)
   if (error instanceof AtomError) {
     return new ErrorClass(
       `${error.name} (${context}): ${error.message}`,
@@ -203,11 +252,9 @@ export function wrapError(
     );
   }
 
-  // 2. Native Error
   if (error instanceof Error) {
     return new ErrorClass(`${error.name || 'Error'} (${context}): ${error.message}`, error);
   }
 
-  // 3. Unknown Types (Raw Preservation)
   return new ErrorClass(`Unexpected error (${context}): ${String(error)}`, error);
 }

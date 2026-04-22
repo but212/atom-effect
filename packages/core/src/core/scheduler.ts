@@ -62,7 +62,6 @@ export function startFlush(): boolean {
   return true;
 }
 
-/** Ends the current flush cycle. */
 export function endFlush(): void {
   isFlushing = false;
 }
@@ -100,7 +99,6 @@ export function incrementFlushExecutionCount(): number {
   );
 }
 
-/** Resets all global flush-related states to their defaults. */
 export function resetFlushState(): void {
   _flushEpoch = 0;
   flushExecutionCount = 0;
@@ -128,14 +126,14 @@ export type SchedulerJob = SchedulerJobFunction | SchedulerJobObject;
 /**
  * Core Scheduler that manages asynchronous and synchronous task execution.
  *
- * Features:
- * - Double buffering for stable queue processing.
- * - Automatic job deduplication via Epoch tagging.
- * - Nested batching support with automatic coalescence.
- * - Microsecond-level scheduling via queueMicrotask.
+ * Logic: Coordinates task execution cycles using double buffering and epoch-based deduplication.
+ * It ensures that all reactive updates are batched and flushed in a stable, predictable order.
+ *
+ * Optimization: Uses pre-allocated buffers and SMI-optimized fields to minimize GC pressure
+ * and maximize throughput during high-frequency updates.
  */
 class Scheduler {
-  // SMI fields grouped at top for V8 layout optimization
+  // Optimization: SMI fields grouped at top for V8 layout optimization (Number packing).
   private _bufferIndex = 0;
   private _size = 0;
   private _epoch = 0;
@@ -147,7 +145,7 @@ class Scheduler {
   private _isProcessing = false;
   private _isFlushingSync = false;
 
-  // Pre-allocated buffers to avoid tuple access overhead
+  // Optimization: Pre-allocated buffers to avoid tuple access overhead and garbage collection pressure.
   private _buffer0: (SchedulerJob | undefined)[] = [];
   private _buffer1: (SchedulerJob | undefined)[] = [];
   /** Temporary holding area for jobs scheduled during an active batch or sync flush. */
@@ -170,7 +168,9 @@ class Scheduler {
 
   /**
    * Schedules a job for execution.
-   * Jobs are deduplicated based on the current epoch.
+   *
+   * Logic: Deduplicates jobs based on the current epoch to prevent redundant executions.
+   * If a batch is active, the job is moved to a temporary queue to coalesce with other updates.
    *
    * @param callback - The task to be executed.
    */
@@ -188,7 +188,6 @@ class Scheduler {
     if (callback._nextEpoch === epoch) return;
     callback._nextEpoch = epoch;
 
-    // If batching or sync flushing, move to batch queue to ensure order and coalescence.
     if (this._batchDepth > 0 || this._isFlushingSync) {
       this._batchQueue[this._batchQueueSize++] = callback;
       return;
@@ -202,14 +201,12 @@ class Scheduler {
     }
   }
 
-  /** Initiates an asynchronous flush via microtask. */
   private _flush(): void {
     if (this._isProcessing || (this._size === 0 && this._batchQueueSize === 0)) return;
     this._isProcessing = true;
     queueMicrotask(this._boundRunLoop);
   }
 
-  /** Internal microtask execution loop. */
   private _runLoop(): void {
     try {
       if (this._size === 0 && this._batchQueueSize === 0) return;
@@ -238,9 +235,6 @@ class Scheduler {
     }
   }
 
-  /**
-   * Merges the temporal batch queue into the main active buffer.
-   */
   private _mergeBatchQueue(): void {
     const queueSize = this._batchQueueSize;
     if (queueSize === 0) return;
@@ -261,13 +255,10 @@ class Scheduler {
 
     this._size = currentSize;
     this._batchQueueSize = 0;
-    // Shrink array if it grew significantly
+    // Optimization: Shrink array if it grew significantly beyond threshold to release memory.
     if (bQueue.length > SCHEDULER_CONFIG.BATCH_QUEUE_SHRINK_THRESHOLD) bQueue.length = 0;
   }
 
-  /**
-   * Continuous loop that drains both main and batch queues.
-   */
   private _drainQueue(): void {
     let iterations = 0;
     while (this._size > 0 || this._batchQueueSize > 0) {
@@ -281,13 +272,12 @@ class Scheduler {
     }
   }
 
-  /** Executes all jobs currently in the primary buffer and swaps buffers. */
   private _processQueue(): void {
     const idx = this._bufferIndex;
     const jobs = idx === 0 ? this._buffer0 : this._buffer1;
     const count = this._size;
 
-    // Buffer swapping & Epoch bump
+    // Logic: Buffer swapping & Epoch bump to isolate the current execution cycle.
     this._bufferIndex = idx ^ 1;
     this._size = 0;
     this._epoch = (this._epoch + 1) | 0;
@@ -307,7 +297,6 @@ class Scheduler {
     }
   }
 
-  /** Resets the scheduler state on infinite loop detection. */
   private _handleFlushOverflow(): void {
     const droppedCount = this._size + this._batchQueueSize;
     console.error(
@@ -330,12 +319,10 @@ class Scheduler {
     }
   }
 
-  /** Enters a new batching depth. */
   startBatch(): void {
     this._batchDepth++;
   }
 
-  /** Decrements batching depth. */
   endBatch(): void {
     if (this._batchDepth === 0) {
       if (IS_DEV) console.warn(ERROR_MESSAGES.SCHEDULER_END_BATCH_WITHOUT_START);
@@ -349,7 +336,6 @@ class Scheduler {
     }
   }
 
-  /** Configures the maximum safety iterations. */
   setMaxFlushIterations(max: number): void {
     if (max < SCHEDULER_CONFIG.MIN_FLUSH_ITERATIONS)
       throw new SchedulerError(
@@ -363,12 +349,26 @@ class Scheduler {
 export const scheduler = new Scheduler();
 
 /**
- * Groups multiple state updates into a single batch, delaying effects and computations
- * until the batch is closed.
+ * When to use:
+ * - When performing multiple related atom updates that should trigger effects only once.
+ * - To improve performance by coalescing multiple updates into a single flush cycle.
+ * - To prevent inconsistent intermediate states during complex transactions.
  *
  * @param fn - The function containing state updates.
  * @returns The result of the function execution.
  * @throws {TypeError} If fn is not a function.
+ *
+ * @example
+ * ```typescript
+ * const a = atom(0);
+ * const b = atom(0);
+ * effect(() => console.log(a.value + b.value));
+ *
+ * batch(() => {
+ *   a.value = 1;
+ *   b.value = 2;
+ * }); // Logs "3" once, instead of logging "1" then "3".
+ * ```
  */
 export function batch<T>(fn: () => T): T {
   if (IS_DEV && typeof fn !== 'function') {
@@ -386,8 +386,9 @@ export function batch<T>(fn: () => T): T {
 let sharedNextTickPromise: Promise<void> | null = null;
 
 /**
- * Returns a promise that resolves after the next scheduler flush.
- * This can be used to wait for all asynchronous effects to be processed.
+ * When to use:
+ * - To wait for all asynchronous effects to be processed and settled.
+ * - In testing, to ensure the state has fully propagated before asserting.
  *
  * @param fn - Optional callback to execute after the flush.
  * @returns A promise that resolves after the flush completes.

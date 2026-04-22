@@ -31,7 +31,12 @@ import { debug } from '@/utils/debug';
 
 /**
  * Resolves a single key-value pair or a map into a uniform map.
- * Used to simplify multiple binding methods.
+ *
+ * Logic: Streamlines overloaded jQuery methods that accept either
+ * `(key, value)` or `(map)` by normalizing them into a consistent
+ * Record format for the lower-level binding engine.
+ *
+ * @internal
  */
 function resolveMap<V>(
   keyOrMap: string | Record<string, V>,
@@ -50,29 +55,55 @@ function resolveMap<V>(
 }
 
 /**
- * Binds an atom's value to the text content of the matching elements.
+ * When to use:
+ * - Rendering raw text that should stay in sync with an atom.
+ * - Automatically updating labels, counts, or status messages.
  *
  * @example
+ * ```typescript
  * $('.count').atomText(counterAtom, (v) => `Current: ${v}`);
+ * ```
+ *
+ * @public
  */
 $.fn.atomText = function <T>(source: AsyncReactiveValue<T>, formatter?: (v: T) => string): JQuery {
   return atomEachElement(this, (el) => bindText(el, source, formatter));
 };
 
 /**
- * Binds an atom's value to the innerHTML of the matching elements.
- * Warning: Ensure the source data is trusted to prevent XSS.
+ * Caution: Ensure the source data is trusted. Rendering unsanitized HTML
+ * from user input can lead to XSS vulnerabilities.
+ *
+ * When to use:
+ * - Rendering complex markup or rich text that contains formatting tags.
+ *
+ * @public
  */
 $.fn.atomHtml = function (source: AsyncReactiveValue<string>): JQuery {
   return atomEachElement(this, (el) => bindHtml(el, source));
 };
 
 /**
- * Reactively toggles CSS classes.
+ * Logic: Supports both single class toggling and batch class management
+ * via a mapping object.
  *
- * Supports two patterns:
- * 1. Single class: .atomClass('active', conditionAtom)
- * 2. Class map: .atomClass({ 'is-loading': loadingAtom, 'is-hidden': hiddenAtom })
+ * When to use:
+ * - Adding 'active', 'disabled', or 'hidden' states to elements.
+ * - Managing complex UI component states with multiple class flags.
+ *
+ * @example
+ * ```typescript
+ * // 1. Single class
+ * $('.btn').atomClass('is-active', activeAtom);
+ *
+ * // 2. Class map
+ * $('.item').atomClass({
+ *   'is-loading': loadingAtom,
+ *   'is-hidden': hiddenAtom
+ * });
+ * ```
+ *
+ * @public
  */
 $.fn.atomClass = function (
   this: JQuery,
@@ -89,11 +120,26 @@ $.fn.atomClass = function (
 };
 
 /**
- * Reactively updates CSS properties.
+ * Logic: Normalizes properties and units (e.g., 'px') to ensure
+ * consistent style application across browsers.
  *
- * Supports two patterns:
- * 1. Single property: .atomCss('opacity', valueAtom)
- * 2. Property map: .atomCss({ width: '100px', height: heightAtom })
+ * When to use:
+ * - Driving visual styles like opacity, width, or color from state.
+ * - Dynamic layouts where dimensions depend on reactive calculations.
+ *
+ * @example
+ * ```typescript
+ * // 1. Single property
+ * $('.bar').atomCss('width', progressAtom, '%');
+ *
+ * // 2. Property map
+ * $('.box').atomCss({
+ *    opacity: opacityAtom,
+ *    backgroundColor: colorAtom
+ * });
+ * ```
+ *
+ * @public
  */
 $.fn.atomCss = function (
   this: JQuery,
@@ -108,7 +154,12 @@ $.fn.atomCss = function (
   return map ? atomEachElement(this, (el) => bindCss(el, map as CssBindings)) : this;
 };
 
-/** Reactively updates DOM attributes based on atom changes. */
+/**
+ * When to use:
+ * - Updating `id`, `title`, `alt`, or `data-*` attributes.
+ *
+ * @public
+ */
 $.fn.atomAttr = function (
   this: JQuery,
   nameOrMap: string | Record<string, AsyncReactiveValue<PrimitiveValue>>,
@@ -118,7 +169,12 @@ $.fn.atomAttr = function (
   return map ? atomEachElement(this, (el) => bindAttr(el, map)) : this;
 };
 
-/** Reactively updates DOM properties (e.g., 'disabled', 'readOnly'). */
+/**
+ * When to use:
+ * - Toggling stateful properties that require boolean values or direct property access.
+ *
+ * @public
+ */
 $.fn.atomProp = function <T>(
   this: JQuery,
   nameOrMap: string | Record<string, AsyncReactiveValue<T>>,
@@ -132,19 +188,28 @@ $.fn.atomProp = function <T>(
     : this;
 };
 
-/** Toggles visibility (display: none) when the condition is true. */
+/**
+ * @public
+ */
 $.fn.atomShow = function (condition: AsyncReactiveValue<boolean>): JQuery {
   return atomEachElement(this, (el) => bindVisibility(el, condition, false));
 };
 
-/** Hides the element (display: none) when the condition is true. */
+/**
+ * @public
+ */
 $.fn.atomHide = function (condition: AsyncReactiveValue<boolean>): JQuery {
   return atomEachElement(this, (el) => bindVisibility(el, condition, true));
 };
 
 /**
- * Two-way binding for form input values.
- * Automatically synchronizes the input state with the writable atom.
+ * Logic: Automatically synchronizes the input's `value` with a writable
+ * atom, handling both atom-to-DOM updates and DOM-to-atom changes (input/change events).
+ *
+ * When to use:
+ * - Handling text inputs, textareas, and select menus.
+ *
+ * @public
  */
 $.fn.atomVal = function <T>(atom: WritableAtom<T>, options: ValOptions<T> = {}): JQuery {
   return atomEachElement(this, (el) =>
@@ -152,14 +217,23 @@ $.fn.atomVal = function <T>(atom: WritableAtom<T>, options: ValOptions<T> = {}):
   );
 };
 
-/** Two-way binding for checkboxes and radio buttons. */
+/**
+ * @public
+ */
 $.fn.atomChecked = function (atom: WritableAtom<boolean>): JQuery {
   return atomEachElement(this, (el) => bindChecked(el, atom));
 };
 
 /**
  * Orchestrates two-way binding for an entire form.
- * Maps form fields to properties of a reactive object.
+ *
+ * Logic: Maps form fields (via `name` attributes) to nested properties
+ * of a reactive object atom.
+ *
+ * When to use:
+ * - Synchronizing a complex data model with a standard HTML form.
+ *
+ * @public
  */
 $.fn.atomForm = function <T extends object>(
   atom: WritableAtom<T>,
@@ -174,7 +248,9 @@ $.fn.atomForm = function <T extends object>(
   });
 };
 
-/** Configures a standard event listener with automatic cleanup. */
+/**
+ * @public
+ */
 $.fn.atomOn = function (event: string, handler: (e: JQuery.Event) => void): JQuery {
   return atomEachElement(this, (el) => bindOn(el, event, handler));
 };
@@ -229,12 +305,24 @@ const BINDING_TASKS: BindingTask[] = [
 /**
  * Unified entry point for declaring multiple reactive bindings in a single call.
  *
+ * Logic: Iterates through the provided options and executes the
+ * corresponding tasks in a deterministic order (e.g., text before class)
+ * to ensure predictable rendering results.
+ *
+ * When to use:
+ * - Initializing multiple bindings on an element efficiently.
+ * - Keeping binding declarations organized in complex UI logic.
+ *
  * @example
+ * ```typescript
  * $('.btn').atomBind({
  *   text: labelAtom,
  *   class: { 'is-primary': primaryAtom },
  *   on: { click: handleClick }
  * });
+ * ```
+ *
+ * @public
  */
 $.fn.atomBind = function <T>(this: JQuery, options: BindingOptions<T>): JQuery {
   const opt = options as Record<string, unknown>;
@@ -260,7 +348,9 @@ $.fn.atomBind = function <T>(this: JQuery, options: BindingOptions<T>): JQuery {
   });
 };
 
-/** Manually destroys all reactive bindings associated with the elements in the collection. */
+/**
+ * @public
+ */
 $.fn.atomUnbind = function (this: JQuery): JQuery {
   return atomEachElement(this, (el) => registry.cleanupTree(el));
 };

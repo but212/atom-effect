@@ -8,11 +8,19 @@ import { ItemState, type PreparedDiff } from './types';
 /**
  * Prepares the reconciliation plan (diff) between the old list state and the new items.
  *
- * This function identifies which DOM nodes can be reused, which are new,
- * and which need a forced replacement based on key/identity changes.
+ * Logic: Identifies reusable DOM nodes, new entries, and forced replacements
+ * using a high-performance double-ended diffing algorithm. It isolates the
+ * modified "dirty" range by skipping unchanged items at both ends of the list.
  *
- * Performance: Uses a double-ended diffing strategy (prefix/suffix matching)
- * to skip unchanged elements at both ends, isolating only the modified middle section.
+ * When to use:
+ * - Calculating a batch of DOM mutations for the `atomList` binding.
+ *
+ * @example
+ * ```typescript
+ * const diff = buildIndices(ctx, items, items.length, getKey, updateFn, eqFn);
+ * ```
+ *
+ * @internal
  */
 export function buildIndices<T>(
   ctx: ListContext<T>,
@@ -38,8 +46,8 @@ export function buildIndices<T>(
   const newIndices: number[] = new Array(itemCount);
   const toRender: { key: ListKey; item: T; index: number }[] = [];
 
-  // Optimization Step 1: Skip unchanged prefix
-  // Reason: Fast-forward through items that haven't moved or changed at the start.
+  // Reason: Fast-forward through items that haven't moved or changed at the start
+  // to avoid mapping overhead for static sections.
   while (startIndex <= oldEndIndex && startIndex <= newEndIndex) {
     const item = items[startIndex]!,
       k = getKey(item, startIndex);
@@ -48,8 +56,8 @@ export function buildIndices<T>(
     keyToIndex.set(k, startIndex++);
   }
 
-  // Optimization Step 2: Skip unchanged suffix
-  // Reason: Isolate the "dirty" middle range by matching unchanged items from the end.
+  // Reason: Narrow the "dirty" middle range by matching items from the end,
+  // minimizing the O(N) complexity of the subsequent mapping phase.
   while (oldEndIndex >= startIndex && newEndIndex >= startIndex) {
     const item = items[newEndIndex]!,
       k = getKey(item, newEndIndex);
@@ -59,7 +67,6 @@ export function buildIndices<T>(
     oldEndIndex--;
   }
 
-  // Process skip ranges as Unchanged
   for (let i = 0; i < startIndex; i++) {
     const k = oldKeys[i]!;
     newKeys[i] = k;
@@ -79,11 +86,9 @@ export function buildIndices<T>(
     newKeySet.add(k);
   }
 
-  // Map remaining old keys for fast lookup during middle-section diffing
   const oldIndexMap = new Map<ListKey, number>();
   for (let i = startIndex; i <= oldEndIndex; i++) oldIndexMap.set(oldKeys[i]!, i);
 
-  // Process the "dirty" middle section
   for (let i = startIndex; i <= newEndIndex; i++) {
     const item = items[i]!,
       k = getKey(item, i);
@@ -99,8 +104,10 @@ export function buildIndices<T>(
     newKeySet.add(k);
 
     const foundIdx = oldIndexMap.get(k);
-    // Caution: If a key is in removingKeys, its DOM node is currently animating out.
-    // We must treat it as a new item rather than re-using the decaying DOM node.
+    // Caution: Reclaiming an animating node.
+    // If a key is in `removingKeys`, its DOM node is currently performing a
+    // removal animation. We must treat this as a 'New' item (creating a fresh node)
+    // rather than potentially re-using a node that is in an inconsistent state.
     const oldIdx = foundIdx !== undefined && !removingKeys.has(k) ? foundIdx : undefined;
 
     if (oldIdx === undefined) {
@@ -111,8 +118,11 @@ export function buildIndices<T>(
     }
 
     newNodes[i] = oldNodes[oldIdx]!;
-    // Logic: If 'update' is not provided and content changed, we can't patch the DOM.
-    // We must force a full replacement (destroy and re-create).
+
+    // Logic: Handling partial updates vs full replacements.
+    // If an 'update' callback is missing and content has changed, the library
+    // cannot patch the existing DOM. We must force a 'ForceReplace' state
+    // to trigger a clean re-render.
     if (!update && !eq(oldItems[oldIdx]!, item)) {
       toRender.push({ key: k, item, index: i });
       newStates[i] = ItemState.ForceReplace;

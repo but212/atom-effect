@@ -1,7 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { LOG_PREFIXES } from '@/constants';
-import $, { type RouteDefinition } from '@/index';
-import { debug } from '@/utils/debug';
+import $ from '@/index';
 
 describe('$.route() - SPA Routing', () => {
   beforeEach(() => {
@@ -19,7 +17,7 @@ describe('$.route() - SPA Routing', () => {
       <template id="tmpl-404"><h1>404 Not Found</h1></template>
     `;
     window.location.hash = '';
-    debug.enabled = false;
+    $.debug.enabled = false;
   });
 
   afterEach(() => {
@@ -96,17 +94,26 @@ describe('$.route() - SPA Routing', () => {
 
       // 3. Popstate Event with Guard
       const onLeave = vi.fn(() => false); // Block
-      // Access internal config for test-only guard injection
-      const internalRouter = router as unknown as {
-        config: { routes: Record<string, RouteDefinition> };
-      };
-      internalRouter.config.routes.about!.onLeave = onLeave;
+
+      const router2 = $.route({
+        target: '#app',
+        mode: 'history',
+        basePath: '/v2',
+        routes: {
+          home: { template: '#tmpl-home' },
+          about: { template: '#tmpl-about', onLeave },
+        },
+      });
+
+      router2.navigate('about');
+      await $.nextTick();
 
       history.replaceState(null, '', '/v2/home');
       window.dispatchEvent(new Event('popstate'));
       expect(onLeave).toHaveBeenCalled();
-      expect(router.currentRoute.value).toBe('about'); // Stayed
+      expect(router2.currentRoute.value).toBe('about'); // Stayed
 
+      router2.destroy();
       router.destroy();
     });
   });
@@ -167,15 +174,15 @@ describe('$.route() - SPA Routing', () => {
     });
 
     it('should survive and warn on broken link/route inputs', async () => {
-      const warnSpy = vi.spyOn(debug, 'warn');
-      debug.enabled = true;
+      const warnSpy = vi.spyOn($.debug, 'warn');
+      $.debug.enabled = true;
       const router = $.route({ target: '#app' });
 
       // Malformed URI in query
       router.navigate('home?bad=%FF');
       await $.nextTick();
       expect(warnSpy).toHaveBeenCalledWith(
-        LOG_PREFIXES.ROUTE,
+        expect.stringContaining('route'),
         expect.stringContaining('Malformed')
       );
 

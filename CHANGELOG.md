@@ -1,5 +1,44 @@
 # Changelog
 
+## [Unreleased]
+
+### Documentation
+
+- **Standards**: Established formal TSDoc and inline comment conventions in `docs/conventions/code_documentation_conventions.md`.
+- **Core & jQuery**: Applied comprehensive documentation across both packages, focusing on audience segmentation (User vs. Contributor) and the "3-Second Rule".
+- **Internal Logic**: Added specialized annotations (`Logic:`, `Optimization:`, `Constraint:`, `Reason:`) to explain V8 optimizations, security measures, and architectural decisions.
+
+### jQuery
+
+#### Added
+
+- **Global Configuration**: Introduced `$.initAEJ` for centralized control over library behavior, allowing granular toggling of jQuery patches and custom `MutationObserver` safety-net roots.
+- **Web Components**: Enhanced `useAtomComponent` for professional reactive integration with Custom Elements.
+  - **Scoped Selector (`$`)**: Added a component-aware jQuery selector that automatically isolates lookups to the active ShadowRoot or host element.
+  - **Metadata Access**: Exposed `host` and `root` properties on the controller for precise DOM control.
+- **Dependency Injection (DI)**:
+  - **Late Binding**: Added support for late-bound reactive context in Custom Elements, enabling `injectAtom` to work correctly during element construction before DOM connection.
+  - **Context Automation**: Introduced a global MutationObserver to automatically bump context versions when nodes move between providers, ensuring seamless reactivity across DOM reorganizations.
+- **CSS Bridge**: Added a "CSS Bridge" feature to `provideAtom`, automatically synchronizing provided values to CSS custom properties (e.g., `--aej-key`) for direct styling integration.
+- **Reactive Attributes**: Enhanced `useAtomComponent` with an `attrs` controller property that automatically synchronizes `observedAttributes` to reactive atoms.
+
+#### Changed
+
+- **Dependency Injection (DI)**: Re-implemented resolution using composed tree traversal for 100% Shadow DOM reliability, and moved the injection cache from a global `WeakMap` to node-local `AEJState` for better data locality and lifecycle alignment.
+- **Internal Architecture**: Consolidated node state into a private `AEJ_STATE` symbol, reducing DOM pollution and preventing interference with other libraries.
+- **Memory Management**: Overhauled the auto-cleanup engine to support multiple roots and explicit opt-out via `initAEJ`.
+
+#### Fixed
+
+- **Memory Management**: Resolved a leak where `MutationObserver` instances were not disconnected on component teardown, holding strong references to ShadowRoot nodes.
+- **DI Boundary**: Fixed DI resolution failures in nested Shadow DOM environments by implementing an explicit host-traversal fallback mechanism.
+- **Navigation**: Resolved a race condition where pending async hooks could overwrite state after a subsequent navigation.
+
+#### Refactor
+
+- **Core Overrides**: Modularized jQuery prototype patches (`jquery-patch`) to allow independent enabling of event-wrapping and lifecycle-sync hooks.
+- **DI Engine**: Refactored `provideAtom` and `injectAtom` to use high-performance tree traversal, eliminating the overhead of custom event dispatch.
+
 ## [0.31.0]
 
 ### Core

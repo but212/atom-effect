@@ -6,7 +6,7 @@ This guide explains the built-in sanitization layer and how to integrate [DOMPur
 
 ## Built-in Sanitization
 
-`atomHtml` applies a lightweight filter (`sanitizeHtml`) before injecting content. It handles common vectors but is **not** a complete defense.
+`atomHtml` applies a built-in sanitization policy (`sanitizeHtml`) before injecting content. It addresses common security vectors but is **not** a comprehensive defense.
 
 ### What it blocks
 
@@ -14,14 +14,14 @@ This guide explains the built-in sanitization layer and how to integrate [DOMPur
 
 | Vector | Action |
 | ------ | ------ |
-| `<script>`, `<iframe>`, `<object>`, `<embed>`, `<base>`, `<meta>`, `<applet>`, `<noscript>`, `<form>`, `<style>`, `<link>` | Tag stripped and transformed into safe `<span>` wrappers. |
+| `<script>`, `<iframe>`, `<object>`, `<embed>`, `<base>`, `<meta>`, `<applet>`, `<noscript>`, `<form>`, `<style>`, `<link>` | Tag stripped and transformed into inert `<span>` wrappers. |
 | `onclick`, `onerror`, etc. (`on*` attributes) | Replaced with a single, comma-separated `data-unsafe-attr` list. |
-| `javascript:`, `vbscript:`, `data:` protocols | Neutralized (Replaced with `data-unsafe-protocol:`). Strips all internal whitespace and handles obfuscated entities. |
+| `javascript:`, `vbscript:`, `data:` protocols | Neutralized (Replaced with `data-unsafe-protocol:`). Strips all internal whitespace and handles decoded entities. |
 | `srcset` hijacking | Each comma-separated URL is individually normalized and validated. |
-| Dangerous data URIs (`text/html`, `application/javascript`, `image/svg+xml`, etc.) | Neutralized. Covers both standalone attributes and `srcdoc` sinks. |
-| CSS expressions & protocol smuggling | Normalizes CSS by **stripping comments** (`/*...*/`) first, then matches against a data-driven array of danger patterns. |
+| Untrusted data URIs (`text/html`, `application/javascript`, `image/svg+xml`, etc.) | Neutralized. Covers both standalone attributes and `srcdoc` sinks. |
+| CSS expressions & protocol smuggling | Normalizes CSS by **stripping comments** (`/*...*/`) first, then matches against a data-driven array of threat patterns. |
 | Entities (`&#NNN;`, `&#xHH;`, `&colon;`, etc.) | **Decoded first** in the normalization phase. Correctively handles optional trailing semicolons. |
-| Null bytes / control characters | **Stripped after entity decoding** to catch hidden payloads. |
+| Null bytes / control characters | **Stripped after entity decoding** to prevent hidden payloads. |
 | XML processing instructions (`<?...?>`) | Stripped |
 
 `bindAttr` (used by `atomAttr` / `atomBind.attr`):
@@ -30,8 +30,8 @@ This guide explains the built-in sanitization layer and how to integrate [DOMPur
 | ------ | ------ |
 | `on*` attribute names (e.g., `onclick`) | Silently blocked (attribute not set) |
 | `javascript:` / `vbscript:` / `data:` in URL attributes | Silently blocked. Returns normalized safe URLs to prevent entity bypasses. |
-| SVG URL attributes (`fill`, `filter`, `mask`, etc.) | Sanitized for dangerous protocols |
-| `srcset` and `srcdoc` | Subject to individual URL validation and recursive sniffer checks respectively. |
+| SVG URL attributes (`fill`, `filter`, `mask`, etc.) | Sanitized for untrusted protocols |
+| `srcset` and `srcdoc` | Subject to individual URL validation and explicit content scanning respectively. |
 
 `bindCss` (used by `atomCss` / `atomBind.css`):
 
@@ -50,11 +50,38 @@ This guide explains the built-in sanitization layer and how to integrate [DOMPur
 
 ### What it does NOT block
 
-- Non-standard event handlers beyond `on*` pattern in specialized tags (e.g., rare attribute-based execution in outdated browsers)
+- Non-standard event handlers beyond `on*` pattern in specialized tags (e.g., rare attribute-based execution in legacy browsers)
 - Mutation-based XSS (mXSS)
-- CSS-based data exfiltration (beyond known protocol vectors)
+- CSS-based data exfiltration (beyond identified protocol vectors)
 
-**For production applications handling user-generated content, always use DOMPurify.**
+**For production applications handling user-generated content, use of a comprehensive library like DOMPurify is recommended.**
+
+---
+
+## Policy-Driven Architecture
+
+The sanitization layer uses a **Data-Driven Policy** architecture. Instead of hardcoded logic, security rules are defined in a `SanitizationPolicy` object.
+
+### Customizing the Policy
+
+You can extend the `DEFAULT_POLICY` or provide a completely new one to `sanitizeHtml`:
+
+```typescript
+import { sanitizeHtml, DEFAULT_POLICY } from '@but212/atom-effect-jquery';
+
+const myPolicy = {
+  ...DEFAULT_POLICY,
+  // Allow iframes for specific trusted sources
+  allowedTags: [...DEFAULT_POLICY.allowedTags, 'iframe'],
+};
+
+// Use the policy manually
+const safe = sanitizeHtml(untrusted, myPolicy);
+```
+
+### Global Policy (Experimental)
+
+Future versions will allow injecting a global policy to override behavior across all `atomBind` and `atomHtml` calls. Currently, policy injection is available at the utility function level.
 
 ---
 

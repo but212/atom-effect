@@ -56,7 +56,6 @@ export class DependencyLink {
 
 /**
  * Subscription entry.
- * Encapsulates the notification logic for a dependency change.
  */
 export class Subscription<T> {
   constructor(
@@ -73,27 +72,25 @@ export class Subscription<T> {
   /**
    * Notifies the subscriber of a value change.
    *
-   * @remarks
-   * Optimized with inlined 'untracked' logic to eliminate closure allocation.
+   * Optimization: Inlined 'untracked' logic to eliminate closure allocation in notification hot-path.
+   * It ensures any reactive access during notification doesn't create accidental dependency cycles.
    */
   notify(newValue?: T, oldValue?: T): void {
     const fn = this.fn;
     const sub = this.sub;
 
-    // Fast path: nothing to notify
     if (fn === undefined && sub === undefined) return;
 
     const ctx = trackingContext;
     const prev = ctx.current;
 
-    // If already untracked, bypass context switching logic
     if (prev === null) {
       if (fn !== undefined) fn(newValue, oldValue);
       if (sub !== undefined) sub.execute();
       return;
     }
 
-    // Context switch required for notification safety
+    // Logic: Context switch required for notification safety.
     ctx.current = null;
     try {
       if (fn !== undefined) fn(newValue, oldValue);
@@ -108,7 +105,6 @@ export class Subscription<T> {
 
 /**
  * Tracking context implementation.
- * Manages the global stack of active dependency collectors.
  */
 class TrackingContext {
   /** Active subscriber at the top of the stack. */
@@ -122,7 +118,6 @@ class TrackingContext {
    * @returns The result of `fn`.
    */
   public run<T>(subscriber: DependencySubscriber, fn: () => T): T {
-    // Fast path: already in the correct context
     if (this.current === subscriber) {
       return fn();
     }
@@ -131,12 +126,10 @@ class TrackingContext {
     this.current = subscriber;
 
     try {
-      // Small production optimization: direct return
       if (!IS_DEV) return fn();
 
       const result = fn();
 
-      // Async detection: check if the function returned a Promise
       debug.warn(
         isPromise(result),
         'Detected Promise returned within tracking context. ' +
@@ -146,7 +139,7 @@ class TrackingContext {
 
       return result;
     } finally {
-      // Synchronous restoration is required for safety in multi-tasking environments
+      // Constraint: Synchronous restoration is required for safety in multi-tasking environments.
       this.current = prev;
     }
   }
@@ -165,16 +158,25 @@ export type { TrackingContext };
 // ── Untracked ───────────────────────────────────────────────────────────
 
 /**
- * Executes a function without dependency tracking.
+ * When to use:
+ * - To read reactive state without creating a dependency link.
+ * - To perform side effects inside a computation that shouldn't trigger re-runs.
  *
  * @param fn - Function to execute.
  * @returns Result of `fn`.
+ *
+ * @example
+ * ```typescript
+ * effect(() => {
+ *   const val = untracked(() => someAtom.value);
+ *   console.log('Read without tracking:', val);
+ * });
+ * ```
  */
 export function untracked<T>(fn: () => T): T {
   const ctx = trackingContext;
   const prev = ctx.current;
 
-  // Optimized: Skip context switching if already untracked
   if (prev === null) {
     return fn();
   }

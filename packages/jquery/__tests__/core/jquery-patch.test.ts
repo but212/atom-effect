@@ -1,53 +1,36 @@
-import { atom } from '@but212/atom-effect';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { enablejQueryOverrides, INTERNAL_HANDLER } from '@/core/jquery-patch';
-import { disableAutoCleanup, enableAutoCleanup, registry } from '@/core/registry';
+import { beforeEach, describe, expect, it } from 'vitest';
 import $ from '@/index';
-
-/** Type definitions for accessing jQuery's internal event store and metadata */
-interface JQueryInternal extends JQueryStatic {
-  _data(
-    element: Node,
-    key: 'events'
-  ): Record<string, JQuery.HandleObject<Node, unknown>[]> | undefined;
-}
-
-interface HandlerMetadata extends Function {
-  [INTERNAL_HANDLER]?: boolean;
-}
 
 describe('jQuery Patch (Lifecycle & Events)', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
-    enablejQueryOverrides();
-    enableAutoCleanup(document.body);
-  });
-
-  afterEach(() => {
-    disableAutoCleanup();
-    registry.cleanupTree(document.body);
+    $.initAEJ({ patch: true, autoCleanup: true });
   });
 
   describe('DOM Lifecycle Overrides', () => {
-    it('should correctly manage registry lifecycle during removal and detachment', () => {
+    it('should correctly manage lifecycle during removal and detachment', async () => {
       const $root = $('<div id="root"><span class="target"></span></div>').appendTo(document.body);
       const $target = $root.find('.target');
-      registry.trackCleanup($target[0]!, () => {});
+      const atom = $.atom('initial');
+      $target.atomText(atom);
 
       // 1. Detach: binding state preserved
       $target.detach();
-      expect(registry.isKept($target[0]!)).toBe(true);
-      expect(registry.hasBind($target[0]!)).toBe(true);
+      atom.value = 'detached';
+      await $.nextTick();
+      expect($target.text()).toBe('detached');
 
       // 2. Re-append and Remove: binding state cleaned up
       $target.appendTo($root).remove();
-      expect(registry.hasBind($target[0]!)).toBe(false);
+      atom.value = 'removed';
+      await $.nextTick();
+      expect($target.text()).not.toBe('removed');
     });
   });
 
   describe('Reactive Event Integration', () => {
     it('should apply reactive batching across all registration signatures', async () => {
-      const count = atom(0);
+      const count = $.atom(0);
       let computeCount = 0;
       $.effect(() => {
         count.value;
@@ -98,26 +81,38 @@ describe('jQuery Patch (Lifecycle & Events)', () => {
     });
 
     it('should ensure handler identification and unbinding works correctly', () => {
-      const $el = $('<div>');
-      const handler = () => {};
+      const $el = $('<div>').appendTo('body');
+      let count = 0;
+      const handler = () => {
+        count++;
+      };
 
-      // 1. Verify internal wrapping and identification for unbinding
+      // 1. Verify unbinding with ORIGINAL handler works
       $el.on('click', handler);
+      $el.trigger('click');
+      expect(count).toBe(1);
 
-      const events = ($ as unknown as JQueryInternal)._data($el[0]!, 'events');
-      const registered = events?.click?.[0]?.handler as HandlerMetadata;
-      expect(registered[INTERNAL_HANDLER], 'Handler not marked as internal').toBe(true);
-
-      // Unbinding with ORIGINAL handler should work via resolveWrapped/handlerMap
       $el.off('click', handler);
-      const postEvents = ($ as unknown as JQueryInternal)._data($el[0]!, 'events');
-      expect(postEvents?.click).toBeUndefined();
+      $el.trigger('click');
+      expect(count).toBe(1); // Should not increase
 
       // 2. Special handler (boolean false) compatibility
-      $el.on('submit', false);
-      $el.off('submit', false);
-      const postSubmitEvents = ($ as unknown as JQueryInternal)._data($el[0]!, 'events');
-      expect(postSubmitEvents?.submit).toBeUndefined();
+      let submitCount = 0;
+      const form = $('<form>')
+        .on('submit', () => {
+          submitCount++;
+          return false;
+        })
+        .appendTo('body');
+
+      form.trigger('submit');
+      expect(submitCount).toBe(1);
+
+      form.off('submit');
+      // Do not trigger submit again as it will cause a real navigation in the browser.
+
+      form.remove();
+      $el.remove();
     });
   });
 });

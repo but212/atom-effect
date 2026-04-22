@@ -1,16 +1,5 @@
-/**
- * atom-effect-jquery: Main Entry Point
- *
- * This module orchestrates the automatic integration of reactive atoms
- * into the jQuery ecosystem. By importing this module, the following
- * actions occur automatically:
- * 1. jQuery prototypes are patched for lifecycle safety.
- * 2. Reactive chainable methods ($().atomText, etc.) are registered.
- * 3. The MutationObserver safety-net is activated for automated cleanup.
- */
 import $ from 'jquery';
 
-// side-effectful imports: these register methods and features into the $ namespace.
 import '@/core/namespace';
 import '@/bindings/chainable';
 import '@/bindings/list';
@@ -18,31 +7,86 @@ import '@/bindings/mount';
 import '@/features/route';
 import '@/features/fetch';
 import '@/features/nav';
-
-import { enablejQueryOverrides } from '@/core/jquery-patch';
-import { disableAutoCleanup, enableAutoCleanup, registry } from '@/core/registry';
+import '@/features/web-component';
+import { disablejQueryOverrides, enablejQueryOverrides } from '@/core/jquery-patch';
+import type { AEJConfig } from '@/types';
+import {
+  disableAutoCleanup,
+  enableAutoCleanup,
+  registry,
+  setAutoCleanupAllowed,
+} from './core/registry';
 
 /**
- * Auto-Initialize:
- * Logic: Hooks into jQuery's ready event to guarantee that overrides
- * and lifecycle observers are anchored to a valid DOM tree.
+ * Initializes Atom-Effect jQuery with the specified configuration.
+ *
+ * This function resets the library's state according to the provided config.
+ * It is safe to call multiple times to reconfigure features at runtime.
+ *
+ * @param config - Configuration options.
+ * @public
+ *
+ * @warning If both `patch` and `autoCleanup` are set to `false`, you are
+ * responsible for calling `cleanup(element)` manually when
+ * elements are removed to prevent memory leaks.
  */
-$(() => {
-  enablejQueryOverrides();
-  if (document.body) {
-    // Rationale: document.body is the standard root for the MutationObserver 'safety-net'.
-    enableAutoCleanup(document.body);
+export function initAEJ(config: AEJConfig = {}): void {
+  const { patch = true, autoCleanup = true } = config;
+
+  // 1. Install jQuery patches (granular options handled inside)
+  disablejQueryOverrides();
+  if (patch !== false) {
+    const patchOpts = typeof patch === 'object' ? patch : {};
+    enablejQueryOverrides(patchOpts);
   }
+
+  // 2. Configure MutationObserver safety net
+  disableAutoCleanup();
+  if (autoCleanup !== false) {
+    setAutoCleanupAllowed(true);
+    const root = typeof autoCleanup === 'object' ? autoCleanup.root : document.body;
+    if (root) {
+      enableAutoCleanup(root);
+      registry.setAutoCleanupScheduled(true);
+    }
+  } else {
+    setAutoCleanupAllowed(false);
+  }
+}
+
+// Logic: Legacy support for automatic initialization.
+// Allows opting out via window.AEJ_NO_AUTO_INIT = true.
+$(() => {
+  const win = window as unknown as { AEJ_NO_AUTO_INIT?: boolean };
+  if (!win.AEJ_NO_AUTO_INIT) initAEJ();
 });
 
 export { disablejQueryOverrides, enablejQueryOverrides } from '@/core/jquery-patch';
-export { nextTick } from '@/core/namespace';
+export { disableAutoCleanup, enableAutoCleanup } from '@/core/registry';
 
 /**
- * Public API Surface:
- * Re-exports the definitive types used for building reactive components and bindings.
+ * Performs a deep recursive cleanup on a node and its entire Shadow DOM subtrees.
+ *
+ * When to use:
+ * - Manually cleaning up an element that was removed from the DOM if autoCleanup is disabled.
+ * - Forcing a cleanup cycle on a specific container.
+ *
+ * @param element - The element to clean up.
+ * @public
  */
+export function cleanup(element: HTMLElement | JQuery): void {
+  if (element instanceof HTMLElement) {
+    registry.cleanupTree(element);
+  } else {
+    element.each((_, el) => registry.cleanupTree(el));
+  }
+}
+
+$.extend({ initAEJ });
+
 export type {
+  AtomComponentController,
+  AtomNav,
   AtomNavOptions,
   BindingOptions,
   ComponentFn,
@@ -52,7 +96,9 @@ export type {
   EffectCleanup,
   EffectResult,
   EqualFn,
+  FetchError,
   FetchOptions,
+  JQueryScopedSelector,
   ListOptions,
   PrimitiveValue,
   ReactiveValue,
@@ -65,7 +111,4 @@ export type {
   WritableAtom,
 } from '@/types';
 
-export { disableAutoCleanup, enableAutoCleanup, registry };
-
-/** The augmented jQuery object is the default export. */
 export default $;

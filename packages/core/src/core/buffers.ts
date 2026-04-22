@@ -3,7 +3,11 @@
 /**
  * A ultra-high-performance, allocation-optimized container for reactive subscribers.
  *
- * Design Philosophy:
+ * When to use:
+ * - Internal storage for subscribers or dependencies in reactive nodes.
+ * - When performance and memory allocations are critical (avoids arrays for small sizes).
+ *
+ * Logic:
  * 1. Inline Storage: Uses 4 object properties (_s0.._s3) to store items directly.
  *    Since >90% of reactive nodes have 1-4 subscribers, this avoids array creation entirely.
  * 2. Spill-over Model: Shifts to a lazy-allocated overflow array only when necessary.
@@ -11,13 +15,13 @@
  *    to support fast iteration while maintaining hole-reuse capabilities.
  */
 export class SlotBuffer<T> {
-  // Physical high-water mark first for better V8 object layout (numbers)
+  // Optimization: Physical high-water mark first for better V8 object layout (numbers)
   /** Physical high-water mark. Indicates the highest index ever occupied + 1. */
   _count = 0;
   /** Logical element count. Number of non-null items currently in the buffer. */
   _actualCount = 0;
 
-  // Direct property slots for ultra-fast access and zero allocation.
+  // Optimization: Direct property slots for ultra-fast access and zero allocation.
   _s0: T | null = null;
   _s1: T | null = null;
   _s2: T | null = null;
@@ -101,7 +105,12 @@ export class SlotBuffer<T> {
     return this._count;
   }
 
-  /** Retrieves item at the specified index. O(1). */
+  /**
+   * Retrieves item at the specified physical index.
+   *
+   * @param index - The physical index to access.
+   * @returns The item at the index, or null if empty or out of bounds.
+   */
   getAt(index: number): T | null {
     if (index < 4) {
       if (index === 0) return this._s0;
@@ -115,8 +124,13 @@ export class SlotBuffer<T> {
   }
 
   /**
-   * Sets item at index.
-   * Forces recalculation of logic size and high-water mark reduction on nullification.
+   * Sets item at a specific physical index and updates bookkeeping.
+   *
+   * Logic: Forces recalculation of logical size and physical high-water mark.
+   * If an item is nullified, it may trigger a recursive physical size reduction.
+   *
+   * @param index - The physical index to set.
+   * @param item - The item to store, or null to clear the slot.
    */
   setAt(index: number, item: T | null): void {
     const old = this.getAt(index);
@@ -124,11 +138,9 @@ export class SlotBuffer<T> {
 
     this._rawWrite(index, item);
 
-    // Sync logical count (Active items tracking)
     if (old === null) this._actualCount++;
     else if (item === null) this._actualCount--;
 
-    // Sync physical high-water mark (Iteration boundary tracking)
     if (item !== null) {
       if (index >= this._count) this._count = index + 1;
     } else {
@@ -168,7 +180,6 @@ export class SlotBuffer<T> {
    * Normalizes the high-water mark even if the current count is 0.
    */
   truncateFrom(index: number): void {
-    // 1. Cleanup inline slots
     if (index <= 3) {
       if (index <= 3 && this._s3 !== null) {
         this._onItemRemoved(this._s3!);
@@ -192,7 +203,6 @@ export class SlotBuffer<T> {
       }
     }
 
-    // 2. Cleanup overflow array
     const ov = this._overflow;
     if (ov !== null) {
       const ovStart = index > 4 ? index - 4 : 0;
@@ -223,7 +233,14 @@ export class SlotBuffer<T> {
    */
   protected _onItemRemoved(_item: T): void {}
 
-  /** Appends an item to the buffer. Returns assigned index. O(1). */
+  /**
+   * Appends an item to the buffer in the first available slot.
+   *
+   * @param item - The item to add.
+   * @returns The assigned physical index.
+   *
+   * Optimization: Reuses holes in the overflow array if available, avoiding array growth.
+   */
   add(item: T): number {
     const idx = this._rawAdd(item);
     if (idx >= this._count) this._count = idx + 1;
@@ -260,7 +277,12 @@ export class SlotBuffer<T> {
     return false;
   }
 
-  /** O(N) presence check. */
+  /**
+   * Checks if an item exists in the buffer.
+   *
+   * @param item - Item to search for.
+   * @returns true if found.
+   */
   has(item: T): boolean {
     const actual = this._actualCount;
     if (actual === 0) return false;
@@ -271,13 +293,20 @@ export class SlotBuffer<T> {
     return false;
   }
 
-  /** Optimized iteration. Fast-path triggers when buffer is dense (no holes). */
+  /**
+   * Iterates over all active (non-null) items.
+   *
+   * Optimization: Triggers a fast-path for dense buffers (no holes),
+   * avoiding all null checks and property lookups.
+   *
+   * @param fn - Callback to execute for each item.
+   */
   forEach(fn: (item: T) => void): void {
     const actual = this._actualCount;
     if (actual === 0) return;
 
     if (actual === this._count) {
-      // Dense optimization: Avoid all null checks and property lookups
+      // Optimization: Dense optimization: Avoid all null checks and property lookups
       fn(this._s0!);
       if (actual > 1) {
         fn(this._s1!);
@@ -295,7 +324,7 @@ export class SlotBuffer<T> {
       return;
     }
 
-    // Sparse path: Unrolled for the first 4 slots
+    // Logic: Sparse path: Unrolled for the first 4 slots
     let count = 0;
     if (this._s0 !== null) {
       fn(this._s0);
@@ -326,7 +355,11 @@ export class SlotBuffer<T> {
     }
   }
 
-  /** Elimination of all holes via in-place shifting. Zero-allocation. */
+  /**
+   * Elimination of all holes via in-place shifting.
+   *
+   * Optimization: Performs zero-allocation compaction to ensure the buffer is dense.
+   */
   compact(): void {
     const actual = this._actualCount;
     if (actual === this._count) return;
@@ -379,6 +412,9 @@ import type { DependencyLink } from './tracking';
 
 /**
  * Specialized high-speed buffer for Dependency Tracking Cycles.
+ *
+ * Logic: Optimized for frequent synchronization of Node->Index mappings
+ * and supports dependency "claiming" to minimize tracking overhead.
  */
 export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
   private _map: Map<Dependency, number> | null = null;
@@ -393,7 +429,6 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
     link.unsub?.();
   }
 
-  /** Synchronizes the Node->Index Map when setting entries directly. */
   override setAt(index: number, item: DependencyLink | null): void {
     const old = this.getAt(index);
     super.setAt(index, item);
@@ -405,14 +440,19 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
   }
 
   /**
-   * Finds and reuses a dependency from a previous cycle.
-   * Optimized hot-path with unrolled search.
+   * Finds and reuses a dependency from a previous tracking cycle to minimize work.
+   *
+   * Optimization: Performs a multi-stage search starting with a direct hit check (O(1)),
+   * falling back to map lookup or targeted scan depending on buffer size.
+   *
+   * @param dep - The dependency node to claim.
+   * @param trackIndex - The expected physical index for this dependency.
+   * @returns true if found and claimed.
    */
   claimExisting(dep: Dependency, trackIndex: number): boolean {
     const length = this._count;
     if (length <= trackIndex) return false;
 
-    // 1. Direct hit check (Unrolled for performance)
     let current: DependencyLink | null = null;
     if (trackIndex < 4) {
       if (trackIndex === 0) current = this._s0;
@@ -428,12 +468,10 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
       return true;
     }
 
-    // 2. Map lookup
     if (this._map !== null || length - trackIndex > this._SCAN_THRESHOLD) {
       return this._claimViaMap(dep, trackIndex);
     }
 
-    // 3. Sequential search: Unrolled for the first 4 slots
     let foundIdx = -1;
     let foundLink: DependencyLink | null = null;
 
@@ -460,7 +498,7 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
 
     if (foundIdx !== -1) {
       foundLink!.version = dep.version;
-      // Precise manual swap to avoid repeated index checks in _rawSwap
+      // Optimization: Precise manual swap to avoid repeated index checks in _rawSwap
       this._rawWrite(trackIndex, foundLink);
       this._rawWrite(foundIdx, current);
       return true;

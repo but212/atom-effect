@@ -22,13 +22,19 @@ import {
 import { DependencyLink, type DependencyTracker, trackingContext } from './tracking';
 
 /**
- * Effect implementation.
+ * Internal {@link EffectObject} implementation.
+ *
+ * Logic: Manages lifecycle, dependency tracking, and execution scheduling for side effects.
+ * Supports both synchronous and asynchronous execution, automatic cleanup management,
+ * and built-in protection against infinite reactive loops.
+ *
+ * Optimization: Uses a pre-allocated notify callback to minimize closure allocations per dependency.
  */
 class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyTracker {
   /** @internal */
   readonly [BRAND] = BrandFlags.Effect;
 
-  // Bookkeeping fields grouped at top for V8 layout optimization
+  // Optimization: Bookkeeping fields grouped at top for V8 layout optimization (SMI/Number packing).
   private _currentEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
   private _lastFlushEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
   private _executionsInEpoch = 0;
@@ -72,6 +78,11 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     debug.attachDebugInfo(this, 'effect', this.id, options.name);
   }
 
+  /**
+   * Manually triggers the effect execution, even if dependencies haven't changed.
+   *
+   * @throws {EffectError} If the effect has already been disposed.
+   */
   public run(): void {
     if (this.isDisposed) {
       throw new EffectError(ERROR_MESSAGES.EFFECT_DISPOSED);
@@ -79,6 +90,9 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     this.execute(true);
   }
 
+  /**
+   * Disposes the effect, stopping all future executions and clearing dependencies.
+   */
   public dispose(): void {
     if (this.isDisposed) return;
     this.flags |= EFFECT_STATE_FLAGS.DISPOSED;
@@ -97,7 +111,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     const deps = this._deps;
     const version = dep.version;
 
-    // [Optimization] Fast-path lookup bypassing SlotBuffer.getAt() or switch statements
+    // Optimization: Fast-path lookup bypassing SlotBuffer.getAt() or switch statements for inline slots.
     let existing: DependencyLink | null = null;
     if (trackIndex < 4) {
       if (trackIndex === 0) existing = deps._s0;
@@ -140,14 +154,17 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
   }
 
   /**
-   * Executes effect with tracking.
+   * Logic: Transactional Execution
+   * Manages re-entrancy protection, cleanup rotation, and dependency tracking
+   * during the user's side effect execution to ensure atomic updates and
+   * prevention of infinite reactive loops.
+   *
+   * @param force - If true, bypasses dirty check and executes immediately.
    */
   public execute(force = false): void {
     const flags = this.flags;
-    // Guard: Combined bitwise check for efficiency
     if ((flags & (EFFECT_STATE_FLAGS.DISPOSED | EFFECT_STATE_FLAGS.EXECUTING)) !== 0) return;
 
-    // Skip if not dirty or forced
     const deps = this._deps;
     if (!force && deps.physicalSize > 0 && !this._isDirty()) return;
 
@@ -221,13 +238,12 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     const size = deps.size;
     if (size === 0) return false;
 
-    // Fast path: Check hot index first without switching context
     const hotIndex = this._hotIndex;
     if (hotIndex !== -1 && hotIndex < size) {
       const link = deps.getAt(hotIndex);
       if (link !== null) {
         const dep = link.node;
-        // Correctness: Only non-computed deps can skip context switch/deep check
+        // Logic: Correctness: Only non-computed deps can skip context switch/deep check.
         if (!dep.isComputed && dep.version !== link.version) return true;
       }
     }
@@ -284,6 +300,12 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     }
   }
 
+  /**
+   * Safeguard to detect and prevent infinite reactive loops.
+   *
+   * Constraint: Monitors execution frequency per flush and per effect,
+   * throwing if defined thresholds are exceeded.
+   */
   private _checkInfiniteLoops(): void {
     const epoch = currentFlushEpoch();
     if (this._lastFlushEpoch !== epoch) {
@@ -355,11 +377,27 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
 }
 
 /**
- * Creates and starts an effect.
+ * Creates and starts a reactive effect that automatically re-runs when its dependencies change.
  *
- * @param fn - Effect function.
- * @param options - Configuration options.
- * @returns Effect instance.
+ * When to use:
+ * - To perform side effects (logging, data fetching, DOM updates) in response to state changes.
+ * - To synchronize external systems with the reactive state.
+ *
+ * @param fn - The function to execute. Can return a cleanup function or a Promise.
+ * @param options - Configuration for sync mode, frequency limits, or custom error handling.
+ * @returns A handle to the created effect for manual disposal or control.
+ * @throws {EffectError} If the provided function is not a valid function.
+ *
+ * @example
+ * ```typescript
+ * const count = atom(0);
+ * effect(() => {
+ *   console.log(`Current count: ${count.value}`);
+ *   return () => console.log('Cleanup before next run');
+ * });
+ *
+ * count.value++; // Logs: "Cleanup before next run", "Current count: 1"
+ * ```
  */
 export function effect(fn: EffectFunction, options: EffectOptions = {}): EffectObject {
   if (typeof fn !== 'function') {

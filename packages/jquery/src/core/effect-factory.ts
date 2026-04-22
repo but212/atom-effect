@@ -19,7 +19,14 @@ export type BindingDebugType =
   | (string & {});
 
 /**
- * Internal helper to manage async race conditions and cleanup.
+ * Internal helper to manage asynchronous race conditions and DOM lifecycle cleanup.
+ *
+ * Logic: Monotonic ID Tracking
+ * - Assigns a unique, incrementing ID to every update request.
+ * - Discards resolved promises if a newer update ID has been issued,
+ *   effectively solving the "out-of-order" async racing problem.
+ *
+ * @internal
  */
 function createAsyncRunner<T>(
   el: Element,
@@ -29,52 +36,61 @@ function createAsyncRunner<T>(
   let latestId = 0;
   let isDisposed = false;
 
-  registry.trackCleanup(el, () => {
+  registry.onCleanup(el, () => {
     isDisposed = true;
   });
 
-  return (val: T | Promise<T>) => {
+  return (value: T | Promise<T>) => {
     const currentId = ++latestId;
 
-    if (!isPromise(val)) {
+    if (!isPromise(value)) {
       untracked(() => {
         try {
-          updater(val);
-          debug.domUpdated(LOG_PREFIXES.BINDING, el, debugType, val);
-        } catch (e) {
+          updater(value);
+          debug.domUpdated(LOG_PREFIXES.BINDING, el, debugType, value);
+        } catch (error) {
           debug.error(
             LOG_PREFIXES.BINDING,
             ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType, true),
-            e
+            error
           );
         }
       });
       return;
     }
 
-    val
+    value
       .then((resolved) => {
         if (currentId === latestId && !isDisposed) {
           untracked(() => {
             try {
               updater(resolved);
               debug.domUpdated(LOG_PREFIXES.BINDING, el, `${debugType} (async)`, resolved);
-            } catch (e) {
-              debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType), e);
+            } catch (error) {
+              debug.error(
+                LOG_PREFIXES.BINDING,
+                ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType),
+                error
+              );
             }
           });
         }
       })
-      .catch((e) => {
+      .catch((error) => {
         if (currentId === latestId && !isDisposed) {
-          debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType), e);
+          debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType), error);
         }
       });
   };
 }
 
 /**
- * Orchestrates a reactive relationship between a single source and a DOM element.
+ * Lifecycle:
+ * - Automatically registers the created `effect` with the global `registry`
+ *   linked to the target element.
+ * - Ensures that the effect is disposed of when the element is removed or cleaned.
+ *
+ * @internal
  */
 export function registerReactiveEffect<T>(
   el: Element,
@@ -84,15 +100,15 @@ export function registerReactiveEffect<T>(
 ): void {
   const runner = createAsyncRunner(el, debugType, updater);
 
-  const sourceIsReactive = isAtom(source);
-  const sourceIsFunction = typeof source === 'function';
+  const isReactive = isAtom(source);
+  const isFunction = typeof source === 'function';
 
-  if (sourceIsReactive || sourceIsFunction) {
+  if (isReactive || isFunction) {
     registry.trackEffect(
       el,
       effect(
         () => {
-          const value = sourceIsReactive
+          const value = isReactive
             ? (source as ReadonlyAtom<T | Promise<T>>).value
             : (source as () => T | Promise<T>)();
           runner(value);
@@ -106,7 +122,12 @@ export function registerReactiveEffect<T>(
 }
 
 /**
- * Orchestrates reactive updates for a collection of values (e.g. classes or styles).
+ * Logic: Batch Resolution
+ * - Detects if any property in the map is reactive (Atom or Function).
+ * - Aggregates multiple async sources into a single `Promise.all` resolution
+ *   to minimize DOM thrashing and ensure atomic UI updates.
+ *
+ * @internal
  */
 export function registerMapEffect<T>(
   el: Element,
@@ -119,50 +140,50 @@ export function registerMapEffect<T>(
 
   let hasReactive = false;
   for (let i = 0, len = entries.length; i < len; i++) {
-    const val = entries[i]![1];
-    if (isAtom(val) || typeof val === 'function') {
+    const value = entries[i]![1];
+    if (isAtom(value) || typeof value === 'function') {
       hasReactive = true;
       break;
     }
   }
 
-  const evaluateMap = () => {
-    const promises: Promise<{ key: string; val: T }>[] = [];
-    const resolvedMap: Record<string, T> = {};
+  const collect = () => {
+    const promises: Promise<{ key: string; value: T }>[] = [];
+    const resolved: Record<string, T> = {};
 
     for (let i = 0, len = entries.length; i < len; i++) {
       const [key, source] = entries[i]!;
-      const val = isAtom(source)
+      const value = isAtom(source)
         ? (source as ReadonlyAtom<T | Promise<T>>).value
         : typeof source === 'function'
           ? (source as () => T | Promise<T>)()
           : (source as T | Promise<T>);
 
-      if (isPromise(val)) {
-        promises.push(val.then((v) => ({ key, val: v })));
+      if (isPromise(value)) {
+        promises.push(value.then((v) => ({ key, value: v })));
       } else {
-        resolvedMap[key] = val as T;
+        resolved[key] = value as T;
       }
     }
 
     if (promises.length > 0) {
       return Promise.all(promises).then((results) => {
         for (let i = 0, len = results.length; i < len; i++) {
-          const res = results[i]!;
-          resolvedMap[res.key] = res.val;
+          const result = results[i]!;
+          resolved[result.key] = result.value;
         }
-        return resolvedMap;
+        return resolved;
       });
     }
-    return resolvedMap;
+    return resolved;
   };
 
   if (hasReactive) {
     registry.trackEffect(
       el,
-      effect(() => runner(evaluateMap()), { name: debugType })
+      effect(() => runner(collect()), { name: debugType })
     );
   } else {
-    runner(evaluateMap());
+    runner(collect());
   }
 }

@@ -8,7 +8,7 @@ Think of your application state as a **spreadsheet**.
 
 - **Atoms** are cells you type into manually.
 - **Computed** values are cells with formulas — they update automatically when their inputs change.
-- **Effects** are "watchers" that react to cell changes (e.g., updating the DOM, logging, sending requests).
+- **Effects** are "observers" that react to cell changes (e.g., updating the DOM, logging, sending requests).
 
 ```text
   [Atom A]  ──┐
@@ -16,7 +16,7 @@ Think of your application state as a **spreadsheet**.
   [Atom B]  ──┘
 ```
 
-All dependency tracking happens **automatically** — you never declare relationships manually. Just read a value inside a `computed` or `effect`, and the library tracks it for you.
+All dependency tracking occurs **automatically** — you never declare relationships manually. Just read a value inside a `computed` or `effect`, and the library tracks it for you.
 
 ## Core Primitives
 
@@ -53,7 +53,7 @@ total.value; // 220 — recomputed because `price` changed
 
 - **Lazy**: Does not compute until `.value` is read.
 - **Cached**: Returns the same result if dependencies haven't changed.
-- **Async-capable**: Can return a `Promise`. See [API Reference](./API.md) for `defaultValue` and async state tracking.
+- **Asynchronous support**: Can return a `Promise`. See [API Reference](./API.md) for `defaultValue` and async state tracking.
 
 ### 3. `effect(fn)` — Side Effects
 
@@ -196,7 +196,7 @@ effect(() => {
 });
 ```
 
-## Common Pitfalls
+## Common Considerations
 
 ### 1. Forgetting to Dispose
 
@@ -267,10 +267,10 @@ packages/core/src/
 
 ## Next Steps
 
-To become a power user or contributor, explore the following:
+To become an advanced user or contributor, explore the following:
 
 - [**Architecture & Design**](./ARCHITECTURE.md):
   - **The Life of a Change**: How updates flow through the engine.
-  - **Glitch-Free Guarantee**: How the library avoids inconsistent states.
+  - **Consistency Model**: How the library avoids inconsistent states.
   - **V8 Optimizations**: How we use bitwise flags and memory pooling for performance.
 - [**API Reference**](./API.md): Full documentation of options, configuration, and advanced error handling.

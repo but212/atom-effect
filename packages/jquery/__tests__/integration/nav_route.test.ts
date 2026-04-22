@@ -1,17 +1,14 @@
-import $ from 'jquery';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import '@/index';
-import { disableAutoCleanup, enableAutoCleanup, registry } from '@/core/registry';
+import $ from '@/index';
 
 describe('Nav & Route Integration', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
-    enableAutoCleanup(document.body);
+    $.initAEJ({ autoCleanup: true });
   });
 
   afterEach(() => {
-    disableAutoCleanup();
-    registry.cleanupTree(document.body);
+    $.initAEJ({ autoCleanup: false });
     window.location.hash = '';
     window.history.replaceState(null, '', '/');
   });
