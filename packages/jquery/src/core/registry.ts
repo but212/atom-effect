@@ -3,8 +3,7 @@ import type { EffectObject } from '@/types';
 import { getSelector } from '@/utils';
 import { debug } from '@/utils/debug';
 
-let isScheduled = false;
-let isEnabled = true;
+let isAutoCleanupEnabled = true;
 
 /**
  * Logic: Configuration Control
@@ -13,7 +12,7 @@ let isEnabled = true;
  * @internal
  */
 export function setAutoCleanupAllowed(allowed: boolean): void {
-  isEnabled = allowed;
+  isAutoCleanupEnabled = allowed;
 }
 
 /**
@@ -51,6 +50,8 @@ class BindingRegistry {
 
   private shadows = new WeakMap<Element, ShadowRoot>();
 
+  private autoCleanupScheduled = false;
+
   /** Mark a node to preserve its effects even if detached from the DOM (e.g., jQuery .detach()). */
   keep(node: Node): void {
     this.kept.add(node);
@@ -75,6 +76,16 @@ class BindingRegistry {
    */
   unmarkIgnored(node: Node): void {
     this.ignored.delete(node);
+  }
+
+  /** @internal */
+  isAutoCleanupScheduled(): boolean {
+    return this.autoCleanupScheduled;
+  }
+
+  /** @internal */
+  setAutoCleanupScheduled(scheduled: boolean): void {
+    this.autoCleanupScheduled = scheduled;
   }
 
   /**
@@ -121,7 +132,12 @@ class BindingRegistry {
    * @internal
    */
   markHost(host: Element): void {
-    host.classList.add(MARK_SHADOW);
+    if (host.isConnected) {
+      host.classList.add(MARK_SHADOW);
+    } else {
+      // Logic: Defer attribute modification to avoid DOMException during Custom Element construction.
+      queueMicrotask(() => host.classList.add(MARK_SHADOW));
+    }
   }
 
   /**
@@ -134,8 +150,13 @@ class BindingRegistry {
 
   private getOrCreateRecord(element: Element): BindingRecord {
     // Logic: Lazy-init the mutation observer only when the first binding is created.
-    if (isEnabled && !isScheduled && typeof document !== 'undefined' && document.body) {
-      isScheduled = true;
+    if (
+      isAutoCleanupEnabled &&
+      !this.autoCleanupScheduled &&
+      typeof document !== 'undefined' &&
+      document.body
+    ) {
+      this.autoCleanupScheduled = true;
       enableAutoCleanup(document.body);
     }
     let result = this.records.get(element);
@@ -307,13 +328,10 @@ export function enableAutoCleanup(root: Element | ShadowRoot | DocumentFragment)
   observerMap.set(root, observer);
 }
 
-export function setAutoCleanupScheduled(scheduled: boolean): void {
-  isScheduled = scheduled;
-}
-
 export function disableAutoCleanup(): void {
   observerMap.forEach((observer) => observer.disconnect());
   observerMap.clear();
+  registry.setAutoCleanupScheduled(false);
 }
 
 /**

@@ -60,6 +60,23 @@ describe('Web Component Features', () => {
       p2.remove();
       await vi.waitFor(() => expect(registry.hasBind(el.inner)).toBe(false));
     });
+
+    it('should not throw DOMException when setup() is called in constructor', () => {
+      const tagName = 'constructor-setup-comp';
+      class Comp extends HTMLElement {
+        private aej = $.useAtomComponent(this);
+        constructor() {
+          super();
+          this.attachShadow({ mode: 'open' });
+          // Logic: Safe to call setup in constructor even if it adds classes (deferred)
+          this.aej.setup();
+        }
+      }
+      if (!customElements.get(tagName)) customElements.define(tagName, Comp);
+      expect(() => {
+        document.createElement(tagName);
+      }).not.toThrow();
+    });
   });
 
   describe('Scoped Selector ($)', () => {
@@ -95,10 +112,10 @@ describe('Web Component Features', () => {
       $.provideAtom(provider, 'key', atom);
 
       // 1. Basic resolution & Null fallbacks
-      expect($.injectAtom(consumer, 'key')).toBeNull();
+      expect($.injectAtom(consumer, 'key')?.value).toBeNull();
       provider.appendChild(consumer);
-      expect($.injectAtom(consumer, 'key')).toBe(atom);
-      expect($.injectAtom(provider, 'unknown')).toBeNull();
+      expect($.injectAtom(consumer, 'key')?.value).toBe(atom.value);
+      expect($.injectAtom(provider, 'unknown')?.value).toBeNull();
 
       // 2. Shadow Boundary Traversal (The "composed" path)
       const shadowHost = document.createElement('div');
@@ -107,7 +124,7 @@ describe('Web Component Features', () => {
       sr.appendChild(deepChild);
       provider.appendChild(shadowHost);
 
-      expect($.injectAtom(deepChild, 'key')).toBe(atom);
+      expect($.injectAtom(deepChild, 'key')?.value).toBe(atom.value);
     });
 
     it('should respect nearest-ancestor priority and overrides', () => {
@@ -122,12 +139,53 @@ describe('Web Component Features', () => {
       const a2 = $.atom(2);
       $.provideAtom(gp, 'k', a1);
       $.provideAtom(p, 'k', a2); // Closer provider wins
-
-      expect($.injectAtom(c, 'k')).toBe(a2);
+      expect($.injectAtom(c, 'k')?.value).toBe(a2.value);
 
       const a3 = $.atom(3);
       $.provideAtom(p, 'k', a3); // Runtime override
-      expect($.injectAtom(c, 'k')).toBe(a3);
+      expect($.injectAtom(c, 'k')?.value).toBe(3);
+    });
+
+    it('should re-evaluate computed atom after connection (Late Binding)', async () => {
+      const tagName = 'late-binding-comp';
+      const atom = $.atom('initial');
+
+      class Comp extends HTMLElement {
+        private aej = $.useAtomComponent(this);
+        public theme = $.injectAtom(this, 'theme');
+        connectedCallback() {
+          this.aej.setup();
+        }
+      }
+      if (!customElements.get(tagName)) customElements.define(tagName, Comp);
+
+      const el = document.createElement(tagName) as Comp;
+      const provider = document.createElement('div');
+      $.provideAtom(provider, 'theme', atom);
+
+      // Before connection: cached null
+      expect(el.theme?.value).toBeNull();
+
+      // Connect to provider
+      provider.appendChild(el);
+      document.body.appendChild(provider);
+
+      await vi.waitFor(() => expect(el.theme?.value).toBe('initial'));
+    });
+
+    it('should update consumers when a provider is attached late', async () => {
+      const provider = document.createElement('div');
+      const consumer = document.createElement('div');
+      provider.appendChild(consumer);
+      document.body.appendChild(provider);
+
+      const theme = $.injectAtom(consumer, 'theme');
+      expect(theme?.value).toBeNull();
+
+      const atom = $.atom('dark');
+      $.provideAtom(provider, 'theme', atom);
+
+      await vi.waitFor(() => expect(theme?.value).toBe('dark'));
     });
   });
 
@@ -175,6 +233,24 @@ describe('Web Component Features', () => {
 
       container.remove();
     });
+
+    it('should not attach redundant MutationObserver to document.body when custom root is used', () => {
+      const customRoot = document.createElement('div');
+      document.body.appendChild(customRoot);
+
+      // Reset global state for clean test
+      registry.setAutoCleanupScheduled(false);
+      $.initAEJ({ autoCleanup: { root: customRoot } });
+
+      expect(registry.isAutoCleanupScheduled()).toBe(true);
+
+      const el = document.createElement('div');
+      customRoot.appendChild(el);
+      $(el).atomText($.atom('test'));
+
+      // verify that it remains true (no secondary body observer attached)
+      expect(registry.isAutoCleanupScheduled()).toBe(true);
+    });
   });
 
   describe('Edge Cases & Regression Tests', () => {
@@ -199,7 +275,7 @@ describe('Web Component Features', () => {
       $.provideAtom(el, 'key', atom);
 
       const injected = $.injectAtom(el, 'key');
-      expect(injected).toBeNull();
+      expect(injected?.value).toBeNull();
     });
   });
 

@@ -10,7 +10,12 @@ import '@/features/nav';
 import '@/features/web-component';
 import { disablejQueryOverrides, enablejQueryOverrides } from '@/core/jquery-patch';
 import type { AEJConfig } from '@/types';
-import { disableAutoCleanup, enableAutoCleanup, setAutoCleanupAllowed } from './core/registry';
+import {
+  disableAutoCleanup,
+  enableAutoCleanup,
+  registry,
+  setAutoCleanupAllowed,
+} from './core/registry';
 
 /**
  * Initializes Atom-Effect jQuery with the specified configuration.
@@ -40,7 +45,10 @@ export function initAEJ(config: AEJConfig = {}): void {
   if (autoCleanup !== false) {
     setAutoCleanupAllowed(true);
     const root = typeof autoCleanup === 'object' ? autoCleanup.root : document.body;
-    if (root) enableAutoCleanup(root);
+    if (root) {
+      enableAutoCleanup(root);
+      registry.setAutoCleanupScheduled(true);
+    }
   } else {
     setAutoCleanupAllowed(false);
   }

@@ -1,12 +1,7 @@
 import $ from 'jquery';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '@/index';
-import {
-  disableAutoCleanup,
-  enableAutoCleanup,
-  registry,
-  setAutoCleanupScheduled,
-} from '@/core/registry';
+import { disableAutoCleanup, enableAutoCleanup, registry } from '@/core/registry';
 
 describe('Binding Registry', () => {
   beforeEach(() => {
@@ -69,7 +64,7 @@ describe('Binding Registry', () => {
     it('should respect boundaries regardless of initialization timing (Body Readiness)', async () => {
       // Ensure: system works even if first call happens before body is ready
       disableAutoCleanup();
-      setAutoCleanupScheduled(false);
+      registry.setAutoCleanupScheduled(false);
 
       const originalBody = document.body;
       const bodySpy = vi

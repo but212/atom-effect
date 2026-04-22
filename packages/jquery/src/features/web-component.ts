@@ -1,6 +1,11 @@
 import $ from 'jquery';
 import { disableAutoCleanupFor, enableAutoCleanup, registry } from '@/core/registry';
-import type { AtomComponentController, JQueryScopedSelector, ReadonlyAtom } from '@/types';
+import type {
+  AtomComponentController,
+  JQueryScopedSelector,
+  ReadonlyAtom,
+  WritableAtom,
+} from '@/types';
 
 // ─── Internal Symbols ────────────────────────────────────────────────────────
 
@@ -18,6 +23,29 @@ const AEJ_STATE = Symbol.for('aej:state');
  * @internal
  */
 const CLEANUP_MARKER = Symbol.for('aej:cleanup-enabled');
+// ─── Context System ──────────────────────────────────────────────────────────
+
+const globalContextVersion = $.atom(0);
+const keyContextVersions = new Map<string | symbol, WritableAtom<number>>();
+
+/** @internal */
+function getContextVersion(key: string | symbol): WritableAtom<number> {
+  let v = keyContextVersions.get(key);
+  if (!v) {
+    v = $.atom(0);
+    keyContextVersions.set(key, v);
+  }
+  return v;
+}
+
+/** @internal */
+function notifyContextChange(key?: string | symbol): void {
+  if (key) {
+    getContextVersion(key).value++;
+  } else {
+    globalContextVersion.value++;
+  }
+}
 
 // ─── Internal Types ───────────────────────────────────────────────────────────
 
@@ -173,7 +201,9 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
     },
 
     injectAtom<T = unknown>(key: string | symbol): T | null {
-      return findContext(element, key) as T | null;
+      // Logic: Use the same reactive lookup logic as $.injectAtom to ensure consistency.
+      const atom = injectAtom(element, key);
+      return (atom ? atom.value : null) as T | null;
     },
 
     setup(shadowRoot?: ShadowRoot) {
@@ -198,6 +228,8 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       }
 
       reactive.isInitialized = true;
+      // Reason: Notify injected atoms that the host might now have a shadow root or be connected.
+      notifyContextChange();
     },
 
     teardown() {
@@ -250,6 +282,8 @@ export function provideAtom(
     if (!s.providers) s.providers = new Map();
     s.providers.set(key, val);
   }
+  // Reason: Notify lookups for this specific key.
+  notifyContextChange(key);
 }
 
 /**
@@ -279,23 +313,20 @@ export function injectAtom(
   const target = resolveElement(element);
   if (!target) return null;
 
-  // Logic: Late Binding support for Web Components.
-  // Custom Elements are not connected during construction.
-  // We return a lazy computed atom so property initializers work consistently.
-  if (!target.isConnected && target.tagName.includes('-')) {
-    return $.computed(() => {
-      const provider = findContext(target, key);
-      return ($.isAtom(provider) ? provider.value : provider) as unknown;
-    }) as ReadonlyAtom<unknown>;
-  }
+  // Logic: Always return a computed atom to support:
+  // 1. Late Binding (Custom Elements not yet connected)
+  // 2. Late Providers (provideAtom called after injectAtom)
+  // 3. Tree Changes (element moved to a different provider)
+  return $.computed(() => {
+    // track dependency on version to re-evaluate when provideAtom or setup is called
+    globalContextVersion.value;
+    getContextVersion(key).value;
 
-  const provider = findContext(target, key);
-  if (provider === null) return null;
+    const provider = findContext(target, key);
+    if (provider === null) return null;
 
-  // Reason: Return the actual atom if provided, otherwise a static computed wrapper
-  // to ensure consistent 'ReadonlyAtom' duck-typing interface.
-  if ($.isAtom(provider)) return provider as unknown as ReadonlyAtom<unknown>;
-  return $.computed(() => provider as unknown) as ReadonlyAtom<unknown>;
+    return ($.isAtom(provider) ? provider.value : provider) as unknown;
+  }) as ReadonlyAtom<unknown>;
 }
 
 $.extend({ provideAtom, injectAtom, useAtomComponent });

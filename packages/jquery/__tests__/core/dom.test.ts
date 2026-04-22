@@ -5,6 +5,8 @@ import $ from '@/index';
 vi.mock('@/core/registry', () => ({
   registry: {
     trackCleanup: vi.fn(),
+    setAutoCleanupScheduled: vi.fn(),
+    isAutoCleanupScheduled: vi.fn(() => false),
   },
   enableAutoCleanup: vi.fn(),
   disableAutoCleanup: vi.fn(),
