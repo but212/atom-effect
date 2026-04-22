@@ -286,7 +286,7 @@ export interface AtomComponentFeatures {
   /** Registers a reactive provider on this element. */
   provideAtom<T = unknown>(key: string | symbol, val: T): void;
   /** Injects a reactive value from an ancestor. */
-  injectAtom<T = unknown>(key: string | symbol): T | null;
+  injectAtom<T = unknown>(key: string | symbol): WritableAtom<T> | null;
 }
 
 /**
@@ -607,19 +607,22 @@ declare global {
     atomNav(options: AtomNavOptions): AtomNav;
 
     /**
-     * Registers an element (or multiple) as a provider for a reactive context.
+     * Registers an element (or multiple) as a provider for a reactive context value.
      *
      * When to use:
-     * - When you need to share state (atoms) with deep descendant elements.
-     * - To avoid "prop drilling" in complex component hierarchies.
+     * - When you need to share state (atoms) with deep descendant elements without prop drilling.
+     * - To establish a theme, user session, or global configuration context at a specific root.
      *
-     * @param element - The host element, selector, or JQuery collection.
-     * @param key - Unique identifier for the context.
-     * @param val - The value (usually an Atom) to be shared.
+     * @param element - The host element, selector, or JQuery collection to act as provider.
+     * @param key - Unique identifier for the context (string or symbol).
+     * @param val - The value (usually an Atom) to be shared with descendants.
      *
      * @example
-     * const theme = $.atom('dark');
-     * $.provideAtom('#app', 'theme', theme);
+     * ```typescript
+     * // Parent provides a theme atom
+     * const theme = $.atom('light');
+     * $.provideAtom('#app-root', 'theme', theme);
+     * ```
      *
      * @public
      */
@@ -629,51 +632,60 @@ declare global {
      * Injects a reactive context provided by an ancestor element.
      *
      * When to use:
-     * - To consume state provided by a parent/ancestor component.
-     * - To decouple child components from specific data sources.
+     * - To consume state provided by a parent/ancestor component without direct coupling.
+     * - To create "Context-Aware" components that adapt to their position in the DOM.
      *
      * @param element - The element or selector requesting the context.
      * @param key - The unique identifier of the context to find.
-     * @returns The injected value if a provider was found, otherwise `null`.
+     * @returns A WritableAtom proxy that tracks the nearest ancestor provider.
      *
      * @example
-     * const theme = $.injectAtom(this, 'theme');
+     * ```typescript
+     * // Child consumes the provided theme
+     * const theme = $.injectAtom('#child-element', 'theme');
      * if (theme) {
-     *   $(this).atomClass('dark-mode', $.computed(() => theme.value === 'dark'));
+     *   $.effect(() => {
+     *     console.log('Current theme:', theme.value);
+     *   });
      * }
+     * ```
      *
      * @public
      */
     injectAtom<T = unknown>(
       element: HTMLElement | JQuery | string,
       key: string | symbol
-    ): ReadonlyAtom<T> | null;
+    ): WritableAtom<T> | null;
 
     /**
-     * Composition-based helper for AEJ Web Components.
+     * Composition-based helper for creating AEJ-powered Web Components.
      *
      * When to use:
-     * - When adding reactive capabilities to standard Custom Elements.
-     * - When you want to avoid 'this' pollution and maintain perfect type safety.
+     * - When building standard Custom Elements with reactive state and scoped selection.
+     * - When you want perfect type safety and predictable lifecycle management for components.
      *
-     * @param element - The host element (usually `this`).
-     * @returns A controller for managing reactive lifecycle and scoped root.
+     * @param element - The host Custom Element (usually `this`).
+     * @returns A controller for managing reactive lifecycle, providers, and scoped root.
      *
      * @example
-     * class MyComp extends HTMLElement {
-     *   // Reason: class field initializers run after super(), so capturing `this` here is valid.
+     * ```typescript
+     * class MyComponent extends HTMLElement {
+     *   // Capture 'this' as the reactive host
      *   private aej = $.useAtomComponent(this);
      *
      *   connectedCallback() {
+     *     // Initialize shadow root and registry
      *     this.aej.setup();
-     *     this.aej.$('h1').text('Hello AEJ');
+     *     this.aej.$('button').on('click', () => console.log('Clicked!'));
      *   }
      *
      *   disconnectedCallback() {
+     *     // Clean up providers and observers
      *     this.aej.teardown();
      *   }
      * }
-     * customElements.define('my-comp', MyComp);
+     * customElements.define('my-component', MyComponent);
+     * ```
      *
      * @public
      */
