@@ -1,12 +1,34 @@
 {
+  /**
+   * Monorepo Base TypeScript Configuration
+   *
+   * Defines the foundational compiler standards for all packages within the
+   * workspace. Prioritizes strict type safety, modern ECMAScript features,
+   * and compatibility with contemporary build tools.
+   */
   "compilerOptions": {
+    /**
+     * Reason: Modern Target Selection
+     * Targets ES2021 to leverage modern language features while maintaining
+     * compatibility with current LTS Node.js and evergreen browsers.
+     */
     "target": "ES2021",
     "module": "ESNext",
     "lib": ["ES2021", "DOM", "DOM.Iterable"],
+    /**
+     * Logic: Bundler-Oriented Resolution
+     * Optimized for monorepo environments where Vite or Rollup manage the
+     * final orchestration based on package.json export maps.
+     */
     "moduleResolution": "bundler",
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
+    /**
+     * Constraint: Maximum Type Safety
+     * Enforces the strictest possible TypeScript rules to prevent common
+     * runtime errors and improve codebase predictability.
+     */
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,

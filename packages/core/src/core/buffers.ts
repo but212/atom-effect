@@ -1,42 +1,44 @@
 // ── SlotBuffer ──────────────────────────────────────────────────────────
 
 /**
- * A ultra-high-performance, allocation-optimized container for reactive subscribers.
+ * An optimized container for managing reactive subscribers with minimal allocations.
  *
  * When to use:
- * - Internal storage for subscribers or dependencies in reactive nodes.
- * - When performance and memory allocations are critical (avoids arrays for small sizes).
+ * - As internal storage for subscribers or dependencies within reactive nodes.
+ * - In performance-critical paths where frequent array allocations should be avoided.
  *
  * Logic:
- * 1. Inline Storage: Uses 4 object properties (_s0.._s3) to store items directly.
- *    Since >90% of reactive nodes have 1-4 subscribers, this avoids array creation entirely.
- * 2. Spill-over Model: Shifts to a lazy-allocated overflow array only when necessary.
- * 3. Size Duality: Distinguishes between Physical Boundary (_count) and Logical Size (_actualCount)
- *    to support fast iteration while maintaining hole-reuse capabilities.
+ * 1. Inline Storage: Utilizes 4 object properties (_s0.._s3) to store items directly.
+ *    This avoids array creation for nodes with 4 or fewer subscribers (the majority case).
+ * 2. Spill-over Model: Transitions to a lazy-allocated overflow array only when required.
+ * 3. Size Duality: Maintains a physical high-water mark (_count) and a logical size (_actualCount)
+ *    to support fast iteration and efficient hole reuse.
  */
 export class SlotBuffer<T> {
-  // Optimization: Physical high-water mark first for better V8 object layout (numbers)
-  /** Physical high-water mark. Indicates the highest index ever occupied + 1. */
+  // Optimization: High-water mark is initialized first for consistent V8 object layout.
+  /** The highest physical index occupied in the buffer plus one. */
   _count = 0;
-  /** Logical element count. Number of non-null items currently in the buffer. */
+  /** The number of active (non-null) items currently stored in the buffer. */
   _actualCount = 0;
 
-  // Optimization: Direct property slots for ultra-fast access and zero allocation.
+  // Optimization: Direct properties provide faster access than indexed array lookups.
   _s0: T | null = null;
   _s1: T | null = null;
   _s2: T | null = null;
   _s3: T | null = null;
 
-  /** Lazy overflow container for index >= 4. */
+  /** A lazily initialized container for items at index 4 or higher. */
   _overflow: (T | null)[] | null = null;
-  /** LIFO reuse-stack of freed overflow indices to maintain O(1) addition. */
+  /** A LIFO stack of available indices in the overflow array to enable O(1) addition. */
   _freeIndices: number[] | null = null;
 
   // ── Internal Physical Primitives ──────────────────────────────────────
 
   /**
-   * Low-level atomic write.
-   * Does NOT update bookkeeping counters. Used as a building block for higher APIs.
+   * Performs a low-level atomic write to a physical slot.
+   *
+   * Logic: This method does not update bookkeeping counters and serves as a
+   * primitive for higher-level operations.
    */
   protected _rawWrite(index: number, item: T | null): void {
     if (index < 4) {
@@ -52,8 +54,9 @@ export class SlotBuffer<T> {
   }
 
   /**
-   * Finds the first available hole or appends to the tail.
-   * Returns the assigned physical index.
+   * Finds the first available slot (either a hole or the tail) and assigns the item.
+   *
+   * @returns The assigned physical index.
    */
   protected _rawAdd(item: T): number {
     if (this._s0 === null) {
@@ -85,7 +88,11 @@ export class SlotBuffer<T> {
     return 3 + ov.length;
   }
 
-  /** Atomic swap of two physical slots. Essential for dependency relocation. */
+  /**
+   * Performs an atomic swap of two physical slots.
+   *
+   * Logic: Essential for maintaining dependency order during relocation cycles.
+   */
   protected _rawSwap(idxA: number, idxB: number): void {
     if (idxA === idxB) return;
     const valA = this.getAt(idxA);
@@ -96,20 +103,20 @@ export class SlotBuffer<T> {
 
   // ── Public API ────────────────────────────────────────────────────────
 
-  /** Number of active (non-null) elements. */
+  /** The number of active (non-null) elements in the buffer. */
   get size(): number {
     return this._actualCount;
   }
-  /** Highest physical index + 1. */
+  /** The highest physical index occupied plus one. */
   get physicalSize(): number {
     return this._count;
   }
 
   /**
-   * Retrieves item at the specified physical index.
+   * Retrieves the item at the specified physical index.
    *
    * @param index - The physical index to access.
-   * @returns The item at the index, or null if empty or out of bounds.
+   * @returns The item at the index, or null if the slot is empty or out of bounds.
    */
   getAt(index: number): T | null {
     if (index < 4) {
@@ -124,13 +131,10 @@ export class SlotBuffer<T> {
   }
 
   /**
-   * Sets item at a specific physical index and updates bookkeeping.
+   * Updates a specific physical index and adjusts bookkeeping counters.
    *
-   * Logic: Forces recalculation of logical size and physical high-water mark.
-   * If an item is nullified, it may trigger a recursive physical size reduction.
-   *
-   * @param index - The physical index to set.
-   * @param item - The item to store, or null to clear the slot.
+   * Logic: Updates both the logical size and the physical high-water mark.
+   * Nullifying a slot at the tail may trigger a recursive reduction of the physical size.
    */
   setAt(index: number, item: T | null): void {
     const old = this.getAt(index);
@@ -149,8 +153,9 @@ export class SlotBuffer<T> {
   }
 
   /**
-   * Shrinks high-water mark recursively from the tail.
-   * Optimized to avoid getAt() overhead in tight loop.
+   * Reduces the high-water mark recursively from the tail of the buffer.
+   *
+   * Optimization: This internal logic is optimized to avoid repeated `getAt` calls.
    */
   private _shrinkPhysicalSizeFrom(index: number): void {
     if (index !== this._count - 1) return;
@@ -176,8 +181,7 @@ export class SlotBuffer<T> {
   }
 
   /**
-   * Truncates the buffer to a specific size.
-   * Normalizes the high-water mark even if the current count is 0.
+   * Truncates the buffer starting from the specified index.
    */
   truncateFrom(index: number): void {
     if (index <= 3) {
@@ -228,8 +232,8 @@ export class SlotBuffer<T> {
   }
 
   /**
-   * Internal hook for resource cleanup (e.g. unsubscriptions).
-   * @internal For use in DepSlotBuffer only.
+   * Internal hook for resource cleanup or unsubscription logic.
+   * @internal Used specifically by DepSlotBuffer.
    */
   protected _onItemRemoved(_item: T): void {}
 
@@ -239,7 +243,7 @@ export class SlotBuffer<T> {
    * @param item - The item to add.
    * @returns The assigned physical index.
    *
-   * Optimization: Reuses holes in the overflow array if available, avoiding array growth.
+   * Optimization: Reuses existing holes in the overflow array where possible to minimize growth.
    */
   add(item: T): number {
     const idx = this._rawAdd(item);
@@ -248,7 +252,12 @@ export class SlotBuffer<T> {
     return idx;
   }
 
-  /** Removes an item by reference. O(N). */
+  /**
+   * Removes an item by reference.
+   *
+   * Logic: Performs an O(N) search and updates the free index stack if the item
+   * was located in the overflow array.
+   */
   remove(item: T): boolean {
     let idx = -1;
     if (this._s0 === item) idx = 0;
@@ -278,10 +287,7 @@ export class SlotBuffer<T> {
   }
 
   /**
-   * Checks if an item exists in the buffer.
-   *
-   * @param item - Item to search for.
-   * @returns true if found.
+   * Returns true if the item is present in the buffer.
    */
   has(item: T): boolean {
     const actual = this._actualCount;
@@ -294,19 +300,17 @@ export class SlotBuffer<T> {
   }
 
   /**
-   * Iterates over all active (non-null) items.
+   * Iterates over all active (non-null) items in the buffer.
    *
-   * Optimization: Triggers a fast-path for dense buffers (no holes),
-   * avoiding all null checks and property lookups.
-   *
-   * @param fn - Callback to execute for each item.
+   * Optimization: Features a fast-path for dense buffers (no holes) to avoid
+   * null checks and indexed property lookups.
    */
   forEach(fn: (item: T) => void): void {
     const actual = this._actualCount;
     if (actual === 0) return;
 
     if (actual === this._count) {
-      // Optimization: Dense optimization: Avoid all null checks and property lookups
+      // Logic: Dense optimization path.
       fn(this._s0!);
       if (actual > 1) {
         fn(this._s1!);
@@ -324,7 +328,7 @@ export class SlotBuffer<T> {
       return;
     }
 
-    // Logic: Sparse path: Unrolled for the first 4 slots
+    // Logic: Sparse path with unrolled checks for inline slots.
     let count = 0;
     if (this._s0 !== null) {
       fn(this._s0);
@@ -356,9 +360,9 @@ export class SlotBuffer<T> {
   }
 
   /**
-   * Elimination of all holes via in-place shifting.
+   * Eliminates all internal holes via in-place shifting.
    *
-   * Optimization: Performs zero-allocation compaction to ensure the buffer is dense.
+   * Optimization: Performs a zero-allocation compaction to ensure the buffer is dense.
    */
   compact(): void {
     const actual = this._actualCount;
@@ -391,7 +395,7 @@ export class SlotBuffer<T> {
     this._freeIndices = null;
   }
 
-  /** Complete reset and memory release. */
+  /** Resets the buffer and releases internal memory. */
   clear(): void {
     this._s0 = this._s1 = this._s2 = this._s3 = null;
     this._count = 0;
@@ -411,16 +415,21 @@ import type { Dependency } from '@/types';
 import type { DependencyLink } from './tracking';
 
 /**
- * Specialized high-speed buffer for Dependency Tracking Cycles.
+ * A specialized buffer optimized for dependency tracking and validation cycles.
  *
- * Logic: Optimized for frequent synchronization of Node->Index mappings
- * and supports dependency "claiming" to minimize tracking overhead.
+ * Logic: Extends SlotBuffer to provide O(1) node-to-index mappings via an internal
+ * Map and supports "claiming" logic to reuse dependency links between re-evaluation cycles.
  */
 export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
+  /** A lookup table for O(1) dependency resolution. Initialized lazily for large buffers. */
   private _map: Map<Dependency, number> | null = null;
+  /** Threshold for transitioning from sequential scans to map-based resolution. */
   private readonly _SCAN_THRESHOLD = 32;
 
+  /** Indicates whether the buffer contains any computed nodes. */
   hasComputeds = false;
+
+  /** Prepares the buffer for a new tracking phase. */
   prepareTracking(): void {
     this.hasComputeds = false;
   }
@@ -440,14 +449,14 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
   }
 
   /**
-   * Finds and reuses a dependency from a previous tracking cycle to minimize work.
+   * Attempts to locate and reuse a dependency link from a previous cycle.
    *
-   * Optimization: Performs a multi-stage search starting with a direct hit check (O(1)),
-   * falling back to map lookup or targeted scan depending on buffer size.
+   * Logic: Performs a multi-stage search beginning with a direct hit check at the
+   * expected `trackIndex`. Falls back to an internal Map lookup or sequential scan.
    *
-   * @param dep - The dependency node to claim.
-   * @param trackIndex - The expected physical index for this dependency.
-   * @returns true if found and claimed.
+   * @param dep - The dependency node to identify.
+   * @param trackIndex - The predicted physical index for the dependency.
+   * @returns true if the dependency was successfully found and reused.
    */
   claimExisting(dep: Dependency, trackIndex: number): boolean {
     const length = this._count;
@@ -463,6 +472,7 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
       current = this._overflow![trackIndex - 4] ?? null;
     }
 
+    // Logic: Fast-path for direct hits where the dependency remains at the same position.
     if (current && current.node === dep && current.unsub) {
       current.version = dep.version;
       return true;
@@ -498,7 +508,7 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
 
     if (foundIdx !== -1) {
       foundLink!.version = dep.version;
-      // Optimization: Precise manual swap to avoid repeated index checks in _rawSwap
+      // Optimization: Performs a manual swap to minimize index validation overhead.
       this._rawWrite(trackIndex, foundLink);
       this._rawWrite(foundIdx, current);
       return true;
@@ -546,8 +556,10 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
   }
 
   /**
-   * Inserts a new link at trackIdx.
-   * Optimized to avoid getAt/_rawWrite overhead.
+   * Inserts a new dependency link at the specified tracking index.
+   *
+   * Logic: If the slot is occupied, the previous occupant is shifted to a new slot.
+   * This maintains the insertion order required for consistent validation cycles.
    */
   insertNew(trackIdx: number, link: DependencyLink): void {
     let occupant: DependencyLink | null = null;
@@ -590,9 +602,17 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
     return idx;
   }
 
+  /**
+   * Removal is prohibited for DepSlotBuffer to maintain graph integrity during validation.
+   * Use truncateFrom(0) or disposeAll() for cleanup.
+   *
+   * @throws {Error} Always.
+   */
   override remove(_item: DependencyLink): boolean {
     throw new Error('remove() prohibited');
   }
+
+  /** Compaction is a no-op for DepSlotBuffer. */
   override compact(): void {}
 
   override truncateFrom(index: number): void {
@@ -602,6 +622,7 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
     }
   }
 
+  /** Truncates the buffer and resets computed state indicators. */
   disposeAll(): void {
     this.truncateFrom(0);
     this.hasComputeds = false;

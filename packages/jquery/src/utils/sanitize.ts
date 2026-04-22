@@ -1,29 +1,29 @@
-import { DANGEROUS_PROTOCOL_PATTERN } from '@/constants';
+import { SYSTEM_SECURITY } from '@/constants';
 
-// --- Configuration & Security Policy ---
+// ─── Configuration & Security Policy ─────────────────────────────────────────
 
 /**
- * Security Policy: Defines the boundaries of what is considered dangerous.
- * Separation of Policy (Data) from Execution (Logic).
+ * Defines the security boundaries and rules for the HTML sanitization engine.
  *
  * When to use:
- * - When creating a custom sanitization sandbox for specific security requirements.
- * - To override default blacklisted tags or allowed URL attributes.
- *
- * @public
+ * - When creating a customized sanitization sandbox for specific security requirements.
+ * - To override default blacklisted tags or allowed URL attributes in specialized environments.
  */
 export interface SanitizationPolicy {
-  /** Attributes that must be checked for dangerous URI protocols. */
+  /** Attributes that must be validated for dangerous URI protocols. */
   readonly urlAttributes: string[];
   /** Tags that are neutralized by transforming them into safe containers (e.g., <span>). */
   readonly blacklistedTags: string[];
-  /** Patterns forbidden within CSS contexts. */
+  /** Patterns forbidden within CSS property values. */
   readonly cssDangerPatterns: RegExp[];
 }
 
 /**
- * Default Sanitization Policy.
- * Following Rob Pike's Rule 5: "Data dominates."
+ * The default security policy used by the library.
+ *
+ * Logic: Data-Driven Security
+ * Following the principle that "Data dominates," this policy explicitly defines
+ * the surfaces (tags, attributes, and patterns) considered dangerous by default.
  */
 export const DEFAULT_POLICY: SanitizationPolicy = {
   urlAttributes: [
@@ -70,44 +70,45 @@ export const DEFAULT_POLICY: SanitizationPolicy = {
     /behavior\s*:/i, // IE legacy behaviors
     /-moz-binding\s*:/i, // Old Firefox XBL bindings
     /@import/i, // External stylesheet imports
-    new RegExp(`url\\s*\\(\\s*["']?\\s*${DANGEROUS_PROTOCOL_PATTERN}\\s*:`, 'i'), // url(javascript:...)
+    new RegExp(`url\\s*\\(\\s*["']?\\s*${SYSTEM_SECURITY.DANGEROUS_PROTOCOL_PATTERN}\\s*:`, 'i'), // url(javascript:...)
     /data\s*:\s*(?!image\/)/i, // data: URIs that aren't images
   ],
 };
 
-/** Mapping of obfuscated HTML entities to their plain-text equivalents. */
+/** Mapping of common obfuscated HTML entities to their plain-text equivalents. @internal */
 const HTML_ENTITY_LOOKUP: Record<string, string> = {
   colon: ':',
   tab: '\t',
   newline: '\n',
 };
 
-// --- Regex Definitions ---
+// ─── Regex Definitions ──────────────────────────────────────────────────────
 
 const REGEX_NUMERIC_ENTITY = /&#x([0-9a-f]+);?|&#([0-9]+);?/gi;
 const REGEX_NAMED_ENTITY = /&(colon|tab|newline);?/gi;
 
+// Logic: Essential control character removal to prevent protocol smuggling.
 // biome-ignore lint/suspicious/noControlCharactersInRegex: necessary for protocol normalization
 const REGEX_CONTROL_CHARS = /[\x00-\x1f\x7f]/g;
 
 const REGEX_DATA_URI_HTML =
   /data\s*:\s*(?:text\/(?:html|javascript|vbscript|xml)|application\/(?:javascript|xhtml\+xml|xml|x-shockwave-flash)|image\/svg\+xml)/i;
 
-/** Optimization: Pre-compiled strict protocol pattern */
+/** Optimization: Pre-compiled strict protocol validation pattern. @internal */
 const REGEX_PROTOCOL_STRICT = new RegExp(
-  `(?:^|url\\s*\\(\\s*["']?)\\s*${DANGEROUS_PROTOCOL_PATTERN}\\s*:`,
+  `(?:^|url\\s*\\(\\s*["']?)\\s*${SYSTEM_SECURITY.DANGEROUS_PROTOCOL_PATTERN}\\s*:`,
   'i'
 );
 
-// --- Safe DOM Access ---
+// ─── Safe DOM Access ────────────────────────────────────────────────────────
 
 /**
  * Security: DOM Clobbering Prevention
  *
- * Reason: Accesses DOM properties via `Element.prototype` to prevent bypass attacks
- * that use `Object.defineProperty` on element instances (DOM Clobbering).
- * This ensures the sanitizer always uses the browser's intended methods
- * even if the global environment has been tampered with.
+ * Reason: Bridge Logic
+ * Accesses DOM methods directly via `Element.prototype` to prevent bypass
+ * attacks that leverage `Object.defineProperty` on element instances (DOM
+ * Clobbering). This ensures the sanitizer consistently uses native browser logic.
  *
  * @internal
  */
@@ -130,13 +131,14 @@ const DOM_PROTOTYPE_BRIDGE = {
     ) as ChildNode | null,
 };
 
-// --- Normalization & Validation Logic ---
+// ─── Normalization & Validation Logic ───────────────────────────────────────
 
 /**
  * Normalizes a string by decoding entities and removing control characters.
  *
- * Logic: Decodes HTML entities (numeric and named) and strips control characters
- * to reveal protocols that might be hidden via obfuscation (e.g., `j&#x61;vascript:`).
+ * Logic: Obfuscation Removal
+ * Decodes numeric and named HTML entities and strips non-printable control
+ * characters to reveal hidden protocols (e.g., `j&#x61;vascript:`).
  *
  * @internal
  */
@@ -151,18 +153,22 @@ function normalizeValue(input: string): string {
     .replace(REGEX_CONTROL_CHARS, '');
 }
 
-/** @internal */
+/**
+ * Checks if a value contains a dangerous URI protocol.
+ * @internal
+ */
 function isDangerousProtocol(value: string): boolean {
   const cleanedValue = value.replace(/\s+/g, '');
   return REGEX_PROTOCOL_STRICT.test(cleanedValue) || REGEX_DATA_URI_HTML.test(cleanedValue);
 }
 
 /**
- * Detects if a string contains dangerous HTML structures.
+ * Detects if a string contains dangerous HTML structures under a specific policy.
  *
- * Reason: Following Rob Pike's Rule 4 ("Simple is better"), we use explicit,
- * readable checks instead of a single, complex regular expression. This reduces
- * false positives and makes maintenance easier as new vectors are discovered.
+ * Reason: Explicit Validation
+ * This method uses discrete, readable checks rather than a single complex
+ * regular expression. This reduces false positives and simplifies maintenance
+ * as new attack vectors are identified.
  *
  * @internal
  */
@@ -170,17 +176,14 @@ function containsDangerousHtml(value: string, policy: SanitizationPolicy): boole
   const normalized = normalizeValue(value);
   const lowerValue = normalized.toLowerCase();
 
-  // 1. Check for blacklisted tags
   if (policy.blacklistedTags.some((tag) => lowerValue.includes(`<${tag}`))) {
     return true;
   }
 
-  // 2. Check for event handlers
   if (/\bon\w+\s*=/i.test(normalized)) {
     return true;
   }
 
-  // 3. Check for dangerous protocols
   if (isDangerousProtocol(normalized)) {
     return true;
   }
@@ -189,10 +192,11 @@ function containsDangerousHtml(value: string, policy: SanitizationPolicy): boole
 }
 
 /**
+ * Sanitizes the `srcset` attribute which may contain multiple URLs.
+ *
  * Caution: Protocol Smuggling
- * The `srcset` attribute can contain multiple, comma-separated URLs.
- * Each segment must be parsed and sanitized individually to prevent malicious
- * protocols from being injected between safe sources.
+ * Malicious protocols can be injected between safe sources in comma-separated
+ * values. Each segment must be parsed and validated individually.
  *
  * @internal
  */
@@ -214,7 +218,7 @@ function scrubSrcset(value: string): string {
 /** @internal */
 function normalizeCss(value: string): string {
   const normalized = normalizeValue(value);
-  // Strip CSS comments: /* ... */
+  // Logic: CSS comments are stripped to prevent payloads hidden within /* ... */
   return normalized.replace(/\/\*[\s\S]*?\*\//g, '');
 }
 
@@ -224,32 +228,42 @@ function isCssDangerous(value: string, policy: SanitizationPolicy): boolean {
   return policy.cssDangerPatterns.some((pattern) => pattern.test(cleanCss));
 }
 
-// --- Attribute Specific Scrubbers ---
+// ─── Attribute Specific Scrubbers ───────────────────────────────────────────
 
 /**
- * Logic: Specialized handlers for attributes requiring complex sanitization.
+ * Logic: Specialized Attribute Handlers
+ * Specific attributes like `srcdoc`, `srcset`, and `style` require recursive
+ * or pattern-based sanitization.
  */
 const ATTRIBUTE_HANDLERS: Record<
   string,
-  (element: HTMLElement, name: string, value: string) => void
+  (element: HTMLElement, name: string, value: string, policy: SanitizationPolicy) => void
 > = {
-  srcdoc: (element, name, value) => {
+  srcdoc: (element, name, value, policy) => {
     const normalizedValue = normalizeValue(value);
-    DOM_PROTOTYPE_BRIDGE.setAttribute(element, name, sanitizeHtml(normalizedValue));
+    DOM_PROTOTYPE_BRIDGE.setAttribute(element, name, sanitizeHtml(normalizedValue, policy));
   },
   srcset: (element, name, value) => {
     DOM_PROTOTYPE_BRIDGE.setAttribute(element, name, scrubSrcset(value));
   },
-  style: (element, _, value) => {
-    if (isCssDangerous(value, DEFAULT_POLICY)) {
+  style: (element, _, value, policy) => {
+    if (isCssDangerous(value, policy)) {
       DOM_PROTOTYPE_BRIDGE.setAttribute(element, 'style', 'data-unsafe-css:');
     }
   },
 };
 
-// --- Scrubber Core ---
+// ─── Scrubber Core ──────────────────────────────────────────────────────────
 
-/** @internal */
+/**
+ * Applies security policies to an element's attribute collection.
+ *
+ * Logic: Attribute Scrubbing
+ * Iterates through all attributes, removing event handlers (on*) and
+ * neutralizing dangerous protocols in URL-based attributes.
+ *
+ * @internal
+ */
 function applySecurityPolicy(element: HTMLElement, policy: SanitizationPolicy): void {
   const attributes = DOM_PROTOTYPE_BRIDGE.getAttributes(element);
   if (!attributes) return;
@@ -269,7 +283,7 @@ function applySecurityPolicy(element: HTMLElement, policy: SanitizationPolicy): 
     }
 
     if (ATTRIBUTE_HANDLERS[lowerName]) {
-      ATTRIBUTE_HANDLERS[lowerName]!(element, name, value);
+      ATTRIBUTE_HANDLERS[lowerName]!(element, name, value, policy);
     } else if (policy.urlAttributes.includes(lowerName)) {
       const normalizedValue = normalizeValue(value);
       if (isDangerousProtocol(normalizedValue)) {
@@ -284,25 +298,30 @@ function applySecurityPolicy(element: HTMLElement, policy: SanitizationPolicy): 
 }
 
 /**
- * Neutralizes dangerous tags by converting them safely into safe containers.
+ * Neutralizes dangerous tags by converting them into safe `<span>` containers.
  *
- * Logic: Converts tags like `<script>` or `<iframe>` into `<span>` elements
- * while preserving their non-executable children and scrubbing their attributes.
+ * Logic: Tag Neutralization
+ * Blacklisted tags (e.g., `<script>`, `<iframe>`) are replaced with `<span>`
+ * elements. Their non-executable children are preserved, but all attributes
+ * are subjected to the standard security policy.
  *
  * @internal
  */
 function neutralizeDangerousNode(element: HTMLElement, policy: SanitizationPolicy): void {
-  if (!policy.blacklistedTags.includes(DOM_PROTOTYPE_BRIDGE.getLocalName(element))) return;
+  if (!policy.blacklistedTags.includes(DOM_PROTOTYPE_BRIDGE.getLocalName(element))) {
+    return;
+  }
 
   const safeReplacement = document.createElement('span');
   const attributes = DOM_PROTOTYPE_BRIDGE.getAttributes(element);
 
   for (let i = 0; i < attributes.length; i++) {
     const attr = attributes[i];
-    if (attr) safeReplacement.setAttribute(attr.name, attr.value);
+    if (attr) {
+      safeReplacement.setAttribute(attr.name, attr.value);
+    }
   }
 
-  // Scrub attributes copied from dangerous nodes
   applySecurityPolicy(safeReplacement, policy);
 
   let child = DOM_PROTOTYPE_BRIDGE.getFirstChild(element);
@@ -315,9 +334,11 @@ function neutralizeDangerousNode(element: HTMLElement, policy: SanitizationPolic
 }
 
 /**
- * Logic: Tree-walking sanitization process.
- * Recursively visits all nodes, including those inside `<template>` fragments,
- * to apply security policies and neutralize dangerous elements.
+ * Performs a recursive tree-walking sanitization.
+ *
+ * Logic: Tree Traversal
+ * Recursively visits all elements, including those inside `<template>` fragments,
+ * to apply the security policy and neutralize dangerous elements.
  *
  * @internal
  */
@@ -343,38 +364,38 @@ function executeSanitizationWalk(
   }
 }
 
-// --- Public APIs ---
+// ─── Public APIs ────────────────────────────────────────────────────────────
 
 /**
- * Cleanses a raw HTML string to prevent XSS attacks.
+ * Cleanses a raw HTML string to prevent cross-site scripting (XSS) attacks.
  *
  * When to use:
- * - Before injecting untrusted HTML strings into the DOM via `$.fn.atomHtml`.
- * - When processing user-provided markup for display.
+ * - Before injecting untrusted HTML strings into the DOM via reactive bindings.
+ * - When processing user-provided markup for safe display.
  *
- * Logic: Uses a detached `<template>` element to parse and walk the DOM tree
- * without executing any malicious payloads during the scrubbing process.
+ * Logic: Template Parsing
+ * Uses a detached `<template>` element to parse and walk the DOM tree. This
+ * ensures that no malicious scripts or event handlers are executed during the
+ * scrubbing process.
  *
  * @param html - The raw HTML string to cleanse.
- * @returns A sanitized HTML string safe for browser execution.
+ * @returns A sanitized HTML string safe for document insertion.
  *
  * @example
  * ```typescript
- * import { sanitizeHtml } from '@but212/atom-effect-jquery';
- *
  * const dirty = '<img src=x onerror=alert(1)>';
  * const clean = sanitizeHtml(dirty);
  * // Result: <img src="x" data-unsafe-attr="onerror">
  * ```
- *
- * @public
  */
-export function sanitizeHtml(html: string | null | undefined): string {
+export function sanitizeHtml(
+  html: string | null | undefined,
+  policy: SanitizationPolicy = DEFAULT_POLICY
+): string {
   if (!html) return '';
-  // Use a fresh template per call to avoid complex state management.
   const template = document.createElement('template');
   template.innerHTML = String(html);
-  executeSanitizationWalk(template.content);
+  executeSanitizationWalk(template.content, policy);
   return template.innerHTML;
 }
 
@@ -385,20 +406,10 @@ export function sanitizeHtml(html: string | null | undefined): string {
  * - To validate individual attribute updates in `$.fn.atomAttr`.
  * - To prevent protocol smuggling (e.g., `javascript:`) in dynamic bindings.
  *
- * @param attribute - The name of the HTML attribute (e.g., 'href', 'src', 'srcdoc').
+ * @param attribute - The name of the HTML attribute (e.g., 'href', 'src').
  * @param value - The material to validate.
- * @param policy - Optional custom security policy. Defaults to `DEFAULT_POLICY`.
- * @returns `true` if the value is deemed dangerous under the current policy.
- *
- * @example
- * ```typescript
- * import { isDangerousUrl } from '@but212/atom-effect-jquery';
- *
- * isDangerousUrl('href', 'javascript:alert(1)'); // true
- * isDangerousUrl('src', 'https://safe.com/img.png'); // false
- * ```
- *
- * @public
+ * @param policy - Optional security policy (defaults to DEFAULT_POLICY).
+ * @returns `true` if the value is deemed dangerous.
  */
 export const isDangerousUrl = (
   attribute: string,
@@ -406,7 +417,9 @@ export const isDangerousUrl = (
   policy: SanitizationPolicy = DEFAULT_POLICY
 ): boolean => {
   const lowerAttribute = attribute.toLowerCase();
-  if (!policy.urlAttributes.includes(lowerAttribute)) return false;
+  if (!policy.urlAttributes.includes(lowerAttribute)) {
+    return false;
+  }
 
   const normalizedValue = normalizeValue(value);
   return lowerAttribute === 'srcdoc'
@@ -421,22 +434,13 @@ export const isDangerousUrl = (
  * - To validate dynamic style updates in `$.fn.atomCss`.
  * - To detect legacy IE behaviors or modern obfuscated URI protocols in CSS.
  *
- * Logic: Strips comments and decodes entities before matching against
- * forbidden patterns like `expression()` or `url(javascript:...)`.
+ * Logic: Sanitization Pre-processing
+ * Decodes entities and strips comments before matching against forbidden
+ * patterns like `expression()` or `url(javascript:...)`.
  *
  * @param value - The CSS property value to validate.
- * @param policy - Optional custom security policy. Defaults to `DEFAULT_POLICY`.
+ * @param policy - Optional security policy (defaults to DEFAULT_POLICY).
  * @returns `true` if the value contains dangerous patterns.
- *
- * @example
- * ```typescript
- * import { isDangerousCssValue } from '@but212/atom-effect-jquery';
- *
- * isDangerousCssValue('url(javascript:alert(1))'); // true
- * isDangerousCssValue('red'); // false
- * ```
- *
- * @public
  */
 export const isDangerousCssValue = (
   value: string,

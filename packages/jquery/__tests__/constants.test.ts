@@ -1,22 +1,29 @@
 import { describe, expect, it } from 'vitest';
-import { ERROR_MESSAGES } from '../src/constants';
+import {
+  SYSTEM_BINDING,
+  SYSTEM_CORE,
+  SYSTEM_LIST,
+  SYSTEM_MOUNT,
+  SYSTEM_ROUTE,
+  SYSTEM_SECURITY,
+} from '@/constants';
 
 describe('Constants', () => {
   describe('ERROR_MESSAGES', () => {
     it('should interpolate dynamic arguments into the message', () => {
       const cases: [string, string][] = [
-        [ERROR_MESSAGES.ROUTE.NOT_FOUND('home'), 'home'],
-        [ERROR_MESSAGES.ROUTE.TEMPLATE_NOT_FOUND('#tpl'), '#tpl'],
-        [ERROR_MESSAGES.ROUTE.TARGET_NOT_FOUND('#app'), '#app'],
-        [ERROR_MESSAGES.ROUTE.MALFORMED_URI('%'), '%'],
-        [ERROR_MESSAGES.SECURITY.BLOCKED_CSS_VALUE('color'), 'color'],
-        [ERROR_MESSAGES.SECURITY.BLOCKED_EVENT_HANDLER('onclick'), 'onclick'],
-        [ERROR_MESSAGES.SECURITY.BLOCKED_PROTOCOL('href'), 'href'],
-        [ERROR_MESSAGES.SECURITY.BLOCKED_PROP('innerHTML'), 'innerHTML'],
-        [ERROR_MESSAGES.BINDING.INVALID_INPUT_ELEMENT('div'), 'div'],
-        [ERROR_MESSAGES.LIST.DUPLICATE_KEY('id-1', 5), 'id-1'],
-        [ERROR_MESSAGES.BINDING.MISSING_SOURCE('atomAttr'), 'atomAttr'],
-        [ERROR_MESSAGES.BINDING.MISSING_CONDITION('atomClass'), 'atomClass'],
+        [SYSTEM_ROUTE.ERRORS.NOT_FOUND('home'), 'home'],
+        [SYSTEM_ROUTE.ERRORS.TEMPLATE_NOT_FOUND('#tpl'), '#tpl'],
+        [SYSTEM_ROUTE.ERRORS.TARGET_NOT_FOUND('#app'), '#app'],
+        [SYSTEM_ROUTE.ERRORS.MALFORMED_URI('%'), '%'],
+        [SYSTEM_SECURITY.ERRORS.BLOCKED_CSS_VALUE('color'), 'color'],
+        [SYSTEM_SECURITY.ERRORS.BLOCKED_EVENT_HANDLER('onclick'), 'onclick'],
+        [SYSTEM_SECURITY.ERRORS.BLOCKED_PROTOCOL('href'), 'href'],
+        [SYSTEM_SECURITY.ERRORS.BLOCKED_PROP('innerHTML'), 'innerHTML'],
+        [SYSTEM_BINDING.ERRORS.INVALID_INPUT_ELEMENT('div'), 'div'],
+        [SYSTEM_LIST.ERRORS.DUPLICATE_KEY('id-1', 5), 'id-1'],
+        [SYSTEM_BINDING.ERRORS.MISSING_SOURCE('atomAttr'), 'atomAttr'],
+        [SYSTEM_BINDING.ERRORS.MISSING_CONDITION('atomClass'), 'atomClass'],
       ];
 
       cases.forEach(([result, expected]) => {
@@ -25,12 +32,12 @@ describe('Constants', () => {
     });
 
     it('should return a non-empty string for zero-argument messages', () => {
-      expect(ERROR_MESSAGES.SECURITY.UNSAFE_CONTENT()).toBeTruthy();
-      expect(ERROR_MESSAGES.BINDING.PARSE_ERROR('err')).toBeTruthy();
-      expect(ERROR_MESSAGES.MOUNT.ERROR('comp')).toBeTruthy();
-      expect(ERROR_MESSAGES.MOUNT.CLEANUP_ERROR('#sel')).toBeTruthy();
-      expect(ERROR_MESSAGES.CORE.EFFECT_DISPOSE_ERROR('#sel')).toBeTruthy();
-      expect(ERROR_MESSAGES.BINDING.CLEANUP_ERROR('#sel')).toBeTruthy();
+      expect(SYSTEM_SECURITY.ERRORS.UNSAFE_CONTENT()).toBeTruthy();
+      expect(SYSTEM_BINDING.ERRORS.PARSE_ERROR('err')).toBeTruthy();
+      expect(SYSTEM_MOUNT.ERRORS.ERROR('comp')).toBeTruthy();
+      expect(SYSTEM_MOUNT.ERRORS.CLEANUP_ERROR('#sel')).toBeTruthy();
+      expect(SYSTEM_CORE.ERRORS.EFFECT_DISPOSE_ERROR('#sel')).toBeTruthy();
+      expect(SYSTEM_BINDING.ERRORS.CLEANUP_ERROR('#sel')).toBeTruthy();
     });
   });
 });

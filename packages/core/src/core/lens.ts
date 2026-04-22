@@ -2,18 +2,23 @@ import { BRAND, BrandFlags } from '@/symbols';
 import type { Paths, PathValue, WritableAtom } from '../types';
 
 /**
- * Internal recursive helper for creating deep immutable copies with structural sharing.
+ * Creates a deep immutable copy of an object or array with a new value assigned at the specified path.
  *
- * Logic: Recursively traverses the object path and creates new object/array instances
- * only for modified branches to maintain structural sharing.
+ * Logic: Recursively traverses the object tree following the provided keys. It utilizes
+ * structural sharing by only creating new object or array instances for the branches
+ * affected by the update, while preserving references to unchanged sibling branches.
  *
- * Optimization: Uses literal string comparisons instead of regular expressions
- * to eliminate path-parsing overhead during deep updates.
+ * @param obj - The source object or array to update.
+ * @param keys - An array of path segments leading to the target property.
+ * @param index - The current depth in the recursive traversal.
+ * @param value - The new value to assign at the target path.
+ * @returns A new object or array containing the updated value, or the original reference if no change occurred.
  */
 export function setDeepValue(obj: unknown, keys: string[], index: number, value: unknown): unknown {
   if (index === keys.length) return value;
 
   const key = keys[index]!;
+  // Constraint: Block access to internal prototypes to prevent prototype pollution vulnerabilities.
   if (key === '__proto__' || key === 'constructor' || key === 'prototype') return obj;
 
   const isObj = obj != null && typeof obj === 'object';
@@ -21,12 +26,13 @@ export function setDeepValue(obj: unknown, keys: string[], index: number, value:
   const oldVal = curr[key];
   const newVal = setDeepValue(oldVal, keys, index + 1, value);
 
+  // Optimization: Return the original reference if the value at the path remains identical (Object.is).
   if (Object.is(oldVal, newVal)) return obj;
 
   if (Array.isArray(curr)) {
     const copy = curr.slice();
     const idx = +key;
-    // Logic: Check for valid array index (positive integer, non-empty) to preserve array dense layout.
+    // Logic: Validate the key as a numeric index to maintain a dense array layout where possible.
     if (key.trim() !== '' && idx >= 0 && idx % 1 === 0) {
       copy[idx] = newVal;
     } else {
@@ -41,17 +47,20 @@ export function setDeepValue(obj: unknown, keys: string[], index: number, value:
 }
 
 /**
- * Helper to retrieve a nested value from an object/array at a given path.
+ * Retrieves a nested value from an object or array at the specified path.
  *
- * Optimization: Uses a simple for-loop and fast string comparisons to avoid
- * performance penalties in hot paths.
+ * @param source - The object or array to traverse.
+ * @param parts - An array of path segments.
+ * @returns The value at the path, or undefined if the path is invalid or the source is nullish.
  */
 export function getPathValue(source: unknown, parts: string[]): unknown {
   let res = source;
   const len = parts.length;
+  // Optimization: Uses a simple for-loop for traversal to minimize overhead in hot paths.
   for (let i = 0; i < len; i++) {
     if (res == null) return undefined;
     const key = parts[i]!;
+    // Constraint: Prevent access to internal prototypes.
     if (key === '__proto__' || key === 'constructor' || key === 'prototype') return undefined;
     res = (res as Record<string, unknown>)[key];
   }
@@ -59,32 +68,39 @@ export function getPathValue(source: unknown, parts: string[]): unknown {
 }
 
 /**
- * Creates a two-way "lens" for a specific property path on an object-based atom.
+ * Creates a two-way reactive "lens" for a specific nested property path.
  *
  * When to use:
- * - To read/write a specific nested property of an atom without boilerplate.
- * - To create a scoped reactive view of a larger state object.
- * - To pass a slice of state to a component or logic that only cares about a sub-property.
+ * - To read or write a specific sub-property of a large object-based atom without manual boilerplate.
+ * - To create a scoped reactive view that only notifies when a specific nested property changes.
+ * - To pass a slice of state to a child component or utility that only requires a subset of the root state.
  *
  * @param atom - The source atom containing the object.
- * @param path - Dot-separated path to the target property (e.g., 'user.profile.name').
- * @returns A new writable atom that targets the specific path.
+ * @param path - A dot-separated string representing the path to the target property (e.g., 'profile.address.city').
+ * @returns A new writable atom targeting the specified path.
  *
  * @example
  * ```typescript
- * const store = atom({ user: { name: 'Alice' } });
- * const nameLens = atomLens(store, 'user.name');
+ * import { atom, atomLens } from '@but212/atom-effect';
  *
- * console.log(nameLens.value); // 'Alice'
- * nameLens.value = 'Bob'; // Updates store.user.name immutably
+ * const user = atom({ name: 'Alice', settings: { theme: 'dark' } });
+ * const themeLens = atomLens(user, 'settings.theme');
+ *
+ * console.log(themeLens.value); // 'dark'
+ * themeLens.value = 'light';    // Immutably updates the root 'user' atom.
  * ```
  */
 export function atomLens<T extends object, P extends Paths<T>>(
   atom: WritableAtom<T>,
   path: P
 ): WritableAtom<PathValue<T, P>> {
+  // Optimization: Pre-split the path string once during creation to avoid string manipulation during property access.
   const parts = path.includes('.') ? path.split('.') : [path];
   const unsubs = new Set<() => void>();
+
+  /**
+   * Terminates all internal subscriptions maintained by the lens.
+   */
   const dispose = () => {
     unsubs.forEach((u) => u());
     unsubs.clear();
@@ -101,7 +117,9 @@ export function atomLens<T extends object, P extends Paths<T>>(
     },
     peek: () => getPathValue(atom.peek(), parts) as PathValue<T, P>,
     subscribe(listener: (nv: PathValue<T, P>, ov: PathValue<T, P>) => void) {
-      // Optimization: Local tracking of prevValue cuts getPathValue calls by 50% during root updates.
+      // Logic: Cache the previous value locally to ensure that notifications are only
+      // dispatched when the specific nested property changes, even if other parts of
+      // the root atom are updated.
       let prevValue = getPathValue(atom.peek(), parts) as PathValue<T, P>;
 
       const unsub = atom.subscribe((np) => {
@@ -125,22 +143,26 @@ export function atomLens<T extends object, P extends Paths<T>>(
 }
 
 /**
- * When to use:
- * - Composing an existing lens with a sub-path to create a more specific view.
+ * Composes an existing lens with a sub-path to create a more specific scoped view.
  *
- * @example
- * ```typescript
- * const userLens = atomLens(store, 'user');
- * const nameLens = composeLens(userLens, 'name');
- * ```
+ * When to use:
+ * - To further drill down into an already existing lens.
+ *
+ * @param lens - The source lens atom.
+ * @param path - Dot-separated sub-path relative to the lens.
+ * @returns A new writable atom targeting the nested sub-path.
  */
 export const composeLens = <T extends object, P extends Paths<T>>(lens: WritableAtom<T>, path: P) =>
   atomLens(lens, path);
 
 /**
+ * Creates a lens factory bound to a specific root atom.
+ *
  * When to use:
- * - Creating a lens factory bound to a specific root atom to reduce boilerplate
- *   when creating multiple lenses.
+ * - To reduce boilerplate when creating multiple lenses from the same root atom.
+ *
+ * @param atom - The root atom to bind to.
+ * @returns A factory function that accepts paths to create lenses.
  *
  * @example
  * ```typescript

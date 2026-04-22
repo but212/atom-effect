@@ -1,128 +1,114 @@
 # Benchmark Documentation
 
-Comprehensive benchmarking suite for `atom-effect` to measure performance and detect regressions.
+This document outlines the benchmarking suite for `@but212/atom-effect`. The suite is used to quantify performance characteristics and monitor the system for potential regressions.
 
-## Performance Summary
+## Performance Metrics Summary
 
-| Category | Key Metric | Value | Context |
-| ---------- | ---------- | ----- | ------- |
-| **Atom** | Read 100x (untracked) | 1.36M ops/sec | Fast untracked access |
-| **Computed** | Recompute (cached) | 80.6K ops/sec | Highly optimized re-evaluation |
-| **Effect** | Propagation (atom→comp→effect) | 1.50M ops/sec | Efficient notify-trigger cycle |
-| **Real-world** | Todo full workflow | 96.8K ops/sec | Production-ready performance |
-| **Frame Budget** | 100 atom updates | 0.0154ms | Well under 16ms budget |
+The following table summarizes key performance metrics observed in version `0.31.0`.
+
+| Category | Metric | Result | Context |
+| :--- | :--- | :--- | :--- |
+| **Atom** | Read (untracked) | 1.36M ops/sec | Performance of non-reactive reads (x100) |
+| **Computed** | Recompute (cached) | 80.6K ops/sec | Cached re-evaluation performance (x100) |
+| **Effect** | Propagation | 1.50M ops/sec | Full atom → computed → effect cycle (x100) |
+| **Workflow** | Todo App | 96.8K ops/sec | Comprehensive workflow performance |
+| **Latency** | 100 Atom updates | 0.0154 ms | Mean execution time for batched updates |
+
+---
 
 ## Running Benchmarks
 
-### Quick Start
+Benchmarks are executed using `vitest bench`. The following commands are available:
+
+### Execution Commands
 
 ```bash
-# Run all benchmarks
+# Execute the full benchmark suite
 pnpm bench
 
-# Run only micro-benchmarks
+# Execute micro-benchmarks only
 pnpm bench:micro
 
-# Run only macro-benchmarks
+# Execute macro-benchmarks only
 pnpm bench:macro
+
+# Execute realistic scenario benchmarks
+pnpm bench:realistic
 ```
 
-### Specific Benchmarks
+### Targeted Execution
 
 ```bash
-# Run atom benchmarks
+# Target specific primitives
 pnpm bench:atom
-
-# Run computed benchmarks
 pnpm bench:computed
-
-# Run effect benchmarks
 pnpm bench:effect
+pnpm bench:propagation
 ```
+
+---
 
 ## Benchmark Categories
 
-### Micro-Benchmarks
+### 1. Micro-Benchmarks
 
-Located in `__benchmarks__/micro/`, these test individual primitive operations:
+Located in `__benchmarks__/micro/`, these tests measure the overhead of individual reactive primitives in isolation.
 
-- **Atom**: Creation, reads (value/peek), writes, subscriptions, disposal
-- **Computed**: Dependency tracking, recomputation, lazy evaluation, cache invalidation
-- **Effect**: Creation, execution, cleanup, disposal
-- **Batch**: Batched vs non-batched updates, nested batches
-- **Untracked**: Untracked reads, mixed operations
-- **Propagation**: Fan-in, Fan-out, Deep chain propagation
+- **Atom**: Measures creation, reactive/non-reactive reads, writes, and subscription overhead.
+- **Computed**: Measures dependency tracking efficiency, lazy evaluation overhead, and cache hit/miss performance.
+- **Effect**: Measures execution scheduling, cleanup rotation, and disposal latency.
+- **Propagation**: Stress tests various graph topologies, including deep chains, wide fan-outs (1-to-N), and fan-ins (N-to-1).
 
-### Macro-Benchmarks
+### 2. Macro-Benchmarks
 
-Located in `__benchmarks__/macro/`, these test real-world scenarios:
+Located in `__benchmarks__/macro/`, these tests simulate common application patterns without external dependencies (e.g., DOM).
 
-- **Todo App**: Create, toggle, filter, delete (100 items)
-- **Data Grid**: Sort, filter, paginate (1000 rows × 10 columns)
-- **Dependency Graphs**: Deep chains, wide fan-out, diamond patterns
-- **Memory Stress**: Create/dispose 1K atoms, GC pressure, leak detection
+- **Todo Workflow**: A complete sequence of adding, toggling, filtering, and deleting items.
+- **Data Grid**: Performance of sorting, filtering, and pagination over large datasets (1000+ rows).
+- **Graph Stress**: Evaluation of complex dependency structures such as diamond and pyramid patterns.
 
-### Realistic-Benchmarks
+### 3. Realistic Scenarios
 
-Production-like scenarios:
+Located in `__benchmarks__/realistic/`, these tests evaluate the system under constraints typical of production environments.
 
-- **Frame Budget**: Stay within 16ms frame budget
-- **Memory Stability**: Memory after component churn
-- **Batch Efficiency**: Form reset performance
-- **Input Latency**: Input to render latency
+- **Frame Budget Analysis**: Ensures that reactive updates complete within the 16.6ms window required for 60fps rendering.
+- **Memory Stability**: Monitors heap usage during high-churn lifecycle cycles (mount/update/unmount).
 
-## Interpreting Results
+---
 
-### Reading the Numbers
+## Interpretation of Results
 
-- **ops/sec (Hz)**: Operations per second. **Higher is better**.
-- **Mean (ms)**: Average time per operation.
-- **p99 (ms)**: 99th percentile latency (worst-case for 99% of operations).
+### Metric Definitions
 
-### What Good Performance Looks Like
+- **ops/sec (Hz)**: The number of operations completed per second. Higher values indicate greater throughput.
+- **Mean (ms)**: The average time taken to complete a single operation.
+- **p99 (ms)**: The 99th percentile latency, representing the upper bound for 99% of the operations.
 
-| Metric | Good Performance | Why It Matters |
-| -------- | ---------------- | -------------- |
-| **Atom reads (peek)** | >500K ops/sec | Near-native speed, negligible overhead |
-| **Computed recompute** | >1M ops/sec | Cached reads should be nearly free |
-| **Effect execution** | >1M ops/sec | Fast propagation ensures responsiveness |
-| **Frame budget** | <16ms | Stays within browser's 60fps budget |
+### Performance Indicators
 
-### Red Flags
+| Metric | Nominal Range | Rationale |
+| :--- | :--- | :--- |
+| **Atom reads (peek)** | > 500K ops/sec | Indicates minimal overhead for non-reactive state access. |
+| **Computed recompute** | > 1M ops/sec | Indicates efficient cache validation and re-use. |
+| **Effect execution** | > 1M ops/sec | Ensures rapid propagation across the dependency graph. |
+| **Batch Latency** | < 16ms | Ensures compliance with browser rendering cycles. |
 
-- **Atom writes <100K ops/sec**: Indicates scheduler overhead
-- **Computed recompute <100K ops/sec**: Cache invalidation issues
-- **Frame budget >16ms**: Risk of janky UI
-- **Memory leaks**: Growing heap after disposal cycles
+### Potential Issues
 
-## Latest Results
+- **Throughput Drop**: Significant decreases in `ops/sec` for primitive operations often indicate increased internal overhead in the scheduler or tracking context.
+- **Latency Spikes**: High `p99` values relative to the mean suggest periodic blocking operations or excessive Garbage Collection (GC) pressure.
+- **Scaling Inefficiency**: Disproportionate performance degradation when increasing dependency depth (e.g., from 10 to 1000 nodes) indicates $O(N)$ or worse complexity in hot paths.
+
+---
+
+## Technical Specifications
 
 **Version**: v0.31.0
 **Last Updated**: 2026-04-20
 **Environment**:
 
-- **Node.js**: v22.x
-- **OS**: ubuntu-latest (GitHub Actions)
+- **Runtime**: Node.js v22.x
+- **Infrastructure**: ubuntu-latest (GitHub Actions)
 
-> **[View Detailed Results](./BENCHMARKS_DETAILED.md)**
-
-### Key Highlights
-
-| Benchmark | Result | Analysis |
-| ---------- | ------ | -------- |
-| Atom untracked (100x) | 1.36M ops/sec | Near-native performance |
-| Computed read (100x) | 176.2K ops/sec | Low-overhead tracking |
-| Effect propagation (atom→comp→effect) | 1.50M ops/sec | Efficient subscriber notify |
-| Todo workflow | 96.8K ops/sec | Production-ready (Full workflow) |
-| Frame Budget (100 atoms) | 0.0154ms | Well under 16ms |
-| Data Grid Filter (1000 rows) | 0.0049ms | Real-time filtering |
-
-## Contributing Benchmarks
-
-When adding new benchmarks:
-
-1. **Micro**: Test a single primitive operation in isolation
-2. **Macro**: Test a realistic workflow (e.g., "shopping cart checkout")
-3. **Realistic**: Simulate production constraints (frame budget, memory)
-
-See [CONTRIBUTING.md](../../../CONTRIBUTING.md#benchmarks) for details.
+> [!NOTE]
+> For a complete breakdown of all test cases and raw data, refer to the **[Detailed Benchmark Results](./BENCHMARKS_DETAILED.md)**.

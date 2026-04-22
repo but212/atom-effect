@@ -1,14 +1,18 @@
 /**
- * Internal State Flags for ReactiveNode.
+ * Internal bitmask flags used for state management within `ReactiveNode`.
  *
- * Optimization: Managed as a 31-bit integer field to ensure V8 SMI (Small Integer)
- * optimization, avoiding heap allocation for state tracking.
+ * Logic: These flags are managed as a single 31-bit integer field to represent
+ * the lifecycle and execution state of reactive primitives.
+ *
+ * Optimization: The use of a bitmask field ensures that state tracking is compatible
+ * with V8 SMI (Small Integer) optimization, avoiding heap allocation and improving
+ * performance during state transitions.
  *
  * Bit Layout:
- * [0-7]   - Shared Core (Disposed, Computed marker, etc.)
- * [8-15]  - Computed States (Dirty, Recomputing, etc.)
- * [16-23] - Async Lifecycle (Idle, Pending, Resolved, Rejected)
- * [24-30] - Primitive Specific (Atom Sync, Effect Executing, etc.)
+ * - [0-7]   : Shared Core states (Disposed, Computed identity)
+ * - [8-15]  : Computed-specific states (Dirty checking, recomputation)
+ * - [16-23] : Asynchronous lifecycle states (Idle, Pending, Resolved, Rejected)
+ * - [24-30] : Primitive-specific states (Atom sync, Effect execution)
  *
  * @internal
  */
@@ -38,33 +42,33 @@ const FLAGS = {
 } as const;
 
 /**
- * Compound Masks for fast bitwise clearing and multi-flag checking.
+ * Compound bitmasks used for efficient multi-flag validation and resetting.
  *
  * When to use:
- * - Resetting multiple related state bits in a single operation.
- * - Checking if a node is in ANY of the grouped states.
- *
- * @public
+ * - To reset a group of related flags (e.g., clearing all dirty-related bits).
+ * - To check if a node resides in any of the specified aggregate states.
  */
 export const STATE_MASKS = Object.freeze({
+  /** Bitmask covering all asynchronous lifecycle states. */
   ASYNC_STATE: FLAGS.IDLE | FLAGS.PENDING | FLAGS.RESOLVED | FLAGS.REJECTED,
+  /** Bitmask covering all states that indicate a need for re-computation. */
   COMPUTED_DIRTY_MASK: FLAGS.DIRTY | FLAGS.RECOMPUTING | FLAGS.FORCE_COMPUTE,
 });
 
 /**
- * Async operation states for public API consumption and type-safe checks.
+ * Enumeration of asynchronous operation states for public API consumption.
  *
  * When to use:
- * - Comparing `atom.status` or `effect.status` against known states.
+ * - To verify the current status of an asynchronous atom or computed node.
  *
  * @example
  * ```typescript
- * if (atom.status === AsyncState.PENDING) {
- *   showLoadingSpinner();
+ * import { AsyncState } from '@but212/atom-effect';
+ *
+ * if (myAtom.status === AsyncState.PENDING) {
+ *   renderLoadingIndicator();
  * }
  * ```
- *
- * @public
  */
 export const AsyncState = Object.freeze({
   IDLE: 'idle',
@@ -73,11 +77,13 @@ export const AsyncState = Object.freeze({
   REJECTED: 'rejected',
 });
 
+/** @internal */
 export const EFFECT_STATE_FLAGS = Object.freeze({
   DISPOSED: FLAGS.DISPOSED,
   EXECUTING: FLAGS.EFFECT_EXECUTING,
 });
 
+/** @internal */
 export const COMPUTED_STATE_FLAGS = Object.freeze({
   DISPOSED: FLAGS.DISPOSED,
   IS_COMPUTED: FLAGS.IS_COMPUTED,
@@ -91,6 +97,7 @@ export const COMPUTED_STATE_FLAGS = Object.freeze({
   FORCE_COMPUTE: FLAGS.FORCE_COMPUTE,
 });
 
+/** @internal */
 export const ATOM_STATE_FLAGS = Object.freeze({
   DISPOSED: FLAGS.DISPOSED,
   SYNC: FLAGS.ATOM_SYNC,
@@ -98,119 +105,108 @@ export const ATOM_STATE_FLAGS = Object.freeze({
 });
 
 /**
- * Global Scheduler configuration.
+ * Global configuration parameters for the Scheduler.
  *
- * Caution: Changing these values can significantly impact engine stability
- * and memory consumption.
- *
- * @public
+ * Caution: Modification of these thresholds can significantly impact the stability
+ * and memory footprint of the reactive engine.
  */
 export const SCHEDULER_CONFIG = Object.freeze({
   /**
-   * Infinite loop protection - total executions per second limit.
-   * Reason: Prevent runaway processes from freezing the host environment.
+   * The maximum number of effect executions allowed per second as a loop protection measure.
+   * Reason: Prevents runaway processes from freezing the host environment.
    */
   MAX_EXECUTIONS_PER_SECOND: 1000,
   /**
-   * Limit for a single effect's executions per microtask cycle.
+   * The maximum number of times a single effect can execute within a single microtask cycle.
    */
   MAX_EXECUTIONS_PER_EFFECT: 100,
 
   /**
-   * Batch processing limits to prevent blocking the main thread for too long.
-   * Optimization: Yield control back to the browser periodically.
+   * The global execution limit for all tasks within a single flush cycle.
    */
   MAX_EXECUTIONS_PER_FLUSH: 10000,
+  /**
+   * The maximum number of drain iterations allowed per flush before an overflow is declared.
+   */
   MAX_FLUSH_ITERATIONS: 1000,
+  /**
+   * The minimum number of iterations allowed for a flush cycle.
+   */
   MIN_FLUSH_ITERATIONS: 10,
 
   /**
-   * Memory management threshold for the batch queue.
+   * The threshold at which the batch queue array is shrunk to release unused memory.
    */
   BATCH_QUEUE_SHRINK_THRESHOLD: 1000,
 });
 
 /**
- * V8 Small Integer (SMI) max value for 32nd bit signed systems.
- * Optimization: Values within this range stay in registers in V8.
+ * The maximum safe integer value for 32nd-bit signed systems in V8 (SMI).
  *
- * @public
+ * Optimization: Values within this range are stored directly in CPU registers
+ * by V8, avoiding boxing and unboxing overhead.
  */
 export const SMI_MAX = 0x3fffffff;
 
 /**
- * Global Debugging thresholds and toggles.
- *
- * @example
- * ```typescript
- * // In dev tools console
- * window.__ATOM_DEBUG__ = true;
- * ```
- *
- * @public
+ * Thresholds and toggles for development diagnostic features.
  */
 export const DEBUG_CONFIG = Object.freeze({
+  /** Enables or disables infinite loop warnings in the console. */
   WARN_INFINITE_LOOP: true,
+  /** The time window (in ms) used for monitoring execution frequency. */
   EFFECT_FREQUENCY_WINDOW: 1000,
+  /** The number of updates allowed within the time window before a warning is triggered. */
   LOOP_THRESHOLD: 100,
 });
 
+/** @internal */
 export const COMPUTED_CONFIG = Object.freeze({
-  /** Optimization: Use SMI range for promise tracking IDs to avoid box/unbox overhead. */
+  /** Optimization: Restricts promise IDs to the SMI range to optimize comparison operations. */
   MAX_PROMISE_ID: SMI_MAX,
 });
 
 /**
- * Epoch sentinel values used for tracking global reactive updates.
- *
- * When to use:
- * - Initializing version trackers in custom reactive nodes.
- *
- * @public
+ * Sentinel values used for tracking epoch-based state consistency.
  */
 export const EPOCH_CONSTANTS = Object.freeze({
-  /** Uninitialized epoch marker. Used as initial value before any flush has occurred. */
+  /** Represents an uninitialized epoch, typically used as an initial state. */
   UNINITIALIZED: -1,
-  /** Minimum valid epoch value after a counter reset. */
+  /** The minimum valid epoch value assigned after a counter reset. */
   MIN: 1,
 });
 
 let runtimeDebug = false;
 try {
+  // Logic: Runtime debug state is derived from global environment overrides or session storage markers.
   runtimeDebug = !!(
     (typeof globalThis !== 'undefined' &&
       (globalThis as { __ATOM_DEBUG__?: boolean }).__ATOM_DEBUG__) ||
     (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('__ATOM_DEBUG__') === 'true')
   );
-} catch {}
+} catch {
+  // Suppress errors during environment feature detection.
+}
 
 /**
- * Logic: Resolve the environment state by checking common build-time constants
- * and runtime debug markers.
+ * A flag indicating whether the library is running in a development environment.
  *
- * Support Matrix:
- * - Node.js (process.env.NODE_ENV)
- * - Bundlers (__DEV__ global)
- * - Vite/ESM (import.meta.env)
- * - Browser (sessionStorage/window overrides)
- *
- * @public
+ * Logic: This constant is resolved by evaluating build-time environment variables
+ * (`process.env.NODE_ENV`), bundler-injected globals (`__DEV__`), and runtime debug markers.
  */
 export const IS_DEV =
   (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production') ||
   (typeof __DEV__ !== 'undefined' && !!__DEV__) ||
-  // @ts-expect-error: import.meta.env is Vite-specific and may not be defined in all environments
+  // @ts-expect-error: import.meta.env is environment-specific and may not be present in all contexts.
   (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.DEV) ||
   runtimeDebug;
 
-// Fallback declarations for global environment variables
+// Fallback declarations for common build-time global variables.
 declare const __DEV__: boolean;
 
 /**
- * Reusable empty error array for memory optimization in settled states.
+ * A reusable, frozen empty array used for memory optimization in settled error states.
  *
- * Constraint: Must remain frozen to prevent side-effects in subscriber logic.
- *
- * @public
+ * Constraint: This array must remain immutable to prevent side-effects in subscriber logic.
  */
 export const EMPTY_ERROR_ARRAY: readonly Error[] = Object.freeze([]);

@@ -5,21 +5,25 @@ import type { AtomComponentController, EffectObject, WritableAtom } from '@/type
 
 // ─── Constants & Types ───────────────────────────────────────────────────────
 
+/** Internal symbol used to track if an element has an active MutationObserver. @internal */
 const CLEANUP_MARKER = Symbol.for('aej:cleanup-enabled');
+
+/** Internal event name used for dependency injection discovery. @internal */
 const CONTEXT_REQUEST = 'aej:context-request';
 
-/** @internal */
+/** Detailed payload for context discovery events. @internal */
 interface ContextRequestDetail {
   key: string | symbol;
   callback: (atom: unknown) => void;
 }
 
 /**
- * Data-Centric Node State.
+ * Consolidated metadata for DOM nodes participating in the AEJ ecosystem.
  *
- * Reason: Consolidating all metadata (providers, effects, injects) into a single
- * structure per Node reduces lookup overhead from O(N) WeakMap lookups to O(1)
- * object property access after the initial fetch.
+ * Reason: Consolidation
+ * Aggregating providers, effects, and injections into a single structure
+ * per node reduces WeakMap lookup overhead from O(N) to O(1) after the
+ * initial state acquisition.
  *
  * @internal
  */
@@ -30,13 +34,18 @@ interface NodeInternalState {
   controller?: AtomComponentController;
 }
 
-// ─── Internal State (The Single Source of Truth) ────────────────────────────
+// ─── Internal State ─────────────────────────────────────────────────────────
 
+/** Global storage for element-specific reactive metadata. */
 const nodeStateMap = new WeakMap<Node, NodeInternalState>();
 
 /**
- * Helper to get or create internal state for a node.
- * Constraint: Must be accessed via this helper to ensure lazy initialization.
+ * Retrieves or initializes the internal metadata state for a node.
+ *
+ * Constraint: This helper must be used for all state access to ensure
+ * lazy initialization and consistent reference tracking.
+ *
+ * @internal
  */
 function getInternalState(node: Node): NodeInternalState {
   let state = nodeStateMap.get(node);
@@ -47,11 +56,16 @@ function getInternalState(node: Node): NodeInternalState {
   return state;
 }
 
-// ─── Context Engine (Move Detection & Discovery) ───────────────────────────
+// ─── Context Engine ─────────────────────────────────────────────────────────
 
 /**
- * Manages global hierarchy versioning and DOM move detection.
- * Logic: Bumping the version triggers re-discovery in all reactive proxies.
+ * Orchestrates global hierarchy versioning and DOM move detection.
+ *
+ * Logic: Versioning
+ * Bumping the global version atom triggers re-discovery in all reactive context
+ * proxies, ensuring that moved elements correctly resolve their new nearest providers.
+ *
+ * @internal
  */
 const ContextEngine = {
   version: $.atom(0),
@@ -62,10 +76,11 @@ const ContextEngine = {
   },
 
   /**
-   * Dispatches a bubbling event to find the nearest provider for a key.
+   * Dispatches a bubbling event to locate the nearest ancestor provider for a key.
    *
-   * Logic: Event bubbling is the simplest way to traverse the DOM tree
-   * while respecting Shadow DOM boundaries (via composed: true).
+   * Logic: Discovery Mechanism
+   * Event bubbling is used for tree traversal as it natively respects
+   * Shadow DOM boundaries when configured with `composed: true`.
    */
   discover(target: HTMLElement, key: string | symbol): unknown {
     let found: unknown = null;
@@ -84,12 +99,18 @@ const ContextEngine = {
   },
 };
 
-// Optimization: Use a single global MutationObserver for all AEJ components.
-// Logic: We throttle version bumps to the next microtask to avoid "double-reactive" updates.
+/**
+ * Optimization: Global Observation
+ * A single global MutationObserver monitors the entire document for
+ * structure changes. Throttling version bumps to the next microtask
+ * prevents redundant reactive updates during batch DOM operations.
+ */
 if (typeof document !== 'undefined') {
   const observer = new MutationObserver((mutations) => {
     if (mutations.some((m) => m.addedNodes.length > 0 || m.removedNodes.length > 0)) {
-      if (ContextEngine.isBumpPending) return;
+      if (ContextEngine.isBumpPending) {
+        return;
+      }
       ContextEngine.isBumpPending = true;
       queueMicrotask(() => {
         ContextEngine.bump();
@@ -103,13 +124,16 @@ if (typeof document !== 'undefined') {
 // ─── Context Proxy Factory ──────────────────────────────────────────────────
 
 /**
- * Creates a reactive proxy that resolves to a provided atom in the DOM hierarchy.
+ * Creates a reactive proxy atom that resolves to a provided value in the DOM hierarchy.
  *
- * Logic:
- * This proxy implements a "Hybrid Discovery" model:
- * 1. Reactive: Subscribes to ContextEngine.version to detect DOM moves.
- * 2. Synchronous: Performs immediate discovery on .value access to ensure
- *    correctness even outside reactive contexts (e.g. initial setup or tests).
+ * Logic: Hybrid Discovery
+ * This proxy implements a dual-mode resolution model:
+ * 1. Reactive: Subscribes to `ContextEngine.version` to detect DOM moves
+ *    and trigger re-evaluation.
+ * 2. Synchronous: Performs immediate discovery on property access to
+ *    ensure accuracy even outside reactive execution contexts.
+ *
+ * @internal
  */
 function createContextProxy<T>(target: HTMLElement, key: string | symbol): WritableAtom<T> {
   let _currentProvider: WritableAtom<T> | null = null;
@@ -119,22 +143,26 @@ function createContextProxy<T>(target: HTMLElement, key: string | symbol): Writa
 
   const proxyAtom: WritableAtom<T> = {
     get value() {
-      // Logic: Establish dependency on hierarchy version so we re-run when moved.
+      // Logic: Establish a dependency on the hierarchy version to re-run when moved.
       ContextEngine.version.value;
       _currentProvider = getLatestProvider();
       return (isAtom(_currentProvider) ? _currentProvider.value : _currentProvider) as T;
     },
     set value(v: T) {
       _currentProvider = getLatestProvider();
-      if (isWritable(_currentProvider)) _currentProvider.value = v;
+      if (isWritable(_currentProvider)) {
+        _currentProvider.value = v;
+      }
     },
     peek() {
       _currentProvider = getLatestProvider();
       return (isAtom(_currentProvider) ? _currentProvider.peek() : _currentProvider) as T;
     },
     subscribe: (fn) => {
-      // Optimization: Only create a long-lived computed if there are manual subscribers.
-      if (!_shared) _shared = $.computed(() => proxyAtom.value);
+      // Optimization: Only initialize a long-lived computed atom if there are active subscribers.
+      if (!_shared) {
+        _shared = $.computed(() => proxyAtom.value);
+      }
       return _shared.subscribe(fn);
     },
     subscriberCount: () => _shared?.subscriberCount() ?? 0,
@@ -152,22 +180,24 @@ function createContextProxy<T>(target: HTMLElement, key: string | symbol): Writa
 // ─── Controller Implementation ───────────────────────────────────────────────
 
 /**
- * Composition-based controller for AEJ-powered Web Components.
+ * Creates a composition-based controller for integrating AEJ reactivity with Custom Elements.
  *
  * When to use:
- * - When building Custom Elements that need reactive state and scoped jQuery selection.
- * - To manage complex component lifecycles with automatic resource cleanup.
+ * - To build Custom Elements that require reactive attribute synchronization.
+ * - To manage complex component lifecycles with automated resource disposal.
+ * - To provide or inject reactive state across Shadow DOM boundaries.
  *
  * @param element - The host Custom Element instance.
  * @returns A controller for managing reactivity, attributes, and shadow root.
  *
  * @example
+ * ```typescript
  * class MyComponent extends HTMLElement {
  *   private aej = $.useAtomComponent(this);
  *
  *   connectedCallback() {
  *     this.aej.setup();
- *     this.aej.$('.btn').on('click', () => console.log('Clicked!'));
+ *     this.aej.$('.btn').on('click', () => console.log('Action performed'));
  *   }
  *
  *   disconnectedCallback() {
@@ -175,10 +205,13 @@ function createContextProxy<T>(target: HTMLElement, key: string | symbol): Writa
  *   }
  * }
  * customElements.define('my-component', MyComponent);
+ * ```
  */
 export function useAtomComponent(element: HTMLElement): AtomComponentController {
   const state = getInternalState(element);
-  if (state.controller) return state.controller;
+  if (state.controller) {
+    return state.controller;
+  }
 
   const reactive = {
     root: null as (Node & { [CLEANUP_MARKER]?: boolean }) | null,
@@ -232,7 +265,9 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
 
     $: (selector, context) => {
       const ctx = context || reactive.root || element;
-      if (typeof selector !== 'string') return $(selector) as JQuery;
+      if (typeof selector !== 'string') {
+        return $(selector) as JQuery;
+      }
 
       return ctx instanceof DocumentFragment
         ? ($(Array.from(ctx.querySelectorAll<HTMLElement>(selector))) as JQuery)
@@ -272,10 +307,12 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       s.providerEffects?.clear();
       s.injects?.clear();
 
-      // Logic: Notify descendants that providers on this node are gone.
+      // Logic: Notify descendants that providers on this node are no longer available.
       ContextEngine.bump();
 
-      if (!reactive.isInitialized) return;
+      if (!reactive.isInitialized) {
+        return;
+      }
 
       reactive.isInitialized = false;
       reactive.attributeObserver?.disconnect();
@@ -297,27 +334,34 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
   return controller;
 }
 
-// ─── Public API (Context Management) ──────────────────────────────────────────
+// ─── Context Management API ──────────────────────────────────────────────────
+
 /**
  * Registers an element as a provider for a reactive context value.
  *
  * When to use:
- * - When you need to share state (atoms) with deep descendant elements without prop drilling.
+ * - To share state (atoms) with deep descendants without explicit prop drilling.
  * - To establish theme or configuration contexts at specific DOM roots.
  *
- * Logic:
- * - Provided values are automatically exposed as CSS variables (`--aej-[key]`).
- * - If the value is an Atom, the CSS variable stays reactively in sync.
+ * Logic: Event-Based Discovery
+ * Uses the bubbling `aej:context-request` event to resolve dependency
+ * requests from descendants. This respects Shadow DOM boundaries through
+ * composed event propagation.
+ *
+ * Logic: CSS Bridge
+ * Automatically synchronizes provided atom values with CSS custom properties
+ * (`--aej-[key]`), enabling reactive styling based on application state.
  *
  * @param element - The host element, selector, or JQuery collection.
- * @param key - Unique identifier for the context (string or symbol).
- * @param val - The value or Atom to be shared.
+ * @param key - The unique identifier for the context.
+ * @param val - The value or atom to be shared.
  *
  * @example
+ * ```typescript
  * const theme = $.atom('dark');
  * $.provideAtom('#app-root', 'theme', theme);
+ * ```
  */
-
 export function provideAtom(
   element: HTMLElement | JQuery | string,
   key: string | symbol,
@@ -335,7 +379,6 @@ export function provideAtom(
     if (!state.providers) {
       state.providers = new Map();
 
-      // Logic: Setup a listener for the bubbling context-request event.
       el.addEventListener(CONTEXT_REQUEST, (e: Event) => {
         const { key: reqKey, callback } = (e as CustomEvent<ContextRequestDetail>).detail;
         if (state.providers?.has(reqKey)) {
@@ -347,14 +390,15 @@ export function provideAtom(
 
     state.providers.set(key, val);
 
-    // CSS Bridge logic: Sync atom value to CSS variable --aej-[key]
     const keyStr = typeof key === 'symbol' ? key.description : String(key);
     if (keyStr) {
       const varName = `--aej-${keyStr}`;
       const sync = (v: unknown) => el.style.setProperty(varName, v == null ? '' : String(v));
 
       if (isAtom(val)) {
-        if (!state.providerEffects) state.providerEffects = new Map();
+        if (!state.providerEffects) {
+          state.providerEffects = new Map();
+        }
         state.providerEffects.get(key)?.dispose();
 
         const effect = $.effect(() => {
@@ -369,29 +413,30 @@ export function provideAtom(
   }
   ContextEngine.bump();
 }
+
 /**
  * Injects a reactive context provided by an ancestor element.
  *
  * When to use:
  * - To consume state from an ancestor without direct coupling.
- * - To create "Context-Aware" components that adapt to their position in the DOM.
+ * - To create context-aware components that adapt to their DOM hierarchy position.
  *
- * Logic:
- * - Returns a reactive proxy that automatically re-discovers providers if moved in the DOM.
- * - Implements "Hybrid Discovery" (Reactive + Synchronous resolution).
+ * Logic: Reactive Discovery
+ * Returns a reactive proxy that automatically re-locates providers if the
+ * element is moved within the DOM.
  *
- * @param element - The element or selector requesting the context.
- * @param key - The unique identifier of the context to find.
- * @returns A WritableAtom proxy tracking the nearest provider, or null if target not found.
+ * @param element - The requesting element or selector.
+ * @param key - The unique identifier of the context to locate.
+ * @returns A reactive proxy tracking the nearest provider, or null if the target is invalid.
  *
  * @example
- * const theme = $.injectAtom('#child', 'theme');
+ * ```typescript
+ * const theme = $.injectAtom('#sidebar', 'theme');
  * $.effect(() => {
  *   console.log('Active theme:', theme?.value);
- *   return undefined;
  * });
+ * ```
  */
-
 export function injectAtom<T = unknown>(
   element: HTMLElement | JQuery | string,
   key: string | symbol
@@ -402,10 +447,14 @@ export function injectAtom<T = unknown>(
       : typeof element === 'string'
         ? document.querySelector<HTMLElement>(element)
         : ((element as JQuery)[0] as HTMLElement);
-  if (!target) return null;
+  if (!target) {
+    return null;
+  }
 
   const state = getInternalState(target);
-  if (!state.injects) state.injects = new Map();
+  if (!state.injects) {
+    state.injects = new Map();
+  }
   let existing = state.injects.get(key);
   if (!existing) {
     existing = createContextProxy<T>(target, key);

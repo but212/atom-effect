@@ -1,5 +1,5 @@
 import $ from 'jquery';
-import { LOG_PREFIXES } from '@/constants';
+import { SYSTEM_LIST } from '@/constants';
 import type { ListOptions } from '@/types';
 import { debug } from '@/utils/debug';
 import { sanitizeHtml } from '@/utils/sanitize';
@@ -8,9 +8,14 @@ import { ItemState, type PlaceCallbacks, type PreparedDiff } from './types';
 import { cleanupNodes, setAtomKey, wrap } from './utils';
 
 /**
- * Low-level DOM helper to insert elements before a reference node.
- * Supports both raw Elements and jQuery collections.
+ * A low-level DOM utility for inserting elements before a specific reference node.
  *
+ * This helper supports both raw `Element` instances and jQuery collections,
+ * ensuring consistent insertion behavior regardless of the input type.
+ *
+ * @param elOrJq - The element or jQuery collection to insert.
+ * @param nextNode - The reference node to insert before. If null, appends to the container.
+ * @param container - The parent container element.
  * @internal
  */
 export function insertOrAppend(
@@ -31,13 +36,19 @@ export function insertOrAppend(
 }
 
 /**
- * Logic:
- * - If `onRemove` exists, we must trigger asynchronous removals for each item
- *   to allow for exit animations instead of a destructive `empty()`.
+ * Orchestrates the cleanup of a list container and the rendering of empty placeholders.
+ *
+ * Logic: If an `onRemove` callback is provided, the function performs asynchronous
+ * removals for each item to allow for exit animations. Otherwise, it executes a
+ * destructive `empty()` on the container for efficiency.
  *
  * When to use:
- * - Internal cleanup and placeholder rendering for `atomList`.
+ * - To reset a list container during reconciliation or when the data source becomes empty.
  *
+ * @param ctx - The list context containing historical state.
+ * @param itemCount - The number of items in the new data set.
+ * @param $container - The jQuery-wrapped container.
+ * @param empty - The template or element to display when the list is empty.
  * @internal
  */
 export function handleEmpty<T>(
@@ -56,12 +67,14 @@ export function handleEmpty<T>(
   if (!onRemove) {
     $container.empty();
   } else {
-    // Reason: Must trigger coordinated exit animations for every existing row
+    // Reason: Coordinated exit animations are triggered for every existing row
     // to maintain visual consistency during batch updates.
     for (let i = 0, len = oldKeys.length; i < len; i++) {
-      const k = oldKeys[i]!,
-        node = oldNodes[i];
-      if (node) ctx.removeItem(k, wrap(node as Element | JQuery<Element>));
+      const k = oldKeys[i]!;
+      const node = oldNodes[i];
+      if (node) {
+        ctx.removeItem(k, wrap(node as Element | JQuery<Element>));
+      }
     }
   }
 
@@ -77,14 +90,20 @@ export function handleEmpty<T>(
 }
 
 /**
- * Optimization:
- * If all items are HTML strings and it's a cold start, returns sanitized HTML
- * parts for direct `innerHTML` injection to bypass the overhead of jQuery
- * object construction for every element.
+ * Transforms items into DOM handles based on the reconciliation plan.
+ *
+ * Optimization: If all items utilize string templates and the list is undergoing
+ * an initial render (cold start), the function returns sanitized HTML fragments
+ * for direct `innerHTML` injection, bypassing the overhead of individual jQuery
+ * object construction.
  *
  * When to use:
- * - Generating DOM handles or HTML fragments for the reconciliation plan.
+ * - Internal processing of new items within the `atomList` lifecycle.
  *
+ * @param diff - The prepared diff plan.
+ * @param options - Configuration options for the list.
+ * @param isInitial - Indicates whether this is the first render of the list.
+ * @returns An array of sanitized HTML strings if the fast-path is applicable; otherwise null.
  * @internal
  */
 export function renderItems<T>(
@@ -103,14 +122,17 @@ export function renderItems<T>(
   for (let i = 0; i < renderCount; i++) {
     const raw = options.render(toRender[i]!.item, toRender[i]!.index);
     results[i] = raw;
-    if (typeof raw === 'string') htmlParts.push(raw);
-    else isAllStrings = false;
+    if (typeof raw === 'string') {
+      htmlParts.push(raw);
+    } else {
+      isAllStrings = false;
+    }
   }
 
   let sanitized: string[] | null = null;
   if (htmlParts.length > 0) sanitized = batchSanitize(htmlParts);
 
-  // High-perf path: Cold start with string-only templates
+  // Optimization: Fast-path for initial renders using string-only templates without custom bindings.
   if (
     isInitial &&
     isAllStrings &&
@@ -132,8 +154,8 @@ export function renderItems<T>(
 
     setAtomKey($el, String(key));
 
-    // Choice: ForceReplace occurs when identity matches but patching is not permitted
-    // by user configuration. We must physically replace the old node with the new one.
+    // Choice: If identity matches but user configuration prevents patching (missing update callback),
+    // a `ForceReplace` occurs. The old node is physically replaced with the new instance.
     if (newStates[targetIdx] === ItemState.ForceReplace && newNodes[targetIdx]) {
       const node = newNodes[targetIdx]!;
       cleanupNodes(node as Element | JQuery);
@@ -149,28 +171,37 @@ export function renderItems<T>(
 }
 
 /**
+ * Sanitizes a batch of HTML strings in a single pass to improve performance.
+ *
+ * Reason: Reduces the overhead of the sanitization engine (e.g., DOMPurify)
+ * by merging multiple fragments into a single string separated by unique sentinels.
+ *
+ * @param parts - An array of HTML strings to sanitize.
+ * @returns An array of sanitized HTML strings.
  * @internal
  */
 function batchSanitize(parts: string[]): string[] {
   if (parts.length === 1) return [sanitizeHtml(parts[0]!)];
   const sep = `<template data-atom-sep="s${Math.random().toString(36).slice(2)}"></template>`;
 
-  /**
-   * Reason: Massive performance gain by reducing the number of costly sanitization
-   * calls (DOMPurify/Sanitizer) to a single pass for the entire batch.
-   */
   return sanitizeHtml(parts.join(sep)).split(sep);
 }
 
 /**
+ * Identifies and removes items that are no longer present in the reactive data set.
+ *
+ * Logic: Iterates through the historical key set and triggers the removal
+ * lifecycle for any key that is not found in the new state.
+ *
+ * @param ctx - The list context containing historical state.
+ * @param diff - The prepared diff plan.
  * @internal
  */
 export function cleanupRemoved<T>(ctx: ListContext<T>, diff: PreparedDiff<T>): void {
   const { startIndex, oldEndIndex, newKeySet } = diff;
   for (let i = startIndex; i <= oldEndIndex; i++) {
     const k = ctx.oldKeys[i]!;
-    // Note: Items in the "moving" middle section are already filtered.
-    // Here we only target items that don't exist in the new key set at all.
+    // Note: Items within the head/tail optimization range are excluded.
     if (!newKeySet.has(k) && ctx.oldNodes[i]) {
       ctx.removeItem(k, wrap(ctx.oldNodes[i] as Element | JQuery<Element>));
     }
@@ -178,6 +209,20 @@ export function cleanupRemoved<T>(ctx: ListContext<T>, diff: PreparedDiff<T>): v
 }
 
 /**
+ * Strategically places item nodes into the DOM container based on the reconciliation plan.
+ *
+ * Logic: This function selects the most efficient injection path (innerHTML,
+ * Fragment, or complex Moves) based on the current state of the container.
+ *
+ * Optimization: When performing moves, the loop iterates backwards to use
+ * `insertBefore(nextNode)`, which is more efficient across most JS engines
+ * than forward insertions.
+ *
+ * @param ctx - The list context.
+ * @param diff - The prepared diff plan.
+ * @param container - The parent DOM element.
+ * @param callbacks - User-provided hooks for binding and updates.
+ * @param htmlFragments - Optional pre-rendered HTML strings from the fast-path.
  * @internal
  */
 export function placeItems<T>(
@@ -190,28 +235,31 @@ export function placeItems<T>(
   const { newKeys, newItems, newNodes, newStates, newIndices } = diff;
   const count = newKeys.length;
 
-  // Path A: The fastest possible start using direct innerHTML.
+  // Path A: Fastest path — initial render using direct innerHTML injection.
   if (htmlFragments) {
     container.innerHTML = htmlFragments.join('');
     let el = container.firstElementChild;
     for (let i = 0; i < count; i++) {
       if (!el) break;
-      el.setAttribute('data-atom-key', String(newKeys[i]));
+      const key = newKeys[i]!;
+      const $el = $(el) as unknown as JQuery;
+      el.setAttribute('data-atom-key', String(key));
       newNodes[i] = el;
       newStates[i] = ItemState.Existing;
-      debug.domUpdated(LOG_PREFIXES.LIST, $(el) as unknown as JQuery, 'list.add', newItems[i]);
+      debug.domUpdated(SYSTEM_LIST.PREFIX, $el, 'list.add', newItems[i]);
       el = el.nextElementSibling;
     }
     return;
   }
 
-  // Path B: Fragment-based batch injection for clean starts.
+  // Path B: DocumentFragment injection for batch insertion into empty containers.
   if (ctx.oldKeys.length === 0 && ctx.removingKeys.size === 0) {
     const frag = document.createDocumentFragment();
     for (const node of newNodes) {
       if (!node) continue;
-      if (node instanceof Element) frag.appendChild(node);
-      else {
+      if (node instanceof Element) {
+        frag.appendChild(node);
+      } else {
         const jq = node as JQuery;
         for (let j = 0; j < jq.length; j++) {
           const entry = jq[j];
@@ -222,29 +270,30 @@ export function placeItems<T>(
     container.innerHTML = '';
     container.appendChild(frag);
   } else {
-    // Path C: Complex move logic for active lists.
-    // Optimization: Loop backwards to maintain order using insertBefore(next),
-    // which is more efficient than forward insertion in many engines.
-    let next: Node | null = null,
-      min = Infinity;
+    // Path C: Complex reconciliation logic for reordering and partial updates.
+    let next: Node | null = null;
+    let min = Infinity;
     for (let i = count - 1; i >= 0; i--) {
-      const idx = newIndices[i]!,
-        node = newNodes[i];
+      const idx = newIndices[i]!;
+      const node = newNodes[i];
       if (!node) continue;
 
       const first = node instanceof Element ? node : (node as JQuery)[0];
       if (first) {
-        // Deterministic Move Logic:
-        // idx !== -1 ensures it's an existing item.
-        // idx < min tracks the relative order; if broken, the item must be moved
-        // to its correct relative position.
-        if (idx !== -1 && idx < min) min = idx;
-        else insertOrAppend(node as Element | JQuery, next, container);
+        // Logic: Deterministic Move detection.
+        // idx !== -1 identifies an existing item.
+        // If the relative order (tracked by min) is violated, the item is moved.
+        if (idx !== -1 && idx < min) {
+          min = idx;
+        } else {
+          insertOrAppend(node as Element | JQuery, next, container);
+        }
         next = first;
       }
     }
   }
 
+  // Logic: Execute user-provided lifecycle hooks and bindings.
   for (let i = 0; i < count; i++) {
     const state = newStates[i]!;
     if (state === ItemState.Unchanged) continue;
@@ -252,15 +301,18 @@ export function placeItems<T>(
     const node = newNodes[i];
     if (!node) continue;
 
-    const $el = wrap(node as Element | JQuery<Element>),
-      item = newItems[i]!;
-    if (state === ItemState.Existing) callbacks.update?.($el, item, i);
-    else {
+    const $el = wrap(node as Element | JQuery<Element>);
+    const item = newItems[i]!;
+
+    if (state === ItemState.Existing) {
+      callbacks.update?.($el, item, i);
+    } else {
       callbacks.bind?.($el, item, i);
       if (state === ItemState.New) {
         callbacks.onAdd?.($el);
-        ctx.removingKeys.delete(newKeys[i]!); // Stop tracking now that it's back in the active DOM.
-        debug.domUpdated(LOG_PREFIXES.LIST, $el, 'list.add', item);
+        // Constraint: Remove from transition tracking now that the node is back in the active DOM.
+        ctx.removingKeys.delete(newKeys[i]!);
+        debug.domUpdated(SYSTEM_LIST.PREFIX, $el, 'list.add', item);
       }
     }
   }
