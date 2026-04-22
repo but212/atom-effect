@@ -1,16 +1,6 @@
-/**
- * @fileoverview Refactored tracking tests: Focusing on behavior and core safety.
- */
-
-import { describe, expect, it, vi } from 'vitest';
-import {
-  type DependencySubscriber,
-  Subscription,
-  trackingContext,
-  untracked,
-} from '@/core/tracking';
-import { aeNextTick, atom, computed } from '@/index';
-import type { Subscriber } from '@/types';
+import { describe, expect, it } from 'vitest';
+import { aeNextTick, atom, computed, effect, untracked } from '@/index';
+import { sleep } from '../../utils/test-helpers';
 
 describe('Tracking Context & untracked()', () => {
   it('untracked() suppresses dependency collection while allowing value access', async () => {
@@ -47,43 +37,58 @@ describe('Tracking Context & untracked()', () => {
     ).toThrow('baz');
   });
 
-  it('LIMITATION: tracking context is strictly synchronous for safety', async () => {
+  it('does not track dependencies accessed after an await boundary (Sync Limitation)', async () => {
     const a = atom(0);
-    const sub = {
-      execute: vi.fn(),
-      addDependency: vi.fn(),
-    } as unknown as Subscriber & DependencySubscriber;
+    let runs = 0;
 
-    await trackingContext.run(sub, async () => {
-      a.value; // Synchronous: Tracked
-      await Promise.resolve();
-      a.value; // Asynchronous: NOT tracked (intended limitation)
-    });
+    // Async computed: tracking only works before the first 'await'
+    const c = computed(
+      async () => {
+        runs++;
+        await sleep(10);
+        return a.value;
+      },
+      { defaultValue: -1 }
+    );
 
-    expect(sub.addDependency).toHaveBeenCalledTimes(1);
+    c.value; // Trigger first evaluation
+    await sleep(30);
+    expect(runs).toBe(1);
+
+    // Update 'a': Since 'a.value' was accessed after 'await', 'c' should NOT be subscribed to 'a'
+    a.value = 1;
+    await aeNextTick();
+    await c.value; // Force re-evaluation attempt
+    expect(runs).toBe(1); // Should not have re-run
   });
 });
 
 describe('Subscription Notification Robustness', () => {
-  it('Subscription.notify ensures reliable execution and context isolation', () => {
-    const fn = vi.fn();
-    const sub = {
-      execute: vi.fn(),
-      addDependency: vi.fn(),
-    } as unknown as Subscriber & DependencySubscriber;
+  it('ensures subscriber notifications are untracked even when triggered inside a tracking context', async () => {
+    const trigger = atom(0, { sync: true });
+    const leakSource = atom(0);
+    let parentRuns = 0;
 
-    const s = new Subscription(fn, sub);
-
-    // Context Isolation: running notify inside another tracker must not leak
-    trackingContext.run(sub, () => {
-      s.notify(1, 0);
+    // Subscriber that accesses an external atom
+    trigger.subscribe(() => {
+      leakSource.value;
     });
 
-    // 1. Reliable execution: both callback and subscriber are called
-    expect(fn).toHaveBeenCalledWith(1, 0);
-    expect(sub.execute).toHaveBeenCalled();
+    const parent = effect(() => {
+      parentRuns++;
+      // Triggering a sync update here forces notifications to happen
+      // WHILE this effect's tracking context is active.
+      trigger.value = parentRuns;
+    });
 
-    // 2. Context Safety: notify must be untracked internally
-    expect(sub.addDependency).not.toHaveBeenCalled();
+    await aeNextTick();
+    expect(parentRuns).toBe(1);
+
+    // Update leakSource: parent must NOT re-run because the subscriber access was untracked
+    leakSource.value = 99;
+    await aeNextTick();
+    expect(parentRuns).toBe(1);
+
+    parent.dispose();
   });
 });

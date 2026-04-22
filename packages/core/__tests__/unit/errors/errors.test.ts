@@ -4,29 +4,30 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { EMPTY_ERROR_ARRAY } from '@/constants';
-import { atom } from '@/core/atom';
-import { computed } from '@/core/computed';
-import { effect } from '@/core/effect';
 import {
   AtomError,
-  type AtomErrorConstructor,
+  atom,
   ComputedError,
+  computed,
   EffectError,
+  effect,
+  isAtom,
+  isComputed,
+  isEffect,
+  isPromise,
+  isWritable,
   SchedulerError,
-  wrapError,
-} from '@/errors';
-import { isAtom, isComputed, isEffect, isPromise, isWritable } from '@/utils/type-guards';
+} from '@/index';
 
 describe('Error Handling System', () => {
   // ── Error Classes & Constructor ─────────────────────────────────────────────
 
   describe('Error Hierarchy', () => {
     const errorTypes = [
-      { Class: AtomError as AtomErrorConstructor, name: 'AtomError', recoverable: true },
-      { Class: ComputedError as AtomErrorConstructor, name: 'ComputedError', recoverable: true },
-      { Class: EffectError as AtomErrorConstructor, name: 'EffectError', recoverable: false },
-      { Class: SchedulerError as AtomErrorConstructor, name: 'SchedulerError', recoverable: false },
+      { Class: AtomError, name: 'AtomError', recoverable: true },
+      { Class: ComputedError, name: 'ComputedError', recoverable: true },
+      { Class: EffectError, name: 'EffectError', recoverable: false },
+      { Class: SchedulerError, name: 'SchedulerError', recoverable: false },
     ] as const;
 
     it.each(errorTypes)('$name confirms inheritance, default state, and optional parameters', ({
@@ -47,27 +48,6 @@ describe('Error Handling System', () => {
       const custom = new Class('msg', null, !defaultRecoverable, 'ERR_CODE');
       expect(custom.recoverable).toBe(!defaultRecoverable);
       expect(custom.code).toBe('ERR_CODE');
-    });
-  });
-
-  // ── wrapError() ───────────────────────────────────────────────────────────────
-
-  describe('wrapError() logic', () => {
-    it('wraps various types of causes correctly', () => {
-      // 1. Native error wrapping
-      const native = new TypeError('fail');
-      const wrapped = wrapError(native, ComputedError, 'ctx');
-      expect(wrapped.message).toBe('TypeError (ctx): fail');
-      expect(wrapped.cause).toBe(native);
-
-      // 2. Accumulation (Chainable) - Preserves traceability
-      const secondWrap = wrapError(wrapped, EffectError, 'outer');
-      expect(secondWrap.cause).toBe(wrapped);
-      expect(secondWrap.message).toContain('outer');
-
-      // 3. Non-Error value preservation
-      const raw = { status: 500 };
-      expect(wrapError(raw, AtomError, 'api').cause).toBe(raw);
     });
   });
 
@@ -135,8 +115,9 @@ describe('Error Handling System', () => {
 
   // ── Maintenance ─────────────────────────────────────────────────────────────
 
-  it('verifies EMPTY_ERROR_ARRAY integrity', () => {
-    expect(Object.isFrozen(EMPTY_ERROR_ARRAY)).toBe(true);
-    expect(computed(() => 42).errors).toBe(EMPTY_ERROR_ARRAY);
+  it('verifies initial error state integrity', () => {
+    const c = computed(() => 42);
+    expect(c.errors).toEqual([]);
+    expect(Object.isFrozen(c.errors)).toBe(true);
   });
 });

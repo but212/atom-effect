@@ -3,15 +3,12 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { EMPTY_ERROR_ARRAY } from '@/constants';
 import { aeNextTick, atom, computed, effect } from '@/index';
 import { sleep } from '../../utils/test-helpers';
 
 describe('Core - Error Handling and Propagation', () => {
   describe('Sync Error Propagation & Recovery', () => {
     it('aggregates multiple upstream errors, wraps as ComputedError, and clears completely upon recovery', () => {
-      expect(Object.isFrozen(EMPTY_ERROR_ARRAY)).toBe(true);
-
       const cause1 = atom(true, { sync: true });
       const cause2 = atom(true, { sync: true });
 
@@ -33,7 +30,7 @@ describe('Core - Error Handling and Propagation', () => {
       const z = computed(() => x.value + y.value, { defaultValue: -1 });
 
       expect(z.hasError).toBe(false);
-      expect(z.errors).toBe(EMPTY_ERROR_ARRAY);
+      expect(z.errors).toEqual([]);
 
       // Trigger x and y evaluations — direct access throws even with defaultValue
       try {
@@ -65,7 +62,7 @@ describe('Core - Error Handling and Propagation', () => {
       expect(z.value).toBe(3); // 1 + 2
       expect(z.hasError).toBe(false);
       expect(z.lastError).toBeNull();
-      expect(z.errors).toBe(EMPTY_ERROR_ARRAY);
+      expect(z.errors).toEqual([]);
     });
   });
 
@@ -99,7 +96,7 @@ describe('Core - Error Handling and Propagation', () => {
 
       expect(user.state).toBe('resolved');
       expect(user.hasError).toBe(false);
-      expect(user.errors).toBe(EMPTY_ERROR_ARRAY);
+      expect(user.errors).toEqual([]);
       expect(user.value).toEqual({ name: 'Test' });
     });
   });

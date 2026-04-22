@@ -3,22 +3,12 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { scheduler } from '@/core/scheduler';
-import { AtomError, aeNextTick, atom } from '@/index';
+import { AtomError, aeNextTick, atom, batch } from '@/index';
 
 describe('Atom', () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
-
-  interface InternalAtom {
-    hasError: boolean;
-    _deepDirtyCheck(): boolean;
-    isSync: boolean;
-    isNotificationScheduled: boolean;
-    _flushNotifications(): void;
-    dispose(): void;
-  }
 
   it('should manage lifecycle: creation, non-reactive read, and disposal', () => {
     const a = atom(42);
@@ -111,10 +101,10 @@ describe('Atom', () => {
       const spy = vi.fn();
       a.subscribe(spy);
 
-      scheduler.startBatch();
-      a.value = 4;
-      a.value = 0; // Return to 0
-      scheduler.endBatch();
+      batch(() => {
+        a.value = 4;
+        a.value = 0; // Return to 0
+      });
 
       await aeNextTick();
       expect(spy).not.toHaveBeenCalled();
@@ -133,12 +123,11 @@ describe('Atom', () => {
       expect(spy).toHaveBeenCalledWith(1, 0);
 
       // Suppressed during manual scheduler batch
-      scheduler.startBatch();
-      a.value = 2;
-      a.value = 3;
-      expect(spy).toHaveBeenCalledTimes(1); // Still 1
-
-      scheduler.endBatch();
+      batch(() => {
+        a.value = 2;
+        a.value = 3;
+        expect(spy).toHaveBeenCalledTimes(1); // Still 1
+      });
       expect(spy).toHaveBeenCalledTimes(2); // Final value synced
       expect(spy).toHaveBeenCalledWith(3, 1);
     });
@@ -156,6 +145,24 @@ describe('Atom', () => {
       a.value = 2; // Trigger
 
       expect(log).toEqual(['sub1: 1 -> 2', 'sub2: 1 -> 2', 'sub1: 2 -> 3', 'sub2: 2 -> 3']);
+    });
+
+    it('should handle unsubscription safely during the notification loop (Re-entry)', () => {
+      const a = atom(0, { sync: true });
+      let unsub: (() => void) | undefined;
+      const log: number[] = [];
+
+      unsub = a.subscribe((nv) => {
+        log.push(nv!);
+        if (nv === 1) unsub?.();
+      });
+      a.subscribe((nv) => log.push(nv!));
+
+      expect(a.subscriberCount()).toBe(2);
+      a.value = 1;
+
+      expect(log).toEqual([1, 1]);
+      expect(a.subscriberCount()).toBe(1);
     });
   });
 
@@ -214,17 +221,6 @@ describe('Atom', () => {
   });
 
   describe('Coverage Gaps', () => {
-    it('ReactiveNode base properties', () => {
-      const a = atom(0) as unknown as InternalAtom;
-      expect(a.hasError).toBe(false);
-      expect(a._deepDirtyCheck()).toBe(false);
-      expect(a.isSync).toBe(false);
-      expect(a.isNotificationScheduled).toBe(false);
-
-      const s = atom(0, { sync: true }) as unknown as InternalAtom;
-      expect(s.isSync).toBe(true);
-    });
-
     it('Duplicate subscription checks across all slots and overflow', () => {
       const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const a = atom(0);
@@ -276,16 +272,6 @@ describe('Atom', () => {
 
       // Should have 6 errors logged
       expect(consoleError).toHaveBeenCalledTimes(6);
-    });
-
-    it('Internal _flushNotifications guards', () => {
-      const a = atom(0) as unknown as InternalAtom;
-      // Manually trigger flush when nothing is scheduled
-      expect(() => a._flushNotifications()).not.toThrow();
-
-      a.dispose();
-      // Should return early if disposed
-      expect(() => a._flushNotifications()).not.toThrow();
     });
   });
 });

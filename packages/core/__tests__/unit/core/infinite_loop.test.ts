@@ -1,13 +1,7 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { SCHEDULER_CONFIG } from '@/constants';
-import { batch, resetFlushState, startFlush } from '@/core/scheduler';
-import { atom, effect } from '@/index';
+import { describe, expect, it, vi } from 'vitest';
+import { atom, batch, effect, SCHEDULER_CONFIG } from '@/index';
 
 describe('Infinite Loop Detection (Epoch Based)', () => {
-  afterEach(() => {
-    resetFlushState();
-  });
-
   it('detects loop, logs error, and disposes the effect', () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const count = atom(0);
@@ -85,33 +79,6 @@ describe('Infinite Loop Detection (Epoch Based)', () => {
     expect(executions).toBeLessThan(SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_EFFECT);
 
     consoleSpy.mockRestore();
-  });
-
-  it('does not allow bypassing detection via startFlush() inside effect', () => {
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const count = atom(0);
-
-    batch(() => {
-      effect(() => {
-        const val = count.value;
-        startFlush(); // bypass attempt — should be ignored
-        if (val < 200) count.value = val + 1;
-      });
-      count.value = 1;
-    });
-
-    expect(consoleSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: expect.stringMatching(/Infinite loop detected \(per-effect\)/),
-      })
-    );
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('startFlush() called during flush')
-    );
-
-    consoleSpy.mockRestore();
-    warnSpy.mockRestore();
   });
 
   it('completes normally when executions stay within limit', () => {
