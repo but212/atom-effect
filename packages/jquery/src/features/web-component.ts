@@ -96,14 +96,15 @@ const contextRegistry = {
   },
 };
 
-let bumpTimer: ReturnType<typeof setTimeout> | null = null;
+let isBumpPending = false;
 const globalTreeObserver = new MutationObserver((mutations) => {
   if (mutations.some((m) => m.addedNodes.length > 0 || m.removedNodes.length > 0)) {
-    if (bumpTimer) return;
-    bumpTimer = setTimeout(() => {
+    if (isBumpPending) return;
+    isBumpPending = true;
+    queueMicrotask(() => {
       contextRegistry.bump();
-      bumpTimer = null;
-    }, 16); // Roughly 1 frame
+      isBumpPending = false;
+    });
   }
 });
 
@@ -316,7 +317,15 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       if (sr) {
         registry.markHost(element);
         registry.registerShadow(element, sr);
-        reactive.treeObserver = new MutationObserver(() => contextRegistry.bump());
+        let isRootBumpPending = false;
+        reactive.treeObserver = new MutationObserver(() => {
+          if (isRootBumpPending) return;
+          isRootBumpPending = true;
+          queueMicrotask(() => {
+            contextRegistry.bump();
+            isRootBumpPending = false;
+          });
+        });
         reactive.treeObserver.observe(sr, { childList: true, subtree: true });
       }
 
