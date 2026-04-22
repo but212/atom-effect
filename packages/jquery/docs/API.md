@@ -369,7 +369,7 @@ Composition-based helper for adding AEJ reactive features to standard Web Compon
 - `$`: Scoped jQuery selector. Limited to selecting elements within the component.
 - `setup(shadowRoot?)`: Initializes reactive lifecycle. Pass `shadowRoot` for closed-mode components.
 - `teardown()`: Disposes all bindings. Call in `disconnectedCallback`.
-- `attrs`: Reactive atoms for `observedAttributes`. Only syncs attributes defined in the component's static `observedAttributes` array.
+- `attrs`: Reactive atoms for `observedAttributes`. A proxy that lazily creates atoms and initializes a `MutationObserver` on first access. Only syncs attributes defined in the component's static `observedAttributes` array.
 - `provideAtom(key, val)`: Scoped provider registration.
 - `injectAtom(key)`: Scoped context injection.
 
@@ -423,7 +423,9 @@ Injects a reactive context provided by an ancestor.
 
 Unlike standard DI, `injectAtom` returns a **reactive source**. If the provider changes the value at runtime, any effects or bindings using the injected atom will automatically update.
 
-**Context Automation**: AEJ uses a global `MutationObserver` to track DOM movements. If an element moves to a different part of the tree with a different provider, `injectAtom` proxies will automatically detect the change and re-evaluate, ensuring that components always reflect their current position in the context hierarchy.
+**Context Automation**: AEJ uses a global `MutationObserver` to track DOM movements. If an element moves to a different part of the tree with a different provider, `injectAtom` proxies will automatically detect the change via a global versioning system and re-evaluate, ensuring that components always reflect their current position in the context hierarchy.
+
+**Hybrid Discovery**: The returned proxy implements a dual-mode resolution. It is reactive within tracking contexts (subscribing to hierarchy changes) and performs immediate synchronous discovery on `.value` access, ensuring correctness even outside reactive effects.
 
 #### Late Binding (Custom Elements)
 
@@ -454,7 +456,7 @@ const theme = $.injectAtom<'light' | 'dark'>(el, 'user-theme');
 
 #### Shadow DOM Traversal
 
-AEJ's DI system uses a **composed tree traversal** strategy (O(depth)). It automatically traverses Shadow DOM boundaries by walking up the host chain until a provider is found or the document root is reached. This is more reliable and performant than event-based DI, as it doesn't depend on event bubbling or retargeting rules.
+AEJ's DI system uses an **event-based discovery** strategy. When an atom is requested, a bubbling `aej:context-request` event is dispatched with `composed: true`. This allows the request to naturally traverse Shadow DOM boundaries and find the nearest ancestor provider without manual tree-walking logic.
 
 ### `.atomUnmount()`
 

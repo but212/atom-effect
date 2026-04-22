@@ -88,7 +88,7 @@ The `BindingRegistry` (`registry.ts`) is the central lifecycle manager. It track
 - **Effects**: Core `effect` instances bound to DOM elements.
 - **Cleanups**: Component-level cleanup functions.
 
-Storage uses **WeakMap/WeakSet** to prevent memory leaks. The `BindingRecord` objects are plain structures used to track resources per element, which are proactively cleaned up when the element is removed. Resource pooling has been removed to reduce architectural complexity, as modern JS engines handle the allocation of these small objects with extremely high efficiency (O(1) memory management).
+Storage uses a centralized **WeakMap** (`nodeStateMap`) to prevent memory leaks and reduce DOM pollution. The internal state objects are plain structures used to track resources per element (providers, effects, injects), which are proactively cleaned up when the element is removed. Resource pooling has been removed to reduce architectural complexity, as modern JS engines handle the allocation of these small objects with extremely high efficiency (O(1) memory management).
 
 ### 3.2 Marker Class Optimization
 
@@ -497,28 +497,26 @@ This controller manages:
 - **Scoped API**: Provides a raw `host` reference, an active `root` node, and a scoped jQuery instance (`$`) restricted to the component boundary.
 - **Lifecycle Sync**: Bridges `connectedCallback` to `setup()` and `disconnectedCallback` to `teardown()`.
 - **Observer Management**: Handles the scoped `MutationObserver` lifecycle for the component's boundary, supporting custom roots (Shadow DOM).
-- **Reactive Attributes (`attrs`)**: Lazy-initializes atoms for `observedAttributes`. A private `MutationObserver` tracks attribute changes and syncs them to these atoms, allowing components to react to HTML attribute updates.
-
-### 16.2 Dependency Injection (DI) Engine
+- **Reactive Attributes (`attrs`)**: Refactored into a `Proxy` that lazy-initializes atoms for `observedAttributes`. A private `MutationObserver` is created only on the first attribute access. It tracks attribute changes and syncs them to these atoms, allowing components to react to HTML attribute updates with minimal initial overhead.
 
 `provideAtom` and `injectAtom` implement a reactive DI system using DOM events.
 
-#### 16.2.1 Composed Tree Traversal
+#### 16.2.1 Event-Based Discovery
 
-AEJ uses a **stateless tree-walker** for DI resolution. This avoids the overhead and complexity of CustomEvents:
+AEJ uses a **hybrid discovery strategy** that combines event propagation with a registry-based lookup. This minimizes DOM traversals while maintaining full support for encapsulated shadow roots:
 
-1. **Upward Scan**: `injectAtom` starts from the target's parent and walks up the DOM.
-2. **Shadow Navigation**: When it hits a `ShadowRoot`, it jumps to the `host` element and continues.
-3. **Registry Lookup**: At each step, it checks the node's `AEJ_STATE` for registered providers.
-4. **Resolution**: The first match is returned. This guarantees nearest-ancestor priority and allows for context overrides.
+1. **Discovery Request**: `injectAtom` dispatches a bubbling `aej:context-request` event from the target element.
+2. **Composed Traversal**: The event is initialized with `composed: true`, allowing it to cross Shadow DOM boundaries.
+3. **Provider Capture**: Providers (registered via `provideAtom`) listen for this event. The first ancestor to capture the event calls a provided callback with its atom and stops propagation.
+4. **Resolution**: The result is cached in the target node's internal state.
 
-#### 16.2.2 Context Automation (Global Versioning)
+#### 16.2.2 Context Engine (Global Versioning)
 
-To detect DOM movements without the overhead of event listeners on every node, AEJ uses a **Global Versioning** system:
+To detect DOM movements without the overhead of event listeners on every node, AEJ uses a **Global Versioning** system managed by the `ContextEngine`:
 
-1. **Global Observer**: A `globalTreeObserver` (MutationObserver) watches the entire document and all ShadowRoots for node additions/removals.
-2. **Version Bumping**: Any structural change bumps a `globalVersion` atom in the `contextRegistry`.
-3. **Reactive Invalidation**: `injectAtom` proxies depend on this `globalVersion`. When it changes, all active injections re-run their tree-traversal logic to ensure they are still connected to the correct provider.
+1. **Global Observer**: A centralized `MutationObserver` watches the entire document for node additions or removals.
+2. **Version Bumping**: Any structural change bumps a global `version` atom in the `ContextEngine`.
+3. **Reactive Invalidation**: `injectAtom` proxies establish a dependency on this global version. When it changes, the proxy re-runs its discovery logic.
 
 #### 16.2.3 Reactive & Lazy Resolution
 
@@ -539,4 +537,4 @@ The new DI engine favors standard TypeScript generics over interface merging. By
 
 #### 16.2.6 Injection Cache Optimization
 
-Resolution results are cached in the target node's `AEJ_STATE`. Each cache entry includes snapshots of the global version and the key-specific version at the time of resolution. Subsequent lookups skip the O(depth) traversal if the versions haven't changed, providing O(1) performance for stable DOM structures.
+Resolution results are cached in the target node's internal state within a `WeakMap`. Each cache entry stores the discovered proxy atom. Subsequent lookups for the same key on the same node return the cached proxy, ensuring identity stability and avoiding redundant event dispatch. The proxies themselves handle invalidation via the `ContextEngine.version`.

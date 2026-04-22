@@ -616,18 +616,21 @@ declare global {
      * Registers an element (or multiple) as a provider for a reactive context value.
      *
      * When to use:
-     * - When you need to share state (atoms) with deep descendant elements without prop drilling.
-     * - To establish a theme, user session, or global configuration context at a specific root.
+     * - To share state (Atoms) with deep descendant elements without prop drilling.
+     * - To establish a theme, session, or global configuration context at a specific root.
+     * - When you want provided values to be automatically exposed as CSS variables (`--aej-[key]`).
      *
      * @param element - The host element, selector, or JQuery collection to act as provider.
      * @param key - Unique identifier for the context (string or symbol).
-     * @param val - The value (usually an Atom) to be shared with descendants.
+     * @param val - The value (usually an Atom) to be shared. If it's an Atom, descendants get a reactive proxy.
      *
      * @example
      * ```typescript
-     * // Parent provides a theme atom
-     * const theme = $.atom('light');
-     * $.provideAtom('#app-root', 'theme', theme);
+     * // 1. Provide a theme atom at the root
+     * const theme = $.atom('dark');
+     * $.provideAtom('#app', 'theme', theme);
+     *
+     * // 2. AEJ automatically sets CSS variable: #app { --aej-theme: "dark" }
      * ```
      *
      * @public
@@ -638,20 +641,21 @@ declare global {
      * Injects a reactive context provided by an ancestor element.
      *
      * When to use:
-     * - To consume state provided by a parent/ancestor component without direct coupling.
-     * - To create "Context-Aware" components that adapt to their position in the DOM.
+     * - To consume state provided by an ancestor without direct coupling.
+     * - To create "Context-Aware" components that adapt as they move within the DOM.
      *
      * @param element - The element or selector requesting the context.
      * @param key - The unique identifier of the context to find.
-     * @returns A WritableAtom proxy that tracks the nearest ancestor provider.
+     * @returns A WritableAtom proxy that automatically re-discovers the nearest provider if the node is moved.
      *
      * @example
      * ```typescript
-     * // Child consumes the provided theme
-     * const theme = $.injectAtom('#child-element', 'theme');
+     * // Consume a theme from any ancestor
+     * const theme = $.injectAtom('.my-component', 'theme');
+     *
      * if (theme) {
      *   $.effect(() => {
-     *     console.log('Current theme:', theme.value);
+     *     console.log('Current theme in component:', theme.value);
      *   });
      * }
      * ```
@@ -667,30 +671,35 @@ declare global {
      * Composition-based helper for creating AEJ-powered Web Components.
      *
      * When to use:
-     * - When building standard Custom Elements with reactive state and scoped selection.
-     * - When you want perfect type safety and predictable lifecycle management for components.
+     * - When building standard Custom Elements that need reactive state, scoped selectors, and DI.
+     * - To simplify attribute-to-atom mapping and lifecycle cleanup in Web Components.
      *
      * @param element - The host Custom Element (usually `this`).
-     * @returns A controller for managing reactive lifecycle, providers, and scoped root.
+     * @returns A controller for managing reactive lifecycle, providers, and scoped selection.
      *
      * @example
      * ```typescript
-     * class MyComponent extends HTMLElement {
-     *   // Capture 'this' as the reactive host
+     * class MyCounter extends HTMLElement {
      *   private aej = $.useAtomComponent(this);
      *
      *   connectedCallback() {
-     *     // Initialize shadow root and registry
      *     this.aej.setup();
-     *     this.aej.$('button').on('click', () => console.log('Clicked!'));
+     *     const count = $.atom(0);
+     *
+     *     // Use scoped selector within the component
+     *     this.aej.$('button').on('click', () => count.value++);
+     *
+     *     // Access reactive attributes
+     *     $.effect(() => {
+     *        console.log('Initial count from attr:', this.aej.attrs.start.value);
+     *     });
      *   }
      *
      *   disconnectedCallback() {
-     *     // Clean up providers and observers
      *     this.aej.teardown();
      *   }
      * }
-     * customElements.define('my-component', MyComponent);
+     * customElements.define('my-counter', MyCounter);
      * ```
      *
      * @public
