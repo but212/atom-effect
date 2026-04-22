@@ -1,29 +1,30 @@
 /**
- * Global brand symbol for all reactive primitives in the Atom Effect system.
+ * The global brand symbol used for type identification across all reactive primitives.
  *
- * Optimization: Uses a single consolidated symbol to store multiple type markers
- * via bitwise flags, minimizing property lookups and object size.
+ * Optimization: A single consolidated symbol is used to store multiple type markers
+ * using bitwise flags. This strategy minimizes property lookup overhead and reduces
+ * the overall object size by avoiding multiple type-specific properties.
  *
- * Use this when:
- * - Direct property access for type identification is required.
- * - Implementing custom branded objects.
+ * When to use:
+ * - To access the internal type metadata of a reactive node.
+ * - To implement custom branded objects that need to integrate with the reactive system.
  */
 export const BRAND: unique symbol = Symbol.for('atom-effect/brand');
 
 /**
- * Bitwise flags for type identification.
+ * A collection of bitwise flags used for precise type discrimination.
  *
  * When to use:
- * - Identifying the category of a reactive node in high-frequency loops.
- * - Checking capabilities (e.g., if an atom is Writable).
+ * - To identify the specific category of a reactive node (e.g., Atom, Computed, Effect).
+ * - To verify the capabilities of a node (e.g., checking if it is writable).
  */
 export const BrandFlags = {
-  /** Primitive is an atom (Readonly or Writable). */
+  /** Indicates that the primitive is an atom (either Readonly or Writable). */
   Atom: 1 << 0,
-  /** Primitive supports write operations (.set/.update). */
+  /** Indicates that the primitive supports write operations, such as `.set()` or `.update()`. */
   Writable: 1 << 1,
-  /** Primitive is a computed value with manual dependency tracking. */
+  /** Indicates that the primitive is a computed value with dependency tracking logic. */
   Computed: 1 << 2,
-  /** Primitive is an effect object. */
+  /** Indicates that the primitive is an effect handle. */
   Effect: 1 << 3,
 } as const;

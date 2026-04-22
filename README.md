@@ -4,51 +4,73 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![ES2021+](https://img.shields.io/badge/target-ES2021%2B-blue)
 
-A reactive state management library with first-class async support.
+A monorepo for reactive state management with asynchronous orchestration.
+
+## Overview
+
+The `atom-effect` project implements reactive primitives for JavaScript environments. It enforces type safety, state predictability, and automated resource management.
 
 ## Packages
 
-| Package | Version | Description |
+| Package | Role | Description |
 | --- | --- | --- |
-| [@but212/atom-effect](./packages/core) | [![npm](https://img.shields.io/npm/v/@but212/atom-effect.svg)](https://www.npmjs.com/package/@but212/atom-effect) | Core reactive primitives (`atom`, `computed`, `effect`) |
-| [@but212/atom-effect-jquery](./packages/jquery) | [![npm](https://img.shields.io/npm/v/@but212/atom-effect-jquery.svg)](https://www.npmjs.com/package/@but212/atom-effect-jquery) | jQuery reactive bindings |
+| [@but212/atom-effect](./packages/core) | Core Engine | Reactive primitives: `atom`, `computed`, and `effect`. |
+| [@but212/atom-effect-jquery](./packages/jquery) | jQuery Adapter | Reactive DOM bindings and lifecycle management for jQuery. |
 
 ## Quick Start
+
+### Installation
 
 ```bash
 pnpm add @but212/atom-effect
 ```
 
+### Usage
+
 ```typescript
 import { atom, computed, effect } from '@but212/atom-effect';
 
+// Initialize reactive state
 const count = atom(0);
+
+// Define derived computed value
 const double = computed(() => count.value * 2);
 
-effect(() => console.log(count.value, double.value));
+// Register side-effect
+effect(() => console.log(`Count: ${count.value}, Double: ${double.value}`));
 
-count.value++; // logs: 1, 2
+// Update state triggers synchronous/batched propagation
+count.value++; // Logs: "Count: 1, Double: 2"
 ```
 
-→ See **[@but212/atom-effect README](./packages/core/README.md)** for full documentation.
+Refer to the **[@but212/atom-effect README](./packages/core/README.md)** for detailed documentation.
 
-## Development
+## Monorepo Development
+
+This project uses `pnpm` workspaces for dependency management and build orchestration.
+
+### Commands
 
 ```bash
+# Install dependencies across all packages
 pnpm install
+
+# Build all packages in dependency order
 pnpm build
+
+# Execute test suite for all projects
 pnpm test
 
-# Run a command in a specific package
+# Run a specific command in a targeted package
 pnpm --filter @but212/atom-effect <command>
 pnpm --filter @but212/atom-effect-jquery <command>
 ```
 
-## Documentation
+## Resources
 
-- [Architecture & Design](./packages/core/docs/ARCHITECTURE.md)
-- [Contributing Guide](./CONTRIBUTING.md)
-- [Changelog](./CHANGELOG.md)
+- **Core Architecture**: [Design Philosophy & Internal Mechanics](./packages/core/docs/ARCHITECTURE.md)
+- **Contribution**: [Development Guidelines & PR Process](./CONTRIBUTING.md)
+- **History**: [Release Notes & Migration Guides](./CHANGELOG.md)
 
 ## License
 

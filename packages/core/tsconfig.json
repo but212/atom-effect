@@ -1,15 +1,29 @@
 {
+  /** 
+   * Reason: Shared Configuration Base
+   * Inherits global compiler defaults to ensure consistency across the monorepo. 
+   */
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "paths": {
       "@/*": ["./src/*"]
     },
+    /** 
+     * Constraint: Environment Compatibility
+     * Includes DOM types for cross-platform compatibility, ensuring the core 
+     * logic remains compatible with both browser and Node.js environments.
+     */
     "lib": ["ES2021", "DOM", "DOM.Iterable"],
     "outDir": "./dist",
     "rootDir": ".",
+    /** 
+     * Reason: Tooling & Test Support
+     * Includes Node.js type definitions to support build configurations 
+     * and server-side testing orchestration.
+     */
     "types": ["node"],
     "noImplicitAny": true
   },
-  "include": ["src/**/*", "__tests__/**/*", "__benchmarks__/**/*", "*.config.ts"],
+  "include": ["src/**/*", "__tests__/**/*", "__benchmarks__/**/*.bench.ts", "*.config.ts"],
   "exclude": ["node_modules", "dist"]
 }

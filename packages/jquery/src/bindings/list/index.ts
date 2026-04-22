@@ -8,36 +8,46 @@ import { buildIndices } from './diff';
 import { cleanupRemoved, handleEmpty, placeItems, renderItems } from './dom';
 import type { PlaceCallbacks } from './types';
 
-/** Provides metadata storage for container-to-context associations. */
+/**
+ * Internal WeakMap storage used to associate DOM elements with their persistent
+ * list contexts and controlling effects.
+ */
 const instances = new WeakMap<Element, { fx: EffectObject; ctx: ListContext<unknown> }>();
 
-/**listInstances
- * Binds a reactive atom array to a jQuery container for automated list rendering.
+/**
+ * Synchronizes a reactive atom array with a jQuery container for automated list rendering.
  *
- * Logic: Orchestrates the synchronization between a reactive data source and
- * the DOM tree. It manages a persistent `ListContext` for diffing, wraps
- * rendering cycles in an `effect`, and ensures automatic teardown via the registry.
+ * This function establishes a reactive connection between a data source and the
+ * DOM tree. It utilizes a persistent `ListContext` to track state across updates
+ * and wraps the reconciliation logic within a reactive effect to ensure the
+ * view automatically stays in sync with the data.
  *
  * When to use:
- * - Rendering dynamic, high-performance lists that stay in sync with an atom's state.
- * - Building state-driven UI components like data grids, feeds, or dashboards.
+ * - To render dynamic lists that require high-performance updates and reordering.
+ * - To implement state-driven UI components such as data grids, dashboards, or real-time feeds.
  *
  * Optimization:
- * - Employs a double-ended diffing algorithm to minimize DOM manipulations.
- * - Uses sanitized batch-rendering for optimized cold-start performance.
+ * - Employs a double-ended diffing algorithm to minimize DOM mutations during list updates.
+ * - Supports sanitized batch-rendering for optimized initial renders (cold starts).
+ *
+ * @param source - The reactive atom containing the array of items.
+ * @param options - Configuration options for item keys, rendering, and lifecycle hooks.
+ * @returns The original jQuery collection for chaining.
  *
  * @example
  * ```typescript
- * $('#my-list').atomList(itemsAtom, {
+ * import { atom } from '@but212/atom-effect';
+ *
+ * const items = atom([{ id: 1, text: 'A' }, { id: 2, text: 'B' }]);
+ *
+ * $('#list').atomList(items, {
  *   key: 'id',
- *   render: (item) => `<li>${item.name}</li>`,
+ *   render: (item) => `<li>${item.text}</li>`,
  *   events: {
- *     'click li': (item, index, e) => console.log(item.id)
+ *     'click li': (item) => console.log('Clicked:', item.text)
  *   }
  * });
  * ```
- *
- * @public
  */
 function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptions<T>): JQuery {
   const getKey: ListKeyFn<T> =
@@ -54,9 +64,10 @@ function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptio
   };
 
   for (let i = 0, len = this.length; i < len; i++) {
-    const element = this[i]!,
-      $c = $(element);
+    const element = this[i]!;
+    const $c = $(element);
 
+    // Lifecycle: Dispose of existing instances to prevent memory leaks and conflicting effects.
     const prev = instances.get(element);
     if (prev) {
       prev.fx.dispose();
@@ -65,11 +76,12 @@ function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptio
 
     const ctx = new ListContext<T>($c, getSelector(element), options.onRemove);
     const fx = effect(() => {
-      const items = source.value,
-        count = items.length;
+      const items = source.value;
+      const count = items.length;
 
-      // Reason: DOM synchronization and diffing should not contribute to
-      // reactive dependency tracking to prevent infinite loops or over-execution.
+      // Reason: Reconciliation and diffing logic is executed within an `untracked`
+      // block to prevent the engine from recording internal DOM state management
+      // as reactive dependencies, which avoids infinite loops.
       untracked(() => {
         handleEmpty(ctx, count, $c, options.empty);
         if (count === 0) return;
@@ -84,6 +96,7 @@ function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptio
         cleanupRemoved(ctx, diff);
         placeItems(ctx, diff, element, callbacks, fragment);
 
+        // Logic: Commit the new state to the persistent context for the next diffing cycle.
         ctx.oldKeys = diff.newKeys;
         ctx.oldItems = diff.newItems;
         ctx.oldNodes = diff.newNodes;
@@ -93,7 +106,7 @@ function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptio
     ctx.fx = fx;
     if (options.events) setupEvents(ctx, $c, options.events);
 
-    // Lifecycle: Automatic cleanup when the element or parent effect is destroyed
+    // Lifecycle: Register the effect and context for automatic cleanup when the DOM node is removed.
     registry.trackEffect(element, fx);
     instances.set(element, { fx, ctx });
 
@@ -106,14 +119,19 @@ function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptio
 }
 
 /**
- * Configures delegated event listeners on the container.
+ * Attaches delegated event listeners to the container based on user-provided configurations.
  *
  * Logic:
- * 1. Efficient Delegation: Attaches a single listener to the container per event type.
- * 2. Data Resolution: Maps clicked elements back to their original data items
- *    using the stable `data-atom-key` identity and the context's lookup map.
- * 3. Type Coercion: Automatically handles serializing/deserializing numeric
- *    keys that become strings when stored in HTML attributes.
+ * 1. Delegation: Efficiently attaches a single listener to the container per event type.
+ * 2. Resolution: Maps the event target back to the corresponding data item using the
+ *    stable `data-atom-key` attribute and the context's lookup map.
+ * 3. Coercion: Automatically handles the resolution of numeric keys that may have
+ *    been serialized to strings when stored in HTML attributes.
+ *
+ * @param ctx - The list context for item lookup.
+ * @param $container - The jQuery-wrapped container element.
+ * @param events - A record of event selectors and their associated callback functions.
+ * @internal
  */
 function setupEvents<T>(
   ctx: ListContext<T>,
@@ -122,9 +140,9 @@ function setupEvents<T>(
 ): void {
   for (const eventKey in events) {
     if (!hasOwn.call(events, eventKey)) continue;
-    const spacePos = eventKey.indexOf(' '),
-      type = spacePos === -1 ? eventKey : eventKey.slice(0, spacePos),
-      selector = spacePos === -1 ? '> *' : eventKey.slice(spacePos + 1).trim();
+    const spacePos = eventKey.indexOf(' ');
+    const type = spacePos === -1 ? eventKey : eventKey.slice(0, spacePos);
+    const selector = spacePos === -1 ? '> *' : eventKey.slice(spacePos + 1).trim();
     const callback = events[eventKey]!;
 
     $container.on(
@@ -137,10 +155,13 @@ function setupEvents<T>(
 
         let key: ListKey = rawKey;
 
-        // Handle cases where Number-based keys were serialized to Strings in the DOM
+        // Reason: Numeric keys are serialized to strings in the DOM. This check
+        // ensures that the correct typed key is used for index resolution.
         if (!ctx.keyToIndex.has(rawKey)) {
           const numKey = Number(rawKey);
-          if (!Number.isNaN(numKey) && ctx.keyToIndex.has(numKey)) key = numKey;
+          if (!Number.isNaN(numKey) && ctx.keyToIndex.has(numKey)) {
+            key = numKey;
+          }
         }
 
         const index = ctx.keyToIndex.get(key);

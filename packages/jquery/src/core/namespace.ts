@@ -15,32 +15,35 @@ import $ from 'jquery';
 import { debug } from '@/utils/debug';
 
 /**
- * When to use:
- * - Waiting until all pending effects have finished updating the DOM.
- * - Coordinating manual DOM measurements with reactive state changes.
+ * Returns a promise that resolves after the next reactive update cycle has completed.
  *
- * @public
+ * When to use:
+ * - To perform manual DOM measurements after reactive changes have been applied.
+ * - To coordinate external library initializations that depend on the current DOM state.
+ *
+ * @returns A promise that resolves when the DOM has been synchronized with the latest state.
  */
 export const nextTick = (): Promise<void> => aeNextTick();
 
 /**
- * Reason: Provides a unified development experience by allowing developers
- * to access both reactive state management and DOM manipulation through
- * the standard `$` namespace, reducing context switching and boilerplate.
+ * Extends the global jQuery namespace with reactive state management primitives.
+ *
+ * Reason: This unified namespace allows developers to manage both reactive state
+ * and DOM manipulation within the familiar `$` context, reducing the need for
+ * additional imports and minimizing context switching.
  *
  * @example
  * ```typescript
- * // Reactive state management via jQuery namespace
+ * // Reactive state management via the jQuery namespace
  * const count = $.atom(0);
  *
  * $.effect(() => {
- *   $('#counter').text(count.value);
+ *   $('#counter-label').text(`Current count: ${count.value}`);
  * });
  *
+ * // Trigger an update
  * count.value++;
  * ```
- *
- * @public
  */
 $.extend({
   atom,

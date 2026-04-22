@@ -12,122 +12,140 @@ interface Thenable {
 }
 
 /**
- * Internal helper to check for a brand flag on objects or functions.
+ * Validates whether an object or function possesses a specific reactive brand flag.
  *
- * Optimization: Uses bitwise identity check on a single consolidated BRAND symbol.
- * This is significantly faster than multiple property checks or `instanceof`
- * in high-frequency reactive loops.
+ * Logic: This helper utilizes a bitwise identity check on a single consolidated
+ * `BRAND` symbol.
  *
+ * Optimization: Bitwise checks are significantly faster than multiple property
+ * lookups or `instanceof` checks, making this suitable for high-frequency use
+ * within reactive execution loops.
+ *
+ * @param obj - The value to examine.
+ * @param flag - The bitwise flag to check for.
+ * @returns True if the value contains the specified flag.
  * @internal
  */
 function isBranded<T>(obj: unknown, flag: number): obj is T {
   if (!obj || (typeof obj !== 'object' && typeof obj !== 'function')) return false;
 
-  // Optimization: Bitwise AND check on the consolidated BRAND symbol
   return !!((obj as Branded)[BRAND]! & flag);
 }
 
 /**
+ * Determines whether a value is a ReadonlyAtom.
+ *
  * When to use:
- * - Validating user input in APIs that expect atoms.
- * - Discriminating between raw values and reactive containers.
+ * - To validate user input in APIs that expect reactive atoms.
+ * - To differentiate between raw values and reactive containers.
  *
  * @param obj - The value to check.
- * @returns True if the value has the Atom brand flag.
+ * @returns True if the value is an atom.
  *
  * @example
  * ```typescript
+ * import { isAtom } from '@but212/atom-effect';
+ *
  * if (isAtom(maybeAtom)) {
  *   console.log(maybeAtom.value);
  * }
  * ```
- *
- * @public
  */
 export function isAtom(obj: unknown): obj is ReadonlyAtom {
   return isBranded(obj, BrandFlags.Atom);
 }
 
 /**
+ * Determines whether a value is a WritableAtom.
+ *
  * When to use:
- * - Ensuring an atom can be modified before calling `.set()` or `.update()`.
+ * - To verify if an atom can be modified via `.set()` or `.update()` before attempting the operation.
  *
  * @param obj - The value to check.
- * @returns True if the value has the Writable brand flag.
+ * @returns True if the value is a writable atom.
  *
  * @example
  * ```typescript
+ * import { isWritable } from '@but212/atom-effect';
+ *
  * if (isWritable(maybeAtom)) {
- *   maybeAtom.value = newValue;
+ *   maybeAtom.value = 123;
  * }
  * ```
- *
- * @public
  */
 export function isWritable(obj: unknown): obj is WritableAtom {
   return isBranded(obj, BrandFlags.Writable);
 }
 
 /**
+ * Determines whether a value is a ComputedAtom.
+ *
  * When to use:
- * - Identifying derived state containers that may have dependencies.
+ * - To identify derived state containers that may have underlying dependencies.
  *
  * @param obj - The value to check.
- * @returns True if the value has the Computed brand flag.
+ * @returns True if the value is a computed atom.
  *
  * @example
  * ```typescript
+ * import { isComputed } from '@but212/atom-effect';
+ *
  * if (isComputed(maybeAtom)) {
- *   console.log('This is a derived value');
+ *   console.log('This atom is a derived value.');
  * }
  * ```
- *
- * @public
  */
 export function isComputed(obj: unknown): obj is ComputedAtom {
   return isBranded(obj, BrandFlags.Computed);
 }
 
 /**
+ * Determines whether a value is an EffectObject.
+ *
  * When to use:
- * - Validating objects that manage side-effects.
+ * - To validate objects that manage reactive side-effects.
  *
  * @param obj - The value to check.
- * @returns True if the value has the Effect brand flag.
+ * @returns True if the value is an effect handle.
  *
  * @example
  * ```typescript
+ * import { isEffect } from '@but212/atom-effect';
+ *
  * if (isEffect(maybeEffect)) {
  *   maybeEffect.dispose();
  * }
  * ```
- *
- * @public
  */
 export function isEffect(obj: unknown): obj is EffectObject {
   return isBranded(obj, BrandFlags.Effect);
 }
 
 /**
- * Logic: Multi-tiered detection strategy that prioritizes native `Promise` performance
- * before falling back to duck-typed thenable identification for cross-library safety.
+ * Determines whether a value is a Promise or a Thenable.
+ *
+ * Logic: Implements a multi-tiered detection strategy that prioritizes native
+ * `Promise` performance via `instanceof` before falling back to duck-typed
+ * thenable identification for compatibility across different Promise implementations.
  *
  * @param value - The value to examine.
- * @returns True if the value has a `.then()` method.
+ * @returns True if the value is a promise-like object.
  *
  * @example
  * ```typescript
+ * import { isPromise } from '@but212/atom-effect';
+ *
  * if (isPromise(result)) {
- *   result.then(handleSuccess);
+ *   result.then((val) => console.log(val));
  * }
  * ```
- *
- * @public
  */
 export function isPromise<T>(value: unknown): value is Promise<T> {
+  // Optimization: Prioritize native Promise check for performance.
   if (value instanceof Promise) return true;
 
   if (value === null || typeof value !== 'object') return false;
 
+  // Logic: Fallback to duck-typing for cross-library compatibility.
   return typeof (value as Thenable).then === 'function';
 }

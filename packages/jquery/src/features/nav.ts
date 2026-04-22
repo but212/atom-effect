@@ -2,13 +2,16 @@ import $ from 'jquery';
 import type { AtomNav, AtomNavOptions, ReadonlyAtom } from '@/types';
 import { sanitizeHtml } from '@/utils/sanitize';
 
+/** Internal type for tracking the origin of a navigation request. @internal */
 type NavigationType = 'init' | 'push' | 'replace' | 'pop';
 
+/** Internal state for the current location. @internal */
 interface NavState {
   url: string;
   type: NavigationType;
 }
 
+/** Represents extracted content from a fetched page. @internal */
 interface ContentState {
   html: string;
   title: string | null;
@@ -17,6 +20,10 @@ interface ContentState {
   meta?: Record<string, string>;
 }
 
+/**
+ * Resolves an absolute URL given a relative path and a base.
+ * @internal
+ */
 function getAbsoluteUrl(url: string, base: string): URL {
   try {
     return new URL(url, base);
@@ -25,20 +32,34 @@ function getAbsoluteUrl(url: string, base: string): URL {
   }
 }
 
+/**
+ * Retrieves the current location path including search and hash.
+ * @internal
+ */
 function getCurrentFullUrl(win: Window): string {
   const { pathname, search, hash } = win.location;
   return (pathname || '/') + (search || '') + (hash || '');
 }
 
+/**
+ * Extracts the path and search parameters from a URL object.
+ * @internal
+ */
 function getPathAndSearch(urlObj: URL): string {
   return urlObj.pathname + urlObj.search;
 }
 
 /**
- * Optimization: DOM Extraction
- * Uses isolated `DOMParser` instances to extract clean fragments without
- * the high overhead of invisible iframes or global parser state.
+ * Extracts specific content fragments and metadata from a raw HTML string.
  *
+ * Optimization: DOM Extraction
+ * Uses isolated `DOMParser` instances to extract fragments without the
+ * performance overhead of invisible iframes or global parser state.
+ *
+ * @param html - The raw HTML string of the fetched page.
+ * @param selector - Optional CSS selector to extract a specific part of the page.
+ * @param xhr - The original jqXHR object to check for redirect headers.
+ * @returns The extracted content and metadata state.
  * @internal
  */
 function extractContent(html: string, selector?: string, xhr?: JQuery.jqXHR): ContentState {
@@ -52,7 +73,9 @@ function extractContent(html: string, selector?: string, xhr?: JQuery.jqXHR): Co
   const attributes: Record<string, string> = {};
   if (contentNode) {
     for (const { name, value } of Array.from(contentNode.attributes)) {
-      if (name !== 'id') attributes[name] = value;
+      if (name !== 'id') {
+        attributes[name] = value;
+      }
     }
   }
 
@@ -76,10 +99,15 @@ function extractContent(html: string, selector?: string, xhr?: JQuery.jqXHR): Co
 }
 
 /**
- * Logic: SEO Continuity
- * Updates standard meta tags and canonical links to preserve SEO and social
- * sharing integrity during partial SPA transitions.
+ * Synchronizes document metadata to maintain SEO and social sharing integrity.
  *
+ * Logic: SEO Continuity
+ * Updates standard meta tags and canonical links during partial AJAX transitions
+ * to ensure that the document state remains consistent for social crawlers and
+ * browser history previews.
+ *
+ * @param win - The target Window object.
+ * @param meta - The metadata mapping to apply.
  * @internal
  */
 function syncMetaData(win: Window, meta?: Record<string, string>): void {
@@ -94,12 +122,17 @@ function syncMetaData(win: Window, meta?: Record<string, string>): void {
     }
     const target = (el as HTMLElement) || doc.createElement(isLink ? 'link' : 'meta');
     if (!el) {
-      if (isLink) target.setAttribute('rel', 'canonical');
-      else target.setAttribute('name', name);
+      if (isLink) {
+        target.setAttribute('rel', 'canonical');
+      } else {
+        target.setAttribute('name', name);
+      }
       head.appendChild(target);
     }
     const attr = isLink ? 'href' : 'content';
-    if (target.getAttribute(attr) !== value) target.setAttribute(attr, value);
+    if (target.getAttribute(attr) !== value) {
+      target.setAttribute(attr, value);
+    }
   };
 
   sync('meta[name="description"]', meta?.description, 'description');
@@ -107,7 +140,10 @@ function syncMetaData(win: Window, meta?: Record<string, string>): void {
   sync('link[rel="canonical"]', meta?.canonical, 'canonical', true);
 }
 
-/** @internal */
+/**
+ * Updates element attributes while preserving internal tracking IDs.
+ * @internal
+ */
 function updateAttributes(el: HTMLElement, next: Record<string, string>): void {
   for (const attr of Array.from(el.attributes)) {
     const { name } = attr;
@@ -123,6 +159,7 @@ function updateAttributes(el: HTMLElement, next: Record<string, string>): void {
 }
 
 /**
+ * Handles viewport scrolling for hash navigation or page transitions.
  * @internal
  */
 function performScroll(win: Window, hash?: string, fallbackToTop = false): void {
@@ -138,33 +175,35 @@ function performScroll(win: Window, hash?: string, fallbackToTop = false): void 
 }
 
 /**
+ * Initializes a navigation manager that implements AJAX-based partial page updates.
+ *
  * Logic: Progressive Enhancement
- * Hijacks standard link interactions and performs AJAX-based partial DOM
- * replacements, maintaining history via the `pushState` API. Handles
- * meta-tag synchronization, scroll management, and automatic reactive cleanup.
+ * This manager hijacks standard link interactions and performs asynchronous
+ * DOM replacements while maintaining browser history via the `pushState` API.
+ * It coordinates metadata synchronization, scroll restoration, and automated
+ * reactive resource cleanup.
  *
  * When to use:
- * - Building AJAX-driven multi-page experiences within a jQuery ecosystem.
- * - Requiring SEO-friendly link interception and partial DOM replacement.
+ * - To build single-page application (SPA) experiences within a traditional
+ *   jQuery/multi-page environment.
+ * - To implement SEO-friendly AJAX navigation with partial container updates.
  *
- * @param options - Configuration including target container and lifecycle hooks.
+ * @param options - Configuration including target containers, link selectors, and lifecycle hooks.
  * @returns A navigator interface for programmatic control and state monitoring.
  *
  * @example
  * ```typescript
  * const nav = $.atomNav({
- *   target: '#main-content',
- *   selector: 'a[data-nav]',
+ *   target: '#app-main',
+ *   selector: 'a.ajax-link',
  *   onMount: ($target, url) => {
- *     console.log('Page loaded:', url);
+ *     console.log(`Navigated to: ${url}`);
  *   }
  * });
  *
- * // Trigger manual navigation
+ * // Programmatic navigation
  * nav.navigate('/profile');
  * ```
- *
- * @public
  */
 export function atomNav(options: AtomNavOptions): AtomNav {
   const { target, selector = 'a[data-nav]', headers = {}, syncTitle = true } = options;
@@ -223,14 +262,14 @@ export function atomNav(options: AtomNavOptions): AtomNav {
   }
 
   /**
-   * Logic: DOM Reconciliation
-   * Executes DOM manipulation and ensures reactive cleanup of stale fragments.
+   * Performs DOM reconciliation by replacing target content and updating metadata.
    *
-   * Lifecycle:
-   * - Meta-sync: Updates SEO tags.
-   * - Teardown: Calls `onUnmount` for the previous fragment.
-   * - Memory: Triggers `.atomUnbind()` on the target subtree to prevent memory leaks.
-   * - Update: Replaces HTML and calls `onMount` for the new fragment.
+   * Logic: Reconciliation Lifecycle
+   * 1. SEO: Synchronizes document title and meta tags.
+   * 2. Cleanup: Triggers `onUnmount` and performs deep `atomUnbind` on the target
+   *    subtree to prevent memory leaks from stale reactive fragments.
+   * 3. Update: Replaces HTML and applies target container attribute changes.
+   * 4. Activation: Executes the `onMount` hook for the new content.
    */
   function reconcileDOM(state: ContentState, url: string, previousUrl: string): void {
     $.untracked(() => {
@@ -242,7 +281,8 @@ export function atomNav(options: AtomNavOptions): AtomNav {
       syncMetaData(win, state.meta);
       options.onUnmount?.($target, previousUrl);
 
-      // Logic: Cleanup of reactive elements before subtree replacement to prevent memory leaks.
+      // Logic: Cleanup of reactive elements before subtree replacement.
+      // This ensures all event listeners and effects are disposed synchronously.
       $target.children().atomUnbind();
 
       const el = $target[0] as HTMLElement | undefined;
@@ -256,24 +296,30 @@ export function atomNav(options: AtomNavOptions): AtomNav {
   }
 
   /**
-   * Logic: UI Synchronization
-   * Primary effect that orchestrates re-fetching, history management, and scrolling.
+   * Synchronizes the UI state with the current navigation atom values.
+   *
+   * Optimization: Skips re-fetching if the target path is identical to the
+   * currently rendered path, handling only hash-based scrolling.
    */
   function syncUI(): undefined {
     const { url, pathAndSearch, hash, type } = _normalizedState.value;
     const rendered = _renderedState.value;
 
-    // Optimization: Skip re-fetching if the path is identical to the currently rendered path.
     if (type === 'init' && pathAndSearch === rendered.path) {
-      if (hash) performScroll(win, hash);
+      if (hash) {
+        performScroll(win, hash);
+      }
       options.onMount?.($target, url);
       return;
     }
 
     if (_content.hasError) {
       const error = _content.lastError;
-      if (error instanceof Error && error.name === 'AbortError') return;
-      // Fail-over: If AJAX navigation fails, fall back to a standard browser refresh.
+      if (error instanceof Error && error.name === 'AbortError') {
+        return;
+      }
+      // Logic: If AJAX navigation fails, fall back to a full browser refresh
+      // unless suppressed by the onError hook.
       if (options.onError?.(error, url) !== false) {
         win.location.assign(url);
       }
@@ -281,7 +327,9 @@ export function atomNav(options: AtomNavOptions): AtomNav {
     }
 
     const state = _content.value;
-    if (!_content.isResolved || _content.isPending) return;
+    if (!_content.isResolved || _content.isPending) {
+      return;
+    }
 
     const isRedirect = state.redirectUrl && state.redirectUrl !== url;
     const previousUrl = rendered.url;
@@ -293,7 +341,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
 
     $.batch(() => {
       if (isRedirect) {
-        // Handle server-side redirects detected via headers (e.g. X-PJAX-URL).
+        // Logic: Correct browser history if the server indicates a redirect via headers.
         win.history.replaceState(null, '', finalUrl);
       }
 
@@ -326,7 +374,8 @@ export function atomNav(options: AtomNavOptions): AtomNav {
   };
 
   const doc = win.document;
-  /** Logic: Global link interceptor that hijacks clicks matching the navigation policy. */
+
+  /** Global click listener to hijack navigation links matching the selector. */
   doc.addEventListener(
     'click',
     (e) => {
@@ -337,7 +386,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
       const myId = $target.attr('id');
       const isExplicitTarget = targetAttr && myId && targetAttr === `#${myId}`;
 
-      // Logic: Verification that the link explicitly targets this specific navigator instance.
+      // Logic: Ensure the link explicitly targets this navigator instance if a target is specified.
       if (targetAttr && !isExplicitTarget) return;
 
       const closestNavTarget = $(el).closest('[data-atom-nav-target="true"]')[0];
@@ -351,9 +400,10 @@ export function atomNav(options: AtomNavOptions): AtomNav {
         (e as unknown as { originalEvent?: { defaultPrevented?: boolean } }).originalEvent
           ?.defaultPrevented;
 
-      // Logic: Preservation of native browser behavior for modified clicks (Ctrl, Cmd, etc.).
-      if (isPrevented || mouse.ctrlKey || mouse.metaKey || mouse.shiftKey || mouse.button > 0)
+      // Logic: Preserve native browser behavior for modified clicks (e.g., Ctrl+Click).
+      if (isPrevented || mouse.ctrlKey || mouse.metaKey || mouse.shiftKey || mouse.button > 0) {
         return;
+      }
 
       const targetHref = el.getAttribute('href');
       const isInterceptee =
@@ -382,7 +432,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
 
   win.addEventListener('popstate', handlePopState, { signal: _lifecycleController.signal });
 
-  /** @internal */
+  /** Updates history and triggers the reactive navigation state. @internal */
   const commitNavigation = (url: string, type: NavigationType): void => {
     $.batch(() => {
       const method = type === 'replace' ? 'replaceState' : 'pushState';
@@ -399,22 +449,20 @@ export function atomNav(options: AtomNavOptions): AtomNav {
     hasError: $.computed(() => _content.hasError, { name: 'nav:hasError' }),
 
     /**
+     * Programmatically triggers navigation to a new URL.
+     *
      * Logic: Navigation Flow
-     * 1. Resolution: Determines absolute URL and origin.
-     * 2. Hand-off: Performs `location.assign` if the origin is external.
-     * 3. Middleware: Executes `onBeforeLoad` async hook (can cancel navigation).
-     * 4. Commit: Updates history and triggers the reactive fetch.
+     * 1. Handoff: Determines if the URL is external and assigns directly if so.
+     * 2. Hook Execution: Executes the `onBeforeLoad` async hook (allows cancellation).
+     * 3. History: Updates the browser history stack.
+     * 4. Trigger: Updates the reactive state to initiate the content fetch.
      *
-     * @param url - The target location (absolute or relative string).
-     * @param navOptions - Options for history manipulation and state control.
-     *
-     * @example
-     * ```typescript
-     * nav.navigate('/settings', { replace: true });
-     * ```
+     * @param url - The target URL (absolute or relative).
+     * @param navOptions - Options to control history behavior (e.g., replacement).
      */
     async navigate(url: string, navOptions: { replace?: boolean } = {}): Promise<void> {
-      // Reason: Aborting previous tasks at the entry point prevents state corruption during racing hooks.
+      // Reason: Aborting previous tasks at the entry point prevents state
+      // corruption during concurrent navigation attempts.
       const { signal } = _renewAbortSignal();
       const type: NavigationType = navOptions.replace ? 'replace' : 'push';
 
@@ -422,7 +470,6 @@ export function atomNav(options: AtomNavOptions): AtomNav {
       const target = getAbsoluteUrl(url, base);
       const current = getAbsoluteUrl(win.location.href, base);
 
-      // Logic: Internal vs External origin determination for handoff logic.
       if (target.origin !== current.origin) {
         return win.location.assign(url);
       }
@@ -431,7 +478,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
       const isSamePath = path === getPathAndSearch(current);
       const isSameLoc = isSamePath && target.hash === (current.hash || '');
 
-      // Logic: Bypass for cases where the destination is identical to the current viewport and state.
+      // Logic: If navigation is to the exact same location, only handle scrolling.
       if (isSameLoc && type === 'push') {
         if (url.includes('#') || target.hash) {
           performScroll(win, target.hash.slice(1), true);
@@ -439,25 +486,25 @@ export function atomNav(options: AtomNavOptions): AtomNav {
         return;
       }
 
-      // Logic: Asynchronous hook execution for blocking or redirecting navigation requests.
       if (!isSamePath && options.onBeforeLoad) {
         _pendingHookCount.value++;
         try {
           const ok = await (options.onBeforeLoad as Function)(url, signal);
-          if (signal.aborted || ok === false) return;
+          if (signal.aborted || ok === false) {
+            return;
+          }
         } finally {
           _pendingHookCount.value = Math.max(0, _pendingHookCount.value - 1);
         }
       }
 
-      // Data synchronization after all checks pass
       commitNavigation(path + target.hash, type);
     },
 
     /**
      * Constraint: Resource Teardown
-     * Prevents memory leaks by aborting pending network requests, disposing
-     * reactive effects, and removing global event listeners.
+     * Disposes of all internal reactive effects, network requests, and
+     * global event listeners to prevent memory leaks.
      */
     destroy() {
       _lifecycleController.abort();

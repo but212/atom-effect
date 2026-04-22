@@ -1,12 +1,26 @@
 {
+  /** 
+   * Reason: Shared Configuration Base
+   * Inherits global compiler defaults to ensure consistency across the monorepo. 
+   */
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "target": "ES2021",
     "paths": {
       "@/*": ["./src/*"]
     },
+    /** 
+     * Logic: Bundler Integration
+     * Optimized for modern build tools (Vite/Rollup) that handle module 
+     * resolution based on package.json exports. 
+     */
     "moduleResolution": "bundler",
     "outDir": "./dist",
+    /** 
+     * Constraint: DOM Environment
+     * Required for jQuery and internal DOM manipulation logic. Includes 
+     * browser-specific types and iterables.
+     */
     "lib": ["ES2021", "DOM", "DOM.Iterable"],
     "noImplicitAny": true
   },

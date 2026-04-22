@@ -1,20 +1,25 @@
 import { effect, untracked } from '@but212/atom-effect';
-import { INPUT_DEFAULTS, LOG_PREFIXES } from '@/constants';
+import { SYSTEM_BINDING } from '@/constants';
 import { INTERNAL_HANDLER } from '@/core/jquery-patch';
 import type { EffectObject, ValOptions, WritableAtom } from '@/types';
 import { BindingFlags } from '@/types';
 import { debug } from '@/utils/debug';
 
+/** Internal counter used to generate unique event namespaces for each binding instance. */
 let instanceCounter = 0;
+
+/** Supported form control types. @internal */
 type FormElement = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
 
 /**
  * Marks a function as an internal atom-effect handler.
  *
- * Reason: Bypasses the global jQuery batching patch to prevent redundant update cycles.
- * Since synchronization is already gated by internal `BindingFlags` bitmasks,
- * double-buffering at the jQuery level is unnecessary and slow.
+ * Reason: This bypasses the global jQuery batching patch, preventing redundant
+ * update cycles. Since synchronization is already governed by internal
+ * `BindingFlags` bitmasks, additional batching at the jQuery level is
+ * unnecessary and would degrade performance.
  *
+ * @param handlerFunction - The handler function to mark.
  * @internal
  */
 function markInternal(handlerFunction: Function): void {
@@ -22,16 +27,20 @@ function markInternal(handlerFunction: Function): void {
 }
 
 /**
- * Internal engine for two-way data binding between DOM inputs and reactive Atoms.
+ * The internal engine coordinating two-way data synchronization between DOM
+ * inputs and reactive atoms.
  *
- * Optimization: Specializes read/write/equal/format strategies at construction time.
- * This ensures monomorphic execution paths in V8, avoiding expensive branching
- * inside high-frequency synchronization loops.
+ * Optimization: Read, write, equality, and formatting strategies are specialized
+ * at construction time. This ensures monomorphic execution paths in V8 and
+ * avoids expensive conditional branching within high-frequency synchronization loops.
  *
  * Logic:
- * - Handles IME composition (Korean/Japanese/Chinese) to prevent partial data sync.
- * - Maintains cursor position during atom-to-DOM updates for seamless typing.
- * - Implements bitmask-based recursive update prevention.
+ * - Composition Safety: Manages IME composition states (Korean, Japanese, Chinese)
+ *   to prevent partial data synchronization during multi-stroke input.
+ * - Cursor Stability: Maintains the user's cursor position during atom-to-DOM
+ *   updates to ensure a seamless typing experience.
+ * - Loop Protection: Utilizes bitmask-based flags to prevent infinite recursive
+ *   updates between the DOM and the reactive graph.
  *
  * @internal
  */
@@ -58,7 +67,8 @@ class InputBinding<T> {
     const parse = options.parse ?? ((value: string) => value as unknown as T);
     const baseEqual = options.equal ?? Object.is;
 
-    // Optimization: Branching is handled once here instead of every sync cycle.
+    // Optimization: Strategy selection occurs once here, allowing the hot-path
+    // to execute specialized logic without repeated feature detection.
     if (isMultipleSelect) {
       this.readValue = () => (($element.val() as string[]) || []) as unknown as T;
       this.writeToDom = (value) => {
@@ -78,8 +88,8 @@ class InputBinding<T> {
     } else {
       this.readValue = () => parse(element.value);
       this.writeToDom = (_, formatted) => {
-        // Logic: Cursor preservation prevents focus loss or "jumping" when
-        // updating focused text controls in a reactive system.
+        // Logic: Cursor preservation logic is applied to focused text controls
+        // to prevent the input from "jumping" or losing focus during reactive updates.
         if (isTextControl && document.activeElement === element) {
           const input = element as HTMLInputElement;
           try {
@@ -106,12 +116,16 @@ class InputBinding<T> {
     this.initializeEvents();
   }
 
+  /** Normalizes and attaches all required DOM event listeners for the binding. */
   private initializeEvents(): void {
     const namespace = this.namespace;
     const debounce = this.options.debounce ?? 0;
 
     const syncToAtomDelegate = () => {
-      if (!(this.flags & BindingFlags.Composing)) this.syncToAtom();
+      // Constraint: Synchronization is deferred while an IME composition is active.
+      if (!(this.flags & BindingFlags.Composing)) {
+        this.syncToAtom();
+      }
     };
 
     const handleInput =
@@ -130,7 +144,7 @@ class InputBinding<T> {
       handleInput,
     ].forEach(markInternal);
 
-    const eventNames = (this.options.event ?? INPUT_DEFAULTS.EVENT)
+    const eventNames = (this.options.event ?? SYSTEM_BINDING.INPUT_DEFAULTS.EVENT)
       .trim()
       .split(/\s+/)
       .map((name) => `${name}${namespace}`)
@@ -157,6 +171,7 @@ class InputBinding<T> {
     this.syncToAtom();
   };
 
+  /** Handles final synchronization and value normalization when the control loses focus. */
   private handleBlur = () => {
     const wasComposing = !!(this.flags & BindingFlags.Composing);
     this.flags &= ~(BindingFlags.Focused | BindingFlags.Composing);
@@ -169,13 +184,15 @@ class InputBinding<T> {
       this.syncToAtom();
     }
 
-    // Logic: Normalization ensures the DOM value strictly matches the Atom state when interactions end.
+    // Logic: Value normalization ensures that the physical DOM value exactly
+    // matches the reactive state once user interaction has concluded.
     const atomValue = this.atom.peek();
     if (!this.isDomUpToDate(atomValue)) {
       this.writeToDom(atomValue, this.formatValue(atomValue));
     }
   };
 
+  /** Reads from the DOM and updates the reactive atom if the value has changed. */
   private syncToAtom(): void {
     if (this.flags & BindingFlags.Busy) return;
     this.flags |= BindingFlags.SyncingToAtom;
@@ -189,9 +206,11 @@ class InputBinding<T> {
     }
   }
 
+  /** Synchronizes the atom's current value back to the physical DOM element. */
   public readonly syncToDom = () => {
     const atomValue = this.atom.value;
-    // Logic: Bitmask gate prevents infinite feedback loops between DOM events and Atom updates.
+    // Logic: The bitmask gate is critical to prevent infinite feedback loops
+    // triggered by DOM change events that occur during synchronization.
     if (this.flags & BindingFlags.Busy) return;
 
     untracked(() => {
@@ -200,47 +219,58 @@ class InputBinding<T> {
       try {
         const formatted = this.formatValue(atomValue);
         this.writeToDom(atomValue, formatted);
-        debug.domUpdated(LOG_PREFIXES.BINDING, this.$element, 'val', formatted);
+        debug.domUpdated(SYSTEM_BINDING.PREFIX, this.$element, 'val', formatted);
       } finally {
         this.flags &= ~BindingFlags.SyncingToDom;
       }
     });
   };
 
+  /** Determines if the current DOM value matches the reactive state. */
   private isDomUpToDate(atomValue: T): boolean {
     if (!this.areEqual(this.readValue(), atomValue)) return false;
 
-    // Logic: While focused, we allow minor visual discrepancies (e.g., "1.0" vs "1") for input stability.
+    // Logic: While the input is focused, we allow minor discrepancies (e.g.,
+    // "1.0" in DOM vs 1 in Atom) to avoid disruptive formatting while the user is typing.
     if (this.flags & BindingFlags.Focused) return true;
 
     const element = this.$element[0] as FormElement;
     return this.formatValue(atomValue) === element.value;
   }
 
+  /** Cleans up all event listeners and timers associated with the binding. */
   public cleanup(): void {
-    // Constraint: Namespacing prevents collisions with other bindings or user-defined event listeners.
+    // Constraint: Strict namespacing prevents accidental removal of
+    // user-defined listeners or handlers from other binding instances.
     this.$element.off(this.namespace);
-    clearTimeout(this.debounceTimer);
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+    }
   }
 }
 
 /**
+ * Applies a two-way reactive binding to a form input element.
+ *
+ * This function handles text inputs, textareas, and select menus, ensuring
+ * stability during IME composition and maintaining cursor positions during
+ * background state updates.
+ *
  * When to use:
- * - Synchronizing form inputs (text, textarea, select) with a `WritableAtom`.
- * - Enhancing UX with bitmask-gated cursor stability and IME composition support.
+ * - To synchronize a form control with a `WritableAtom` state.
+ * - To implement debounced or custom-formatted input fields.
  *
- * @param $element - The jQuery wrapped form element to bind.
- * @param atom - The WritableAtom to synchronize with the element value.
- * @param options - Configuration for debouncing, custom parsing, and formatting.
- *
- * @returns An object containing the reactive effect and a cleanup function.
+ * @param $element - The jQuery collection containing the target form element.
+ * @param atom - The writable atom to synchronize with.
+ * @param options - Configuration for debouncing, event triggers, and data transformation.
+ * @returns A handle containing the reactive effect and a cleanup function.
  *
  * @example
  * ```typescript
- * const count = atom(0);
- * const { cleanup } = applyInputBinding($('#my-input'), count, {
- *   parse: (v) => parseInt(v, 10),
- *   debounce: 300
+ * const name = atom('John');
+ * const { cleanup } = applyInputBinding($('#name-input'), name, {
+ *   debounce: 200,
+ *   format: (v) => v.toUpperCase()
  * });
  * ```
  */

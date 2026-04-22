@@ -1,10 +1,10 @@
 # Architecture & Design
 
-This document explains the internal mechanics of `@but212/atom-effect-jquery`. It is intended for developers who want to understand how the jQuery integration layer works or contribute to the package.
+This document explains the internal mechanics of `@but212/atom-effect-jquery`. It is intended for developers who want to understand the jQuery integration layer or contribute to the package.
 
 ## 1. Overview
 
-The jQuery package is a **minimal reactive binding layer** on top of `@but212/atom-effect` core. It does not reimplement any reactive primitives — it bridges them to the DOM via jQuery.
+The jQuery package provides a reactive binding layer on top of `@but212/atom-effect` core. It bridges reactive primitives to the DOM via jQuery.
 
 ```text
                  ┌───────────────────────────────────┐
@@ -29,7 +29,7 @@ The jQuery package is a **minimal reactive binding layer** on top of `@but212/at
 
 ## 2. Binding Pipeline
 
-Every reactive binding follows the same pipeline:
+Every reactive binding follows a standardized pipeline:
 
 ```text
 $.fn.atomText(atom)
@@ -44,22 +44,20 @@ $.fn.atomText(atom)
 
 `registerReactiveEffect` and `registerMapEffect` (`effect-factory.ts`) utilize a shared `createAsyncRunner` utility to manage reactive updates. This internal helper encapsulates:
 
-- **Async Resolution**: Automatically handles `Promise` values from any source.
+- **Async Resolution**: Handles `Promise` values from any source.
 - **Race Condition Protection**: Uses a monotonic `latestId` to ensure only the result of the most recent async operation is applied to the DOM.
-- **Orphaned Result Prevention**: Automatically tracks disposal state via `registry.trackCleanup`, ensuring stale async results are discarded if the element is disconnected during resolution.
-- **Monomorphic Updates**: The runner ensures that updaters are consistently executed inside an `untracked` block to isolate reactive dependencies.
-
-This standardizes behavior across all binding types and ensures reliable, memory-safe async behavior.
+- **Disposal Tracking**: Automatically tracks disposal state via `registry.trackCleanup`, ensuring stale async results are discarded if the element is disconnected during resolution.
+- **Monomorphic Updates**: Ensures updaters are executed inside an `untracked` block to isolate reactive dependencies.
 
 ### 2.2 DOM Engine
 
-`atomEachElement(jq, fn)` in `core/dom.ts` provides the base engine for all reactive bindings. The central iterator used by all chainable methods, it handles jQuery sets, filters for `HTMLElement` (skipping text/comment nodes), and provides optimized loops to minimize property lookups in performance-critical paths.
+`atomEachElement(jq, fn)` in `core/dom.ts` provides the iteration engine for reactive bindings. It handles jQuery sets, filters for `HTMLElement`, and utilizes optimized loops to manage performance in critical paths.
 
-Internal binding handlers in `unified.ts` generally operate on native `HTMLElement` references to optimize performance, utilizing jQuery only when complex event delegation or multi-event management is required (e.g., in `bindEvents`).
+Internal binding handlers in `unified.ts` operate on native `HTMLElement` references, utilizing jQuery for event delegation or multi-event management (e.g., in `bindEvents`).
 
 ### 2.3 Unified Binding (`atomBind`)
 
-`atomBind` dispatches to focused handler functions:
+`atomBind` dispatches to specific handler functions:
 
 ```text
 atomBind({ text, html, class, css, attr, prop, show, hide, val, checked, on })
@@ -67,474 +65,155 @@ atomBind({ text, html, class, css, attr, prop, show, hide, val, checked, on })
     bindVisibility, bindVal, bindChecked, bindEvents
 ```
 
-Each handler is a standalone function that receives the element and the reactive value. This decomposition keeps cyclomatic complexity low and enables tree-shaking.
+Handlers are standalone functions, which facilitates tree-shaking and reduces cyclomatic complexity.
 
-#### 2.3.1 Performance Optimizations in Bindings
+#### 2.3.1 Performance Implementation Details
 
-To achieve optimal performance during high-frequency updates (e.g., animations or rapid state changes), `unified.ts` implements several optimizations:
+To manage performance during high-frequency updates, `unified.ts` implements several techniques:
 
-- **Metadata Caching**: Complex bindings like `atomClass`, `atomCss`, `atomAttr`, and `atomProp` pre-calculate metadata (e.g., camelCase property names, ARIA flags, URL-bearing status) during the initial registration. Map objects for these bindings are **hoisted outside the element iteration loop** to avoid redundant object allocations.
-- **Monomorphic Dispatch**: The internal `InputBinding` class specializes its `format` and `equal` logic at construction time. This removes branching and `instanceof` checks from the high-frequency `syncToDom` and `syncToAtom` paths.
-- **JS-Level Value Caching**: `bindHtml`, `bindClass`, `bindCss`, `bindProp`, and `bindAttr` maintain a local JS-side cache of the last written value. This avoids resource-intensive DOM reads (like `el.innerHTML`) and redundant DOM writes (like `classList.add` or property assignments) when the reactive state hasn't changed significantly.
-- **Batched Map Updates**: `registerMapEffect` processes entire dictionaries of reactive values in a single effect, reducing the number of total `Effect` objects and improving subscription efficiency.
-- **Async Consolidation**: `registerMapEffect` uses `Promise.all` to synchronize multiple asynchronous dependencies within a map, ensuring the updater is called only when all new values have resolved. This prevents partial updates and visual inconsistency in complex bindings.
+- **Metadata Caching**: Bindings such as `atomClass`, `atomCss`, `atomAttr`, and `atomProp` pre-calculate metadata during initial registration. Map objects are hoisted outside the iteration loop to reduce allocations.
+- **Monomorphic Dispatch**: The `InputBinding` class specializes its logic at construction time, removing branching from synchronization paths.
+- **JS-Level Value Caching**: Handlers maintain a local cache of the last written value to avoid redundant DOM reads and writes.
+- **Batched Map Updates**: `registerMapEffect` processes dictionaries of reactive values in a single effect to improve subscription efficiency.
+- **Async Consolidation**: `registerMapEffect` uses `Promise.all` to synchronize multiple asynchronous dependencies within a map.
 
 ## 3. Lifecycle Management
 
 ### 3.1 Binding Registry
 
-The `BindingRegistry` (`registry.ts`) is the central lifecycle manager. It tracks:
-
-- **Effects**: Core `effect` instances bound to DOM elements.
-- **Cleanups**: Component-level cleanup functions.
-
-Storage uses a centralized **WeakMap** (`nodeStateMap`) to prevent memory leaks and reduce DOM pollution. The internal state objects are plain structures used to track resources per element (providers, effects, injects), which are proactively cleaned up when the element is removed. Resource pooling has been removed to reduce architectural complexity, as modern JS engines handle the allocation of these small objects with extremely high efficiency (O(1) memory management).
+The `BindingRegistry` (`registry.ts`) manages the lifecycle of effects and cleanup functions. Storage uses a centralized `WeakMap` (`nodeStateMap`) to prevent memory leaks. Resource pooling is omitted to maintain architectural simplicity, as modern JS engines optimize the allocation of these state objects.
 
 ### 3.2 Marker Class Optimization
 
-Bound elements receive a `_aes-bound` CSS class marker. This enables O(M) cleanup via `querySelectorAll('._aes-bound')` where M is the number of bound elements, instead of O(N) traversal of all descendants. `querySelectorAll` provides a **static NodeList snapshot**, which stabilizes the teardown loop against concurrent DOM removals and avoids the "unstable length" issues inherent in live collections like `HTMLCollection`. This approach is more efficient than recursive tree traversal as it leverages the browser's internal selector engine.
+Bound elements are marked with an `_aes-bound` CSS class. This allows the registry to identify elements for cleanup using `querySelectorAll`, which provides a static NodeList snapshot and avoids issues with live collections.
 
 ### 3.3 Auto-Cleanup via MutationObserver
 
-`enableAutoCleanup(root)` installs a `MutationObserver` on the specified `root` (Element, ShadowRoot, or DocumentFragment) that watches for removed nodes. For the global DOM, this is lazily initialized within the `BindingRegistry` upon registering the very first reactive binding. The logic is designed for reliable early initialization; it performs a safety check for `document.body` and automatically handles cases where the binding occurs before the body is ready. Multiple roots can be observed concurrently (e.g., for micro-frontends).
+`enableAutoCleanup(root)` installs a `MutationObserver` on the specified root to watch for removed nodes. For the global DOM, this is lazily initialized. The logic handles early initialization cases where the document body is not yet ready.
 
 #### 3.3.1 Move Robustness (Deferred Cleanup)
 
-To support synchronous DOM moves (e.g., `parent2.appendChild(el)`), the library implements **Deferred Cleanup** via `registry.deferCleanup(node)`.
+Synchronous DOM moves are supported via **Deferred Cleanup** in `registry.deferCleanup(node)`.
 
-- When an element is disconnected, it is marked as "ignored" and a cleanup task is queued as a **microtask**.
-- If the element is re-connected before the microtask runs, the cleanup is cancelled.
-- This ensures that reactive state (atoms, effects) is preserved during common jQuery operations like repositioning elements.
-
-```text
-DOM Removal Detected
-  → Is element type? (skip text/comment nodes)
-  → Is still connected? (skip moves within DOM)
-  → Is preserved? (skip .detach())
-  → Is ignored? (skip .remove() already handled)
-  → registry.cleanupTree(element)
-    → cleanupDescendants(el)  // Cleanup all _aes-bound descendants
-    → cleanup(el)             // Cleanup the element itself
-```
+- Disconnected elements are marked and a cleanup task is queued as a microtask.
+- If re-connected before the microtask runs, the cleanup is cancelled.
+- This preserves reactive state during repositioning operations.
 
 ### 3.4 Shadow DOM
 
-The global `MutationObserver` (on `document.body`) does not cross Shadow DOM boundaries. However, AEJ provides enhanced Shadow DOM support through the `BindingRegistry`:
+The global `MutationObserver` does not cross Shadow DOM boundaries. AEJ provides Shadow DOM support through:
 
-- **Host Marking**: When a component is initialized (via `useAtomComponent`), its host is marked with an `_aes-has-shadow` class.
-- **Efficient Traversal**: `cleanupTree` and `cleanupDescendants` use this marker to jump directly to shadow hosts, avoiding O(N) full-tree scans while ensuring all shadow subtrees are cleaned.
-- **Closed Shadow Support**: The registry maintains a `WeakMap` of host elements to their `ShadowRoot` objects, allowing AEJ to clean up "closed" mode shadows that are otherwise inaccessible.
-- **Scoped Observers**: `useAtomComponent` automatically attaches a `MutationObserver` to the component's root (Host or ShadowRoot). These observers are explicitly disconnected during `teardown()` to prevent memory leaks (releasing the Map's strong reference to the ShadowRoot).
+- **Host Marking**: Hosts are marked with an `_aes-has-shadow` class during initialization.
+- **Traversal Logic**: `cleanupTree` uses these markers to identify shadow hosts, avoiding full-tree scans.
+- **Closed Shadow Support**: Maintains a `WeakMap` of hosts to `ShadowRoot` objects for cleaning inaccessible subtrees.
+- **Scoped Observers**: `useAtomComponent` attaches observers to the component's root.
 
 ### 3.5 jQuery Method Patches
 
-`enablejQueryOverrides()` (`jquery-patch.ts`) patches core jQuery methods:
+`enablejQueryOverrides()` patches core jQuery methods to integrate with the reactive lifecycle:
 
 | Method | Patch Behavior |
 | ------ | -------------- |
-| `.remove()` | Calls `cleanupTree` + marks as ignored before original removal |
-| `.empty()` | Calls `cleanupDescendants` before original empty |
-| `.detach()` | Marks elements as "kept" (preserves bindings for re-attach) |
-| `.on()` | Wraps handlers in `batch()` for automatic update coalescing. Supports maps and `.one()`. |
-| `.off()` | Resolves wrapped handlers via WeakMap for correct unbinding |
+| `.remove()` | Calls `cleanupTree` before removal. |
+| `.empty()` | Calls `cleanupDescendants` before emptying. |
+| `.detach()` | Marks elements as preserved to maintain bindings. |
+| `.on()` | Wraps handlers in `batch()` for update coalescing. |
+| `.off()` | Resolves wrapped handlers via `WeakMap`. |
 
-The `.on()` and `.one()` patches use `INTERNAL_HANDLER` (a `Symbol.for('atom-effect-internal')`) to mark wrapped handlers, ensuring compatibility across different library instances or bundles.
-
-The `.on()` patch ensures that multiple atom writes inside a single jQuery event handler are batched into one synchronous flush:
-
-```javascript
-$btn.on('click', () => {
-  count.value++;    // Batched
-  name.value = 'x'; // Batched
-}); // Both updates flush here as one
-```
+The `.on()` patch ensures that multiple atom writes within a single event handler are batched into a single synchronous flush.
 
 ## 4. Two-Way Input Binding
 
-`applyInputBinding` (`input-binding.ts`) implements comprehensive two-way binding:
+`applyInputBinding` implements two-way binding with the following features:
 
-```text
-┌──────────┐    input/change     ┌──────────┐
-│   DOM    │  ─────────────────▶ │   Atom   │
-│  <input> │                     │  .value   │
-│          │  ◀───────────────── │          │
-└──────────┘    effect (Atom→DOM) └──────────┘
-```
-
-The binding maintains closure references internally, but utilizes a strict teardown sequence during cleanup (`binding = null`) to explicitly release objects for V8's garbage collector.
-
-### Features
-
-- **Strategy Specialization**: Uses `createStrategies` to select optimized `read`/`write`/`equal`/`format` logic at initialization. This avoids constant branching by assigning specialized functional strategies based on element type (e.g., standard inputs vs. `select[multiple]`).
-- **Cursor Preservation**: Focused text controls use a selection-range buffer during writes to prevent cursor shifting when the atom value is updated externally.
-
-- **Cycle Prevention**: A bitmask-based state gate (`Busy`, `SyncingToAtom`, `SyncingToDom`) ensures that state synchronization remains uni-directional at any given moment, preventing infinite loops.
-- **IME & Composition**: Gathers character entries during composition using `compositionstart`/`compositionend` events, deferring atom updates until strings are finalized.
+- **Strategy Specialization**: Selects optimized logic at initialization based on element type.
+- **Cursor Preservation**: Uses a selection-range buffer to prevent cursor shifting during reactive updates.
+- **Cycle Prevention**: A bitmask-based state gate ensures uni-directional synchronization.
+- **IME & Composition**: Defers updates during composition until strings are finalized.
 
 ## 5. List Reconciliation
 
-`atomList` (`bindings/list/`) renders reactive arrays using an **optimized 3-pass reconciliation** algorithm:
+`atomList` renders reactive arrays using a 3-pass reconciliation algorithm:
 
-1. **Prefix Trimming**: Identifies and skips common items at the start of the list.
-2. **Suffix Trimming**: Identifies and skips common items at the end of the list.
-3. **Middle Diffing**: Reconciles the middle range that has changed.
-   - Uses **Bitwise ItemState Flags** (`New`, `Existing`, `ForceReplace`, `Unchanged`) to track the lifecycle of each item in the new list.
-   - Employs a **Key Mapping** strategy for O(1) item lookup during diffing.
-4. **Patching**: Synchronizes the DOM using a **greedy placement strategy** during a reverse traversal. It uses **standard DOM APIs** (`target.insertBefore`, `target.appendChild`) to bypass jQuery's internal overhead, ensuring O(N) performance for large datasets.
-5. **Fast Initial Render**: When possible (string output, no complex bindings), it uses `innerHTML` with bulk-sanitized fragments for the first render to optimize hydration speed.
+1. **Prefix/Suffix Trimming**: Skips common items at the start and end of the list.
+2. **Middle Diffing**: Reconciles the middle range using bitwise state flags and key mapping.
+3. **Patching**: Synchronizes the DOM using a greedy placement strategy and native DOM APIs to bypass jQuery overhead.
+4. **Initial Render**: Uses bulk-sanitized fragments where possible to optimize hydration.
 
 ### 5.1 Reconciliation Lifecycle
 
-The reconciliation process is modularized into dedicated units:
+The reconciliation process is modularized into `diff.ts` (calculation), `dom.ts` (manipulation), and `context.ts` (state management). Lifecycle hooks such as `render`, `bind`, and `update` allow for customized behavior.
 
-- **`diff.ts`**: Calculates the difference between the old and new state, yielding a `PreparedDiff`.
-- **`dom.ts`**: Handles physical DOM manipulations and lifecycle callback execution based on the diff.
-- **`context.ts`**: Manages the state and asynchronous cleanup of the container.
+### 5.2 Delegated Event Listeners
 
-### Lifecycle Hooks
-
-- `render(item)`: Creates the initial DOM element.
-- `bind($el, item)`: Attaches reactive bindings (runs once per element).
-- `update($el, item)`: Updates existing elements (optimization to avoid rebinding).
-- `onAdd($el)`: Called after insertion (for entry animations).
-- `onRemove($el)`: Called before removal (supports async exit animations via Promise).
-
-### Delegated Event Listeners (`events`)
-
-`events` attaches one listener per event type on the **container**, not on each item. This keeps memory usage constant regardless of list size.
-
-```text
-events: { 'click .del': handler }
-  → $container.on('click', delegateHandler)     // 1 listener total
-
-delegateHandler(e):
-  walk e.target → childElement chain
-    → dataset.atomKey (DOM lookup)              // O(1) key extraction
-    → keyToIndex.get(key)                       // O(1) index lookup
-    → handler(item, index, e)
-```
-
-The `keyToIndex` map is kept in sync at the end of every effect run and cleared via `registry.trackCleanup` on container teardown.
+Event listeners are attached to the container rather than individual items, maintaining constant memory usage regardless of list size.
 
 ## 6. Component Mounting
 
-`atomMount` (`mount.ts`) provides a simple component lifecycle:
-
-```javascript
-$el.atomMount((el, props) => {
-  // Setup: create bindings, effects, listeners
-  return () => {
-    // Cleanup: called on unmount
-  };
-});
-```
-
-- **Automatic Cleanup**: Before mounting, it automatically calls `registry.cleanupTree(el)` to dispose of any existing component and its reactive bindings.
-- **Batched Execution**: The component function is executed within `batch()` and `untracked()`. This ensures that initial state setups are atomic (preventing intermediate DOM flushes) and that setup logic doesn't leak into parent reactive effects.
-- **Idempotency**: Double-unmount protection via `WeakMap.delete()` guard.
-- **Error Isolation**: Cleanup errors and mounting errors are caught and logged as `[atom-mount]` without interrupting the rest of the application.
+`atomMount` provides a component lifecycle with automatic cleanup and batched execution. Setup logic is isolated within `untracked()` blocks to prevent subscription leaks, and errors are caught to ensure application stability.
 
 ## 7. SPA Router
 
-The router is entirely **reactive**. Navigation (`navigate()` or URL change) updates the `currentRoute` and `queryParams` atoms.
+The router utilizes reactive states for navigation management.
 
 ### 7.1 Mode Abstraction (`UrlAdapter`)
 
-The router decouples browser navigation from the core logic using a **Strategy Pattern** (`UrlAdapter`). This isolates mode-specific logic (History API vs. location.hash) into specialized adapters:
+Decouples browser navigation using the `UrlAdapter` strategy pattern, allowing for both hash-based and History API modes.
 
-- `getBrowserState()`: Fetches normalized path and parsed query params.
-- `commit(path)`: Persists new state to the URL.
-- `revert(url)`: Restores previous URL on guard rejection.
-- `resolveAnchor(el)`: Extracts logical path from standard `<a>` elements.
+### 7.2 Transition Lifecycle
 
-### 7.2 Matching Engine (`RouteMatcher`)
+Navigation follows a defined pipeline: Link Interception -> Leave Guards -> Browser Sync -> Enter Guards -> State Update -> DOM Render -> Accessibility Finalization.
 
-Route registration pre-compiles paths into specialized lookups. Registration is handled in a single pass, with exact matches and dynamic paths (containing `:param` segments) stored in a unified `routes` array. This ensures predictable matching priority and simplifies the internal matching loop.
+### 7.3 Performance & Resilience
 
-### 7.3 Transition Lifecycle
-
-Every navigation follows a strict reactive pipeline:
-
-1. **Link Interception / Programmatic Call**: Normalizes the target path.
-2. **Leave Guards**: Executes `onLeave` for the current route.
-3. **Browser Sync**: `UrlAdapter` updates the browser URL (or reverts if blocked).
-4. **Enter Guards**: Executes `onEnter`. Returning `false` triggers a URL restoration.
-5. **Reactive State Update**: `currentRoute` and `queryParams` atoms are updated.
-6. **DOM Render Effect**: Clears container, clones template or calls `render()`, and manages `onMount`.
-7. **Accessibility Finalization**: Synchronizes `document.title` and shifts focus to the new content's primary heading (`<h1>`).
-
-### 7.4 Performance & Resilience
-
-- **Link Resolution Cache**: A `WeakMap` caches resolved route names for `<a>` and `[data-route]` elements, avoiding repetitive URL parsing.
-- **Stateless PathUtils**: All string manipulation (normalization, splitting) is centralized in a pure utility object.
-
-- **Asset Links**: The interception engine identifies and ignores links to files (containing dots) to prevent interference with standard downloads or external assets.
-
-### 7.5 Mode Abstraction Logic
-
-| Function | Hash mode | History mode |
-| --- | --- | --- |
-| `getBrowserState()` | Parses `location.hash` and splits query string. | Extracts path from `pathname` relative to `basePath` and parses `location.search`. |
-| `commit(path)` | Sets `location.hash` with optional query prefix. | Calls `history.pushState()` with the absolute path. |
-| `revert(url)` | Restores previous `location.hash`. | Calls `history.replaceState()` to restore the previous URL without adding to history. |
-| `resolveAnchor(el)` | Extracts logical path from `hash`. | Normalizes `pathname` and `search` relative to the app base. |
-| `setupListener(h)` | Listens for `hashchange`. | Listens for `popstate`. |
-
-### Key Design Decisions
-
-- **Reactive**: `currentRoute` is a `ReadonlyAtom` — external code reads it reactively but must use `navigate()` to change routes, keeping the URL in sync.
-- **Navigation Guards**: `onLeave` hooks can return `false` to block navigation. URL is restored on block (hash revert or `replaceState`).
-- **Event Delegation**: `autoBindLinks` uses `$(document).on('click', '[data-route]')` for dynamically added links.
-- **Active State**: Active-link class management uses a reactive `effect` that re-runs whenever `currentRoute` changes, updating all `[data-route]` links in a single pass using **manual loops** for performance.
-- **Backwards Compatible**: Default mode is `'hash'`, preserving existing behavior.
-
-### 7.6 Nav & Router Synergy (Traffic Control)
-
-The library provides a specialized "Traffic Control" strategy to allow `$.atomNav` (top-level PJAX) and `$.route` (nested SPA routing) to coexist in the same application without conflict:
-
-- **Selector isolation**: `$.atomNav` intercepts links based on a specific selector (defaulting to `a[data-nav]`). By keeping layout links as `data-nav` and sub-view links as `data-route`, the two systems never fight over the same click event.
-- **Base Path isolation**: The Router's `basePath` ensures that it only responds to URLs within its domain. If a link points outside the `basePath`, the router naturally ignores it, allowing the standard browser behavior or `$.atomNav` to take over.
-- **Nested Teardown**: Because `$.route` tracks its target element in the `registry`, it is automatically destroyed when `$.atomNav` replaces its parent container. This ensures that route effects and listeners are cleaned up exactly when the layout that contains them is swapped out.
+Includes a resolution cache for route links and centralized path utilities for string manipulation. Asset links are automatically ignored to prevent interference with file downloads.
 
 ## 8. Reactive Data Fetching (`$.atomFetch`)
 
-`$.atomFetch` (`fetch.ts`) is a high-level primitive that integrates jQuery's `$.ajax` with `@but212/atom-effect` core's async `computed` atoms.
+`$.atomFetch` provides a declarative AJAX primitive that integrates `$.ajax` with computed atoms.
 
-### 8.1 Lifecycle & Abort Logic
-
-To prevent memory leaks and orphaned resolutions (where a request resolves but its reactive node was already disposed or superseded), `$.atomFetch` implements a strict lifecycle:
-
-- **AbortController**: Each execution creates a new `AbortController`. The internal `cleanup` function links the signal to the `jqXHR.abort()` method.
-- **Auto-Cleanup**: Listeners on the `AbortSignal` are explicitly removed in a `finally` block.
-- **Disposal**: The atom's `.dispose()` method is patched to trigger an immediate abort, ensuring all pending network activity stops when the atom is destroyed.
-
-### 8.2 Error Handling
-
-`$.atomFetch` provides robust error isolation:
-
-- **Data Normalization**: Uses internal `toSettings` and `toError` helpers to ensure consistent behavior across different network conditions and jQuery versions.
-- **Network Error Normalization**: Standardizes `jqXHR` objects into standard `Error` instances, with specialized handling for `status 0` (timeouts/network failures).
-- **Hook Isolation**: The `onError` user hook is wrapped in a dedicated `try/catch` block. Exceptions thrown within the hook are logged to the console but do not re-throw, preventing user-defined logic from breaking the internal reactive update cycle.
-- **Abort Silence (Transient Error Prevention)**: Cancellations (via `AbortError`) are caught internally and re-thrown as a named error that the core reactive engine understands but ignores for state updates, preventing transient error states during rapid re-evaluations.
+- **Lifecycle Management**: Uses `AbortController` for cancellation and disposal.
+- **Error Handling**: Standardizes error instances and isolates user hooks to prevent breaking the reactive chain.
+- **Abort Silence**: Catch and ignore `AbortError` internally during rapid re-evaluations.
 
 ## 9. Security
 
-The binding layer includes defensive measures against XSS and prototype pollution:
+The binding layer includes several defensive measures:
 
-- `bindHtml`: Sanitizes content via `sanitizeHtml()`. It uses a **multi-layered DOM-based Sanitizer** that employs a **walkAndScrub** strategy. It recursively cleans the DOM tree, transforming untrusted tags into inert `<span>` wrappers while preserving safe structure.
-- **DOM Clobbering Protection**: All element interactions are routed through `DOM_PROTOTYPE_BRIDGE`, which accesses properties and methods directly from `Element.prototype` and `Node.prototype` via descriptors. This prevents untrusted HTML from shadowing instance properties to bypass security checks.
-- `bindAttr`: Blocks `on*` event handler attributes (collects them into a comma-separated `data-unsafe-attr` list) and untrusted URL protocols using a centralized matcher. This protection covers standard and SVG-specific attributes and includes individual URL monitoring for `srcset`. It also strips all whitespace and decodes entities BEFORE protocol matching.
-- `srcdoc` Protection: Specifically monitors `srcdoc` as a sensitive HTML sink, applying recursive sanitization checks.
-- `bindCss`: Blocks CSS values containing untrusted patterns. It strips CSS comments (`/* ... */`) before validation to prevent obfuscation bypasses and matches against an array of known threat patterns (`CSS_DANGER_PATTERNS`).
-- `bindProp`: Blocks untrusted properties (`innerHTML`, `outerHTML`) and prototype pollution vectors (`__proto__`, `constructor`, `prototype`).
-- **Sanitization Engine**: `sanitizeHtml` implementation uses a **Data-driven logic** strategy: normalization (entity decoding with optional semicolon support), recursive tag transformation, and data-driven attribute/CSS neutralization.
-
-These are **first-pass filters** using optimized regular expressions. For user-generated content, [DOMPurify](https://github.com/cure53/DOMPurify) is recommended. See the [Security Guide](./SECURITY.md) for integration patterns.
+- **Sanitization**: Uses a recursive DOM-based sanitizer that transforms untrusted tags into inert wrappers.
+- **DOM Clobbering Protection**: element interactions are routed through prototype-level descriptors.
+- **Attribute & Sink Protection**: Blocks `on*` event handlers and monitors sensitive sinks like `srcdoc`.
+- **CSS Validation**: Blocks CSS values containing untrusted patterns.
 
 ## 10. Module Structure
 
-```text
-packages/jquery/src/
-  index.ts          — Entry point, plugin registration, auto-init
-  constants.ts      — Internal constants and log prefixes
-  types.ts          — TypeScript global and internal type definitions
-  core/
-    namespace.ts      — $.atom, $.computed, $.effect, $.nextTick (standardized scheduler-aware tick)
-    dom.ts            — Core DOM engine (atomEachElement, unpack)
-    effect-factory.ts — registerReactiveEffect (creates and registers effects)
-    registry.ts       — WeakMap-based binding registry + MutationObserver cleanup
-    jquery-patch.ts   — jQuery method patches (.on batch, .remove cleanup)
-  bindings/
-    chainable.ts      — $.fn.atomText, $.fn.atomVal, etc. (jQuery methods)
-    unified.ts        — Binding handler implementations + atomBind
-    input-binding.ts  — Two-way input binding with IME/debounce/cursor support
-    form.ts           — Fully automated form binding with lens-based deep paths
-    list/             — Modularized atomList implementation
-      index.ts        — Main entry point and effect registration
-      diff.ts         — Keyed diffing algorithm with prefix/suffix trimming
-      dom.ts          — DOM manipulation, rendering, and empty state handling
-      context.ts      — ListContext for managing state and async removals
-      types.ts        — Internal types and interface definitions
-    mount.ts          — atomMount / atomUnmount component lifecycle
-  features/
-    web-component.ts  — AEJ-powered Custom Elements + Reactive DI engine + CSS Bridge
-    route.ts          — SPA router (hash + history mode) with reactive state
-    fetch.ts          — $.atomFetch declarative AJAX primitive
-    nav.ts            — $.atomNav PJAX navigation module
-  utils/
-    index.ts          — DOM selectors, type classification, and identity helpers
-    debug.ts          — Debug mode logging and visual highlighting
-    sanitize.ts       — Regex-based HTML sanitization and URL protocol security
-```
+The package is organized into core logic, binding handlers, features (Routing, Fetching, Navigation), and utilities (Debugging, Sanitization).
 
 ## 11. PJAX Navigation (`$.atomNav`)
 
-`$.atomNav` (`features/nav.ts`) is a state-driven PJAX (Partial Page Loading) module that treats the browser's URL as a reactive atom.
+`$.atomNav` treats the browser's URL as a reactive atom and manages metadata and attribute synchronization during navigation.
 
-### 11.1 Single Source of Truth
-
-Unlike traditional PJAX libraries that rely on sequential event handlers, `$.atomNav` is driven by a `currentUrl` atom.
-
-- Link clicks and `popstate` events update the `currentUrl`.
-- A reactive `$.atomFetch` observes `currentUrl` and handles the network request.
-- A reactive `effect` observes the fetch result and reconciles the DOM.
-
-### 11.2 Memory & Race Condition Safety
-
-- **Automatic Unbinding**: To prevent memory leaks and state shadowing, `$.atomNav` automatically calls `.atomUnbind()` on the target container's children before injecting new HTML.
-- **Metadata Synchronization**: It automatically synchronizes `<title>`, and meta tags (`description`, `keywords`, `canonical`) from the response.
-- **Attribute Synchronization**: Container attributes (excluding `id`) are synchronized with the incoming fragment's attributes.
-- **Abort Protection**: Each navigation life-cycle is managed by an `AbortController`. Programmatic navigations and `popstate` events trigger a new signal, automatically cancelling stale requests and pending hooks.
-- **Phase Transitions**: Navigation is broken down into optimized paths. External origins hand off to the browser. Navigating to the exact same location is ignored to prevent hook freezes. Hash-only transitions bypass AJAX hooks entirely for immediate performance.
-- **Redirect Support**: Respects `X-PJAX-URL` headers for server-side redirects, updating the browser history and reactive state accordingly.
-
-### 11.3 Lifecycle Hooks
-
-- `onBeforeLoad`: Allows intercepting navigation (e.g., for per-page authentication or unsaved changes warnings).
-- `onMount`: Called after new content is injected and bound. Useful for triggering entry animations.
-- `onUnmount`: Called before content is replaced. Useful for exit animations.
+- **Race Condition Safety**: Uses `AbortController` to manage the navigation lifecycle and prevent stale updates.
+- **Transitions**: Optimizes navigation paths by ignoring redundant requests and bypassing hooks for hash-only transitions.
 
 ## 12. Performance & Memory Management
 
 ### 12.1 Internal Data Structures
 
-All internal state records (e.g., `BindingRecord`, `InputBinding`) are initialized with a fixed, dense set of fields from the constructor. By strictly avoiding "shape transitions" (dynamically adding or deleting properties), the objects remain **Monomorphic**. This allows V8 to utilize **Inline Caches (IC)** at every property access point, achieving near-native performance for reactive propagation and DOM updates.
+Internal state records are initialized with a fixed set of fields to maintain monomorphic shapes, allowing for efficient property access in JS engines.
 
-### 12.3 Efficient Reconciliation
+### 12.2 Branching Optimizations
 
-By moving from binary buffers and manual pooling to a simplified 3-pass algorithm, `atomList` leverages modern JS engine optimizations (V8's Map and Array optimizations) for reconciliation. This reduces architectural complexity while maintaining high performance.
+The library minimizes branching in performance-critical paths through task-based dispatch in `atomBind` and strategy specialization in `InputBinding`. Static snapshots are used during registry cleanup to stabilize loop prediction.
 
-- **Sanitization Engine**: `sanitizeHtml` implementation uses a data-driven strategy: normalization (entity decoding, control stripping), recursive tag transformation to inert `<span>` elements, and protocol/CSS neutralization.
-- **Equality Checks**: `shallowEqual` uses `Object.keys()` and `Object.is()` for reliable comparison, correctly handling `NaN` and edge cases while maintaining an efficient linear scan.
+## 13. Lenses & Structural Sharing
 
-## 13. CPU Branch Prediction Optimizations
+Lenses are re-exported from the core package. `atomForm` leverages these for deep property binding while maintaining performance through leaf atoms and a centralized dispatcher.
 
-To achieve minimal-overhead reactive updates, the library implements several techniques to maximize **Pipeline Efficiency** by reducing branch mispredictions in performance-critical paths.
+## 14. Debugging & Visual Highlighting
 
-### 13.1 Minimal-Overhead Debugging
+The `DebugController` provides visual feedback via non-blocking outlines using `requestAnimationFrame`. Selector logic generates human-readable identifier strings for elements in logs.
 
-The library implements a simplified debugging subsystem that minimizes overhead when disabled.
+## 15. Web Component & DI Integration
 
-- In production (or when `debug.enabled` is false), the `domUpdated` method returns immediately.
-- The `resolveInitialState` utility determines the default state based on `window.__ATOM_DEBUG__` or `NODE_ENV`.
-
-### 13.2 Task-Based Dispatch (`atomBind`)
-
-The implementation of `atomBind` optimizes multi-binding dispatch through a **Task-Based Loop**:
-
-1. `atomBind` identifies active binding keys from the input options.
-2. It constructs a **monomorphic array of `BindingTask` objects** specifically for the current call.
-3. During element iteration, it iterates through this pre-filtered task list, calling the specific handler (`run`) for each active binding.
-4. This approach minimizes branching inside the element loop and avoids the overhead of checking inactive keys for every single element in a jQuery set. The loop iterates through the static `BINDING_TASKS` collection, performing a single `undefined` check per task. Unified property resolution (supporting both single values and maps) is handled by the centralized `resolveMap` utility in `chainable.ts`.
-
-### 13.3 Strategy Specialization (`InputBinding`)
-
-Two-way input bindings often branch based on element type (Text vs. Select-Multiple). These branches were eliminated by:
-
-- **Monomorphic Strategies**: Pre-specializing `read`, `write`, `equal`, and `format` functions in the constructor via `createStrategies`.
-- **Functional Equality**: Encapsulates functional equality checks directly into the specialized `equal` strategy, providing a single, predictable execution path.
-- **Bitmask Guards**: Uses the `Busy` mask (Composing | SyncingToAtom | SyncingToDom) for constant-time synchronization gates.
-
-This ensures the updater function's control flow remains identical for a given element type, allowing the CPU to effectively predict the execution path.
-
-### 13.4 Static Snapshot for Registry Cleanup
-
-Live DOM collections (e.g. `HTMLCollection`) change their length as elements are removed, which causes "unstable loop prediction". `cleanupDescendants` now converts the result to a **static array snapshot**. This stabilizes the loop's iteration count and branch targets, preventing stalls during large DOM teardowns.
-
-## 14. Lenses & Structural Sharing
-
-`$.atomLens` and related utilities are now **re-exported from the Core package**. The jQuery layer provides these via the `$` namespace while delegating the recursive structural sharing logic to the core engine.
-
-### 14.1 Integration with `atomForm`
-
-`atomForm` (`bindings/form.ts`) leverages core's `setDeepValue` and `getPathValue` utilities for O(1) performance on large forms, managed by the `FormBinder` orchestrator.
-
-1. Field-Level Atoms (Leaf Atoms): Instead of binding each input directly to a lens of the root atom (which would create N effects subscribing to the root), `atomForm` creates individual "leaf atoms" for each field.
-2. Centralized Root Dispatcher: A single `effect` watches the root atom and dispatches updates only to relevant leaf atoms using a batch cycle. This eliminates the O(N) re-evaluation overhead.
-3. Local Sync & Circular Protection: Each field entry has its own effect to sync local changes (including debouncing and transforms) back to the root atom. The `FormBinder` uses an `isSyncingFromLeaf` flag to explicitly break circular update loops between the root and leaf states.
-4. Dynamic Lifecycle & Ref-Counting:
-   - A `MutationObserver` monitors child additions, removals, and attribute changes (`name`).
-   - **Ref-counting**: Multiple radio/checkbox inputs with the same `name` share a single `FieldEntry` (atom + effect). The entry is only disposed when all associated elements are removed.
-   - **Renaming**: When an element's `name` changes, the binder automatically releases the old field and acquires the new one.
-5. Recursive Path Support: Supports nested property access and array indexing (e.g., `user.profile.name`, `items[0].text`) by normalizing name attributes into standard dot-notation paths.
-6. Toggle Groups: Radio and Checkbox groups are handled via a specialized `bindToggle` strategy that manages array-based values for multi-check boxes and string/boolean states for radio and single checks.
-
-## 15. Debugging & Visual Highlighting
-
-The `DebugController` (`utils/debug.ts`) provides visual feedback for DOM updates when enabled.
-
-### 15.1 Visual Highlighting
-
-To provide immediate visual feedback during reactive updates, the controller applies a temporary outline highlight to the target element.
-
-- **Non-blocking Rendering**: Highlights are applied using `requestAnimationFrame` to ensure they don't block the reactive update cycle.
-- **Reliability**: Uses a `WeakMap` for `rafs` and `timers` to track active animations per element. This prevents overlapping highlights from leaking and ensures that existing timers are cancelled if a new change occurs.
-- **Highlight Persistence**: The cleanup logic explicitly removes the highlight class even if an element is disconnected from the DOM before the timeout, preventing accidental persistence.
-- **Smooth Fade-out**: To fix abrupt transitions when the highlight class is removed, the CSS `transition` is attached to a persistent attribute selector (`[data-atom-debug]`). The highlight class itself is purely additive, enabling a graceful exit transition handled by the browser's CSS engine.
-- **Dynamic Style Injection**: Injects necessary CSS exactly once into the document head, with checks for existing style markers to avoid duplication.
-
-### 15.2 Selector Logic (`getSelector`)
-
-The `getSelector` utility in `utils/index.ts` generates human-readable identifier strings for elements in logs:
-
-- **Format**: Returns `tag#id.class1.class2.type` for maximum context during debugging.
-- **SVG Support**: Handles SVG elements where `.className` returns an `SVGAnimatedString` object by accessing its `.baseVal`.
-
-## 16. Web Component & DI Integration
-
-`features/web-component.ts` implements a composition-based model for modern Web Components.
-
-### 16.1 Composition via `useAtomComponent`
-
-Instead of forced inheritance, AEJ uses a controller pattern:
-
-```typescript
-private aej = $.useAtomComponent(this);
-```
-
-This controller manages:
-
-- **Scoped API**: Provides a raw `host` reference, an active `root` node, and a scoped jQuery instance (`$`) restricted to the component boundary.
-- **Lifecycle Sync**: Bridges `connectedCallback` to `setup()` and `disconnectedCallback` to `teardown()`.
-- **Observer Management**: Handles the scoped `MutationObserver` lifecycle for the component's boundary, supporting custom roots (Shadow DOM).
-- **Reactive Attributes (`attrs`)**: Refactored into a `Proxy` that lazy-initializes atoms for `observedAttributes`. A private `MutationObserver` is created only on the first attribute access. It tracks attribute changes and syncs them to these atoms, allowing components to react to HTML attribute updates with minimal initial overhead.
-
-`provideAtom` and `injectAtom` implement a reactive DI system using DOM events.
-
-#### 16.2.1 Event-Based Discovery
-
-AEJ uses a **hybrid discovery strategy** that combines event propagation with a registry-based lookup. This minimizes DOM traversals while maintaining full support for encapsulated shadow roots:
-
-1. **Discovery Request**: `injectAtom` dispatches a bubbling `aej:context-request` event from the target element.
-2. **Composed Traversal**: The event is initialized with `composed: true`, allowing it to cross Shadow DOM boundaries.
-3. **Provider Capture**: Providers (registered via `provideAtom`) listen for this event. The first ancestor to capture the event calls a provided callback with its atom and stops propagation.
-4. **Resolution**: The result is cached in the target node's internal state.
-
-#### 16.2.2 Context Engine (Global Versioning)
-
-To detect DOM movements without the overhead of event listeners on every node, AEJ uses a **Global Versioning** system managed by the `ContextEngine`:
-
-1. **Global Observer**: A centralized `MutationObserver` watches the entire document for node additions or removals.
-2. **Version Bumping**: Any structural change bumps a global `version` atom in the `ContextEngine`.
-3. **Reactive Invalidation**: `injectAtom` proxies establish a dependency on this global version. When it changes, the proxy re-runs its discovery logic.
-
-#### 16.2.3 Reactive & Lazy Resolution
-
-- **Reactive**: Injected values are returned as `ReadonlyAtom<T>`. If the provider is an atom, it is returned directly; otherwise, it's wrapped in a computed atom.
-- **Late Binding**: For Custom Elements, if the element is disconnected during construction, a lazy computed atom is returned that delays resolution until the first access while connected.
-
-#### 16.2.4 Type Safety (Generics)
-
-The new DI engine favors standard TypeScript generics over interface merging. By providing a type parameter to `injectAtom<T>`, users get full IDE support and compile-time validation for the returned `ReadonlyAtom<T>`.
-
-#### 16.2.5 CSS Custom Properties Bridge
-
-`provideAtom` implements a "CSS Bridge" that maps reactive state to the CSS layer:
-
-- **Naming**: Keys are converted to `--aej-<key>` variables.
-- **Effect Mapping**: For atom-based providers, a dedicated effect is created on the element's `AEJ_STATE` to sync the atom's value to the style property.
-- **Lifecycle**: These effects are automatically cleaned up if the provider is overridden or the element is removed.
-
-#### 16.2.6 Injection Cache Optimization
-
-Resolution results are cached in the target node's internal state within a `WeakMap`. Each cache entry stores the discovered proxy atom. Subsequent lookups for the same key on the same node return the cached proxy, ensuring identity stability and avoiding redundant event dispatch. The proxies themselves handle invalidation via the `ContextEngine.version`.
+`useAtomComponent` implements a composition-based model for Web Components. The reactive DI system uses event-based discovery and global versioning to manage context across DOM structural changes. A CSS Bridge synchronizes reactive values to CSS Custom Properties.

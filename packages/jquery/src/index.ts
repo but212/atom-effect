@@ -24,7 +24,6 @@ import {
  * It is safe to call multiple times to reconfigure features at runtime.
  *
  * @param config - Configuration options.
- * @public
  *
  * @warning If both `patch` and `autoCleanup` are set to `false`, you are
  * responsible for calling `cleanup(element)` manually when
@@ -72,7 +71,6 @@ export { disableAutoCleanup, enableAutoCleanup } from '@/core/registry';
  * - Forcing a cleanup cycle on a specific container.
  *
  * @param element - The element to clean up.
- * @public
  */
 export function cleanup(element: HTMLElement | JQuery): void {
   if (element instanceof HTMLElement) {

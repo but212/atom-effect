@@ -1,11 +1,14 @@
 import { effect, isAtom, type ReadonlyAtom, untracked } from '@but212/atom-effect';
-import { ERROR_MESSAGES, LOG_PREFIXES } from '@/constants';
+import { SYSTEM_BINDING } from '@/constants';
 import { registry } from '@/core/registry';
 import type { AsyncReactiveValue } from '@/types';
-
 import { isPromise } from '@/utils';
 import { debug } from '@/utils/debug';
 
+/**
+ * Enumeration of binding types for debugging and performance tracking.
+ * @internal
+ */
 export type BindingDebugType =
   | 'text'
   | 'html'
@@ -19,13 +22,21 @@ export type BindingDebugType =
   | (string & {});
 
 /**
- * Internal helper to manage asynchronous race conditions and DOM lifecycle cleanup.
+ * Creates an execution wrapper that manages asynchronous race conditions.
  *
  * Logic: Monotonic ID Tracking
- * - Assigns a unique, incrementing ID to every update request.
- * - Discards resolved promises if a newer update ID has been issued,
- *   effectively solving the "out-of-order" async racing problem.
+ * Every update request is assigned a unique, incrementing ID. If a promise resolves
+ * but its ID no longer matches the latest issued ID, the result is discarded.
+ * This effectively prevents "out-of-order" race conditions where stale data
+ * could overwrite newer state.
  *
+ * Lifecycle: The runner monitors the element's lifecycle through the registry
+ * and prevents updates if the element has been disposed.
+ *
+ * @param el - The target element for the update.
+ * @param debugType - The type of binding for logging purposes.
+ * @param updater - The callback to execute when a value is ready.
+ * @returns A function that accepts a value or a promise.
  * @internal
  */
 function createAsyncRunner<T>(
@@ -47,11 +58,11 @@ function createAsyncRunner<T>(
       untracked(() => {
         try {
           updater(value);
-          debug.domUpdated(LOG_PREFIXES.BINDING, el, debugType, value);
+          debug.domUpdated(SYSTEM_BINDING.PREFIX, el, debugType, value);
         } catch (error) {
           debug.error(
-            LOG_PREFIXES.BINDING,
-            ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType, true),
+            SYSTEM_BINDING.PREFIX,
+            SYSTEM_BINDING.ERRORS.UPDATER_ERROR(debugType, true),
             error
           );
         }
@@ -61,15 +72,16 @@ function createAsyncRunner<T>(
 
     value
       .then((resolved) => {
+        // Logic: Discard results if a newer update was initiated or the element was removed.
         if (currentId === latestId && !isDisposed) {
           untracked(() => {
             try {
               updater(resolved);
-              debug.domUpdated(LOG_PREFIXES.BINDING, el, `${debugType} (async)`, resolved);
+              debug.domUpdated(SYSTEM_BINDING.PREFIX, el, `${debugType} (async)`, resolved);
             } catch (error) {
               debug.error(
-                LOG_PREFIXES.BINDING,
-                ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType),
+                SYSTEM_BINDING.PREFIX,
+                SYSTEM_BINDING.ERRORS.UPDATER_ERROR(debugType),
                 error
               );
             }
@@ -78,18 +90,23 @@ function createAsyncRunner<T>(
       })
       .catch((error) => {
         if (currentId === latestId && !isDisposed) {
-          debug.error(LOG_PREFIXES.BINDING, ERROR_MESSAGES.BINDING.UPDATER_ERROR(debugType), error);
+          debug.error(SYSTEM_BINDING.PREFIX, SYSTEM_BINDING.ERRORS.UPDATER_ERROR(debugType), error);
         }
       });
   };
 }
 
 /**
- * Lifecycle:
- * - Automatically registers the created `effect` with the global `registry`
- *   linked to the target element.
- * - Ensures that the effect is disposed of when the element is removed or cleaned.
+ * Establishes a reactive effect between a single source and a DOM element.
  *
+ * Lifecycle: The created effect is automatically registered with the global
+ * `registry` and linked to the target element, ensuring it is disposed of
+ * when the element is removed from the DOM.
+ *
+ * @param el - The target DOM element.
+ * @param source - The reactive atom, function, or static value.
+ * @param updater - The function that applies the value to the DOM.
+ * @param debugType - Metadata for debugging.
  * @internal
  */
 export function registerReactiveEffect<T>(
@@ -117,16 +134,23 @@ export function registerReactiveEffect<T>(
       )
     );
   } else {
+    // Logic: Static values are handled directly via the runner to support initial sync.
     runner(source as T | Promise<T>);
   }
 }
 
 /**
- * Logic: Batch Resolution
- * - Detects if any property in the map is reactive (Atom or Function).
- * - Aggregates multiple async sources into a single `Promise.all` resolution
- *   to minimize DOM thrashing and ensure atomic UI updates.
+ * Establishes a reactive effect between a map of sources and a DOM element.
  *
+ * Optimization: Batch Resolution
+ * Aggregates multiple asynchronous sources into a single `Promise.all` resolution.
+ * This minimizes DOM thrashing by ensuring the UI update only occurs once all
+ * parts of the map are ready.
+ *
+ * @param el - The target DOM element.
+ * @param map - A record of property keys and reactive values.
+ * @param updater - The function that applies the entire map to the DOM.
+ * @param debugType - Metadata for debugging.
  * @internal
  */
 export function registerMapEffect<T>(
@@ -147,6 +171,7 @@ export function registerMapEffect<T>(
     }
   }
 
+  /** Collects current values from the map and resolves any pending promises. */
   const collect = () => {
     const promises: Promise<{ key: string; value: T }>[] = [];
     const resolved: Record<string, T> = {};

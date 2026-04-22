@@ -1,7 +1,7 @@
 import { effect, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
 import { applyInputBinding } from '@/bindings/input-binding';
-import { DANGEROUS_PROPS, ERROR_MESSAGES, LOG_PREFIXES, VALID_INPUT_TAGS } from '@/constants';
+import { SYSTEM_BINDING, SYSTEM_SECURITY } from '@/constants';
 import { registerMapEffect, registerReactiveEffect } from '@/core/effect-factory';
 import { INTERNAL_HANDLER } from '@/core/jquery-patch';
 import { registry } from '@/core/registry';
@@ -19,6 +19,10 @@ import { debug } from '@/utils/debug';
 import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '@/utils/sanitize';
 
 /**
+ * Converts a kebab-case property name to camelCase.
+ *
+ * @param property - The kebab-case string (e.g., 'background-color').
+ * @returns The camelCase version (e.g., 'backgroundColor').
  * @internal
  */
 function toCamel(property: string): string {
@@ -28,32 +32,39 @@ function toCamel(property: string): string {
 }
 
 /**
- * Blocks 'on*' event attributes and dangerous properties like `innerHTML`
- * from being bound as standard attributes/props to prevent XSS.
+ * Validates whether a property or attribute name is safe for reactive binding.
  *
+ * Logic: This utility prevents XSS attacks by blocking 'on*' event attributes
+ * and sensitive properties like `innerHTML` from being manipulated via
+ * standard attribute or property bindings.
+ *
+ * @param name - The name of the property or attribute.
+ * @param isProperty - True if checking a DOM property, false for attributes.
+ * @returns True if the binding is considered safe.
  * @internal
  */
 function isSafeBinding(name: string, isProperty: boolean): boolean {
   const lowerName = name.toLowerCase();
   if (lowerName.startsWith('on')) {
-    console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_EVENT_HANDLER(name)}`);
+    console.warn(`${SYSTEM_BINDING.PREFIX} ${SYSTEM_SECURITY.ERRORS.BLOCKED_EVENT_HANDLER(name)}`);
     return false;
   }
-  if (isProperty && (DANGEROUS_PROPS as readonly string[]).includes(name)) {
-    console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_PROP(name)}`);
+  if (isProperty && (SYSTEM_SECURITY.DANGEROUS_PROPS as readonly string[]).includes(name)) {
+    console.warn(`${SYSTEM_BINDING.PREFIX} ${SYSTEM_SECURITY.ERRORS.BLOCKED_PROP(name)}`);
     return false;
   }
   return true;
 }
 
 /**
+ * Binds the text content of an element to a reactive source.
+ *
  * When to use:
- * - Rendering raw text that stays in sync with an atom.
+ * - To synchronize labels or counts with an atom without the risk of XSS.
  *
- * @param element - The target element.
- * @param value - The reactive source.
- * @param formatter - Optional function to format the value.
- *
+ * @param element - The target HTMLElement.
+ * @param value - The reactive source atom or computed.
+ * @param formatter - An optional function to format the value before display.
  * @internal
  */
 export function bindText<T = unknown>(
@@ -66,25 +77,29 @@ export function bindText<T = unknown>(
     value,
     (val) => {
       const textContent = formatter ? formatter(val) : String(val ?? '');
-      if (element.textContent !== textContent) element.textContent = textContent;
+      if (element.textContent !== textContent) {
+        element.textContent = textContent;
+      }
     },
     'text'
   );
 }
 
 /**
- * Logic: Descendant bindings are automatically cleaned up via the registry
- * before re-writing `innerHTML` to prevent memory leaks from detached nodes.
+ * Binds the HTML content of an element to a reactive source.
  *
- * Caution: Even with sanitization, rendering unsanitized user content
- * is a security risk. Use `bindText` whenever possible.
+ * Logic: To prevent memory leaks from detached nodes, all reactive bindings
+ * within the element's descendants are automatically cleaned up via the
+ * registry before the `innerHTML` is overwritten.
+ *
+ * Caution: Even with sanitization, rendering user-provided HTML remains a
+ * security risk. Prefer `bindText` whenever possible.
  *
  * When to use:
- * - Rendering rich text or trusted HTML templates.
+ * - To render trusted templates or rich text containing formatting tags.
  *
- * @param element - The target element.
- * @param value - The reactive source.
- *
+ * @param element - The target HTMLElement.
+ * @param value - The reactive source containing the HTML string.
  * @internal
  */
 export function bindHtml(element: HTMLElement, value: AsyncReactiveValue<string>): void {
@@ -106,14 +121,15 @@ export function bindHtml(element: HTMLElement, value: AsyncReactiveValue<string>
 }
 
 /**
+ * Binds a set of CSS classes to reactive conditions.
+ *
  * Logic: Token Management
- * - Supports space-separated class names in keys.
- * - Tracks active tokens in a `Set` to ensure classes are only removed if no
- *   other active definition in the map requires them.
+ * - Supports space-separated class names within keys.
+ * - Active tokens are tracked in a `Set` to ensure classes are only removed
+ *   if no other active definition within the map requires them.
  *
- * @param element - The target element.
- * @param classMap - A map of class names to boolean sources.
- *
+ * @param element - The target HTMLElement.
+ * @param classMap - A record mapping class names to reactive boolean conditions.
  * @internal
  */
 export function bindClass(
@@ -141,14 +157,13 @@ export function bindClass(
         }
       }
 
-      // Add new tokens
+      // Logic: Atomic token updates — only apply changes for tokens that have transitioned.
       for (const token of currentActiveTokens) {
         if (!prevActive.has(token)) {
           element.classList.add(token);
         }
       }
 
-      // Remove tokens that are no longer active
       for (const token of prevActive) {
         if (!currentActiveTokens.has(token)) {
           element.classList.remove(token);
@@ -162,12 +177,13 @@ export function bindClass(
 }
 
 /**
- * Security: Blocks dangerous CSS values (like `url()` with javascript protocols)
- * to prevent XSS and style-based attacks.
+ * Binds inline CSS styles to reactive sources.
  *
- * @param element - The target element.
- * @param cssMap - A map of style properties to values.
+ * Security: Dangerous CSS values (e.g., `url()` containing javascript: protocols)
+ * are blocked to prevent XSS and style-based injection attacks.
  *
+ * @param element - The target HTMLElement.
+ * @param cssMap - A record mapping style properties to reactive values.
  * @internal
  */
 export function bindCss(element: HTMLElement, cssMap: Record<string, CssValue>): void {
@@ -203,14 +219,16 @@ export function bindCss(element: HTMLElement, cssMap: Record<string, CssValue>):
 }
 
 /**
+ * Binds HTML attributes to reactive sources.
+ *
  * Logic:
- * - Handles specific logic for boolean attributes (like `disabled`).
- * - Validates URL protocols (href/src) before applying changes.
- * - Supports ARIA attributes with distinct boolean-to-string mapping.
+ * - Boolean Attributes: Specifically handles attributes like `disabled` where
+ *   false results in attribute removal.
+ * - ARIA: Maps boolean values to 'true'/'false' strings for accessibility attributes.
+ * - Protocol Validation: Blocks dangerous URL protocols in `href` or `src` attributes.
  *
- * @param element - The target element.
- * @param attrMap - A map of attribute names to values.
- *
+ * @param element - The target HTMLElement.
+ * @param attrMap - A record mapping attribute names to reactive values.
  * @internal
  */
 export function bindAttr(
@@ -236,14 +254,17 @@ export function bindAttr(
         const val = value as PrimitiveValue;
 
         if (val == null || (val === false && !meta.isAria)) {
-          if (prev[name] !== null) element.removeAttribute(name);
+          if (prev[name] !== null) {
+            element.removeAttribute(name);
+          }
           prev[name] = null;
           continue;
         }
 
         const next = val === true ? (meta.isAria ? 'true' : name) : String(val);
+
         if (isDangerousUrl(name, next)) {
-          console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_PROTOCOL(name)}`);
+          console.warn(`${SYSTEM_BINDING.PREFIX} ${SYSTEM_SECURITY.ERRORS.BLOCKED_PROTOCOL(name)}`);
           continue;
         }
 
@@ -258,12 +279,13 @@ export function bindAttr(
 }
 
 /**
- * Security: Blocks dangerous properties (e.g., `innerHTML`, `on*` events)
- * and validates URL-based properties to prevent injection attacks.
+ * Binds DOM properties directly to reactive sources.
  *
- * @param element - The target element.
- * @param propMap - A map of property names to values.
+ * Security: Blocks sensitive properties (e.g., `innerHTML`, event handlers)
+ * and validates URL-based properties to prevent prototype pollution or XSS.
  *
+ * @param element - The target HTMLElement.
+ * @param propMap - A record mapping property names to reactive values.
  * @internal
  */
 export function bindProp(
@@ -283,7 +305,7 @@ export function bindProp(
         if (previousValues[name] === value) continue;
 
         if (typeof value === 'string' && isDangerousUrl(name, value)) {
-          console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_PROTOCOL(name)}`);
+          console.warn(`${SYSTEM_BINDING.PREFIX} ${SYSTEM_SECURITY.ERRORS.BLOCKED_PROTOCOL(name)}`);
           continue;
         }
 
@@ -296,13 +318,14 @@ export function bindProp(
 }
 
 /**
- * Logic: Preserves the original `display` mode (e.g., `flex`, `block`)
- * so that visibility restoration returns the element to its intended layout state.
+ * Manages element visibility based on a reactive condition.
  *
- * @param element - The target element.
- * @param condition - The visibility condition.
- * @param invert - Whether to invert the condition.
+ * Logic: The original `display` mode (e.g., `flex`, `grid`) is preserved and
+ * restored when the element is shown, ensuring the intended layout remains intact.
  *
+ * @param element - The target HTMLElement.
+ * @param condition - The reactive boolean condition governing visibility.
+ * @param invert - If true, hides the element when the condition is met.
  * @internal
  */
 export function bindVisibility(
@@ -331,6 +354,14 @@ export function bindVisibility(
 }
 
 /**
+ * Binds a form control's value to a writable atom.
+ *
+ * When to use:
+ * - To implement two-way synchronization for inputs, selects, and textareas.
+ *
+ * @param element - The form control element.
+ * @param atom - The writable atom to synchronize with.
+ * @param options - Configuration for debouncing and transformation.
  * @internal
  */
 export function bindVal(
@@ -339,9 +370,9 @@ export function bindVal(
   options: ValOptions<unknown> = {}
 ): void {
   const tagName = element.tagName.toLowerCase();
-  if (!(VALID_INPUT_TAGS as readonly string[]).includes(tagName)) {
+  if (!(SYSTEM_BINDING.VALID_INPUT_TAGS as readonly string[]).includes(tagName)) {
     console.warn(
-      `${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.BINDING.INVALID_INPUT_ELEMENT(tagName)}`
+      `${SYSTEM_BINDING.PREFIX} ${SYSTEM_BINDING.ERRORS.INVALID_INPUT_ELEMENT(tagName)}`
     );
     return;
   }
@@ -351,12 +382,14 @@ export function bindVal(
 }
 
 /**
- * Requirement: Radio buttons in the same name group don't fire 'change'
- * when they are automatically unchecked by another radio selection.
+ * Synchronizes the visual state of a radio button group.
  *
- * Logic: Manually triggers a `change.atomRadioSync` event for the entire group
- * to ensure reactive consistency across the radio group.
+ * Logic: Native radio buttons do not fire 'change' events when they are
+ * unchecked by the selection of another radio button in the same group.
+ * This utility manually triggers synchronization for the entire group
+ * to ensure reactive consistency.
  *
+ * @param element - The radio input element that was recently selected.
  * @internal
  */
 function syncRadios(element: HTMLInputElement): void {
@@ -369,11 +402,15 @@ function syncRadios(element: HTMLInputElement): void {
 }
 
 /**
+ * Binds a checkbox or radio button's checked state to a writable atom.
+ *
+ * @param element - The target input element.
+ * @param atom - The writable atom to synchronize with the checked state.
  * @internal
  */
 export function bindChecked(element: HTMLElement, atom: WritableAtom<boolean>): void {
   if (!(element instanceof HTMLInputElement)) {
-    console.warn(`${LOG_PREFIXES.BINDING} atomChecked called on non-input element`);
+    console.warn(`${SYSTEM_BINDING.PREFIX} atomChecked called on non-input element`);
     return;
   }
   const inputElement = element;
@@ -397,7 +434,7 @@ export function bindChecked(element: HTMLElement, atom: WritableAtom<boolean>): 
       untracked(() => {
         if (inputElement.checked !== isChecked) {
           inputElement.checked = isChecked;
-          debug.domUpdated(LOG_PREFIXES.BINDING, inputElement, 'checked', isChecked);
+          debug.domUpdated(SYSTEM_BINDING.PREFIX, inputElement, 'checked', isChecked);
           if (isChecked) syncRadios(inputElement);
         }
       });
@@ -406,6 +443,10 @@ export function bindChecked(element: HTMLElement, atom: WritableAtom<boolean>): 
 }
 
 /**
+ * Binds a mapping of event listeners to an element.
+ *
+ * @param element - The target HTMLElement.
+ * @param eventMap - A record mapping event names to handler functions.
  * @internal
  */
 export function bindEvents(
@@ -418,6 +459,11 @@ export function bindEvents(
 }
 
 /**
+ * Binds a single event listener to an element.
+ *
+ * @param element - The target HTMLElement.
+ * @param event - The name of the event.
+ * @param handler - The handler function to execute.
  * @internal
  */
 export function bindOn(
