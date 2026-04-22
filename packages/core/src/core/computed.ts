@@ -218,8 +218,10 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     if (!dependencies.hasComputeds) return false;
 
     return untracked(() => {
-      for (const link of dependencies) {
-        if (link.node.hasError) return true;
+      const length = dependencies.capacity;
+      for (let i = 0; i < length; i++) {
+        const link = dependencies.at(i);
+        if (link?.node.hasError) return true;
       }
       return false;
     });
@@ -253,10 +255,17 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     if (selfError !== null) collected.push(selfError);
 
     untracked(() => {
-      for (const link of dependencies) {
-        const dependencyNode = link.node;
-        if ((dependencyNode.flags & IS_COMPUTED) !== 0) {
-          this._accumulateErrors(dependencyNode as unknown as ComputedAtomImpl<unknown>, collected);
+      const length = dependencies.capacity;
+      for (let i = 0; i < length; i++) {
+        const link = dependencies.at(i);
+        if (link !== null) {
+          const dependencyNode = link.node;
+          if ((dependencyNode.flags & IS_COMPUTED) !== 0) {
+            this._accumulateErrors(
+              dependencyNode as unknown as ComputedAtomImpl<unknown>,
+              collected
+            );
+          }
         }
       }
     });
@@ -273,10 +282,14 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     const dependencies = dependency._deps;
     if (!dependencies.hasComputeds) return;
 
-    for (const link of dependencies) {
-      const node = link.node;
-      if ((node.flags & IS_COMPUTED) !== 0) {
-        this._accumulateErrors(node as unknown as ComputedAtomImpl<unknown>, collected);
+    const length = dependencies.capacity;
+    for (let i = 0; i < length; i++) {
+      const link = dependencies.at(i);
+      if (link !== null) {
+        const node = link.node;
+        if ((node.flags & IS_COMPUTED) !== 0) {
+          this._accumulateErrors(node as unknown as ComputedAtomImpl<unknown>, collected);
+        }
       }
     }
   }

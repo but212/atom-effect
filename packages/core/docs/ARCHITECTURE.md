@@ -13,7 +13,7 @@ The high-level API (`atom`, `computed`, `effect`) is built upon a unified intern
   - **Push (Notification Phase)**: When a source atom changes, it propagates a "dirty" signal to its immediate subscribers. This phase marks nodes for re-evaluation without performing calculations.
   - **Pull (Evaluation Phase)**: When a node's value is accessed or an effect executes, it performs a "pull" to validate the versions of its dependencies, triggering re-computation only if necessary.
 - **Scheduler and Coalescing**: Effects do not execute immediately upon state change. Instead, they are queued in a **Scheduler** that utilizes **Double Buffering** and a **Flat Loop** to coalesce multiple updates into a single execution cycle. This prevents redundant work and avoids call stack overflows.
-- **Small Vector Optimization (SVO)**: To minimize heap allocations and garbage collection (GC) pressure, the engine uses inline slots (`_s0` through `_s3`) for the most common dependency and subscriber links before falling back to dynamic arrays. These buffers now implement a standardized **Array-like API** and **Iterator support** for efficient, readable traversal.
+- **Small Vector Optimization (SVO)**: To minimize heap allocations and garbage collection (GC) pressure, the engine uses inline slots (`_s0` through `_s3`) for the most common dependency and subscriber links before falling back to dynamic arrays. These buffers now implement a standardized **Array-like API** (`length`, `at()`, `push()`) for consistent, high-performance access.
 - **Bitwise Branding**: Primitives are identified using a bitwise mask (`BrandFlags`) stored on a single `BRAND` symbol. This allows for constant-time type identification (e.g., checking if a node is an Atom or a Computed) without multiple property lookups.
 - **Isolated Debug Metadata**: Debug information such as IDs and names are attached via non-enumerable symbols, ensuring that debugging features do not interfere with object iteration, serialization, or production performance.
 
@@ -78,8 +78,8 @@ Asynchronous computed nodes manage their lifecycle as state machines, protecting
 Memory and performance are managed through specialized structures:
 
 - **`DepSlotBuffer`**: A high-speed buffer for dependency tracking that features:
-  - **Standardized API**: Implements `length`, `capacity`, `push()`, and `at()` to match JavaScript collection patterns.
-  - **Iterator Support**: Implements `[Symbol.iterator]` for high-performance, readable `for...of` traversal.
+  - **Standardized API**: Implements `length`, `capacity`, `push()`, and `at()` for predictable access patterns.
+  - **Manual Optimization**: Uses unrolled loops for inline slots and standard `for` loops for overflow to ensure zero-allocation performance.
   - **Size Duality**: Separates physical capacity from logical length for rapid iteration and hole reuse.
   - **Hybrid Lookup**: Uses an $O(1)$ `Map` fallback when the number of dependencies exceeds 32.
   - **Cache Locality**: Swaps active links to the head of the buffer during re-evaluation.

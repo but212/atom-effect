@@ -127,11 +127,39 @@ export abstract class ReactiveNode<T> {
     }
 
     if (slots.length > 0) {
-      for (const link of slots) {
-        if (link.fn === listener || link.sub === listener) {
-          if (IS_DEV)
-            console.warn(`[atom-effect] Duplicate subscription ignored on node ${this.id}`);
-          return () => {};
+      // Optimization: Unrolled membership check for the inline slots (s0-s3) to minimize traversal overhead.
+      if (
+        (slots._s0 !== null && (slots._s0.fn === listener || slots._s0.sub === listener)) ||
+        (slots._s1 !== null && (slots._s1.fn === listener || slots._s1.sub === listener)) ||
+        (slots._s2 !== null && (slots._s2.fn === listener || slots._s2.sub === listener)) ||
+        (slots._s3 !== null && (slots._s3.fn === listener || slots._s3.sub === listener))
+      ) {
+        if (IS_DEV) console.warn(`[atom-effect] Duplicate subscription ignored on node ${this.id}`);
+        return () => {};
+      }
+
+      const ov = slots._overflow;
+      if (ov !== null) {
+        const len = ov.length;
+        // Logic: Hoisted invariant check (isFn) outside the loop to reduce branching in the hot path.
+        if (isFn) {
+          for (let i = 0; i < len; i++) {
+            const s = ov[i];
+            if (s !== null && s?.fn === listener) {
+              if (IS_DEV)
+                console.warn(`[atom-effect] Duplicate subscription ignored on node ${this.id}`);
+              return () => {};
+            }
+          }
+        } else {
+          for (let i = 0; i < len; i++) {
+            const s = ov[i];
+            if (s !== null && s?.sub === listener) {
+              if (IS_DEV)
+                console.warn(`[atom-effect] Duplicate subscription ignored on node ${this.id}`);
+              return () => {};
+            }
+          }
         }
       }
     }
@@ -186,12 +214,47 @@ export abstract class ReactiveNode<T> {
 
     this._notifying++;
     try {
-      // Logic: Using the new iterator for standard, readable traversal.
-      for (const sub of slots) {
+      // Optimization: Prioritizes inline slots (s0-s3) for notification delivery.
+      if (slots._s0 !== null) {
         try {
-          sub.notify(newValue, oldValue);
+          slots._s0.notify(newValue, oldValue);
         } catch (e) {
           this._logNotifyError(e);
+        }
+      }
+      if (slots._s1 !== null) {
+        try {
+          slots._s1.notify(newValue, oldValue);
+        } catch (e) {
+          this._logNotifyError(e);
+        }
+      }
+      if (slots._s2 !== null) {
+        try {
+          slots._s2.notify(newValue, oldValue);
+        } catch (e) {
+          this._logNotifyError(e);
+        }
+      }
+      if (slots._s3 !== null) {
+        try {
+          slots._s3.notify(newValue, oldValue);
+        } catch (e) {
+          this._logNotifyError(e);
+        }
+      }
+
+      const ov = slots._overflow;
+      if (ov !== null) {
+        for (let i = 0, len = ov.length; i < len; i++) {
+          const sub = ov[i];
+          if (sub !== null) {
+            try {
+              sub?.notify(newValue, oldValue);
+            } catch (e) {
+              this._logNotifyError(e);
+            }
+          }
         }
       }
     } finally {

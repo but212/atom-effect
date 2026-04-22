@@ -242,9 +242,8 @@ A hybrid buffer using Small Vector Optimization (SVO).
 - `capacity`: The highest physical index occupied plus one.
 - `push(item: T): number`: Adds an item to the buffer, reusing holes if possible. Returns the index.
 - `at(index: number): T | null`: Returns the item at the specified index.
-- `remove(item: T): void`: Removes an item and leaves a hole for future reuse.
+- `remove(item: T): boolean`: Removes an item and leaves a hole for future reuse.
 - `compact(): void`: Eliminates all internal holes and resets physical boundaries.
-- `[Symbol.iterator]`: Supports standard `for...of` iteration over active items.
 
 ### `DepSlotBuffer`
 

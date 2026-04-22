@@ -360,43 +360,6 @@ export class SlotBuffer<T> {
   }
 
   /**
-   * Standard iterator to support for...of loops.
-   */
-  *[Symbol.iterator](): IterableIterator<T> {
-    const actual = this._actualCount;
-    if (actual === 0) return;
-
-    let count = 0;
-    if (this._s0 !== null) {
-      yield this._s0;
-      if (++count >= actual) return;
-    }
-    if (this._s1 !== null) {
-      yield this._s1;
-      if (++count >= actual) return;
-    }
-    if (this._s2 !== null) {
-      yield this._s2;
-      if (++count >= actual) return;
-    }
-    if (this._s3 !== null) {
-      yield this._s3;
-      if (++count >= actual) return;
-    }
-
-    const ov = this._overflow;
-    if (ov !== null) {
-      for (let i = 0, len = ov.length; i < len; i++) {
-        const item = ov[i];
-        if (item !== null && item !== undefined) {
-          yield item;
-          if (++count >= actual) return;
-        }
-      }
-    }
-  }
-
-  /**
    * Eliminates all internal holes via in-place shifting.
    *
    * Optimization: Performs a zero-allocation compaction to ensure the buffer is dense.
