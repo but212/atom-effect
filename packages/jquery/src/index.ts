@@ -75,8 +75,11 @@ export { disableAutoCleanup, enableAutoCleanup } from '@/core/registry';
  * @public
  */
 export function cleanup(element: HTMLElement | JQuery): void {
-  const target = element instanceof HTMLElement ? element : (element[0] as HTMLElement);
-  if (target) registry.cleanupTree(target);
+  if (element instanceof HTMLElement) {
+    registry.cleanupTree(element);
+  } else {
+    element.each((_, el) => registry.cleanupTree(el));
+  }
 }
 
 $.extend({ initAEJ });
