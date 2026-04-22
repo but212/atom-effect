@@ -96,9 +96,14 @@ const contextRegistry = {
   },
 };
 
+let bumpTimer: ReturnType<typeof setTimeout> | null = null;
 const globalTreeObserver = new MutationObserver((mutations) => {
   if (mutations.some((m) => m.addedNodes.length > 0 || m.removedNodes.length > 0)) {
-    contextRegistry.bump();
+    if (bumpTimer) return;
+    bumpTimer = setTimeout(() => {
+      contextRegistry.bump();
+      bumpTimer = null;
+    }, 16); // Roughly 1 frame
   }
 });
 
@@ -246,6 +251,8 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
     isInitialized: false,
     attributeAtoms: new Map<string, WritableAtom<string | null>>(),
     attributeObserver: null as MutationObserver | null,
+    treeObserver: null as MutationObserver | null,
+    attrsRecord: null as Record<string, WritableAtom<string | null>> | null,
   };
 
   const controller: AtomComponentController = {
@@ -256,20 +263,22 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
     },
 
     get attrs() {
-      // Logic: Lazy-initialize atoms for observed attributes
-      const observed =
-        (element.constructor as { observedAttributes?: string[] }).observedAttributes || [];
-      const result: Record<string, WritableAtom<string | null>> = {};
+      if (!reactive.attrsRecord) {
+        const observed =
+          (element.constructor as { observedAttributes?: string[] }).observedAttributes || [];
+        const result: Record<string, WritableAtom<string | null>> = {};
 
-      for (const name of observed) {
-        let atom = reactive.attributeAtoms.get(name);
-        if (!atom) {
-          atom = $.atom(element.getAttribute(name));
-          reactive.attributeAtoms.set(name, atom);
+        for (const name of observed) {
+          let atom = reactive.attributeAtoms.get(name);
+          if (!atom) {
+            atom = $.atom(element.getAttribute(name));
+            reactive.attributeAtoms.set(name, atom);
+          }
+          result[name] = atom;
         }
-        result[name] = atom;
+        reactive.attrsRecord = result;
       }
-      return result;
+      return reactive.attrsRecord;
     },
 
     $: (selector, context) => {
@@ -307,7 +316,8 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       if (sr) {
         registry.markHost(element);
         registry.registerShadow(element, sr);
-        globalTreeObserver.observe(sr, { childList: true, subtree: true });
+        reactive.treeObserver = new MutationObserver(() => contextRegistry.bump());
+        reactive.treeObserver.observe(sr, { childList: true, subtree: true });
       }
 
       reactive.root = (sr ?? element) as AEJNode;
@@ -349,6 +359,11 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
         for (const k of keys) contextRegistry.bump(k);
       }
 
+      if (state.providerEffects) {
+        for (const effect of state.providerEffects.values()) effect.dispose();
+        state.providerEffects.clear();
+      }
+
       if (!reactive.isInitialized) return;
 
       // Logic: Flag is set to false BEFORE cleanup to prevent re-entry if cleanup throws.
@@ -358,6 +373,13 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
         reactive.attributeObserver.disconnect();
         reactive.attributeObserver = null;
       }
+
+      if (reactive.treeObserver) {
+        reactive.treeObserver.disconnect();
+        reactive.treeObserver = null;
+      }
+
+      reactive.attrsRecord = null;
 
       try {
         if (reactive.root?.[CLEANUP_MARKER]) {
@@ -416,7 +438,6 @@ export function provideAtom(
 
     s.providers.set(key, val);
 
-    // Rule 3: CSS Custom Properties Bridge
     const keyStr = typeof key === 'symbol' ? key.description : String(key);
     if (keyStr) {
       const varName = `--aej-${keyStr}`;
