@@ -10,6 +10,8 @@ This package extends jQuery with reactive capabilities. All methods are availabl
 - [Control Flow](#control-flow)
 - [Form Bindings](#form-bindings)
 - [Components](#components)
+- [Web Components (`$.useAtomComponent`)](#web-components)
+- [Dependency Injection (`$.provideAtom`, `$.injectAtom`)](#dependency-injection)
 - [Static Methods](#static-methods)
 - [Data Fetching (`$.atomFetch`)](#data-fetching)
 - [Routing (`$.route`)](#routing)
@@ -26,24 +28,30 @@ When using the library via a CDN (e.g., jsDelivr or unpkg), the library is expos
 
 The following utilities and constants are available on the global `AtomEffectJQuery` object:
 
-- `enableAutoCleanup(container)`: Manually initialize the MutationObserver on a specific element.
-- `disableAutoCleanup(container)`: Remove the observer from an element.
-- `enablejQueryOverrides()`: Manually enable patches for jQuery's native methods (like `.empty()` and `.remove()`).
+- `initAEJ(config)`: Unified entry point for library configuration (patches, auto-cleanup).
+- `enableAutoCleanup(container)`: Manually attach a MutationObserver to a specific element.
+- `disableAutoCleanup()`: Remove all global observers.
+- `enablejQueryOverrides(options)`: Manually enable patches for jQuery's native methods.
 - `nextTick()`: Utility for waiting until the next reactive flush.
 - `registry`: Access to the internal element-effect registry.
 - `debug`: Access to the runtime-toggleable debug controller.
 
-### Manual Initialization
+### Library Configuration (`$.initAEJ`)
 
-While the library attempts to auto-initialize on `document.body` when the DOM is ready, certain environments (dynamic scripts, Shadow DOM, or custom containers) may require manual initialization:
+While the library auto-initializes on `document.body` by default, you can use `$.initAEJ` to fine-tune its behavior or target specific roots:
 
 ```javascript
-// Ensure auto-cleanup is active for the entire document
-AtomEffectJQuery.enableAutoCleanup(document.body);
+// Example: Customize patches and target a specific container
+$.initAEJ({
+  patch: { lifecycle: true, events: false },
+  autoCleanup: { root: myContainer }
+});
 
-// Active specifically for a Shadow Root
-AtomEffectJQuery.enableAutoCleanup(myShadowRoot);
+// Example: Fully manual mode (disable all auto features)
+$.initAEJ({ patch: false, autoCleanup: false });
 ```
+
+> **Note**: Subsequent calls to `initAEJ` will replace the existing configuration.
 
 ### Extending jQuery
 
@@ -342,6 +350,99 @@ const UserProfile = ($el, { id }) => {
 $('#root').atomMount(UserProfile, { id: 42 });
 ```
 
+---
+
+## Web Components
+
+### `$.useAtomComponent(element)`
+
+Composition-based helper for adding AEJ reactive features to standard Web Components (Custom Elements). It returns a controller to manage the component's reactive lifecycle.
+
+**Parameters**:
+
+- `element`: `HTMLElement` (usually `this` inside a class).
+
+**Returns**: `AtomComponentController` object with:
+
+- `host`: The raw `HTMLElement` (usually `this`).
+- `root`: The active root node (ShadowRoot or Host). Available after `setup()`.
+- `$`: Scoped jQuery selector. Limited to selecting elements within the component.
+- `setup(shadowRoot?)`: Initializes reactive lifecycle. Pass `shadowRoot` for closed-mode components.
+- `teardown()`: Disposes all bindings. Call in `disconnectedCallback`.
+- `provideAtom(key, val)`: Scoped provider registration.
+- `injectAtom(key)`: Scoped context injection.
+
+```javascript
+class MyComp extends HTMLElement {
+  private aej = $.useAtomComponent(this);
+  
+  connectedCallback() {
+    this.aej.setup();
+    this.aej.$('.title').atomText($.atom('Hello'));
+  }
+  
+  disconnectedCallback() {
+    this.aej.teardown();
+  }
+}
+```
+
+---
+
+## Dependency Injection
+
+### `$.provideAtom(target, key, atom)`
+
+Registers an element as a provider for a reactive context.
+
+- **target**: `string | HTMLElement | JQuery` — The provider element(s).
+- **key**: `string | symbol` — Unique identifier.
+- **atom**: The value to share.
+
+### `$.injectAtom(target, key)`
+
+Injects a reactive context provided by an ancestor.
+
+- **target**: `string | HTMLElement | JQuery` — The requesting element.
+- **key**: `string | symbol` — The identifier to find.
+
+**Returns**: A `ReadonlyAtom<T>` wrapping the provided value, or `null` if no provider is found.
+
+#### Reactive Resolution
+
+Unlike standard DI, `injectAtom` returns a **reactive source**. If the provider changes the value at runtime, any effects or bindings using the injected atom will automatically update.
+
+#### Late Binding (Custom Elements)
+
+Custom Elements often need to inject atoms during construction or before they are connected to the DOM. AEJ supports **Late Binding**: if `injectAtom` is called on a disconnected Custom Element, it returns a lazy computed atom that will resolve the context once the element is attached.
+
+```javascript
+class MyComp extends HTMLElement {
+  // Safe: Returns a lazy atom that resolves when connected
+  private theme = $.injectAtom(this, 'theme');
+
+  connectedCallback() {
+    this.aej.setup();
+    // Use the atom normally
+    this.aej.$('.title').atomClass('dark', $.computed(() => this.theme.value === 'dark'));
+  }
+}
+```
+
+#### Type Safety (Generics)
+
+`injectAtom` supports generics, allowing you to explicitly specify the type of the injected data.
+
+```typescript
+// Inject the atom corresponding to the 'user-theme' key as type 'light' | 'dark'
+const theme = $.injectAtom<'light' | 'dark'>(el, 'user-theme');
+// 'theme' will be of type ReadonlyAtom<'light' | 'dark'> | null.
+```
+
+#### Shadow DOM Traversal
+
+AEJ's DI system uses a **composed tree traversal** strategy (O(depth)). It automatically traverses Shadow DOM boundaries by walking up the host chain until a provider is found or the document root is reached. This is more reliable and performant than event-based DI, as it doesn't depend on event bubbling or retargeting rules.
+
 ### `.atomUnmount()`
 
 Disposes all reactive bindings and component cleanups on the selected elements and their descendants. This method is the primary way to manually teardown a component tree from the DOM.
@@ -350,9 +451,9 @@ Disposes all reactive bindings and component cleanups on the selected elements a
 
 Manually disposes all reactive effects and cleanups registered on the selected elements and their descendants. Does not invoke the component cleanup function — use `.atomUnmount()` for full component teardown. Supports recursive traversal across `DocumentFragment` and `ShadowRoot`.
 
-> **💡 Note**: You generally do not need to call `.atomUnbind()` manually. The library heavily leverages `MutationObserver` to automatically perform memory cleanup when elements are removed from the DOM, even if they are forcibly deleted by external, non-jQuery libraries (e.g. React or vanilla JS `replaceChildren()`).
+> **💡 Note**: You generally do not need to call `.atomUnbind()` manually. The library heavily leverages `MutationObserver` to automatically perform memory cleanup when elements are removed from the DOM.
 >
-> For **Shadow DOM** support, while the global observer on `document.body` does not cross shadow boundaries, the library provides `enableAutoCleanup(shadowRoot)` to attach independent observers to specific subtrees, or you can manually call `.atomUnbind()` during the component's `disconnectedCallback`.
+> If you need to change the root of the automatic cleanup (e.g., to a specific ShadowRoot), use `$.initAEJ({ autoCleanup: { root: myRoot } })`.
 
 ---
 

@@ -98,6 +98,14 @@ Bound elements receive a `_aes-bound` CSS class marker. This enables O(M) cleanu
 
 `enableAutoCleanup(root)` installs a `MutationObserver` on the specified `root` (Element, ShadowRoot, or DocumentFragment) that watches for removed nodes. For the global DOM, this is lazily initialized via `ensureAutoCleanup()` upon registering the very first reactive binding. The logic is robust against early initialization; it performs a safety check for `document.body` and gracefully recovers if the binding occurs before the body is ready. Multiple roots can be observed concurrently (e.g., for micro-frontends).
 
+#### 3.3.1 Move Robustness (Deferred Cleanup)
+
+To support synchronous DOM moves (e.g., `parent2.appendChild(el)`), the library implements **Deferred Cleanup** via `registry.deferredCleanup(node)`.
+
+- When an element is disconnected, it is marked as "ignored" and a cleanup task is queued as a **microtask**.
+- If the element is re-connected before the microtask runs, the cleanup is cancelled.
+- This ensures that reactive state (atoms, effects) is preserved during common jQuery operations like repositioning elements.
+
 ```text
 DOM Removal Detected
   → Is element type? (skip text/comment nodes)
@@ -111,7 +119,12 @@ DOM Removal Detected
 
 ### 3.4 Shadow DOM
 
-The global `MutationObserver` (on `document.body`) does not cross Shadow DOM boundaries. However, `enableAutoCleanup` now supports `ShadowRoot` as a root element. If you use Web Components, you can call `enableAutoCleanup(this.shadowRoot)` in `connectedCallback` to enable automatic cleanup within that shadow subtree, or manually call `registry.cleanupTree(this.shadowRoot)` in `disconnectedCallback`.
+The global `MutationObserver` (on `document.body`) does not cross Shadow DOM boundaries. However, AEJ provides enhanced Shadow DOM support through the `BindingRegistry`:
+
+- **Host Marking**: When a component is initialized (via `useAtomComponent`), its host is marked with an `_aes-has-shadow` class.
+- **Efficient Traversal**: `cleanupTree` and `cleanupDescendants` use this marker to jump directly to shadow hosts, avoiding O(N) full-tree scans while ensuring all shadow subtrees are cleaned.
+- **Closed Shadow Support**: The registry maintains a `WeakMap` of host elements to their `ShadowRoot` objects, allowing AEJ to clean up "closed" mode shadows that are otherwise inaccessible.
+- **Scoped Observers**: `useAtomComponent` automatically attaches a `MutationObserver` to the component's root (Host or ShadowRoot). These observers are explicitly disconnected during `teardown()` to prevent memory leaks (releasing the Map's strong reference to the ShadowRoot).
 
 ### 3.5 jQuery Method Patches
 
@@ -463,3 +476,43 @@ The `getSelector` utility in `utils/index.ts` generates human-readable identifie
 
 - **Format**: Returns `tag#id.class1.class2.type` for maximum context during debugging.
 - **SVG Support**: Handles SVG elements where `.className` returns an `SVGAnimatedString` object by accessing its `.baseVal`.
+
+## 16. Web Component & DI Integration
+
+`features/web-component.ts` implements a composition-based model for modern Web Components.
+
+### 16.1 Composition via `useAtomComponent`
+
+Instead of forced inheritance, AEJ uses a controller pattern:
+
+```typescript
+private aej = $.useAtomComponent(this);
+```
+
+This controller manages:
+
+- **Scoped API**: Provides a raw `host` reference, an active `root` node, and a scoped jQuery instance (`$`) restricted to the component boundary.
+- **Lifecycle Sync**: Bridges `connectedCallback` to `setup()` and `disconnectedCallback` to `teardown()`.
+- **Observer Management**: Handles the scoped `MutationObserver` lifecycle for the component's boundary, supporting custom roots (Shadow DOM).
+
+### 16.2 Dependency Injection (DI) Engine
+
+`provideAtom` and `injectAtom` implement a reactive DI system using DOM events.
+
+#### 16.2.1 Composed Tree Traversal
+
+AEJ uses a **stateless tree-walker** for DI resolution. This avoids the overhead and complexity of CustomEvents:
+
+1. **Upward Scan**: `injectAtom` starts from the target's parent and walks up the DOM.
+2. **Shadow Navigation**: When it hits a `ShadowRoot`, it jumps to the `host` element and continues.
+3. **Registry Lookup**: At each step, it checks the node's `AEJ_STATE` for registered providers.
+4. **Resolution**: The first match is returned. This guarantees nearest-ancestor priority and allows for context overrides.
+
+#### 16.2.2 Reactive & Lazy Resolution
+
+- **Reactive**: Injected values are returned as `ReadonlyAtom<T>`. If the provider is an atom, it is returned directly; otherwise, it's wrapped in a computed atom.
+- **Late Binding**: For Custom Elements, if the element is disconnected during construction, a lazy computed atom is returned that delays resolution until the first access while connected.
+
+#### 16.2.3 Type Safety (Generics)
+
+The new DI engine favors standard TypeScript generics over interface merging. By providing a type parameter to `injectAtom<T>`, users get full IDE support and compile-time validation for the returned `ReadonlyAtom<T>`.

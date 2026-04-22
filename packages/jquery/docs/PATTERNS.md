@@ -314,4 +314,4 @@ $('#card-root').atomUnmount();
 > See [`.atomMount`](./API.md#atommountcomponent-props) and [`.atomUnmount`](./API.md#atomUnmount) in the API reference.
 > For component lifecycle internals, see [Architecture §6](./ARCHITECTURE.md#6-component-mounting).
 > When rendering user-supplied HTML inside a component, see the [Security Guide](./SECURITY.md) for DOMPurify integration.
-> **Shadow DOM:** The global `MutationObserver` cannot detect when elements inside a Shadow Root are removed. To enable automatic cleanup for shadow descendants, call `$.enableAutoCleanup(this.shadowRoot)` in your component's setup, or manually call `$.registry.cleanupTree(this.shadowRoot)` during unmount.
+> **Shadow DOM:** Automatic cleanup for shadow descendants is handled natively by the library. When using `$.useAtomComponent`, the controller's `setup()` method automatically registers and observes the component's root. For manual scenarios, use `$.initAEJ({ autoCleanup: { root: myShadowRoot } })` to establish a new safety-net boundary.

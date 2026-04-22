@@ -1,12 +1,7 @@
 import $ from 'jquery';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '@/index';
-import {
-  disableAutoCleanup,
-  enableAutoCleanup,
-  registry,
-  setAutoCleanupScheduled,
-} from '@/core/registry';
+import { disableAutoCleanup, enableAutoCleanup, registry } from '@/core/registry';
 
 describe('Binding Registry', () => {
   beforeEach(() => {
@@ -28,7 +23,7 @@ describe('Binding Registry', () => {
       expect($el.hasClass('_aes-bound')).toBe(false);
 
       // 2. Fragmented/Detached element
-      registry.trackCleanup($el[0]!, () => {});
+      registry.onCleanup($el[0]!, () => {});
       registry.cleanup($el[0]!);
       expect(registry.hasBind($el[0]!)).toBe(false);
       expect($el.hasClass('_aes-bound')).toBe(false);
@@ -51,10 +46,10 @@ describe('Binding Registry', () => {
         isExecuting: false,
         executionCount: 0,
       });
-      registry.trackCleanup(el, () => {
+      registry.onCleanup(el, () => {
         throw new Error('cleanup fail');
       });
-      registry.setComponentCleanup(el, () => {
+      registry.setTeardown(el, () => {
         throw new Error('mount cleanup fail');
       });
 
@@ -69,7 +64,7 @@ describe('Binding Registry', () => {
     it('should respect boundaries regardless of initialization timing (Body Readiness)', async () => {
       // Ensure: system works even if first call happens before body is ready
       disableAutoCleanup();
-      setAutoCleanupScheduled(false);
+      registry.setAutoCleanupScheduled(false);
 
       const originalBody = document.body;
       const bodySpy = vi
@@ -77,13 +72,13 @@ describe('Binding Registry', () => {
         .mockReturnValue(null as unknown as HTMLElement);
 
       // Trigger first binding check (head/early script simulation)
-      registry.trackCleanup(document.createElement('div'), () => {});
+      registry.onCleanup(document.createElement('div'), () => {});
 
       bodySpy.mockReturnValue(originalBody);
 
       const $el = $('<span>').appendTo(document.body);
       const cleanup = vi.fn();
-      registry.trackCleanup($el[0]!, cleanup);
+      registry.onCleanup($el[0]!, cleanup);
 
       $el[0]!.remove();
       await new Promise((r) => setTimeout(r, 100));
@@ -102,7 +97,7 @@ describe('Binding Registry', () => {
       };
 
       const $child1 = $('<span>').appendTo(shadow as unknown as HTMLElement);
-      registry.trackCleanup($child1[0]!, cleanup);
+      registry.onCleanup($child1[0]!, cleanup);
 
       // 1. Manual subtree cleanup check
       registry.cleanupTree(shadow);
@@ -110,7 +105,7 @@ describe('Binding Registry', () => {
 
       // 2. Mutation-based auto cleanup check
       const $child2 = $('<span>').appendTo(shadow as unknown as HTMLElement);
-      registry.trackCleanup($child2[0]!, cleanup);
+      registry.onCleanup($child2[0]!, cleanup);
       $child2[0]!.remove();
 
       await new Promise((r) => setTimeout(r, 100));
@@ -132,8 +127,8 @@ describe('Binding Registry', () => {
       const $el1 = $('<span>').appendTo(root1);
       const $el2 = $('<span>').appendTo(root2);
 
-      registry.trackCleanup($el1[0]!, cleanup1);
-      registry.trackCleanup($el2[0]!, cleanup2);
+      registry.onCleanup($el1[0]!, cleanup1);
+      registry.onCleanup($el2[0]!, cleanup2);
 
       disableAutoCleanup();
 
