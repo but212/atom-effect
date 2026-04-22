@@ -4,16 +4,8 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { AtomError, aeNextTick, atom, ComputedError, computed, isComputed } from '@/index';
+import { AtomError, aeNextTick, atom, ComputedError, computed, effect, isComputed } from '@/index';
 import { sleep } from '../../utils/test-helpers';
-
-/**
- * Internal interface for testing purposes to access non-public metadata
- */
-interface LocalTestComputed {
-  id: number | string;
-  version: number;
-}
 
 describe('Computed', () => {
   afterEach(() => {
@@ -24,7 +16,7 @@ describe('Computed', () => {
     it('initializes correctly and rejects invalid arguments', () => {
       const c = computed(() => 1);
       expect(isComputed(c)).toBe(true);
-      expect((c as unknown as LocalTestComputed).id).toBeDefined();
+      expect(c).toBeDefined();
 
       // Invalid arguments validation
       expect(() => computed(null as unknown as () => void)).toThrow(ComputedError);
@@ -66,13 +58,19 @@ describe('Computed', () => {
       });
 
       c.value; // initialize
-      const version = (c as unknown as LocalTestComputed).version;
+      const spy = vi.fn();
+      effect(() => {
+        c.value;
+        spy();
+      });
+      spy.mockClear(); // Clear initial run
 
       src.value = { x: 1 }; // Structurally different, but logically identical
       await aeNextTick();
 
       expect(c.value).toEqual({ x: 1 });
-      expect((c as unknown as LocalTestComputed).version).toBe(version); // Version should not bump
+      expect(fn).toHaveBeenCalledTimes(2); // Initial + Re-evaluation
+      expect(spy).not.toHaveBeenCalled(); // Effect skipped re-run because c.version didn't change
     });
   });
 

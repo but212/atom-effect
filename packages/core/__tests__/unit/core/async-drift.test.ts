@@ -5,14 +5,12 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { resetFlushState } from '@/core/scheduler';
 import { AsyncState, atom, computed, effect } from '@/index';
 import { sleep } from '../../utils/test-helpers';
 
 describe('Async Drift Constraint & Recovery', () => {
   afterEach(() => {
     vi.restoreAllMocks();
-    resetFlushState();
   });
 
   it('resolves reliably without retries (maxAsyncRetries = 0) when dependencies remain stable', async () => {
