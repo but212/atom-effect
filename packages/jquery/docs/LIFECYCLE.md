@@ -25,9 +25,9 @@ This document defines the expected behavior and cleanup timing for elements mana
 
 ## Cleanup Chain Logic
 
-1. **Explicit Patch (Fast-path)**: jQuery methods (`.remove()`, `.empty()`) trigger **synchronous** cleanup. Patches can be toggled via `$.initAEJ({ patch: ... })`.
-2. **Safety Net (Fallback)**: A global `MutationObserver` catches removals by native APIs. The root of this observer can be customized via `$.initAEJ({ autoCleanup: { root: myRoot } })`.
-3. **Hybrid Teardown**: `teardown()` stops observing the component's internal root immediately to release resources, while delegating the actual tree cleanup to the deferred registry to maintain move-safety.
+1. **Explicit Patch (Optimized path)**: jQuery methods (`.remove()`, `.empty()`) trigger **synchronous** cleanup. Patches can be toggled via `$.initAEJ({ patch: ... })`.
+2. **Fallback Mechanism**: A global `MutationObserver` catches removals by native APIs. The root of this observer can be customized via `$.initAEJ({ autoCleanup: { root: myRoot } })`.
+3. **Hybrid Teardown**: `teardown()` stops observing the component's internal root immediately to release resources, while delegating the tree cleanup to the deferred registry to maintain relocation stability.
 
 ## Global Configuration (`$.initAEJ`)
 

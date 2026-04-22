@@ -4,7 +4,7 @@ This document explains the internal mechanics of `@but212/atom-effect-jquery`. I
 
 ## 1. Overview
 
-The jQuery package is a **thin reactive binding layer** on top of `@but212/atom-effect` core. It does not reimplement any reactive primitives — it bridges them to the DOM via jQuery.
+The jQuery package is a **minimal reactive binding layer** on top of `@but212/atom-effect` core. It does not reimplement any reactive primitives — it bridges them to the DOM via jQuery.
 
 ```text
                  ┌───────────────────────────────────┐
@@ -46,16 +46,16 @@ $.fn.atomText(atom)
 
 - **Async Resolution**: Automatically handles `Promise` values from any source.
 - **Race Condition Protection**: Uses a monotonic `latestId` to ensure only the result of the most recent async operation is applied to the DOM.
-- **Zombie Prevention**: Automatically tracks disposal state via `registry.trackCleanup`, ensuring stale async results are discarded if the element is disconnected during resolution.
+- **Orphaned Result Prevention**: Automatically tracks disposal state via `registry.trackCleanup`, ensuring stale async results are discarded if the element is disconnected during resolution.
 - **Monomorphic Updates**: The runner ensures that updaters are consistently executed inside an `untracked` block to isolate reactive dependencies.
 
-This eliminates boilerplate across all binding types and ensures robust, memory-safe async behavior.
+This standardizes behavior across all binding types and ensures reliable, memory-safe async behavior.
 
 ### 2.2 DOM Engine
 
-`atomEachElement(jq, fn)` in `core/dom.ts` provides the base engine for all reactive bindings. The central iterator used by all chainable methods, it handles jQuery sets, filters for `HTMLElement` (skipping text/comment nodes), and provides optimized loops to minimize property lookups in hot paths.
+`atomEachElement(jq, fn)` in `core/dom.ts` provides the base engine for all reactive bindings. The central iterator used by all chainable methods, it handles jQuery sets, filters for `HTMLElement` (skipping text/comment nodes), and provides optimized loops to minimize property lookups in performance-critical paths.
 
-Internal binding handlers in `unified.ts` generally operate on native `HTMLElement` references to maximize performance, utilizing jQuery only when complex event delegation or multi-event management is required (e.g., in `bindEvents`).
+Internal binding handlers in `unified.ts` generally operate on native `HTMLElement` references to optimize performance, utilizing jQuery only when complex event delegation or multi-event management is required (e.g., in `bindEvents`).
 
 ### 2.3 Unified Binding (`atomBind`)
 
@@ -71,13 +71,13 @@ Each handler is a standalone function that receives the element and the reactive
 
 #### 2.3.1 Performance Optimizations in Bindings
 
-To achieve maximum performance during high-frequency updates (e.g., animations or rapid state changes), `unified.ts` implements several optimizations:
+To achieve optimal performance during high-frequency updates (e.g., animations or rapid state changes), `unified.ts` implements several optimizations:
 
 - **Metadata Caching**: Complex bindings like `atomClass`, `atomCss`, `atomAttr`, and `atomProp` pre-calculate metadata (e.g., camelCase property names, ARIA flags, URL-bearing status) during the initial registration. Map objects for these bindings are **hoisted outside the element iteration loop** to avoid redundant object allocations.
 - **Monomorphic Dispatch**: The internal `InputBinding` class specializes its `format` and `equal` logic at construction time. This removes branching and `instanceof` checks from the high-frequency `syncToDom` and `syncToAtom` paths.
-- **JS-Level Value Caching**: `bindHtml`, `bindClass`, `bindCss`, `bindProp`, and `bindAttr` maintain a local JS-side cache of the last written value. This avoids expensive DOM reads (like `el.innerHTML`) and redundant DOM writes (like `classList.add` or property assignments) when the reactive state hasn't meaningfully changed.
+- **JS-Level Value Caching**: `bindHtml`, `bindClass`, `bindCss`, `bindProp`, and `bindAttr` maintain a local JS-side cache of the last written value. This avoids resource-intensive DOM reads (like `el.innerHTML`) and redundant DOM writes (like `classList.add` or property assignments) when the reactive state hasn't changed significantly.
 - **Batched Map Updates**: `registerMapEffect` processes entire dictionaries of reactive values in a single effect, reducing the number of total `Effect` objects and improving subscription efficiency.
-- **Async Consolidation**: `registerMapEffect` uses `Promise.all` to synchronize multiple asynchronous dependencies within a map, ensuring the updater is called only when all new values have resolved. This prevents partial updates and flickering in complex bindings.
+- **Async Consolidation**: `registerMapEffect` uses `Promise.all` to synchronize multiple asynchronous dependencies within a map, ensuring the updater is called only when all new values have resolved. This prevents partial updates and visual inconsistency in complex bindings.
 
 ## 3. Lifecycle Management
 
@@ -92,11 +92,11 @@ Storage uses **WeakMap/WeakSet** to prevent memory leaks. The `BindingRecord` ob
 
 ### 3.2 Marker Class Optimization
 
-Bound elements receive a `_aes-bound` CSS class marker. This enables O(M) cleanup via `querySelectorAll('._aes-bound')` where M is the number of bound elements, instead of O(N) traversal of all descendants. `querySelectorAll` provides a **static NodeList snapshot**, which stabilizes the teardown loop against concurrent DOM removals and avoids the "unstable length" issues inherent in live collections like `HTMLCollection`. This approach is significantly faster than recursive tree traversal as it leverages the browser's internal selector engine.
+Bound elements receive a `_aes-bound` CSS class marker. This enables O(M) cleanup via `querySelectorAll('._aes-bound')` where M is the number of bound elements, instead of O(N) traversal of all descendants. `querySelectorAll` provides a **static NodeList snapshot**, which stabilizes the teardown loop against concurrent DOM removals and avoids the "unstable length" issues inherent in live collections like `HTMLCollection`. This approach is more efficient than recursive tree traversal as it leverages the browser's internal selector engine.
 
 ### 3.3 Auto-Cleanup via MutationObserver
 
-`enableAutoCleanup(root)` installs a `MutationObserver` on the specified `root` (Element, ShadowRoot, or DocumentFragment) that watches for removed nodes. For the global DOM, this is lazily initialized within the `BindingRegistry` upon registering the very first reactive binding. The logic is robust against early initialization; it performs a safety check for `document.body` and gracefully recovers if the binding occurs before the body is ready. Multiple roots can be observed concurrently (e.g., for micro-frontends).
+`enableAutoCleanup(root)` installs a `MutationObserver` on the specified `root` (Element, ShadowRoot, or DocumentFragment) that watches for removed nodes. For the global DOM, this is lazily initialized within the `BindingRegistry` upon registering the very first reactive binding. The logic is designed for reliable early initialization; it performs a safety check for `document.body` and automatically handles cases where the binding occurs before the body is ready. Multiple roots can be observed concurrently (e.g., for micro-frontends).
 
 #### 3.3.1 Move Robustness (Deferred Cleanup)
 
@@ -151,7 +151,7 @@ $btn.on('click', () => {
 
 ## 4. Two-Way Input Binding
 
-`applyInputBinding` (`input-binding.ts`) implements full-featured two-way binding:
+`applyInputBinding` (`input-binding.ts`) implements comprehensive two-way binding:
 
 ```text
 ┌──────────┐    input/change     ┌──────────┐
@@ -161,26 +161,27 @@ $btn.on('click', () => {
 └──────────┘    effect (Atom→DOM) └──────────┘
 ```
 
-The binding maintains closure references internally, but utilizes a strict teardown sequence during cleanup (`binding = null`) to proactively release objects for V8's garbage collector.
+The binding maintains closure references internally, but utilizes a strict teardown sequence during cleanup (`binding = null`) to explicitly release objects for V8's garbage collector.
 
 ### Features
 
 - **Strategy Specialization**: Uses `createStrategies` to select optimized `read`/`write`/`equal`/`format` logic at initialization. This avoids constant branching by assigning specialized functional strategies based on element type (e.g., standard inputs vs. `select[multiple]`).
-- **Cursor Preservation**: Focused text controls use a selection-range buffer during writes to prevent "jumping" when the atom value is updated externally.
+- **Cursor Preservation**: Focused text controls use a selection-range buffer during writes to prevent cursor shifting when the atom value is updated externally.
+
 - **Cycle Prevention**: A bitmask-based state gate (`Busy`, `SyncingToAtom`, `SyncingToDom`) ensures that state synchronization remains uni-directional at any given moment, preventing infinite loops.
 - **IME & Composition**: Gathers character entries during composition using `compositionstart`/`compositionend` events, deferring atom updates until strings are finalized.
 
 ## 5. List Reconciliation
 
-`atomList` (`bindings/list/`) renders reactive arrays using a high-performance **3-pass reconciliation** algorithm:
+`atomList` (`bindings/list/`) renders reactive arrays using an **optimized 3-pass reconciliation** algorithm:
 
 1. **Prefix Trimming**: Identifies and skips common items at the start of the list.
 2. **Suffix Trimming**: Identifies and skips common items at the end of the list.
 3. **Middle Diffing**: Reconciles the middle range that has changed.
    - Uses **Bitwise ItemState Flags** (`New`, `Existing`, `ForceReplace`, `Unchanged`) to track the lifecycle of each item in the new list.
    - Employs a **Key Mapping** strategy for O(1) item lookup during diffing.
-4. **Patching**: Synchronizes the DOM using a **greedy placement strategy** during a reverse traversal. It uses **pure DOM APIs** (`target.insertBefore`, `target.appendChild`) to bypass jQuery's internal overhead, ensuring O(N) performance for large datasets.
-5. **Fast Initial Render**: When possible (string output, no complex bindings), it uses `innerHTML` with bulk-sanitized fragments for the first render to maximize hydration speed.
+4. **Patching**: Synchronizes the DOM using a **greedy placement strategy** during a reverse traversal. It uses **standard DOM APIs** (`target.insertBefore`, `target.appendChild`) to bypass jQuery's internal overhead, ensuring O(N) performance for large datasets.
+5. **Fast Initial Render**: When possible (string output, no complex bindings), it uses `innerHTML` with bulk-sanitized fragments for the first render to optimize hydration speed.
 
 ### 5.1 Reconciliation Lifecycle
 
@@ -230,7 +231,7 @@ $el.atomMount((el, props) => {
 
 - **Automatic Cleanup**: Before mounting, it automatically calls `registry.cleanupTree(el)` to dispose of any existing component and its reactive bindings.
 - **Batched Execution**: The component function is executed within `batch()` and `untracked()`. This ensures that initial state setups are atomic (preventing intermediate DOM flushes) and that setup logic doesn't leak into parent reactive effects.
-- **Idempotency**: Double-unmount protection via `WeakMap.delete()` atomic guard.
+- **Idempotency**: Double-unmount protection via `WeakMap.delete()` guard.
 - **Error Isolation**: Cleanup errors and mounting errors are caught and logged as `[atom-mount]` without interrupting the rest of the application.
 
 ## 7. SPA Router
@@ -264,8 +265,9 @@ Every navigation follows a strict reactive pipeline:
 
 ### 7.4 Performance & Resilience
 
-- **Link Resolution Cache**: A `WeakMap` caches resolved route names for `<a>` and `[data-route]` elements, skipping repetitive URL parsing.
+- **Link Resolution Cache**: A `WeakMap` caches resolved route names for `<a>` and `[data-route]` elements, avoiding repetitive URL parsing.
 - **Stateless PathUtils**: All string manipulation (normalization, splitting) is centralized in a pure utility object.
+
 - **Asset Links**: The interception engine identifies and ignores links to files (containing dots) to prevent interference with standard downloads or external assets.
 
 ### 7.5 Mode Abstraction Logic
@@ -300,7 +302,7 @@ The library provides a specialized "Traffic Control" strategy to allow `$.atomNa
 
 ### 8.1 Lifecycle & Abort Logic
 
-To prevent memory leaks and "zombie" resolutions (where a request resolves but its reactive node was already disposed or superseded), `$.atomFetch` implements a strict lifecycle:
+To prevent memory leaks and orphaned resolutions (where a request resolves but its reactive node was already disposed or superseded), `$.atomFetch` implements a strict lifecycle:
 
 - **AbortController**: Each execution creates a new `AbortController`. The internal `cleanup` function links the signal to the `jqXHR.abort()` method.
 - **Auto-Cleanup**: Listeners on the `AbortSignal` are explicitly removed in a `finally` block.
@@ -313,19 +315,19 @@ To prevent memory leaks and "zombie" resolutions (where a request resolves but i
 - **Data Normalization**: Uses internal `toSettings` and `toError` helpers to ensure consistent behavior across different network conditions and jQuery versions.
 - **Network Error Normalization**: Standardizes `jqXHR` objects into standard `Error` instances, with specialized handling for `status 0` (timeouts/network failures).
 - **Hook Isolation**: The `onError` user hook is wrapped in a dedicated `try/catch` block. Exceptions thrown within the hook are logged to the console but do not re-throw, preventing user-defined logic from breaking the internal reactive update cycle.
-- **Abort Silence (Zero Flickering)**: Cancellations (via `AbortError`) are caught internally and re-thrown as a named error that the core reactive engine understands but ignores for state updates, preventing "Error Flickering" during rapid re-evaluations.
+- **Abort Silence (Transient Error Prevention)**: Cancellations (via `AbortError`) are caught internally and re-thrown as a named error that the core reactive engine understands but ignores for state updates, preventing transient error states during rapid re-evaluations.
 
 ## 9. Security
 
 The binding layer includes defensive measures against XSS and prototype pollution:
 
-- `bindHtml`: Sanitizes content via `sanitizeHtml()`. It uses a **multi-layered DOM-based Sanitizer** that employs a **walkAndScrub** strategy. It recursively cleans the DOM tree, transforming dangerous tags into inert `<span>` wrappers while preserving safe structure.
-- **DOM Clobbering Protection**: All element interactions are routed through `DOM_PROTOTYPE_BRIDGE`, which accesses properties and methods directly from `Element.prototype` and `Node.prototype` via descriptors. This prevents malicious HTML from "clobbering" instance properties to bypass security checks.
-- `bindAttr`: Blocks `on*` event handler attributes (collects them into a comma-separated `data-unsafe-attr` list) and dangerous URL protocols using a centralized matcher. This protection covers standard and SVG-specific attributes and includes individual URL monitoring for `srcset`. It also strips all whitespace and decodes entities BEFORE protocol matching.
-- `srcdoc` Protection: Specifically monitors `srcdoc` as a high-risk HTML sink, applying recursive sanitization checks via `REGEX_DANGEROUS_SNIFFER`.
-- `bindCss`: Blocks CSS values containing dangerous patterns. It strips CSS comments (`/* ... */`) before validation to prevent obfuscation bypasses and matches against an array of known threat patterns (`CSS_DANGER_PATTERNS`).
-- `bindProp`: Blocks dangerous properties (`innerHTML`, `outerHTML`) and prototype pollution vectors (`__proto__`, `constructor`, `prototype`).
-- **Sanitization Engine**: `sanitizeHtml` implementation uses a **Dumb Code, Smart Data** strategy: normalization (entity decoding with optional semicolon support), recursive tag transformation, and data-driven attribute/CSS neutralization.
+- `bindHtml`: Sanitizes content via `sanitizeHtml()`. It uses a **multi-layered DOM-based Sanitizer** that employs a **walkAndScrub** strategy. It recursively cleans the DOM tree, transforming untrusted tags into inert `<span>` wrappers while preserving safe structure.
+- **DOM Clobbering Protection**: All element interactions are routed through `DOM_PROTOTYPE_BRIDGE`, which accesses properties and methods directly from `Element.prototype` and `Node.prototype` via descriptors. This prevents untrusted HTML from shadowing instance properties to bypass security checks.
+- `bindAttr`: Blocks `on*` event handler attributes (collects them into a comma-separated `data-unsafe-attr` list) and untrusted URL protocols using a centralized matcher. This protection covers standard and SVG-specific attributes and includes individual URL monitoring for `srcset`. It also strips all whitespace and decodes entities BEFORE protocol matching.
+- `srcdoc` Protection: Specifically monitors `srcdoc` as a sensitive HTML sink, applying recursive sanitization checks.
+- `bindCss`: Blocks CSS values containing untrusted patterns. It strips CSS comments (`/* ... */`) before validation to prevent obfuscation bypasses and matches against an array of known threat patterns (`CSS_DANGER_PATTERNS`).
+- `bindProp`: Blocks untrusted properties (`innerHTML`, `outerHTML`) and prototype pollution vectors (`__proto__`, `constructor`, `prototype`).
+- **Sanitization Engine**: `sanitizeHtml` implementation uses a **Data-driven logic** strategy: normalization (entity decoding with optional semicolon support), recursive tag transformation, and data-driven attribute/CSS neutralization.
 
 These are **first-pass filters** using optimized regular expressions. For user-generated content, [DOMPurify](https://github.com/cure53/DOMPurify) is recommended. See the [Security Guide](./SECURITY.md) for integration patterns.
 
@@ -379,11 +381,11 @@ Unlike traditional PJAX libraries that rely on sequential event handlers, `$.ato
 
 ### 11.2 Memory & Race Condition Safety
 
-- **Automatic Unbinding**: To prevent memory leaks and state "shadowing", `$.atomNav` automatically calls `.atomUnbind()` on the target container's children before injecting new HTML.
+- **Automatic Unbinding**: To prevent memory leaks and state shadowing, `$.atomNav` automatically calls `.atomUnbind()` on the target container's children before injecting new HTML.
 - **Metadata Synchronization**: It automatically synchronizes `<title>`, and meta tags (`description`, `keywords`, `canonical`) from the response.
 - **Attribute Synchronization**: Container attributes (excluding `id`) are synchronized with the incoming fragment's attributes.
 - **Abort Protection**: Each navigation life-cycle is managed by an `AbortController`. Programmatic navigations and `popstate` events trigger a new signal, automatically cancelling stale requests and pending hooks.
-- **Phase Transitions**: Navigation is broken down into fast-paths. External origins hand off to the browser. Navigating to the exact same location is ignored to prevent hook freezes. Hash-only transitions bypass AJAX hooks entirely for immediate performance.
+- **Phase Transitions**: Navigation is broken down into optimized paths. External origins hand off to the browser. Navigating to the exact same location is ignored to prevent hook freezes. Hash-only transitions bypass AJAX hooks entirely for immediate performance.
 - **Redirect Support**: Respects `X-PJAX-URL` headers for server-side redirects, updating the browser history and reactive state accordingly.
 
 ### 11.3 Lifecycle Hooks
@@ -403,13 +405,13 @@ All internal state records (e.g., `BindingRecord`, `InputBinding`) are initializ
 By moving from binary buffers and manual pooling to a simplified 3-pass algorithm, `atomList` leverages modern JS engine optimizations (V8's Map and Array optimizations) for reconciliation. This reduces architectural complexity while maintaining high performance.
 
 - **Sanitization Engine**: `sanitizeHtml` implementation uses a data-driven strategy: normalization (entity decoding, control stripping), recursive tag transformation to inert `<span>` elements, and protocol/CSS neutralization.
-- **Robust Equality**: `shallowEqual` uses `Object.keys()` and `Object.is()` for reliable comparison, correctly handling `NaN` and edge cases while maintaining an efficient linear scan.
+- **Equality Checks**: `shallowEqual` uses `Object.keys()` and `Object.is()` for reliable comparison, correctly handling `NaN` and edge cases while maintaining an efficient linear scan.
 
 ## 13. CPU Branch Prediction Optimizations
 
-To achieve zero-overhead reactive updates, the library implements several techniques to maximize **Pipeline Efficiency** by reducing branch mispredictions in the hot-path.
+To achieve minimal-overhead reactive updates, the library implements several techniques to maximize **Pipeline Efficiency** by reducing branch mispredictions in performance-critical paths.
 
-### 13.1 Zero-Overhead Debugging
+### 13.1 Minimal-Overhead Debugging
 
 The library implements a simplified debugging subsystem that minimizes overhead when disabled.
 
@@ -433,7 +435,7 @@ Two-way input bindings often branch based on element type (Text vs. Select-Multi
 - **Functional Equality**: Encapsulates functional equality checks directly into the specialized `equal` strategy, providing a single, predictable execution path.
 - **Bitmask Guards**: Uses the `Busy` mask (Composing | SyncingToAtom | SyncingToDom) for constant-time synchronization gates.
 
-This ensures the updater function's control flow remains identical for a given element type, allowing the CPU to perfectly predict the execution path.
+This ensures the updater function's control flow remains identical for a given element type, allowing the CPU to effectively predict the execution path.
 
 ### 13.4 Static Snapshot for Registry Cleanup
 
@@ -466,7 +468,7 @@ The `DebugController` (`utils/debug.ts`) provides visual feedback for DOM update
 To provide immediate visual feedback during reactive updates, the controller applies a temporary outline highlight to the target element.
 
 - **Non-blocking Rendering**: Highlights are applied using `requestAnimationFrame` to ensure they don't block the reactive update cycle.
-- **Robustness**: Uses a `WeakMap` for `rafs` and `timers` to track active animations per element. This prevents overlapping highlights from leaking and ensures that existing timers are cancelled if a new change occurs.
+- **Reliability**: Uses a `WeakMap` for `rafs` and `timers` to track active animations per element. This prevents overlapping highlights from leaking and ensures that existing timers are cancelled if a new change occurs.
 - **Highlight Persistence**: The cleanup logic explicitly removes the highlight class even if an element is disconnected from the DOM before the timeout, preventing accidental persistence.
 - **Smooth Fade-out**: To fix abrupt transitions when the highlight class is removed, the CSS `transition` is attached to a persistent attribute selector (`[data-atom-debug]`). The highlight class itself is purely additive, enabling a graceful exit transition handled by the browser's CSS engine.
 - **Dynamic Style Injection**: Injects necessary CSS exactly once into the document head, with checks for existing style markers to avoid duplication.

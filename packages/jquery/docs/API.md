@@ -63,7 +63,7 @@ The library automatically extends the global `jQuery` (or `$`) object. Methods l
 
 ### `.atomBind(bindings)`
 
-The preferred way to apply multiple bindings at once. This method uses a **task-based loop strategy** to minimize overhead, ensuring efficient invocation even for complex binding maps by pre-filtering active tasks before iterating over elements.
+The recommended method to apply multiple bindings at once. This method uses a **task-based loop strategy** to optimize overhead, ensuring efficient invocation even for complex binding maps by pre-filtering active tasks before iterating over elements.
 
 ```javascript
 $('.user-card').atomBind({
@@ -104,15 +104,15 @@ $el.atomBind({ text: [count, c => `Count: ${c}`] });
 Updates `innerHTML`.
 
 > **🛡️ Security Note**:
-> This method uses a **multi-layered DOM-based Sanitizer** (via inert `<template>`) for maximum reliability. It uses a **recursive tree-walker** that transforms dangerous tags (`<script>`, `<iframe>`, etc.) into inert `<span>` wrappers while stripping `on*` attributes and dangerous protocols (`javascript:`, `data:`, etc.).
+> This method uses a **multi-layered DOM-based Sanitizer** (via inert `<template>`) for optimal reliability. It uses a **recursive tree-walker** that transforms untrusted tags (`<script>`, `<iframe>`, etc.) into inert `<span>` wrappers while stripping `on*` attributes and untrusted protocols (`javascript:`, `data:`, etc.).
 >
 > **Key Security Features**:
 >
-> - **DOM Clobbering Protection**: Uses prototype-level descriptors to prevent malicious inputs from shadowing internal element properties.
+> - **DOM Clobbering Protection**: Uses prototype-level descriptors to prevent untrusted inputs from shadowing internal element properties.
 > - **Immediate Scrubbing**: All attributes from transformed nodes (e.g., `<script onerror=...>` → `<span data-unsafe-attr=...>`) are immediately processed.
-> - **Recursive Trust**: Automatically cleanses nested contexts including `<template>` content and `srcdoc` sinks.
+> - **Recursive Validation**: Automatically cleanses nested contexts including `<template>` content and `srcdoc` sinks.
 >
-> While highly efficient, [DOMPurify](https://github.com/cure53/DOMPurify) is recommended for complex, user-generated content to ensure maximum security.
+> While highly efficient, [DOMPurify](https://github.com/cure53/DOMPurify) is recommended for complex, user-generated content to ensure optimal security.
 > See the [Security Guide](./SECURITY.md) for details.
 >
 > ```javascript
@@ -146,8 +146,8 @@ $('.box').atomCss('width', widthAtom, 'px'); // Outputs e.g. "120px"
 
 Updates an HTML attribute.
 
-- **Security Guards**: Automatically blocks `on*` event handlers and dangerous protocols (`javascript:`, `vbscript:`, etc.) to prevent injection. This protection extends to SVG attributes like `fill`, `filter`, and `mask` which may contain `url(javascript:...)` patterns.
-- **HTML Sinks**: Specifically monitors and sanitizes dangerous HTML sinks like `srcdoc`.
+- **Security Guards**: Automatically blocks `on*` event handlers and untrusted protocols (`javascript:`, `vbscript:`, etc.) to prevent injection. This protection extends to SVG attributes like `fill`, `filter`, and `mask` which may contain `url(javascript:...)` patterns.
+- **HTML Sinks**: Specifically monitors and sanitizes sensitive HTML sinks like `srcdoc`.
 - **Constraints**: Accepts `PrimitiveValue` (string, number, boolean, null, undefined).
 - **WAI-ARIA**: Boolean `false` is preserved as the string `"false"` for `aria-*` attributes (e.g., `aria-expanded="false"`), not removed. Other attributes treat `false` as removal.
 
@@ -160,7 +160,7 @@ $('img').atomAttr('src', imageUrl);
 Updates a DOM property (e.g., `checked`, `disabled`, `value`).
 
 - **Flexible**: Employs `unknown` instead of `any` to satisfy strict linting while maintaining 100% flexibility for heterogeneous property types.
-- **Security**: Directly blocks dangerous properties (`innerHTML`, `outerHTML`, `srcdoc`) and prototype pollution vectors (`__proto__`, `constructor`, `prototype`) through a unified security subsystem.
+- **Security**: Directly blocks sensitive properties (`innerHTML`, `outerHTML`, `srcdoc`) and prototype pollution vectors (`__proto__`, `constructor`, `prototype`) through a unified security subsystem.
 
 ```javascript
 $('input').atomProp('disabled', shouldDisable);
@@ -213,11 +213,11 @@ $('ul').atomList(usersAtom, {
 
 ### Internal Performance Note
 
-The `atomList` synchronization engine uses a **greedy placement strategy** combined with native DOM APIs (`insertBefore`, `appendChild`) for structural updates. This bypasses jQuery's internal overhead (script scanning, context normalization) during the rendering hot path, ensuring O(N) performance even for lists with thousands of items.
+The `atomList` synchronization engine uses a **greedy placement strategy** combined with native DOM APIs (`insertBefore`, `appendChild`) for structural updates. This bypasses jQuery's internal overhead (script scanning, context normalization) during the rendering performance-critical path, ensuring O(N) performance even for lists with thousands of items.
 
 #### Memory & Async Safety
 
-All reactive bindings (`atomBind`, `atomText`, etc.) include built-in **Zombie Prevention**. This ensures that asynchronous updates (promises) are automatically discarded if the element is disconnected from the DOM before the resolution completes. Additionally, the library ensures zero memory leaks even in highly dynamic states through its internal registry. `atomBind` (via `registerMapEffect`) also optimizes multi-promise maps by synchronizing multiple asynchronous dependencies, preventing partial updates and flickering during complex state transitions.
+All reactive bindings (`atomBind`, `atomText`, etc.) include built-in **Memory Safety**. This ensures that asynchronous updates (promises) are automatically discarded if the element is disconnected from the DOM before the resolution completes. Additionally, the library ensures minimal memory footprint even in highly dynamic states through its internal registry. `atomBind` (via `registerMapEffect`) also optimizes multi-promise maps by synchronizing multiple asynchronous dependencies, preventing partial updates and visual inconsistency during complex state transitions.
 
 ---
 
@@ -476,7 +476,7 @@ All lens functions are now officially part of `@but212/atom-effect` (Core) and r
 
 ### `$.atomLens(atom, path)`
 
-Creates a two-way reactive "lens" for a specific property path on an object-based atom. This "fake" atom allows fine-grained binding to deep properties of a monolithic state atom without extra memory or complex computed logic.
+Creates a two-way reactive "virtual lens" for a specific property path on an object-based atom. This virtual atom allows fine-grained binding to deep properties of a monolithic state atom without extra memory or complex computed logic.
 
 - **atom**: The source `WritableAtom` containing an object.
 - **path**: Dot-separated string path (e.g., `'profile.settings.theme'`).
@@ -788,4 +788,4 @@ When enabled:
 
 - **Console Logs**: Every DOM update is logged with its selector (e.g., `[atom-binding] DOM updated: div#app.main.text = value`).
 - **Visual Highlighting**: Updated elements are temporarily outlined with a red border. This highlight uses a non-blocking `requestAnimationFrame` loop and is automatically cleaned up after a short duration, even if the element is removed from the DOM.
-- **Selector Precision**: Logs use a precise `tag#id.class` format (including SVG support) to help you identify the exact source of a change.
+- **Selector Precision**: Logs use a precise `tag#id.class` format (including SVG support) to help you identify the source of a change.

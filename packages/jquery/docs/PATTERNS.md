@@ -56,7 +56,7 @@ $('#username').atomText(userName);
 
 ## 2. Modals & Dialogs
 
-Don't manually `fadeIn`/`fadeOut` in your business logic. Bind visibility to state.
+Avoid manual `fadeIn`/`fadeOut` in business logic. Bind visibility to state.
 
 ```javascript
 const isModalOpen = $.atom(false);
@@ -68,7 +68,7 @@ $('#close-btn, .modal-backdrop').on('click', () => isModalOpen.value = false);
 // Binding - Declarative
 $('.modal').atomBind({
     class: { 'open': isModalOpen },
-    // If you need animation, use an effect instead of simple class binding
+    // For advanced animations, consider an effect instead of a basic class binding
     show: isModalOpen
 });
 
@@ -103,7 +103,7 @@ $.effect(() => document.title = pageTitle.value);
 
 ### History Mode (pushState)
 
-For clean URLs without `#`:
+For standardized URLs without `#`:
 
 ```javascript
 const router = $.route({
@@ -154,7 +154,7 @@ $.route({
 
 ## 4. Legacy Plugins (Select2, Datepicker)
 
-Integrating with plugins that don't trigger standard `input` events requires a manual bridge.
+Integrating with plugins that do not emit standard `input` events involves creating a manual bridge.
 
 ```javascript
 const selectedTag = $.atom('react');
@@ -181,7 +181,7 @@ $select.on('change', (e) => {
 
 ## 5. Synchronous Flushing with `$.batch`
 
-By default, atom notifications are deferred to a **microtask**. Multiple synchronous writes are automatically coalesced — effects run once with the final values, in the next tick.
+By default, atom notifications are deferred to a **microtask**. Multiple synchronous writes are automatically coalesced — effects are executed once using the final state in the subsequent tick.
 
 ```javascript
 firstName.value = 'Alice';
@@ -189,7 +189,7 @@ lastName.value = 'Smith';
 // Effects run once, asynchronously (next microtask)
 ```
 
-If you need to wait for these asynchronous updates without forcing a synchronous flush, use `$.nextTick()`:
+If you need to await these asynchronous updates without requiring a synchronous flush, use `$.nextTick()`:
 
 ```javascript
 firstName.value = 'Alice';
@@ -238,7 +238,7 @@ $('#tags-multi').atomVal(selectedTags);
 
 ## 7. Reactive Lists
 
-Use `atomList` for efficient keyed list rendering. It uses LIS-based diffing to minimize DOM operations.
+Use `atomList` for optimized keyed list rendering. It uses LIS-based diffing to optimize DOM operations.
 
 ```javascript
 const users = $.atom([
@@ -266,8 +266,8 @@ $('ul').atomList(users, {
 | - | - | - |
 | Listeners registered | 1 per event type (on container) | 1 per item per event type |
 | Item data access | Provided directly as argument | Captured via closure |
-| Reorder / update cost | Zero — listener stays on container | Zero — listener stays on element |
-| Best for | Click, dblclick, input, etc. | Reactive atom bindings (`atomText`, `atomClass`, …) |
+| Reorder / update cost | Minimal — listener remains on the container | Minimal — listener remains on the element |
+| Recommended for | Click, dblclick, input, etc. | Reactive atom bindings (`atomText`, `atomClass`, …) |
 
 Use `bind` when you need to attach **reactive bindings** to an item's internals. Use `events` for **DOM event handlers**.
 

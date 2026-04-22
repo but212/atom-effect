@@ -8,7 +8,7 @@ Creates a mutable state container. Atoms are the leaf nodes of your dependency g
 
 ### When to use - atom
 
-- **Store source of truth:** User inputs, server data, configuration.
+- **Primary state management:** User inputs, server data, configuration.
 - **Avoid:** Storing derived data (use `computed` instead).
 
 ### Example - atom
@@ -38,12 +38,12 @@ console.log(counter.peek());
 
 Creates a derived signal that updates automatically when its dependencies change.
 
-### Why it's special - computed
+### Key Characteristics - computed
 
 - **Lazy**: Only recalculates when read or when needed by an active effect.
 - **Cached**: Returns the cached value if dependencies haven't changed.
-- **Async-Aware**: Natively handles Promises.
-- **Ultra-High Performance**: Uses an allocation-optimized `DepSlotBuffer` with size duality and $O(1)$ slot reuse for zero-allocation dependency churn and mega-node scalability.
+- **Asynchronous Support**: Natively handles Promises.
+- **Optimized Performance**: Uses an allocation-optimized `DepSlotBuffer` with size duality and $O(1)$ slot reuse for minimal-allocation dependency management and large-scale node scalability.
 
 ### Synchronous Example - computed
 
@@ -241,7 +241,7 @@ console.log(title);
 
 ## `untracked<T>(fn: () => T): T`
 
-Runs a function without tracking dependencies. Any `.value` reads inside the callback are invisible to the enclosing `effect` or `computed`. Optimized with a zero-overhead fast-path for nested untracked calls.
+Runs a function without tracking dependencies. Any `.value` reads inside the callback are implicit to the enclosing `effect` or `computed`. Optimized with a minimal-overhead path for nested untracked calls.
 
 ### When to use - untracked
 
@@ -344,7 +344,7 @@ Lenses provide a type-safe way to create two-way reactive "views" into part of a
 
 ### `atomLens<T, P>(atom: WritableAtom<T>, path: P): WritableAtom<PathValue<T, P>>`
 
-Creates a writable "fake" atom that points to a specific dot-path within a source atom.
+Creates a writable virtual atom that points to a specific dot-path within a source atom.
 
 - **Structural Sharing**: Writing to a lens only clones objects along the modified path. Unrelated branches stay reference-equal (`===`).
 - **Equality Guard**: If the new value is identical to the current one (via `Object.is`), the parent atom is not updated, preventing redundant effect propagation.
@@ -394,7 +394,7 @@ The core structural sharing engine. Recursively creates a new object tree, cloni
 
 ## `debug` Utilities
 
-The `debug` object provides several utilities for troubleshooting and inspecting the reactive graph. In production builds, these utilities are swapped for zero-overhead no-op functions unless explicitly enabled.
+The `debug` object provides several utilities for troubleshooting and inspecting the reactive graph. In production builds, these utilities are swapped for minimal-overhead no-op functions unless explicitly enabled.
 
 ### `debug.dumpGraph()`
 
@@ -416,7 +416,7 @@ Retrieves the debug name and type metadata attached to a reactive node.
 
 ## Global Debug Toggle
 
-Even in production-mode builds, you can enable debug features at runtime. Because the library swaps the debug implementation at load time for zero-overhead performance, the global flag must be set **before** the library script evaluates.
+Even in production-mode builds, you can enable debug features at runtime. Because the library swaps the debug implementation at load time for optimized performance, the global flag must be set **before** the library script evaluates.
 
 You can accomplish this by either setting it in your HTML `<head>`, or by using `sessionStorage` and refreshing the page (which is evaluated when resolving the initial state):
 
@@ -428,4 +428,4 @@ window.__ATOM_DEBUG__ = true;
 sessionStorage.setItem('__ATOM_DEBUG__', 'true');
 ```
 
-This bypasses the `ProdDebugController` no-op implementation and activates full tracking and logging features.
+This overrides the `ProdDebugController` no-op implementation and activates full tracking and logging features.
