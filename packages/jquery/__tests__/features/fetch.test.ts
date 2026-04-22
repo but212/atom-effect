@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import $ from '@/index';
-import type { FetchError } from '@/types';
+import $, { type FetchError } from '@/index';
 
 /**
  * Integration Suite: $.atomFetch

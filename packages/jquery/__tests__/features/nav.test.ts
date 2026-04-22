@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import $ from '@/index';
-import type { AtomNav, AtomNavOptions } from '@/types';
+import $, { type AtomNav, type AtomNavOptions } from '@/index';
 
 /**
  * $.atomNav Specification Tests

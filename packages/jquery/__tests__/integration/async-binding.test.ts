@@ -1,6 +1,5 @@
-import $ from 'jquery';
 import { describe, expect, it, vi } from 'vitest';
-import '@/index';
+import $ from '@/index';
 
 describe('Async Binding Integration', () => {
   it('atomText: should automatically resolve Promise and update DOM', async () => {

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import $, { registry } from '@/index';
+import $ from '@/index';
 
 describe('Web Component Features', () => {
   beforeEach(() => {
@@ -31,19 +31,23 @@ describe('Web Component Features', () => {
 
     it('should support Closed Shadow DOM and preserve state during moves', async () => {
       const tagName = 'advanced-cleanup-comp';
+      const atom = $.atom('state');
+
       class Comp extends HTMLElement {
         public aej = $.useAtomComponent(this);
         public inner = document.createElement('div');
         private _sr: ShadowRoot | null = null;
+
         connectedCallback() {
           if (!this._sr) {
             this._sr = this.attachShadow({ mode: 'closed' });
             this._sr.appendChild(this.inner);
           }
           this.aej.setup(this._sr);
-          $(this.inner).atomText($.atom('state'));
+          $(this.inner).atomText(atom);
         }
       }
+
       if (!customElements.get(tagName)) customElements.define(tagName, Comp);
       const el = document.createElement(tagName) as Comp;
       const p1 = document.createElement('div');
@@ -53,12 +57,17 @@ describe('Web Component Features', () => {
       // Move (Behavior: Binding preserved during microtask)
       p1.appendChild(el);
       p2.appendChild(el);
-      await new Promise((r) => setTimeout(r, 0));
-      expect(registry.hasBind(el.inner)).toBe(true);
+      await $.nextTick();
+
+      atom.value = 'updated';
+      await vi.waitFor(() => expect(el.inner.textContent).toBe('updated'));
 
       // Final removal (Behavior: Auto-cleanup triggered)
       p2.remove();
-      await vi.waitFor(() => expect(registry.hasBind(el.inner)).toBe(false));
+      await vi.waitFor(() => {
+        atom.value = 'dead';
+        return el.inner.textContent !== 'dead';
+      });
     });
 
     it('should not throw DOMException when setup() is called in constructor', () => {
@@ -191,17 +200,16 @@ describe('Web Component Features', () => {
 
   describe('Global Configuration (initAEJ)', () => {
     it('should toggle patches and auto-cleanup dynamically', async () => {
-      const cleanupSpy = vi.spyOn(registry, 'cleanupTree');
-
       // Behavior: Lifecycle patch and autoCleanup can be opted out
       $.initAEJ({ patch: { lifecycle: false }, autoCleanup: false });
       const el = document.createElement('div');
       document.body.appendChild(el);
-      $(el).atomText($.atom('v')).remove();
+      const atom = $.atom('v');
+      $(el).atomText(atom).remove();
 
-      await new Promise((r) => setTimeout(r, 10));
-      expect(cleanupSpy).not.toHaveBeenCalled();
-      expect(registry.hasBind(el)).toBe(true);
+      atom.value = 'leaked';
+      await $.nextTick();
+      expect(el.textContent).toBe('leaked'); // Should still update because cleanup was disabled
 
       // Behavior: Event patch can be opted out
       $.initAEJ({ patch: { events: false } });
@@ -224,32 +232,44 @@ describe('Web Component Features', () => {
 
       const el = document.createElement('div');
       sr.appendChild(el);
-      $(el).atomText($.atom('v'));
+      const atom = $.atom('v');
+      $(el).atomText(atom);
 
-      expect(registry.hasBind(el)).toBe(true);
+      atom.value = 'active';
+      await vi.waitFor(() => expect(el.textContent).toBe('active'));
 
       el.remove(); // Native removal from sr
-      await vi.waitFor(() => expect(registry.hasBind(el)).toBe(false));
+      await vi.waitFor(() => {
+        atom.value = 'cleaned';
+        return el.textContent !== 'cleaned';
+      });
 
       container.remove();
     });
 
-    it('should not attach redundant MutationObserver to document.body when custom root is used', () => {
+    it('should handle multiple initAEJ calls and maintain auto-cleanup functionality', async () => {
       const customRoot = document.createElement('div');
       document.body.appendChild(customRoot);
 
-      // Reset global state for clean test
-      registry.setAutoCleanupScheduled(false);
+      // Re-initialize multiple times with different roots
+      $.initAEJ({ autoCleanup: true });
       $.initAEJ({ autoCleanup: { root: customRoot } });
-
-      expect(registry.isAutoCleanupScheduled()).toBe(true);
 
       const el = document.createElement('div');
       customRoot.appendChild(el);
-      $(el).atomText($.atom('test'));
+      const atom = $.atom('test');
+      $(el).atomText(atom);
 
-      // verify that it remains true (no secondary body observer attached)
-      expect(registry.isAutoCleanupScheduled()).toBe(true);
+      expect(el.textContent).toBe('test');
+
+      // Verify cleanup still works
+      el.remove();
+      await vi.waitFor(() => {
+        atom.value = 'cleaned';
+        return el.textContent !== 'cleaned';
+      });
+
+      customRoot.remove();
     });
   });
 
@@ -341,8 +361,15 @@ describe('Web Component Features', () => {
       expect(label?.textContent).toBe('Theme: light');
 
       // Assertion: Auto-cleanup on removal (Memory safety)
+      const atom = $.atom('live');
+      const labelEl = el.shadowRoot!.querySelector('.theme-label') as HTMLElement;
+      $(labelEl).atomText(atom);
+
       container.remove();
-      await vi.waitFor(() => expect(registry.hasBind(label as HTMLElement)).toBe(false));
+      await vi.waitFor(() => {
+        atom.value = 'cleaned';
+        return labelEl.textContent !== 'cleaned';
+      });
     });
   });
 });

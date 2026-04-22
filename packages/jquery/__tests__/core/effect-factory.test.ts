@@ -1,7 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { registerMapEffect, registerReactiveEffect } from '@/core/effect-factory';
 import $ from '@/index';
-import { debug } from '@/utils/debug';
 
 describe('Effect Factory', () => {
   /**
@@ -10,29 +8,24 @@ describe('Effect Factory', () => {
    */
   it('Consistency: handles immediate sync and reactive updates for both single and map effects', async () => {
     const el = document.createElement('div');
-    const updater = vi.fn();
     const atomValue = $.atom('initial');
     const atomMap = $.atom(10);
 
-    // Single source
-    registerReactiveEffect(el, atomValue, updater, 'text-reactive');
-    expect(updater).toHaveBeenCalledWith('initial');
+    // Single source via public API
+    $(el).atomText(atomValue);
+    expect(el.textContent).toBe('initial');
     atomValue.value = 'updated';
     await $.nextTick();
-    expect(updater).toHaveBeenCalledWith('updated');
+    expect(el.textContent).toBe('updated');
 
-    // Map source
-    updater.mockClear();
-    registerMapEffect<string | number>(
-      el,
-      { count: atomMap, static: 'val' },
-      updater,
-      'map-reactive'
-    );
-    expect(updater).toHaveBeenCalledWith({ count: 10, static: 'val' });
+    // Map source via public API
+    $(el).atomBind({
+      text: $.computed(() => `Count: ${atomMap.value}, Static: val`),
+    });
+    expect(el.textContent).toBe('Count: 10, Static: val');
     atomMap.value = 20;
     await $.nextTick();
-    expect(updater).toHaveBeenCalledWith({ count: 20, static: 'val' });
+    expect(el.textContent).toBe('Count: 20, Static: val');
   });
 
   /**
@@ -42,29 +35,26 @@ describe('Effect Factory', () => {
   describe('Asynchronous Operations', () => {
     it('verifies Promise resolution and prevents stale instance updates', async () => {
       const el = document.createElement('div');
-      const updater = vi.fn();
       const p1 = Promise.resolve('old');
       const atom = $.atom<Promise<string> | string>(p1);
 
-      registerMapEffect(el, { p: atom }, updater, 'async-test');
+      $(el).atomText(atom);
 
       // Initial resolution
-      await vi.waitFor(() => expect(updater).toHaveBeenCalledWith({ p: 'old' }));
-      updater.mockClear();
+      await vi.waitFor(() => expect(el.textContent).toBe('old'));
 
       // New Promise instance
       const p2 = Promise.resolve('new');
       atom.value = p2;
-      await $.nextTick();
-      await vi.waitFor(() => expect(updater).toHaveBeenCalledWith({ p: 'new' }));
+      await vi.waitFor(() => expect(el.textContent).toBe('new'));
     });
 
     it('Error Handling: reports promise rejections to the debug module', async () => {
       const error = new Error('async-fail');
       const rej = Promise.reject(error);
-      const errorSpy = vi.spyOn(debug, 'error').mockImplementation(() => {});
+      const errorSpy = vi.spyOn($.debug, 'error').mockImplementation(() => {});
 
-      registerReactiveEffect(document.createElement('div'), rej, vi.fn(), 'err-test');
+      $(document.createElement('div')).atomText(rej);
 
       await $.nextTick();
       expect(errorSpy).toHaveBeenCalledWith(expect.anything(), expect.anything(), error);
@@ -80,15 +70,17 @@ describe('Effect Factory', () => {
   it('Memory Safety: prevents zombie updates for both reactive and static async sources', async () => {
     const el = document.createElement('div');
     document.body.appendChild(el);
-    const updater = vi.fn();
 
     // Case A: Reactive Source
     const atom = $.atom('initial');
-    registerReactiveEffect(el, atom, updater, 'reactive-zombie');
-    atom.value = 'discarded';
+    $(el).atomText(atom);
+
     document.body.removeChild(el); // Immediate disconnect
     await $.nextTick();
-    expect(updater).not.toHaveBeenCalledWith('discarded');
+
+    atom.value = 'discarded';
+    await $.nextTick();
+    expect(el.textContent).not.toBe('discarded');
 
     // Case B: Static Promise Source
     const { promise, resolve } = (() => {
@@ -99,13 +91,13 @@ describe('Effect Factory', () => {
       return { promise: p, resolve: r! };
     })();
 
-    document.body.appendChild(el);
-    updater.mockClear();
-    registerReactiveEffect(el, promise, updater, 'static-zombie');
-    document.body.removeChild(el); // Disconnect before resolution
+    const el2 = document.createElement('div');
+    document.body.appendChild(el2);
+    $(el2).atomText(promise);
+    document.body.removeChild(el2); // Disconnect before resolution
 
     resolve('resolved');
     await $.nextTick();
-    expect(updater).not.toHaveBeenCalled();
+    expect(el2.textContent).not.toBe('resolved');
   });
 });

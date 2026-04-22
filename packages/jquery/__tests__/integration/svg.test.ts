@@ -1,6 +1,5 @@
-import $ from 'jquery';
 import { describe, expect, it } from 'vitest';
-import '@/index';
+import $ from '@/index';
 
 describe('SVG Support', () => {
   it('should handle SVG attributes correctly', async () => {

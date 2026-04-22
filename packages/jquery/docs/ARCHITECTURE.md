@@ -96,11 +96,11 @@ Bound elements receive a `_aes-bound` CSS class marker. This enables O(M) cleanu
 
 ### 3.3 Auto-Cleanup via MutationObserver
 
-`enableAutoCleanup(root)` installs a `MutationObserver` on the specified `root` (Element, ShadowRoot, or DocumentFragment) that watches for removed nodes. For the global DOM, this is lazily initialized via `ensureAutoCleanup()` upon registering the very first reactive binding. The logic is robust against early initialization; it performs a safety check for `document.body` and gracefully recovers if the binding occurs before the body is ready. Multiple roots can be observed concurrently (e.g., for micro-frontends).
+`enableAutoCleanup(root)` installs a `MutationObserver` on the specified `root` (Element, ShadowRoot, or DocumentFragment) that watches for removed nodes. For the global DOM, this is lazily initialized within the `BindingRegistry` upon registering the very first reactive binding. The logic is robust against early initialization; it performs a safety check for `document.body` and gracefully recovers if the binding occurs before the body is ready. Multiple roots can be observed concurrently (e.g., for micro-frontends).
 
 #### 3.3.1 Move Robustness (Deferred Cleanup)
 
-To support synchronous DOM moves (e.g., `parent2.appendChild(el)`), the library implements **Deferred Cleanup** via `registry.deferredCleanup(node)`.
+To support synchronous DOM moves (e.g., `parent2.appendChild(el)`), the library implements **Deferred Cleanup** via `registry.deferCleanup(node)`.
 
 - When an element is disconnected, it is marked as "ignored" and a cleanup task is queued as a **microtask**.
 - If the element is re-connected before the microtask runs, the cleanup is cancelled.

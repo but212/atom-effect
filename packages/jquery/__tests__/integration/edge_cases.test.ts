@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 import $ from '@/index';
-import { debug } from '@/utils/debug';
 
 describe('Atom List Edge Cases', () => {
   it('should visually collapse items with duplicate keys', async () => {
@@ -8,8 +7,8 @@ describe('Atom List Edge Cases', () => {
     // distinct failure mode to document.
 
     // Enable debug mode to capture warning
-    const originalDebug = debug.enabled;
-    debug.enabled = true;
+    const originalDebug = $.debug.enabled;
+    $.debug.enabled = true;
 
     try {
       const items = $.atom([
@@ -40,7 +39,7 @@ describe('Atom List Edge Cases', () => {
       consoleWarnSpy.mockRestore();
       $container.remove();
     } finally {
-      debug.enabled = originalDebug;
+      $.debug.enabled = originalDebug;
     }
   });
 
