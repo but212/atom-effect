@@ -24,9 +24,8 @@
 
 #### Changed
 
-- **Dependency Injection (DI)**: Re-implemented DI resolution using composed tree traversal instead of event bubbling, ensuring 100% reliability across nested Shadow DOM boundaries and improving resolution performance.
+- **Dependency Injection (DI)**: Re-implemented resolution using composed tree traversal for 100% Shadow DOM reliability, and moved the injection cache from a global `WeakMap` to node-local `AEJState` for better data locality and lifecycle alignment.
 - **Internal Architecture**: Consolidated node state into a private `AEJ_STATE` symbol, reducing DOM pollution and preventing interference with other libraries.
-- **Dependency Injection (DI)**: Moved the injection cache from a global `WeakMap` to node-local `AEJState` for better data locality and lifecycle alignment.
 - **Memory Management**: Overhauled the auto-cleanup engine to support multiple roots and explicit opt-out via `initAEJ`.
 
 #### Fixed
