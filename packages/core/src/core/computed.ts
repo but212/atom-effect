@@ -156,7 +156,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     if ((flags & (DIRTY | IDLE)) !== 0) {
       const dependencies = this._deps;
       const shouldRecompute =
-        (flags & (IDLE | FORCE_COMPUTE)) !== 0 || dependencies.size === 0 || this._isDirty();
+        (flags & (IDLE | FORCE_COMPUTE)) !== 0 || dependencies.length === 0 || this._isDirty();
 
       if (!shouldRecompute) {
         this.flags &= ~DIRTY;
@@ -218,10 +218,8 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     if (!dependencies.hasComputeds) return false;
 
     return untracked(() => {
-      const size = dependencies.size;
-      for (let i = 0; i < size; i++) {
-        const link = dependencies.getAt(i);
-        if (link?.node.hasError) return true;
+      for (const link of dependencies) {
+        if (link.node.hasError) return true;
       }
       return false;
     });
@@ -255,11 +253,9 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     if (selfError !== null) collected.push(selfError);
 
     untracked(() => {
-      const size = dependencies.size;
-      for (let i = 0; i < size; i++) {
-        const link = dependencies.getAt(i);
-        const dependencyNode = link?.node;
-        if (dependencyNode !== undefined && (dependencyNode.flags & IS_COMPUTED) !== 0) {
+      for (const link of dependencies) {
+        const dependencyNode = link.node;
+        if ((dependencyNode.flags & IS_COMPUTED) !== 0) {
           this._accumulateErrors(dependencyNode as unknown as ComputedAtomImpl<unknown>, collected);
         }
       }
@@ -277,11 +273,9 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     const dependencies = dependency._deps;
     if (!dependencies.hasComputeds) return;
 
-    const size = dependencies.size;
-    for (let i = 0; i < size; i++) {
-      const link = dependencies.getAt(i);
-      const node = link?.node;
-      if (node !== undefined && (node.flags & IS_COMPUTED) !== 0) {
+    for (const link of dependencies) {
+      const node = link.node;
+      if ((node.flags & IS_COMPUTED) !== 0) {
         this._accumulateErrors(node as unknown as ComputedAtomImpl<unknown>, collected);
       }
     }
@@ -362,16 +356,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     const trackIndex = this._trackCount++;
     const dependencies = this._deps;
 
-    let existing: DependencyLink | null = null;
-    if (trackIndex < 4) {
-      if (trackIndex === 0) existing = dependencies._s0;
-      else if (trackIndex === 1) existing = dependencies._s1;
-      else if (trackIndex === 2) existing = dependencies._s2;
-      else existing = dependencies._s3;
-    } else {
-      const overflow = dependencies._overflow;
-      if (overflow !== null) existing = overflow[trackIndex - 4] ?? null;
-    }
+    const existing = dependencies.at(trackIndex);
 
     if (existing !== null && existing.node === dependency) {
       existing.version = dependency.version;
@@ -524,20 +509,20 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
    */
   protected override _deepDirtyCheck(): boolean {
     const dependencies = this._deps;
-    const size = dependencies.size;
+    const length = dependencies.length;
     const hotIndex = this._hotIndex;
 
     return untracked(() => {
       // Logic: Hot-path check.
-      if (hotIndex !== -1 && hotIndex < size) {
-        const link = dependencies.getAt(hotIndex);
+      if (hotIndex !== -1 && hotIndex < length) {
+        const link = dependencies.at(hotIndex);
         if (link !== null && this._checkLinkDirty(link)) return true;
       }
 
       // Logic: Sequential scan for other dependencies.
-      for (let i = 0; i < size; i++) {
+      for (let i = 0; i < length; i++) {
         if (i === hotIndex) continue;
-        const link = dependencies.getAt(i);
+        const link = dependencies.at(i);
         if (link !== null && this._checkLinkDirty(link)) {
           this._hotIndex = i;
           return true;

@@ -6,15 +6,15 @@ const REPEATS = 100;
 
 describe('SlotBuffer: Addition (Inline <= 4)', () => {
   bench(
-    `add 4 items (SlotBuffer) X${REPEATS}`,
+    `push 4 items (SlotBuffer) X${REPEATS}`,
     () => {
       let lastBuf;
       for (let i = 0; i < REPEATS; i++) {
         const buf = new SlotBuffer<number>();
-        buf.add(1);
-        buf.add(2);
-        buf.add(3);
-        buf.add(4);
+        buf.push(1);
+        buf.push(2);
+        buf.push(3);
+        buf.push(4);
         lastBuf = buf;
       }
       return lastBuf as any;
@@ -48,7 +48,7 @@ describe('SlotBuffer: Addition (Overflow > 4)', () => {
       for (let i = 0; i < REPEATS; i++) {
         const buf = new SlotBuffer<number>();
         for (let j = 0; j < 16; j++) {
-          buf.add(j);
+          buf.push(j);
         }
         lastBuf = buf;
       }
@@ -81,7 +81,7 @@ describe('SlotBuffer: Churn (Gap Reuse)', () => {
       let lastBuf;
       for (let i = 0; i < REPEATS; i++) {
         const buf = new SlotBuffer<number>();
-        for (let j = 0; j < 16; j++) buf.add(j);
+        for (let j = 0; j < 16; j++) buf.push(j);
 
         // Remove 8
         for (let j = 0; j < 16; j += 2) {
@@ -89,7 +89,7 @@ describe('SlotBuffer: Churn (Gap Reuse)', () => {
         }
         // Re-add 8
         for (let j = 0; j < 16; j += 2) {
-          buf.add(j);
+          buf.push(j);
         }
         lastBuf = buf;
       }
@@ -125,10 +125,10 @@ describe('SlotBuffer: Churn (Gap Reuse)', () => {
 
 describe('SlotBuffer: Iteration', () => {
   const inlineBuf = new SlotBuffer<number>();
-  for (let i = 0; i < 4; i++) inlineBuf.add(i);
+  for (let i = 0; i < 4; i++) inlineBuf.push(i);
 
   const overflowBuf = new SlotBuffer<number>();
-  for (let i = 0; i < 16; i++) overflowBuf.add(i);
+  for (let i = 0; i < 16; i++) overflowBuf.push(i);
 
   const inlineArr = [0, 1, 2, 3];
   const overflowArr = Array.from({ length: 16 }, (_, i) => i);
@@ -201,7 +201,7 @@ describe('SlotBuffer: Compaction', () => {
       let lastBuf;
       for (let i = 0; i < REPEATS; i++) {
         const buf = new SlotBuffer<number>();
-        for (let j = 0; j < 16; j++) buf.add(j);
+        for (let j = 0; j < 16; j++) buf.push(j);
         for (let j = 0; j < 16; j += 2) buf.remove(j);
         buf.compact();
         lastBuf = buf;

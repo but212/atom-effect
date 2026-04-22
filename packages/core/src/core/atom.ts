@@ -90,7 +90,7 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
     // Constraint: Prevent redundant scheduling if a flush is already pending.
     if ((currentFlags & SCHED_BIT) !== 0) return;
     const slots = this._slots;
-    if (slots === null || slots.size === 0) return;
+    if (slots === null || slots.length === 0) return;
 
     this._pendingOldValue = oldValue;
     const nextFlags = currentFlags | SCHED_BIT;
