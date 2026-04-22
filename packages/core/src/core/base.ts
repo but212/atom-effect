@@ -127,39 +127,13 @@ export abstract class ReactiveNode<T> {
     }
 
     if (slots.length > 0) {
-      // Optimization: Unrolled membership check for the inline slots (s0-s3) to minimize traversal overhead.
-      if (
-        (slots._s0 !== null && (slots._s0.fn === listener || slots._s0.sub === listener)) ||
-        (slots._s1 !== null && (slots._s1.fn === listener || slots._s1.sub === listener)) ||
-        (slots._s2 !== null && (slots._s2.fn === listener || slots._s2.sub === listener)) ||
-        (slots._s3 !== null && (slots._s3.fn === listener || slots._s3.sub === listener))
-      ) {
-        if (IS_DEV) console.warn(`[atom-effect] Duplicate subscription ignored on node ${this.id}`);
-        return () => {};
-      }
-
-      const ov = slots._overflow;
-      if (ov !== null) {
-        const len = ov.length;
-        // Logic: Hoisted invariant check (isFn) outside the loop to reduce branching in the hot path.
-        if (isFn) {
-          for (let i = 0; i < len; i++) {
-            const s = ov[i];
-            if (s !== null && s?.fn === listener) {
-              if (IS_DEV)
-                console.warn(`[atom-effect] Duplicate subscription ignored on node ${this.id}`);
-              return () => {};
-            }
-          }
-        } else {
-          for (let i = 0; i < len; i++) {
-            const s = ov[i];
-            if (s !== null && s?.sub === listener) {
-              if (IS_DEV)
-                console.warn(`[atom-effect] Duplicate subscription ignored on node ${this.id}`);
-              return () => {};
-            }
-          }
+      const length = slots.capacity;
+      for (let i = 0; i < length; i++) {
+        const link = slots.at(i);
+        if (link !== null && (link.fn === listener || link.sub === listener)) {
+          if (IS_DEV)
+            console.warn(`[atom-effect] Duplicate subscription ignored on node ${this.id}`);
+          return () => {};
         }
       }
     }
