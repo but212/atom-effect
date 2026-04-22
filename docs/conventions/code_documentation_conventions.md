@@ -69,6 +69,7 @@ export type ReactiveValue<T> = T | ReadonlyAtom<T> | (() => T);
 
 * **`@public`**: Available to end-users. Requires full TSDoc and `@example`.
 * **`@internal`**: Used for cross-module members that are NOT part of the public API. Should still have TSDoc explaining its role to other contributors, but does not require `@example`.
+  * **Constraint (Types):** Do NOT use `@internal` for types (interfaces, type aliases) that are referenced by any `@public` members. This causes bundling failures (leaked internal types) and broken declaration files (`.d.ts`). Such types must be `@public` to ensure the integrity of the distributed package.
 
 ### 4. @deprecated Policy
 

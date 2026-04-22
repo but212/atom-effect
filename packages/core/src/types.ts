@@ -10,7 +10,6 @@ export type DependencyId = number;
 
 /**
  * A helper type that converts a numeric string literal into a number type.
- * @internal
  */
 export type StringKeyToNumber<S extends string> = S extends `${infer N extends number}` ? N : S;
 
@@ -19,9 +18,8 @@ export type MaxDepth = 8;
 
 /**
  * Types that are considered terminal nodes during path exploration.
- * @internal
  */
-type TerminalTypes =
+export type TerminalTypes =
   | Date
   | RegExp
   | Map<unknown, unknown>
@@ -181,8 +179,6 @@ export interface WritableAtom<T = unknown> extends ReadonlyAtom<T> {
  *
  * Constraint: Internal fields such as `version`, `flags`, and `_lastSeenEpoch`
  * are managed exclusively by the engine and must not be mutated by external code.
- *
- * @internal
  */
 export interface Dependency<T = unknown> {
   /** @internal */
@@ -283,7 +279,6 @@ export interface ComputedAtom<T = unknown> extends ReadonlyAtom<T> {
 
 /**
  * An interface for objects capable of being notified by the scheduler.
- * @internal
  */
 export interface Subscriber {
   /** Performs the execution task. */
