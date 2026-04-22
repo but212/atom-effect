@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ERROR_MESSAGES } from '../src/constants';
+import $ from '@/index';
 
 describe('Constants', () => {
   describe('ERROR_MESSAGES', () => {

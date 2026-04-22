@@ -1,7 +1,5 @@
-import $ from 'jquery';
 import { beforeEach, describe, expect, it } from 'vitest';
-import '@/index';
-import { atom } from '@but212/atom-effect';
+import $ from '@/index';
 
 describe('jQuery Batching Documentation Verification', () => {
   beforeEach(() => {
@@ -9,7 +7,7 @@ describe('jQuery Batching Documentation Verification', () => {
   });
 
   it('VERIFY: Is DOM updated INSIDE the handler when wrapped in batch?', () => {
-    const count = atom(0);
+    const count = $.atom(0);
     $('#count').atomText(count);
 
     const $btn = $('#btn');

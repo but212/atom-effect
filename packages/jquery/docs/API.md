@@ -33,7 +33,7 @@ The following utilities and constants are available on the global `AtomEffectJQu
 - `disableAutoCleanup()`: Remove all global observers.
 - `enablejQueryOverrides(options)`: Manually enable patches for jQuery's native methods.
 - `nextTick()`: Utility for waiting until the next reactive flush.
-- `registry`: Access to the internal element-effect registry.
+- `cleanup(element)`: Manually trigger a deep recursive cleanup on an element.
 - `debug`: Access to the runtime-toggleable debug controller.
 
 ### Library Configuration (`$.initAEJ`)

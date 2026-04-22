@@ -27,7 +27,7 @@ import {
  * @public
  *
  * @warning If both `patch` and `autoCleanup` are set to `false`, you are
- * responsible for calling `registry.cleanupTree(element)` manually when
+ * responsible for calling `cleanup(element)` manually when
  * elements are removed to prevent memory leaks.
  */
 export function initAEJ(config: AEJConfig = {}): void {
@@ -62,12 +62,28 @@ $(() => {
 });
 
 export { disablejQueryOverrides, enablejQueryOverrides } from '@/core/jquery-patch';
-export { disableAutoCleanup, enableAutoCleanup, registry } from '@/core/registry';
+export { disableAutoCleanup, enableAutoCleanup } from '@/core/registry';
+
+/**
+ * Performs a deep recursive cleanup on a node and its entire Shadow DOM subtrees.
+ *
+ * When to use:
+ * - Manually cleaning up an element that was removed from the DOM if autoCleanup is disabled.
+ * - Forcing a cleanup cycle on a specific container.
+ *
+ * @param element - The element to clean up.
+ * @public
+ */
+export function cleanup(element: HTMLElement | JQuery): void {
+  const target = element instanceof HTMLElement ? element : (element[0] as HTMLElement);
+  if (target) registry.cleanupTree(target);
+}
 
 $.extend({ initAEJ });
 
 export type {
   AtomComponentController,
+  AtomNav,
   AtomNavOptions,
   BindingOptions,
   ComponentFn,
@@ -77,6 +93,7 @@ export type {
   EffectCleanup,
   EffectResult,
   EqualFn,
+  FetchError,
   FetchOptions,
   JQueryScopedSelector,
   ListOptions,
