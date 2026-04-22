@@ -4,7 +4,7 @@ import { atomEachElement } from '@/core/dom';
 import { registry } from '@/core/registry';
 import type { ComponentFn } from '@/types';
 
-const EMPTY_PROPS = Object.freeze({});
+const DEFAULT_PROPS = Object.freeze({});
 
 /**
  * Logic: Orchestrates the lifecycle of a discrete UI unit. It handles
@@ -38,7 +38,7 @@ const EMPTY_PROPS = Object.freeze({});
  * @public
  */
 $.fn.atomMount = function <P>(this: JQuery, component: ComponentFn<P>, props?: P): JQuery {
-  const componentProps = (props ?? EMPTY_PROPS) as P;
+  const mergedProps = (props ?? DEFAULT_PROPS) as P;
 
   return atomEachElement(this, (element) => {
     // Reason: Prevents memory leaks and conflicting effects if mounting on a non-empty element.
@@ -46,11 +46,11 @@ $.fn.atomMount = function <P>(this: JQuery, component: ComponentFn<P>, props?: P
 
     // Reason: 'untracked' ensures component initialization doesn't establish dependency
     // loops with the parent caller. 'batch' ensures initial DOM updates are atomic.
-    const result = untracked(() => batch(() => component($(element), componentProps)));
+    const hook = untracked(() => batch(() => component($(element), mergedProps)));
 
-    if (result) {
-      const teardown = typeof result === 'function' ? result : result.unmount;
-      registry.setComponentCleanup(element, teardown);
+    if (hook) {
+      const teardown = typeof hook === 'function' ? hook : hook.unmount;
+      registry.setTeardown(element, teardown);
     }
   });
 };

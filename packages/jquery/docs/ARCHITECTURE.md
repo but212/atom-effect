@@ -491,20 +491,28 @@ private aej = $.useAtomComponent(this);
 
 This controller manages:
 
-- **Scoped jQuery (`$root`)**: A jQuery instance restricted to the Shadow DOM (or host).
+- **Scoped API**: Provides a raw `host` reference, an active `root` node, and a scoped jQuery instance (`$`) restricted to the component boundary.
 - **Lifecycle Sync**: Bridges `connectedCallback` to `setup()` and `disconnectedCallback` to `teardown()`.
-- **Observer Management**: Handles the scoped `MutationObserver` lifecycle for the component's boundary.
+- **Observer Management**: Handles the scoped `MutationObserver` lifecycle for the component's boundary, supporting custom roots (Shadow DOM).
 
 ### 16.2 Dependency Injection (DI) Engine
 
 `provideAtom` and `injectAtom` implement a reactive DI system using DOM events.
 
-#### 16.2.1 Transport Mechanism
+#### 16.2.1 Composed Tree Traversal
 
-1. **Event Dispatch**: `injectAtom` dispatches a `aej:context-request` CustomEvent.
-2. **Bubbling**: The event bubbles up the DOM. Providers listen for this event and stop propagation if they hold the requested key.
-3. **Shadow Traversal (Fallback)**: If bubbling fails (e.g., due to retargeting limits or framework boundaries), AEJ performs a **Manual Shadow Host chain traversal**. It recursively walks up `getRootNode().host` to ensure the request reaches providers in outer scopes.
+AEJ uses a **stateless tree-walker** for DI resolution. This avoids the overhead and complexity of CustomEvents:
 
-#### 16.2.2 Type Safety (`AEJContextMap`)
+1. **Upward Scan**: `injectAtom` starts from the target's parent and walks up the DOM.
+2. **Shadow Navigation**: When it hits a `ShadowRoot`, it jumps to the `host` element and continues.
+3. **Registry Lookup**: At each step, it checks the node's `AEJ_STATE` for registered providers.
+4. **Resolution**: The first match is returned. This guarantees nearest-ancestor priority and allows for context overrides.
 
-Users can enable strict typing by extending the global `AEJContextMap` interface. This allows `injectAtom` to return the correct Atom type based on the key string, providing full IDE support and compile-time validation.
+#### 16.2.2 Reactive & Lazy Resolution
+
+- **Reactive**: Injected values are returned as `ReadonlyAtom<T>`. If the provider is an atom, it is returned directly; otherwise, it's wrapped in a computed atom.
+- **Late Binding**: For Custom Elements, if the element is disconnected during construction, a lazy computed atom is returned that delays resolution until the first access while connected.
+
+#### 16.2.3 Type Safety (Generics)
+
+The new DI engine favors standard TypeScript generics over interface merging. By providing a type parameter to `injectAtom<T>`, users get full IDE support and compile-time validation for the returned `ReadonlyAtom<T>`.

@@ -9,9 +9,9 @@ import { cleanupRemoved, handleEmpty, placeItems, renderItems } from './dom';
 import type { PlaceCallbacks } from './types';
 
 /** Provides metadata storage for container-to-context associations. */
-const listInstances = new WeakMap<Element, { fx: EffectObject; ctx: ListContext<unknown> }>();
+const instances = new WeakMap<Element, { fx: EffectObject; ctx: ListContext<unknown> }>();
 
-/**
+/**listInstances
  * Binds a reactive atom array to a jQuery container for automated list rendering.
  *
  * Logic: Orchestrates the synchronization between a reactive data source and
@@ -54,16 +54,16 @@ function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptio
   };
 
   for (let i = 0, len = this.length; i < len; i++) {
-    const raw = this[i]!,
-      $c = $(raw);
+    const element = this[i]!,
+      $c = $(element);
 
-    const old = listInstances.get(raw);
-    if (old) {
-      old.fx.dispose();
-      old.ctx.dispose();
+    const prev = instances.get(element);
+    if (prev) {
+      prev.fx.dispose();
+      prev.ctx.dispose();
     }
 
-    const ctx = new ListContext<T>($c, getSelector(raw), options.onRemove);
+    const ctx = new ListContext<T>($c, getSelector(element), options.onRemove);
     const fx = effect(() => {
       const items = source.value,
         count = items.length;
@@ -74,15 +74,15 @@ function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptio
         handleEmpty(ctx, count, $c, options.empty);
         if (count === 0) return;
 
-        const isActuallyInitial = ctx.oldKeys.length === 0 && ctx.removingKeys.size === 0;
+        const isInitial = ctx.oldKeys.length === 0 && ctx.removingKeys.size === 0;
 
         ctx.keyToIndex.clear();
         const diff = buildIndices(ctx, items, count, getKey, options.update, options.isEqual);
 
-        const frag = renderItems(diff, options, isActuallyInitial);
+        const fragment = renderItems(diff, options, isInitial);
 
         cleanupRemoved(ctx, diff);
-        placeItems(ctx, diff, raw, callbacks, frag);
+        placeItems(ctx, diff, element, callbacks, fragment);
 
         ctx.oldKeys = diff.newKeys;
         ctx.oldItems = diff.newItems;
@@ -94,12 +94,12 @@ function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptio
     if (options.events) setupEvents(ctx, $c, options.events);
 
     // Lifecycle: Automatic cleanup when the element or parent effect is destroyed
-    registry.trackEffect(raw, fx);
-    listInstances.set(raw, { fx, ctx });
+    registry.trackEffect(element, fx);
+    instances.set(element, { fx, ctx });
 
-    registry.trackCleanup(raw, () => {
+    registry.onCleanup(element, () => {
       ctx.dispose();
-      listInstances.delete(raw);
+      instances.delete(element);
     });
   }
   return this;
@@ -120,31 +120,35 @@ function setupEvents<T>(
   $container: JQuery,
   events: Record<string, Function>
 ): void {
-  for (const ek in events) {
-    if (!hasOwn.call(events, ek)) continue;
-    const s = ek.indexOf(' '),
-      type = s === -1 ? ek : ek.slice(0, s),
-      sel = s === -1 ? '> *' : ek.slice(s + 1).trim();
-    const handler = events[ek]!;
+  for (const eventKey in events) {
+    if (!hasOwn.call(events, eventKey)) continue;
+    const spacePos = eventKey.indexOf(' '),
+      type = spacePos === -1 ? eventKey : eventKey.slice(0, spacePos),
+      selector = spacePos === -1 ? '> *' : eventKey.slice(spacePos + 1).trim();
+    const callback = events[eventKey]!;
 
-    $container.on(`${type}.atomList`, sel, function (this: HTMLElement, e: JQuery.TriggeredEvent) {
-      const itemEl = e.target.closest?.('[data-atom-key]') as HTMLElement | null;
-      const rk = itemEl?.getAttribute('data-atom-key');
-      if (rk === null || rk === undefined) return;
+    $container.on(
+      `${type}.atomList`,
+      selector,
+      function (this: HTMLElement, e: JQuery.TriggeredEvent) {
+        const target = e.target.closest?.('[data-atom-key]') as HTMLElement | null;
+        const rawKey = target?.getAttribute('data-atom-key');
+        if (rawKey === null || rawKey === undefined) return;
 
-      let key: ListKey = rk;
+        let key: ListKey = rawKey;
 
-      // Handle cases where Number-based keys were serialized to Strings in the DOM
-      if (!ctx.keyToIndex.has(rk)) {
-        const nk = Number(rk);
-        if (!Number.isNaN(nk) && ctx.keyToIndex.has(nk)) key = nk;
+        // Handle cases where Number-based keys were serialized to Strings in the DOM
+        if (!ctx.keyToIndex.has(rawKey)) {
+          const numKey = Number(rawKey);
+          if (!Number.isNaN(numKey) && ctx.keyToIndex.has(numKey)) key = numKey;
+        }
+
+        const index = ctx.keyToIndex.get(key);
+        if (index !== undefined) {
+          callback.call(target as HTMLElement, ctx.oldItems[index]!, index, e);
+        }
       }
-
-      const idx = ctx.keyToIndex.get(key);
-      if (idx !== undefined) {
-        handler.call(itemEl as HTMLElement, ctx.oldItems[idx]!, idx, e);
-      }
-    });
+    );
   }
 }
 

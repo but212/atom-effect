@@ -1,6 +1,7 @@
 import { batch } from '@but212/atom-effect';
 import $ from 'jquery';
 import { registry } from '@/core/registry';
+import type { PatchOptions } from '@/types';
 
 type EventHandler = JQuery.EventHandlerBase<unknown, JQuery.TriggeredEvent>;
 
@@ -35,7 +36,7 @@ let originals: OriginalMethods | null = null;
  *
  * @internal
  */
-const getWrappedHandler = (fn: EventHandler): EventHandler => {
+const wrapHandler = (fn: EventHandler): EventHandler => {
   if ((fn as unknown as { [INTERNAL_HANDLER]?: boolean })[INTERNAL_HANDLER]) return fn;
 
   let wrapped = handlerMap.get(fn);
@@ -54,7 +55,7 @@ const getWrappedHandler = (fn: EventHandler): EventHandler => {
 /**
  * @internal
  */
-const resolveWrapped = (fn: EventHandler): EventHandler => {
+const unwrapHandler = (fn: EventHandler): EventHandler => {
   return handlerMap.get(fn) ?? fn;
 };
 
@@ -62,20 +63,20 @@ function wrapEventMap(
   map: Record<string, JQueryEventHandler | undefined>
 ): Record<string, JQueryEventHandler> {
   const newMap: Record<string, JQueryEventHandler> = {};
-  for (const k in map) {
-    const fn = map[k];
-    newMap[k] = typeof fn === 'function' ? getWrappedHandler(fn) : (fn as JQueryEventHandler);
+  for (const key in map) {
+    const fn = map[key];
+    newMap[key] = typeof fn === 'function' ? wrapHandler(fn) : (fn as JQueryEventHandler);
   }
   return newMap;
 }
 
-function resolveOffEventMap(
+function unwrapEventMap(
   map: Record<string, JQueryEventHandler | undefined>
 ): Record<string, JQueryEventHandler | undefined> {
   const newMap: Record<string, JQueryEventHandler | undefined> = {};
-  for (const k in map) {
-    const h = map[k];
-    newMap[k] = typeof h === 'function' ? resolveWrapped(h) : h;
+  for (const key in map) {
+    const handler = map[key];
+    newMap[key] = typeof handler === 'function' ? unwrapHandler(handler) : handler;
   }
   return newMap;
 }
@@ -83,7 +84,7 @@ function resolveOffEventMap(
 /**
  * @internal
  */
-function patchEventArguments(
+function patchArguments(
   args: unknown[],
   mapProcessor: (
     map: Record<string, JQueryEventHandler | undefined>
@@ -102,31 +103,24 @@ function patchEventArguments(
   }
 }
 
-function createEventHandlerPatch(origFn: Function) {
+function createPatch(original: Function) {
   return function (this: JQuery, ...args: unknown[]) {
-    patchEventArguments(args, wrapEventMap, getWrappedHandler);
-    return origFn.apply(this, args) ?? this;
+    patchArguments(args, wrapEventMap, wrapHandler);
+    return original.apply(this, args) ?? this;
   };
 }
 
 /**
  * Logic: Global Patch Responsibilities
- * 1. Auto-Batching: Wraps all event handlers in `batch()` to prevent UI jitter.
- * 2. Lifecycle Sync: Hooking `.remove()`/`.empty()` to stop reactive effects
- *    on deleted elements immediately to prevent memory leaks.
- * 3. Persistence: Hooking `.detach()` to preserve effects when nodes are moved
- *    temporarily, distinguishing it from permanent removal.
- * 4. Identity Management: Uses a `WeakMap` so `.off(originalFn)` continues
- *    to work correctly by resolving the wrapped proxy back to its original.
- *
- * When to use:
- * - This should be called during the library initialization phase to ensure
- *   consistent behavior across all jQuery interactions.
+ * 1. Event Patching: Wraps handlers in `batch()` to prevent UI jitter.
+ * 2. Lifecycle Patching: Hooking `.remove()` to stop reactive effects immediately.
  *
  * @internal
  */
-export function enablejQueryOverrides(): void {
+export function enablejQueryOverrides(options: PatchOptions = {}): void {
   if (originals !== null) return;
+
+  const { events = true, lifecycle = true } = options;
 
   originals = {
     on: $.fn.on,
@@ -136,52 +130,51 @@ export function enablejQueryOverrides(): void {
     empty: $.fn.empty,
     detach: $.fn.detach,
   };
-  const orig = originals;
+  const prev = originals;
 
-  $.fn.remove = function (this: JQuery, selector?: string) {
-    const targets = selector ? this.filter(selector) : this;
-    const len = targets.length;
-    for (let i = 0; i < len; i++) {
-      const el = targets[i];
-      if (el) {
-        // Condition: Mark ignored to prevent duplicate cleanup cycles if jQuery
-        // triggers internal events during removal.
-        registry.markIgnored(el);
-        registry.cleanupTree(el);
+  if (lifecycle) {
+    $.fn.remove = function (this: JQuery, selector?: string) {
+      const targets = selector ? this.filter(selector) : this;
+      const len = targets.length;
+      for (let i = 0; i < len; i++) {
+        const el = targets[i];
+        if (el) {
+          registry.markIgnored(el);
+          registry.cleanupTree(el);
+        }
       }
-    }
-    return orig.remove.call(this, selector) ?? this;
-  };
+      return prev.remove.call(this, selector) ?? this;
+    };
 
-  $.fn.empty = function (this: JQuery) {
-    const len = this.length;
-    for (let i = 0; i < len; i++) {
-      const el = this[i];
-      if (el?.hasChildNodes()) registry.cleanupDescendants(el);
-    }
-    return orig.empty.call(this) ?? this;
-  };
+    $.fn.empty = function (this: JQuery) {
+      const len = this.length;
+      for (let i = 0; i < len; i++) {
+        const el = this[i];
+        if (el?.hasChildNodes()) registry.cleanupDescendants(el);
+      }
+      return prev.empty.call(this) ?? this;
+    };
 
-  $.fn.detach = function (this: JQuery, selector?: string) {
-    const targets = selector ? this.filter(selector) : this;
-    const len = targets.length;
-    for (let i = 0; i < len; i++) {
-      const el = targets[i];
-      // Logic: Detachment vs Removal
-      // Unlike `.remove()`, `.detach()` signals that the element might reappear
-      // elsewhere, so we maintain its internal state and reactive effects.
-      if (el) registry.keep(el);
-    }
-    return orig.detach.call(this, selector) ?? this;
-  };
+    $.fn.detach = function (this: JQuery, selector?: string) {
+      const targets = selector ? this.filter(selector) : this;
+      const len = targets.length;
+      for (let i = 0; i < len; i++) {
+        const el = targets[i];
+        if (el) registry.keep(el);
+      }
+      return prev.detach.call(this, selector) ?? this;
+    };
+  }
 
-  $.fn.on = createEventHandlerPatch(orig.on) as typeof $.fn.on;
-  $.fn.one = createEventHandlerPatch(orig.one) as typeof $.fn.one;
+  if (events) {
+    $.fn.on = createPatch(prev.on) as typeof $.fn.on;
+    $.fn.one = createPatch(prev.one) as typeof $.fn.one;
 
-  $.fn.off = function (this: JQuery, ...args: unknown[]) {
-    patchEventArguments(args, resolveOffEventMap, resolveWrapped);
-    return orig.off.apply(this, args as Parameters<typeof $.fn.off>) ?? this;
-  };
+    $.fn.off = function (this: JQuery, ...args: unknown[]) {
+      patchArguments(args, unwrapEventMap, unwrapHandler);
+      return prev.off.apply(this, args as Parameters<typeof $.fn.off>) ?? this;
+    };
+  }
 }
 
 /**

@@ -40,11 +40,11 @@ const SELECTOR = 'input, select, textarea';
  * @internal
  */
 class FormBinder<T extends object> {
-  private fieldMap = new Map<string, FieldEntry>();
+  private entries = new Map<string, FieldEntry>();
 
-  private fields: FieldEntry[] = [];
+  private entryList: FieldEntry[] = [];
 
-  private elementNames = new WeakMap<Element, string>();
+  private names = new WeakMap<Element, string>();
 
   constructor(
     private form: HTMLFormElement,
@@ -55,20 +55,20 @@ class FormBinder<T extends object> {
   }
 
   private init(): void {
-    this.bindElement(this.form);
-    this.setupObserver();
+    this.bindSubtree(this.form);
+    this.observe();
   }
 
-  public bindElement(el: Element): void {
+  public bindSubtree(el: Element): void {
     const targets = el.matches?.(SELECTOR)
       ? [el]
       : (el as HTMLElement).querySelectorAll?.(SELECTOR) || [];
     for (let i = 0, len = targets.length; i < len; i++) {
-      this.bindControl(targets[i] as Element);
+      this.bindField(targets[i] as Element);
     }
   }
 
-  private bindControl(el: Element): void {
+  private bindField(el: Element): void {
     if (
       !(
         el instanceof HTMLInputElement ||
@@ -83,15 +83,15 @@ class FormBinder<T extends object> {
     if (!name) return;
 
     // Handle 'name' attribute changes reactively
-    const oldName = this.elementNames.get(control);
+    const oldName = this.names.get(control);
     if (oldName !== undefined && oldName !== name) registry.cleanup(control);
 
-    if (this.elementNames.has(control) && oldName === name) return;
+    if (this.names.has(control) && oldName === name) return;
 
-    const entry = this.acquireField(name);
-    this.elementNames.set(control, name);
+    const entry = this.ensureField(name);
+    this.names.set(control, name);
 
-    registry.trackCleanup(control, () => this.releaseField(control, name));
+    registry.onCleanup(control, () => this.unbindField(control, name));
 
     if (
       control instanceof HTMLInputElement &&
@@ -124,7 +124,7 @@ class FormBinder<T extends object> {
 
     (handler as unknown as { [INTERNAL_HANDLER]: boolean })[INTERNAL_HANDLER] = true;
     $(el).on('change', handler);
-    registry.trackCleanup(el, () => $(el).off('change', handler));
+    registry.onCleanup(el, () => $(el).off('change', handler));
 
     registry.trackEffect(
       el,
@@ -144,8 +144,8 @@ class FormBinder<T extends object> {
    * Logic: Converts flat name attributes (e.g., 'user.info[0]') into
    * reactive dot-paths that `atomLens` can understand.
    */
-  private acquireField(name: string): FieldEntry {
-    let entry = this.fieldMap.get(name);
+  private ensureField(name: string): FieldEntry {
+    let entry = this.entries.get(name);
     if (entry) {
       entry.refCount++;
       return entry;
@@ -172,21 +172,21 @@ class FormBinder<T extends object> {
 
     entry = { atom: customLens as WritableAtom<unknown>, name, refCount: 1 };
 
-    this.fieldMap.set(name, entry);
-    this.fields.push(entry);
+    this.entries.set(name, entry);
+    this.entryList.push(entry);
     return entry;
   }
 
-  private releaseField(el: Element, name: string): void {
-    const entry = this.fieldMap.get(name);
+  private unbindField(el: Element, name: string): void {
+    const entry = this.entries.get(name);
     if (entry && --entry.refCount <= 0) {
-      const idx = this.fields.indexOf(entry);
-      if (idx !== -1) this.fields.splice(idx, 1);
+      const idx = this.entryList.indexOf(entry);
+      if (idx !== -1) this.entryList.splice(idx, 1);
       const disposableAtom = entry.atom as Partial<{ dispose: () => void }>;
       if (typeof disposableAtom.dispose === 'function') {
         disposableAtom.dispose();
       }
-      this.fieldMap.delete(name);
+      this.entries.delete(name);
     }
     registry.cleanup(el);
   }
@@ -196,17 +196,17 @@ class FormBinder<T extends object> {
    * and 'name' attribute changes, ensuring newly added fields are
    * automatically enrolled in the two-way binding system.
    */
-  private setupObserver(): void {
+  private observe(): void {
     const observer = new MutationObserver((ms) => {
       for (let i = 0, len = ms.length; i < len; i++) {
         const m = ms[i]!;
         if (m.type === 'childList') {
           for (let j = 0; j < m.addedNodes.length; j++) {
             const node = m.addedNodes[j]!;
-            if (node.nodeType === 1) this.bindElement(node as Element);
+            if (node.nodeType === 1) this.bindSubtree(node as Element);
           }
         } else if (m.attributeName === 'name') {
-          this.bindElement(m.target as Element);
+          this.bindSubtree(m.target as Element);
         }
       }
     });
@@ -218,7 +218,7 @@ class FormBinder<T extends object> {
       attributeFilter: ['name'],
     });
 
-    registry.trackCleanup(this.form, () => observer.disconnect());
+    registry.onCleanup(this.form, () => observer.disconnect());
   }
 }
 

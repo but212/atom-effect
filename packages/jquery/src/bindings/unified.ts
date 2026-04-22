@@ -21,7 +21,7 @@ import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '@/utils/sanit
 /**
  * @internal
  */
-function getCamelCase(property: string): string {
+function toCamel(property: string): string {
   return property.includes('-')
     ? property.replace(/-./g, (match) => match[1]!.toUpperCase())
     : property;
@@ -64,8 +64,8 @@ export function bindText<T = unknown>(
   registerReactiveEffect(
     element,
     value,
-    (currentValue) => {
-      const textContent = formatter ? formatter(currentValue) : String(currentValue ?? '');
+    (val) => {
+      const textContent = formatter ? formatter(val) : String(val ?? '');
       if (element.textContent !== textContent) element.textContent = textContent;
     },
     'text'
@@ -88,17 +88,17 @@ export function bindText<T = unknown>(
  * @internal
  */
 export function bindHtml(element: HTMLElement, value: AsyncReactiveValue<string>): void {
-  let lastHtml: string | null = null;
+  let prevHtml: string | null = null;
 
   registerReactiveEffect(
     element,
     value,
-    (currentValue) => {
-      const sanitizedHtml = sanitizeHtml(currentValue as string);
-      if (lastHtml !== sanitizedHtml) {
+    (val) => {
+      const sanitized = sanitizeHtml(val as string);
+      if (prevHtml !== sanitized) {
         registry.cleanupDescendants(element);
-        element.innerHTML = sanitizedHtml;
-        lastHtml = sanitizedHtml;
+        element.innerHTML = sanitized;
+        prevHtml = sanitized;
       }
     },
     'html'
@@ -120,14 +120,12 @@ export function bindClass(
   element: HTMLElement,
   classMap: Record<string, AsyncReactiveValue<boolean>>
 ): void {
-  const tokenMap: Record<string, string[]> = {};
-  let lastActiveTokens = new Set<string>();
+  const tokens: Record<string, string[]> = {};
+  let prevActive = new Set<string>();
 
   for (const key of Object.keys(classMap)) {
     const trimmedKey = key.trim();
-    tokenMap[key] = trimmedKey.includes(' ')
-      ? trimmedKey.split(/\s+/).filter(Boolean)
-      : [trimmedKey];
+    tokens[key] = trimmedKey.includes(' ') ? trimmedKey.split(/\s+/).filter(Boolean) : [trimmedKey];
   }
 
   registerMapEffect(
@@ -137,7 +135,7 @@ export function bindClass(
       const currentActiveTokens = new Set<string>();
       for (const [key, isActive] of Object.entries(states)) {
         if (isActive) {
-          for (const token of tokenMap[key]!) {
+          for (const token of tokens[key]!) {
             currentActiveTokens.add(token);
           }
         }
@@ -145,19 +143,19 @@ export function bindClass(
 
       // Add new tokens
       for (const token of currentActiveTokens) {
-        if (!lastActiveTokens.has(token)) {
+        if (!prevActive.has(token)) {
           element.classList.add(token);
         }
       }
 
       // Remove tokens that are no longer active
-      for (const token of lastActiveTokens) {
+      for (const token of prevActive) {
         if (!currentActiveTokens.has(token)) {
           element.classList.remove(token);
         }
       }
 
-      lastActiveTokens = currentActiveTokens;
+      prevActive = currentActiveTokens;
     },
     'class'
   );
@@ -175,13 +173,13 @@ export function bindClass(
 export function bindCss(element: HTMLElement, cssMap: Record<string, CssValue>): void {
   const style = element.style as unknown as Record<string, string | null>;
   const reactiveMap: Record<string, ReactiveValue<unknown>> = {};
-  const metadataMap: Record<string, { camelCase: string; unit: string }> = {};
-  const previousValues: Record<string, string | null> = {};
+  const metaMap: Record<string, { camelCase: string; unit: string }> = {};
+  const prev: Record<string, string | null> = {};
 
   for (const [property, value] of Object.entries(cssMap)) {
     const [source, unit] = Array.isArray(value) ? value : [value, ''];
     reactiveMap[property] = source;
-    metadataMap[property] = { camelCase: getCamelCase(property), unit };
+    metaMap[property] = { camelCase: toCamel(property), unit };
   }
 
   registerMapEffect(
@@ -189,14 +187,14 @@ export function bindCss(element: HTMLElement, cssMap: Record<string, CssValue>):
     reactiveMap,
     (states) => {
       for (const [property, value] of Object.entries(states)) {
-        const metadata = metadataMap[property]!;
-        const valueString = metadata.unit ? `${value}${metadata.unit}` : String(value);
+        const meta = metaMap[property]!;
+        const str = meta.unit ? `${value}${meta.unit}` : String(value);
 
-        if (previousValues[property] !== valueString) {
-          if (!isDangerousCssValue(valueString)) {
-            style[metadata.camelCase] = valueString;
+        if (prev[property] !== str) {
+          if (!isDangerousCssValue(str)) {
+            style[meta.camelCase] = str;
           }
-          previousValues[property] = valueString;
+          prev[property] = str;
         }
       }
     },
@@ -221,12 +219,12 @@ export function bindAttr(
 ): void {
   const safeEntries = Object.entries(attrMap).filter(([name]) => isSafeBinding(name, false));
   const safeMap = Object.fromEntries(safeEntries);
-  const metadataMap: Record<string, { isAria: boolean }> = {};
-  const cache: Record<string, string | null> = {};
+  const metaMap: Record<string, { isAria: boolean }> = {};
+  const prev: Record<string, string | null> = {};
 
   for (const [name] of safeEntries) {
-    metadataMap[name] = { isAria: name.toLowerCase().startsWith('aria-') };
-    cache[name] = element.getAttribute(name);
+    metaMap[name] = { isAria: name.toLowerCase().startsWith('aria-') };
+    prev[name] = element.getAttribute(name);
   }
 
   registerMapEffect(
@@ -234,25 +232,24 @@ export function bindAttr(
     safeMap,
     (states) => {
       for (const [name, value] of Object.entries(states)) {
-        const metadata = metadataMap[name]!;
-        const primitiveValue = value as PrimitiveValue;
+        const meta = metaMap[name]!;
+        const val = value as PrimitiveValue;
 
-        if (primitiveValue == null || (primitiveValue === false && !metadata.isAria)) {
-          if (cache[name] !== null) element.removeAttribute(name);
-          cache[name] = null;
+        if (val == null || (val === false && !meta.isAria)) {
+          if (prev[name] !== null) element.removeAttribute(name);
+          prev[name] = null;
           continue;
         }
 
-        const newValue =
-          primitiveValue === true ? (metadata.isAria ? 'true' : name) : String(primitiveValue);
-        if (isDangerousUrl(name, newValue)) {
+        const next = val === true ? (meta.isAria ? 'true' : name) : String(val);
+        if (isDangerousUrl(name, next)) {
           console.warn(`${LOG_PREFIXES.BINDING} ${ERROR_MESSAGES.SECURITY.BLOCKED_PROTOCOL(name)}`);
           continue;
         }
 
-        if (cache[name] !== newValue) {
-          element.setAttribute(name, newValue);
-          cache[name] = newValue;
+        if (prev[name] !== next) {
+          element.setAttribute(name, next);
+          prev[name] = next;
         }
       }
     },
@@ -313,7 +310,7 @@ export function bindVisibility(
   condition: AsyncReactiveValue<boolean>,
   invert: boolean
 ): void {
-  let lastDisplay = element.style.display === 'none' ? '' : element.style.display;
+  let prevDisplay = element.style.display === 'none' ? '' : element.style.display;
 
   registerReactiveEffect(
     element,
@@ -322,10 +319,10 @@ export function bindVisibility(
       const isVisible = invert !== !!value;
       if (isVisible) {
         if (element.style.display === 'none') {
-          element.style.display = lastDisplay;
+          element.style.display = prevDisplay;
         }
       } else if (element.style.display !== 'none') {
-        lastDisplay = element.style.display;
+        prevDisplay = element.style.display;
         element.style.display = 'none';
       }
     },
@@ -350,7 +347,7 @@ export function bindVal(
   }
   const { reactiveEffect, cleanup } = applyInputBinding($(element), atom, options);
   registry.trackEffect(element, reactiveEffect);
-  registry.trackCleanup(element, cleanup);
+  registry.onCleanup(element, cleanup);
 }
 
 /**
@@ -362,7 +359,7 @@ export function bindVal(
  *
  * @internal
  */
-function synchronizeRadioGroup(element: HTMLInputElement): void {
+function syncRadios(element: HTMLInputElement): void {
   if (element.type === 'radio' && element.name) {
     (element.form ? $(element.form) : $(document))
       .find(`input[type="radio"][name="${$.escapeSelector(element.name)}"]`)
@@ -382,18 +379,16 @@ export function bindChecked(element: HTMLElement, atom: WritableAtom<boolean>): 
   const inputElement = element;
   const $element = $(inputElement);
 
-  const changeHandler = () => {
+  const onChange = () => {
     if (atom.peek() !== inputElement.checked) {
       atom.value = inputElement.checked;
-      synchronizeRadioGroup(inputElement);
+      syncRadios(inputElement);
     }
   };
-  (changeHandler as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
+  (onChange as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
 
-  $element.on('change change.atomRadioSync', changeHandler);
-  registry.trackCleanup(inputElement, () =>
-    $element.off('change change.atomRadioSync', changeHandler)
-  );
+  $element.on('change change.atomRadioSync', onChange);
+  registry.onCleanup(inputElement, () => $element.off('change change.atomRadioSync', onChange));
 
   registry.trackEffect(
     inputElement,
@@ -403,7 +398,7 @@ export function bindChecked(element: HTMLElement, atom: WritableAtom<boolean>): 
         if (inputElement.checked !== isChecked) {
           inputElement.checked = isChecked;
           debug.domUpdated(LOG_PREFIXES.BINDING, inputElement, 'checked', isChecked);
-          if (isChecked) synchronizeRadioGroup(inputElement);
+          if (isChecked) syncRadios(inputElement);
         }
       });
     })
@@ -419,7 +414,7 @@ export function bindEvents(
 ): void {
   const $element = $(element);
   $element.on(eventMap);
-  registry.trackCleanup(element, () => $element.off(eventMap));
+  registry.onCleanup(element, () => $element.off(eventMap));
 }
 
 /**
@@ -432,5 +427,5 @@ export function bindOn(
 ): void {
   const $element = $(element);
   $element.on(event, handler);
-  registry.trackCleanup(element, () => $element.off(event, handler));
+  registry.onCleanup(element, () => $element.off(event, handler));
 }

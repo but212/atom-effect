@@ -325,7 +325,7 @@ class RouterImpl implements Router {
 
     if (this.config.autoBindLinks) this.setupInterception();
     if (this.$target[0]) {
-      registry.trackCleanup(this.$target[0], () => this.destroy());
+      registry.onCleanup(this.$target[0], () => this.destroy());
     }
   }
 

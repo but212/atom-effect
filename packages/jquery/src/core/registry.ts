@@ -3,7 +3,18 @@ import type { EffectObject } from '@/types';
 import { getSelector } from '@/utils';
 import { debug } from '@/utils/debug';
 
-let autoCleanupScheduled = false;
+let isScheduled = false;
+let isEnabled = true;
+
+/**
+ * Logic: Configuration Control
+ * Allows explicit disabling of the global 'safety-net' MutationObserver
+ * to prevent it from being re-initialized during binding creation.
+ * @internal
+ */
+export function setAutoCleanupAllowed(allowed: boolean): void {
+  isEnabled = allowed;
+}
 
 /**
  * Optimization: Marker class for elements with active reactive bindings.
@@ -12,12 +23,12 @@ let autoCleanupScheduled = false;
  *
  * @internal
  */
-const AES_BOUND = '_aes-bound';
-const AES_HAS_SHADOW = '_aes-has-shadow';
+const MARK_BOUND = '_aes-bound';
+const MARK_SHADOW = '_aes-has-shadow';
 
 export interface BindingRecord {
-  cleanups?: Array<() => void>;
-  componentCleanup?: (() => void) | undefined;
+  tasks?: Array<() => void>;
+  teardown?: (() => void) | undefined;
 }
 
 /**
@@ -34,28 +45,28 @@ export interface BindingRecord {
 class BindingRegistry {
   private records = new WeakMap<Element, BindingRecord>();
 
-  private preservedNodes = new WeakSet<Node>();
+  private kept = new WeakSet<Node>();
 
-  private ignoredNodes = new WeakSet<Node>();
+  private ignored = new WeakSet<Node>();
 
-  private closedShadows = new WeakMap<Element, ShadowRoot>();
+  private shadows = new WeakMap<Element, ShadowRoot>();
 
   /** Mark a node to preserve its effects even if detached from the DOM (e.g., jQuery .detach()). */
   keep(node: Node): void {
-    this.preservedNodes.add(node);
+    this.kept.add(node);
   }
 
   isKept(node: Node): boolean {
-    return this.preservedNodes.has(node);
+    return this.kept.has(node);
   }
 
   /** Temporary flag to block redundant cleanup cycles for the same node. */
   markIgnored(node: Node): void {
-    this.ignoredNodes.add(node);
+    this.ignored.add(node);
   }
 
   isIgnored(node: Node): boolean {
-    return this.ignoredNodes.has(node);
+    return this.ignored.has(node);
   }
 
   /**
@@ -63,7 +74,7 @@ class BindingRegistry {
    * @internal
    */
   unmarkIgnored(node: Node): void {
-    this.ignoredNodes.delete(node);
+    this.ignored.delete(node);
   }
 
   /**
@@ -74,11 +85,11 @@ class BindingRegistry {
    *
    * @param node - The node to tentatively clean up.
    */
-  deferredCleanup(node: Node): void {
-    this.ignoredNodes.add(node);
+  deferCleanup(node: Node): void {
+    this.ignored.add(node);
     queueMicrotask(() => {
       if (node.isConnected) {
-        this.ignoredNodes.delete(node);
+        this.ignored.delete(node);
       } else {
         this.cleanupTree(node);
       }
@@ -95,7 +106,7 @@ class BindingRegistry {
    * @internal
    */
   registerShadow(host: Element, sr: ShadowRoot): void {
-    this.closedShadows.set(host, sr);
+    this.shadows.set(host, sr);
   }
 
   /**
@@ -110,7 +121,7 @@ class BindingRegistry {
    * @internal
    */
   markHost(host: Element): void {
-    host.classList.add(AES_HAS_SHADOW);
+    host.classList.add(MARK_SHADOW);
   }
 
   /**
@@ -118,28 +129,28 @@ class BindingRegistry {
    * @internal
    */
   getShadow(host: Element): ShadowRoot | null {
-    return host.shadowRoot || this.closedShadows.get(host) || null;
+    return host.shadowRoot || this.shadows.get(host) || null;
   }
 
   private getOrCreateRecord(element: Element): BindingRecord {
     // Logic: Lazy-init the mutation observer only when the first binding is created.
-    if (!autoCleanupScheduled && typeof document !== 'undefined' && document.body) {
-      autoCleanupScheduled = true;
+    if (isEnabled && !isScheduled && typeof document !== 'undefined' && document.body) {
+      isScheduled = true;
       enableAutoCleanup(document.body);
     }
     let result = this.records.get(element);
     if (!result) {
       result = {};
       this.records.set(element, result);
-      element.classList.add(AES_BOUND);
+      element.classList.add(MARK_BOUND);
     }
     return result;
   }
 
   private addCleanup(element: Element, cleanupFunction: () => void): void {
     const record = this.getOrCreateRecord(element);
-    if (!record.cleanups) record.cleanups = [];
-    record.cleanups.push(cleanupFunction);
+    if (!record.tasks) record.tasks = [];
+    record.tasks.push(cleanupFunction);
   }
 
   /**
@@ -164,7 +175,7 @@ class BindingRegistry {
   }
 
   /** @internal */
-  trackCleanup(element: Element, cleanupFunction: () => void): void {
+  onCleanup(element: Element, cleanupFunction: () => void): void {
     const selector = getSelector(element);
     this.addCleanup(element, () => {
       try {
@@ -176,8 +187,8 @@ class BindingRegistry {
   }
 
   /** @internal */
-  setComponentCleanup(element: Element, teardownFunction: (() => void) | undefined): void {
-    this.getOrCreateRecord(element).componentCleanup = teardownFunction;
+  setTeardown(element: Element, teardownFunction: (() => void) | undefined): void {
+    this.getOrCreateRecord(element).teardown = teardownFunction;
   }
 
   hasBind(element: Element): boolean {
@@ -185,29 +196,29 @@ class BindingRegistry {
   }
 
   cleanup(node: Node): void {
-    this.preservedNodes.delete(node);
-    this.ignoredNodes.delete(node);
+    this.kept.delete(node);
+    this.ignored.delete(node);
 
     if (node.nodeType !== 1) return;
     const element = node as Element;
     const record = this.records.get(element);
 
     this.records.delete(element);
-    element.classList.remove(AES_BOUND);
+    element.classList.remove(MARK_BOUND);
 
     if (!record) return;
 
-    if (record.componentCleanup) {
+    if (record.teardown) {
       try {
-        record.componentCleanup();
+        record.teardown();
       } catch (error) {
         const selector = getSelector(element);
         debug.error(LOG_PREFIXES.MOUNT, ERROR_MESSAGES.MOUNT.CLEANUP_ERROR(selector), error);
       }
     }
 
-    if (record.cleanups) {
-      for (const cleanupFunction of record.cleanups) cleanupFunction();
+    if (record.tasks) {
+      for (const cleanupFunction of record.tasks) cleanupFunction();
     }
   }
 
@@ -219,7 +230,7 @@ class BindingRegistry {
    * classes are modified during the cleanup cycle.
    */
   cleanupDescendants(root: Element | DocumentFragment | ShadowRoot): void {
-    const nodes = root.querySelectorAll(`.${AES_BOUND}`);
+    const nodes = root.querySelectorAll(`.${MARK_BOUND}`);
 
     // Reason: Scoped cleanup prevents memory leaks in reactive bindings.
     for (let i = 0, length = nodes.length; i < length; i++) {
@@ -230,7 +241,7 @@ class BindingRegistry {
     // Logic: Marker-based traversal (Data Dominates).
     // Optimization: Instead of walking the whole tree with `*`, we jump to
     // elements known to have shadow roots. This keeps cleanup O(N_bound + N_hosts).
-    const shadowHosts = root.querySelectorAll(`.${AES_HAS_SHADOW}`);
+    const shadowHosts = root.querySelectorAll(`.${MARK_SHADOW}`);
     for (let i = 0, length = shadowHosts.length; i < length; i++) {
       const el = shadowHosts[i] as Element;
       const sr = this.getShadow(el);
@@ -260,7 +271,7 @@ class BindingRegistry {
 
 export const registry = new BindingRegistry();
 
-const observers = new Map<Node, MutationObserver>();
+const observerMap = new Map<Node, MutationObserver>();
 
 /**
  * Logic: DOM Safety Net
@@ -271,7 +282,7 @@ const observers = new Map<Node, MutationObserver>();
  * @internal
  */
 export function enableAutoCleanup(root: Element | ShadowRoot | DocumentFragment): void {
-  if (observers.has(root)) return;
+  if (observerMap.has(root)) return;
 
   const observer = new MutationObserver((mutations) => {
     for (let i = 0, mutationsLength = mutations.length; i < mutationsLength; i++) {
@@ -293,16 +304,16 @@ export function enableAutoCleanup(root: Element | ShadowRoot | DocumentFragment)
   });
 
   observer.observe(root, { childList: true, subtree: true });
-  observers.set(root, observer);
+  observerMap.set(root, observer);
 }
 
 export function setAutoCleanupScheduled(scheduled: boolean): void {
-  autoCleanupScheduled = scheduled;
+  isScheduled = scheduled;
 }
 
 export function disableAutoCleanup(): void {
-  observers.forEach((observer) => observer.disconnect());
-  observers.clear();
+  observerMap.forEach((observer) => observer.disconnect());
+  observerMap.clear();
 }
 
 /**
@@ -317,9 +328,9 @@ export function disableAutoCleanup(): void {
  * @internal
  */
 export function disableAutoCleanupFor(root: Node): void {
-  const observer = observers.get(root);
+  const observer = observerMap.get(root);
   if (observer) {
     observer.disconnect();
-    observers.delete(root);
+    observerMap.delete(root);
   }
 }

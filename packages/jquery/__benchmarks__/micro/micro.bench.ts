@@ -4,8 +4,7 @@
  */
 
 import { bench, describe } from 'vitest';
-import { sanitizeHtml } from '@/utils/sanitize';
-import $ from '../../dist';
+import $, { type AtomComponentController } from '../../dist';
 import { cleanupContainer, createContainer, microBenchOptions } from '../utils/setup';
 
 // ============================================================================
@@ -201,33 +200,93 @@ describe('List Rendering: atomList', () => {
 });
 
 // ============================================================================
-// 4. HTML Sanitization
+// 4. Web Components
 // ============================================================================
+describe('web component', () => {
+  class TestComp extends HTMLElement {
+    controller?: AtomComponentController;
+    setup() {
+      this.controller = $.useAtomComponent(this);
+      this.controller.setup();
+    }
+    teardown() {
+      this.controller?.teardown();
+    }
+  }
 
-describe('Sanitization: sanitizeHtml', () => {
-  const HTML_CLEAN_LARGE = `<article>${Array.from({ length: 20 }, (_, i) => `<p class="p-${i}">Text ${i}</p>`).join('')}</article>`;
-  const HTML_MIXED_ATTRS = `<div id="r" onmouseover="e()"><a href="javascript:e()">XSS</a><p style="color:red">Safe</p></div>`;
+  if (!customElements.get('test-comp')) {
+    customElements.define('test-comp', TestComp);
+  }
 
   bench(
-    'clean large (50+ nodes)',
+    'Web Component: setup/teardown (100)',
     () => {
-      sanitizeHtml(HTML_CLEAN_LARGE);
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      for (let i = 0; i < 100; i++) {
+        const el = document.createElement('test-comp') as TestComp;
+        container.appendChild(el);
+        el.setup();
+        el.teardown();
+      }
+      document.body.removeChild(container);
     },
     microBenchOptions
   );
 
   bench(
-    'mixed dangerous attributes removal',
+    'Web Component: context injection (depth 10, 100x)',
     () => {
-      sanitizeHtml(HTML_MIXED_ATTRS);
+      const root = document.createElement('div');
+      document.body.appendChild(root);
+
+      // Setup provider at root
+      $.provideAtom(root, 'test-key', 'test-value');
+
+      // Create a deep tree
+      let current = root;
+      for (let i = 0; i < 10; i++) {
+        const child = document.createElement('div');
+        current.appendChild(child);
+        current = child;
+      }
+
+      const leaf = current;
+
+      for (let i = 0; i < 100; i++) {
+        $.injectAtom(leaf, 'test-key');
+      }
+
+      document.body.removeChild(root);
     },
     microBenchOptions
   );
 
   bench(
-    'batch throughput (100 × mixed profile)',
+    'Web Component: context injection across Shadow DOM (depth 5, 100x)',
     () => {
-      for (let i = 0; i < 100; i++) sanitizeHtml(HTML_MIXED_ATTRS);
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+
+      $.provideAtom(container, 'theme', 'dark');
+
+      let currentHost: HTMLElement = container;
+      for (let i = 0; i < 5; i++) {
+        const host = document.createElement('div');
+        currentHost.appendChild(host);
+        const shadow = host.attachShadow({ mode: 'open' });
+        const child = document.createElement('div');
+        shadow.appendChild(child);
+        currentHost = child;
+      }
+
+      const leaf = currentHost;
+
+      for (let i = 0; i < 100; i++) {
+        $.injectAtom(leaf, 'theme');
+      }
+
+      document.body.removeChild(container);
     },
     microBenchOptions
   );

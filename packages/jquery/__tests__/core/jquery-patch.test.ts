@@ -32,7 +32,7 @@ describe('jQuery Patch (Lifecycle & Events)', () => {
     it('should correctly manage registry lifecycle during removal and detachment', () => {
       const $root = $('<div id="root"><span class="target"></span></div>').appendTo(document.body);
       const $target = $root.find('.target');
-      registry.trackCleanup($target[0]!, () => {});
+      registry.onCleanup($target[0]!, () => {});
 
       // 1. Detach: binding state preserved
       $target.detach();
