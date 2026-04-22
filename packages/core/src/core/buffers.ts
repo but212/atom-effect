@@ -95,8 +95,8 @@ export class SlotBuffer<T> {
    */
   protected _rawSwap(idxA: number, idxB: number): void {
     if (idxA === idxB) return;
-    const valA = this.getAt(idxA);
-    const valB = this.getAt(idxB);
+    const valA = this.at(idxA);
+    const valB = this.at(idxB);
     this._rawWrite(idxA, valB);
     this._rawWrite(idxB, valA);
   }
@@ -104,11 +104,11 @@ export class SlotBuffer<T> {
   // ── Public API ────────────────────────────────────────────────────────
 
   /** The number of active (non-null) elements in the buffer. */
-  get size(): number {
+  get length(): number {
     return this._actualCount;
   }
   /** The highest physical index occupied plus one. */
-  get physicalSize(): number {
+  get capacity(): number {
     return this._count;
   }
 
@@ -118,7 +118,7 @@ export class SlotBuffer<T> {
    * @param index - The physical index to access.
    * @returns The item at the index, or null if the slot is empty or out of bounds.
    */
-  getAt(index: number): T | null {
+  at(index: number): T | null {
     if (index < 4) {
       if (index === 0) return this._s0;
       if (index === 1) return this._s1;
@@ -137,7 +137,7 @@ export class SlotBuffer<T> {
    * Nullifying a slot at the tail may trigger a recursive reduction of the physical size.
    */
   setAt(index: number, item: T | null): void {
-    const old = this.getAt(index);
+    const old = this.at(index);
     if (old === item) return;
 
     this._rawWrite(index, item);
@@ -245,7 +245,7 @@ export class SlotBuffer<T> {
    *
    * Optimization: Reuses existing holes in the overflow array where possible to minimize growth.
    */
-  add(item: T): number {
+  push(item: T): number {
     const idx = this._rawAdd(item);
     if (idx >= this._count) this._count = idx + 1;
     this._actualCount++;
@@ -376,7 +376,7 @@ export class SlotBuffer<T> {
     let writeIdx = 0;
     const limit = this._count;
     for (let readIdx = 0; readIdx < limit; readIdx++) {
-      const item = this.getAt(readIdx);
+      const item = this.at(readIdx);
       if (item !== null) {
         if (readIdx !== writeIdx) {
           this._rawWrite(writeIdx, item);
@@ -439,7 +439,7 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
   }
 
   override setAt(index: number, item: DependencyLink | null): void {
-    const old = this.getAt(index);
+    const old = this.at(index);
     super.setAt(index, item);
 
     if (this._map !== null) {
@@ -523,13 +523,13 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
     const existingIndex = map.get(dep);
     if (existingIndex === undefined || existingIndex < trackIndex) return false;
 
-    const link = this.getAt(existingIndex);
+    const link = this.at(existingIndex);
     if (link === null || !link.unsub) return false;
 
     link.version = dep.version;
 
     if (existingIndex !== trackIndex) {
-      const occupant = this.getAt(trackIndex);
+      const occupant = this.at(trackIndex);
       this._rawSwap(existingIndex, trackIndex);
 
       map.set(dep, trackIndex);
@@ -596,8 +596,8 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
     if (this._map !== null && link.unsub) this._map.set(link.node, trackIdx);
   }
 
-  override add(item: DependencyLink): number {
-    const idx = super.add(item);
+  override push(item: DependencyLink): number {
+    const idx = super.push(item);
     if (this._map !== null && item.unsub) this._map.set(item.node, idx);
     return idx;
   }

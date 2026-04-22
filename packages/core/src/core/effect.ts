@@ -122,17 +122,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     const deps = this._deps;
     const version = dep.version;
 
-    // Optimization: Fast-path membership check for inline slots.
-    let existing: DependencyLink | null = null;
-    if (trackIndex < 4) {
-      if (trackIndex === 0) existing = deps._s0;
-      else if (trackIndex === 1) existing = deps._s1;
-      else if (trackIndex === 2) existing = deps._s2;
-      else existing = deps._s3;
-    } else {
-      const ov = deps._overflow;
-      if (ov !== null) existing = ov[trackIndex - 4] ?? null;
-    }
+    const existing = deps.at(trackIndex);
 
     if (existing !== null && existing.node === dep) {
       existing.version = version;
@@ -181,7 +171,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
 
     const deps = this._deps;
     // Optimization: Short-circuit execution if dependencies are stable.
-    if (!force && deps.physicalSize > 0 && !this._isDirty()) return;
+    if (!force && deps.capacity > 0 && !this._isDirty()) return;
 
     this._checkInfiniteLoops();
     debug.trackUpdate(this.id, debug.getDebugName(this));
@@ -249,12 +239,12 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
 
   protected override _isDirty(): boolean {
     const deps = this._deps;
-    const size = deps.size;
-    if (size === 0) return false;
+    const length = deps.length;
+    if (length === 0) return false;
 
     const hotIndex = this._hotIndex;
-    if (hotIndex !== -1 && hotIndex < size) {
-      const link = deps.getAt(hotIndex);
+    if (hotIndex !== -1 && hotIndex < length) {
+      const link = deps.at(hotIndex);
       if (link !== null) {
         const dep = link.node;
         // Optimization: Pure nodes (atoms) can bypass context switching during dirty checks.
@@ -270,7 +260,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
    */
   protected override _deepDirtyCheck(): boolean {
     const deps = this._deps;
-    const size = deps.size;
+    const length = deps.length;
     const hotIdx = this._hotIndex;
 
     // Caution: Tracking must be disabled during validation to prevent unintentional subscriptions.
@@ -278,9 +268,9 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     trackingContext.current = null;
 
     try {
-      for (let i = 0; i < size; i++) {
+      for (let i = 0; i < length; i++) {
         if (i === hotIdx) continue;
-        const link = deps.getAt(i);
+        const link = deps.at(i);
         if (link === null) continue;
 
         const dep = link.node;

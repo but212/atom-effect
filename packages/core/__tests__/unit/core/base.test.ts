@@ -113,7 +113,7 @@ describe('ReactiveNode (Base)', () => {
       dep.version = 5;
 
       const deps = new DepSlotBuffer();
-      deps.add(new DependencyLink(dep, 4)); // 4 != 5 -> Dirty
+      deps.push(new DependencyLink(dep, 4)); // 4 != 5 -> Dirty
       node.setTestDeps(deps, 0);
 
       expect(node.checkIsDirty()).toBe(true);
@@ -126,7 +126,7 @@ describe('ReactiveNode (Base)', () => {
       dep.version = 5;
 
       const deps = new DepSlotBuffer();
-      deps.add(new DependencyLink(dep, 5)); // Match -> Clean
+      deps.push(new DependencyLink(dep, 5)); // Match -> Clean
       node.setTestDeps(deps, 0);
 
       node.dirtyCheckResult = true;

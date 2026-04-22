@@ -126,45 +126,15 @@ export abstract class ReactiveNode<T> {
       this._slots = slots;
     }
 
-    if (slots.size > 0) {
-      let duplicate = false;
-
-      // Optimization: Unrolled membership check for the inline slots (s0-s3) to minimize traversal overhead.
-      if (
-        (slots._s0 !== null && (slots._s0.fn === listener || slots._s0.sub === listener)) ||
-        (slots._s1 !== null && (slots._s1.fn === listener || slots._s1.sub === listener)) ||
-        (slots._s2 !== null && (slots._s2.fn === listener || slots._s2.sub === listener)) ||
-        (slots._s3 !== null && (slots._s3.fn === listener || slots._s3.sub === listener))
-      ) {
-        duplicate = true;
-      } else {
-        const ov = slots._overflow;
-        if (ov !== null) {
-          const len = ov.length;
-          // Logic: Hoisted invariant check (isFn) outside the loop to reduce branching in the hot path.
-          if (isFn) {
-            for (let i = 0; i < len; i++) {
-              const s = ov[i];
-              if (s !== null && s?.fn === listener) {
-                duplicate = true;
-                break;
-              }
-            }
-          } else {
-            for (let i = 0; i < len; i++) {
-              const s = ov[i];
-              if (s !== null && s?.sub === listener) {
-                duplicate = true;
-                break;
-              }
-            }
-          }
+    if (slots.length > 0) {
+      const length = slots.capacity;
+      for (let i = 0; i < length; i++) {
+        const link = slots.at(i);
+        if (link !== null && (link.fn === listener || link.sub === listener)) {
+          if (IS_DEV)
+            console.warn(`[atom-effect] Duplicate subscription ignored on node ${this.id}`);
+          return () => {};
         }
-      }
-
-      if (duplicate) {
-        if (IS_DEV) console.warn(`[atom-effect] Duplicate subscription ignored on node ${this.id}`);
-        return () => {};
       }
     }
 
@@ -173,7 +143,7 @@ export abstract class ReactiveNode<T> {
       !isFn ? (listener as Subscriber) : undefined
     );
 
-    slots.add(link);
+    slots.push(link);
     return () => this._unsubscribe(link);
   }
 
@@ -202,7 +172,7 @@ export abstract class ReactiveNode<T> {
    */
   subscriberCount(): number {
     const slots = this._slots;
-    return slots === null ? 0 : slots.size;
+    return slots === null ? 0 : slots.length;
   }
 
   /**
@@ -214,7 +184,7 @@ export abstract class ReactiveNode<T> {
    */
   protected _notifySubscribers(newValue: T | undefined, oldValue: T | undefined): void {
     const slots = this._slots;
-    if (slots === null || slots.size === 0) return;
+    if (slots === null || slots.length === 0) return;
 
     this._notifying++;
     try {
@@ -284,11 +254,11 @@ export abstract class ReactiveNode<T> {
    */
   protected _isDirty(): boolean {
     const deps = this._deps;
-    if (deps === null || deps.size === 0) return false;
+    if (deps === null || deps.length === 0) return false;
 
     const hotIndex = this._hotIndex;
     if (hotIndex !== -1) {
-      const hotLink = deps.getAt(hotIndex);
+      const hotLink = deps.at(hotIndex);
       if (hotLink !== null && hotLink.node.version !== hotLink.version) {
         return true;
       }

@@ -227,3 +227,24 @@ The `runtimeDebug` object (exported from the core) provides tools for inspecting
 ### Global Debug Toggle
 
 Debug features can be enabled at runtime by setting `window.__ATOM_DEBUG__ = true` or `sessionStorage.setItem('__ATOM_DEBUG__', 'true')` before the library script is evaluated.
+
+---
+
+## Internal Buffers (Advanced)
+
+The library uses specialized buffers (`SlotBuffer`, `DepSlotBuffer`) for high-performance dependency and subscriber management. While primarily internal, they are exported for advanced use cases and testing.
+
+### `SlotBuffer<T>`
+
+A hybrid buffer using Small Vector Optimization (SVO).
+
+- `length`: The number of active (non-null) items in the buffer.
+- `capacity`: The highest physical index occupied plus one.
+- `push(item: T): number`: Adds an item to the buffer, reusing holes if possible. Returns the index.
+- `at(index: number): T | null`: Returns the item at the specified index.
+- `remove(item: T): boolean`: Removes an item and leaves a hole for future reuse.
+- `compact(): void`: Eliminates all internal holes and resets physical boundaries.
+
+### `DepSlotBuffer`
+
+A specialized `SlotBuffer` for `DependencyLink` objects, adding a Map-based fallback for $O(1)$ lookups when the collection grows large (> 32 items).

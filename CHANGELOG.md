@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Core
+
+#### Refactor
+
+- **Buffers**: Standardized `SlotBuffer` and `DepSlotBuffer` API to match standard JavaScript collections (Array-like).
+  - Renamed `size` -> `length`, `physicalSize` -> `capacity`, `add` -> `push`, and `getAt` -> `at`.
+
 ### Documentation
 
 - **Standards**: Established formal TSDoc and inline comment conventions in `docs/conventions/code_documentation_conventions.md`.
