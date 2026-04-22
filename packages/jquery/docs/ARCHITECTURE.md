@@ -355,6 +355,7 @@ packages/jquery/src/
       types.ts        — Internal types and interface definitions
     mount.ts          — atomMount / atomUnmount component lifecycle
   features/
+    web-component.ts  — AEJ-powered Custom Elements + Reactive DI engine + CSS Bridge
     route.ts          — SPA router (hash + history mode) with reactive state
     fetch.ts          — $.atomFetch declarative AJAX primitive
     nav.ts            — $.atomNav PJAX navigation module
@@ -494,6 +495,7 @@ This controller manages:
 - **Scoped API**: Provides a raw `host` reference, an active `root` node, and a scoped jQuery instance (`$`) restricted to the component boundary.
 - **Lifecycle Sync**: Bridges `connectedCallback` to `setup()` and `disconnectedCallback` to `teardown()`.
 - **Observer Management**: Handles the scoped `MutationObserver` lifecycle for the component's boundary, supporting custom roots (Shadow DOM).
+- **Reactive Attributes (`attrs`)**: Lazy-initializes atoms for `observedAttributes`. A private `MutationObserver` tracks attribute changes and syncs them to these atoms, allowing components to react to HTML attribute updates.
 
 ### 16.2 Dependency Injection (DI) Engine
 
@@ -508,11 +510,31 @@ AEJ uses a **stateless tree-walker** for DI resolution. This avoids the overhead
 3. **Registry Lookup**: At each step, it checks the node's `AEJ_STATE` for registered providers.
 4. **Resolution**: The first match is returned. This guarantees nearest-ancestor priority and allows for context overrides.
 
-#### 16.2.2 Reactive & Lazy Resolution
+#### 16.2.2 Context Automation (Global Versioning)
+
+To detect DOM movements without the overhead of event listeners on every node, AEJ uses a **Global Versioning** system:
+
+1. **Global Observer**: A `globalTreeObserver` (MutationObserver) watches the entire document and all ShadowRoots for node additions/removals.
+2. **Version Bumping**: Any structural change bumps a `globalVersion` atom in the `contextRegistry`.
+3. **Reactive Invalidation**: `injectAtom` proxies depend on this `globalVersion`. When it changes, all active injections re-run their tree-traversal logic to ensure they are still connected to the correct provider.
+
+#### 16.2.3 Reactive & Lazy Resolution
 
 - **Reactive**: Injected values are returned as `ReadonlyAtom<T>`. If the provider is an atom, it is returned directly; otherwise, it's wrapped in a computed atom.
 - **Late Binding**: For Custom Elements, if the element is disconnected during construction, a lazy computed atom is returned that delays resolution until the first access while connected.
 
-#### 16.2.3 Type Safety (Generics)
+#### 16.2.4 Type Safety (Generics)
 
 The new DI engine favors standard TypeScript generics over interface merging. By providing a type parameter to `injectAtom<T>`, users get full IDE support and compile-time validation for the returned `ReadonlyAtom<T>`.
+
+#### 16.2.5 CSS Custom Properties Bridge
+
+`provideAtom` implements a "CSS Bridge" that maps reactive state to the CSS layer:
+
+- **Naming**: Keys are converted to `--aej-<key>` variables.
+- **Effect Mapping**: For atom-based providers, a dedicated effect is created on the element's `AEJ_STATE` to sync the atom's value to the style property.
+- **Lifecycle**: These effects are automatically cleaned up if the provider is overridden or the element is removed.
+
+#### 16.2.6 Injection Cache Optimization
+
+Resolution results are cached in the target node's `AEJ_STATE`. Each cache entry includes snapshots of the global version and the key-specific version at the time of resolution. Subsequent lookups skip the O(depth) traversal if the versions haven't changed, providing O(1) performance for stable DOM structures.

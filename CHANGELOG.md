@@ -18,11 +18,15 @@
   - **Metadata Access**: Exposed `host` and `root` properties on the controller for precise DOM control.
 - **Dependency Injection (DI)**:
   - **Late Binding**: Added support for late-bound reactive context in Custom Elements, enabling `injectAtom` to work correctly during element construction before DOM connection.
+  - **Context Automation**: Introduced a global MutationObserver to automatically bump context versions when nodes move between providers, ensuring seamless reactivity across DOM reorganizations.
+- **CSS Bridge**: Added a "CSS Bridge" feature to `provideAtom`, automatically synchronizing provided values to CSS custom properties (e.g., `--aej-key`) for direct styling integration.
+- **Reactive Attributes**: Enhanced `useAtomComponent` with an `attrs` controller property that automatically synchronizes `observedAttributes` to reactive atoms.
 
 #### Changed
 
 - **Dependency Injection (DI)**: Re-implemented DI resolution using composed tree traversal instead of event bubbling, ensuring 100% reliability across nested Shadow DOM boundaries and improving resolution performance.
 - **Internal Architecture**: Consolidated node state into a private `AEJ_STATE` symbol, reducing DOM pollution and preventing interference with other libraries.
+- **Dependency Injection (DI)**: Moved the injection cache from a global `WeakMap` to node-local `AEJState` for better data locality and lifecycle alignment.
 - **Memory Management**: Overhauled the auto-cleanup engine to support multiple roots and explicit opt-out via `initAEJ`.
 
 #### Fixed

@@ -295,6 +295,12 @@ export interface AtomComponentFeatures {
  */
 export interface AtomComponentController extends AtomComponentFeatures {
   /**
+   * Reactive atoms for observed attributes.
+   * Only includes attributes defined in the component's static `observedAttributes` array.
+   */
+  readonly attrs: Record<string, WritableAtom<string | null>>;
+
+  /**
    * Initializes the component's reactive lifecycle.
    * @param shadowRoot - Optional ShadowRoot (required for 'closed' mode components).
    */

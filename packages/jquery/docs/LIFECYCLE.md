@@ -20,6 +20,7 @@ This document defines the expected behavior and cleanup timing for elements mana
 | **$.empty()** | `ATTACHED` → `DESTROYED` (descendants) | **Immediate** | **Patch Path**: Direct call to `cleanupDescendants()`. |
 | **Native Removal** | `ATTACHED` → `DESTROYED` | **Deferred** | **Observer Path**: Caught by MutationObserver (Microtask). |
 | **teardown()** | `ATTACHED` → `DESTROYED` | **Hybrid** | **Observer Disconnect** (Immediate) + **Cleanup** (Deferred). |
+| **DOM Move** | `ATTACHED` → `DETACHED` → `ATTACHED` | **Context Bump** | `globalTreeObserver` triggers version bump on movement. |
 | **Closed Shadow** | `ATTACHED` → `DESTROYED` | **Same as Host** | Registered via `setup(sr)`; cleaned via host marker. |
 
 ## Cleanup Chain Logic
@@ -40,3 +41,4 @@ The library's lifecycle behavior is governed by a global configuration. Calling 
 1. **Double Cleanup Safety**: Calling cleanup multiple times on the same node must be idempotent and never throw.
 2. **Shadow Transparency**: Shadow DOM subtrees must be traversed during cleanup unless the host is marked as `ignored`.
 3. **Memory Leak Prevention**: All `WeakMap` entries and `MutationObserver` listeners must be released when a component calls `teardown()`.
+4. **Context Integrity**: A DOM movement must trigger a context version bump to invalidate cached injections, ensuring node locality for reactive context.
