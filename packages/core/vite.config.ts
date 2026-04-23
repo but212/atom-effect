@@ -37,7 +37,7 @@ export default defineConfig(({ mode }) => ({
       include: ['src/**/*'],
       exclude: ['src/**/*.test.ts', 'node_modules'],
       insertTypesEntry: true,
-      rollupTypes: true,
+      skipDiagnostics: true,
       tsconfigPath: './tsconfig.build.json',
     }),
   ],

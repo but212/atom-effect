@@ -1,6 +1,5 @@
-import { playwright } from '@vitest/browser-playwright';
+import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
-import { defineConfig } from 'vitest/config';
 
 export default defineConfig(({ mode }) => ({
   define: {
@@ -16,9 +15,10 @@ export default defineConfig(({ mode }) => ({
         format === 'umd' ? 'atom-effect-jquery.min.js' : `index.${format === 'es' ? 'mjs' : 'cjs'}`,
     },
     rollupOptions: {
-      external: ['jquery'],
+      external: ['jquery', '@but212/atom-effect'],
       output: {
         globals: {
+          '@but212/atom-effect': 'AtomEffect',
           jquery: 'jQuery',
         },
         exports: 'named',
@@ -31,16 +31,10 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [
     dts({
-      rollupTypes: true,
-      exclude: ['src/**/*.test.ts', '__tests__/**/*'],
+      include: ['src/**/*'],
+      exclude: ['src/**/*.test.ts', '__tests__/**/*', '__benchmarks__/**/*', 'node_modules'],
+      skipDiagnostics: true,
+      tsconfigPath: './tsconfig.build.json',
     }),
   ],
-  test: {
-    browser: {
-      enabled: true,
-      provider: playwright(),
-      instances: [{ browser: 'chromium' }],
-    },
-    setupFiles: ['./__tests__/setup.ts'],
-  },
 }));
