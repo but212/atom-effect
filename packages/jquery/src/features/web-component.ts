@@ -766,9 +766,11 @@ export function injectAtom<T = unknown>(
     return null;
   }
 
-  const tagName = target.tagName.toLowerCase();
-  if (debug.enabled && tagName.includes('-') && !customElements.get(tagName)) {
-    debug.warn(SYSTEM_COMPONENT.PREFIX, SYSTEM_COMPONENT.ERRORS.NOT_REGISTERED(tagName));
+  if (debug.enabled && typeof customElements !== 'undefined') {
+    const tagName = target.tagName.toLowerCase();
+    if (tagName.includes('-') && !customElements.get(tagName)) {
+      debug.warn(SYSTEM_COMPONENT.PREFIX, SYSTEM_COMPONENT.ERRORS.NOT_REGISTERED(tagName));
+    }
   }
 
   const state = getInternalState(target);
