@@ -424,23 +424,54 @@ export interface AtomComponentFeatures {
 /**
  * Composition-based controller for managing a component's reactive lifecycle.
  *
+ * When to use:
+ * - To build Custom Elements that require reactive attribute and slot synchronization.
+ * - To manage complex component lifecycles with automated resource disposal.
+ * - To provide or inject reactive state across Shadow DOM boundaries.
+ *
  * @public
  */
 export interface AtomComponentController extends AtomComponentFeatures {
   /**
-   * Reactive atoms synchronized with observed HTML attributes.
-   * Includes only attributes defined in the static `observedAttributes` array.
+   * Factory function that returns a reactive lens atom for a specific HTML attribute.
+   * Accessing a name returns a WritableAtom<string | null>.
    */
-  readonly attrs: Record<string, WritableAtom<string | null>>;
+  readonly attrs: (name: string) => WritableAtom<string | null>;
+
+  /**
+   * Factory function that returns a reactive lens atom for a specific Shadow DOM slot.
+   * Provides ReadonlyAtom<Node[]> for each named slot (or 'default' for unnamed).
+   */
+  readonly slots: (name: string) => ReadonlyAtom<Node[]>;
 
   /**
    * Initializes the component's reactive lifecycle and observers.
-   * @param shadowRoot - Optional ShadowRoot context for 'closed' mode components.
+   *
+   * Logic: Hybrid Options
+   * Accepts a raw ShadowRoot for traditional usage or a configuration object
+   * for declarative hydration and automatic event dispatching.
+   *
+   * @param options - ShadowRoot or configuration object for hydration and event dispatching.
    */
-  setup(shadowRoot?: ShadowRoot): void;
+  setup(
+    options?:
+      | ShadowRoot
+      | {
+          shadowRoot?: ShadowRoot;
+          /** Maps event names to atoms or getter functions for automatic dispatching. */
+          dispatch?: Record<string, ReactiveValue<unknown>>;
+          /** Maps data-bind keys to atoms for declarative DOM hydration. */
+          bind?: Record<string, ReadonlyAtom<unknown>>;
+        }
+  ): void;
+
   /**
    * Tears down all reactive bindings and observers.
    * Disconnects observers immediately; actual cleanup is deferred to a microtask.
+   *
+   * Logic: Cleanup Mechanism
+   * Releases all listeners, observers, and effects created during setup() or
+   * through reactive property access (attrs/slots).
    */
   teardown(): void;
 }
@@ -743,10 +774,20 @@ declare global {
     /**
      * Registers a reactive context value at a specific DOM root.
      *
+     * When to use:
+     * - To share state (atoms) with deep descendants without explicit prop drilling.
+     * - To establish theme or configuration contexts at specific DOM roots.
+     *
      * Logic: Dependency Injection
-     * - Shares state with deep descendant elements without prop drilling.
-     * - Automatically exposes provided values as CSS variables (`--aej-[key]`).
-     * - Uses a global versioning system to trigger re-discovery when nodes move.
+     * Shares state with descendant elements via the bubbling `aej:context-request` event.
+     * This mechanism respects Shadow DOM boundaries through composed event propagation.
+     *
+     * Logic: CSS Bridge
+     * Automatically synchronizes provided values with CSS custom properties (`--aej-[key]`),
+     * enabling reactive styling driven by application state.
+     *
+     * Optimization: Versioning
+     * Uses a global versioning system to trigger re-discovery when nodes move in the DOM.
      *
      * @param element - The host element, selector, or collection acting as provider.
      * @param key - Unique identifier for the context (string or symbol).
@@ -765,9 +806,13 @@ declare global {
     /**
      * Injects a reactive context provided by an ancestor element.
      *
+     * When to use:
+     * - To consume state from an ancestor without direct coupling.
+     * - To create context-aware components that adapt to their DOM hierarchy position.
+     *
      * Logic: Hybrid Discovery
      * Consumes state from ancestors without direct coupling. Returns a proxy
-     * that automatically re-discovers providers if the element is moved within
+     * that automatically re-locates providers if the element is moved within
      * the DOM hierarchy.
      *
      * @param element - The element or selector requesting the context.
@@ -786,7 +831,11 @@ declare global {
      *
      * When to use:
      * - When building standard Custom Elements that require reactive state and DI.
-     * - To simplify mapping between HTML attributes and reactive atoms.
+     * - To mapping between HTML attributes/slots and reactive atoms.
+     *
+     * Logic: Lifecycle Integration
+     * Returns a controller that orchestrates the initialization and teardown of
+     * component-specific reactive resources.
      *
      * @param element - The host Custom Element (usually `this`).
      * @returns A controller for managing the component's reactive lifecycle.
@@ -795,14 +844,17 @@ declare global {
      * ```typescript
      * class MyComponent extends HTMLElement {
      *   private aej = $.useAtomComponent(this);
+     *
      *   connectedCallback() {
      *     this.aej.setup();
-     *     // ... setup bindings
+     *     this.aej.$('.btn').on('click', () => console.log('Action performed'));
      *   }
+     *
      *   disconnectedCallback() {
      *     this.aej.teardown();
      *   }
      * }
+     * customElements.define('my-component', MyComponent);
      * ```
      *
      * @public

@@ -115,7 +115,7 @@ Lenses provide reactive access to nested properties within monolithic state obje
 
 - **Structural Sharing**: When updating a value through a lens, only the objects along the modified path are cloned. Unrelated branches maintain reference equality (`===`), preventing unnecessary downstream updates.
 - **Security**: The `setDeepValue` utility blocks access to `__proto__`, `constructor`, and `prototype` to prevent prototype pollution.
-- **Type Safety**: Recursive utility types (`Paths`, `PathValue`) provide IDE autocompletion and type inference up to 8 levels deep.
+- **Type Safety**: Recursive utility types (`Paths`, `PathValue`) provide IDE autocompletion up to 8 levels deep. The engine explicitly handles arrays and broad string/number dictionaries, ensuring type stability across complex, dynamic state structures.
 
 ---
 

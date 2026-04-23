@@ -211,6 +211,9 @@ Lenses allow for the creation of reactive "views" into specific parts of an obje
 
 Creates a writable virtual atom pointing to a dot-path within a source atom. It uses structural sharing to ensure that only modified paths are updated, preserving reference equality for unrelated branches.
 
+- **Path Resolution Engine**: Supports fully typed dot-paths for deep object structures, including arrays (`user.items.0.name`) and open-ended dictionaries (`Record<string, T>`).
+- **Flexible Typing**: The setter and subscription callbacks accept broader types (`unknown`) to accommodate structural updates and dynamic keys.
+
 ### `lensFor(atom)`
 
 A factory utility for creating multiple lenses bound to the same source atom.

@@ -13,6 +13,18 @@ export type DependencyId = number;
  */
 export type StringKeyToNumber<S extends string> = S extends `${infer N extends number}` ? N : S;
 
+/** Detects whether a type exposes an open-ended string index signature. */
+export type HasBroadStringKey<T> = string extends keyof T ? true : false;
+
+/** Detects whether a type exposes an open-ended number index signature. */
+export type HasBroadNumberKey<T> = number extends keyof T ? true : false;
+
+/** Extracts the value type of an open-ended string dictionary. */
+export type StringIndexValue<T> = T extends Record<string, infer V> ? V : never;
+
+/** Extracts the element type of an array or tuple. */
+export type ArrayElement<T> = T extends readonly (infer U)[] ? U : never;
+
 /** The maximum recursion depth allowed for path generation and traversal. */
 export type MaxDepth = 8;
 
@@ -47,15 +59,21 @@ export type Paths<T, D extends unknown[] = []> = D['length'] extends MaxDepth
   ? never
   : T extends TerminalTypes
     ? never
-    : T extends object
-      ? {
-          [K in keyof T & (string | number)]: T[K] extends Function
-            ? never
-            : NonNullable<T[K]> extends object
-              ? `${K}` | `${K}.${Paths<NonNullable<T[K]>, [...D, 1]>}`
-              : `${K}`;
-        }[keyof T & (string | number)]
-      : never;
+    : T extends readonly unknown[]
+      ? NonNullable<ArrayElement<T>> extends object
+        ? `${number}` | `${number}.${Paths<NonNullable<ArrayElement<T>>, [...D, 1]>}`
+        : `${number}`
+      : T extends object
+        ? HasBroadStringKey<T> extends true
+          ? string
+          : {
+              [K in keyof T & (string | number)]: T[K] extends Function
+                ? never
+                : NonNullable<T[K]> extends object
+                  ? `${K}` | `${K}.${Paths<NonNullable<T[K]>, [...D, 1]>}`
+                  : `${K}`;
+            }[keyof T & (string | number)]
+        : never;
 
 /**
  * Resolves the type of the value located at a specific dot-path.
@@ -74,12 +92,24 @@ export type Paths<T, D extends unknown[] = []> = D['length'] extends MaxDepth
  * ```
  */
 export type PathValue<T, P extends string> = P extends `${infer K}.${infer Rest}`
-  ? StringKeyToNumber<K> extends keyof NonNullable<T>
-    ? PathValue<NonNullable<NonNullable<T>[StringKeyToNumber<K> & keyof NonNullable<T>]>, Rest>
-    : never
-  : StringKeyToNumber<P> extends keyof NonNullable<T>
-    ? NonNullable<T>[StringKeyToNumber<P> & keyof NonNullable<T>]
-    : never;
+  ? NonNullable<T> extends readonly unknown[]
+    ? K extends `${number}`
+      ? PathValue<NonNullable<ArrayElement<NonNullable<T>>>, Rest>
+      : never
+    : HasBroadStringKey<NonNullable<T>> extends true
+      ? PathValue<NonNullable<StringIndexValue<NonNullable<T>>>, Rest>
+      : StringKeyToNumber<K> extends keyof NonNullable<T>
+        ? PathValue<NonNullable<NonNullable<T>[StringKeyToNumber<K> & keyof NonNullable<T>]>, Rest>
+        : never
+  : NonNullable<T> extends readonly unknown[]
+    ? P extends `${number}`
+      ? NonNullable<ArrayElement<NonNullable<T>>>
+      : never
+    : HasBroadStringKey<NonNullable<T>> extends true
+      ? NonNullable<StringIndexValue<NonNullable<T>>>
+      : StringKeyToNumber<P> extends keyof NonNullable<T>
+        ? NonNullable<T>[StringKeyToNumber<P> & keyof NonNullable<T>]
+        : never;
 
 // ============================================================================
 // Core Types
