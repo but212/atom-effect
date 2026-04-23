@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import $ from '@/index';
 import type { Router } from '@/types';
 
@@ -87,5 +87,21 @@ describe('Context Injection Synergy (provide/inject)', () => {
     expect(style?.getPropertyValue('--aej-accent-color')).toBe('#00ff00');
 
     $container.remove();
+  });
+
+  it('should warn when injectAtom is called on an unregistered custom element', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    $.debug.enabled = true;
+
+    const tagName = `unregistered-inject-${Math.random().toString(36).slice(2, 9)}`;
+    const el = document.createElement(tagName);
+
+    $.injectAtom(el, 'some-key');
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining(`[atom-component] Custom Element <${tagName}> is not registered.`)
+    );
+
+    warnSpy.mockRestore();
   });
 });

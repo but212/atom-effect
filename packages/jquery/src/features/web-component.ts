@@ -1,5 +1,6 @@
 import { BRAND, BrandFlags, isAtom, isWritable, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
+import { SYSTEM_COMPONENT } from '@/constants';
 import { disableAutoCleanupFor, enableAutoCleanup, registry } from '@/core/registry';
 import type {
   AtomComponentController,
@@ -9,6 +10,7 @@ import type {
   ReadonlyAtom,
   WritableAtom,
 } from '@/types';
+import { debug } from '@/utils/debug';
 
 // ─── Constants & Types ───────────────────────────────────────────────────────
 
@@ -284,6 +286,13 @@ function createContextProxy<T>(target: HTMLElement, key: string | symbol): Writa
  * ```
  */
 export function useAtomComponent(element: HTMLElement): AtomComponentController {
+  if (debug.enabled && typeof customElements !== 'undefined') {
+    const tagName = element.tagName.toLowerCase();
+    if (tagName.includes('-') && !customElements.get(tagName)) {
+      debug.warn(SYSTEM_COMPONENT.PREFIX, SYSTEM_COMPONENT.ERRORS.NOT_REGISTERED(tagName));
+    }
+  }
+
   const state = getInternalState(element);
   if (state.controller) {
     return state.controller;
@@ -755,6 +764,13 @@ export function injectAtom<T = unknown>(
         : ((element as JQuery)[0] as HTMLElement);
   if (!target) {
     return null;
+  }
+
+  if (debug.enabled && typeof customElements !== 'undefined') {
+    const tagName = target.tagName.toLowerCase();
+    if (tagName.includes('-') && !customElements.get(tagName)) {
+      debug.warn(SYSTEM_COMPONENT.PREFIX, SYSTEM_COMPONENT.ERRORS.NOT_REGISTERED(tagName));
+    }
   }
 
   const state = getInternalState(target);

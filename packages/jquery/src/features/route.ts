@@ -7,7 +7,7 @@ import {
   untracked,
 } from '@but212/atom-effect';
 import $ from 'jquery';
-import { SYSTEM_ROUTE } from '@/constants';
+import { SYSTEM_COMPONENT, SYSTEM_ROUTE } from '@/constants';
 import { registry } from '@/core/registry';
 import type { RouteConfig, RouteDefinition, Router, WritableAtom } from '@/types';
 import { debug } from '@/utils/debug';
@@ -500,6 +500,21 @@ class RouterImpl implements Router {
         def.onMount?.($(container).children(), onUnmount, this);
       }
     }
+
+    this.checkUnregisteredComponents(container);
+  }
+
+  /** Checks for unregistered custom elements within the container and logs a warning in debug mode. */
+  private checkUnregisteredComponents(container: HTMLElement) {
+    if (!debug.enabled || typeof customElements === 'undefined') return;
+
+    container.querySelectorAll(':not(:defined)').forEach((el) => {
+      const tagName = el.tagName.toLowerCase();
+      // Logic: Standard Custom Elements must contain a hyphen.
+      if (tagName.includes('-')) {
+        debug.warn(SYSTEM_COMPONENT.PREFIX, SYSTEM_COMPONENT.ERRORS.NOT_REGISTERED(tagName));
+      }
+    });
   }
 
   /** Automatically scans the DOM for templates with route definitions. */

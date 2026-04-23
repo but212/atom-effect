@@ -113,6 +113,14 @@ export const SYSTEM_MOUNT = {
   },
 } as const;
 
+/** Error templates for Web Components. @internal */
+export const SYSTEM_COMPONENT = {
+  PREFIX: '[atom-component]',
+  ERRORS: {
+    NOT_REGISTERED: (tagName: string) => `Custom Element <${tagName}> is not registered.`,
+  },
+} as const;
+
 /** Defaults for the visual debug system. @internal */
 export const SYSTEM_DEBUG = {
   DEFAULTS: Object.freeze({ HIGHLIGHT_DURATION_MS: 500 } as const),

@@ -250,4 +250,31 @@ describe('Nav & Route Integration', () => {
     nav.destroy();
     router.destroy();
   });
+
+  describe('Diagnostics & Warnings', () => {
+    it('should warn when router renders an unregistered custom element', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      $.debug.enabled = true;
+
+      const $view = $('<div id="view"></div>').appendTo(document.body);
+      const tagName = `unregistered-route-${Math.random().toString(36).slice(2, 9)}`;
+
+      const router = $.route({
+        target: $view,
+        routes: {
+          '/': { render: (el) => $(el).html(`<${tagName}></${tagName}>`) },
+        },
+      });
+
+      await $.nextTick();
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining(`[atom-component] Custom Element <${tagName}> is not registered.`)
+      );
+
+      router.destroy();
+      $view.remove();
+      warnSpy.mockRestore();
+    });
+  });
 });

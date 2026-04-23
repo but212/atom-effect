@@ -177,4 +177,23 @@ describe('Web Components Synergy (useAtomComponent)', () => {
     // renderCount should remain 2 because of cleanup
     expect(renderCount).toBe(2);
   });
+
+  describe('Diagnostics & Warnings', () => {
+    it('should warn when useAtomComponent is called on an unregistered custom element', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      $.debug.enabled = true;
+
+      const tagName = `unregistered-test-${Math.random().toString(36).slice(2, 9)}`;
+      const el = document.createElement(tagName);
+
+      // Trigger the warning by calling useAtomComponent on an unregistered tag
+      $.useAtomComponent(el);
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining(`[atom-component] Custom Element <${tagName}> is not registered.`)
+      );
+
+      warnSpy.mockRestore();
+    });
+  });
 });

@@ -19,6 +19,7 @@
 
 #### Added
 
+- **Diagnostic Warnings**: Integrated unregistered custom element detection in `$.route`, `$.useAtomComponent`, and `$.injectAtom` when `debug.enabled` is true.
 - **Global Configuration**: Introduced `$.initAEJ` for centralized control over library behavior, allowing granular toggling of jQuery patches and custom `MutationObserver` safety-net roots.
 - **Web Components**: Introduced `useAtomComponent` for high-performance reactive integration with Custom Elements.
   - **Lens Factory API**: Exposed `attrs` and `slots` as functional Lens Factories (e.g., `attrs('name')`), leveraging core `atomLens` for fine-grained reactivity and better type safety.
@@ -48,6 +49,8 @@
 
 #### Refactor
 
+- **Test Infrastructure**: Modularized the monolithic integration test suite into specialized categories (`features`, `synergy`, `routing`, `core`, `scenarios`, `lifecycle`) for improved maintainability and stability.
+- **ESM Modernization**: Migrated configuration files to use `import.meta.dirname` for better ESM compatibility and standardized `@/` path aliases across the monorepo.
 - **Core Overrides**: Modularized jQuery prototype patches (`jquery-patch`) to allow independent enabling of event-wrapping and lifecycle-sync hooks.
 
 ## [0.31.0]
