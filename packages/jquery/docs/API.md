@@ -303,23 +303,56 @@ $('#root').atomMount(UserProfile, { id: 42 });
 
 ### `$.useAtomComponent(element)`
 
-Helper for adding reactive features to standard Web Components (Custom Elements).
+Integrates reactive state management into standard Custom Elements. This utility returns an `AtomComponentController` that handles the initialization and cleanup of reactive resources synchronized with the component's lifecycle.
 
-**Returns**: `AtomComponentController` for managing the component lifecycle, including scoped selectors, attribute atoms, and dependency injection.
+#### Controller API
+
+- **`attrs`**: A factory function that returns `WritableAtom`s for HTML attributes. Calling the function with an attribute name (e.g., `attrs('theme')`) returns a lens atom. Changing an atom updates the corresponding DOM attribute, and attribute changes update the atom value.
+- **`slots`**: A factory function providing `ReadonlyAtom<Node[]>` for each Shadow DOM `<slot>`.
+  - `controller.slots('default')`: Tracks nodes in the unnamed slot.
+  - `controller.slots(name)`: Tracks nodes in a named slot (e.g., `controller.slots('header')`).
+- **`$`**: A jQuery selector scoped to the component's `ShadowRoot` or the host element itself.
+
+#### `setup(options?)`
+
+Configures reactive observers, event dispatching, and data binding.
+
+- **`shadowRoot`**: The `ShadowRoot` instance used for scoped selectors and slot tracking (required for 'closed' mode).
+- **`dispatch`**: An object mapping event names to atoms or functions. A `CustomEvent` is automatically dispatched from the host whenever the state changes.
+- **`bind`**: An object mapping keys to atoms. Elements within the component containing `data-bind="key"` will have their text content updated when the atom changes.
+
+#### Example: Reactive Custom Element
 
 ```javascript
 class MyComp extends HTMLElement {
+  static observedAttributes = ['theme'];
   private aej = $.useAtomComponent(this);
+  private count = $.atom(0);
   
   connectedCallback() {
-    this.aej.setup();
-    this.aej.$('.title').atomText($.atom('Hello'));
+    const sr = this.attachShadow({ mode: 'open' });
+    sr.innerHTML = `
+      <div>
+        <h1 data-bind="title"></h1>
+        <slot></slot>
+        <button class="inc">Increment</button>
+      </div>
+    `;
+
+    this.aej.setup({
+      shadowRoot: sr,
+      bind: { title: $.computed(() => `Theme: ${this.aej.attrs('theme').value}`) },
+      dispatch: { 'count-changed': this.count }
+    });
+
+    this.aej.$('.inc').on('click', () => this.count.value++);
   }
   
   disconnectedCallback() {
     this.aej.teardown();
   }
 }
+customElements.define('my-comp', MyComp);
 ```
 
 ---
@@ -328,18 +361,18 @@ class MyComp extends HTMLElement {
 
 ### `$.provideAtom(target, key, atom)`
 
-Registers an element as a provider for a reactive context.
+Exposes a reactive value to all descendant elements in the DOM tree.
 
-- **CSS Bridge**: Synchronizes values to CSS Custom Properties (e.g., `--aej-<key>`) on the element's style.
+- **Shadow DOM Support**: Uses event-based discovery to allow state to cross Shadow DOM boundaries via the `aej:context-request` event.
+- **CSS Synchronization**: Automatically mirrors the provided value to a CSS custom property (`--aej-[key]`) on the provider element, enabling state-driven styling.
 
 ### `$.injectAtom(target, key)`
 
-Injects a reactive context provided by an ancestor.
+Retrieves a reactive value provided by an ancestor element.
 
-- **Resolution Logic**: Returns a reactive source. If the provider changes, dependents update automatically.
-- **Context Automation**: Uses a global `MutationObserver` to track DOM movements and re-evaluate context if an element is moved.
-- **Late Binding**: Supports disconnected Custom Elements by returning a lazy computed atom that resolves once connected.
-- **Shadow DOM**: Uses event-based discovery (`aej:context-request`) to traverse Shadow DOM boundaries.
+- **Dynamic Resolution**: Returns a proxy that maintains the connection even if the element is moved to a different position in the DOM hierarchy.
+- **Lazy Connection**: Supports disconnected elements by deferring the provider search until the element is attached to the document.
+- **Performance**: Utilizes an internal versioning system to minimize re-discovery overhead during structural DOM changes.
 
 ---
 

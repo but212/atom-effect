@@ -254,3 +254,87 @@ const UserCard = ($el, { userId }) => {
 
 $('#card-root').atomMount(UserCard, { userId: 42 });
 ```
+
+## 9. Web Components (Custom Elements)
+
+Integrate AEJ into standard Custom Elements using `useAtomComponent`.
+
+```javascript
+class MyComponent extends HTMLElement {
+  static observedAttributes = ['theme'];
+  private aej = $.useAtomComponent(this);
+  private count = $.atom(0);
+
+  connectedCallback() {
+    const sr = this.attachShadow({ mode: 'open' });
+    sr.innerHTML = `
+      <div class="card">
+        <h1 data-bind="title"></h1>
+        <slot></slot>
+        <button class="inc">Count: <span data-bind="count"></span></button>
+      </div>
+    `;
+
+    // 1. Setup reactive features
+    this.aej.setup({
+      shadowRoot: sr,
+      bind: { 
+        title: $.computed(() => `Theme: ${this.aej.attrs('theme').value}`),
+        count: this.count
+      },
+      dispatch: { 
+        'count-changed': this.count // Dispatches CustomEvent when count changes
+      }
+    });
+
+    // 2. Scoped event handling
+    this.aej.$('.inc').on('click', () => this.count.value++);
+  }
+
+  disconnectedCallback() {
+    // 3. Automated cleanup of effects and listeners
+    this.aej.teardown();
+  }
+}
+customElements.define('my-component', MyComponent);
+```
+
+## 10. Dependency Injection (Context API)
+
+Share state across the DOM tree without prop-drilling.
+
+### Providing Context
+
+```javascript
+const theme = $.atom('light');
+
+// Theme is available to all descendants of document.body
+$.provideAtom(document.body, 'theme', theme);
+
+// Updating the atom updates all consumers and CSS variables (--aej-theme)
+theme.value = 'dark';
+```
+
+### Injecting Context
+
+Consumers automatically re-discover providers if moved in the DOM.
+
+```javascript
+class DeepChild extends HTMLElement {
+  private aej = $.useAtomComponent(this);
+  private theme = $.injectAtom(this, 'theme');
+
+  connectedCallback() {
+    this.aej.setup();
+
+    // Use injected atom like any other atom
+    $.effect(() => {
+      console.log('Current theme:', this.theme.value);
+    });
+  }
+
+  disconnectedCallback() {
+    this.aej.teardown();
+  }
+}
+```

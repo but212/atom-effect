@@ -216,4 +216,25 @@ The `DebugController` provides visual feedback via non-blocking outlines using `
 
 ## 15. Web Component & DI Integration
 
-`useAtomComponent` implements a composition-based model for Web Components. The reactive DI system uses event-based discovery and global versioning to manage context across DOM structural changes. A CSS Bridge synchronizes reactive values to CSS Custom Properties.
+### 15.1 Web Component Controller
+
+`useAtomComponent(element)` implements a composition-based model that manages a component's reactive lifecycle. It provides:
+
+- **Reactive Attributes (`attrs`)**: A Lens Factory for observed attributes. It maintains a single source `attributeAtom` and provides scoped `atomLens` instances for individual attributes. This "Single Source of Truth" model ensures that DOM attribute changes trigger only one atom update, which then propagates efficiently through lenses.
+- **Slot Tracking (`slots`)**: A Lens Factory that monitors `assignedNodes()` via `slotchange` events. Like attributes, it uses a single source `slotsAtom` to track all slots, providing scoped lenses for individual slot names (including the default slot).
+- **Scoped Selection (`$`)**: A jQuery-compatible selector that targets the component's `ShadowRoot` (if present) or the host element.
+
+### 15.2 Declarative Synthesis & Dispatch
+
+The `setup()` method orchestrates advanced component behaviors:
+
+- **Reactive Dispatch**: Automatically dispatches `CustomEvent`s when mapped atoms or reactive functions change. This bridges internal component state to the external application.
+- **Dynamic Hydration (Synthesis)**: Maps data-binding keys to atoms. It uses a combination of initial tree-walking and a `MutationObserver` to ensure both static and dynamically added nodes are correctly bound to reactive state.
+
+### 15.3 Dependency Injection (DI)
+
+The DI system provides a loosely coupled mechanism for state sharing across the DOM:
+
+- **Event-Based Discovery**: Uses the bubbling `aej:context-request` event to locate providers, enabling state to traverse Shadow DOM boundaries via composed event propagation.
+- **Context Versioning**: A global versioning system triggers re-discovery of providers when nodes are moved within the DOM hierarchy.
+- **CSS Bridge**: Provided atoms are automatically mirrored to CSS Custom Properties (`--aej-[key]`) on the host element, allowing reactive styling driven by application state.

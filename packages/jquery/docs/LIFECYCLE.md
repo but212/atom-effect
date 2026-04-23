@@ -19,14 +19,19 @@ This document defines the behavior and cleanup timing for elements managed by `a
 | **$.remove()** | `ATTACHED` → `DESTROYED` | **Immediate** | Patched method calls `registry.cleanupTree()` synchronously. |
 | **$.empty()** | `ATTACHED` → `DESTROYED` (descendants) | **Immediate** | Patched method calls `registry.cleanupDescendants()` synchronously. |
 | **Native Removal** | `ATTACHED` → `DESTROYED` | **Deferred** | `MutationObserver` detects removal and queues cleanup as a microtask. |
-| **teardown()** | `ATTACHED` → `DESTROYED` | **Hybrid** | Immediate observer disconnection; deferred tree cleanup via microtask. |
+| **teardown()** | `ATTACHED` → `DESTROYED` | **Hybrid** | Immediate disposal of component effects (dispatch, hydration) and slot listeners; deferred tree cleanup via microtask. |
 | **Closed Shadow** | `ATTACHED` → `DESTROYED` | **Same as Host** | Registered via `registry.registerShadow()`; cleaned via host markers. |
 
 ## Cleanup Logic
 
 1. **Patched Execution (Synchronous)**: jQuery methods (`.remove()`, `.empty()`) are patched to trigger immediate cleanup of effects and bindings. These patches can be configured via `$.initAEJ({ patch: ... })`.
 2. **MutationObserver Execution (Asynchronous)**: A global `MutationObserver` acts as a fallback for removals performed via native DOM APIs. It triggers cleanup via microtasks, allowing for relocation stability.
-3. **Controller Teardown**: `teardown()` disconnects the component's internal root observer immediately while delegating element-level cleanup to the registry to ensure consistency during moves.
+3. **Controller Teardown**: `teardown()` performs immediate deterministic cleanup:
+
+- **Resource Disposal**: Disposes of internal atoms, lens maps, `dispatchEffects`, and `hydrationEffects`.
+- **Observer Removal**: Disconnects `slotchange` listeners and the attribute `MutationObserver`.
+  - **Context Notification**: Triggers a global version bump to notify descendants that providers on this node are no longer available.
+  - **Tree Cleanup**: Delegated to the registry to ensure consistency across Shadow DOM boundaries.
 
 ## Global Configuration (`$.initAEJ`)
 
@@ -40,4 +45,4 @@ The library's lifecycle behavior is controlled by global settings:
 1. **Idempotent Cleanup**: Sequential calls to cleanup a single node must result in no side effects and maintain a stable state.
 2. **Shadow Traversal**: Cleanup must traverse Shadow DOM subtrees unless the host element is explicitly marked as `ignored`.
 3. **Resource Disposal**: All `WeakMap` records and `MutationObserver` instances must be released when a component or element is destroyed.
-4. **Context Locality**: Structural DOM changes must trigger a context version bump to invalidate cached reactive injections, ensuring they reflect the element's new position.
+4. **Context Locality**: Structural DOM changes or component teardown must trigger a context version bump to invalidate cached reactive injections, ensuring they reflect the current DOM state.
