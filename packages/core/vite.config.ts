@@ -1,4 +1,3 @@
-import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 
@@ -8,7 +7,7 @@ export default defineConfig(({ mode }) => ({
   },
   build: {
     lib: {
-      entry: resolve(__dirname, 'src/index.ts'),
+      entry: `${import.meta.dirname}/src/index.ts`,
       name: 'AtomEffect',
       fileName: (format: string) => {
         if (format === 'umd') return 'atom-effect.min.js';
@@ -30,14 +29,15 @@ export default defineConfig(({ mode }) => ({
     },
   },
   resolve: {
-    tsconfigPaths: true,
+    alias: {
+      '@': `${import.meta.dirname}/src`,
+    },
   },
   plugins: [
     dts({
       include: ['src/**/*'],
       exclude: ['src/**/*.test.ts', 'node_modules'],
       insertTypesEntry: true,
-      skipDiagnostics: true,
       tsconfigPath: './tsconfig.build.json',
     }),
   ],

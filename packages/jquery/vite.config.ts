@@ -8,7 +8,7 @@ export default defineConfig(({ mode }) => ({
   build: {
     target: 'es2021',
     lib: {
-      entry: 'src/index.ts',
+      entry: `${import.meta.dirname}/src/index.ts`,
       name: 'AtomEffectJQuery',
       formats: ['es', 'cjs', 'umd'],
       fileName: (format: string) =>
@@ -27,13 +27,14 @@ export default defineConfig(({ mode }) => ({
     sourcemap: true,
   },
   resolve: {
-    tsconfigPaths: true,
+    alias: {
+      '@': `${import.meta.dirname}/src`,
+    },
   },
   plugins: [
     dts({
       include: ['src/**/*'],
       exclude: ['src/**/*.test.ts', '__tests__/**/*', '__benchmarks__/**/*', 'node_modules'],
-      skipDiagnostics: true,
       tsconfigPath: './tsconfig.build.json',
     }),
   ],

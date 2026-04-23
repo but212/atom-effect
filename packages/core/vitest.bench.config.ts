@@ -1,8 +1,7 @@
-import path from 'node:path';
 import { defineConfig } from 'vitest/config';
 
 /** Path to the library source root for alias resolution. */
-const SRC_PATH = path.resolve(__dirname, 'src');
+const SRC_PATH = `${import.meta.dirname}/src`;
 
 export default defineConfig({
   resolve: {
