@@ -286,9 +286,11 @@ function createContextProxy<T>(target: HTMLElement, key: string | symbol): Writa
  * ```
  */
 export function useAtomComponent(element: HTMLElement): AtomComponentController {
-  const tagName = element.tagName.toLowerCase();
-  if (debug.enabled && tagName.includes('-') && !customElements.get(tagName)) {
-    debug.warn(SYSTEM_COMPONENT.PREFIX, SYSTEM_COMPONENT.ERRORS.NOT_REGISTERED(tagName));
+  if (debug.enabled && typeof customElements !== 'undefined') {
+    const tagName = element.tagName.toLowerCase();
+    if (tagName.includes('-') && !customElements.get(tagName)) {
+      debug.warn(SYSTEM_COMPONENT.PREFIX, SYSTEM_COMPONENT.ERRORS.NOT_REGISTERED(tagName));
+    }
   }
 
   const state = getInternalState(element);
