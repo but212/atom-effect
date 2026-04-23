@@ -20,7 +20,8 @@ describe('Atom List Edge Cases', () => {
 
       $container.atomList(items, {
         key: 'id',
-        render: (item) => `<div id="item-${item.id}">${item.text}</div>`,
+        render: (item: { id: number; text: string }) =>
+          `<div id="item-${item.id}">${item.text}</div>`,
       });
 
       await $.nextTick();
@@ -55,8 +56,8 @@ describe('Atom List Edge Cases', () => {
 
     $container.atomList(items, {
       key: 'id',
-      render: (item) => `<div class="item">${item.text}</div>`,
-      onRemove: async ($el) => {
+      render: (item: { id: number; text: string }) => `<div class="item">${item.text}</div>`,
+      onRemove: async ($el: JQuery<HTMLElement>) => {
         $el.addClass('removing');
         await removePromise;
         $el.remove();
@@ -125,11 +126,6 @@ describe('Atom List Edge Cases', () => {
     expect(children.eq(2).find('input').attr('id')).toBe('input-2');
 
     // Verify Focus Preserved
-    // In real browser, moving node usually preserves focus.
-    // In JSDOM? It might lose it if detached.
-    // nextNode logic uses .insertBefore.
-    // If element is already in document, .insertBefore moves it. It is NOT detached.
-    // So focus should be preserved.
     expect(document.activeElement).toBe(input1);
 
     $container.remove();
