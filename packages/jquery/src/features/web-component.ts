@@ -9,6 +9,8 @@ import type {
   ReadonlyAtom,
   WritableAtom,
 } from '@/types';
+import { debug } from '@/utils/debug';
+import { SYSTEM_COMPONENT } from '@/constants';
 
 // ─── Constants & Types ───────────────────────────────────────────────────────
 
@@ -284,6 +286,11 @@ function createContextProxy<T>(target: HTMLElement, key: string | symbol): Writa
  * ```
  */
 export function useAtomComponent(element: HTMLElement): AtomComponentController {
+  const tagName = element.tagName.toLowerCase();
+  if (debug.enabled && tagName.includes('-') && !customElements.get(tagName)) {
+    debug.warn(SYSTEM_COMPONENT.PREFIX, SYSTEM_COMPONENT.ERRORS.NOT_REGISTERED(tagName));
+  }
+
   const state = getInternalState(element);
   if (state.controller) {
     return state.controller;
@@ -755,6 +762,11 @@ export function injectAtom<T = unknown>(
         : ((element as JQuery)[0] as HTMLElement);
   if (!target) {
     return null;
+  }
+
+  const tagName = target.tagName.toLowerCase();
+  if (debug.enabled && tagName.includes('-') && !customElements.get(tagName)) {
+    debug.warn(SYSTEM_COMPONENT.PREFIX, SYSTEM_COMPONENT.ERRORS.NOT_REGISTERED(tagName));
   }
 
   const state = getInternalState(target);

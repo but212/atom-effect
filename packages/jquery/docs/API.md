@@ -305,6 +305,8 @@ $('#root').atomMount(UserProfile, { id: 42 });
 
 Integrates reactive state management into standard Custom Elements. This utility returns an `AtomComponentController` that handles the initialization and cleanup of reactive resources synchronized with the component's lifecycle.
 
+> **DX Diagnostic**: In debug mode (`$.debug.enabled = true`), this utility warns if the host element's tag name is a custom element (contains a hyphen) but has not been registered via `customElements.define()`.
+
 #### Controller API
 
 - **`attrs`**: A factory function that returns `WritableAtom`s for HTML attributes. Calling the function with an attribute name (e.g., `attrs('theme')`) returns a lens atom. Changing an atom updates the corresponding DOM attribute, and attribute changes update the atom value. If the component class declares `static observedAttributes`, only those attributes are tracked in the reactive snapshot.
@@ -373,6 +375,7 @@ Retrieves a reactive value provided by an ancestor element.
 - **Dynamic Resolution**: Returns a proxy that maintains the connection even if the element is moved to a different position in the DOM hierarchy.
 - **Lazy Connection**: Supports disconnected elements by deferring the provider search until the element is attached to the document.
 - **Performance**: Utilizes an internal versioning system to minimize re-discovery overhead during structural DOM changes.
+- **DX Warning**: In debug mode, warns if the target element is an unregistered custom element.
 
 ---
 
@@ -428,6 +431,8 @@ $('#name').atomText(user, u => u?.name ?? '');
 ### `$.route(config)`
 
 SPA router supporting hash-based and pushState routing. Includes features for dynamic segments, template cloning, and implicit auto-discovery of routes from the DOM.
+
+> **DX Diagnostic**: In debug mode, the router automatically scans rendered content for unregistered custom elements and logs warnings to prevent silent failures during view transitions.
 
 ---
 

@@ -238,3 +238,24 @@ The DI system provides a loosely coupled mechanism for state sharing across the 
 - **Event-Based Discovery**: Uses the bubbling `aej:context-request` event to locate providers, enabling state to traverse Shadow DOM boundaries via composed event propagation.
 - **Context Versioning**: A global versioning system triggers re-discovery of providers when nodes are moved within the DOM hierarchy.
 - **CSS Bridge**: Provided atoms are automatically mirrored to CSS Custom Properties (`--aej-[key]`) on the host element, allowing reactive styling driven by application state.
+
+## 16. Testing & Quality
+
+### 16.1 Modular Test Suite
+
+To maintain the reliability of the complex integration layer, the test suite is partitioned into specialized categories located in `__tests__/integration/`:
+
+- **`features/`**: Individual reactive binding behaviors (Async, SVG, Lists).
+- **`synergy/`**: Cross-feature interactions (Web Components + DI).
+- **`routing/`**: Navigation and path matching scenarios.
+- **`core/`**: Lifecycle, batching, and DOM engine verification.
+- **`scenarios/`**: End-to-end complex application logic.
+
+This modularization prevents race conditions and ensures that environment failures (like Playwright Iframe timeouts) are easily pinpointed.
+
+### 16.2 Runtime Diagnostics
+
+The library implements proactive diagnostics to prevent "silent failures," particularly with Custom Elements:
+
+- **Registration Checks**: In `debug` mode, `$.route`, `$.useAtomComponent`, and `$.injectAtom` automatically verify that custom element tags are registered in `customElements`.
+- **Warning System**: Discovered issues are logged via `debug.warn` with the `[atom-component]` prefix to guide developers during initial setup.
