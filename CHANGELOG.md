@@ -26,12 +26,16 @@
   - **Scoped Selector (`$`)**: Added a component-aware jQuery selector that automatically isolates lookups to the active ShadowRoot or host element.
   - **Metadata Access**: Exposed `host` and `root` properties on the controller for precise DOM control.
   - **Slot Tracking**: Added reactive monitoring of `assignedNodes()` via `slotchange` events, enabling components to react to projected content.
+  - **Closed Shadow DOM Support**: `setup({ shadowRoot: sr })` now robustly supports closed shadow roots, including deferred slot tracking.
+  - **Attribute Snapshot Optimization**: `attrs()` now respects `static observedAttributes` if defined, drastically reducing memory by only tracking relevant attributes.
+  - **Re-hydration**: `teardown()` now removes `data-aej-bind` markers, allowing the same DOM nodes to be safely re-hydrated if `setup()` is called again.
   - **Scheduler Integration**: Optimized observers to rely on the global scheduler's auto-batching, ensuring efficient, synchronized updates.
 - **Dependency Injection (DI)**:
   - **Event-Based Discovery**: Migrated context resolution to a bubbling `CustomEvent` (`aej:context-request`) with `composed: true`, ensuring 100% reliability across Shadow DOM boundaries.
   - **Hybrid Discovery Proxy**: Injected atoms now use a dual-mode resolution: Reactive (subscribing to hierarchy moves) and Synchronous (immediate discovery on `.value` access).
   - **Context Automation**: Unified hierarchy move detection into a single `ContextEngine.version` atom, triggered by a global `MutationObserver`.
   - **Late Binding**: Added support for late-bound reactive context in Custom Elements, enabling `injectAtom` to work correctly during element construction before DOM connection.
+  - **Type Safety**: Added generic type support (`provideAtom<T>`, `injectAtom<T>`) for improved IDE autocompletion and type checking.
 - **CSS Bridge**: Added a "CSS Bridge" feature to `provideAtom`, automatically synchronizing provided values to CSS custom properties (e.g., `--aej-key`) for direct styling integration.
 
 #### Changed

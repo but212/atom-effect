@@ -93,6 +93,10 @@ export function getPathValue(source: unknown, parts: string[]): unknown {
 export function atomLens<T extends object, P extends Paths<T>>(
   atom: WritableAtom<T>,
   path: P
+): WritableAtom<PathValue<T, P>>;
+export function atomLens<T extends object, P extends Paths<T>>(
+  atom: WritableAtom<T>,
+  path: P
 ): WritableAtom<PathValue<T, P>> {
   // Optimization: Pre-split the path string once during creation to avoid string manipulation during property access.
   const parts = path.includes('.') ? path.split('.') : [path];
@@ -108,22 +112,22 @@ export function atomLens<T extends object, P extends Paths<T>>(
 
   return {
     get value() {
-      return getPathValue(atom.value, parts) as PathValue<T, P>;
+      return getPathValue(atom.value, parts);
     },
-    set value(newVal: PathValue<T, P>) {
+    set value(newVal: unknown) {
       const cur = atom.peek(),
         next = setDeepValue(cur, parts, 0, newVal);
       if (next !== cur) atom.value = next as T;
     },
-    peek: () => getPathValue(atom.peek(), parts) as PathValue<T, P>,
-    subscribe(listener: (nv: PathValue<T, P>, ov: PathValue<T, P>) => void) {
+    peek: () => getPathValue(atom.peek(), parts),
+    subscribe(listener: (nv: unknown, ov: unknown) => void) {
       // Logic: Cache the previous value locally to ensure that notifications are only
       // dispatched when the specific nested property changes, even if other parts of
       // the root atom are updated.
-      let prevValue = getPathValue(atom.peek(), parts) as PathValue<T, P>;
+      let prevValue = getPathValue(atom.peek(), parts);
 
       const unsub = atom.subscribe((np) => {
-        const nv = getPathValue(np, parts) as PathValue<T, P>;
+        const nv = getPathValue(np, parts);
         if (!Object.is(nv, prevValue)) {
           const ov = prevValue;
           prevValue = nv;

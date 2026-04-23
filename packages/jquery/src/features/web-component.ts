@@ -4,6 +4,7 @@ import { disableAutoCleanupFor, enableAutoCleanup, registry } from '@/core/regis
 import type {
   AtomComponentController,
   EffectObject,
+  JQueryScopedSelector,
   ReactiveValue,
   ReadonlyAtom,
   WritableAtom,
@@ -58,6 +59,72 @@ function getInternalState(node: Node): NodeInternalState {
     nodeStateMap.set(node, state);
   }
   return state;
+}
+
+/**
+ * Resolves the static attribute contract declared by a Custom Element constructor.
+ *
+ * Logic: Attribute Scope
+ * When `observedAttributes` is present, attribute synchronization is constrained
+ * to that explicit set so the reactive snapshot and the MutationObserver stay aligned.
+ *
+ * @internal
+ */
+function getObservedAttributes(element: HTMLElement): string[] {
+  return (
+    (
+      element.constructor as typeof HTMLElement & {
+        observedAttributes?: string[];
+      }
+    ).observedAttributes || []
+  );
+}
+
+/**
+ * Materializes the current attribute state for a host element.
+ *
+ * Logic: Snapshot Policy
+ * If a component declares `observedAttributes`, only that subset is captured.
+ * Otherwise all current attributes are included to preserve host-driven behavior.
+ *
+ * @internal
+ */
+function snapshotAttributes(
+  element: HTMLElement,
+  observed: readonly string[]
+): Record<string, string | null> {
+  const attrs: Record<string, string | null> = {};
+  if (observed.length > 0) {
+    observed.forEach((name) => {
+      attrs[name] = element.getAttribute(name);
+    });
+    return attrs;
+  }
+
+  for (const attr of element.attributes) {
+    attrs[attr.name] = attr.value;
+  }
+  return attrs;
+}
+
+/**
+ * Resolves the active ShadowRoot for component-local operations.
+ *
+ * Reason: Closed Shadow DOM
+ * `element.shadowRoot` is `null` for closed roots, so lifecycle code must prefer
+ * an explicitly provided root before falling back to the host's open shadow root.
+ *
+ * @internal
+ */
+function resolveShadowRoot(
+  element: HTMLElement,
+  root: Node | ShadowRoot | null | undefined
+): ShadowRoot | null {
+  return root instanceof ShadowRoot
+    ? root
+    : element.shadowRoot instanceof ShadowRoot
+      ? element.shadowRoot
+      : null;
 }
 
 // ─── Context Engine ─────────────────────────────────────────────────────────
@@ -164,7 +231,7 @@ function createContextProxy<T>(target: HTMLElement, key: string | symbol): Writa
     subscribe: (fn) => {
       // Optimization: Only initialize a long-lived computed atom if there are active subscribers.
       if (!_shared) {
-        _shared = $.computed(() => proxyAtom.value);
+        _shared = $.computed(() => proxyAtom.value) as WritableAtom<T>;
       }
       return _shared.subscribe(fn);
     },
@@ -233,30 +300,17 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
     slotListeners: new Map<string, (e: Event) => void>(),
     dispatchEffects: new Set<EffectObject>(),
     hydrationEffects: new Set<EffectObject>(),
+    hydratedNodes: new Set<Element>(),
   };
 
   const ensureAttributeObserver = () => {
     if (reactive.attributeObserver) return;
 
-    const initialAttrs: Record<string, string | null> = {};
-    for (const attr of element.attributes) {
-      initialAttrs[attr.name] = attr.value;
-    }
-    reactive.attributeAtom = $.atom(initialAttrs);
-
-    const observed =
-      (
-        element.constructor as typeof HTMLElement & {
-          observedAttributes?: string[];
-        }
-      ).observedAttributes || [];
+    const observed = getObservedAttributes(element);
+    reactive.attributeAtom = $.atom(snapshotAttributes(element, observed));
 
     reactive.attributeObserver = new MutationObserver(() => {
-      const nextAttrs: Record<string, string | null> = {};
-      for (const attr of element.attributes) {
-        nextAttrs[attr.name] = attr.value;
-      }
-      reactive.attributeAtom!.value = nextAttrs;
+      reactive.attributeAtom!.value = snapshotAttributes(element, observed);
     });
 
     const options: MutationObserverInit = { attributes: true };
@@ -266,32 +320,46 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
     reactive.attributeObserver.observe(element, options);
   };
 
-  const ensureSlotsTracking = () => {
-    if (reactive.slotsAtom) return;
+  const ensureSlotsTracking = (root?: ShadowRoot | null) => {
+    const sr = resolveShadowRoot(element, root || reactive.root);
 
-    const sr = element.shadowRoot;
-    const initialSlots: Record<string, Node[]> = {};
+    if (!reactive.slotsAtom) {
+      const initialSlots: Record<string, Node[]> = {};
 
-    if (sr) {
-      const slots = sr.querySelectorAll('slot');
-      slots.forEach((slot) => {
-        const name = slot.name || '';
-        initialSlots[name] = slot.assignedNodes();
-      });
+      if (sr) {
+        const slots = sr.querySelectorAll('slot');
+        slots.forEach((slot) => {
+          const name = slot.name || '';
+          initialSlots[name] = slot.assignedNodes();
+        });
+      }
 
-      const listener = (e: Event) => {
-        const target = e.target as HTMLSlotElement;
-        const name = target.name || '';
-        reactive.slotsAtom!.value = {
-          ...reactive.slotsAtom!.peek(),
-          [name]: target.assignedNodes(),
-        };
-      };
-      sr.addEventListener('slotchange', listener);
-      reactive.slotListeners.set('all', listener);
+      reactive.slotsAtom = $.atom(initialSlots);
     }
 
-    reactive.slotsAtom = $.atom(initialSlots);
+    // Logic: Deferred Root Binding
+    // Slot lenses may be requested before setup() runs. Listener attachment is delayed
+    // until a concrete ShadowRoot becomes available so closed roots can still participate.
+    if (!sr || reactive.slotListeners.size > 0) return;
+
+    const nextSlots = { ...reactive.slotsAtom!.peek() };
+    const slots = sr.querySelectorAll('slot');
+    slots.forEach((slot) => {
+      const name = slot.name || '';
+      nextSlots[name] = slot.assignedNodes();
+    });
+    reactive.slotsAtom!.value = nextSlots;
+
+    const listener = (e: Event) => {
+      const target = e.target as HTMLSlotElement;
+      const name = target.name || '';
+      reactive.slotsAtom!.value = {
+        ...reactive.slotsAtom!.peek(),
+        [name]: target.assignedNodes(),
+      };
+    };
+    sr.addEventListener('slotchange', listener);
+    reactive.slotListeners.set('all', listener);
   };
 
   const controller: AtomComponentController = {
@@ -303,7 +371,7 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
 
     get attrs() {
       ensureAttributeObserver();
-      return (name: string) => {
+      return (name: string): WritableAtom<string | null> => {
         let lens = reactive.attributeLenses.get(name);
         if (!lens) {
           lens = $.atomLens(reactive.attributeAtom!, name);
@@ -315,18 +383,18 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
 
     get slots() {
       ensureSlotsTracking();
-      return (name: string) => {
+      return (name: string): ReadonlyAtom<Node[]> => {
         const key = name === 'default' ? '' : name;
         let lens = reactive.slotLenses.get(key);
         if (!lens) {
-          lens = $.atomLens(reactive.slotsAtom!, key) as WritableAtom<Node[]>;
+          lens = $.atomLens(reactive.slotsAtom!, key);
           reactive.slotLenses.set(key, lens);
         }
-        return lens as ReadonlyAtom<Node[]>;
+        return lens;
       };
     },
 
-    $: (selector, context) => {
+    $: ((selector, context) => {
       const ctx = context || reactive.root || element;
       if (typeof selector !== 'string') {
         return $(selector) as JQuery;
@@ -335,10 +403,10 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       return ctx instanceof DocumentFragment
         ? ($(Array.from(ctx.querySelectorAll<HTMLElement>(selector))) as JQuery)
         : ($(selector, ctx) as JQuery);
-    },
+    }) as JQueryScopedSelector,
 
-    provideAtom: (key, val) => provideAtom(element, key, val),
-    injectAtom: (key) => injectAtom(element, key),
+    provideAtom: <T = unknown>(key: string | symbol, val: T) => provideAtom(element, key, val),
+    injectAtom: <T = unknown>(key: string | symbol) => injectAtom<T>(element, key),
 
     setup(
       options?:
@@ -372,6 +440,11 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
         reactive.root![CLEANUP_MARKER] = true;
       }
 
+      // Logic: Root Reconciliation
+      // Slot tracking is synchronized here as well as in the getter path so access
+      // order does not affect behavior for open or closed shadow roots.
+      ensureSlotsTracking(sr);
+
       // 1. Reactive Dispatch
       if (config.dispatch) {
         setupDispatch(element, config.dispatch, reactive);
@@ -399,6 +472,12 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       reactive.dispatchEffects.clear();
       reactive.hydrationEffects.forEach((e) => e.dispose());
       reactive.hydrationEffects.clear();
+      // Cleanup Mechanism: Hydration markers are removed during teardown so a later
+      // setup() can bind the same DOM nodes again without requiring DOM reconstruction.
+      reactive.hydratedNodes.forEach((node) => {
+        delete (node as Element & { [HYDRATION_MARKER]?: boolean })[HYDRATION_MARKER];
+      });
+      reactive.hydratedNodes.clear();
 
       reactive.isInitialized = false;
       reactive.attributeObserver?.disconnect();
@@ -406,7 +485,7 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       reactive.attributeAtom = null;
       reactive.attributeLenses.clear();
 
-      const sr = element.shadowRoot;
+      const sr = resolveShadowRoot(element, reactive.root);
       if (sr) {
         reactive.slotListeners.forEach((listener) => {
           sr.removeEventListener('slotchange', listener);
@@ -426,7 +505,7 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
         registry.deferCleanup(element);
       }
     },
-  };
+  } as unknown as AtomComponentController;
 
   state.controller = controller;
   return controller;
@@ -501,7 +580,7 @@ function setupDispatch(
 function hydrate(
   root: Element,
   bindings: Record<string, ReadonlyAtom<unknown>>,
-  state: { hydrationEffects: Set<EffectObject>; root?: Node | null }
+  state: { hydrationEffects: Set<EffectObject>; hydratedNodes: Set<Element>; root?: Node | null }
 ) {
   const BIND_ATTRS = ['data-aej-bind', 'data-bind'];
   const selector = BIND_ATTRS.map((a) => `[${a}]`).join(',');
@@ -517,11 +596,15 @@ function hydrate(
         const atom = bindings[key];
         const effect = $.effect(() => {
           const val = isAtom(atom) ? atom.value : atom;
-          node.textContent = val == null ? '' : String(val);
+          const strVal = val == null ? '' : String(val);
+          if (node.textContent !== strVal) {
+            node.textContent = strVal;
+          }
           return undefined;
         });
         state.hydrationEffects.add(effect);
         target[HYDRATION_MARKER] = true;
+        state.hydratedNodes.add(target);
         break;
       }
     }
@@ -549,7 +632,8 @@ function hydrate(
 
   observer.observe(root, { childList: true, subtree: true });
 
-  // Use a dedicated effect for observer management to align with core lifecycle
+  // Cleanup Mechanism: The observer lifecycle is registered as an effect so teardown()
+  // disposes DOM observation in the same phase as other reactive resources.
   const observerCleanup = $.effect(() => {
     return () => observer.disconnect();
   });

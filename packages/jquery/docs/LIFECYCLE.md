@@ -29,7 +29,8 @@ This document defines the behavior and cleanup timing for elements managed by `a
 3. **Controller Teardown**: `teardown()` performs immediate deterministic cleanup:
 
 - **Resource Disposal**: Disposes of internal atoms, lens maps, `dispatchEffects`, and `hydrationEffects`.
-- **Observer Removal**: Disconnects `slotchange` listeners and the attribute `MutationObserver`.
+- **Hydration Reversal**: Removes `data-aej-bind` and `data-bind` markers from previously hydrated DOM nodes, allowing them to be safely re-hydrated in subsequent `setup()` calls.
+- **Observer Removal**: Disconnects `slotchange` listeners (including those attached to closed shadow roots) and the attribute `MutationObserver`.
   - **Context Notification**: Triggers a global version bump to notify descendants that providers on this node are no longer available.
   - **Tree Cleanup**: Delegated to the registry to ensure consistency across Shadow DOM boundaries.
 

@@ -307,11 +307,11 @@ Integrates reactive state management into standard Custom Elements. This utility
 
 #### Controller API
 
-- **`attrs`**: A factory function that returns `WritableAtom`s for HTML attributes. Calling the function with an attribute name (e.g., `attrs('theme')`) returns a lens atom. Changing an atom updates the corresponding DOM attribute, and attribute changes update the atom value.
-- **`slots`**: A factory function providing `ReadonlyAtom<Node[]>` for each Shadow DOM `<slot>`.
+- **`attrs`**: A factory function that returns `WritableAtom`s for HTML attributes. Calling the function with an attribute name (e.g., `attrs('theme')`) returns a lens atom. Changing an atom updates the corresponding DOM attribute, and attribute changes update the atom value. If the component class declares `static observedAttributes`, only those attributes are tracked in the reactive snapshot.
+- **`slots`**: A factory function providing `ReadonlyAtom<Node[]>` for each Shadow DOM `<slot>`. Fully supports Closed Shadow DOM when the root is passed to `setup()`.
   - `controller.slots('default')`: Tracks nodes in the unnamed slot.
   - `controller.slots(name)`: Tracks nodes in a named slot (e.g., `controller.slots('header')`).
-- **`$`**: A jQuery selector scoped to the component's `ShadowRoot` or the host element itself.
+- **`$`**: A jQuery selector (`JQueryScopedSelector`) scoped to the component's `ShadowRoot` or the host element itself.
 
 #### `setup(options?)`
 
@@ -359,14 +359,14 @@ customElements.define('my-comp', MyComp);
 
 ## Dependency Injection
 
-### `$.provideAtom(target, key, atom)`
+### `$.provideAtom<T>(target, key, atom)`
 
 Exposes a reactive value to all descendant elements in the DOM tree.
 
 - **Shadow DOM Support**: Uses event-based discovery to allow state to cross Shadow DOM boundaries via the `aej:context-request` event.
 - **CSS Synchronization**: Automatically mirrors the provided value to a CSS custom property (`--aej-[key]`) on the provider element, enabling state-driven styling.
 
-### `$.injectAtom(target, key)`
+### `$.injectAtom<T>(target, key)`
 
 Retrieves a reactive value provided by an ancestor element.
 

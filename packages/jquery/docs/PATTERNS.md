@@ -261,12 +261,14 @@ Integrate AEJ into standard Custom Elements using `useAtomComponent`.
 
 ```javascript
 class MyComponent extends HTMLElement {
+  // 1. Attribute Filtering: Only these attributes are tracked by aej.attrs()
   static observedAttributes = ['theme'];
   private aej = $.useAtomComponent(this);
   private count = $.atom(0);
 
   connectedCallback() {
-    const sr = this.attachShadow({ mode: 'open' });
+    // 2. Closed Shadow DOM Support: aej.setup() accepts the root
+    const sr = this.attachShadow({ mode: 'closed' });
     sr.innerHTML = `
       <div class="card">
         <h1 data-bind="title"></h1>

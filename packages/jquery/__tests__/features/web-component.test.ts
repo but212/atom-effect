@@ -14,6 +14,17 @@ function defineAndCreate<T extends HTMLElement>(
   return document.createElement(name) as T & { aej: AtomComponentController };
 }
 
+type PrewarmElement = HTMLElement & {
+  aej: AtomComponentController;
+  slots: AtomComponentController['slots'];
+};
+
+type CleanupElement = HTMLElement & {
+  aej: AtomComponentController;
+  addSpy: ReturnType<typeof vi.spyOn>;
+  removeSpy: ReturnType<typeof vi.spyOn>;
+};
+
 /**
  * Utility: Waits for native browser tasks (like slotchange) to complete.
  */
@@ -183,6 +194,24 @@ describe('Web Component Features', () => {
       el.setAttribute('active', 'false');
       await vi.waitFor(() => expect(el.aej.attrs('active').value).toBe('false'));
     });
+
+    it('should not expose unobserved attributes in the initial reactive snapshot', async () => {
+      const el = defineAndCreate(
+        'attr-filter-comp',
+        class extends HTMLElement {
+          static observedAttributes = ['active'];
+          aej = $.useAtomComponent(this);
+        }
+      );
+
+      el.setAttribute('active', 'true');
+      el.setAttribute('data-extra', 'stale');
+      document.body.appendChild(el);
+      el.aej.setup();
+
+      await vi.waitFor(() => expect(el.aej.attrs('active').value).toBe('true'));
+      expect(el.aej.attrs('data-extra').value).toBeUndefined();
+    });
   });
 
   describe('Evolution Features', () => {
@@ -214,6 +243,89 @@ describe('Web Component Features', () => {
       el.appendChild(headerChild);
       await waitForTasks();
       expect(slots('header').value.length).toBe(1);
+    });
+
+    it('should track assigned nodes for closed shadow roots when setup receives the root', async () => {
+      const el = defineAndCreate(
+        'closed-slot-comp',
+        class extends HTMLElement {
+          aej = $.useAtomComponent(this);
+
+          connectedCallback() {
+            const sr = this.attachShadow({ mode: 'closed' });
+            sr.innerHTML = '<slot></slot><slot name="header"></slot>';
+            this.aej.setup(sr);
+          }
+        }
+      );
+      document.body.appendChild(el);
+
+      const slots = el.aej.slots;
+      await $.nextTick();
+      expect(slots('default').value.length).toBe(0);
+
+      const child = document.createElement('span');
+      el.appendChild(child);
+      await waitForTasks();
+      expect(slots('default').value[0]).toBe(child);
+
+      const headerChild = document.createElement('h1');
+      headerChild.setAttribute('slot', 'header');
+      el.appendChild(headerChild);
+      await waitForTasks();
+      expect(slots('header').value[0]).toBe(headerChild);
+    });
+
+    it('should recover slot tracking when slots are accessed before setup for closed roots', async () => {
+      const el = defineAndCreate<PrewarmElement>(
+        'closed-slot-prewarm-comp',
+        class extends HTMLElement {
+          aej = $.useAtomComponent(this);
+          slots = this.aej.slots;
+
+          connectedCallback() {
+            const sr = this.attachShadow({ mode: 'closed' });
+            sr.innerHTML = '<slot></slot>';
+            this.aej.setup(sr);
+          }
+        }
+      );
+
+      const slots = el.slots;
+      document.body.appendChild(el);
+      await $.nextTick();
+      expect(slots('default').value.length).toBe(0);
+
+      const child = document.createElement('span');
+      el.appendChild(child);
+      await waitForTasks();
+      expect(slots('default').value[0]).toBe(child);
+    });
+
+    it('should remove slotchange listeners from closed shadow roots during teardown', async () => {
+      const el = defineAndCreate<CleanupElement>(
+        'closed-slot-cleanup-comp',
+        class extends HTMLElement {
+          aej = $.useAtomComponent(this);
+          addSpy!: ReturnType<typeof vi.spyOn>;
+          removeSpy!: ReturnType<typeof vi.spyOn>;
+
+          connectedCallback() {
+            const sr = this.attachShadow({ mode: 'closed' });
+            sr.innerHTML = '<slot></slot>';
+            this.addSpy = vi.spyOn(sr, 'addEventListener');
+            this.removeSpy = vi.spyOn(sr, 'removeEventListener');
+            this.aej.setup(sr);
+          }
+        }
+      );
+      document.body.appendChild(el);
+
+      el.aej.slots('default');
+      expect(el.addSpy).toHaveBeenCalledWith('slotchange', expect.any(Function));
+
+      el.aej.teardown();
+      expect(el.removeSpy).toHaveBeenCalledWith('slotchange', expect.any(Function));
     });
 
     it('should automatically dispatch custom events when atoms change', async () => {
@@ -274,6 +386,28 @@ describe('Web Component Features', () => {
       nameAtom.value = 'Bob';
       await $.nextTick();
       expect(newEl.textContent).toBe('Bob');
+    });
+
+    it('should re-hydrate previously bound nodes after teardown and setup', async () => {
+      const nameAtom = $.atom('Alice');
+      const el = document.createElement('div');
+      const ctrl = $.useAtomComponent(el);
+      const sr = el.attachShadow({ mode: 'open' });
+      sr.innerHTML = '<span data-bind="username"></span>';
+
+      ctrl.setup({ shadowRoot: sr, bind: { username: nameAtom } });
+      expect(sr.querySelector('[data-bind="username"]')?.textContent).toBe('Alice');
+
+      ctrl.teardown();
+
+      nameAtom.value = 'Bob';
+      ctrl.setup({ shadowRoot: sr, bind: { username: nameAtom } });
+      await $.nextTick();
+      expect(sr.querySelector('[data-bind="username"]')?.textContent).toBe('Bob');
+
+      nameAtom.value = 'Carol';
+      await $.nextTick();
+      expect(sr.querySelector('[data-bind="username"]')?.textContent).toBe('Carol');
     });
   });
 });
