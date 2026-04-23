@@ -1,5 +1,6 @@
 import { BRAND, BrandFlags, isAtom, isWritable, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
+import { SYSTEM_COMPONENT } from '@/constants';
 import { disableAutoCleanupFor, enableAutoCleanup, registry } from '@/core/registry';
 import type {
   AtomComponentController,
@@ -10,7 +11,6 @@ import type {
   WritableAtom,
 } from '@/types';
 import { debug } from '@/utils/debug';
-import { SYSTEM_COMPONENT } from '@/constants';
 
 // ─── Constants & Types ───────────────────────────────────────────────────────
 

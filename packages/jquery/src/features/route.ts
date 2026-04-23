@@ -508,10 +508,10 @@ class RouterImpl implements Router {
   private checkUnregisteredComponents(container: HTMLElement) {
     if (!debug.enabled || typeof customElements === 'undefined') return;
 
-    container.querySelectorAll('*').forEach((el) => {
+    container.querySelectorAll(':not(:defined)').forEach((el) => {
       const tagName = el.tagName.toLowerCase();
       // Logic: Standard Custom Elements must contain a hyphen.
-      if (tagName.includes('-') && !customElements.get(tagName)) {
+      if (tagName.includes('-')) {
         debug.warn(SYSTEM_COMPONENT.PREFIX, SYSTEM_COMPONENT.ERRORS.NOT_REGISTERED(tagName));
       }
     });
