@@ -69,7 +69,7 @@ importers:
         version: link:../core
     devDependencies:
       '@types/jquery':
-        specifier: 3.5.0
+        specifier: ^3.5.0
         version: 3.5.0
       '@vitest/browser':
         specifier: ^4.1.5
@@ -81,8 +81,8 @@ importers:
         specifier: ^4.1.5
         version: 4.1.5(@vitest/browser@4.1.5)(vitest@4.1.5)
       jquery:
-        specifier: 3.5.0
-        version: 3.5.0
+        specifier: 3.6.0
+        version: 3.6.0
       playwright:
         specifier: ^1.59.1
         version: 1.59.1
@@ -1089,8 +1089,8 @@ packages:
   jju@1.4.0:
     resolution: {integrity: sha512-8wb9Yw966OSxApiCt0K3yNJL8pnNeIv+OEq2YMidz4FKP6nonSRoOXc80iXY4JaN2FC11B9qsNmDsm+ZOfMROA==}
 
-  jquery@3.5.0:
-    resolution: {integrity: sha512-Xb7SVYMvygPxbFMpTFQiHh1J7HClEaThguL15N/Gg37Lri/qKyhRGZYzHRyLH8Stq3Aow0LsHO2O2ci86fCrNQ==}
+  jquery@3.6.0:
+    resolution: {integrity: sha512-JVzAR/AjBvVt2BmYhxRCSYysDsPcssdmTFnzyLEts9qNwmjmu4JTAMYubEfwVOSwpQ1I1sKKFcxhZCI2buerfw==}
 
   js-tokens@10.0.0:
     resolution: {integrity: sha512-lM/UBzQmfJRo9ABXbPWemivdCW8V2G8FHaHdypQaIy523snUjog0W71ayWXTjiR+ixeMyVHN2XcpnTd/liPg/Q==}
@@ -2465,7 +2465,7 @@ snapshots:
 
   jju@1.4.0: {}
 
-  jquery@3.5.0: {}
+  jquery@3.6.0: {}
 
   js-tokens@10.0.0: {}
 
