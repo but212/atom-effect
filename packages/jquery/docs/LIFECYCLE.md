@@ -6,44 +6,31 @@ This document defines the behavior and cleanup timing for elements managed by `a
 
 | State | Description | Trigger |
 | :--- | :--- | :--- |
-| **ATTACHED** | Element is in the DOM and reactive effects are active. | `setup()`, `$.fn.atomMount()`, or DOM insertion. |
+| **ATTACHED** | Element is in the DOM and reactive effects are active. | `setup()`, `$.fn.atomMount()`, Static Specs (Auto-Setup), or DOM insertion. |
 | **DETACHED** | Element is temporarily disconnected from the DOM. Effects are preserved. | `$.fn.detach()` or relocation within the same document. |
 | **DESTROYED** | Element is permanently removed. Effects and bindings are disposed. | `$.fn.remove()`, `$.fn.empty()`, or `teardown()`. |
 
 ## Scenario Matrix
 
-| Scenario | State Transition | Cleanup Timing | Implementation Path |
+| Scenario | State Transition | Cleanup Timing | Implementation Logic |
 | :--- | :--- | :--- | :--- |
-| **DOM Move** | `ATTACHED` → `DETACHED` → `ATTACHED` | **None** | Microtask buffer prevents cleanup during synchronous moves. |
-| **$.detach()** | `ATTACHED` → `DETACHED` | **None** | Node is marked via `registry.keep()` to preserve state. |
-| **$.remove()** | `ATTACHED` → `DESTROYED` | **Immediate** | Patched method calls `registry.cleanupTree()` synchronously. |
-| **$.empty()** | `ATTACHED` → `DESTROYED` (descendants) | **Immediate** | Patched method calls `registry.cleanupDescendants()` synchronously. |
-| **Native Removal** | `ATTACHED` → `DESTROYED` | **Deferred** | `MutationObserver` detects removal and queues cleanup as a microtask. |
-| **teardown()** | `ATTACHED` → `DESTROYED` | **Hybrid** | Immediate disposal of component effects (dispatch, hydration, styles, aria, parts, form) and slot listeners; deferred tree cleanup via microtask. |
-| **Closed Shadow** | `ATTACHED` → `DESTROYED` | **Same as Host** | Registered via `registry.registerShadow()`; cleaned via host markers. |
+| **DOM Move** | `ATTACHED` → `DETACHED` → `ATTACHED` | **None** | Microtask buffer prevents cleanup during synchronous moves, preserving reactive subscriptions. |
+| **$.detach()** | `ATTACHED` → `DETACHED` | **None** | Node is marked via `registry.keep()` to bypass the next cleanup cycle. |
+| **Native Removal** | `ATTACHED` → `DESTROYED` | **Deferred** | `MutationObserver` detects removal and queues cleanup as a microtask to allow for potential relocation. |
+| **Auto-Setup** | `OFFLINE` → `ATTACHED` | **Immediate** | `ContextEngine` detects insertion of components with static specs and triggers `setup()` within the same microtask. |
+| **teardown()** | `ATTACHED` → `DESTROYED` | **Deterministic** | Immediate disposal of internal state via `ComponentState.dispose()`. Triggers `ContextEngine.release()`. |
 
-## Cleanup Logic
+## Resource Management (Reference Counting)
 
-1. **Patched Execution (Synchronous)**: jQuery methods (`.remove()`, `.empty()`) are patched to trigger immediate cleanup of effects and bindings. These patches can be configured via `$.initAEJ({ patch: ... })`.
-2. **MutationObserver Execution (Asynchronous)**: A global `MutationObserver` acts as a fallback for removals performed via native DOM APIs. It triggers cleanup via microtasks, allowing for relocation stability.
-3. **Controller Teardown**: `teardown()` performs immediate deterministic cleanup:
+The library employs a **Reference Counting** strategy via `ContextEngine` to manage heavy resources like the global `MutationObserver`.
 
-- **Resource Disposal**: Disposes of internal atoms, lens maps, `dispatchEffects`, `hydrationEffects`, `styleEffects`, `ariaEffects`, `partEffects`, and `formEffects`.
-- **Hydration Reversal**: Removes `data-aej-bind` and `data-bind` markers from previously hydrated DOM nodes, allowing them to be safely re-hydrated in subsequent `setup()` calls.
-- **Observer Removal**: Disconnects `slotchange` listeners (including those attached to closed shadow roots) and the attribute `MutationObserver`.
-  - **Context Notification**: Triggers a global version bump to notify descendants that providers on this node are no longer available.
-  - **Tree Cleanup**: Delegated to the registry to ensure consistency across Shadow DOM boundaries.
-
-## Global Configuration (`$.initAEJ`)
-
-The library's lifecycle behavior is controlled by global settings:
-
-- **`patch`**: Determines if jQuery's prototype methods are overridden to provide synchronous lifecycle hooks.
-- **`autoCleanup`**: Enables or disables the asynchronous `MutationObserver` fallback. If disabled, manual calls to `registry.cleanupTree()` are required for permanent removals.
+1. **Retain**: When a component is created with static specs but not yet connected, or when a reactive context is injected (`injectAtom`), `ContextEngine.retain()` is called.
+2. **Activation**: The first retain call initializes and connects the global `MutationObserver`.
+3. **Release**: Upon component `teardown()` or context disposal, `ContextEngine.release()` is called.
+4. **Deactivation**: When the count reaches zero, the observer is disconnected and nullified to free up system resources.
 
 ## Invariant Rules
 
-1. **Idempotent Cleanup**: Sequential calls to cleanup a single node must result in no side effects and maintain a stable state.
-2. **Shadow Traversal**: Cleanup must traverse Shadow DOM subtrees unless the host element is explicitly marked as `ignored`.
-3. **Resource Disposal**: All `WeakMap` records and `MutationObserver` instances must be released when a component or element is destroyed.
-4. **Context Locality**: Structural DOM changes or component teardown must trigger a context version bump to invalidate cached reactive injections, ensuring they reflect the current DOM state.
+1. **Idempotent Cleanup**: Sequential cleanup calls on a single node must be side-effect free and result in a stable `DESTROYED` state.
+2. **Context Continuity**: Component `teardown()` or structural DOM changes must trigger a `ContextEngine.version` bump. This invalidates cached injection proxies, ensuring they re-resolve to the nearest valid provider.
+3. **Shadow DOM Transparency**: Resource discovery (DI) and cleanup must traverse Shadow DOM boundaries unless an element is explicitly marked for isolation.

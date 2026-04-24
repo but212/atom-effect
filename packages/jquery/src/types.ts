@@ -520,4 +520,20 @@ export type AtomComponentElement<T extends HTMLElement = HTMLElement> = T & {
   readonly aej: AtomComponentController;
 };
 
+/**
+ * Declarative specification for Atom-Effect components.
+ * @internal
+ */
+export interface AtomComponentStatic {
+  aejStyles?: (string | CSSStyleSheet)[];
+  aejBind?: Record<string, ReadonlyAtom<unknown>>;
+  aejAria?: Record<string, ReadonlyAtom<unknown>>;
+  aejParts?: Record<string, ReadonlyAtom<string | string[] | Record<string, boolean>>>;
+  aejDispatch?: Record<string, ReactiveValue<unknown>>;
+  aejValue?: ReadonlyAtom<unknown> | { val: ReadonlyAtom<unknown>; state?: ReadonlyAtom<unknown> };
+  aejValidation?:
+    | ReadonlyAtom<ValidityStateFlags | string>
+    | ((val: unknown) => ValidityStateFlags | string);
+}
+
 export type { ComputedAtom, ComputedOptions, EffectObject, ReadonlyAtom, WritableAtom };

@@ -104,13 +104,12 @@ $el.atomBind({ text: [count, c => `Count: ${c}`] });
 Updates `innerHTML`.
 
 > **🛡️ Security Implementation**:
-> This method implements a DOM-based sanitizer using an inert `<template>` and a recursive tree-walker. It transforms untrusted tags (`<script>`, `<iframe>`, etc.) into inert `<span>` wrappers and strips `on*` attributes and untrusted protocols (`javascript:`, `data:`, etc.).
+> This method implements a multi-layered sanitization pipeline to protect the DOM from untrusted data:
 >
-> **Features**:
->
-> - **DOM Clobbering Protection**: Uses prototype-level descriptors to prevent input from shadowing internal element properties.
-> - **Attribute Scrubbing**: Attributes from transformed nodes are processed immediately.
-> - **Recursive Validation**: Sanitizes nested contexts including `<template>` content and `srcdoc` sinks.
+> 1. **Inert Parsing**: Data is parsed within an inert `<template>` element, preventing the execution of any embedded scripts during initial DOM construction.
+> 2. **Recursive Tree-walking**: Every node is inspected, transforming untrusted tags (e.g., `<script>`, `<iframe>`, `<object>`) into safe, inert `<span>` wrappers.
+> 3. **Attribute Scrubbing**: All `on*` event handlers and attributes containing sensitive protocols (`javascript:`, `data:`) are strictly stripped.
+> 4. **Prototype Protection**: Interaction with DOM properties is routed through prototype-level descriptors to mitigate DOM Clobbering attacks.
 >
 > For complex user-generated content, integrating a library like [DOMPurify](https://github.com/cure53/DOMPurify) is supported.
 >
@@ -311,14 +310,31 @@ Integrates reactive state management into standard Custom Elements. This utility
 
 > **DX Diagnostic**: In debug mode (`$.debug.enabled = true`), this utility warns if the host element's tag name is a custom element (contains a hyphen) but has not been registered via `customElements.define()`.
 
+#### Declarative Static Specs
+
+Standard-compliant Custom Elements can define their reactive behavior declaratively using static properties. This approach eliminates the boilerplate of calling `setup()` manually in `connectedCallback` and ensures deterministic initialization managed by the `ContextEngine`.
+
+| Property | Type (Pseudo-type) | Description |
+| :--- | :--- | :--- |
+| `aejStyles` | `(string \| CSSStyleSheet)[]` | Array of styles to be applied via `adoptedStyleSheets`. |
+| `aejBind` | `Record<string, ReadonlyAtom<any>>` | Text-content bindings for elements with `data-aej-bind`. |
+| `aejAria` | `Record<string, ReadonlyAtom<any>>` | Reactive ARIA synchronization via `ElementInternals`. |
+| `aejParts` | `Record<string, ReadonlyAtom<any>>` | Reactive CSS Shadow Parts control for elements with `data-aej-part`. |
+| `aejDispatch` | `Record<string, ReactiveValue<any>>` | Automatic `CustomEvent` dispatching on state changes. |
+| `aejValue` | `Atom<any> \| { val: Atom, state?: Atom }` | Form-Associated Custom Element (FACE) value/state sync. |
+| `aejValidation` | `Atom<ValidityStateFlags \| string> \| Function` | Native Constraint Validation API integration. |
+
+> **Auto-Setup Logic**: If these static specs are present, the controller automatically registers the element for observation. If the element is disconnected at the time of `useAtomComponent` call, the `ContextEngine` defers initialization until it is attached to the DOM.
+
 #### Controller API
 
-- **`attrs`**: A factory function that returns `WritableAtom`s for HTML attributes. Calling the function with an attribute name (e.g., `attrs('theme')`) returns a lens atom. Changing an atom updates the corresponding DOM attribute, and attribute changes update the atom value. If the component class declares `static observedAttributes`, only those attributes are tracked in the reactive snapshot.
-- **`slots`**: A factory function providing `ReadonlyAtom<Node[]>` for each Shadow DOM `<slot>`. Fully supports Closed Shadow DOM when the root is passed to `setup()`.
-  - `controller.slots('default')`: Tracks nodes in the unnamed slot.
-  - `controller.slots(name)`: Tracks nodes in a named slot (e.g., `controller.slots('header')`).
-- **`internals`**: Access to the native `ElementInternals` object for advanced form integration, accessibility, and states. (Available if `attachInternals` is supported).
-- **`$`**: A jQuery selector (`JQueryScopedSelector`) scoped to the component's `ShadowRoot` or the host element itself.
+- **`attrs(name: string)`**: Returns a **Lens Atom** for a specific attribute.
+  - If `static observedAttributes` is defined, the controller only monitors those attributes to optimize memory and performance.
+  - If undefined, it falls back to monitoring all attribute mutations via a `MutationObserver`.
+- **`slots(name?: string)`**: Returns a `ReadonlyAtom<Node[]>` representing the assigned nodes of a specific `<slot>`.
+  - Use `'default'` or omit the argument to track the unnamed slot.
+- **`internals`**: Provides direct access to the `ElementInternals` instance, enabling advanced form participation and accessibility features.
+- **`$(selector: string | Element)`**: A scoped jQuery selector that isolates lookups to the component's `ShadowRoot` or the host element.
 
 #### `setup(options?)`
 
@@ -333,31 +349,20 @@ Configures reactive observers, event dispatching, and data binding.
 - **`value`**: For Form-Associated Custom Elements (FACE). Synchronizes an atom value with the native `<form>` submission data.
 - **`validation`**: For FACE. Integrates an atom or function with the native Constraint Validation API (`setCustomValidity`).
 
-#### Example: Reactive Custom Element
+#### Example: Declarative Custom Element
 
 ```javascript
 class MyComp extends HTMLElement {
-  static observedAttributes = ['theme'];
-  private aej = $.useAtomComponent(this);
-  private count = $.atom(0);
+  static aejStyles = [':host { display: block; }'];
+  static aejBind = { title: $.atom('Hello World') };
+  static aejDispatch = { 'init': () => ({ time: Date.now() }) };
+
+  private aej = $.useAtomComponent(this); // Auto-setup handles everything
   
   connectedCallback() {
-    const sr = this.attachShadow({ mode: 'open' });
-    sr.innerHTML = `
-      <div>
-        <h1 data-bind="title"></h1>
-        <slot></slot>
-        <button class="inc">Increment</button>
-      </div>
+    this.attachShadow({ mode: 'open' }).innerHTML = `
+      <h1 data-aej-bind="title"></h1>
     `;
-
-    this.aej.setup({
-      shadowRoot: sr,
-      bind: { title: $.computed(() => `Theme: ${this.aej.attrs('theme').value}`) },
-      dispatch: { 'count-changed': this.count }
-    });
-
-    this.aej.$('.inc').on('click', () => this.count.value++);
   }
   
   disconnectedCallback() {

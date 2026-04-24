@@ -21,20 +21,17 @@
 
 - **Diagnostic Warnings**: Integrated unregistered custom element detection in `$.route`, `$.useAtomComponent`, and `$.injectAtom` when `debug.enabled` is true.
 - **Global Configuration**: Introduced `$.initAEJ` for centralized control over library behavior, allowing granular toggling of jQuery patches and custom `MutationObserver` safety-net roots.
-- **Web Components**: Introduced `useAtomComponent` for high-performance reactive integration with Custom Elements.
-  - **Lens Factory API**: Exposed `attrs` and `slots` as functional Lens Factories (e.g., `attrs('name')`), leveraging core `atomLens` for fine-grained reactivity and better type safety.
-  - **Single Source of Truth**: Optimized internal state to use a single source atom per category (Attributes/Slots), drastically reducing memory overhead and synchronization complexity.
-  - **Scoped Selector (`$`)**: Added a component-aware jQuery selector that automatically isolates lookups to the active ShadowRoot or host element.
-  - **Metadata Access**: Exposed `host` and `root` properties on the controller for precise DOM control.
-  - **Slot Tracking**: Added reactive monitoring of `assignedNodes()` via `slotchange` events, enabling components to react to projected content.
-  - **Closed Shadow DOM Support**: `setup({ shadowRoot: sr })` now robustly supports closed shadow roots, including deferred slot tracking.
-  - **Attribute Snapshot Optimization**: `attrs()` now respects `static observedAttributes` if defined, drastically reducing memory by only tracking relevant attributes.
-  - **Re-hydration**: `teardown()` now removes `data-aej-bind` markers, allowing the same DOM nodes to be safely re-hydrated if `setup()` is called again.
-  - **Scheduler Integration**: Optimized observers to rely on the global scheduler's auto-batching, ensuring efficient, synchronized updates.
-  - **Shared Styles**: Added support for shared constructable stylesheets via `adoptedStyleSheets`, improving CSS management across component instances.
-  - **Reactive ARIA**: Integrated `ElementInternals` for reactive binding of accessibility properties.
-  - **CSS Shadow Parts**: Added `parts` synchronization, allowing reactive control over component internal elements via `::part()`.
-  - **FACE Integration**: Enabled Form-Associated Custom Element support, allowing components to participate in native form submission and validation.
+- **Web Components**: Introduced a comprehensive reactive toolkit for Custom Elements via `$.useAtomComponent`.
+  - **Declarative Static Specs**: Support for class-level reactive specifications using static properties (`aejStyles`, `aejBind`, `aejAria`, `aejParts`, `aejDispatch`, `aejValue`, `aejValidation`).
+  - **Intelligent Auto-Setup**: Automated component initialization via a global reference-counted `MutationObserver` that detects when components with static specs are connected to the DOM.
+  - **Lens Factory API**: Functional `attrs` and `slots` factories (e.g., `attrs('name')`) leveraging core `atomLens` for O(1) attribute and slot tracking.
+  - **Scoped Selector (`$`)**: A component-aware jQuery selector that isolates lookups to the active ShadowRoot or host element.
+  - **FACE Integration**: Native Form-Associated Custom Element support with reactive `value` and Constraint Validation (`aejValidation`) integration.
+  - **Reactive ARIA & Parts**: Direct binding to `ElementInternals` for accessibility and reactive CSS Shadow Parts management.
+  - **Shared Styles**: Optimized support for shared constructable stylesheets via `adoptedStyleSheets`.
+  - **Slot Monitoring**: Reactive tracking of `assignedNodes()` via `slotchange` events.
+  - **Lifecycle Management**: Robust `setup()` and `teardown()` cycles with support for closed Shadow DOM and safe re-hydration.
+  - **Modular Architecture**: Re-engineered internals into `ComponentState` and `SetupFeatures` for deterministic resource lifecycle management and improved auditability.
 - **Form Binding (atomForm)**:
   - **Declarative Validation**: Integrated with the browser's Constraint Validation API via a reactive `validation` schema.
   - **Hybrid Discovery**: Expanded selector logic to automatically bind to any element with a `name` attribute, supporting native and custom controls seamlessly.
@@ -59,7 +56,6 @@
 - **Test Infrastructure**: Modularized the monolithic integration test suite into specialized categories (`features`, `synergy`, `routing`, `core`, `scenarios`, `lifecycle`) for improved maintainability and stability.
 - **ESM Modernization**: Migrated configuration files to use `import.meta.dirname` for better ESM compatibility and standardized `@/` path aliases across the monorepo.
 - **Core Overrides**: Modularized jQuery prototype patches (`jquery-patch`) to allow independent enabling of event-wrapping and lifecycle-sync hooks.
-- **Web Component Internals**: Modularized `useAtomComponent` logic into `ComponentState` and `SetupHelpers` for improved resource lifecycle management.
 - **Form Binder**: Centralized form synchronization and validation logic using a data-driven pipeline.
 
 ## [0.31.0]
