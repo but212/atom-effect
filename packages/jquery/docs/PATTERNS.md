@@ -278,23 +278,25 @@ $('#card-root').atomMount(UserCard, { userId: 42 });
 
 ## 9. Web Components (Custom Elements)
 
-Integrate AEJ into standard Custom Elements using `useAtomComponent`.
+### Option A: Declarative Specs (Recommended)
+
+Define your component's reactive behavior using static properties. AEJ handles the setup automatically when the element connects.
 
 ```javascript
 class MyComponent extends HTMLElement {
-  // 1. Attribute Filtering: Only these attributes are tracked by aej.attrs()
-  static observedAttributes = ['theme'];
+  static aejStyles = [sharedStyles];
+  static aejBind = { 
+    title: $.computed(() => `Theme: ${this.aej.attrs('theme').value}`),
+    count: $.atom(0)
+  };
+  static aejParts = {
+    status: $.computed(() => (this.aejBind.count.value % 2 === 0 ? 'even' : 'odd'))
+  };
+
   private aej = $.useAtomComponent(this);
-  private count = $.atom(0);
 
   connectedCallback() {
-    // 2. Closed Shadow DOM Support: aej.setup() accepts the root
-    const sr = this.attachShadow({ mode: 'closed' });
-    sr.innerHTML = `
-      <style>
-        :host { display: block; }
-        .card { padding: 10px; border: 1px solid #ccc; }
-      </style>
+    this.attachShadow({ mode: 'open' }).innerHTML = `
       <div class="card">
         <h1 data-aej-bind="title"></h1>
         <slot></slot>
@@ -302,36 +304,30 @@ class MyComponent extends HTMLElement {
         <button class="inc">Count: <span data-aej-bind="count"></span></button>
       </div>
     `;
-
-    // 1. Setup reactive features
-    this.aej.setup({
-      shadowRoot: sr,
-      styles: [sharedStyles], // Use constructable stylesheets
-      bind: { 
-        title: $.computed(() => `Theme: ${this.aej.attrs('theme').value}`),
-        count: this.count
-      },
-      aria: {
-        ariaLabel: $.computed(() => `Counter at ${this.count.value}`)
-      },
-      parts: {
-        status: $.computed(() => (this.count.value % 2 === 0 ? 'even' : 'odd'))
-      },
-      dispatch: { 
-        'count-changed': this.count 
-      }
-    });
-
-    // 2. Scoped event handling
-    this.aej.$('.inc').on('click', () => this.count.value++);
-  }
-
-  disconnectedCallback() {
-    // 3. Automated cleanup of effects and listeners
-    this.aej.teardown();
   }
 }
 customElements.define('my-component', MyComponent);
+```
+
+### Option B: Imperative Setup (Advanced)
+
+Use `aej.setup()` when you need to pass dynamic data (like ShadowRoot for 'closed' mode) or conditional logic.
+
+```javascript
+class AdvancedComponent extends HTMLElement {
+  private aej = $.useAtomComponent(this);
+
+  connectedCallback() {
+    const sr = this.attachShadow({ mode: 'closed' });
+    sr.innerHTML = `<div data-aej-bind="title"></div>`;
+
+    this.aej.setup({
+      shadowRoot: sr,
+      bind: { title: $.atom('Closed Shadow Content') }
+    });
+  }
+}
+customElements.define('AdvancedComponent', AdvancedComponent);
 ```
 
 ## 10. Dependency Injection (Context API)
@@ -375,31 +371,26 @@ class DeepChild extends HTMLElement {
 customElements.define('deep-child', DeepChild);
 ```
 
-## 11. Standard-Compliant Custom Elements (FACE)
+## 11. Form-Associated Custom Elements (FACE)
 
 Create custom form controls that participate in native `<form>` submission and validation.
 
 ```javascript
 class MyInput extends HTMLElement {
   static formAssociated = true;
+  // 1. Declarative FACE spec
+  static aejValue = $.atom('');
+  static aejValidation = (v) => (v.includes('@') ? '' : 'Invalid email');
+
   private aej = $.useAtomComponent(this);
-  private value = $.atom('');
 
   connectedCallback() {
     this.attachShadow({ mode: 'open' }).innerHTML = `
       <input type="text" placeholder="Type here...">
     `;
 
-    this.aej.setup({
-      // 1. Sync internal atom with form value
-      value: this.value,
-      
-      // 2. Reactive validation integrated with Constraint Validation API
-      validation: (v) => (v.includes('@') ? '' : 'Invalid email'),
-    });
-
     this.aej.$('input').on('input', (e) => {
-      this.value.value = e.target.value;
+      (this.constructor as any).aejValue.value = e.target.value;
     });
   }
 
@@ -408,4 +399,3 @@ class MyInput extends HTMLElement {
   }
 }
 customElements.define('my-input', MyInput);
-```

@@ -13,11 +13,9 @@ function defineAndCreate<T extends HTMLElement>(
   const name = `${tagPrefix}-${Math.random().toString(36).slice(2, 7)}`;
   customElements.define(name, klass);
   const el = document.createElement(name) as T;
-  // Logic: Manually associate controller for testing purposes
-  return Object.assign(el, { aej: $.useAtomComponent(el) }) as AtomComponentElement<T>;
+  const aej = $.useAtomComponent(el);
+  return Object.assign(el, { aej }) as AtomComponentElement<T>;
 }
-
-const waitForTasks = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 // ─── Test Suite ─────────────────────────────────────────────────────────────
 
@@ -130,11 +128,10 @@ describe('Web Component Features', () => {
       const el = defineAndCreate(
         'slot-sync',
         class extends HTMLElement {
-          aej = $.useAtomComponent(this);
           connectedCallback() {
             const sr = this.attachShadow({ mode: 'open' });
             sr.innerHTML = '<slot></slot>';
-            this.aej.setup(sr);
+            $.useAtomComponent(this).setup(sr);
           }
         }
       );
@@ -145,7 +142,7 @@ describe('Web Component Features', () => {
 
       const child = document.createElement('span');
       el.appendChild(child);
-      await waitForTasks();
+      await $.nextTick();
       expect(slots('default').value[0]).toBe(child);
     });
 
@@ -153,11 +150,10 @@ describe('Web Component Features', () => {
       const el = defineAndCreate(
         'closed-sr',
         class extends HTMLElement {
-          aej = $.useAtomComponent(this);
           connectedCallback() {
             const sr = this.attachShadow({ mode: 'closed' });
             sr.innerHTML = '<slot></slot>';
-            this.aej.setup(sr);
+            $.useAtomComponent(this).setup(sr);
           }
         }
       );
@@ -165,7 +161,7 @@ describe('Web Component Features', () => {
 
       const child = document.createElement('span');
       el.appendChild(child);
-      await waitForTasks();
+      await $.nextTick();
       expect(el.aej.slots('default').value[0]).toBe(child);
     });
   });
@@ -176,11 +172,10 @@ describe('Web Component Features', () => {
       const el = defineAndCreate(
         'bind-feat',
         class extends HTMLElement {
-          aej = $.useAtomComponent(this);
           connectedCallback() {
             const sr = this.attachShadow({ mode: 'open' });
             sr.innerHTML = '<span data-aej-bind="user"></span>';
-            this.aej.setup({ shadowRoot: sr, bind: { user: name } });
+            $.useAtomComponent(this).setup({ shadowRoot: sr, bind: { user: name } });
           }
         }
       );
@@ -199,10 +194,9 @@ describe('Web Component Features', () => {
       const el1 = defineAndCreate(
         'style-share',
         class extends HTMLElement {
-          aej = $.useAtomComponent(this);
           connectedCallback() {
             const sr = this.attachShadow({ mode: 'open' });
-            this.aej.setup({ shadowRoot: sr, styles: [css] });
+            $.useAtomComponent(this).setup({ shadowRoot: sr, styles: [css] });
           }
         }
       );
@@ -210,10 +204,9 @@ describe('Web Component Features', () => {
       const el2 = defineAndCreate(
         'style-share-2',
         class extends HTMLElement {
-          aej = $.useAtomComponent(this);
           connectedCallback() {
             const sr = this.attachShadow({ mode: 'open' });
-            this.aej.setup({ shadowRoot: sr, styles: [css] });
+            $.useAtomComponent(this).setup({ shadowRoot: sr, styles: [css] });
           }
         }
       );
@@ -232,11 +225,10 @@ describe('Web Component Features', () => {
       const el = defineAndCreate(
         'marker-comp',
         class extends HTMLElement {
-          aej = $.useAtomComponent(this);
           connectedCallback() {
             const sr = this.attachShadow({ mode: 'open' });
             sr.innerHTML = '<span data-aej-bind="user"></span>';
-            this.aej.setup({ shadowRoot: sr, bind: { user: name } });
+            $.useAtomComponent(this).setup({ shadowRoot: sr, bind: { user: name } });
           }
         }
       );
@@ -255,9 +247,8 @@ describe('Web Component Features', () => {
       const el = defineAndCreate(
         'aria-feat',
         class extends HTMLElement {
-          aej = $.useAtomComponent(this);
           connectedCallback() {
-            this.aej.setup({ aria: { ariaExpanded: expanded } });
+            $.useAtomComponent(this).setup({ aria: { ariaExpanded: expanded } });
           }
         }
       );
@@ -277,9 +268,8 @@ describe('Web Component Features', () => {
       const el = defineAndCreate(
         'dispatch-feat',
         class extends HTMLElement {
-          aej = $.useAtomComponent(this);
           connectedCallback() {
-            this.aej.setup({ dispatch: { update: count } });
+            $.useAtomComponent(this).setup({ dispatch: { update: count } });
           }
         }
       );
@@ -297,11 +287,10 @@ describe('Web Component Features', () => {
       const el = defineAndCreate(
         'part-feat',
         class extends HTMLElement {
-          aej = $.useAtomComponent(this);
           connectedCallback() {
             const sr = this.attachShadow({ mode: 'open' });
             sr.innerHTML = '<div data-aej-part="box"></div>';
-            this.aej.setup({
+            $.useAtomComponent(this).setup({
               shadowRoot: sr,
               parts: { box: $.computed(() => ({ active: active.value })) },
             });
@@ -326,9 +315,8 @@ describe('Web Component Features', () => {
         'face-sync',
         class extends HTMLElement {
           static formAssociated = true;
-          aej = $.useAtomComponent(this);
           connectedCallback() {
-            this.aej.setup({ value: nameAtom });
+            $.useAtomComponent(this).setup({ value: nameAtom });
           }
         }
       );
@@ -354,9 +342,8 @@ describe('Web Component Features', () => {
         'face-complex',
         class extends HTMLElement {
           static formAssociated = true;
-          aej = $.useAtomComponent(this);
           connectedCallback() {
-            this.aej.setup({ value: formAtom });
+            $.useAtomComponent(this).setup({ value: formAtom });
           }
         }
       );
@@ -385,9 +372,8 @@ describe('Web Component Features', () => {
         'face-dual',
         class extends HTMLElement {
           static formAssociated = true;
-          aej = $.useAtomComponent(this);
           connectedCallback() {
-            this.aej.setup({ value: { val, state } });
+            $.useAtomComponent(this).setup({ value: { val, state } });
           }
         }
       );
@@ -415,9 +401,8 @@ describe('Web Component Features', () => {
         'face-valid-atom',
         class extends HTMLElement {
           static formAssociated = true;
-          aej = $.useAtomComponent(this);
           connectedCallback() {
-            this.aej.setup({
+            $.useAtomComponent(this).setup({
               value: email,
               validation: errorAtom,
             });
@@ -445,9 +430,8 @@ describe('Web Component Features', () => {
         'face-valid-cb',
         class extends HTMLElement {
           static formAssociated = true;
-          aej = $.useAtomComponent(this);
           connectedCallback() {
-            this.aej.setup({
+            $.useAtomComponent(this).setup({
               value: val,
               validation: (v: string) => (v ? '' : 'Required field'),
             });
@@ -464,6 +448,136 @@ describe('Web Component Features', () => {
       val.value = 'content';
       await $.nextTick();
       expect(form.checkValidity()).toBe(true);
+    });
+  });
+
+  describe('Declarative Static Specs', () => {
+    it('should automatically apply static aejStyles', async () => {
+      const css = ':host { display: block; color: red; }';
+      const el = defineAndCreate(
+        'static-styles',
+        class extends HTMLElement {
+          static aejStyles = [css];
+          connectedCallback() {
+            this.attachShadow({ mode: 'open' });
+          }
+        }
+      );
+      document.body.appendChild(el);
+      await $.nextTick();
+
+      const sheets = el.shadowRoot!.adoptedStyleSheets;
+      expect(sheets.length).toBeGreaterThan(0);
+      expect(sheets[0]?.cssRules[0]?.cssText).toContain('color: red');
+    });
+
+    it('should automatically bind static aejBind', async () => {
+      const name = $.atom('Alice');
+      const el = defineAndCreate(
+        'static-bind',
+        class extends HTMLElement {
+          static aejBind = { user: name };
+          connectedCallback() {
+            const sr = this.attachShadow({ mode: 'open' });
+            sr.innerHTML = '<span data-aej-bind="user"></span>';
+          }
+        }
+      );
+      document.body.appendChild(el);
+      await $.nextTick();
+
+      const span = el.shadowRoot!.querySelector('span');
+      expect(span?.textContent).toBe('Alice');
+
+      name.value = 'Bob';
+      await $.nextTick();
+      expect(span?.textContent).toBe('Bob');
+    });
+
+    it('should automatically sync static aejAria', async () => {
+      const expanded = $.atom(false);
+      const el = defineAndCreate(
+        'static-aria',
+        class extends HTMLElement {
+          static aejAria = { ariaExpanded: expanded };
+        }
+      );
+      document.body.appendChild(el);
+      await $.nextTick();
+
+      const internals = el.aej.internals!;
+      expect(internals.ariaExpanded).toBe('false');
+
+      expanded.value = true;
+      await $.nextTick();
+      expect(internals.ariaExpanded).toBe('true');
+    });
+
+    it('should automatically sync static aejParts', async () => {
+      const active = $.atom(true);
+      const el = defineAndCreate(
+        'static-parts',
+        class extends HTMLElement {
+          static aejParts = { box: $.computed(() => ({ active: active.value })) };
+          connectedCallback() {
+            const sr = this.attachShadow({ mode: 'open' });
+            sr.innerHTML = '<div data-aej-part="box"></div>';
+          }
+        }
+      );
+      document.body.appendChild(el);
+      await $.nextTick();
+
+      const div = el.shadowRoot!.querySelector('div')!;
+      expect(div.getAttribute('part')).toBe('active');
+
+      active.value = false;
+      await $.nextTick();
+      expect(div.getAttribute('part')).toBe('');
+    });
+
+    it('should automatically handle static aejDispatch', async () => {
+      const count = $.atom(0);
+      const spy = vi.fn();
+      const el = defineAndCreate(
+        'static-dispatch',
+        class extends HTMLElement {
+          static aejDispatch = { update: count };
+        }
+      );
+
+      el.addEventListener('update', (e: Event) => spy((e as CustomEvent).detail.value));
+      document.body.appendChild(el);
+      await $.nextTick();
+
+      count.value = 100;
+      await $.nextTick();
+      expect(spy).toHaveBeenCalledWith(100);
+    });
+
+    it('should automatically handle static aejValue & aejValidation (FACE)', async () => {
+      const val = $.atom('initial');
+      const el = defineAndCreate(
+        'static-face',
+        class extends HTMLElement {
+          static formAssociated = true;
+          static aejValue = val;
+          static aejValidation = (v: string) => (v.length > 3 ? '' : 'too short');
+        }
+      );
+      el.setAttribute('name', 'test');
+      const form = document.createElement('form');
+      form.appendChild(el);
+      document.body.appendChild(form);
+      await $.nextTick();
+
+      expect(new FormData(form).get('test')).toBe('initial');
+      expect(form.checkValidity()).toBe(true);
+
+      val.value = 'abc';
+      await $.nextTick();
+      expect(form.checkValidity()).toBe(false);
+      expect(el.aej.internals?.validationMessage).toBe('too short');
     });
   });
 });

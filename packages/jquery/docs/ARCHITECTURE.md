@@ -216,30 +216,60 @@ The `DebugController` provides visual feedback via non-blocking outlines using `
 
 ## 15. Web Component & DI Integration
 
-### 15.1 Web Component Controller
+### 15.1 Web Component Controller (`ComponentState`)
 
-`useAtomComponent(element)` implements a composition-based model managed by a `ComponentState` class. This internal state centralizes all reactive resources, including:
+`useAtomComponent(element)` implements a composition-based model managed by the `ComponentState` class. This internal state centralizes all reactive resources and manages the initialization of declarative specs.
 
-- **Reactive Attributes (`attrs`)**: A Lens Factory for observed attributes. It maintains a single source `attributeAtom` and provides scoped `atomLens` instances for individual attributes. This "Single Source of Truth" model ensures that DOM attribute changes trigger only one atom update, which then propagates efficiently through lenses. It respects the `static observedAttributes` contract to filter unneeded DOM attributes from the snapshot, optimizing memory and mutation observation.
-- **Slot Tracking (`slots`)**: A Lens Factory that monitors `assignedNodes()` via `slotchange` events. Like attributes, it uses a single source `slotsAtom` to track all slots, providing scoped lenses for individual slot names (including the default slot). Includes deferred binding logic to support Closed Shadow DOMs when the root is provided during `setup()`.
-- **Scoped Selection (`$`)**: A jQuery-compatible selector that targets the component's `ShadowRoot` (if present) or the host element.
+- **ComponentState**: Encapsulates all reactive resources for a single component instance, including lenses, effects, and mutation observers.
+- **Reasoning**: By consolidating lifecycle resources into a single class instance, the library ensures deterministic disposal during `teardown()` and prevents memory leaks that typically arise from fragmented observer management.
 
-### 15.2 Declarative Synthesis & Helpers
+#### Internal Resource Management
 
-The `setup()` method delegates specific activations to a `SetupHelpers` utility, which manages:
+```mermaid
+graph TD
+    Host[Host Element] --> CS[ComponentState]
+    CS --> AA[Attribute Atom/Observer]
+    CS --> SA[Slots Atom/Listeners]
+    CS --> ES[Effects Set]
+    CS --> HN[Hydrated Nodes Set]
+    CS --> AS[Applied Styles]
+    
+    AA -.-> AL[Attribute Lenses]
+    SA -.-> SL[Slot Lenses]
+```
 
-- **Reactive Dispatch**: Automatically dispatches `CustomEvent`s when mapped atoms or reactive functions change. This bridges internal component state to the external application.
-- **Dynamic Hydration**: Maps data-binding keys to atoms. It uses a combination of initial tree-walking and a `MutationObserver` to ensure both static and dynamically added nodes are correctly bound to reactive state.
-- **Styles & Parts**: Manages constructable stylesheets and `data-aej-part` attribute synchronization.
-- **Aria & Form**: Bridges reactive state to `ElementInternals` for accessibility and native form participation.
+### 15.2 Declarative Synthesis & Features (`SetupFeatures`)
 
-### 15.3 Dependency Injection (DI)
+The `setup()` method delegates specific activations to the `SetupFeatures` module. This decomposition allows for feature-specific optimization without polluting the main controller logic.
 
-The DI system provides a loosely coupled mechanism for state sharing across the DOM:
+- **Dynamic Hydration**: Uses a dedicated `MutationObserver` per component to ensure that both static and dynamically injected nodes (containing `data-aej-bind`) are correctly bound to reactive state.
+- **FACE Integration**: Leverages `ElementInternals` to bridge AEJ atoms with the browser's native form submission and validation engines.
 
-- **Event-Based Discovery**: Uses the bubbling `aej:context-request` event to locate providers, enabling state to traverse Shadow DOM boundaries via composed event propagation.
-- **Context Versioning**: A centralized `ContextEngine` monitors DOM structure changes and triggers a global version bump. This invalidates cached injection proxies, ensuring moved nodes re-discover their nearest providers.
-- **CSS Bridge**: Provided atoms are automatically mirrored to CSS Custom Properties (`--aej-[key]`) on the host element, allowing reactive styling driven by application state.
+### 15.3 Context Engine & Auto-Setup
+
+The `ContextEngine` is a singleton that manages global DOM observation and reactive context versioning. It utilizes a **Reference Counting (`retain`/`release`)** mechanism to optimize performance.
+
+#### Global Observer Lifecycle
+
+```mermaid
+sequenceDiagram
+    participant C as Component
+    participant E as ContextEngine
+    participant O as MutationObserver
+
+    C->>E: retain()
+    alt activeCount == 1
+        E->>O: connect()
+    end
+    Note over O: Watching for DOM changes
+    O->>C: Auto-Setup Triggered
+    C->>E: release()
+    alt activeCount == 0
+        E->>O: disconnect()
+    end
+```
+
+- **Logic: Just-in-Time Observation**: The global `MutationObserver` is only active when there are "offline" components (created but not yet connected) or active context injections. This minimizes the performance impact on the main thread during heavy DOM manipulations.
 
 ### 15.4 Form Integration (FACE)
 
