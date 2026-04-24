@@ -36,7 +36,7 @@ export const SYSTEM_ROUTE = {
 /** Configuration and error templates for reactive bindings. @internal */
 export const SYSTEM_BINDING = {
   PREFIX: '[atom-binding]',
-  INPUT_DEFAULTS: Object.freeze({ EVENT: 'input', DEBOUNCE: 0 } as const),
+  INPUT_DEFAULTS: Object.freeze({ EVENT: 'input change', DEBOUNCE: 0 } as const),
   VALID_INPUT_TAGS: ['input', 'select', 'textarea'] as const,
   ERRORS: {
     INVALID_INPUT_ELEMENT: (t: string) => `Invalid element <${t}> for val.`,

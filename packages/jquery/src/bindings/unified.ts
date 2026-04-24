@@ -3,8 +3,8 @@ import $ from 'jquery';
 import { applyInputBinding } from '@/bindings/input-binding';
 import { SYSTEM_BINDING, SYSTEM_SECURITY } from '@/constants';
 import { registerMapEffect, registerReactiveEffect } from '@/core/effect-factory';
-import { INTERNAL_HANDLER } from '@/core/jquery-patch';
 import { registry } from '@/core/registry';
+import { INTERNAL_HANDLER } from '@/core/symbols';
 import type {
   AsyncReactiveValue,
   BindingOptions,
@@ -15,7 +15,6 @@ import type {
   WritableAtom,
 } from '@/types';
 import { debug } from '@/utils/debug';
-
 import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '@/utils/sanitize';
 
 /**
@@ -370,7 +369,11 @@ export function bindVal(
   options: ValOptions<unknown> = {}
 ): void {
   const tagName = element.tagName.toLowerCase();
-  if (!(SYSTEM_BINDING.VALID_INPUT_TAGS as readonly string[]).includes(tagName)) {
+  const isValidTag =
+    (SYSTEM_BINDING.VALID_INPUT_TAGS as readonly string[]).includes(tagName) ||
+    tagName.includes('-'); // Support Custom Elements (FACE)
+
+  if (!isValidTag) {
     console.warn(
       `${SYSTEM_BINDING.PREFIX} ${SYSTEM_BINDING.ERRORS.INVALID_INPUT_ELEMENT(tagName)}`
     );

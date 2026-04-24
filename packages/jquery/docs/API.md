@@ -263,7 +263,11 @@ const user = $.atom({ name: 'Alice', age: 30, items: [{ text: 'Item 1' }] });
 
 $('form').atomForm(user, {
   debounce: 200,
-  transform: (path, val) => (path === 'age' ? Number(val) : val)
+  transform: (path, val) => (path === 'age' ? Number(val) : val),
+  validation: {
+    'name': (v) => (v ? '' : 'Name is required'),
+    'age': (v) => (v >= 18 ? true : 'Must be an adult')
+  }
 });
 ```
 
@@ -313,6 +317,7 @@ Integrates reactive state management into standard Custom Elements. This utility
 - **`slots`**: A factory function providing `ReadonlyAtom<Node[]>` for each Shadow DOM `<slot>`. Fully supports Closed Shadow DOM when the root is passed to `setup()`.
   - `controller.slots('default')`: Tracks nodes in the unnamed slot.
   - `controller.slots(name)`: Tracks nodes in a named slot (e.g., `controller.slots('header')`).
+- **`internals`**: Access to the native `ElementInternals` object for advanced form integration, accessibility, and states. (Available if `attachInternals` is supported).
 - **`$`**: A jQuery selector (`JQueryScopedSelector`) scoped to the component's `ShadowRoot` or the host element itself.
 
 #### `setup(options?)`
@@ -321,7 +326,12 @@ Configures reactive observers, event dispatching, and data binding.
 
 - **`shadowRoot`**: The `ShadowRoot` instance used for scoped selectors and slot tracking (required for 'closed' mode).
 - **`dispatch`**: An object mapping event names to atoms or functions. A `CustomEvent` is automatically dispatched from the host whenever the state changes.
-- **`bind`**: An object mapping keys to atoms. Elements within the component containing `data-bind="key"` will have their text content updated when the atom changes.
+- **`bind`**: An object mapping keys to atoms. Elements within the component containing `data-aej-bind="key"` will have their text content updated when the atom changes.
+- **`styles`**: An array of `string` or `CSSStyleSheet` objects to be shared across all instances of the component via `adoptedStyleSheets`.
+- **`aria`**: An object mapping ARIA properties (e.g., `ariaExpanded`) to atoms, updated via `ElementInternals`.
+- **`parts`**: An object mapping part keys to atoms. Elements with `data-aej-part="key"` will have their `part` attribute synchronized reactively.
+- **`value`**: For Form-Associated Custom Elements (FACE). Synchronizes an atom value with the native `<form>` submission data.
+- **`validation`**: For FACE. Integrates an atom or function with the native Constraint Validation API (`setCustomValidity`).
 
 #### Example: Reactive Custom Element
 

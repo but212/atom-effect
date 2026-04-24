@@ -19,7 +19,7 @@ This document defines the behavior and cleanup timing for elements managed by `a
 | **$.remove()** | `ATTACHED` → `DESTROYED` | **Immediate** | Patched method calls `registry.cleanupTree()` synchronously. |
 | **$.empty()** | `ATTACHED` → `DESTROYED` (descendants) | **Immediate** | Patched method calls `registry.cleanupDescendants()` synchronously. |
 | **Native Removal** | `ATTACHED` → `DESTROYED` | **Deferred** | `MutationObserver` detects removal and queues cleanup as a microtask. |
-| **teardown()** | `ATTACHED` → `DESTROYED` | **Hybrid** | Immediate disposal of component effects (dispatch, hydration) and slot listeners; deferred tree cleanup via microtask. |
+| **teardown()** | `ATTACHED` → `DESTROYED` | **Hybrid** | Immediate disposal of component effects (dispatch, hydration, styles, aria, parts, form) and slot listeners; deferred tree cleanup via microtask. |
 | **Closed Shadow** | `ATTACHED` → `DESTROYED` | **Same as Host** | Registered via `registry.registerShadow()`; cleaned via host markers. |
 
 ## Cleanup Logic
@@ -28,7 +28,7 @@ This document defines the behavior and cleanup timing for elements managed by `a
 2. **MutationObserver Execution (Asynchronous)**: A global `MutationObserver` acts as a fallback for removals performed via native DOM APIs. It triggers cleanup via microtasks, allowing for relocation stability.
 3. **Controller Teardown**: `teardown()` performs immediate deterministic cleanup:
 
-- **Resource Disposal**: Disposes of internal atoms, lens maps, `dispatchEffects`, and `hydrationEffects`.
+- **Resource Disposal**: Disposes of internal atoms, lens maps, `dispatchEffects`, `hydrationEffects`, `styleEffects`, `ariaEffects`, `partEffects`, and `formEffects`.
 - **Hydration Reversal**: Removes `data-aej-bind` and `data-bind` markers from previously hydrated DOM nodes, allowing them to be safely re-hydrated in subsequent `setup()` calls.
 - **Observer Removal**: Disconnects `slotchange` listeners (including those attached to closed shadow roots) and the attribute `MutationObserver`.
   - **Context Notification**: Triggers a global version bump to notify descendants that providers on this node are no longer available.

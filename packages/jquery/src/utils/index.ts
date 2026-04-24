@@ -115,3 +115,27 @@ export function shallowEqual(a: unknown, b: unknown): boolean {
   }
   return true;
 }
+
+/**
+ * Recursively flattens an object into a FormData instance.
+ *
+ * Logic: Nested Naming
+ * Converts nested structures into bracket-notation strings (e.g., 'user[profile][name]')
+ * to ensure compatibility with standard form parsers in most backend frameworks.
+ *
+ * @param fd - The FormData instance to populate.
+ * @param prefix - The name prefix for the current path.
+ * @param obj - The value to flatten.
+ *
+ * @internal
+ */
+export function flattenToFormData(fd: FormData, prefix: string, obj: unknown): void {
+  if (typeof obj === 'object' && obj !== null && !(obj instanceof File) && !(obj instanceof Blob)) {
+    for (const [k, v] of Object.entries(obj)) {
+      const key = prefix ? `${prefix}[${k}]` : k;
+      flattenToFormData(fd, key, v);
+    }
+  } else {
+    fd.append(prefix, obj instanceof Blob ? obj : String(obj ?? ''));
+  }
+}

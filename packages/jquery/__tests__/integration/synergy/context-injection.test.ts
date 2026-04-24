@@ -22,7 +22,7 @@ describe('Context Injection Synergy (provide/inject)', () => {
     $.provideAtom($app, 'global-router', router);
 
     class RouteChild extends HTMLElement {
-      private aej = $.useAtomComponent(this);
+      aej = $.useAtomComponent(this);
 
       connectedCallback() {
         const r = this.aej.injectAtom<Router>('global-router');

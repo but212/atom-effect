@@ -2,6 +2,12 @@ import { BRAND, BrandFlags, isAtom, isWritable, untracked } from '@but212/atom-e
 import $ from 'jquery';
 import { SYSTEM_COMPONENT } from '@/constants';
 import { disableAutoCleanupFor, enableAutoCleanup, registry } from '@/core/registry';
+import {
+  CLEANUP_MARKER,
+  CONTEXT_REQUEST,
+  type ContextRequestDetail,
+  HYDRATION_MARKER,
+} from '@/core/symbols';
 import type {
   AtomComponentController,
   EffectObject,
@@ -10,279 +16,413 @@ import type {
   ReadonlyAtom,
   WritableAtom,
 } from '@/types';
+import { flattenToFormData } from '@/utils';
 import { debug } from '@/utils/debug';
-
-// ─── Constants & Types ───────────────────────────────────────────────────────
-
-/** Internal symbol used to track if an element has been hydrated. @internal */
-const HYDRATION_MARKER = Symbol.for('aej:hydrated');
-
-/** Internal symbol used to track if an element has an active MutationObserver. @internal */
-const CLEANUP_MARKER = Symbol.for('aej:cleanup-enabled');
-
-/** Internal event name used for dependency injection discovery. @internal */
-const CONTEXT_REQUEST = 'aej:context-request';
-
-/** Detailed payload for context discovery events. @internal */
-interface ContextRequestDetail {
-  key: string | symbol;
-  callback: (atom: unknown) => void;
-}
 
 /**
  * Consolidated metadata for DOM nodes participating in the AEJ ecosystem.
  *
+ * Logic: Internal State Management
+ * Maintains reactive resources (providers, injections, and controllers)
+ * associated with a specific node, tracked via a WeakMap to prevent leaks.
+ *
  * @internal
  */
 interface NodeInternalState {
+  /** Map of keys to provided reactive values. */
   providers?: Map<string | symbol, unknown>;
+  /** Map of keys to disposal effects for provided atoms (e.g., CSS Bridge). */
   providerEffects?: Map<string | symbol, EffectObject>;
+  /** Map of keys to active injection proxy atoms. */
   injects?: Map<string | symbol, WritableAtom<unknown>>;
+  /** The reactive controller instance for Custom Elements. */
   controller?: AtomComponentController;
 }
 
-// ─── Internal State ─────────────────────────────────────────────────────────
+// ─── Internal State Storage ──────────────────────────────────────────────────
 
-/** Global storage for element-specific reactive metadata. */
 const nodeStateMap = new WeakMap<Node, NodeInternalState>();
+const sheetCache = new Map<string, CSSStyleSheet>();
+const MAX_SHEET_CACHE_SIZE = 100;
 
-/**
- * Retrieves or initializes the internal metadata state for a node.
- *
- * Constraint: This helper must be used for all state access to ensure
- * lazy initialization and consistent reference tracking.
- *
- * @internal
- */
-function getInternalState(node: Node): NodeInternalState {
+/** Retrieves or initializes the internal metadata state for a node. @internal */
+const getInternalState = (node: Node): NodeInternalState => {
   let state = nodeStateMap.get(node);
   if (!state) {
     state = {};
     nodeStateMap.set(node, state);
   }
   return state;
-}
+};
+
+// ─── Environment & Compatibility ───────────────────────────────────────────────
+
+const supportsConstructableStylesheets =
+  typeof window !== 'undefined' &&
+  'adoptedStyleSheets' in Document.prototype &&
+  'replaceSync' in CSSStyleSheet.prototype;
 
 /**
- * Resolves the static attribute contract declared by a Custom Element constructor.
- *
- * Logic: Attribute Scope
- * When `observedAttributes` is present, attribute synchronization is constrained
- * to that explicit set so the reactive snapshot and the MutationObserver stay aligned.
+ * Detection for Form-Associated Custom Elements (FACE) support.
+ * @internal
+ */
+const supportsInternals =
+  typeof window !== 'undefined' && 'attachInternals' in HTMLElement.prototype;
+
+/**
+ * Normalizes a style source into a shareable CSSStyleSheet.
  *
  * @internal
  */
-function getObservedAttributes(element: HTMLElement): string[] {
-  return (
-    (
-      element.constructor as typeof HTMLElement & {
-        observedAttributes?: string[];
-      }
-    ).observedAttributes || []
-  );
-}
+const getOrCreateSheet = (source: string | CSSStyleSheet): CSSStyleSheet => {
+  if (source instanceof CSSStyleSheet) return source;
+  let sheet = sheetCache.get(source);
+  if (!sheet) {
+    sheet = new CSSStyleSheet();
+    sheet.replaceSync(source);
 
-/**
- * Materializes the current attribute state for a host element.
- *
- * Logic: Snapshot Policy
- * If a component declares `observedAttributes`, only that subset is captured.
- * Otherwise all current attributes are included to preserve host-driven behavior.
- *
- * @internal
- */
-function snapshotAttributes(
-  element: HTMLElement,
-  observed: readonly string[]
-): Record<string, string | null> {
-  const attrs: Record<string, string | null> = {};
-  if (observed.length > 0) {
-    observed.forEach((name) => {
-      attrs[name] = element.getAttribute(name);
-    });
-    return attrs;
+    // Limits the cache size to prevent memory leaks from dynamic CSS.
+    if (sheetCache.size >= MAX_SHEET_CACHE_SIZE) {
+      const firstKey = sheetCache.keys().next().value;
+      if (firstKey !== undefined) sheetCache.delete(firstKey);
+    }
+
+    sheetCache.set(source, sheet);
   }
+  return sheet;
+};
 
-  for (const attr of element.attributes) {
-    attrs[attr.name] = attr.value;
-  }
-  return attrs;
-}
-
-/**
- * Resolves the active ShadowRoot for component-local operations.
- *
- * Reason: Closed Shadow DOM
- * `element.shadowRoot` is `null` for closed roots, so lifecycle code must prefer
- * an explicitly provided root before falling back to the host's open shadow root.
- *
- * @internal
- */
-function resolveShadowRoot(
+/** Resolves the active ShadowRoot for component-local operations. @internal */
+const resolveShadowRoot = (
   element: HTMLElement,
   root: Node | ShadowRoot | null | undefined
-): ShadowRoot | null {
-  return root instanceof ShadowRoot
+): ShadowRoot | null =>
+  root instanceof ShadowRoot
     ? root
     : element.shadowRoot instanceof ShadowRoot
       ? element.shadowRoot
       : null;
-}
 
-// ─── Context Engine ─────────────────────────────────────────────────────────
+// ─── Context Engine (Encapsulated Versioning) ───────────────────────────────
 
 /**
- * Orchestrates global hierarchy versioning and DOM move detection.
+ * Orchestrates global hierarchy versioning and DOM discovery.
  *
- * Logic: Versioning
- * Bumping the global version atom triggers re-discovery in all reactive context
- * proxies, ensuring that moved elements correctly resolve their new nearest providers.
+ * Logic: Reactive Hierarchy Tracking
+ * Encapsulates a global MutationObserver that increments a version atom
+ * whenever nodes are added or removed. This triggers re-discovery of
+ * injected contexts to ensure they always point to the nearest provider.
  *
  * @internal
  */
-const ContextEngine = {
-  version: $.atom(0),
-
-  bump() {
-    this.version.value++;
-  },
-
-  /**
-   * Dispatches a bubbling event to locate the nearest ancestor provider for a key.
-   *
-   * Logic: Discovery Mechanism
-   * Event bubbling is used for tree traversal as it natively respects
-   * Shadow DOM boundaries when configured with `composed: true`.
-   */
-  discover(target: HTMLElement, key: string | symbol): unknown {
-    let found: unknown = null;
-    const event = new CustomEvent<ContextRequestDetail>(CONTEXT_REQUEST, {
-      detail: {
-        key,
-        callback: (atom) => {
-          found = atom;
-        },
-      },
-      bubbles: true,
-      composed: true,
-    });
-    target.dispatchEvent(event);
-    return found;
-  },
-};
-
-/**
- * Optimization: Global Observation
- * A single global MutationObserver monitors the entire document for
- * structure changes. Throttling version bumps to the scheduler's next
- * cycle ensures synchronization with other reactive updates.
- */
-if (typeof document !== 'undefined') {
+const ContextEngine = (() => {
+  const version = $.atom(0);
   let isBumpPending = false;
-  const observer = new MutationObserver((mutations) => {
-    if (mutations.some((m) => m.addedNodes.length > 0 || m.removedNodes.length > 0)) {
-      if (isBumpPending) return;
-      isBumpPending = true;
-      // Logic: Use microtask for throttling, but rely on atom's built-in scheduling for flushes.
-      queueMicrotask(() => {
-        ContextEngine.bump();
-        isBumpPending = false;
-      });
-    }
-  });
-  observer.observe(document.documentElement, { childList: true, subtree: true });
-}
+  let observer: MutationObserver | null = null;
 
-// ─── Context Proxy Factory ──────────────────────────────────────────────────
+  const bump = () => {
+    if (isBumpPending) return;
+    isBumpPending = true;
+    queueMicrotask(() => {
+      version.value++;
+      isBumpPending = false;
+    });
+  };
+
+  /** Lazily initializes the global mutation observer. */
+  const ensureObserver = () => {
+    if (observer || typeof document === 'undefined') return;
+    observer = new MutationObserver((mutations) => {
+      if (mutations.some((m) => m.addedNodes.length > 0 || m.removedNodes.length > 0)) {
+        bump();
+      }
+    });
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+  };
+
+  return {
+    get version() {
+      ensureObserver();
+      return version;
+    },
+    bump,
+    discover(target: HTMLElement, key: string | symbol): unknown {
+      ensureObserver();
+      let found: unknown = null;
+      const event = new CustomEvent<ContextRequestDetail>(CONTEXT_REQUEST, {
+        detail: {
+          key,
+          callback: (atom) => {
+            found = atom;
+          },
+        },
+        bubbles: true,
+        composed: true,
+      });
+      target.dispatchEvent(event);
+      return found;
+    },
+  };
+})();
+
+// ─── Context Proxy Resolver ─────────────────────────────────────────────────
 
 /**
- * Creates a reactive proxy atom that resolves to a provided value in the DOM hierarchy.
+ * Creates a reactive proxy atom for dependency injection.
  *
  * Logic: Hybrid Discovery
- * This proxy implements a dual-mode resolution model:
- * 1. Reactive: Subscribes to `ContextEngine.version` to detect DOM moves
- *    and trigger re-evaluation.
- * 2. Synchronous: Performs immediate discovery on property access to
- *    ensure accuracy even outside reactive execution contexts.
+ * Implements a dual-resolution strategy:
+ * 1. Synchronous: Immediate discovery when `.value` or `.peek()` is accessed.
+ * 2. Reactive: Subscribes to the `ContextEngine.version` to re-resolve
+ *    the value if the DOM hierarchy changes.
  *
  * @internal
  */
 function createContextProxy<T>(target: HTMLElement, key: string | symbol): WritableAtom<T> {
-  let _currentProvider: WritableAtom<T> | null = null;
-  let _shared: WritableAtom<T> | null = null;
+  const resolve = (isPeek: boolean) => {
+    if (isPeek) ContextEngine.version.peek();
+    else ContextEngine.version.value;
+    return untracked(() => ContextEngine.discover(target, key)) as WritableAtom<T> | T | null;
+  };
 
-  const getLatestProvider = () => ContextEngine.discover(target, key) as WritableAtom<T>;
+  const getLiveValue = (isPeek: boolean) => {
+    const p = resolve(isPeek);
+    return (isAtom(p) ? (isPeek ? p.peek() : p.value) : p) as T;
+  };
 
-  const proxyAtom: WritableAtom<T> = {
+  let sharedAtom: ReadonlyAtom<T> | null = null;
+  const getShared = () => {
+    if (!sharedAtom) sharedAtom = $.computed(() => getLiveValue(false));
+    return sharedAtom;
+  };
+
+  return {
     get value() {
-      // Logic: Establish a dependency on the hierarchy version to re-run when moved.
-      ContextEngine.version.value;
-      _currentProvider = untracked(getLatestProvider);
-      return (isAtom(_currentProvider) ? _currentProvider.value : _currentProvider) as T;
+      return getLiveValue(false);
     },
     set value(v: T) {
-      _currentProvider = untracked(getLatestProvider);
-      if (isWritable(_currentProvider)) {
-        _currentProvider.value = v;
-      }
+      const p = resolve(true);
+      if (isWritable(p)) p.value = v;
     },
     peek() {
-      _currentProvider = untracked(getLatestProvider);
-      return (isAtom(_currentProvider) ? _currentProvider.peek() : _currentProvider) as T;
+      return getLiveValue(true);
     },
-    subscribe: (fn) => {
-      // Optimization: Only initialize a long-lived computed atom if there are active subscribers.
-      if (!_shared) {
-        _shared = $.computed(() => proxyAtom.value) as WritableAtom<T>;
-      }
-      return _shared.subscribe(fn);
-    },
-    subscriberCount: () => _shared?.subscriberCount() ?? 0,
+    subscribe: (fn) => getShared().subscribe(fn),
+    subscriberCount: () => (sharedAtom ? sharedAtom.subscriberCount() : 0),
     dispose: () => {
-      _shared?.dispose();
-      _shared = null;
-      _currentProvider = null;
+      if (sharedAtom) {
+        sharedAtom.dispose();
+        sharedAtom = null;
+      }
     },
     [BRAND]: BrandFlags.Atom | BrandFlags.Writable,
   } as WritableAtom<T>;
+}
 
-  return proxyAtom;
+// ─── Reactive State Manager ─────────────────────────────────────────────────
+
+/**
+ * Centralizes all component-specific reactive state and resource tracking.
+ *
+ * Logic: Rule 5 - Data Dominates
+ * Consolidates lifecycle resources (effects, observers, lenses) into a
+ * single class instance to simplify teardown and state management.
+ *
+ * @internal
+ */
+class ComponentState {
+  /** The root node (host or shadowRoot) managed by this state. */
+  root: (Node & { [CLEANUP_MARKER]?: boolean }) | null = null;
+  /** Initialization status to prevent redundant setups. */
+  isInitialized = false;
+  /** Collection of active effects managed by the component. */
+  effects = new Set<EffectObject>();
+  /** Set of nodes that have been hydrated with data-bind mappings. */
+  hydratedNodes = new Set<Element>();
+
+  // Attributes Tracking
+  /** Source atom containing the snapshot of all observed attributes. */
+  attributeAtom: WritableAtom<Record<string, string | null>> | null = null;
+  /** Observer monitoring attribute changes on the host. */
+  attributeObserver: MutationObserver | null = null;
+  /** Map of individual attribute names to their lens atoms. */
+  attributeLenses = new Map<string, WritableAtom<string | null>>();
+
+  // Slots Tracking
+  /** Source atom containing the mapping of slot names to assigned nodes. */
+  slotsAtom: WritableAtom<Record<string, Node[]>> | null = null;
+  /** Map of individual slot names to their lens atoms. */
+  slotLenses = new Map<string, WritableAtom<Node[]>>();
+  /** Internal listeners for slotchange events. */
+  slotListeners = new Map<string, (e: Event) => void>();
+
+  /** List of constructable stylesheets applied to the root. */
+  appliedStyles: CSSStyleSheet[] = [];
+
+  constructor(public host: HTMLElement) {}
+
+  /**
+   * Initializes attribute tracking if not already active.
+   *
+   * Logic: Single Source of Truth
+   * A single MutationObserver updates a global attribute snapshot atom,
+   * while individual attribute lenses provide fine-grained reactivity.
+   */
+  ensureAttributeTracking() {
+    if (this.attributeObserver) return;
+
+    const getObserved = () =>
+      (this.host.constructor as typeof HTMLElement & { observedAttributes?: string[] })
+        .observedAttributes || [];
+
+    const snapshot = () => {
+      const observed = getObserved();
+      const attrs: Record<string, string | null> = {};
+      if (observed.length > 0) {
+        observed.forEach((n) => (attrs[n] = this.host.getAttribute(n)));
+      } else {
+        for (const a of this.host.attributes) attrs[a.name] = a.value;
+      }
+      return attrs;
+    };
+
+    this.attributeAtom = $.atom(snapshot());
+    this.attributeObserver = new MutationObserver(() => {
+      this.attributeAtom!.value = snapshot();
+    });
+
+    const options: MutationObserverInit = { attributes: true };
+    const observed = getObserved();
+    if (observed.length > 0) options.attributeFilter = observed;
+
+    this.attributeObserver.observe(this.host, options);
+  }
+
+  /**
+   * Initializes reactive slot tracking.
+   *
+   * Logic: Composite Monitoring
+   * Combines initial scanning of the ShadowRoot with `slotchange`
+   * listeners to maintain a reactive mapping of projected content.
+   */
+  ensureSlotTracking(root?: ShadowRoot | null) {
+    const sr = resolveShadowRoot(this.host, root || this.root);
+
+    if (!this.slotsAtom) {
+      const initial: Record<string, Node[]> = {};
+      if (sr) {
+        sr.querySelectorAll('slot').forEach((s) => (initial[s.name || ''] = s.assignedNodes()));
+      }
+      this.slotsAtom = $.atom(initial);
+    }
+
+    if (!sr || this.slotListeners.has('all')) return;
+
+    /** Logic: Initial Hydration Sync */
+    const sync = () => {
+      const next = { ...this.slotsAtom!.peek() };
+      sr.querySelectorAll('slot').forEach((s) => (next[s.name || ''] = s.assignedNodes()));
+      this.slotsAtom!.value = next;
+    };
+    sync();
+
+    const listener = (e: Event) => {
+      const target = e.target as HTMLSlotElement;
+      this.slotsAtom!.value = {
+        ...this.slotsAtom!.peek(),
+        [target.name || '']: target.assignedNodes(),
+      };
+    };
+    sr.addEventListener('slotchange', listener);
+    this.slotListeners.set('all', listener);
+  }
+
+  /**
+   * Deterministically releases all reactive resources and observers.
+   *
+   * Logic: Resource Reversal
+   * Restores the node to its pre-hydrated state by removing hydration
+   * markers and disconnecting observers in reverse order.
+   */
+  dispose() {
+    this.effects.forEach((e) => e.dispose());
+    this.effects.clear();
+
+    this.hydratedNodes.forEach(
+      (n) => delete (n as Element & { [HYDRATION_MARKER]?: boolean })[HYDRATION_MARKER]
+    );
+    this.hydratedNodes.clear();
+
+    this.attributeObserver?.disconnect();
+    this.attributeObserver = null;
+    this.attributeAtom = null;
+    this.attributeLenses.clear();
+
+    const sr = resolveShadowRoot(this.host, this.root);
+    if (sr) {
+      this.slotListeners.forEach((l) => sr.removeEventListener('slotchange', l));
+    }
+    this.slotListeners.clear();
+    this.slotsAtom = null;
+    this.slotLenses.clear();
+
+    if (
+      this.appliedStyles.length > 0 &&
+      (this.root instanceof ShadowRoot || this.root instanceof Document)
+    ) {
+      this.root.adoptedStyleSheets = this.root.adoptedStyleSheets.filter(
+        (s) => !this.appliedStyles.includes(s)
+      );
+    }
+    this.appliedStyles = [];
+
+    try {
+      if (this.root?.[CLEANUP_MARKER]) {
+        disableAutoCleanupFor(this.root);
+        this.root[CLEANUP_MARKER] = false;
+      }
+    } finally {
+      this.root = null;
+      this.isInitialized = false;
+    }
+  }
 }
 
 // ─── Controller Implementation ───────────────────────────────────────────────
 
 /**
- * Composition-based helper for building reactive Web Components.
+ * Composition-based helper for building reactive Custom Elements.
  *
  * When to use:
- * - When building standard Custom Elements that require reactive state and DI.
- * - To orchestrate attribute, slot, and template hydration logic within a single lifecycle.
+ * - Recommended for integrating reactive state management into standard
+ *   Web Components.
+ * - Suitable for mapping HTML attributes and slots to reactive atoms.
  *
- * Logic: Composition Model
- * Returns a controller that manages the component's internal reactive state,
- * including lazy-initialized atoms for attributes and slots.
+ * Logic: Lifecycle Integration
+ * Returns a controller that orchestrates the initialization and teardown
+ * of component-specific reactive resources, synchronized with the
+ * element's attachment to the DOM.
  *
- * @param element - The host Custom Element instance.
- * @returns A controller for managing reactivity, attributes, and shadow root.
+ * @param element - The host HTMLElement (usually `this`).
+ * @returns A controller instance for managing the component's reactivity.
  *
  * @example
  * ```typescript
- * class MyComponent extends HTMLElement {
+ * class MyComp extends HTMLElement {
  *   private aej = $.useAtomComponent(this);
+ *   private count = $.atom(0);
  *
  *   connectedCallback() {
- *     // Logic: Initializes observers and hydration
  *     this.aej.setup({
- *        bind: { title: someAtom }
+ *       bind: { count: this.count }
  *     });
  *   }
  *
  *   disconnectedCallback() {
- *     // Logic: Deterministic cleanup of all effects and listeners
  *     this.aej.teardown();
  *   }
  * }
- * customElements.define('my-component', MyComponent);
+ * customElements.define('my-comp', MyComp);
  * ```
  */
 export function useAtomComponent(element: HTMLElement): AtomComponentController {
@@ -293,144 +433,72 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
     }
   }
 
-  const state = getInternalState(element);
-  if (state.controller) {
-    return state.controller;
+  const internal = getInternalState(element);
+  if (internal.controller) return internal.controller;
+
+  let internals: ElementInternals | undefined;
+  if (supportsInternals) {
+    try {
+      internals = element.attachInternals();
+    } catch {
+      /* Ignored */
+    }
   }
 
-  const reactive = {
-    root: null as (Node & { [CLEANUP_MARKER]?: boolean }) | null,
-    isInitialized: false,
-    attributeAtom: null as WritableAtom<Record<string, string | null>> | null,
-    attributeObserver: null as MutationObserver | null,
-    attributeLenses: new Map<string, WritableAtom<string | null>>(),
-    slotsAtom: null as WritableAtom<Record<string, Node[]>> | null,
-    slotLenses: new Map<string, WritableAtom<Node[]>>(),
-    slotListeners: new Map<string, (e: Event) => void>(),
-    dispatchEffects: new Set<EffectObject>(),
-    hydrationEffects: new Set<EffectObject>(),
-    hydratedNodes: new Set<Element>(),
-  };
-
-  const ensureAttributeObserver = () => {
-    if (reactive.attributeObserver) return;
-
-    const observed = getObservedAttributes(element);
-    reactive.attributeAtom = $.atom(snapshotAttributes(element, observed));
-
-    reactive.attributeObserver = new MutationObserver(() => {
-      reactive.attributeAtom!.value = snapshotAttributes(element, observed);
-    });
-
-    const options: MutationObserverInit = { attributes: true };
-    if (observed.length > 0) {
-      options.attributeFilter = observed;
-    }
-    reactive.attributeObserver.observe(element, options);
-  };
-
-  const ensureSlotsTracking = (root?: ShadowRoot | null) => {
-    const sr = resolveShadowRoot(element, root || reactive.root);
-
-    if (!reactive.slotsAtom) {
-      const initialSlots: Record<string, Node[]> = {};
-
-      if (sr) {
-        const slots = sr.querySelectorAll('slot');
-        slots.forEach((slot) => {
-          const name = slot.name || '';
-          initialSlots[name] = slot.assignedNodes();
-        });
-      }
-
-      reactive.slotsAtom = $.atom(initialSlots);
-    }
-
-    // Logic: Deferred Root Binding
-    // Slot lenses may be requested before setup() runs. Listener attachment is delayed
-    // until a concrete ShadowRoot becomes available so closed roots can still participate.
-    if (!sr || reactive.slotListeners.size > 0) return;
-
-    const nextSlots = { ...reactive.slotsAtom!.peek() };
-    const slots = sr.querySelectorAll('slot');
-    slots.forEach((slot) => {
-      const name = slot.name || '';
-      nextSlots[name] = slot.assignedNodes();
-    });
-    reactive.slotsAtom!.value = nextSlots;
-
-    const listener = (e: Event) => {
-      const target = e.target as HTMLSlotElement;
-      const name = target.name || '';
-      reactive.slotsAtom!.value = {
-        ...reactive.slotsAtom!.peek(),
-        [name]: target.assignedNodes(),
-      };
-    };
-    sr.addEventListener('slotchange', listener);
-    reactive.slotListeners.set('all', listener);
-  };
+  const state = new ComponentState(element);
 
   const controller: AtomComponentController = {
     host: element,
 
     get root() {
-      return reactive.root;
+      return state.root;
+    },
+
+    get internals() {
+      return internals;
     },
 
     get attrs() {
-      ensureAttributeObserver();
-      return (name: string): WritableAtom<string | null> => {
-        let lens = reactive.attributeLenses.get(name);
+      state.ensureAttributeTracking();
+      return (name: string) => {
+        let lens = state.attributeLenses.get(name);
         if (!lens) {
-          lens = $.atomLens(reactive.attributeAtom!, name);
-          reactive.attributeLenses.set(name, lens);
+          lens = $.atomLens(state.attributeAtom!, name);
+          state.attributeLenses.set(name, lens);
         }
         return lens;
       };
     },
 
     get slots() {
-      ensureSlotsTracking();
-      return (name: string): ReadonlyAtom<Node[]> => {
+      state.ensureSlotTracking();
+      return (name: string) => {
         const key = name === 'default' ? '' : name;
-        let lens = reactive.slotLenses.get(key);
+        let lens = state.slotLenses.get(key);
         if (!lens) {
-          lens = $.atomLens(reactive.slotsAtom!, key);
-          reactive.slotLenses.set(key, lens);
+          lens = $.atomLens(state.slotsAtom!, key);
+          state.slotLenses.set(key, lens);
         }
         return lens;
       };
     },
 
     $: ((selector, context) => {
-      const ctx = context || reactive.root || element;
-      if (typeof selector !== 'string') {
-        return $(selector) as JQuery;
-      }
+      const ctx = context || state.root || element;
+      if (typeof selector !== 'string') return $(selector) as unknown as JQuery;
 
       return ctx instanceof DocumentFragment
-        ? ($(Array.from(ctx.querySelectorAll<HTMLElement>(selector))) as JQuery)
-        : ($(selector, ctx) as JQuery);
+        ? ($(Array.from(ctx.querySelectorAll<HTMLElement>(selector))) as unknown as JQuery)
+        : ($(selector, ctx as Element) as unknown as JQuery);
     }) as JQueryScopedSelector,
 
-    provideAtom: <T = unknown>(key: string | symbol, val: T) => provideAtom(element, key, val),
+    provideAtom: (key: string | symbol, val: unknown) => provideAtom(element, key, val),
     injectAtom: <T = unknown>(key: string | symbol) => injectAtom<T>(element, key),
 
-    setup(
-      options?:
-        | ShadowRoot
-        | {
-            shadowRoot?: ShadowRoot;
-            dispatch?: Record<string, ReactiveValue<unknown>>;
-            bind?: Record<string, ReadonlyAtom<unknown>>;
-          }
-    ) {
-      if (reactive.isInitialized) {
-        const incomingSR = options instanceof Node ? options : options?.shadowRoot;
-        if (incomingSR && incomingSR !== reactive.root) {
-          throw new Error('Call teardown() first.');
-        }
+    setup(options: Parameters<AtomComponentController['setup']>[0]) {
+      if (state.isInitialized) {
+        const incoming = options instanceof Node ? options : options?.shadowRoot;
+        if (incoming && incoming !== state.root) throw new Error('Call teardown() first.');
         return;
       }
 
@@ -443,28 +511,31 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
         registry.registerShadow(element, sr);
       }
 
-      reactive.root = (sr ?? element) as Node & { [CLEANUP_MARKER]?: boolean };
-      if (!reactive.root![CLEANUP_MARKER]) {
-        enableAutoCleanup(reactive.root as Element);
-        reactive.root![CLEANUP_MARKER] = true;
+      state.root = (sr ?? element) as Node & { [CLEANUP_MARKER]?: boolean };
+      if (!state.root![CLEANUP_MARKER]) {
+        enableAutoCleanup(state.root as Element);
+        state.root![CLEANUP_MARKER] = true;
       }
 
-      // Logic: Root Reconciliation
-      // Slot tracking is synchronized here as well as in the getter path so access
-      // order does not affect behavior for open or closed shadow roots.
-      ensureSlotsTracking(sr);
+      state.ensureSlotTracking(sr);
 
-      // 1. Reactive Dispatch
-      if (config.dispatch) {
-        setupDispatch(element, config.dispatch, reactive);
+      // Feature Activations
+      if (config.dispatch) SetupHelpers.dispatch(element, config.dispatch, state.effects);
+      if (config.bind) SetupHelpers.hydrate(state.root as Element, config.bind, state);
+      if (
+        config.styles &&
+        supportsConstructableStylesheets &&
+        (state.root instanceof ShadowRoot || state.root instanceof Document)
+      ) {
+        state.appliedStyles = SetupHelpers.styles(state.root, config.styles);
+      }
+      if (config.aria && internals) SetupHelpers.aria(internals, config.aria, state.effects);
+      if (config.parts) SetupHelpers.parts(state.root as Element, config.parts, state.effects);
+      if ((config.value || config.validation) && internals) {
+        SetupHelpers.form(element, internals, config.value, config.validation, state.effects);
       }
 
-      // 2. Declarative Hydration (Synthesis: Dynamic & Robust)
-      if (config.bind) {
-        hydrate(reactive.root as Element, config.bind, reactive);
-      }
-
-      reactive.isInitialized = true;
+      state.isInitialized = true;
     },
 
     teardown() {
@@ -474,180 +545,236 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       s.providerEffects?.clear();
       s.injects?.clear();
 
-      // Logic: Notify descendants that providers on this node are no longer available.
       ContextEngine.bump();
-
-      reactive.dispatchEffects.forEach((e) => e.dispose());
-      reactive.dispatchEffects.clear();
-      reactive.hydrationEffects.forEach((e) => e.dispose());
-      reactive.hydrationEffects.clear();
-      // Cleanup Mechanism: Hydration markers are removed during teardown so a later
-      // setup() can bind the same DOM nodes again without requiring DOM reconstruction.
-      reactive.hydratedNodes.forEach((node) => {
-        delete (node as Element & { [HYDRATION_MARKER]?: boolean })[HYDRATION_MARKER];
-      });
-      reactive.hydratedNodes.clear();
-
-      reactive.isInitialized = false;
-      reactive.attributeObserver?.disconnect();
-      reactive.attributeObserver = null;
-      reactive.attributeAtom = null;
-      reactive.attributeLenses.clear();
-
-      const sr = resolveShadowRoot(element, reactive.root);
-      if (sr) {
-        reactive.slotListeners.forEach((listener) => {
-          sr.removeEventListener('slotchange', listener);
-        });
-      }
-      reactive.slotListeners.clear();
-      reactive.slotsAtom = null;
-      reactive.slotLenses.clear();
-
-      try {
-        if (reactive.root?.[CLEANUP_MARKER]) {
-          disableAutoCleanupFor(reactive.root);
-          reactive.root[CLEANUP_MARKER] = false;
-        }
-      } finally {
-        reactive.root = null;
-        registry.deferCleanup(element);
-      }
+      state.dispose();
+      registry.deferCleanup(element);
     },
   } as unknown as AtomComponentController;
 
-  state.controller = controller;
+  internal.controller = controller;
   return controller;
 }
 
-// ─── Internal Evolution Helpers ──────────────────────────────────────────────
+// ─── Setup Feature Helpers ──────────────────────────────────────────────────
 
 /**
- * Orchestrates declarative event dispatching for a component.
+ * Collection of decomposed activation logic for setup components.
  *
- * Logic: Reactive Dispatch
- * Monitors a set of reactive values and automatically dispatches a matching
- * CustomEvent whenever a value changes.
- *
- * Logic: Polymorphic Input
- * Supports reactive atoms for state-driven updates, functional getters for
- * deferred execution, or static values.
+ * Logic: Feature Specialization
+ * Separates concerns for different reactive integrations (ARIA, Styles,
+ * Form, Dispatch) to maintain maintainability.
  *
  * @internal
  */
-function setupDispatch(
-  element: HTMLElement,
-  mappings: Record<string, ReactiveValue<unknown>>,
-  state: { dispatchEffects: Set<EffectObject> }
-) {
-  for (const [eventName, source] of Object.entries(mappings)) {
-    const effect = $.effect(() => {
-      const value = isAtom(source)
-        ? source.value
-        : typeof source === 'function'
-          ? (source as Function)()
-          : source;
-
-      // Logic: Polymorphic Detail
-      // If source is a function returning an object, use it directly as detail.
-      // Otherwise, wrap the primitive or atom value in a { value } object for consistency.
-      const detail =
-        typeof source === 'function' && typeof value === 'object' && value !== null
-          ? value
-          : { value };
-
-      element.dispatchEvent(
-        new CustomEvent(eventName, {
-          detail,
-          bubbles: true,
-          composed: true,
+const SetupHelpers = {
+  /**
+   * Orchestrates reactive CustomEvent dispatching.
+   *
+   * Logic: Event Bridge
+   * Maps atom changes or functional getters to standard DOM events.
+   */
+  dispatch(
+    el: HTMLElement,
+    mappings: Record<string, ReactiveValue<unknown>>,
+    effects: Set<EffectObject>
+  ) {
+    for (const [name, source] of Object.entries(mappings)) {
+      effects.add(
+        $.effect(() => {
+          const val = isAtom(source)
+            ? source.value
+            : typeof source === 'function'
+              ? (source as Function)()
+              : source;
+          const detail =
+            typeof source === 'function' && typeof val === 'object' && val !== null
+              ? val
+              : { value: val };
+          el.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
+          return undefined;
         })
       );
-      return undefined;
-    });
-    state.dispatchEffects.add(effect);
-  }
-}
+    }
+  },
 
-/**
- * Performs dynamic hydration of reactive markers within a component's root.
- *
- * When to use:
- * - Recommended for components that require data-binding between application
- *   state (Atoms) and the DOM without manual manipulation.
- *
- * Logic: Dynamic Hydration
- * Combines initial tree-walking with a MutationObserver to ensure that nodes
- * added dynamically after setup() are correctly bound to their respective atoms.
- *
- * Security: Text Injection
- * Uses `textContent` for updates to prevent XSS vulnerabilities. HTML injection
- * is explicitly avoided in the default hydration logic.
- *
- * @internal
- */
-function hydrate(
-  root: Element,
-  bindings: Record<string, ReadonlyAtom<unknown>>,
-  state: { hydrationEffects: Set<EffectObject>; hydratedNodes: Set<Element>; root?: Node | null }
-) {
-  const BIND_ATTRS = ['data-aej-bind', 'data-bind'];
-  const selector = BIND_ATTRS.map((a) => `[${a}]`).join(',');
+  /**
+   * Applies constructable stylesheets to a ShadowRoot or Document.
+   */
+  styles(root: ShadowRoot | Document, styles: (string | CSSStyleSheet)[]) {
+    const sheets = styles.map(getOrCreateSheet);
+    root.adoptedStyleSheets = [...root.adoptedStyleSheets, ...sheets];
+    return sheets;
+  },
 
-  const applyTo = (node: Element) => {
-    const target = node as Element & { [HYDRATION_MARKER]?: boolean };
-    // Only bind if not already bound (idempotency)
-    if (target[HYDRATION_MARKER]) return;
-
-    for (const attr of BIND_ATTRS) {
-      const key = node.getAttribute(attr);
-      if (key && bindings[key]) {
-        const atom = bindings[key];
-        const effect = $.effect(() => {
-          const val = isAtom(atom) ? atom.value : atom;
-          const strVal = val == null ? '' : String(val);
-          if (node.textContent !== strVal) {
-            node.textContent = strVal;
-          }
+  /**
+   * Bridges reactive atoms to the ElementInternals ARIA API.
+   */
+  aria(
+    internals: ElementInternals,
+    aria: Record<string, ReadonlyAtom<unknown>>,
+    effects: Set<EffectObject>
+  ) {
+    for (const [prop, atom] of Object.entries(aria)) {
+      effects.add(
+        $.effect(() => {
+          (internals as unknown as Record<string, string | null>)[prop] =
+            atom.value == null ? null : String(atom.value);
           return undefined;
-        });
-        state.hydrationEffects.add(effect);
-        target[HYDRATION_MARKER] = true;
-        state.hydratedNodes.add(target);
-        break;
-      }
+        })
+      );
     }
-  };
+  },
 
-  // Initial scan
-  $(root)
-    .find(selector)
-    .addBack(selector)
-    .each((_, el) => applyTo(el));
+  /**
+   * Hydrates the DOM subtree with reactive text bindings.
+   *
+   * Logic: Attribute-Driven Discovery
+   * Scans for elements with `data-aej-bind` or `data-bind` and
+   * establishes reactive effects for their textContent.
+   */
+  hydrate(root: Element, bindings: Record<string, ReadonlyAtom<unknown>>, state: ComponentState) {
+    const BIND_ATTRS = ['data-aej-bind', 'data-bind'];
+    const selector = BIND_ATTRS.map((a) => `[${a}]`).join(',');
 
-  // Dynamic observation for structural changes
-  const observer = new MutationObserver((mutations) => {
-    for (const mutation of mutations) {
-      mutation.addedNodes.forEach((node) => {
-        if (node instanceof Element) {
-          if (node.matches(selector)) applyTo(node);
-          $(node)
-            .find(selector)
-            .each((_, el) => applyTo(el));
+    const apply = (node: Element) => {
+      const target = node as Element & { [HYDRATION_MARKER]?: boolean };
+      if (target[HYDRATION_MARKER]) return;
+      for (const attr of BIND_ATTRS) {
+        const key = node.getAttribute(attr);
+        if (key && bindings[key]) {
+          const atom = bindings[key];
+          state.effects.add(
+            $.effect(() => {
+              const val = String(atom.value ?? '');
+              if (node.textContent !== val) node.textContent = val;
+              return undefined;
+            })
+          );
+          target[HYDRATION_MARKER] = true;
+          state.hydratedNodes.add(node);
+          break;
         }
-      });
-    }
-  });
+      }
+    };
 
-  observer.observe(root, { childList: true, subtree: true });
+    this.observe(root, selector, apply, state.effects);
+  },
 
-  // Cleanup Mechanism: The observer lifecycle is registered as an effect so teardown()
-  // disposes DOM observation in the same phase as other reactive resources.
-  const observerCleanup = $.effect(() => {
-    return () => observer.disconnect();
-  });
-  state.hydrationEffects.add(observerCleanup);
-}
+  /**
+   * Synchronizes reactive values with CSS Shadow Parts.
+   */
+  parts(root: Element, parts: Record<string, ReadonlyAtom<unknown>>, effects: Set<EffectObject>) {
+    const apply = (node: Element) => {
+      const key = node.getAttribute('data-aej-part');
+      if (key && parts[key]) {
+        const atom = parts[key];
+        effects.add(
+          $.effect(() => {
+            const val = atom.value;
+            /** Logic: CSS Part Token Normalization */
+            const normalized =
+              typeof val === 'string'
+                ? val
+                : Array.isArray(val)
+                  ? val.join(' ')
+                  : Object.entries((val as Record<string, boolean>) || {})
+                      .filter((e) => !!e[1])
+                      .map((e) => e[0])
+                      .join(' ');
+            if (node.getAttribute('part') !== normalized) node.setAttribute('part', normalized);
+            return undefined;
+          })
+        );
+      }
+    };
+    this.observe(root, '[data-aej-part]', apply, effects);
+  },
+
+  /**
+   * Internal utility for maintaining reactive observers over a subtree.
+   */
+  observe(
+    root: Element,
+    selector: string,
+    apply: (n: Element) => void,
+    effects: Set<EffectObject>
+  ) {
+    $(root)
+      .find(selector)
+      .addBack(selector)
+      .each((_, el) => apply(el));
+
+    const obs = new MutationObserver((muts) =>
+      muts.forEach((m) =>
+        m.addedNodes.forEach((n) => {
+          if (n instanceof Element) {
+            if (n.matches(selector)) apply(n);
+            $(n)
+              .find(selector)
+              .each((_, el) => apply(el));
+          }
+        })
+      )
+    );
+    obs.observe(root, { childList: true, subtree: true });
+    effects.add($.effect(() => () => obs.disconnect()));
+  },
+
+  /**
+   * Orchestrates form-associated behaviors (FACE).
+   *
+   * Logic: Form Control Integration
+   * Bridges internal reactive state to the browser's form submission
+   * data and Constraint Validation API.
+   */
+  form(
+    el: HTMLElement,
+    internals: ElementInternals,
+    value:
+      | ReadonlyAtom<unknown>
+      | { val: ReadonlyAtom<unknown>; state?: ReadonlyAtom<unknown> }
+      | undefined,
+    validation:
+      | ReadonlyAtom<ValidityStateFlags | string>
+      | ((val: unknown) => ValidityStateFlags | string)
+      | undefined,
+    effects: Set<EffectObject>
+  ) {
+    const valAtom = !value ? null : isAtom(value) ? value : value.val;
+    const stateAtom = !value || isAtom(value) ? null : value.state;
+
+    effects.add(
+      $.effect(() => {
+        const v = valAtom?.value;
+        const s = stateAtom?.value;
+
+        // Security: Data Serialization
+        // Uses flattenToFormData to recursively serialize complex objects
+        // into standard form-data format.
+        if (valAtom) {
+          if (typeof v === 'object' && v !== null && !(v instanceof File) && !(v instanceof Blob)) {
+            const fd = new FormData();
+            flattenToFormData(fd, el.getAttribute('name') || '', v);
+            internals.setFormValue(fd, s as string | FormData | null);
+          } else {
+            internals.setFormValue(v as string | null, s as string | FormData | null);
+          }
+        }
+
+        // Logic: Validation Sync
+        if (validation) {
+          const res = isAtom(validation) ? validation.value : validation(v);
+          if (typeof res === 'string') {
+            internals.setValidity(res ? { customError: true } : {}, res, el);
+          } else {
+            internals.setValidity(res, undefined, el);
+          }
+        }
+        return undefined;
+      })
+    );
+  },
+};
 
 // ─── Context Management API ──────────────────────────────────────────────────
 
@@ -655,25 +782,21 @@ function hydrate(
  * Registers an element as a provider for a reactive context value.
  *
  * When to use:
- * - To share state (atoms) with deep descendants without explicit prop drilling.
- * - To establish theme or configuration contexts at specific DOM roots.
- *
- * Logic: Event-Based Discovery
- * Uses the bubbling `aej:context-request` event to resolve dependency
- * requests from descendants. This respects Shadow DOM boundaries through
- * composed event propagation.
+ * - Recommended for sharing state (atoms) with deep descendants without
+ *   explicit prop drilling.
+ * - Suitable for establishing theme or configuration contexts at specific DOM roots.
  *
  * Logic: CSS Bridge
- * Automatically synchronizes provided atom values with CSS custom properties
- * (`--aej-[key]`), enabling reactive styling based on application state.
+ * Automatically synchronizes provided values with CSS custom properties
+ * (`--aej-[key]`) on the host element, allowing for reactive styling.
  *
- * @param element - The host element, selector, or JQuery collection.
- * @param key - The unique identifier for the context.
- * @param val - The value or atom to be shared.
+ * @param element - The host element, selector, or collection acting as provider.
+ * @param key - Unique identifier for the context (string or symbol).
+ * @param val - The reactive atom or static value to share.
  *
  * @example
  * ```typescript
- * const theme = $.atom('dark');
+ * const theme = $.atom('light');
  * $.provideAtom('#app-root', 'theme', theme);
  * ```
  */
@@ -689,11 +812,10 @@ export function provideAtom(
         ? Array.from(document.querySelectorAll<HTMLElement>(element))
         : ((element as JQuery).toArray() as HTMLElement[]);
 
-  for (const el of targets) {
+  targets.forEach((el) => {
     const state = getInternalState(el);
     if (!state.providers) {
       state.providers = new Map();
-
       el.addEventListener(CONTEXT_REQUEST, (e: Event) => {
         const { key: reqKey, callback } = (e as CustomEvent<ContextRequestDetail>).detail;
         if (state.providers?.has(reqKey)) {
@@ -709,23 +831,20 @@ export function provideAtom(
     if (keyStr) {
       const varName = `--aej-${keyStr}`;
       const sync = (v: unknown) => el.style.setProperty(varName, v == null ? '' : String(v));
-
       if (isAtom(val)) {
-        if (!state.providerEffects) {
-          state.providerEffects = new Map();
-        }
+        if (!state.providerEffects) state.providerEffects = new Map();
         state.providerEffects.get(key)?.dispose();
-
-        const effect = $.effect(() => {
-          sync(val.value);
-          return undefined;
-        });
-        state.providerEffects.set(key, effect);
-      } else {
-        sync(val);
-      }
+        state.providerEffects.set(
+          key,
+          $.effect(() => {
+            sync(val.value);
+            return undefined;
+          })
+        );
+      } else sync(val);
     }
-  }
+  });
+
   ContextEngine.bump();
 }
 
@@ -733,23 +852,22 @@ export function provideAtom(
  * Injects a reactive context provided by an ancestor element.
  *
  * When to use:
- * - To consume state from an ancestor without direct coupling.
- * - To create context-aware components that adapt to their DOM hierarchy position.
+ * - Recommended for consuming state from an ancestor without direct coupling.
+ * - Suitable for creating context-aware components that adapt to their
+ *   DOM hierarchy position.
  *
- * Logic: Reactive Discovery
- * Returns a reactive proxy that automatically re-locates providers if the
- * element is moved within the DOM.
+ * Logic: Hybrid Discovery
+ * Returns a reactive proxy atom that automatically re-locates providers
+ * if the element is moved within the DOM hierarchy.
  *
- * @param element - The requesting element or selector.
+ * @param element - The element or selector requesting the context.
  * @param key - The unique identifier of the context to locate.
- * @returns A reactive proxy tracking the nearest provider, or null if the target is invalid.
+ * @returns A reactive proxy atom representing the injected context.
  *
  * @example
  * ```typescript
- * const theme = $.injectAtom('#sidebar', 'theme');
- * $.effect(() => {
- *   console.log('Active theme:', theme?.value);
- * });
+ * const theme = $.injectAtom(this, 'theme');
+ * $.effect(() => console.log('Current theme:', theme.value));
  * ```
  */
 export function injectAtom<T = unknown>(
@@ -762,9 +880,8 @@ export function injectAtom<T = unknown>(
       : typeof element === 'string'
         ? document.querySelector<HTMLElement>(element)
         : ((element as JQuery)[0] as HTMLElement);
-  if (!target) {
-    return null;
-  }
+
+  if (!target) return null;
 
   if (debug.enabled && typeof customElements !== 'undefined') {
     const tagName = target.tagName.toLowerCase();
@@ -774,9 +891,8 @@ export function injectAtom<T = unknown>(
   }
 
   const state = getInternalState(target);
-  if (!state.injects) {
-    state.injects = new Map();
-  }
+  if (!state.injects) state.injects = new Map();
+
   let existing = state.injects.get(key);
   if (!existing) {
     existing = createContextProxy<T>(target, key);

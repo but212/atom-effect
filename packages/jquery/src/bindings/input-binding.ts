@@ -1,6 +1,6 @@
 import { effect, untracked } from '@but212/atom-effect';
 import { SYSTEM_BINDING } from '@/constants';
-import { INTERNAL_HANDLER } from '@/core/jquery-patch';
+import { INTERNAL_HANDLER } from '@/core/symbols';
 import type { EffectObject, ValOptions, WritableAtom } from '@/types';
 import { BindingFlags } from '@/types';
 import { debug } from '@/utils/debug';
