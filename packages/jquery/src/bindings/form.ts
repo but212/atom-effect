@@ -7,28 +7,36 @@ import {
   type WritableAtom,
 } from '@but212/atom-effect';
 import $ from 'jquery';
-import { INTERNAL_HANDLER } from '@/core/jquery-patch';
 import { registry } from '@/core/registry';
+import { INTERNAL_HANDLER } from '@/core/symbols';
 import type { FormOptions } from '@/types';
 import { bindVal } from './unified';
 
 /**
  * Represents an internal entry for a specific form field and its associated lens.
+ *
+ * Logic: Reference Counting
+ * Tracks multiple form controls bound to the same property path to ensure
+ * lens atoms are only disposed when the last associated control is removed.
+ *
  * @internal
  */
 interface FieldEntry {
   /** The reactive lens atom providing access to a specific nested property. */
   atom: WritableAtom<unknown>;
 
-  /** The unique name of the field. */
+  /** The unique name of the field derived from the `name` attribute. */
   name: string;
 
-  /** Reference count used to determine when the field atom can be safely disposed. */
+  /** Reference count for lifecycle management. */
   refCount: number;
 }
 
-/** Default selector for identifyable form controls. @internal */
-const SELECTOR = 'input, select, textarea';
+/**
+ * Selector used for identifying form-associated elements and custom elements.
+ * @internal
+ */
+const SELECTOR = 'input, select, textarea, [name]';
 
 /**
  * Orchestrates the synchronization between a complex reactive object and an HTML Form.
@@ -38,9 +46,9 @@ const SELECTOR = 'input, select, textarea';
  * that the DOM and the reactive state remain consistent even as the form structure
  * changes dynamically.
  *
- * When to use:
- * - To manage complex, nested data models through standard HTML form interfaces.
- * - To implement automated two-way synchronization for entire form containers.
+ * Logic: Hybrid Discovery
+ * Combines initial scanning with a MutationObserver to maintain bindings for
+ * dynamically added elements or attribute changes.
  *
  * @internal
  */
@@ -88,26 +96,22 @@ class FormBinder<T extends object> {
   /**
    * Establishes a two-way binding for an individual form control.
    *
-   * Logic: Field identification is based on the control's `name` attribute. If
-   * the name changes, the previous binding is cleaned up and a new lens is established.
+   * Logic: Field Identification
+   * Identification is based on the control's `name` attribute. If the name attribute
+   * changes, the previous binding is cleaned up and a new lens is established.
    *
-   * @param el - The form control element.
+   * @param el - The form control element to bind.
    */
   private bindField(el: Element): void {
-    if (
-      !(
-        el instanceof HTMLInputElement ||
-        el instanceof HTMLSelectElement ||
-        el instanceof HTMLTextAreaElement
-      )
-    ) {
-      return;
-    }
-    const control = el;
-    const name = control.name;
+    if (!el.getAttribute('name')) return;
+
+    const control = el as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+    const name = control.name || el.getAttribute('name')!;
     if (!name) return;
 
-    // Logic: Detect name attribute changes and trigger a cleanup of the old binding association.
+    // Logic: Identity Reconciliation
+    // Detects changes to the 'name' attribute and triggers a cleanup of the
+    // previous association to prevent stale state updates.
     const oldName = this.names.get(control);
     if (oldName !== undefined && oldName !== name) {
       registry.cleanup(control);
@@ -118,6 +122,9 @@ class FormBinder<T extends object> {
     const entry = this.ensureField(name);
     this.names.set(control, name);
 
+    // Logic: Resource Cleanup
+    // Registers a cleanup hook to release the field reference and associated
+    // lens effects when the element is disconnected.
     registry.onCleanup(control, () => this.unbindField(control, name));
 
     if (
@@ -128,14 +135,42 @@ class FormBinder<T extends object> {
     } else {
       bindVal(control, entry.atom, this.options);
     }
+
+    this.applyValidation(control, name, entry.atom);
+  }
+
+  /**
+   * Integrates declarative validation for a specific form control.
+   *
+   * Logic: Constraint Validation Bridge
+   * Maps validation results from the reactive schema to the browser's native
+   * Constraint Validation API (`setCustomValidity`).
+   */
+  private applyValidation(control: Element, name: string, atom: WritableAtom<unknown>): void {
+    const opts = this.options as FormOptions<unknown>;
+    const validator = opts.validation?.[name];
+    if (!validator) return;
+
+    registry.trackEffect(
+      control,
+      effect(() => {
+        const v = atom.value;
+        const res = validator(v);
+        const msg = typeof res === 'string' ? res : res ? '' : 'Invalid';
+        if ('setCustomValidity' in control) {
+          (control as unknown as HTMLInputElement).setCustomValidity(msg);
+        }
+      })
+    );
   }
 
   /**
    * Specifically handles two-way binding for toggleable controls (checkboxes and radios).
    *
-   * Logic: Multi-checkbox scenarios (where the atom value is an array) are
-   * handled by maintaining a set of selected values to ensure synchronization
-   * without assuming positional order.
+   * Logic: Multi-checkbox Arrays
+   * For checkboxes bound to an array, synchronization is performed by maintaining
+   * a Set of values, ensuring order-independent updates and preventing
+   * duplicate entries during reactive flushes.
    */
   private bindToggle(
     el: HTMLInputElement,
@@ -159,7 +194,9 @@ class FormBinder<T extends object> {
       }
     };
 
-    // Note: Marked as internal to distinguish from user-defined event handlers.
+    // Logic: Batch Coalescing
+    // Marks the handler as an internal AEJ handler to prevent redundant
+    // wrapping during multiple patch cycles, maintaining a flat execution stack.
     (handler as unknown as { [INTERNAL_HANDLER]: boolean })[INTERNAL_HANDLER] = true;
     $(el).on('change', handler);
     registry.onCleanup(el, () => $(el).off('change', handler));
@@ -181,8 +218,9 @@ class FormBinder<T extends object> {
   /**
    * Retrieves or creates a reactive entry for a specific field name.
    *
-   * Logic: Flat name attributes (e.g., 'user.profile[0].name') are converted
-   * into dot-separated paths compatible with the `atomLens` engine.
+   * Logic: Path Transformation
+   * Flat HTML 'name' attributes (e.g., 'user.profile[0].name') are converted
+   * into dot-separated paths compatible with the `atomLens` structural sharing engine.
    */
   private ensureField(name: string): FieldEntry {
     let entry = this.entries.get(name);
@@ -241,9 +279,9 @@ class FormBinder<T extends object> {
   /**
    * Monitors the form for structural changes using a MutationObserver.
    *
-   * Logic: Newly injected elements or changes to 'name' attributes are
-   * automatically detected, allowing for dynamic form support without
-   * manual re-binding.
+   * Optimization: Batch Processing
+   * Iterates through mutation records in a single pass to minimize DOM
+   * re-scanning when multiple elements are injected simultaneously.
    */
   private observe(): void {
     const observer = new MutationObserver((ms) => {
@@ -257,6 +295,8 @@ class FormBinder<T extends object> {
             }
           }
         } else if (m.attributeName === 'name') {
+          // Logic: Attribute Change detection
+          // Triggers re-binding if the 'name' attribute is modified.
           this.bindSubtree(m.target as Element);
         }
       }
@@ -277,11 +317,26 @@ class FormBinder<T extends object> {
  * Establishes a two-way reactive binding between a `<form>` and an object atom.
  *
  * When to use:
- * - To synchronize a standard HTML form with a complex, nested reactive state object.
+ * - Recommended for synchronizing standard HTML forms with complex, nested
+ *   reactive state objects.
+ * - Suitable for scenarios requiring declarative validation integrated with
+ *   browser-native APIs.
  *
  * @param form - The target form element to bind.
  * @param atom - A writable atom containing the state model.
- * @param options - Configuration for transformations and change listeners.
+ * @param options - Configuration for transformations and reactive validation.
+ *
+ * @example
+ * ```typescript
+ * const user = $.atom({ profile: { name: 'Alice' }, items: [] });
+ *
+ * $.bindForm($('form')[0], user, {
+ *   validation: {
+ *     'profile.name': (v) => v ? true : 'Name is required'
+ *   },
+ *   onChange: (path, val) => console.log(`${path} changed to ${val}`)
+ * });
+ * ```
  */
 export function bindForm<T extends object>(
   form: HTMLFormElement,

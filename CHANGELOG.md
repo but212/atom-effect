@@ -31,6 +31,13 @@
   - **Attribute Snapshot Optimization**: `attrs()` now respects `static observedAttributes` if defined, drastically reducing memory by only tracking relevant attributes.
   - **Re-hydration**: `teardown()` now removes `data-aej-bind` markers, allowing the same DOM nodes to be safely re-hydrated if `setup()` is called again.
   - **Scheduler Integration**: Optimized observers to rely on the global scheduler's auto-batching, ensuring efficient, synchronized updates.
+  - **Shared Styles**: Added support for shared constructable stylesheets via `adoptedStyleSheets`, improving CSS management across component instances.
+  - **Reactive ARIA**: Integrated `ElementInternals` for reactive binding of accessibility properties.
+  - **CSS Shadow Parts**: Added `parts` synchronization, allowing reactive control over component internal elements via `::part()`.
+  - **FACE Integration**: Enabled Form-Associated Custom Element support, allowing components to participate in native form submission and validation.
+- **Form Binding (atomForm)**:
+  - **Declarative Validation**: Integrated with the browser's Constraint Validation API via a reactive `validation` schema.
+  - **Hybrid Discovery**: Expanded selector logic to automatically bind to any element with a `name` attribute, supporting native and custom controls seamlessly.
 - **Dependency Injection (DI)**:
   - **Event-Based Discovery**: Migrated context resolution to a bubbling `CustomEvent` (`aej:context-request`) with `composed: true`, ensuring 100% reliability across Shadow DOM boundaries.
   - **Hybrid Discovery Proxy**: Injected atoms now use a dual-mode resolution: Reactive (subscribing to hierarchy moves) and Synchronous (immediate discovery on `.value` access).
@@ -52,6 +59,8 @@
 - **Test Infrastructure**: Modularized the monolithic integration test suite into specialized categories (`features`, `synergy`, `routing`, `core`, `scenarios`, `lifecycle`) for improved maintainability and stability.
 - **ESM Modernization**: Migrated configuration files to use `import.meta.dirname` for better ESM compatibility and standardized `@/` path aliases across the monorepo.
 - **Core Overrides**: Modularized jQuery prototype patches (`jquery-patch`) to allow independent enabling of event-wrapping and lifecycle-sync hooks.
+- **Web Component Internals**: Modularized `useAtomComponent` logic into `ComponentState` and `SetupHelpers` for improved resource lifecycle management.
+- **Form Binder**: Centralized form synchronization and validation logic using a data-driven pipeline.
 
 ## [0.31.0]
 

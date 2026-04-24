@@ -206,9 +206,9 @@ Internal state records are initialized with a fixed set of fields to maintain mo
 
 The library minimizes branching in performance-critical paths through task-based dispatch in `atomBind` and strategy specialization in `InputBinding`. Static snapshots are used during registry cleanup to stabilize loop prediction.
 
-## 13. Lenses & Structural Sharing
+### 13. Lenses & Structural Sharing
 
-Lenses are re-exported from the core package. `atomForm` leverages these for deep property binding while maintaining performance through leaf atoms and a centralized dispatcher.
+Lenses are re-exported from the core package. `atomForm` leverages these for deep property binding while maintaining performance through leaf atoms and a centralized dispatcher. It also integrates with the browser's **Constraint Validation API**, reactively calling `setCustomValidity` on form controls based on the provided validation schema.
 
 ## 14. Debugging & Visual Highlighting
 
@@ -218,26 +218,35 @@ The `DebugController` provides visual feedback via non-blocking outlines using `
 
 ### 15.1 Web Component Controller
 
-`useAtomComponent(element)` implements a composition-based model that manages a component's reactive lifecycle. It provides:
+`useAtomComponent(element)` implements a composition-based model managed by a `ComponentState` class. This internal state centralizes all reactive resources, including:
 
 - **Reactive Attributes (`attrs`)**: A Lens Factory for observed attributes. It maintains a single source `attributeAtom` and provides scoped `atomLens` instances for individual attributes. This "Single Source of Truth" model ensures that DOM attribute changes trigger only one atom update, which then propagates efficiently through lenses. It respects the `static observedAttributes` contract to filter unneeded DOM attributes from the snapshot, optimizing memory and mutation observation.
 - **Slot Tracking (`slots`)**: A Lens Factory that monitors `assignedNodes()` via `slotchange` events. Like attributes, it uses a single source `slotsAtom` to track all slots, providing scoped lenses for individual slot names (including the default slot). Includes deferred binding logic to support Closed Shadow DOMs when the root is provided during `setup()`.
 - **Scoped Selection (`$`)**: A jQuery-compatible selector that targets the component's `ShadowRoot` (if present) or the host element.
 
-### 15.2 Declarative Synthesis & Dispatch
+### 15.2 Declarative Synthesis & Helpers
 
-The `setup()` method orchestrates advanced component behaviors:
+The `setup()` method delegates specific activations to a `SetupHelpers` utility, which manages:
 
 - **Reactive Dispatch**: Automatically dispatches `CustomEvent`s when mapped atoms or reactive functions change. This bridges internal component state to the external application.
-- **Dynamic Hydration (Synthesis)**: Maps data-binding keys to atoms. It uses a combination of initial tree-walking and a `MutationObserver` to ensure both static and dynamically added nodes are correctly bound to reactive state. Teardown safely removes hydration markers to allow seamless DOM node re-hydration if the component is re-initialized.
+- **Dynamic Hydration**: Maps data-binding keys to atoms. It uses a combination of initial tree-walking and a `MutationObserver` to ensure both static and dynamically added nodes are correctly bound to reactive state.
+- **Styles & Parts**: Manages constructable stylesheets and `data-aej-part` attribute synchronization.
+- **Aria & Form**: Bridges reactive state to `ElementInternals` for accessibility and native form participation.
 
 ### 15.3 Dependency Injection (DI)
 
 The DI system provides a loosely coupled mechanism for state sharing across the DOM:
 
 - **Event-Based Discovery**: Uses the bubbling `aej:context-request` event to locate providers, enabling state to traverse Shadow DOM boundaries via composed event propagation.
-- **Context Versioning**: A global versioning system triggers re-discovery of providers when nodes are moved within the DOM hierarchy.
+- **Context Versioning**: A centralized `ContextEngine` monitors DOM structure changes and triggers a global version bump. This invalidates cached injection proxies, ensuring moved nodes re-discover their nearest providers.
 - **CSS Bridge**: Provided atoms are automatically mirrored to CSS Custom Properties (`--aej-[key]`) on the host element, allowing reactive styling driven by application state.
+
+### 15.4 Form Integration (FACE)
+
+`useAtomComponent` provides first-class support for **Form-Associated Custom Elements**. When `value` or `validation` options are provided to `setup()`, the controller uses `ElementInternals` to:
+
+1. **Sync Values**: Serializes atom data (using `flattenToFormData` for complex objects) and passes it to `internals.setFormValue()`.
+2. **Sync Validity**: Maps validation results to `internals.setValidity()`, allowing the custom element to block form submission and reflect `:invalid` states.
 
 ## 16. Testing & Quality
 

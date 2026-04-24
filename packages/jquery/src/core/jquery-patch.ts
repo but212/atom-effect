@@ -2,19 +2,10 @@ import { batch } from '@but212/atom-effect';
 import $ from 'jquery';
 import { registry } from '@/core/registry';
 import type { PatchOptions } from '@/types';
+import { INTERNAL_HANDLER } from './symbols';
 
 /** Alias for common jQuery event handler types. @internal */
 type EventHandler = JQuery.EventHandlerBase<unknown, JQuery.TriggeredEvent>;
-
-/**
- * A unique symbol used to mark event handlers as already wrapped in a batch.
- *
- * Reason: This prevents redundant nested `batch()` calls when re-binding
- * handlers or during multiple patch cycles, maintaining flat execution stacks.
- *
- * @internal
- */
-export const INTERNAL_HANDLER = Symbol.for('atom-effect-internal');
 
 /** A mapping of original user-defined handlers to their batch-wrapped counterparts. */
 const handlerMap = new WeakMap<EventHandler, EventHandler>();

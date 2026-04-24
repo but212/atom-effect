@@ -207,6 +207,27 @@ $('#price-input').atomVal(price, {
 });
 ```
 
+## 7. Reactive Form Validation
+
+Leverage the `validation` schema in `atomForm` to integrate with the browser's native Constraint Validation API.
+
+```javascript
+const user = $.atom({ name: '', age: 0 });
+
+$('form').atomForm(user, {
+  validation: {
+    'name': (v) => (v.length >= 2 ? true : 'Name is too short'),
+    'age': (v) => (v >= 18 ? '' : 'Must be at least 18')
+  }
+});
+```
+
+When validation fails:
+
+- `setCustomValidity()` is called on the corresponding input.
+- The element matches the `:invalid` CSS pseudo-class.
+- Native browser validation bubbles will appear on form submission.
+
 ## 7. Reactive Lists
 
 The `atomList` method uses a 3-pass reconciliation algorithm to synchronize DOM operations with array state.
@@ -270,22 +291,34 @@ class MyComponent extends HTMLElement {
     // 2. Closed Shadow DOM Support: aej.setup() accepts the root
     const sr = this.attachShadow({ mode: 'closed' });
     sr.innerHTML = `
+      <style>
+        :host { display: block; }
+        .card { padding: 10px; border: 1px solid #ccc; }
+      </style>
       <div class="card">
-        <h1 data-bind="title"></h1>
+        <h1 data-aej-bind="title"></h1>
         <slot></slot>
-        <button class="inc">Count: <span data-bind="count"></span></button>
+        <div data-aej-part="status">Status: Active</div>
+        <button class="inc">Count: <span data-aej-bind="count"></span></button>
       </div>
     `;
 
     // 1. Setup reactive features
     this.aej.setup({
       shadowRoot: sr,
+      styles: [sharedStyles], // Use constructable stylesheets
       bind: { 
         title: $.computed(() => `Theme: ${this.aej.attrs('theme').value}`),
         count: this.count
       },
+      aria: {
+        ariaLabel: $.computed(() => `Counter at ${this.count.value}`)
+      },
+      parts: {
+        status: $.computed(() => (this.count.value % 2 === 0 ? 'even' : 'odd'))
+      },
       dispatch: { 
-        'count-changed': this.count // Dispatches CustomEvent when count changes
+        'count-changed': this.count 
       }
     });
 
@@ -339,4 +372,40 @@ class DeepChild extends HTMLElement {
     this.aej.teardown();
   }
 }
+customElements.define('deep-child', DeepChild);
+```
+
+## 11. Standard-Compliant Custom Elements (FACE)
+
+Create custom form controls that participate in native `<form>` submission and validation.
+
+```javascript
+class MyInput extends HTMLElement {
+  static formAssociated = true;
+  private aej = $.useAtomComponent(this);
+  private value = $.atom('');
+
+  connectedCallback() {
+    this.attachShadow({ mode: 'open' }).innerHTML = `
+      <input type="text" placeholder="Type here...">
+    `;
+
+    this.aej.setup({
+      // 1. Sync internal atom with form value
+      value: this.value,
+      
+      // 2. Reactive validation integrated with Constraint Validation API
+      validation: (v) => (v.includes('@') ? '' : 'Invalid email'),
+    });
+
+    this.aej.$('input').on('input', (e) => {
+      this.value.value = e.target.value;
+    });
+  }
+
+  disconnectedCallback() {
+    this.aej.teardown();
+  }
+}
+customElements.define('my-input', MyInput);
 ```
