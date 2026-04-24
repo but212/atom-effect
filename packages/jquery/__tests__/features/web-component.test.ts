@@ -449,7 +449,7 @@ describe('Web Component Features', () => {
           connectedCallback() {
             this.aej.setup({
               value: val,
-              validation: (v) => (v ? '' : 'Required field'),
+              validation: (v: string) => (v ? '' : 'Required field'),
             });
           }
         }
