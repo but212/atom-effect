@@ -122,6 +122,7 @@ const ContextEngine = (() => {
         });
       }
       autoSetupMap.delete(el);
+      ContextEngine.release();
     }
   };
 
@@ -385,6 +386,7 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       });
     } else {
       autoSetupMap.set(element, ctor);
+      ContextEngine.retain();
     }
   }
 
