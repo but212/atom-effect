@@ -4,45 +4,55 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![ES2021+](https://img.shields.io/badge/target-ES2021%2B-blue)
 
-## Quick Start
+Core reactive state management engine implementing an epoch-based dependency tracking system.
 
-### Installation
+## Overview
+
+This package provides the foundational primitives for reactive programming in JavaScript environments. It manages state synchronization through a pull-based dependency graph, ensuring deterministic execution and automatic resource management.
+
+- **Target**: ES2021+
+- **Architecture**: Epoch-based push/pull propagation
+- **Features**: Atomic batching, lazy evaluation, and explicit effect cleanup.
+
+## Installation
 
 ```bash
 npm install @but212/atom-effect
 ```
 
-### Usage in 30 Seconds
+## Usage
+
+The following example demonstrates the primary primitives for state initialization, derivation, and side-effect orchestration.
 
 ```typescript
 import { atom, computed, effect } from '@but212/atom-effect';
 
-// 1. Create State
+// 1. Initialize State
 const count = atom(0);
 const multiplier = atom(2);
 
-// 2. Derive State (Lazy & Cached)
+// 2. Derive State (Lazy Evaluation & Identity Caching)
 const doubled = computed(() => count.value * multiplier.value);
 
-// 3. React to Changes
+// 3. Side-Effect Orchestration
 const effectHandle = effect(() => {
   console.log(`Count: ${count.value}, Doubled: ${doubled.value}`);
 });
 // Output: "Count: 0, Doubled: 0"
 
-// 4. Update State
+// 4. State Modification
 count.value = 1;
 // Output: "Count: 1, Doubled: 2"
 
-// 5. Cleanup
+// 5. Explicit Disposal
 effectHandle.dispose();
 ```
 
 ## Documentation
 
-- [**Onboarding Guide**](./docs/ONBOARDING.md): Mental model, key concepts, and common pitfalls.
-- [**API Reference**](./docs/API.md): Detailed usage of `atom`, `computed`, `effect`, `batch`, `untracked`.
-- [**Architecture**](./docs/ARCHITECTURE.md): Deep dive into the epoch-based propagation system.
+- [**Technical Overview**](./docs/ONBOARDING.md): Core concepts, mental model, and architectural boundaries.
+- [**API Reference**](./docs/API.md): Specification for `atom`, `computed`, `effect`, `batch`, and `untracked`.
+- [**Internals**](./docs/ARCHITECTURE.md): Deep dive into the epoch-based propagation algorithm and dependency slot management.
 
 ## License
 

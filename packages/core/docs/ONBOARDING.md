@@ -1,276 +1,178 @@
 # Onboarding Guide
 
-This guide helps new developers understand `@but212/atom-effect` quickly: the mental model, key concepts, and common pitfalls.
+This guide is designed to help developers quickly understand the core concepts, mental model, and common patterns of `@but212/atom-effect`.
 
 ## Mental Model
 
-Think of your application state as a **spreadsheet**.
+The reactive system in `@but212/atom-effect` can be compared to a **spreadsheet**:
 
-- **Atoms** are cells you type into manually.
-- **Computed** values are cells with formulas — they update automatically when their inputs change.
-- **Effects** are "observers" that react to cell changes (e.g., updating the DOM, logging, sending requests).
+- **Atoms** represent cells containing raw data (inputs).
+- **Computeds** represent cells with formulas that automatically update based on their inputs.
+- **Effects** represent observers that perform actions (such as updating the DOM or logging) whenever the relevant cells change.
 
 ```text
   [Atom A]  ──┐
-              ├──▶  [Computed C = A + B]  ──▶  [Effect: update DOM]
+              ├──▶  [Computed C = A + B]  ──▶  [Effect: Update UI]
   [Atom B]  ──┘
 ```
 
-All dependency tracking occurs **automatically** — you never declare relationships manually. Just read a value inside a `computed` or `effect`, and the library tracks it for you.
+Dependency tracking is handled **automatically**. By reading a reactive value inside a `computed` or `effect` function, the system registers that relationship without requiring manual declaration.
+
+---
 
 ## Core Primitives
 
-### 1. `atom(initialValue)` — Writable State
+### 1. `atom(initialValue, options?)`
+
+Atoms are the primary source of state. They are writable and notify subscribers when their value changes.
 
 ```typescript
 import { atom } from '@but212/atom-effect';
 
 const count = atom(0);
 
-count.value;        // Read (tracked inside effect/computed)
-count.peek();       // Read (never tracked)
-count.value = 5;    // Write (notifies subscribers)
-count.dispose();    // Cleanup
+// Accessing the value (tracks dependency if inside effect/computed)
+console.log(count.value);
+
+// Updating the value (triggers notifications)
+count.value = 5;
+
+// Reading without tracking
+console.log(count.peek());
+
+// Explicitly cleaning up resources
+count.dispose();
 ```
 
-**Key behavior**: Writes are batched via microtask by default. Multiple writes in the same synchronous block are coalesced into one notification.
+**Note**: By default, atom updates are batched using microtasks. Multiple updates in the same synchronous block result in a single notification cycle.
 
-### 2. `computed(fn)` — Derived State
+### 2. `computed(fn, options?)`
+
+Computeds are read-only nodes that derive their state from other atoms or computeds.
 
 ```typescript
-import { atom, computed } from '@but212/atom-effect';
-
 const price = atom(100);
 const tax = atom(0.1);
 const total = computed(() => price.value * (1 + tax.value));
 
-total.value; // 110 — computed lazily on first read
-price.value = 200;
-total.value; // 220 — recomputed because `price` changed
+console.log(total.value); // 110 (Calculated lazily)
 ```
 
-**Key behavior**:
+**Key Characteristics**:
 
-- **Lazy**: Does not compute until `.value` is read.
-- **Cached**: Returns the same result if dependencies haven't changed.
-- **Asynchronous support**: Can return a `Promise`. See [API Reference](./API.md) for `defaultValue` and async state tracking.
+- **Lazy Evaluation**: The calculation only runs when the `.value` is accessed.
+- **Caching**: The result is cached and only re-calculated if dependencies change.
+- **Async Support**: Can return a `Promise`. Use the `defaultValue` option to provide a value while the promise is pending.
 
-### 3. `effect(fn)` — Side Effects
+### 3. `effect(fn, options?)`
+
+Effects are used to perform side effects in response to state changes.
 
 ```typescript
-import { atom, effect } from '@but212/atom-effect';
+const name = atom('Developer');
 
-const name = atom('World');
+const handle = effect(() => {
+  console.log(`Hello, ${name.value}`);
 
-const effectHandle = effect(() => {
-  console.log(`Hello, ${name.value}!`);
-  // Optional cleanup function
+  // Optional cleanup function called before re-execution or disposal
   return () => console.log('Cleaning up...');
 });
-// Logs: "Hello, World!"
 
-name.value = 'Alice';
-// (after microtask) Logs: "Cleaning up..." then "Hello, Alice!"
-
-effectHandle.dispose(); // Stop watching
+name.value = 'User';
+// Console logs: "Cleaning up...", then "Hello, User"
 ```
 
-**Key behavior**:
+---
 
-- Runs immediately on creation.
-- Re-runs asynchronously (microtask) when dependencies change.
-- Previous cleanup runs before each re-execution.
+## Scheduling and Batching
 
-## Scheduling & Batching
+### Microtask Batching
 
-### Default: Microtask Batching
-
-By default, notifications are delivered via `queueMicrotask`. This means multiple writes in the same synchronous block are automatically coalesced:
-
-```typescript
-const a = atom(0);
-effect(() => console.log(a.value)); // Logs: 0
-
-a.value = 1;
-a.value = 2;
-a.value = 3;
-// Effect runs once with value 3 (not three times)
-```
+The scheduler uses `queueMicrotask` by default to coalesce multiple state changes into a single notification flush. This prevents redundant executions.
 
 ### Explicit Batching with `batch()`
 
-Use `batch()` when you need **synchronous flush** after updating multiple atoms:
+The `batch()` utility allows you to group multiple updates and ensure a synchronous flush of all affected effects and computeds immediately after the batch callback finishes.
 
 ```typescript
-import { atom, batch } from '@but212/atom-effect';
-
-const firstName = atom('');
-const lastName = atom('');
+import { batch } from '@but212/atom-effect';
 
 batch(() => {
-  firstName.value = 'John';
-  lastName.value = 'Doe';
-  // No effects run inside this block
+  atomA.value = 1;
+  atomB.value = 2;
+  // Notifications are deferred until the end of this block
 });
-// Effects flush synchronously here, seeing both updates at once
+// Synchronous flush occurs here
 ```
 
-### Sync Mode
-
-For latency-critical paths, atoms and effects support `sync: true`:
-
-```typescript
-const count = atom(0, { sync: true });
-effect(() => console.log(count.value), { sync: true });
-
-count.value = 1; // Effect runs immediately (no microtask delay)
-```
+---
 
 ## Dependency Tracking
 
-### How It Works
+Tracking occurs whenever a `.value` property is accessed within a tracking context (like an `effect` or `computed`).
 
-When you read `.value` inside a `computed` or `effect`, the library records that dependency automatically using a **tracking context**.
+### Dynamic Dependencies
+
+The dependency graph is dynamic. If a computation branches, it only tracks the dependencies it actually accesses during the last execution.
 
 ```typescript
+const show = atom(true);
 const a = atom(1);
 const b = atom(2);
-const show = atom(true);
 
 const result = computed(() => {
-  if (show.value) return a.value;  // tracks `show` and `a`
-  return b.value;                   // tracks `show` and `b`
+  return show.value ? a.value : b.value;
 });
+// If show.value is true, only 'show' and 'a' are tracked.
 ```
 
-Dependencies are **dynamic** — they can change between runs. If `show` becomes `false`, the computed stops tracking `a` and starts tracking `b`.
+### Bypassing Tracking
 
-### Reading Without Tracking
+Use `.peek()` on an atom or wrap logic in `untracked(() => ...)` to read reactive state without creating a dependency.
 
-Use `peek()` or `untracked()` to read values without creating a dependency:
+---
+
+## Asynchronous Operations
+
+Async computeds are natively supported. It is important to remember that **dependency tracking is synchronous**. Always read dependencies before the first `await` keyword.
 
 ```typescript
-import { untracked } from '@but212/atom-effect';
-
-effect(() => {
-  const tracked = source.value;             // Creates dependency
-  const notTracked = config.peek();          // No dependency
-  const alsoNotTracked = untracked(() => {   // No dependency
-    return other.value;
-  });
-});
+const data = computed(async () => {
+  const currentId = userId.value; // Tracked
+  const response = await fetch(`/api/user/${currentId}`);
+  return response.json();
+}, { defaultValue: null });
 ```
+
+---
 
 ## Error Handling
 
-### Computed Errors
+### Computed Nodes
 
-Errors thrown during computation are captured and stored:
+Computeds catch errors during evaluation. You can inspect them using `.hasError`, `.lastError`, or `.errors`. Providing a `defaultValue` allows the system to return that value instead of throwing when the node is accessed in an error state.
 
-```typescript
-const c = computed(() => {
-  throw new Error('oops');
-});
+### Effect Nodes
 
-c.hasError;   // true
-c.lastError;  // Error('oops')
-c.errors;     // [Error('oops')] — includes errors from dependencies
-```
+Errors in effects are caught by the scheduler. You can provide an `onError` callback in the effect options to handle these errors (e.g., for logging to a service).
 
-With a `defaultValue`, errors become recoverable:
+---
 
-```typescript
-const c = computed(() => { throw new Error('fail'); }, { defaultValue: 0 });
-c.value; // 0 (does not throw)
-```
+## Best Practices and Considerations
 
-### Effect Errors
+1. **Manual Disposal**: Effects and atoms should be disposed of when they are no longer needed to prevent memory leaks, especially in component-based architectures.
+2. **Purity in Computeds**: Computed functions should be pure and free of side effects. Avoid modifying atoms inside a computed function, as this can lead to infinite loops.
+3. **Circular Dependencies**: The library detects circular dependency chains and throws an error to maintain graph integrity.
+4. **`aeNextTick`**: Use `await aeNextTick()` in tests or complex logic to wait for the scheduler to finish its current flush cycle.
 
-Effects catch errors and log them. Use `onError` for custom handling:
-
-```typescript
-effect(() => {
-  throw new Error('effect failed');
-}, {
-  onError: (err) => reportToSentry(err)
-});
-```
-
-## Common Considerations
-
-### 1. Forgetting to Dispose
-
-Effects keep running until disposed. Always clean up in component lifecycles:
-
-```typescript
-const effectHandle = effect(() => { /* ... */ });
-// Later:
-effectHandle.dispose();
-```
-
-### 2. Writing Inside Computed
-
-Computed functions must be **pure** (read-only). Writing to atoms inside a computed can cause infinite loops:
-
-```typescript
-// BAD
-const bad = computed(() => {
-  count.value++;  // Writing inside computed!
-  return count.value;
-});
-```
-
-### 3. Circular Dependencies
-
-The library detects circular dependencies and throws a `ComputedError`:
-
-```typescript
-const a = computed(() => b.value + 1);
-const b = computed(() => a.value + 1); // Throws: Circular dependency detected
-```
-
-### 4. Async Computed Without Default
-
-Accessing an async computed's value before resolution throws if no `defaultValue` is set:
-
-```typescript
-const data = computed(async () => fetch('/api'));
-data.value; // Throws: Async computation pending with no default value
-
-// Fix:
-const data = computed(async () => fetch('/api'), { defaultValue: null });
-data.value; // null (while pending)
-```
+---
 
 ## Project Structure
 
-```text
-packages/core/src/
-  core/
-    atom.ts         — Writable atom implementation
-    computed.ts     — Computed atom with async support
-    effect.ts       — Side effect runner
-    base.ts         — ReactiveNode / ReactiveDependency base classes
-    tracking.ts     — Tracking context and dependency links
-    scheduler.ts    — Microtask-based scheduler and epoch management
-    buffers.ts      — Slot-buffered dependency storage
-    lens.ts         — Writable atom lenses
-  utils/
-    debug.ts        — Runtime debug info and dev-only warnings
-    type-guards.ts  — Reactive node type identification
-  types.ts          — Public TypeScript definitions
-  constants.ts      — Configuration flags and default values
-  errors.ts         — Custom error classes and message registry
-  symbols.ts        — Internal brands for runtime safety
-  index.ts          — Main entry point
-```
+For contributors, here is an overview of the core package layout:
 
-## Next Steps
-
-To become an advanced user or contributor, explore the following:
-
-- [**Architecture & Design**](./ARCHITECTURE.md):
-  - **The Life of a Change**: How updates flow through the engine.
-  - **Consistency Model**: How the library avoids inconsistent states.
-  - **V8 Optimizations**: How we use bitwise flags and memory pooling for performance.
-- [**API Reference**](./API.md): Full documentation of options, configuration, and advanced error handling.
+- `packages/core/src/core/`: Implementation of atoms, computeds, effects, and the scheduler.
+- `packages/core/src/utils/`: Debugging tools and type guards.
+- `packages/core/src/types.ts`: Public TypeScript interfaces.
+- `packages/core/src/errors.ts`: Error hierarchy and message registry.
+- `packages/core/src/constants.ts`: Internal configuration and state flags.

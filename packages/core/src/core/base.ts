@@ -6,46 +6,49 @@ import { type DepSlotBuffer, SlotBuffer } from './buffers';
 import { Subscription } from './tracking';
 
 /**
- * Unified base class for all reactive nodes (Atoms, Computeds, Effects).
+ * A unified base class for all reactive primitives, including Atoms, Computeds, and Effects.
  *
  * When to use:
- * - Internal base for implementing Atoms, Computeds, or Effects.
- * - When a custom reactive primitive needs to integrate with the dependency graph.
+ * - As an internal base for implementing new reactive primitives.
+ * - When a custom primitive requires integration with the core dependency graph.
  *
- * Optimization: Optimized for V8 Hidden Class Monomorphism by having a single, consistent
- * object shape for all reactive logic.
+ * Optimization: This class is designed to maintain a consistent object shape across all
+ * reactive nodes, which assists JavaScript engines in optimizing property access via
+ * Hidden Class Monomorphism.
  *
- * @template T - The type of value produced by this node (used for subscriptions).
+ * @template T - The type of value produced by the node, used for subscriber notifications.
  */
 export abstract class ReactiveNode<T> {
-  /** [Producer/Consumer] State flags */
+  /** Internal bitfield representing the current state of the node. */
   flags: number;
-  /** [Producer/Consumer] Version counter */
+  /** A monotonically increasing counter representing the version of the node's value. */
   version: number;
-  /** [Producer/Consumer] Last access epoch */
+  /** The epoch ID of the last time this node was visited during a dependency walk. */
   _lastSeenEpoch: number;
-  /** [Context] Scheduler epoch tag */
+  /** A tag used by the scheduler to deduplicate execution within a single flush cycle. */
   _nextEpoch: number | undefined;
-  /** [Debug] Unique ID for identify node in tracking maps */
+  /** A unique identifier used for debugging and graph traversal. */
   readonly id: DependencyId;
 
   /**
-   * [Producer] Managed subscribers.
+   * Buffered storage for active subscribers.
+   * @internal
    */
   _slots: SlotBuffer<Subscription<T>> | null;
 
-  /** [Producer] Re-entry guard for notification loop. */
+  /** Re-entry guard counter used during subscriber notification loops. */
   _notifying: number;
 
   /**
-   * [Consumer] Managed dependencies.
+   * Buffered storage for captured dependencies.
+   * @internal
    */
   _deps: DepSlotBuffer | null;
-  /** [Consumer] O(1) Hot-path dependency index for rapid dirty checks. */
+  /** Index of the last known dirty dependency, providing an O(1) validation path. */
   _hotIndex: number;
 
   constructor() {
-    // Optimization: Reordered for V8 Hidden Class (integers/numbers first)
+    // Optimization: Field initialization order is managed to maintain a consistent V8 object layout.
     this.flags = 0;
     this.version = 0;
     this._lastSeenEpoch = EPOCH_CONSTANTS.UNINITIALIZED;
@@ -53,30 +56,29 @@ export abstract class ReactiveNode<T> {
     this._hotIndex = -1;
     this.id = generateId() & SMI_MAX;
 
-    // References/Nullable last
     this._nextEpoch = undefined;
     this._slots = null;
     this._deps = null;
   }
 
   /**
-   * Whether the node has been disposed.
+   * Indicates whether the node has been explicitly disposed.
    * @internal
    */
   get isDisposed(): boolean {
-    return (this.flags & COMPUTED_STATE_FLAGS.DISPOSED) !== 0; // Bit 0: DISPOSED
+    return (this.flags & COMPUTED_STATE_FLAGS.DISPOSED) !== 0;
   }
 
   /**
-   * Whether the node is a computed atom.
+   * Indicates whether the node is a computed atom.
    * @internal
    */
   get isComputed(): boolean {
-    return (this.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) !== 0; // Bit 1: IS_COMPUTED
+    return (this.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) !== 0;
   }
 
   /**
-   * Whether the node currently has an error.
+   * Indicates whether the node or its dependency sub-graph is currently in an error state.
    * @internal
    */
   get hasError(): boolean {
@@ -88,25 +90,28 @@ export abstract class ReactiveNode<T> {
   // ============================================================================
 
   /**
-   * Adds subscriber for notifications.
+   * Registers a subscriber to be notified when the node's value changes.
    *
    * When to use:
-   * - When manual observation of value changes is required outside of reactive contexts.
+   * - To observe value changes manually outside of reactive contexts (e.g., in UI adapters).
    *
-   * @param listener - The function or Subscriber object to receive updates.
-   * @returns Unsubscribe function to stop receiving notifications.
-   * @throws {AtomError} If the listener is neither a function nor a valid Subscriber.
+   * @param listener - A callback function or a Subscriber object.
+   * @returns A cleanup function to terminate the subscription.
+   * @throws {AtomError} If the provided listener is not a function or a valid Subscriber.
    *
    * @example
-   * const node = someReactiveNode;
+   * ```typescript
    * const unsub = node.subscribe((next, prev) => {
-   *   console.log(`Changed from ${prev} to ${next}`);
+   *   console.log(`Value changed from ${prev} to ${next}`);
    * });
-   * // Later...
+   *
+   * // Later:
    * unsub();
+   * ```
    */
   subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
     const isFn = typeof listener === 'function';
+    // Constraint: Validates input to ensure consistent execution during notification.
     if (!isFn && (listener === null || typeof (listener as Subscriber).execute !== 'function')) {
       throw wrapError(
         new TypeError('Invalid subscriber'),
@@ -121,46 +126,15 @@ export abstract class ReactiveNode<T> {
       this._slots = slots;
     }
 
-    if (slots.size > 0) {
-      let duplicate = false;
-
-      // Optimization: Unrolled check using unified comparison to reduce branching.
-      // Since Subscription stores fn/sub and one is always undefined, we can check both.
-      if (
-        (slots._s0 !== null && (slots._s0.fn === listener || slots._s0.sub === listener)) ||
-        (slots._s1 !== null && (slots._s1.fn === listener || slots._s1.sub === listener)) ||
-        (slots._s2 !== null && (slots._s2.fn === listener || slots._s2.sub === listener)) ||
-        (slots._s3 !== null && (slots._s3.fn === listener || slots._s3.sub === listener))
-      ) {
-        duplicate = true;
-      } else {
-        const ov = slots._overflow;
-        if (ov !== null) {
-          const len = ov.length;
-          // Optimization: Hoisted invariant check (isFn) to avoid branching inside the loop.
-          if (isFn) {
-            for (let i = 0; i < len; i++) {
-              const s = ov[i];
-              if (s !== null && s?.fn === listener) {
-                duplicate = true;
-                break;
-              }
-            }
-          } else {
-            for (let i = 0; i < len; i++) {
-              const s = ov[i];
-              if (s !== null && s?.sub === listener) {
-                duplicate = true;
-                break;
-              }
-            }
-          }
+    if (slots.length > 0) {
+      const length = slots.capacity;
+      for (let i = 0; i < length; i++) {
+        const link = slots.at(i);
+        if (link !== null && (link.fn === listener || link.sub === listener)) {
+          if (IS_DEV)
+            console.warn(`[atom-effect] Duplicate subscription ignored on node ${this.id}`);
+          return () => {};
         }
-      }
-
-      if (duplicate) {
-        if (IS_DEV) console.warn(`[atom-effect] Duplicate subscription ignored on node ${this.id}`);
-        return () => {};
       }
     }
 
@@ -169,10 +143,16 @@ export abstract class ReactiveNode<T> {
       !isFn ? (listener as Subscriber) : undefined
     );
 
-    slots.add(link);
+    slots.push(link);
     return () => this._unsubscribe(link);
   }
 
+  /**
+   * Internal removal of a subscription link.
+   *
+   * Caution: Compaction is deferred if a notification loop is currently active to
+   * prevent index shifting during iteration.
+   */
   protected _unsubscribe(link: Subscription<T>): void {
     const slots = this._slots;
     if (slots === null) return;
@@ -184,30 +164,31 @@ export abstract class ReactiveNode<T> {
   }
 
   /**
-   * Returns current subscriber count.
+   * Returns the number of active subscribers for this node.
    *
    * When to use:
-   * - Monitoring subscription leaks during development.
-   * - Conditional logic that depends on tracking state.
-   *
-   * @returns The number of active subscribers.
-   *
-   * @example
-   * if (node.subscriberCount() > 0) {
-   *   console.log('Node is currently being observed');
-   * }
+   * - To monitor subscription health or detect leaks during development.
+   * - To implement conditional logic based on node observability.
    */
   subscriberCount(): number {
     const slots = this._slots;
-    return slots === null ? 0 : slots.size;
+    return slots === null ? 0 : slots.length;
   }
 
+  /**
+   * Dispatches notifications to all registered subscribers.
+   *
+   * Logic: Increments the `_notifying` guard to protect the subscriber buffer from
+   * structural changes during iteration. Error handling is encapsulated per subscriber
+   * to ensure a single failing listener does not terminate the entire notification cycle.
+   */
   protected _notifySubscribers(newValue: T | undefined, oldValue: T | undefined): void {
     const slots = this._slots;
-    if (slots === null || slots.size === 0) return;
+    if (slots === null || slots.length === 0) return;
 
     this._notifying++;
     try {
+      // Optimization: Prioritizes inline slots (s0-s3) for notification delivery.
       if (slots._s0 !== null) {
         try {
           slots._s0.notify(newValue, oldValue);
@@ -266,17 +247,18 @@ export abstract class ReactiveNode<T> {
   // ============================================================================
 
   /**
-   * Optimization: Double-Phase Validation
-   * Combines an O(1) hot-path check of the primary dependency with an
-   * O(N) exhaustive validation of the full chain to minimize graph traversal.
+   * Determines if the node requires re-evaluation due to dependency changes.
+   *
+   * Logic: Implements a double-phase validation. It first attempts an O(1) check of the
+   * dependency stored at `_hotIndex`. If stable, it falls back to a deep structural walk.
    */
   protected _isDirty(): boolean {
     const deps = this._deps;
-    if (deps === null || deps.size === 0) return false;
+    if (deps === null || deps.length === 0) return false;
 
     const hotIndex = this._hotIndex;
     if (hotIndex !== -1) {
-      const hotLink = deps.getAt(hotIndex);
+      const hotLink = deps.at(hotIndex);
       if (hotLink !== null && hotLink.node.version !== hotLink.version) {
         return true;
       }
@@ -285,5 +267,8 @@ export abstract class ReactiveNode<T> {
     return this._deepDirtyCheck();
   }
 
+  /**
+   * Performs an exhaustive validation of the full dependency chain.
+   */
   protected abstract _deepDirtyCheck(): boolean;
 }

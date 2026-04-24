@@ -1,19 +1,23 @@
-/**
- * @fileoverview Scheduler tests - Refactored for maintainability and behavior-driven validation.
- */
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { SCHEDULER_CONFIG } from '@/constants';
-import { resetFlushState, runInFlushScope, scheduler } from '@/core/scheduler';
-import { aeNextTick, atom, batch, computed, effect, SchedulerError } from '@/index';
+import {
+  aeNextTick,
+  atom,
+  batch,
+  computed,
+  effect,
+  SCHEDULER_CONFIG,
+  SchedulerError,
+  globalScheduler as scheduler,
+} from '@/index';
 import { sleep } from '../../utils/test-helpers';
 
 describe('Scheduler', () => {
   beforeEach(async () => {
-    // Reset global scheduler state before each test
-    while (scheduler.isBatching) scheduler.endBatch();
-    resetFlushState();
-    await sleep(0);
+    // Wait for any pending flushes and reset batch depth via public API
+    await aeNextTick();
+    while (scheduler.isBatching) {
+      scheduler.endBatch();
+    }
   });
 
   describe('Core Scheduling', () => {
@@ -37,13 +41,13 @@ describe('Scheduler', () => {
       expect(scheduler.queueSize).toBe(0);
     });
 
-    it('handles nested flush scopes without skipping execution', () => {
+    it('handles nested batch scopes correctly', () => {
       const log: string[] = [];
 
-      runInFlushScope(() => {
+      batch(() => {
         log.push('outer-start');
-        runInFlushScope(() => {
-          log.push('inner'); // Should execute even if a flush is already active
+        batch(() => {
+          log.push('inner');
         });
         log.push('outer-end');
       });

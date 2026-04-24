@@ -2,13 +2,12 @@
 
 **Last Updated**: 2026-04-20
 **Version**: v0.31.0
-**Environment**:
 
 - **Node.js**: v22.x
 - **Browser**: Chromium (via Vitest browser mode)
 - **OS**: ubuntu-latest (GitHub Actions)
 
-> *Note: These benchmarks run in a real Chromium browser. Results reflect actual DOM rendering costs including layout, paint, and event handling.*
+> *Note: These benchmarks are executed in a Chromium browser environment. Results include DOM rendering costs such as layout, paint, and event processing.*
 
 ## 1. Micro-Benchmarks
 
@@ -73,4 +72,4 @@
 | Update 1 field in 10-field form (x100) | 408,160.67 | 0.0025 | 0.1000 |
 | Update 1 field in 100-field form (O(1) test, x100) | 406,567.56 | 0.0025 | 0.1000 |
 
-> **Analysis**: These results demonstrate true **O(1) scaling**. Form size has negligible impact on field dispatch performance, maintaining over **406,000 operations per second** for both small and large forms.
+> **Technical Analysis**: The results indicate consistent performance across different form sizes. Field dispatch frequency remains stable at approximately 406,000–408,000 operations per second for both 10-field and 100-field forms, indicating O(1) scaling behavior for field updates.

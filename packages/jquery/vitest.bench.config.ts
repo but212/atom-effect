@@ -1,14 +1,12 @@
-import path from 'node:path';
 import { playwright } from '@vitest/browser-playwright';
 import { defineConfig } from 'vitest/config';
 
-/**
- * Vitest configuration for benchmarks in real browser engine
- */
+const SRC_PATH = `${import.meta.dirname}/src`;
+
 export default defineConfig({
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, 'src'),
+      '@': SRC_PATH,
     },
   },
   test: {

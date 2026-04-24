@@ -9,7 +9,21 @@ This document outlines the conventions for TSDoc and inline comments within the 
     * **Contributor (Developer)**: Targets for Inline Comments. Focus on design intent, "why" decisions, and maintenance constraints.
 2. **Document the "Why" and "When"**: Code shows *what* it does. Comments must explain *why* a particular approach was taken and *when* the code should (or should not) be used.
 3. **The 3-Second Rule**: A reader should grasp the core intent or constraint within 3 seconds. Use structured tags and concise language.
-4. **Maintainability**: Avoid documenting implementation details that change frequently. Focus on invariant logic, constraints, and boundaries.
+4. **Neutrality & Technical Precision**: Avoid promotional, subjective, or anthropomorphic language. Use passive voice and objective technical terms (e.g., "Orchestrates synchronization" instead of "Magically handles updates").
+
+---
+
+## Tone & Diction
+
+To maintain a professional and consistent standard, follow these diction rules:
+
+| Avoid (Subjective/Informal) | Use (Neutral/Technical) |
+| :--- | :--- |
+| Easy, Simple, Magic | Deterministic, Automatic, Logic-driven |
+| Fast, Speedy | Optimized, High-performance, Low-overhead |
+| Remembers, Thinks | Persists, Caches, Tracks |
+| Makes sure, Ensures | Enforces, Validates, Synchronizes |
+| Great way to... | Recommended for..., When to use:... |
 
 ---
 
@@ -24,7 +38,7 @@ All public-facing APIs **MUST** include TSDoc.
  * [One-line summary of role]
  * 
  * When to use:
- * - [Required Scenario 1]
+ * - [Required Scenario 1: Guide the user on when this tool is appropriate]
  * 
  * @param [name] [Required if type alone doesn't convey intent or valid range]
  * 
@@ -33,18 +47,31 @@ All public-facing APIs **MUST** include TSDoc.
  * @throws {ErrorType} [Required if applicable] Description of when this is thrown.
  * 
  * @example [Required - Standalone & Runnable]
- * const source = atom([1, 2, 3]);
- * atomList(source, { key: (item) => item.id });
+ * const source = atom(0);
+ * $.effect(() => console.log(source.value));
  */
 ```
 
-### 2. @example Requirements
+### 2. Polymorphic & Reactive Inputs
 
-* **Mandatory**: Every public API must have at least one example.
-* **Standalone**: Examples must be runnable in isolation. Do not assume internal setup is already present.
-* **Copy-Pasteable**: A user should be able to copy the example into their project and see it work.
+When a parameter accepts multiple forms (e.g., literal, atom, or getter), explicitly document the polymorphic behavior.
 
-### 3. @deprecated Policy
+```typescript
+/**
+ * Logic: Polymorphic Input
+ * Supports raw values for static initialization, reactive atoms for 
+ * state-driven updates, or functional getters for deferred execution.
+ */
+export type ReactiveValue<T> = T | ReadonlyAtom<T> | (() => T);
+```
+
+### 3. @internal vs @public
+
+* **`@public`**: Available to end-users. Requires full TSDoc and `@example`.
+* **`@internal`**: Used for cross-module members that are NOT part of the public API. Should still have TSDoc explaining its role to other contributors, but does not require `@example`.
+  * **Constraint (Types):** Do NOT use `@internal` for types (interfaces, type aliases) that are referenced by any `@public` members. This causes bundling failures (leaked internal types) and broken declaration files (`.d.ts`). Such types must be `@public` to ensure the integrity of the distributed package.
+
+### 4. @deprecated Policy
 
 Deprecation is a critical communication tool for users. Always include:
 
@@ -64,15 +91,32 @@ Deprecation is a critical communication tool for users. Always include:
 
 ## Inline Comment Conventions (For Contributors)
 
-Use specialized prefixes to categorize maintenance information:
+Use specialized prefixes to categorize maintenance information. These can be used in JSDoc blocks for internal members or as single-line comments.
 
 * **`Reason:`**: Explains non-obvious design choices or why a simpler approach was discarded.
 * **`Constraint:`**: Documents hard requirements (e.g., "Must be called before removal").
-* **`Caution:`**: Highlights fragile code prone to regressions.
-* **`Optimization:`**: Explains performance-related complexity.
+* **`Caution:`**: Highlights fragile code prone to regressions or tricky side effects.
+* **`Security:`**: **(Required)** Documents mechanisms for XSS mitigation, DOM Clobbering prevention, or sensitive data handling.
+* **`Optimization:`**: Explains performance-related complexity, batching strategies, or diffing algorithms.
 * **`Logic:`**: Explains the *intent* behind complex state transitions or non-linear branching.
-  Use only when the branching logic itself is non-obvious.
-  **Do not use** for simple loops or straightforward conditionals.
+
+---
+
+## Lifecycle & Concurrency Standards
+
+For operations involving asynchronous logic or DOM lifecycles, you must document:
+
+1. **Cleanup Mechanism**: How resources (timers, observers, listeners) are released.
+2. **Concurrency Control**: How "out-of-order" responses or race conditions are handled (e.g., `AbortController`, version tracking).
+3. **Teardown Order**: If the sequence of destruction matters.
+
+```typescript
+/**
+ * Logic: Concurrency Control
+ * Uses AbortController to ensure that only the result of the most recent 
+ * request is reflected in the state, discarding stale responses.
+ */
+```
 
 ---
 
@@ -92,7 +136,7 @@ Use specialized prefixes to categorize maintenance information:
 
 * **Redundant summaries**: Translating a descriptive function name into a comment.
 * **Implementation blow-by-blow**: "Step 1: Loop, Step 2: Push". Let the code speak.
-* **No-Audience comments**: Notes that won't make sense to anyone (including your future self) in 3 months.
+* **No-Audience comments**: Notes that won't make sense to anyone in 3 months.
 
 ---
 
@@ -101,18 +145,16 @@ Use specialized prefixes to categorize maintenance information:
 ### For Authors (Before PR)
 
 * [ ] Are all Public APIs documented with an `@example`?
-
-* [ ] Is the `@example` standalone and runnable?
-* [ ] Did I document `@param` if the type/name doesn't fully convey intent or range?
-* [ ] Did I document `@throws` if the code can throw under specific conditions?
+* [ ] Is the tone neutral and technical? (No "magic", "easy", etc.)
+* [ ] Did I use `Security:` tags for any XSS-related logic?
+* [ ] Is the concurrency/cleanup logic explained for async operations?
+* [ ] Did I document polymorphic inputs (Logic: Polymorphic Input)?
 * [ ] Does `@deprecated` include the 'since' version and a migration path?
-* [ ] If I change the internal logic later, will this comment still be valid? (Avoid "blow-by-blow" logic).
 
 ### For Reviewers (During PR)
 
 * [ ] Is the information placed in the correct layer (User TSDoc vs Contributor Inline)?
-
-* [ ] Does every TODO/FIXME have an issue reference or owner and a clear resolution condition?
-* [ ] Is the TSDoc consistent with the current implementation's signature and behavior?
-* [ ] Are the `@example` snippets accurate and standalone?
-* [ ] Are `Logic:` comments used strictly for intent and non-obvious complexity?
+* [ ] Does every TODO/FIXME have an issue reference or owner?
+* [ ] Is the TSDoc consistent with the current implementation's behavior?
+* [ ] Are `Security:` and `Optimization:` tags used where appropriate?
+* [ ] Is the `@example` snippet accurate and standalone?

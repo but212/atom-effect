@@ -2,21 +2,18 @@ import { batch } from '@but212/atom-effect';
 import $ from 'jquery';
 import { registry } from '@/core/registry';
 import type { PatchOptions } from '@/types';
+import { INTERNAL_HANDLER } from './symbols';
 
+/** Alias for common jQuery event handler types. @internal */
 type EventHandler = JQuery.EventHandlerBase<unknown, JQuery.TriggeredEvent>;
 
-/**
- * Symbol used to mark handlers as processed, avoiding redundant wrapping in `batch()`.
- *
- * @internal
- */
-export const INTERNAL_HANDLER = Symbol.for('atom-effect-internal');
-
-/** Maps original developer functions to their corresponding batch-wrapped versions. */
+/** A mapping of original user-defined handlers to their batch-wrapped counterparts. */
 const handlerMap = new WeakMap<EventHandler, EventHandler>();
 
+/** Internal union type for various jQuery event map values. @internal */
 type JQueryEventHandler = EventHandler | boolean;
 
+/** Metadata storing references to native jQuery methods before patching. */
 type OriginalMethods = {
   on: typeof $.fn.on;
   one: typeof $.fn.one;
@@ -26,18 +23,25 @@ type OriginalMethods = {
   detach: typeof $.fn.detach;
 };
 
+/** Global storage for native jQuery methods to allow restoration. */
 let originals: OriginalMethods | null = null;
 
 /**
- * Logic: Auto-Batching
- * This ensures that multiple atom updates triggered by a single event
- * (e.g., click) only trigger a single collective re-render, preventing
- * UI jitter and redundant calculations.
+ * Wraps a standard event handler function in a reactive batch.
  *
+ * Logic: Auto-Batching
+ * This ensures that multiple atom updates triggered by a single interaction
+ * (e.g., a 'click' event) are processed atomically. This prevents intermediate
+ * UI states, visual jitter, and redundant re-computations.
+ *
+ * @param fn - The original event handler function.
+ * @returns A wrapped handler function that executes within a batch.
  * @internal
  */
 const wrapHandler = (fn: EventHandler): EventHandler => {
-  if ((fn as unknown as { [INTERNAL_HANDLER]?: boolean })[INTERNAL_HANDLER]) return fn;
+  if ((fn as unknown as { [INTERNAL_HANDLER]?: boolean })[INTERNAL_HANDLER]) {
+    return fn;
+  }
 
   let wrapped = handlerMap.get(fn);
 
@@ -53,12 +57,14 @@ const wrapHandler = (fn: EventHandler): EventHandler => {
 };
 
 /**
+ * Retrieves the original handler function from a wrapped version.
  * @internal
  */
 const unwrapHandler = (fn: EventHandler): EventHandler => {
   return handlerMap.get(fn) ?? fn;
 };
 
+/** Normalizes and wraps all handlers within a jQuery event map. @internal */
 function wrapEventMap(
   map: Record<string, JQueryEventHandler | undefined>
 ): Record<string, JQueryEventHandler> {
@@ -70,6 +76,7 @@ function wrapEventMap(
   return newMap;
 }
 
+/** Normalizes and unwraps all handlers within a jQuery event map. @internal */
 function unwrapEventMap(
   map: Record<string, JQueryEventHandler | undefined>
 ): Record<string, JQueryEventHandler | undefined> {
@@ -82,6 +89,7 @@ function unwrapEventMap(
 }
 
 /**
+ * Utility for modifying jQuery method arguments to wrap or unwrap handlers.
  * @internal
  */
 function patchArguments(
@@ -103,6 +111,7 @@ function patchArguments(
   }
 }
 
+/** Creates a patched version of a jQuery event attachment method. @internal */
 function createPatch(original: Function) {
   return function (this: JQuery, ...args: unknown[]) {
     patchArguments(args, wrapEventMap, wrapHandler);
@@ -111,10 +120,17 @@ function createPatch(original: Function) {
 }
 
 /**
- * Logic: Global Patch Responsibilities
- * 1. Event Patching: Wraps handlers in `batch()` to prevent UI jitter.
- * 2. Lifecycle Patching: Hooking `.remove()` to stop reactive effects immediately.
+ * Enables global patches for jQuery to integrate reactive state management.
  *
+ * Logic: Global Patch Responsibilities
+ * 1. Auto-Batching: Intercepts `$.fn.on` and `$.fn.one` to wrap all event handlers
+ *    in `batch()`, ensuring atomic UI updates.
+ * 2. Automated Cleanup: Hooks into `$.fn.remove` and `$.fn.empty` to automatically
+ *    dispose of reactive effects via the `registry` when elements are destroyed.
+ * 3. Lifecycle Preservation: Hooks into `$.fn.detach` to allow reactive resources
+ *    to be kept in memory for later re-attachment.
+ *
+ * @param options - Configuration to selectively enable event or lifecycle patches.
  * @internal
  */
 export function enablejQueryOverrides(options: PatchOptions = {}): void {
@@ -139,6 +155,7 @@ export function enablejQueryOverrides(options: PatchOptions = {}): void {
       for (let i = 0; i < len; i++) {
         const el = targets[i];
         if (el) {
+          // Logic: Stop all associated reactive effects immediately upon removal.
           registry.markIgnored(el);
           registry.cleanupTree(el);
         }
@@ -150,7 +167,10 @@ export function enablejQueryOverrides(options: PatchOptions = {}): void {
       const len = this.length;
       for (let i = 0; i < len; i++) {
         const el = this[i];
-        if (el?.hasChildNodes()) registry.cleanupDescendants(el);
+        // Logic: Clean up all reactive resources within the container's subtree.
+        if (el?.hasChildNodes()) {
+          registry.cleanupDescendants(el);
+        }
       }
       return prev.empty.call(this) ?? this;
     };
@@ -160,7 +180,10 @@ export function enablejQueryOverrides(options: PatchOptions = {}): void {
       const len = targets.length;
       for (let i = 0; i < len; i++) {
         const el = targets[i];
-        if (el) registry.keep(el);
+        // Logic: Mark the element tree to preserve its reactive resources despite detachment.
+        if (el) {
+          registry.keep(el);
+        }
       }
       return prev.detach.call(this, selector) ?? this;
     };
@@ -178,6 +201,7 @@ export function enablejQueryOverrides(options: PatchOptions = {}): void {
 }
 
 /**
+ * Restores jQuery prototype methods to their original native state.
  * @internal
  */
 export function disablejQueryOverrides(): void {

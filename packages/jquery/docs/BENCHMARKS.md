@@ -1,17 +1,17 @@
-# Benchmark Documentation — atom-effect-jquery
+# Benchmark Documentation
 
 Benchmarking suite for `@but212/atom-effect-jquery` to measure DOM binding performance and detect regressions.
 
 ## Performance Summary
 
-| Category | Key Metric | Value | Context |
+| Category | Key Metric | Value | Technical Context |
 | ---------- | ---------- | ----- | ------- |
-| **Text Binding** | Update (100el × 50) | 922.6 ops/sec | Efficient set-and-notify |
-| **Class Binding** | Toggle (100el × 100) | 938.0 ops/sec | Fast optimized toggle |
-| **List Render** | Reconciliation (100 items) | 1,024.9 ops/sec | Smooth list updates |
-| **Input (DOM→Atom)** | 100 events | 1,949.6 ops/sec | Minimal event overhead |
-| **Todo App** | Full workflow | 12,988.5 ops/sec | High-throughput DOM sync |
-| **Dashboard** | Fan-in chain | 5,196.7 ops/sec | Scalable reactive topology |
+| **Text Binding** | Update (100el × 50) | 922.6 ops/sec | Direct text node synchronization |
+| **Class Binding** | Toggle (100el × 100) | 938.0 ops/sec | Class list manipulation |
+| **List Render** | Reconciliation (100 items) | 1,024.9 ops/sec | Keyed 3-pass reconciliation |
+| **Input (DOM→Atom)** | 100 events | 1,949.6 ops/sec | Direct event-to-atom synchronization |
+| **Todo App** | Full workflow | 12,988.5 ops/sec | Batch-optimized workflow execution |
+| **Dashboard** | Fan-in chain | 5,196.7 ops/sec | Multi-level propagation chain |
 
 ## Running Benchmarks
 
@@ -30,44 +30,45 @@ pnpm bench:macro
 
 ### Micro-Benchmarks
 
-Located in `__benchmarks__/micro/`, these test individual binding operations:
+Located in `__benchmarks__/micro/`, these test individual binding operations in isolation:
 
-- **Binding**: atomText, atomHtml, atomClass, atomCss, atomAttr, atomProp, atomShow/Hide, atomBind
-- **List**: atomList render, append, remove, shuffle, partial update, bind callback
-- **Input**: atomVal, atomChecked, debounce
-- **Sanitize**: sanitizeHtml with different profiles and batch sizes
-- **Lens**: atomLens creation, reading, writing, and propagation
+- **Binding**: `atomText`, `atomHtml`, `atomClass`, `atomCss`, `atomAttr`, `atomProp`, `atomShow/Hide`, `atomBind`.
+- **List**: `atomList` initial render, append, removal, shuffle, and bind callbacks.
+- **Input**: `atomVal`, `atomChecked`, and debounced updates.
+- **Sanitize**: `sanitizeHtml` with various content profiles and batch sizes.
+- **Lens**: Creation, reading, writing, and propagation through lenses.
 
 ### Macro-Benchmarks
 
-Located in `__benchmarks__/macro/`, these test real-world DOM scenarios:
+Located in `__benchmarks__/macro/`, these test combined DOM scenarios:
 
-- **Todo App**: Add, toggle, filter, delete with DOM rendering
-- **Dashboard**: Multi-widget binding, mount/unmount cycles, computed→DOM chains
+- **Todo App**: Add, toggle, filter, and delete operations with full DOM rendering.
+- **Dashboard**: Multi-widget updates, mount/unmount cycles, and computed-to-DOM chains.
+- **Form Scaling**: Verification of O(1) field dispatch performance across different form sizes.
 
 ## Interpreting Results
 
 ### Reading the Numbers
 
-- **ops/sec (Hz)**: Operations per second. **Higher is better**.
+- **ops/sec (Hz)**: Operations per second.
 - **Mean (ms)**: Average time per operation.
-- **p99 (ms)**: 99th percentile latency (worst-case for 99% of operations).
+- **p99 (ms)**: 99th percentile latency (execution time for 99% of operations).
 
-### What Good Performance Looks Like
+### Performance Metrics
 
-| Metric | Good Performance | Why It Matters |
+| Metric | Performance Target | Technical Significance |
 | -------- | ---------------- | -------------- |
-| **Text propagation** | >100 ops/sec | Smooth text updates at 60fps |
-| **List render (100)** | >150 ops/sec | Responsive list operations |
-| **DOM→Atom events** | >500 ops/sec | Low-latency input handling |
-| **Full workflow** | >1K ops/sec | Production-ready throughput |
+| **Text propagation** | >100 ops/sec | Frequency exceeding 60fps refresh rate |
+| **List render (100)** | >150 ops/sec | Update frequency for common list sizes |
+| **DOM→Atom events** | >500 ops/sec | Synchronous input processing frequency |
+| **Full workflow** | >1K ops/sec | Execution frequency for complex state changes |
 
-### Red Flags
+### Performance Indicators
 
-- **Binding creation <30 ops/sec**: DOM overhead too high
-- **List render (100) <20 ops/sec**: Reconciliation issues
-- **DOM→Atom <100 ops/sec**: Event handler bottleneck
-- **Mount/unmount <10 ops/sec**: Memory leak or cleanup issues
+- **Binding creation <30 ops/sec**: Indicates high DOM manipulation overhead during binding initialization.
+- **List render (100) <20 ops/sec**: Indicates potential reconciliation bottlenecks.
+- **DOM→Atom <100 ops/sec**: Indicates event processing latency.
+- **Mount/unmount <10 ops/sec**: Indicates potential resource management or cleanup overhead.
 
 ## Latest Results
 
@@ -81,23 +82,23 @@ Located in `__benchmarks__/macro/`, these test real-world DOM scenarios:
 
 > **[View Detailed Results](./BENCHMARKS_DETAILED.md)**
 
-### Key Highlights
+### Benchmark Highlights
 
-| Benchmark | Result | Analysis |
+| Benchmark | Result | Technical Context |
 | ---------- | ------ | -------- |
-| atomText update (100el × 50) | 922.6 ops/sec | Consistent DOM text updates |
-| atomClass toggle (100el × 100) | 938.0 ops/sec | Fast class manipulation |
-| atomList reconciliation (100 items) | 1,024.9 ops/sec | Efficient list reconciliation |
-| atomVal DOM→Atom (100 events) | 1,949.6 ops/sec | Near-instant input sync |
-| Todo full workflow | 12,988.5 ops/sec | Optimized for web-apps |
-| Dashboard fan-in | 5,196.7 ops/sec | Efficient computed→DOM chain |
-| atomForm O(1) Scaling | 408.2K ops/sec | O(1) field dispatch validated |
+| atomText update (100el × 50) | 922.6 ops/sec | Frequency for 5,000 total text node updates |
+| atomClass toggle (100el × 100) | 938.0 ops/sec | Frequency for 10,000 total class list toggles |
+| atomList reconciliation (100 items) | 1,024.9 ops/sec | Frequency for 100-item reconciliation cycles |
+| atomVal DOM→Atom (100 events) | 1,949.6 ops/sec | Frequency for 100 sequential input events |
+| Todo full workflow | 12,988.5 ops/sec | Frequency for combined CRUD operations |
+| Dashboard fan-in | 5,196.7 ops/sec | Frequency for multi-level fan-in propagation |
+| atomForm O(1) Scaling | 408.2K ops/sec | Validates consistent performance across form sizes |
 
 ## Contributing Benchmarks
 
 When adding new benchmarks:
 
-1. **Micro**: Test a single DOM binding operation in isolation
-2. **Macro**: Test a realistic DOM workflow (e.g., "todo app with rendering")
+1. **Micro**: Test a single DOM binding operation in isolation.
+2. **Macro**: Test a combined DOM workflow with rendering.
 
-See [CONTRIBUTING.md](../../../CONTRIBUTING.md#benchmarks) for details.
+Refer to [CONTRIBUTING.md](../../../CONTRIBUTING.md#benchmarks) for further details.

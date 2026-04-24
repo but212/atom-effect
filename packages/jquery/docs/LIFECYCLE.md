@@ -1,44 +1,36 @@
-# AEJ Lifecycle Invariants
+# Lifecycle Invariants
 
-This document defines the expected behavior and cleanup timing for elements managed by `atom-effect-jquery`. Use this as a reference for debugging and maintenance.
+This document defines the behavior and cleanup timing for elements managed by `atom-effect-jquery`.
 
 ## Core States
 
 | State | Description | Trigger |
 | :--- | :--- | :--- |
-| **ATTACHED** | Element is in DOM and reactive effects are active. | `setup()`, `$.mount()`, or DOM insertion. |
-| **DETACHED** | Element is temporarily out of DOM. Effects are preserved. | `$.detach()` or move within the same document. |
-| **DESTROYED** | Element is permanently removed. All effects are stopped. | `$.remove()`, `$.empty()`, or `teardown()`. |
+| **ATTACHED** | Element is in the DOM and reactive effects are active. | `setup()`, `$.fn.atomMount()`, Static Specs (Auto-Setup), or DOM insertion. |
+| **DETACHED** | Element is temporarily disconnected from the DOM. Effects are preserved. | `$.fn.detach()` or relocation within the same document. |
+| **DESTROYED** | Element is permanently removed. Effects and bindings are disposed. | `$.fn.remove()`, `$.fn.empty()`, or `teardown()`. |
 
 ## Scenario Matrix
 
-| Scenario | State Transition | Cleanup Timing | Path |
+| Scenario | State Transition | Cleanup Timing | Implementation Logic |
 | :--- | :--- | :--- | :--- |
-| **DOM Move** | `ATTACHED` → `DETACHED` → `ATTACHED` | **None** | Microtask buffer protects from cleanup. |
-| **$.detach()** | `ATTACHED` → `DETACHED` | **None** | Explicitly marked as `preserved`. |
-| **$.remove()** | `ATTACHED` → `DESTROYED` | **Immediate** | **Patch Path**: Direct call to `cleanupTree()`. |
-| **$.empty()** | `ATTACHED` → `DESTROYED` (descendants) | **Immediate** | **Patch Path**: Direct call to `cleanupDescendants()`. |
-| **Native Removal** | `ATTACHED` → `DESTROYED` | **Deferred** | **Observer Path**: Caught by MutationObserver (Microtask). |
-| **teardown()** | `ATTACHED` → `DESTROYED` | **Hybrid** | **Observer Disconnect** (Immediate) + **Cleanup** (Deferred). |
-| **DOM Move** | `ATTACHED` → `DETACHED` → `ATTACHED` | **Context Bump** | `globalTreeObserver` triggers version bump on movement. |
-| **Closed Shadow** | `ATTACHED` → `DESTROYED` | **Same as Host** | Registered via `setup(sr)`; cleaned via host marker. |
+| **DOM Move** | `ATTACHED` → `DETACHED` → `ATTACHED` | **None** | Microtask buffer prevents cleanup during synchronous moves, preserving reactive subscriptions. |
+| **$.detach()** | `ATTACHED` → `DETACHED` | **None** | Node is marked via `registry.keep()` to bypass the next cleanup cycle. |
+| **Native Removal** | `ATTACHED` → `DESTROYED` | **Deferred** | `MutationObserver` detects removal and queues cleanup as a microtask to allow for potential relocation. |
+| **Auto-Setup** | `OFFLINE` → `ATTACHED` | **Immediate** | `ContextEngine` detects insertion of components with static specs and triggers `setup()` within the same microtask. |
+| **teardown()** | `ATTACHED` → `DESTROYED` | **Deterministic** | Immediate disposal of internal state via `ComponentState.dispose()`. Triggers `ContextEngine.release()`. |
 
-## Cleanup Chain Logic
+## Resource Management (Reference Counting)
 
-1. **Explicit Patch (Optimized path)**: jQuery methods (`.remove()`, `.empty()`) trigger **synchronous** cleanup. Patches can be toggled via `$.initAEJ({ patch: ... })`.
-2. **Fallback Mechanism**: A global `MutationObserver` catches removals by native APIs. The root of this observer can be customized via `$.initAEJ({ autoCleanup: { root: myRoot } })`.
-3. **Hybrid Teardown**: `teardown()` stops observing the component's internal root immediately to release resources, while delegating the tree cleanup to the deferred registry to maintain relocation stability.
+The library employs a **Reference Counting** strategy via `ContextEngine` to manage heavy resources like the global `MutationObserver`.
 
-## Global Configuration (`$.initAEJ`)
-
-The library's lifecycle behavior is governed by a global configuration. Calling `initAEJ` resets the state:
-
-- **`patch`**: Controls whether jQuery's prototype is modified.
-- **`autoCleanup`**: Controls the 'safety-net' MutationObserver. Disabling this requires manual calls to `registry.cleanupTree()`.
+1. **Retain**: When a component is created with static specs but not yet connected, or when a reactive context is injected (`injectAtom`), `ContextEngine.retain()` is called.
+2. **Activation**: The first retain call initializes and connects the global `MutationObserver`.
+3. **Release**: Upon component `teardown()` or context disposal, `ContextEngine.release()` is called.
+4. **Deactivation**: When the count reaches zero, the observer is disconnected and nullified to free up system resources.
 
 ## Invariant Rules
 
-1. **Double Cleanup Safety**: Calling cleanup multiple times on the same node must be idempotent and never throw.
-2. **Shadow Transparency**: Shadow DOM subtrees must be traversed during cleanup unless the host is marked as `ignored`.
-3. **Memory Leak Prevention**: All `WeakMap` entries and `MutationObserver` listeners must be released when a component calls `teardown()`.
-4. **Context Integrity**: A DOM movement must trigger a context version bump to invalidate cached injections, ensuring node locality for reactive context.
+1. **Idempotent Cleanup**: Sequential cleanup calls on a single node must be side-effect free and result in a stable `DESTROYED` state.
+2. **Context Continuity**: Component `teardown()` or structural DOM changes must trigger a `ContextEngine.version` bump. This invalidates cached injection proxies, ensuring they re-resolve to the nearest valid provider.
+3. **Shadow DOM Transparency**: Resource discovery (DI) and cleanup must traverse Shadow DOM boundaries unless an element is explicitly marked for isolation.

@@ -10,6 +10,6 @@
     "types": ["node"],
     "noImplicitAny": true
   },
-  "include": ["src/**/*", "__tests__/**/*", "__benchmarks__/**/*", "*.config.ts"],
+  "include": ["src/**/*", "__tests__/**/*", "__benchmarks__/**/*.bench.ts", "*.config.ts"],
   "exclude": ["node_modules", "dist"]
 }

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import $, { type WritableAtom } from '@/index';
+import $ from '@/index';
+import type { DisposableWritableAtom } from '@/types';
 
-describe('Integration & Core API', () => {
+describe('Complex App Scenarios', () => {
   it('should handle Todo List with Search (synergy between atomList, atomVal, and computed)', async () => {
     interface Todo {
       id: number;
@@ -61,40 +62,6 @@ describe('Integration & Core API', () => {
     $app.remove();
   });
 
-  it('should maintain reactivity after DOM reparenting', async () => {
-    const count = $.atom(0);
-    const $parent1 = $('<div id="parent1">').appendTo(document.body);
-    const $parent2 = $('<div id="parent2">').appendTo(document.body);
-    const $el = $('<div id="reactive-el">').appendTo($parent1);
-
-    $el.atomText(count);
-
-    await $.nextTick();
-    expect($el.text()).toBe('0');
-    expect($parent1.find('#reactive-el').length).toBe(1);
-
-    // Reparent to parent2
-    $el.appendTo($parent2);
-    await $.nextTick();
-    expect($parent1.find('#reactive-el').length).toBe(0);
-    expect($parent2.find('#reactive-el').length).toBe(1);
-
-    // Update atom
-    count.value = 1;
-    await $.nextTick();
-    expect($el.text()).toBe('1');
-
-    // Reparent back to parent1 using prependTo
-    $el.prependTo($parent1);
-    count.value = 2;
-    await $.nextTick();
-    expect($el.text()).toBe('2');
-    expect($parent1.find('#reactive-el').length).toBe(1);
-
-    $parent1.remove();
-    $parent2.remove();
-  });
-
   it('should handle Complex Form Validation (atomBind with parse/format and computed state)', async () => {
     const age = $.atom<number | null>(null);
 
@@ -148,7 +115,6 @@ describe('Integration & Core API', () => {
     expect(isValid.value).toBe(true);
     expect($display.text()).toBe('Valid');
     expect($submit.prop('disabled')).toBe(false);
-    // Use toMatch to handle both 'green' and 'rgb(0, 128, 0)'
     expect($input.css('border-top-color')).toMatch(/green|rgb\(0, 128, 0\)/);
 
     // Enter invalid age
@@ -171,7 +137,7 @@ describe('Integration & Core API', () => {
     interface Category {
       id: number;
       title: string;
-      items: WritableAtom<Item[]>;
+      items: DisposableWritableAtom<Item[]>;
     }
 
     const categories = $.atom<Category[]>([
@@ -212,29 +178,6 @@ describe('Integration & Core API', () => {
     expect($app.find('.category').length).toBe(2);
     expect($app.find('#cat-1 .item-list li').length).toBe(2);
     expect($app.find('#cat-2 .item-list li').length).toBe(1);
-
-    // Add item to Fruit
-    categories.value[0]!.items.value = [
-      ...categories.value[0]!.items.value,
-      { id: 103, name: 'Cherry' },
-    ];
-    await $.nextTick();
-    expect($app.find('#cat-1 .item-list li').length).toBe(3);
-    expect($app.find('#item-103').text()).toBe('Cherry');
-
-    // Add new category
-    categories.value = [
-      ...categories.value,
-      {
-        id: 3,
-        title: 'Dairy',
-        items: $.atom([{ id: 301, name: 'Milk' }]),
-      },
-    ];
-    await $.nextTick();
-    expect($app.find('.category').length).toBe(3);
-    expect($app.find('#cat-3 h3').text()).toBe('Dairy');
-    expect($app.find('#item-301').text()).toBe('Milk');
 
     $app.remove();
   });

@@ -5,7 +5,6 @@
 
 import { describe, expect, it } from 'vitest';
 import { atom, computed, effect } from '@/index';
-import { getSubscriberCount } from '../../utils/test-helpers';
 
 describe('Memory Leaks (GC)', () => {
   it('cleans up computed subscription on dispose', () => {
@@ -13,10 +12,10 @@ describe('Memory Leaks (GC)', () => {
     const c = computed(() => a.value);
 
     c.value;
-    expect(getSubscriberCount(a)).toBe(1);
+    expect(a.subscriberCount()).toBe(1);
 
     c.dispose();
-    expect(getSubscriberCount(a)).toBe(0);
+    expect(a.subscriberCount()).toBe(0);
   });
 
   it('cleans up effect subscription on dispose', () => {
@@ -25,10 +24,10 @@ describe('Memory Leaks (GC)', () => {
       a.value;
     });
 
-    expect(getSubscriberCount(a)).toBe(1);
+    expect(a.subscriberCount()).toBe(1);
 
     e.dispose();
-    expect(getSubscriberCount(a)).toBe(0);
+    expect(a.subscriberCount()).toBe(0);
   });
 
   it('cleans up chain subscriptions when intermediate computed is disposed', () => {
@@ -38,10 +37,10 @@ describe('Memory Leaks (GC)', () => {
     const c = computed(() => b.value + 1);
 
     c.value;
-    expect(getSubscriberCount(a)).toBe(1);
+    expect(a.subscriberCount()).toBe(1);
 
     b.dispose();
-    expect(getSubscriberCount(a)).toBe(0);
+    expect(a.subscriberCount()).toBe(0);
   });
 
   it('tracks subscriber count as computeds are disposed one by one', () => {
@@ -51,13 +50,13 @@ describe('Memory Leaks (GC)', () => {
 
     b.value;
     c.value;
-    expect(getSubscriberCount(a)).toBe(2);
+    expect(a.subscriberCount()).toBe(2);
 
     b.dispose();
-    expect(getSubscriberCount(a)).toBe(1);
+    expect(a.subscriberCount()).toBe(1);
 
     c.dispose();
-    expect(getSubscriberCount(a)).toBe(0);
+    expect(a.subscriberCount()).toBe(0);
   });
 
   it('runs effect cleanup function on dispose', () => {

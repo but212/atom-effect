@@ -26,8 +26,3 @@ export function seededRandom(seed: number): () => number {
 // Internal structure test helpers
 // biome-ignore lint/suspicious/noExplicitAny: Internal tests need access to private properties
 export const getNodeVersion = (node: any): number => node.version;
-
-// biome-ignore lint/suspicious/noExplicitAny: Internal tests need access to private properties
-export const getSubscriberCount = (node: any): number => {
-  return node._slots?.size ?? 0;
-};

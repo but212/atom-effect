@@ -1,17 +1,22 @@
 /**
+ * Centralized repository for library-wide constants, defaults, and error templates.
+ *
  * Logic: Subsystem Organization
- * Group prefixes, defaults, and error messages into cohesive logical units
- * to improve maintainability and provide clear namespaces across the library.
+ * Consolidates global prefixes, defaults, and error templates into logical
+ * namespaces. This organization ensures consistency across the library and
+ * provides a central location for modifying system behavior.
  *
  * @internal
  */
 
+/** Constants for the core reactive engine. @internal */
 export const SYSTEM_CORE = {
   ERRORS: {
     EFFECT_DISPOSE_ERROR: (i?: string) => `Dispose error${i ? `: ${i}` : ''}`,
   },
 } as const;
 
+/** Configuration and error templates for the routing subsystem. @internal */
 export const SYSTEM_ROUTE = {
   PREFIX: '[atom-route]',
   DEFAULTS: Object.freeze({
@@ -28,9 +33,10 @@ export const SYSTEM_ROUTE = {
   },
 } as const;
 
+/** Configuration and error templates for reactive bindings. @internal */
 export const SYSTEM_BINDING = {
   PREFIX: '[atom-binding]',
-  INPUT_DEFAULTS: Object.freeze({ EVENT: 'input', DEBOUNCE: 0 } as const),
+  INPUT_DEFAULTS: Object.freeze({ EVENT: 'input change', DEBOUNCE: 0 } as const),
   VALID_INPUT_TAGS: ['input', 'select', 'textarea'] as const,
   ERRORS: {
     INVALID_INPUT_ELEMENT: (t: string) => `Invalid element <${t}> for val.`,
@@ -42,12 +48,18 @@ export const SYSTEM_BINDING = {
   },
 } as const;
 
+/**
+ * Constants for the security and sanitization engine.
+ *
+ * Logic: Sanitization Schema
+ * Defines the properties and URI protocols considered inherently dangerous.
+ * These constants form the basis of the library's XSS and DOM Clobbering
+ * prevention strategy.
+ *
+ * @internal
+ */
 export const SYSTEM_SECURITY = {
-  /**
-   * Security: Sanitization Schema
-   * Properties and URI patterns that are inherently dangerous and must
-   * be scrubbed to prevent XSS and DOM Clobbering.
-   */
+  /** Property names that are blocked to prevent XSS and property hijacking. */
   DANGEROUS_PROPS: [
     'innerHTML',
     'outerHTML',
@@ -56,6 +68,7 @@ export const SYSTEM_SECURITY = {
     'constructor',
     'prototype',
   ] as const,
+  /** Attributes that must be validated for dangerous URI protocols. */
   URL_PROPS: [
     'src',
     'href',
@@ -72,6 +85,7 @@ export const SYSTEM_SECURITY = {
     'codebase',
     'xlink:href',
   ] as const,
+  /** Pattern for identifying malicious URI protocols. */
   DANGEROUS_PROTOCOL_PATTERN: '(?:javascript|vbscript)',
   ERRORS: {
     UNSAFE_CONTENT: () => 'Unsafe content neutralized.',
@@ -82,6 +96,7 @@ export const SYSTEM_SECURITY = {
   },
 } as const;
 
+/** Error templates for list rendering. @internal */
 export const SYSTEM_LIST = {
   PREFIX: '[atom-list]',
   ERRORS: {
@@ -89,6 +104,7 @@ export const SYSTEM_LIST = {
   },
 } as const;
 
+/** Error templates for component mounting. @internal */
 export const SYSTEM_MOUNT = {
   PREFIX: '[atom-mount]',
   ERRORS: {
@@ -97,41 +113,15 @@ export const SYSTEM_MOUNT = {
   },
 } as const;
 
+/** Error templates for Web Components. @internal */
+export const SYSTEM_COMPONENT = {
+  PREFIX: '[atom-component]',
+  ERRORS: {
+    NOT_REGISTERED: (tagName: string) => `Custom Element <${tagName}> is not registered.`,
+  },
+} as const;
+
+/** Defaults for the visual debug system. @internal */
 export const SYSTEM_DEBUG = {
   DEFAULTS: Object.freeze({ HIGHLIGHT_DURATION_MS: 500 } as const),
 } as const;
-
-/**
- * Logic: Backward Compatibility
- * Ensures API continuity during the transition to subsystem-based organization.
- *
- * Reason: Migration
- * Allows for non-breaking internal refactoring of constant storage.
- *
- * @internal
- */
-
-export const LOG_PREFIXES = {
-  ROUTE: SYSTEM_ROUTE.PREFIX,
-  BINDING: SYSTEM_BINDING.PREFIX,
-  LIST: SYSTEM_LIST.PREFIX,
-  MOUNT: SYSTEM_MOUNT.PREFIX,
-} as const;
-
-export const ERROR_MESSAGES = {
-  ROUTE: SYSTEM_ROUTE.ERRORS,
-  SECURITY: SYSTEM_SECURITY.ERRORS,
-  BINDING: SYSTEM_BINDING.ERRORS,
-  LIST: SYSTEM_LIST.ERRORS,
-  MOUNT: SYSTEM_MOUNT.ERRORS,
-  CORE: SYSTEM_CORE.ERRORS,
-} as const;
-
-export const ROUTE_DEFAULTS = SYSTEM_ROUTE.DEFAULTS;
-export const INPUT_DEFAULTS = SYSTEM_BINDING.INPUT_DEFAULTS;
-export const DEBUG_DEFAULTS = SYSTEM_DEBUG.DEFAULTS;
-
-export const VALID_INPUT_TAGS = SYSTEM_BINDING.VALID_INPUT_TAGS;
-export const URL_PROPS = SYSTEM_SECURITY.URL_PROPS;
-export const DANGEROUS_PROPS = SYSTEM_SECURITY.DANGEROUS_PROPS;
-export const DANGEROUS_PROTOCOL_PATTERN = SYSTEM_SECURITY.DANGEROUS_PROTOCOL_PATTERN;

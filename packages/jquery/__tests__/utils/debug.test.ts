@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { LOG_PREFIXES } from '@/constants';
+import { SYSTEM_BINDING, SYSTEM_MOUNT } from '@/constants';
 import { debug } from '@/utils/debug';
 
 describe('Debug Module', () => {
@@ -28,15 +28,15 @@ describe('Debug Module', () => {
     it('should gate by enabled state', () => {
       // 1. Gating check
       debug.enabled = false;
-      debug.domUpdated(LOG_PREFIXES.BINDING, document.createElement('div'), 'test', 'val');
+      debug.domUpdated(SYSTEM_BINDING.PREFIX, document.createElement('div'), 'test', 'val');
       expect(logSpy).not.toHaveBeenCalled();
 
       // 2. Critical messages check (behavior: always on irrespective of state)
       const error = new Error('fail');
-      debug.warn(LOG_PREFIXES.MOUNT, 'warning');
-      debug.error(LOG_PREFIXES.BINDING, 'error', error);
-      expect(warnSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.MOUNT} warning`);
-      expect(errorSpy).toHaveBeenCalledWith(`${LOG_PREFIXES.BINDING} error`, error);
+      debug.warn(SYSTEM_MOUNT.PREFIX, 'warning');
+      debug.error(SYSTEM_BINDING.PREFIX, 'error', error);
+      expect(warnSpy).toHaveBeenCalledWith(`${SYSTEM_MOUNT.PREFIX} warning`);
+      expect(errorSpy).toHaveBeenCalledWith(`${SYSTEM_BINDING.PREFIX} error`, error);
     });
   });
 
@@ -57,12 +57,12 @@ describe('Debug Module', () => {
       document.body.append(htmlEl, svgEl, textNode);
 
       // Verify identification logic (HTML, SVG, JQuery)
-      debug.domUpdated(LOG_PREFIXES.BINDING, htmlEl, 'text', 'v1');
-      debug.domUpdated(LOG_PREFIXES.BINDING, svgEl, 'attr', 'v2');
-      debug.domUpdated(LOG_PREFIXES.BINDING, jqWrapper, 'prop', 'v3');
+      debug.domUpdated(SYSTEM_BINDING.PREFIX, htmlEl, 'text', 'v1');
+      debug.domUpdated(SYSTEM_BINDING.PREFIX, svgEl, 'attr', 'v2');
+      debug.domUpdated(SYSTEM_BINDING.PREFIX, jqWrapper, 'prop', 'v3');
 
       // Verify skip logic (TextNode) - should not log or highlight
-      debug.domUpdated(LOG_PREFIXES.BINDING, textNode as unknown as Element, 'op', 'v4');
+      debug.domUpdated(SYSTEM_BINDING.PREFIX, textNode as unknown as Element, 'op', 'v4');
 
       expect(logSpy).toHaveBeenCalledTimes(3); // html, svg, jq only
       expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('div#app.text'), 'v1');
@@ -85,8 +85,8 @@ describe('Debug Module', () => {
       const el = document.createElement('div');
 
       // Triggering update multiple times should result in exactly one <style> tag
-      debug.domUpdated(LOG_PREFIXES.BINDING, el, 'a', '1');
-      debug.domUpdated(LOG_PREFIXES.BINDING, el, 'b', '2');
+      debug.domUpdated(SYSTEM_BINDING.PREFIX, el, 'a', '1');
+      debug.domUpdated(SYSTEM_BINDING.PREFIX, el, 'b', '2');
 
       const styles = document.querySelectorAll('style[data-atom-debug]');
       expect(styles.length).toBe(1);
@@ -114,7 +114,7 @@ describe('Debug Module', () => {
 
       // Logic check: should not throw ReferenceErrors or crash
       expect(() => {
-        debug.domUpdated(LOG_PREFIXES.BINDING, container, 'test', 'value');
+        debug.domUpdated(SYSTEM_BINDING.PREFIX, container, 'test', 'value');
       }).not.toThrow();
 
       // Verify state was not updated illegally

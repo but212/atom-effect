@@ -1,277 +1,138 @@
 # Architecture & Design
 
-This document explains the internal mechanics of `@but212/atom-effect`. It explains the relationship between the core principles and the technical trade-offs required to realize them in an optimized environment.
+This document describes the internal architecture of `@but212/atom-effect`. It details the relationship between core reactive principles and the technical implementations designed to optimize performance and reliability.
 
 ---
 
-## 0. The Conceptual Bridge: From Usage to Internals
+## 0. Conceptual Overview: From API to Engine
 
-Before examining the bitwise flags and version hashing, it is helpful to understand how the high-level API maps to the internal engine.
+The high-level API (`atom`, `computed`, `effect`) is built upon a unified internal execution engine designed for V8 performance and memory efficiency.
 
-- **Unified Surface**: While you use `atom`, `computed`, and `effect`, they are all specialized instances of a single internal class: **`ReactiveNode`**. This ensures consistent memory layout (Monomorphism) for V8 optimization.
-  - **Push (Notification Phase)**: When an atom changes, it "pushes" a dirty signal to its immediate subscribers. No calculation happens yet.
-  - **Pull (Evaluation Phase)**: When you read a `.value` or when an effect runs, the node "pulls" the latest versions from its dependencies to see if it requires re-computation.
-- **The Scheduler's Role**: Effects don't run immediately. They are queued in a **Scheduler**. This allows the library to "coalesce" multiple atom updates into a single effect execution, ensuring efficiency. The scheduler uses a **Double Buffering** strategy and a **Flat Loop** to ensure execution stability and prevent call stack overflows during recursive updates.
-- **Small Vector Optimization (SVO)**: To minimize GC overhead and closure heap-allocations, the engine manually unrolls "Small Vector" paths (first 4 slots) for subscriber and dependency link storage.
-- **Bitwise Branding Strategy**: To ensure optimized type identification, all reactive primitives carry a single `BRAND` symbol property. Instead of checking for the existence of multiple distinct symbols, the engine uses a bitwise mask (`BrandFlags`) to verify if a node is an Atom, Computed, or Effect in a single constant-time operation.
-- **Minimal-overhead Debug Metadata**: Debug information (ID, Type, Name) is injected using non-enumerable symbols. This ensures that debugging metadata does not interfere with object iteration (`Object.keys`), serialization (`JSON.stringify`), or production performance while providing deep traceability during development.
+- **Unified Base Class**: All reactive primitives are specialized instances of the internal **`ReactiveNode`** class. This ensures a consistent memory layout (Hidden Class Monomorphism), allowing the JavaScript engine to optimize property access.
+- **Push-Pull Hybrid Model**:
+  - **Push (Notification Phase)**: When a source atom changes, it propagates a "dirty" signal to its immediate subscribers. This phase marks nodes for re-evaluation without performing calculations.
+  - **Pull (Evaluation Phase)**: When a node's value is accessed or an effect executes, it performs a "pull" to validate the versions of its dependencies, triggering re-computation only if necessary.
+- **Scheduler and Coalescing**: Effects do not execute immediately upon state change. Instead, they are queued in a **Scheduler** that utilizes **Double Buffering** and a **Flat Loop** to coalesce multiple updates into a single execution cycle. This prevents redundant work and avoids call stack overflows.
+- **Small Vector Optimization (SVO)**: To minimize heap allocations and garbage collection (GC) pressure, the engine uses inline slots (`_s0` through `_s3`) for the most common dependency and subscriber links before falling back to dynamic arrays. These buffers now implement a standardized **Array-like API** (`length`, `at()`, `push()`) for consistent, high-performance access.
+- **Bitwise Branding**: Primitives are identified using a bitwise mask (`BrandFlags`) stored on a single `BRAND` symbol. This allows for constant-time type identification (e.g., checking if a node is an Atom or a Computed) without multiple property lookups.
+- **Isolated Debug Metadata**: Debug information such as IDs and names are attached via non-enumerable symbols, ensuring that debugging features do not interfere with object iteration, serialization, or production performance.
 
 ---
 
-## 1. Atomic Principles: Autonomous Nodes
+## 1. Principles of Reactive Nodes
 
-The core design focuses on **decentralized responsibility**. State is not managed by an external orchestrator; instead, each node is intended to remain the source of its own state.
+The system is designed around autonomous nodes that manage their own state and dependencies.
 
 ### Key Mechanisms
 
-1. **Local Versioning**: Nodes track their own `version`. Staleness is determined by comparing a node's current state with what was previously observed by its subscribers.
-2. **Implicit Subscriptions**: Relationships are formed through usage. Reading a `.value` registers the caller as a dependency automatically via `trackingContext`.
-3. **Lifecycle Snapshots**: For asynchronous tasks, nodes capture a snapshot of their dependencies' versions. This allows a node to detect if the "world" has moved on during its execution.
+1. **Local Versioning**: Every node maintains a `version` counter. A node determines if it is stale by comparing its stored dependency versions with the current versions of those dependencies.
+2. **Implicit Subscription**: Dependency relationships are established automatically when a node's `.value` is read within a reactive context (tracked via `trackingContext`).
+3. **Version Snapshots**: Asynchronous operations capture snapshots of dependency versions. If these versions change before the operation completes, the result is considered stale and discarded.
 
-### Core Class Hierarchy
+### Class Hierarchy
 
-To maximize performance and maintain consistent behavior, the engine uses a unified inheritance structure optimized for **V8 Hidden Class Monomorphism**:
-
-- **`ReactiveNode<T>`**: The single, unified base class for all reactive primitives (**Atoms**, **Computeds**, **Effects**). Implements the **`Disposable`** interface for explicit resource management. By merging the roles of **Producer** (observable) and **Consumer** (observer) into a single **Unified Base Class**, the engine ensures that every reactive object shares a consistent memory layout.
-  - **Subscriber Management**: Provides `subscribe()` and `_notifySubscribers()` capabilities.
-  - **Dependency Tracking**: Manages a `DepSlotBuffer` and provides optimized dirty checking logic (`_isDirty`). Critical tracking loops are manually unrolled for performance.
-  - **Type Safety**: Uses generic type `T` to ensure type-safe notifications for subscribers.
-- **`AtomImpl<T>`**: A pure producer node that holds mutable state. It extends `ReactiveNode<T>` but keeps its dependency list (`_deps`) null to save memory. Implements a **Breadth-First Notification Loop** to handle synchronous re-entrancy and a **Net-Zero Guard** to suppress redundant notifications.
-- **`ComputedAtomImpl<T>`**: A hybrid node that both consumes dependencies and produces a derived value. It fully leverages both producer and consumer facets of `ReactiveNode<T>`.
-
-- **`EffectImpl`**: A pure consumer node that performs side effects. It extends `ReactiveNode<void>` and keeps its subscriber list (`_slots`) null.
-
-### The Fundamental Trade-off: Local vs. Global
-
-To make independent judgment possible, a **Global Epoch** is accepted. While each node makes its own decision, it does so based on a shared **temporal reference**. Absolute decentralization is traded for the performance and consistency of a single global counter.
+- **`ReactiveNode<T>`**: The foundation for all primitives. It manages subscriber lists (`_slots`), dependency lists (`_deps`), and state flags. It implements the `Disposable` interface for resource cleanup.
+- **`AtomImpl<T>`**: A pure producer node for mutable state. It keeps its dependency list (`_deps`) null to save memory. It handles synchronous re-entrancy through a breadth-first notification loop.
+- **`ComputedAtomImpl<T>`**: A hybrid node that acts as both a consumer (of dependencies) and a producer (of derived values). It manages lazy evaluation and result caching.
+- **`EffectImpl`**: A pure consumer node for side effects. It keeps its subscriber list (`_slots`) null as it is a terminal node in the graph.
 
 ---
 
-## 2. Consistency Model: Epoch & Version
+## 2. Consistency: Global Epoch and Local Version
 
-A "glitch" occurs when an inconsistent intermediate state is observed. The approach is to separate the **Mutation Timestamp (Epoch)** from the **Result of Change (Version)**.
+To prevent "glitches" (observing inconsistent intermediate states), the engine distinguishes between time and value:
 
-- **Global Epoch**: Incremented whenever a mutation starts. It acts as a "logical clock" to identify *when* something happened across the entire system.
-- **Local Version**: Incremented only when a node's *value* actually changes.
-  - **Reserved Value**: Both Epoch and Version avoid `0` (wrapping to `1`). This ensures `0` can be used as a reliable "uninitialized" or "never seen" marker across the engine.
-
-### Rationale
-
-By comparing `version` instead of just reacting to `epoch`, unnecessary re-calculations are avoided. If a dependency's output is the same as before, nodes further down the chain can stay idle.
+- **Global Epoch**: A global counter incremented whenever a mutation occurs. It serves as a logical clock to identify when changes happen across the system.
+- **Local Version**: A node-specific counter incremented only when its *value* actually changes. If a computation re-evaluates but produces the same result (as determined by an equality check), its version remains unchanged, preventing downstream re-evaluations.
+- **Zero-Value Reservation**: Both counters avoid the value `0` (wrapping to `1`). This allows `0` to be used as a reliable marker for "uninitialized" or "never seen" states.
 
 ---
 
-## 3. Efficiency through Deferral: Two-Phase Propagation
+## 3. Efficiency: Two-Phase Propagation
 
-To reduce unnecessary work, a **Notify-and-Check** approach is used.
+The engine utilizes a **Notify-and-Check** strategy to minimize redundant computations.
 
-1. **Phase 1: Notification**: When an atom changes, it notifies its immediate subscribers. For **Computed** nodes, this sets the `DIRTY` flag. For **Effects**, this schedules an execution check via the scheduler.
-2. **Phase 2: Evaluation (Sweep)**: The check differs by node type:
-   - **Computed**: On `.value` access, it calls `_isDirty()` to determine if re-computation is needed. This uses a **Hot-path Check**: it first checks the last known dependency that caused a change. If that dependency is still updating, the node is known to be dirty in $O(1)$.
-   - **Effect**: Before re-executing, `_isDirty()` is called. This performs a structural walk of dependency versions.
-
-**Trade-off: Fast Path (O(1)) vs. Full Walk (O(N))**
-The validation process uses layered heuristics to minimize resource-intensive work. The **Hot-path Check (O(1))** provides instant dirty detection for recurring updates by caching the last dirty index. Only if that misses does the engine perform a structural walk of dependencies.
+1. **Notification Phase**: A changed atom notifies its immediate subscribers. Computed nodes are marked as `DIRTY`, and effects are scheduled for execution.
+2. **Validation Phase (Sweep)**:
+   - **Computed**: When accessed, it checks if any dependency has a newer version. It uses a **Hot-path Optimization** (`_hotIndex`) to first check the dependency that most recently caused a change, providing $O(1)$ dirty detection in many cases.
+   - **Effect**: Before execution, it performs a structural walk to verify dependency versions.
 
 ---
 
-## 4. Integrity at the Async Boundary
+## 4. Async Boundary Integrity
 
-Async computed nodes are treated as state machines, using **version snapshots** to guard against race conditions.
+Asynchronous computed nodes manage their lifecycle as state machines, protecting against race conditions and stale data.
 
-- **Async Drift Detection**: If dependency versions change between a Promise's start and resolution (detected via a version snapshot), the result is discarded and the node re-evaluates.
-- **Cancellation**: Only the latest "Promise ID" is allowed to resolve. This prevents slow, stale responses from overwriting newer results.
-
-### Bitwise State Management
-
-To keep state transitions fast and memory-efficient, `ReactiveNode` utilizes a single 31-bit integer field (V8 SMI optimized) to manage all internal status flags. This field is strictly partitioned to avoid bit collisions across different node types and lifecycles:
-
-- **[0-7] Shared Core**: Common flags like `DISPOSED` and identity markers like `IS_COMPUTED`.
-- **[8-15] Computed States**: Management of `DIRTY`, `RECOMPUTING`, and `HAS_ERROR` states.
-- **[16-23] Async Lifecycle**: Tracking partitioned states for asynchronous operations (Idle, Pending, Resolved, Rejected).
-- **[24-30] Primitive Specific**: Specialized flags for specific implementations, such as `ATOM_SYNC` or `EFFECT_EXECUTING`.
+- **Async Drift Detection**: If dependencies change while a Promise is pending, the resolution is ignored, and the computation is re-triggered.
+- **Cancellation**: A `_promiseId` ensures that only the most recently initiated asynchronous operation can resolve the node's state.
+- **Bitwise Partitioning**: Internal state is managed via a 31-bit integer field (V8 SMI optimized):
+  - **[0-7] Core**: `DISPOSED`, `IS_COMPUTED`.
+  - **[8-15] Computed**: `DIRTY`, `RECOMPUTING`, `HAS_ERROR`.
+  - **[16-23] Async**: `IDLE`, `PENDING`, `RESOLVED`, `REJECTED`.
+  - **[24-30] implementation-specific**: `ATOM_SYNC`, `EFFECT_EXECUTING`.
 
 ---
 
-## 5. Resource Stewardship: Memory Management
+## 5. Resource Stewardship
 
-Reactivity systems are prone to memory leaks if subscriptions are not cleaned up. Two mechanisms are used to manage memory efficiently: **Subscriber Management** and **Array Pooling**.
+Memory and performance are managed through specialized structures:
 
-- **DepSlotBuffer (Dependency Tracking)**: A specialized high-speed buffer for dependency tracking cycles. It features:
-  - **Size Duality**: Distinguishes between Physical Boundary and Logical Size to support fast iteration while maintaining hole-reuse capabilities.
-  - **Large-scale Node Optimization**: A hybrid O(1) `Map` fallback when dependencies exceed 32, ensuring performance even for extremely large graphs.
-  - **Dense-head Structure**: Swaps existing links to the current track index to maintain cache locality.
-  - **Manual Loop Unrolling**: Dependency collection and notifications prioritize inline slots (_s0.._s3) to bypass closure allocations and iterator dispatch.
-  - **Safe Retrieval**: Implemented `claimExisting` to reuse existing dependency links during re-evaluation, minimizing update frequency.
-
-- **Computed Optimizations**:
-  - **Hot-path Check**: Caches the index of the last dirty dependency (`_hotIndex`) to provide $O(1)$ dirty detection for recurring state changes (e.g., animations, scrolls).
-
-**Trade-off: Complexity vs. Zero-Allocation**
-Managing inline slots and hybrid lookups adds internal complexity, but it significantly reduces Garbage Collection (GC) pressure and improves performance in high-frequency update scenarios.
+- **`DepSlotBuffer`**: A high-speed buffer for dependency tracking that features:
+  - **Standardized API**: Implements `length`, `capacity`, `push()`, and `at()` for predictable access patterns.
+  - **Manual Optimization**: Uses unrolled loops for inline slots and standard `for` loops for overflow to ensure zero-allocation performance.
+  - **Size Duality**: Separates physical capacity from logical length for rapid iteration and hole reuse.
+  - **Hybrid Lookup**: Uses an $O(1)$ `Map` fallback when the number of dependencies exceeds 32.
+  - **Cache Locality**: Swaps active links to the head of the buffer during re-evaluation.
+  - **Link Reuse**: The `claimExisting` logic reuses established dependency links to minimize allocation and subscription overhead.
 
 ---
 
-## 6. Security & Boundaries
+## 6. Security and Boundaries
 
-A **Symmetric Boundary** is enforced between production and consumption.
+The engine enforces strict boundaries between logic and side effects.
 
-- **Atoms & Computeds (Pure)**: Intended to be free of side effects. They form the "logic" layer.
-- **Effects (Impure)**: The designated place for side effects (DOM mutation, logging, API calls).
-
-**Protection**: `RECOMPUTING` flags are used to detect circular dependencies. If a Computed node is accessed while it is already calculating, an error is raised to protect the integrity of the graph.
-
-### The Synchronous Tracking Boundary
-
-While `@but212/atom-effect` fully supports asynchronous `computed` and `effect` nodes, **dependency tracking is a strictly synchronous process**.
-
-- **Why**: Tracking relies on a global, synchronous stack (`trackingContext`). When a function `await`s, it yields control to the event loop. By the time it resumes, the tracking context has already been popped or replaced.
-- **Accessing Values After Await**: You can still read `.value` after an `await` boundary to get the current state, but these reads **will not be registered as dependencies**. The node will not re-evaluate when those specific dependencies change.
-
-- **The Pattern**: Always read your reactive dependencies at the top of your function, before the first `await`.
-
-```typescript
-// ❌ Incorrect: 'atom2' will not be tracked
-computed(async () => {
-  await someAsyncCall();
-  return atom2.value;
-});
-
-// ✅ Correct: 'atom2' is tracked
-computed(async () => {
-  const val = atom2.value; // Captured synchronously
-  await someAsyncCall();
-  return val;
-});
-```
-
-### Execution Engine (Scheduler)
-
-The scheduler orchestrates state propagation and effect execution using a microtask-based loop.
-
-#### Key Mechanics
-
-- **Epoch-based Deduplication**: Every job is tagged with a version (epoch). If a job is scheduled multiple times within the same epoch, subsequent requests are ignored.
-- **Double Buffering**: Ingests new jobs into a dormant buffer while processing the active one, ensuring stable iteration and preventing "queue jumping".
-- **Flat Loop Drainage**: Drains both main and batch queues in a single non-recursive loop. This prevents call stack overflows even under heavy reactive churn or deeply nested `batch()` calls.
-- **Memory Safety**: Explicitly clears internal array references (`undefined`) immediately after a job executes. This ensures closures are not retained longer than necessary, aiding Garbage Collection in long-running apps.
-
-#### `aeNextTick` Synchronization
-
-`aeNextTick` provides a public interface for synchronizing with the scheduler's internal state. Unlike a generic `Promise.resolve().then()`, `aeNextTick` schedules a job on the internal queue (`scheduler.schedule()`).
-
-This ensures that:
-
-1. It executes **after** all reactive effects that were already queued.
-2. It correctly participates in `batch()` cycles, resolving only after the synchronous flush completes.
-3. It respects the internal `epoch` system, preventing premature resolution during complex re-evaluation cycles.
-4. **Promise Deduplication**: To minimize GC pressure and scheduler overhead, multiple calls to `aeNextTick()` without a callback share a single pending promise. Subsequent calls return the same promise instance until the scheduler flush completes and clears the shared reference.
+- **Symmetric Boundary**: Atoms and Computeds are intended to be pure logic. Side effects are restricted to `effect` nodes.
+- **Circularity Protection**: The `RECOMPUTING` flag detects synchronous circular dependencies, throwing an error to prevent infinite recursion.
+- **Synchronous Tracking Boundary**: Dependency tracking is strictly synchronous. Dependencies accessed after an `await` keyword are not tracked because the `trackingContext` is cleared when the function yields.
+- **Scheduler Integrity**:
+  - **Deduplication**: Jobs are tagged with an epoch to prevent redundant scheduling within the same cycle.
+  - **Flat Loop**: Drains queues without recursion to ensure stack safety.
+  - **Memory Clearing**: Internal references are cleared to `undefined` immediately after execution to assist GC.
 
 ### Infinite Loop Defense
 
-Effects can inadvertently create feedback loops (e.g., an effect that writes to an atom it also reads). Layered hard limits are in place to prevent runaway execution:
+The system implements hard limits to prevent runaway reactive cycles:
 
-| Limit | Threshold | Scope |
-| :--- | :--- | :--- |
-| `MAX_EXECUTIONS_PER_EFFECT` | 100 per flush | Per individual effect |
-| `MAX_EXECUTIONS_PER_FLUSH` | 10,000 per flush | Global across all effects (Checked in `incrementFlushExecutionCount`) |
-| `MAX_EXECUTIONS_PER_SECOND` | 1,000 / sec (dev only) | Frequency guard per effect |
-
-When a threshold is crossed, an `EffectError` is thrown and the offending effect is disposed to avoid blocking the main thread indefinitely.
+- **Per-Effect**: 100 executions per flush.
+- **Global**: 10,000 executions per flush.
+- **Frequency**: 1,000 executions per second (Development mode only).
 
 ---
 
-## 7. Lenses & Structural Sharing
+## 7. Lenses and Structural Sharing
 
-The Core package provides fine-grained reactivity over monolithic state objects via **Lenses**. A lens is a "virtual atom" that points to a specific dot-path within a parent atom.
+Lenses provide reactive access to nested properties within monolithic state objects.
 
-### Structural Sharing Logic
-
-When a value is updated through a lens, the `setDeepValue` recursive helper creates a new object tree:
-
-1. **Security Guard**: Blocks all access to `__proto__`, `constructor`, and `prototype` keys. Any path containing these segments is treated as `undefined` for reads and a no-op for writes, preventing prototype pollution attacks.
-2. **Path Cloning**: Only clones the nodes along the specific path from the root to the leaf.
-3. **Reference Preservation**: All other branches are preserved by reference. Unrelated effect nodes remain reference-equal (`===`), preventing **cascading updates**.
-4. **Monomorphic Equality**: Uses `Object.is` for zero-allocation identity checks before triggering parent atom updates.
-
-### Type-Safe Paths
-
-Lenses utilize recursive utility types (`Paths<T>`, `PathValue<T, P>`) to enforce safety:
-
-- **Autocompletion**: Enumerates all possible dot-separated paths up to **8 levels deep** (V8 Smi-friendly recursion limit).
-- **Method Filtering**: Automatically excludes prototype methods (e.g., `push`, `pop` on arrays) to keep autocompletion focused strictly on data paths.
-- **Inference**: Precisely resolves the resulting type, eliminating `any` casts in user code.
-
-### Subscription Lifecycle
-
-Every lens maintains an internal set of parent atom subscriptions. Calling `lens.dispose()` shuts down these bridges, ensuring zero memory usage for high-churn patterns (e.g., dynamic forms or list item lensing). Improved type safety in `PathValue` and `Paths` now correctly handles nullable and optional properties within the state tree.
+- **Structural Sharing**: When updating a value through a lens, only the objects along the modified path are cloned. Unrelated branches maintain reference equality (`===`), preventing unnecessary downstream updates.
+- **Security**: The `setDeepValue` utility blocks access to `__proto__`, `constructor`, and `prototype` to prevent prototype pollution.
+- **Type Safety**: Recursive utility types (`Paths`, `PathValue`) provide IDE autocompletion up to 8 levels deep. The engine explicitly handles arrays and broad string/number dictionaries, ensuring type stability across complex, dynamic state structures.
 
 ---
 
-## 8. Debugging Subsystem & DevTools Readiness
+## 8. Debugging and Observability
 
-The engine includes an **advanced** debugging layer designed to provide deep observability while maintaining an **on-demand** performance profile.
+The debugging subsystem is designed for deep visibility with minimal production impact.
 
-### Dual-Controller Strategy (Minimal-Overhead)
-
-To eliminate conditional branching (`if (dev)`) on critical hot paths, the engine employs a **Monomorphic Singleton Swap**:
-
-- **`DevDebugController`**: Active in development. It manages update counters, maintains the node registry, and issues contextual warnings.
-- **`ProdDebugController`**: An inert, no-op implementation. Modern JS engines can inline these empty calls, effectively removing debugging overhead from the production execution path.
-
-### WeakRef-based Node Registry
-
-The `debug` controller maintains a global **registry** of all active reactive nodes (Atoms, Computeds, Effects).
-
-- **Registry Mechanism**: Every node is automatically registered upon creation.
-- **Memory Safety**: The registry uses **`WeakRef`** to store references. This ensures the debugger itself never prevents a reactive node from being garbage collected once it is no longer needed by the application.
-- **Inspection**: The `debug.dumpGraph()` API allows external DevTools to **export** a snapshot of the entire reactive state, including update frequencies and node relationships, without manual instrumentation.
-
-### Infinite Loop Detection & Naming
-
-The engine automatically calls `debug.trackUpdate(id, name)` during every state mutation (Atom), invalidation (Computed), or execution (Effect).
-
-- **Contextual Warnings**: When the `LOOP_THRESHOLD` (default: 100) is exceeded within a single execution scope, the engine issues a warning.
-- **Name-based Traceability**: By capturing the user-provided `name` (or auto-generated alias), the warning clearly identifies the offending node (e.g., `Infinite loop detected for userProfile_atom`), **significantly reducing** the time needed to debug complex reactive cycles.
-
-### Production Runtime Toggle
-
-To support troubleshooting in production environments, the `IS_DEV` check includes a fallback for `globalThis.__ATOM_DEBUG__` and `sessionStorage.getItem('__ATOM_DEBUG__')`. Because the implementation is evaluated at load time to preserve minimal-overhead execution paths, you must set this flag **before** the library loads, or by setting it in session storage and refreshing the page:
-
-```javascript
-sessionStorage.setItem('__ATOM_DEBUG__', 'true');
-// Reload the page
-```
-
-This **overrides** the production no-op implementation, enabling full tracking and inspection capabilities on any distribution artifact without requiring a re-build.
+- **Dual-Controller Strategy**: In development, `DevDebugController` manages node registries and update counters. In production, these are replaced by `ProdDebugController` (no-op), which JavaScript engines can optimize away.
+- **WeakRef Registry**: The debug registry uses `WeakRef` to ensure that tracking nodes for inspection does not prevent them from being garbage collected.
+- **Traceability**: User-provided names and unique IDs allow for clear identification of offending nodes in warnings (e.g., infinite loop detections).
 
 ---
 
-## 9. Error Handling & Traceability
+## 9. Error Handling
 
-Reactivity creates **implicit dependencies** between distant parts of an application. When an error occurs, knowing *what* failed is often less important than knowing *where it came from* and *how it traveled*.
+Errors are treated as part of the reactive graph, enabling robust recovery and traceability.
 
-### Chainable Context Tracking
-
-The engine uses a **Context Accumulation** strategy. When an error propagates through the graph (e.g., from an Atom to a Computed, then to an Effect), each stage "wraps" the error with its own context using `wrapError`.
-
-- **Traceability**: Unlike standard errors that only show a stack trace, `AtomError` preserves a "logical trace" of the reactive nodes.
-- **Programmatic Inspection**: The `getChain()` method allows tools to walk this logical path without parsing stack strings.
-
-### Dependency Isolation in Error Queries
-
-Accessing error-related properties like `hasError` or `errors` is automatically wrapped in an `untracked` scope.
-
-- **Graph Pollution Prevention**: This ensures that while a caller can react to the *presence* of an error in a computation, it does not accidentally subscribe to the entire deep dependency tree of that computation.
-- **Predictable Re-execution**: The caller only re-executes if the computed node's own error state changes, preventing unnecessary re-runs when unrelated internal child nodes of the computation change in ways that don't affect the final error status.
-
-### Policy-Driven Recovery
-
-The `recoverable` flag acts as a signal to the execution engine:
-
-- **Recoverable (`true`)**: The node is marked as having an error, but its subscribers are notified that they can try to re-evaluate if the environment changes.
-- **Non-recoverable (`false`)**: The error is considered fatal for that specific branch of the graph, and the engine may stop further attempts to execute the node until manual intervention or disposal occurs.
-
-### Data Integrity
-
-Since JavaScript allows throwing any value, the engine treats the `cause` as `unknown`. This ensures that if a developer throws a complex metadata object, it remains fully intact and inspectable by the top-level error handler or global `onError` hook.
+- **Chainable Context**: Errors are wrapped as they propagate (`wrapError`), preserving a "logical trace" of the nodes involved in the failure.
+- **Dependency Isolation**: Accessing error properties (`hasError`, `errors`) is performed in an `untracked` scope to prevent the consumer from inadvertently subscribing to the entire dependency tree of a failing node.
+- **Recovery Signals**: The `recoverable` flag indicates whether a node can attempt re-evaluation if its dependencies change.

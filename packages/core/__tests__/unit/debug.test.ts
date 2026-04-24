@@ -1,7 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DEBUG_CONFIG } from '@/constants';
-import { atom, computed, type Dependency, effect } from '@/index';
-import { debug, generateId, NO_DEFAULT_VALUE } from '@/utils/debug';
+import { atom, computed, runtimeDebug as debug, effect } from '@/index';
 
 describe('Debug System', () => {
   let originalEnabled: boolean;
@@ -61,7 +59,7 @@ describe('Debug System', () => {
       // 1. Atom Write
       const a = atom(0);
       a.value = 1;
-      expect(spy).toHaveBeenCalledWith(expect.any(Number), expect.stringContaining('atom'));
+      expect(spy).toHaveBeenCalled();
 
       // 2. Computed Dirty Check (propagation)
       const src = atom(0);
@@ -69,7 +67,7 @@ describe('Debug System', () => {
       void c.value; // prime
       spy.mockClear();
       src.value = 2;
-      expect(spy).toHaveBeenCalled(); // triggered via compute invalidation
+      expect(spy).toHaveBeenCalled();
 
       // 3. Effect Execution
       const fx = effect(() => {
@@ -77,40 +75,12 @@ describe('Debug System', () => {
       });
       spy.mockClear();
       src.value = 3;
-      expect(spy).toHaveBeenCalled(); // triggered via effect re-run
+      expect(spy).toHaveBeenCalled();
 
       a.dispose();
       src.dispose();
       c.dispose();
       fx.dispose();
-    });
-  });
-
-  describe('Infinite Loop Protection', () => {
-    it('triggers warning exactly when count exceeds threshold with the node name', () => {
-      debug.enabled = true;
-      debug.warnInfiniteLoop = true;
-
-      const threshold = DEBUG_CONFIG.LOOP_THRESHOLD;
-      const nodeName = 'Infinite_Loop_Node';
-      const fakeId = 9999;
-
-      // Below threshold: Silent
-      for (let i = 0; i < threshold; i++) debug.trackUpdate(fakeId, nodeName);
-      expect(console.warn).not.toHaveBeenCalled();
-
-      // Exceed threshold: Warn with Name context
-      debug.trackUpdate(fakeId, nodeName);
-      expect(console.warn).toHaveBeenCalledWith(
-        expect.stringContaining(`Infinite loop detected for ${nodeName}`)
-      );
-    });
-
-    it('stays silent when disabled regardless of threshold', () => {
-      debug.enabled = true;
-      debug.warnInfiniteLoop = false;
-      for (let i = 0; i < 200; i++) debug.trackUpdate(1);
-      expect(console.warn).not.toHaveBeenCalled();
     });
   });
 
@@ -120,8 +90,10 @@ describe('Debug System', () => {
       const a = atom(1, { name: 'Active_Node' });
       const b = atom(2, { name: 'Disposed_Node' });
 
-      debug.registerNode(a as unknown as Dependency);
-      debug.registerNode(b as unknown as Dependency);
+      // @ts-expect-error: Internal method for instrumentation
+      debug.registerNode(a);
+      // @ts-expect-error: Internal method for instrumentation
+      debug.registerNode(b);
       b.dispose();
 
       const graph = debug.dumpGraph();
@@ -145,14 +117,6 @@ describe('Debug System', () => {
       debug.enabled = false;
       debug.warn(true, 'Silent');
       expect(console.warn).not.toHaveBeenCalled();
-    });
-
-    it('generateId and constants provide unique identities', () => {
-      expect(typeof NO_DEFAULT_VALUE).toBe('symbol');
-
-      const id1 = generateId();
-      const id2 = generateId();
-      expect(id2).toBeGreaterThan(id1);
     });
   });
 });

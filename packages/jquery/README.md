@@ -4,11 +4,19 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![ES2021+](https://img.shields.io/badge/target-ES2021%2B-blue)
 
-> **High-Density, Type-Safe Reactivity for jQuery.** This package provides a strictly typed, zero-overhead binding layer on top of `atom-effect`. Targets ES2021+ environments. Legacy browsers (IE11) are **NOT** supported.
+Reactive DOM bindings for jQuery, implemented as an integration layer for the `atom-effect` core.
 
-## Quick Start
+## Overview
 
-### Installation
+This package enables declarative synchronization between reactive state and the DOM using jQuery selectors and chainable methods. It enforces automatic resource management via `MutationObserver` and provides specialized support for complex state flows, including IME composition and list reconciliation.
+
+- **Target**: ES2021+
+- **Compatibility**: jQuery 3.x+
+- **Environment**: Modern browsers (legacy environments such as IE11 are not supported).
+
+## Installation
+
+### Package Manager
 
 ```bash
 npm install @but212/atom-effect-jquery jquery
@@ -17,60 +25,56 @@ npm install @but212/atom-effect-jquery jquery
 ### CDN
 
 ```html
-<!-- jquery -->
+<!-- jQuery -->
 <script src="https://code.jquery.com/jquery-4.0.0.min.js"></script>
 <!-- atom-effect-jquery -->
 <script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.31.0"></script>
 
 <script>
-  /*
-   * CDN Usage Notes:
-   * 1. The library is exposed via the global `AtomEffectJQuery` namespace.
-   * 2. It automatically extends jQuery ($), so methods like $.atom() are available.
-   * 3. Manual cleanup initialization: If the library is loaded dynamically, 
-   *    ensure auto-cleanup is enabled for the target container.
-   */
-  AtomEffectJQuery.enableAutoCleanup(document.body);
+  // Initializing global state
+  const { initAEJ } = AtomEffectJQuery;
+  initAEJ({ autoCleanup: true });
 </script>
 ```
 
-### Usage
+## Usage
 
-Instead of manually updating the DOM in 5 different places, you define the relationship **once**.
+Bindings allow for declarative relationship definitions between reactive atoms and DOM elements.
 
 ```javascript
 import $ from 'jquery';
 import '@but212/atom-effect-jquery';
 
-// 1. Define State
+// 1. Initialize State
 const count = $.atom(0);
 
-// 2. Bind to DOM (Declarative)
+// 2. Declarative Binding
 $('#count-display').atomText(count);
+
+// 3. Interaction
 $('#btn-increment').on('click', () => count.value++);
 
-// 3. Conditional UI
-const isBig = $.computed(() => count.value > 10);
-$('#warning-msg').atomShow(isBig);
+// 4. Derived State
+const isThresholdReached = $.computed(() => count.value > 10);
+$('#warning-msg').atomShow(isThresholdReached);
 ```
 
-## Security Note
+## Security
 
-For rendering HTML content (`atomHtml`), this library includes **minimal** XSS protection.
-For production applications dealing with user-generated content, use **[DOMPurify](https://github.com/cure53/DOMPurify)**.
+The `atomHtml` method renders raw HTML strings. To mitigate XSS risks, ensure input is sanitized before synchronization.
 
 ```javascript
 import DOMPurify from 'dompurify';
-// Always sanitize before binding HTML
+
+// Sanitize before binding to the DOM
 $('#content').atomHtml($.computed(() => DOMPurify.sanitize(rawHTML.value)));
 ```
 
 ## Documentation
 
-- [**API Reference**](./docs/API.md): Full list of bindings (`atomText`, `atomVal`, `atomBind`...).
-- [**Architecture**](./docs/ARCHITECTURE.md): Internal design — binding pipeline, lifecycle management, list reconciliation.
-- [**Security Guide**](./docs/SECURITY.md): HTML sanitization and DOMPurify integration.
-- [**Common Patterns**](./docs/PATTERNS.md): How to handle async loading, modals, and legacy plugins.
+- [**API Reference**](./docs/API.md): Detailed specification of reactive methods (`atomText`, `atomVal`, `atomList`, etc.).
+- [**Architecture**](./docs/ARCHITECTURE.md): Internal implementation details including the binding pipeline and memory management.
+- [**Security**](./docs/SECURITY.md): Protocols for HTML sanitization and secure data flow.
 
 ## License
 

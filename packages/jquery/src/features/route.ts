@@ -7,20 +7,26 @@ import {
   untracked,
 } from '@but212/atom-effect';
 import $ from 'jquery';
-import { ERROR_MESSAGES, LOG_PREFIXES, ROUTE_DEFAULTS } from '@/constants';
+import { SYSTEM_COMPONENT, SYSTEM_ROUTE } from '@/constants';
 import { registry } from '@/core/registry';
 import type { RouteConfig, RouteDefinition, Router, WritableAtom } from '@/types';
 import { debug } from '@/utils/debug';
 
-/** Internal utilities for consistent path manipulation across adapters. */
+/**
+ * Collection of internal path manipulation utilities.
+ * @internal
+ */
 const PathUtils = {
+  /** Removes leading and trailing slashes from a path. */
   normalize: (path: string): string => path.replace(/(^\/+|\/+$)/g, ''),
 
+  /** Separates a path into its route and query string components. */
   split: (path: string): { route: string; query: string | undefined } => {
     const [route, query] = path.split('?');
     return { route: PathUtils.normalize(route || ''), query };
   },
 
+  /** Compares two parameter maps for equality. */
   isSameParams: (a: Record<string, string>, b: Record<string, string>): boolean => {
     if (a === b) return true;
     const ka = Object.keys(a),
@@ -29,6 +35,10 @@ const PathUtils = {
   },
 };
 
+/**
+ * Parses a raw query string into a key-value record.
+ * @internal
+ */
 function parseQueryParams(raw: string): Record<string, string> {
   const res: Record<string, string> = {};
   if (!raw) return res;
@@ -36,7 +46,7 @@ function parseQueryParams(raw: string): Record<string, string> {
   try {
     decodeURIComponent(raw);
   } catch {
-    debug.warn(LOG_PREFIXES.ROUTE, ERROR_MESSAGES.ROUTE.MALFORMED_URI(raw));
+    debug.warn(SYSTEM_ROUTE.PREFIX, SYSTEM_ROUTE.ERRORS.MALFORMED_URI(raw));
   }
 
   try {
@@ -47,6 +57,10 @@ function parseQueryParams(raw: string): Record<string, string> {
   return res;
 }
 
+/**
+ * Represents the current parsed state of a URL.
+ * @internal
+ */
 type URLState = {
   readonly path: string;
   readonly query: Record<string, string>;
@@ -54,19 +68,26 @@ type URLState = {
 };
 
 /**
- * Abstract interface for synchronizing the router with browser URL mechanisms.
- *
+ * Interface for coordinating router state with browser URL mechanisms.
  * @internal
  */
 interface UrlAdapter {
+  /** Retrieves the current path and query state from the browser. */
   readonly getBrowserState: () => URLState;
+  /** Persists a new path to the browser history. */
   readonly commit: (fullPath: string) => URLState;
+  /** Restores the browser URL to a previous state (used for navigation reverts). */
   readonly revert: (previousUrl: string) => void;
+  /** Resolves the relative path from a clicked anchor element. */
   readonly resolveAnchor: (el: HTMLAnchorElement) => string;
+  /** Establishes a listener for browser-driven navigation events (popstate/hashchange). */
   readonly setupListener: (handler: () => void) => () => void;
 }
 
-/** Implementation for modern browsers using the HTML5 History API (pushState). */
+/**
+ * Implementation of URL synchronization using the HTML5 History API.
+ * @internal
+ */
 const createHistoryAdapter = (basePathRaw?: string): UrlAdapter => {
   const basePath = basePathRaw ? `/${PathUtils.normalize(basePathRaw)}` : '';
   const absoluteBase = `${location.origin}${basePath}/`.replace(/\/+$/, '/');
@@ -74,7 +95,9 @@ const createHistoryAdapter = (basePathRaw?: string): UrlAdapter => {
   return {
     getBrowserState: () => {
       let p = location.pathname;
-      if (basePath && p.startsWith(basePath)) p = p.substring(basePath.length);
+      if (basePath && p.startsWith(basePath)) {
+        p = p.substring(basePath.length);
+      }
       return {
         path: PathUtils.normalize(p),
         query: parseQueryParams(location.search.substring(1)),
@@ -84,7 +107,9 @@ const createHistoryAdapter = (basePathRaw?: string): UrlAdapter => {
     commit: (fullPath) => {
       const { route, query } = PathUtils.split(fullPath);
       const url = new URL(route, absoluteBase);
-      if (query) url.search = query;
+      if (query) {
+        url.search = query;
+      }
       const urlStr = url.pathname + url.search;
       try {
         history.pushState(null, '', urlStr);
@@ -105,7 +130,9 @@ const createHistoryAdapter = (basePathRaw?: string): UrlAdapter => {
     },
     resolveAnchor: (el) => {
       let p = el.pathname;
-      if (basePath && p.startsWith(basePath)) p = p.substring(basePath.length);
+      if (basePath && p.startsWith(basePath)) {
+        p = p.substring(basePath.length);
+      }
       return PathUtils.normalize(p) + el.search;
     },
     setupListener: (handler) => {
@@ -115,7 +142,10 @@ const createHistoryAdapter = (basePathRaw?: string): UrlAdapter => {
   };
 };
 
-/** Implementation for legacy support or static environments using URL fragments (#). */
+/**
+ * Implementation of URL synchronization using URL fragment hashes.
+ * @internal
+ */
 const createHashAdapter = (): UrlAdapter => {
   return {
     getBrowserState: () => {
@@ -131,7 +161,9 @@ const createHashAdapter = (): UrlAdapter => {
       return { path: PathUtils.normalize(route), query: parseQueryParams(query || ''), url };
     },
     revert: (previousUrl) => {
-      if (location.hash !== previousUrl) location.hash = previousUrl;
+      if (location.hash !== previousUrl) {
+        location.hash = previousUrl;
+      }
     },
     resolveAnchor: (el) => {
       return el.hash.startsWith('#') ? PathUtils.normalize(el.hash.substring(1)) : '';
@@ -143,6 +175,7 @@ const createHashAdapter = (): UrlAdapter => {
   };
 };
 
+/** Internal type for compiled route metadata. @internal */
 type CompiledRoute =
   | {
       readonly kind: 'exact';
@@ -157,6 +190,7 @@ type CompiledRoute =
       readonly def: RouteDefinition;
     };
 
+/** Internal type for route matching results. @internal */
 type MatchResult =
   | {
       readonly kind: 'found';
@@ -166,10 +200,13 @@ type MatchResult =
   | { readonly kind: 'not-found' };
 
 /**
+ * Manages path pattern matching and parameter extraction.
+ *
  * Logic: Regex Transformation
- * Converts path patterns (e.g., `/user/:id`) into anchored regular expressions.
- * Escapes special characters while transforming `:param` tokens into
- * capturing groups for efficient extraction of route parameters.
+ * This class converts human-readable path patterns (e.g., `/user/:id`) into
+ * anchored regular expressions. It escapes special characters while
+ * transforming `:param` tokens into capturing groups for high-performance
+ * extraction of named segments.
  *
  * @internal
  */
@@ -201,12 +238,15 @@ class RouteMatcher {
     });
   }
 
+  /** Finds a matching route for the provided path and extracts parameters. */
   match(path: string): MatchResult {
     const normalized = PathUtils.normalize(path);
 
     for (const route of this.routes) {
       if (route.kind === 'exact') {
-        if (route.pattern === normalized) return { kind: 'found', route, params: {} };
+        if (route.pattern === normalized) {
+          return { kind: 'found', route, params: {} };
+        }
       } else {
         const match = normalized.match(route.regex);
         if (match) {
@@ -229,12 +269,13 @@ class RouteMatcher {
   }
 }
 
+/**
+ * Concrete implementation of the Router interface.
+ * @internal
+ */
 class RouterImpl implements Router {
-  /** Reactive current path (read-only). */
   public currentRoute: ReadonlyAtom<string>;
-  /** Reactive key-value map of URL query parameters. */
   public queryParams: ReadonlyAtom<Record<string, string>>;
-  /** Combined reactive map of route params (e.g. :id) and query params. */
   public params: ReadonlyAtom<Record<string, string>>;
 
   private readonly matcher: RouteMatcher;
@@ -293,12 +334,13 @@ class RouterImpl implements Router {
     this.setupLifecycle();
   }
 
+  /** Normalizes raw configuration into a consistent internal format. */
   private parseConfig(c: RouteConfig) {
     return {
-      mode: ROUTE_DEFAULTS.mode,
-      basePath: ROUTE_DEFAULTS.basePath,
-      autoBindLinks: ROUTE_DEFAULTS.autoBindLinks,
-      activeClass: ROUTE_DEFAULTS.activeClass,
+      mode: SYSTEM_ROUTE.DEFAULTS.mode,
+      basePath: SYSTEM_ROUTE.DEFAULTS.basePath,
+      autoBindLinks: SYSTEM_ROUTE.DEFAULTS.autoBindLinks,
+      activeClass: SYSTEM_ROUTE.DEFAULTS.activeClass,
       notFound: c.notFound || '',
       beforeTransition: c.beforeTransition || (() => {}),
       afterTransition: c.afterTransition || (() => {}),
@@ -308,12 +350,12 @@ class RouterImpl implements Router {
     } as Required<RouteConfig> & { routes: Record<string, RouteDefinition> };
   }
 
+  /** Establishes core reactive effects and event listeners. */
   private setupLifecycle() {
     this.cleanups.push(this.urlAdapter.setupListener(() => this.handleBrowserSync()));
 
     const renderSub = effect(() => {
       const path = this.currentRouteAtom.value;
-      // Dependency: Implicitly tracks queryParamsAtom to re-render if query changes.
       this.queryParamsAtom.value;
 
       untracked(() => {
@@ -323,20 +365,28 @@ class RouterImpl implements Router {
     });
     this.cleanups.push(() => renderSub.dispose());
 
-    if (this.config.autoBindLinks) this.setupInterception();
+    if (this.config.autoBindLinks) {
+      this.setupInterception();
+    }
     if (this.$target[0]) {
       registry.onCleanup(this.$target[0], () => this.destroy());
     }
   }
 
   /**
+   * Programmatically navigates to a new path.
+   *
    * Logic: Navigation Guard
-   * Intercepts the transition and executes the `onLeave` guard. If any
-   * guard returns `false`, the navigation is aborted, preventing
-   * data loss in unsaved forms or complex states.
+   * The transition is intercepted to execute the `onLeave` guard. If the
+   * guard returns `false`, the navigation is aborted. This is typically
+   * used to prevent data loss in unsaved forms.
+   *
+   * @param path - The target path including optional query strings.
    */
   public navigate(path: string): void {
-    if (this.isDestroyed || !this.canLeave()) return;
+    if (this.isDestroyed || !this.canLeave()) {
+      return;
+    }
 
     const { route, query } = PathUtils.split(path);
     const targetPath = route || this.config.default;
@@ -359,7 +409,7 @@ class RouterImpl implements Router {
     });
   }
 
-  /** @internal */
+  /** Synchronizes the internal state with external browser-driven URL changes. */
   private handleBrowserSync() {
     if (this.isDestroyed) return;
     const state = this.urlAdapter.getBrowserState();
@@ -368,7 +418,7 @@ class RouterImpl implements Router {
     const nextPath = state.path || this.config.default;
     if (this.currentRouteAtom.peek() !== nextPath) {
       if (!this.canLeave()) {
-        // Revert: If navigation is blocked by a guard, force the browser URL back to the previous state.
+        // Reason: Force the browser URL back if the current route transition is blocked.
         this.urlAdapter.revert(this.previousUrl);
         return;
       }
@@ -380,12 +430,14 @@ class RouterImpl implements Router {
   }
 
   /**
+   * Orchestrates the rendering process for a given path.
+   *
    * Lifecycle: Transition Stages
-   * 1. `beforeTransition`: Global hook execution.
-   * 2. `onEnter`: Route-specific guard and parameter pre-processing.
-   * 3. `updateDom`: Actual HTML injection or template rendering.
-   * 4. `afterTransition`: Global completion hook.
-   * 5. `finalizeNavigation`: Metadata updates and accessibility focus reset.
+   * 1. Global Pre-hook: `beforeTransition` execution.
+   * 2. Local Guard: `onEnter` execution with parameter pre-processing.
+   * 3. DOM Sync: UI rendering via templates or render callbacks.
+   * 4. Global Post-hook: `afterTransition` execution.
+   * 5. Finalization: Focus management and accessibility updates.
    */
   private render(requestedPath: string): void {
     const matchResult = this.matcher.match(requestedPath);
@@ -395,7 +447,7 @@ class RouterImpl implements Router {
         : this.config.routes[this.config.notFound];
 
     if (!def) {
-      debug.warn(LOG_PREFIXES.ROUTE, ERROR_MESSAGES.ROUTE.NOT_FOUND(requestedPath));
+      debug.warn(SYSTEM_ROUTE.PREFIX, SYSTEM_ROUTE.ERRORS.NOT_FOUND(requestedPath));
       return;
     }
 
@@ -406,30 +458,35 @@ class RouterImpl implements Router {
     untracked(() => this.config.beforeTransition(this.previousPath, routeName));
 
     if (def.onEnter) {
-      // Guard: Allows synchronous blocking of the current navigation.
       const hookResult = untracked(() => def.onEnter!(mergedParams, this));
       if (hookResult === false) {
         this.urlAdapter.revert(this.previousUrl);
         return;
       }
-      if (hookResult) Object.assign(mergedParams, hookResult);
+      if (hookResult) {
+        Object.assign(mergedParams, hookResult);
+      }
     }
 
     if (!PathUtils.isSameParams(this.paramsAtom.peek(), mergedParams)) {
       this.paramsAtom.value = mergedParams;
     }
 
-    if (def.title) document.title = def.title;
+    if (def.title) {
+      document.title = def.title;
+    }
     this.updateDom(def, routeName, mergedParams);
 
     untracked(() => this.config.afterTransition(this.previousPath, routeName));
     this.finalizeNavigation(routeName, mergedParams);
   }
 
-  /** @internal */
+  /** Applies the route definition to the target DOM container. */
   private updateDom(def: RouteDefinition, name: string, params: Record<string, string>) {
     const container = this.$target[0];
     if (!container) return;
+
+    // Logic: The container is cleared entirely before new content is injected.
     container.replaceChildren();
 
     const onUnmount = (fn: () => void) => this.routeCleanups.push(fn);
@@ -443,9 +500,24 @@ class RouterImpl implements Router {
         def.onMount?.($(container).children(), onUnmount, this);
       }
     }
+
+    this.checkUnregisteredComponents(container);
   }
 
-  /** @internal */
+  /** Checks for unregistered custom elements within the container and logs a warning in debug mode. */
+  private checkUnregisteredComponents(container: HTMLElement) {
+    if (!debug.enabled || typeof customElements === 'undefined') return;
+
+    container.querySelectorAll(':not(:defined)').forEach((el) => {
+      const tagName = el.tagName.toLowerCase();
+      // Logic: Standard Custom Elements must contain a hyphen.
+      if (tagName.includes('-')) {
+        debug.warn(SYSTEM_COMPONENT.PREFIX, SYSTEM_COMPONENT.ERRORS.NOT_REGISTERED(tagName));
+      }
+    });
+  }
+
+  /** Automatically scans the DOM for templates with route definitions. */
   private discoverRoutesFromDOM() {
     document.querySelectorAll<HTMLTemplateElement>('template[data-path]').forEach((tmpl) => {
       const path = PathUtils.normalize(tmpl.getAttribute('data-path') || '');
@@ -453,7 +525,9 @@ class RouterImpl implements Router {
 
       const existing = this.config.routes[path];
       if (!existing) {
-        if (!tmpl.id) tmpl.id = `route-${Math.random().toString(36).substring(2, 9)}`;
+        if (!tmpl.id) {
+          tmpl.id = `route-${Math.random().toString(36).substring(2, 9)}`;
+        }
         this.config.routes[path] = {
           template: `#${tmpl.id}`,
           ...(title ? { title } : {}),
@@ -468,14 +542,18 @@ class RouterImpl implements Router {
     });
   }
 
-  /** @internal */
+  /** Establishes global click interception for routing. */
   private setupInterception() {
     const onClick = (e: JQuery.TriggeredEvent) => {
       const me = e.originalEvent as MouseEvent;
-      if (me && (me.ctrlKey || me.metaKey || me.altKey || me.shiftKey || me.button !== 0)) return;
+      if (me && (me.ctrlKey || me.metaKey || me.altKey || me.shiftKey || me.button !== 0)) {
+        return;
+      }
 
       const el = e.currentTarget as HTMLElement;
-      if (el.hasAttribute('data-ignore')) return;
+      if (el.hasAttribute('data-ignore')) {
+        return;
+      }
 
       const path = this.resolvePathFromElement(el);
       if (path && this.shouldIntercept(path, el)) {
@@ -489,7 +567,7 @@ class RouterImpl implements Router {
     this.setupActiveEffect();
   }
 
-  /** @internal */
+  /** Manages visual feedback for active links via CSS classes and ARIA attributes. */
   private setupActiveEffect() {
     const activeSub = effect(() => {
       const current = this.currentRouteAtom.value;
@@ -501,15 +579,20 @@ class RouterImpl implements Router {
           const path = this.resolvePathFromElement(el, true);
           const active = path === current || path === pattern;
           el.classList.toggle(this.activeClass, active);
-          // Accessibility: Updates aria-current to signal active navigation for screen readers.
-          if (active) el.setAttribute('aria-current', 'page');
-          else el.removeAttribute('aria-current');
+
+          // Accessibility: Signal active navigation state for screen readers.
+          if (active) {
+            el.setAttribute('aria-current', 'page');
+          } else {
+            el.removeAttribute('aria-current');
+          }
         });
       });
     });
     this.cleanups.push(() => activeSub.dispose());
   }
 
+  /** Resolves the navigation path from an element's attributes. */
   private resolvePathFromElement(el: HTMLElement, stripQuery = false): string {
     let path = el.dataset.route || '';
     if (!path && el instanceof HTMLAnchorElement) {
@@ -519,11 +602,13 @@ class RouterImpl implements Router {
   }
 
   /**
-   * Logic: Link Interception Policy
+   * Evaluates whether a specific link click should be intercepted by the router.
+   *
+   * Logic: Interception Policy
    * Bypasses interception for:
-   * - External domains or `rel="external"` links.
-   * - Files with extensions (e.g., `.pdf`) unless a route is explicitly matched.
-   * - Links with modifier keys (Ctrl/Cmd/Shift) to preserve native tab behavior.
+   * - External domains or elements with `rel="external"`.
+   * - Files with extensions (e.g., `.pdf`) unless an explicit route exists.
+   * - Modified clicks (Ctrl/Cmd) to maintain native tab behavior.
    */
   private shouldIntercept(path: string, el: HTMLElement): boolean {
     if (el instanceof HTMLAnchorElement) {
@@ -531,22 +616,27 @@ class RouterImpl implements Router {
         el.rel === 'external' ||
         (el.target && el.target !== '_self') ||
         el.hasAttribute('download')
-      )
+      ) {
         return false;
-      if (el.origin !== location.origin) return false;
+      }
+      if (el.origin !== location.origin) {
+        return false;
+      }
 
-      // Logic: Ignore clicks to file paths (.jpg, .pdf) that don't match a registered route.
+      // Logic: Ignore file paths (e.g., .jpg) that don't match a registered route.
       const last = path.split('/').pop() || '';
       if (
         last.includes('.') &&
         this.matcher.match(PathUtils.split(path).route).kind === 'not-found'
-      )
+      ) {
         return false;
+      }
     }
     const { route } = PathUtils.split(path);
     return this.matcher.match(route).kind === 'found' || !!this.config.notFound;
   }
 
+  /** Evaluates if the current route can be abandoned based on guards. */
   private canLeave(): boolean {
     const matchResult = this.matcher.match(this.currentRouteAtom.peek());
     const def =
@@ -556,11 +646,13 @@ class RouterImpl implements Router {
     return def?.onLeave ? untracked(() => def.onLeave!(this)) !== false : true;
   }
 
+  /** Retrieves a template element from the DOM. */
   private getTemplate(selector: string) {
     const el = document.querySelector(selector);
     return el instanceof HTMLTemplateElement ? el : null;
   }
 
+  /** Executes all registered cleanup tasks for the previous route. */
   private runRouteCleanups() {
     this.routeCleanups.forEach((fn) => {
       try {
@@ -571,10 +663,12 @@ class RouterImpl implements Router {
   }
 
   /**
+   * Finalizes the navigation by updating accessibility state and firing events.
+   *
    * Accessibility: SPA Focus Management
-   * Resets the document focus to the main heading (`h1`) or the target
-   * container to ensure that screen readers announce the new page content
-   * instead of remaining silent on the triggered link.
+   * To ensure screen readers announce new content, the document focus is reset
+   * to the main heading (`h1`) or the target container. This prevents the
+   * browser from remaining silent on the triggering link.
    */
   private finalizeNavigation(routeName: string, params: Record<string, string>) {
     window.dispatchEvent(
@@ -586,7 +680,6 @@ class RouterImpl implements Router {
     const targetElement = this.$target[0];
     if (!targetElement) return;
 
-    // Accessibility: Reset focus to the main heading or container to handle SPA navigation for screen readers.
     const heading = targetElement.querySelector('h1, [role="heading"]');
     const focusTarget = heading instanceof HTMLElement ? heading : targetElement;
     focusTarget.tabIndex = -1;
@@ -595,7 +688,10 @@ class RouterImpl implements Router {
     this.previousPath = routeName;
   }
 
-  /** @internal */
+  /**
+   * Disposes of the router and all associated reactive resources.
+   * @internal
+   */
   public destroy(): void {
     if (this.isDestroyed) return;
     this.isDestroyed = true;
@@ -610,33 +706,37 @@ class RouterImpl implements Router {
 }
 
 /**
+ * Initializes a reactive router for synchronizing URL state with DOM views.
+ *
  * Logic: Reactive Routing
- * Orchestrates URL synchronization, path matching, and dynamic view rendering.
- * Uses atoms to provide reactive access to `currentRoute` and `params`,
- * enabling secondary UI elements to reactively update sidebars or breadcrumbs.
+ * This manager orchestrates URL synchronization, path matching, and dynamic
+ * view rendering. It utilizes atoms to provide reactive access to
+ * `currentRoute` and `params`, enabling secondary UI elements (like
+ * breadcrumbs) to synchronize effortlessly.
  *
  * Capabilities:
- * - Multi-mode support: 'history' (pushState) or 'hash' for legacy support.
- * - Dynamic matching: High-performance param extraction for named route segments.
- * - Reactive state: Integrated with the core atom system for effortless UI syncing.
- * - Lifecycle hooks: Fine-grained navigation control via `onEnter` and `onLeave`.
+ * - Multi-mode support: 'history' (pushState) or 'hash' for legacy environments.
+ * - Dynamic matching: High-performance parameter extraction for named segments.
+ * - Lifecycle hooks: Fine-grained navigation control via `onEnter` and `onLeave` guards.
+ * - Accessibility: Built-in SPA focus management for screen readers.
+ *
+ * @param config - Configuration for routes, containers, and lifecycle hooks.
+ * @returns A router interface for programmatic control and state monitoring.
  *
  * @example
  * ```typescript
  * const router = $.route({
- *   target: '#app',
+ *   target: '#app-root',
  *   routes: {
  *     '/': { template: '#home-tmpl' },
  *     '/user/:id': {
  *       render: (el, name, params) => {
- *         $(el).text(`User Profile: ${params.id}`);
+ *         $(el).text(`User ID: ${params.id}`);
  *       }
  *     }
  *   }
  * });
  * ```
- *
- * @public
  */
 export function route(config: RouteConfig): Router {
   return new RouterImpl(config);

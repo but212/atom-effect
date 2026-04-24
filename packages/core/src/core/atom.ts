@@ -7,15 +7,15 @@ import { nextVersion, scheduler } from './scheduler';
 import { trackingContext } from './tracking';
 
 /**
- * Internal {@link WritableAtom} implementation.
+ * Internal implementation of a {@link WritableAtom}.
  *
- * Logic: Manages a single piece of mutable state and coordinates notification
+ * This class manages a single piece of mutable state and coordinates notification
  * scheduling for its subscribers. Participation in the dependency graph is
- * handled via the `value` getter/setter.
+ * handled automatically through the `value` getter and setter.
  */
 class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
   private _value: T;
-  /** Old value for notifications */
+  /** Old value captured during a mutation, used for subscriber notifications. */
   private _pendingOldValue: T | undefined;
   private _equal: (a: T, b: T) => boolean;
 
@@ -31,23 +31,27 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
       this.flags |= ATOM_STATE_FLAGS.SYNC;
     }
 
-    if (IS_DEV) {
-      debug.attachDebugInfo(this, 'atom', this.id, options.name);
-    }
+    debug.attachDebugInfo(this, 'atom', this.id, options.name);
   }
 
-  /** @internal */
+  /**
+   * Indicates whether a notification for this atom has been scheduled but not yet flushed.
+   * @internal
+   */
   get isNotificationScheduled(): boolean {
     return (this.flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED) !== 0;
   }
 
-  /** @internal */
+  /**
+   * Indicates whether this atom is configured to notify its subscribers synchronously.
+   * @internal
+   */
   get isSync(): boolean {
     return (this.flags & ATOM_STATE_FLAGS.SYNC) !== 0;
   }
 
   /**
-   * Retrieves current value and registers a dependency if called in a reactive context.
+   * Retrieves the current value and registers a dependency if called in a reactive context.
    */
   get value(): T {
     const ctx = trackingContext.current;
@@ -73,18 +77,20 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
   }
 
   /**
-   * Logic: Atom State Synchronization
-   * Orchestrates notification scheduling. If synchronization is required (via `sync` option)
-   * and no batch is active, it flushes immediately; otherwise, it delegates to the global
-   * scheduler for microtask-based delivery.
+   * Orchestrates the scheduling of subscriber notifications.
+   *
+   * Logic: If the atom is in `sync` mode and no batch is currently active, notifications
+   * are flushed immediately to ensure predictable synchronous behavior. Otherwise,
+   * the notification is delegated to the global scheduler for microtask-based delivery.
    */
   private _scheduleNotification(oldValue: T): void {
     const currentFlags = this.flags;
     const SCHED_BIT = ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
 
+    // Constraint: Prevent redundant scheduling if a flush is already pending.
     if ((currentFlags & SCHED_BIT) !== 0) return;
     const slots = this._slots;
-    if (slots === null || slots.size === 0) return;
+    if (slots === null || slots.length === 0) return;
 
     this._pendingOldValue = oldValue;
     const nextFlags = currentFlags | SCHED_BIT;
@@ -92,6 +98,7 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
 
     const SYNC_BIT = ATOM_STATE_FLAGS.SYNC;
     if ((nextFlags & SYNC_BIT) !== 0 && !scheduler.isBatching) {
+      // Logic: Direct flush for sync atoms outside of batch blocks to minimize latency.
       if (this._notifying === 0) {
         this._flushNotifications();
       }
@@ -101,11 +108,20 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
     scheduler.schedule(this);
   }
 
-  /** @internal */
+  /**
+   * Entry point for the scheduler to trigger a notification flush.
+   * @internal
+   */
   execute(): void {
     this._flushNotifications();
   }
 
+  /**
+   * Flushes pending notifications to all active subscribers.
+   *
+   * Optimization: Implements a net-zero check to suppress notifications if the value
+   * returns to its original state during a batch operation.
+   */
   private _flushNotifications(): void {
     const SCHED_BIT = ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
     const DISP_BIT = ATOM_STATE_FLAGS.DISPOSED;
@@ -113,21 +129,20 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
     const LOOP_MASK = SCHED_BIT | DISP_BIT;
 
     let flags = this.flags;
-    // Loop to handle re-entrant sync updates in breadth-first order
+    // Logic: Breadth-first execution loop to handle re-entrant synchronous updates.
     while ((flags & LOOP_MASK) === SCHED_BIT) {
       const oldValue = this._pendingOldValue as T;
       this._pendingOldValue = undefined;
 
       this.flags = flags &= ~SCHED_BIT;
 
-      // Optimization: Net-zero check: if value returned to original during batching, skip notification.
       const currentVal = this._value;
       if (!this._equal(currentVal, oldValue)) {
         this._notifySubscribers(currentVal, oldValue);
       }
 
       flags = this.flags;
-      // Only continue looping if we are in sync mode and not batching.
+      // Optimization: Only continue looping if we are in sync mode and not batching.
       if ((flags & SYNC_BIT) === 0 || scheduler.isBatching) {
         break;
       }
@@ -135,16 +150,19 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
   }
 
   /**
-   * Accesses the value without triggering dependency tracking.
+   * Accesses the current value without triggering dependency tracking.
+   *
+   * When to use:
+   * - In event handlers or logic where observation of the state is not required.
    */
   peek(): T {
     return this._value;
   }
 
   /**
-   * Cleans up the atom and releases references to its state.
+   * Disposes of the atom and releases all internal references.
    *
-   * Caution: Disposed atoms will throw if accessed or modified.
+   * Caution: Disposed atoms will throw an error if accessed or modified.
    */
   dispose(): void {
     const flags = this.flags;
@@ -154,12 +172,15 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
     this.flags = flags | DISP_BIT;
     this._slots?.clear();
 
-    // Reason: Clear references to prevent memory leaks in long-lived applications.
+    // Reason: Explicitly clearing references to prevent memory leaks in long-lived applications.
     this._value = undefined as T;
     this._pendingOldValue = undefined;
-    this._equal = Object.is; // Reset to default
+    this._equal = Object.is;
   }
 
+  /**
+   * Atoms are always considered leaf nodes and do not require deep dirty checking.
+   */
   protected override _deepDirtyCheck(): boolean {
     return false;
   }
@@ -169,20 +190,24 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
  * Creates a reactive atom holding mutable state.
  *
  * When to use:
- * - When you need a source of truth for a specific piece of state.
- * - When that state needs to be updated manually (unlike Computeds).
+ * - When defining a primary source of truth for a specific piece of state.
+ * - When the state needs to be updated manually (unlike derived computed values).
  *
- * @param initialValue - The initial value of the atom.
- * @param options - Configuration options for sync mode, custom equality, or naming.
- * @returns A writable reactive atom.
+ * @param initialValue - The initial value stored in the atom.
+ * @param options - Configuration for naming, custom equality, or synchronous notification mode.
+ * @returns A writable reactive atom instance.
  *
  * @example
  * ```typescript
+ * import { atom } from '@but212/atom-effect';
+ *
  * const count = atom(0);
  * console.log(count.value); // 0
+ *
  * count.value++;
+ * // Re-evaluates any dependent effects or computeds asynchronously.
  * ```
  */
-export function atom<T>(initialValue: T, options: AtomOptions = {}): WritableAtom<T> {
+export function atom<T>(initialValue: T, options: AtomOptions<T> = {}): WritableAtom<T> {
   return new AtomImpl(initialValue, options);
 }

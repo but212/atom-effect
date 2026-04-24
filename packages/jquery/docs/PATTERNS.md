@@ -4,9 +4,9 @@
 
 ## 1. Async UI Updates
 
-### With `$.atomFetch` (Recommended)
+### Using `$.atomFetch`
 
-For HTTP data fetching, use `$.atomFetch` — it handles auto-cancellation, abort signals, and reactive URL dependencies automatically.
+For HTTP data fetching, `$.atomFetch` manages cancellation, abort signals, and reactive URL dependencies.
 
 ```javascript
 const userId = $.atom(1);
@@ -25,15 +25,15 @@ $('#error-msg').atomText(userProfile, u => userProfile.lastError?.message ?? '')
 // 3. Data Display
 $('#username').atomText(userProfile, u => u?.name ?? 'Guest');
 
-// Change userId → auto-refetches, previous request is aborted
+// Change userId → triggers re-fetch and aborts the previous request
 userId.value = 2;
 ```
 
-> See [`$.atomFetch`](./API.md#atomfetchurlfn-options) for the full options reference including `onError` and `eager`.
+> See [`$.atomFetch`](./API.md#atomfetchurlfn-options) for the full options reference.
 
-### With `$.computed` (Manual / Non-HTTP)
+### Using `$.computed` (Non-HTTP)
 
-For async operations that don't use `$.ajax` (e.g., IndexedDB, Web Workers):
+For asynchronous operations that do not use `$.ajax` (e.g., IndexedDB, Web Workers):
 
 ```javascript
 const userId = $.atom(1);
@@ -43,7 +43,7 @@ const userProfile = $.computed(async () => {
     return res.json();
 }, { defaultValue: null });
 
-// isPending / hasError are reactive getters — bind directly, no $.computed wrapper needed
+// isPending and hasError are reactive getters
 $('#loading').atomShow(userProfile.isPending);
 $('#error').atomShow(userProfile.hasError);
 $('#error-msg').atomText($.computed(() => userProfile.lastError?.message ?? ''));
@@ -52,34 +52,29 @@ const userName = $.computed(() => userProfile.value?.name ?? 'Guest');
 $('#username').atomText(userName);
 ```
 
-> See [`$.atom`, `$.computed`, `$.effect`](./API.md#atomval-computedfn-effectfn) in the API reference.
-
 ## 2. Modals & Dialogs
 
-Avoid manual `fadeIn`/`fadeOut` in business logic. Bind visibility to state.
+Bind visibility to state rather than manually triggering animations in business logic.
 
 ```javascript
 const isModalOpen = $.atom(false);
 
-// Logic
+// Event Handlers
 $('#open-btn').on('click', () => isModalOpen.value = true);
 $('#close-btn, .modal-backdrop').on('click', () => isModalOpen.value = false);
 
-// Binding - Declarative
+// Declarative Binding
 $('.modal').atomBind({
     class: { 'open': isModalOpen },
-    // For advanced animations, consider an effect instead of a basic class binding
     show: isModalOpen
 });
 
-// Or customized animation
+// Animation via Effect
 $.effect(() => {
     if (isModalOpen.value) $('.modal').fadeIn(200);
     else $('.modal').fadeOut(200);
 });
 ```
-
-> See [`.atomBind`](./API.md#atombindbindings), [`.atomShow`/`.atomHide`](./API.md#atomshowbooleanatom--atomhidebooleanatom) in the API reference.
 
 ## 3. Routing
 
@@ -96,14 +91,15 @@ const router = $.route({
   }
 });
 
-// Derive page title from route
-const pageTitle = $.computed(() => `My App - ${router.currentRoute.value}`);
-$.effect(() => document.title = pageTitle.value);
+// Synchronize page title with route state
+$.effect(() => {
+  document.title = `My App - ${router.currentRoute.value}`;
+});
 ```
 
 ### History Mode (pushState)
 
-For standardized URLs without `#`:
+For URLs without a hash fragment:
 
 ```javascript
 const router = $.route({
@@ -117,15 +113,13 @@ const router = $.route({
     settings: { template: '#tmpl-settings' },
   }
 });
-// URL: /app/settings (no hash)
-router.navigate('settings');
 ```
 
-> **Note**: History mode requires server-side configuration to serve your `index.html` for all routes (e.g., `try_files $uri /index.html` in nginx).
+> **Note**: History mode requires server-side configuration to serve the entry point (e.g., `index.html`) for all registered routes.
 
 ### Navigation Guards
 
-`onLeave` returns `false` to block navigation, or `void`/`true` to allow it.
+The `onLeave` hook allows for conditional navigation. Return `false` to block or `true`/`void` to permit.
 
 ```javascript
 const hasUnsavedChanges = $.atom(false);
@@ -138,10 +132,8 @@ $.route({
       template: '#tmpl-editor',
       onLeave: () => {
         if (hasUnsavedChanges.value) {
-          // confirm() returns true (allow) or false (block)
           return confirm('Discard unsaved changes?');
         }
-        // returning undefined implicitly allows navigation
       }
     },
     home: { template: '#tmpl-home' },
@@ -149,96 +141,96 @@ $.route({
 });
 ```
 
-> See [`$.route`](./API.md#routeconfig) for the full config reference (`onEnter`, `onParamsChange`, `onMount`, `beforeTransition`, etc.).
-> For internal routing architecture, see [Architecture §7](./ARCHITECTURE.md#7-spa-router).
-
 ## 4. Legacy Plugins (Select2, Datepicker)
 
-Integrating with plugins that do not emit standard `input` events involves creating a manual bridge.
+Integrating with plugins that do not emit standard `input` events requires a manual synchronization bridge.
 
 ```javascript
 const selectedTag = $.atom('react');
-
-// 1. Initialize Plugin
 const $select = $('#tags').select2();
 
-// 2. Sync Atom -> Plugin
+// Atom -> Plugin
 $.effect(() => {
-    // Guard prevents an infinite loop:
-    // effect → sets select → triggers 'change' → updates atom → effect re-runs
     if ($select.val() !== selectedTag.value) {
         $select.val(selectedTag.value).trigger('change');
     }
 });
 
-// 3. Sync Plugin -> Atom
+// Plugin -> Atom
 $select.on('change', (e) => {
     selectedTag.value = e.target.value;
 });
 ```
 
-> For native inputs, use [`.atomVal`](./API.md#atomvalatom-options) instead — it handles IME, debounce, and cycle prevention automatically.
-
 ## 5. Synchronous Flushing with `$.batch`
 
-By default, atom notifications are deferred to a **microtask**. Multiple synchronous writes are automatically coalesced — effects are executed once using the final state in the subsequent tick.
+Atom notifications are deferred to a microtask by default, allowing multiple synchronous writes to be coalesced.
 
 ```javascript
 firstName.value = 'Alice';
 lastName.value = 'Smith';
-// Effects run once, asynchronously (next microtask)
+// Effects execute once in the subsequent microtask
 ```
 
-If you need to await these asynchronous updates without requiring a synchronous flush, use `$.nextTick()`:
+To await these updates without an immediate flush, use `$.nextTick()`:
 
 ```javascript
 firstName.value = 'Alice';
 await $.nextTick();
-// DOM is now guaranteed to be updated
+// DOM state is now updated
 ```
 
-Use `$.batch` only when you need effects to flush **synchronously and immediately** after the writes — for example, to read an updated DOM value in the same call stack.
+Use `$.batch` when effects must execute synchronously within the same call stack, such as when reading updated DOM properties.
 
 ```javascript
 $.batch(() => {
   firstName.value = 'Alice';
   lastName.value = 'Smith';
 });
-// Effects have already run here, synchronously
-const updatedText = $('#name').text(); // reflects new values
+// Effects have executed synchronously
+const updatedText = $('#name').text();
 ```
 
-> jQuery's `.on()` patch automatically wraps event handlers in `$.batch()`, so effects triggered by user interactions always flush synchronously within the handler.
-> See [`$.batch`](./API.md#batchfn) in the API reference and [Architecture §3.5](./ARCHITECTURE.md#35-jquery-method-patches) for how the `.on()` patch works.
+> jQuery's `.on()` patch automatically wraps handlers in `$.batch()`.
 
 ## 6. Typed Form Inputs
 
-Use `atomVal` with `parse` and `format` for type-safe two-way binding.
+The `atomVal` method supports `parse` and `format` hooks for data transformation.
 
 ```javascript
-const price = $.atom(9.99); // number atom
+const price = $.atom(9.99);
 
 $('#price-input').atomVal(price, {
-  parse:  str => parseFloat(str) || 0,   // string → number
-  format: val => val.toFixed(2),          // number → string (shown on blur)
+  parse:  str => parseFloat(str) || 0,
+  format: val => val.toFixed(2),
   debounce: 300,
 });
-
-// Checkbox/radio
-const isAgreed = $.atom(false);
-$('#agree').atomChecked(isAgreed);
-
-// Select Multiple
-const selectedTags = $.atom(['javascript', 'reactive']);
-$('#tags-multi').atomVal(selectedTags);
 ```
 
-> See [`.atomVal`](./API.md#atomvalatom-options) and [`.atomChecked`](./API.md#atomcheckedatom) for the full options reference.
-> For IME support, cursor preservation, and cycle-prevention internals, see [Architecture §4](./ARCHITECTURE.md#4-two-way-input-binding).
+## 7. Reactive Form Validation
+
+Leverage the `validation` schema in `atomForm` to integrate with the browser's native Constraint Validation API.
+
+```javascript
+const user = $.atom({ name: '', age: 0 });
+
+$('form').atomForm(user, {
+  validation: {
+    'name': (v) => (v.length >= 2 ? true : 'Name is too short'),
+    'age': (v) => (v >= 18 ? '' : 'Must be at least 18')
+  }
+});
+```
+
+When validation fails:
+
+- `setCustomValidity()` is called on the corresponding input.
+- The element matches the `:invalid` CSS pseudo-class.
+- Native browser validation bubbles will appear on form submission.
 
 ## 7. Reactive Lists
 
-Use `atomList` for optimized keyed list rendering. It uses LIS-based diffing to optimize DOM operations.
+The `atomList` method uses a 3-pass reconciliation algorithm to synchronize DOM operations with array state.
 
 ```javascript
 const users = $.atom([
@@ -249,48 +241,25 @@ const users = $.atom([
 $('ul').atomList(users, {
   key: u => u.id,
   render: u => `<li class="user-item"><span>${u.name}</span><button class="del">✕</button></li>`,
-  onAdd:    $el => $el.hide().fadeIn(200),           // Entry animation
-  onRemove: $el => $el.fadeOut(200).promise(),       // Exit animation (async)
-  empty:    '<li class="empty">No users found.</li>',
+  onAdd:    $el => $el.hide().fadeIn(200),
+  onRemove: $el => $el.fadeOut(200).promise(),
   events: {
-    // One listener on the container — O(1) regardless of list size.
     'click .del': (user, index, e) => removeUser(user.id),
-    'click':      (user, index, e) => selectUser(user),
   },
 });
 ```
 
-### Delegated events vs. `bind`
+### Event Management
 
-| case | `events` | `bind` + `.on()` |
+| Approach | `events` | `bind` + `.on()` |
 | - | - | - |
-| Listeners registered | 1 per event type (on container) | 1 per item per event type |
-| Item data access | Provided directly as argument | Captured via closure |
-| Reorder / update cost | Minimal — listener remains on the container | Minimal — listener remains on the element |
-| Recommended for | Click, dblclick, input, etc. | Reactive atom bindings (`atomText`, `atomClass`, …) |
-
-Use `bind` when you need to attach **reactive bindings** to an item's internals. Use `events` for **DOM event handlers**.
-
-```javascript
-$('ul').atomList(itemsAtom, {
-  key: 'id',
-  render: item => `<li><span class="name"></span><button class="del">✕</button></li>`,
-  bind: ($el, item) => {
-    // Reactive binding: re-runs when nameAtom changes
-    $el.find('.name').atomText(item.nameAtom);
-  },
-  events: {
-    'click .del': (item) => remove(item.id),
-  },
-});
-```
-
-> See [`.atomList`](./API.md#atomlistlistatom-options) for all options (`update`, `onAdd`, `onRemove`, `empty`, `events`).
-> For diffing algorithm and delegation internals, see [Architecture §5](./ARCHITECTURE.md#5-list-reconciliation).
+| Registration | Single listener on container | Listener per item |
+| Data Access | Passed as argument | Captured via closure |
+| Recommended for | DOM events (click, input) | Reactive bindings (`atomText`, etc.) |
 
 ## 8. Functional Components
 
-Use `atomMount` to encapsulate DOM structure and reactive bindings into reusable components.
+The `atomMount` method encapsulates DOM structure and reactive bindings into reusable units.
 
 ```javascript
 const UserCard = ($el, { userId }) => {
@@ -298,20 +267,135 @@ const UserCard = ($el, { userId }) => {
 
   $el.atomBind({
     html: $.computed(() => `<h2>${user.value?.name ?? ''}</h2>`),
-    class: { 'loading': user.isPending, 'error': user.hasError },
+    class: { 'loading': user.isPending },
   });
 
-  // Return cleanup function (optional)
-  return () => console.log('UserCard unmounted');
+  return () => console.log('Component unmounted');
 };
 
 $('#card-root').atomMount(UserCard, { userId: 42 });
-
-// Later: tear down component and all its reactive bindings
-$('#card-root').atomUnmount();
 ```
 
-> See [`.atomMount`](./API.md#atommountcomponent-props) and [`.atomUnmount`](./API.md#atomUnmount) in the API reference.
-> For component lifecycle internals, see [Architecture §6](./ARCHITECTURE.md#6-component-mounting).
-> When rendering user-supplied HTML inside a component, see the [Security Guide](./SECURITY.md) for DOMPurify integration.
-> **Shadow DOM:** Automatic cleanup for shadow descendants is handled natively by the library. When using `$.useAtomComponent`, the controller's `setup()` method automatically registers and observes the component's root. For manual scenarios, use `$.initAEJ({ autoCleanup: { root: myShadowRoot } })` to establish a new safety-net boundary.
+## 9. Web Components (Custom Elements)
+
+### Option A: Declarative Specs (Recommended)
+
+Define your component's reactive behavior using static properties. AEJ handles the setup automatically when the element connects.
+
+```javascript
+class MyComponent extends HTMLElement {
+  static aejStyles = [sharedStyles];
+  static aejBind = { 
+    title: $.computed(() => `Theme: ${this.aej.attrs('theme').value}`),
+    count: $.atom(0)
+  };
+  static aejParts = {
+    status: $.computed(() => (this.aejBind.count.value % 2 === 0 ? 'even' : 'odd'))
+  };
+
+  private aej = $.useAtomComponent(this);
+
+  connectedCallback() {
+    this.attachShadow({ mode: 'open' }).innerHTML = `
+      <div class="card">
+        <h1 data-aej-bind="title"></h1>
+        <slot></slot>
+        <div data-aej-part="status">Status: Active</div>
+        <button class="inc">Count: <span data-aej-bind="count"></span></button>
+      </div>
+    `;
+  }
+}
+customElements.define('my-component', MyComponent);
+```
+
+### Option B: Imperative Setup (Advanced)
+
+Use `aej.setup()` when you need to pass dynamic data (like ShadowRoot for 'closed' mode) or conditional logic.
+
+```javascript
+class AdvancedComponent extends HTMLElement {
+  private aej = $.useAtomComponent(this);
+
+  connectedCallback() {
+    const sr = this.attachShadow({ mode: 'closed' });
+    sr.innerHTML = `<div data-aej-bind="title"></div>`;
+
+    this.aej.setup({
+      shadowRoot: sr,
+      bind: { title: $.atom('Closed Shadow Content') }
+    });
+  }
+}
+customElements.define('AdvancedComponent', AdvancedComponent);
+```
+
+## 10. Dependency Injection (Context API)
+
+Share state across the DOM tree without prop-drilling.
+
+### Providing Context
+
+```javascript
+const theme = $.atom('light');
+
+// Theme is available to all descendants of document.body
+$.provideAtom(document.body, 'theme', theme);
+
+// Updating the atom updates all consumers and CSS variables (--aej-theme)
+theme.value = 'dark';
+```
+
+### Injecting Context
+
+Consumers automatically re-discover providers if moved in the DOM.
+
+```javascript
+class DeepChild extends HTMLElement {
+  private aej = $.useAtomComponent(this);
+  private theme = $.injectAtom(this, 'theme');
+
+  connectedCallback() {
+    this.aej.setup();
+
+    // Use injected atom like any other atom
+    $.effect(() => {
+      console.log('Current theme:', this.theme.value);
+    });
+  }
+
+  disconnectedCallback() {
+    this.aej.teardown();
+  }
+}
+customElements.define('deep-child', DeepChild);
+```
+
+## 11. Form-Associated Custom Elements (FACE)
+
+Create custom form controls that participate in native `<form>` submission and validation.
+
+```javascript
+class MyInput extends HTMLElement {
+  static formAssociated = true;
+  // 1. Declarative FACE spec
+  static aejValue = $.atom('');
+  static aejValidation = (v) => (v.includes('@') ? '' : 'Invalid email');
+
+  private aej = $.useAtomComponent(this);
+
+  connectedCallback() {
+    this.attachShadow({ mode: 'open' }).innerHTML = `
+      <input type="text" placeholder="Type here...">
+    `;
+
+    this.aej.$('input').on('input', (e) => {
+      (this.constructor as any).aejValue.value = e.target.value;
+    });
+  }
+
+  disconnectedCallback() {
+    this.aej.teardown();
+  }
+}
+customElements.define('my-input', MyInput);

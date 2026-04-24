@@ -2,24 +2,21 @@ import { DEBUG_CONFIG, IS_DEV } from '@/constants';
 import type { DebugConfig, DependencyId } from '@/types';
 
 /**
- * Debug symbols for metadata attachment.
- * These allow attaching internal tracking data to user-provided objects without
- * polluting the public property namespace.
+ * Global symbols used for attaching internal debug metadata to reactive objects.
+ * These symbols prevent property name collisions with user-provided data.
  *
- * Use these when:
- * - Direct inspection of runtime objects is required.
- * - Building custom devtools or logging utilities.
- *
- * @public
+ * When to use:
+ * - To inspect the internal state of atoms or effects during runtime.
+ * - To build diagnostic tools or custom loggers that require access to node metadata.
  */
 
-/** Symbol for the human-readable identifier of a dependency. */
+/** A symbol representing the human-readable identifier of a reactive node. */
 export const DEBUG_NAME = Symbol('AtomEffect.DebugName');
-/** Symbol for the unique internal monotonic ID. */
+/** A symbol representing the unique internal monotonic ID of a reactive node. */
 export const DEBUG_ID = Symbol('AtomEffect.Id');
-/** Symbol for the entity category (e.g., 'atom', 'effect'). */
+/** A symbol representing the category type of a reactive node (e.g., 'atom', 'effect'). */
 export const DEBUG_TYPE = Symbol('AtomEffect.Type');
-/** Sentinel value for missing default values in reactive nodes. */
+/** A sentinel value used to indicate the absence of a default value in reactive nodes. */
 export const NO_DEFAULT_VALUE = Symbol('AtomEffect.NoDefaultValue');
 
 /** @internal */
@@ -29,29 +26,37 @@ interface DebugMetadata {
   [DEBUG_TYPE]?: string;
 }
 
-/** Log prefix for Atom Effect console messages. */
+/** The prefix used for all console messages dispatched by the library. */
 const PREFIX = '[Atom Effect]';
 
-/** Shared no-op function to reduce memory footprint and call overhead in production. */
+/**
+ * A shared no-op function used in production to minimize memory usage and call overhead.
+ * @internal
+ */
 const noop = () => {};
 
 /**
- * Optimized Debug controller implementation for development environments.
- * Provides active monitoring, logging, and inspection capabilities.
+ * A controller providing diagnostic and monitoring capabilities in development environments.
+ *
+ * The `DevDebugController` facilitates graph tracking, infinite loop detection,
+ * and metadata management, ensuring that internal state is inspectable without
+ * affecting production performance.
  *
  * @internal
- * @implements {DebugConfig}
  */
 class DevDebugController implements DebugConfig {
+  /** Indicates whether debugging features are currently active. */
   public enabled = true;
 
+  /** Indicates whether infinite loop warnings should be dispatched. */
   public warnInfiniteLoop = DEBUG_CONFIG.WARN_INFINITE_LOOP;
 
   private _updateCounts = new Map<DependencyId, number>();
 
   /**
-   * Weakly references registered nodes to allow garbage collection while maintaining
-   * a list for graph dumping.
+   * Logic: Maintains a registry of active nodes using `WeakRef`.
+   * This allows the registry to track nodes for graph visualization while
+   * permitting garbage collection of nodes that are no longer referenced by the user.
    */
   private _nodeRegistry = new Map<DependencyId, WeakRef<object>>();
 
@@ -60,14 +65,14 @@ class DevDebugController implements DebugConfig {
   private _cleanupScheduled = false;
 
   /**
-   * Logs a warning message if the condition is met and debugging is enabled.
+   * Logs a warning to the console if the provided condition evaluates to true.
    *
-   * @param cond - The condition to evaluate.
-   * @param msg - The message to log when the condition is truthy.
+   * @param cond - The condition to validate.
+   * @param msg - The warning message to display.
    *
    * @example
    * ```typescript
-   * debug.warn(count > 100, 'Update cycle threshold exceeded');
+   * debug.warn(count > 100, 'Threshold exceeded');
    * ```
    */
   public warn = (cond: boolean, msg: string): void => {
@@ -75,30 +80,24 @@ class DevDebugController implements DebugConfig {
   };
 
   /**
-   * Registers a node for graph tracking.
+   * Registers a reactive node within the internal graph registry.
    *
-   * Optimization: Uses WeakRef to allow garbage collection of unused nodes
-   * while still supporting graph visualization tools until collection.
-   *
-   * @param node - The reactive node to track.
+   * @param node - The node instance to register.
    */
   public registerNode = (node: object & { id: DependencyId }): void => {
     this._nodeRegistry.set(node.id, new WeakRef(node));
   };
 
   /**
-   * Attaches debug metadata to a runtime object.
+   * Attaches technical metadata to a reactive object.
    *
-   * When to use:
-   * - During initialization of new atoms or effects.
+   * Logic: Performs direct property assignment using Symbols to ensure that
+   * metadata is attached with minimal overhead compared to `Object.defineProperty`.
    *
-   * Optimization: Performs direct property assignment instead of using
-   * `Object.defineProperty` for significantly higher performance in hot paths.
-   *
-   * @param obj - target object to augment.
-   * @param type - node category (atom/effect/etc).
-   * @param id - unique identifier.
-   * @param customName - optional user-provided label.
+   * @param obj - The target object to augment.
+   * @param type - The node category (e.g., 'atom', 'computed').
+   * @param id - The unique identifier for the node.
+   * @param customName - An optional user-provided label.
    */
   public attachDebugInfo = (
     obj: object,
@@ -108,8 +107,6 @@ class DevDebugController implements DebugConfig {
   ): void => {
     if (!this.enabled) return;
 
-    // Optimization: SMI (Small Integer) optimization and direct symbol access
-    // provide the fastest possible metadata attachment in V8.
     const meta = obj as DebugMetadata;
     meta[DEBUG_NAME] = customName ?? `${type}_${id}`;
     meta[DEBUG_ID] = id;
@@ -119,12 +116,14 @@ class DevDebugController implements DebugConfig {
   };
 
   /**
-   * Tracks an update to a dependency and checks for infinite loops.
+   * Tracks an update to a specific node and monitors for infinite loops.
    *
-   * Complexity: O(1) tracking using a shared Map and microtask cleanup.
+   * Logic: Increments an update counter for the specified ID. If the counter
+   * exceeds the defined threshold within a single microtask execution cycle,
+   * a warning is dispatched.
    *
-   * @param id - The identifier of the updating dependency.
-   * @param name - Display name for warning context.
+   * @param id - The unique identifier of the updating node.
+   * @param name - The display name of the node for error context.
    */
   public trackUpdate = (id: DependencyId, name?: string): void => {
     if (!this.enabled || !this.warnInfiniteLoop) return;
@@ -135,7 +134,8 @@ class DevDebugController implements DebugConfig {
     if (count > this._threshold) {
       this.warn(
         true,
-        `Infinite loop detected for ${name ?? `dependency ${id}`}. Over ${this._threshold} updates in a single execution scope.`
+        `Infinite loop detected for ${name ?? `dependency ${id}`}. ` +
+          `Detected ${count} updates within a single execution scope, exceeding the threshold of ${this._threshold}.`
       );
     } else {
       counts.set(id, count);
@@ -143,8 +143,7 @@ class DevDebugController implements DebugConfig {
 
     if (!this._cleanupScheduled) {
       this._cleanupScheduled = true;
-      // Logic: Flush update counts at the end of the current microtask to reset loop detection
-      // for the next execution cycle without requiring manual teardown.
+      // Logic: Flush update counts at the end of the current microtask to reset loop detection.
       queueMicrotask(() => {
         this._updateCounts.clear();
         this._cleanupScheduled = false;
@@ -153,12 +152,12 @@ class DevDebugController implements DebugConfig {
   };
 
   /**
-   * Generates a snapshot of the current reactive graph.
+   * Generates a snapshot representing the current state of the reactive graph.
    *
-   * Caution: This operation is O(N) where N is the total number of registered nodes.
-   * Should only be used for debugging/visualization, never in performance-critical code.
+   * Caution: This operation has O(N) complexity relative to the total number
+   * of registered nodes and should only be used for diagnostic purposes.
    *
-   * @returns Array of debug info for all live nodes.
+   * @returns An array of metadata objects for all currently live nodes.
    */
   public dumpGraph = (): Record<string, unknown>[] => {
     const result: Record<string, unknown>[] = [];
@@ -172,7 +171,7 @@ class DevDebugController implements DebugConfig {
           updateCount: this._updateCounts.get(id) ?? 0,
         });
       } else {
-        // Optimization: Lazy cleanup of collected nodes during graph traversal.
+        // Optimization: Lazily clean up registry entries for nodes that have been garbage collected.
         this._nodeRegistry.delete(id);
         this._updateCounts.delete(id);
       }
@@ -181,13 +180,10 @@ class DevDebugController implements DebugConfig {
   };
 
   /**
-   * @param obj - the object to inspect.
-   * @returns The human-readable name or undefined.
+   * Retrieves the human-readable name attached to a reactive object.
    *
-   * @example
-   * ```typescript
-   * const name = debug.getDebugName(myAtom);
-   * ```
+   * @param obj - The object to inspect.
+   * @returns The debug name or undefined.
    */
   public getDebugName = (obj: object | null | undefined): string | undefined => {
     if (obj == null) return undefined;
@@ -195,13 +191,10 @@ class DevDebugController implements DebugConfig {
   };
 
   /**
-   * @param obj - the object to inspect.
-   * @returns The type identifier or undefined.
+   * Retrieves the node type identifier attached to a reactive object.
    *
-   * @example
-   * ```typescript
-   * const type = debug.getDebugType(myAtom); // 'atom'
-   * ```
+   * @param obj - The object to inspect.
+   * @returns The type string or undefined.
    */
   public getDebugType = (obj: object | null | undefined): string | undefined => {
     if (obj == null) return undefined;
@@ -210,11 +203,10 @@ class DevDebugController implements DebugConfig {
 }
 
 /**
- * Inert implementation of the Debug controller for production environments.
- * All operations are no-ops using shared handlers for minimal overhead.
+ * An inert implementation of the debug controller for production environments.
  *
- * @internal
- * @implements {DebugConfig}
+ * Optimization: All methods are replaced with no-ops to ensure zero runtime
+ * overhead when debugging is disabled.
  */
 const ProdDebugController: DebugConfig = {
   enabled: false,
@@ -230,38 +222,34 @@ const ProdDebugController: DebugConfig = {
 
 /**
  * The global debug singleton instance.
- * Switches between `DevDebugController` (development) and `ProdDebugController` (production).
+ *
+ * When to use:
+ * - To enable or disable diagnostic features at runtime.
+ * - To adjust thresholds for loop detection during development or testing.
  *
  * @example
  * ```typescript
- * // Enable detailed loop warnings in a test environment
+ * import { debug } from '@but212/atom-effect';
+ *
+ * // Enable detailed loop warnings in a test environment.
  * debug.enabled = true;
  * debug.warnInfiniteLoop = true;
  * ```
- *
- * @public
  */
 export const debug: DebugConfig = IS_DEV ? new DevDebugController() : ProdDebugController;
 
 /**
- * Internal counter for generating unique DependencyIds.
+ * Internal counter used to generate unique dependency identifiers.
  * @internal
  */
 let nextId = 1;
 
 /**
- * Generates a unique, monotonically increasing integer ID.
+ * Generates a unique, monotonically increasing integer identifier.
  *
- * Optimization: Uses bitwise OR with 0 to coerce the number to a 32-bit integer (SMI),
- * which is more efficient in V8's hidden class transitions and arithmetic.
+ * Optimization: Uses a bitwise OR with 0 to ensure the result is coerced to
+ * a 32-bit integer (SMI), which optimizes property access and memory layout in V8.
  *
- * @returns A fresh DependencyId.
- *
- * @example
- * ```typescript
- * const id = generateId();
- * ```
- *
- * @public
+ * @returns A unique DependencyId.
  */
 export const generateId = (): DependencyId => (nextId++ | 0) as DependencyId;

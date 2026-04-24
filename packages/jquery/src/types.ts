@@ -3,27 +3,42 @@ import type {
   ComputedAtom,
   ComputedOptions,
   EffectObject,
-  Paths,
-  PathValue,
   ReadonlyAtom,
   WritableAtom,
 } from '@but212/atom-effect';
 
+/** A function that performs cleanup tasks for a reactive effect or component. */
 export type EffectCleanup = () => void;
+
+/** Represents the unmounting phase of a component's lifecycle. */
 export interface ComponentLifecycle {
+  /** Cleanup task executed during the unmount phase. */
   unmount: EffectCleanup;
 }
+
+/** The result of a reactive effect function, which may include cleanup logic. */
 export type EffectResult = undefined | EffectCleanup | ComponentLifecycle;
+
+/** A function used to determine equality between two reactive values. */
 export type EqualFn<T> = (a: T, b: T) => boolean;
 
+/**
+ * Configuration options for creating reactive atoms.
+ *
+ * @public
+ */
 export interface AtomOptions extends BaseAtomOptions {
+  /** Optional name for debugging and diagnostic purposes. */
   name?: string;
+  /** Whether to trigger updates synchronously. Default is false (batched). */
   sync?: boolean;
 }
 
 /**
+ * A value that can be a static literal, a reactive atom, or a getter function.
+ *
  * Logic: Polymorphic Input
- * Supports raw values for static initialization, reactive Atoms for state-driven
+ * Supports raw values for static initialization, reactive atoms for state-driven
  * updates, or functional getters for deferred execution of complex logic.
  *
  * @public
@@ -31,9 +46,12 @@ export interface AtomOptions extends BaseAtomOptions {
 export type ReactiveValue<T> = T | ReadonlyAtom<T> | (() => T);
 
 /**
+ * A value that can be a static literal, a reactive atom, a promise, or a getter
+ * function that returns any of these.
+ *
  * When to use:
- * - CSS or Attribute bindings that require data from an async source.
- * - Integration with fetch-based reactive atoms.
+ * - CSS or Attribute bindings that require data from an asynchronous source.
+ * - Integration with fetch-based reactive atoms where values resolve over time.
  *
  * @public
  */
@@ -43,116 +61,183 @@ export type AsyncReactiveValue<T> =
   | Promise<T>
   | (() => T | Promise<T>);
 
+/** Supported primitive types for attribute and property bindings. */
 export type PrimitiveValue = string | number | boolean | null | undefined;
 
+/** A CSS property value or a tuple containing a value and its unit (e.g., [10, 'px']). */
 export type CssValue =
   | AsyncReactiveValue<string | number>
   | [source: AsyncReactiveValue<number>, unit: string];
 
+/** A mapping of CSS property names to their reactive values. */
 export type CssBindings = Record<string, CssValue>;
 
 /**
+ * Declaration of reactive bindings for a DOM element.
+ *
  * Logic: Binding Strategy Map
  * Maps reactive sources to specific DOM manipulation strategies (text, class,
- * val, etc.). This declarative structure allows the engine to batch
- * updates and optimize cleanup automatically.
+ * val, etc.). This declarative structure allows the engine to batch updates
+ * and optimize resource cleanup automatically.
  *
  * @public
  */
 export interface BindingOptions<T = unknown> {
+  /** Binds the element's text content. Can include an optional formatter. */
   text?:
     | AsyncReactiveValue<unknown>
     | [source: AsyncReactiveValue<unknown>, formatter: (v: unknown) => string];
+  /** Binds the element's inner HTML. Use with caution for untrusted content. */
   html?: AsyncReactiveValue<string>;
+  /** Toggles CSS classes based on reactive conditions. */
   class?: Record<string, AsyncReactiveValue<boolean>>;
+  /** Binds CSS styles reactively. */
   css?: CssBindings;
+  /** Binds HTML attributes reactively. */
   attr?: Record<string, AsyncReactiveValue<PrimitiveValue>>;
+  /** Binds DOM properties reactively. */
   prop?: Record<string, AsyncReactiveValue<unknown>>;
+  /** Toggles element visibility (`display: block/none`) based on a condition. */
   show?: AsyncReactiveValue<boolean>;
+  /** Hides the element (`display: none`) when the condition is true. */
   hide?: AsyncReactiveValue<boolean>;
+  /** Two-way binding for form input values. */
   val?: WritableAtom<T> | [atom: WritableAtom<T>, options: ValOptions<T>];
+  /** Two-way binding for checkbox and radio checked states. */
   checked?: WritableAtom<boolean>;
+  /** Orchestrates two-way bindings for an entire form element. */
   form?:
     | WritableAtom<T extends object ? T : unknown>
     | [
         atom: WritableAtom<T extends object ? T : unknown>,
         options: FormOptions<T extends object ? T : unknown>,
       ];
+  /** Registers event listeners with automatic lifecycle management. */
   on?: Record<string, (e: JQuery.Event) => void>;
 }
 
+/** A writable atom that includes an explicit disposal mechanism. @internal */
 export interface DisposableWritableAtom<T> extends WritableAtom<T> {
+  /** Releases all reactive resources and observers associated with the atom. */
   dispose(): void;
 }
 
+/** Supported key types for identifying items in a reactive list. */
 export type ListKey = string | number;
+
+/** Valid return types for a list item render function. */
 export type ListRenderResult = string | Element | DocumentFragment | JQuery;
+
+/** A function that extracts a unique identity key from a list item. */
 export type ListKeyFn<T> = (item: T, index: number) => ListKey;
 
 /**
+ * Configuration options for reactive list rendering.
+ *
  * Optimization: DOM Reconciliation
- * Uses a 'key' for identity tracking to minimize DOM churn by reordering
- * existing elements instead of re-rendering the entire list when
- * the underlying data changes.
+ * Uses unique keys for identity tracking to minimize DOM churn by reordering
+ * existing elements instead of re-rendering the entire list when data changes.
  *
  * @public
  */
 export interface ListOptions<T> {
+  /** The property name or function used to extract unique keys. */
   key: keyof T | ListKeyFn<T>;
+  /** Function to generate the DOM representation for an item. */
   render: (item: T, index: number) => ListRenderResult;
+  /** Optional callback to apply bindings to the rendered element. */
   bind?: ($el: JQuery, item: T, index: number) => void;
+  /** Optional callback triggered when an item's data is updated. */
   update?: ($el: JQuery, item: T, index: number) => void;
+  /** Callback triggered when a new element is added to the list. */
   onAdd?: ($el: JQuery) => void;
+  /** Callback triggered when an element is removed (can be used for transitions). */
   onRemove?: ($el: JQuery) => Promise<void> | void;
+  /** Content to display when the list is empty. */
   empty?: ListRenderResult;
+  /** Event handlers bound to individual list items. */
   events?: Record<string, (item: T, index: number, e: JQuery.TriggeredEvent) => void>;
+  /** Optional function for custom item equality checks. */
   isEqual?: (a: T, b: T) => boolean;
 }
 
+/** Options for customizing two-way value bindings. */
 export interface ValOptions<T> {
+  /** Time in milliseconds to delay atom synchronization after user input. */
   debounce?: number;
+  /** The DOM event used to trigger synchronization (e.g., 'change'). */
   event?: string;
+  /** Function to parse the DOM string value into the atom's type. */
   parse?: (v: string) => T;
+  /** Function to format the atom's value for DOM display. */
   format?: (v: T) => string;
+  /** Function for custom value equality checks. */
   equal?: EqualFn<T>;
 }
 
+/** Options for orchestrating form-wide reactive synchronization. */
 export interface FormOptions<T> extends ValOptions<T> {
-  /** Custom function to transform field value based on path before atomic sync. */
+  /** Function to transform field values based on their object path before synchronization. */
   transform?: (path: string, value: unknown) => unknown;
-  /** Callback triggered when a field value changes. */
+  /** Callback triggered whenever any field in the form changes. */
   onChange?: (path: string, value: unknown) => void;
+  /** Reactive validation schema mapping paths to validators. */
+  validation?: Record<string, (val: unknown) => string | boolean>;
 }
 
+/** Configuration for reactive AJAX requests. */
 export interface FetchOptions<T> {
+  /** The value returned while the request is pending or if it fails. */
   defaultValue: T;
+  /** Optional name for debugging and diagnostic logging. */
   name?: string;
+  /** HTTP method to use for the request. */
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS' | (string & {});
+  /** Custom HTTP headers to include in the request. */
   headers?: Record<string, string>;
+  /** Function to transform the raw response before it is stored in the atom. */
   transform?: (raw: unknown, xhr: JQuery.jqXHR) => T;
+  /** Direct overrides for the underlying jQuery AJAX settings. */
   ajaxOptions?: JQuery.AjaxSettings | (() => JQuery.AjaxSettings);
+  /** Callback triggered when the request fails. */
   onError?: (err: unknown) => void;
+  /** Whether to trigger the initial request immediately upon creation. */
   eager?: boolean;
 }
 
+/** An error object containing the source jqXHR for diagnostic purposes. */
 export interface FetchError extends Error {
+  /** The underlying jQuery XHR object that caused the error. */
   jqXHR?: JQuery.jqXHR;
 }
 
-/** Definition for a mountable component that manages its own lifecycle. */
+/** Definition for a mountable component that manages its own reactive lifecycle. */
 export type ComponentFn<P = Record<string, unknown>> = ($el: JQuery, props: P) => EffectResult;
 
+/** Lifecycle hooks for navigating between application routes. */
 export interface RouteLifecycle {
+  /**
+   * Hook triggered before entering a route.
+   * Returning false aborts the navigation.
+   */
   onEnter?: (
     params: Record<string, string>,
     router: Router
   ) => Record<string, string> | undefined | false;
+  /**
+   * Hook triggered before leaving the current route.
+   * Returning false prevents navigation away.
+   */
   onLeave?: (router: Router) => boolean | undefined;
+  /** Optional document title for the route. */
   title?: string;
 }
 
+/** Definition of a specific application route and its rendering logic. */
 export interface RouteDefinition extends RouteLifecycle {
+  /** Selector for a template fragment to be cloned and rendered. */
   template?: string;
+  /** Custom function to render the route content into the container. */
   render?: (
     container: HTMLElement,
     route: string,
@@ -160,105 +245,153 @@ export interface RouteDefinition extends RouteLifecycle {
     onUnmount: (cleanupFn: () => void) => void,
     router: Router
   ) => void;
+  /** Callback triggered after the route content has been mounted to the DOM. */
   onMount?: ($content: JQuery, onUnmount: (cleanupFn: () => void) => void, router: Router) => void;
 }
 
+/** Global configuration for the reactive router. */
 export interface RouteConfig {
+  /** The root element or selector where route content will be injected. */
   target: string | JQuery<HTMLElement> | HTMLElement;
+  /** The default path to navigate to if no route matches. */
   default?: string;
+  /** Mapping of path patterns to route definitions. */
   routes?: Record<string, RouteDefinition>;
+  /** Synchronization mode: 'hash' or HTML5 'history' API. */
   mode?: 'hash' | 'history';
+  /** Base path for the application (useful for history mode). */
   basePath?: string;
+  /** Path to navigate to when a requested route is not found. */
   notFound?: string;
+  /** Whether to automatically intercept and route link clicks. */
   autoBindLinks?: boolean;
+  /** CSS class applied to navigation elements matching the active route. */
   activeClass?: string;
+  /** Callback triggered immediately before a navigation transition starts. */
   beforeTransition?: (from: string, to: string) => void;
+  /** Callback triggered after a navigation transition has completed. */
   afterTransition?: (from: string, to: string) => void;
 }
 
+/** Interface for programmatically interacting with the application router. */
 export interface Router {
+  /** Reactive atom containing the current route name. */
   currentRoute: ReadonlyAtom<string>;
+  /** Reactive atom containing the current query string parameters. */
   queryParams: ReadonlyAtom<Record<string, string>>;
+  /** Reactive atom containing the extracted path parameters. */
   params: ReadonlyAtom<Record<string, string>>;
+  /** Programmatically navigates to the specified path. */
   navigate: (route: string) => void;
+  /** Shuts down the router and releases all observers. */
   destroy: () => void;
 }
 
+/** Options for AJAX-based fragment navigation. */
 export interface AtomNavOptions {
+  /** The target container for injected content. */
   target: string | JQuery<HTMLElement> | HTMLElement;
+  /** Optional sub-selector to extract from the loaded document. */
   selector?: string;
+  /** Custom HTTP headers for navigation requests. */
   headers?: Record<string, string>;
+  /** Hook triggered before a navigation request is initiated. */
   onBeforeLoad?: (url: string) => boolean | undefined | Promise<boolean | undefined>;
+  /** Callback triggered after the content has been injected. */
   onMount?: ($container: JQuery, url: string) => void;
+  /** Callback triggered before content is replaced. */
   onUnmount?: ($container: JQuery, oldUrl: string) => void;
+  /** Callback for handling navigation errors. */
   onError?: (err: unknown, url: string) => boolean | undefined;
+  /** Whether to reset scroll position to the top after navigation. */
   scrollToTop?: boolean;
+  /** Whether to synchronize the document title with the loaded page. */
   syncTitle?: boolean;
-
+  /** Optional window context for cross-origin navigation. */
   window?: Window & typeof globalThis;
 }
 
+/** Interface for managing AJAX fragment navigation. */
 export interface AtomNav {
+  /** Reactive atom containing the currently loaded URL. */
   currentUrl: ReadonlyAtom<string>;
+  /** Reactive atom indicating whether a navigation request is in progress. */
   isPending: ReadonlyAtom<boolean>;
+  /** Reactive atom indicating whether the last navigation failed. */
   hasError: ReadonlyAtom<boolean>;
+  /** Navigates to a specific URL and replaces the container content. */
   navigate(url: string, options?: { replace?: boolean }): Promise<void>;
+  /** Disposes of the navigation manager and observers. */
   destroy: () => void;
 }
 
 /**
+ * Internal state flags for two-way bindings.
+ *
  * Logic: Feedback Loop Protection
- * Prevents recursive update loops between the DOM and reactive Atoms
+ * Prevents recursive update loops between the DOM and reactive atoms
  * during two-way data flow (e.g., IME composition or rapid input events).
  *
  * @internal
  */
 export enum BindingFlags {
+  /** No active synchronization or interaction. */
   None = 0,
+  /** The input element is currently focused by the user. */
   Focused = 1 << 0,
+  /** The user is currently performing IME composition. */
   Composing = 1 << 1,
+  /** Synchronization from DOM to Atom is currently active. */
   SyncingToAtom = 1 << 2,
+  /** Synchronization from Atom to DOM is currently active. */
   SyncingToDom = 1 << 3,
+  /** The binding is considered busy and will ignore external updates. */
   Busy = Composing | SyncingToAtom | SyncingToDom,
 }
 
 /**
- * Options for jQuery overrides.
+ * Options for customizing jQuery core method overrides.
+ *
  * @public
  */
 export interface PatchOptions {
   /**
-   * Wraps .on()/.one() in batch() for auto-reactive updates.
+   * Automatically wraps .on()/.one() callbacks in $.batch() for reactivity.
    * @default true
    */
   events?: boolean;
   /**
-   * Hooks .remove()/.empty()/.detach() for automatic memory management.
+   * Hooks .remove()/.empty()/.detach() for automatic resource cleanup.
    * @default true
    */
   lifecycle?: boolean;
 }
 
 /**
- * Configuration options for AEJ.
+ * Global configuration settings for the library.
+ *
  * @public
  */
 export interface AEJConfig {
   /**
-   * jQuery prototype patches.
-   * Set to false to disable all patches.
+   * Configuration for jQuery prototype patches.
+   * Set to false to disable all automated overrides.
    */
   patch?: boolean | PatchOptions;
   /**
-   * Automatic MutationObserver for memory management.
-   * Set to false to manage cleanup manually.
+   * Configuration for the automated MutationObserver cleanup system.
+   * Set to false to manage reactive resource disposal manually.
    */
   autoCleanup?: boolean | { root: Element | ShadowRoot | DocumentFragment };
 }
 
 /**
  * A scoped version of the jQuery selector function.
- * Only supports element selection within the component boundary.
+ *
+ * Logic: Scope Enforcement
+ * Restricts element selection to the component's internal DOM tree (ShadowRoot
+ * or host container) to ensure encapsulation and prevent cross-component leaks.
+ *
  * @public
  */
 export type JQueryScopedSelector = (
@@ -267,671 +400,140 @@ export type JQueryScopedSelector = (
 ) => JQuery;
 
 /**
- * Interface representing the features added to a component by AEJ.
+ * Interface representing the reactive capabilities injected into a component.
  *
- * Provides structured access to the component's root and reactive DI.
  * @public
  */
 export interface AtomComponentFeatures {
-  /** The raw host element. */
+  /** The raw host element of the component. */
   readonly host: HTMLElement;
-  /** The active root node (ShadowRoot or Host). Available after setup(). */
+  /** The active root node (ShadowRoot or Host container). */
   readonly root: Node | null;
   /**
    * Scoped jQuery selector.
-   * Limited to selecting elements within the component's shadowRoot or host.
+   * Limited to selecting elements within the component's encapsulated DOM.
    */
   readonly $: JQueryScopedSelector;
 
-  /** Registers a reactive provider on this element. */
+  /** Registers a reactive provider on this element for dependency injection. */
   provideAtom<T = unknown>(key: string | symbol, val: T): void;
-  /** Injects a reactive value from an ancestor. */
+  /** Injects a reactive value provided by an ancestor element. */
   injectAtom<T = unknown>(key: string | symbol): WritableAtom<T> | null;
 }
 
 /**
- * Controller providing AEJ features via composition.
+ * Composition-based controller for managing a component's reactive lifecycle.
+ *
+ * When to use:
+ * - To build Custom Elements that require reactive attribute and slot synchronization.
+ * - To manage complex component lifecycles with automated resource disposal.
+ * - To provide or inject reactive state across Shadow DOM boundaries.
+ *
  * @public
  */
 export interface AtomComponentController extends AtomComponentFeatures {
   /**
-   * Reactive atoms for observed attributes.
-   * Only includes attributes defined in the component's static `observedAttributes` array.
+   * Factory function that returns a reactive lens atom for a specific HTML attribute.
+   * Accessing a name returns a WritableAtom<string | null>.
    */
-  readonly attrs: Record<string, WritableAtom<string | null>>;
+  readonly attrs: (name: string) => WritableAtom<string | null>;
 
   /**
-   * Initializes the component's reactive lifecycle.
-   * @param shadowRoot - Optional ShadowRoot (required for 'closed' mode components).
+   * Factory function that returns a reactive lens atom for a specific Shadow DOM slot.
+   * Provides ReadonlyAtom<Node[]> for each named slot (or 'default' for unnamed).
    */
-  setup(shadowRoot?: ShadowRoot): void;
+  readonly slots: (name: string) => ReadonlyAtom<Node[]>;
+
   /**
-   * Tears down reactive bindings.
+   * Access to the component's internal state and accessibility properties via ElementInternals.
+   * Available only if the browser supports attachInternals().
+   */
+  readonly internals?: ElementInternals;
+
+  /**
+   * Initializes the component's reactive lifecycle and observers.
+   *
+   * Logic: Hybrid Options
+   * Accepts a raw ShadowRoot for traditional usage or a configuration object
+   * for declarative hydration and automatic event dispatching.
+   *
+   * @param options - ShadowRoot or configuration object for hydration and event dispatching.
+   */
+  setup(
+    options?:
+      | ShadowRoot
+      | {
+          shadowRoot?: ShadowRoot;
+          /** Maps event names to atoms or getter functions for automatic dispatching. */
+          dispatch?: Record<string, ReactiveValue<unknown>>;
+          /** Maps data-bind keys to atoms for declarative DOM hydration. */
+          bind?: Record<string, ReadonlyAtom<unknown>>;
+          /**
+           * Constructable stylesheets to be shared across instances.
+           * Strings are automatically converted to shared CSSStyleSheet objects.
+           */
+          styles?: (string | CSSStyleSheet)[];
+          /**
+           * Reactive accessibility bindings via AriaMixin (ElementInternals).
+           * Maps ARIA properties (e.g., 'ariaExpanded') to atoms.
+           */
+          aria?: Record<string, ReadonlyAtom<unknown>>;
+          /**
+           * Reactive CSS Part bindings.
+           * Maps element selectors or data-aej-part keys to atoms for dynamic part names.
+           */
+          parts?: Record<string, ReadonlyAtom<string | string[] | Record<string, boolean>>>;
+          /**
+           * Reactive value for Form-Associated Custom Elements (FACE).
+           * Automatically synchronized with the native <form> via internals.setFormValue().
+           */
+          value?:
+            | ReadonlyAtom<unknown>
+            | { val: ReadonlyAtom<unknown>; state?: ReadonlyAtom<unknown> };
+          /**
+           * Reactive validation logic for Form-Associated Custom Elements (FACE).
+           * Can be a validation message string, a ValidityStateFlags object, or an atom/function returning either.
+           */
+          validation?:
+            | ReadonlyAtom<ValidityStateFlags | string>
+            | ((val: unknown) => ValidityStateFlags | string);
+        }
+  ): void;
+
+  /**
+   * Tears down all reactive bindings and observers.
    * Disconnects observers immediately; actual cleanup is deferred to a microtask.
+   *
+   * Logic: Cleanup Mechanism
+   * Releases all listeners, observers, and effects created during setup() or
+   * through reactive property access (attrs/slots).
    */
   teardown(): void;
 }
 
-declare global {
-  /**
-   * Global jQuery namespace extensions (`$`).
-   *
-   * @public
-   */
-  interface JQueryStatic {
-    /**
-     * Creates a writable reactive atom.
-     *
-     * When to use:
-     * - When you need a source of truth for a specific piece of state.
-     * - When that state needs to be updated manually (unlike Computeds).
-     *
-     * @param initialValue - The initial value of the atom.
-     * @param options - Configuration options for sync mode, custom equality, or naming.
-     * @returns A writable reactive atom.
-     *
-     * @example
-     * ```typescript
-     * const count = $.atom(0);
-     * console.log(count.value); // 0
-     * count.value++;
-     * ```
-     */
-    atom<T>(initialValue: T, options?: AtomOptions): WritableAtom<T>;
-    /**
-     * When to use:
-     * - When a value needs to be automatically derived from other reactive sources.
-     * - To optimize performance by caching expensive calculations.
-     *
-     * @param fn - The computation function.
-     * @param options - Configuration for custom equality or default values.
-     * @returns A read-only reactive computed atom.
-     *
-     * @example
-     * ```typescript
-     * const count = $.atom(1);
-     * const doubled = $.computed(() => count.value * 2);
-     *
-     * console.log(doubled.value); // 2
-     * count.value = 5;
-     * console.log(doubled.value); // 10
-     * ```
-     */
-    computed<T>(fn: () => T, options?: ComputedOptions<T>): ComputedAtom<T>;
-    computed<T>(
-      fn: () => Promise<T>,
-      options: ComputedOptions<T> & { defaultValue: T }
-    ): ComputedAtom<T>;
-    /**
-     * When to use:
-     * - To perform side effects (logging, async fetching, DOM updates) in response to state changes.
-     * - To synchronize external systems with the reactive state.
-     *
-     * @param fn - The function to execute. Can return a cleanup function.
-     * @param options - Configuration for sync mode or custom error handling.
-     * @returns A handle to the created effect for manual control.
-     *
-     * @example
-     * ```typescript
-     * const count = $.atom(0);
-     * $.effect(() => {
-     *   console.log(`Current count: ${count.value}`);
-     *   return () => console.log('Cleanup before next run');
-     * });
-     *
-     * count.value++; // Logs: "Cleanup before next run", "Current count: 1"
-     * ```
-     */
-    effect(
-      fn: () => EffectResult,
-      options?: import('@but212/atom-effect').EffectOptions
-    ): EffectObject;
-    /**
-     * When to use:
-     * - When performing multiple related atom updates that should trigger effects only once.
-     * - To improve performance by coalescing multiple updates into a single flush cycle.
-     *
-     * @param fn - The function containing state updates.
-     *
-     * @example
-     * ```typescript
-     * const a = $.atom(0);
-     * const b = $.atom(0);
-     * $.effect(() => console.log(a.value + b.value));
-     *
-     * $.batch(() => {
-     *   a.value = 1;
-     *   b.value = 2;
-     * }); // Logs "3" once.
-     * ```
-     */
-    batch(fn: () => void): void;
-    /**
-     * When to use:
-     * - To read reactive state inside an effect without creating a dependency link.
-     *
-     * @param fn - Function to execute.
-     * @returns Result of `fn`.
-     *
-     * @example
-     * ```typescript
-     * $.effect(() => {
-     *   const val = $.untracked(() => someAtom.value);
-     *   console.log('Read without tracking:', val);
-     * });
-     * ```
-     */
-    untracked<T>(fn: () => T): T;
-    /**
-     * Checks if a value is an atom ($).
-     *
-     * @example
-     * ```typescript
-     * if ($.isAtom(maybeAtom)) {
-     *   console.log(maybeAtom.value);
-     * }
-     * ```
-     */
-    isAtom(obj: unknown): obj is WritableAtom<unknown> | ReadonlyAtom<unknown>;
-    /**
-     * Checks if a value is a Computed atom ($).
-     *
-     * @example
-     * ```typescript
-     * if ($.isComputed(maybeAtom)) {
-     *   console.log('Derived value detected');
-     * }
-     * ```
-     */
-    isComputed(obj: unknown): obj is ComputedAtom<unknown>;
-    /**
-     * Returns a promise that resolves after the next scheduler flush.
-     *
-     * @example
-     * ```typescript
-     * await $.nextTick();
-     * ```
-     */
-    nextTick(): Promise<void>;
+/**
+ * Represents an HTMLElement that has been enhanced with an AEJ controller.
+ *
+ * @public
+ */
+export type AtomComponentElement<T extends HTMLElement = HTMLElement> = T & {
+  readonly aej: AtomComponentController;
+};
 
-    /**
-     * Global diagnostic logger for the Atom-Effect library.
-     *
-     * When to use:
-     * - Debugging reactive updates and DOM mutations in real-time.
-     * - Inspecting error causes in binding hooks.
-     *
-     * Logic: Runtime Control
-     * Toggle `debug.enabled` at runtime (e.g., via browser console) to
-     * activate or deactivate visual instrumentation without a page reload.
-     *
-     * @example
-     * ```typescript
-     * $.debug.enabled = true; // Enable visual highlights
-     * ```
-     *
-     * @public
-     */
-    debug: {
-      enabled: boolean;
-      warn(prefix: string, message: string, ...rest: unknown[]): void;
-      error(prefix: string, message: string, cause: unknown): void;
-      domUpdated(prefix: string, target: Element | JQuery, type: string, value: unknown): void;
-    };
-
-    /**
-     * Creates a two-way "lens" for a specific property path via `$.atomLens`.
-     *
-     * @param atom - The source atom.
-     * @param path - Dot-separated path (e.g., 'user.profile.name').
-     * @returns A new writable lens atom.
-     *
-     * @example
-     * ```typescript
-     * const store = $.atom({ user: { name: 'Alice' } });
-     * const nameLens = $.atomLens(store, 'user.name');
-     * nameLens.value = 'Bob'; // Updates store
-     * ```
-     */
-    atomLens<T extends object, P extends Paths<T>>(
-      atom: WritableAtom<T>,
-      path: P
-    ): DisposableWritableAtom<PathValue<T, P>>;
-
-    /**
-     * Composes an existing lens with a sub-path via `$.composeLens`.
-     *
-     * @example
-     * ```typescript
-     * const userLens = $.atomLens(store, 'user');
-     * const nameLens = $.composeLens(userLens, 'name');
-     * ```
-     */
-    composeLens<T extends object, P extends Paths<T>>(
-      lens: WritableAtom<T>,
-      path: P
-    ): DisposableWritableAtom<PathValue<T, P>>;
-
-    /**
-     * Creates a lens factory bound to an atom via `$.lensFor`.
-     *
-     * @example
-     * ```typescript
-     * const lensify = $.lensFor(store);
-     * const nameLens = lensify('user.name');
-     * ```
-     */
-    lensFor<T extends object>(
-      atom: WritableAtom<T>
-    ): <P extends Paths<T>>(p: P) => DisposableWritableAtom<PathValue<T, P>>;
-
-    /**
-     * Initializes a client-side router for the application.
-     *
-     * Logic: Reactive Routing
-     * Orchestrates URL synchronization, path matching, and dynamic view rendering.
-     * Uses atoms to provide reactive access to `currentRoute` and `params`,
-     * enabling secondary UI elements to reactively update sidebars or breadcrumbs.
-     *
-     * Capabilities:
-     * - Multi-mode support: 'history' (pushState) or 'hash' for legacy support.
-     * - Dynamic matching: High-performance param extraction for named route segments.
-     * - Reactive state: Integrated with the core atom system for effortless UI syncing.
-     * - Lifecycle hooks: Fine-grained navigation control via `onEnter` and `onLeave`.
-     *
-     * @example
-     * ```typescript
-     * const router = $.route({
-     *   target: '#app',
-     *   routes: {
-     *     '/': { template: '#home-tmpl' },
-     *     '/user/:id': {
-     *       render: (el, name, params) => {
-     *         $(el).text(`User Profile: ${params.id}`);
-     *       }
-     *     }
-     *   }
-     * });
-     * ```
-     *
-     * @public
-     */
-    route(config: RouteConfig): Router;
-
-    /**
-     * When to use:
-     * - Fetching data that depends on other reactive atoms (auto-refetch on dependency change).
-     * - Implementing built-in concurrency management (automatic cancellation of stale requests).
-     *
-     * Logic: Concurrency Control
-     * - Uses `AbortController` and `jqXHR.abort()` to ensures that only the result
-     *   of the most recent request is reflected in the atom's state.
-     * - Discards older, "out-of-order" responses to prevent UI flickering.
-     *
-     * @param source - A static URL string or a reactive function that returns a URL.
-     * @param options - Configuration for default values, custom headers, and response transformation.
-     *
-     * @returns A computed atom that automatically manages the async lifecycle.
-     *
-     * @example
-     * ```typescript
-     * const userId = $.atom(1);
-     * const user = $.atomFetch(() => `/api/users/${userId.value}`, {
-     *   defaultValue: { name: 'Loading...' },
-     *   eager: true
-     * });
-     *
-     * $.effect(() => {
-     *   console.log(`Current user: ${user.value.name}`);
-     * });
-     * ```
-     *
-     * @public
-     */
-    atomFetch<T>(
-      url: string | (() => string),
-      opts: FetchOptions<T>
-    ): ComputedAtom<T> & { abort: () => void; dispose(): void };
-
-    /**
-     * SPA-style navigation for AJAX-loaded content.
-     *
-     * When to use:
-     * - To implement fragment-based partial page updates without full reload.
-     * - When you need automatic cleanup of bindings in the replaced container.
-     *
-     * @param options - Configuration for target container and navigation hooks.
-     *
-     * @example
-     * const nav = $.atomNav({
-     *   target: '#main-content',
-     *   onBeforeLoad: (url) => console.log(`Navigating to ${url}`)
-     * });
-     *
-     * @public
-     */
-    atomNav(options: AtomNavOptions): AtomNav;
-
-    /**
-     * Registers an element (or multiple) as a provider for a reactive context value.
-     *
-     * When to use:
-     * - When you need to share state (atoms) with deep descendant elements without prop drilling.
-     * - To establish a theme, user session, or global configuration context at a specific root.
-     *
-     * @param element - The host element, selector, or JQuery collection to act as provider.
-     * @param key - Unique identifier for the context (string or symbol).
-     * @param val - The value (usually an Atom) to be shared with descendants.
-     *
-     * @example
-     * ```typescript
-     * // Parent provides a theme atom
-     * const theme = $.atom('light');
-     * $.provideAtom('#app-root', 'theme', theme);
-     * ```
-     *
-     * @public
-     */
-    provideAtom(element: HTMLElement | JQuery | string, key: string | symbol, val: unknown): void;
-
-    /**
-     * Injects a reactive context provided by an ancestor element.
-     *
-     * When to use:
-     * - To consume state provided by a parent/ancestor component without direct coupling.
-     * - To create "Context-Aware" components that adapt to their position in the DOM.
-     *
-     * @param element - The element or selector requesting the context.
-     * @param key - The unique identifier of the context to find.
-     * @returns A WritableAtom proxy that tracks the nearest ancestor provider.
-     *
-     * @example
-     * ```typescript
-     * // Child consumes the provided theme
-     * const theme = $.injectAtom('#child-element', 'theme');
-     * if (theme) {
-     *   $.effect(() => {
-     *     console.log('Current theme:', theme.value);
-     *   });
-     * }
-     * ```
-     *
-     * @public
-     */
-    injectAtom<T = unknown>(
-      element: HTMLElement | JQuery | string,
-      key: string | symbol
-    ): WritableAtom<T> | null;
-
-    /**
-     * Composition-based helper for creating AEJ-powered Web Components.
-     *
-     * When to use:
-     * - When building standard Custom Elements with reactive state and scoped selection.
-     * - When you want perfect type safety and predictable lifecycle management for components.
-     *
-     * @param element - The host Custom Element (usually `this`).
-     * @returns A controller for managing reactive lifecycle, providers, and scoped root.
-     *
-     * @example
-     * ```typescript
-     * class MyComponent extends HTMLElement {
-     *   // Capture 'this' as the reactive host
-     *   private aej = $.useAtomComponent(this);
-     *
-     *   connectedCallback() {
-     *     // Initialize shadow root and registry
-     *     this.aej.setup();
-     *     this.aej.$('button').on('click', () => console.log('Clicked!'));
-     *   }
-     *
-     *   disconnectedCallback() {
-     *     // Clean up providers and observers
-     *     this.aej.teardown();
-     *   }
-     * }
-     * customElements.define('my-component', MyComponent);
-     * ```
-     *
-     * @public
-     */
-    useAtomComponent(element: HTMLElement): AtomComponentController;
-
-    /**
-     * Initializes Atom-Effect jQuery with the specified configuration.
-     * @param config - Configuration options.
-     */
-    initAEJ(config?: AEJConfig): void;
-  }
-
-  /**
-   * jQuery Instance Method extensions (`$('...').method()`).
-   *
-   * @public
-   */
-  interface JQuery {
-    /**
-     * When to use:
-     * - Rendering raw text that should stay in sync with an atom.
-     * - Automatically updating labels, counts, or status messages.
-     *
-     * @example
-     * ```typescript
-     * $('.count').atomText(counterAtom, (v) => `Current: ${v}`);
-     * ```
-     *
-     * @public
-     */
-    atomText<T>(src: AsyncReactiveValue<T>, fmt?: (v: T) => string): this;
-    /**
-     * Caution: Ensure the source data is trusted. Rendering unsanitized HTML
-     * from user input can lead to XSS vulnerabilities.
-     *
-     * When to use:
-     * - Rendering complex markup or rich text that contains formatting tags.
-     *
-     * @public
-     */
-    atomHtml(src: AsyncReactiveValue<string>): this;
-    /**
-     * Reactively toggles CSS classes based on atom conditions.
-     *
-     * Logic: Supports both single class toggling and batch class management
-     * via a mapping object.
-     *
-     * When to use:
-     * - Adding 'active', 'disabled', or 'hidden' states to elements.
-     * - Managing complex UI component states with multiple class flags.
-     *
-     * @example
-     * ```typescript
-     * // 1. Single class
-     * $('.btn').atomClass('is-active', activeAtom);
-     *
-     * // 2. Class map
-     * $('.item').atomClass({
-     *   'is-loading': loadingAtom,
-     *   'is-hidden': hiddenAtom
-     * });
-     * ```
-     *
-     * @public
-     */
-    atomClass(name: string, cond: AsyncReactiveValue<boolean>): this;
-    atomClass(map: Record<string, AsyncReactiveValue<boolean>>): this;
-    /**
-     * When to use:
-     * - Driving visual styles like opacity, width, or color from state.
-     * - Dynamic layouts where dimensions depend on reactive calculations.
-     *
-     * Logic: Normalizes properties and units (e.g., 'px') to ensure
-     * consistent style application across browsers.
-     *
-     * @example
-     * ```typescript
-     * // 1. Single property
-     * $('.bar').atomCss('width', progressAtom, '%');
-     *
-     * // 2. Property map
-     * $('.box').atomCss({
-     *    opacity: opacityAtom,
-     *    backgroundColor: colorAtom
-     * });
-     * ```
-     *
-     * @public
-     */
-    atomCss(prop: string, src: AsyncReactiveValue<string | number>, unit?: string): this;
-    atomCss(map: CssBindings): this;
-    /**
-     * Reactively updates DOM attributes based on atom changes.
-     *
-     * When to use:
-     * - Updating `id`, `title`, `alt`, or `data-*` attributes.
-     *
-     * @public
-     */
-    atomAttr(name: string, src: AsyncReactiveValue<PrimitiveValue>): this;
-    atomAttr(map: Record<string, AsyncReactiveValue<PrimitiveValue>>): this;
-    /**
-     * Reactively updates DOM properties (e.g., `disabled`, `readOnly`).
-     *
-     * When to use:
-     * - Toggling stateful properties that require boolean values or direct property access.
-     *
-     * @public
-     */
-    atomProp<T>(name: string, src: AsyncReactiveValue<T>): this;
-    atomProp(map: Record<string, AsyncReactiveValue<unknown>>): this;
-    /**
-     * Toggles visibility (`display: none`) when the condition is true.
-     *
-     * @public
-     */
-    atomShow(cond: AsyncReactiveValue<boolean>): this;
-    /**
-     * Hides the element (`display: none`) when the condition is true.
-     *
-     * @public
-     */
-    atomHide(cond: AsyncReactiveValue<boolean>): this;
-
-    /**
-     * Two-way binding for form input values.
-     *
-     * Logic: Automatically synchronizes the input's `value` with a writable
-     * atom, handling both atom-to-DOM updates and DOM-to-atom changes.
-     *
-     * When to use:
-     * - Handling text inputs, textareas, and select menus.
-     *
-     * @public
-     */
-    atomVal<T>(atom: WritableAtom<T>, opts?: ValOptions<T>): this;
-
-    /**
-     * Two-way binding for checkboxes and radio buttons.
-     *
-     * @public
-     */
-    atomChecked(atom: WritableAtom<boolean>): this;
-
-    /**
-     * Orchestrates two-way binding for an entire form.
-     *
-     * Logic: Maps form fields (via `name` attributes) to nested properties
-     * of a reactive object atom.
-     *
-     * When to use:
-     * - Synchronizing a complex data model with a standard HTML form.
-     *
-     * @public
-     */
-    atomForm<T extends object>(atom: WritableAtom<T>, opts?: FormOptions<T>): this;
-
-    /**
-     * Configures a standard event listener with automatic lifecycle cleanup.
-     *
-     * @public
-     */
-    atomOn(event: string, handler: (e: JQuery.Event) => void): this;
-
-    /**
-     * Unified entry point for declaring multiple reactive bindings in a single call.
-     *
-     * Logic: Iterates through the provided options and executes the
-     * corresponding tasks in a deterministic order (e.g., text before class).
-     *
-     * When to use:
-     * - Initializing multiple bindings on an element efficiently.
-     *
-     * @example
-     * ```typescript
-     * $('.btn').atomBind({
-     *   text: labelAtom,
-     *   class: { 'is-primary': primaryAtom },
-     *   on: { click: handleClick }
-     * });
-     * ```
-     *
-     * @public
-     */
-    atomBind<T = unknown>(opts: BindingOptions<T>): this;
-
-    /**
-     * Logic: Orchestrates the synchronization between a reactive data source and
-     * the DOM tree. It manages a persistent `ListContext` for diffing.
-     *
-     * Optimization:
-     * - Employs a double-ended diffing algorithm to minimize DOM manipulations.
-     * - Uses sanitized batch-rendering for optimized cold-start performance.
-     *
-     * @example
-     * ```typescript
-     * $('#my-list').atomList(itemsAtom, {
-     *   key: 'id',
-     *   render: (item) => `<li>${item.name}</li>`
-     * });
-     * ```
-     *
-     * @public
-     */
-    atomList<T>(src: ReadonlyAtom<T[]>, opts: ListOptions<T>): this;
-
-    /**
-     * Logic: Lifecycle Orchestration
-     * Handles automatic teardown of existing bindings, isolated component
-     * execution within a safe reactive window, and registration of
-     * teardown hooks in the global registry.
-     *
-     * @example
-     * ```typescript
-     * const MyCounter = ($el, props) => {
-     *   const count = atom(0);
-     *   effect(() => $el.text(`${props.title}: ${count.value}`));
-     *   return () => console.log('Cleanup');
-     * };
-     *
-     * $('.host').atomMount(MyCounter, { title: 'Clicks' });
-     * ```
-     *
-     * @public
-     */
-    atomMount<P>(comp: ComponentFn<P>, props?: P): this;
-    /**
-     * Manually triggers the teardown phase for the component and all nested bindings.
-     *
-     * @public
-     */
-    atomUnmount(): this;
-
-    /**
-     * Manually destroys all reactive bindings associated with the collection.
-     *
-     * @public
-     */
-    atomUnbind(): this;
-  }
+/**
+ * Declarative specification for Atom-Effect components.
+ * @internal
+ */
+export interface AtomComponentStatic {
+  aejStyles?: (string | CSSStyleSheet)[];
+  aejBind?: Record<string, ReadonlyAtom<unknown>>;
+  aejAria?: Record<string, ReadonlyAtom<unknown>>;
+  aejParts?: Record<string, ReadonlyAtom<string | string[] | Record<string, boolean>>>;
+  aejDispatch?: Record<string, ReactiveValue<unknown>>;
+  aejValue?: ReadonlyAtom<unknown> | { val: ReadonlyAtom<unknown>; state?: ReadonlyAtom<unknown> };
+  aejValidation?:
+    | ReadonlyAtom<ValidityStateFlags | string>
+    | ((val: unknown) => ValidityStateFlags | string);
 }
 
 export type { ComputedAtom, ComputedOptions, EffectObject, ReadonlyAtom, WritableAtom };

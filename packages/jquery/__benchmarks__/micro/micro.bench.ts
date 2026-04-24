@@ -207,7 +207,7 @@ describe('web component', () => {
     controller?: AtomComponentController;
     setup() {
       this.controller = $.useAtomComponent(this);
-      this.controller.setup();
+      this.controller?.setup();
     }
     teardown() {
       this.controller?.teardown();

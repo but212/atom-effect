@@ -65,7 +65,7 @@ describe('Nav & Route Integration', () => {
       onMount: ($target, url) => {
         if (url.includes('settings')) {
           const router = $.route({
-            target: $target.find('#settings-view'), // Now allowed by types!
+            target: $target.find('#settings-view'),
             routes: {
               profile: { template: '#tpl-profile' },
               security: { template: '#tpl-security' },
@@ -244,11 +244,37 @@ describe('Nav & Route Integration', () => {
     expect(ajaxSpy).toHaveBeenCalledWith(expect.objectContaining({ url: '/dashboard' }));
 
     // $.route should NOT have changed (should still show settings or be empty/default)
-    // In this test, it still shows admin-settings because nothing cleared it
     expect($adminArea.find('#admin-settings-view').length).toBe(1);
 
     ajaxSpy.mockRestore();
     nav.destroy();
     router.destroy();
+  });
+
+  describe('Diagnostics & Warnings', () => {
+    it('should warn when router renders an unregistered custom element', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      $.debug.enabled = true;
+
+      const $view = $('<div id="view"></div>').appendTo(document.body);
+      const tagName = `unregistered-route-${Math.random().toString(36).slice(2, 9)}`;
+
+      const router = $.route({
+        target: $view,
+        routes: {
+          '/': { render: (el) => $(el).html(`<${tagName}></${tagName}>`) },
+        },
+      });
+
+      await $.nextTick();
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining(`[atom-component] Custom Element <${tagName}> is not registered.`)
+      );
+
+      router.destroy();
+      $view.remove();
+      warnSpy.mockRestore();
+    });
   });
 });

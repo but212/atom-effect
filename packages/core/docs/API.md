@@ -1,51 +1,60 @@
 # API Reference
 
-This document covers the core primitives of `@but212/atom-effect`.
+This document provides a detailed reference for the core primitives of `@but212/atom-effect`. It is intended for developers who need to understand the behavior, options, and technical implementation details of the library.
 
 ## `atom<T>(initialValue: T, options?: AtomOptions)`
 
-Creates a mutable state container. Atoms are the leaf nodes of your dependency graph.
+Creates a mutable state container, known as an **atom**. Atoms serve as the leaf nodes in the reactive dependency graph.
 
-### When to use - atom
+### Usage
 
-- **Primary state management:** User inputs, server data, configuration.
-- **Avoid:** Storing derived data (use `computed` instead).
+Atoms are used for managing primary state such as user inputs, configuration, or server data. Derived state should be managed using `computed`.
 
-### Example - atom
+### Example
 
 ```typescript
 import { atom } from '@but212/atom-effect';
 
 const counter = atom(0);
 
-// Read (tracks dependency if inside effect/computed)
+// Read the value (tracks dependency if inside effect/computed)
 console.log(counter.value); 
 
-// Write (notifies observers)
+// Update the value (notifies observers)
 counter.value = 1;
 
-// Peek (read without tracking)
+// Peek the value (read without tracking)
 console.log(counter.peek()); 
+
+// Cleanup the atom
+counter.dispose();
 ```
 
-### Options - atom
+### Properties and Methods
 
-- `name`: String. Optional name used for debugging and traceability.
-- `sync`: Boolean (default `false`). If `true`, updates flush synchronously (bypassing microtask batching). Use with caution.
-- `equal`: `(a, b) => boolean`. Custom equality check. If returns `true`, the update is ignored.
+- `value`: A getter/setter for the atom's state. Accessing the getter registers the atom as a dependency in the current reactive context. The setter updates the value and schedules notifications for subscribers if the value has changed.
+- `peek(): T`: Returns the current value without registering a dependency.
+- `dispose(): void`: Disposes of the atom. It clears all subscribers and internal state. Accessing or modifying a disposed atom will throw an error.
+
+### Options
+
+- `name`: (Optional) A string used for debugging and traceability.
+- `sync`: (Default: `false`) If `true`, updates are flushed synchronously, bypassing the microtask batching system.
+- `equal`: `(a: T, b: T) => boolean`. A custom equality function. If it returns `true`, the update is ignored and no notifications are sent. Defaults to `Object.is`.
+
+---
 
 ## `computed<T>(fn: () => T | Promise<T>, options?: ComputedOptions)`
 
-Creates a derived signal that updates automatically when its dependencies change.
+Creates a derived reactive node that automatically updates when its dependencies change.
 
-### Key Characteristics - computed
+### Key Characteristics
 
-- **Lazy**: Only recalculates when read or when needed by an active effect.
-- **Cached**: Returns the cached value if dependencies haven't changed.
-- **Asynchronous Support**: Natively handles Promises.
-- **Optimized Performance**: Uses an allocation-optimized `DepSlotBuffer` with size duality and $O(1)$ slot reuse for minimal-allocation dependency management and large-scale node scalability.
+- **Lazy**: Computations are deferred until the `value` is accessed or required by an active effect.
+- **Cached**: The result is cached and only re-evaluated if a dependency has changed.
+- **Asynchronous Support**: Handles `Promise` return values natively, managing lifecycle states (pending, resolved, rejected).
 
-### Synchronous Example - computed
+### Example
 
 ```typescript
 const count = atom(1);
@@ -54,20 +63,21 @@ const double = computed(() => count.value * 2);
 console.log(double.value); // 2
 ```
 
-### Properties - computed
+### Properties and Methods
 
-A `ComputedAtom` instance provides the following reactive properties:
+- `value`: Returns the current computed value. If dependencies are stale, it triggers a re-computation.
+- `state`: Returns the current `AsyncState` (`'idle'`, `'pending'`, `'resolved'`, or `'rejected'`).
+- `hasError`: A boolean indicating if the computation or any of its dependencies failed.
+- `isValid`: A shortcut for `!hasError`.
+- `errors`: A read-only array containing all errors collected from the local dependency sub-graph.
+- `lastError`: The specific error thrown by this node's computation, if any.
+- `isPending`: Boolean indicating if an asynchronous computation is currently in progress.
+- `isResolved`: Boolean indicating if the computation has successfully resolved.
+- `peek(): T`: Returns the cached value without triggering dependency tracking or re-computation.
+- `invalidate(): void`: Forces the node to be marked as dirty, ensuring a re-computation on the next access.
+- `dispose(): void`: Disposes of the computed atom and its dependency links.
 
-- `value`: Returns the current value.
-- `state`: Returns `AsyncState` (`IDLE`, `PENDING`, `RESOLVED`, `REJECTED`).
-- `hasError`: Boolean indicating if the computation (or its dependencies) failed. Accessing this property is **dependency-isolated** (untracked) to prevent graph pollution.
-- `isValid`: Shortcut for `!hasError`.
-- `errors`: A read-only array of all errors in the local dependency sub-graph. Optimized via recursive accumulation and dependency isolation.
-- `lastError`: The specific error thrown by this node's computation.
-- `isPending`: Shortcut for `state === AsyncState.PENDING`.
-- `isResolved`: Shortcut for `state === AsyncState.RESOLVED`.
-
-### Async Example - computed
+### Async Example
 
 ```typescript
 const userId = atom(123);
@@ -77,355 +87,167 @@ const userData = computed(async () => {
   return response.json();
 }, { defaultValue: { loading: true } });
 
-// userData.value returns the resolved value (or defaultValue if pending)
-// Race conditions are handled via promise cancellation (see ARCHITECTURE.md)
+// Accessing userData.value returns the resolved value or the defaultValue if pending.
 ```
 
 > [!IMPORTANT]
-> **Dependency Tracking is Synchronous**: Inside an async function, only atoms/computeds accessed **before** the first `await` are tracked as dependencies. Values read after an `await` will return their current value but will not trigger re-evaluations when they change. Always "hoist" your dependency reads to the top of your async function.
+> **Async Dependency Tracking**: Only dependencies accessed **before** the first `await` are tracked. Dependencies accessed after an `await` will return their current value but will not trigger re-evaluations when they change.
 
-### Options - computed
+### Options
 
-- `name`: String. Optional name used for debugging and traceability.
-- `equal`: `(a, b) => boolean`. Custom equality check.
-- `defaultValue`: Initial value while async computation is pending.
-- `lazy`: Boolean (default `true`).
-- `onError`: `(error: Error) => void`. Error handler for computation failures.
+- `name`: (Optional) A string for debugging.
+- `equal`: Custom equality check for the computed result.
+- `defaultValue`: Initial value returned while an asynchronous computation is pending.
+- `lazy`: (Default: `true`) If `false`, the computation runs immediately upon creation.
+- `onError`: `(error: Error) => void`. Callback executed when the computation fails.
 
-## `effect(fn: () => void | CleanupFn, options?: EffectOptions)`
+---
 
-Runs a side effect immediately, and re-runs it whenever dependencies change.
+## `effect(fn: () => void | CleanupFn | Promise<void | CleanupFn>, options?: EffectOptions)`
 
-### When to use - effect
+Starts a side effect that executes immediately and re-runs whenever its dependencies change.
 
-- **DOM Updates**: Manually syncing state to UI (if not using a framework adapter).
-- **Network Requests**: Triggering analytics or saves.
-- **Subscriptions**: syncing with external libraries.
+### Usage
 
-### Example - effect
+Effects are intended for side effects such as DOM manipulation, network requests, or integration with external libraries.
+
+### Example
 
 ```typescript
-const effectHandle = effect(() => {
+const handle = effect(() => {
   const currentCount = count.value;
   document.title = `Count: ${currentCount}`;
 
-  // Optional cleanup function
   return () => {
-    console.log(`Cleaning up count ${currentCount}`);
+    console.log(`Cleaning up for count ${currentCount}`);
   };
 });
 
-// Later: stop the effect
-effectHandle.dispose();
+// Stop the effect
+handle.dispose();
 ```
 
-`effect()` returns an `EffectObject` with the following properties:
+### Properties and Methods
 
-- `dispose()`: Stops the effect and runs cleanup.
-- `run()`: Manually re-executes the effect.
-- `isDisposed`: Whether the effect has been disposed.
-- `isExecuting`: Whether the effect is currently running.
-- `executionCount`: Number of times the effect has executed.
+`effect()` returns an `EffectObject`:
 
-### Options - effect
+- `dispose()`: Stops the effect and executes the cleanup function.
+- `run()`: Manually triggers the effect execution, even if dependencies haven't changed.
+- `isDisposed`: Boolean indicating if the effect has been stopped.
+- `isExecuting`: Boolean indicating if the effect logic is currently running.
+- `executionCount`: The total number of times the effect has executed.
 
-- `name`: String. Optional name used for debugging and traceability.
-- `sync`: Boolean (default `false`). Force synchronous execution.
+### Options
+
+- `name`: (Optional) A string for debugging.
+- `sync`: (Default: `false`) If `true`, the effect runs synchronously when dependencies change, instead of being batched.
 - `onError`: `(error: unknown) => void`. Custom error handler.
-- `maxExecutionsPerSecond`: Number (default `1000`). Maximum executions per second (dev mode only).
-- `maxExecutionsPerFlush`: Number (default `100`). Maximum executions per flush cycle before infinite loop detection triggers.
+- `maxExecutionsPerFlush`: (Default: `100`) Maximum executions allowed for this specific effect within a single flush cycle to prevent infinite loops.
+
+---
 
 ## `batch<T>(fn: () => T): T`
 
-Groups multiple state updates into a single synchronous notification cycle. Effects and computed values are deferred until the batch completes, then flushed.
+Groups multiple state updates into a single notification cycle.
 
-- **Returns**: The return value of `fn`.
-- **Nesting**: Fully supports deep nesting. Updates are coalesced and flushed only once after the outermost batch ends.
-- **Stability**: Guaranteed protection against stack overflows in deeply recursive reactive patterns via a flat execution loop.
-- **Atomicity**: Changes made to atoms within a batch are committed even if the callback throws an error, ensuring state integrity.
+Updates to atoms inside the `batch` block are coalesced. Effects and computed values are deferred until the batch completes, ensuring they only run once with the final state.
 
-> **Note**: The engine already performs automatic microtask batching by default. Use `batch()` specifically when you need **Synchronous Reflection** (e.g., updates must be applied before the next line of code executes) or to group multiple mutations into a single transactional flush.
+- **Nesting**: Supports nested batches. The flush occurs only after the outermost batch ends.
+- **Atomicity**: State changes are committed even if the callback throws an error.
 
-### Basic Example - batch
-
-```typescript
-import { atom, batch, effect } from '@but212/atom-effect';
-
-const firstName = atom('');
-const lastName = atom('');
-
-effect(() => {
-  console.log(`${firstName.value} ${lastName.value}`);
-});
-// Output: " "
-
-batch(() => {
-  firstName.value = 'John';
-  lastName.value = 'Doe';
-  // No effects run inside this block
-});
-// Output: "John Doe" (flushed synchronously after batch)
-```
-
-### Form Submission Example - batch
-
-```typescript
-const email = atom('');
-const password = atom('');
-const errors = atom<string[]>([]);
-
-function handleSubmit(formData: FormData) {
-  batch(() => {
-    email.value = formData.get('email') as string;
-    password.value = formData.get('password') as string;
-    errors.value = [];
-  });
-  // All validation effects run here with consistent state
-}
-```
-
-### Nested Batch Example - batch
-
-```typescript
-batch(() => {
-  atom1.value = 'a';
-  batch(() => {
-    atom2.value = 'b';
-    atom3.value = 'c';
-    // Inner batch does NOT flush here
-  });
-  atom4.value = 'd';
-  // Outer batch flushes all four updates here
-});
-```
-
-### Return Value - batch
-
-`batch()` returns the value returned by `fn`:
-
-```typescript
-const result = batch(() => {
-  count.value = 10;
-  return count.value * 2;
-}); // result === 20
-```
+---
 
 ## `aeNextTick(fn?: () => void): Promise<void>`
 
-Returns a promise that resolves after the next scheduler flush. This is the recommended way to wait for all asynchronous effects to be processed and the DOM to be in a consistent state.
+Returns a promise that resolves after the next scheduler flush.
 
-- **Deduplication**: Optimized for performance. Multiple calls without a callback share a single pending promise and scheduler job, significantly reducing allocations. Calls with callbacks resolve in the order they were queued within the same flush cycle.
-- **Batch Awareness**: If called within a `batch()` block, it waits for the synchronous flush triggered at the end of the batch.
-- **Callback Support**: Accepts an optional callback for non-async/await usage.
+This is the recommended method to wait for all asynchronous effects to settle and for the system to reach a consistent state, particularly useful in testing environments.
 
-### Example - aeNextTick
-
-```typescript
-import { atom, effect, aeNextTick } from '@but212/atom-effect';
-
-const count = atom(0);
-let title = '';
-
-effect(() => {
-  title = `Count is ${count.value}`;
-});
-
-count.value = 1;
-
-// Title is still '' because the effect is queued in a microtask
-await aeNextTick();
-
-// Now title is 'Count is 1'
-console.log(title);
-```
+---
 
 ## `untracked<T>(fn: () => T): T`
 
-Runs a function without tracking dependencies. Any `.value` reads inside the callback are implicit to the enclosing `effect` or `computed`. Optimized with a minimal-overhead path for nested untracked calls.
+Executes a function without registering dependencies. Any reactive reads inside the callback will not cause the enclosing `effect` or `computed` to re-run.
 
-### When to use - untracked
+---
 
-- **Read without subscribing**: Access a value for computation without creating a dependency.
-- **Logging / Debugging**: Read state for logging without re-triggering the effect on every change.
-- **Conditional dependencies**: Selectively opt-out of tracking for specific reads.
+## `AsyncState`
 
-### Basic Example - untracked
+An exported object representing the possible states of an asynchronous computed atom:
 
-```typescript
-import { atom, effect, untracked } from '@but212/atom-effect';
+- `AsyncState.IDLE`: 'idle'
+- `AsyncState.PENDING`: 'pending'
+- `AsyncState.RESOLVED`: 'resolved'
+- `AsyncState.REJECTED`: 'rejected'
 
-const source = atom(0);
-const config = atom('verbose');
-
-effect(() => {
-  // Tracked: effect re-runs when `source` changes
-  const val = source.value;
-
-  // Untracked: effect does NOT re-run when `config` changes
-  const mode = untracked(() => config.value);
-
-  console.log(`[${mode}] Value: ${val}`);
-});
-```
-
-### Conditional Dependency Example - untracked
-
-```typescript
-const searchQuery = atom('');
-const searchResults = atom<string[]>([]);
-const totalCount = atom(0);
-
-effect(() => {
-  const query = searchQuery.value; // Tracked
-
-  const count = untracked(() => totalCount.value);
-
-  console.log(`Searching "${query}" (${count} total results so far)`);
-});
-```
-
-### Inside Computed Example - untracked
-
-```typescript
-const items = atom([1, 2, 3]);
-const multiplier = atom(2);
-
-const result = computed(() => {
-  // Recompute when items change, but NOT when multiplier changes
-  return items.value.map(i => i * untracked(() => multiplier.value));
-});
-```
+---
 
 ## Error Handling
 
-The library provides a structured error hierarchy to help you identify and recover from issues in the reactive graph.
+The library utilizes a structured error hierarchy for identifying and recovering from issues within the reactive graph.
 
-### `AtomError` (Base Class)
+### `AtomError`
 
-All errors thrown by the system inherit from `AtomError`.
+The base class for all library-specific errors.
 
-- **Properties**:
-  - `message`: Human-readable description.
-  - `cause`: The original error or value that triggered this error (`unknown`).
-  - `recoverable`: Boolean indicating if the system can potentially recover if dependencies change.
-  - `code`: Optional machine-readable string (e.g., `ERR_CIRCULAR_DEP`).
-- **Methods**:
-  - `getChain()`: Returns an array of the entire error chain, from the current error down to the root cause.
-  - `toJSON()`: Returns a plain object representation for logging.
+- `message`: Description of the error.
+- `cause`: The underlying error or value that triggered the failure.
+- `recoverable`: Boolean indicating if the system can recover if dependencies change.
+- `code`: Machine-readable error code (e.g., `ERR_CIRCULAR_DEP`).
 
 ### Specialized Errors
 
-- `ComputedError`: Thrown when a computation fails. Usually `recoverable: true`.
-- `EffectError`: Thrown during effect execution or cleanup. Usually `recoverable: false`.
-- `SchedulerError`: Thrown by the execution engine (e.g., infinite loop detection).
-
-### `AtomErrorConstructor` (Type)
-
-A specialized constructor type for Atom errors, ensuring consistent signatures across the system.
-
-```typescript
-type AtomErrorConstructor = new (
-  message: string,
-  cause?: unknown,
-  recoverable?: boolean,
-  code?: string
-) => AtomError;
-```
-
-### `wrapError(error: unknown, ErrorClass: AtomErrorConstructor, context: string): AtomError`
-
-Wraps any value into the Atom error hierarchy. If the input is already an `AtomError`, it creates a new wrapper to preserve the propagation context, building a "trace" of how the error traveled through your atoms.
+- `ComputedError`: Errors occurring during computed value evaluation.
+- `EffectError`: Errors occurring during effect execution or cleanup.
+- `SchedulerError`: Errors from the internal execution engine (e.g., infinite loop detection).
 
 ---
 
 ## Lens & Structural Sharing
 
-Lenses provide a type-safe way to create two-way reactive "views" into part of a larger object-based atom. They are essential for managing monolithic state trees with high performance and zero-allocation updates.
+Lenses allow for the creation of reactive "views" into specific parts of an object-based atom.
 
-### `atomLens<T, P>(atom: WritableAtom<T>, path: P): WritableAtom<PathValue<T, P>>`
+### `atomLens<T, P>(atom: WritableAtom<T>, path: P)`
 
-Creates a writable virtual atom that points to a specific dot-path within a source atom.
+Creates a writable virtual atom pointing to a dot-path within a source atom. It uses structural sharing to ensure that only modified paths are updated, preserving reference equality for unrelated branches.
 
-- **Structural Sharing**: Writing to a lens only clones objects along the modified path. Unrelated branches stay reference-equal (`===`).
-- **Equality Guard**: If the new value is identical to the current one (via `Object.is`), the parent atom is not updated, preventing redundant effect propagation.
-- **Nullable Support**: Correctly resolves types for optional (`?`) or nullable properties using `NonNullable` internally.
-- **Auto-Autocompletion**: Supports IDE path completion up to 8 levels deep with exact type inference.
-
-```typescript
-const store = atom({ user: { profile: { name: 'Alice' } } });
-const nameLens = atomLens(store, 'user.profile.name');
-
-console.log(nameLens.value); // 'Alice'
-nameLens.value = 'Bob'; // Atomically updates store.user.profile.name
-```
-
-### `composeLens<T, P>(lens: WritableAtom<T>, path: P)`
-
-Deeper targeting by composing an existing lens with a relative sub-path.
-
-```typescript
-const userLens = atomLens(store, 'user');
-const nameLens = composeLens(userLens, 'profile.name');
-```
+- **Path Resolution Engine**: Supports fully typed dot-paths for deep object structures, including arrays (`user.items.0.name`) and open-ended dictionaries (`Record<string, T>`).
+- **Flexible Typing**: The setter and subscription callbacks accept broader types (`unknown`) to accommodate structural updates and dynamic keys.
 
 ### `lensFor(atom)`
 
-Creates a factory function bound to an atom for concise lens creation.
-
-```typescript
-const lens = lensFor(store);
-const name = lens('user.profile.name');
-const age = lens('user.profile.age');
-```
-
-### `getPathValue(source: unknown, parts: string[]): unknown`
-
-High-performance utility to retrieve a nested value using an array of path segments.
-
-- **Security**: Automatically blocks access to `__proto__`, `constructor`, and `prototype` keys to prevent information leaks or prototype manipulation.
-
-### `setDeepValue(obj: unknown, keys: string[], index: number, value: unknown): unknown`
-
-The core structural sharing engine. Recursively creates a new object tree, cloning only the necessary nodes.
-
-- **Security**: Implements strict prototype pollution protection by blocking updates to `__proto__`, `constructor`, and `prototype` keys. Any attempt to modify these properties is ignored, returning the original object reference.
+A factory utility for creating multiple lenses bound to the same source atom.
 
 ---
 
-## `debug` Utilities
+## Debugging Utilities
 
-The `debug` object provides several utilities for troubleshooting and inspecting the reactive graph. In production builds, these utilities are swapped for minimal-overhead no-op functions unless explicitly enabled.
+The `runtimeDebug` object (exported from the core) provides tools for inspecting the reactive graph. In production, these are typically no-op functions unless explicitly enabled.
 
-### `debug.dumpGraph()`
+- `dumpGraph()`: Returns metadata for all currently active reactive nodes.
+- `trackUpdate(id, name)`: Increments the update count for a node (used for loop detection).
 
-Returns an array containing metadata for all currently active reactive nodes (Atoms, Computeds, Effects).
+### Global Debug Toggle
 
-- **Returns**: `Array<{ id: number, name: string, type: string, updateCount: number }>`
-- **Usage**: Useful for building DevTools or inspecting the state of the reactive graph at runtime.
-- **Note**: Uses `WeakRef` internally; only returns nodes that have not been garbage collected.
-
-### `debug.trackUpdate(id: DependencyId, name?: string)`
-
-Increments the update count for a specific node to detect infinite loops. While automatically called by the engine's internal setters and executors, it can be used for custom instrumentation.
-
-### `debug.getDebugName(node: object)` / `debug.getDebugType(node: object)`
-
-Retrieves the debug name and type metadata attached to a reactive node.
+Debug features can be enabled at runtime by setting `window.__ATOM_DEBUG__ = true` or `sessionStorage.setItem('__ATOM_DEBUG__', 'true')` before the library script is evaluated.
 
 ---
 
-## Global Debug Toggle
+## Internal Buffers (Advanced)
 
-Even in production-mode builds, you can enable debug features at runtime. Because the library swaps the debug implementation at load time for optimized performance, the global flag must be set **before** the library script evaluates.
+The library uses specialized buffers (`SlotBuffer`, `DepSlotBuffer`) for high-performance dependency and subscriber management. While primarily internal, they are exported for advanced use cases and testing.
 
-You can accomplish this by either setting it in your HTML `<head>`, or by using `sessionStorage` and refreshing the page (which is evaluated when resolving the initial state):
+### `SlotBuffer<T>`
 
-```javascript
-// Method 1: Set before script loads
-window.__ATOM_DEBUG__ = true;
+A hybrid buffer using Small Vector Optimization (SVO).
 
-// Method 2: Set in sessionStorage and refresh
-sessionStorage.setItem('__ATOM_DEBUG__', 'true');
-```
+- `length`: The number of active (non-null) items in the buffer.
+- `capacity`: The highest physical index occupied plus one.
+- `push(item: T): number`: Adds an item to the buffer, reusing holes if possible. Returns the index.
+- `at(index: number): T | null`: Returns the item at the specified index.
+- `remove(item: T): boolean`: Removes an item and leaves a hole for future reuse.
+- `compact(): void`: Eliminates all internal holes and resets physical boundaries.
 
-This overrides the `ProdDebugController` no-op implementation and activates full tracking and logging features.
+### `DepSlotBuffer`
+
+A specialized `SlotBuffer` for `DependencyLink` objects, adding a Map-based fallback for $O(1)$ lookups when the collection grows large (> 32 items).

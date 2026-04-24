@@ -1,189 +1,111 @@
-# Security: HTML Sanitization Guide
+# Security & Sanitization Layer
 
-This guide explains the built-in sanitization layer and how to integrate [DOMPurify](https://github.com/cure53/DOMPurify) for production-grade XSS protection.
-
----
-
-## Built-in Sanitization
-
-`atomHtml` applies a built-in sanitization policy (`sanitizeHtml`) before injecting content. It addresses common security vectors but is **not** a comprehensive defense.
-
-### What it blocks
-
-`sanitizeHtml` (used by `atomHtml`):
-
-| Vector | Action |
-| ------ | ------ |
-| `<script>`, `<iframe>`, `<object>`, `<embed>`, `<base>`, `<meta>`, `<applet>`, `<noscript>`, `<form>`, `<style>`, `<link>` | Tag stripped and transformed into inert `<span>` wrappers. |
-| `onclick`, `onerror`, etc. (`on*` attributes) | Replaced with a single, comma-separated `data-unsafe-attr` list. |
-| `javascript:`, `vbscript:`, `data:` protocols | Neutralized (Replaced with `data-unsafe-protocol:`). Strips all internal whitespace and handles decoded entities. |
-| `srcset` hijacking | Each comma-separated URL is individually normalized and validated. |
-| Untrusted data URIs (`text/html`, `application/javascript`, `image/svg+xml`, etc.) | Neutralized. Covers both standalone attributes and `srcdoc` sinks. |
-| CSS expressions & protocol smuggling | Normalizes CSS by **stripping comments** (`/*...*/`) first, then matches against a data-driven array of threat patterns. |
-| Entities (`&#NNN;`, `&#xHH;`, `&colon;`, etc.) | **Decoded first** in the normalization phase. Correctively handles optional trailing semicolons. |
-| Null bytes / control characters | **Stripped after entity decoding** to prevent hidden payloads. |
-| XML processing instructions (`<?...?>`) | Stripped |
-
-`bindAttr` (used by `atomAttr` / `atomBind.attr`):
-
-| Vector | Action |
-| ------ | ------ |
-| `on*` attribute names (e.g., `onclick`) | Silently blocked (attribute not set) |
-| `javascript:` / `vbscript:` / `data:` in URL attributes | Silently blocked. Returns normalized safe URLs to prevent entity bypasses. |
-| SVG URL attributes (`fill`, `filter`, `mask`, etc.) | Sanitized for untrusted protocols |
-| `srcset` and `srcdoc` | Subject to individual URL validation and explicit content scanning respectively. |
-
-`bindCss` (used by `atomCss` / `atomBind.css`):
-
-| Vector | Action |
-| ------ | ------ |
-| `url(javascript:...)` / `url(vbscript:...)` in CSS values | Silently blocked (style not applied) |
-
-`bindProp` (used by `atomProp` / `atomBind.prop`):
-
-| Vector | Action |
-| ------ | ------ |
-| `innerHTML`, `outerHTML`, `srcdoc` (HTML injection sinks) | Silently blocked |
-| `__proto__`, `constructor`, `prototype` (prototype pollution) | Silently blocked |
-| `on*` property names (e.g., `onclick`) | Silently blocked |
-| `javascript:` / `vbscript:` in mapped URL properties (e.g., `src`, `href`) | Silently blocked |
-
-### What it does NOT block
-
-- Non-standard event handlers beyond `on*` pattern in specialized tags (e.g., rare attribute-based execution in legacy browsers)
-- Mutation-based XSS (mXSS)
-- CSS-based data exfiltration (beyond identified protocol vectors)
-
-**For production applications handling user-generated content, use of a comprehensive library like DOMPurify is recommended.**
+`atom-effect-jquery` implements a robust, industry-grade security layer designed to prevent Cross-Site Scripting (XSS) and DOM Clobbering attacks. This document details the architectural measures and sanitization policies enforced by the library.
 
 ---
 
-## Policy-Driven Architecture
+## Security Architecture
 
-The sanitization layer uses a **Data-Driven Policy** architecture. Instead of hardcoded logic, security rules are defined in a `SanitizationPolicy` object.
+The library utilizes a **Data-Driven Security Policy** combined with a **Safe DOM Bridge** to neutralize malicious payloads before they are committed to the document.
 
-### Customizing the Policy
+### 1. Safe DOM Bridge (Clobbering Protection)
 
-You can extend the `DEFAULT_POLICY` or provide a completely new one to `sanitizeHtml`:
+To prevent **DOM Clobbering** attacks—where malicious elements (like `<input id="attributes">`) shadow native property descriptors—the sanitizer interacts with the DOM exclusively via native prototypes.
 
-```typescript
-import { sanitizeHtml, DEFAULT_POLICY } from '@but212/atom-effect-jquery';
+- Accesses `attributes`, `localName`, and `innerHTML` using `Element.prototype` descriptors.
+- Ensures native logic is used even if the target element's instance properties have been tampered with.
 
-const myPolicy = {
-  ...DEFAULT_POLICY,
-  // Allow iframes for specific trusted sources
-  allowedTags: [...DEFAULT_POLICY.allowedTags, 'iframe'],
-};
+### 2. Hybrid Parsing Strategy
 
-// Use the policy manually
-const safe = sanitizeHtml(untrusted, myPolicy);
-```
+The `sanitizeHtml` engine automatically switches between parsing strategies to ensure content integrity:
 
-### Global Policy (Experimental)
-
-Future versions will allow injecting a global policy to override behavior across all `atomBind` and `atomHtml` calls. Currently, policy injection is available at the utility function level.
+- **Fragment Parsing**: Uses a detached `<template>` element for standard HTML fragments.
+- **Document Parsing**: Uses `document.implementation.createHTMLDocument` when top-level tags like `<body>` or `<html>` are detected, preventing the browser from stripping them.
 
 ---
 
-## DOMPurify Integration
+## Sanitization Policy
 
-### Installation
+All reactive bindings that inject HTML or manipulate attributes are governed by the `SanitizationPolicy`.
 
-npm
+### Blocked Elements
 
-```bash
-npm install dompurify
-npm install -D @types/dompurify  # TypeScript users
-```
+The following tags are considered high-risk and are neutralized by transforming them into safe `<span>` containers:
 
-script tag
+- **Executable**: `<script>`, `<iframe>`, `<object>`, `<embed>`, `<applet>`
+- **Structural/State**: `<base>`, `<meta>`, `<link>`, `<title>`, `<noscript>`, `<form>`, `<isindex>`
+- **Global**: `<body>`, `<html>`, `<head>` (Neutralized to prevent full-page hijacking)
 
-```html
-<script type="text/javascript" src="dist/purify.min.js"></script>
-```
+### Attribute Protection
 
-### Basic Usage with `atomHtml`
+The library performs deep inspection of all element attributes:
 
-```javascript
-import DOMPurify from 'dompurify';
+- **Event Handlers**: Any attribute starting with `on` (e.g., `onclick`) is removed and logged in a `data-unsafe-attr` attribute.
+- **Attribute Name Smuggling**: Dangerous URI protocols detected within attribute names (e.g., `<div javascript:alert(1)="...">`) are blocked.
+- **Foreign Contexts**: SVG/MathML animation attributes (`attributeName`, `from`, `to`, `values`) are scrubbed if they point to event handlers or dangerous protocols.
 
-const rawContent = $.atom('<p>User <b>content</b></p>');
+### URI & Protocol Sanitization
 
-// Sanitize reactively — DOMPurify runs whenever rawContent changes
-const safeContent = $.computed(() => DOMPurify.sanitize(rawContent.value));
-$('#output').atomHtml(safeContent);
-```
+The library employs **Advanced Normalization** to reveal hidden protocols:
 
-### Custom Configuration
-
-Allow specific tags or attributes beyond DOMPurify defaults:
-
-```javascript
-const purifyConfig = {
-  ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'a', 'p', 'br', 'ul', 'ol', 'li', 'h1', 'h2', 'h3'],
-  ALLOWED_ATTR: ['href', 'target', 'rel', 'class'],
-  ALLOW_DATA_ATTR: false,
-};
-
-const safeHtml = $.computed(() =>
-  DOMPurify.sanitize(rawHtml.value, purifyConfig)
-);
-$('#content').atomHtml(safeHtml);
-```
-
-### Usage with `atomList`
-
-When rendering lists with user-supplied HTML in the `render` callback:
-
-```javascript
-import DOMPurify from 'dompurify';
-
-$('#comments').atomList(commentsAtom, {
-  key: c => c.id,
-  render: (comment) => {
-    const safeBody = DOMPurify.sanitize(comment.body);
-    return `<div class="comment">${safeBody}</div>`;
-  },
-  bind: ($el, comment) => {
-    $el.find('.author').text(comment.author);
-  }
-});
-```
-
-### Usage with `atomBind`
-
-```javascript
-const safeContent = $.computed(() => DOMPurify.sanitize(rawHtml.value));
-
-$('#card').atomBind({
-  html: safeContent,
-  class: { 'has-content': $.computed(() => !!rawHtml.value) },
-});
-```
+- **Entity Decoding**: Decodes hex (`&#x61;`), decimal (`&#97;`), and named (`&colon;`) entities.
+- **Control Character Stripping**: Removes null bytes (`\0`), control characters (`\x01-\x1f`), and Unicode replacement characters ().
+- **Protocol Blocking**: Neutralizes `javascript:`, `vbscript:`, and dangerous `data:` types (e.g., `text/html`, `image/svg+xml`).
 
 ---
 
-## Content Security Policy (CSP)
+## API Integration
 
-DOMPurify works well with strict CSP policies. If your site uses a CSP that blocks inline styles or scripts:
+### `$.fn.atomHtml(atom)`
 
-```javascript
-// Tell DOMPurify to strip inline styles
-const safeHtml = DOMPurify.sanitize(dirty, {
-  FORBID_ATTR: ['style'],
-  FORBID_TAGS: ['style'],
-});
-```
+Automatically passes all content through `sanitizeHtml` before rendering. This is the primary defense for dynamic content injection.
 
-For `nonce`-based CSP setups, note that DOMPurify does not add nonces to sanitized output. Inline styles and scripts in user content will be blocked by CSP (which is the intended behavior).
+### `$.fn.atomAttr(name, atom)`
+
+Validates the `name` and `value` against the security policy.
+
+- If the attribute name is an event handler or protocol, it is blocked.
+- If the value for a URI-based attribute (like `href`) is dangerous, it is replaced with `data-unsafe-protocol:`.
+
+### `$.fn.atomCss(prop, atom)`
+
+Validates CSS values against dangerous patterns:
+
+- Blocks `expression()`, `behavior:`, and `-moz-binding`.
+- Blocks `url()` values containing dangerous protocols.
+
+### `$.fn.atomProp(name, atom)`
+
+Strictly guards dangerous sinks. Properties like `innerHTML`, `outerHTML`, and `srcdoc` are **completely blocked** from reactive property binding.
 
 ---
 
-## Summary
+## Best Practices
 
-| Scenario | Recommendation |
-| -------- | -------------- |
-| Static, developer-controlled HTML | Built-in `sanitizeHtml` is sufficient |
-| User-generated content (comments, profiles) | Use DOMPurify |
-| Rich text editor output | Use DOMPurify with custom `ALLOWED_TAGS` |
-| Markdown rendering | Sanitize **after** markdown-to-HTML conversion |
+### Handling Untrusted Content
+
+While the built-in sanitizer is highly effective, we recommend using [DOMPurify](https://github.com/cure53/DOMPurify) for processing complex, user-generated rich text in high-stakes environments.
+
+```javascript
+// Integrating DOMPurify with atom-effect
+const safeHtml = $.computed(() => DOMPurify.sanitize(userInput.value));
+$el.atomHtml(safeHtml);
+```
+
+### Content Security Policy (CSP)
+
+The library is fully compatible with strict CSPs. It does not use `eval()` or `new Function()`. Since the library requires **jQuery 4.0.0+**, it benefits from modern browser security features and avoids legacy XSS vectors found in older jQuery versions.
+
+---
+
+## Summary of Defense
+
+| Vector | Protection Mechanism |
+| :--- | :--- |
+| **XSS (Tag)** | Neutralized to `<span>` via `blacklistedTags`. |
+| **XSS (Event)** | Stripped via `on*` pattern matching. |
+| **XSS (Protocol)** | Blocked via `isDangerousUri` (with normalization). |
+| **DOM Clobbering** | Prevented via `DOM_PROTOTYPE_BRIDGE`. |
+| **CSS Injection** | Blocked via `cssDangerPatterns`. |
+| **SVG/MathML Vectors** | Explicitly scrubbed via animation attribute checks. |
+| **Srcset/Srcdoc** | Recursively sanitized or segment-validated. |

@@ -1,8 +1,5 @@
-// vite.config.ts
-
-import { playwright } from '@vitest/browser-playwright';
+import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
-import { defineConfig } from 'vitest/config';
 
 export default defineConfig(({ mode }) => ({
   define: {
@@ -11,16 +8,17 @@ export default defineConfig(({ mode }) => ({
   build: {
     target: 'es2021',
     lib: {
-      entry: 'src/index.ts',
+      entry: `${import.meta.dirname}/src/index.ts`,
       name: 'AtomEffectJQuery',
       formats: ['es', 'cjs', 'umd'],
       fileName: (format: string) =>
         format === 'umd' ? 'atom-effect-jquery.min.js' : `index.${format === 'es' ? 'mjs' : 'cjs'}`,
     },
     rollupOptions: {
-      external: ['jquery'],
+      external: ['jquery', '@but212/atom-effect'],
       output: {
         globals: {
+          '@but212/atom-effect': 'AtomEffect',
           jquery: 'jQuery',
         },
         exports: 'named',
@@ -29,15 +27,15 @@ export default defineConfig(({ mode }) => ({
     sourcemap: true,
   },
   resolve: {
-    tsconfigPaths: true,
-  },
-  plugins: [dts({ rollupTypes: true, exclude: ['src/**/*.test.ts', '__tests__/**/*'] })],
-  test: {
-    browser: {
-      enabled: true,
-      provider: playwright(),
-      instances: [{ browser: 'chromium' }],
+    alias: {
+      '@': `${import.meta.dirname}/src`,
     },
-    setupFiles: ['./__tests__/setup.ts'],
   },
+  plugins: [
+    dts({
+      include: ['src/**/*'],
+      exclude: ['src/**/*.test.ts', '__tests__/**/*', '__benchmarks__/**/*', 'node_modules'],
+      tsconfigPath: './tsconfig.build.json',
+    }),
+  ],
 }));

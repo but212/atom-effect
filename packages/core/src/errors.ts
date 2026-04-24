@@ -1,20 +1,23 @@
 /**
- * Structured JSON representation of an AtomError for external transport or logging.
- *
- * @public
+ * A structured JSON representation of an `AtomError` used for transport or logging.
  */
 export interface AtomErrorJSON {
+  /** The specific name of the error class. */
   name: string;
+  /** The human-readable error message. */
   message: string;
+  /** An optional machine-readable error code. */
   code?: string | undefined;
+  /** Indicates whether the system can attempt to recover from this error. */
   recoverable: boolean;
+  /** The stack trace associated with the error. */
   stack?: string | undefined;
+  /** The underlying cause of the error, if any. */
   cause?: unknown | undefined;
 }
 
 /**
- * Constructor type signature for Atom-branded errors.
- *
+ * A constructor signature for Atom-branded error classes.
  * @internal
  */
 export type AtomErrorConstructor = new (
@@ -25,48 +28,52 @@ export type AtomErrorConstructor = new (
 ) => AtomError;
 
 /**
- * Base error class for the Atom system.
+ * The base error class for the reactive system.
  *
- * Logic: Provides high-performance traceability by maintaining an error chain
- * and protecting against circular references during serialization.
+ * This class provides advanced traceability by maintaining an execution-context
+ * error chain and implements protection against circular references during
+ * serialization to JSON.
  *
  * When to use:
- * - Creating custom error types within the reactive engine.
- * - Inspecting or logging complex failure chains.
+ * - To define custom error types within reactive primitives.
+ * - To capture and wrap third-party errors with system-specific context.
  *
  * @example
  * ```typescript
+ * import { AtomError } from '@but212/atom-effect';
+ *
  * try {
- *   performComputation();
+ *   executeTask();
  * } catch (err) {
- *   throw new AtomError('Computation failed', err, true, 'ERR_COMP_01');
+ *   throw new AtomError('Task failed', err, true, 'ERR_TASK_FAILED');
  * }
  * ```
- *
- * @public
  */
 export class AtomError extends Error {
   override readonly name: string = 'AtomError';
 
   constructor(
     message: string,
+    /** The underlying value or error that caused this error to be thrown. */
     public readonly cause: unknown = null,
+    /** Indicates whether the reactive node should attempt to re-execute after this error. */
     public readonly recoverable: boolean = true,
+    /** A unique identifier for the specific error category. */
     public readonly code?: string
   ) {
     super(message);
 
-    // Optimization: Maintain a stable object shape for V8 to ensure
-    // errors remain in the "fast" object optimization path.
+    // Optimization: Capture the stack trace while maintaining a stable object shape.
+    // This ensures that error objects stay in V8's fast optimization path.
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, this.constructor);
     }
   }
 
   /**
-   * Returns the entire error chain as an array.
+   * Retrieves the full sequence of causal errors associated with this instance.
    *
-   * @returns Array containing historical causes.
+   * @returns An array containing the current error followed by its historical causes.
    */
   getChain(): Array<AtomError | Error | unknown> {
     const cause = this.cause;
@@ -79,6 +86,7 @@ export class AtomError extends Error {
     while (current !== null && current !== undefined) {
       chain.push(current);
 
+      // Constraint: Prevent infinite loops during chain traversal due to recursive error wrapping.
       if (current === this || seen?.has(current)) break;
 
       if (current instanceof AtomError) {
@@ -89,8 +97,8 @@ export class AtomError extends Error {
         break;
       }
 
-      // Optimization: Initialize deep cycle detection only for long chains (>3)
-      // to minimize memory allocations for simple one-off errors.
+      // Optimization: Cycle detection is lazily initialized for deep chains (>3) to avoid
+      // unnecessary Set allocations for standard shallow errors.
       if (chain.length > 3) {
         if (seen === null) {
           seen = new Set(chain);
@@ -103,12 +111,14 @@ export class AtomError extends Error {
   }
 
   /**
-   * Serializes the error to a structured object for external logging/storage.
+   * Serializes the error instance into a plain object structure.
    *
-   * Caution: Heavily recursive for deep chains.
-   * Constraint: Must prevent circular references to avoid crashing serializers (e.g., JSON.stringify).
+   * Caution: This method is recursive and may impact performance for extremely deep error chains.
+   * Constraint: It incorporates cycle detection to prevent circular reference errors
+   * during serialization (e.g., when using `JSON.stringify`).
    *
-   * @param seen - Internal tracking set to manage recursion.
+   * @param seen - An internal set used to track visited objects during recursion.
+   * @returns A JSON-serializable representation of the error.
    */
   toJSON(seen?: Set<unknown>): AtomErrorJSON {
     const s = seen ?? new Set<unknown>();
@@ -144,22 +154,21 @@ export class AtomError extends Error {
     };
   }
 
+  /** @internal */
   static format(source: string, context: string, message: string): string {
     return `${source} (${context}): ${message}`;
   }
 }
 
 /**
- * Thrown when a computation fails (e.g., in a selector or computed atom).
- * @public
+ * An error thrown during the evaluation of a computed atom or selector.
  */
 export class ComputedError extends AtomError {
   override readonly name = 'ComputedError';
 }
 
 /**
- * Thrown when an effect execution or cleanup fails.
- * @public
+ * An error thrown during the execution or cleanup phase of a reactive effect.
  */
 export class EffectError extends AtomError {
   override readonly name = 'EffectError';
@@ -169,8 +178,7 @@ export class EffectError extends AtomError {
 }
 
 /**
- * Thrown by the execution engine or internal scheduler.
- * @public
+ * An error thrown by the internal scheduler or execution engine.
  */
 export class SchedulerError extends AtomError {
   override readonly name = 'SchedulerError';
@@ -180,16 +188,14 @@ export class SchedulerError extends AtomError {
 }
 
 /**
- * Registry of standardized error messages for the entire system.
+ * A central registry of standardized error messages used across the core library.
  *
  * When to use:
- * - Providing consistent localized strings for error logging.
- * - Comparing error messages in tests or diagnostic tools.
- *
- * @public
+ * - To provide consistent diagnostic output in loggers or dev-tools.
+ * - To programmatically identify specific error conditions in tests.
  */
 export const ERROR_MESSAGES = {
-  // Computed Errors
+  // --- Computed Errors ---
   COMPUTED_MUST_BE_FUNCTION: 'Computed target must be a function',
   COMPUTED_ASYNC_PENDING_NO_DEFAULT: 'Async computation pending with no default value',
   COMPUTED_COMPUTATION_FAILED: 'Computation execution failed',
@@ -197,21 +203,22 @@ export const ERROR_MESSAGES = {
   COMPUTED_CIRCULAR_DEPENDENCY: 'Circular dependency detected',
   COMPUTED_DISPOSED: 'Attempted to access disposed computed',
 
-  // Atom Errors
+  // --- Atom Errors ---
   ATOM_SUBSCRIBER_MUST_BE_FUNCTION: 'Subscriber must be a function or Subscriber object',
   ATOM_INDIVIDUAL_SUBSCRIBER_FAILED: 'Subscriber execution failed',
 
-  // Effect Errors
+  // --- Effect Errors ---
   EFFECT_MUST_BE_FUNCTION: 'Effect target must be a function',
   EFFECT_EXECUTION_FAILED: 'Effect execution failed',
   EFFECT_CLEANUP_FAILED: 'Effect cleanup failed',
   EFFECT_DISPOSED: 'Attempted to run disposed effect',
 
-  // Scheduler Errors
+  // --- Scheduler Errors ---
+  /** Returns a formatted message for flush overflow errors. */
   SCHEDULER_FLUSH_OVERFLOW: (max: number, dropped: number): string =>
     `Maximum flush iterations (${max}) exceeded. ${dropped} jobs dropped. Possible infinite loop.`,
 
-  // System / Debug
+  // --- System & Debug ---
   CALLBACK_ERROR_IN_ERROR_HANDLER: 'Exception encountered in onError handler',
   EFFECT_FREQUENCY_LIMIT_EXCEEDED:
     'Effect executed too frequently within 1 second. Suspected infinite loop.',
@@ -221,22 +228,27 @@ export const ERROR_MESSAGES = {
 } as const;
 
 /**
- * Wraps any caught value into the Atom error hierarchy, preserving the trace context.
+ * Normalizes an unknown error value into the system's error hierarchy.
  *
  * When to use:
- * - Normalizing `catch (err)` blocks before rethrowing or logging.
- * - Ensuring consistency across nested execution scopes.
+ * - In `catch` blocks to ensure that errors propagated from effects or atoms
+ *   carry consistent technical context and are traceable through the chain.
  *
- * @param error - The raw error or object thrown.
- * @param ErrorClass - The specific AtomError subclass to use as container.
- * @param context - Human-readable description of the origin context.
+ * @param error - The raw error value or object to wrap.
+ * @param ErrorClass - The specific `AtomError` subclass used as a container.
+ * @param context - A human-readable label indicating the origin of the error.
+ * @returns A new instance of `ErrorClass` containing the original error as a cause.
  *
  * @example
  * ```typescript
- * wrapError(rawError, ComputedError, 'Computed compute() block');
- * ```
+ * import { wrapError, EffectError } from '@but212/atom-effect';
  *
- * @public
+ * try {
+ *   userCallback();
+ * } catch (err) {
+ *   throw wrapError(err, EffectError, 'User Callback Phase');
+ * }
+ * ```
  */
 export function wrapError(
   error: unknown,

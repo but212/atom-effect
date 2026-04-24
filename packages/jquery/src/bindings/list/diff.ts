@@ -1,4 +1,4 @@
-import { ERROR_MESSAGES, LOG_PREFIXES } from '@/constants';
+import { SYSTEM_LIST } from '@/constants';
 import type { ListKey, ListKeyFn, ListOptions } from '@/types';
 import { shallowEqual } from '@/utils';
 import { debug } from '@/utils/debug';
@@ -6,18 +6,28 @@ import type { ListContext } from './context';
 import { ItemState, type PreparedDiff } from './types';
 
 /**
- * Prepares the reconciliation plan (diff) between the old list state and the new items.
+ * Generates a reconciliation plan by calculating the difference between the
+ * current list state and the new item set.
  *
- * Logic: Identifies reusable DOM nodes, new entries, and forced replacements
- * using a high-performance double-ended diffing algorithm. It isolates the
- * modified "dirty" range by skipping unchanged items at both ends of the list.
+ * Logic: This function implements a double-ended diffing algorithm to identify
+ * reusable DOM nodes, new entries, and required replacements. It optimizes
+ * performance by isolating the "dirty" range — skipping unchanged items at
+ * both the head and tail of the list.
  *
  * When to use:
- * - Calculating a batch of DOM mutations for the `atomList` binding.
+ * - Internal orchestration of DOM mutations for the `atomList` binding.
+ *
+ * @param ctx - The current list context containing historical DOM state.
+ * @param items - The new set of items to render.
+ * @param itemCount - The total number of new items.
+ * @param getKey - A function to derive a unique key for each item.
+ * @param update - An optional callback used to patch existing DOM nodes.
+ * @param isEqual - An optional equality comparator for items.
+ * @returns A detailed diff plan used to execute DOM updates.
  *
  * @example
  * ```typescript
- * const diff = buildIndices(ctx, items, items.length, getKey, updateFn, eqFn);
+ * const diff = buildIndices(context, nextItems, nextItems.length, getKey, onUpdate, onEqual);
  * ```
  *
  * @internal
@@ -34,9 +44,9 @@ export function buildIndices<T>(
   const oldLen = oldKeys.length;
   const eq = isEqual || shallowEqual;
 
-  let startIndex = 0,
-    oldEndIndex = oldLen - 1,
-    newEndIndex = itemCount - 1;
+  let startIndex = 0;
+  let oldEndIndex = oldLen - 1;
+  let newEndIndex = itemCount - 1;
 
   const newKeySet = new Set<ListKey>();
   const newKeys: ListKey[] = new Array(itemCount);
@@ -46,27 +56,30 @@ export function buildIndices<T>(
   const newIndices: number[] = new Array(itemCount);
   const toRender: { key: ListKey; item: T; index: number }[] = [];
 
-  // Reason: Fast-forward through items that haven't moved or changed at the start
-  // to avoid mapping overhead for static sections.
+  // Optimization: Fast-forward through identical items at the start of the list.
+  // This bypasses the mapping and diffing logic for static sections of the list.
   while (startIndex <= oldEndIndex && startIndex <= newEndIndex) {
-    const item = items[startIndex]!,
-      k = getKey(item, startIndex);
-    if (oldKeys[startIndex] !== k || !eq(oldItems[startIndex]!, item) || !oldNodes[startIndex])
+    const item = items[startIndex]!;
+    const k = getKey(item, startIndex);
+    if (oldKeys[startIndex] !== k || !eq(oldItems[startIndex]!, item) || !oldNodes[startIndex]) {
       break;
+    }
     keyToIndex.set(k, startIndex++);
   }
 
-  // Reason: Narrow the "dirty" middle range by matching items from the end,
-  // minimizing the O(N) complexity of the subsequent mapping phase.
+  // Optimization: Fast-forward through identical items at the end of the list.
+  // Narrowing the "dirty" middle range minimizes the complexity of the O(N) mapping phase.
   while (oldEndIndex >= startIndex && newEndIndex >= startIndex) {
-    const item = items[newEndIndex]!,
-      k = getKey(item, newEndIndex);
-    if (oldKeys[oldEndIndex] !== k || !eq(oldItems[oldEndIndex]!, item) || !oldNodes[oldEndIndex])
+    const item = items[newEndIndex]!;
+    const k = getKey(item, newEndIndex);
+    if (oldKeys[oldEndIndex] !== k || !eq(oldItems[oldEndIndex]!, item) || !oldNodes[oldEndIndex]) {
       break;
+    }
     keyToIndex.set(k, newEndIndex--);
     oldEndIndex--;
   }
 
+  // Logic: Re-populate unchanged head items into the new state buffers.
   for (let i = 0; i < startIndex; i++) {
     const k = oldKeys[i]!;
     newKeys[i] = k;
@@ -76,6 +89,8 @@ export function buildIndices<T>(
     newIndices[i] = i;
     newKeySet.add(k);
   }
+
+  // Logic: Re-populate unchanged tail items into the new state buffers.
   for (let j = oldLen - 1, i = itemCount - 1; i > newEndIndex; i--, j--) {
     const k = oldKeys[j]!;
     newKeys[i] = k;
@@ -87,27 +102,32 @@ export function buildIndices<T>(
   }
 
   const oldIndexMap = new Map<ListKey, number>();
-  for (let i = startIndex; i <= oldEndIndex; i++) oldIndexMap.set(oldKeys[i]!, i);
+  for (let i = startIndex; i <= oldEndIndex; i++) {
+    oldIndexMap.set(oldKeys[i]!, i);
+  }
 
+  // Logic: Reconcile the remaining "dirty" middle section of the list.
   for (let i = startIndex; i <= newEndIndex; i++) {
-    const item = items[i]!,
-      k = getKey(item, i);
+    const item = items[i]!;
+    const k = getKey(item, i);
     newKeys[i] = k;
     newItems[i] = item;
     keyToIndex.set(k, i);
 
     if (newKeySet.has(k)) {
-      debug.warn(LOG_PREFIXES.LIST, ERROR_MESSAGES.LIST.DUPLICATE_KEY(k, i));
+      debug.warn(SYSTEM_LIST.PREFIX, SYSTEM_LIST.ERRORS.DUPLICATE_KEY(k, i));
       newIndices[i] = -1;
       continue;
     }
     newKeySet.add(k);
 
     const foundIdx = oldIndexMap.get(k);
-    // Caution: Reclaiming an animating node.
-    // If a key is in `removingKeys`, its DOM node is currently performing a
-    // removal animation. We must treat this as a 'New' item (creating a fresh node)
-    // rather than potentially re-using a node that is in an inconsistent state.
+
+    // Caution: Reclaiming animating nodes.
+    // If a key is present in `removingKeys`, its DOM node is currently undergoing
+    // a removal transition. To prevent inconsistent UI states, we treat this
+    // as a 'New' item (forcing a fresh node creation) rather than attempting
+    // to reclaim the transitioning node.
     const oldIdx = foundIdx !== undefined && !removingKeys.has(k) ? foundIdx : undefined;
 
     if (oldIdx === undefined) {
@@ -119,10 +139,10 @@ export function buildIndices<T>(
 
     newNodes[i] = oldNodes[oldIdx]!;
 
-    // Logic: Handling partial updates vs full replacements.
-    // If an 'update' callback is missing and content has changed, the library
-    // cannot patch the existing DOM. We must force a 'ForceReplace' state
-    // to trigger a clean re-render.
+    // Logic: Node reuse strategy.
+    // If no custom `update` callback is provided and the item content has changed,
+    // the existing DOM node cannot be patched. In this case, we trigger a
+    // 'ForceReplace' state to ensure the node is fully re-rendered.
     if (!update && !eq(oldItems[oldIdx]!, item)) {
       toRender.push({ key: k, item, index: i });
       newStates[i] = ItemState.ForceReplace;
