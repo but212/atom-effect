@@ -7,128 +7,121 @@ describe('Binding Registry', () => {
     $.initAEJ({ patch: true, autoCleanup: true });
   });
 
-  describe('Cleanup Lifecycle', () => {
-    it('should be atomic and idempotent (removes marker class always)', () => {
+  describe('Cleanup Lifecycle (Manual)', () => {
+    it('should be atomic and idempotent when removing marker classes', async () => {
       const $el = $('<div class="_aes-bound"></div>');
 
-      // 1. Unregistered element
+      // 1. Unregistered element should just have its class removed
       cleanup($el);
       expect($el.hasClass('_aes-bound')).toBe(false);
 
-      // 2. Fragmented/Detached element
-      const atom = $.atom('v');
+      // 2. Active binding should be disposed and class removed
+      const atom = $.atom('initial');
       $el.atomText(atom);
+      await $.nextTick();
       expect($el.hasClass('_aes-bound')).toBe(true);
 
       cleanup($el);
       expect($el.hasClass('_aes-bound')).toBe(false);
 
-      // Verify binding is dead
-      atom.value = 'dead';
-      expect($el.text()).not.toBe('dead');
+      // Verify reactivity is terminated
+      atom.value = 'updated';
+      expect($el.text()).not.toBe('updated');
     });
 
-    it('should handle errors gracefully during all cleanup phases', () => {
+    it('should continue cleaning up even if individual disposals fail', () => {
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      const $el = $('<div>').appendTo('body');
+      const $el = $('<div>').appendTo(document.body);
 
-      // Register multiple things that fail during cleanup
-      $el.atomText(
-        $.computed(() => {
-          return 'test';
-        })
-      );
-
-      // Force a failing effect disposal (we can't easily make a standard effect throw on dispose without internal access,
-      // but we can use a custom cleanup)
-      $el.atomMount(() => {
-        return () => {
-          throw new Error('mount cleanup fail');
-        };
+      // Register multiple features, one of which throws during cleanup
+      $el.atomText($.atom('test'));
+      $el.atomMount(() => () => {
+        throw new Error('cleanup error');
       });
 
       cleanup($el);
+
       expect(errorSpy).toHaveBeenCalled();
+      expect($el.hasClass('_aes-bound')).toBe(false);
       errorSpy.mockRestore();
     });
   });
 
-  describe('Auto-Cleanup System', () => {
-    it('should respect boundaries regardless of initialization timing (Body Readiness)', async () => {
-      // Ensure: system works even if first call happens before body is ready
-      $.initAEJ({ autoCleanup: false });
+  describe('Auto-Cleanup System (MutationObserver)', () => {
+    it('should track and clean up elements added before body is ready', async () => {
+      $.initAEJ({ autoCleanup: false }); // Reset
 
       const originalBody = document.body;
       const bodySpy = vi
         .spyOn(document, 'body', 'get')
         .mockReturnValue(null as unknown as HTMLElement);
 
-      // Trigger first binding check (head/early script simulation)
-      const atom = $.atom('initial');
+      // Simulate early binding (e.g. in <head>)
+      const atom = $.atom('v1');
       const earlyEl = document.createElement('div');
       $(earlyEl).atomText(atom);
 
+      // Restore body and re-init
       bodySpy.mockReturnValue(originalBody);
       $.initAEJ({ autoCleanup: true });
 
       const $el = $('<span>').appendTo(document.body);
+      await $.nextTick();
       $el.atomText(atom);
 
+      // Remove and verify cleanup
       $el[0]!.remove();
       await vi.waitFor(() => {
-        atom.value = 'cleaned';
-        return $el.text() !== 'cleaned';
+        atom.value = 'v2';
+        return $el.text() !== 'v2';
       });
     });
 
-    it('should support various container types including Shadow DOM', async () => {
+    it('should support automatic cleanup within Shadow DOM boundaries', async () => {
       const $host = $('<div>').appendTo(document.body);
       const shadow = $host[0]!.attachShadow({ mode: 'open' });
       $.initAEJ({ autoCleanup: { root: shadow } });
 
-      const atom = $.atom('v');
-      const $child1 = $('<span>').appendTo(shadow as unknown as HTMLElement);
-      $child1.atomText(atom);
+      const atom = $.atom('active');
+      const $child = $('<span>').appendTo(shadow as unknown as HTMLElement);
+      $child.atomText(atom);
 
-      // 1. Manual subtree cleanup check
-      cleanup($host); // cleanup host should cleanup its shadow
-      atom.value = 'cleaned1';
-      expect($child1.text()).not.toBe('cleaned1');
+      // 1. Cleanup host should reach into shadow
+      cleanup($host);
+      atom.value = 'dead';
+      expect($child.text()).not.toBe('dead');
 
-      // 2. Mutation-based auto cleanup check
+      // 2. Mutation cleanup in shadow
       const $child2 = $('<span>').appendTo(shadow as unknown as HTMLElement);
       $child2.atomText(atom);
       $child2[0]!.remove();
 
       await vi.waitFor(() => {
-        atom.value = 'cleaned2';
-        return $child2.text() !== 'cleaned2';
+        atom.value = 'final';
+        return $child2.text() !== 'final';
       });
     });
 
-    it('should allow multiple roots and handle global disable', async () => {
-      const root1 = document.createElement('div');
-      const root2 = document.createElement('div');
-      document.body.appendChild(root1);
-      document.body.appendChild(root2);
+    it('should verify that disabling autoCleanup prevents automatic disposal', async () => {
+      const root = document.createElement('div');
+      document.body.appendChild(root);
 
-      const atom = $.atom('v');
+      const atom = $.atom('v1');
+      $.initAEJ({ autoCleanup: { root } });
 
-      $.initAEJ({ autoCleanup: { root: root1 } });
-      // Note: initAEJ currently only supports one root at a time in the config,
-      // but we can test global disable.
+      const $el = $('<span>').appendTo(root);
+      $el.atomText(atom);
 
-      const $el1 = $('<span>').appendTo(root1);
-      $el1.atomText(atom);
-
+      // Disable system globally
       $.initAEJ({ autoCleanup: false });
 
-      $el1[0]!.remove();
+      $el[0]!.remove();
       await $.nextTick();
 
+      // Should still be reactive (leaked)
       atom.value = 'leaked';
       await $.nextTick();
-      expect($el1.text()).toBe('leaked');
+      expect($el.text()).toBe('leaked');
     });
   });
 });

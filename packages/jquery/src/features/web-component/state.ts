@@ -93,30 +93,30 @@ export class ComponentState {
   ensureSlotTracking(root?: ShadowRoot | null) {
     const sr = resolveShadowRoot(this.host, root || this.root);
 
-    if (!this.slotsAtom) {
-      const initial: Record<string, Node[]> = {};
+    const snapshot = () => {
+      const next: Record<string, Node[]> = {};
       if (sr) {
-        sr.querySelectorAll('slot').forEach((s) => (initial[s.name || ''] = s.assignedNodes()));
+        sr.querySelectorAll('slot').forEach((s) => (next[s.name || ''] = s.assignedNodes()));
       }
-      this.slotsAtom = $.atom(initial);
+      return next;
+    };
+
+    if (!this.slotsAtom) {
+      this.slotsAtom = $.atom(snapshot());
     }
 
     if (!sr || this.slotListeners.has('all')) return;
 
-    const sync = () => {
-      const next = { ...this.slotsAtom!.peek() };
-      sr.querySelectorAll('slot').forEach((s) => (next[s.name || ''] = s.assignedNodes()));
-      this.slotsAtom!.value = next;
-    };
-    sync();
+    // Initial sync
+    this.slotsAtom.value = snapshot();
 
     const listener = (e: Event) => {
       const target = e.target as HTMLSlotElement;
-      this.slotsAtom!.value = {
-        ...this.slotsAtom!.peek(),
-        [target.name || '']: target.assignedNodes(),
-      };
+      const current = { ...this.slotsAtom!.peek() };
+      current[target.name || ''] = target.assignedNodes();
+      this.slotsAtom!.value = current;
     };
+
     sr.addEventListener('slotchange', listener);
     this.slotListeners.set('all', listener);
   }

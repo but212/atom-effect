@@ -138,6 +138,19 @@ class BindingRegistry {
   }
 
   /**
+   * Safely adds a CSS marker to an element, deferring if it's currently being constructed.
+   */
+  private safeMark(element: Element, className: string): void {
+    if (element.isConnected) {
+      element.classList.add(className);
+    } else {
+      // Logic: Defer class modification to avoid NotSupportedError/DOMException
+      // during Custom Element construction (attributes cannot be set in constructor).
+      queueMicrotask(() => element.classList.add(className));
+    }
+  }
+
+  /**
    * Marks a host element to indicate it possesses a managed ShadowRoot.
    *
    * Optimization: This adds a CSS marker used by `cleanupDescendants` to
@@ -147,12 +160,7 @@ class BindingRegistry {
    * @internal
    */
   markHost(host: Element): void {
-    if (host.isConnected) {
-      host.classList.add(MARK_SHADOW);
-    } else {
-      // Logic: Defer class modification to avoid DOMException during Custom Element construction.
-      queueMicrotask(() => host.classList.add(MARK_SHADOW));
-    }
+    this.safeMark(host, MARK_SHADOW);
   }
 
   /**
@@ -183,7 +191,7 @@ class BindingRegistry {
     if (!result) {
       result = {};
       this.records.set(element, result);
-      element.classList.add(MARK_BOUND);
+      this.safeMark(element, MARK_BOUND);
     }
     return result;
   }

@@ -60,7 +60,7 @@ export const SetupFeatures = {
   },
 
   hydrate(
-    root: Element,
+    root: ParentNode,
     bindings: Record<string, ReadonlyAtom<unknown>>,
     effects: Set<EffectObject>,
     hydratedNodes: Set<Element>
@@ -92,7 +92,11 @@ export const SetupFeatures = {
     this.observe(root, selector, apply, effects);
   },
 
-  parts(root: Element, parts: Record<string, ReadonlyAtom<unknown>>, effects: Set<EffectObject>) {
+  parts(
+    root: ParentNode,
+    parts: Record<string, ReadonlyAtom<unknown>>,
+    effects: Set<EffectObject>
+  ) {
     const apply = (node: Element) => {
       const key = node.getAttribute('data-aej-part');
       if (key && parts[key]) {
@@ -119,7 +123,7 @@ export const SetupFeatures = {
   },
 
   observe(
-    root: Element,
+    root: ParentNode,
     selector: string,
     apply: (n: Element) => void,
     effects: Set<EffectObject>

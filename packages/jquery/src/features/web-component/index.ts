@@ -356,6 +356,14 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       s.providerEffects?.forEach((e) => e.dispose());
       s.providerEffects?.clear();
       s.injects?.clear();
+
+      // Logic: If the component is destroyed before it ever connects to the DOM,
+      // we must explicitly release it from the auto-setup queue to prevent leaks.
+      if (autoSetupMap.has(element)) {
+        autoSetupMap.delete(element);
+        ContextEngine.release();
+      }
+
       ContextEngine.bump();
       state.dispose();
       registry.deferCleanup(element);
@@ -389,6 +397,10 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       ContextEngine.retain();
     }
   }
+
+  // Reason: Provide a safety net for automatic resource cleanup when the
+  // element is removed from the DOM, even if teardown() isn't called manually.
+  registry.setTeardown(element, () => controller.teardown());
 
   internal.controller = controller;
   return controller;
