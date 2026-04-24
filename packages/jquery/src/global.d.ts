@@ -374,54 +374,56 @@ declare global {
      * Registers a reactive context value at a specific DOM root.
      *
      * When to use:
--    * - To share state (atoms) with deep descendants without explicit prop drilling.
--    * - To establish theme or configuration contexts at specific DOM roots.
-+    * - Recommended for sharing state (atoms) with deep descendants without 
-+    *   explicit prop drilling.
-+    * - Suitable for establishing theme or configuration contexts at specific DOM roots.
+     * - Recommended for sharing state (atoms) with deep descendants without
+     *   explicit prop drilling.
+     * - Suitable for establishing theme or configuration contexts at specific DOM roots.
      *
      * Logic: Dependency Injection
      * Shares state with descendant elements via the bubbling `aej:context-request` event.
-@@ -387,7 +388,7 @@
+     *
+     * Logic: CSS Bridge
      * Automatically synchronizes provided values with CSS custom properties (`--aej-[key]`),
      * enabling reactive styling driven by application state.
      *
--    * Optimization: Versioning
-+    * Optimization: Versioned Discovery
-     * Uses a global versioning system to trigger re-discovery when nodes move in the DOM.
-     *
      * @param element - The host element, selector, or collection acting as provider.
-@@ -406,12 +407,12 @@
-     /**
+     * @param key - Unique identifier for the context (string or symbol).
+     * @param val - The reactive atom or static value to share.
+     */
+    provideAtom(element: HTMLElement | JQuery | string, key: string | symbol, val: unknown): void;
+
+    /**
      * Injects a reactive context provided by an ancestor element.
      *
      * When to use:
--    * - To consume state from an ancestor without direct coupling.
--    * - To create context-aware components that adapt to their DOM hierarchy position.
-+    * - Recommended for consuming state from an ancestor without direct coupling.
-+    * - Suitable for creating context-aware components that adapt to their 
-+    *   DOM hierarchy position.
+     * - Recommended for consuming state from an ancestor without direct coupling.
+     * - Suitable for creating context-aware components that adapt to their
+     *   DOM hierarchy position.
      *
      * Logic: Hybrid Discovery
--    * Consumes state from ancestors without direct coupling. Returns a proxy
--    * that automatically re-locates providers if the element is moved within
-+    * Returns a reactive proxy atom that automatically re-locates providers 
-+    * if the element is moved within the DOM hierarchy.
+     * Returns a reactive proxy atom that automatically re-locates providers
+     * if the element is moved within the DOM hierarchy.
      *
      * @param element - The element or selector requesting the context.
-@@ -426,8 +427,8 @@
-     /**
+     * @param key - The unique identifier of the context to locate.
+     * @returns A reactive proxy atom representing the injected context.
+     */
+    injectAtom<T = unknown>(
+      element: HTMLElement | JQuery | string,
+      key: string | symbol
+    ): WritableAtom<T>;
+
+    /**
      * Composition-based helper for building reactive Web Components.
      *
      * When to use:
--    * - When building standard Custom Elements that require reactive state and DI.
--    * - To mapping between HTML attributes/slots and reactive atoms.
-+    * - Recommended for integrating reactive state management into standard 
-+    *   Custom Elements.
-+    * - Suitable for mapping HTML attributes and slots to reactive atoms.
+     * - Recommended for integrating reactive state management into standard
+     *   Custom Elements.
+     * - Suitable for mapping HTML attributes and slots to reactive atoms.
      *
      * Logic: Lifecycle Integration
-@@ -438,10 +439,12 @@
+     * Returns a controller that orchestrates the initialization and teardown
+     * of component-specific reactive resources.
+     *
      * @param element - The host Custom Element (usually `this`).
      * @returns A controller for managing the component's reactive lifecycle.
      *
@@ -429,16 +431,22 @@ declare global {
      * ```typescript
      * class MyComponent extends HTMLElement {
      *   private aej = $.useAtomComponent(this);
-+    *   private count = $.atom(0);
+     *   private count = $.atom(0);
      *
      *   connectedCallback() {
--    *     this.aej.setup();
-+    *     this.aej.setup({
-+    *       bind: { count: this.count }
-+    *     });
+     *     this.aej.setup({
+     *       bind: { count: this.count }
+     *     });
      *     this.aej.$('.btn').on('click', () => console.log('Action performed'));
      *   }
      *
+     *   disconnectedCallback() {
+     *     this.aej.teardown();
+     *   }
+     * }
+     * ```
+     */
+    useAtomComponent(element: HTMLElement): AtomComponentController;
 
     /**
      * Initializes the Atom-Effect jQuery library with custom settings.

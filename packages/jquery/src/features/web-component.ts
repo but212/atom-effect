@@ -43,6 +43,7 @@ interface NodeInternalState {
 
 const nodeStateMap = new WeakMap<Node, NodeInternalState>();
 const sheetCache = new Map<string, CSSStyleSheet>();
+const MAX_SHEET_CACHE_SIZE = 100;
 
 /** Retrieves or initializes the internal metadata state for a node. @internal */
 const getInternalState = (node: Node): NodeInternalState => {
@@ -71,10 +72,6 @@ const supportsInternals =
 /**
  * Normalizes a style source into a shareable CSSStyleSheet.
  *
- * Optimization: Style Sheet Caching
- * Ensures that identical CSS strings are shared across component
- * instances using constructable stylesheets.
- *
  * @internal
  */
 const getOrCreateSheet = (source: string | CSSStyleSheet): CSSStyleSheet => {
@@ -83,6 +80,13 @@ const getOrCreateSheet = (source: string | CSSStyleSheet): CSSStyleSheet => {
   if (!sheet) {
     sheet = new CSSStyleSheet();
     sheet.replaceSync(source);
+
+    // Limits the cache size to prevent memory leaks from dynamic CSS.
+    if (sheetCache.size >= MAX_SHEET_CACHE_SIZE) {
+      const firstKey = sheetCache.keys().next().value;
+      if (firstKey !== undefined) sheetCache.delete(firstKey);
+    }
+
     sheetCache.set(source, sheet);
   }
   return sheet;
@@ -114,45 +118,36 @@ const resolveShadowRoot = (
 const ContextEngine = (() => {
   const version = $.atom(0);
   let isBumpPending = false;
+  let observer: MutationObserver | null = null;
 
   const bump = () => {
     if (isBumpPending) return;
     isBumpPending = true;
-    /**
-     * Logic: Throttled Versioning
-     * Uses microtasks to coalesce multiple DOM mutations into a single
-     * reactive flush, minimizing re-discovery overhead.
-     */
     queueMicrotask(() => {
       version.value++;
       isBumpPending = false;
     });
   };
 
-  if (typeof document !== 'undefined') {
-    const observer = new MutationObserver((mutations) => {
+  /** Lazily initializes the global mutation observer. */
+  const ensureObserver = () => {
+    if (observer || typeof document === 'undefined') return;
+    observer = new MutationObserver((mutations) => {
       if (mutations.some((m) => m.addedNodes.length > 0 || m.removedNodes.length > 0)) {
         bump();
       }
     });
     observer.observe(document.documentElement, { childList: true, subtree: true });
-  }
+  };
 
   return {
-    /** The reactive version atom. */
     get version() {
+      ensureObserver();
       return version;
     },
-    /** Forces a manual version bump. */
     bump,
-    /**
-     * Dispatches a bubbling event to locate a provider for a specific key.
-     *
-     * Logic: Event-Based Discovery
-     * Leverages DOM event propagation to traverse the tree (including
-     * Shadow DOM) to find the nearest provider.
-     */
     discover(target: HTMLElement, key: string | symbol): unknown {
+      ensureObserver();
       let found: unknown = null;
       const event = new CustomEvent<ContextRequestDetail>(CONTEXT_REQUEST, {
         detail: {
@@ -195,7 +190,11 @@ function createContextProxy<T>(target: HTMLElement, key: string | symbol): Writa
     return (isAtom(p) ? (isPeek ? p.peek() : p.value) : p) as T;
   };
 
-  const shared = $.computed(() => getLiveValue(false));
+  let sharedAtom: ReadonlyAtom<T> | null = null;
+  const getShared = () => {
+    if (!sharedAtom) sharedAtom = $.computed(() => getLiveValue(false));
+    return sharedAtom;
+  };
 
   return {
     get value() {
@@ -208,9 +207,14 @@ function createContextProxy<T>(target: HTMLElement, key: string | symbol): Writa
     peek() {
       return getLiveValue(true);
     },
-    subscribe: (fn) => shared.subscribe(fn),
-    subscriberCount: () => shared.subscriberCount(),
-    dispose: () => shared.dispose(),
+    subscribe: (fn) => getShared().subscribe(fn),
+    subscriberCount: () => (sharedAtom ? sharedAtom.subscriberCount() : 0),
+    dispose: () => {
+      if (sharedAtom) {
+        sharedAtom.dispose();
+        sharedAtom = null;
+      }
+    },
     [BRAND]: BrandFlags.Atom | BrandFlags.Writable,
   } as WritableAtom<T>;
 }
