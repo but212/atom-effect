@@ -178,8 +178,9 @@ function scrubAttributes(el: HTMLElement, policy: SanitizationPolicy): void {
     // Block event handlers and smuggled protocols in attribute names
     if (lowName.startsWith('on') || isDangerousUri(name)) {
       DOM.remAttr(el, name);
-      if (lowName.startsWith('on')) events.push(name);
-      else if (attrs.getNamedItem('style')) DOM.setAttr(el, 'style', 'data-unsafe-css:');
+      if (lowName.startsWith('on')) {
+        events.push(name);
+      }
       continue;
     }
 

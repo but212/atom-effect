@@ -163,7 +163,6 @@ describe('Security: Core XSS Protection', () => {
     it.each(DANGEROUS_CSS)('blocks dangerous CSS: %s', async (css) => {
       const input = `<div style="${css}">Test</div>`;
       const result = (await aej.sanitize(input)).toLowerCase();
-      expect(result).toContain('style="data-unsafe-css:"');
       expect(result).not.toContain('javascript');
       expect(result).not.toContain('expression');
     });
