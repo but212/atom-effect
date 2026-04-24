@@ -17,6 +17,11 @@
 
 ### jQuery
 
+#### Breaking Changes
+
+- **Dependency**: Bumped minimum jQuery version from `3.0.0` to `3.5.0`.
+  - This ensures consistent `MutationObserver` behavior and avoids redundant attribute mutation triggers during element creation/insertion.
+
 #### Added
 
 - **Diagnostic Warnings**: Integrated unregistered custom element detection in `$.route`, `$.useAtomComponent`, and `$.injectAtom` when `debug.enabled` is true.
