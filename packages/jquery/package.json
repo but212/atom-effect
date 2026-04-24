@@ -54,17 +54,17 @@
     "directory": "packages/jquery"
   },
   "peerDependencies": {
-    "jquery": ">=3.6.0"
+    "jquery": ">=4.0.0"
   },
   "dependencies": {
     "@but212/atom-effect": "workspace:*"
   },
   "devDependencies": {
-    "@types/jquery": "^3.5.0",
+    "@types/jquery": "^4.0.0",
     "@vitest/browser": "^4.1.5",
     "@vitest/browser-playwright": "^4.1.5",
     "@vitest/coverage-v8": "^4.1.5",
-    "jquery": "3.6.0",
+    "jquery": "^4.0.0",
     "playwright": "^1.59.1",
     "vite": "^8.0.10",
     "vite-plugin-dts": "^4.5.4",

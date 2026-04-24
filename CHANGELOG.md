@@ -19,7 +19,7 @@
 
 #### Breaking Changes
 
-- **Dependency**: Bumped minimum jQuery version from `3.0.0` to `3.6.0`.
+- **Dependency**: Bumped minimum jQuery version from `3.0.0` to `4.0.0`.
   - This ensures consistent `MutationObserver` behavior and avoids redundant attribute mutation triggers during element creation/insertion.
 
 #### Added
