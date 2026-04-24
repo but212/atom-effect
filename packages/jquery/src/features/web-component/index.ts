@@ -106,6 +106,25 @@ const ContextEngine = (() => {
     });
   };
 
+  const init = (el: HTMLElement) => {
+    const specs = autoSetupMap.get(el);
+    if (specs) {
+      const ctrl = getInternalState(el).controller;
+      if (ctrl) {
+        ctrl.setup({
+          ...(specs.aejStyles && { styles: specs.aejStyles }),
+          ...(specs.aejBind && { bind: specs.aejBind }),
+          ...(specs.aejAria && { aria: specs.aejAria }),
+          ...(specs.aejParts && { parts: specs.aejParts }),
+          ...(specs.aejDispatch && { dispatch: specs.aejDispatch }),
+          ...(specs.aejValue && { value: specs.aejValue }),
+          ...(specs.aejValidation && { validation: specs.aejValidation }),
+        });
+      }
+      autoSetupMap.delete(el);
+    }
+  };
+
   const ensureObserver = () => {
     if (observer || typeof document === 'undefined') return;
     observer = new MutationObserver((mutations) => {
@@ -116,25 +135,6 @@ const ContextEngine = (() => {
           needsBump = true;
           m.addedNodes.forEach((node) => {
             if (node instanceof HTMLElement) {
-              const init = (el: HTMLElement) => {
-                const specs = autoSetupMap.get(el);
-                if (specs) {
-                  const ctrl = getInternalState(el).controller;
-                  if (ctrl) {
-                    ctrl.setup({
-                      ...(specs.aejStyles && { styles: specs.aejStyles }),
-                      ...(specs.aejBind && { bind: specs.aejBind }),
-                      ...(specs.aejAria && { aria: specs.aejAria }),
-                      ...(specs.aejParts && { parts: specs.aejParts }),
-                      ...(specs.aejDispatch && { dispatch: specs.aejDispatch }),
-                      ...(specs.aejValue && { value: specs.aejValue }),
-                      ...(specs.aejValidation && { validation: specs.aejValidation }),
-                    });
-                  }
-                  autoSetupMap.delete(el);
-                  ContextEngine.release();
-                }
-              };
               init(node);
               node.querySelectorAll('*').forEach((el) => init(el as HTMLElement));
             }
@@ -385,7 +385,6 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       });
     } else {
       autoSetupMap.set(element, ctor);
-      ContextEngine.retain();
     }
   }
 
