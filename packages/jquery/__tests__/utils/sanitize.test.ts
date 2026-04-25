@@ -17,6 +17,18 @@ const TestKit = {
     return result;
   },
 
+  async sanitizeUpdate(initial: string, update: string): Promise<string> {
+    const val = $.atom(initial);
+    const $el = $('<div>').appendTo(document.body).atomHtml(val);
+    await $.nextTick();
+    val.value = update;
+    await $.nextTick();
+    const result = $el.html();
+    $el.atomUnbind();
+    $el.remove();
+    return result;
+  },
+
   async isUrlBlocked(attr: string, url: string): Promise<boolean> {
     const $el = $('<a>').atomAttr(attr, $.atom(url));
     await $.nextTick();
@@ -236,6 +248,19 @@ describe('Atom-Effect: Security Specification', () => {
       expect(result).toContain('srcdoc="');
       expect(result).toContain('&lt;b&gt;test&lt;/b&gt;');
       expect(result).toContain('&quot;quote&quot;');
+    });
+
+    it('should recursively sanitize srcdoc content', async () => {
+      const payload = '<iframe srcdoc="&lt;script&gt;alert(1)&lt;/script&gt;"></iframe>';
+      const result = (await TestKit.sanitize(payload)).toLowerCase();
+      expect(result).not.toContain('<script');
+      expect(result).toContain('&lt;span');
+    });
+
+    it('should sanitize dynamic updates via atoms (Reactive Integration)', async () => {
+      const result = await TestKit.sanitizeUpdate('<b>Safe</b>', '<img src=x onerror=alert(1)>');
+      expect(result).not.toContain('onerror=');
+      expect(result).toContain('data-unsafe-attr="onerror"');
     });
   });
 });

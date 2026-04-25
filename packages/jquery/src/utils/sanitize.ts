@@ -210,9 +210,25 @@ const Guard = {
     const clean = this.normalize(val).replace(REGEX.CSS_CLEAN, '').toLowerCase();
     if (['javascript:', 'expression(', '-moz-binding'].some((s) => clean.includes(s))) return true;
     const url = clean.match(/url\s*\(\s*["']?([^"')]*)["']?\s*\)/i)?.[1];
-    return !!url && (this.isDangerousUri(url) || url.startsWith('http'));
+    return !!url && this.isDangerousUri(url);
   },
 };
+
+/**
+ * @internal
+ * Logic: Core Sanitization Engine
+ * Shared internal implementation for recursive and fragment-based sanitization.
+ */
+function _sanitize(html: string, policy: SanitizationPolicy): string {
+  const parser = DOM.createElement<HTMLTemplateElement>('template');
+  parser.innerHTML = html;
+
+  walkTree(parser.content, policy);
+
+  const serializer = document.createElement('div');
+  serializer.appendChild(parser.content);
+  return serializer.innerHTML;
+}
 
 // ─── Rule Engine ─────────────────────────────────────────────────────────────
 
@@ -242,6 +258,28 @@ const DEFENSE_RULES: DefenseRule[] = [
         .map((p) => p.trim())
         .filter((p) => p && !Guard.isDangerousCss(p));
       DOM.setAttribute(el, k, safeStyles.length ? `${safeStyles.join('; ')};` : 'data-unsafe-css:');
+    },
+  },
+  {
+    // Logic: HTML Sinks (srcdoc)
+    // Performs recursive sanitization on srcdoc content to ensure nested safety.
+    match: (k) => k === 'srcdoc',
+    action: (el, k, v, p) => DOM.setAttribute(el, k, _sanitize(v, p)),
+  },
+  {
+    // Logic: Multi-URI Attributes (srcset)
+    // Validates each URI segment within a srcset attribute.
+    match: (k) => k === 'srcset',
+    action: (el, k, v) => {
+      const parts = v.split(',').map((part) => {
+        const trimmed = part.trim();
+        if (!trimmed) return part;
+        const [url, ...meta] = trimmed.split(/\s+/);
+        return Guard.isDangerousUri(url!)
+          ? ['data-unsafe-protocol:', ...meta].join(' ')
+          : [Guard.normalize(url!), ...meta].join(' ');
+      });
+      DOM.setAttribute(el, k, parts.join(', '));
     },
   },
   {
@@ -411,21 +449,7 @@ export function sanitizeHtml(
   policy: SanitizationPolicy = DEFAULT_POLICY
 ): string {
   if (!html) return '';
-  const input = String(html);
-
-  // Security: Inert Parsing
-  // Uses <template> as an inert context. Content inside <template> is parsed
-  // but not executed, preventing scripts or network requests during sanitization.
-  const parser = DOM.createElement<HTMLTemplateElement>('template');
-  parser.innerHTML = input;
-
-  walkTree(parser.content, policy);
-
-  // Logic: Serialization
-  // Reconstructs the string by moving cleaned nodes into a serializable div.
-  const serializer = document.createElement('div');
-  serializer.appendChild(parser.content);
-  return serializer.innerHTML;
+  return _sanitize(String(html), policy);
 }
 
 /**
