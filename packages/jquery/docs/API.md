@@ -104,12 +104,13 @@ $el.atomBind({ text: [count, c => `Count: ${c}`] });
 Updates `innerHTML`.
 
 > **🛡️ Security Implementation**:
-> This method implements a multi-layered sanitization pipeline to protect the DOM from untrusted data:
+> This method implements a hardened, rule-based sanitization engine to protect the DOM from untrusted data:
 >
-> 1. **Inert Parsing**: Data is parsed within an inert `<template>` element, preventing the execution of any embedded scripts during initial DOM construction.
-> 2. **Recursive Tree-walking**: Every node is inspected, transforming untrusted tags (e.g., `<script>`, `<iframe>`, `<object>`) into safe, inert `<span>` wrappers.
-> 3. **Attribute Scrubbing**: All `on*` event handlers and attributes containing sensitive protocols (`javascript:`, `data:`) are strictly stripped.
-> 4. **Prototype Protection**: Interaction with DOM properties is routed through prototype-level descriptors to mitigate DOM Clobbering attacks.
+> 1. **Inert Parsing**: Data is parsed within an inert `<template>` element, preventing the execution of any embedded scripts or network requests during initial parsing.
+> 2. **Multi-pass Normalization**: Performs double-decoding of HTML entities and strips control characters to reveal hidden payloads and bypass attempts.
+> 3. **Structural Neutralization**: Transforms untrusted tags (e.g., `<script>`, `<iframe>`) into safe `<span>` wrappers. It also detects and neutralizes tags hidden within text content.
+> 4. **Priority Defense Rules**: Orchestrates attribute-level defense, stripping inline event handlers, protocol-blocking URI sinks, and filtering dangerous CSS patterns.
+> 5. **Prototype Hardening**: Interaction with DOM properties is routed through prototype-bound methods to mitigate DOM Clobbering attacks.
 >
 > For complex user-generated content, integrating a library like [DOMPurify](https://github.com/cure53/DOMPurify) is supported.
 >
@@ -147,7 +148,7 @@ $('.box').atomCss('width', widthAtom, 'px');
 Updates an HTML attribute.
 
 - **Security**: Blocks `on*` event handlers and protocols such as `javascript:`. This applies to both HTML and SVG attributes (e.g., `fill`, `filter`).
-- **HTML Sinks**: Monitors and sanitizes sensitive sinks like `srcdoc`.
+- **HTML Sinks**: Monitors and enforces protocol security on sensitive sinks like `srcdoc`.
 - **WAI-ARIA**: Boolean `false` is preserved as the string `"false"` for `aria-*` attributes instead of being removed.
 
 ```javascript

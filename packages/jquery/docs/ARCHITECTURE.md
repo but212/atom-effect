@@ -180,10 +180,10 @@ Includes a resolution cache for route links and centralized path utilities for s
 
 The binding layer includes several defensive measures:
 
-- **Sanitization**: Uses a recursive DOM-based sanitizer that transforms untrusted tags into inert wrappers.
-- **DOM Clobbering Protection**: element interactions are routed through prototype-level descriptors.
-- **Attribute & Sink Protection**: Blocks `on*` event handlers and monitors sensitive sinks like `srcdoc`.
-- **CSS Validation**: Blocks CSS values containing untrusted patterns.
+- **Sanitization**: Uses a rule-based engine (`DEFENSE_RULES`) that transforms untrusted tags into inert wrappers and neutralizes hidden tags in text content.
+- **Prototype Hardening**: Element interactions are routed through prototype-bound methods to bypass DOM Clobbering vectors.
+- **Attribute & Sink Protection**: Blocks `on*` event handlers and enforces protocol white-listing on URI-carrying attributes (including `srcdoc`).
+- **CSS Filtering**: Dynamically filters CSS declarations to allow safe styles while neutralizing dangerous patterns like `expression()` or `url(javascript:)`.
 
 ## 10. Module Structure
 
