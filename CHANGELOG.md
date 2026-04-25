@@ -11,46 +11,48 @@
 
 ### Documentation
 
+#### Added
+
 - **Standards**: Established formal TSDoc and inline comment conventions in `docs/conventions/code_documentation_conventions.md`.
-- **Core & jQuery**: Applied comprehensive documentation across both packages, focusing on audience segmentation (User vs. Contributor) and the "3-Second Rule".
 - **Internal Logic**: Added specialized annotations (`Logic:`, `Optimization:`, `Constraint:`, `Reason:`) to explain V8 optimizations, security measures, and architectural decisions.
+
+#### Changed
+
+- **Core & jQuery**: Applied comprehensive documentation across both packages, focusing on audience segmentation (User vs. Contributor) and the "3-Second Rule".
 
 ### jQuery
 
 #### Breaking Changes
 
-- **Dependency**: Bumped minimum jQuery version from `3.0.0` to `4.0.0`.
-  - This ensures consistent `MutationObserver` behavior and avoids redundant attribute mutation triggers during element creation/insertion.
+- **Dependency**: Bumped minimum jQuery version from `3.0.0` to `4.0.0` to ensure consistent `MutationObserver` behavior and avoid redundant attribute mutation triggers.
 
 #### Added
 
-- **Diagnostic Warnings**: Integrated unregistered custom element detection in `$.route`, `$.useAtomComponent`, and `$.injectAtom` when `debug.enabled` is true.
-- **Global Configuration**: Introduced `$.initAEJ` for centralized control over library behavior, allowing granular toggling of jQuery patches and custom `MutationObserver` safety-net roots.
-- **Web Components**: Introduced a comprehensive reactive toolkit for Custom Elements via `$.useAtomComponent`.
-  - **Declarative Static Specs**: Support for class-level reactive specifications using static properties (`aejStyles`, `aejBind`, `aejAria`, `aejParts`, `aejDispatch`, `aejValue`, `aejValidation`).
-  - **Intelligent Auto-Setup**: Automated component initialization via a global reference-counted `MutationObserver` that detects when components with static specs are connected to the DOM.
-  - **Lens Factory API**: Functional `attrs` and `slots` factories (e.g., `attrs('name')`) leveraging core `atomLens` for O(1) attribute and slot tracking.
-  - **Scoped Selector (`$`)**: A component-aware jQuery selector that isolates lookups to the active ShadowRoot or host element.
-  - **FACE Integration**: Native Form-Associated Custom Element support with reactive `value` and Constraint Validation (`aejValidation`) integration.
-  - **Reactive ARIA & Parts**: Direct binding to `ElementInternals` for accessibility and reactive CSS Shadow Parts management.
-  - **Shared Styles**: Optimized support for shared constructable stylesheets via `adoptedStyleSheets`.
-  - **Slot Monitoring**: Reactive tracking of `assignedNodes()` via `slotchange` events.
-  - **Lifecycle Management**: Robust `setup()` and `teardown()` cycles with support for closed Shadow DOM and safe re-hydration.
-  - **Modular Architecture**: Re-engineered internals into `ComponentState` and `SetupFeatures` for deterministic resource lifecycle management and improved auditability.
-- **Form Binding (atomForm)**:
-  - **Declarative Validation**: Integrated with the browser's Constraint Validation API via a reactive `validation` schema.
-  - **Hybrid Discovery**: Expanded selector logic to automatically bind to any element with a `name` attribute, supporting native and custom controls seamlessly.
+- **Web Components (`$.useAtomComponent`)**: Introduced a comprehensive reactive toolkit for Custom Elements.
+  - **Reactivity**: Support for declarative specifications (`aejBind`, `aejAria`, `aejParts`) and functional `attrs`/`slots` lenses.
+  - **Lifecycle**: Intelligent auto-setup via reference-counted `MutationObserver` and robust `setup`/`teardown` cycles.
+  - **Form Support**: Native FACE integration with reactive value/validation and `ElementInternals` bridge.
+  - **Optimization**: Modular architecture (`ComponentState`) and support for constructable stylesheets.
+- **Form Binding (`atomForm`)**:
+  - **Validation**: Declarative integration with browser Constraint Validation API.
+  - **Discovery**: Hybrid selector logic for automatic binding to any named element.
 - **Dependency Injection (DI)**:
-  - **Event-Based Discovery**: Migrated context resolution to a bubbling `CustomEvent` (`aej:context-request`) with `composed: true`, ensuring 100% reliability across Shadow DOM boundaries.
-  - **Hybrid Discovery Proxy**: Injected atoms now use a dual-mode resolution: Reactive (subscribing to hierarchy moves) and Synchronous (immediate discovery on `.value` access).
-  - **Context Automation**: Unified hierarchy move detection into a single `ContextEngine.version` atom, triggered by a global `MutationObserver`.
-  - **Late Binding**: Added support for late-bound reactive context in Custom Elements, enabling `injectAtom` to work correctly during element construction before DOM connection.
-  - **Type Safety**: Added generic type support (`provideAtom<T>`, `injectAtom<T>`) for improved IDE autocompletion and type checking.
-- **CSS Bridge**: Added a "CSS Bridge" feature to `provideAtom`, automatically synchronizing provided values to CSS custom properties (e.g., `--aej-key`) for direct styling integration.
+  - **Reliability**: Migrated to bubbling `CustomEvent` discovery for 100% Shadow DOM coverage.
+  - **Efficiency**: Unified move detection via `ContextEngine.version` and hybrid discovery proxies.
+  - **DX**: Added generic type support and late-binding for constructed-but-offline elements.
+- **Diagnostics**: Integrated unregistered custom element detection in `$.route` and `$.useAtomComponent` (Debug Mode only).
+- **Global Configuration**: Introduced `$.initAEJ` for centralized control over patches and mutation observer roots.
+- **CSS Bridge**: Automatically synchronize provided values to CSS custom properties (e.g., `--aej-key`).
 
 #### Changed
 
 - **Memory Management**: Overhauled the auto-cleanup engine to support multiple roots and explicit opt-out via `initAEJ`.
+
+#### Security
+
+- **Engine Overhaul**: Re-engineered `sanitizeHtml` using a single-strategy inert parsing approach and a priority-based rule system (`DEFENSE_RULES`).
+- **Hardening**: Implemented multi-pass entity decoding (double decoding) and text node neutralization to block hidden tag bypasses.
+- **CSS Filtering**: Improved CSS declaration filtering with comment-stripping and protocol validation via the `Guard` utility.
 
 #### Fixed
 
@@ -58,10 +60,10 @@
 
 #### Refactor
 
-- **Test Infrastructure**: Modularized the monolithic integration test suite into specialized categories (`features`, `synergy`, `routing`, `core`, `scenarios`, `lifecycle`) for improved maintainability and stability.
-- **ESM Modernization**: Migrated configuration files to use `import.meta.dirname` for better ESM compatibility and standardized `@/` path aliases across the monorepo.
-- **Core Overrides**: Modularized jQuery prototype patches (`jquery-patch`) to allow independent enabling of event-wrapping and lifecycle-sync hooks.
-- **Form Binder**: Centralized form synchronization and validation logic using a data-driven pipeline.
+- **Test Infrastructure**: Modularized the integration test suite into specialized categories for improved maintainability.
+- **ESM Modernization**: Migrated to `import.meta.dirname` and standardized `@/` path aliases.
+- **Core Overrides**: Modularized jQuery prototype patches (`jquery-patch`) to allow granular toggling.
+- **Form Binder**: Centralized synchronization and validation logic using a data-driven pipeline.
 
 ## [0.31.0]
 
