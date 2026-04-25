@@ -14,7 +14,7 @@ export default defineConfig({
     benchmark: {
       include: ['__benchmarks__/**/*.bench.ts'],
       exclude: ['**/node_modules/**', '**/dist/**'],
-      outputFile: '.performance/benchmark-results.json',
+      outputFile: '.performance/results/benchmark-latest.json',
     },
   },
 });

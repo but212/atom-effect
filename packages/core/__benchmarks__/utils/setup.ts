@@ -5,6 +5,8 @@
 
 import type { BenchOptions } from 'vitest';
 
+export const REPEATS = 10;
+
 /**
  * Standard benchmark options for micro-benchmarks
  * - Warmup ensures JIT compilation optimizations
@@ -24,10 +26,10 @@ export const microBenchOptions: BenchOptions = {
  * - Fewer iterations due to higher operation cost
  */
 export const macroBenchOptions: BenchOptions = {
-  time: 2000, // 2 seconds per benchmark
-  iterations: 20, // Minimum 20 iterations
-  warmupTime: 200, // 200ms warmup
-  warmupIterations: 5,
+  time: 500, // 0.5 seconds per benchmark
+  iterations: 10, // Minimum 10 iterations
+  warmupTime: 100, // 100ms warmup
+  warmupIterations: 3,
   throws: true,
 };
 
@@ -37,10 +39,10 @@ export const macroBenchOptions: BenchOptions = {
  * - Fewer iterations to avoid system stress
  */
 export const memoryBenchOptions: BenchOptions = {
-  time: 3000, // 3 seconds per benchmark
-  iterations: 50, // Minimum 50 iterations
-  warmupTime: 500, // Longer warmup for GC stabilization
-  warmupIterations: 3,
+  time: 1000, // 1 second per benchmark
+  iterations: 20, // Minimum 20 iterations
+  warmupTime: 200, // 200ms warmup
+  warmupIterations: 2,
   throws: true,
 };
 
@@ -63,6 +65,15 @@ export function formatOpsPerSec(ops: number): string {
 export const benchEffectOptions = {
   maxExecutionsPerSecond: Infinity,
   maxExecutionsPerFlush: Infinity,
+};
+
+// Warmup disabled so JIT hasn't seen the hot path yet
+export const coldBenchOptions: BenchOptions = {
+  time: 2000,
+  iterations: 500,
+  warmupTime: 0,
+  warmupIterations: 0,
+  throws: true,
 };
 
 /**
@@ -158,4 +169,118 @@ export function keep(value: any): void {
   if (Date.now() < 0) {
     console.log(_sink);
   }
+}
+
+/**
+ * Environment metadata for annotating benchmark result files.
+ */
+export interface EnvMeta {
+  nodeVersion: string;
+  platform: string;
+  arch: string;
+  date: string;
+}
+
+/** Collect runtime environment information for result annotation. */
+export function getEnvMeta(): EnvMeta {
+  return {
+    nodeVersion: process.version,
+    platform: process.platform,
+    arch: process.arch,
+    date: new Date().toISOString(),
+  };
+}
+
+export interface TodoItem {
+  id: number;
+  text: string;
+  completed: boolean;
+  createdAt: Date;
+}
+
+export interface DataGridRow {
+  id: number;
+  name: string;
+  age: number;
+  email: string;
+  department: string;
+  salary: number;
+  startDate: Date;
+  active: boolean;
+}
+
+/**
+ * Generate todo items for benchmarking
+ */
+export function generateTodos(count: number): TodoItem[] {
+  return Array.from({ length: count }, (_, i) => ({
+    id: i + 1,
+    text: `Todo item ${i + 1}`,
+    completed: i % 3 === 0,
+    createdAt: new Date(Date.now() - i * 1000 * 60),
+  }));
+}
+
+/**
+ * Generate data grid rows for benchmarking
+ */
+export function generateGridData(rows: number): DataGridRow[] {
+  const departments = ['Engineering', 'Sales', 'Marketing', 'HR', 'Finance'];
+  const names = ['Alice', 'Bob', 'Charlie', 'David', 'Eve', 'Frank', 'Grace', 'Henry'];
+
+  return Array.from({ length: rows }, (_, i) => ({
+    id: i + 1,
+    name: `${names[i % names.length]} ${Math.floor(i / names.length)}`,
+    age: 20 + (i % 50),
+    email: `user${i}@example.com`,
+    department: departments[i % departments.length]!,
+    salary: 50000 + (i % 10) * 10000,
+    startDate: new Date(2020, 0, 1 + (i % 365)),
+    active: i % 5 !== 0,
+  }));
+}
+
+/**
+ * Generate random integer between min and max (inclusive)
+ */
+export function randomInt(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+/**
+ * Generate random string of specified length
+ */
+export function randomString(length: number): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  return Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
+
+/**
+ * Generate array of random numbers
+ */
+export function randomNumbers(count: number, min = 0, max = 1000): number[] {
+  return Array.from({ length: count }, () => randomInt(min, max));
+}
+
+// ---------------------------------------------------------------------------
+// Size-keyed helpers
+// ---------------------------------------------------------------------------
+
+export const SIZES = { small: 10, medium: 100, large: 1000 } as const;
+export type SizeKey = keyof typeof SIZES;
+
+export function generateTodosBySizeKey(size: SizeKey): TodoItem[] {
+  return generateTodos(SIZES[size]);
+}
+
+export function generateGridBySizeKey(size: SizeKey): DataGridRow[] {
+  return generateGridData(SIZES[size]);
+}
+
+/**
+ * Generate a corpus of searchable strings for search-as-you-type benchmarks.
+ */
+export function generateSearchCorpus(size: SizeKey): string[] {
+  const words = ['apple', 'banana', 'cherry', 'date', 'elderberry', 'fig', 'grape', 'honeydew'];
+  return Array.from({ length: SIZES[size] }, (_, i) => `${words[i % words.length]} item ${i}`);
 }
