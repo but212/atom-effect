@@ -1,10 +1,6 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    // `baseUrl` used in the extended tsconfig chain is deprecated since TypeScript 5.x
-    // and will stop functioning in TypeScript 7.0.
-    // This flag suppresses that error until migration is complete.
-    // See: https://aka.ms/ts6
     "ignoreDeprecations": "6.0"
   }
 }
