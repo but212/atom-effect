@@ -1,7 +1,7 @@
-import { mergeConfig, type ViteUserConfig } from 'vitest/config';
+import { defineConfig, mergeConfig, type ViteUserConfig } from 'vitest/config';
 
-export const createVitestBenchConfig = (packageDir: string, options: ViteUserConfig = {}) => {
-  const baseConfig: ViteUserConfig = {
+export const getBaseVitestBenchConfig = (packageDir: string): ViteUserConfig => {
+  return {
     resolve: {
       alias: {
         '@': `${packageDir}/src`,
@@ -14,6 +14,9 @@ export const createVitestBenchConfig = (packageDir: string, options: ViteUserCon
       },
     },
   };
-
-  return mergeConfig(baseConfig, options);
 };
+
+export const defineVitestBenchConfig =
+  (packageDir: string) =>
+  (overrides: ViteUserConfig = {}) =>
+    defineConfig(() => mergeConfig(getBaseVitestBenchConfig(packageDir), overrides));

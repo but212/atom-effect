@@ -1,9 +1,13 @@
-import { createViteConfig } from '@but212/atom-effect-configs';
+import { defineViteConfig } from '@but212/atom-effect-configs';
 
-export default createViteConfig(import.meta.dirname, {
+export default defineViteConfig({
+  packageDir: import.meta.dirname,
   name: 'AtomEffectJQuery',
   libFileName: (format: string) =>
-    format === 'umd' ? 'atom-effect-jquery.min.js' : `index.${format === 'es' ? 'mjs' : 'cjs'}`,
+    format === 'umd'
+      ? 'atom-effect-jquery.min.js'
+      : `index.${format === 'es' ? 'mjs' : 'cjs'}`,
+})({
   build: {
     rollupOptions: {
       external: ['jquery', '@but212/atom-effect'],

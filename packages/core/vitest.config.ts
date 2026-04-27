@@ -1,10 +1,10 @@
-import { createVitestConfig } from '@but212/atom-effect-configs';
+import { defineVitestConfig } from '@but212/atom-effect-configs';
 import { playwright } from '@vitest/browser-playwright';
 
 const packageDir = import.meta.dirname;
 const SRC_PATH = `${packageDir}/src`;
 
-export default createVitestConfig(packageDir, {
+export default defineVitestConfig(packageDir)({
   test: {
     projects: [
       {

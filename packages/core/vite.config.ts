@@ -1,6 +1,7 @@
-import { createViteConfig } from '@but212/atom-effect-configs';
+import { defineViteConfig } from '@but212/atom-effect-configs';
 
-export default createViteConfig(import.meta.dirname, {
+export default defineViteConfig({
+  packageDir: import.meta.dirname,
   name: 'AtomEffect',
   libFileName: (format: string) => {
     if (format === 'umd') return 'atom-effect.min.js';
@@ -9,6 +10,7 @@ export default createViteConfig(import.meta.dirname, {
   dtsOptions: {
     insertTypesEntry: true,
   },
+})({
   build: {
     rollupOptions: {
       output: {

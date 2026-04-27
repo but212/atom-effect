@@ -1,6 +1,6 @@
-import { createVitestBenchConfig } from '@but212/atom-effect-configs';
+import { defineVitestBenchConfig } from '@but212/atom-effect-configs';
 
-export default createVitestBenchConfig(import.meta.dirname, {
+export default defineVitestBenchConfig(import.meta.dirname)({
   test: {
     environment: 'node',
     benchmark: {

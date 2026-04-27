@@ -1,4 +1,4 @@
-import { mergeConfig, type ViteUserConfig } from 'vitest/config';
+import { defineConfig, mergeConfig, type ViteUserConfig } from 'vitest/config';
 
 export const baseCoverageExclude = [
   'node_modules/**',
@@ -12,8 +12,8 @@ export const baseCoverageExclude = [
   'scripts/**',
 ];
 
-export const createVitestConfig = (packageDir: string, options: ViteUserConfig = {}) => {
-  const baseConfig: ViteUserConfig = {
+export const getBaseVitestConfig = (packageDir: string): ViteUserConfig => {
+  return {
     resolve: {
       alias: {
         '@': `${packageDir}/src`,
@@ -28,6 +28,9 @@ export const createVitestConfig = (packageDir: string, options: ViteUserConfig =
       },
     },
   };
-
-  return mergeConfig(baseConfig, options);
 };
+
+export const defineVitestConfig =
+  (packageDir: string) =>
+  (overrides: ViteUserConfig = {}) =>
+    defineConfig(() => mergeConfig(getBaseVitestConfig(packageDir), overrides));
