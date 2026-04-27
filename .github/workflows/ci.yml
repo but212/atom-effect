@@ -9,30 +9,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lint:
+  quality:
+    name: Lint, Build, and Typecheck
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup
       - name: Lint
         run: pnpm lint
-
-  build-and-typecheck:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: ./.github/actions/setup
       - name: Build and typecheck
         run: pnpm build && pnpm typecheck
 
   test:
+    name: Test with Coverage
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup
         with:
           install-playwright: "true"
-      - name: Test with coverage
+      - name: Test
         run: pnpm test:coverage
       - name: Upload coverage
         uses: actions/upload-artifact@v7

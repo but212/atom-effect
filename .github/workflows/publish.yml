@@ -6,21 +6,17 @@ on:
       - "v*"
 
 jobs:
-  publish:
-    name: Publish Packages
+  verify:
+    name: Verify Release
     runs-on: ubuntu-latest
-    environment: production
-
-    permissions:
-      contents: write
-      id-token: write
-
+    outputs:
+      release_notes: ${{ steps.verify.outputs.release_notes }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-
-      - name: Check version match
+      - name: Verify versions and extract changelog
+        id: verify
         run: |
           TAG_VERSION=${GITHUB_REF#refs/tags/v}
           CORE_VERSION=$(node -p "require('./packages/core/package.json').version")
@@ -38,48 +34,68 @@ jobs:
 
           echo "✓ All package versions match tag: $TAG_VERSION"
 
-      - name: Extract changelog entry
-        id: changelog
-        run: |
-          TAG_VERSION=${GITHUB_REF#refs/tags/v}
           if ! grep -q "## \[${TAG_VERSION}\]" CHANGELOG.md; then
             echo "Error: CHANGELOG.md does not contain an entry for version ${TAG_VERSION}"
             exit 1
           fi
           awk "/## \[${TAG_VERSION}\]/{flag=1;next}/## \[/{flag=0}flag" CHANGELOG.md > RELEASE_NOTES.md
 
+      - name: Upload Release Notes
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-notes
+          path: RELEASE_NOTES.md
+
+  publish:
+    name: Publish ${{ matrix.package.name }}
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: write
+      id-token: write
+    strategy:
+      matrix:
+        package:
+          - name: "@but212/atom-effect"
+            dir: "packages/core"
+          - name: "@but212/atom-effect-jquery"
+            dir: "packages/jquery"
+
+    steps:
+      - uses: actions/checkout@v6
       - uses: ./.github/actions/setup
         with:
           registry-url: "https://registry.npmjs.org"
-          install-playwright: "true"
 
-      - name: Lint
-        run: pnpm lint
+      - name: Build and Test
+        run: |
+          pnpm build
+          pnpm typecheck
+          pnpm test:run
 
-      - name: Build
-        run: pnpm build
+      - name: Publish
+        uses: ./.github/actions/publish
+        with:
+          package-name: ${{ matrix.package.name }}
+          working-directory: ${{ matrix.package.dir }}
+          npm-token: ${{ secrets.NPM_TOKEN }}
 
-      - name: Type check
-        run: pnpm typecheck
-
-      - name: Test
-        run: pnpm test:run
-
-      - name: Publish @but212/atom-effect
-        working-directory: packages/core
-        run: pnpm publish --no-git-checks --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish @but212/atom-effect-jquery
-        working-directory: packages/jquery
-        run: pnpm publish --no-git-checks --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+  release:
+    name: Create GitHub Release
+    needs: [verify, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - name: Download Release Notes
+        uses: actions/download-artifact@v7
+        with:
+          name: release-notes
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
-        if: success()
         with:
           body_path: RELEASE_NOTES.md
           generate_release_notes: true

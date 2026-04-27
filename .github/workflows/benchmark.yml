@@ -6,12 +6,19 @@ on:
 
 jobs:
   benchmark:
-    name: Run Benchmarks
+    name: Run ${{ matrix.package }} (${{ matrix.type }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [core, jquery]
+        type: [micro, macro, realistic]
+        exclude:
+          - package: jquery
+            type: realistic
 
     steps:
       - uses: actions/checkout@v6
-
       - uses: ./.github/actions/setup
         with:
           install-playwright: "true"
@@ -19,33 +26,14 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Run micro benchmarks
-        working-directory: packages/core
-        run: pnpm bench:micro | tee ../../benchmark-micro.txt
+      - name: Run benchmark
+        working-directory: packages/${{ matrix.package }}
+        run: |
+          mkdir -p ../../results
+          pnpm bench:${{ matrix.type }} | tee ../../results/${{ matrix.package }}-${{ matrix.type }}.txt
 
-      - name: Run macro benchmarks
-        working-directory: packages/core
-        run: pnpm bench:macro | tee ../../benchmark-macro.txt
-
-      - name: Run realistic benchmarks
-        working-directory: packages/core
-        run: pnpm bench:realistic | tee ../../benchmark-realistic.txt
-
-      - name: Run jQuery micro benchmarks
-        working-directory: packages/jquery
-        run: pnpm bench:micro | tee ../../benchmark-jquery-micro.txt
-
-      - name: Run jQuery macro benchmarks
-        working-directory: packages/jquery
-        run: pnpm bench:macro | tee ../../benchmark-jquery-macro.txt
-
-      - name: Upload benchmark results
+      - name: Upload results
         uses: actions/upload-artifact@v7
         with:
           name: benchmark-results
-          path: |
-            benchmark-micro.txt
-            benchmark-macro.txt
-            benchmark-realistic.txt
-            benchmark-jquery-micro.txt
-            benchmark-jquery-macro.txt
+          path: results/
