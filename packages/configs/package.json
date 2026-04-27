@@ -44,5 +44,10 @@
     "vite-plugin-dts": "^4.0.0",
     "vitest": "^4.0.0"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "tsup": "^8.5.1",
+    "vite": "^8.0.0",
+    "vite-plugin-dts": "^4.0.0",
+    "vitest": "^4.0.0"
+  }
 }
