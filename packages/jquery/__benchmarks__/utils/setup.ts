@@ -6,7 +6,7 @@
 import $ from 'jquery';
 import type { BenchOptions } from 'vitest';
 
-export const REPEATS = 20;
+export const REPEATS = 10;
 
 /**
  * Standard benchmark options for micro-benchmarks
