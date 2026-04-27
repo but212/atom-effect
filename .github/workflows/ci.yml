@@ -19,6 +19,7 @@ jobs:
 
   typecheck:
     runs-on: ubuntu-latest
+    needs: [build]
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup
@@ -35,7 +36,6 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    needs: [build]
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup
