@@ -5,7 +5,7 @@
 
 import type { BenchOptions } from 'vitest';
 
-export const REPEATS = 10;
+export const REPEATS = 20;
 
 /**
  * Standard benchmark options for micro-benchmarks
@@ -27,7 +27,7 @@ export const microBenchOptions: BenchOptions = {
  */
 export const macroBenchOptions: BenchOptions = {
   time: 500, // 0.5 seconds per benchmark
-  iterations: 10, // Minimum 10 iterations
+  iterations: 25, // Increased from 10 for better reliability
   warmupTime: 100, // 100ms warmup
   warmupIterations: 3,
   throws: true,
