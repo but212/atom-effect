@@ -9,28 +9,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
+  lint:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v6
-
       - uses: ./.github/actions/setup
-        with:
-          node-version: "22.x"
-
       - name: Lint
         run: pnpm lint
 
-      - name: Build
-        run: pnpm build
-
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
       - name: Type check
         run: pnpm typecheck
 
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
+      - name: Build
+        run: pnpm build
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
+        with:
+          install-playwright: "true"
       - name: Test with coverage
         run: pnpm test:coverage
-
       - name: Upload coverage
         uses: actions/upload-artifact@v7
         with:

@@ -1,5 +1,5 @@
 {
-  "name": "@but212/configs",
+  "name": "@but212/atom-effect-configs",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -26,18 +26,23 @@
       "types": "./dist/vitest.bench.d.ts",
       "import": "./dist/vitest.bench.js",
       "require": "./dist/vitest.bench.cjs"
-    }
+    },
+    "./tsup": {
+      "types": "./dist/tsup.d.ts",
+      "import": "./dist/tsup.js",
+      "require": "./dist/tsup.cjs"
+    },
+    "./tsconfig": "./tsconfig.base.json"
   },
   "scripts": {
-    "build": "tsup src/index.ts src/vite.ts src/vitest.ts src/vitest.bench.ts --format esm,cjs --dts --clean --tsconfig tsconfig.build.json",
+    "build": "tsup src/index.ts src/vite.ts src/vitest.ts src/vitest.bench.ts src/tsup.ts --format esm,cjs --dts --clean --tsconfig tsconfig.build.json",
     "dev": "pnpm run build --watch"
   },
   "peerDependencies": {
+    "tsup": "^8.5.1",
     "vite": "^8.0.0",
     "vite-plugin-dts": "^4.0.0",
     "vitest": "^4.0.0"
   },
-  "devDependencies": {
-    "tsup": "^8.5.1"
-  }
+  "devDependencies": {}
 }

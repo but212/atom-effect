@@ -32,7 +32,7 @@
     "url": "git+https://github.com/but212/atom-effect.git"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.12",
+    "@biomejs/biome": "^2.4.13",
     "@types/node": "^25.6.0",
     "@vitest/browser-playwright": "^4.1.5",
     "rimraf": "^6.1.3",

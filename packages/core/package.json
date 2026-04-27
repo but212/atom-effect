@@ -61,7 +61,8 @@
     "directory": "packages/core"
   },
   "devDependencies": {
-    "@but212/configs": "workspace:*",
+    "@but212/atom-effect-configs": "workspace:*",
+    "@but212/atom-effect-datatypes": "workspace:*",
     "@types/node": "^25.6.0",
     "@vitest/browser": "^4.1.5",
     "@vitest/browser-playwright": "^4.1.5",

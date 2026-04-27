@@ -1,4 +1,4 @@
-import { createViteConfig } from '@but212/configs';
+import { createViteConfig } from '@but212/atom-effect-configs';
 
 export default createViteConfig(import.meta.dirname, {
   name: 'AtomEffect',

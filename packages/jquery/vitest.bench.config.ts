@@ -1,4 +1,4 @@
-import { createVitestBenchConfig } from '@but212/configs';
+import { createVitestBenchConfig } from '@but212/atom-effect-configs';
 import { playwright } from '@vitest/browser-playwright';
 
 export default createVitestBenchConfig(import.meta.dirname, {

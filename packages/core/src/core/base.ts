@@ -1,8 +1,9 @@
+import { SlotBuffer } from '@but212/atom-effect-datatypes';
 import { COMPUTED_STATE_FLAGS, EPOCH_CONSTANTS, IS_DEV, SMI_MAX } from '@/constants';
 import { AtomError, ERROR_MESSAGES, wrapError } from '@/errors';
 import type { DependencyId, Subscriber } from '@/types';
 import { generateId } from '@/utils/debug';
-import { type DepSlotBuffer, SlotBuffer } from './buffers';
+import type { DepSlotBuffer } from './buffers';
 import { Subscription } from './tracking';
 
 /**
