@@ -400,11 +400,16 @@ export type JQueryScopedSelector = (
 ) => JQuery;
 
 /**
- * Interface representing the reactive capabilities injected into a component.
+ * Composition-based controller for managing a component's reactive lifecycle.
+ *
+ * When to use:
+ * - To build Custom Elements that require reactive attribute and slot synchronization.
+ * - To manage complex component lifecycles with automated resource disposal.
+ * - To provide or inject reactive state across Shadow DOM boundaries.
  *
  * @public
  */
-export interface AtomComponentFeatures {
+export interface AtomComponentController {
   /** The raw host element of the component. */
   readonly host: HTMLElement;
   /** The active root node (ShadowRoot or Host container). */
@@ -415,23 +420,6 @@ export interface AtomComponentFeatures {
    */
   readonly $: JQueryScopedSelector;
 
-  /** Registers a reactive provider on this element for dependency injection. */
-  provideAtom<T = unknown>(key: string | symbol, val: T): void;
-  /** Injects a reactive value provided by an ancestor element. */
-  injectAtom<T = unknown>(key: string | symbol): WritableAtom<T> | null;
-}
-
-/**
- * Composition-based controller for managing a component's reactive lifecycle.
- *
- * When to use:
- * - To build Custom Elements that require reactive attribute and slot synchronization.
- * - To manage complex component lifecycles with automated resource disposal.
- * - To provide or inject reactive state across Shadow DOM boundaries.
- *
- * @public
- */
-export interface AtomComponentController extends AtomComponentFeatures {
   /**
    * Factory function that returns a reactive lens atom for a specific HTML attribute.
    * Accessing a name returns a WritableAtom<string | null>.
@@ -448,7 +436,12 @@ export interface AtomComponentController extends AtomComponentFeatures {
    * Access to the component's internal state and accessibility properties via ElementInternals.
    * Available only if the browser supports attachInternals().
    */
-  readonly internals?: ElementInternals;
+  readonly internals?: ElementInternals | undefined;
+
+  /** Registers a reactive provider on this element for dependency injection. */
+  provideAtom<T = unknown>(key: string | symbol, val: T): void;
+  /** Injects a reactive value provided by an ancestor element. */
+  injectAtom<T = unknown>(key: string | symbol): WritableAtom<T> | null;
 
   /**
    * Initializes the component's reactive lifecycle and observers.

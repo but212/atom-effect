@@ -28,11 +28,10 @@
     "bench": "vitest bench --config vitest.bench.config.ts",
     "bench:micro": "pnpm run bench __benchmarks__/micro",
     "bench:macro": "pnpm run bench __benchmarks__/macro",
-    "bench:atom": "pnpm run bench __benchmarks__/micro/atom.bench",
-    "bench:computed": "pnpm run bench __benchmarks__/micro/computed.bench",
-    "bench:effect": "pnpm run bench __benchmarks__/micro/effect.bench",
+    "bench:state": "pnpm run bench __benchmarks__/state",
     "bench:realistic": "pnpm run bench __benchmarks__/realistic",
-    "bench:propagation": "pnpm run bench __benchmarks__/micro/propagation.bench"
+    "bench:scheduler": "pnpm run bench __benchmarks__/micro/scheduler.bench.ts",
+    "bench:all": "pnpm run bench"
   },
   "keywords": [
     "reactive",
@@ -62,6 +61,7 @@
     "directory": "packages/core"
   },
   "devDependencies": {
+    "@but212/configs": "workspace:*",
     "@types/node": "^25.6.0",
     "@vitest/browser": "^4.1.5",
     "@vitest/browser-playwright": "^4.1.5",

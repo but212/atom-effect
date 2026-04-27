@@ -1,14 +1,7 @@
+import { createVitestBenchConfig } from '@but212/configs';
 import { playwright } from '@vitest/browser-playwright';
-import { defineConfig } from 'vitest/config';
 
-const SRC_PATH = `${import.meta.dirname}/src`;
-
-export default defineConfig({
-  resolve: {
-    alias: {
-      '@': SRC_PATH,
-    },
-  },
+export default createVitestBenchConfig(import.meta.dirname, {
   test: {
     browser: {
       enabled: true,
@@ -18,9 +11,7 @@ export default defineConfig({
     },
     setupFiles: ['./__benchmarks__/utils/global-setup.ts'],
     benchmark: {
-      include: ['__benchmarks__/**/*.bench.ts'],
-      exclude: ['**/node_modules/**', '**/dist/**'],
-      outputFile: '.performance/benchmark-results.json',
+      outputFile: '.performance/results/benchmark-results.json',
     },
   },
 });

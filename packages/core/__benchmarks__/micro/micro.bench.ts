@@ -4,10 +4,18 @@
  */
 
 import { bench, describe } from 'vitest';
-import { atom, atomLens, batch, composeLens, computed, effect, untracked } from '../../dist';
-import { benchEffectOptions, keep, microBenchOptions } from '../utils/setup.js';
-
-const REPEATS = 100;
+import {
+  atom,
+  atomLens,
+  batch,
+  composeLens,
+  computed,
+  effect,
+  isAtom,
+  isComputed,
+  untracked,
+} from '../../dist';
+import { benchEffectOptions, keep, microBenchOptions, REPEATS } from '../utils/setup.js';
 
 describe('Atoms: Core Operations', () => {
   bench(
@@ -314,6 +322,107 @@ describe('Stress Tests: Extreme Scale (1000)', () => {
     () => {
       fanIn1000Sources[0]!.value++;
       keep(fanIn1000Target.value);
+    },
+    microBenchOptions
+  );
+});
+
+describe('Subscribe / Unsubscribe Hotpath', () => {
+  const a = atom(0);
+  const c = computed(() => a.value * 2);
+
+  bench(
+    `atom.subscribe + unsubscribe (x${REPEATS})`,
+    () => {
+      for (let i = 0; i < REPEATS; i++) {
+        const unsub = a.subscribe(() => {});
+        unsub();
+      }
+    },
+    microBenchOptions
+  );
+
+  bench(
+    `computed.subscribe + unsubscribe (x${REPEATS})`,
+    () => {
+      for (let i = 0; i < REPEATS; i++) {
+        const unsub = c.subscribe(() => {});
+        unsub();
+      }
+    },
+    microBenchOptions
+  );
+});
+
+describe('Read Methods: .value vs .peek()', () => {
+  const a = atom(42);
+  const c = computed(() => a.value + 1);
+  c.subscribe(() => {}); // keep active
+
+  bench(
+    `atom.value read (x${REPEATS})`,
+    () => {
+      let sum = 0;
+      for (let i = 0; i < REPEATS; i++) sum += a.value;
+      keep(sum);
+    },
+    microBenchOptions
+  );
+
+  bench(
+    `atom.peek() read (x${REPEATS})`,
+    () => {
+      let sum = 0;
+      for (let i = 0; i < REPEATS; i++) sum += a.peek();
+      keep(sum);
+    },
+    microBenchOptions
+  );
+
+  bench(
+    `computed.value read (active, x${REPEATS})`,
+    () => {
+      let sum = 0;
+      for (let i = 0; i < REPEATS; i++) sum += c.value;
+      keep(sum);
+    },
+    microBenchOptions
+  );
+
+  bench(
+    `computed.peek() read (active, x${REPEATS})`,
+    () => {
+      let sum = 0;
+      for (let i = 0; i < REPEATS; i++) sum += c.peek();
+      keep(sum);
+    },
+    microBenchOptions
+  );
+});
+
+describe('Type Guards: isAtom / isComputed', () => {
+  const a = atom(0);
+  const c = computed(() => a.value);
+  const e = effect(() => keep(a.value), benchEffectOptions);
+  // Mix of valid and invalid targets to avoid mono-morphic optimization
+  const targets = [a, c, e, 0, 'str', null, {}, []];
+
+  bench(
+    `isAtom checks (x${REPEATS * targets.length})`,
+    () => {
+      for (let i = 0; i < REPEATS; i++) {
+        for (const t of targets) keep(isAtom(t));
+      }
+    },
+    microBenchOptions
+  );
+
+  bench(
+    `isComputed checks (x${REPEATS * targets.length})`,
+    () => {
+      for (let i = 0; i < REPEATS; i++) {
+        for (const t of targets) keep(isComputed(t));
+      }
     },
     microBenchOptions
   );

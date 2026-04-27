@@ -60,6 +60,7 @@
     "@but212/atom-effect": "workspace:*"
   },
   "devDependencies": {
+    "@but212/configs": "workspace:*",
     "@types/jquery": "^4.0.0",
     "@vitest/browser": "^4.1.5",
     "@vitest/browser-playwright": "^4.1.5",

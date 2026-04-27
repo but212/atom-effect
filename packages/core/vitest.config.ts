@@ -1,31 +1,11 @@
+import { createVitestConfig } from '@but212/configs';
 import { playwright } from '@vitest/browser-playwright';
-import { defineConfig } from 'vitest/config';
 
-const SRC_PATH = `${import.meta.dirname}/src`;
+const packageDir = import.meta.dirname;
+const SRC_PATH = `${packageDir}/src`;
 
-export default defineConfig({
-  resolve: {
-    alias: {
-      '@': SRC_PATH,
-    },
-  },
+export default createVitestConfig(packageDir, {
   test: {
-    globals: true,
-    coverage: {
-      provider: 'v8',
-      reporter: ['text', 'json', 'html'],
-      exclude: [
-        'node_modules/**',
-        'dist/**',
-        '**/*.config.ts',
-        '__benchmarks__/**',
-        '**/*.test.ts',
-        '__tests__/**',
-        'src/types/**',
-        'src/types.ts',
-        'scripts/**',
-      ],
-    },
     projects: [
       {
         resolve: {
