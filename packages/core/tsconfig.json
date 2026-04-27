@@ -4,9 +4,7 @@
     "paths": {
       "@/*": ["./src/*"]
     },
-    "lib": ["ES2021", "DOM", "DOM.Iterable"],
     "outDir": "./dist",
-    "rootDir": ".",
     "types": ["node"],
     "noImplicitAny": true
   },

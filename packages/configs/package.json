@@ -1,0 +1,43 @@
+{
+  "name": "@but212/configs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./vite": {
+      "types": "./dist/vite.d.ts",
+      "import": "./dist/vite.js",
+      "require": "./dist/vite.cjs"
+    },
+    "./vitest": {
+      "types": "./dist/vitest.d.ts",
+      "import": "./dist/vitest.js",
+      "require": "./dist/vitest.cjs"
+    },
+    "./vitest.bench": {
+      "types": "./dist/vitest.bench.d.ts",
+      "import": "./dist/vitest.bench.js",
+      "require": "./dist/vitest.bench.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts src/vite.ts src/vitest.ts src/vitest.bench.ts --format esm,cjs --dts --clean --tsconfig tsconfig.build.json",
+    "dev": "pnpm run build --watch"
+  },
+  "peerDependencies": {
+    "vite": "^8.0.0",
+    "vite-plugin-dts": "^4.0.0",
+    "vitest": "^4.0.0"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.1"
+  }
+}
