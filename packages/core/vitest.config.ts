@@ -1,4 +1,4 @@
-import { createVitestConfig } from '@but212/configs';
+import { createVitestConfig } from '@but212/atom-effect-configs';
 import { playwright } from '@vitest/browser-playwright';
 
 const packageDir = import.meta.dirname;

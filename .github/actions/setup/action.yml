@@ -8,6 +8,9 @@ inputs:
   registry-url:
     description: "NPM registry URL for publishing"
     default: ""
+  install-playwright:
+    description: "Whether to install Playwright browsers"
+    default: "false"
 
 runs:
   using: "composite"
@@ -29,6 +32,15 @@ runs:
       run: pnpm install --frozen-lockfile
       shell: bash
 
+    - name: Cache TurboRepo
+      uses: actions/cache@v4
+      with:
+        path: node_modules/.cache/turbo
+        key: turbo-${{ github.job }}-${{ github.ref_name }}-${{ github.sha }}
+        restore-keys: |
+          turbo-${{ github.job }}-${{ github.ref_name }}-
+
     - name: Install Playwright Browsers
+      if: inputs.install-playwright == 'true'
       run: pnpm dlx playwright install --with-deps chromium
       shell: bash

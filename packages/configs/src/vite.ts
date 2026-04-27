@@ -10,6 +10,10 @@ export interface BaseViteConfigOptions extends Partial<UserConfig> {
 export const createViteConfig = (packageDir: string, options: BaseViteConfigOptions) => {
   const { name, libFileName, dtsOptions, ...rest } = options;
 
+  const lib = rest.build?.lib;
+  const userEntry = lib && typeof lib !== 'boolean' ? lib.entry : undefined;
+  const entry = userEntry || `${packageDir}/src/index.ts`;
+
   return defineConfig(({ mode }) => {
     const baseConfig: UserConfig = {
       define: {
@@ -22,7 +26,7 @@ export const createViteConfig = (packageDir: string, options: BaseViteConfigOpti
         emptyOutDir: true,
         minify: 'esbuild',
         lib: {
-          entry: `${packageDir}/src/index.ts`,
+          entry,
           name: name,
           formats: ['es', 'cjs', 'umd'],
           ...(libFileName ? { fileName: libFileName } : {}),
