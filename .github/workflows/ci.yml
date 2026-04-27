@@ -19,9 +19,12 @@ jobs:
 
   typecheck:
     runs-on: ubuntu-latest
+    needs: [build]
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup
+      - name: Build (Restore from cache)
+        run: pnpm build
       - name: Type check
         run: pnpm typecheck
 
@@ -35,11 +38,14 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    needs: [build]
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup
         with:
           install-playwright: "true"
+      - name: Build (Restore from cache)
+        run: pnpm build
       - name: Test with coverage
         run: pnpm test:coverage
       - name: Upload coverage
