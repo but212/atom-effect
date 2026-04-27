@@ -12,9 +12,7 @@ export const baseCoverageExclude = [
   'scripts/**',
 ];
 
-export interface BaseVitestConfigOptions extends ViteUserConfig {}
-
-export const createVitestConfig = (packageDir: string, options: BaseVitestConfigOptions = {}) => {
+export const createVitestConfig = (packageDir: string, options: ViteUserConfig = {}) => {
   const baseConfig: ViteUserConfig = {
     resolve: {
       alias: {

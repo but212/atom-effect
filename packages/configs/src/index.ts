@@ -1,4 +1,5 @@
-export * from './tsup';
-export * from './vite';
-export * from './vitest';
-export * from './vitest.bench';
+export { createTsupConfig } from './tsup';
+export type { BaseViteConfigOptions } from './vite';
+export { createViteConfig } from './vite';
+export { createVitestConfig } from './vitest';
+export { createVitestBenchConfig } from './vitest.bench';

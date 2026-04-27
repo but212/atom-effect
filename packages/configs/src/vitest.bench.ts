@@ -1,11 +1,6 @@
 import { mergeConfig, type ViteUserConfig } from 'vitest/config';
 
-export interface BaseVitestBenchConfigOptions extends ViteUserConfig {}
-
-export const createVitestBenchConfig = (
-  packageDir: string,
-  options: BaseVitestBenchConfigOptions = {}
-) => {
+export const createVitestBenchConfig = (packageDir: string, options: ViteUserConfig = {}) => {
   const baseConfig: ViteUserConfig = {
     resolve: {
       alias: {
