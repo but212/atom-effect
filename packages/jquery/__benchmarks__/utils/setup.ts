@@ -6,6 +6,8 @@
 import $ from 'jquery';
 import type { BenchOptions } from 'vitest';
 
+export const REPEATS = 20;
+
 /**
  * Standard benchmark options for micro-benchmarks
  * Reduced iterations vs core since DOM creation/teardown per iteration is expensive in jsdom
