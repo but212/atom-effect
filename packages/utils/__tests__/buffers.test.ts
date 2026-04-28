@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SlotBuffer } from '../src/buffers';
+import { SlotBuffer } from '@/index';
 
 describe('SlotBuffer: Structural Integrity', () => {
   it('should synchronize logical size and physical high-water mark (including holes)', () => {
