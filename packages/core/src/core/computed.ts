@@ -136,7 +136,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
    */
   get value(): T {
     const context = trackingContext.current;
-    if (context !== null) context.addDependency(this);
+    context?.addDependency(this);
 
     const flags = this.flags;
     // Logic: Direct return for resolved, non-stale values.
@@ -194,7 +194,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
    */
   get state(): AsyncStateType {
     const context = trackingContext.current;
-    if (context !== null) context.addDependency(this);
+    context?.addDependency(this);
     const flags = this.flags;
     if ((flags & RESOLVED) !== 0) return AsyncState.RESOLVED;
     if ((flags & PENDING) !== 0) return AsyncState.PENDING;
@@ -209,7 +209,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
    */
   get hasError(): boolean {
     const context = trackingContext.current;
-    if (context !== null) context.addDependency(this);
+    context?.addDependency(this);
 
     const flags = this.flags;
     if ((flags & (REJECTED | HAS_ERROR)) !== 0) return true;
@@ -241,7 +241,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
    */
   get errors(): readonly Error[] {
     const context = trackingContext.current;
-    if (context !== null) context.addDependency(this);
+    context?.addDependency(this);
 
     const selfError = this._error;
     const dependencies = this._deps;
@@ -299,7 +299,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
    */
   get lastError(): Error | null {
     const context = trackingContext.current;
-    if (context !== null) context.addDependency(this);
+    context?.addDependency(this);
     return this._error;
   }
 
@@ -308,7 +308,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
    */
   get isPending(): boolean {
     const context = trackingContext.current;
-    if (context !== null) context.addDependency(this);
+    context?.addDependency(this);
     return (this.flags & PENDING) !== 0;
   }
 
@@ -317,7 +317,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
    */
   get isResolved(): boolean {
     const context = trackingContext.current;
-    if (context !== null) context.addDependency(this);
+    context?.addDependency(this);
     return (this.flags & RESOLVED) !== 0;
   }
 
@@ -341,9 +341,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
 
     this._deps.disposeAll();
 
-    if (this._slots !== null) {
-      this._slots.clear();
-    }
+    this._slots?.clear();
     this.flags = DISPOSED | DIRTY | IDLE;
 
     this._error = null;
@@ -371,7 +369,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
 
     const existing = dependencies.at(trackIndex);
 
-    if (existing !== null && existing.node === dependency) {
+    if (existing?.node === dependency) {
       existing.version = dependency.version;
     } else if (dependencies.claimExisting(dependency, trackIndex)) {
       // Version and relocation handled inside claimExisting.
@@ -529,14 +527,14 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
       // Logic: Hot-path check.
       if (hotIndex !== -1 && hotIndex < length) {
         const link = dependencies.at(hotIndex);
-        if (link !== null && this._checkLinkDirty(link)) return true;
+        if (link && this._checkLinkDirty(link)) return true;
       }
 
       // Logic: Sequential scan for other dependencies.
       for (let i = 0; i < length; i++) {
         if (i === hotIndex) continue;
         const link = dependencies.at(i);
-        if (link !== null && this._checkLinkDirty(link)) {
+        if (link && this._checkLinkDirty(link)) {
           this._hotIndex = i;
           return true;
         }

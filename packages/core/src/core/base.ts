@@ -113,7 +113,7 @@ export abstract class ReactiveNode<T> {
   subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
     const isFn = typeof listener === 'function';
     // Constraint: Validates input to ensure consistent execution during notification.
-    if (!isFn && (listener === null || typeof (listener as Subscriber).execute !== 'function')) {
+    if (!isFn && (listener == null || typeof (listener as Subscriber).execute !== 'function')) {
       throw wrapError(
         new TypeError('Invalid subscriber'),
         AtomError,
@@ -131,7 +131,7 @@ export abstract class ReactiveNode<T> {
       const length = slots.capacity;
       for (let i = 0; i < length; i++) {
         const link = slots.at(i);
-        if (link !== null && (link.fn === listener || link.sub === listener)) {
+        if (link && (link.fn === listener || link.sub === listener)) {
           if (IS_DEV)
             console.warn(`[atom-effect] Duplicate subscription ignored on node ${this.id}`);
           return () => {};
@@ -172,8 +172,7 @@ export abstract class ReactiveNode<T> {
    * - To implement conditional logic based on node observability.
    */
   subscriberCount(): number {
-    const slots = this._slots;
-    return slots === null ? 0 : slots.length;
+    return this._slots?.length ?? 0;
   }
 
   /**
@@ -185,7 +184,7 @@ export abstract class ReactiveNode<T> {
    */
   protected _notifySubscribers(newValue: T | undefined, oldValue: T | undefined): void {
     const slots = this._slots;
-    if (slots === null || slots.length === 0) return;
+    if (!slots?.length) return;
 
     this._notifying++;
     try {
@@ -255,12 +254,12 @@ export abstract class ReactiveNode<T> {
    */
   protected _isDirty(): boolean {
     const deps = this._deps;
-    if (deps === null || deps.length === 0) return false;
+    if (!deps?.length) return false;
 
     const hotIndex = this._hotIndex;
     if (hotIndex !== -1) {
       const hotLink = deps.at(hotIndex);
-      if (hotLink !== null && hotLink.node.version !== hotLink.version) {
+      if (hotLink?.node.version !== hotLink?.version) {
         return true;
       }
     }

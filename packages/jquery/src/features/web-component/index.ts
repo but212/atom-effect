@@ -109,7 +109,7 @@ const ContextEngine = (() => {
   const init = (el: HTMLElement) => {
     const specs = autoSetupMap.get(el);
     if (specs) {
-      const ctrl = getInternalState(el).controller;
+      const ctrl = getInternalState(el)?.controller;
       if (ctrl) {
         ctrl.setup({
           ...(specs.aejStyles && { styles: specs.aejStyles }),
@@ -132,7 +132,8 @@ const ContextEngine = (() => {
       let needsBump = false;
       for (let i = 0; i < mutations.length; i++) {
         const m = mutations[i];
-        if (m && m.addedNodes.length > 0) {
+        if (!m) continue;
+        if (m.addedNodes.length > 0) {
           needsBump = true;
           m.addedNodes.forEach((node) => {
             if (node instanceof HTMLElement) {
@@ -141,7 +142,7 @@ const ContextEngine = (() => {
             }
           });
         }
-        if (m && m.removedNodes.length > 0) needsBump = true;
+        if (m.removedNodes.length > 0) needsBump = true;
       }
       if (needsBump) bump();
     });
@@ -292,7 +293,7 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       };
     },
     $: ((selector, context) => {
-      const ctx = context || state.root || element;
+      const ctx = context ?? state.root ?? element;
       if (typeof selector !== 'string') return $(selector) as unknown as JQuery;
       return ctx instanceof DocumentFragment
         ? ($(Array.from(ctx.querySelectorAll<HTMLElement>(selector))) as unknown as JQuery)
@@ -310,8 +311,8 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       }
 
       const config =
-        options instanceof Node ? { shadowRoot: options as ShadowRoot } : options || {};
-      const sr = config.shadowRoot || element.shadowRoot;
+        options instanceof Node ? { shadowRoot: options as ShadowRoot } : (options ?? {});
+      const sr = config.shadowRoot ?? element.shadowRoot;
 
       if (sr) {
         registry.markHost(element);
@@ -319,7 +320,7 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       }
 
       state.root = (sr ?? element) as Node & { [CLEANUP_MARKER]?: boolean };
-      if (!state.root![CLEANUP_MARKER]) {
+      if (!state.root?.[CLEANUP_MARKER]) {
         enableAutoCleanup(state.root as Element);
         state.root![CLEANUP_MARKER] = true;
       }
@@ -434,7 +435,7 @@ export function provideAtom(
     const keyStr = typeof key === 'symbol' ? key.description : String(key);
     if (keyStr) {
       const varName = `--aej-${keyStr}`;
-      const sync = (v: unknown) => el.style.setProperty(varName, v == null ? '' : String(v));
+      const sync = (v: unknown) => el.style.setProperty(varName, String(v ?? ''));
       if (isAtom(val)) {
         if (!state.providerEffects) state.providerEffects = new Map();
         state.providerEffects.get(key)?.dispose();

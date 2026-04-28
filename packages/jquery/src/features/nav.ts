@@ -38,7 +38,7 @@ function getAbsoluteUrl(url: string, base: string): URL {
  */
 function getCurrentFullUrl(win: Window): string {
   const { pathname, search, hash } = win.location;
-  return (pathname || '/') + (search || '') + (hash || '');
+  return (pathname ?? '/') + (search ?? '') + (hash ?? '');
 }
 
 /**
@@ -65,10 +65,10 @@ function getPathAndSearch(urlObj: URL): string {
 function extractContent(html: string, selector?: string, xhr?: JQuery.jqXHR): ContentState {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
-  const title = doc.querySelector('title')?.textContent?.trim() || null;
+  const title = doc.querySelector('title')?.textContent?.trim() ?? null;
 
   const contentNode = selector ? doc.querySelector(selector) : null;
-  const rawHtml = contentNode ? contentNode.innerHTML : doc.body?.innerHTML || html;
+  const rawHtml = contentNode ? contentNode.innerHTML : (doc.body?.innerHTML ?? html);
 
   const attributes: Record<string, string> = {};
   if (contentNode) {
@@ -93,7 +93,7 @@ function extractContent(html: string, selector?: string, xhr?: JQuery.jqXHR): Co
     html: sanitizeHtml(rawHtml).trim(),
     title,
     attributes,
-    redirectUrl: xhr?.getResponseHeader?.('X-PJAX-URL') || undefined,
+    redirectUrl: xhr?.getResponseHeader?.('X-PJAX-URL') ?? undefined,
     meta,
   };
 }
@@ -120,7 +120,7 @@ function syncMetaData(win: Window, meta?: Record<string, string>): void {
       el?.remove();
       return;
     }
-    const target = (el as HTMLElement) || doc.createElement(isLink ? 'link' : 'meta');
+    const target = (el as HTMLElement) ?? doc.createElement(isLink ? 'link' : 'meta');
     if (!el) {
       if (isLink) {
         target.setAttribute('rel', 'canonical');
@@ -238,7 +238,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
     typeof target === 'string'
       ? target
       : $target.attr('id')
-        ? `#${$.escapeSelector($target.attr('id')!)}`
+        ? `#${$.escapeSelector($target.attr('id') ?? '')}`
         : undefined;
 
   const _content = $.atomFetch<ContentState>(() => _normalizedState.value.pathAndSearch, {
@@ -334,7 +334,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
     const isRedirect = state.redirectUrl && state.redirectUrl !== url;
     const previousUrl = rendered.url;
 
-    const finalUrl = isRedirect ? state.redirectUrl! : url;
+    const finalUrl = isRedirect ? (state.redirectUrl ?? url) : url;
     const redirectObj = isRedirect ? getAbsoluteUrl(finalUrl, win.location.href) : null;
     const finalPath = redirectObj ? getPathAndSearch(redirectObj) : pathAndSearch;
     const isNewTarget = finalPath !== rendered.path;
@@ -476,7 +476,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
 
       const path = getPathAndSearch(target);
       const isSamePath = path === getPathAndSearch(current);
-      const isSameLoc = isSamePath && target.hash === (current.hash || '');
+      const isSameLoc = isSamePath && target.hash === (current.hash ?? '');
 
       // Logic: If navigation is to the exact same location, only handle scrolling.
       if (isSameLoc && type === 'push') {

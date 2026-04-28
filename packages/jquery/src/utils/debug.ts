@@ -59,10 +59,10 @@ function resolveInitialState(): boolean {
     __ATOM_DEBUG__?: boolean;
     process?: { env?: { NODE_ENV?: string } };
   };
-  if (g.__ATOM_DEBUG__ !== undefined) {
+  if (g.__ATOM_DEBUG__ != null) {
     return !!g.__ATOM_DEBUG__;
   }
-  return g.process?.env?.NODE_ENV !== 'production' && g.process?.env?.NODE_ENV !== undefined;
+  return g.process?.env?.NODE_ENV !== 'production' && g.process?.env?.NODE_ENV != null;
 }
 
 const IS_DEV = resolveInitialState();
@@ -114,7 +114,7 @@ export const debug = {
     const el = 'jquery' in target ? target[0] : target;
 
     // Safety: Instrumentation is skipped for elements not currently connected to the document.
-    if (el && el.nodeType === 1 && (el as Element).isConnected) {
+    if (el?.nodeType === 1 && (el as Element).isConnected) {
       console.log(`${prefix} DOM updated: ${getSelector(el as Element)}.${type} =`, value);
       triggerVisualHighlight(el as Element);
     }
@@ -140,10 +140,10 @@ function triggerVisualHighlight(el: Element): void {
 
   const existingRaf = rafs.get(el);
   const existingTimer = timers.get(el);
-  if (existingRaf !== undefined) {
+  if (existingRaf != null) {
     g.cancelAnimationFrame(existingRaf);
   }
-  if (existingTimer !== undefined) {
+  if (existingTimer != null) {
     clearTimeout(existingTimer);
   }
 

@@ -26,7 +26,7 @@ import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '@/utils/sanit
  */
 function toCamel(property: string): string {
   return property.includes('-')
-    ? property.replace(/-./g, (match) => match[1]!.toUpperCase())
+    ? property.replace(/-./g, (match) => match[1]?.toUpperCase() ?? '')
     : property;
 }
 
@@ -150,7 +150,7 @@ export function bindClass(
       const currentActiveTokens = new Set<string>();
       for (const [key, isActive] of Object.entries(states)) {
         if (isActive) {
-          for (const token of tokens[key]!) {
+          for (const token of tokens[key] ?? []) {
             currentActiveTokens.add(token);
           }
         }
@@ -202,7 +202,8 @@ export function bindCss(element: HTMLElement, cssMap: Record<string, CssValue>):
     reactiveMap,
     (states) => {
       for (const [property, value] of Object.entries(states)) {
-        const meta = metaMap[property]!;
+        const meta = metaMap[property];
+        if (!meta) continue;
         const str = meta.unit ? `${value}${meta.unit}` : String(value);
 
         if (prev[property] !== str) {
@@ -249,7 +250,8 @@ export function bindAttr(
     safeMap,
     (states) => {
       for (const [name, value] of Object.entries(states)) {
-        const meta = metaMap[name]!;
+        const meta = metaMap[name];
+        if (!meta) continue;
         const val = value as PrimitiveValue;
 
         if (val == null || (val === false && !meta.isAria)) {

@@ -124,7 +124,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
 
     const existing = deps.at(trackIndex);
 
-    if (existing !== null && existing.node === dep) {
+    if (existing?.node === dep) {
       existing.version = version;
     } else if (!deps.claimExisting(dep, trackIndex)) {
       this._insertNewDependency(dep, trackIndex, version);

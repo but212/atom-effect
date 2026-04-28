@@ -77,13 +77,13 @@ export class AtomError extends Error {
    */
   getChain(): Array<AtomError | Error | unknown> {
     const cause = this.cause;
-    if (cause === null || cause === undefined) return [this];
+    if (cause == null) return [this];
 
     const chain: Array<AtomError | Error | unknown> = [this];
     let current: unknown = cause;
     let seen: Set<unknown> | null = null;
 
-    while (current !== null && current !== undefined) {
+    while (current != null) {
       chain.push(current);
 
       // Constraint: Prevent infinite loops during chain traversal due to recursive error wrapping.
@@ -92,7 +92,7 @@ export class AtomError extends Error {
       if (current instanceof AtomError) {
         current = current.cause;
       } else if (current instanceof Error) {
-        current = (current as { cause?: unknown }).cause;
+        current = (current as { cause?: unknown })?.cause;
       } else {
         break;
       }
@@ -140,7 +140,7 @@ export class AtomError extends Error {
         name: causeJson.name,
         message: causeJson.message,
         stack: causeJson.stack,
-        cause: (causeJson as { cause?: unknown }).cause,
+        cause: (causeJson as { cause?: unknown })?.cause,
       };
     }
 

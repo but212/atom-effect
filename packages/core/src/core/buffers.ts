@@ -33,10 +33,8 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
     const old = this.at(index);
     super.setAt(index, item);
 
-    if (this._map !== null) {
-      if (old !== null) this._map.delete(old.node);
-      if (item !== null) this._map.set(item.node, index);
-    }
+    if (old) this._map?.delete(old.node);
+    if (item) this._map?.set(item.node, index);
   }
 
   /**
@@ -109,7 +107,7 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
   }
 
   private _claimViaMap(dep: Dependency, trackIndex: number): boolean {
-    if (this._map === null) this._map = this._initMap();
+    this._map ??= this._initMap();
     const map = this._map;
     const existingIndex = map.get(dep);
     if (existingIndex === undefined || existingIndex < trackIndex) return false;
@@ -178,18 +176,18 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
     if (occupant !== null) {
       const newIdx = this._rawAdd(occupant);
       if (newIdx >= this._count) this._count = newIdx + 1;
-      if (this._map !== null && occupant.unsub) this._map.set(occupant.node, newIdx);
+      if (this._map && occupant.unsub) this._map.set(occupant.node, newIdx);
     }
 
     if (trackIdx >= this._count) this._count = trackIdx + 1;
     this._actualCount++;
 
-    if (this._map !== null && link.unsub) this._map.set(link.node, trackIdx);
+    if (this._map && link.unsub) this._map.set(link.node, trackIdx);
   }
 
   override push(item: DependencyLink): number {
     const idx = super.push(item);
-    if (this._map !== null && item.unsub) this._map.set(item.node, idx);
+    if (this._map && item.unsub) this._map.set(item.node, idx);
     return idx;
   }
 

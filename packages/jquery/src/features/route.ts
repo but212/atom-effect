@@ -23,7 +23,7 @@ const PathUtils = {
   /** Separates a path into its route and query string components. */
   split: (path: string): { route: string; query: string | undefined } => {
     const [route, query] = path.split('?');
-    return { route: PathUtils.normalize(route || ''), query };
+    return { route: PathUtils.normalize(route ?? ''), query };
   },
 
   /** Compares two parameter maps for equality. */
@@ -116,7 +116,7 @@ const createHistoryAdapter = (basePathRaw?: string): UrlAdapter => {
       } catch {}
       return {
         path: PathUtils.normalize(route),
-        query: parseQueryParams(query || ''),
+        query: parseQueryParams(query ?? ''),
         url: urlStr,
       };
     },
@@ -152,13 +152,13 @@ const createHashAdapter = (): UrlAdapter => {
       const hash = location.hash;
       const raw = hash.startsWith('#') ? hash.substring(1) : hash;
       const { route, query } = PathUtils.split(raw);
-      return { path: route, query: parseQueryParams(query || ''), url: hash };
+      return { path: route, query: parseQueryParams(query ?? ''), url: hash };
     },
     commit: (fullPath) => {
       const { route, query } = PathUtils.split(fullPath);
       const url = `#${query ? `${route}?${query}` : route}`;
       location.hash = url;
-      return { path: PathUtils.normalize(route), query: parseQueryParams(query || ''), url };
+      return { path: PathUtils.normalize(route), query: parseQueryParams(query ?? ''), url };
     },
     revert: (previousUrl) => {
       if (location.hash !== previousUrl) {
@@ -341,12 +341,12 @@ class RouterImpl implements Router {
       basePath: SYSTEM_ROUTE.DEFAULTS.basePath,
       autoBindLinks: SYSTEM_ROUTE.DEFAULTS.autoBindLinks,
       activeClass: SYSTEM_ROUTE.DEFAULTS.activeClass,
-      notFound: c.notFound || '',
-      beforeTransition: c.beforeTransition || (() => {}),
-      afterTransition: c.afterTransition || (() => {}),
-      default: c.default || '',
+      notFound: c.notFound ?? '',
+      beforeTransition: c.beforeTransition ?? (() => {}),
+      afterTransition: c.afterTransition ?? (() => {}),
+      default: c.default ?? '',
       ...c,
-      routes: c.routes || {},
+      routes: c.routes ?? {},
     } as Required<RouteConfig> & { routes: Record<string, RouteDefinition> };
   }
 
@@ -520,8 +520,8 @@ class RouterImpl implements Router {
   /** Automatically scans the DOM for templates with route definitions. */
   private discoverRoutesFromDOM() {
     document.querySelectorAll<HTMLTemplateElement>('template[data-path]').forEach((tmpl) => {
-      const path = PathUtils.normalize(tmpl.getAttribute('data-path') || '');
-      const title = tmpl.getAttribute('title') || tmpl.getAttribute('data-title');
+      const path = PathUtils.normalize(tmpl.getAttribute('data-path') ?? '');
+      const title = tmpl.getAttribute('title') ?? tmpl.getAttribute('data-title');
 
       const existing = this.config.routes[path];
       if (!existing) {
@@ -594,7 +594,7 @@ class RouterImpl implements Router {
 
   /** Resolves the navigation path from an element's attributes. */
   private resolvePathFromElement(el: HTMLElement, stripQuery = false): string {
-    let path = el.dataset.route || '';
+    let path = el.dataset.route ?? '';
     if (!path && el instanceof HTMLAnchorElement) {
       path = this.urlAdapter.resolveAnchor(el);
     }
@@ -624,7 +624,7 @@ class RouterImpl implements Router {
       }
 
       // Logic: Ignore file paths (e.g., .jpg) that don't match a registered route.
-      const last = path.split('/').pop() || '';
+      const last = path.split('/').pop() ?? '';
       if (
         last.includes('.') &&
         this.matcher.match(PathUtils.split(path).route).kind === 'not-found'

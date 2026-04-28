@@ -161,8 +161,8 @@ const DOM = {
   getLocalName: (node: Node) => {
     if (node.nodeType !== Node.ELEMENT_NODE) return '';
     const el = node as Element;
-    const getter = _get(Element.prototype, 'localName') || _get(Node.prototype, 'nodeName');
-    return (getter ? (_call(getter, el) as string) : el.localName || '').toLowerCase();
+    const getter = _get(Element.prototype, 'localName') ?? _get(Node.prototype, 'nodeName');
+    return (getter ? (_call(getter, el) as string) : (el.localName ?? '')).toLowerCase();
   },
   /** Creates an HTMLElement in the current document context. */
   createElement: <T extends HTMLElement>(tag: string) => document.createElement(tag) as T,
@@ -355,7 +355,7 @@ function processNode(node: Node, policy: SanitizationPolicy): Node {
   // 1. Logic: Text Node Sanitization
   // Detects and neutralizes encoded tags hidden within text content to prevent bypasses.
   if (node.nodeType === Node.TEXT_NODE) {
-    const content = node.textContent || '';
+    const content = node.textContent ?? '';
     if (
       policy.blacklistedTags.some((tag) =>
         Guard.normalize(content).toLowerCase().includes(`<${tag}`)
@@ -392,7 +392,7 @@ function processNode(node: Node, policy: SanitizationPolicy): Node {
     scrubElement(span, policy);
 
     // Security: Recursive Style Protection
-    if (tag === 'style' && Guard.isDangerousCss(el.textContent || '')) {
+    if (tag === 'style' && Guard.isDangerousCss(el.textContent ?? '')) {
       span.textContent = '/* blocked */';
     } else {
       while (el.firstChild) span.appendChild(el.firstChild);
