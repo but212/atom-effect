@@ -1,4 +1,5 @@
 import { effect, untracked } from '@but212/atom-effect';
+import { Result } from '@but212/atom-effect-utils';
 import { SYSTEM_BINDING } from '@/constants';
 import { INTERNAL_HANDLER } from '@/core/symbols';
 import type { EffectObject, ValOptions, WritableAtom } from '@/types';
@@ -92,7 +93,7 @@ class InputBinding<T> {
         // to prevent the input from "jumping" or losing focus during reactive updates.
         if (isTextControl && document.activeElement === element) {
           const input = element as HTMLInputElement;
-          try {
+          const res = Result.tryCatch(() => {
             const { selectionStart, selectionEnd } = input;
             input.value = formatted;
             if (selectionStart !== null && selectionEnd !== null) {
@@ -102,7 +103,9 @@ class InputBinding<T> {
                 Math.min(selectionEnd, length)
               );
             }
-          } catch {
+          });
+
+          if (Result.isErr(res)) {
             input.value = formatted;
           }
         } else {
@@ -196,14 +199,13 @@ class InputBinding<T> {
   private syncToAtom(): void {
     if (this.flags & BindingFlags.Busy) return;
     this.flags |= BindingFlags.SyncingToAtom;
-    try {
+    Result.tryCatch(() => {
       const domValue = this.readValue();
       if (!this.areEqual(this.atom.peek(), domValue)) {
         this.atom.value = domValue;
       }
-    } finally {
-      this.flags &= ~BindingFlags.SyncingToAtom;
-    }
+    });
+    this.flags &= ~BindingFlags.SyncingToAtom;
   }
 
   /** Synchronizes the atom's current value back to the physical DOM element. */
@@ -216,13 +218,12 @@ class InputBinding<T> {
     untracked(() => {
       if (this.isDomUpToDate(atomValue)) return;
       this.flags |= BindingFlags.SyncingToDom;
-      try {
+      Result.tryCatch(() => {
         const formatted = this.formatValue(atomValue);
         this.writeToDom(atomValue, formatted);
         debug.domUpdated(SYSTEM_BINDING.PREFIX, this.$element, 'val', formatted);
-      } finally {
-        this.flags &= ~BindingFlags.SyncingToDom;
-      }
+      });
+      this.flags &= ~BindingFlags.SyncingToDom;
     });
   };
 

@@ -9,10 +9,8 @@ export {
 } from '@/option';
 export {
   Err,
-  Err as err,
   Ok,
-  Ok as ok,
-  type Result,
+  Result,
   tryCatch,
 } from '@/result';
 export * from '@/type-guard';

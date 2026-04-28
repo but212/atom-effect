@@ -1,3 +1,4 @@
+import { Result } from '@but212/atom-effect-utils';
 import {
   AsyncState,
   COMPUTED_CONFIG,
@@ -394,38 +395,45 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     if ((this.flags & RECOMPUTING) !== 0) return;
     this.flags = (this.flags | RECOMPUTING) & ~FORCE_COMPUTE;
 
-    this._trackEpoch = nextEpoch();
-    this._trackCount = 0;
-    this._deps.prepareTracking();
-    this._hotIndex = -1;
+    this._startTracking();
 
-    let committed = false;
     try {
       const result = trackingContext.run(this, this._computation);
-      this._deps.truncateFrom(this._trackCount);
-      committed = true;
+      this._commitDeps();
 
-      if (isPromise(result)) {
-        this._handleAsyncComputation(result);
-      } else {
-        this._finalizeResolution(result);
-      }
-    } catch (e) {
-      // Reason: Ensure dependency list is truncated even if calculation fails to maintain graph integrity.
-      if (!committed) {
-        try {
-          this._deps.truncateFrom(this._trackCount);
-        } catch (commitError) {
-          if (IS_DEV) {
-            console.warn('[atom-effect] _commitDeps failed during error recovery:', commitError);
+      Result.match(result, {
+        ok: (val: T | Promise<T>) => {
+          if (isPromise(val)) {
+            this._handleAsyncComputation(val as Promise<T>);
+          } else {
+            this._finalizeResolution(val as T);
           }
-        }
-      }
-      this._handleError(e as Error, ERROR_MESSAGES.COMPUTED_COMPUTATION_FAILED, true);
+        },
+        err: (e: Error) => {
+          this._handleError(e, ERROR_MESSAGES.COMPUTED_COMPUTATION_FAILED, true);
+        },
+      });
     } finally {
       this._trackEpoch = EPOCH_CONSTANTS.UNINITIALIZED;
       this._trackCount = 0;
       this.flags &= ~RECOMPUTING;
+    }
+  }
+
+  private _startTracking(): void {
+    this._trackEpoch = nextEpoch();
+    this._trackCount = 0;
+    this._deps.prepareTracking();
+    this._hotIndex = -1;
+  }
+
+  private _commitDeps(): void {
+    try {
+      this._deps.truncateFrom(this._trackCount);
+    } catch (commitError) {
+      if (IS_DEV) {
+        console.warn('[atom-effect] _commitDeps failed during error recovery:', commitError);
+      }
     }
   }
 

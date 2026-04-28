@@ -107,6 +107,9 @@ importers:
       '@but212/atom-effect-configs':
         specifier: workspace:*
         version: link:../configs
+      '@but212/atom-effect-utils':
+        specifier: workspace:*
+        version: link:../utils
       '@types/jquery':
         specifier: ^4.0.0
         version: 4.0.0

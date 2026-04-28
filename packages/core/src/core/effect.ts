@@ -1,3 +1,4 @@
+import { Result } from '@but212/atom-effect-utils';
 import {
   DEBUG_CONFIG,
   EFFECT_STATE_FLAGS,
@@ -19,7 +20,7 @@ import {
   nextEpoch,
   scheduler,
 } from './scheduler';
-import { DependencyLink, type DependencyTracker, trackingContext } from './tracking';
+import { DependencyLink, type DependencyTracker, trackingContext, untracked } from './tracking';
 
 /**
  * Internal implementation of an {@link EffectObject}.
@@ -34,7 +35,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
   readonly [BRAND] = BrandFlags.Effect;
 
   // Bookkeeping fields grouped for V8 SMI optimization
-  private _currentEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
+  private _trackEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
   private _lastFlushEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
   private _executionsInEpoch = 0;
   private _executionCount = 0;
@@ -115,8 +116,8 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     // Constraint: Dependencies are only captured while the effect is actively executing.
     if ((this.flags & EFFECT_STATE_FLAGS.EXECUTING) === 0) return;
 
-    if (dep._lastSeenEpoch === this._currentEpoch) return;
-    dep._lastSeenEpoch = this._currentEpoch;
+    if (dep._lastSeenEpoch === this._trackEpoch) return;
+    dep._lastSeenEpoch = this._trackEpoch;
 
     const trackIndex = this._trackCount++;
     const deps = this._deps;
@@ -179,40 +180,46 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     this.flags = flags | EFFECT_STATE_FLAGS.EXECUTING;
     this._execCleanup();
 
-    this._currentEpoch = nextEpoch();
-    this._trackCount = 0;
-    deps.prepareTracking();
-    this._hotIndex = -1;
+    this._startTracking();
 
-    let committed = false;
     try {
       const result = trackingContext.run(this, this._fn);
+      this._commitDeps();
 
-      deps.truncateFrom(this._trackCount);
-      committed = true;
-
-      if (typeof result === 'function') {
-        this._cleanup = result as () => void;
-      } else if (isPromise(result)) {
-        this._handleAsyncResult(result);
-      } else {
-        this._cleanup = null;
-      }
-    } catch (error) {
-      // Reason: Maintain consistent dependency list state even if execution fails to allow for recovery.
-      if (!committed) {
-        try {
-          deps.truncateFrom(this._trackCount);
-        } catch (commitErr) {
-          if (IS_DEV) {
-            console.warn('[atom-effect] _commitDeps failed during error recovery:', commitErr);
+      Result.match(result as Result<unknown, Error>, {
+        ok: (val) => {
+          if (typeof val === 'function') {
+            this._cleanup = val as () => void;
+          } else if (isPromise(val)) {
+            this._handleAsyncResult(val as Promise<undefined | (() => void)>);
+          } else {
+            this._cleanup = null;
           }
-        }
-      }
-      this._handleExecutionError(error);
-      this._cleanup = null;
+        },
+        err: (e: Error) => {
+          this._handleExecutionError(e);
+          this._cleanup = null;
+        },
+      });
     } finally {
       this.flags &= ~EFFECT_STATE_FLAGS.EXECUTING;
+    }
+  }
+
+  private _startTracking(): void {
+    this._trackEpoch = nextEpoch();
+    this._trackCount = 0;
+    this._deps.prepareTracking();
+    this._hotIndex = -1;
+  }
+
+  private _commitDeps(): void {
+    try {
+      this._deps.truncateFrom(this._trackCount);
+    } catch (commitErr) {
+      if (IS_DEV) {
+        console.warn('[atom-effect] _commitDeps failed during error recovery:', commitErr);
+      }
     }
   }
 
@@ -263,11 +270,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     const length = deps.length;
     const hotIdx = this._hotIndex;
 
-    // Caution: Tracking must be disabled during validation to prevent unintentional subscriptions.
-    const prevContext = trackingContext.current;
-    trackingContext.current = null;
-
-    try {
+    return untracked(() => {
       for (let i = 0; i < length; i++) {
         if (i === hotIdx) continue;
         const link = deps.at(i);
@@ -292,9 +295,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
       }
       this._hotIndex = -1;
       return false;
-    } finally {
-      trackingContext.current = prevContext;
-    }
+    });
   }
 
   private _execCleanup(): void {

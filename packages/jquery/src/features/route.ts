@@ -6,6 +6,7 @@ import {
   type ReadonlyAtom,
   untracked,
 } from '@but212/atom-effect';
+import { Result } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { SYSTEM_COMPONENT, SYSTEM_ROUTE } from '@/constants';
 import { registry } from '@/core/registry';
@@ -43,17 +44,17 @@ function parseQueryParams(raw: string): Record<string, string> {
   const res: Record<string, string> = {};
   if (!raw) return res;
 
-  try {
-    decodeURIComponent(raw);
-  } catch {
-    debug.warn(SYSTEM_ROUTE.PREFIX, SYSTEM_ROUTE.ERRORS.MALFORMED_URI(raw));
-  }
+  Result.tapErr(
+    Result.tryCatch(() => decodeURIComponent(raw)),
+    () => debug.warn(SYSTEM_ROUTE.PREFIX, SYSTEM_ROUTE.ERRORS.MALFORMED_URI(raw))
+  );
 
-  try {
+  Result.tryCatch(() => {
     new URLSearchParams(raw).forEach((v, k) => {
       res[k] = v;
     });
-  } catch {}
+  });
+
   return res;
 }
 
@@ -111,9 +112,8 @@ const createHistoryAdapter = (basePathRaw?: string): UrlAdapter => {
         url.search = query;
       }
       const urlStr = url.pathname + url.search;
-      try {
-        history.pushState(null, '', urlStr);
-      } catch {}
+      Result.tryCatch(() => history.pushState(null, '', urlStr));
+
       return {
         path: PathUtils.normalize(route),
         query: parseQueryParams(query ?? ''),
@@ -123,9 +123,7 @@ const createHistoryAdapter = (basePathRaw?: string): UrlAdapter => {
     revert: (previousUrl) => {
       const current = location.pathname + location.search;
       if (current !== previousUrl) {
-        try {
-          history.replaceState(null, '', previousUrl);
-        } catch {}
+        Result.tryCatch(() => history.replaceState(null, '', previousUrl));
       }
     },
     resolveAnchor: (el) => {
@@ -252,11 +250,11 @@ class RouteMatcher {
         if (match) {
           const params = route.paramNames.reduce(
             (acc, name, i) => {
-              try {
-                acc[name] = decodeURIComponent(match[i + 1] || '');
-              } catch {
-                acc[name] = match[i + 1] || '';
-              }
+              const val = match[i + 1] || '';
+              acc[name] = Result.unwrapOr(
+                Result.tryCatch(() => decodeURIComponent(val)),
+                val
+              );
               return acc;
             },
             {} as Record<string, string>
@@ -654,11 +652,7 @@ class RouterImpl implements Router {
 
   /** Executes all registered cleanup tasks for the previous route. */
   private runRouteCleanups() {
-    this.routeCleanups.forEach((fn) => {
-      try {
-        fn();
-      } catch {}
-    });
+    this.routeCleanups.forEach((fn) => Result.tryCatch(fn));
     this.routeCleanups = [];
   }
 
@@ -696,11 +690,7 @@ class RouterImpl implements Router {
     if (this.isDestroyed) return;
     this.isDestroyed = true;
     this.runRouteCleanups();
-    this.cleanups.forEach((fn) => {
-      try {
-        fn();
-      } catch {}
-    });
+    this.cleanups.forEach((fn) => Result.tryCatch(fn));
     this.cleanups = [];
   }
 }
