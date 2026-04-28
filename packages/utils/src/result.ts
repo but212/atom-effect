@@ -1,4 +1,5 @@
 import { None, type Option, Some } from '@/option';
+import { isPromise, isResult } from './type-guard';
 
 /**
  * Result represents a value that is either a success (Ok) or a failure (Err).
@@ -13,9 +14,11 @@ export interface ResultMethods<T, E> {
   unwrapOrElse(fn: (err: E) => T): T;
   map<U>(fn: (val: T) => U): Result<U, E>;
   mapErr<F>(fn: (err: E) => F): Result<T, F>;
-  andThen<U>(fn: (val: T) => Result<U, E>): Result<U, E>;
+  andThen<U, F = E>(fn: (val: T) => Result<U, F>): Result<U, E | F>;
   toOption(): Option<T>;
   match<U>(matcher: { ok: (val: T) => U; err: (err: E) => U }): U;
+  equals(other: unknown): boolean;
+  toString(): string;
 }
 
 /**
@@ -36,11 +39,6 @@ export interface Err<T, E> extends ResultMethods<T, E> {
 
 const toError = (e: unknown): Error => (e instanceof Error ? e : new Error(String(e)));
 const capture = <E>(e: unknown): E => e as E;
-
-const isPromise = (val: unknown): val is PromiseLike<unknown> =>
-  val !== null &&
-  (typeof val === 'object' || typeof val === 'function') &&
-  typeof (val as Record<'then', unknown>).then === 'function';
 
 class OkImpl<T, E> implements Ok<T, E> {
   readonly ok = true as const;
@@ -67,7 +65,7 @@ class OkImpl<T, E> implements Ok<T, E> {
   mapErr<F>(): Result<T, F> {
     return Ok(this.value);
   }
-  andThen<U>(fn: (val: T) => Result<U, E>): Result<U, E> {
+  andThen<U, F = E>(fn: (val: T) => Result<U, F>): Result<U, E | F> {
     return fn(this.value);
   }
   toOption(): Option<T> {
@@ -75,6 +73,15 @@ class OkImpl<T, E> implements Ok<T, E> {
   }
   match<U>(matcher: { ok: (val: T) => U; err: (err: E) => U }): U {
     return matcher.ok(this.value);
+  }
+  equals(other: unknown): boolean {
+    return isResult(other) && other.ok && (other as Ok<unknown, unknown>).value === this.value;
+  }
+  toString(): string {
+    return `Ok(${String(this.value)})`;
+  }
+  get [Symbol.toStringTag]() {
+    return 'Ok';
   }
 }
 
@@ -103,7 +110,7 @@ class ErrImpl<T, E> implements Err<T, E> {
   mapErr<F>(fn: (err: E) => F): Result<T, F> {
     return Err(fn(this.error));
   }
-  andThen<U>(): Result<U, E> {
+  andThen<U, F = E>(): Result<U, E | F> {
     return Err(this.error);
   }
   toOption(): Option<T> {
@@ -111,6 +118,15 @@ class ErrImpl<T, E> implements Err<T, E> {
   }
   match<U>(matcher: { ok: (val: T) => U; err: (err: E) => U }): U {
     return matcher.err(this.error);
+  }
+  equals(other: unknown): boolean {
+    return isResult(other) && !other.ok && (other as Err<unknown, unknown>).error === this.error;
+  }
+  toString(): string {
+    return `Err(${String(this.error)})`;
+  }
+  get [Symbol.toStringTag]() {
+    return 'Err';
   }
 }
 
@@ -139,9 +155,9 @@ export function tryCatch<_, E = Error>(
     return Ok(val);
   } catch (e) {
     const error = Err<unknown, E>(capture<E>(e));
-    return fn.constructor.name === 'AsyncFunction' ||
-      (fn as { [Symbol.toStringTag]?: string })[Symbol.toStringTag] === 'AsyncFunction'
-      ? Promise.resolve(error)
-      : error;
+    const isAsync =
+      fn.constructor.name === 'AsyncFunction' ||
+      (fn as { [Symbol.toStringTag]?: string })[Symbol.toStringTag] === 'AsyncFunction';
+    return isAsync ? Promise.resolve(error) : error;
   }
 }

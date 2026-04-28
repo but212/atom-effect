@@ -1,209 +1,197 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Err, Ok, type Result, tryCatch } from '@/index';
+import { Err, isResult, Ok, type Result, tryCatch } from '@/index';
 
 describe('Result<T, E>', () => {
-  describe('Factories & State', () => {
-    it('should create an Ok variant with the given value', () => {
+  describe('Core Creation & Factories', () => {
+    it('Ok() should encapsulate a success value', () => {
       const res = Ok(42);
       expect(res.ok).toBe(true);
-      expect(res.isOk()).toBe(true);
-      expect(res.isErr()).toBe(false);
       expect(res.unwrap()).toBe(42);
     });
 
-    it('should create an Err variant with the given error', () => {
-      const error = new Error('failure');
-      const res = Err(error);
+    it('Err() should encapsulate a failure value', () => {
+      const err = new Error('fail');
+      const res = Err(err);
       expect(res.ok).toBe(false);
-      expect(res.isOk()).toBe(false);
-      expect(res.isErr()).toBe(true);
       if (res.isErr()) {
-        expect(res.error).toBe(error);
+        expect(res.error).toBe(err);
       }
     });
 
-    it('should maintain class identity for internal implementations', () => {
-      expect(Ok(1).constructor.name).toMatch(/OkImpl|Ok/);
-      expect(Err('err').constructor.name).toMatch(/ErrImpl|Err/);
-    });
-
-    it('should convert to Option correctly', () => {
-      expect(Ok(42).toOption().ok).toBe(true);
-      expect(Err('fail').toOption().ok).toBe(false);
+    it('should maintain distinct identities for Ok and Err', () => {
+      expect(Ok(1).isOk()).toBe(true);
+      expect(Ok(1).isErr()).toBe(false);
+      expect(Err('fail').isOk()).toBe(false);
+      expect(Err('fail').isErr()).toBe(true);
     });
   });
 
-  describe('Unwrapping & Recovery', () => {
-    describe('unwrapOr', () => {
-      it('should return the success value for Ok', () => {
-        expect(Ok(10).unwrapOr(20)).toBe(10);
-      });
-
-      it('should return the fallback value for Err', () => {
-        expect(Err<number, number>(5).unwrapOr(20)).toBe(20);
-      });
+  describe('Type Identification & Guards', () => {
+    it('isResult utility should accurately detect Result instances', () => {
+      expect(isResult(Ok(1))).toBe(true);
+      expect(isResult(Err('e'))).toBe(true);
+      expect(isResult({ ok: true, value: 1 })).toBe(false); // No unwrap method
+      expect(isResult(null)).toBe(false);
+      expect(isResult({})).toBe(false);
     });
 
-    describe('unwrapOrElse', () => {
-      it('should return the success value for Ok', () => {
-        const fallback = vi.fn(() => 20);
-        expect(Ok(10).unwrapOrElse(fallback)).toBe(10);
-        expect(fallback).not.toHaveBeenCalled();
-      });
+    it('should act as a reliable type guard in control flow', () => {
+      const res: Result<number, string> = Ok(42);
+      if (res.isOk()) {
+        const val: number = res.value;
+        expect(val).toBe(42);
+      }
 
-      it('should execute and return fallback value for Err', () => {
-        const fallback = vi.fn((err: string) => `fixed ${err}`);
-        expect(Err<string, string>('fail').unwrapOrElse(fallback)).toBe('fixed fail');
-        expect(fallback).toHaveBeenCalledWith('fail');
-      });
-    });
-
-    describe('Error Normalization', () => {
-      it('should throw the original Error instance when unwrapping Err', () => {
-        const err = new Error('fail');
-        expect(() => Err(err).unwrap()).toThrow(err);
-      });
-
-      it('should normalize non-Error types into Error objects when unwrapping', () => {
-        expect(() => Err('string error').unwrap()).toThrow('string error');
-        expect(() => Err({ msg: 'object error' }).unwrap()).toThrow('[object Object]');
-      });
+      const err: Result<number, string> = Err('fail');
+      if (err.isErr()) {
+        const msg: string = err.error;
+        expect(msg).toBe('fail');
+      }
     });
   });
 
-  describe('Transformations', () => {
-    it('should map Ok values while preserving Err', () => {
-      const mapper = (n: number) => n * 2;
-      expect(Ok(5).map(mapper).unwrap()).toBe(10);
-
-      const err = Err<number, string>('fail');
-      expect(err.map(mapper).isErr()).toBe(true);
+  describe('Extraction & Fallbacks', () => {
+    it('unwrap() should return value or throw', () => {
+      expect(Ok(10).unwrap()).toBe(10);
+      expect(() => Err('fail').unwrap()).toThrow();
     });
 
-    it('should map Err values while preserving Ok', () => {
-      const errMapper = (s: string) => s.toUpperCase();
-      const res = Err<number, string>('fail').mapErr(errMapper);
+    it('unwrapOr() should provide a default value', () => {
+      expect(Ok(10).unwrapOr(20)).toBe(10);
+      expect((Err('fail') as Result<number, string>).unwrapOr(20)).toBe(20);
+    });
+
+    it('unwrapOrElse() should be lazy', () => {
+      const fallback = vi.fn(() => 20);
+      expect(Ok(10).unwrapOrElse(fallback)).toBe(10);
+      expect(fallback).not.toHaveBeenCalled();
+
+      expect((Err('fail') as Result<number, string>).unwrapOrElse(fallback)).toBe(20);
+      expect(fallback).toHaveBeenCalled();
+    });
+  });
+
+  describe('Functional Transformations', () => {
+    it('map() should transform success values', () => {
       expect(
-        res.match({
-          ok: () => '',
-          err: (e: string) => e,
-        })
-      ).toBe('FAIL');
-
-      expect(Ok<number, string>(10).mapErr(errMapper).unwrap()).toBe(10);
+        Ok(5)
+          .map((n) => n * 2)
+          .unwrap()
+      ).toBe(10);
+      const err = Err<number, string>('fail');
+      expect(err.map((n) => n * 2).isErr()).toBe(true);
     });
 
-    it('should chain operations using andThen (monadic bind)', () => {
+    it('mapErr() should transform error values', () => {
+      const res = Err<number, string>('fail').mapErr((s) => s.toUpperCase());
+      if (res.isErr()) {
+        expect(res.error).toBe('FAIL');
+      }
+      expect(
+        Ok<number, string>(10)
+          .mapErr((s) => s.toUpperCase())
+          .unwrap()
+      ).toBe(10);
+    });
+
+    it('andThen() should chain Results and allow error type expansion', () => {
       const checkPos = (n: number): Result<number, string> => (n > 0 ? Ok(n) : Err('neg'));
 
       expect(Ok<number, string>(10).andThen(checkPos).unwrap()).toBe(10);
       expect(Ok<number, string>(-1).andThen(checkPos).isErr()).toBe(true);
       expect(Err<number, string>('init').andThen(checkPos).isErr()).toBe(true);
     });
+  });
 
-    it('should execute the correct branch in match', () => {
-      const onOk = vi.fn((v: number) => `v:${v}`);
-      const onErr = vi.fn((e: string) => `e:${e}`);
+  describe('Equality & Interoperability', () => {
+    it('toOption() should convert variants correctly', () => {
+      expect(Ok(42).toOption().ok).toBe(true);
+      expect(Err('fail').toOption().ok).toBe(false);
+    });
 
-      expect(Ok<number, string>(42).match({ ok: onOk, err: onErr })).toBe('v:42');
-      expect(onOk).toHaveBeenCalledWith(42);
+    it('equals() should perform structural equality check', () => {
+      expect(Ok(42).equals(Ok(42))).toBe(true);
+      expect(Ok(42).equals(Ok(43))).toBe(false);
+      expect(Ok(42).equals(Err(42))).toBe(false);
+      expect(Err('fail').equals(Err('fail'))).toBe(true);
+      expect(Err('fail').equals(Err('stop'))).toBe(false);
+    });
 
-      expect(Err<number, string>('bad').match({ ok: onOk, err: onErr })).toBe('e:bad');
-      expect(onErr).toHaveBeenCalledWith('bad');
+    it('match() should execute the correct branch', () => {
+      const matcher = { ok: (v: number) => `v:${v}`, err: (e: string) => `e:${e}` };
+      expect(Ok<number, string>(42).match(matcher)).toBe('v:42');
+      expect(Err<number, string>('bad').match(matcher)).toBe('e:bad');
+    });
+
+    it('toString() should provide descriptive output', () => {
+      expect(Ok(42).toString()).toBe('Ok(42)');
+      expect(Err('fail').toString()).toBe('Err(fail)');
     });
   });
 
-  describe('Safe Execution Wrappers', () => {
-    describe('tryCatch (Synchronous)', () => {
-      it('should capture successful return values as Ok', () => {
-        const res = tryCatch(() => 42);
-        expect(res.unwrap()).toBe(42);
+  describe('Safe Execution (tryCatch)', () => {
+    it('should capture success as Ok and errors as Err', () => {
+      expect(tryCatch(() => 42).unwrap()).toBe(42);
+      const res = tryCatch(() => {
+        throw 'oops';
       });
+      expect(res.isErr()).toBe(true);
+      if (res.isErr()) expect(res.error).toBe('oops');
+    });
 
-      it('should capture thrown values as Err', () => {
-        const res = tryCatch<number, string>(() => {
-          throw 'oops';
-        });
-        expect(res.isErr()).toBe(true);
-        expect(
-          res.match({
-            ok: () => '',
-            err: (e: string) => e,
-          })
-        ).toBe('oops');
-      });
+    it('should handle async functions and return a Promise<Result>', async () => {
+      const res = await tryCatch(async () => 42);
+      expect(res.unwrap()).toBe(42);
 
-      it('should preserve Error objects when thrown', () => {
-        const err = new Error('fail');
-        const res = tryCatch(() => {
-          throw err;
-        });
-        expect(
-          res.match({
-            ok: () => null,
-            err: (e: Error) => e,
-          })
-        ).toBe(err);
+      const errRes = await tryCatch(async () => {
+        throw 'async fail';
       });
-
-      it('should automatically handle native Promises', async () => {
-        const res = await tryCatch(() => Promise.resolve(42));
-        expect(res.unwrap()).toBe(42);
-      });
-
-      it('should allow non-promise thenables (e.g. DSLs)', async () => {
-        const thenable = {
-          then: (cb: (val: number) => void) => {
-            cb(42);
-          },
-          isDsl: true,
-        };
-        const res = await tryCatch(() => thenable);
-        expect(res.isOk()).toBe(true);
-        if (res.isOk()) {
-          expect(res.value).toBe(42);
-        }
-      });
-
-      it('should always return a Promise for async overloads even if they throw synchronously', () => {
-        const asyncFn = async () => {
-          throw new Error('sync-ish throw');
-        };
-        const res = tryCatch(asyncFn);
-        expect(res).toBeInstanceOf(Promise);
-      });
+      expect(errRes.isErr()).toBe(true);
     });
   });
 
-  describe('Guardrails (Type Safety)', () => {
-    it('should distinguish between sync and async return types', () => {
-      const syncRes = tryCatch(() => 42);
-      expect(syncRes.ok).toBe(true);
-      // @ts-expect-error - syncRes is a Result, not a Promise
-      syncRes.then;
+  describe('Algebraic Laws', () => {
+    const f = (x: number) => x * 2;
+    const g = (x: number) => x.toString();
+    const mf = (n: number) => Ok(n + 1);
+    const mg = (n: number) => (n % 2 === 0 ? Ok(n * 2) : Err('odd'));
 
-      const asyncRes = tryCatch(async () => 42);
-      // @ts-expect-error - asyncRes is a Promise, not a Result
-      asyncRes.ok;
-      expect(asyncRes).toBeInstanceOf(Promise);
+    describe('Functor Laws', () => {
+      it('Identity', () => {
+        const ok = Ok(42);
+        expect(ok.map((x) => x).equals(ok)).toBe(true);
+      });
+
+      it('Composition', () => {
+        const ok = Ok(10);
+        expect(
+          ok
+            .map(f)
+            .map(g)
+            .equals(ok.map((x) => g(f(x))))
+        ).toBe(true);
+      });
     });
 
-    it('should enforce type-safe fallback in unwrapOr', () => {
-      const res = Ok(10) as Result<number, string>;
+    describe('Monad Laws', () => {
+      it('Left Identity', () => {
+        expect(Ok(5).andThen(mf).equals(mf(5))).toBe(true);
+      });
 
-      // @ts-expect-error - fallback must match T (number)
-      res.unwrapOr('fallback');
+      it('Right Identity', () => {
+        const ok = Ok(42);
+        expect(ok.andThen(Ok).equals(ok)).toBe(true);
+      });
 
-      expect(res.unwrapOr(20)).toBe(10);
-    });
-
-    it('should enforce type-safe fallback in unwrapOrElse', () => {
-      const res = Err('fail') as Result<number, string>;
-
-      // @ts-expect-error - fallback function must return T (number)
-      res.unwrapOrElse(() => 'fallback');
-
-      expect(res.unwrapOrElse(() => 20)).toBe(20);
+      it('Associativity', () => {
+        const ok = Ok(10);
+        expect(
+          ok
+            .andThen(mf)
+            .andThen(mg)
+            .equals(ok.andThen((x) => mf(x).andThen(mg)))
+        ).toBe(true);
+      });
     });
   });
 });

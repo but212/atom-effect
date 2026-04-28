@@ -1,5 +1,4 @@
 export { SlotBuffer } from '@/buffers';
-
 export {
   fromNullable,
   None,
@@ -8,7 +7,6 @@ export {
   Some,
   Some as some,
 } from '@/option';
-
 export {
   Err,
   Err as err,
@@ -17,3 +15,4 @@ export {
   type Result,
   tryCatch,
 } from '@/result';
+export * from '@/type-guard';
