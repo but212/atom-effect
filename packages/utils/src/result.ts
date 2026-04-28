@@ -5,12 +5,7 @@ import { None, type Option, Some } from '@/option';
  */
 export type Result<T, E = Error> = Ok<T, E> | Err<T, E>;
 
-/**
- * Ok<T, E> represents a value that is present.
- */
-export interface Ok<T, E> {
-  readonly ok: true;
-  readonly value: T;
+export interface ResultMethods<T, E> {
   isOk(): this is Ok<T, E>;
   isErr(): this is Err<T, E>;
   unwrap(): T;
@@ -20,43 +15,33 @@ export interface Ok<T, E> {
   mapErr<F>(fn: (err: E) => F): Result<T, F>;
   andThen<U>(fn: (val: T) => Result<U, E>): Result<U, E>;
   toOption(): Option<T>;
-  match<U>(onOk: (val: T) => U, onErr: (err: E) => U): U;
+  match<U>(matcher: { ok: (val: T) => U; err: (err: E) => U }): U;
+}
+
+/**
+ * Ok<T, E> represents a value that is present.
+ */
+export interface Ok<T, E> extends ResultMethods<T, E> {
+  readonly ok: true;
+  readonly value: T;
 }
 
 /**
  * Err<T, E> represents a value that is not present.
  */
-export interface Err<T, E> {
+export interface Err<T, E> extends ResultMethods<T, E> {
   readonly ok: false;
   readonly error: E;
-  isOk(): this is Ok<T, E>;
-  isErr(): this is Err<T, E>;
-  unwrap(): never;
-  unwrapOr(fallback: T): T;
-  unwrapOrElse(fn: (err: E) => T): T;
-  map<U>(fn: (val: T) => U): Result<U, E>;
-  mapErr<F>(fn: (err: E) => F): Result<T, F>;
-  andThen<U>(fn: (val: T) => Result<U, E>): Result<U, E>;
-  toOption(): Option<T>;
-  match<U>(onOk: (val: T) => U, onErr: (err: E) => U): U;
 }
 
-/** Rule 4: Simple but robust error normalization for unwrap() */
 const toError = (e: unknown): Error => (e instanceof Error ? e : new Error(String(e)));
-
-/** Rule 5: Ensure captured data matches expected error type (E) */
 const capture = <E>(e: unknown): E => e as E;
 
-/**
- * Robustly identify Promise instances while avoiding false positives for thenable DSLs.
- */
-const isPromise = (val: unknown): val is Promise<unknown> =>
-  val instanceof Promise ||
-  (val !== null &&
-    typeof val === 'object' &&
-    Object.prototype.toString.call(val) === '[object Promise]');
+const isPromise = (val: unknown): val is PromiseLike<unknown> =>
+  val !== null &&
+  (typeof val === 'object' || typeof val === 'function') &&
+  typeof (val as Record<'then', unknown>).then === 'function';
 
-/** Internal implementation for Ok */
 class OkImpl<T, E> implements Ok<T, E> {
   readonly ok = true as const;
   constructor(readonly value: T) {}
@@ -70,35 +55,29 @@ class OkImpl<T, E> implements Ok<T, E> {
   unwrap(): T {
     return this.value;
   }
-  unwrapOr(_fallback: T): T {
+  unwrapOr(): T {
     return this.value;
   }
-  unwrapOrElse(_fn: (err: E) => T): T {
+  unwrapOrElse(): T {
     return this.value;
   }
-
   map<U>(fn: (val: T) => U): Result<U, E> {
     return Ok(fn(this.value));
   }
-
-  mapErr<F>(_fn: (err: E) => F): Result<T, F> {
+  mapErr<F>(): Result<T, F> {
     return Ok(this.value);
   }
-
   andThen<U>(fn: (val: T) => Result<U, E>): Result<U, E> {
     return fn(this.value);
   }
-
   toOption(): Option<T> {
     return Some(this.value);
   }
-
-  match<U>(onOk: (val: T) => U, _onErr: (err: E) => U): U {
-    return onOk(this.value);
+  match<U>(matcher: { ok: (val: T) => U; err: (err: E) => U }): U {
+    return matcher.ok(this.value);
   }
 }
 
-/** Internal implementation for Err */
 class ErrImpl<T, E> implements Err<T, E> {
   readonly ok = false as const;
   constructor(readonly error: E) {}
@@ -115,29 +94,23 @@ class ErrImpl<T, E> implements Err<T, E> {
   unwrapOr(fallback: T): T {
     return fallback;
   }
-
   unwrapOrElse(fn: (err: E) => T): T {
     return fn(this.error);
   }
-
-  map<U>(_fn: (val: T) => U): Result<U, E> {
+  map<U>(): Result<U, E> {
     return Err(this.error);
   }
-
   mapErr<F>(fn: (err: E) => F): Result<T, F> {
     return Err(fn(this.error));
   }
-
-  andThen<U>(_fn: (val: T) => Result<U, E>): Result<U, E> {
+  andThen<U>(): Result<U, E> {
     return Err(this.error);
   }
-
   toOption(): Option<T> {
     return None;
   }
-
-  match<U>(_onOk: (val: T) => U, onErr: (err: E) => U): U {
-    return onErr(this.error);
+  match<U>(matcher: { ok: (val: T) => U; err: (err: E) => U }): U {
+    return matcher.err(this.error);
   }
 }
 
@@ -152,16 +125,23 @@ export function tryCatch<T, E = Error>(
   fn: () => T extends PromiseLike<unknown> ? never : T
 ): Result<T, E>;
 export function tryCatch<T, E = Error>(fn: () => Promise<T>): Promise<Result<T, E>>;
-export function tryCatch<T, E = Error>(
+export function tryCatch<_, E = Error>(
   fn: () => unknown
 ): Result<unknown, E> | Promise<Result<unknown, E>> {
   try {
     const val = fn();
     if (isPromise(val)) {
-      return (val as Promise<T>).then((v) => Ok(v)).catch((e) => Err(capture<E>(e)));
+      return Promise.resolve(val).then(
+        (v) => Ok(v),
+        (e) => Err(capture<E>(e))
+      );
     }
-    return Ok(val as T);
+    return Ok(val);
   } catch (e) {
-    return Err(capture<E>(e));
+    const error = Err<unknown, E>(capture<E>(e));
+    return fn.constructor.name === 'AsyncFunction' ||
+      (fn as { [Symbol.toStringTag]?: string })[Symbol.toStringTag] === 'AsyncFunction'
+      ? Promise.resolve(error)
+      : error;
   }
 }

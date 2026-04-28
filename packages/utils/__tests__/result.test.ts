@@ -84,10 +84,10 @@ describe('Result<T, E>', () => {
       const errMapper = (s: string) => s.toUpperCase();
       const res = Err<number, string>('fail').mapErr(errMapper);
       expect(
-        res.match(
-          () => '',
-          (e) => e
-        )
+        res.match({
+          ok: () => '',
+          err: (e: string) => e,
+        })
       ).toBe('FAIL');
 
       expect(Ok<number, string>(10).mapErr(errMapper).unwrap()).toBe(10);
@@ -105,10 +105,10 @@ describe('Result<T, E>', () => {
       const onOk = vi.fn((v: number) => `v:${v}`);
       const onErr = vi.fn((e: string) => `e:${e}`);
 
-      expect(Ok<number, string>(42).match(onOk, onErr)).toBe('v:42');
+      expect(Ok<number, string>(42).match({ ok: onOk, err: onErr })).toBe('v:42');
       expect(onOk).toHaveBeenCalledWith(42);
 
-      expect(Err<number, string>('bad').match(onOk, onErr)).toBe('e:bad');
+      expect(Err<number, string>('bad').match({ ok: onOk, err: onErr })).toBe('e:bad');
       expect(onErr).toHaveBeenCalledWith('bad');
     });
   });
@@ -126,10 +126,10 @@ describe('Result<T, E>', () => {
         });
         expect(res.isErr()).toBe(true);
         expect(
-          res.match(
-            () => '',
-            (e: string) => e
-          )
+          res.match({
+            ok: () => '',
+            err: (e: string) => e,
+          })
         ).toBe('oops');
       });
 
@@ -139,10 +139,10 @@ describe('Result<T, E>', () => {
           throw err;
         });
         expect(
-          res.match(
-            () => null,
-            (e: Error) => e
-          )
+          res.match({
+            ok: () => null,
+            err: (e: Error) => e,
+          })
         ).toBe(err);
       });
 
@@ -151,13 +151,26 @@ describe('Result<T, E>', () => {
         expect(res.unwrap()).toBe(42);
       });
 
-      it('should allow non-promise thenables (e.g. DSLs)', () => {
-        const thenable = { then: (cb: (val: number) => void) => cb(42), isDsl: true };
-        const res = tryCatch(() => thenable);
+      it('should allow non-promise thenables (e.g. DSLs)', async () => {
+        const thenable = {
+          then: (cb: (val: number) => void) => {
+            cb(42);
+          },
+          isDsl: true,
+        };
+        const res = await tryCatch(() => thenable);
         expect(res.isOk()).toBe(true);
         if (res.isOk()) {
-          expect(res.value.isDsl).toBe(true);
+          expect(res.value).toBe(42);
         }
+      });
+
+      it('should always return a Promise for async overloads even if they throw synchronously', () => {
+        const asyncFn = async () => {
+          throw new Error('sync-ish throw');
+        };
+        const res = tryCatch(asyncFn);
+        expect(res).toBeInstanceOf(Promise);
       });
     });
   });
