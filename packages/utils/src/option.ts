@@ -1,3 +1,4 @@
+import { OPTION_SYMBOL } from './symbols';
 import { isOption } from './type-guard';
 
 export type Option<T> = Some<T> | None<T>;
@@ -36,6 +37,7 @@ export interface None<T = never> extends OptionMethods<T> {
 
 class SomeImpl<T> implements Some<T> {
   readonly ok = true as const;
+  readonly [OPTION_SYMBOL] = true;
   constructor(readonly value: T) {}
 
   isSome(): this is Some<T> {
@@ -95,6 +97,7 @@ class SomeImpl<T> implements Some<T> {
 
 class NoneImpl<T = never> implements None<T> {
   readonly ok = false as const;
+  readonly [OPTION_SYMBOL] = true;
 
   isSome(): this is Some<T> {
     return false;

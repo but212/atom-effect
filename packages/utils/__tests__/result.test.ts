@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Err, isResult, Ok, type Result, tryCatch } from '@/index';
+import { Err, isResult, Ok, type Result, Some, tryCatch } from '@/index';
 
 describe('Result<T, E>', () => {
   describe('Core Creation & Factories', () => {
@@ -33,6 +33,7 @@ describe('Result<T, E>', () => {
       expect(isResult({ ok: true, value: 1 })).toBe(false); // No unwrap method
       expect(isResult(null)).toBe(false);
       expect(isResult({})).toBe(false);
+      expect(isResult(Some(1))).toBe(false);
     });
 
     it('should act as a reliable type guard in control flow', () => {
@@ -137,6 +138,27 @@ describe('Result<T, E>', () => {
       });
       expect(res.isErr()).toBe(true);
       if (res.isErr()) expect(res.error).toBe('oops');
+    });
+
+    it('should return Result directly (not Promise) on synchronous throw', () => {
+      const res = tryCatch(() => {
+        throw new Error('sync');
+      });
+      expect(res).not.toBeInstanceOf(Promise);
+      expect(res.isErr()).toBe(true);
+    });
+
+    it('should handle functions masquerading as AsyncFunction correctly', () => {
+      const fakeAsync = () => {
+        throw new Error('fake');
+      };
+      Object.defineProperty(fakeAsync, 'constructor', {
+        value: { name: 'AsyncFunction' },
+        configurable: true,
+      });
+
+      const res = tryCatch(fakeAsync as () => unknown);
+      expect(res).not.toBeInstanceOf(Promise);
     });
 
     it('should handle async functions and return a Promise<Result>', async () => {

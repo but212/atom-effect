@@ -1,4 +1,5 @@
 import { None, type Option, Some } from '@/option';
+import { RESULT_SYMBOL } from './symbols';
 import { isPromise, isResult } from './type-guard';
 
 /**
@@ -42,6 +43,7 @@ const capture = <E>(e: unknown): E => e as E;
 
 class OkImpl<T, E> implements Ok<T, E> {
   readonly ok = true as const;
+  readonly [RESULT_SYMBOL] = true;
   constructor(readonly value: T) {}
 
   isOk(): this is Ok<T, E> {
@@ -87,6 +89,7 @@ class OkImpl<T, E> implements Ok<T, E> {
 
 class ErrImpl<T, E> implements Err<T, E> {
   readonly ok = false as const;
+  readonly [RESULT_SYMBOL] = true;
   constructor(readonly error: E) {}
 
   isOk(): this is Ok<T, E> {
@@ -154,10 +157,6 @@ export function tryCatch<_, E = Error>(
     }
     return Ok(val);
   } catch (e) {
-    const error = Err<unknown, E>(capture<E>(e));
-    const isAsync =
-      fn.constructor.name === 'AsyncFunction' ||
-      (fn as { [Symbol.toStringTag]?: string })[Symbol.toStringTag] === 'AsyncFunction';
-    return isAsync ? Promise.resolve(error) : error;
+    return Err<unknown, E>(capture<E>(e));
   }
 }

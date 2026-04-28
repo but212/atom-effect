@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fromNullable, isOption, None, type Option, Some } from '@/index';
+import { fromNullable, isOption, None, Ok, type Option, Some } from '@/index';
 
 describe('Option<T>', () => {
   describe('Core Creation & Factories', () => {
@@ -33,6 +33,7 @@ describe('Option<T>', () => {
       expect(isOption({ ok: true })).toBe(false);
       expect(isOption(null)).toBe(false);
       expect(isOption({})).toBe(false);
+      expect(isOption(Ok(1))).toBe(false);
     });
 
     it('should correctly identify variants via instance methods', () => {
@@ -122,8 +123,9 @@ describe('Option<T>', () => {
       expect(Some(42).equals(Some(43))).toBe(false);
       expect(Some(42).equals(None)).toBe(false);
       expect(None.equals(None)).toBe(true);
-      // Ensure plain objects with similar structure are not identified as Options
+      // Ensure plain objects or other container types with similar structure are not identified as Options
       expect(Some(1).equals({ ok: true, value: 1 })).toBe(false);
+      expect(Some(1).equals(Ok(1))).toBe(false);
     });
 
     it('match() should execute the correct branch', () => {
