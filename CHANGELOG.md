@@ -2,68 +2,51 @@
 
 ## [Unreleased]
 
-### Core
+### Utils
 
-#### Refactor
+#### Breaking Changes
 
-- **Buffers**: Standardized `SlotBuffer` and `DepSlotBuffer` API to match standard JavaScript collections (Array-like).
+- **SlotBuffer API**: Standardized API to match standard JavaScript collections.
   - Renamed `size` -> `length`, `physicalSize` -> `capacity`, `add` -> `push`, and `getAt` -> `at`.
-
-### Documentation
 
 #### Added
 
-- **Standards**: Established formal TSDoc and inline comment conventions in `docs/conventions/code_documentation_conventions.md`.
-- **Internal Logic**: Added specialized annotations (`Logic:`, `Optimization:`, `Constraint:`, `Reason:`) to explain V8 optimizations, security measures, and architectural decisions.
-
-#### Changed
-
-- **Core & jQuery**: Applied comprehensive documentation across both packages, focusing on audience segmentation (User vs. Contributor) and the "3-Second Rule".
+- **Functional Primitives**: Introduced `Option<T>` and `Result<T, E>` types for robust error handling and null-safety.
+  - Added `tryCatch` utility to safely wrap synchronous and asynchronous operations.
 
 ### jQuery
 
 #### Breaking Changes
 
-- **Dependency**: Bumped minimum jQuery version from `3.0.0` to `4.0.0` to ensure consistent `MutationObserver` behavior and avoid redundant attribute mutation triggers.
+- **Dependency**: Bumped minimum jQuery version to `4.0.0` for consistent `MutationObserver` behavior.
 
 #### Added
 
-- **Web Components (`$.useAtomComponent`)**: Introduced a comprehensive reactive toolkit for Custom Elements.
-  - **Reactivity**: Support for declarative specifications (`aejBind`, `aejAria`, `aejParts`) and functional `attrs`/`slots` lenses.
-  - **Lifecycle**: Intelligent auto-setup via reference-counted `MutationObserver` and robust `setup`/`teardown` cycles.
-  - **Form Support**: Native FACE integration with reactive value/validation and `ElementInternals` bridge.
-  - **Optimization**: Modular architecture (`ComponentState`) and support for constructable stylesheets.
-- **Form Binding (`atomForm`)**:
-  - **Validation**: Declarative integration with browser Constraint Validation API.
-  - **Discovery**: Hybrid selector logic for automatic binding to any named element.
-- **Dependency Injection (DI)**:
-  - **Reliability**: Migrated to bubbling `CustomEvent` discovery for 100% Shadow DOM coverage.
-  - **Efficiency**: Unified move detection via `ContextEngine.version` and hybrid discovery proxies.
-  - **DX**: Added generic type support and late-binding for constructed-but-offline elements.
-- **Diagnostics**: Integrated unregistered custom element detection in `$.route` and `$.useAtomComponent` (Debug Mode only).
-- **Global Configuration**: Introduced `$.initAEJ` for centralized control over patches and mutation observer roots.
-- **CSS Bridge**: Automatically synchronize provided values to CSS custom properties (e.g., `--aej-key`).
-
-#### Changed
-
-- **Memory Management**: Overhauled the auto-cleanup engine to support multiple roots and explicit opt-out via `initAEJ`.
+- **Reactive Web Components (`$.useAtomComponent`)**: A comprehensive toolkit for building reactive Custom Elements with declarative bindings, FACE integration, and Shadow DOM support.
+- **Form Binding (`atomForm`)**: Declarative integration with the browser's Constraint Validation API and automatic field discovery.
+- **Dependency Injection**: Enhanced DI system with 100% Shadow DOM coverage and unified move detection.
+- **CSS Bridge**: Automatic synchronization of reactive values to CSS custom properties (e.g., `--aej-key`).
+- **Diagnostics**: Integrated unregistered custom element detection (Debug Mode only).
 
 #### Security
 
-- **Engine Overhaul**: Re-engineered `sanitizeHtml` using a single-strategy inert parsing approach and a priority-based rule system (`DEFENSE_RULES`).
-- **Hardening**: Implemented multi-pass entity decoding (double decoding) and text node neutralization to block hidden tag bypasses.
-- **CSS Filtering**: Improved CSS declaration filtering with comment-stripping and protocol validation via the `Guard` utility.
+- **Sanitization Engine**: Re-engineered `sanitizeHtml` with an inert parsing strategy and a priority-based rule system.
+- **XSS Hardening**: Implemented multi-pass entity decoding and text node neutralization to block bypass attempts.
 
 #### Fixed
 
-- **Navigation**: Resolved a race condition where pending async hooks could overwrite state after a subsequent navigation.
+- **Navigation**: Resolved a race condition where pending async hooks could overwrite state after a navigation.
 
-#### Refactor
+### Documentation & Infrastructure
 
-- **Test Infrastructure**: Modularized the integration test suite into specialized categories for improved maintainability.
-- **ESM Modernization**: Migrated to `import.meta.dirname` and standardized `@/` path aliases.
-- **Core Overrides**: Modularized jQuery prototype patches (`jquery-patch`) to allow granular toggling.
-- **Form Binder**: Centralized synchronization and validation logic using a data-driven pipeline.
+#### Added
+
+- **Standards**: Established formal TSDoc conventions and specialized annotations (`Logic:`, `Optimization:`, etc.) for architectural transparency.
+
+#### Changed
+
+- **Modernization**: Migrated to standard ESM and standardized `@/` path aliases across all packages.
+- **Testing**: Modularized the integration test suite and centralized form validation logic for better maintainability.
 
 ## [0.31.0]
 

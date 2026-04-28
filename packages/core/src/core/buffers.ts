@@ -1,4 +1,4 @@
-import { SlotBuffer } from '@but212/atom-effect-datatypes';
+import { SlotBuffer } from '@but212/atom-effect-utils';
 
 // ── DepSlotBuffer ───────────────────────────────────────────────────────
 
