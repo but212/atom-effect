@@ -1,3 +1,4 @@
+import { Result } from '@but212/atom-effect-utils';
 import { SYSTEM_BINDING, SYSTEM_CORE, SYSTEM_MOUNT } from '@/constants';
 import type { EffectObject } from '@/types';
 import { getSelector } from '@/utils';
@@ -217,15 +218,16 @@ class BindingRegistry {
   trackEffect(element: Element, effect: EffectObject): void {
     const selector = getSelector(element);
     this.addCleanup(element, () => {
-      try {
-        effect.dispose();
-      } catch (error) {
-        debug.error(
-          SYSTEM_BINDING.PREFIX,
-          SYSTEM_CORE.ERRORS.EFFECT_DISPOSE_ERROR(selector),
-          error
-        );
-      }
+      Result.tapErr(
+        Result.tryCatch(() => effect.dispose()),
+        (error: Error) => {
+          debug.error(
+            SYSTEM_BINDING.PREFIX,
+            SYSTEM_CORE.ERRORS.EFFECT_DISPOSE_ERROR(selector),
+            error
+          );
+        }
+      );
     });
   }
 
@@ -233,11 +235,12 @@ class BindingRegistry {
   onCleanup(element: Element, cleanupFunction: () => void): void {
     const selector = getSelector(element);
     this.addCleanup(element, () => {
-      try {
-        cleanupFunction();
-      } catch (error) {
-        debug.error(SYSTEM_BINDING.PREFIX, SYSTEM_BINDING.ERRORS.CLEANUP_ERROR(selector), error);
-      }
+      Result.tapErr(
+        Result.tryCatch(() => cleanupFunction()),
+        (error: Error) => {
+          debug.error(SYSTEM_BINDING.PREFIX, SYSTEM_BINDING.ERRORS.CLEANUP_ERROR(selector), error);
+        }
+      );
     });
   }
 
@@ -270,12 +273,13 @@ class BindingRegistry {
     if (!record) return;
 
     if (record.teardown) {
-      try {
-        record.teardown();
-      } catch (error) {
-        const selector = getSelector(element);
-        debug.error(SYSTEM_MOUNT.PREFIX, SYSTEM_MOUNT.ERRORS.CLEANUP_ERROR(selector), error);
-      }
+      Result.tapErr(
+        Result.tryCatch(() => record.teardown!()),
+        (error: Error) => {
+          const selector = getSelector(element);
+          debug.error(SYSTEM_MOUNT.PREFIX, SYSTEM_MOUNT.ERRORS.CLEANUP_ERROR(selector), error);
+        }
+      );
     }
 
     if (record.tasks) {

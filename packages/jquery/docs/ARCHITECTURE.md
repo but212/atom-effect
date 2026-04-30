@@ -72,7 +72,8 @@ Handlers are standalone functions, which facilitates tree-shaking and reduces cy
 To manage performance during high-frequency updates, `unified.ts` implements several techniques:
 
 - **Metadata Caching**: Bindings such as `atomClass`, `atomCss`, `atomAttr`, and `atomProp` pre-calculate metadata during initial registration. Map objects are hoisted outside the iteration loop to reduce allocations.
-- **Monomorphic Dispatch**: The `InputBinding` class specializes its logic at construction time, removing branching from synchronization paths.
+- **Argument Normalization Factory**: Chainable methods are generated via `createChainableMethod`, which encapsulates argument resolution and iteration to ensure consistent behavior and reduced boilerplate.
+- **Monomorphic Strategy Dispatch**: The `InputBinding` class resolves its synchronization strategy (e.g., `multipleSelect` vs `default`) at construction time. This ensures monomorphic execution paths in V8 and avoids expensive conditional branching within high-frequency event loops.
 - **JS-Level Value Caching**: Handlers maintain a local cache of the last written value to avoid redundant DOM reads and writes.
 - **Batched Map Updates**: `registerMapEffect` processes dictionaries of reactive values in a single effect to improve subscription efficiency.
 - **Async Consolidation**: `registerMapEffect` uses `Promise.all` to synchronize multiple asynchronous dependencies within a map.
@@ -167,6 +168,15 @@ Navigation follows a defined pipeline: Link Interception -> Leave Guards -> Brow
 ### 7.3 Performance & Resilience
 
 Includes a resolution cache for route links and centralized path utilities for string manipulation. Asset links are automatically ignored to prevent interference with file downloads.
+
+### 7.4 Active State Tracking Optimization
+
+The router maintains visual state for navigation links using a targeted tracking system:
+
+- **Link Registry**: Uses a `Set<HTMLElement>` to track all navigation links (`a`, `[data-route]`) currently in the DOM.
+- **Automated Discovery**: A persistent `MutationObserver` monitors `document.body` to automatically register newly added links and remove disconnected ones.
+- **Targeted Updates**: When the route changes, the router iterates only over the tracked set rather than performing a full DOM scan (`querySelectorAll`).
+- **Memory Management**: Links are automatically deregistered from the tracking set via `registry.onCleanup` when they are removed from the DOM.
 
 ## 8. Reactive Data Fetching (`$.atomFetch`)
 

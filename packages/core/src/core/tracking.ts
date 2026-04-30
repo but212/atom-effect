@@ -1,3 +1,4 @@
+import { Err, Ok, type Result } from '@but212/atom-effect-utils';
 import { IS_DEV } from '@/constants';
 import type { Dependency, Subscriber } from '@/types';
 import { debug } from '@/utils/debug';
@@ -86,28 +87,15 @@ export class Subscription<T> {
    * allocation overhead in the notification hot-path.
    */
   notify(newValue?: T, oldValue?: T): void {
-    const fn = this.fn;
-    const sub = this.sub;
-
+    const { fn, sub } = this;
     if (fn === undefined && sub === undefined) return;
 
-    const ctx = trackingContext;
-    const prev = ctx.current;
-
-    if (prev === null) {
-      if (fn !== undefined) fn(newValue, oldValue);
-      if (sub !== undefined) sub.execute();
-      return;
-    }
-
     // Logic: Context switch is required to maintain notification safety and prevent cycles.
-    ctx.current = null;
-    try {
+    // Optimization: We use untracked to encapsulate context management and reduce complexity.
+    untracked(() => {
       if (fn !== undefined) fn(newValue, oldValue);
       if (sub !== undefined) sub.execute();
-    } finally {
-      ctx.current = prev;
-    }
+    });
   }
 }
 
@@ -124,27 +112,28 @@ class TrackingContext {
   public current: DependencySubscriber | null = null;
 
   /**
-   * Executes a function within the scope of a specific subscriber.
+   * Executes a function within the scope of a specific subscriber and returns the result as Data.
    *
    * @param subscriber - The subscriber to collect dependencies for.
    * @param fn - The logic to execute.
-   * @returns The result of the provided function.
+   * @returns A Result containing the success value or the captured error.
    */
-  public run<T>(subscriber: DependencySubscriber, fn: () => T): T {
+  public run<T>(subscriber: DependencySubscriber, fn: () => T): Result<T, Error> {
     if (this.current === subscriber) {
-      return fn();
+      try {
+        return Ok(fn());
+      } catch (e) {
+        return Err(e as Error);
+      }
     }
 
     const prev = this.current;
     this.current = subscriber;
 
     try {
-      if (!IS_DEV) return fn();
-
       const result = fn();
 
-      // Caution: Dependency tracking is strictly synchronous.
-      if (isPromise(result)) {
+      if (IS_DEV && isPromise(result)) {
         debug.warn(
           true,
           'Detected Promise returned within tracking context. ' +
@@ -153,7 +142,9 @@ class TrackingContext {
         );
       }
 
-      return result;
+      return Ok(result);
+    } catch (e) {
+      return Err(e as Error);
     } finally {
       // Constraint: Restoration of the previous context is required to ensure tracking integrity.
       this.current = prev;

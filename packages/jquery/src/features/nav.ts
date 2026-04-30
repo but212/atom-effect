@@ -98,13 +98,23 @@ function extractContent(html: string, selector?: string, xhr?: JQuery.jqXHR): Co
   };
 }
 
+/** Metadata tag definitions for SEO and document integrity. @internal */
+const META_SCHEMA = [
+  {
+    selector: 'meta[name="description"]',
+    name: 'description',
+    key: 'description',
+    isLink: false,
+  },
+  { selector: 'meta[name="keywords"]', name: 'keywords', key: 'keywords', isLink: false },
+  { selector: 'link[rel="canonical"]', name: 'canonical', key: 'canonical', isLink: true },
+] as const;
+
 /**
  * Synchronizes document metadata to maintain SEO and social sharing integrity.
  *
- * Logic: SEO Continuity
- * Updates standard meta tags and canonical links during partial AJAX transitions
- * to ensure that the document state remains consistent for social crawlers and
- * browser history previews.
+ * Logic: Iterates through a predefined metadata schema to ensure that standard meta
+ * tags and canonical links are updated in synchronization with page transitions.
  *
  * @param win - The target Window object.
  * @param meta - The metadata mapping to apply.
@@ -114,12 +124,15 @@ function syncMetaData(win: Window, meta?: Record<string, string>): void {
   const doc = win.document;
   const head = doc.head;
 
-  const sync = (selector: string, value: string | undefined, name: string, isLink = false) => {
+  for (const { selector, name, key, isLink } of META_SCHEMA) {
+    const value = meta?.[key];
     const el = head.querySelector(selector);
+
     if (!value) {
       el?.remove();
-      return;
+      continue;
     }
+
     const target = (el as HTMLElement) ?? doc.createElement(isLink ? 'link' : 'meta');
     if (!el) {
       if (isLink) {
@@ -129,15 +142,12 @@ function syncMetaData(win: Window, meta?: Record<string, string>): void {
       }
       head.appendChild(target);
     }
+
     const attr = isLink ? 'href' : 'content';
     if (target.getAttribute(attr) !== value) {
       target.setAttribute(attr, value);
     }
-  };
-
-  sync('meta[name="description"]', meta?.description, 'description');
-  sync('meta[name="keywords"]', meta?.keywords, 'keywords');
-  sync('link[rel="canonical"]', meta?.canonical, 'canonical', true);
+  }
 }
 
 /**

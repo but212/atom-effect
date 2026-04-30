@@ -188,51 +188,16 @@ export abstract class ReactiveNode<T> {
 
     this._notifying++;
     try {
-      // Optimization: Prioritizes inline slots (s0-s3) for notification delivery.
-      if (slots._s0 !== null) {
+      slots.forEach((sub) => {
         try {
-          slots._s0.notify(newValue, oldValue);
+          sub.notify(newValue, oldValue);
         } catch (e) {
           this._logNotifyError(e);
         }
-      }
-      if (slots._s1 !== null) {
-        try {
-          slots._s1.notify(newValue, oldValue);
-        } catch (e) {
-          this._logNotifyError(e);
-        }
-      }
-      if (slots._s2 !== null) {
-        try {
-          slots._s2.notify(newValue, oldValue);
-        } catch (e) {
-          this._logNotifyError(e);
-        }
-      }
-      if (slots._s3 !== null) {
-        try {
-          slots._s3.notify(newValue, oldValue);
-        } catch (e) {
-          this._logNotifyError(e);
-        }
-      }
-
-      const ov = slots._overflow;
-      if (ov !== null) {
-        for (let i = 0, len = ov.length; i < len; i++) {
-          const sub = ov[i];
-          if (sub !== null) {
-            try {
-              sub?.notify(newValue, oldValue);
-            } catch (e) {
-              this._logNotifyError(e);
-            }
-          }
-        }
-      }
+      });
     } finally {
-      if (--this._notifying === 0) {
+      this._notifying--;
+      if (this._notifying === 0) {
         slots.compact();
       }
     }

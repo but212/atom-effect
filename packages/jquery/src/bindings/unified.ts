@@ -221,11 +221,15 @@ export function bindCss(element: HTMLElement, cssMap: Record<string, CssValue>):
 /**
  * Binds HTML attributes to reactive sources.
  *
- * Logic:
- * - Boolean Attributes: Specifically handles attributes like `disabled` where
- *   false results in attribute removal.
- * - ARIA: Maps boolean values to 'true'/'false' strings for accessibility attributes.
- * - Protocol Validation: Blocks dangerous URL protocols in `href` or `src` attributes.
+ * Logic: Attribute Transformation Pipeline
+ * Implements a unified transformation flow for different attribute categories:
+ * - Boolean Attributes: Automatically removed when the condition is `false`.
+ * - ARIA Attributes: Boolean values are mapped to 'true'/'false' strings.
+ * - Standard Attributes: Values are coerced to strings.
+ *
+ * Security: Protocol Validation
+ * Validates 'href' and 'src' attributes against dangerous URL protocols to
+ * mitigate potential XSS vectors.
  *
  * @param element - The target HTMLElement.
  * @param attrMap - A record mapping attribute names to reactive values.
@@ -252,25 +256,31 @@ export function bindAttr(
       for (const [name, value] of Object.entries(states)) {
         const meta = metaMap[name];
         if (!meta) continue;
+
         const val = value as PrimitiveValue;
 
-        if (val == null || (val === false && !meta.isAria)) {
-          if (prev[name] !== null) {
-            element.removeAttribute(name);
-          }
-          prev[name] = null;
-          continue;
+        // 1. Resolve raw attribute value based on type and metadata
+        let next: string | null = null;
+        if (val === true) {
+          next = meta.isAria ? 'true' : name;
+        } else if (val === false) {
+          next = meta.isAria ? 'false' : null;
+        } else if (val != null) {
+          next = String(val);
         }
 
-        const next = val === true ? (meta.isAria ? 'true' : name) : String(val);
-
-        if (isDangerousUrl(name, next)) {
+        // 2. Validate and Apply
+        if (next !== null && isDangerousUrl(name, next)) {
           console.warn(`${SYSTEM_BINDING.PREFIX} ${SYSTEM_SECURITY.ERRORS.BLOCKED_PROTOCOL(name)}`);
           continue;
         }
 
         if (prev[name] !== next) {
-          element.setAttribute(name, next);
+          if (next === null) {
+            element.removeAttribute(name);
+          } else {
+            element.setAttribute(name, next);
+          }
           prev[name] = next;
         }
       }
@@ -321,8 +331,9 @@ export function bindProp(
 /**
  * Manages element visibility based on a reactive condition.
  *
- * Logic: The original `display` mode (e.g., `flex`, `grid`) is preserved and
- * restored when the element is shown, ensuring the intended layout remains intact.
+ * Logic: Layout Preservation
+ * Transitions between 'visible' and 'hidden' states while preserving the
+ * element's original 'display' mode (e.g., flex, grid) when restored.
  *
  * @param element - The target HTMLElement.
  * @param condition - The reactive boolean condition governing visibility.
@@ -334,19 +345,23 @@ export function bindVisibility(
   condition: AsyncReactiveValue<boolean>,
   invert: boolean
 ): void {
-  let prevDisplay = element.style.display === 'none' ? '' : element.style.display;
+  // Capture initial display state, excluding 'none'.
+  let baseDisplay = element.style.display === 'none' ? '' : element.style.display;
 
   registerReactiveEffect(
     element,
     condition,
     (value) => {
       const isVisible = invert !== !!value;
+      const current = element.style.display;
+
+      // Data-centric state application:
       if (isVisible) {
-        if (element.style.display === 'none') {
-          element.style.display = prevDisplay;
+        if (current === 'none') {
+          element.style.display = baseDisplay;
         }
-      } else if (element.style.display !== 'none') {
-        prevDisplay = element.style.display;
+      } else if (current !== 'none') {
+        baseDisplay = current;
         element.style.display = 'none';
       }
     },

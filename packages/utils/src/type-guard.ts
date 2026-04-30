@@ -1,6 +1,5 @@
 import type { Option } from './option';
-import type { Result } from './result';
-import { OPTION_SYMBOL, RESULT_SYMBOL } from './symbols';
+import { OPTION_SYMBOL } from './symbols';
 
 /**
  * Determines whether a value is a Promise or a Thenable.
@@ -38,11 +37,3 @@ export const isOption = (val: unknown): val is Option<unknown> =>
   val != null &&
   typeof val === 'object' &&
   (val as Record<symbol, unknown>)[OPTION_SYMBOL] === true;
-
-/**
- * Checks if a value is a Result.
- */
-export const isResult = (val: unknown): val is Result<unknown, unknown> =>
-  val != null &&
-  typeof val === 'object' &&
-  (val as Record<symbol, unknown>)[RESULT_SYMBOL] === true;

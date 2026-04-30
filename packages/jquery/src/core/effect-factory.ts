@@ -1,4 +1,5 @@
 import { effect, isAtom, type ReadonlyAtom, untracked } from '@but212/atom-effect';
+import { Result } from '@but212/atom-effect-utils';
 import { SYSTEM_BINDING } from '@/constants';
 import { registry } from '@/core/registry';
 import type { AsyncReactiveValue } from '@/types';
@@ -51,48 +52,47 @@ function createAsyncRunner<T>(
     isDisposed = true;
   });
 
+  /** Internal helper to execute the updater with Result tracking. */
+  const applyUpdate = (val: T, isSync: boolean, targetId: number) => {
+    // Logic: Discard results if a newer update was initiated or the element was removed.
+    if (isDisposed || targetId !== latestId) return;
+
+    untracked(() => {
+      const result = Result.tryCatch(() => updater(val));
+
+      Result.match(result, {
+        ok: () => {
+          const suffix = isSync ? '' : ' (async)';
+          debug.domUpdated(SYSTEM_BINDING.PREFIX, el, `${debugType}${suffix}`, val);
+        },
+        err: (error) => {
+          debug.error(
+            SYSTEM_BINDING.PREFIX,
+            SYSTEM_BINDING.ERRORS.UPDATER_ERROR(debugType, isSync),
+            error
+          );
+        },
+      });
+    });
+  };
+
   return (value: T | Promise<T>) => {
     const currentId = ++latestId;
 
     if (!isPromise(value)) {
-      untracked(() => {
-        try {
-          updater(value);
-          debug.domUpdated(SYSTEM_BINDING.PREFIX, el, debugType, value);
-        } catch (error) {
-          debug.error(
-            SYSTEM_BINDING.PREFIX,
-            SYSTEM_BINDING.ERRORS.UPDATER_ERROR(debugType, true),
-            error
-          );
-        }
-      });
+      applyUpdate(value, true, currentId);
       return;
     }
 
-    value
-      .then((resolved) => {
-        // Logic: Discard results if a newer update was initiated or the element was removed.
-        if (currentId === latestId && !isDisposed) {
-          untracked(() => {
-            try {
-              updater(resolved);
-              debug.domUpdated(SYSTEM_BINDING.PREFIX, el, `${debugType} (async)`, resolved);
-            } catch (error) {
-              debug.error(
-                SYSTEM_BINDING.PREFIX,
-                SYSTEM_BINDING.ERRORS.UPDATER_ERROR(debugType),
-                error
-              );
-            }
-          });
-        }
-      })
-      .catch((error) => {
+    value.then(
+      (resolved) => applyUpdate(resolved, false, currentId),
+      (error) => {
+        // Caution: Network or source errors are logged if they are still relevant.
         if (currentId === latestId && !isDisposed) {
           debug.error(SYSTEM_BINDING.PREFIX, SYSTEM_BINDING.ERRORS.UPDATER_ERROR(debugType), error);
         }
-      });
+      }
+    );
   };
 }
 

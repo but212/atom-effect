@@ -2,17 +2,32 @@
 
 ## [Unreleased]
 
+### Core
+
+#### Changed
+
+- **Architecture**: Standardized tracking lifecycle by extracting `_startTracking()` and `_commitDeps()` across `Computed` and `Effect`.
+- **Consistency**: Renamed internal epoch tracking fields (e.g., `_currentEpoch` -> `_trackEpoch`) to align with the unified dependency model.
+- **Performance**: Optimized notification and validation paths by leveraging `untracked` to prevent redundant dependency capture.
+
 ### Utils
 
 #### Breaking Changes
 
+- **Result API**: Re-engineered `Result<T, E>` from a class-based hierarchy to a high-performance, data-centric POJO design.
+  - Replaced method calls (e.g., `res.unwrap()`) with static utility calls (e.g., `Result.unwrap(res)`) for better tree-shaking and memory efficiency.
 - **SlotBuffer API**: Standardized API to match standard JavaScript collections.
   - Renamed `size` -> `length`, `physicalSize` -> `capacity`, `add` -> `push`, and `getAt` -> `at`.
 
 #### Added
 
 - **Functional Primitives**: Introduced `Option<T>` and `Result<T, E>` types for robust error handling and null-safety.
-  - Added `tryCatch` utility to safely wrap synchronous and asynchronous operations.
+  - **Railway Oriented Programming**: Added a comprehensive suite of static utilities to `Result` (`match`, `tap`, `andThen`, `all`) for declarative error pipelines.
+  - **Safe Execution**: Added `Result.tryCatch` and `Result.fromPromise` to unify synchronous and asynchronous error capture.
+
+#### Fixed
+
+- **Result**: Resolved a type-level edge case where `Promise` objects could be misidentified as `Err` results by `Result.isErr`.
 
 ### jQuery
 
@@ -27,6 +42,14 @@
 - **Dependency Injection**: Enhanced DI system with 100% Shadow DOM coverage and unified move detection.
 - **CSS Bridge**: Automatic synchronization of reactive values to CSS custom properties (e.g., `--aej-key`).
 - **Diagnostics**: Integrated unregistered custom element detection (Debug Mode only).
+
+#### Changed
+
+- **Error Handling**: Adopted the new `Result` utility across all bindings and features for a more robust and declarative error handling model.
+- **Performance**: Optimized `InputBinding` by resolving synchronization strategies at construction time, ensuring monomorphic execution paths in V8.
+- **Performance**: Switched `$.route` to a registry-based link tracking system using `MutationObserver` and a `Set` to eliminate redundant `querySelectorAll` scans during navigation.
+- **Refactor**: Introduced `createChainableMethod` factory to unify argument normalization and iteration across chainable bindings (`atomClass`, `atomAttr`, etc.).
+- **Refactor**: Standardized `bindAttr` with a unified transformation pipeline and improved `bindVisibility` to preserve original `display` modes.
 
 #### Security
 

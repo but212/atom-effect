@@ -148,8 +148,11 @@ $('.box').atomCss('width', widthAtom, 'px');
 Updates an HTML attribute.
 
 - **Security**: Blocks `on*` event handlers and protocols such as `javascript:`. This applies to both HTML and SVG attributes (e.g., `fill`, `filter`).
+- **Attribute Transformation Pipeline**: Implements a unified flow for different categories:
+  - **Boolean Attributes**: Automatically removed when the reactive condition is `false`.
+  - **WAI-ARIA**: Boolean values are mapped to `"true"`/`"false"` strings for accessibility compatibility.
+  - **Standard Attributes**: Values are coerced to strings.
 - **HTML Sinks**: Monitors and enforces protocol security on sensitive sinks like `srcdoc`.
-- **WAI-ARIA**: Boolean `false` is preserved as the string `"false"` for `aria-*` attributes instead of being removed.
 
 ```javascript
 $('img').atomAttr('src', imageUrl);
@@ -174,7 +177,7 @@ $('input').atomProp('disabled', shouldDisable);
 
 Toggles visibility via `display: none`. `atomHide` is the inverse.
 
-- **Style Preservation**: Captures and restores the last non-none display style.
+- **Layout Preservation**: Captures and restores the element's original `display` mode (e.g., `flex`, `grid`) when transitioning from `none`, ensuring the intended layout remains intact.
 
 ```javascript
 $('.loading-spinner').atomShow(isLoading);
@@ -221,9 +224,10 @@ Two-way binding for `<input>`, `<textarea>`, and `<select>`.
 
 **Implementation Details**:
 
+- **Strategy Specialization**: Resolves optimized read/write strategies at construction time (e.g., for `multipleSelect` vs standard inputs). This ensures monomorphic execution paths and avoids feature-detection branching in hot paths.
 - **IME Stability**: Monitors composition states to prevent external updates from interrupting character entry (e.g., for CJK languages).
-- **Cursor Preservation**: Maintains selection range during reactive updates when the input is focused.
-- **Cycle Prevention**: Includes guards against infinite feedback loops.
+- **Cursor Preservation**: Maintains selection range and focus stability during reactive updates using a selection buffer and `Result`-based safe execution.
+- **Recursion Control**: Uses internal bitmask flags to prevent infinite update cycles between the DOM and the reactive graph.
 
 Natively supports `<select multiple>` as a `string[]` array.
 
