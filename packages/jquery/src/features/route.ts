@@ -366,6 +366,11 @@ class RouterImpl implements Router {
     if (this.config.autoBindLinks) {
       this.setupInterception();
     }
+
+    // Initialize automatic link discovery and tracking
+    this.scanLinks();
+    this.linkObserver = this.setupLinkObserver();
+
     if (this.$target[0]) {
       registry.onCleanup(this.$target[0], () => this.destroy());
     }
@@ -565,6 +570,9 @@ class RouterImpl implements Router {
     this.setupActiveEffect();
   }
 
+  private readonly trackedLinks = new Set<HTMLElement>();
+  private linkObserver!: MutationObserver;
+
   /** Manages visual feedback for active links via CSS classes and ARIA attributes. */
   private setupActiveEffect() {
     const activeSub = effect(() => {
@@ -573,21 +581,59 @@ class RouterImpl implements Router {
       const pattern = matchResult.kind === 'found' ? matchResult.route.pattern : '';
 
       untracked(() => {
-        document.querySelectorAll<HTMLElement>('a, [data-route]').forEach((el) => {
+        // Optimization: Registry-based targeted updates.
+        // Iterate only over registered navigation links to minimize DOM traversal.
+        for (const el of this.trackedLinks) {
           const path = this.resolvePathFromElement(el, true);
           const active = path === current || path === pattern;
           el.classList.toggle(this.activeClass, active);
 
-          // Accessibility: Signal active navigation state for screen readers.
           if (active) {
             el.setAttribute('aria-current', 'page');
           } else {
             el.removeAttribute('aria-current');
           }
-        });
+        }
       });
     });
     this.cleanups.push(() => activeSub.dispose());
+  }
+
+  /** Scans the document for navigation links and adds them to the tracked set. */
+  private scanLinks() {
+    document.querySelectorAll<HTMLElement>('a, [data-route]').forEach((el) => {
+      this.trackLink(el);
+    });
+  }
+
+  /** Registers a single element for active state tracking. */
+  private trackLink(el: HTMLElement) {
+    if (this.trackedLinks.has(el)) return;
+    this.trackedLinks.add(el);
+    registry.onCleanup(el, () => this.trackedLinks.delete(el));
+  }
+
+  /** Initializes a mutation observer to detect and track navigation links. @internal */
+  private setupLinkObserver(): MutationObserver {
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        mutation.addedNodes.forEach((node) => {
+          if (node instanceof HTMLElement) {
+            // Logic: Automated Discovery
+            // Detects newly added links and registers them for active state tracking.
+            if (node.matches?.('a, [data-route]')) {
+              this.trackLink(node);
+            }
+            node.querySelectorAll?.('a, [data-route]').forEach((el) => {
+              this.trackLink(el as HTMLElement);
+            });
+          }
+        });
+      }
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+    return observer;
   }
 
   /** Resolves the navigation path from an element's attributes. */
@@ -690,6 +736,8 @@ class RouterImpl implements Router {
     if (this.isDestroyed) return;
     this.isDestroyed = true;
     this.runRouteCleanups();
+    this.linkObserver?.disconnect();
+    this.trackedLinks.clear();
     this.cleanups.forEach((fn) => Result.tryCatch(fn));
     this.cleanups = [];
   }

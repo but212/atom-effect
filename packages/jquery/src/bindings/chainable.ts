@@ -30,33 +30,28 @@ import type {
 import { debug } from '@/utils/debug';
 
 /**
- * Normalizes an overloaded key-value pair or a mapping object into a uniform record.
+ * Resolves overloaded arguments (key-value pair or mapping object) into a consistent Record.
  *
- * Logic: This utility streamlines jQuery methods that accept either `(key, value)`
- * or a single `mapping` object. It ensures a consistent Record format is passed
- * to the lower-level binding engine.
+ * Logic: Argument Normalization
+ * Standardizes jQuery-style overloads into a uniform data structure for
+ * downstream binding operations.
  *
  * @param keyOrMap - A property name string or a mapping object.
  * @param value - The reactive value (required if `keyOrMap` is a string).
- * @param methodName - The name of the calling method for error reporting.
- * @param errorMsg - An optional custom error message.
- * @returns A normalized Record map, or null if validation fails.
+ * @returns A normalized Record map, or null if invalid.
  * @internal
  */
-function resolveMap<V>(
+function resolveArgs<V>(
   keyOrMap: string | Record<string, V>,
-  value: V | undefined,
-  methodName: string,
-  errorMsg: string = SYSTEM_BINDING.ERRORS.MISSING_SOURCE(methodName)
+  value: V | undefined
 ): Record<string, V> | null {
-  const map =
-    typeof keyOrMap === 'string' ? (value === undefined ? null : { [keyOrMap]: value }) : keyOrMap;
-
-  if (!map) {
-    console.warn(`${SYSTEM_BINDING.PREFIX} ${errorMsg}`);
-    return null;
+  if (typeof keyOrMap === 'object' && keyOrMap !== null) {
+    return keyOrMap;
   }
-  return map;
+  if (typeof keyOrMap === 'string' && value !== undefined) {
+    return { [keyOrMap]: value };
+  }
+  return null;
 }
 
 /**
@@ -96,14 +91,40 @@ $.fn.atomHtml = function (source: AsyncReactiveValue<string>): JQuery {
 };
 
 /**
+ * Factory for creating chainable jQuery methods with unified argument resolution.
+ *
+ * Logic: Method HOC
+ * Encapsulates argument normalization and element iteration to provide a
+ * declarative interface for chainable plugin methods.
+ *
+ * @param binder - The underlying binding function.
+ * @param errorMsg - Error message to display if arguments are invalid.
+ * @internal
+ */
+function createChainableMethod<V>(
+  binder: (el: HTMLElement, map: Record<string, V>) => void,
+  errorMsg: string
+) {
+  return function (this: JQuery, keyOrMap: string | Record<string, V>, value?: V): JQuery {
+    const map = resolveArgs(keyOrMap, value);
+    if (!map) {
+      console.warn(`${SYSTEM_BINDING.PREFIX} ${errorMsg}`);
+      return this;
+    }
+    return atomEachElement(this, (el) => binder(el, map));
+  };
+}
+
+/**
  * Binds CSS classes to reactive conditions.
  *
- * Logic: This method supports both toggling a single class based on a condition
- * and managing multiple classes through a mapping object.
+ * Logic: Class Toggling
+ * Supports both toggling a single class based on a condition and managing
+ * multiple classes through a mapping object.
  *
  * When to use:
- * - To toggle stateful classes like 'is-active', 'is-disabled', or 'is-loading'.
- * - To manage complex UI states defined by multiple simultaneous class flags.
+ * - To toggle stateful classes (e.g., 'is-active', 'is-loading').
+ * - To manage complex UI states defined by multiple simultaneous flags.
  *
  * @param classNameOrMap - A class name string or a map of `{ className: conditionAtom }`.
  * @param condition - The condition for the class (required if `classNameOrMap` is a string).
@@ -111,56 +132,41 @@ $.fn.atomHtml = function (source: AsyncReactiveValue<string>): JQuery {
  *
  * @example
  * ```typescript
- * // Toggle a single class
  * $('.tab').atomClass('active', activeAtom);
- *
- * // Manage multiple classes
- * $('.panel').atomClass({
- *   'is-visible': visibleAtom,
- *   'is-collapsed': collapsedAtom
- * });
  * ```
  */
-$.fn.atomClass = function (
-  this: JQuery,
-  classNameOrMap: string | Record<string, AsyncReactiveValue<boolean>>,
-  condition?: AsyncReactiveValue<boolean>
-): JQuery {
-  const map = resolveMap(
-    classNameOrMap,
-    condition,
-    'atomClass',
-    SYSTEM_BINDING.ERRORS.MISSING_CONDITION('atomClass')
-  );
-  return map ? atomEachElement(this, (el) => bindClass(el, map)) : this;
-};
+$.fn.atomClass = createChainableMethod(
+  bindClass,
+  SYSTEM_BINDING.ERRORS.MISSING_CONDITION('atomClass')
+);
+
+/**
+ * Binds HTML attributes to reactive sources.
+ *
+ * @example
+ * ```typescript
+ * $('.link').atomAttr('href', urlAtom);
+ * ```
+ */
+$.fn.atomAttr = createChainableMethod(bindAttr, SYSTEM_BINDING.ERRORS.MISSING_SOURCE('atomAttr'));
+
+/**
+ * Binds DOM properties directly to reactive sources.
+ *
+ * @example
+ * ```typescript
+ * $('.input').atomProp('disabled', disabledAtom);
+ * ```
+ */
+$.fn.atomProp = createChainableMethod(
+  bindProp as (el: HTMLElement, map: Record<string, AsyncReactiveValue<unknown>>) => void,
+  SYSTEM_BINDING.ERRORS.MISSING_SOURCE('atomProp')
+);
 
 /**
  * Binds inline CSS properties to reactive sources.
  *
- * Logic: Property names and units (e.g., 'px', '%') are normalized to ensure
- * consistent style application across different browsers.
- *
- * When to use:
- * - To drive visual styles such as width, opacity, or position from reactive state.
- * - To implement dynamic layouts where dimensions depend on calculated values.
- *
- * @param propOrMap - A CSS property name string or a map of `{ property: source }`.
- * @param source - The reactive value (required if `propOrMap` is a string).
- * @param unit - An optional unit string to append to numeric values.
- * @returns The original jQuery collection for chaining.
- *
- * @example
- * ```typescript
- * // Drive a single property with units
- * $('.progress-bar').atomCss('width', progressAtom, '%');
- *
- * // Drive multiple properties
- * $('.box').atomCss({
- *    opacity: opacityAtom,
- *    left: xPositionAtom
- * });
- * ```
+ * Note: Specialized implementation to handle optional units.
  */
 $.fn.atomCss = function (
   this: JQuery,
@@ -170,51 +176,14 @@ $.fn.atomCss = function (
 ): JQuery {
   const value: CssValue | undefined =
     source !== undefined && unit ? [source as AsyncReactiveValue<number>, unit] : source;
-  const map = resolveMap<CssValue>(propOrMap, value, 'atomCss');
+  const map = resolveArgs<CssValue>(propOrMap, value);
 
-  return map ? atomEachElement(this, (el) => bindCss(el, map as CssBindings)) : this;
-};
+  if (!map) {
+    console.warn(`${SYSTEM_BINDING.PREFIX} ${SYSTEM_BINDING.ERRORS.MISSING_SOURCE('atomCss')}`);
+    return this;
+  }
 
-/**
- * Binds HTML attributes to reactive sources.
- *
- * When to use:
- * - To synchronize standard attributes like `id`, `title`, `alt`, or `data-*`.
- *
- * @param nameOrMap - An attribute name string or a map of `{ attribute: source }`.
- * @param source - The reactive value (required if `nameOrMap` is a string).
- * @returns The original jQuery collection for chaining.
- */
-$.fn.atomAttr = function (
-  this: JQuery,
-  nameOrMap: string | Record<string, AsyncReactiveValue<PrimitiveValue>>,
-  source?: AsyncReactiveValue<PrimitiveValue>
-): JQuery {
-  const map = resolveMap(nameOrMap, source, 'atomAttr');
-  return map ? atomEachElement(this, (el) => bindAttr(el, map)) : this;
-};
-
-/**
- * Binds DOM properties directly to reactive sources.
- *
- * When to use:
- * - To toggle stateful properties that require direct property access rather than attributes.
- *
- * @param nameOrMap - A property name string or a map of `{ property: source }`.
- * @param source - The reactive value (required if `nameOrMap` is a string).
- * @returns The original jQuery collection for chaining.
- */
-$.fn.atomProp = function <T>(
-  this: JQuery,
-  nameOrMap: string | Record<string, AsyncReactiveValue<T>>,
-  source?: AsyncReactiveValue<T>
-): JQuery {
-  const map = resolveMap(nameOrMap, source, 'atomProp');
-  return map
-    ? atomEachElement(this, (el) =>
-        bindProp(el, map as Record<string, AsyncReactiveValue<unknown>>)
-      )
-    : this;
+  return atomEachElement(this, (el) => bindCss(el, map as CssBindings));
 };
 
 /**

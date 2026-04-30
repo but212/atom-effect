@@ -46,7 +46,10 @@
 #### Changed
 
 - **Error Handling**: Adopted the new `Result` utility across all bindings and features for a more robust and declarative error handling model.
-- **Refactor**: Replaced imperative `try-catch` blocks with `Result.tryCatch` and `Result.match` in hot-paths (e.g., `input-binding`, `atomFetch`, `$.route`).
+- **Performance**: Optimized `InputBinding` by resolving synchronization strategies at construction time, ensuring monomorphic execution paths in V8.
+- **Performance**: Switched `$.route` to a registry-based link tracking system using `MutationObserver` and a `Set` to eliminate redundant `querySelectorAll` scans during navigation.
+- **Refactor**: Introduced `createChainableMethod` factory to unify argument normalization and iteration across chainable bindings (`atomClass`, `atomAttr`, etc.).
+- **Refactor**: Standardized `bindAttr` with a unified transformation pipeline and improved `bindVisibility` to preserve original `display` modes.
 
 #### Security
 
