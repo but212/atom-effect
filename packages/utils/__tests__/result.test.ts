@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Err, Ok, Result, tryCatch } from '@/index';
+import { Err, Ok, Result, tryAsync, tryCatch } from '@/index';
 
 describe('Result Utility', () => {
   // Shared test functions for functional transformations
@@ -176,103 +176,99 @@ describe('Result Utility', () => {
   });
 
   describe('Async & Safe Execution', () => {
-    describe('Result.tryCatch()', () => {
-      it('should handle sync success and failure', () => {
-        expect(Result.unwrap(tryCatch(() => 'sync'))).toBe('sync');
-        const err = tryCatch(() => {
-          throw new Error('fail');
-        });
-        expect(Result.isErr(err)).toBe(true);
+    it('should handle sync success and failure', () => {
+      expect(Result.unwrap(tryCatch(() => 'sync'))).toBe('sync');
+      const err = tryCatch(() => {
+        throw new Error('fail');
       });
-
-      it('should handle async success and failure', async () => {
-        const ok = await tryCatch(async () => 'async');
-        expect(Result.unwrap(ok)).toBe('async');
-
-        const err = await tryCatch(async () => {
-          throw 'async fail';
-        });
-        expect(Result.isErr(err)).toBe(true);
-      });
-    });
-
-    it('Result.fromPromise should convert Promise to Result', async () => {
-      expect(await Result.fromPromise(Promise.resolve('ok'))).toEqual(Ok('ok'));
-      expect(await Result.fromPromise(Promise.reject('err'))).toEqual(Err('err'));
-
-      // Thenable compatibility
-      const thenable = {
-        then: (cb: (v: string) => void) => {
-          cb('deferred');
-          return thenable;
-        },
-      };
-      expect(await Result.fromPromise(thenable as unknown as PromiseLike<string>)).toEqual(
-        Ok('deferred')
-      );
+      expect(Result.isErr(err)).toBe(true);
     });
   });
 
-  describe('Algebraic Laws (Formal Verification)', () => {
-    const f = (n: number) => n + 1;
-    const g = (n: number) => n * 2;
-    const mf = (n: number) => Ok(n + 1);
-    const mg = (n: number) => Ok(n * 2);
+  describe('Result.tryAsync()', () => {
+    it('should handle async success and failure', async () => {
+      const ok = await tryAsync(async () => 'async');
+      expect(Result.unwrap(ok)).toBe('async');
 
-    it('Functor Identity: map(id) == id', () => {
-      const ok = Ok(10);
-      expect(Result.map(ok, (x) => x)).toEqual(ok);
-    });
-
-    it('Functor Composition: map(g . f) == map(f).map(g)', () => {
-      const ok = Ok(10);
-      const left = Result.map(Result.map(ok, f), g);
-      const right = Result.map(ok, (x) => g(f(x)));
-      expect(Result.equals(left, right)).toBe(true);
-    });
-
-    it('Monad Left Identity: andThen(Ok(x), f) == f(x)', () => {
-      expect(Result.andThen(Ok(10), mf)).toEqual(mf(10));
-    });
-
-    it('Monad Right Identity: andThen(m, Ok) == m', () => {
-      const ok = Ok(10);
-      expect(Result.andThen(ok, Ok)).toEqual(ok);
-    });
-
-    it('Monad Associativity', () => {
-      const ok = Ok(10);
-      const left = Result.andThen(Result.andThen(ok, mf), mg);
-      const right = Result.andThen(ok, (x) => Result.andThen(mf(x), mg));
-      expect(Result.equals(left, right)).toBe(true);
+      const err = await tryAsync(async () => {
+        throw 'async fail';
+      });
+      expect(Result.isErr(err)).toBe(true);
     });
   });
 
-  describe('Constraints & Edge Cases', () => {
-    it('should preserve error object identity (Pike Rule 5)', () => {
-      const complexError = { code: 500, detail: 'Internal Server Error' };
-      const res = Err(complexError);
-      try {
-        Result.unwrap(res);
-      } catch (e) {
-        expect(e).toBe(complexError);
-      }
-    });
+  it('Result.fromPromise should convert Promise to Result', async () => {
+    expect(await Result.fromPromise(Promise.resolve('ok'))).toEqual(Ok('ok'));
+    expect(await Result.fromPromise(Promise.reject('err'))).toEqual(Err('err'));
 
-    it('should return original reference on Err transformation (Pike Rule 5)', () => {
-      const err = Err('original error');
-      expect(Result.map(err, (v) => v)).toBe(err);
-      expect(Result.andThen(err, (v) => Ok(v))).toBe(err);
-    });
+    // Thenable compatibility
+    const thenable = {
+      then: (cb: (v: string) => void) => {
+        cb('deferred');
+        return thenable;
+      },
+    };
+    expect(await Result.fromPromise(thenable as unknown as PromiseLike<string>)).toEqual(
+      Ok('deferred')
+    );
+  });
+});
 
-    it('isErr should not return true for a Promise (Red Phase)', () => {
-      /**
-       * @bug Edge Case: Result.tryCatch returns a Promise when handling async logic.
-       * If Result.isErr is called on this Promise, it incorrectly returns true because !promise.ok is true.
-       */
-      const asyncResult = Result.tryCatch(async () => 'hello');
-      // This is expected to FAIL in current implementation
-      expect(Result.isErr(asyncResult as unknown as Result<unknown, Error>)).toBe(false);
-    });
+describe('Algebraic Laws (Formal Verification)', () => {
+  const f = (n: number) => n + 1;
+  const g = (n: number) => n * 2;
+  const mf = (n: number) => Ok(n + 1);
+  const mg = (n: number) => Ok(n * 2);
+
+  it('Functor Identity: map(id) == id', () => {
+    const ok = Ok(10);
+    expect(Result.map(ok, (x) => x)).toEqual(ok);
+  });
+
+  it('Functor Composition: map(g . f) == map(f).map(g)', () => {
+    const ok = Ok(10);
+    const left = Result.map(Result.map(ok, f), g);
+    const right = Result.map(ok, (x) => g(f(x)));
+    expect(Result.equals(left, right)).toBe(true);
+  });
+
+  it('Monad Left Identity: andThen(Ok(x), f) == f(x)', () => {
+    expect(Result.andThen(Ok(10), mf)).toEqual(mf(10));
+  });
+
+  it('Monad Right Identity: andThen(m, Ok) == m', () => {
+    const ok = Ok(10);
+    expect(Result.andThen(ok, Ok)).toEqual(ok);
+  });
+
+  it('Monad Associativity', () => {
+    const ok = Ok(10);
+    const left = Result.andThen(Result.andThen(ok, mf), mg);
+    const right = Result.andThen(ok, (x) => Result.andThen(mf(x), mg));
+    expect(Result.equals(left, right)).toBe(true);
+  });
+});
+
+describe('Constraints & Edge Cases', () => {
+  it('should preserve error object identity (Pike Rule 5)', () => {
+    const complexError = { code: 500, detail: 'Internal Server Error' };
+    const res = Err(complexError);
+    try {
+      Result.unwrap(res);
+    } catch (e) {
+      expect(e).toBe(complexError);
+    }
+  });
+
+  it('should return original reference on Err transformation (Pike Rule 5)', () => {
+    const err = Err('original error');
+    expect(Result.map(err, (v) => v)).toBe(err);
+    expect(Result.andThen(err, (v) => Ok(v))).toBe(err);
+  });
+
+  it('isErr should not return true for a Promise wrapped in Ok', () => {
+    const wrappedPromise = Result.tryCatch(() => (async () => 'hello')());
+    expect(Result.isErr(wrappedPromise as unknown as Result<unknown, Error>)).toBe(false);
+    expect(Result.isOk(wrappedPromise as unknown as Result<unknown, Error>)).toBe(true);
   });
 });

@@ -1,5 +1,4 @@
 import { None, type Option, Some } from '@/option';
-import { isPromise } from './type-guard';
 
 /**
  * Represents a successful computation result.
@@ -21,18 +20,10 @@ export type Err<E> = { readonly ok: false; readonly error: E };
  */
 export type Result<T, E = Error> = Ok<T> | Err<E>;
 
-/**
- * @internal
- * Logic: Internal capture helper to cast unknown errors to a specific error type.
- */
-const capture = <E>(e: unknown): E => e as E;
+// Removed capture helper as it was just a type cast masquerading as logic.
 
-/**
- * Internal type guard to check if a value conforms to the Result structure.
- * Logic: We check for the presence of the 'ok' property and either 'value' or 'error'.
- */
 const isResult = (val: unknown): val is Result<unknown, unknown> =>
-  val !== null && typeof val === 'object' && 'ok' in val && ('value' in val || 'error' in val);
+  !!val && typeof val === 'object' && 'ok' in val && ('value' in val || 'error' in val);
 
 /**
  * Result Static Utilities
@@ -70,37 +61,9 @@ export const Result = {
    */
   err: <E>(error: E): Result<never, E> => ({ ok: false, error }),
 
-  /**
-   * Type guard for Ok variant.
-   *
-   * When to use:
-   * - To narrow a Result type to Ok in conditional blocks.
-   *
-   * @param res The result to check.
-   * @returns True if the result is Ok.
-   *
-   * @example
-   * if (Result.isOk(res)) {
-   *   console.log(res.value);
-   * }
-   */
-  isOk: <T, E>(res: Result<T, E>): res is Ok<T> => isResult(res) && res.ok,
+  isOk: <T, E>(res: Result<T, E>): res is Ok<T> => res.ok,
 
-  /**
-   * Type guard for Err variant.
-   *
-   * When to use:
-   * - To narrow a Result type to Err in conditional blocks.
-   *
-   * @param res The result to check.
-   * @returns True if the result is Err.
-   *
-   * @example
-   * if (Result.isErr(res)) {
-   *   console.error(res.error);
-   * }
-   */
-  isErr: <T, E>(res: Result<T, E>): res is Err<E> => isResult(res) && !res.ok,
+  isErr: <T, E>(res: Result<T, E>): res is Err<E> => !res.ok,
 
   /**
    * Returns the value if Ok, otherwise throws the error as-is.
@@ -321,14 +284,12 @@ export const Result = {
    * @example
    * const res = Result.all([Result.ok(1), Result.ok(2)]); // Ok([1, 2])
    */
-  all: <T, E>(results: Result<T, E>[]): Result<T[], E> => {
-    const values: T[] = [];
-    for (const r of results) {
-      if (!r.ok) return r;
-      values.push(r.value);
-    }
-    return { ok: true, value: values };
-  },
+  all: <T, E>(results: Result<T, E>[]): Result<T[], E> =>
+    results.reduce<Result<T[], E>>((acc, res) => {
+      if (!acc.ok) return acc;
+      if (!res.ok) return res;
+      return { ok: true, value: [...acc.value, res.value] };
+    }, Result.ok<T[]>([])),
 
   /**
    * Converts a Promise/Thenable into a Promise resolving to a Result.
@@ -342,41 +303,37 @@ export const Result = {
    * @example
    * const res = await Result.fromPromise(fetch("/api"));
    */
-  fromPromise: <T, E = Error>(promise: PromiseLike<T>): Promise<Result<T, E>> => {
-    return Promise.resolve(promise).then(
+  fromPromise: <T, E = Error>(promise: PromiseLike<T>): Promise<Result<T, E>> =>
+    Promise.resolve(promise).then(
       (value) => ({ ok: true, value }) as Result<T, E>,
-      (error) => ({ ok: false, error: capture<E>(error) }) as Result<T, E>
-    );
+      (error) => ({ ok: false, error: error as E })
+    ),
+
+  /**
+   * Executes a synchronous function and captures any thrown error as Result.
+   *
+   * @param fn The function to execute.
+   * @returns A Result containing the value or captured error.
+   */
+  tryCatch: <T, E = Error>(fn: () => T): Result<T, E> => {
+    try {
+      return { ok: true, value: fn() };
+    } catch (e) {
+      return { ok: false, error: e as E };
+    }
   },
 
   /**
-   * Executes a function and captures any thrown error as Result.
-   * Automatically handles both synchronous and asynchronous functions.
+   * Executes an asynchronous function and captures any thrown error as Result.
    *
-   * When to use:
-   * - To wrap potentially throwing functions in a safe Result container.
-   *
-   * @param fn The function to execute.
-   * @returns A Result (or Promise of Result) containing the value or captured error.
-   *
-   * @example
-   * const res = Result.tryCatch(() => JSON.parse(str));
+   * @param fn The async function to execute.
+   * @returns A Promise resolving to a Result.
    */
-  tryCatch: <T, E = Error>(
-    fn: () => T
-  ): T extends PromiseLike<infer U> ? Promise<Result<U, E>> : Result<T, E> => {
-    type TryCatchReturn = T extends PromiseLike<infer U> ? Promise<Result<U, E>> : Result<T, E>;
+  tryAsync: <T, E = Error>(fn: () => PromiseLike<T>): Promise<Result<T, E>> => {
     try {
-      const val = fn();
-      if (isPromise(val)) {
-        return (val as PromiseLike<unknown>).then(
-          (v: unknown) => ({ ok: true, value: v }) as Result<unknown, E>,
-          (e: unknown) => ({ ok: false, error: capture<E>(e) }) as Result<unknown, E>
-        ) as unknown as TryCatchReturn;
-      }
-      return { ok: true, value: val } as unknown as TryCatchReturn;
+      return Result.fromPromise(fn());
     } catch (e) {
-      return { ok: false, error: capture<E>(e) } as unknown as TryCatchReturn;
+      return Promise.resolve({ ok: false, error: e as E });
     }
   },
 };
@@ -398,17 +355,16 @@ export const Ok = Result.ok;
 export const Err = Result.err;
 
 /**
- * Executes a function and captures any thrown error. Alias for {@link Result.tryCatch}.
- *
- * @example
- * const res = tryCatch(() => JSON.parse("{"));
+ * Executes a sync function and captures any thrown error. Alias for {@link Result.tryCatch}.
  */
 export const tryCatch = Result.tryCatch;
 
 /**
+ * Executes an async function and captures any thrown error. Alias for {@link Result.tryAsync}.
+ */
+export const tryAsync = Result.tryAsync;
+
+/**
  * Converts a promise to a Result. Alias for {@link Result.fromPromise}.
- *
- * @example
- * const res = await fromPromise(fetch("/api"));
  */
 export const fromPromise = Result.fromPromise;

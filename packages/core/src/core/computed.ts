@@ -219,10 +219,35 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     if (!dependencies.hasComputeds) return false;
 
     return untracked(() => {
-      const length = dependencies.capacity;
-      for (let i = 0; i < length; i++) {
+      // Logic: Iterative graph traversal using a stack to check for errors in the dependency sub-graph.
+      // This approach is more robust against deep dependency chains and consistent with the errors getter.
+      const stack: ComputedAtomImpl<unknown>[] = [];
+      const capacity = dependencies.capacity;
+      for (let i = 0; i < capacity; i++) {
         const link = dependencies.at(i);
-        if (link?.node.hasError) return true;
+        if (link?.node.isComputed) {
+          stack.push(link.node as unknown as ComputedAtomImpl<unknown>);
+        }
+      }
+
+      const seen = new Set<number>();
+      while (stack.length > 0) {
+        const node = stack.pop()!;
+        if (seen.has(node.id)) continue;
+        seen.add(node.id);
+
+        if ((node.flags & (REJECTED | HAS_ERROR)) !== 0) return true;
+
+        const deps = node._deps;
+        if (deps.hasComputeds) {
+          const cap = deps.capacity;
+          for (let i = 0; i < cap; i++) {
+            const link = deps.at(i);
+            if (link?.node.isComputed) {
+              stack.push(link.node as unknown as ComputedAtomImpl<unknown>);
+            }
+          }
+        }
       }
       return false;
     });
@@ -253,46 +278,46 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     }
 
     const collected: Error[] = [];
-    if (selfError !== null) collected.push(selfError);
+    const seenErrors = new Set<Error>();
+    if (selfError !== null) {
+      collected.push(selfError);
+      seenErrors.add(selfError);
+    }
 
     untracked(() => {
-      const length = dependencies.capacity;
-      for (let i = 0; i < length; i++) {
+      // Logic: Iterative traversal using a stack to avoid recursion overhead and
+      // utilizing a Set for O(1) deduplication, making the data structure drive the logic.
+      const stack: ComputedAtomImpl<unknown>[] = [];
+      const capacity = dependencies.capacity;
+      for (let i = 0; i < capacity; i++) {
         const link = dependencies.at(i);
-        if (link !== null) {
-          const dependencyNode = link.node;
-          if ((dependencyNode.flags & IS_COMPUTED) !== 0) {
-            this._accumulateErrors(
-              dependencyNode as unknown as ComputedAtomImpl<unknown>,
-              collected
-            );
+        if (link?.node.isComputed) {
+          stack.push(link.node as unknown as ComputedAtomImpl<unknown>);
+        }
+      }
+
+      while (stack.length > 0) {
+        const node = stack.pop()!;
+        const error = node._error;
+        if (error !== null && !seenErrors.has(error)) {
+          collected.push(error);
+          seenErrors.add(error);
+        }
+
+        const deps = node._deps;
+        if (deps.hasComputeds) {
+          const cap = deps.capacity;
+          for (let i = 0; i < cap; i++) {
+            const link = deps.at(i);
+            if (link?.node.isComputed) {
+              stack.push(link.node as unknown as ComputedAtomImpl<unknown>);
+            }
           }
         }
       }
     });
 
     return collected.length === 0 ? EMPTY_ERROR_ARRAY : Object.freeze(collected);
-  }
-
-  private _accumulateErrors(dependency: ComputedAtomImpl<unknown>, collected: Error[]): void {
-    const error = dependency._error;
-    if (error !== null && !collected.includes(error)) {
-      collected.push(error);
-    }
-
-    const dependencies = dependency._deps;
-    if (!dependencies.hasComputeds) return;
-
-    const length = dependencies.capacity;
-    for (let i = 0; i < length; i++) {
-      const link = dependencies.at(i);
-      if (link !== null) {
-        const node = link.node;
-        if ((node.flags & IS_COMPUTED) !== 0) {
-          this._accumulateErrors(node as unknown as ComputedAtomImpl<unknown>, collected);
-        }
-      }
-    }
   }
 
   /**

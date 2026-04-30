@@ -51,15 +51,7 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
     const length = this._count;
     if (length <= trackIndex) return false;
 
-    let current: DependencyLink | null = null;
-    if (trackIndex < 4) {
-      if (trackIndex === 0) current = this._s0;
-      else if (trackIndex === 1) current = this._s1;
-      else if (trackIndex === 2) current = this._s2;
-      else current = this._s3;
-    } else {
-      current = this._overflow![trackIndex - 4] ?? null;
-    }
+    const current = this.at(trackIndex);
 
     // Logic: Fast-path for direct hits where the dependency remains at the same position.
     if (current && current.node === dep && current.unsub) {
@@ -71,36 +63,16 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
       return this._claimViaMap(dep, trackIndex);
     }
 
-    let foundIdx = -1;
-    let foundLink: DependencyLink | null = null;
-
-    let i = trackIndex + 1;
-    for (; i < 4 && i < length; i++) {
-      const l = i === 1 ? this._s1 : i === 2 ? this._s2 : this._s3;
-      if (l && l.node === dep && l.unsub) {
-        foundIdx = i;
-        foundLink = l;
-        break;
+    // Data-driven search: Iterate through remaining slots using the uniform at() accessor.
+    for (let i = trackIndex + 1; i < length; i++) {
+      const foundLink = this.at(i);
+      if (foundLink && foundLink.node === dep && foundLink.unsub) {
+        foundLink.version = dep.version;
+        // Optimization: Performs a manual swap to minimize index validation overhead.
+        this._rawWrite(trackIndex, foundLink);
+        this._rawWrite(i, current);
+        return true;
       }
-    }
-    if (foundIdx === -1 && i < length) {
-      const ov = this._overflow!;
-      for (let j = i - 4, len = length - 4; j < len; j++) {
-        const l = ov[j];
-        if (l && l.node === dep && l.unsub) {
-          foundIdx = j + 4;
-          foundLink = l;
-          break;
-        }
-      }
-    }
-
-    if (foundIdx !== -1) {
-      foundLink!.version = dep.version;
-      // Optimization: Performs a manual swap to minimize index validation overhead.
-      this._rawWrite(trackIndex, foundLink);
-      this._rawWrite(foundIdx, current);
-      return true;
     }
 
     return false;
@@ -151,27 +123,8 @@ export class DepSlotBuffer extends SlotBuffer<DependencyLink> {
    * This maintains the insertion order required for consistent validation cycles.
    */
   insertNew(trackIdx: number, link: DependencyLink): void {
-    let occupant: DependencyLink | null = null;
-    if (trackIdx < 4) {
-      if (trackIdx === 0) {
-        occupant = this._s0;
-        this._s0 = link;
-      } else if (trackIdx === 1) {
-        occupant = this._s1;
-        this._s1 = link;
-      } else if (trackIdx === 2) {
-        occupant = this._s2;
-        this._s2 = link;
-      } else {
-        occupant = this._s3;
-        this._s3 = link;
-      }
-    } else {
-      if (this._overflow === null) this._overflow = [];
-      const ov = this._overflow;
-      occupant = ov[trackIdx - 4] ?? null;
-      ov[trackIdx - 4] = link;
-    }
+    const occupant = this.at(trackIdx);
+    this._rawWrite(trackIdx, link);
 
     if (occupant !== null) {
       const newIdx = this._rawAdd(occupant);

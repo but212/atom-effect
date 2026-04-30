@@ -9,8 +9,10 @@ export {
 } from '@/option';
 export {
   Err,
+  fromPromise,
   Ok,
   Result,
+  tryAsync,
   tryCatch,
 } from '@/result';
 export * from '@/type-guard';

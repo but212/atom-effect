@@ -152,7 +152,8 @@ function atomFetch<T>(source: string | (() => string), options: FetchOptions<T>)
           ? options.transform(data as unknown, xhr!)
           : (data as T);
 
-        const transformed = transformedResult instanceof Promise ? await transformedResult : transformedResult;
+        const transformed =
+          transformedResult instanceof Promise ? await transformedResult : transformedResult;
         return transformed as T;
       } catch (err) {
         const error = toError(err);

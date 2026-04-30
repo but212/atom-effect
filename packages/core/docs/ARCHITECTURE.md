@@ -14,7 +14,7 @@ The high-level API (`atom`, `computed`, `effect`) is built upon a unified intern
   - **Pull (Evaluation Phase)**: When a node's value is accessed or an effect executes, it performs a "pull" to validate the versions of its dependencies, triggering re-computation only if necessary.
 - **Scheduler and Coalescing**: Effects do not execute immediately upon state change. Instead, they are queued in a **Scheduler** that utilizes **Double Buffering** and a **Flat Loop** to coalesce multiple updates into a single execution cycle. This prevents redundant work and avoids call stack overflows.
 - **Small Vector Optimization (SVO)**: To minimize heap allocations and garbage collection (GC) pressure, the engine uses inline slots (`_s0` through `_s3`) for the most common dependency and subscriber links before falling back to dynamic arrays. These buffers now implement a standardized **Array-like API** (`length`, `at()`, `push()`) for consistent, high-performance access.
-- **Bitwise Branding**: Primitives are identified using a bitwise mask (`BrandFlags`) stored on a single `BRAND` symbol. This allows for constant-time type identification (e.g., checking if a node is an Atom or a Computed) without multiple property lookups.
+- **Bitwise Branding**: Primitives are identified using a bitwise mask (`BrandFlags`) stored on a single `BRAND` symbol. This allows for constant-time type identification without multiple property lookups.
 - **Isolated Debug Metadata**: Debug information such as IDs and names are attached via non-enumerable symbols, ensuring that debugging features do not interfere with object iteration, serialization, or production performance.
 
 ---
@@ -55,6 +55,7 @@ The engine utilizes a **Notify-and-Check** strategy to minimize redundant comput
 1. **Notification Phase**: A changed atom notifies its immediate subscribers. Computed nodes are marked as `DIRTY`, and effects are scheduled for execution.
 2. **Validation Phase (Sweep)**:
    - **Computed**: When accessed, it checks if any dependency has a newer version. It uses a **Hot-path Optimization** (`_hotIndex`) to first check the dependency that most recently caused a change, providing $O(1)$ dirty detection in many cases.
+   - **Iterative Check**: Dirty checking and error detection perform an iterative walk using a stack and a `Set` for deduplication. This prevents stack overflow in deep chains and provides consistent $O(1)$ lookup for already-visited nodes.
    - **Effect**: Before execution, it performs a structural walk to verify dependency versions.
 
 ---
@@ -133,6 +134,6 @@ The debugging subsystem is designed for deep visibility with minimal production 
 
 Errors are treated as part of the reactive graph, enabling robust recovery and traceability.
 
-- **Chainable Context**: Errors are wrapped as they propagate (`wrapError`), preserving a "logical trace" of the nodes involved in the failure.
+- **Iterative Accumulation**: Errors are collected using an iterative traversal logic with a stack and a `Set` for deduplication, avoiding recursion overhead.
 - **Dependency Isolation**: Accessing error properties (`hasError`, `errors`) is performed in an `untracked` scope to prevent the consumer from inadvertently subscribing to the entire dependency tree of a failing node.
 - **Recovery Signals**: The `recoverable` flag indicates whether a node can attempt re-evaluation if its dependencies change.

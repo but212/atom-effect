@@ -36,11 +36,15 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
 
   // Bookkeeping fields grouped for V8 SMI optimization
   private _trackEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
-  private _lastFlushEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
-  private _executionsInEpoch = 0;
+  private _loopState = {
+    lastEpoch: EPOCH_CONSTANTS.UNINITIALIZED as number,
+    countInEpoch: 0,
+  };
+  private _freqState = {
+    windowStart: 0,
+    windowCount: 0,
+  };
   private _executionCount = 0;
-  private _windowStart = 0;
-  private _windowCount = 0;
   private _execId = 0;
   private _trackCount = 0;
 
@@ -314,14 +318,17 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
    */
   private _checkInfiniteLoops(): void {
     const epoch = currentFlushEpoch();
-    if (this._lastFlushEpoch !== epoch) {
-      this._lastFlushEpoch = epoch;
-      this._executionsInEpoch = 0;
+    const loopState = this._loopState;
+
+    if (loopState.lastEpoch !== epoch) {
+      loopState.lastEpoch = epoch;
+      loopState.countInEpoch = 0;
     }
 
-    const executions = ++this._executionsInEpoch;
     // Constraint: Limit executions per flush to prevent runaway effects from hanging the process.
-    if (executions > this._maxExecutionsPerFlush) this._throwInfiniteLoopError('per-effect');
+    if (++loopState.countInEpoch > this._maxExecutionsPerFlush) {
+      this._throwInfiniteLoopError('per-effect');
+    }
 
     const globalExecutions = incrementFlushExecutionCount();
     if (globalExecutions > SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH) {
@@ -337,13 +344,15 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     if (!Number.isFinite(this._maxExecutions)) return;
 
     const now = Date.now();
-    if (now - this._windowStart >= DEBUG_CONFIG.EFFECT_FREQUENCY_WINDOW) {
-      this._windowStart = now;
-      this._windowCount = 1;
+    const freqState = this._freqState;
+
+    if (now - freqState.windowStart >= DEBUG_CONFIG.EFFECT_FREQUENCY_WINDOW) {
+      freqState.windowStart = now;
+      freqState.windowCount = 1;
       return;
     }
 
-    if (++this._windowCount > this._maxExecutions) {
+    if (++freqState.windowCount > this._maxExecutions) {
       const err = new EffectError(ERROR_MESSAGES.EFFECT_FREQUENCY_LIMIT_EXCEEDED);
       this.dispose();
       this._handleExecutionError(err);
@@ -368,7 +377,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
 
   private _throwInfiniteLoopError(type: 'per-effect' | 'global'): never {
     const error = new EffectError(
-      `Infinite loop detected (${type}): effect executed ${this._executionsInEpoch} times in current flush. Total executions in flush: ${flushExecutionCount}`
+      `Infinite loop detected (${type}): effect executed ${this._loopState.countInEpoch} times in current flush. Total executions in flush: ${flushExecutionCount}`
     );
     this.dispose();
     console.error(error);

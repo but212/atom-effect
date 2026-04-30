@@ -69,7 +69,7 @@ console.log(double.value); // 2
 - `state`: Returns the current `AsyncState` (`'idle'`, `'pending'`, `'resolved'`, or `'rejected'`).
 - `hasError`: A boolean indicating if the computation or any of its dependencies failed.
 - `isValid`: A shortcut for `!hasError`.
-- `errors`: A read-only array containing all errors collected from the local dependency sub-graph.
+- `errors`: A read-only array containing all errors collected from the local dependency sub-graph. It uses an iterative traversal strategy to ensure stability and completeness even in deep dependency chains.
 - `lastError`: The specific error thrown by this node's computation, if any.
 - `isPending`: Boolean indicating if an asynchronous computation is currently in progress.
 - `isResolved`: Boolean indicating if the computation has successfully resolved.
