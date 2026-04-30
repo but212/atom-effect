@@ -1,5 +1,5 @@
 import $ from 'jquery';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import '@/index';
 
 describe('Input Bindings (Two-way)', () => {
@@ -235,6 +235,30 @@ describe('Input Bindings (Two-way)', () => {
 
     // Redundant write count should be 0
     expect(writeCount).toBe(0);
+
+    $el.remove();
+  });
+
+  it('should log warnings when synchronization fails (Error Logging)', async () => {
+    const warnSpy = vi.spyOn($.debug, 'warn').mockImplementation(() => {});
+    $.debug.enabled = true;
+
+    const val = $.atom(1);
+    const $el = $('<input>').appendTo(document.body);
+
+    $el.atomVal(val, {
+      parse: () => {
+        throw new Error('Parse error');
+      },
+    });
+
+    $el.val('2').trigger('input');
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('atom-binding'),
+      expect.stringContaining('syncToAtom failed'),
+      expect.any(Error)
+    );
 
     $el.remove();
   });

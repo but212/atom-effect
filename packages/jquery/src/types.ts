@@ -196,7 +196,7 @@ export interface FetchOptions<T> {
   /** Custom HTTP headers to include in the request. */
   headers?: Record<string, string>;
   /** Function to transform the raw response before it is stored in the atom. */
-  transform?: (raw: unknown, xhr: JQuery.jqXHR) => T;
+  transform?: (raw: unknown, xhr: JQuery.jqXHR) => T | Promise<T>;
   /** Direct overrides for the underlying jQuery AJAX settings. */
   ajaxOptions?: JQuery.AjaxSettings | (() => JQuery.AjaxSettings);
   /** Callback triggered when the request fails. */

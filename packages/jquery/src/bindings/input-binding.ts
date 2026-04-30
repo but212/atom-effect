@@ -115,8 +115,6 @@ class InputBinding<T> {
   private readonly formatValue: (value: T) => string;
   private readonly eventNamespace: string;
 
-  private isInternalUpdate = false;
-  private isComposing = false;
   private flags = BindingFlags.None;
   private debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -226,12 +224,15 @@ class InputBinding<T> {
   private syncToAtom(): void {
     if (this.flags & BindingFlags.Busy) return;
     this.flags |= BindingFlags.SyncingToAtom;
-    Result.tryCatch(() => {
-      const domValue = this.readValue();
-      if (!this.areEqual(this.atom.peek(), domValue)) {
-        this.atom.value = domValue;
-      }
-    });
+    Result.tapErr(
+      Result.tryCatch(() => {
+        const domValue = this.readValue();
+        if (!this.areEqual(this.atom.peek(), domValue)) {
+          this.atom.value = domValue;
+        }
+      }),
+      (err) => debug.warn(SYSTEM_BINDING.PREFIX, 'syncToAtom failed:', err)
+    );
     this.flags &= ~BindingFlags.SyncingToAtom;
   }
 

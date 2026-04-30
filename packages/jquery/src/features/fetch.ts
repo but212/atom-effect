@@ -127,32 +127,40 @@ function atomFetch<T>(source: string | (() => string), options: FetchOptions<T>)
         ajaxResult = Result.err(toError(err));
       }
 
-      // Railway Pipeline: Map the raw result into a transformed Result, handling side-effects
-      const processedResult = Result.match(ajaxResult, {
-        ok: (data) =>
-          Result.tryCatch<T>(() =>
-            options.transform ? options.transform(data as unknown, xhr!) : (data as T)
-          ) as Result<T, Error>,
-        err: (error) => {
-          if (controller.signal.aborted) {
-            const abortErr = new Error('AbortError');
-            abortErr.name = 'AbortError';
-            return Result.err(abortErr);
-          }
+      // 2. Transformation Pipeline (Railway approach)
+      if (Result.isErr(ajaxResult)) {
+        const error = ajaxResult.error;
+        if (controller.signal.aborted) {
+          const abortErr = new Error('AbortError');
+          abortErr.name = 'AbortError';
+          throw abortErr;
+        }
 
-          if (options.onError) {
-            // Safety: Suppress and log errors from user hooks.
-            const hookResult = Result.tryCatch(() => options.onError!(error));
-            if (Result.isErr(hookResult)) {
-              console.error('atomFetch: onError hook threw an error', hookResult.error);
-            }
+        if (options.onError) {
+          const hookResult = Result.tryCatch(() => options.onError!(error));
+          if (Result.isErr(hookResult)) {
+            console.error('atomFetch: onError hook threw an error', hookResult.error);
           }
-          return Result.err(error);
-        },
-      });
+        }
+        throw error;
+      }
 
-      // Boundary: Unwrap the final pipeline result
-      return Result.unwrap(processedResult);
+      // Handle transformation (supports both sync and async)
+      const data = Result.unwrap(ajaxResult);
+      try {
+        const transformedResult = options.transform
+          ? options.transform(data as unknown, xhr!)
+          : (data as T);
+
+        const transformed = transformedResult instanceof Promise ? await transformedResult : transformedResult;
+        return transformed as T;
+      } catch (err) {
+        const error = toError(err);
+        if (options.onError) {
+          Result.tryCatch(() => options.onError!(error));
+        }
+        throw error;
+      }
     } finally {
       controller.signal.removeEventListener('abort', cleanup);
       // Logic: Only clear the reference if this execution is the latest.

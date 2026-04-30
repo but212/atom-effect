@@ -297,6 +297,7 @@ class RouterImpl implements Router {
     this.config = this.parseConfig(config);
     this.activeClass = this.config.activeClass;
 
+    // Resolve target to a JQuery instance while satisfying TypeScript's overload resolution
     const target = this.config.target;
     if (typeof target === 'string') {
       this.$target = $(target);
@@ -376,6 +377,19 @@ class RouterImpl implements Router {
     }
   }
 
+  /** Unified state update mechanism with batching to prevent redundant renders. */
+  private updateState(nextPath: string, nextQuery: Record<string, string>, newUrl: string) {
+    batch(() => {
+      if (!PathUtils.isSameParams(this.queryParamsAtom.peek(), nextQuery)) {
+        this.queryParamsAtom.value = nextQuery;
+      }
+      if (this.currentRouteAtom.peek() !== nextPath) {
+        this.currentRouteAtom.value = nextPath;
+      }
+    });
+    this.previousUrl = newUrl;
+  }
+
   /**
    * Programmatically navigates to a new path.
    *
@@ -396,40 +410,27 @@ class RouterImpl implements Router {
     if (!targetPath) return;
 
     const fullPath = query ? `${targetPath}?${query}` : targetPath;
+    const nextState = this.urlAdapter.commit(fullPath);
 
-    batch(() => {
-      const nextState = this.urlAdapter.commit(fullPath);
-      this.previousUrl = nextState.url;
-
-      if (!PathUtils.isSameParams(this.queryParamsAtom.peek(), nextState.query)) {
-        this.queryParamsAtom.value = nextState.query;
-      }
-
-      const current = this.currentRouteAtom.peek();
-      if (current !== nextState.path) {
-        this.currentRouteAtom.value = nextState.path;
-      }
-    });
+    this.updateState(nextState.path, nextState.query, nextState.url);
   }
 
   /** Synchronizes the internal state with external browser-driven URL changes. */
   private handleBrowserSync() {
     if (this.isDestroyed) return;
+
     const state = this.urlAdapter.getBrowserState();
     if (state.url === this.previousUrl) return;
 
     const nextPath = state.path || this.config.default;
-    if (this.currentRouteAtom.peek() !== nextPath) {
-      if (!this.canLeave()) {
-        // Reason: Force the browser URL back if the current route transition is blocked.
-        this.urlAdapter.revert(this.previousUrl);
-        return;
-      }
-      this.currentRouteAtom.value = nextPath;
+
+    if (this.currentRouteAtom.peek() !== nextPath && !this.canLeave()) {
+      // Reason: Force the browser URL back if the current route transition is blocked.
+      this.urlAdapter.revert(this.previousUrl);
+      return;
     }
 
-    this.queryParamsAtom.value = state.query;
-    this.previousUrl = state.url;
+    this.updateState(nextPath, state.query, state.url);
   }
 
   /**
@@ -480,6 +481,7 @@ class RouterImpl implements Router {
     }
     this.updateDom(def, routeName, mergedParams);
 
+    this.syncActiveLinks(routeName);
     untracked(() => this.config.afterTransition(this.previousPath, routeName));
     this.finalizeNavigation(routeName, mergedParams);
   }
@@ -567,36 +569,33 @@ class RouterImpl implements Router {
 
     $(document).on('click', 'a, [data-route]', onClick);
     this.cleanups.push(() => $(document).off('click', 'a, [data-route]', onClick));
-    this.setupActiveEffect();
   }
 
-  private readonly trackedLinks = new Set<HTMLElement>();
+  private readonly trackedLinks = new Set<Element>();
   private linkObserver!: MutationObserver;
 
-  /** Manages visual feedback for active links via CSS classes and ARIA attributes. */
-  private setupActiveEffect() {
-    const activeSub = effect(() => {
-      const current = this.currentRouteAtom.value;
-      const matchResult = this.matcher.match(current);
-      const pattern = matchResult.kind === 'found' ? matchResult.route.pattern : '';
+  /** Synchronizes visual feedback for active links via CSS classes and ARIA attributes. */
+  private syncActiveLinks(current: string) {
+    const matchResult = this.matcher.match(current);
+    const pattern = matchResult.kind === 'found' ? matchResult.route.pattern : '';
 
-      untracked(() => {
-        // Optimization: Registry-based targeted updates.
-        // Iterate only over registered navigation links to minimize DOM traversal.
-        for (const el of this.trackedLinks) {
-          const path = this.resolvePathFromElement(el, true);
-          const active = path === current || path === pattern;
-          el.classList.toggle(this.activeClass, active);
+    for (const el of this.trackedLinks) {
+      this.updateActiveStateForLink(el, current, pattern);
+    }
+  }
 
-          if (active) {
-            el.setAttribute('aria-current', 'page');
-          } else {
-            el.removeAttribute('aria-current');
-          }
-        }
-      });
-    });
-    this.cleanups.push(() => activeSub.dispose());
+  /** Updates the active visual state for a specific link element. */
+  private updateActiveStateForLink(el: Element, current: string, pattern: string) {
+    const path = this.resolvePathFromElement(el, true);
+    const active = path === current || path === pattern;
+
+    if (active) {
+      el.classList.add(this.activeClass);
+      el.setAttribute('aria-current', 'page');
+    } else {
+      el.classList.remove(this.activeClass);
+      el.removeAttribute('aria-current');
+    }
   }
 
   /** Scans the document for navigation links and adds them to the tracked set. */
@@ -607,9 +606,18 @@ class RouterImpl implements Router {
   }
 
   /** Registers a single element for active state tracking. */
-  private trackLink(el: HTMLElement) {
+  private trackLink(el: Element) {
     if (this.trackedLinks.has(el)) return;
     this.trackedLinks.add(el);
+
+    // Logic: Immediate Synchronization
+    // New links must be updated immediately to match the current route state.
+    const current = this.currentRoute.peek();
+    const matchResult = this.matcher.match(current);
+    const pattern = matchResult.kind === 'found' ? matchResult.route.pattern : '';
+    this.updateActiveStateForLink(el, current, pattern);
+
+    // Registry manages weak tracking safely without namespace restrictions
     registry.onCleanup(el, () => this.trackedLinks.delete(el));
   }
 
@@ -618,31 +626,49 @@ class RouterImpl implements Router {
     const observer = new MutationObserver((mutations) => {
       for (const mutation of mutations) {
         mutation.addedNodes.forEach((node) => {
-          if (node instanceof HTMLElement) {
-            // Logic: Automated Discovery
-            // Detects newly added links and registers them for active state tracking.
-            if (node.matches?.('a, [data-route]')) {
-              this.trackLink(node);
+          if (node.nodeType === 1) {
+            const el = node as Element;
+            const isLink = el.localName === 'a' || el.hasAttribute('data-route');
+            if (isLink) {
+              this.trackLink(el);
             }
-            node.querySelectorAll?.('a, [data-route]').forEach((el) => {
-              this.trackLink(el as HTMLElement);
+            el.querySelectorAll?.('a, [data-route]').forEach((child) => {
+              this.trackLink(child);
             });
           }
         });
       }
     });
 
-    observer.observe(document.body, { childList: true, subtree: true });
+    const root = document.body || document.documentElement;
+    observer.observe(root, { childList: true, subtree: true });
     return observer;
   }
 
   /** Resolves the navigation path from an element's attributes. */
-  private resolvePathFromElement(el: HTMLElement, stripQuery = false): string {
-    let path = el.dataset.route ?? '';
-    if (!path && el instanceof HTMLAnchorElement) {
-      path = this.urlAdapter.resolveAnchor(el);
+  private resolvePathFromElement(el: Element, stripQuery = false): string {
+    // Logic: Attribute Priority
+    // data-route takes precedence. If present but empty on an anchor, we fallback to href.
+    let path = el.getAttribute('data-route');
+
+    if (!path && el.localName === 'a') {
+      if (el instanceof HTMLAnchorElement) {
+        path = this.urlAdapter.resolveAnchor(el);
+      } else {
+        // SVG Anchor handling leverages the URL adapter via temporary anchor
+        const rawHref = el.getAttribute('href') || el.getAttribute('xlink:href') || '';
+        if (rawHref.startsWith('#')) {
+          path = rawHref.slice(1);
+        } else {
+          const tempAnchor = document.createElement('a');
+          tempAnchor.href = rawHref;
+          path = this.urlAdapter.resolveAnchor(tempAnchor);
+        }
+      }
     }
-    return stripQuery ? PathUtils.split(path).route : path;
+
+    const finalPath = path || '';
+    return stripQuery ? PathUtils.split(finalPath).route : finalPath;
   }
 
   /**
@@ -654,7 +680,7 @@ class RouterImpl implements Router {
    * - Files with extensions (e.g., `.pdf`) unless an explicit route exists.
    * - Modified clicks (Ctrl/Cmd) to maintain native tab behavior.
    */
-  private shouldIntercept(path: string, el: HTMLElement): boolean {
+  private shouldIntercept(path: string, el: Element): boolean {
     if (el instanceof HTMLAnchorElement) {
       if (
         el.rel === 'external' ||
