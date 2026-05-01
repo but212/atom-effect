@@ -50,4 +50,47 @@ describe('Option', () => {
       keep(fromNullable(val));
     }
   });
+
+  describe('Native Comparison (null/undefined)', () => {
+    const rawVal = 1;
+    const rawNull = null;
+
+    bench(`Literal assignment (x${REPEATS})`, () => {
+      for (let i = 0; i < REPEATS; i++) {
+        keep(i);
+      }
+    });
+
+    bench(`Null check (x${REPEATS})`, () => {
+      for (let i = 0; i < REPEATS; i++) {
+        keep(rawVal != null);
+      }
+    });
+
+    bench(`Nullish coalescing (mixed, x${REPEATS})`, () => {
+      const vals = [rawVal, rawNull];
+      for (let i = 0; i < REPEATS; i++) {
+        const val = vals[nextRandomInt(2)];
+        keep(val ?? 0);
+      }
+    });
+
+    bench(`Inline ternary map (x${REPEATS})`, () => {
+      for (let i = 0; i < REPEATS; i++) {
+        keep(rawVal != null ? rawVal + 1 : null);
+      }
+    });
+
+    bench(`If-Else branch (mixed, x${REPEATS})`, () => {
+      const vals = [rawVal, rawNull];
+      for (let i = 0; i < REPEATS; i++) {
+        const val = vals[nextRandomInt(2)];
+        if (val != null) {
+          keep(val);
+        } else {
+          keep(0);
+        }
+      }
+    });
+  });
 });

@@ -1,21 +1,25 @@
-/** SlotBuffer – a compact, high‑performance container for reactive subscribers.
+/**
+ * SlotBuffer: A high-performance, hybrid container optimized for reactive subscriber lists.
  *
- *  The implementation keeps four fast slots (`_s0`‑`_s3`) that are tracked by a
- *  4‑bit mask (`_mask`).  All additional items are stored in a plain array
- *  (`_overflow`).  The mask enables O(1) checks for the fast lanes while the
- *  overflow array provides unbounded capacity.
+ * DESIGN INTENT:
+ * - Minimizes heap allocations for small collections (0-4 items) using "fast slots" (_s0-_s3).
+ * - Scales to unbounded capacity using an overflow array when needed.
+ * - Uses a 4-bit occupancy mask for O(1) vacancy checks in the fast lanes.
  *
- *  This refactor keeps the original performance‑critical data structures but
- *  replaces the hard‑coded `FIRST_FREE` table with a tiny bit‑scan helper
- *  (`_firstFreeSlot`).  All public APIs are typed without `any` and contain
- *  minimal TSDoc comments where the intent may not be obvious.
+ * WHEN TO USE:
+ * - Managing dependency lists (atoms, observers) where most instances have 1-4 items.
+ * - When O(1) removal of items by reference is required (via free-index tracking).
  */
 export class SlotBuffer<T> {
-  /** Number of slots that physically exist (fast + overflow). */
+  /** Physical capacity including null gaps. Tracking this avoids unnecessary array scans. */
   protected _count = 0;
-  /** Number of non‑null entries currently stored. */
+  /** Actual number of non-null items stored. Used for early-exit in iterations. */
   protected _actualCount = 0;
-  /** 4‑bit mask: bit 0‑3 indicate occupancy of _s0‑_s3. */
+
+  /**
+   * Optimization: 4-bit mask for fast-lane (0-3) occupancy.
+   * bit i = 1 means _si is occupied.
+   */
   protected _mask = 0;
 
   protected _s0: T | null = null;
@@ -24,9 +28,13 @@ export class SlotBuffer<T> {
   protected _s3: T | null = null;
 
   protected _overflow: (T | null)[] | null = null;
+  /** Logic: Tracks indices of null holes in the overflow array for O(1) reuse. */
   protected _freeIndices: number[] | null = null;
 
-  /** Find the first free fast slot (0‑3) or return -1 if none are free. */
+  /**
+   * Optimization: Find the first free fast slot (0-3) using bit scanning.
+   * @returns Index 0-3, or -1 if all fast slots are occupied.
+   */
   protected _firstFreeSlot(mask: number): number {
     if ((mask & 0b0001) === 0) return 0;
     if ((mask & 0b0010) === 0) return 1;
@@ -35,7 +43,10 @@ export class SlotBuffer<T> {
     return -1;
   }
 
-  /** Write a value directly into a slot, updating the mask when necessary. */
+  /**
+   * Logic: Low-level write that synchronizes the occupancy mask.
+   * Caution: Does not update _actualCount or _count. Use setAt for high-level operations.
+   */
   protected _rawWrite(index: number, item: T | null): void {
     if (index < 4) {
       const bit = 1 << index;
@@ -53,7 +64,7 @@ export class SlotBuffer<T> {
     }
   }
 
-  /** Add an item to the first available slot and return its index. */
+  /** Logic: Finds a vacant slot (prioritizing fast lanes) and fills it. */
   protected _rawAdd(item: T): number {
     const mask = this._mask;
     const fastIdx = this._firstFreeSlot(mask);
@@ -88,17 +99,20 @@ export class SlotBuffer<T> {
     this._rawWrite(idxB, a);
   }
 
-  /** Number of non‑null items stored. */
+  /** Number of non-null items stored. */
   get length(): number {
     return this._actualCount;
   }
 
-  /** Physical capacity (including empty slots). */
+  /** Physical capacity (including empty slots/holes). */
   get capacity(): number {
     return this._count;
   }
 
-  /** Retrieve the item at a given index (null if empty). */
+  /**
+   * Retrieves the item at the given index.
+   * @returns The item, or null if the slot is empty or out of bounds.
+   */
   at(index: number): T | null {
     if (index < 4) {
       if (index === 0) return this._s0;
@@ -111,7 +125,10 @@ export class SlotBuffer<T> {
     return ov ? (ov[index - 4] ?? null) : null;
   }
 
-  /** Set the item at a specific index, updating counters and capacity. */
+  /**
+   * Updates the item at a specific index.
+   * Caution: Manual indexing can create gaps. Use compact() if order/density matters.
+   */
   setAt(index: number, item: T | null): void {
     const old = this.at(index);
     if (old === item) return;
@@ -128,7 +145,10 @@ export class SlotBuffer<T> {
     }
   }
 
-  /** Reduce physical size when the last slot becomes empty. */
+  /**
+   * Optimization: Trims trailing nulls to keep iterations efficient.
+   * Logic: Only triggers if the removed item was at the physical tail of the buffer.
+   */
   protected _shrinkPhysicalSizeFrom(index: number): void {
     if (index !== this._count - 1) return;
     this._count--;
@@ -141,12 +161,18 @@ export class SlotBuffer<T> {
     }
 
     if (this._count <= 4) {
-      // Re‑calculate highest occupied fast‑slot using the mask.
+      // Logic: Calculates highest bit set in the mask (e.g., mask 0b1010 -> count 4).
       this._count = 32 - Math.clz32(this._mask);
     }
   }
 
-  /** Remove all items from `index` onward, invoking `_onItemRemoved`. */
+  /**
+   * Efficiently clears all items from the given index to the end.
+   *
+   * @example
+   * // Keep only the first 2 items
+   * buffer.truncateFrom(2);
+   */
   truncateFrom(index: number): void {
     const limit = this._count;
     if (index >= limit) return;
@@ -154,13 +180,12 @@ export class SlotBuffer<T> {
     for (let i = index; i < limit; i++) {
       const item = this.at(i);
       if (item !== null) {
-        this._onItemRemoved(item);
         this._actualCount--;
       }
     }
 
     if (index < 4) {
-      // Clear fast‑lane mask and values up to `index`.
+      // Optimization: Clear mask and fast slots in one go using bitwise AND.
       this._mask &= (1 << index) - 1;
       if (index <= 0) this._s0 = null;
       if (index <= 1) this._s1 = null;
@@ -175,12 +200,10 @@ export class SlotBuffer<T> {
     this._freeIndices = null;
   }
 
-  /** Hook for subclasses – called when an item is removed via `truncateFrom`. */
-  protected _onItemRemoved(_item: T): void {
-    // No‑op in the base class.
-  }
-
-  /** Append an item to the buffer and return its index. */
+  /**
+   * Adds an item to the first available hole or appends it.
+   * @returns The index where the item was stored.
+   */
   push(item: T): number {
     const idx = this._rawAdd(item);
     if (idx >= this._count) this._count = idx + 1;
@@ -188,7 +211,11 @@ export class SlotBuffer<T> {
     return idx;
   }
 
-  /** Remove a specific item; returns true if the item was present. */
+  /**
+   * Removes an item by identity.
+   * Optimization: Checks fast slots before scanning the overflow array.
+   * @returns True if the item was found and removed.
+   */
   remove(item: T): boolean {
     if (this._actualCount === 0) return false;
 
@@ -253,7 +280,10 @@ export class SlotBuffer<T> {
     return false;
   }
 
-  /** Execute a callback for every non‑null entry, in order. */
+  /**
+   * Iterates through all non-null items in order.
+   * Optimization: Uses the occupancy mask to skip null slots in the fast lane.
+   */
   forEach(fn: (item: T) => void): void {
     if (this._actualCount === 0) return;
 
@@ -272,7 +302,10 @@ export class SlotBuffer<T> {
     }
   }
 
-  /** Remove gaps by moving all items toward the front of the buffer. */
+  /**
+   * Removes all gaps and shifts items toward the front.
+   * Recommendation: Call this after multiple remove() operations to improve iteration speed.
+   */
   compact(): void {
     const actual = this._actualCount;
     if (actual === this._count) return;
