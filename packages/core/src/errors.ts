@@ -1,23 +1,23 @@
 /**
- * A structured JSON representation of an `AtomError` used for transport or logging.
+ * A structured JSON representation of an `AtomError` for cross-context transport.
  */
 export interface AtomErrorJSON {
   /** The specific name of the error class. */
   name: string;
   /** The human-readable error message. */
   message: string;
-  /** An optional machine-readable error code. */
+  /** Machine-readable error identifier. */
   code?: string | undefined;
-  /** Indicates whether the system can attempt to recover from this error. */
+  /** When true, the reactive engine may attempt re-execution. */
   recoverable: boolean;
-  /** The stack trace associated with the error. */
+  /** Trace information. */
   stack?: string | undefined;
-  /** The underlying cause of the error, if any. */
+  /** The underlying cause resolved into a plain object or primitive. */
   cause?: unknown | undefined;
 }
 
 /**
- * A constructor signature for Atom-branded error classes.
+ * Constructor signature for system-branded error classes.
  * @internal
  */
 export type AtomErrorConstructor = new (
@@ -30,23 +30,24 @@ export type AtomErrorConstructor = new (
 /**
  * The base error class for the reactive system.
  *
- * This class provides advanced traceability by maintaining an execution-context
- * error chain and implements protection against circular references during
- * serialization to JSON.
+ * Logic: Execution Context Traceability
+ * Maintains a causal chain (`cause`) to allow developers to trace errors
+ * through multiple layers of atoms, computed nodes, and effects.
  *
  * When to use:
- * - To define custom error types within reactive primitives.
- * - To capture and wrap third-party errors with system-specific context.
+ * - To define custom error categories within the engine.
+ * - To wrap third-party errors with system-specific metadata.
  *
  * @example
  * ```typescript
  * import { AtomError } from '@but212/atom-effect';
  *
- * try {
- *   executeTask();
- * } catch (err) {
- *   throw new AtomError('Task failed', err, true, 'ERR_TASK_FAILED');
- * }
+ * throw new AtomError(
+ *   'Validation failed',
+ *   rawInput,
+ *   true,
+ *   'ERR_VAL_001'
+ * );
  * ```
  */
 export class AtomError extends Error {
@@ -54,75 +55,59 @@ export class AtomError extends Error {
 
   constructor(
     message: string,
-    /** The underlying value or error that caused this error to be thrown. */
+    /** The raw value or error that triggered this instance. */
     public readonly cause: unknown = null,
-    /** Indicates whether the reactive node should attempt to re-execute after this error. */
+    /**
+     * Logic: Error Recovery
+     * When true, indicate that the state might be corrected by a subsequent
+     * update. When false, the node is considered permanently failed.
+     */
     public readonly recoverable: boolean = true,
-    /** A unique identifier for the specific error category. */
+    /** Unique category identifier for programmatic handling. */
     public readonly code?: string
   ) {
     super(message);
 
-    // Optimization: Capture the stack trace while maintaining a stable object shape.
-    // This ensures that error objects stay in V8's fast optimization path.
+    /**
+     * Optimization: V8 Fast Path
+     * Captures stack traces while maintaining a stable hidden class shape
+     * for high-performance error object creation.
+     */
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, this.constructor);
     }
   }
 
   /**
-   * Retrieves the full sequence of causal errors associated with this instance.
+   * Retrieves the full sequence of causal errors.
    *
-   * @returns An array containing the current error followed by its historical causes.
+   * Logic: Trace Reconstruction
+   * Recursively traverses the `.cause` property while protecting against
+   * infinite loops caused by circular error chains.
+   *
+   * @returns Sequential array of errors, starting from the current instance.
    */
   getChain(): Array<AtomError | Error | unknown> {
-    const cause = this.cause;
-    if (cause == null) return [this];
+    const chain: Array<AtomError | Error | unknown> = [];
+    const seen = new Set<unknown>();
+    let current: unknown = this;
 
-    const chain: Array<AtomError | Error | unknown> = [this];
-    let current: unknown = cause;
-    let seen: Set<unknown> | null = null;
-
-    while (current != null) {
+    while (current != null && !seen.has(current)) {
       chain.push(current);
-
-      // Constraint: Prevent infinite loops during chain traversal due to recursive error wrapping.
-      if (current === this || seen?.has(current)) break;
-
-      if (current instanceof AtomError) {
-        current = current.cause;
-      } else if (current instanceof Error) {
-        current = (current as { cause?: unknown })?.cause;
-      } else {
-        break;
-      }
-
-      // Optimization: Cycle detection is lazily initialized for deep chains (>3) to avoid
-      // unnecessary Set allocations for standard shallow errors.
-      if (chain.length > 3) {
-        if (seen === null) {
-          seen = new Set(chain);
-        } else {
-          seen.add(current);
-        }
-      }
+      seen.add(current);
+      current = (current as { cause?: unknown })?.cause;
     }
     return chain;
   }
 
   /**
-   * Serializes the error instance into a plain object structure.
-   *
-   * Caution: This method is recursive and may impact performance for extremely deep error chains.
-   * Constraint: It incorporates cycle detection to prevent circular reference errors
-   * during serialization (e.g., when using `JSON.stringify`).
-   *
-   * @param seen - An internal set used to track visited objects during recursion.
-   * @returns A JSON-serializable representation of the error.
+   * Logic: Safe Serialization
+   * Converts the error into a plain JSON object.
+   * Automatically replaces circular references with a sentinel message to
+   * prevent serialization crashes in loggers.
    */
-  toJSON(seen?: Set<unknown>): AtomErrorJSON {
-    const s = seen ?? new Set<unknown>();
-    if (s.has(this)) {
+  toJSON(seen: Set<unknown> = new Set()): AtomErrorJSON {
+    if (seen.has(this)) {
       return {
         name: this.name,
         message: '[Circular Reference]',
@@ -130,19 +115,7 @@ export class AtomError extends Error {
         code: this.code,
       };
     }
-    s.add(this);
-
-    let causeJson: unknown = this.cause;
-    if (causeJson instanceof AtomError) {
-      causeJson = causeJson.toJSON(s);
-    } else if (causeJson instanceof Error) {
-      causeJson = {
-        name: causeJson.name,
-        message: causeJson.message,
-        stack: causeJson.stack,
-        cause: (causeJson as { cause?: unknown })?.cause,
-      };
-    }
+    seen.add(this);
 
     return {
       name: this.name,
@@ -150,52 +123,58 @@ export class AtomError extends Error {
       code: this.code,
       recoverable: this.recoverable,
       stack: this.stack,
-      cause: causeJson,
+      cause: serializeErrorValue(this.cause, seen),
     };
   }
 
-  /** @internal */
+  /**
+   * Formatting utility for internal diagnostic messages.
+   * @internal
+   */
   static format(source: string, context: string, message: string): string {
     return `${source} (${context}): ${message}`;
   }
 }
 
 /**
- * An error thrown during the evaluation of a computed atom or selector.
+ * Thrown during the evaluation phase of a computed atom.
  */
 export class ComputedError extends AtomError {
   override readonly name = 'ComputedError';
 }
 
 /**
- * An error thrown during the execution or cleanup phase of a reactive effect.
+ * Thrown during the execution or cleanup phase of a reactive effect.
+ * Typically represents a side-effect failure.
  */
 export class EffectError extends AtomError {
   override readonly name = 'EffectError';
+
   constructor(message: string, cause: unknown = null, recoverable = false, code?: string) {
     super(message, cause, recoverable, code);
   }
 }
 
 /**
- * An error thrown by the internal scheduler or execution engine.
+ * Thrown by the internal engine when scheduling or flush limits are violated.
  */
 export class SchedulerError extends AtomError {
   override readonly name = 'SchedulerError';
+
   constructor(message: string, cause: unknown = null, recoverable = false, code?: string) {
     super(message, cause, recoverable, code);
   }
 }
 
 /**
- * A central registry of standardized error messages used across the core library.
+ * Central registry of standardized error messages.
  *
  * When to use:
- * - To provide consistent diagnostic output in loggers or dev-tools.
- * - To programmatically identify specific error conditions in tests.
+ * - To ensure consistent diagnostic output.
+ * - To identify specific failure conditions during unit testing.
  */
 export const ERROR_MESSAGES = {
-  // --- Computed Errors ---
+  // --- Computed Phase ---
   COMPUTED_MUST_BE_FUNCTION: 'Computed target must be a function',
   COMPUTED_ASYNC_PENDING_NO_DEFAULT: 'Async computation pending with no default value',
   COMPUTED_COMPUTATION_FAILED: 'Computation execution failed',
@@ -203,23 +182,24 @@ export const ERROR_MESSAGES = {
   COMPUTED_CIRCULAR_DEPENDENCY: 'Circular dependency detected',
   COMPUTED_DISPOSED: 'Attempted to access disposed computed',
 
-  // --- Atom Errors ---
+  // --- Atom Phase ---
   ATOM_SUBSCRIBER_MUST_BE_FUNCTION: 'Subscriber must be a function or Subscriber object',
   ATOM_INDIVIDUAL_SUBSCRIBER_FAILED: 'Subscriber execution failed',
 
-  // --- Effect Errors ---
+  // --- Effect Phase ---
   EFFECT_MUST_BE_FUNCTION: 'Effect target must be a function',
   EFFECT_EXECUTION_FAILED: 'Effect execution failed',
   EFFECT_CLEANUP_FAILED: 'Effect cleanup failed',
   EFFECT_DISPOSED: 'Attempted to run disposed effect',
 
-  // --- Scheduler Errors ---
-  /** Returns a formatted message for flush overflow errors. */
+  // --- Engine/Scheduler Phase ---
+  /** Returns a formatted message for flush overflow limits. */
   SCHEDULER_FLUSH_OVERFLOW: (max: number, dropped: number): string =>
     `Maximum flush iterations (${max}) exceeded. ${dropped} jobs dropped. Possible infinite loop.`,
 
-  // --- System & Debug ---
+  // --- System Diagnostics ---
   CALLBACK_ERROR_IN_ERROR_HANDLER: 'Exception encountered in onError handler',
+  /** Logic: Loop Protection */
   EFFECT_FREQUENCY_LIMIT_EXCEEDED:
     'Effect executed too frequently within 1 second. Suspected infinite loop.',
   SCHEDULER_CALLBACK_MUST_BE_FUNCTION: 'Scheduler callback must be a function',
@@ -228,25 +208,22 @@ export const ERROR_MESSAGES = {
 } as const;
 
 /**
- * Normalizes an unknown error value into the system's error hierarchy.
+ * Normalizes an unknown error into the system's error hierarchy.
  *
  * When to use:
- * - In `catch` blocks to ensure that errors propagated from effects or atoms
- *   carry consistent technical context and are traceable through the chain.
+ * - In `catch` blocks within the engine to ensure cross-module traceability.
+ * - To wrap user-provided callbacks with appropriate context (e.g., 'Effect Phase').
  *
- * @param error - The raw error value or object to wrap.
- * @param ErrorClass - The specific `AtomError` subclass used as a container.
- * @param context - A human-readable label indicating the origin of the error.
- * @returns A new instance of `ErrorClass` containing the original error as a cause.
+ * @param error - The raw error value to wrap.
+ * @param ErrorClass - The targeted `AtomError` subclass.
+ * @param context - Label describing the origin of the failure.
  *
  * @example
  * ```typescript
- * import { wrapError, EffectError } from '@but212/atom-effect';
- *
  * try {
- *   userCallback();
+ *   fn();
  * } catch (err) {
- *   throw wrapError(err, EffectError, 'User Callback Phase');
+ *   throw wrapError(err, EffectError, 'Effect Execution');
  * }
  * ```
  */
@@ -255,18 +232,54 @@ export function wrapError(
   ErrorClass: AtomErrorConstructor,
   context: string
 ): AtomError {
+  const meta = getErrorMetadata(error);
+
+  return new ErrorClass(
+    `${meta.name} (${context}): ${meta.message}`,
+    error,
+    meta.recoverable,
+    meta.code
+  );
+}
+
+/**
+ * Logic: Heuristic Metadata Extraction
+ * Resolves standard properties from `AtomError`, `Error`, or raw values.
+ * @internal
+ */
+function getErrorMetadata(error: unknown) {
   if (error instanceof AtomError) {
-    return new ErrorClass(
-      `${error.name} (${context}): ${error.message}`,
-      error,
-      error.recoverable,
-      error.code
-    );
+    return {
+      name: error.name,
+      message: error.message,
+      recoverable: error.recoverable,
+      code: error.code,
+    };
   }
 
-  if (error instanceof Error) {
-    return new ErrorClass(`${error.name || 'Error'} (${context}): ${error.message}`, error);
-  }
+  const e = error as Record<string, unknown>;
+  return {
+    name: e?.name || (error instanceof Error ? 'Error' : 'Unexpected error'),
+    message: e?.message || String(error),
+    recoverable: true,
+    code: e?.code as string | undefined,
+  };
+}
 
-  return new ErrorClass(`Unexpected error (${context}): ${String(error)}`, error);
+/**
+ * Logic: Circular Serialization
+ * Recursively serializes the error cause tree into a plain object structure.
+ * @internal
+ */
+function serializeErrorValue(value: unknown, seen: Set<unknown>): unknown {
+  if (value instanceof AtomError) return value.toJSON(seen);
+  if (value instanceof Error) {
+    return {
+      name: value.name,
+      message: value.message,
+      stack: value.stack,
+      cause: (value as { cause?: unknown }).cause,
+    };
+  }
+  return value;
 }

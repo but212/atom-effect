@@ -257,17 +257,17 @@ describe('Lenses: Structural Access', () => {
     microBenchOptions
   );
 
+  const sharedSource = atom({ x: { y: 1 } });
+  const composed = composeLens(atomLens(sharedSource, 'x' as any), 'y');
+  const manyLenses = Array.from({ length: 100 }, () => {
+    const l = atomLens(sharedSource, 'x.y' as any);
+    l.subscribe(() => {});
+    return l;
+  });
+
   bench(
     `composition & scaling (100 active lenses)`,
     () => {
-      const sharedSource = atom({ x: { y: 1 } });
-      const composed = composeLens(atomLens(sharedSource, 'x' as any), 'y');
-      const manyLenses = Array.from({ length: 100 }, () => {
-        const l = atomLens(sharedSource, 'x.y' as any);
-        l.subscribe(() => {});
-        return l;
-      });
-
       sharedSource.value = { x: { y: 2 } };
       keep([composed.value, manyLenses.length]);
     },

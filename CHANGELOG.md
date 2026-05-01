@@ -6,9 +6,11 @@
 
 #### Changed
 
-- **Architecture**: Standardized tracking lifecycle by extracting `_startTracking()` and `_commitDeps()` across `Computed` and `Effect`.
-- **Consistency**: Renamed internal epoch tracking fields (e.g., `_currentEpoch` -> `_trackEpoch`) to align with the unified dependency model.
-- **Performance**: Optimized notification and validation paths by leveraging `untracked` to prevent redundant dependency capture.
+- **Architecture**: Replaced class-based `DepSlotBuffer` with a highly optimized functional `DepBufferState` to reduce object overhead and improve V8 Hidden Class performance.
+- **Architecture**: Overhauled the Scheduler with a "Triple-Buffer" system (Active, Standby, Batch) to robustly handle nested updates and eliminate redundant flushes.
+- **Performance**: Unified async drift detection into the `isDirty()` check, eliminating the overhead of DJB2 hashing for stale promise tracking.
+- **Performance**: Forced internal IDs and versions into the SMI (Small Integer) range to bypass heap allocation.
+- **Security**: Hardened `atomLens` and `setDeepValue` against prototype pollution by blocking dangerous keys like `__proto__`.
 
 ### Utils
 
@@ -16,14 +18,23 @@
 
 - **Result API**: Re-engineered `Result<T, E>` from a class-based hierarchy to a high-performance, data-centric POJO design.
   - Replaced method calls (e.g., `res.unwrap()`) with static utility calls (e.g., `Result.unwrap(res)`) for better tree-shaking and memory efficiency.
+- **Option API**: Re-engineered `Option<T>` into a functional API with plain object variants (`Some`, `None`), aligning with the `Result` architecture for better performance and consistency.
 - **SlotBuffer API**: Standardized API to match standard JavaScript collections.
   - Renamed `size` -> `length`, `physicalSize` -> `capacity`, `add` -> `push`, and `getAt` -> `at`.
 
+#### Changed
+
+- **SlotBuffer**: Optimized `truncateFrom` by removing redundant hooks.
+- **Result/Option**: Integrated nominal type checking via symbols and added native comparison benchmarks.
+- **SlotBuffer**: Optimized with a 4-bit mask for "fast-lane" slot tracking and bit-scan slot discovery, significantly improving performance for small collections.
+
 #### Added
 
+- **Type Guards**: Added `isResult` for robust Result identification using internal symbols.
 - **Functional Primitives**: Introduced `Option<T>` and `Result<T, E>` types for robust error handling and null-safety.
   - **Railway Oriented Programming**: Added a comprehensive suite of static utilities to `Result` (`match`, `tap`, `andThen`, `all`) for declarative error pipelines.
   - **Safe Execution**: Added `Result.tryCatch` and `Result.fromPromise` to unify synchronous and asynchronous error capture.
+- **Performance Benchmarks**: Introduced a comprehensive benchmarking suite for `utils` utilities using `vitest bench`.
 
 #### Fixed
 
@@ -65,6 +76,7 @@
 #### Added
 
 - **Standards**: Established formal TSDoc conventions and specialized annotations (`Logic:`, `Optimization:`, etc.) for architectural transparency.
+- **Documentation**: Added comprehensive JSDoc examples and design intent documentation for core utilities.
 
 #### Changed
 
@@ -97,7 +109,7 @@
 
 - **Architecture**: Reorganized `constants.ts` into focused subsystem namespaces for better modularity.
 - **Performance**: Optimized reactive bindings by operating directly on native `HTMLElement` nodes.
-- **Engines**: Overhauled `InputBinding` (strategy-based) and Security (data-driven) architectures.
+- **Engines**: Overhauled `InputBinding` (strategy-based) and Security architectures.
 - **Reactivity**: Unified async race-condition protection via `createAsyncRunner`.
 - **Lifecycle**: Enhanced `atomMount` with "Fail Loud" initialization and structured `ComponentLifecycle` support.
 - **Interception**: Improved link handling to respect modifier keys, external links, and download attributes.
