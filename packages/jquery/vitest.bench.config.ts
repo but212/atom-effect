@@ -1,7 +1,7 @@
 import { defineVitestBenchConfig } from '@but212/atom-effect-configs';
 import { playwright } from '@vitest/browser-playwright';
 
-export default defineVitestBenchConfig(import.meta.dirname)({
+export default defineVitestBenchConfig(import.meta.dirname, {
   test: {
     browser: {
       enabled: true,

@@ -30,7 +30,5 @@ export const getBaseVitestConfig = (packageDir: string): ViteUserConfig => {
   };
 };
 
-export const defineVitestConfig =
-  (packageDir: string) =>
-  (overrides: ViteUserConfig = {}) =>
-    defineConfig(() => mergeConfig(getBaseVitestConfig(packageDir), overrides));
+export const defineVitestConfig = (packageDir: string, overrides: ViteUserConfig = {}) =>
+  defineConfig(() => mergeConfig(getBaseVitestConfig(packageDir), overrides));

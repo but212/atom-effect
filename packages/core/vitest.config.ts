@@ -4,7 +4,7 @@ import { playwright } from '@vitest/browser-playwright';
 const packageDir = import.meta.dirname;
 const SRC_PATH = `${packageDir}/src`;
 
-export default defineVitestConfig(packageDir)({
+export default defineVitestConfig(packageDir, {
   test: {
     projects: [
       {
