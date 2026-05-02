@@ -1,4 +1,4 @@
-import { Result } from '@but212/atom-effect-utils';
+import { Option, Result } from '@but212/atom-effect-utils';
 import { IS_DEV } from '@/constants';
 import type { Dependency, Subscriber } from '@/types';
 import { debug } from '@/utils/debug';
@@ -87,7 +87,7 @@ export function notifySubscription<T>(
   const { fn, sub } = subscription;
   if (fn === undefined && sub === undefined) return;
 
-  trackingContext.push(null);
+  trackingContext.push(Option.none);
   try {
     if (fn !== undefined) fn(newValue, oldValue);
     if (sub !== undefined) sub.execute();
@@ -107,15 +107,15 @@ export function notifySubscription<T>(
  * The stack ensures that dependencies are attributed to the correct parent node.
  */
 class TrackingContext {
-  /** Stack of subscribers. null indicates an 'untracked' zone. */
-  private readonly _stack: (DependencySubscriber | null)[] = [];
+  /** Stack of subscribers. Option.none indicates an 'untracked' zone. */
+  private readonly _stack: Option<DependencySubscriber>[] = [];
 
   public get current(): DependencySubscriber | null {
     const len = this._stack.length;
-    return len > 0 ? this._stack[len - 1]! : null;
+    return len > 0 ? Option.toNullable(this._stack[len - 1]!) : null;
   }
 
-  public push(subscriber: DependencySubscriber | null): void {
+  public push(subscriber: Option<DependencySubscriber>): void {
     this._stack.push(subscriber);
   }
 
@@ -132,7 +132,7 @@ class TrackingContext {
   public run<T>(subscriber: DependencySubscriber, fn: () => T): Result<T, Error> {
     if (this.current === subscriber) return Result.tryCatch(fn);
 
-    this.push(subscriber);
+    this.push(Option.some(subscriber));
     try {
       const res = Result.tryCatch(fn);
       if (IS_DEV && res.ok && isPromise(res.value)) {
@@ -173,7 +173,7 @@ export type { TrackingContext };
 export function untracked<T>(fn: () => T): T {
   if (trackingContext.current === null) return fn();
 
-  trackingContext.push(null);
+  trackingContext.push(Option.none);
   try {
     return fn();
   } finally {

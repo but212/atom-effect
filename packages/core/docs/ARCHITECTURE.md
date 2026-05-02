@@ -124,7 +124,7 @@ The debugging subsystem is designed for deep visibility with minimal production 
 
 - **Dual-Controller Strategy**: In development, `DevDebugController` manages node registries and update counters. In production, these are replaced by `ProdDebugController` (no-op), which JavaScript engines can optimize away.
 - **WeakRef Registry**: The debug registry uses `WeakRef` to ensure that tracking nodes for inspection does not prevent them from being garbage collected.
-- **Traceability**: User-provided names and unique IDs allow for clear identification of offending nodes in warnings (e.g., infinite loop detections).
+- **Traceability**: Errors are wrapped with contextual messages and machine-readable codes for easier debugging.
 
 ---
 

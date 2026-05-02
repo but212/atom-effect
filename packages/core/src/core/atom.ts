@@ -50,10 +50,7 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
    * Retrieves the current value and registers a dependency if called in a reactive context.
    */
   get value(): T {
-    const ctx = trackingContext.current;
-    if (ctx != null) {
-      ctx.addDependency(this);
-    }
+    trackingContext.current?.addDependency(this);
     return this._value;
   }
 

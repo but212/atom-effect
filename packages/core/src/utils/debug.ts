@@ -1,3 +1,4 @@
+import { Option } from '@but212/atom-effect-utils';
 import { DEBUG_CONFIG, IS_DEV } from '@/constants';
 import { BRAND, BrandFlags } from '@/symbols';
 import type { DebugConfig, DependencyId } from '@/types';
@@ -196,20 +197,24 @@ class DevDebugController implements DebugConfig {
     const meta = this._registry.get(id);
     if (meta) return meta.name;
 
-    const type = this.getDebugType(obj);
-    return type ? `${type}_${id}` : undefined;
+    const typeOpt = this.getDebugTypeInternal(obj);
+    return Option.toUndefined(Option.map(typeOpt, (type) => `${type}_${id}`));
   }
 
   public getDebugType(obj: object | null | undefined): string | undefined {
-    if (!this.enabled || !obj) return undefined;
+    return Option.toUndefined(this.getDebugTypeInternal(obj));
+  }
+
+  private getDebugTypeInternal(obj: object | null | undefined): Option<string> {
+    if (!this.enabled || !obj) return Option.none;
     const id = (obj as { id?: DependencyId }).id;
-    if (id === undefined) return undefined;
+    if (id === undefined) return Option.none;
 
     const meta = this._registry.get(id);
-    if (meta) return meta.type;
+    if (meta) return Option.some(meta.type);
 
     const brand = (obj as { [BRAND]?: number })[BRAND];
-    return brand !== undefined ? TYPE_BY_BRAND[brand & BRAND_MASK] : undefined;
+    return Option.fromNullable(brand !== undefined ? TYPE_BY_BRAND[brand & BRAND_MASK] : undefined);
   }
 }
 
