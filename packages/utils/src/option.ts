@@ -56,6 +56,14 @@ export const Option = {
   isNone: <T>(opt: Option<T>): opt is None => !opt.ok,
 
   /**
+   * Returns the value if present, otherwise throws an error with the provided message.
+   */
+  expect: <T>(opt: Option<T>, message: string): T => {
+    if (opt.ok) return opt.value;
+    throw new Error(message);
+  },
+
+  /**
    * Extracts the inner value if present.
    */
   unwrap: <T>(opt: Option<T>): T => {
