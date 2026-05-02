@@ -5,6 +5,7 @@ import '@/bindings/chainable';
 import '@/bindings/list';
 import '@/bindings/mount';
 import '@/features/route';
+import '@/features/url';
 import '@/features/fetch';
 import '@/features/nav';
 import '@/features/web-component';

@@ -22,6 +22,7 @@ The jQuery package provides a reactive binding layer on top of `@but212/atom-eff
                  │  chainable.ts ← $.fn methods      │
                  │  bindings/list/ ← Modular list    │
                  │  route.ts     ← SPA router        │
+                 │  url.ts       ← Reactive URL      │
                  │  mount.ts     ← Component mount   │
                  │  core/dom.ts  ← Core DOM engine   │
                  └───────────────────────────────────┘
@@ -186,7 +187,21 @@ The router maintains visual state for navigation links using a targeted tracking
 - **Error Handling**: Standardizes error instances and isolates user hooks to prevent breaking the reactive chain.
 - **Abort Silence**: Catch and ignore `AbortError` internally during rapid re-evaluations.
 
-## 9. Security
+## 9. Reactive URL Engine (`$.atomUrl`)
+
+The URL engine provides a reactive interface to the browser's location and history, bridging the History API with `atom-effect` primitives.
+
+### 9.1 Implementation Details
+
+- **Resilient Atoms**: Singleton parts (like `path`, `params`) use a `_makeResilient` proxy wrapper. This ensures that even if internal atoms are disposed (e.g., during app resets), the exported references remain functional by automatically reviving their internal instances upon next access.
+- **Navigation Batching**: URL property updates are debounced via a microtask. If multiple properties are modified within the same tick (even outside a `$.batch`), they are coalesced into a single `pushState` or `replaceState` call, preventing redundant history entries.
+- **Path Resolution Rules**: Employs a pattern-based `RESOLVE_RULES` engine to handle path normalization. It intelligently resolves relative paths against the current location and `basePath`, while preserving external protocols (e.g., `mailto:`, `//external.com`).
+- **Bidirectional Synchronization**:
+  - **Downstream**: Listens to `popstate` and `hashchange` events.
+  - **Upstream**: Monkey-patches `history.pushState` and `history.replaceState` to detect programmatic changes that don't emit events.
+  - **State Guarding**: Uses an `_ignoreSync` flag to prevent infinite recursive updates when `$.atomUrl` itself triggers a navigation.
+
+## 10. Security
 
 The binding layer includes several defensive measures:
 
