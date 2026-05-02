@@ -212,7 +212,12 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
 
     if ((flags & MASK_UNRESOLVED_ASYNC) !== 0) {
       if (hasDefault) return this._defaultValue;
-      if ((flags & REJECTED) !== 0) throw Option.unwrap(this._error);
+      if ((flags & REJECTED) !== 0) {
+        throw Option.expect(
+          this._error,
+          'Internal Inconsistency: Computed node is in REJECTED state but no error was found.'
+        );
+      }
       throw new ComputedError(ERROR_MESSAGES.COMPUTED_ASYNC_PENDING_NO_DEFAULT);
     }
 
@@ -285,8 +290,13 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
       if (seen.has(node.id)) return false;
       seen.add(node.id);
 
-      if (Option.isSome(node._error)) {
-        collected.push(node._error.value);
+      if ((node.flags & MASK_ERROR) !== 0) {
+        collected.push(
+          Option.expect(
+            node._error,
+            'Internal Inconsistency: MASK_ERROR flag set but error is None'
+          )
+        );
         if (stopOnFirst) return true;
       }
 
