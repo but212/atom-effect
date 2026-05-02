@@ -10,12 +10,14 @@ const packages = fs
   .map((d) => path.join('packages', d.name))
   .filter((p) => fs.existsSync(path.join(p, 'package.json')));
 
-const mismatches = packages
-  .map((p) => ({
-    path: p,
-    version: JSON.parse(fs.readFileSync(path.join(p, 'package.json'), 'utf8')).version,
-  }))
-  .filter((pkg) => pkg.version !== version);
+const packageDetails = packages.map((p) => {
+  const { name, version: pkgVersion } = JSON.parse(
+    fs.readFileSync(path.join(p, 'package.json'), 'utf8')
+  );
+  return { path: p, name, version: pkgVersion };
+});
+
+const mismatches = packageDetails.filter((pkg) => pkg.version !== version);
 
 if (mismatches.length > 0) {
   mismatches.forEach((m) =>
@@ -39,10 +41,7 @@ fs.writeFileSync('RELEASE_NOTES.md', notes);
 console.log(`✓ RELEASE_NOTES.md generated for v${version}`);
 
 // 3. Output matrix for GHA
-const matrix = packages.map((p) => ({
-  name: JSON.parse(fs.readFileSync(path.join(p, 'package.json'), 'utf8')).name,
-  dir: p,
-}));
+const matrix = packageDetails.map(({ name, path: dir }) => ({ name, dir }));
 
 if (process.env.GITHUB_OUTPUT) {
   fs.appendFileSync(process.env.GITHUB_OUTPUT, `matrix=${JSON.stringify(matrix)}\n`);

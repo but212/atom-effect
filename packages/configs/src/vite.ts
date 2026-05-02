@@ -32,7 +32,8 @@ export const getBaseViteConfig = (options: BaseViteConfigOptions): UserConfig =>
         ...(libFileNames
           ? {
               fileName: (format: string) =>
-                libFileNames[format] ?? `index.${format === 'es' ? 'mjs' : 'cjs'}`,
+                libFileNames[format] ??
+                `index.${format === 'es' ? 'mjs' : format === 'umd' ? 'js' : 'cjs'}`,
             }
           : {}),
       },
