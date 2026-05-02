@@ -11,6 +11,7 @@
 - **Performance**: Unified async drift detection into the `isDirty()` check, eliminating the overhead of DJB2 hashing for stale promise tracking.
 - **Performance**: Forced internal IDs and versions into the SMI (Small Integer) range to bypass heap allocation.
 - **Security**: Hardened `atomLens` and `setDeepValue` against prototype pollution by blocking dangerous keys like `__proto__`.
+- **Refactor**: Adopted functional `Option<T>` and `Result<T, E>` patterns for internal state management (tracking context, cleanup, and error handling) to improve null-safety and code robustness.
 
 ### Utils
 

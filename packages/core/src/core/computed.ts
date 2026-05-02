@@ -1,4 +1,4 @@
-import { Result } from '@but212/atom-effect-utils';
+import { Option, Result } from '@but212/atom-effect-utils';
 import {
   AsyncState,
   COMPUTED_STATE_FLAGS,
@@ -84,7 +84,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
   private _trackCount = 0;
 
   private _value: T;
-  private _error: Error | null = null;
+  private _error: Option<Error> = Option.none;
 
   /**
    * Internal dependency buffer managing subscription reconciliation.
@@ -212,7 +212,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
 
     if ((flags & MASK_UNRESOLVED_ASYNC) !== 0) {
       if (hasDefault) return this._defaultValue;
-      if ((flags & REJECTED) !== 0) throw this._error!;
+      if ((flags & REJECTED) !== 0) throw Option.unwrap(this._error);
       throw new ComputedError(ERROR_MESSAGES.COMPUTED_ASYNC_PENDING_NO_DEFAULT);
     }
 
@@ -230,8 +230,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
    * Returns the current lifecycle phase (IDLE, PENDING, RESOLVED, REJECTED).
    */
   get state(): AsyncStateType {
-    const context = trackingContext.current;
-    context?.addDependency(this);
+    trackingContext.current?.addDependency(this);
     const flags = this.flags;
     if ((flags & RESOLVED) !== 0) return AsyncState.RESOLVED;
     if ((flags & PENDING) !== 0) return AsyncState.PENDING;
@@ -245,8 +244,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
    * Performed untracked to avoid creating excessive subscriptions to deep nodes.
    */
   get hasError(): boolean {
-    const context = trackingContext.current;
-    context?.addDependency(this);
+    trackingContext.current?.addDependency(this);
 
     if ((this.flags & MASK_ERROR) !== 0) return true;
     if (!this._deps.hasComputeds) return false;
@@ -262,11 +260,13 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
    * Collects all errors from the dependency sub-graph into a frozen array.
    */
   get errors(): readonly Error[] {
-    const context = trackingContext.current;
-    context?.addDependency(this);
+    trackingContext.current?.addDependency(this);
 
     if (!this._deps.hasComputeds) {
-      return this._error === null ? EMPTY_ERROR_ARRAY : Object.freeze([this._error]);
+      return Option.match(this._error, {
+        some: (err) => Object.freeze([err]),
+        none: () => EMPTY_ERROR_ARRAY,
+      });
     }
 
     return untracked(() => Object.freeze(this._collectErrors(false)));
@@ -285,9 +285,8 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
       if (seen.has(node.id)) return false;
       seen.add(node.id);
 
-      const error = node._error;
-      if (error !== null) {
-        collected.push(error);
+      if (Option.isSome(node._error)) {
+        collected.push(node._error.value);
         if (stopOnFirst) return true;
       }
 
@@ -308,20 +307,17 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
   }
 
   get lastError(): Error | null {
-    const context = trackingContext.current;
-    context?.addDependency(this);
-    return this._error;
+    trackingContext.current?.addDependency(this);
+    return Option.toNullable(this._error);
   }
 
   get isPending(): boolean {
-    const context = trackingContext.current;
-    context?.addDependency(this);
+    trackingContext.current?.addDependency(this);
     return (this.flags & PENDING) !== 0;
   }
 
   get isResolved(): boolean {
-    const context = trackingContext.current;
-    context?.addDependency(this);
+    trackingContext.current?.addDependency(this);
     return (this.flags & RESOLVED) !== 0;
   }
 
@@ -346,7 +342,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     this._slots?.clear();
     this.flags = DISPOSED | DIRTY | IDLE;
 
-    this._error = null;
+    this._error = Option.none;
     this._value = undefined as T;
   }
 
@@ -467,11 +463,12 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
   private _handleError(error: unknown, message: string, shouldThrow = false): void {
     const wrappedError = wrapError(error, ComputedError, message);
 
-    if (!this.isRejected || this._error !== wrappedError) {
+    const oldError = Option.toNullable(this._error);
+    if (!this.isRejected || oldError !== wrappedError) {
       this.version = nextVersion(this.version);
     }
 
-    this._error = wrappedError;
+    this._error = Option.some(wrappedError);
     this.flags = TRANSITIONS.TO_REJECTED(this.flags);
 
     if (this._onError) {
@@ -498,7 +495,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     }
 
     this._value = value;
-    this._error = null;
+    this._error = Option.none;
     this.flags = TRANSITIONS.TO_RESOLVED(this.flags);
   }
 

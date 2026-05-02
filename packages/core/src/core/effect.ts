@@ -1,4 +1,4 @@
-import { Result } from '@but212/atom-effect-utils';
+import { Option, Result } from '@but212/atom-effect-utils';
 import {
   DEBUG_CONFIG,
   EFFECT_STATE_FLAGS,
@@ -55,7 +55,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     totalExecutions: 0,
   };
 
-  private _cleanup: (() => void) | null = null;
+  private _cleanup: Option<() => void> = Option.none;
   /**
    * Buffered storage for reconciled subscriptions.
    * @internal
@@ -65,7 +65,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
   /** @internal */
   private readonly _notifyCallback: () => void;
 
-  private readonly _onError: ((error: unknown) => void) | null;
+  private readonly _onError: Option<(error: unknown) => void>;
 
   private readonly _fn: EffectFunction;
   private readonly _sync: boolean;
@@ -75,7 +75,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
   constructor(fn: EffectFunction, options: EffectOptions = {}) {
     super();
     this._fn = fn;
-    this._onError = options.onError ?? null;
+    this._onError = Option.fromNullable(options.onError);
     this._sync = options.sync ?? false;
     this._maxExecutions =
       options.maxExecutionsPerSecond ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_SECOND;
@@ -218,16 +218,16 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     Result.match(result as Result<unknown, Error>, {
       ok: (val) => {
         if (typeof val === 'function') {
-          this._cleanup = val as () => void;
+          this._cleanup = Option.some(val as () => void);
         } else if (isPromise(val)) {
           this._handleAsyncResult(val as Promise<undefined | (() => void)>);
         } else {
-          this._cleanup = null;
+          this._cleanup = Option.none;
         }
       },
       err: (e) => {
         this._handleExecutionError(e);
-        this._cleanup = null;
+        this._cleanup = Option.none;
       },
     });
   }
@@ -272,7 +272,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
           }
           return;
         }
-        if (typeof cleanup === 'function') this._cleanup = cleanup as () => void;
+        if (typeof cleanup === 'function') this._cleanup = Option.some(cleanup as () => void);
       },
       (err) => this._session.sessionId === sessionId && this._handleExecutionError(err)
     );
@@ -289,11 +289,11 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
   }
 
   private _execCleanup(): void {
-    const cleanup = this._cleanup;
-    if (cleanup == null) return;
-    this._cleanup = null;
+    const cleanupOpt = this._cleanup;
+    if (Option.isNone(cleanupOpt)) return;
+    this._cleanup = Option.none;
     try {
-      cleanup();
+      cleanupOpt.value();
     } catch (error) {
       this._handleExecutionError(error, ERROR_MESSAGES.EFFECT_CLEANUP_FAILED);
     }
@@ -354,13 +354,16 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
   ): void {
     const errorObj = wrapError(error, EffectError, message);
     console.error(errorObj);
-    if (this._onError) {
-      try {
-        this._onError(errorObj);
-      } catch (e) {
-        console.error(wrapError(e, EffectError, ERROR_MESSAGES.CALLBACK_ERROR_IN_ERROR_HANDLER));
-      }
-    }
+    Option.match(this._onError, {
+      some: (handler) => {
+        try {
+          handler(errorObj);
+        } catch (e) {
+          console.error(wrapError(e, EffectError, ERROR_MESSAGES.CALLBACK_ERROR_IN_ERROR_HANDLER));
+        }
+      },
+      none: () => {},
+    });
   }
 }
 
