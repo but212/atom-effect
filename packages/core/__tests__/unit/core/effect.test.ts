@@ -19,7 +19,7 @@ describe('Effect', () => {
 
   interface InternalEffect {
     _deps: {
-      truncateFrom(index: number): void;
+      slots: { truncateFrom(index: number): void };
     };
     dispose(): void;
   }
