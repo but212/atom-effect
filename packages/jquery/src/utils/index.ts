@@ -139,34 +139,3 @@ export function flattenToFormData(fd: FormData, prefix: string, obj: unknown): v
     fd.append(prefix, obj instanceof Blob ? obj : String(obj ?? ''));
   }
 }
-/**
- * Parses a query string into a key-value object.
- *
- * @param search - The query string (e.g., '?a=1&b=2').
- * @param onError - Optional callback for malformed URI segments.
- * @returns An object representing the query parameters.
- * @internal
- */
-export function parseQueryParams(
-  search: string,
-  onError?: (raw: string) => void
-): Record<string, string> {
-  const params: Record<string, string> = {};
-  const query = search.startsWith('?') ? search.substring(1) : search;
-  if (!query) return params;
-
-  const pairs = query.split('&');
-  for (const pair of pairs) {
-    const [key, value] = pair.split('=');
-    if (key) {
-      try {
-        params[decodeURIComponent(key)] = decodeURIComponent(value || '');
-      } catch {
-        if (onError) onError(query);
-        // Fallback to raw values if decoding fails
-        params[key] = value || '';
-      }
-    }
-  }
-  return params;
-}

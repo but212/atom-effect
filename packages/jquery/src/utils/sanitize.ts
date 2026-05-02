@@ -326,12 +326,12 @@ const DEFENSE_RULES: DefenseRule[] = [
  */
 function scrubElement(el: HTMLElement, policy: SanitizationPolicy): void {
   const attrs = DOM.getAttributes(el);
-  const detectedEvents: string[] = [];
+  const detectedEvents = attrs
+    .filter((a) => a.name.toLowerCase().startsWith('on'))
+    .map((a) => a.name);
 
   for (const { name, value } of attrs) {
     const key = name.toLowerCase();
-    if (key.startsWith('on')) detectedEvents.push(name);
-
     for (const rule of DEFENSE_RULES) {
       if (rule.match(key, value, policy)) {
         rule.action(el, name, value, policy);
@@ -340,7 +340,6 @@ function scrubElement(el: HTMLElement, policy: SanitizationPolicy): void {
     }
   }
 
-  // Metadata: Persistence of removed events for auditing
   if (detectedEvents.length) {
     DOM.setAttribute(el, 'data-unsafe-attr', detectedEvents.join(','));
   }
@@ -386,9 +385,8 @@ function processNode(node: Node, policy: SanitizationPolicy): Node {
   // Replaces forbidden elements with <span> while preserving attributes and children.
   if (policy.blacklistedTags.includes(tag)) {
     const span = DOM.createElement('span');
-    for (const { name, value } of DOM.getAttributes(el)) {
-      span.setAttribute(name, value);
-    }
+    // Simplified attribute mirroring.
+    DOM.getAttributes(el).forEach((a) => span.setAttribute(a.name, a.value));
     scrubElement(span, policy);
 
     // Security: Recursive Style Protection
@@ -406,23 +404,22 @@ function processNode(node: Node, policy: SanitizationPolicy): Node {
 
 /**
  * @internal
- * Logic: DOM Tree Traversal
- * Performs a recursive walk through the DOM fragment, processing each node.
+ * Logic: DOM Tree Traversal using native TreeWalker.
  */
 function walkTree(root: Node, policy: SanitizationPolicy): void {
-  const target = processNode(root, policy);
+  // Use native TreeWalker for efficient, non-recursive traversal.
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
 
-  // Security: Template Fragmentation
-  // Templates must be traversed via their .content fragment to ensure inertness.
-  if (DOM.getLocalName(target) === 'template') {
-    walkTree((target as HTMLTemplateElement).content, policy);
-  }
+  let node: Node | null = root;
+  while (node) {
+    const nextNode = walker.nextNode();
+    processNode(node, policy);
 
-  if (target.nodeType === Node.ELEMENT_NODE || target.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
-    const children = Array.from(target.childNodes);
-    for (const child of children) {
-      walkTree(child, policy);
+    // Template content must be handled separately as they are inert fragments.
+    if (node.nodeType === Node.ELEMENT_NODE && DOM.getLocalName(node) === 'template') {
+      walkTree((node as HTMLTemplateElement).content, policy);
     }
+    node = nextNode;
   }
 }
 

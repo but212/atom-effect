@@ -416,7 +416,7 @@ $.effect(() => {
 
 // 2. Updating URL state (triggers navigation)
 $('#search-input').on('input', (e) => {
-  // Update params while preserving other parts
+  // Directly update params atom
   $.atomUrl.params.value = { ...$.atomUrl.params.value, q: e.target.value };
 });
 

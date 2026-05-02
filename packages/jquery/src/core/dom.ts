@@ -1,3 +1,5 @@
+import { Option } from '@but212/atom-effect-utils';
+
 /**
  * Iterates over a jQuery collection and executes a callback for each HTMLElement.
  *
@@ -12,12 +14,11 @@
  */
 export function atomEachElement(jq: JQuery, fn: (el: HTMLElement) => void): JQuery {
   for (let i = 0, len = jq.length; i < len; i++) {
-    const node = jq[i];
-
-    // Logic: Filter for ELEMENT_NODE (type 1) to ensure the callback only receives HTMLElements.
-    if (node?.nodeType === 1) {
-      fn(node as HTMLElement);
-    }
+    Option.map(Option.fromNullable(jq[i]), (node) => {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        fn(node as HTMLElement);
+      }
+    });
   }
   return jq;
 }
@@ -38,15 +39,16 @@ export function unpack<T, O>(val: T | [T, O]): [T, O?] {
     return [val as T];
   }
 
-  const second = val[1];
-
-  // Logic: Configuration tuples typically contain a transformation function or a
-  // static options object. To avoid misidentifying array-based state values as
-  // options, we explicitly verify that the second element is not a reactive
-  // atom (possessing a 'value' property) or a promise (possessing a 'then' method).
-  const isTuple =
-    typeof second === 'function' ||
-    (second !== null && typeof second === 'object' && !('value' in second) && !('then' in second));
-
-  return isTuple ? (val as [T, O]) : [val as T];
+  return Option.unwrapOr(
+    Option.map(Option.fromNullable(val[1]), (second) => {
+      const isTuple =
+        typeof second === 'function' ||
+        (second !== null &&
+          typeof second === 'object' &&
+          !('value' in second) &&
+          !('then' in second));
+      return isTuple ? (val as [T, O]) : ([val as T] as [T, O?]);
+    }),
+    [val as T]
+  );
 }

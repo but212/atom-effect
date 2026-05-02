@@ -1,4 +1,4 @@
-import { Result } from '@but212/atom-effect-utils';
+import { Option, Result } from '@but212/atom-effect-utils';
 import { SYSTEM_BINDING, SYSTEM_CORE, SYSTEM_MOUNT } from '@/constants';
 import type { EffectObject } from '@/types';
 import { getSelector } from '@/utils';
@@ -169,7 +169,10 @@ class BindingRegistry {
    * @internal
    */
   getShadow(host: Element): ShadowRoot | null {
-    return host.shadowRoot || this.shadows.get(host) || null;
+    return Option.unwrapOr(
+      Option.fromNullable(host.shadowRoot),
+      Option.toNullable(Option.fromNullable(this.shadows.get(host)))
+    );
   }
 
   /**
@@ -188,13 +191,13 @@ class BindingRegistry {
       this.autoCleanupScheduled = true;
       enableAutoCleanup(document.body);
     }
-    let result = this.records.get(element);
-    if (!result) {
-      result = {};
+
+    return Option.unwrapOrElse(Option.fromNullable(this.records.get(element)), () => {
+      const result: BindingRecord = {};
       this.records.set(element, result);
       this.safeMark(element, MARK_BOUND);
-    }
-    return result;
+      return result;
+    });
   }
 
   /** Internal helper to append a cleanup task to an element's record. */
@@ -218,16 +221,14 @@ class BindingRegistry {
   trackEffect(element: Element, effect: EffectObject): void {
     const selector = getSelector(element);
     this.addCleanup(element, () => {
-      Result.tapErr(
-        Result.tryCatch(() => effect.dispose()),
-        (error: Error) => {
-          debug.error(
-            SYSTEM_BINDING.PREFIX,
-            SYSTEM_CORE.ERRORS.EFFECT_DISPOSE_ERROR(selector),
-            error
-          );
-        }
-      );
+      const res = Result.tryCatch(() => effect.dispose());
+      if (!res.ok) {
+        debug.error(
+          SYSTEM_BINDING.PREFIX,
+          SYSTEM_CORE.ERRORS.EFFECT_DISPOSE_ERROR(selector),
+          res.error
+        );
+      }
     });
   }
 
@@ -235,12 +236,14 @@ class BindingRegistry {
   onCleanup(element: Element, cleanupFunction: () => void): void {
     const selector = getSelector(element);
     this.addCleanup(element, () => {
-      Result.tapErr(
-        Result.tryCatch(() => cleanupFunction()),
-        (error: Error) => {
-          debug.error(SYSTEM_BINDING.PREFIX, SYSTEM_BINDING.ERRORS.CLEANUP_ERROR(selector), error);
-        }
-      );
+      const res = Result.tryCatch(() => cleanupFunction());
+      if (!res.ok) {
+        debug.error(
+          SYSTEM_BINDING.PREFIX,
+          SYSTEM_BINDING.ERRORS.CLEANUP_ERROR(selector),
+          res.error
+        );
+      }
     });
   }
 
@@ -265,28 +268,32 @@ class BindingRegistry {
 
     if (node.nodeType !== 1) return;
     const element = node as Element;
-    const record = this.records.get(element);
 
-    this.records.delete(element);
-    element.classList.remove(MARK_BOUND);
+    Option.match(Option.fromNullable(this.records.get(element)), {
+      some: (record) => {
+        this.records.delete(element);
+        element.classList.remove(MARK_BOUND);
 
-    if (!record) return;
+        Option.map(Option.fromNullable(record.teardown), (teardown: () => void) => {
+          const res = Result.tryCatch(() => teardown());
+          if (!res.ok) {
+            const selector = getSelector(element);
+            debug.error(
+              SYSTEM_MOUNT.PREFIX,
+              SYSTEM_MOUNT.ERRORS.CLEANUP_ERROR(selector),
+              res.error
+            );
+          }
+        });
 
-    if (record.teardown) {
-      Result.tapErr(
-        Result.tryCatch(() => record.teardown!()),
-        (error: Error) => {
-          const selector = getSelector(element);
-          debug.error(SYSTEM_MOUNT.PREFIX, SYSTEM_MOUNT.ERRORS.CLEANUP_ERROR(selector), error);
-        }
-      );
-    }
-
-    if (record.tasks) {
-      for (const cleanupFunction of record.tasks) {
-        cleanupFunction();
-      }
-    }
+        Option.map(Option.fromNullable(record.tasks), (tasks: Array<() => void>) => {
+          tasks.forEach((cleanupFunction) => cleanupFunction());
+        });
+      },
+      none: () => {
+        element.classList.remove(MARK_BOUND);
+      },
+    });
   }
 
   /**

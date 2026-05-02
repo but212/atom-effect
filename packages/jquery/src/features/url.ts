@@ -1,16 +1,8 @@
 import { atom, batch, computed } from '@but212/atom-effect';
-import {
-  fromNullable,
-  isNone,
-  match as matchOpt,
-  None,
-  type Option,
-  Result,
-  Some,
-} from '@but212/atom-effect-utils';
+import { Option, Result } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import type { AtomUrl, NavigationType, ReadonlyAtom, WritableAtom } from '@/types';
-import { parseQueryParams, shallowEqual } from '@/utils';
+import { shallowEqual } from '@/utils';
 
 /** Internal state of the reactive URL manager. */
 interface UrlSnapshot {
@@ -65,7 +57,10 @@ const RESOLVE_RULES: Array<{
   },
 ];
 
-/** Declarative schema for URL parts extraction and injection. */
+/**
+ * Declarative schema for URL parts extraction and injection.
+ * Defines how to read from/write to a native URL object.
+ */
 const PART_SCHEMA = {
   path: {
     get: (u: URL, base: string) => {
@@ -83,19 +78,21 @@ const PART_SCHEMA = {
     },
   },
   search: {
+    // URL spec: search setter normalises the leading '?' automatically.
     get: (u: URL) => u.search,
     set: (u: URL, v: string) => {
-      u.search = v.startsWith('?') ? v : `?${v}`;
+      u.search = v;
     },
   },
   hash: {
+    // URL spec: hash setter normalises the leading '#' automatically.
     get: (u: URL) => u.hash,
     set: (u: URL, v: string) => {
-      u.hash = v.startsWith('#') ? v : `#${v}`;
+      u.hash = v;
     },
   },
   params: {
-    get: (u: URL) => parseQueryParams(u.search),
+    get: (u: URL) => Object.fromEntries(u.searchParams),
     set: (u: URL, v: Record<string, unknown>) => {
       const p = new URLSearchParams();
       Object.entries(v).forEach(([k, val]) => {
@@ -122,7 +119,6 @@ const BINDINGS: Array<
  * Orchestrates browser history API with atom-effect reactive primitives.
  */
 class AtomUrlImpl implements AtomUrl {
-  // --- 1. Core State ---
   private readonly _snapshot = atom<UrlSnapshot>(
     {
       url: IS_BROWSER ? window.location.href : FALLBACK_URL,
@@ -146,10 +142,9 @@ class AtomUrlImpl implements AtomUrl {
     url: URL;
     state: unknown;
     method: 'push' | 'replace';
-  }> = None;
-  private _cleanup: Option<() => void> = None;
+  }> = Option.none;
+  private _cleanup: Option<() => void> = Option.none;
 
-  // --- 2. Internal Computeds (Resilient) ---
   private readonly _urlObj = this._makeResilient(() =>
     computed(
       () => {
@@ -174,7 +169,6 @@ class AtomUrlImpl implements AtomUrl {
     return base.endsWith('/') ? base.slice(0, -1) : base;
   }
 
-  // --- 3. Public Reactive Interface ---
   public readonly url: ReadonlyAtom<string> = this._makeResilient(() =>
     computed(() => this._snapshot.value.url, { name: 'url:full' })
   );
@@ -221,8 +215,6 @@ class AtomUrlImpl implements AtomUrl {
     this._setupListeners();
   }
 
-  // --- 4. Navigation & Patching Logic ---
-
   /**
    * Consolidates multiple URL property changes into a single history entry via a microtask.
    *
@@ -230,16 +222,16 @@ class AtomUrlImpl implements AtomUrl {
    * trigger one browser navigation call to avoid polluting the history stack.
    */
   private _patch(update: (url: URL) => void, state?: unknown, method: 'push' | 'replace' = 'push') {
-    if (isNone(this._pending)) {
+    if (Option.isNone(this._pending)) {
       const current = this._snapshot.peek();
-      this._pending = Some({
+      this._pending = Option.some({
         url: new URL(current.url),
         state: current.state,
         method,
       });
     }
 
-    matchOpt(this._pending, {
+    Option.match(this._pending, {
       some: (pending) => {
         // Priority: Any 'push' in the batch upgrades the entire batch to 'push'.
         if (NAV_PRIORITY[method] > NAV_PRIORITY[pending.method]) {
@@ -255,12 +247,12 @@ class AtomUrlImpl implements AtomUrl {
     if (!this._navPending) {
       this._navPending = true;
       Promise.resolve().then(() => {
-        if (!this._navPending || isNone(this._pending)) return;
+        if (!this._navPending || Option.isNone(this._pending)) return;
 
-        matchOpt(this._pending, {
+        Option.match(this._pending, {
           some: ({ url, state: s, method: m }) => {
             this._navPending = false;
-            this._pending = None;
+            this._pending = Option.none;
 
             this._navDrivers[m](url.href, s);
           },
@@ -274,13 +266,11 @@ class AtomUrlImpl implements AtomUrl {
   private _resolve(url: string): string {
     const base = this._getNormalizedBase();
     const current = this._snapshot.peek().url;
-    return matchOpt(fromNullable(RESOLVE_RULES.find((r) => r.test(url))), {
+    return Option.match(Option.fromNullable(RESOLVE_RULES.find((r) => r.test(url))), {
       some: (rule) => rule.exec(url, base, current),
       none: () => url,
     });
   }
-
-  // --- 5. Lifecycle & Resource Management ---
 
   /** Track reactive objects for centralized disposal. */
   private _track<T extends { dispose(): void }>(obj: T): T {
@@ -307,6 +297,7 @@ class AtomUrlImpl implements AtomUrl {
         return fn(instance);
       } catch (e: unknown) {
         const err = e as { name?: string; message?: string } | null;
+        // Logic: Catch errors specifically related to accessing a disposed computed value.
         if (err?.name === 'ComputedError' || err?.message?.includes('disposed')) {
           instance = creator() as WritableAtom<T>;
           return fn(instance);
@@ -371,8 +362,8 @@ class AtomUrlImpl implements AtomUrl {
         window.addEventListener(b.event, handler);
         cleanups.push(() => window.removeEventListener(b.event, handler));
       } else {
-        // Reason: pushState/replaceState do not emit events. We monkey-patch
-        // them to intercept programmatic navigation from other libraries.
+        // Reason: pushState/replaceState do not emit browser events.
+        // We monkey-patch them to intercept programmatic navigation from other libraries.
         const original = window.history[b.patch];
         window.history[b.patch] = (...args: Parameters<typeof original>) => {
           original.apply(window.history, args);
@@ -384,7 +375,7 @@ class AtomUrlImpl implements AtomUrl {
       }
     });
 
-    this._cleanup = Some(() => cleanups.forEach((fn) => fn()));
+    this._cleanup = Option.some(() => cleanups.forEach((fn) => fn()));
   }
 
   /** Synchronizes internal snapshot with the current browser location. */
@@ -405,6 +396,7 @@ class AtomUrlImpl implements AtomUrl {
         }
       );
 
+    // Equality check to prevent redundant atom updates and infinite loops.
     if (
       normalize(current.url) === normalize(url) &&
       shallowEqual(current.state, state) &&
@@ -414,15 +406,21 @@ class AtomUrlImpl implements AtomUrl {
     }
 
     this._navPending = false;
-    this._pending = None;
+    this._pending = Option.none;
 
     batch(() => {
       this._snapshot.value = { url, state, type };
     });
   }
 
-  // --- 6. Public API ---
-
+  /**
+   * Navigates to a new URL and adds a entry to history.
+   *
+   * Example:
+   * ```typescript
+   * $.atomUrl.push('/search?q=query#results');
+   * ```
+   */
   public push(url: string, state: unknown = null): void {
     if (!IS_BROWSER) return;
     this._ignoreSync = true;
@@ -434,6 +432,9 @@ class AtomUrlImpl implements AtomUrl {
     }
   }
 
+  /**
+   * Updates the current URL without adding a new entry to history.
+   */
   public replace(url: string, state: unknown = null): void {
     if (!IS_BROWSER) return;
     this._ignoreSync = true;
@@ -452,23 +453,28 @@ class AtomUrlImpl implements AtomUrl {
     if (IS_BROWSER) window.history.forward();
   }
 
+  /** Re-attaches listeners and forces a sync with the current URL. */
   public reset(): void {
-    if (IS_BROWSER && isNone(this._cleanup)) this._setupListeners();
+    if (IS_BROWSER && Option.isNone(this._cleanup)) this._setupListeners();
     this.update('init');
   }
 
+  /** Fully detaches from the browser and disposes of all reactive parts. */
   public dispose(): void {
-    matchOpt(this._cleanup, {
+    Option.match(this._cleanup, {
       some: (fn) => fn(),
       none: () => {},
     });
-    this._cleanup = None;
-    this._pending = None;
+    this._cleanup = Option.none;
+    this._pending = Option.none;
     this._navPending = false;
     this._computeds.forEach((c) => c.dispose());
     this._computeds.length = 0;
   }
 }
 
+/**
+ * Singleton instance of the reactive URL manager.
+ */
 export const atomUrl: AtomUrl = new AtomUrlImpl();
 $.extend({ atomUrl });

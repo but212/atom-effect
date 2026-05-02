@@ -1,4 +1,5 @@
 import { BRAND, BrandFlags, isAtom, isWritable, untracked } from '@but212/atom-effect';
+import { Option } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { SYSTEM_COMPONENT } from '@/constants';
 import { enableAutoCleanup, registry } from '@/core/registry';
@@ -55,14 +56,12 @@ if (debug.enabled && typeof window !== 'undefined') {
 const autoSetupMap = new WeakMap<HTMLElement, AtomComponentStatic>();
 
 /** Retrieves or initializes the internal metadata state for a node. @internal */
-const getInternalState = (node: Node): NodeInternalState => {
-  let state = nodeStateMap.get(node);
-  if (!state) {
-    state = {};
+const getInternalState = (node: Node): NodeInternalState =>
+  Option.unwrapOrElse(Option.fromNullable(nodeStateMap.get(node)), () => {
+    const state = {};
     nodeStateMap.set(node, state);
-  }
-  return state;
-};
+    return state;
+  });
 
 // ─── Environment & Compatibility ───────────────────────────────────────────────
 
@@ -76,17 +75,16 @@ const supportsInternals =
 
 const getOrCreateSheet = (source: string | CSSStyleSheet): CSSStyleSheet => {
   if (source instanceof CSSStyleSheet) return source;
-  let sheet = sheetCache.get(source);
-  if (!sheet) {
-    sheet = new CSSStyleSheet();
+  return Option.unwrapOrElse(Option.fromNullable(sheetCache.get(source)), () => {
+    const sheet = new CSSStyleSheet();
     sheet.replaceSync(source);
     if (sheetCache.size >= MAX_SHEET_CACHE_SIZE) {
       const firstKey = sheetCache.keys().next().value;
       if (firstKey !== undefined) sheetCache.delete(firstKey);
     }
     sheetCache.set(source, sheet);
-  }
-  return sheet;
+    return sheet;
+  });
 };
 
 // ─── Context Engine (Encapsulated Versioning) ───────────────────────────────
@@ -138,6 +136,7 @@ const ContextEngine = (() => {
           m.addedNodes.forEach((node) => {
             if (node instanceof HTMLElement) {
               init(node);
+              // Recursively initialize all children.
               node.querySelectorAll('*').forEach((el) => init(el as HTMLElement));
             }
           });
@@ -169,13 +168,13 @@ const ContextEngine = (() => {
       activeCount--;
       if (activeCount === 0) releaseObserver();
     },
-    discover(target: HTMLElement, key: string | symbol): unknown {
-      let found: unknown = null;
+    discover(target: HTMLElement, key: string | symbol): Option<unknown> {
+      let found: Option<unknown> = Option.none;
       const event = new CustomEvent<ContextRequestDetail>(CONTEXT_REQUEST, {
         detail: {
           key,
           callback: (atom) => {
-            found = atom;
+            found = Option.some(atom);
           },
         },
         bubbles: true,
@@ -193,12 +192,14 @@ function createContextProxy<T>(target: HTMLElement, key: string | symbol): Writa
   const resolve = (isPeek: boolean) => {
     if (isPeek) ContextEngine.version.peek();
     else ContextEngine.version.value;
-    return untracked(() => ContextEngine.discover(target, key)) as WritableAtom<T> | T | null;
+    return untracked(() => ContextEngine.discover(target, key)) as Option<WritableAtom<T> | T>;
   };
 
   const getLiveValue = (isPeek: boolean) => {
-    const p = resolve(isPeek);
-    return (isAtom(p) ? (isPeek ? p.peek() : p.value) : p) as T;
+    return Option.unwrapOr(
+      Option.map(resolve(isPeek), (p) => (isAtom(p) ? (isPeek ? p.peek() : p.value) : p)),
+      null
+    ) as T;
   };
 
   let sharedAtom: ReadonlyAtom<T> | null = null;
@@ -212,8 +213,9 @@ function createContextProxy<T>(target: HTMLElement, key: string | symbol): Writa
       return getLiveValue(false);
     },
     set value(v: T) {
-      const p = resolve(true);
-      if (isWritable(p)) p.value = v;
+      Option.map(resolve(true), (p) => {
+        if (isWritable(p)) p.value = v;
+      });
     },
     peek() {
       return getLiveValue(true);
@@ -264,7 +266,7 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
   const controller: AtomComponentController = {
     host: element,
     get root() {
-      return state.root;
+      return Option.toNullable(state.root);
     },
     get internals() {
       return internals;
@@ -274,7 +276,7 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       return (name: string) => {
         let lens = state.attributeLenses.get(name);
         if (!lens) {
-          lens = $.atomLens(state.attributeAtom!, name);
+          lens = $.atomLens(Option.unwrap(state.attributeAtom), name);
           state.attributeLenses.set(name, lens);
         }
         return lens;
@@ -286,7 +288,7 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
         const key = name === 'default' ? '' : name;
         let lens = state.slotLenses.get(key);
         if (!lens) {
-          lens = $.atomLens(state.slotsAtom!, key);
+          lens = $.atomLens(Option.unwrap(state.slotsAtom), key);
           state.slotLenses.set(key, lens);
         }
         return lens;
@@ -295,8 +297,9 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
     $: ((selector, context) => {
       const ctx = context ?? state.root ?? element;
       if (typeof selector !== 'string') return $(selector) as unknown as JQuery;
+      // ShadowRoot/DocumentFragment also support querySelectorAll.
       return ctx instanceof DocumentFragment
-        ? ($(Array.from(ctx.querySelectorAll<HTMLElement>(selector))) as unknown as JQuery)
+        ? ($(ctx.querySelectorAll(selector)) as unknown as JQuery)
         : ($(selector, ctx as Element) as unknown as JQuery);
     }) as JQueryScopedSelector,
 
@@ -306,44 +309,44 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
     setup(options: Parameters<AtomComponentController['setup']>[0]) {
       if (state.isInitialized) {
         const incoming = options instanceof Node ? options : options?.shadowRoot;
-        if (incoming && incoming !== state.root) throw new Error('Call teardown() first.');
+        if (incoming && incoming !== Option.toNullable(state.root))
+          throw new Error('Call teardown() first.');
         return;
       }
 
       const config =
         options instanceof Node ? { shadowRoot: options as ShadowRoot } : (options ?? {});
-      const sr = config.shadowRoot ?? element.shadowRoot;
+      const srOpt = Option.fromNullable(config.shadowRoot ?? element.shadowRoot);
 
-      if (sr) {
+      Option.map(srOpt, (sr) => {
         registry.markHost(element);
         registry.registerShadow(element, sr);
+      });
+
+      const rootNode = Option.unwrapOr(srOpt, element) as Node & {
+        [CLEANUP_MARKER]?: boolean;
+      };
+      state.root = Option.some(rootNode);
+
+      if (!rootNode[CLEANUP_MARKER]) {
+        enableAutoCleanup(rootNode as Element);
+        rootNode[CLEANUP_MARKER] = true;
       }
 
-      state.root = (sr ?? element) as Node & { [CLEANUP_MARKER]?: boolean };
-      if (!state.root?.[CLEANUP_MARKER]) {
-        enableAutoCleanup(state.root as Element);
-        state.root![CLEANUP_MARKER] = true;
-      }
-
-      state.ensureSlotTracking(sr);
+      state.ensureSlotTracking(Option.toNullable(srOpt));
 
       if (config.dispatch) SetupFeatures.dispatch(element, config.dispatch, state.effects);
       if (config.bind)
-        SetupFeatures.hydrate(
-          state.root as Element,
-          config.bind,
-          state.effects,
-          state.hydratedNodes
-        );
+        SetupFeatures.hydrate(rootNode as Element, config.bind, state.effects, state.hydratedNodes);
       if (
         config.styles &&
         supportsConstructableStylesheets &&
-        (state.root instanceof ShadowRoot || state.root instanceof Document)
+        (rootNode instanceof ShadowRoot || rootNode instanceof Document)
       ) {
-        state.appliedStyles = SetupFeatures.styles(state.root, config.styles.map(getOrCreateSheet));
+        state.appliedStyles = SetupFeatures.styles(rootNode, config.styles.map(getOrCreateSheet));
       }
       if (config.aria && internals) SetupFeatures.aria(internals, config.aria, state.effects);
-      if (config.parts) SetupFeatures.parts(state.root as Element, config.parts, state.effects);
+      if (config.parts) SetupFeatures.parts(rootNode as Element, config.parts, state.effects);
       if ((config.value || config.validation) && internals) {
         SetupFeatures.form(element, internals, config.value, config.validation, state.effects);
       }

@@ -6,6 +6,7 @@ import {
   untracked,
   type WritableAtom,
 } from '@but212/atom-effect';
+import { Option, Result } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { registry } from '@/core/registry';
 import { INTERNAL_HANDLER } from '@/core/symbols';
@@ -85,12 +86,15 @@ class FormBinder<T extends object> {
    * @param el - The root element of the subtree to scan.
    */
   public bindSubtree(el: Element): void {
-    const targets = el.matches?.(SELECTOR)
-      ? [el]
-      : (el as HTMLElement).querySelectorAll?.(SELECTOR) || [];
-    for (let i = 0, len = targets.length; i < len; i++) {
-      this.bindField(targets[i] as Element);
-    }
+    // Optimization: Use native form.elements for the root form, otherwise fallback to querySelectorAll.
+    const targets =
+      el === this.form
+        ? Array.from(this.form.elements)
+        : el.matches?.(SELECTOR)
+          ? [el]
+          : Array.from((el as HTMLElement).querySelectorAll?.(SELECTOR) || []);
+
+    targets.forEach((target) => this.bindField(target as Element));
   }
 
   /**
@@ -103,40 +107,35 @@ class FormBinder<T extends object> {
    * @param el - The form control element to bind.
    */
   private bindField(el: Element): void {
-    if (!el.getAttribute('name')) return;
-
     const control = el as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
-    const name = control.name || el.getAttribute('name')!;
-    if (!name) return;
 
-    // Logic: Identity Reconciliation
-    // Detects changes to the 'name' attribute and triggers a cleanup of the
-    // previous association to prevent stale state updates.
-    const oldName = this.names.get(control);
-    if (oldName !== undefined && oldName !== name) {
-      registry.cleanup(control);
-    }
+    Option.map(Option.fromNullable(control.name || el.getAttribute('name')), (name: string) => {
+      // Logic: Identity Reconciliation
+      Option.map(Option.fromNullable(this.names.get(control)), (oldName: string) => {
+        if (oldName !== name) registry.cleanup(control);
+      });
 
-    if (this.names.has(control) && oldName === name) return;
+      if (this.names.has(control) && this.names.get(control) === name) return;
 
-    const entry = this.ensureField(name);
-    this.names.set(control, name);
+      const entry = this.ensureField(name);
+      this.names.set(control, name);
 
-    // Logic: Resource Cleanup
-    // Registers a cleanup hook to release the field reference and associated
-    // lens effects when the element is disconnected.
-    registry.onCleanup(control, () => this.unbindField(control, name));
+      // Logic: Resource Cleanup
+      // Registers a cleanup hook to release the field reference and associated
+      // lens effects when the element is disconnected.
+      registry.onCleanup(control, () => this.unbindField(control, name));
 
-    if (
-      control instanceof HTMLInputElement &&
-      (control.type === 'radio' || control.type === 'checkbox')
-    ) {
-      this.bindToggle(control, entry.atom, control.value, control.type === 'checkbox');
-    } else {
-      bindVal(control, entry.atom, this.options);
-    }
+      if (
+        control instanceof HTMLInputElement &&
+        (control.type === 'radio' || control.type === 'checkbox')
+      ) {
+        this.bindToggle(control, entry.atom, control.value, control.type === 'checkbox');
+      } else {
+        bindVal(control, entry.atom, this.options);
+      }
 
-    this.applyValidation(control, name, entry.atom);
+      this.applyValidation(control, name, entry.atom);
+    });
   }
 
   /**
@@ -146,20 +145,36 @@ class FormBinder<T extends object> {
    * Maps validation results from the reactive schema to the browser's native
    * Constraint Validation API (`setCustomValidity`).
    */
-  private applyValidation(control: Element, name: string, atom: WritableAtom<unknown>): void {
-    const opts = this.options as FormOptions<unknown>;
-    const validator = opts.validation?.[name];
-    if (!validator) return;
+  private applyValidation(
+    control: HTMLFormElement['elements'][number],
+    name: string,
+    atom: WritableAtom<unknown>
+  ): void {
+    const validate = this.options.validation?.[name];
+    if (!validate) return;
 
     registry.trackEffect(
       control,
       effect(() => {
-        const v = atom.value;
-        const res = validator(v);
-        const msg = typeof res === 'string' ? res : res ? '' : 'Invalid';
-        if ('setCustomValidity' in control) {
-          (control as unknown as HTMLInputElement).setCustomValidity(msg);
-        }
+        const value = atom.value;
+        const res = Result.tryCatch(() => validate(value));
+
+        Result.match(res, {
+          ok: (errorMsg) => {
+            const msg = Option.unwrapOr(
+              Option.map(
+                Option.fromNullable(errorMsg as string | boolean | undefined),
+                (res: string | boolean) => (typeof res === 'string' ? res : res ? '' : 'Invalid')
+              ),
+              ''
+            );
+            (control as HTMLInputElement).setCustomValidity?.(msg);
+          },
+          err: (err) => {
+            console.error(`Validation error in field "${name}":`, err);
+            (control as HTMLInputElement).setCustomValidity?.('Validation failed');
+          },
+        });
       })
     );
   }
@@ -183,11 +198,7 @@ class FormBinder<T extends object> {
 
       if (isCheck && Array.isArray(curr)) {
         const s = new Set(curr.map(String));
-        if (el.checked) {
-          s.add(val);
-        } else {
-          s.delete(val);
-        }
+        el.checked ? s.add(val) : s.delete(val);
         atom.value = Array.from(s);
       } else {
         atom.value = isCheck ? el.checked : val;
@@ -278,28 +289,18 @@ class FormBinder<T extends object> {
 
   /**
    * Monitors the form for structural changes using a MutationObserver.
-   *
-   * Optimization: Batch Processing
-   * Iterates through mutation records in a single pass to minimize DOM
-   * re-scanning when multiple elements are injected simultaneously.
    */
   private observe(): void {
     const observer = new MutationObserver((ms) => {
-      for (let i = 0, len = ms.length; i < len; i++) {
-        const m = ms[i]!;
+      ms.forEach((m) => {
         if (m.type === 'childList') {
-          for (let j = 0; j < m.addedNodes.length; j++) {
-            const node = m.addedNodes[j]!;
-            if (node.nodeType === 1) {
-              this.bindSubtree(node as Element);
-            }
-          }
+          Array.from(m.addedNodes)
+            .filter((node) => node.nodeType === Node.ELEMENT_NODE)
+            .forEach((node) => this.bindSubtree(node as Element));
         } else if (m.attributeName === 'name') {
-          // Logic: Attribute Change detection
-          // Triggers re-binding if the 'name' attribute is modified.
           this.bindSubtree(m.target as Element);
         }
-      }
+      });
     });
 
     observer.observe(this.form, {

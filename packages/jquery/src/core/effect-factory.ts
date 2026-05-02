@@ -1,5 +1,5 @@
 import { effect, isAtom, type ReadonlyAtom, untracked } from '@but212/atom-effect';
-import { Result } from '@but212/atom-effect-utils';
+import { Option, Result } from '@but212/atom-effect-utils';
 import { SYSTEM_BINDING } from '@/constants';
 import { registry } from '@/core/registry';
 import type { AsyncReactiveValue } from '@/types';
@@ -155,12 +155,12 @@ export function registerReactiveEffect<T>(
  */
 export function registerMapEffect<T>(
   el: Element,
-  map: Record<string, AsyncReactiveValue<T>>,
+  sourceMap: Record<string, AsyncReactiveValue<T>>,
   updater: (map: Record<string, T>) => void,
   debugType: BindingDebugType
 ): void {
   const runner = createAsyncRunner(el, debugType, updater);
-  const entries = Object.entries(map);
+  const entries = Object.entries(sourceMap);
 
   let hasReactive = false;
   for (let i = 0, len = entries.length; i < len; i++) {
@@ -173,30 +173,31 @@ export function registerMapEffect<T>(
 
   /** Collects current values from the map and resolves any pending promises. */
   const collect = () => {
-    const promises: Promise<{ key: string; value: T }>[] = [];
     const resolved: Record<string, T> = {};
 
-    for (let i = 0, len = entries.length; i < len; i++) {
-      const [key, source] = entries[i]!;
+    const items = entries.map(([key, source]) => {
       const value = isAtom(source)
         ? (source as ReadonlyAtom<T | Promise<T>>).value
-        : typeof source === 'function'
-          ? (source as () => T | Promise<T>)()
-          : (source as T | Promise<T>);
+        : Option.unwrapOr(
+            Option.map(
+              Option.fromNullable(typeof source === 'function' ? source : null),
+              (fn: Function) => fn()
+            ),
+            source as T | Promise<T>
+          );
+      return { key, value };
+    });
 
-      if (isPromise(value)) {
-        promises.push(value.then((v) => ({ key, value: v })));
-      } else {
-        resolved[key] = value as T;
-      }
-    }
+    // Separate promises and static values.
+    const promises = items
+      .filter((i) => isPromise(i.value))
+      .map((i) => (i.value as Promise<T>).then((v) => ({ key: i.key, value: v })));
+
+    items.filter((i) => !isPromise(i.value)).forEach((i) => (resolved[i.key] = i.value as T));
 
     if (promises.length > 0) {
       return Promise.all(promises).then((results) => {
-        for (let i = 0, len = results.length; i < len; i++) {
-          const result = results[i]!;
-          resolved[result.key] = result.value;
-        }
+        results.forEach((r) => (resolved[r.key] = r.value));
         return resolved;
       });
     }

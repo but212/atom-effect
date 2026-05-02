@@ -22,12 +22,6 @@
 - **SlotBuffer API**: Standardized API to match standard JavaScript collections.
   - Renamed `size` -> `length`, `physicalSize` -> `capacity`, `add` -> `push`, and `getAt` -> `at`.
 
-#### Changed
-
-- **SlotBuffer**: Optimized `truncateFrom` by removing redundant hooks.
-- **Result/Option**: Integrated nominal type checking via symbols and added native comparison benchmarks.
-- **SlotBuffer**: Optimized with a 4-bit mask for "fast-lane" slot tracking and bit-scan slot discovery, significantly improving performance for small collections.
-
 #### Added
 
 - **Type Guards**: Added `isResult` for robust Result identification using internal symbols.
@@ -35,6 +29,12 @@
   - **Railway Oriented Programming**: Added a comprehensive suite of static utilities to `Result` (`match`, `tap`, `andThen`, `all`) for declarative error pipelines.
   - **Safe Execution**: Added `Result.tryCatch` and `Result.fromPromise` to unify synchronous and asynchronous error capture.
 - **Performance Benchmarks**: Introduced a comprehensive benchmarking suite for `utils` utilities using `vitest bench`.
+
+#### Changed
+
+- **SlotBuffer**: Optimized `truncateFrom` by removing redundant hooks.
+- **Result/Option**: Integrated nominal type checking via symbols and added native comparison benchmarks.
+- **SlotBuffer**: Optimized with a 4-bit mask for "fast-lane" slot tracking and bit-scan slot discovery, significantly improving performance for small collections.
 
 #### Fixed
 
@@ -62,6 +62,11 @@
 - **Performance**: Switched `$.route` to a registry-based link tracking system using `MutationObserver` and a `Set` to eliminate redundant `querySelectorAll` scans during navigation.
 - **Refactor**: Introduced `createChainableMethod` factory to unify argument normalization and iteration across chainable bindings (`atomClass`, `atomAttr`, etc.).
 - **Refactor**: Standardized `bindAttr` with a unified transformation pipeline and improved `bindVisibility` to preserve original `display` modes.
+- **`$.atomUrl`**: Enhanced with robust URL normalization (standardizing trailing slashes and empty parts), microtask-based property batching, and resilient singleton atoms that auto-revive if disposed.
+- **`$.route`**: Added native `URLPattern` support for dynamic segment extraction and an `isEqual` option for custom route comparison.
+- **`atomList`**: Improved reconciliation logic with an optional `isEqual` check and optimized `untracked` blocks for internal state management.
+- **`atomForm`**: Refined field discovery and validation error handling using functional `Option`/`Result` patterns for improved safety.
+- **Input Binding**: Strengthened IME (Composition) support for CJK languages, ensuring reactive updates do not interrupt active character entry.
 
 #### Security
 

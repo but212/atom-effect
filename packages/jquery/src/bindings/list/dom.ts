@@ -1,3 +1,4 @@
+import { Option } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { SYSTEM_LIST } from '@/constants';
 import type { ListOptions } from '@/types';
@@ -26,12 +27,10 @@ export function insertOrAppend(
   if (!elOrJq) return;
   if (elOrJq instanceof Element) {
     container.insertBefore(elOrJq, nextNode);
-    return;
-  }
-  const jq = elOrJq as JQuery;
-  for (let i = 0, len = jq.length; i < len; i++) {
-    const el = jq[i];
-    if (el) container.insertBefore(el, nextNode);
+  } else {
+    Array.from(elOrJq as JQuery).forEach((el) => {
+      if (el) container.insertBefore(el, nextNode);
+    });
   }
 }
 
@@ -63,19 +62,18 @@ export function handleEmpty<T>(
   }
   if (itemCount !== 0) return;
 
-  const { oldKeys, oldNodes, onRemove } = ctx;
+  const { onRemove } = ctx;
   if (!onRemove) {
     $container.empty();
   } else {
     // Reason: Coordinated exit animations are triggered for every existing row
     // to maintain visual consistency during batch updates.
-    for (let i = 0, len = oldKeys.length; i < len; i++) {
-      const k = oldKeys[i]!;
-      const node = oldNodes[i];
+    ctx.oldKeys.forEach((k, i) => {
+      const node = ctx.oldNodes[i];
       if (node) {
         ctx.removeItem(k, wrap(node as Element | JQuery<Element>));
       }
-    }
+    });
   }
 
   if (empty && !ctx.$emptyEl) {
@@ -115,19 +113,9 @@ export function renderItems<T>(
   const renderCount = toRender.length;
   if (renderCount === 0) return null;
 
-  const results: (string | Element | DocumentFragment | JQuery)[] = new Array(renderCount);
-  const htmlParts: string[] = [];
-  let isAllStrings = true;
-
-  for (let i = 0; i < renderCount; i++) {
-    const raw = options.render(toRender[i]!.item, toRender[i]!.index);
-    results[i] = raw;
-    if (typeof raw === 'string') {
-      htmlParts.push(raw);
-    } else {
-      isAllStrings = false;
-    }
-  }
+  const results = toRender.map((entry) => options.render(entry.item, entry.index));
+  const htmlParts = results.filter((raw): raw is string => typeof raw === 'string');
+  const isAllStrings = htmlParts.length === renderCount;
 
   let sanitized: string[] | null = null;
   if (htmlParts.length > 0) sanitized = batchSanitize(htmlParts);
@@ -145,8 +133,8 @@ export function renderItems<T>(
   }
 
   let sIdx = 0;
-  for (let i = 0; i < renderCount; i++) {
-    const { key, index: targetIdx } = toRender[i]!;
+  toRender.forEach((entry, i) => {
+    const { key, index: targetIdx } = entry;
     const raw = results[i]!;
     const $el = (typeof raw === 'string'
       ? $($.parseHTML(sanitized![sIdx++]!))
@@ -154,8 +142,6 @@ export function renderItems<T>(
 
     setAtomKey($el, String(key));
 
-    // Choice: If identity matches but user configuration prevents patching (missing update callback),
-    // a `ForceReplace` occurs. The old node is physically replaced with the new instance.
     if (newStates[targetIdx] === ItemState.ForceReplace && newNodes[targetIdx]) {
       const node = newNodes[targetIdx]!;
       cleanupNodes(node as Element | JQuery);
@@ -165,7 +151,7 @@ export function renderItems<T>(
     }
 
     newNodes[targetIdx] = $el.length === 1 ? ($el[0] as Element) : $el;
-  }
+  });
 
   return null;
 }
@@ -225,6 +211,13 @@ export function cleanupRemoved<T>(ctx: ListContext<T>, diff: PreparedDiff<T>): v
  * @param htmlFragments - Optional pre-rendered HTML strings from the fast-path.
  * @internal
  */
+const ACTION_TABLE: Record<number, (keyof PlaceCallbacks<unknown>)[]> = {
+  [ItemState.Unchanged]: [],
+  [ItemState.Existing]: ['update'],
+  [ItemState.New]: ['bind', 'onAdd'],
+  [ItemState.ForceReplace]: ['bind'],
+};
+
 export function placeItems<T>(
   ctx: ListContext<T>,
   diff: PreparedDiff<T>,
@@ -235,42 +228,36 @@ export function placeItems<T>(
   const { newKeys, newItems, newNodes, newStates, newIndices } = diff;
   const count = newKeys.length;
 
-  // Path A: Fastest path — initial render using direct innerHTML injection.
   if (htmlFragments) {
     container.innerHTML = htmlFragments.join('');
     let el = container.firstElementChild;
-    for (let i = 0; i < count; i++) {
-      if (!el) break;
-      const key = newKeys[i]!;
+    newKeys.forEach((key, i) => {
+      if (!el) return;
       const $el = $(el) as unknown as JQuery;
       el.setAttribute('data-atom-key', String(key));
       newNodes[i] = el;
       newStates[i] = ItemState.Existing;
       debug.domUpdated(SYSTEM_LIST.PREFIX, $el, 'list.add', newItems[i]);
       el = el.nextElementSibling;
-    }
+    });
     return;
   }
 
-  // Path B: DocumentFragment injection for batch insertion into empty containers.
   if (ctx.oldKeys.length === 0 && ctx.removingKeys.size === 0) {
     const frag = document.createDocumentFragment();
-    for (const node of newNodes) {
-      if (!node) continue;
+    newNodes.forEach((node) => {
+      if (!node) return;
       if (node instanceof Element) {
         frag.appendChild(node);
       } else {
-        const jq = node as JQuery;
-        for (let j = 0; j < jq.length; j++) {
-          const entry = jq[j];
+        Array.from(node as JQuery).forEach((entry) => {
           if (entry) frag.appendChild(entry);
-        }
+        });
       }
-    }
+    });
     container.innerHTML = '';
     container.appendChild(frag);
   } else {
-    // Path C: Complex reconciliation logic for reordering and partial updates.
     let next: Node | null = null;
     let min = Infinity;
     for (let i = count - 1; i >= 0; i--) {
@@ -280,9 +267,6 @@ export function placeItems<T>(
 
       const first = node instanceof Element ? node : (node as JQuery)[0];
       if (first) {
-        // Logic: Deterministic Move detection.
-        // idx !== -1 identifies an existing item.
-        // If the relative order (tracked by min) is violated, the item is moved.
         if (idx !== -1 && idx < min) {
           min = idx;
         } else {
@@ -293,27 +277,26 @@ export function placeItems<T>(
     }
   }
 
-  // Logic: Execute user-provided lifecycle hooks and bindings.
-  for (let i = 0; i < count; i++) {
-    const state = newStates[i]!;
-    if (state === ItemState.Unchanged) continue;
-
+  newStates.forEach((state, i) => {
+    const actions = ACTION_TABLE[state] ?? [];
     const node = newNodes[i];
-    if (!node) continue;
+    if (actions.length === 0 || !node) return;
 
     const $el = wrap(node as Element | JQuery<Element>);
     const item = newItems[i]!;
 
-    if (state === ItemState.Existing) {
-      callbacks.update?.($el, item, i);
-    } else {
-      callbacks.bind?.($el, item, i);
-      if (state === ItemState.New) {
-        callbacks.onAdd?.($el);
-        // Constraint: Remove from transition tracking now that the node is back in the active DOM.
-        ctx.removingKeys.delete(newKeys[i]!);
-        debug.domUpdated(SYSTEM_LIST.PREFIX, $el, 'list.add', item);
+    actions.forEach((action) => {
+      if (action === 'onAdd') {
+        Option.map(Option.fromNullable(callbacks.onAdd), (cb) => {
+          cb($el);
+          ctx.removingKeys.delete(newKeys[i]!);
+          debug.domUpdated(SYSTEM_LIST.PREFIX, $el, 'list.add', item);
+        });
+      } else {
+        Option.map(Option.fromNullable(callbacks[action as keyof PlaceCallbacks<T>]), (cb) =>
+          (cb as Function)($el, item, i)
+        );
       }
-    }
-  }
+    });
+  });
 }
