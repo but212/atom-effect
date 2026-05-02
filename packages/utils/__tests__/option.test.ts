@@ -1,56 +1,38 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  andThen,
-  equals,
-  filter,
-  fromNullable,
-  isNone,
-  isOption,
-  isSome,
-  map,
-  match,
-  None,
-  type Option,
-  Some,
-  toNullable,
-  toUndefined,
-  unwrap,
-  unwrapOr,
-  unwrapOrElse,
-} from '@/index';
+import { isOption, Option } from '@/index';
 
 describe('Option<T>', () => {
   describe('Core Creation & Factories', () => {
-    it('Some() should encapsulate any value', () => {
-      expect(unwrap(Some(42))).toBe(42);
-      expect(unwrap(Some(null))).toBe(null);
-      expect(unwrap(Some(undefined))).toBe(undefined);
+    it('some() should encapsulate any value', () => {
+      expect(Option.unwrap(Option.some(42))).toBe(42);
+      expect(Option.unwrap(Option.some(null))).toBe(null);
+      expect(Option.unwrap(Option.some(undefined))).toBe(undefined);
     });
 
-    it('None should represent absence', () => {
-      expect(None.ok).toBe(false);
-      expect(isNone(None)).toBe(true);
-      expect(map(None, (x: unknown) => x)).toBe(None);
-      expect(filter(None, () => true)).toBe(None);
+    it('none should represent absence', () => {
+      expect(Option.none.ok).toBe(false);
+      expect(Option.isNone(Option.none)).toBe(true);
+      expect(Option.map(Option.none, (x: unknown) => x)).toBe(Option.none);
+      expect(Option.filter(Option.none, () => true)).toBe(Option.none);
     });
 
     it('fromNullable() should correctly normalize values', () => {
-      expect(fromNullable(null)).toBe(None);
-      expect(fromNullable(undefined)).toBe(None);
-      expect(fromNullable(0).ok).toBe(true);
+      expect(Option.fromNullable(null)).toBe(Option.none);
+      expect(Option.fromNullable(undefined)).toBe(Option.none);
+      expect(Option.fromNullable(0).ok).toBe(true);
     });
   });
 
   describe('Type Identification & Guards', () => {
     it('isOption utility should detect Options via symbol', () => {
-      expect(isOption(Some(1))).toBe(true);
-      expect(isOption(None)).toBe(true);
+      expect(isOption(Option.some(1))).toBe(true);
+      expect(isOption(Option.none)).toBe(true);
       expect(isOption({ ok: true })).toBe(false);
     });
 
     it('isSome/isNone should act as reliable type guards', () => {
-      const opt: Option<number> = Some(42);
-      if (isSome(opt)) {
+      const opt: Option<number> = Option.some(42);
+      if (Option.isSome(opt)) {
         const val: number = opt.value;
         expect(val).toBe(42);
       }
@@ -59,64 +41,64 @@ describe('Option<T>', () => {
 
   describe('Extraction & Fallbacks', () => {
     it('unwrap() should return value or throw', () => {
-      expect(unwrap(Some(10))).toBe(10);
-      expect(() => unwrap(None)).toThrow('Option.unwrap() on None');
+      expect(Option.unwrap(Option.some(10))).toBe(10);
+      expect(() => Option.unwrap(Option.none)).toThrow('Option.unwrap() on None');
     });
 
     it('unwrapOr() should provide a default value', () => {
-      expect(unwrapOr(Some(10), 20)).toBe(10);
-      expect(unwrapOr(None as Option<number>, 20)).toBe(20);
+      expect(Option.unwrapOr(Option.some(10), 20)).toBe(10);
+      expect(Option.unwrapOr(Option.none as Option<number>, 20)).toBe(20);
     });
 
     it('unwrapOrElse() should be lazy and return fallback value when None', () => {
       const fallback = vi.fn(() => 20);
-      expect(unwrapOrElse(Some(10), fallback)).toBe(10);
+      expect(Option.unwrapOrElse(Option.some(10), fallback)).toBe(10);
       expect(fallback).not.toHaveBeenCalled();
 
-      expect(unwrapOrElse(None as Option<number>, fallback)).toBe(20);
+      expect(Option.unwrapOrElse(Option.none as Option<number>, fallback)).toBe(20);
       expect(fallback).toHaveBeenCalledTimes(1);
 
-      expect(unwrapOrElse(None, () => 'default')).toBe('default');
+      expect(Option.unwrapOrElse(Option.none, () => 'default')).toBe('default');
     });
   });
 
   describe('Functional Transformations', () => {
     it('map() should transform inner values', () => {
-      expect(unwrap(map(Some(3), (n: number) => n * n))).toBe(9);
-      expect(map(None, (n: number) => n * n)).toBe(None);
+      expect(Option.unwrap(Option.map(Option.some(3), (n: number) => n * n))).toBe(9);
+      expect(Option.map(Option.none, (n: number) => n * n)).toBe(Option.none);
     });
 
     it('andThen() should chain nested Options', () => {
-      const getLength = (s: string) => Some(s.length);
-      expect(unwrap(andThen(Some('hello'), getLength))).toBe(5);
-      expect(andThen(None, (s: string) => Some(s))).toBe(None);
+      const getLength = (s: string) => Option.some(s.length);
+      expect(Option.unwrap(Option.andThen(Option.some('hello'), getLength))).toBe(5);
+      expect(Option.andThen(Option.none, (s: string) => Option.some(s))).toBe(Option.none);
     });
 
     it('filter() should drop values based on predicate', () => {
-      expect(isSome(filter(Some(10), (n) => n > 0))).toBe(true);
-      expect(isNone(filter(Some(-5), (n) => n > 0))).toBe(true);
+      expect(Option.isSome(Option.filter(Option.some(10), (n) => n > 0))).toBe(true);
+      expect(Option.isNone(Option.filter(Option.some(-5), (n) => n > 0))).toBe(true);
     });
   });
 
   describe('Equality & Interoperability', () => {
     it('should convert to nullable/undefined', () => {
-      expect(toNullable(Some(1))).toBe(1);
-      expect(toNullable(None)).toBe(null);
-      expect(toUndefined(Some(1))).toBe(1);
-      expect(toUndefined(None)).toBe(undefined);
+      expect(Option.toNullable(Option.some(1))).toBe(1);
+      expect(Option.toNullable(Option.none)).toBe(null);
+      expect(Option.toUndefined(Option.some(1))).toBe(1);
+      expect(Option.toUndefined(Option.none)).toBe(undefined);
     });
 
     it('equals() should perform deep equality check', () => {
-      expect(equals(Some(42), Some(42))).toBe(true);
-      expect(equals(Some(42), Some(43))).toBe(false);
-      expect(equals(Some(42), None)).toBe(false);
-      expect(equals(None, None)).toBe(true);
+      expect(Option.equals(Option.some(42), Option.some(42))).toBe(true);
+      expect(Option.equals(Option.some(42), Option.some(43))).toBe(false);
+      expect(Option.equals(Option.some(42), Option.none)).toBe(false);
+      expect(Option.equals(Option.none, Option.none)).toBe(true);
     });
 
     it('match() should execute the correct branch', () => {
       const matcher = { some: (v: number) => v * 2, none: () => -1 };
-      expect(match(Some(42), matcher)).toBe(84);
-      expect(match(None, matcher)).toBe(-1);
+      expect(Option.match(Option.some(42), matcher)).toBe(84);
+      expect(Option.match(Option.none, matcher)).toBe(-1);
     });
   });
 
@@ -126,24 +108,24 @@ describe('Option<T>', () => {
 
     it('Functor Identity', () => {
       expect(
-        equals(
-          map(Some(42), (x: number) => x),
-          Some(42)
+        Option.equals(
+          Option.map(Option.some(42), (x: number) => x),
+          Option.some(42)
         )
       ).toBe(true);
       expect(
-        equals(
-          map(None, (x: unknown) => x),
-          None
+        Option.equals(
+          Option.map(Option.none, (x: unknown) => x),
+          Option.none
         )
       ).toBe(true);
     });
 
     it('Functor Composition', () => {
-      const some = Some(10);
-      const res1 = map(map(some, f), g);
-      const res2 = map(some, (x: number) => g(f(x)));
-      expect(equals(res1, res2)).toBe(true);
+      const some = Option.some(10);
+      const res1 = Option.map(Option.map(some, f), g);
+      const res2 = Option.map(some, (x: number) => g(f(x)));
+      expect(Option.equals(res1, res2)).toBe(true);
     });
   });
 });

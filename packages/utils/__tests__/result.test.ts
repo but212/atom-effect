@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isResult, Result, Some } from '@/index';
+import { isResult, Option, Result } from '@/index';
 
 describe('Result', () => {
   describe('isResult()', () => {
@@ -16,7 +16,7 @@ describe('Result', () => {
     });
 
     it('should distinguish from Option', () => {
-      expect(isResult(Some(1))).toBe(false);
+      expect(isResult(Option.some(1))).toBe(false);
     });
   });
   describe('Result.ok / Result.err', () => {
