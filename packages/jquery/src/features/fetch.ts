@@ -128,7 +128,7 @@ function atomFetch<T>(source: string | (() => string), options: FetchOptions<T>)
       }
 
       // 2. Transformation Pipeline (Railway approach)
-      if (Result.isErr(ajaxResult)) {
+      if (!ajaxResult.ok) {
         const error = ajaxResult.error;
         if (controller.signal.aborted) {
           const abortErr = new Error('AbortError');
@@ -138,7 +138,7 @@ function atomFetch<T>(source: string | (() => string), options: FetchOptions<T>)
 
         if (options.onError) {
           const hookResult = Result.tryCatch(() => options.onError!(error));
-          if (Result.isErr(hookResult)) {
+          if (!hookResult.ok) {
             console.error('atomFetch: onError hook threw an error', hookResult.error);
           }
         }
@@ -146,13 +146,14 @@ function atomFetch<T>(source: string | (() => string), options: FetchOptions<T>)
       }
 
       // Handle transformation (supports both sync and async)
-      const data = Result.unwrap(ajaxResult);
+      const data = ajaxResult.value;
       try {
         const transformedResult = options.transform
           ? options.transform(data as unknown, xhr!)
           : (data as T);
 
-        const transformed = transformedResult instanceof Promise ? await transformedResult : transformedResult;
+        const transformed =
+          transformedResult instanceof Promise ? await transformedResult : transformedResult;
         return transformed as T;
       } catch (err) {
         const error = toError(err);

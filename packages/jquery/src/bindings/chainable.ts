@@ -353,25 +353,15 @@ const BINDING_TASKS: BindingTask[] = [
  */
 $.fn.atomBind = function <T>(this: JQuery, options: BindingOptions<T>): JQuery {
   const opt = options as Record<string, unknown>;
-  let hasTasks = false;
 
-  for (let i = 0, len = BINDING_TASKS.length; i < len; i++) {
-    if (opt[BINDING_TASKS[i]!.key] !== undefined) {
-      hasTasks = true;
-      break;
-    }
-  }
-
-  if (!hasTasks) return this;
+  // Check if there are any valid tasks to run.
+  const activeTasks = BINDING_TASKS.filter((task) => opt[task.key] !== undefined);
+  if (activeTasks.length === 0) return this;
 
   return atomEachElement(this, (el) => {
-    for (let i = 0, len = BINDING_TASKS.length; i < len; i++) {
-      const task = BINDING_TASKS[i]!;
-      const val = opt[task.key];
-      if (val !== undefined) {
-        task.run(el, val);
-      }
-    }
+    activeTasks.forEach((task) => {
+      task.run(el, opt[task.key]);
+    });
   });
 };
 

@@ -1,3 +1,4 @@
+import { Option } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { disableAutoCleanupFor } from '@/core/registry';
 import { CLEANUP_MARKER, HYDRATION_MARKER } from '@/core/symbols';
@@ -7,12 +8,12 @@ import type { EffectObject, WritableAtom } from '@/types';
 export const resolveShadowRoot = (
   element: HTMLElement,
   root: Node | ShadowRoot | null | undefined
-): ShadowRoot | null =>
+): Option<ShadowRoot> =>
   root instanceof ShadowRoot
-    ? root
+    ? Option.some(root)
     : element.shadowRoot instanceof ShadowRoot
-      ? element.shadowRoot
-      : null;
+      ? Option.some(element.shadowRoot)
+      : Option.none;
 
 /**
  * Centralizes all component-specific reactive state and resource tracking.
@@ -25,7 +26,7 @@ export const resolveShadowRoot = (
  */
 export class ComponentState {
   /** The root node (host or shadowRoot) managed by this state. */
-  root: (Node & { [CLEANUP_MARKER]?: boolean }) | null = null;
+  root: Option<Node & { [CLEANUP_MARKER]?: boolean }> = Option.none;
   /** Initialization status to prevent redundant setups. */
   isInitialized = false;
   /** Collection of active effects managed by the component. */
@@ -35,15 +36,15 @@ export class ComponentState {
 
   // Attributes Tracking
   /** Source atom containing the snapshot of all observed attributes. */
-  attributeAtom: WritableAtom<Record<string, string | null>> | null = null;
+  attributeAtom: Option<WritableAtom<Record<string, string | null>>> = Option.none;
   /** Observer monitoring attribute changes on the host. */
-  attributeObserver: MutationObserver | null = null;
+  attributeObserver: Option<MutationObserver> = Option.none;
   /** Map of individual attribute names to their lens atoms. */
   attributeLenses = new Map<string, WritableAtom<string | null>>();
 
   // Slots Tracking
   /** Source atom containing the mapping of slot names to assigned nodes. */
-  slotsAtom: WritableAtom<Record<string, Node[]>> | null = null;
+  slotsAtom: Option<WritableAtom<Record<string, Node[]>>> = Option.none;
   /** Map of individual slot names to their lens atoms. */
   slotLenses = new Map<string, WritableAtom<Node[]>>();
   /** Internal listeners for slotchange events. */
@@ -58,7 +59,7 @@ export class ComponentState {
    * Initializes attribute tracking if not already active.
    */
   ensureAttributeTracking() {
-    if (this.attributeObserver) return;
+    if (Option.isSome(this.attributeObserver)) return;
 
     const getObserved = () =>
       (this.host.constructor as typeof HTMLElement & { observedAttributes?: string[] })
@@ -66,34 +67,34 @@ export class ComponentState {
 
     const snapshot = () => {
       const observed = getObserved();
-      const attrs: Record<string, string | null> = {};
       if (observed.length > 0) {
-        observed.forEach((n) => (attrs[n] = this.host.getAttribute(n)));
-      } else {
-        for (const a of this.host.attributes) attrs[a.name] = a.value;
+        return Object.fromEntries(observed.map((n) => [n, this.host.getAttribute(n)]));
       }
-      return attrs;
+      return Object.fromEntries(Array.from(this.host.attributes).map((a) => [a.name, a.value]));
     };
 
-    this.attributeAtom = $.atom(snapshot());
-    this.attributeObserver = new MutationObserver(() => {
-      this.attributeAtom!.value = snapshot();
+    const atom = $.atom(snapshot());
+    this.attributeAtom = Option.some(atom);
+
+    const observer = new MutationObserver(() => {
+      atom.value = snapshot();
     });
+    this.attributeObserver = Option.some(observer);
 
     const options: MutationObserverInit = { attributes: true };
     const observed = getObserved();
     if (observed.length > 0) options.attributeFilter = observed;
 
-    this.attributeObserver.observe(this.host, options);
+    observer.observe(this.host, options);
   }
 
   /**
    * Initializes reactive slot tracking.
    */
   ensureSlotTracking(root?: ShadowRoot | null) {
-    const sr = resolveShadowRoot(this.host, root || this.root);
+    const srOpt = resolveShadowRoot(this.host, root || Option.toNullable(this.root));
 
-    const snapshot = () => {
+    const snapshot = (sr: ShadowRoot | null) => {
       const next: Record<string, Node[]> = {};
       if (sr) {
         sr.querySelectorAll('slot').forEach((s) => (next[s.name || ''] = s.assignedNodes()));
@@ -101,24 +102,33 @@ export class ComponentState {
       return next;
     };
 
-    if (!this.slotsAtom) {
-      this.slotsAtom = $.atom(snapshot());
+    if (Option.isNone(this.slotsAtom)) {
+      this.slotsAtom = Option.some($.atom(snapshot(Option.toNullable(srOpt))));
     }
 
-    if (!sr || this.slotListeners.has('all')) return;
+    Option.match(srOpt, {
+      some: (sr) => {
+        if (this.slotListeners.has('all')) return;
 
-    // Initial sync
-    this.slotsAtom.value = snapshot();
+        // Initial sync
+        Option.map(this.slotsAtom, (a) => {
+          a.value = snapshot(sr);
+        });
 
-    const listener = (e: Event) => {
-      const target = e.target as HTMLSlotElement;
-      const current = { ...this.slotsAtom!.peek() };
-      current[target.name || ''] = target.assignedNodes();
-      this.slotsAtom!.value = current;
-    };
+        const listener = (e: Event) => {
+          const target = e.target as HTMLSlotElement;
+          Option.map(this.slotsAtom, (a) => {
+            const current = { ...a.peek() };
+            current[target.name || ''] = target.assignedNodes();
+            a.value = current;
+          });
+        };
 
-    sr.addEventListener('slotchange', listener);
-    this.slotListeners.set('all', listener);
+        sr.addEventListener('slotchange', listener);
+        this.slotListeners.set('all', listener);
+      },
+      none: () => {},
+    });
   }
 
   /**
@@ -133,37 +143,38 @@ export class ComponentState {
     );
     this.hydratedNodes.clear();
 
-    this.attributeObserver?.disconnect();
-    this.attributeObserver = null;
-    this.attributeAtom = null;
+    Option.map(this.attributeObserver, (obs) => obs.disconnect());
+    this.attributeObserver = Option.none;
+    this.attributeAtom = Option.none;
     this.attributeLenses.clear();
 
-    const sr = resolveShadowRoot(this.host, this.root);
-    if (sr) {
+    const srOpt = resolveShadowRoot(this.host, Option.toNullable(this.root));
+    Option.map(srOpt, (sr) => {
       this.slotListeners.forEach((l) => sr.removeEventListener('slotchange', l));
-    }
+    });
+
     this.slotListeners.clear();
-    this.slotsAtom = null;
+    this.slotsAtom = Option.none;
     this.slotLenses.clear();
 
-    if (
-      this.appliedStyles.length > 0 &&
-      (this.root instanceof ShadowRoot || this.root instanceof Document)
-    ) {
-      this.root.adoptedStyleSheets = this.root.adoptedStyleSheets.filter(
-        (s) => !this.appliedStyles.includes(s)
-      );
-    }
-    this.appliedStyles = [];
-
-    try {
-      if (this.root?.[CLEANUP_MARKER]) {
-        disableAutoCleanupFor(this.root);
-        this.root[CLEANUP_MARKER] = false;
+    Option.map(this.root, (root) => {
+      if (
+        this.appliedStyles.length > 0 &&
+        (root instanceof ShadowRoot || root instanceof Document)
+      ) {
+        root.adoptedStyleSheets = root.adoptedStyleSheets.filter(
+          (s) => !this.appliedStyles.includes(s)
+        );
       }
-    } finally {
-      this.root = null;
-      this.isInitialized = false;
-    }
+      this.appliedStyles = [];
+
+      if (root[CLEANUP_MARKER]) {
+        disableAutoCleanupFor(root);
+        root[CLEANUP_MARKER] = false;
+      }
+    });
+
+    this.root = Option.none;
+    this.isInitialized = false;
   }
 }

@@ -16,7 +16,5 @@ export const getBaseVitestBenchConfig = (packageDir: string): ViteUserConfig => 
   };
 };
 
-export const defineVitestBenchConfig =
-  (packageDir: string) =>
-  (overrides: ViteUserConfig = {}) =>
-    defineConfig(() => mergeConfig(getBaseVitestBenchConfig(packageDir), overrides));
+export const defineVitestBenchConfig = (packageDir: string, overrides: ViteUserConfig = {}) =>
+  defineConfig(() => mergeConfig(getBaseVitestBenchConfig(packageDir), overrides));

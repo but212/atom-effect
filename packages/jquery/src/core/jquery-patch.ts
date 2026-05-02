@@ -1,4 +1,5 @@
 import { batch } from '@but212/atom-effect';
+import { Option } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { registry } from '@/core/registry';
 import type { PatchOptions } from '@/types';
@@ -43,17 +44,18 @@ const wrapHandler = (fn: EventHandler): EventHandler => {
     return fn;
   }
 
-  let wrapped = handlerMap.get(fn);
+  return Option.unwrapOrElse(
+    Option.map(Option.fromNullable(handlerMap.get(fn)), (wrapped) => wrapped),
+    () => {
+      const wrapped = function (this: unknown, ...args: unknown[]) {
+        return batch(() => fn.apply(this, args as Parameters<EventHandler>));
+      } as unknown as EventHandler;
 
-  if (!wrapped) {
-    wrapped = function (this: unknown, ...args: unknown[]) {
-      return batch(() => fn.apply(this, args as Parameters<EventHandler>));
-    } as unknown as EventHandler;
-
-    (wrapped as unknown as { [INTERNAL_HANDLER]?: boolean })[INTERNAL_HANDLER] = true;
-    handlerMap.set(fn, wrapped);
-  }
-  return wrapped;
+      (wrapped as unknown as { [INTERNAL_HANDLER]?: boolean })[INTERNAL_HANDLER] = true;
+      handlerMap.set(fn, wrapped);
+      return wrapped;
+    }
+  );
 };
 
 /**
@@ -68,24 +70,24 @@ const unwrapHandler = (fn: EventHandler): EventHandler => {
 function wrapEventMap(
   map: Record<string, JQueryEventHandler | undefined>
 ): Record<string, JQueryEventHandler> {
-  const newMap: Record<string, JQueryEventHandler> = {};
-  for (const key in map) {
-    const fn = map[key];
-    newMap[key] = typeof fn === 'function' ? wrapHandler(fn) : (fn as JQueryEventHandler);
-  }
-  return newMap;
+  return Object.fromEntries(
+    Object.entries(map).map(([key, fn]) => [
+      key,
+      typeof fn === 'function' ? wrapHandler(fn) : (fn as JQueryEventHandler),
+    ])
+  );
 }
 
 /** Normalizes and unwraps all handlers within a jQuery event map. @internal */
 function unwrapEventMap(
   map: Record<string, JQueryEventHandler | undefined>
 ): Record<string, JQueryEventHandler | undefined> {
-  const newMap: Record<string, JQueryEventHandler | undefined> = {};
-  for (const key in map) {
-    const handler = map[key];
-    newMap[key] = typeof handler === 'function' ? unwrapHandler(handler) : handler;
-  }
-  return newMap;
+  return Object.fromEntries(
+    Object.entries(map).map(([key, handler]) => [
+      key,
+      typeof handler === 'function' ? unwrapHandler(handler) : handler,
+    ])
+  );
 }
 
 /**
@@ -153,14 +155,15 @@ export function enablejQueryOverrides(options: PatchOptions = {}): void {
       const targets = selector ? this.filter(selector) : this;
       const len = targets.length;
       for (let i = 0; i < len; i++) {
-        const el = targets[i];
-        if (el) {
-          // Logic: Stop all associated reactive effects immediately upon removal.
+        Option.map(Option.fromNullable(targets[i]), (el) => {
           registry.markIgnored(el);
           registry.cleanupTree(el);
-        }
+        });
       }
-      return prev.remove.call(this, selector) ?? this;
+      return Option.unwrapOr(
+        Option.map(Option.fromNullable(prev.remove), (rem) => rem.call(this, selector)),
+        this
+      );
     };
 
     $.fn.empty = function (this: JQuery) {

@@ -1,4 +1,5 @@
 import { isAtom } from '@but212/atom-effect';
+import { Option } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { HYDRATION_MARKER } from '@/core/symbols';
 import type { EffectObject, ReactiveValue, ReadonlyAtom } from '@/types';
@@ -51,8 +52,10 @@ export const SetupFeatures = {
     for (const [prop, atom] of Object.entries(aria)) {
       effects.add(
         $.effect(() => {
-          (internals as unknown as Record<string, string | null>)[prop] =
-            atom.value == null ? null : String(atom.value);
+          (internals as unknown as Record<string, string | null>)[prop] = Option.unwrapOr(
+            Option.map(Option.fromNullable(atom.value), String),
+            null
+          );
           return undefined;
         })
       );
@@ -72,20 +75,21 @@ export const SetupFeatures = {
       const target = node as Element & { [HYDRATION_MARKER]?: boolean };
       if (target[HYDRATION_MARKER]) return;
       for (const attr of BIND_ATTRS) {
-        const key = node.getAttribute(attr);
-        if (key && bindings[key]) {
-          const atom = bindings[key];
-          effects.add(
-            $.effect(() => {
-              const val = String(atom.value ?? '');
-              if (node.textContent !== val) node.textContent = val;
-              return undefined;
-            })
-          );
-          target[HYDRATION_MARKER] = true;
-          hydratedNodes.add(node);
-          break;
-        }
+        Option.map(Option.fromNullable(node.getAttribute(attr)), (key) => {
+          if (bindings[key]) {
+            const atom = bindings[key];
+            effects.add(
+              $.effect(() => {
+                const val = String(atom.value ?? '');
+                if (node.textContent !== val) node.textContent = val;
+                return undefined;
+              })
+            );
+            target[HYDRATION_MARKER] = true;
+            hydratedNodes.add(node);
+          }
+        });
+        if (target[HYDRATION_MARKER]) break;
       }
     };
 
@@ -98,26 +102,27 @@ export const SetupFeatures = {
     effects: Set<EffectObject>
   ) {
     const apply = (node: Element) => {
-      const key = node.getAttribute('data-aej-part');
-      if (key && parts[key]) {
-        const atom = parts[key];
-        effects.add(
-          $.effect(() => {
-            const val = atom.value;
-            const normalized =
-              typeof val === 'string'
-                ? val
-                : Array.isArray(val)
-                  ? val.join(' ')
-                  : Object.entries((val as Record<string, boolean>) || {})
-                      .filter((e) => !!e[1])
-                      .map((e) => e[0])
-                      .join(' ');
-            if (node.getAttribute('part') !== normalized) node.setAttribute('part', normalized);
-            return undefined;
-          })
-        );
-      }
+      Option.map(Option.fromNullable(node.getAttribute('data-aej-part')), (key) => {
+        if (parts[key]) {
+          const atom = parts[key];
+          effects.add(
+            $.effect(() => {
+              const val = atom.value;
+              const normalized =
+                typeof val === 'string'
+                  ? val
+                  : Array.isArray(val)
+                    ? val.join(' ')
+                    : Object.entries((val as Record<string, boolean>) || {})
+                        .filter((e) => !!e[1])
+                        .map((e) => e[0])
+                        .join(' ');
+              if (node.getAttribute('part') !== normalized) node.setAttribute('part', normalized);
+              return undefined;
+            })
+          );
+        }
+      });
     };
     this.observe(root, '[data-aej-part]', apply, effects);
   },
@@ -128,19 +133,15 @@ export const SetupFeatures = {
     apply: (n: Element) => void,
     effects: Set<EffectObject>
   ) {
-    $(root)
-      .find(selector)
-      .addBack(selector)
-      .each((_, el) => apply(el));
+    if (root instanceof Element && root.matches(selector)) apply(root);
+    root.querySelectorAll(selector).forEach((el) => apply(el));
 
     const obs = new MutationObserver((muts) =>
       muts.forEach((m) =>
         m.addedNodes.forEach((n) => {
           if (n instanceof Element) {
             if (n.matches(selector)) apply(n);
-            $(n)
-              .find(selector)
-              .each((_, el) => apply(el));
+            n.querySelectorAll(selector).forEach((el) => apply(el));
           }
         })
       )
@@ -162,15 +163,18 @@ export const SetupFeatures = {
       | undefined,
     effects: Set<EffectObject>
   ) {
-    const valAtom = !value ? null : isAtom(value) ? value : value.val;
-    const stateAtom = !value || isAtom(value) ? null : value.state;
+    const valAtomOpt = Option.fromNullable(!value ? null : isAtom(value) ? value : value.val);
+    const stateAtomOpt = Option.fromNullable(!value || isAtom(value) ? null : value.state);
 
     effects.add(
       $.effect(() => {
-        const v = valAtom?.value;
-        const s = stateAtom?.value;
+        Option.map(valAtomOpt, (valAtom) => {
+          const v = valAtom.value;
+          const s = Option.unwrapOr(
+            Option.map(stateAtomOpt, (a) => a.value),
+            null
+          );
 
-        if (valAtom) {
           if (typeof v === 'object' && v !== null && !(v instanceof File) && !(v instanceof Blob)) {
             const fd = new FormData();
             flattenToFormData(fd, el.getAttribute('name') || '', v);
@@ -178,16 +182,20 @@ export const SetupFeatures = {
           } else {
             internals.setFormValue(v as string | null, s as string | FormData | null);
           }
-        }
+        });
 
-        if (validation) {
-          const res = isAtom(validation) ? validation.value : validation(v);
+        Option.map(Option.fromNullable(validation), (vld) => {
+          const val = Option.unwrapOr(
+            Option.map(valAtomOpt, (a) => a.value),
+            undefined
+          );
+          const res = isAtom(vld) ? vld.value : vld(val);
           if (typeof res === 'string') {
             internals.setValidity(res ? { customError: true } : {}, res, el);
           } else {
             internals.setValidity(res, undefined, el);
           }
-        }
+        });
         return undefined;
       })
     );

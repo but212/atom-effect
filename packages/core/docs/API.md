@@ -69,7 +69,7 @@ console.log(double.value); // 2
 - `state`: Returns the current `AsyncState` (`'idle'`, `'pending'`, `'resolved'`, or `'rejected'`).
 - `hasError`: A boolean indicating if the computation or any of its dependencies failed.
 - `isValid`: A shortcut for `!hasError`.
-- `errors`: A read-only array containing all errors collected from the local dependency sub-graph.
+- `errors`: A read-only array containing all errors collected from the local dependency sub-graph. It uses an iterative traversal strategy to ensure stability and completeness even in deep dependency chains.
 - `lastError`: The specific error thrown by this node's computation, if any.
 - `isPending`: Boolean indicating if an asynchronous computation is currently in progress.
 - `isResolved`: Boolean indicating if the computation has successfully resolved.
@@ -239,14 +239,17 @@ The library uses specialized buffers (`SlotBuffer`, `DepSlotBuffer`) for high-pe
 
 ### `SlotBuffer<T>`
 
-A hybrid buffer using Small Vector Optimization (SVO).
+A high-performance container using a 4-bit mask for "fast-lane" slot management and an overflow array for unbounded capacity.
 
 - `length`: The number of active (non-null) items in the buffer.
 - `capacity`: The highest physical index occupied plus one.
 - `push(item: T): number`: Adds an item to the buffer, reusing holes if possible. Returns the index.
 - `at(index: number): T | null`: Returns the item at the specified index.
 - `remove(item: T): boolean`: Removes an item and leaves a hole for future reuse.
+- `has(item: T): boolean`: Returns true if the buffer contains the item.
+- `forEach(fn: (item: T) => void): void`: Executes a callback for every non-null entry.
 - `compact(): void`: Eliminates all internal holes and resets physical boundaries.
+- `clear(): void`: Resets the buffer to an empty state.
 
 ### `DepSlotBuffer`
 

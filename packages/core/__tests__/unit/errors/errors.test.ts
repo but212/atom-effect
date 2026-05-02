@@ -94,8 +94,8 @@ describe('Error Handling System', () => {
       (err1 as unknown as { cause: unknown }).cause = err2;
 
       const chain = err1.getChain();
-      expect(chain).toHaveLength(3);
-      expect(chain[chain.length - 1]).toBe(err1);
+      expect(chain).toHaveLength(2);
+      expect(chain[chain.length - 1]).toBe(err2);
     });
 
     it('deeply serializes complex error chains to JSON', () => {

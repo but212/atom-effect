@@ -143,6 +143,9 @@ importers:
       '@but212/atom-effect-configs':
         specifier: workspace:*
         version: link:../configs
+      tinybench:
+        specifier: ^6.0.0
+        version: 6.0.0
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(@microsoft/api-extractor@7.58.2(@types/node@25.6.0))(postcss@8.5.10)(tsx@4.21.0)(typescript@6.0.3)

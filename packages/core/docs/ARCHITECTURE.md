@@ -12,9 +12,9 @@ The high-level API (`atom`, `computed`, `effect`) is built upon a unified intern
 - **Push-Pull Hybrid Model**:
   - **Push (Notification Phase)**: When a source atom changes, it propagates a "dirty" signal to its immediate subscribers. This phase marks nodes for re-evaluation without performing calculations.
   - **Pull (Evaluation Phase)**: When a node's value is accessed or an effect executes, it performs a "pull" to validate the versions of its dependencies, triggering re-computation only if necessary.
-- **Scheduler and Coalescing**: Effects do not execute immediately upon state change. Instead, they are queued in a **Scheduler** that utilizes **Double Buffering** and a **Flat Loop** to coalesce multiple updates into a single execution cycle. This prevents redundant work and avoids call stack overflows.
-- **Small Vector Optimization (SVO)**: To minimize heap allocations and garbage collection (GC) pressure, the engine uses inline slots (`_s0` through `_s3`) for the most common dependency and subscriber links before falling back to dynamic arrays. These buffers now implement a standardized **Array-like API** (`length`, `at()`, `push()`) for consistent, high-performance access.
-- **Bitwise Branding**: Primitives are identified using a bitwise mask (`BrandFlags`) stored on a single `BRAND` symbol. This allows for constant-time type identification (e.g., checking if a node is an Atom or a Computed) without multiple property lookups.
+- **Scheduler and Coalescing**: Effects do not execute immediately upon state change. Instead, they are queued in a **Scheduler** that utilizes **Triple Buffering** (Active, Standby, Batch) and a **Flat Loop** to coalesce multiple updates into a single execution cycle. This prevents redundant work and avoids call stack overflows.
+- **Small Vector Optimization (SVO)**: To minimize heap allocations and GC pressure, the engine uses inline slots (`_s0` through `_s3`) tracked by a **4-bit occupancy mask**. This allows for constant-time availability checks and O(1) slot discovery via bit-scanning before falling back to dynamic arrays. These buffers implement a standardized **Array-like API** (`length`, `at()`, `push()`) for consistent, high-performance access.
+- **Bitwise Branding**: Primitives are identified using a bitwise mask (`BrandFlags`) stored on a single `BRAND` symbol. This allows for constant-time type identification without multiple property lookups.
 - **Isolated Debug Metadata**: Debug information such as IDs and names are attached via non-enumerable symbols, ensuring that debugging features do not interfere with object iteration, serialization, or production performance.
 
 ---
@@ -31,7 +31,7 @@ The system is designed around autonomous nodes that manage their own state and d
 
 ### Class Hierarchy
 
-- **`ReactiveNode<T>`**: The foundation for all primitives. It manages subscriber lists (`_slots`), dependency lists (`_deps`), and state flags. It implements the `Disposable` interface for resource cleanup.
+- **`ReactiveNode<T>`**: The foundation for all primitives. It manages subscriber lists (`_slots`) and the dependency tracking state (`_deps`). It implements the `Disposable` interface for resource cleanup.
 - **`AtomImpl<T>`**: A pure producer node for mutable state. It keeps its dependency list (`_deps`) null to save memory. It handles synchronous re-entrancy through a breadth-first notification loop.
 - **`ComputedAtomImpl<T>`**: A hybrid node that acts as both a consumer (of dependencies) and a producer (of derived values). It manages lazy evaluation and result caching.
 - **`EffectImpl`**: A pure consumer node for side effects. It keeps its subscriber list (`_slots`) null as it is a terminal node in the graph.
@@ -55,6 +55,7 @@ The engine utilizes a **Notify-and-Check** strategy to minimize redundant comput
 1. **Notification Phase**: A changed atom notifies its immediate subscribers. Computed nodes are marked as `DIRTY`, and effects are scheduled for execution.
 2. **Validation Phase (Sweep)**:
    - **Computed**: When accessed, it checks if any dependency has a newer version. It uses a **Hot-path Optimization** (`_hotIndex`) to first check the dependency that most recently caused a change, providing $O(1)$ dirty detection in many cases.
+   - **Iterative Check**: Dirty checking and error detection perform an iterative walk using a stack and a `Set` for deduplication. This prevents stack overflow in deep chains and provides consistent $O(1)$ lookup for already-visited nodes.
    - **Effect**: Before execution, it performs a structural walk to verify dependency versions.
 
 ---
@@ -63,8 +64,8 @@ The engine utilizes a **Notify-and-Check** strategy to minimize redundant comput
 
 Asynchronous computed nodes manage their lifecycle as state machines, protecting against race conditions and stale data.
 
-- **Async Drift Detection**: If dependencies change while a Promise is pending, the resolution is ignored, and the computation is re-triggered.
-- **Cancellation**: A `_promiseId` ensures that only the most recently initiated asynchronous operation can resolve the node's state.
+- **Async Drift Detection**: If dependencies change while a Promise is pending, the resolution is ignored. This is handled via an integrated `isDirty` check during the resolution phase.
+- **Session Management**: A rolling `_sessionId` ensures that only the result from the most current asynchronous session can resolve the node's state, preventing race conditions from stale computations.
 - **Bitwise Partitioning**: Internal state is managed via a 31-bit integer field (V8 SMI optimized):
   - **[0-7] Core**: `DISPOSED`, `IS_COMPUTED`.
   - **[8-15] Computed**: `DIRTY`, `RECOMPUTING`, `HAS_ERROR`.
@@ -77,13 +78,11 @@ Asynchronous computed nodes manage their lifecycle as state machines, protecting
 
 Memory and performance are managed through specialized structures:
 
-- **`DepSlotBuffer`**: A high-speed buffer for dependency tracking that features:
-  - **Standardized API**: Implements `length`, `capacity`, `push()`, and `at()` for predictable access patterns.
-  - **Manual Optimization**: Uses unrolled loops for inline slots and standard `for` loops for overflow to ensure zero-allocation performance.
-  - **Size Duality**: Separates physical capacity from logical length for rapid iteration and hole reuse.
-  - **Hybrid Lookup**: Uses an $O(1)$ `Map` fallback when the number of dependencies exceeds 32.
-  - **Cache Locality**: Swaps active links to the head of the buffer during re-evaluation.
-  - **Link Reuse**: The `claimExisting` logic reuses established dependency links to minimize allocation and subscription overhead.
+- **`DepBufferState`**: A high-performance state object for dependency tracking that features:
+  - **Reconciliation API**: Uses functional utilities like `claimExisting` and `insertNew` for predictable access and memory efficiency.
+  - **Memory Efficiency**: Transitions from linear scans to an $O(1)$ `Map` lookup only when the dependency count exceeds 32, minimizing overhead for small sets.
+  - **Order Preservation**: Swaps active links to the head of the buffer during tracking to optimize future reconciliation cycles.
+  - **Subscription Reuse**: Reuses established dependency links (`DependencyLink`) to eliminate the overhead of repeated event listener attachment and detachment.
 
 ---
 
@@ -133,6 +132,6 @@ The debugging subsystem is designed for deep visibility with minimal production 
 
 Errors are treated as part of the reactive graph, enabling robust recovery and traceability.
 
-- **Chainable Context**: Errors are wrapped as they propagate (`wrapError`), preserving a "logical trace" of the nodes involved in the failure.
+- **Iterative Accumulation**: Errors are collected using an iterative traversal logic with a stack and a `Set` for deduplication, avoiding recursion overhead.
 - **Dependency Isolation**: Accessing error properties (`hasError`, `errors`) is performed in an `untracked` scope to prevent the consumer from inadvertently subscribing to the entire dependency tree of a failing node.
 - **Recovery Signals**: The `recoverable` flag indicates whether a node can attempt re-evaluation if its dependencies change.

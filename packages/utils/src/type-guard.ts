@@ -1,39 +1,72 @@
 import type { Option } from './option';
-import { OPTION_SYMBOL } from './symbols';
+import type { Result } from './result';
+import { OPTION_SYMBOL, RESULT_SYMBOL } from './symbols';
 
 /**
  * Determines whether a value is a Promise or a Thenable.
  *
- * Logic: Implements a multi-tiered detection strategy that prioritizes native
- * `Promise` performance via `instanceof` before falling back to duck-typed
- * thenable identification for compatibility across different Promise implementations.
+ * When to use:
+ * - When you need to handle potentially asynchronous values from third-party
+ *   libraries that might not use native Promises.
  *
- * @param value - The value to examine.
- * @returns True if the value is a promise-like object.
+ * Logic:
+ * - Implements a tiered detection strategy. It prioritizes native `Promise`
+ *   performance via `instanceof` before falling back to duck-typed thenable
+ *   identification for Promises/A+ compatibility.
  *
  * @example
- * ```typescript
- * if (isPromise(result)) {
- *   result.then((val) => console.log(val));
+ * if (isPromise(value)) {
+ *   value.then(result => console.log(result));
  * }
- * ```
  */
 export function isPromise<T = unknown>(value: unknown): value is PromiseLike<T> {
-  // Optimization: Prioritize native Promise check for performance.
+  // Optimization: Prioritize native Promise check for speed.
   if (value instanceof Promise) return true;
 
   if (value === null || (typeof value !== 'object' && typeof value !== 'function')) {
     return false;
   }
 
-  // Logic: Fallback to duck-typing for cross-library compatibility (Promises/A+).
+  // Logic: Fallback to duck-typing for cross-library compatibility.
   return typeof (value as { then: unknown }).then === 'function';
 }
 
 /**
- * Checks if a value is an Option.
+ * Checks if a value is a valid {@link Option} instance.
+ *
+ * When to use:
+ * - When validating if an unknown object is an Option from this library.
+ *
+ * Logic:
+ * - Uses `OPTION_SYMBOL` to distinguish Options from other objects with
+ *   an `ok` property, ensuring nominal type safety.
+ *
+ * @example
+ * if (isOption(val)) {
+ *   console.log(val.ok ? "Some" : "None");
+ * }
  */
 export const isOption = (val: unknown): val is Option<unknown> =>
   val != null &&
   typeof val === 'object' &&
   (val as Record<symbol, unknown>)[OPTION_SYMBOL] === true;
+
+/**
+ * Checks if a value is a valid {@link Result} instance.
+ *
+ * When to use:
+ * - When validating if an unknown object is a Result from this library.
+ *
+ * Logic:
+ * - Uses `RESULT_SYMBOL` for disambiguation, preventing {@link Option}
+ *   or generic objects from being misidentified as Results.
+ *
+ * @example
+ * if (isResult(val)) {
+ *   if (val.ok) console.log(val.value);
+ * }
+ */
+export const isResult = (val: unknown): val is Result<unknown, unknown> =>
+  val != null &&
+  typeof val === 'object' &&
+  (val as Record<symbol, unknown>)[RESULT_SYMBOL] === true;

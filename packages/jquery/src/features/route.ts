@@ -6,11 +6,12 @@ import {
   type ReadonlyAtom,
   untracked,
 } from '@but212/atom-effect';
-import { Result } from '@but212/atom-effect-utils';
+import { Option, Result } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { SYSTEM_COMPONENT, SYSTEM_ROUTE } from '@/constants';
 import { registry } from '@/core/registry';
 import type { RouteConfig, RouteDefinition, Router, WritableAtom } from '@/types';
+import { shallowEqual } from '@/utils';
 import { debug } from '@/utils/debug';
 
 /**
@@ -22,41 +23,19 @@ const PathUtils = {
   normalize: (path: string): string => path.replace(/(^\/+|\/+$)/g, ''),
 
   /** Separates a path into its route and query string components. */
-  split: (path: string): { route: string; query: string | undefined } => {
+  split: (path: string): { route: string; query: Option<string> } => {
     const [route, query] = path.split('?');
-    return { route: PathUtils.normalize(route ?? ''), query };
-  },
-
-  /** Compares two parameter maps for equality. */
-  isSameParams: (a: Record<string, string>, b: Record<string, string>): boolean => {
-    if (a === b) return true;
-    const ka = Object.keys(a),
-      kb = Object.keys(b);
-    return ka.length === kb.length && ka.every((k) => a[k] === b[k]);
+    return { route: PathUtils.normalize(route ?? ''), query: Option.fromNullable(query) };
   },
 };
 
 /**
  * Parses a raw query string into a key-value record.
+ * URLSearchParams (ES2019) handles '?' prefix and percent-decoding natively.
  * @internal
  */
-function parseQueryParams(raw: string): Record<string, string> {
-  const res: Record<string, string> = {};
-  if (!raw) return res;
-
-  Result.tapErr(
-    Result.tryCatch(() => decodeURIComponent(raw)),
-    () => debug.warn(SYSTEM_ROUTE.PREFIX, SYSTEM_ROUTE.ERRORS.MALFORMED_URI(raw))
-  );
-
-  Result.tryCatch(() => {
-    new URLSearchParams(raw).forEach((v, k) => {
-      res[k] = v;
-    });
-  });
-
-  return res;
-}
+const parseQuery = (raw: string): Record<string, string> =>
+  Object.fromEntries(new URLSearchParams(raw));
 
 /**
  * Represents the current parsed state of a URL.
@@ -101,22 +80,23 @@ const createHistoryAdapter = (basePathRaw?: string): UrlAdapter => {
       }
       return {
         path: PathUtils.normalize(p),
-        query: parseQueryParams(location.search.substring(1)),
+        query: parseQuery(location.search.substring(1)),
         url: location.pathname + location.search,
       };
     },
     commit: (fullPath) => {
       const { route, query } = PathUtils.split(fullPath);
       const url = new URL(route, absoluteBase);
-      if (query) {
-        url.search = query;
-      }
+      Option.map(query, (q) => {
+        url.search = q;
+      });
       const urlStr = url.pathname + url.search;
       Result.tryCatch(() => history.pushState(null, '', urlStr));
 
       return {
         path: PathUtils.normalize(route),
-        query: parseQueryParams(query ?? ''),
+        // Reuse the already-parsed URL object — no second parse needed.
+        query: Object.fromEntries(url.searchParams),
         url: urlStr,
       };
     },
@@ -147,16 +127,24 @@ const createHistoryAdapter = (basePathRaw?: string): UrlAdapter => {
 const createHashAdapter = (): UrlAdapter => {
   return {
     getBrowserState: () => {
-      const hash = location.hash;
-      const raw = hash.startsWith('#') ? hash.substring(1) : hash;
+      // URL spec: location.hash is always '' or '#...' — conditional branch unneeded.
+      const raw = location.hash.slice(1);
       const { route, query } = PathUtils.split(raw);
-      return { path: route, query: parseQueryParams(query ?? ''), url: hash };
+      return {
+        path: route,
+        query: parseQuery(Option.unwrapOr(query, '')),
+        url: location.hash,
+      };
     },
     commit: (fullPath) => {
       const { route, query } = PathUtils.split(fullPath);
-      const url = `#${query ? `${route}?${query}` : route}`;
+      const url = `#${Option.isSome(query) ? `${route}?${Option.unwrap(query)}` : route}`;
       location.hash = url;
-      return { path: PathUtils.normalize(route), query: parseQueryParams(query ?? ''), url };
+      return {
+        path: PathUtils.normalize(route),
+        query: parseQuery(Option.unwrapOr(query, '')),
+        url,
+      };
     },
     revert: (previousUrl) => {
       if (location.hash !== previousUrl) {
@@ -181,6 +169,15 @@ type CompiledRoute =
       readonly def: RouteDefinition;
     }
   | {
+      // URLPattern branch: Chrome 95+, Edge 95+, Safari 17+.
+      // Handles :param extraction and percent-decoding natively.
+      readonly kind: 'url-pattern';
+      readonly pattern: string;
+      readonly urlPattern: URLPattern;
+      readonly def: RouteDefinition;
+    }
+  | {
+      // Regex fallback for browsers without URLPattern (e.g. Firefox).
       readonly kind: 'dynamic';
       readonly pattern: string;
       readonly regex: RegExp;
@@ -189,13 +186,10 @@ type CompiledRoute =
     };
 
 /** Internal type for route matching results. @internal */
-type MatchResult =
-  | {
-      readonly kind: 'found';
-      readonly route: CompiledRoute;
-      readonly params: Record<string, string>;
-    }
-  | { readonly kind: 'not-found' };
+type MatchResult = Option<{
+  readonly route: CompiledRoute;
+  readonly params: Record<string, string>;
+}>;
 
 /**
  * Manages path pattern matching and parameter extraction.
@@ -216,7 +210,16 @@ class RouteMatcher {
       const normalized = PathUtils.normalize(path);
       if (!normalized.includes(':')) {
         this.routes.push({ kind: 'exact', pattern: normalized, def });
+      } else if (typeof URLPattern !== 'undefined') {
+        // URLPattern resolves :param groups and decodes percent-encoding natively.
+        this.routes.push({
+          kind: 'url-pattern',
+          pattern: normalized,
+          urlPattern: new URLPattern({ pathname: `/${normalized}` }),
+          def,
+        });
       } else {
+        // Regex fallback for environments without URLPattern (e.g. Firefox).
         const paramNames: string[] = [];
         const regexStr = normalized
           .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -224,7 +227,6 @@ class RouteMatcher {
             paramNames.push(name);
             return '([^/]+)';
           });
-
         this.routes.push({
           kind: 'dynamic',
           pattern: normalized,
@@ -243,27 +245,42 @@ class RouteMatcher {
     for (const route of this.routes) {
       if (route.kind === 'exact') {
         if (route.pattern === normalized) {
-          return { kind: 'found', route, params: {} };
+          return Option.some({ route, params: {} });
+        }
+      } else if (route.kind === 'url-pattern') {
+        const resultOpt = Option.fromNullable(
+          route.urlPattern.exec({ pathname: `/${normalized}` })
+        );
+        if (Option.isSome(resultOpt)) {
+          const result = Option.unwrap(resultOpt);
+          const params = Object.fromEntries(
+            Object.entries(result.pathname.groups).filter(
+              (entry): entry is [string, string] => entry[1] != null
+            )
+          );
+          return Option.some({ route, params });
         }
       } else {
-        const match = normalized.match(route.regex);
-        if (match) {
+        const matchOpt = Option.fromNullable(normalized.match(route.regex));
+        if (Option.isSome(matchOpt)) {
+          const match = Option.unwrap(matchOpt);
           const params = route.paramNames.reduce(
             (acc, name, i) => {
               const val = match[i + 1] || '';
-              acc[name] = Result.unwrapOr(
-                Result.tryCatch(() => decodeURIComponent(val)),
-                val
-              );
+              const decoded = Result.tryCatch(() => decodeURIComponent(val));
+              acc[name] = Result.match(decoded, {
+                ok: (v) => v,
+                err: () => val,
+              });
               return acc;
             },
             {} as Record<string, string>
           );
-          return { kind: 'found', route, params };
+          return Option.some({ route, params });
         }
       }
     }
-    return { kind: 'not-found' };
+    return Option.none;
   }
 }
 
@@ -326,7 +343,10 @@ class RouterImpl implements Router {
     this.queryParams = computed(() => this.queryParamsAtom.value);
 
     const firstMatch = this.matcher.match(initialPath);
-    const initialParams = firstMatch.kind === 'found' ? firstMatch.params : {};
+    const initialParams = Option.unwrapOr(
+      Option.map(firstMatch, (m) => m.params),
+      {}
+    );
     this.paramsAtom = createAtom({ ...initState.query, ...initialParams });
     this.params = computed(() => this.paramsAtom.value);
 
@@ -380,7 +400,7 @@ class RouterImpl implements Router {
   /** Unified state update mechanism with batching to prevent redundant renders. */
   private updateState(nextPath: string, nextQuery: Record<string, string>, newUrl: string) {
     batch(() => {
-      if (!PathUtils.isSameParams(this.queryParamsAtom.peek(), nextQuery)) {
+      if (!shallowEqual(this.queryParamsAtom.peek(), nextQuery)) {
         this.queryParamsAtom.value = nextQuery;
       }
       if (this.currentRouteAtom.peek() !== nextPath) {
@@ -409,7 +429,10 @@ class RouterImpl implements Router {
     const targetPath = route || this.config.default;
     if (!targetPath) return;
 
-    const fullPath = query ? `${targetPath}?${query}` : targetPath;
+    const fullPath = Option.match(query, {
+      some: (q) => `${targetPath}?${q}`,
+      none: () => targetPath,
+    });
     const nextState = this.urlAdapter.commit(fullPath);
 
     this.updateState(nextState.path, nextState.query, nextState.url);
@@ -445,18 +468,24 @@ class RouterImpl implements Router {
    */
   private render(requestedPath: string): void {
     const matchResult = this.matcher.match(requestedPath);
-    const def =
-      matchResult.kind === 'found'
-        ? matchResult.route.def
-        : this.config.routes[this.config.notFound];
+    const def = Option.unwrapOr(
+      Option.map(matchResult, (m) => m.route.def),
+      this.config.routes[this.config.notFound]
+    );
 
     if (!def) {
       debug.warn(SYSTEM_ROUTE.PREFIX, SYSTEM_ROUTE.ERRORS.NOT_FOUND(requestedPath));
       return;
     }
 
-    const routeName = matchResult.kind === 'found' ? matchResult.route.pattern : requestedPath;
-    const pathParams = matchResult.kind === 'found' ? matchResult.params : {};
+    const routeName = Option.unwrapOr(
+      Option.map(matchResult, (m) => m.route.pattern),
+      requestedPath
+    );
+    const pathParams = Option.unwrapOr(
+      Option.map(matchResult, (m) => m.params),
+      {}
+    );
     const mergedParams = { ...this.queryParamsAtom.peek(), ...pathParams };
 
     untracked(() => this.config.beforeTransition(this.previousPath, routeName));
@@ -472,7 +501,7 @@ class RouterImpl implements Router {
       }
     }
 
-    if (!PathUtils.isSameParams(this.paramsAtom.peek(), mergedParams)) {
+    if (!shallowEqual(this.paramsAtom.peek(), mergedParams)) {
       this.paramsAtom.value = mergedParams;
     }
 
@@ -531,7 +560,13 @@ class RouterImpl implements Router {
       const existing = this.config.routes[path];
       if (!existing) {
         if (!tmpl.id) {
-          tmpl.id = `route-${Math.random().toString(36).substring(2, 9)}`;
+          // Logic: Unique Identifier Generation
+          // Uses standard crypto.randomUUID() (ES2021+) with a fallback for older environments.
+          const uuid =
+            typeof crypto?.randomUUID === 'function'
+              ? crypto.randomUUID()
+              : Math.random().toString(36).slice(2, 11);
+          tmpl.id = `route-${uuid}`;
         }
         this.config.routes[path] = {
           template: `#${tmpl.id}`,
@@ -577,7 +612,10 @@ class RouterImpl implements Router {
   /** Synchronizes visual feedback for active links via CSS classes and ARIA attributes. */
   private syncActiveLinks(current: string) {
     const matchResult = this.matcher.match(current);
-    const pattern = matchResult.kind === 'found' ? matchResult.route.pattern : '';
+    const pattern = Option.unwrapOr(
+      Option.map(matchResult, (m) => m.route.pattern),
+      ''
+    );
 
     for (const el of this.trackedLinks) {
       this.updateActiveStateForLink(el, current, pattern);
@@ -614,7 +652,10 @@ class RouterImpl implements Router {
     // New links must be updated immediately to match the current route state.
     const current = this.currentRoute.peek();
     const matchResult = this.matcher.match(current);
-    const pattern = matchResult.kind === 'found' ? matchResult.route.pattern : '';
+    const pattern = Option.unwrapOr(
+      Option.map(matchResult, (m) => m.route.pattern),
+      ''
+    );
     this.updateActiveStateForLink(el, current, pattern);
 
     // Registry manages weak tracking safely without namespace restrictions
@@ -671,15 +712,7 @@ class RouterImpl implements Router {
     return stripQuery ? PathUtils.split(finalPath).route : finalPath;
   }
 
-  /**
-   * Evaluates whether a specific link click should be intercepted by the router.
-   *
-   * Logic: Interception Policy
-   * Bypasses interception for:
-   * - External domains or elements with `rel="external"`.
-   * - Files with extensions (e.g., `.pdf`) unless an explicit route exists.
-   * - Modified clicks (Ctrl/Cmd) to maintain native tab behavior.
-   */
+  /** Evaluates whether a specific link click should be intercepted by the router. */
   private shouldIntercept(path: string, el: Element): boolean {
     if (el instanceof HTMLAnchorElement) {
       if (
@@ -695,24 +728,21 @@ class RouterImpl implements Router {
 
       // Logic: Ignore file paths (e.g., .jpg) that don't match a registered route.
       const last = path.split('/').pop() ?? '';
-      if (
-        last.includes('.') &&
-        this.matcher.match(PathUtils.split(path).route).kind === 'not-found'
-      ) {
+      if (last.includes('.') && Option.isNone(this.matcher.match(PathUtils.split(path).route))) {
         return false;
       }
     }
     const { route } = PathUtils.split(path);
-    return this.matcher.match(route).kind === 'found' || !!this.config.notFound;
+    return Option.isSome(this.matcher.match(route)) || !!this.config.notFound;
   }
 
   /** Evaluates if the current route can be abandoned based on guards. */
   private canLeave(): boolean {
     const matchResult = this.matcher.match(this.currentRouteAtom.peek());
-    const def =
-      matchResult.kind === 'found'
-        ? matchResult.route.def
-        : this.config.routes[this.config.notFound];
+    const def = Option.unwrapOr(
+      Option.map(matchResult, (m) => m.route.def),
+      this.config.routes[this.config.notFound]
+    );
     return def?.onLeave ? untracked(() => def.onLeave!(this)) !== false : true;
   }
 

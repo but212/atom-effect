@@ -1,169 +1,125 @@
 import { OPTION_SYMBOL } from './symbols';
 import { isOption } from './type-guard';
 
-export type Option<T> = Some<T> | None<T>;
-
-export interface OptionMethods<T> extends Iterable<T> {
-  isSome(): this is Some<T>;
-  isNone(): this is None<T>;
-  unwrap(): T;
-  unwrapOr<U>(fallback: U): T | U;
-  unwrapOrElse<U>(fn: () => U): T | U;
-  map<U>(fn: (val: T) => U): Option<U>;
-  andThen<U>(fn: (val: T) => Option<U>): Option<U>;
-  filter<U extends T>(predicate: (val: T) => val is U): Option<U>;
-  filter(predicate: (val: T) => boolean): Option<T>;
-  match<R>(matcher: { some: (val: T) => R; none: () => R }): R;
-  equals(other: unknown): boolean;
-  toNullable(): T | null;
-  toUndefined(): T | undefined;
-  toString(): string;
-}
-
 /**
- * Some<T> represents a value that is present.
+ * Represents a present value.
  */
-export interface Some<T> extends OptionMethods<T> {
+export type Some<T> = {
   readonly ok: true;
   readonly value: T;
-}
-
-/**
- * None represents the absence of a value.
- */
-export interface None<T = never> extends OptionMethods<T> {
-  readonly ok: false;
-}
-
-class SomeImpl<T> implements Some<T> {
-  readonly ok = true as const;
-  readonly [OPTION_SYMBOL] = true;
-  constructor(readonly value: T) {}
-
-  isSome(): this is Some<T> {
-    return true;
-  }
-  isNone(): this is None<T> {
-    return false;
-  }
-  unwrap(): T {
-    return this.value;
-  }
-  unwrapOr<U>(_fallback: U): T | U {
-    return this.value;
-  }
-  unwrapOrElse<U>(_fn: () => U): T | U {
-    return this.value;
-  }
-  map<U>(fn: (val: T) => U): Option<U> {
-    return Some(fn(this.value));
-  }
-  andThen<U>(fn: (val: T) => Option<U>): Option<U> {
-    return fn(this.value);
-  }
-
-  filter<U extends T>(predicate: (val: T) => val is U): Option<U>;
-  filter(predicate: (val: T) => boolean): Option<T>;
-  filter<U extends T>(predicate: (val: T) => boolean): Option<U> {
-    return predicate(this.value) ? (this as unknown as Option<U>) : (None as unknown as Option<U>);
-  }
-
-  match<R>(matcher: { some: (val: T) => R; none: () => R }): R {
-    return matcher.some(this.value);
-  }
-
-  equals(other: unknown): boolean {
-    return isOption(other) && other.ok && (other as Some<unknown>).value === this.value;
-  }
-
-  toNullable(): T {
-    return this.value;
-  }
-  toUndefined(): T {
-    return this.value;
-  }
-
-  toString(): string {
-    return `Some(${String(this.value)})`;
-  }
-  get [Symbol.toStringTag]() {
-    return 'Some';
-  }
-
-  *[Symbol.iterator](): Generator<T, void, undefined> {
-    yield this.value;
-  }
-}
-
-class NoneImpl<T = never> implements None<T> {
-  readonly ok = false as const;
-  readonly [OPTION_SYMBOL] = true;
-
-  isSome(): this is Some<T> {
-    return false;
-  }
-  isNone(): this is None<T> {
-    return true;
-  }
-  unwrap(): T {
-    throw new Error('Option.unwrap() on None');
-  }
-  unwrapOr<U>(fallback: U): T | U {
-    return fallback;
-  }
-  unwrapOrElse<U>(fn: () => U): T | U {
-    return fn();
-  }
-  map<U>(_fn: (val: T) => U): Option<U> {
-    return this as unknown as Option<U>;
-  }
-  andThen<U>(_fn: (val: T) => Option<U>): Option<U> {
-    return this as unknown as Option<U>;
-  }
-
-  filter<U extends T>(predicate: (val: T) => val is U): Option<U>;
-  filter(predicate: (val: T) => boolean): Option<T>;
-  filter<U extends T>(_predicate: (val: T) => boolean): Option<U> {
-    return this as unknown as Option<U>;
-  }
-
-  match<R>(matcher: { some: (val: T) => R; none: () => R }): R {
-    return matcher.none();
-  }
-
-  equals(other: unknown): boolean {
-    return isOption(other) && !other.ok;
-  }
-
-  toNullable(): null {
-    return null;
-  }
-  toUndefined(): undefined {
-    return undefined;
-  }
-
-  toString(): string {
-    return 'None';
-  }
-  get [Symbol.toStringTag]() {
-    return 'None';
-  }
-
-  *[Symbol.iterator](): Generator<T, void, undefined> {}
-}
-
-/**
- * Creates an Option holding a value.
- */
-export const Some = <T>(value: T): Option<T> => new SomeImpl(value);
+  readonly [OPTION_SYMBOL]: true;
+};
 
 /**
  * Represents the absence of a value.
  */
-export const None: Option<never> = new NoneImpl<never>();
+export type None = {
+  readonly ok: false;
+  readonly [OPTION_SYMBOL]: true;
+};
 
 /**
- * Converts a nullable value (T | null | undefined) into an Option<T>.
+ * A discriminated union representing either a value ({@link Some})
+ * or the absence of a value ({@link None}).
  */
-export const fromNullable = <T>(value: T | null | undefined): Option<T> =>
-  value == null ? (None as Option<T>) : Some(value);
+export type Option<T> = Some<T> | None;
+
+/**
+ * Utilities for creating and consuming Option types.
+ */
+export const Option = {
+  /**
+   * Creates a {@link Some} instance holding a non-nullable value.
+   */
+  some: <T>(value: T): Some<T> => ({
+    ok: true,
+    value,
+    [OPTION_SYMBOL]: true,
+  }),
+
+  /**
+   * A constant representing the absence of a value.
+   */
+  none: {
+    ok: false,
+    [OPTION_SYMBOL]: true,
+  } as None,
+
+  /**
+   * Type guard to check if an {@link Option} contains a value.
+   */
+  isSome: <T>(opt: Option<T>): opt is Some<T> => opt.ok,
+
+  /**
+   * Type guard to check if an {@link Option} is empty.
+   */
+  isNone: <T>(opt: Option<T>): opt is None => !opt.ok,
+
+  /**
+   * Extracts the inner value if present.
+   */
+  unwrap: <T>(opt: Option<T>): T => {
+    if (!opt.ok) throw new Error('Option.unwrap() on None');
+    return opt.value;
+  },
+
+  /**
+   * Returns the inner value if present, otherwise returns a fallback value.
+   */
+  unwrapOr: <T, U>(opt: Option<T>, fallback: U): T | U => (opt.ok ? opt.value : fallback),
+
+  /**
+   * Returns the inner value if present, otherwise computes a fallback value.
+   */
+  unwrapOrElse: <T, U>(opt: Option<T>, fn: () => U): T | U => (opt.ok ? opt.value : fn()),
+
+  /**
+   * Transforms the inner value using the provided function if present.
+   */
+  map: <T, U>(opt: Option<T>, fn: (val: T) => U): Option<U> =>
+    opt.ok ? Option.some(fn(opt.value)) : (opt as unknown as Option<U>),
+
+  /**
+   * Chains a function that returns another {@link Option}.
+   */
+  andThen: <T, U>(opt: Option<T>, fn: (val: T) => Option<U>): Option<U> =>
+    opt.ok ? fn(opt.value) : (opt as unknown as Option<U>),
+
+  /**
+   * Creates an {@link Option} from a value that might be `null` or `undefined`.
+   */
+  fromNullable: <T>(value: T | null | undefined): Option<T> =>
+    value == null ? Option.none : Option.some(value),
+
+  /**
+   * Executes a branch handler based on whether the option is {@link Some} or {@link None}.
+   */
+  match: <T, R>(opt: Option<T>, branches: { some: (val: T) => R; none: () => R }): R =>
+    opt.ok ? branches.some(opt.value) : branches.none(),
+
+  /**
+   * Returns {@link None} if the inner value does not satisfy the predicate.
+   */
+  filter: <T>(opt: Option<T>, predicate: (val: T) => boolean): Option<T> =>
+    opt.ok && predicate(opt.value) ? opt : Option.none,
+
+  /**
+   * Checks for deep equality between two options.
+   */
+  equals: <T>(a: Option<T>, b: Option<T>): boolean => {
+    if (a === b) return true;
+    if (!isOption(a) || !isOption(b)) return false;
+    if (a.ok !== b.ok) return false;
+    return !a.ok || (a as Some<T>).value === (b as Some<T>).value;
+  },
+
+  /**
+   * Converts an {@link Option} to a nullable type.
+   */
+  toNullable: <T>(opt: Option<T>): T | null => (opt.ok ? opt.value : null),
+
+  /**
+   * Converts an {@link Option} to an undefined type.
+   */
+  toUndefined: <T>(opt: Option<T>): T | undefined => (opt.ok ? opt.value : undefined),
+};

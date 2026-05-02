@@ -221,15 +221,16 @@ describe('web component', () => {
   bench(
     'Web Component: setup/teardown (100)',
     () => {
-      const container = document.createElement('div');
-      document.body.appendChild(container);
+      const $c = createContainer();
+      const container = $c[0];
       for (let i = 0; i < 100; i++) {
         const el = document.createElement('test-comp') as TestComp;
-        container.appendChild(el);
+        container?.appendChild(el);
         el.setup();
         el.teardown();
+        container?.removeChild(el);
       }
-      document.body.removeChild(container);
+      cleanupContainer($c);
     },
     microBenchOptions
   );
@@ -237,14 +238,12 @@ describe('web component', () => {
   bench(
     'Web Component: context injection (depth 10, 100x)',
     () => {
-      const root = document.createElement('div');
-      document.body.appendChild(root);
+      const $c = createContainer();
+      const root = $c[0]!;
 
-      // Setup provider at root
       $.provideAtom(root, 'test-key', 'test-value');
 
-      // Create a deep tree
-      let current = root;
+      let current: HTMLElement = root;
       for (let i = 0; i < 10; i++) {
         const child = document.createElement('div');
         current.appendChild(child);
@@ -252,12 +251,11 @@ describe('web component', () => {
       }
 
       const leaf = current;
-
       for (let i = 0; i < 100; i++) {
         $.injectAtom(leaf, 'test-key');
       }
 
-      document.body.removeChild(root);
+      cleanupContainer($c);
     },
     microBenchOptions
   );
@@ -265,8 +263,8 @@ describe('web component', () => {
   bench(
     'Web Component: context injection across Shadow DOM (depth 5, 100x)',
     () => {
-      const container = document.createElement('div');
-      document.body.appendChild(container);
+      const $c = createContainer();
+      const container = $c[0]!;
 
       $.provideAtom(container, 'theme', 'dark');
 
@@ -281,12 +279,11 @@ describe('web component', () => {
       }
 
       const leaf = currentHost;
-
       for (let i = 0; i < 100; i++) {
         $.injectAtom(leaf, 'theme');
       }
 
-      document.body.removeChild(container);
+      cleanupContainer($c);
     },
     microBenchOptions
   );

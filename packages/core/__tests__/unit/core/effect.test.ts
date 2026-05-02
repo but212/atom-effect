@@ -348,7 +348,7 @@ describe('Effect', () => {
         throw new Error('exec fail');
       }) as unknown as InternalEffect;
 
-      vi.spyOn(e._deps, 'truncateFrom').mockImplementationOnce(() => {
+      vi.spyOn(e._deps.slots, 'truncateFrom').mockImplementationOnce(() => {
         throw new Error('truncate fail');
       });
 

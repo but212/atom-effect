@@ -399,3 +399,39 @@ class MyInput extends HTMLElement {
   }
 }
 customElements.define('my-input', MyInput);
+```
+
+## 12. Reactive URL Management
+
+Use `$.atomUrl` to synchronize your application state with the browser's URL.
+
+### Reading and Writing URL State
+
+```javascript
+// 1. Reading URL state reactively
+$.effect(() => {
+  console.log('Current path:', $.atomUrl.path.value);
+  console.log('Query params:', $.atomUrl.params.value);
+});
+
+// 2. Updating URL state (triggers navigation)
+$('#search-input').on('input', (e) => {
+  // Directly update params atom
+  $.atomUrl.params.value = { ...$.atomUrl.params.value, q: e.target.value };
+});
+
+// 3. Navigation with state
+$.atomUrl.push('/dashboard', { from: 'home' });
+```
+
+### Navigation Batching
+
+When multiple URL parts change simultaneously, wrap them in `$.batch` to ensure only a single entry is added to the browser history.
+
+```javascript
+$.batch(() => {
+  $.atomUrl.path.value = '/search';
+  $.atomUrl.params.value = { category: 'electronics', sort: 'price' };
+  $.atomUrl.hash.value = 'results';
+}); // Results in a single pushState call: /search?category=electronics&sort=price#results
+```

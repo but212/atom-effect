@@ -22,6 +22,7 @@ The jQuery package provides a reactive binding layer on top of `@but212/atom-eff
                  │  chainable.ts ← $.fn methods      │
                  │  bindings/list/ ← Modular list    │
                  │  route.ts     ← SPA router        │
+                 │  url.ts       ← Reactive URL      │
                  │  mount.ts     ← Component mount   │
                  │  core/dom.ts  ← Core DOM engine   │
                  └───────────────────────────────────┘
@@ -136,10 +137,10 @@ The `.on()` patch ensures that multiple atom writes within a single event handle
 
 `atomList` renders reactive arrays using a 3-pass reconciliation algorithm:
 
-1. **Prefix/Suffix Trimming**: Skips common items at the start and end of the list.
-2. **Middle Diffing**: Reconciles the middle range using bitwise state flags and key mapping.
-3. **Patching**: Synchronizes the DOM using a greedy placement strategy and native DOM APIs to bypass jQuery overhead.
-4. **Initial Render**: Uses bulk-sanitized fragments where possible to optimize hydration.
+1. **Prefix/Suffix Trimming**: Identifies and skips common items at the start and end of the list to reduce diffing overhead.
+2. **Keyed Diffing**: Reconciles the middle range using a double-ended diffing strategy and persistent key mapping.
+3. **Patching**: Synchronizes the DOM using a greedy placement strategy and native DOM APIs.
+4. **Initial Render**: Utilizes sanitized fragments to optimize initial population.
 
 ### 5.1 Reconciliation Lifecycle
 
@@ -186,7 +187,21 @@ The router maintains visual state for navigation links using a targeted tracking
 - **Error Handling**: Standardizes error instances and isolates user hooks to prevent breaking the reactive chain.
 - **Abort Silence**: Catch and ignore `AbortError` internally during rapid re-evaluations.
 
-## 9. Security
+## 9. Reactive URL Engine (`$.atomUrl`)
+
+The URL engine provides a reactive interface to the browser's location and history, bridging the History API with `atom-effect` primitives.
+
+### 9.1 Implementation Details
+
+- **Resilient Atoms**: Singleton properties (like `path`, `params`) use a proxy wrapper that revives internal instances if they are disposed.
+- **Navigation Batching**: Property updates are coalesced via a microtask. If multiple properties change within the same tick, they are applied in a single History API call.
+- **Normalization**: Standardizes URL components (e.g., trailing slashes, search/hash empty states) during synchronization.
+- **Bidirectional Synchronization**:
+  - **Downstream**: Listens to `popstate` and `hashchange` events.
+  - **Upstream**: Monkey-patches `history.pushState` and `history.replaceState` to detect programmatic changes.
+  - **State Guarding**: Uses an internal flag to prevent recursive updates during atomic URL operations.
+
+## 10. Security
 
 The binding layer includes several defensive measures:
 

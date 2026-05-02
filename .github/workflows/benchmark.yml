@@ -5,13 +5,26 @@ on:
     branches: [main]
 
 jobs:
+  setup:
+    name: Discover Packages
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.list.outputs.packages }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: list
+        run: |
+          PKGS=$(ls packages | jq -R . | jq -s -c .)
+          echo "packages=$PKGS" >> $GITHUB_OUTPUT
+
   benchmark:
     name: Run ${{ matrix.package }} (${{ matrix.type }})
+    needs: setup
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        package: [core, jquery]
+        package: ${{ fromJSON(needs.setup.outputs.packages) }}
         type: [micro, macro, realistic]
         exclude:
           - package: jquery
@@ -28,9 +41,11 @@ jobs:
 
       - name: Run benchmark
         working-directory: packages/${{ matrix.package }}
+        env:
+          BENCH_OUTPUT: ../../results/${{ matrix.package }}-${{ matrix.type }}.txt
         run: |
           mkdir -p ../../results
-          pnpm bench:${{ matrix.type }} | tee ../../results/${{ matrix.package }}-${{ matrix.type }}.txt
+          pnpm bench:${{ matrix.type }} > ../../results/${{ matrix.package }}-${{ matrix.type }}.txt
 
       - name: Upload results
         uses: actions/upload-artifact@v7

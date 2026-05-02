@@ -173,18 +173,17 @@ describe('$.route() - SPA Routing', () => {
       router.destroy();
     });
 
-    it('should survive and warn on broken link/route inputs', async () => {
-      const warnSpy = vi.spyOn($.debug, 'warn');
-      $.debug.enabled = true;
+    it('should be resilient to malformed query parameters using standard APIs', async () => {
       const router = $.route({ target: '#app' });
 
-      // Malformed URI in query
+      // Malformed URI in query: %FF is invalid.
+      // URLSearchParams (ES2019) handles this by producing the replacement character '\uFFFD'.
       router.navigate('home?bad=%FF');
       await $.nextTick();
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('route'),
-        expect.stringContaining('Malformed')
-      );
+
+      // Should not crash and should contain the handled value (standard browser behavior)
+      expect(router.queryParams.value.bad).toBe('\uFFFD');
+      expect(router.currentRoute.value).toBe('home');
 
       router.destroy();
     });

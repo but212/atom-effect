@@ -123,5 +123,7 @@ export const SYSTEM_COMPONENT = {
 
 /** Defaults for the visual debug system. @internal */
 export const SYSTEM_DEBUG = {
-  DEFAULTS: Object.freeze({ HIGHLIGHT_DURATION_MS: 500 } as const),
+  DEFAULTS: {
+    HIGHLIGHT_DURATION_MS: 500,
+  },
 } as const;

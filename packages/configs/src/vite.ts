@@ -5,7 +5,7 @@ export interface BaseViteConfigOptions {
   packageDir: string;
   name: string;
   entry?: string;
-  libFileName?: (format: string) => string;
+  libFileNames?: Record<string, string>;
   dtsOptions?: PluginOptions;
 }
 
@@ -14,7 +14,7 @@ export const getBaseViteConfig = (options: BaseViteConfigOptions): UserConfig =>
     packageDir,
     name,
     entry = `${packageDir}/src/index.ts`,
-    libFileName,
+    libFileNames,
     dtsOptions,
   } = options;
 
@@ -29,7 +29,13 @@ export const getBaseViteConfig = (options: BaseViteConfigOptions): UserConfig =>
         entry,
         name,
         formats: ['es', 'cjs', 'umd'],
-        ...(libFileName ? { fileName: libFileName } : {}),
+        ...(libFileNames
+          ? {
+              fileName: (format: string) =>
+                libFileNames[format] ??
+                `index.${format === 'es' ? 'mjs' : format === 'umd' ? 'js' : 'cjs'}`,
+            }
+          : {}),
       },
       rollupOptions: {
         output: {
@@ -53,7 +59,7 @@ export const getBaseViteConfig = (options: BaseViteConfigOptions): UserConfig =>
   };
 };
 
-export const defineViteConfig =
-  (baseOptions: BaseViteConfigOptions) =>
-  (overrides: Partial<UserConfig> = {}) =>
-    defineConfig(() => mergeConfig(getBaseViteConfig(baseOptions), overrides));
+export const defineViteConfig = (
+  baseOptions: BaseViteConfigOptions,
+  overrides: Partial<UserConfig> = {}
+) => defineConfig(() => mergeConfig(getBaseViteConfig(baseOptions), overrides));

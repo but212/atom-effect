@@ -10,35 +10,14 @@ jobs:
     name: Verify Release
     runs-on: ubuntu-latest
     outputs:
-      release_notes: ${{ steps.verify.outputs.release_notes }}
+      matrix: ${{ steps.verify.outputs.matrix }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Verify versions and extract changelog
         id: verify
-        run: |
-          TAG_VERSION=${GITHUB_REF#refs/tags/v}
-          CORE_VERSION=$(node -p "require('./packages/core/package.json').version")
-          JQUERY_VERSION=$(node -p "require('./packages/jquery/package.json').version")
-
-          if [ "$TAG_VERSION" != "$CORE_VERSION" ]; then
-            echo "Error: Tag version ($TAG_VERSION) does not match core package.json version ($CORE_VERSION)"
-            exit 1
-          fi
-
-          if [ "$TAG_VERSION" != "$JQUERY_VERSION" ]; then
-            echo "Error: Tag version ($TAG_VERSION) does not match jquery package.json version ($JQUERY_VERSION)"
-            exit 1
-          fi
-
-          echo "✓ All package versions match tag: $TAG_VERSION"
-
-          if ! grep -q "## \[${TAG_VERSION}\]" CHANGELOG.md; then
-            echo "Error: CHANGELOG.md does not contain an entry for version ${TAG_VERSION}"
-            exit 1
-          fi
-          awk "/## \[${TAG_VERSION}\]/{flag=1;next}/## \[/{flag=0}flag" CHANGELOG.md > RELEASE_NOTES.md
+        run: node .github/scripts/release-helper.js
 
       - name: Upload Release Notes
         uses: actions/upload-artifact@v7
@@ -56,11 +35,7 @@ jobs:
       id-token: write
     strategy:
       matrix:
-        package:
-          - name: "@but212/atom-effect"
-            dir: "packages/core"
-          - name: "@but212/atom-effect-jquery"
-            dir: "packages/jquery"
+        package: ${{ fromJSON(needs.verify.outputs.matrix) }}
 
     steps:
       - uses: actions/checkout@v6

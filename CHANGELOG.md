@@ -6,9 +6,11 @@
 
 #### Changed
 
-- **Architecture**: Standardized tracking lifecycle by extracting `_startTracking()` and `_commitDeps()` across `Computed` and `Effect`.
-- **Consistency**: Renamed internal epoch tracking fields (e.g., `_currentEpoch` -> `_trackEpoch`) to align with the unified dependency model.
-- **Performance**: Optimized notification and validation paths by leveraging `untracked` to prevent redundant dependency capture.
+- **Architecture**: Replaced class-based `DepSlotBuffer` with a highly optimized functional `DepBufferState` to reduce object overhead and improve V8 Hidden Class performance.
+- **Architecture**: Overhauled the Scheduler with a "Triple-Buffer" system (Active, Standby, Batch) to robustly handle nested updates and eliminate redundant flushes.
+- **Performance**: Unified async drift detection into the `isDirty()` check, eliminating the overhead of DJB2 hashing for stale promise tracking.
+- **Performance**: Forced internal IDs and versions into the SMI (Small Integer) range to bypass heap allocation.
+- **Security**: Hardened `atomLens` and `setDeepValue` against prototype pollution by blocking dangerous keys like `__proto__`.
 
 ### Utils
 
@@ -16,14 +18,23 @@
 
 - **Result API**: Re-engineered `Result<T, E>` from a class-based hierarchy to a high-performance, data-centric POJO design.
   - Replaced method calls (e.g., `res.unwrap()`) with static utility calls (e.g., `Result.unwrap(res)`) for better tree-shaking and memory efficiency.
+- **Option API**: Re-engineered `Option<T>` into a functional API with plain object variants (`Some`, `None`), aligning with the `Result` architecture for better performance and consistency.
 - **SlotBuffer API**: Standardized API to match standard JavaScript collections.
   - Renamed `size` -> `length`, `physicalSize` -> `capacity`, `add` -> `push`, and `getAt` -> `at`.
 
 #### Added
 
+- **Type Guards**: Added `isResult` for robust Result identification using internal symbols.
 - **Functional Primitives**: Introduced `Option<T>` and `Result<T, E>` types for robust error handling and null-safety.
   - **Railway Oriented Programming**: Added a comprehensive suite of static utilities to `Result` (`match`, `tap`, `andThen`, `all`) for declarative error pipelines.
   - **Safe Execution**: Added `Result.tryCatch` and `Result.fromPromise` to unify synchronous and asynchronous error capture.
+- **Performance Benchmarks**: Introduced a comprehensive benchmarking suite for `utils` utilities using `vitest bench`.
+
+#### Changed
+
+- **SlotBuffer**: Optimized `truncateFrom` by removing redundant hooks.
+- **Result/Option**: Integrated nominal type checking via symbols and added native comparison benchmarks.
+- **SlotBuffer**: Optimized with a 4-bit mask for "fast-lane" slot tracking and bit-scan slot discovery, significantly improving performance for small collections.
 
 #### Fixed
 
@@ -37,6 +48,7 @@
 
 #### Added
 
+- **Reactive URL Management (`$.atomUrl`)**: Introduced a centralized, reactive system for managing the browser's URL. Provides synchronized atoms for `path`, `search`, `hash`, `params`, and `state`, with full support for navigation batching and `basePath` resolution.
 - **Reactive Web Components (`$.useAtomComponent`)**: A comprehensive toolkit for building reactive Custom Elements with declarative bindings, FACE integration, and Shadow DOM support.
 - **Form Binding (`atomForm`)**: Declarative integration with the browser's Constraint Validation API and automatic field discovery.
 - **Dependency Injection**: Enhanced DI system with 100% Shadow DOM coverage and unified move detection.
@@ -50,6 +62,11 @@
 - **Performance**: Switched `$.route` to a registry-based link tracking system using `MutationObserver` and a `Set` to eliminate redundant `querySelectorAll` scans during navigation.
 - **Refactor**: Introduced `createChainableMethod` factory to unify argument normalization and iteration across chainable bindings (`atomClass`, `atomAttr`, etc.).
 - **Refactor**: Standardized `bindAttr` with a unified transformation pipeline and improved `bindVisibility` to preserve original `display` modes.
+- **`$.atomUrl`**: Enhanced with robust URL normalization (standardizing trailing slashes and empty parts), microtask-based property batching, and resilient singleton atoms that auto-revive if disposed.
+- **`$.route`**: Added native `URLPattern` support for dynamic segment extraction and an `isEqual` option for custom route comparison.
+- **`atomList`**: Improved reconciliation logic with an optional `isEqual` check and optimized `untracked` blocks for internal state management.
+- **`atomForm`**: Refined field discovery and validation error handling using functional `Option`/`Result` patterns for improved safety.
+- **Input Binding**: Strengthened IME (Composition) support for CJK languages, ensuring reactive updates do not interrupt active character entry.
 
 #### Security
 
@@ -65,6 +82,7 @@
 #### Added
 
 - **Standards**: Established formal TSDoc conventions and specialized annotations (`Logic:`, `Optimization:`, etc.) for architectural transparency.
+- **Documentation**: Added comprehensive JSDoc examples and design intent documentation for core utilities.
 
 #### Changed
 
@@ -97,7 +115,7 @@
 
 - **Architecture**: Reorganized `constants.ts` into focused subsystem namespaces for better modularity.
 - **Performance**: Optimized reactive bindings by operating directly on native `HTMLElement` nodes.
-- **Engines**: Overhauled `InputBinding` (strategy-based) and Security (data-driven) architectures.
+- **Engines**: Overhauled `InputBinding` (strategy-based) and Security architectures.
 - **Reactivity**: Unified async race-condition protection via `createAsyncRunner`.
 - **Lifecycle**: Enhanced `atomMount` with "Fail Loud" initialization and structured `ComponentLifecycle` support.
 - **Interception**: Improved link handling to respect modifier keys, external links, and download attributes.

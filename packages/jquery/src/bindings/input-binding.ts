@@ -1,5 +1,5 @@
 import { effect, untracked } from '@but212/atom-effect';
-import { Result } from '@but212/atom-effect-utils';
+import { Option, Result } from '@but212/atom-effect-utils';
 import { SYSTEM_BINDING } from '@/constants';
 import { INTERNAL_HANDLER } from '@/core/symbols';
 import type { EffectObject, ValOptions, WritableAtom } from '@/types';
@@ -38,8 +38,9 @@ interface BindingStrategy<T> {
 /** Registry of binding strategies for various form controls. @internal */
 const STRATEGIES = {
   multipleSelect: {
-    read: (_: FormElement, $el: JQuery) => (($el.val() as string[]) || []) as unknown,
-    write: (_: FormElement, $el: JQuery, value: unknown, _formatted: string) => {
+    read: (el: FormElement) =>
+      el instanceof HTMLSelectElement ? Array.from(el.selectedOptions, (o) => o.value) : [],
+    write: (_: FormElement, $el: JQuery, value: unknown) => {
       $el.val(value as string[]);
     },
     equal: (a: unknown, b: unknown, baseEqual: (a: unknown, b: unknown) => boolean) => {
@@ -52,41 +53,49 @@ const STRATEGIES = {
       );
     },
     format: (v: unknown, custom?: (v: unknown) => string) =>
-      custom?.(v) ?? (Array.isArray(v) ? v.join(',') : String(v ?? '')),
+      Option.unwrapOr(
+        Option.map(Option.fromNullable(custom), (fn: Function) => fn(v)),
+        Array.isArray(v) ? v.join(',') : String(v ?? '')
+      ),
   } as BindingStrategy<unknown>,
 
   default: {
     read: (el: FormElement, _: JQuery, parse?: (v: string) => unknown) =>
-      parse ? parse(el.value) : el.value,
+      Option.unwrapOr(
+        Option.map(Option.fromNullable(parse), (p: Function) => p(el.value)),
+        el.value
+      ),
     write: (el: FormElement, _: JQuery, __: unknown, formatted: string) => {
       if (
         (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) &&
         document.activeElement === el
       ) {
         const input = el as HTMLInputElement;
-        Result.tapErr(
-          Result.tryCatch(() => {
-            const { selectionStart, selectionEnd } = input;
-            input.value = formatted;
-            if (selectionStart !== null && selectionEnd !== null) {
-              const length = formatted.length;
-              input.setSelectionRange(
-                Math.min(selectionStart, length),
-                Math.min(selectionEnd, length)
-              );
-            }
-          }),
-          () => {
-            input.value = formatted;
+        const res = Result.tryCatch(() => {
+          const { selectionStart, selectionEnd } = input;
+          input.value = formatted;
+          if (selectionStart !== null && selectionEnd !== null) {
+            const length = formatted.length;
+            input.setSelectionRange(
+              Math.min(selectionStart, length),
+              Math.min(selectionEnd, length)
+            );
           }
-        );
+        });
+        if (!res.ok) {
+          input.value = formatted;
+        }
       } else {
         el.value = formatted;
       }
     },
     equal: (a: unknown, b: unknown, baseEqual: (a: unknown, b: unknown) => boolean) =>
       baseEqual(a, b),
-    format: (v: unknown, custom?: (v: unknown) => string) => custom?.(v) ?? String(v ?? ''),
+    format: (v: unknown, custom?: (v: unknown) => string) =>
+      Option.unwrapOr(
+        Option.map(Option.fromNullable(custom), (fn: Function) => fn(v)),
+        String(v ?? '')
+      ),
   } as BindingStrategy<unknown>,
 } as const;
 
@@ -114,6 +123,7 @@ class InputBinding<T> {
   private readonly areEqual: (a: T, b: T) => boolean;
   private readonly formatValue: (value: T) => string;
   private readonly eventNamespace: string;
+  private readonly abortController = new AbortController();
 
   private flags = BindingFlags.None;
   private debounceTimer: ReturnType<typeof setTimeout> | undefined;
@@ -123,6 +133,8 @@ class InputBinding<T> {
     private readonly atom: WritableAtom<T>,
     private readonly options: ValOptions<T>
   ) {
+    this.atom = atom;
+    this.options = options;
     this.$element = $element;
     this.eventNamespace = `.atomBind-${++instanceCounter}`;
     const element = $element[0] as FormElement;
@@ -149,28 +161,25 @@ class InputBinding<T> {
     const namespace = this.eventNamespace;
     const debounce = this.options.debounce ?? 0;
 
-    const syncToAtomDelegate = () => {
-      // Constraint: Synchronization is deferred while an IME composition is active.
-      if (!(this.flags & BindingFlags.Composing)) {
-        this.syncToAtom();
-      }
+    const syncToAtomDelegate = (e?: Event | JQuery.TriggeredEvent) => {
+      const native = (e && 'originalEvent' in e ? e.originalEvent : e) as InputEvent;
+      // Logic: Synchronization is deferred while an IME composition is active (Standard InputEvent).
+      if (native?.isComposing) return;
+      this.syncToAtom();
     };
 
     const handleInput =
       debounce > 0
-        ? () => {
+        ? (e: JQuery.TriggeredEvent) => {
             clearTimeout(this.debounceTimer);
-            this.debounceTimer = setTimeout(syncToAtomDelegate, debounce);
+            this.debounceTimer = setTimeout(() => syncToAtomDelegate(e), debounce);
           }
         : syncToAtomDelegate;
 
-    [
-      this.handleFocus,
-      this.handleBlur,
-      this.handleCompositionStart,
-      this.handleCompositionEnd,
-      handleInput,
-    ].forEach(markInternal);
+    const onFocus = () => (this.flags |= BindingFlags.Focused);
+    const onBlur = () => this.handleBlur();
+
+    [onFocus, onBlur, handleInput].forEach(markInternal);
 
     const eventNames = (this.options.event ?? SYSTEM_BINDING.INPUT_DEFAULTS.EVENT)
       .trim()
@@ -178,39 +187,22 @@ class InputBinding<T> {
       .map((name) => `${name}${namespace}`)
       .join(' ');
 
+    // Use jQuery .on() for compatibility with $el.trigger().
     this.$element
-      .on(`focus${namespace}`, this.handleFocus)
-      .on(`blur${namespace}`, this.handleBlur)
-      .on(`compositionstart${namespace}`, this.handleCompositionStart)
-      .on(`compositionend${namespace}`, this.handleCompositionEnd)
-      .on(eventNames, handleInput);
+      .on(`focus${namespace}`, onFocus)
+      .on(`blur${namespace}`, onBlur)
+      .on(eventNames, handleInput as JQuery.EventHandler<HTMLElement>);
   }
 
-  private handleFocus = () => {
-    this.flags |= BindingFlags.Focused;
-  };
-
-  private handleCompositionStart = () => {
-    this.flags |= BindingFlags.Composing;
-  };
-
-  private handleCompositionEnd = () => {
-    this.flags &= ~BindingFlags.Composing;
-    this.syncToAtom();
-  };
-
   /** Handles final synchronization and value normalization when the control loses focus. */
-  private handleBlur = () => {
-    const wasComposing = !!(this.flags & BindingFlags.Composing);
-    this.flags &= ~(BindingFlags.Focused | BindingFlags.Composing);
+  private handleBlur(): void {
+    this.flags &= ~BindingFlags.Focused;
 
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
       this.debounceTimer = undefined;
-      this.syncToAtom();
-    } else if (wasComposing) {
-      this.syncToAtom();
     }
+    this.syncToAtom();
 
     // Logic: Value normalization ensures that the physical DOM value exactly
     // matches the reactive state once user interaction has concluded.
@@ -218,21 +210,21 @@ class InputBinding<T> {
     if (!this.isDomUpToDate(atomValue)) {
       this.writeToDom(atomValue, this.formatValue(atomValue));
     }
-  };
+  }
 
   /** Reads from the DOM and updates the reactive atom if the value has changed. */
   private syncToAtom(): void {
     if (this.flags & BindingFlags.Busy) return;
     this.flags |= BindingFlags.SyncingToAtom;
-    Result.tapErr(
-      Result.tryCatch(() => {
-        const domValue = this.readValue();
-        if (!this.areEqual(this.atom.peek(), domValue)) {
-          this.atom.value = domValue;
-        }
-      }),
-      (err) => debug.warn(SYSTEM_BINDING.PREFIX, 'syncToAtom failed:', err)
-    );
+    const res = Result.tryCatch(() => {
+      const domValue = this.readValue();
+      if (!this.areEqual(this.atom.peek(), domValue)) {
+        this.atom.value = domValue;
+      }
+    });
+    if (!res.ok) {
+      debug.warn(SYSTEM_BINDING.PREFIX, 'syncToAtom failed:', res.error);
+    }
     this.flags &= ~BindingFlags.SyncingToAtom;
   }
 
@@ -269,9 +261,9 @@ class InputBinding<T> {
 
   /** Cleans up all event listeners and timers associated with the binding. */
   public cleanup(): void {
-    // Constraint: Strict namespacing prevents accidental removal of
-    // user-defined listeners or handlers from other binding instances.
+    // Logic: Multiple cleanup mechanisms for maximum resilience.
     this.$element.off(this.eventNamespace);
+    this.abortController.abort();
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
     }
