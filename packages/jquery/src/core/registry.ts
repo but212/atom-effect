@@ -1,4 +1,4 @@
-import { Option, Result } from '@but212/atom-effect-utils';
+import { Option, Result, SlotBuffer } from '@but212/atom-effect-utils';
 import { SYSTEM_BINDING, SYSTEM_CORE, SYSTEM_MOUNT } from '@/constants';
 import type { EffectObject } from '@/types';
 import { getSelector } from '@/utils';
@@ -31,8 +31,12 @@ const MARK_SHADOW = '_aes-has-shadow';
  * @internal
  */
 export interface BindingRecord {
-  /** A collection of individual cleanup tasks (e.g., effect disposals). */
-  tasks?: Array<() => void>;
+  /**
+   * A collection of individual cleanup tasks (e.g., effect disposals).
+   * Optimization: Uses SlotBuffer to minimize heap allocations for small
+   * collections (1-4 items), which represents the vast majority of use cases.
+   */
+  tasks?: SlotBuffer<() => void>;
   /** An optional component-level teardown function. */
   teardown?: (() => void) | undefined;
 }
@@ -204,7 +208,7 @@ class BindingRegistry {
   private addCleanup(element: Element, cleanupFunction: () => void): void {
     const record = this.getOrCreateRecord(element);
     if (!record.tasks) {
-      record.tasks = [];
+      record.tasks = new SlotBuffer<() => void>();
     }
     record.tasks.push(cleanupFunction);
   }
@@ -286,8 +290,9 @@ class BindingRegistry {
           }
         });
 
-        Option.map(Option.fromNullable(record.tasks), (tasks: Array<() => void>) => {
+        Option.map(Option.fromNullable(record.tasks), (tasks: SlotBuffer<() => void>) => {
           tasks.forEach((cleanupFunction) => cleanupFunction());
+          tasks.dispose();
         });
       },
       none: () => {
