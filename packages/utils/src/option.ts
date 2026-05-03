@@ -21,10 +21,10 @@ export type None = {
 /**
  * A constant representing the absence of a value.
  */
-const NONE: None = {
+const NONE: None = Object.freeze({
   ok: false,
   [OPTION_SYMBOL]: true,
-};
+} as const);
 
 /**
  * A discriminated union representing either a value ({@link Some})
@@ -37,7 +37,8 @@ export type Option<T> = Some<T> | None;
  */
 export const Option = {
   /**
-   * Creates a {@link Some} instance holding a non-nullable value.
+   * Creates a {@link Some} instance holding the provided value.
+   * To convert a nullable value to an {@link Option}, use {@link Option.fromNullable}.
    */
   some: <T>(value: T): Some<T> => ({
     ok: true,
@@ -92,7 +93,7 @@ export const Option = {
   map: <T, U>(opt: Option<T>, fn: (val: T) => U): Option<U> => {
     if (!opt.ok) return opt as unknown as Option<U>;
     const newValue = fn(opt.value);
-    return (newValue as unknown as T) === opt.value
+    return (newValue as unknown) === opt.value
       ? (opt as unknown as Option<U>)
       : Option.some(newValue);
   },
@@ -122,7 +123,7 @@ export const Option = {
     opt.ok && predicate(opt.value) ? opt : NONE,
 
   /**
-   * Checks for deep equality between two options.
+   * Checks for strict equality between two options.
    */
   equals: <T>(a: Option<T>, b: Option<T>): boolean => {
     if (a === b) return true;
