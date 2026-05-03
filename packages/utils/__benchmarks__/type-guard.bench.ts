@@ -1,12 +1,12 @@
 import { bench, describe } from 'vitest';
-import { isOption, isPromise, Some } from '../dist';
+import { isOption, isPromise, Option } from '../dist';
 import { keep, nextRandomInt, REPEATS } from './setup';
 
 describe('type-guard', () => {
   const promise = Promise.resolve();
   const thenable = { then: () => {} };
   const obj = {};
-  const option = Some(1);
+  const option = Option.some(1);
 
   bench(`isPromise: native promise (x${REPEATS})`, () => {
     for (let i = 0; i < REPEATS; i++) {

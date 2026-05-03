@@ -1,20 +1,20 @@
 import { bench, describe } from 'vitest';
-import { fromNullable, isSome, map, match, None, Some, unwrapOr } from '../dist';
+import { Option } from '../dist';
 import { keep, nextRandom, nextRandomInt, REPEATS } from './setup';
 
 describe('Option', () => {
-  const someVal = Some(1);
-  const noneVal = None;
+  const someVal = Option.some(1);
+  const noneVal = Option.none;
 
   bench(`Some creation (x${REPEATS})`, () => {
     for (let i = 0; i < REPEATS; i++) {
-      keep(Some(i));
+      keep(Option.some(i));
     }
   });
 
   bench(`isSome (x${REPEATS})`, () => {
     for (let i = 0; i < REPEATS; i++) {
-      keep(isSome(someVal));
+      keep(Option.isSome(someVal));
     }
   });
 
@@ -22,13 +22,13 @@ describe('Option', () => {
     const opts = [someVal, noneVal];
     for (let i = 0; i < REPEATS; i++) {
       const opt = opts[nextRandomInt(2)];
-      keep(unwrapOr(opt, 0));
+      keep(Option.unwrapOr(opt, 0));
     }
   });
 
   bench(`map (x${REPEATS})`, () => {
     for (let i = 0; i < REPEATS; i++) {
-      keep(map(someVal, (x) => x + 1));
+      keep(Option.map(someVal, (x) => x + 1));
     }
   });
 
@@ -40,14 +40,14 @@ describe('Option', () => {
     };
     for (let i = 0; i < REPEATS; i++) {
       const opt = opts[nextRandomInt(2)];
-      keep(match(opt, branches));
+      keep(Option.match(opt, branches));
     }
   });
 
   bench(`fromNullable (mixed, x${REPEATS})`, () => {
     for (let i = 0; i < REPEATS; i++) {
       const val = nextRandom() > 0.5 ? i : null;
-      keep(fromNullable(val));
+      keep(Option.fromNullable(val));
     }
   });
 

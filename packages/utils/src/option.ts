@@ -84,8 +84,13 @@ export const Option = {
   /**
    * Transforms the inner value using the provided function if present.
    */
-  map: <T, U>(opt: Option<T>, fn: (val: T) => U): Option<U> =>
-    opt.ok ? Option.some(fn(opt.value)) : (opt as unknown as Option<U>),
+  map: <T, U>(opt: Option<T>, fn: (val: T) => U): Option<U> => {
+    if (!opt.ok) return opt as unknown as Option<U>;
+    const newValue = fn(opt.value);
+    return (newValue as unknown as T) === opt.value
+      ? (opt as unknown as Option<U>)
+      : Option.some(newValue);
+  },
 
   /**
    * Chains a function that returns another {@link Option}.
@@ -116,8 +121,8 @@ export const Option = {
    */
   equals: <T>(a: Option<T>, b: Option<T>): boolean => {
     if (a === b) return true;
-    if (!isOption(a) || !isOption(b)) return false;
     if (a.ok !== b.ok) return false;
+    if (!isOption(a) || !isOption(b)) return false;
     return !a.ok || (a as Some<T>).value === (b as Some<T>).value;
   },
 
