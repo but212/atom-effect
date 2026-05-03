@@ -1,15 +1,8 @@
 /**
- * SlotBuffer: A high-performance, hybrid container optimized for reactive subscriber lists.
- *
- * DESIGN INTENT:
- * - Minimizes heap allocations for small collections (0-4 items) using "fast slots" (_s0-_s3).
- * - Scales to unbounded capacity using an overflow array when needed.
- * - Uses a 4-bit occupancy mask for O(1) vacancy checks in the fast lanes.
- *
- * WHEN TO USE:
- * - Managing dependency lists (atoms, observers) where most instances have 1-4 items.
- * - When O(1) removal of items by reference is required (via free-index tracking).
+ * Table for scan of the first free bit in a 4-bit mask.
  */
+const FIRST_FREE_INDEX = [0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, -1];
+
 export class SlotBuffer<T> {
   /** Physical capacity including null gaps. Tracking this avoids unnecessary array scans. */
   protected _count = 0;
@@ -43,11 +36,7 @@ export class SlotBuffer<T> {
    * @returns Index 0-3, or -1 if all fast slots are occupied.
    */
   protected _firstFreeSlot(mask: number): number {
-    if ((mask & 0b0001) === 0) return 0;
-    if ((mask & 0b0010) === 0) return 1;
-    if ((mask & 0b0100) === 0) return 2;
-    if ((mask & 0b1000) === 0) return 3;
-    return -1;
+    return FIRST_FREE_INDEX[mask & 0b1111]!;
   }
 
   /**
@@ -109,11 +98,6 @@ export class SlotBuffer<T> {
   /** Number of non-null items stored. */
   get length(): number {
     return this._actualCount;
-  }
-
-  /** Physical capacity (including empty slots/holes). */
-  get capacity(): number {
-    return this._count;
   }
 
   /**
