@@ -273,12 +273,16 @@ class BindingRegistry {
     if (node.nodeType !== 1) return;
     const element = node as Element;
 
-    Option.match(Option.fromNullable(this.records.get(element)), {
-      some: (record) => {
-        this.records.delete(element);
-        element.classList.remove(MARK_BOUND);
+    const recordOpt = Option.fromNullable(this.records.get(element));
 
-        Option.map(Option.fromNullable(record.teardown), (teardown: () => void) => {
+    if (Option.isSome(recordOpt)) {
+      const record = recordOpt.value;
+      this.records.delete(element);
+      element.classList.remove(MARK_BOUND);
+
+      // Execute component teardown if present
+      Option.match(Option.fromNullable(record.teardown), {
+        some: (teardown) => {
           const res = Result.tryCatch(() => teardown());
           if (!res.ok) {
             const selector = getSelector(element);
@@ -288,17 +292,22 @@ class BindingRegistry {
               res.error
             );
           }
-        });
+        },
+        none: () => {},
+      });
 
-        Option.map(Option.fromNullable(record.tasks), (tasks: SlotBuffer<() => void>) => {
+      // Execute and dispose of all cleanup tasks
+      Option.match(Option.fromNullable(record.tasks), {
+        some: (tasks) => {
           tasks.forEach((cleanupFunction) => cleanupFunction());
           tasks.dispose();
-        });
-      },
-      none: () => {
-        element.classList.remove(MARK_BOUND);
-      },
-    });
+        },
+        none: () => {},
+      });
+    } else {
+      // Logic: Ensure idempotency. If no record exists, just remove the marker class.
+      element.classList.remove(MARK_BOUND);
+    }
   }
 
   /**

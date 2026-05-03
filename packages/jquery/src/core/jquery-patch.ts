@@ -44,18 +44,16 @@ const wrapHandler = (fn: EventHandler): EventHandler => {
     return fn;
   }
 
-  return Option.unwrapOrElse(
-    Option.map(Option.fromNullable(handlerMap.get(fn)), (wrapped) => wrapped),
-    () => {
-      const wrapped = function (this: unknown, ...args: unknown[]) {
-        return batch(() => fn.apply(this, args as Parameters<EventHandler>));
-      } as unknown as EventHandler;
+  const cached = Option.fromNullable(handlerMap.get(fn));
+  if (Option.isSome(cached)) return cached.value;
 
-      (wrapped as unknown as { [INTERNAL_HANDLER]?: boolean })[INTERNAL_HANDLER] = true;
-      handlerMap.set(fn, wrapped);
-      return wrapped;
-    }
-  );
+  const wrapped = function (this: unknown, ...args: unknown[]) {
+    return batch(() => fn.apply(this, args as Parameters<EventHandler>));
+  } as unknown as EventHandler;
+
+  (wrapped as unknown as { [INTERNAL_HANDLER]?: boolean })[INTERNAL_HANDLER] = true;
+  handlerMap.set(fn, wrapped);
+  return wrapped;
 };
 
 /**
@@ -155,15 +153,19 @@ export function enablejQueryOverrides(options: PatchOptions = {}): void {
       const targets = selector ? this.filter(selector) : this;
       const len = targets.length;
       for (let i = 0; i < len; i++) {
-        Option.map(Option.fromNullable(targets[i]), (el) => {
+        const el = targets[i];
+        if (el) {
           registry.markIgnored(el);
           registry.cleanupTree(el);
-        });
+        }
       }
-      return Option.unwrapOr(
-        Option.map(Option.fromNullable(prev.remove), (rem) => rem.call(this, selector)),
-        this
+
+      // Logic: Use Option.expect to ensure the original method is preserved.
+      const originalRemove = Option.expect(
+        Option.fromNullable(prev.remove),
+        'Internal Inconsistency: Original jQuery .remove() method is missing during patch execution.'
       );
+      return originalRemove.call(this, selector);
     };
 
     $.fn.empty = function (this: JQuery) {

@@ -6,7 +6,7 @@ import {
   type ReadonlyAtom,
   untracked,
 } from '@but212/atom-effect';
-import { Option, Result } from '@but212/atom-effect-utils';
+import { Option, Result, SlotBuffer } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { SYSTEM_COMPONENT, SYSTEM_ROUTE } from '@/constants';
 import { registry } from '@/core/registry';
@@ -307,8 +307,8 @@ class RouterImpl implements Router {
   private previousPath = '';
   private previousUrl = '';
 
-  private cleanups: (() => void)[] = [];
-  private routeCleanups: (() => void)[] = [];
+  private readonly cleanups = new SlotBuffer<() => void>();
+  private readonly routeCleanups = new SlotBuffer<() => void>();
 
   constructor(config: RouteConfig) {
     this.config = this.parseConfig(config);
@@ -755,7 +755,7 @@ class RouterImpl implements Router {
   /** Executes all registered cleanup tasks for the previous route. */
   private runRouteCleanups() {
     this.routeCleanups.forEach((fn) => Result.tryCatch(fn));
-    this.routeCleanups = [];
+    this.routeCleanups.clear();
   }
 
   /**
@@ -795,7 +795,8 @@ class RouterImpl implements Router {
     this.linkObserver?.disconnect();
     this.trackedLinks.clear();
     this.cleanups.forEach((fn) => Result.tryCatch(fn));
-    this.cleanups = [];
+    this.cleanups.dispose();
+    this.routeCleanups.dispose();
   }
 }
 

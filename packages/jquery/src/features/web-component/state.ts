@@ -1,4 +1,4 @@
-import { Option } from '@but212/atom-effect-utils';
+import { Option, SlotBuffer } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { disableAutoCleanupFor } from '@/core/registry';
 import { CLEANUP_MARKER, HYDRATION_MARKER } from '@/core/symbols';
@@ -30,7 +30,7 @@ export class ComponentState {
   /** Initialization status to prevent redundant setups. */
   isInitialized = false;
   /** Collection of active effects managed by the component. */
-  effects = new Set<EffectObject>();
+  effects = new SlotBuffer<EffectObject>();
   /** Set of nodes that have been hydrated with data-bind mappings. */
   hydratedNodes = new Set<Element>();
 
@@ -111,17 +111,17 @@ export class ComponentState {
         if (this.slotListeners.has('all')) return;
 
         // Initial sync
-        Option.map(this.slotsAtom, (a) => {
-          a.value = snapshot(sr);
-        });
+        const atom = Option.expect(
+          this.slotsAtom,
+          'ComponentState: slotsAtom missing after initialization'
+        );
+        atom.value = snapshot(sr);
 
         const listener = (e: Event) => {
           const target = e.target as HTMLSlotElement;
-          Option.map(this.slotsAtom, (a) => {
-            const current = { ...a.peek() };
-            current[target.name || ''] = target.assignedNodes();
-            a.value = current;
-          });
+          const current = { ...atom.peek() };
+          current[target.name || ''] = target.assignedNodes();
+          atom.value = current;
         };
 
         sr.addEventListener('slotchange', listener);
@@ -136,7 +136,7 @@ export class ComponentState {
    */
   dispose() {
     this.effects.forEach((e) => e.dispose());
-    this.effects.clear();
+    this.effects.dispose();
 
     this.hydratedNodes.forEach(
       (n) => delete (n as Element & { [HYDRATION_MARKER]?: boolean })[HYDRATION_MARKER]

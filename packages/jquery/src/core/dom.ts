@@ -39,8 +39,9 @@ export function unpack<T, O>(val: T | [T, O]): [T, O?] {
     return [val as T];
   }
 
-  return Option.unwrapOr(
-    Option.map(Option.fromNullable(val[1]), (second) => {
+  // Logic: Check if the second element qualifies as a configuration object or function.
+  return Option.match(Option.fromNullable(val[1]), {
+    some: (second) => {
       const isTuple =
         typeof second === 'function' ||
         (second !== null &&
@@ -48,7 +49,7 @@ export function unpack<T, O>(val: T | [T, O]): [T, O?] {
           !('value' in second) &&
           !('then' in second));
       return isTuple ? (val as [T, O]) : ([val as T] as [T, O?]);
-    }),
-    [val as T]
-  );
+    },
+    none: () => [val as T],
+  });
 }

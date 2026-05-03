@@ -1,5 +1,5 @@
 import { isAtom } from '@but212/atom-effect';
-import { Option } from '@but212/atom-effect-utils';
+import { Option, type SlotBuffer } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { HYDRATION_MARKER } from '@/core/symbols';
 import type { EffectObject, ReactiveValue, ReadonlyAtom } from '@/types';
@@ -18,10 +18,10 @@ export const SetupFeatures = {
   dispatch(
     el: HTMLElement,
     mappings: Record<string, ReactiveValue<unknown>>,
-    effects: Set<EffectObject>
+    effects: SlotBuffer<EffectObject>
   ) {
     for (const [name, source] of Object.entries(mappings)) {
-      effects.add(
+      effects.push(
         $.effect(() => {
           const val = isAtom(source)
             ? source.value
@@ -47,10 +47,10 @@ export const SetupFeatures = {
   aria(
     internals: ElementInternals,
     aria: Record<string, ReadonlyAtom<unknown>>,
-    effects: Set<EffectObject>
+    effects: SlotBuffer<EffectObject>
   ) {
     for (const [prop, atom] of Object.entries(aria)) {
-      effects.add(
+      effects.push(
         $.effect(() => {
           (internals as unknown as Record<string, string | null>)[prop] = Option.unwrapOr(
             Option.map(Option.fromNullable(atom.value), String),
@@ -65,7 +65,7 @@ export const SetupFeatures = {
   hydrate(
     root: ParentNode,
     bindings: Record<string, ReadonlyAtom<unknown>>,
-    effects: Set<EffectObject>,
+    effects: SlotBuffer<EffectObject>,
     hydratedNodes: Set<Element>
   ) {
     const BIND_ATTRS = ['data-aej-bind', 'data-bind'];
@@ -78,7 +78,7 @@ export const SetupFeatures = {
         Option.map(Option.fromNullable(node.getAttribute(attr)), (key) => {
           if (bindings[key]) {
             const atom = bindings[key];
-            effects.add(
+            effects.push(
               $.effect(() => {
                 const val = String(atom.value ?? '');
                 if (node.textContent !== val) node.textContent = val;
@@ -99,13 +99,13 @@ export const SetupFeatures = {
   parts(
     root: ParentNode,
     parts: Record<string, ReadonlyAtom<unknown>>,
-    effects: Set<EffectObject>
+    effects: SlotBuffer<EffectObject>
   ) {
     const apply = (node: Element) => {
       Option.map(Option.fromNullable(node.getAttribute('data-aej-part')), (key) => {
         if (parts[key]) {
           const atom = parts[key];
-          effects.add(
+          effects.push(
             $.effect(() => {
               const val = atom.value;
               const normalized =
@@ -131,7 +131,7 @@ export const SetupFeatures = {
     root: ParentNode,
     selector: string,
     apply: (n: Element) => void,
-    effects: Set<EffectObject>
+    effects: SlotBuffer<EffectObject>
   ) {
     if (root instanceof Element && root.matches(selector)) apply(root);
     root.querySelectorAll(selector).forEach((el) => apply(el));
@@ -147,7 +147,7 @@ export const SetupFeatures = {
       )
     );
     obs.observe(root, { childList: true, subtree: true });
-    effects.add($.effect(() => () => obs.disconnect()));
+    effects.push($.effect(() => () => obs.disconnect()));
   },
 
   form(
@@ -161,12 +161,12 @@ export const SetupFeatures = {
       | ReadonlyAtom<ValidityStateFlags | string>
       | ((val: unknown) => ValidityStateFlags | string)
       | undefined,
-    effects: Set<EffectObject>
+    effects: SlotBuffer<EffectObject>
   ) {
     const valAtomOpt = Option.fromNullable(!value ? null : isAtom(value) ? value : value.val);
     const stateAtomOpt = Option.fromNullable(!value || isAtom(value) ? null : value.state);
 
-    effects.add(
+    effects.push(
       $.effect(() => {
         Option.map(valAtomOpt, (valAtom) => {
           const v = valAtom.value;

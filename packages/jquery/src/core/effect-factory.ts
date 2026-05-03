@@ -178,13 +178,14 @@ export function registerMapEffect<T>(
     const items = entries.map(([key, source]) => {
       const value = isAtom(source)
         ? (source as ReadonlyAtom<T | Promise<T>>).value
-        : Option.unwrapOr(
-            Option.map(
-              Option.fromNullable(typeof source === 'function' ? source : null),
-              (fn: Function) => fn()
-            ),
-            source as T | Promise<T>
+        : Option.match(
+            Option.fromNullable(typeof source === 'function' ? (source as Function) : null),
+            {
+              some: (fn) => fn(),
+              none: () => source as T | Promise<T>,
+            }
           );
+
       return { key, value };
     });
 
