@@ -34,17 +34,29 @@ export type Err<E> = {
 export type Result<T, E = Error> = Ok<T> | Err<E>;
 
 /**
+ * Pre-allocated success result for void operations.
+ */
+const VOID_SUCCESS: Result<void, never> = {
+  ok: true,
+  value: undefined,
+  [RESULT_SYMBOL]: true,
+};
+
+/**
  * Utilities for creating and consuming Result types.
  */
 export const Result = {
   /**
    * Creates a successful Result.
    */
-  ok: <T>(value: T): Result<T, never> => ({
-    ok: true as const,
-    value,
-    [RESULT_SYMBOL]: true,
-  }),
+  ok: <T>(value: T): Result<T, never> => {
+    if (value === (undefined as unknown as T)) return VOID_SUCCESS as unknown as Result<T, never>;
+    return {
+      ok: true as const,
+      value,
+      [RESULT_SYMBOL]: true,
+    };
+  },
 
   /**
    * Creates a failed Result.

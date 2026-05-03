@@ -19,6 +19,14 @@ export type None = {
 };
 
 /**
+ * A constant representing the absence of a value.
+ */
+const NONE: None = {
+  ok: false,
+  [OPTION_SYMBOL]: true,
+};
+
+/**
  * A discriminated union representing either a value ({@link Some})
  * or the absence of a value ({@link None}).
  */
@@ -40,10 +48,7 @@ export const Option = {
   /**
    * A constant representing the absence of a value.
    */
-  none: {
-    ok: false,
-    [OPTION_SYMBOL]: true,
-  } as None,
+  none: NONE,
 
   /**
    * Type guard to check if an {@link Option} contains a value.
@@ -102,7 +107,7 @@ export const Option = {
    * Creates an {@link Option} from a value that might be `null` or `undefined`.
    */
   fromNullable: <T>(value: T | null | undefined): Option<T> =>
-    value == null ? Option.none : Option.some(value),
+    value == null ? NONE : Option.some(value),
 
   /**
    * Executes a branch handler based on whether the option is {@link Some} or {@link None}.
@@ -114,7 +119,7 @@ export const Option = {
    * Returns {@link None} if the inner value does not satisfy the predicate.
    */
   filter: <T>(opt: Option<T>, predicate: (val: T) => boolean): Option<T> =>
-    opt.ok && predicate(opt.value) ? opt : Option.none,
+    opt.ok && predicate(opt.value) ? opt : NONE,
 
   /**
    * Checks for deep equality between two options.
