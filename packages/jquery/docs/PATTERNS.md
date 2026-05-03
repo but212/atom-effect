@@ -411,13 +411,13 @@ Use `$.atomUrl` to synchronize your application state with the browser's URL.
 // 1. Reading URL state reactively
 $.effect(() => {
   console.log('Current path:', $.atomUrl.path.value);
-  console.log('Query params:', $.atomUrl.params.value);
+  console.log('Query params:', $.atomUrl.query.value);
 });
 
 // 2. Updating URL state (triggers navigation)
 $('#search-input').on('input', (e) => {
-  // Directly update params atom
-  $.atomUrl.params.value = { ...$.atomUrl.params.value, q: e.target.value };
+  // Directly update query atom
+  $.atomUrl.query.value = { ...$.atomUrl.query.value, q: e.target.value };
 });
 
 // 3. Navigation with state
@@ -431,7 +431,7 @@ When multiple URL parts change simultaneously, wrap them in `$.batch` to ensure 
 ```javascript
 $.batch(() => {
   $.atomUrl.path.value = '/search';
-  $.atomUrl.params.value = { category: 'electronics', sort: 'price' };
+  $.atomUrl.query.value = { category: 'electronics', sort: 'price' };
   $.atomUrl.hash.value = 'results';
 }); // Results in a single pushState call: /search?category=electronics&sort=price#results
 ```

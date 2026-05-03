@@ -299,7 +299,7 @@ export interface AtomUrl {
    * Reactive atom containing parsed query parameters as an object.
    * Setting this value triggers navigation.
    */
-  readonly params: WritableAtom<Record<string, string>>;
+  readonly query: WritableAtom<Record<string, string>>;
   /** Reactive atom containing the current navigation type. */
   readonly type: ReadonlyAtom<NavigationType>;
   /**
@@ -307,8 +307,11 @@ export interface AtomUrl {
    * Setting this value updates history.state.
    */
   readonly state: WritableAtom<unknown>;
-  /** Base path for the application (useful for history mode). */
-  basePath: string;
+  /**
+   * Reactive atom containing the base path for the application.
+   * Paths are resolved relative to this base.
+   */
+  readonly base: WritableAtom<string>;
   /** Navigates to a new URL using pushState. */
   push(url: string, state?: unknown): void;
   /** Replaces the current URL using replaceState. */
@@ -319,6 +322,8 @@ export interface AtomUrl {
   forward(): void;
   /** Resets the URL state to the current platform location. */
   reset(): void;
+  /** Synchronizes the internal state with the current platform location. */
+  update(type: NavigationType): void;
   /** Disposes of URL listeners and observers. */
   dispose(): void;
 }

@@ -49,7 +49,10 @@
 
 #### Added
 
-- **Reactive URL Management (`$.atomUrl`)**: Introduced a centralized, reactive system for managing the browser's URL. Provides synchronized atoms for `path`, `search`, `hash`, `params`, and `state`, with full support for navigation batching and `basePath` resolution.
+- **Reactive URL Management (`$.atomUrl`)**: Introduced a centralized, reactive system for managing the browser's URL.
+  - Provides synchronized atoms for `path`, `search`, `hash`, `query` (formerly `params`), `state`, and a reactive `base` (formerly `basePath`).
+  - Supports navigation batching, explicit `update()` for manual synchronization, and a resilient auto-revive mechanism for singleton atoms.
+  - Features a re-engineered architecture using decoupled `PartContext` and removal of history monkey-patching for improved stability.
 - **Reactive Web Components (`$.useAtomComponent`)**: A comprehensive toolkit for building reactive Custom Elements with declarative bindings, FACE integration, and Shadow DOM support.
 - **Form Binding (`atomForm`)**: Declarative integration with the browser's Constraint Validation API and automatic field discovery.
 - **Dependency Injection**: Enhanced DI system with 100% Shadow DOM coverage and unified move detection.
@@ -63,7 +66,6 @@
 - **Performance**: Switched `$.route` to a registry-based link tracking system using `MutationObserver` and a `Set` to eliminate redundant `querySelectorAll` scans during navigation.
 - **Refactor**: Introduced `createChainableMethod` factory to unify argument normalization and iteration across chainable bindings (`atomClass`, `atomAttr`, etc.).
 - **Refactor**: Standardized `bindAttr` with a unified transformation pipeline and improved `bindVisibility` to preserve original `display` modes.
-- **`$.atomUrl`**: Enhanced with robust URL normalization (standardizing trailing slashes and empty parts), microtask-based property batching, and resilient singleton atoms that auto-revive if disposed.
 - **`$.route`**: Added native `URLPattern` support for dynamic segment extraction and an `isEqual` option for custom route comparison.
 - **`atomList`**: Improved reconciliation logic with an optional `isEqual` check and optimized `untracked` blocks for internal state management.
 - **`atomForm`**: Refined field discovery and validation error handling using functional `Option`/`Result` patterns for improved safety.

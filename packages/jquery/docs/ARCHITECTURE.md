@@ -193,12 +193,14 @@ The URL engine provides a reactive interface to the browser's location and histo
 
 ### 9.1 Implementation Details
 
-- **Resilient Atoms**: Singleton properties (like `path`, `params`) use a proxy wrapper that revives internal instances if they are disposed.
+- **Resilient Atoms**: Singleton properties (like `path`, `query`) use a proxy wrapper that revives internal instances if they are disposed.
 - **Navigation Batching**: Property updates are coalesced via a microtask. If multiple properties change within the same tick, they are applied in a single History API call.
 - **Normalization**: Standardizes URL components (e.g., trailing slashes, search/hash empty states) during synchronization.
+- **Decoupled Parts**: Uses a `PartContext` and `URL_PARTS_CONFIG` to separate serialization logic from the main state manager.
 - **Bidirectional Synchronization**:
   - **Downstream**: Listens to `popstate` and `hashchange` events.
-  - **Upstream**: Monkey-patches `history.pushState` and `history.replaceState` to detect programmatic changes.
+  - **Upstream**: Navigation is handled via explicit `push`/`replace` methods using priority-based strategies. (Monkey-patching of history methods was removed for better stability).
+  - **Reactive Base**: The application base path is managed as a `WritableAtom`, allowing the resolution logic to react to dynamic base path changes.
   - **State Guarding**: Uses an internal flag to prevent recursive updates during atomic URL operations.
 
 ## 10. Security

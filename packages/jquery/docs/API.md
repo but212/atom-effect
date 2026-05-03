@@ -460,10 +460,10 @@ A reactive manager for the application's URL state. It synchronizes with the bro
 | `path` | `WritableAtom<string>` | The normalized pathname. Setting this value triggers navigation. |
 | `search` | `WritableAtom<string>` | The raw query string (including the leading `?`). |
 | `hash` | `WritableAtom<string>` | The fragment identifier (including the leading `#`). |
-| `params` | `WritableAtom<Record<string, string>>` | Parsed query parameters as a key-value object. |
+| `query` | `WritableAtom<Record<string, string>>` | Parsed query parameters as a key-value object. |
 | `state` | `WritableAtom<unknown>` | The current history state (`history.state`). |
 | `type` | `ReadonlyAtom<NavigationType>` | The last navigation type: `init`, `push`, `replace`, `pop`, or `hash`. |
-| `basePath` | `string` | The base path for resolution. |
+| `base` | `WritableAtom<string>` | The reactive base path for resolution. |
 
 #### Navigation Methods
 
@@ -472,6 +472,7 @@ A reactive manager for the application's URL state. It synchronizes with the bro
 - **`back()`**: Navigates backward in history (`history.back()`).
 - **`forward()`**: Navigates forward in history (`history.forward()`).
 - **`reset()`**: Re-initializes the state from the current platform location and restores event listeners if needed.
+- **`update(type)`**: Explicitly synchronizes the internal state with the current platform location.
 - **`dispose()`**: Removes all event listeners and disposes of internal reactive atoms.
 
 ---

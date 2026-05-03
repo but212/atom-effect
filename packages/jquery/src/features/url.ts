@@ -4,119 +4,118 @@ import $ from 'jquery';
 import type { AtomUrl, NavigationType, ReadonlyAtom, WritableAtom } from '@/types';
 import { shallowEqual } from '@/utils';
 
-/** Internal state of the reactive URL manager. */
+// --- Constants & Types ---
+
+const IS_BROWSER = typeof window !== 'undefined';
+const FALLBACK_URL = 'http://localhost/';
+const PROTOCOL_REGEX = /^[a-z][a-z0-9.+-]*:/i;
+const NAV_PRIORITY: Record<'push' | 'replace', number> = { push: 2, replace: 1 };
+
 interface UrlSnapshot {
   url: string;
   state: unknown;
   type: NavigationType;
 }
 
-const IS_BROWSER = typeof window !== 'undefined';
-const FALLBACK_URL = 'http://localhost/';
-const PROTOCOL_REGEX = /^[a-z][a-z0-9.+-]*:/i;
+interface PendingNav {
+  url: URL;
+  state: unknown;
+  method: 'push' | 'replace';
+}
 
 /**
- * Navigation method priorities for batching: push overrides replace.
- * If a batch contains both, the final operation must be 'push' to preserve history.
+ * Context provided to URL part getters/setters to keep them decoupled
+ * from the main class instance.
  */
-const NAV_PRIORITY: Record<'push' | 'replace', number> = { push: 2, replace: 1 };
+interface PartContext {
+  resolve: (url: string) => string;
+  patch: (update: (u: URL) => void, state?: unknown, method?: 'push' | 'replace') => void;
+  snapshot: () => UrlSnapshot;
+  base: () => string;
+}
 
-/**
- * Path resolution logic driven by pattern-action pairs.
- * Note: External and protocol-relative URLs are returned as-is to avoid mangling.
- */
-const RESOLVE_RULES: Array<{
-  test: (url: string) => boolean;
-  exec: (url: string, base: string, current: string) => string;
-}> = [
-  {
-    test: (u) => !IS_BROWSER || PROTOCOL_REGEX.test(u) || u.startsWith('//'),
-    exec: (u) => u,
+const NAV_STRATEGIES = {
+  push: {
+    history: (h: History, s: unknown, u: string) => h.pushState(s, '', u),
+    location: (l: Location, u: string) => (l.href = u),
   },
-  {
-    test: (u) => u.startsWith('/'),
-    exec: (u, base) => {
-      if (!base || base === '/') return u;
-      // Constraint: Absolute paths are resolved relative to the configured basePath.
-      return u === base || u.startsWith(`${base}/`) ? u : base + u;
-    },
-  },
-  {
-    test: () => true,
-    exec: (u, _, current) =>
-      Result.unwrapOr(
-        Result.tryCatch(() => {
-          const resolved = new URL(u, current);
-          return resolved.pathname + resolved.search + resolved.hash;
-        }),
-        u
-      ),
-  },
-];
-
-/**
- * Declarative schema for URL parts extraction and injection.
- * Defines how to read from/write to a native URL object.
- */
-const PART_SCHEMA = {
-  path: {
-    get: (u: URL, base: string) => {
-      const p = u.pathname;
-      return !base || base === '/'
-        ? p
-        : p === base
-          ? '/'
-          : p.startsWith(`${base}/`)
-            ? p.substring(base.length)
-            : p;
-    },
-    set: (u: URL, v: string, res: (s: string) => string) => {
-      u.pathname = res(v);
-    },
-  },
-  search: {
-    // URL spec: search setter normalises the leading '?' automatically.
-    get: (u: URL) => u.search,
-    set: (u: URL, v: string) => {
-      u.search = v;
-    },
-  },
-  hash: {
-    // URL spec: hash setter normalises the leading '#' automatically.
-    get: (u: URL) => u.hash,
-    set: (u: URL, v: string) => {
-      u.hash = v;
-    },
-  },
-  params: {
-    get: (u: URL) => Object.fromEntries(u.searchParams),
-    set: (u: URL, v: Record<string, unknown>) => {
-      const p = new URLSearchParams();
-      Object.entries(v).forEach(([k, val]) => {
-        if (val != null) p.set(k, String(val));
-      });
-      u.search = p.toString();
-    },
+  replace: {
+    history: (h: History, s: unknown, u: string) => h.replaceState(s, '', u),
+    location: (l: Location, u: string) => l.replace(u),
   },
 } as const;
 
-/** Browser event and history method mappings for synchronization. */
-const BINDINGS: Array<
-  | { event: string; type: NavigationType }
-  | { patch: 'pushState' | 'replaceState'; type: NavigationType }
-> = [
-  { event: 'popstate', type: 'pop' },
-  { event: 'hashchange', type: 'hash' },
-  { patch: 'pushState', type: 'push' },
-  { patch: 'replaceState', type: 'replace' },
-];
+/**
+ * Schema defining how each URL part maps to the underlying URL object.
+ * Logic: Centralized serialization/deserialization for all URL atoms.
+ */
+const URL_PARTS_CONFIG = {
+  path: {
+    get: (u: URL, ctx: PartContext) => {
+      const p = u.pathname;
+      const b = ctx.base();
+      if (!b || b === '/') return p;
+      return p === b ? '/' : p.startsWith(`${b}/`) ? p.substring(b.length) : p;
+    },
+    set: (v: string, ctx: PartContext) => ctx.patch((u) => (u.pathname = ctx.resolve(v))),
+  },
+  search: {
+    get: (u: URL) => u.search,
+    set: (v: string, ctx: PartContext) => ctx.patch((u) => (u.search = v)),
+  },
+  hash: {
+    get: (u: URL) => u.hash,
+    set: (v: string, ctx: PartContext) => ctx.patch((u) => (u.hash = v)),
+  },
+  query: {
+    get: (u: URL) => Object.fromEntries(u.searchParams) as Record<string, string>,
+    set: (v: Record<string, string>, ctx: PartContext) =>
+      ctx.patch((u) => {
+        const p = new URLSearchParams();
+        Object.entries(v).forEach(([k, val]) => {
+          if (val != null) p.set(k, String(val));
+        });
+        u.search = p.toString();
+      }),
+    equal: shallowEqual,
+  },
+  state: {
+    get: (_: URL, ctx: PartContext) => ctx.snapshot().state,
+    set: (v: unknown, ctx: PartContext) => ctx.patch(() => {}, v, 'replace'),
+    equal: shallowEqual,
+  },
+} as const;
+
+// --- Logic Helpers ---
+
+const isExternal = (url: string) => PROTOCOL_REGEX.test(url) || url.startsWith('//');
+
+const resolveUrl = (url: string, base: string, current: string): string => {
+  if (!IS_BROWSER || isExternal(url)) return url;
+
+  if (url.startsWith('/')) {
+    if (!base || base === '/') return url;
+    return url.startsWith(`${base}/`) || url === base ? url : `${base}${url}`;
+  }
+
+  // Reason: Native URL resolution for relative paths.
+  return Result.unwrapOrElse(
+    Result.tryCatch(() => {
+      const resolved = new URL(url, current);
+      return resolved.pathname + resolved.search + resolved.hash;
+    }),
+    () => url
+  );
+};
+
+// --- Implementation ---
 
 /**
- * Reactive URL state manager implementation.
- * Orchestrates browser history API with atom-effect reactive primitives.
+ * Reactive URL state manager.
+ * Orchestrates the relationship between browser location and atom-effect.
  */
 class AtomUrlImpl implements AtomUrl {
-  private readonly _snapshot = atom<UrlSnapshot>(
+  #snapshot = atom<UrlSnapshot>(
     {
       url: IS_BROWSER ? window.location.href : FALLBACK_URL,
       type: 'init',
@@ -125,167 +124,162 @@ class AtomUrlImpl implements AtomUrl {
     { name: 'url:snapshot' }
   );
 
-  private readonly _basePath = atom('', { name: 'url:base-path' });
-  private readonly _computeds: { dispose(): void }[] = [];
-  private readonly _navDrivers = {
-    push: this.push.bind(this),
-    replace: this.replace.bind(this),
-  } as const;
+  #resources: { dispose(): void }[] = [];
+  #ignoreSync = false;
+  #navPending = false;
+  #pending: Option<PendingNav> = Option.none;
+  #cleanup: Option<() => void> = Option.none;
 
-  /** Flag to prevent navigation-to-state recursive loops. */
-  private _ignoreSync = false;
-  private _navPending = false;
-  private _pending: Option<{
-    url: URL;
-    state: unknown;
-    method: 'push' | 'replace';
-  }> = Option.none;
-  private _cleanup: Option<() => void> = Option.none;
+  public readonly base = atom('', { name: 'url:base' });
 
-  private readonly _urlObj = this._makeResilient(() =>
-    computed(
-      () => {
-        const snap = this._snapshot.value;
-        return Result.unwrapOrElse(
-          Result.tryCatch(() => new URL(snap.url)),
-          () => {
-            return new URL(IS_BROWSER ? window.location.href : FALLBACK_URL);
-          }
-        );
-      },
-      { name: 'url:obj' }
-    )
-  );
+  public readonly url: ReadonlyAtom<string>;
+  public readonly type: ReadonlyAtom<NavigationType>;
+  public readonly path: WritableAtom<string>;
+  public readonly search: WritableAtom<string>;
+  public readonly hash: WritableAtom<string>;
+  public readonly query: WritableAtom<Record<string, string>>;
+  public readonly state: WritableAtom<unknown>;
 
-  /** Returns current basePath with leading slash and no trailing slash. */
-  private _getNormalizedBase(): string {
-    let base = this._basePath.peek();
-    if (!base) return '';
-    if (!base.startsWith('/')) base = `/${base}`;
-    return base.endsWith('/') ? base.slice(0, -1) : base;
-  }
-
-  public readonly url: ReadonlyAtom<string> = this._makeResilient(() =>
-    computed(() => this._snapshot.value.url, { name: 'url:full' })
-  );
-
-  public readonly type: ReadonlyAtom<NavigationType> = this._makeResilient(() =>
-    computed(() => this._snapshot.value.type, { name: 'url:type:read' })
-  );
-
-  public readonly path = this._createPart(
-    () => PART_SCHEMA.path.get(this._urlObj.value, this._getNormalizedBase()),
-    (val) => this._patch((u) => PART_SCHEMA.path.set(u, val, this._resolve.bind(this)))
-  );
-
-  public readonly search = this._createPart(
-    () => PART_SCHEMA.search.get(this._urlObj.value),
-    (val) => this._patch((u) => PART_SCHEMA.search.set(u, val))
-  );
-
-  public readonly hash = this._createPart(
-    () => PART_SCHEMA.hash.get(this._urlObj.value),
-    (val) => this._patch((u) => PART_SCHEMA.hash.set(u, val))
-  );
-
-  public readonly params = this._createPart(
-    () => PART_SCHEMA.params.get(this._urlObj.value),
-    (val) => this._patch((u) => PART_SCHEMA.params.set(u, val as Record<string, unknown>)),
-    shallowEqual
-  );
-
-  public readonly state = this._createPart(
-    () => this._snapshot.value.state,
-    (val) => this._patch(() => {}, val, 'replace'),
-    shallowEqual
-  );
-
-  public get basePath(): string {
-    return this._basePath.value;
-  }
-  public set basePath(val: string) {
-    this._basePath.value = val;
-  }
+  #urlObj: ReadonlyAtom<URL>;
 
   constructor() {
-    this._setupListeners();
+    this.#urlObj = this.#createResilient(() =>
+      computed(
+        () => {
+          return Result.unwrapOrElse(
+            Result.tryCatch(() => new URL(this.#snapshot.value.url)),
+            () => new URL(IS_BROWSER ? window.location.href : FALLBACK_URL)
+          );
+        },
+        { name: 'url:obj' }
+      )
+    );
+
+    this.url = this.#createResilient(() =>
+      computed(() => this.#snapshot.value.url, { name: 'url:full' })
+    );
+    this.type = this.#createResilient(() =>
+      computed(() => this.#snapshot.value.type, { name: 'url:type' })
+    );
+
+    const ctx: PartContext = {
+      resolve: (url) => this.#resolve(url),
+      patch: (update, state, method) => this.#patch(update, state, method),
+      snapshot: () => this.#snapshot.peek(),
+      base: () => this.#getNormalizedBase(),
+    };
+
+    this.path = this.#createPart(URL_PARTS_CONFIG.path, ctx);
+    this.search = this.#createPart(URL_PARTS_CONFIG.search, ctx);
+    this.hash = this.#createPart(URL_PARTS_CONFIG.hash, ctx);
+    this.query = this.#createPart(URL_PARTS_CONFIG.query, ctx);
+    this.state = this.#createPart(URL_PARTS_CONFIG.state, ctx);
+
+    this.#setupListeners();
+  }
+
+  // --- Internal Methods ---
+
+  #createPart<T>(
+    spec: {
+      get: (u: URL, ctx: PartContext) => T;
+      set: (v: T, ctx: PartContext) => void;
+      equal?: (a: T, b: T) => boolean;
+    },
+    ctx: PartContext
+  ): WritableAtom<T> {
+    return this.#createUrlPart(
+      () => spec.get(this.#urlObj.value, ctx),
+      (v: T) => spec.set(v, ctx),
+      spec.equal
+    );
+  }
+
+  #getNormalizedBase(): string {
+    let b = this.base.peek();
+    if (!b) return '';
+    if (!b.startsWith('/')) b = `/${b}`;
+    return b.endsWith('/') ? b.slice(0, -1) : b;
+  }
+
+  #resolve(url: string): string {
+    return resolveUrl(url, this.#getNormalizedBase(), this.#snapshot.peek().url);
   }
 
   /**
-   * Consolidates multiple URL property changes into a single history entry via a microtask.
-   *
-   * Reason: Changing multiple parts (e.g. path and params) synchronously should only
-   * trigger one browser navigation call to avoid polluting the history stack.
+   * Batches multiple URL property updates into a single navigation event.
+   * Logic: Defers navigation to a microtask and prioritizes 'push' over 'replace'.
    */
-  private _patch(update: (url: URL) => void, state?: unknown, method: 'push' | 'replace' = 'push') {
-    if (Option.isNone(this._pending)) {
-      const current = this._snapshot.peek();
-      this._pending = Option.some({
-        url: new URL(current.url),
-        state: current.state,
-        method,
-      });
+  #patch(update: (url: URL) => void, state?: unknown, method: 'push' | 'replace' = 'push') {
+    const current = this.#snapshot.peek();
+    if (Option.isNone(this.#pending)) {
+      this.#pending = Option.some({ url: new URL(current.url), state: current.state, method });
     }
 
-    Option.match(this._pending, {
-      some: (pending) => {
-        // Priority: Any 'push' in the batch upgrades the entire batch to 'push'.
-        if (NAV_PRIORITY[method] > NAV_PRIORITY[pending.method]) {
-          pending.method = method;
-        }
-
-        update(pending.url);
-        if (state !== undefined) pending.state = state;
+    Option.match(this.#pending, {
+      some: (p: PendingNav) => {
+        if (NAV_PRIORITY[method] > NAV_PRIORITY[p.method]) p.method = method;
+        update(p.url);
+        if (state !== undefined) p.state = state;
       },
       none: () => {},
     });
 
-    if (!this._navPending) {
-      this._navPending = true;
+    if (!this.#navPending) {
+      this.#navPending = true;
       Promise.resolve().then(() => {
-        if (!this._navPending || Option.isNone(this._pending)) return;
-
-        Option.match(this._pending, {
-          some: ({ url, state: s, method: m }) => {
-            this._navPending = false;
-            this._pending = Option.none;
-
-            this._navDrivers[m](url.href, s);
+        if (!this.#navPending) return;
+        Option.match(this.#pending, {
+          some: ({ url, state: s, method: m }: PendingNav) => {
+            this.#navPending = false;
+            this.#pending = Option.none;
+            this.#navigate(url.href, s, m);
           },
-          none: () => {},
+          none: () => {
+            this.#navPending = false;
+          },
         });
       });
     }
   }
 
-  /** Resolves relative or absolute paths against the current basePath and location. */
-  private _resolve(url: string): string {
-    const base = this._getNormalizedBase();
-    const current = this._snapshot.peek().url;
-    return Option.match(Option.fromNullable(RESOLVE_RULES.find((r) => r.test(url))), {
-      some: (rule) => rule.exec(url, base, current),
-      none: () => url,
+  #navigate(url: string, state: unknown, method: 'push' | 'replace') {
+    if (!IS_BROWSER) return;
+    // Reason: Prevents the resulting popstate/hashchange from triggering a loop.
+    this.#ignoreSync = true;
+    try {
+      NAV_STRATEGIES[method].history(window.history, state, url);
+      this.update(method);
+    } finally {
+      this.#ignoreSync = false;
+    }
+  }
+
+  #setupListeners() {
+    if (!IS_BROWSER) return;
+    const sync = (t: NavigationType) => !this.#ignoreSync && this.update(t);
+    const onPop = () => sync('pop');
+    const onHash = () => sync('hash');
+
+    window.addEventListener('popstate', onPop);
+    window.addEventListener('hashchange', onHash);
+
+    this.#cleanup = Option.some(() => {
+      window.removeEventListener('popstate', onPop);
+      window.removeEventListener('hashchange', onHash);
     });
   }
 
-  /** Track reactive objects for centralized disposal. */
-  private _track<T extends { dispose(): void }>(obj: T): T {
-    this._computeds.push(obj);
-    return obj;
-  }
-
   /**
-   * Wraps an atom or computed in a proxy that auto-revives if it was accidentally disposed.
-   *
-   * Why: This module exports a singleton `atomUrl`. If a user or test accidentally
-   * calls `.dispose()` on a part (like `.path`), it would normally break the app permanently.
-   * This resilience ensures singleton parts remain functional across app resets.
+   * Wraps an atom in a proxy that automatically recreates it if accessed after disposal.
+   * Reason: Atoms may be disposed during component unmounts; this ensures the bridge
+   * remains alive for long-lived shared state.
    */
-  private _makeResilient<T>(creator: () => ReadonlyAtom<T>): ReadonlyAtom<T>;
-  private _makeResilient<T>(creator: () => WritableAtom<T>): WritableAtom<T>;
-  private _makeResilient<T>(
-    creator: () => ReadonlyAtom<T> | WritableAtom<T>
-  ): ReadonlyAtom<T> | WritableAtom<T> {
+  #createResilient<T>(creator: () => WritableAtom<T>): WritableAtom<T>;
+  #createResilient<T>(creator: () => ReadonlyAtom<T>): ReadonlyAtom<T>;
+  #createResilient<T>(
+    creator: () => WritableAtom<T> | ReadonlyAtom<T>
+  ): WritableAtom<T> | ReadonlyAtom<T> {
     let instance = creator() as WritableAtom<T>;
 
     const access = <R>(fn: (atom: WritableAtom<T>) => R): R => {
@@ -293,7 +287,6 @@ class AtomUrlImpl implements AtomUrl {
         return fn(instance);
       } catch (e: unknown) {
         const err = e as { name?: string; message?: string } | null;
-        // Logic: Catch errors specifically related to accessing a disposed computed value.
         if (err?.name === 'ComputedError' || err?.message?.includes('disposed')) {
           instance = creator() as WritableAtom<T>;
           return fn(instance);
@@ -302,7 +295,7 @@ class AtomUrlImpl implements AtomUrl {
       }
     };
 
-    return this._track({
+    const proxy = {
       get value() {
         return access((a) => a.value);
       },
@@ -315,159 +308,103 @@ class AtomUrlImpl implements AtomUrl {
       subscribe: (fn: (val?: T) => void) => access((a) => a.subscribe(fn)),
       dispose: () => instance.dispose(),
       subscriberCount: () => access((a) => a.subscriberCount()),
-    } as WritableAtom<T>);
+    } as WritableAtom<T>;
+
+    this.#resources.push(proxy);
+    return proxy;
   }
 
-  /** Factory for creating resilient, writable URL part atoms. */
-  private _createPart<T>(
+  #createUrlPart<T>(
     get: () => T,
-    set: (val: T) => void,
+    set: (v: T) => void,
     equal?: (a: T, b: T) => boolean
   ): WritableAtom<T> {
-    return this._makeResilient<T>(() => {
+    return this.#createResilient(() => {
       const c = computed(get, equal ? { equal } : {});
       return {
         get value() {
           return c.value;
         },
         set value(v: T) {
-          if (equal ? equal(c.peek(), v) : c.peek() === v) return;
-          set(v);
+          if (equal ? !equal(c.peek(), v) : c.peek() !== v) set(v);
         },
         peek: () => c.peek(),
         subscribe: (fn: (val?: T) => void) => c.subscribe(fn),
         dispose: () => c.dispose(),
         subscriberCount: () => c.subscriberCount(),
       } as WritableAtom<T>;
-    });
+    }) as WritableAtom<T>;
   }
 
-  /** Patches history API and attaches event listeners for bidirectional sync. */
-  private _setupListeners(): void {
-    if (!IS_BROWSER) return;
-    const sync = (type: NavigationType) => {
-      if (this._ignoreSync) return;
-      this.update(type);
-    };
+  // --- Public API ---
 
-    const cleanups: (() => void)[] = [];
-
-    BINDINGS.forEach((b) => {
-      if ('event' in b) {
-        const handler = () => sync(b.type);
-        window.addEventListener(b.event, handler);
-        cleanups.push(() => window.removeEventListener(b.event, handler));
-      } else {
-        // Reason: pushState/replaceState do not emit browser events.
-        // We monkey-patch them to intercept programmatic navigation from other libraries.
-        const original = window.history[b.patch];
-        window.history[b.patch] = (...args: Parameters<typeof original>) => {
-          original.apply(window.history, args);
-          sync(b.type);
-        };
-        cleanups.push(() => {
-          window.history[b.patch] = original;
-        });
-      }
-    });
-
-    this._cleanup = Option.some(() => cleanups.forEach((fn) => fn()));
-  }
-
-  /** Synchronizes internal snapshot with the current browser location. */
-  private update(type: NavigationType): void {
+  /**
+   * Explicit handshake between the Browser's Location and the Atom system.
+   * Call manually if external scripts modify History without triggering events.
+   */
+  public update(type: NavigationType) {
     const url = IS_BROWSER ? window.location.href : FALLBACK_URL;
     const state = IS_BROWSER ? window.history.state : null;
-    const current = this._snapshot.peek();
+    const current = this.#snapshot.peek();
 
-    const normalize = (u: string) =>
-      Result.unwrapOrElse(
-        Result.tryCatch(() => {
-          const parsed = new URL(u);
-          return parsed.origin + parsed.pathname + parsed.search + parsed.hash;
-        }),
-        () => u || '/'
-      );
+    this.#navPending = false;
+    this.#pending = Option.none;
 
-    // Equality check to prevent redundant atom updates and infinite loops.
-    if (
-      normalize(current.url) === normalize(url) &&
-      shallowEqual(current.state, state) &&
-      current.type === type
-    ) {
-      return;
-    }
-
-    this._navPending = false;
-    this._pending = Option.none;
+    if (current.url === url && shallowEqual(current.state, state) && current.type === type) return;
 
     batch(() => {
-      this._snapshot.value = { url, state, type };
+      this.#snapshot.value = { url, state, type };
     });
   }
 
   /**
-   * Navigates to a new URL and adds a entry to history.
-   *
-   * Example:
-   * ```typescript
-   * $.atomUrl.push('/search?q=query#results');
-   * ```
+   * Adds a new entry to history and updates reactive state.
+   * @example $.atomUrl.push('/search', { q: 'query' });
    */
-  public push(url: string, state: unknown = null): void {
-    if (!IS_BROWSER) return;
-    this._ignoreSync = true;
-    try {
-      window.history.pushState(state, '', this._resolve(url));
-      this.update('push');
-    } finally {
-      this._ignoreSync = false;
-    }
+  public push(url: string, state: unknown = null) {
+    this.#doNavigate('push', url, state);
   }
 
   /**
-   * Updates the current URL without adding a new entry to history.
+   * Replaces the current history entry.
+   * @example $.atomUrl.replace('/login');
    */
-  public replace(url: string, state: unknown = null): void {
-    if (!IS_BROWSER) return;
-    this._ignoreSync = true;
-    try {
-      window.history.replaceState(state, '', this._resolve(url));
-      this.update('replace');
-    } finally {
-      this._ignoreSync = false;
+  public replace(url: string, state: unknown = null) {
+    this.#doNavigate('replace', url, state);
+  }
+
+  #doNavigate(method: 'push' | 'replace', url: string, state: unknown) {
+    const resolved = this.#resolve(url);
+    if (isExternal(resolved)) {
+      if (IS_BROWSER) NAV_STRATEGIES[method].location(window.location, resolved);
+      return;
     }
+    this.#navigate(resolved, state, method);
   }
 
-  public back(): void {
-    if (IS_BROWSER) window.history.back();
+  public back() {
+    IS_BROWSER && window.history.back();
   }
-  public forward(): void {
-    if (IS_BROWSER) window.history.forward();
+  public forward() {
+    IS_BROWSER && window.history.forward();
   }
 
-  /** Re-attaches listeners and forces a sync with the current URL. */
-  public reset(): void {
-    if (IS_BROWSER && Option.isNone(this._cleanup)) this._setupListeners();
+  /**
+   * Forces re-synchronization and ensures listeners are active.
+   */
+  public reset() {
+    if (IS_BROWSER && Option.isNone(this.#cleanup)) this.#setupListeners();
     this.update('init');
   }
 
-  /** Fully detaches from the browser and disposes of all reactive parts. */
-  public dispose(): void {
-    Option.match(this._cleanup, {
-      some: (fn) => fn(),
-      none: () => {},
-    });
-    this._cleanup = Option.none;
-    this._pending = Option.none;
-    this._navPending = false;
-    this._computeds.forEach((c) => c.dispose());
-    this._computeds.length = 0;
+  public dispose() {
+    Option.match(this.#cleanup, { some: (f: () => void) => f(), none: () => {} });
+    this.#cleanup = Option.none;
+    this.#navPending = false;
+    this.#resources.forEach((r) => r.dispose());
+    this.#resources.length = 0;
   }
 }
 
-/**
- * Singleton instance of the reactive URL manager.
- */
 export const atomUrl: AtomUrl = new AtomUrlImpl();
 $.extend({ atomUrl });

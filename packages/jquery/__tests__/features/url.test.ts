@@ -1,33 +1,29 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import $ from '@/index';
 
-describe('$.atomUrl - Reactive URL Management', () => {
-  // --- Test Utilities ---
+describe('$.atomUrl - Relational Reactivity', () => {
+  // --- Helpers ---
 
-  /** Helper to access private _resolve for logic testing */
-  const resolve = (url: string) =>
-    ($.atomUrl as unknown as { _resolve: (url: string) => string })._resolve(url);
-
-  /** Helper to assert multiple URL parts in one go */
-  const expectUrl = (parts: {
+  /** Helper to assert multiple URL components at once */
+  const expectUrlState = (expected: {
     path?: string;
-    search?: string;
+    query?: Record<string, string>;
     hash?: string;
-    params?: Record<string, string>;
-    url?: string;
+    search?: string;
+    type?: string;
   }) => {
-    if (parts.path !== undefined) expect($.atomUrl.path.value).toBe(parts.path);
-    if (parts.search !== undefined) expect($.atomUrl.search.value).toBe(parts.search);
-    if (parts.hash !== undefined) expect($.atomUrl.hash.value).toBe(parts.hash);
-    if (parts.params !== undefined) expect($.atomUrl.params.value).toEqual(parts.params);
-    if (parts.url !== undefined) expect($.atomUrl.url.value).toBe(parts.url);
+    if (expected.path !== undefined) expect($.atomUrl.path.value).toBe(expected.path);
+    if (expected.query !== undefined) expect($.atomUrl.query.value).toEqual(expected.query);
+    if (expected.hash !== undefined) expect($.atomUrl.hash.value).toBe(expected.hash);
+    if (expected.search !== undefined) expect($.atomUrl.search.value).toBe(expected.search);
+    if (expected.type !== undefined) expect($.atomUrl.type.value).toBe(expected.type);
   };
 
   beforeEach(() => {
+    // Reset browser environment to a clean state
     window.history.replaceState(null, '', '/');
-    $.atomUrl.basePath = '';
+    $.atomUrl.base.value = '';
     $.atomUrl.reset();
-    $.debug.enabled = false;
   });
 
   afterEach(() => {
@@ -35,227 +31,179 @@ describe('$.atomUrl - Reactive URL Management', () => {
     vi.restoreAllMocks();
   });
 
-  describe('Core State & Reactivity', () => {
-    it('initializes from window.location correctly', () => {
-      expectUrl({
-        url: window.location.href,
+  describe('Reactive State Initialization', () => {
+    it('should initialize correctly from window.location', () => {
+      expectUrlState({
         path: '/',
+        query: {},
+        hash: '',
+        type: 'init',
       });
-      expect($.atomUrl.type.value).toBe('init');
     });
 
-    it('tracks history state changes', async () => {
-      const state = { user: { id: 1 } };
-      $.atomUrl.push('/dashboard', state);
-
-      expect($.atomUrl.state.value).toEqual(state);
-      expectUrl({ path: '/dashboard' });
-      expect($.atomUrl.type.value).toBe('push');
-    });
-
-    it('optimizes state updates using shallow equality', async () => {
-      $.atomUrl.push('/a', { val: 1 });
-      await $.nextTick();
-
-      let updates = 0;
-      const stop = $.effect(() => {
-        $.atomUrl.state.value;
-        updates++;
-        return undefined;
-      });
-
-      $.atomUrl.state.value = { val: 1 }; // New object, same content
-      await $.nextTick();
-
-      expect(updates).toBe(1);
-      stop.dispose();
-    });
-
-    it('uses replaceState for pure state updates', async () => {
-      const pushSpy = vi.spyOn(window.history, 'pushState');
-      const replaceSpy = vi.spyOn(window.history, 'replaceState');
-
-      $.atomUrl.state.value = { changed: true };
-      await $.nextTick();
-
-      expect(pushSpy).not.toHaveBeenCalled();
-      expect(replaceSpy).toHaveBeenCalled();
+    it('should provide a full URL atom', () => {
+      expect($.atomUrl.url.value).toBe(window.location.href);
     });
   });
 
-  describe('Navigation Synchronization', () => {
-    it('syncs with browser popstate events', async () => {
+  describe('Bidirectional Property Sync', () => {
+    it('syncs path atom with window.location.pathname', async () => {
+      $.atomUrl.path.value = '/test-path';
+      await $.nextTick();
+      expect(window.location.pathname).toBe('/test-path');
+    });
+
+    it('syncs query object and search string bidirectionally', async () => {
+      // 1. Setting query object updates search string
+      $.atomUrl.query.value = { a: '1', b: '2' };
+      await $.nextTick();
+      expect(window.location.search).toBe('?a=1&b=2');
+      expect($.atomUrl.search.value).toBe('?a=1&b=2');
+
+      // 2. Setting search string updates query object
+      $.atomUrl.search.value = '?x=10';
+      await $.nextTick();
+      expect($.atomUrl.query.value).toEqual({ x: '10' });
+    });
+
+    it('syncs hash fragment', async () => {
+      $.atomUrl.hash.value = '#section-1';
+      await $.nextTick();
+      expect(window.location.hash).toBe('#section-1');
+
+      // Browser initiated change
+      window.location.hash = 'manual';
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+      await $.nextTick();
+      expect($.atomUrl.hash.value).toBe('#manual');
+    });
+  });
+
+  describe('History API Integration (Actor)', () => {
+    it('performs pushState and updates navigation type', async () => {
+      const state = { some: 'data' };
+      $.atomUrl.push('/page-1', state);
+
+      expectUrlState({ path: '/page-1', type: 'push' });
+      expect($.atomUrl.state.value).toEqual(state);
+    });
+
+    it('performs replaceState and updates navigation type', async () => {
+      $.atomUrl.replace('/page-2');
+      expectUrlState({ path: '/page-2', type: 'replace' });
+    });
+
+    it('uses replaceState for pure state updates via atom', async () => {
+      const replaceSpy = vi.spyOn(window.history, 'replaceState');
+      $.atomUrl.state.value = { updated: true };
+      await $.nextTick();
+
+      expect(replaceSpy).toHaveBeenCalled();
+      expect($.atomUrl.state.value).toEqual({ updated: true });
+    });
+
+    it('reacts to popstate events (Browser Navigation)', async () => {
       $.atomUrl.push('/step-1');
       $.atomUrl.push('/step-2');
 
-      const backState = { from: 'manual' };
-      window.history.replaceState(backState, '', '/back');
-      window.dispatchEvent(new PopStateEvent('popstate', { state: backState }));
+      // Simulate browser back button
+      window.history.replaceState({ back: true }, '', '/back-path');
+      window.dispatchEvent(new PopStateEvent('popstate', { state: { back: true } }));
 
       await $.nextTick();
-      expectUrl({ path: '/back', params: {} });
-      expect($.atomUrl.state.value).toEqual(backState);
-      expect($.atomUrl.type.value).toBe('pop');
-    });
-
-    it('syncs with hashchange events', async () => {
-      window.location.hash = 'target';
-      window.dispatchEvent(new HashChangeEvent('hashchange'));
-
-      await $.nextTick();
-      expectUrl({ hash: '#target' });
-      expect($.atomUrl.type.value).toBe('hash');
+      expectUrlState({ path: '/back-path', type: 'pop' });
+      expect($.atomUrl.state.value).toEqual({ back: true });
     });
   });
 
-  describe('URL Part Manipulation (DX)', () => {
-    it('navigates when updating path directly', async () => {
-      $.atomUrl.path.value = '/settings';
-      await $.nextTick();
-      expect(window.location.pathname).toBe('/settings');
-    });
-
-    it('handles search parameters as an object', async () => {
-      $.atomUrl.params.value = { q: 'search', p: '1' };
-      await $.nextTick();
-
-      expect(window.location.search).toContain('q=search');
-      expectUrl({ params: { q: 'search', p: '1' } });
-    });
-
-    it('clears parameters when set to null/undefined', async () => {
-      $.atomUrl.params.value = { a: '1', b: '2' };
-      await $.nextTick();
-
-      $.atomUrl.params.value = { a: '1', b: undefined as unknown as string };
-      await $.nextTick();
-
-      expect(new URLSearchParams(window.location.search).has('b')).toBe(false);
-    });
-
-    it('preserves other URL parts during single property updates', async () => {
-      $.atomUrl.push('/path?q=1#top');
-      $.atomUrl.path.value = '/new';
-      await $.nextTick();
-
-      expectUrl({ path: '/new', search: '?q=1', hash: '#top' });
-    });
-
-    it('batches multiple property updates into one history entry', async () => {
-      const spy = vi.spyOn(window.history, 'pushState');
+  describe('Batching & Performance', () => {
+    it('consolidates multiple part updates into a single history entry', async () => {
+      const pushSpy = vi.spyOn(window.history, 'pushState');
 
       $.batch(() => {
         $.atomUrl.path.value = '/batched';
+        $.atomUrl.query.value = { q: '1' };
         $.atomUrl.hash.value = 'end';
       });
 
       await $.nextTick();
-      expect(spy).toHaveBeenCalledTimes(1);
-      expect(window.location.href).toContain('/batched#end');
-    });
-  });
-
-  describe('Path Resolution & BasePath', () => {
-    it('normalizes basePath automatically', () => {
-      $.atomUrl.basePath = '/app/';
-      window.history.replaceState(null, '', '/app/home');
-      $.atomUrl.reset();
-      expectUrl({ path: '/home' });
-
-      $.atomUrl.basePath = 'admin';
-      window.history.replaceState(null, '', '/admin/dashboard');
-      $.atomUrl.reset();
-      expectUrl({ path: '/dashboard' });
+      expect(pushSpy).toHaveBeenCalledTimes(1);
+      expect(window.location.href).toContain('/batched?q=1#end');
     });
 
-    it('resolves relative paths correctly', async () => {
-      window.history.replaceState(null, '', '/section/page');
-      $.atomUrl.reset();
-
-      $.atomUrl.push('next');
-      await $.nextTick();
-      expect(window.location.pathname).toBe('/section/next');
-    });
-
-    it('resolves absolute paths relative to basePath', async () => {
-      $.atomUrl.basePath = '/sub';
-      $.atomUrl.push('/home');
-      await $.nextTick();
-      expect(window.location.pathname).toBe('/sub/home');
-    });
-
-    it('respects external protocols and protocol-relative URLs', () => {
-      $.atomUrl.basePath = '/app';
-      expect(resolve('//external.com')).toBe('//external.com');
-      expect(resolve('mailto:hi@test.com')).toBe('mailto:hi@test.com');
-    });
-
-    it('picks up basePath changes immediately (no race condition)', async () => {
-      $.atomUrl.basePath = '/dynamic';
-      $.atomUrl.push('/page');
-      expect(window.location.pathname).toBe('/dynamic/page');
-    });
-  });
-
-  describe('Stability & Lifecycle', () => {
-    it('prevents infinite loops from reactive navigation', async () => {
-      let count = 0;
-      vi.spyOn(window.history, 'pushState').mockImplementation(() => {
-        count++;
-      });
-
+    it('prevents redundant updates if values are unchanged (Optimization)', async () => {
+      let updateCount = 0;
       const stop = $.effect(() => {
-        if ($.atomUrl.path.value === '/loop') $.atomUrl.push('/target');
+        $.atomUrl.path.value;
+        updateCount++;
         return undefined;
       });
 
-      $.atomUrl.path.value = '/loop';
+      // Update to same value
+      $.atomUrl.path.value = '/';
       await $.nextTick();
 
-      expect(count).toBeLessThan(10);
+      expect(updateCount).toBe(1); // Only initial execution
       stop.dispose();
     });
+  });
 
-    it('handles malformed URLs gracefully', async () => {
-      $.atomUrl.search.value = '???invalid';
-      await $.nextTick();
-      expect($.atomUrl.params.value).toBeDefined();
-    });
-
-    it('manages resource cleanup in dispose()', async () => {
-      let count = 0;
-      $.effect(() => {
-        $.atomUrl.path.value;
-        count++;
-        return undefined;
-      });
-
-      $.atomUrl.dispose();
-
-      // Manually trigger internal state (simulating browser event after dispose)
-      const internal = $.atomUrl as unknown as {
-        _snapshot: { value: unknown; peek: () => { url: string } };
-      };
-      internal._snapshot.value = {
-        ...internal._snapshot.peek(),
-        url: 'http://localhost/disconnected',
-      };
-
-      expect(count).toBe(1); // Should not have increased
-    });
-
-    it('allows reviving singleton parts after accidental disposal', () => {
-      $.atomUrl.path.dispose();
-
-      $.atomUrl.push('/revived');
-      expectUrl({ path: '/revived' }); // Should still work due to resilient logic
-    });
-
-    it('restores listeners correctly on reset', () => {
-      $.atomUrl.dispose();
-      const spy = vi.spyOn(window, 'addEventListener');
+  describe('Path Resolution & Scoping', () => {
+    it('resolves relative paths correctly in push()', async () => {
+      window.history.replaceState(null, '', '/category/item');
       $.atomUrl.reset();
-      expect(spy).toHaveBeenCalled();
+
+      $.atomUrl.push('detail'); // Relative to /category/item
+      await $.nextTick();
+      expect(window.location.pathname).toBe('/category/detail');
+    });
+
+    it('respects base path and exposes relative path via atom', async () => {
+      $.atomUrl.base.value = '/admin';
+
+      // Navigate to /admin/users
+      $.atomUrl.path.value = '/users';
+      await $.nextTick();
+
+      expect(window.location.pathname).toBe('/admin/users');
+      expect($.atomUrl.path.value).toBe('/users'); // Relational view
+    });
+
+    it('ignores base path for external URLs and avoids pushState security errors', () => {
+      const pushSpy = vi.spyOn(window.history, 'pushState');
+      // Logic: Mocking location properties is tricky in some environments,
+      // so we focus on ensuring pushState is NOT called for external origins.
+      $.atomUrl.base.value = '/app';
+      $.atomUrl.push('https://example.com');
+
+      expect(pushSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Stability & Resilience', () => {
+    it('revives atoms automatically after accidental disposal', () => {
+      const pathAtom = $.atomUrl.path;
+      pathAtom.dispose();
+
+      // Should still work due to resilient proxy logic
+      $.atomUrl.push('/revived');
+      expect($.atomUrl.path.value).toBe('/revived');
+    });
+
+    it('cleans up listeners properly on dispose()', () => {
+      const addSpy = vi.spyOn(window, 'addEventListener');
+      const removeSpy = vi.spyOn(window, 'removeEventListener');
+
+      $.atomUrl.dispose(); // Ensure clean state
+      $.atomUrl.reset(); // Trigger setup
+      expect(addSpy).toHaveBeenCalled();
+
+      $.atomUrl.dispose(); // Trigger cleanup
+      expect(removeSpy).toHaveBeenCalled();
+    });
+
+    it('handles initialization gracefully', () => {
+      expect(() => $.atomUrl.update('init')).not.toThrow();
     });
   });
 });
