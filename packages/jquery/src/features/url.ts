@@ -44,15 +44,12 @@ const RESOLVE_RULES: Array<{
   {
     test: () => true,
     exec: (u, _, current) =>
-      Result.match(
+      Result.unwrapOr(
         Result.tryCatch(() => {
           const resolved = new URL(u, current);
           return resolved.pathname + resolved.search + resolved.hash;
         }),
-        {
-          ok: (val) => val,
-          err: () => u,
-        }
+        u
       ),
   },
 ];
@@ -149,11 +146,10 @@ class AtomUrlImpl implements AtomUrl {
     computed(
       () => {
         const snap = this._snapshot.value;
-        return Result.match(
+        return Result.unwrapOrElse(
           Result.tryCatch(() => new URL(snap.url)),
-          {
-            ok: (u) => u,
-            err: () => new URL(IS_BROWSER ? window.location.href : FALLBACK_URL),
+          () => {
+            return new URL(IS_BROWSER ? window.location.href : FALLBACK_URL);
           }
         );
       },
@@ -385,15 +381,12 @@ class AtomUrlImpl implements AtomUrl {
     const current = this._snapshot.peek();
 
     const normalize = (u: string) =>
-      Result.match(
+      Result.unwrapOrElse(
         Result.tryCatch(() => {
           const parsed = new URL(u);
           return parsed.origin + parsed.pathname + parsed.search + parsed.hash;
         }),
-        {
-          ok: (val) => val,
-          err: () => u || '/',
-        }
+        () => u || '/'
       );
 
     // Equality check to prevent redundant atom updates and infinite loops.

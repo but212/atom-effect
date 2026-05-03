@@ -91,6 +91,8 @@ const userData = computed(async () => {
 ```
 
 > [!IMPORTANT]
+> **Async Consistency**: Asynchronous computations resolve and update their state (`value`, `isPending`, `isResolved`) within the microtask following the settlement of the underlying Promise.
+>
 > **Async Dependency Tracking**: Only dependencies accessed **before** the first `await` are tracked. Dependencies accessed after an `await` will return their current value but will not trigger re-evaluations when they change.
 
 ### Options
@@ -135,6 +137,7 @@ handle.dispose();
 - `run()`: Manually triggers the effect execution, even if dependencies haven't changed.
 - `isDisposed`: Boolean indicating if the effect has been stopped.
 - `isExecuting`: Boolean indicating if the effect logic is currently running.
+- `isNotifying`: Boolean indicating if the effect is currently propagating updates to its own subscribers.
 - `executionCount`: The total number of times the effect has executed.
 
 ### Options
@@ -154,6 +157,13 @@ Updates to atoms inside the `batch` block are coalesced. Effects and computed va
 
 - **Nesting**: Supports nested batches. The flush occurs only after the outermost batch ends.
 - **Atomicity**: State changes are committed even if the callback throws an error.
+- **Return Value**: Returns the result of the provided function `fn`.
+
+---
+
+## `runInFlushScope<T>(fn: () => T): T | undefined`
+
+Executes a function while the scheduler is locked for a new execution pass. This utility groups updates to be processed within a single, atomic flush cycle. Returns the result of `fn`, or `undefined` if the flush could not be started (e.g., already in progress).
 
 ---
 

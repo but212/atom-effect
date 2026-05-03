@@ -212,12 +212,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
   const _normalizedState = $.computed(
     () => {
       const { url } = _navState.value;
-      const urlObj = Result.match(getAbsoluteUrl(url, win.location.href), {
-        ok: (v) => v,
-        err: (e) => {
-          throw e;
-        },
-      });
+      const urlObj = Result.unwrap(getAbsoluteUrl(url, win.location.href));
       return {
         url,
         pathAndSearch: urlObj.pathname + urlObj.search,
@@ -325,10 +320,10 @@ export function atomNav(options: AtomNavOptions): AtomNav {
 
     const finalPath = Option.match(redirectResOpt, {
       some: (res) =>
-        Result.match(res, {
-          ok: (obj) => obj.pathname + obj.search,
-          err: () => pathAndSearch,
-        }),
+        Result.unwrapOr(
+          Result.map(res, (obj) => obj.pathname + obj.search),
+          pathAndSearch
+        ),
       none: () => pathAndSearch,
     });
     const isNewTarget = finalPath !== rendered.path;
@@ -338,12 +333,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
       if (isNewTarget || isRedirect) reconcileDOM(state, finalUrl, previousUrl);
 
       const { scrollToTop = true } = options;
-      const prevUrlObj = Result.match(getAbsoluteUrl(_renderedState.value.url, win.location.href), {
-        ok: (v) => v,
-        err: (e) => {
-          throw e;
-        },
-      });
+      const prevUrlObj = Result.unwrap(getAbsoluteUrl(_renderedState.value.url, win.location.href));
       const isHashRemoval = !hash && prevUrlObj.hash !== '';
       const isPop = type === 'pop';
 
@@ -445,12 +435,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
 
       const base = win.document.baseURI ?? win.location.href;
       const targetRes = getAbsoluteUrl(url, base);
-      const target = Result.match(targetRes, {
-        ok: (v) => v,
-        err: (e) => {
-          throw e;
-        },
-      });
+      const target = Result.unwrap(targetRes);
       const current = new URL(win.location.href, base);
 
       if (target.origin !== current.origin) {

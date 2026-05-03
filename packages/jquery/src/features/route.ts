@@ -267,11 +267,10 @@ class RouteMatcher {
           const params = route.paramNames.reduce(
             (acc, name, i) => {
               const val = match[i + 1] || '';
-              const decoded = Result.tryCatch(() => decodeURIComponent(val));
-              acc[name] = Result.match(decoded, {
-                ok: (v) => v,
-                err: () => val,
-              });
+              acc[name] = Result.unwrapOr(
+                Result.tryCatch(() => decodeURIComponent(val)),
+                val
+              );
               return acc;
             },
             {} as Record<string, string>

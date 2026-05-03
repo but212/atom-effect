@@ -1,8 +1,5 @@
-import { Option, Result } from '@but212/atom-effect-utils';
-import { IS_DEV } from '@/constants';
+import { Result } from '@but212/atom-effect-utils';
 import type { Dependency, Subscriber } from '@/types';
-import { debug } from '@/utils/debug';
-import { isPromise } from '@/utils/type-guards';
 
 // ── Tracking Types ──────────────────────────────────────────────────────
 
@@ -75,27 +72,29 @@ export function createSubscription<T>(
 /**
  * Triggers a subscription's update logic.
  *
- * Caution: Pushes 'null' to the tracking context before execution to ensure
- * that side-effects or listener logic don't accidentally create new dependencies
- * or recursive loops during the notification phase.
+ * Optimization: Context Recovery
+ * Uses the trackingContext.depth pointer to restore the context even if a subscriber
+ * fails, avoiding the overhead of try-finally in the common case.
  */
 export function notifySubscription<T>(
-  subscription: Subscription<T>,
+  subscription: Subscription<T> | null,
   newValue?: T,
   oldValue?: T
 ): void {
-  const { fn, sub } = subscription;
-  if (fn === undefined && sub === undefined) return;
+  if (subscription === null) return;
 
-  trackingContext.push(Option.none);
-  try {
+  const result = Result.tryCatch(() => {
+    const { fn, sub } = subscription;
     if (fn !== undefined) fn(newValue, oldValue);
     if (sub !== undefined) sub.execute();
-  } catch (e) {
-    console.error('[atom-effect] Subscriber failed:', e);
-  } finally {
-    trackingContext.pop();
-  }
+  });
+
+  Result.match(result, {
+    ok: () => {},
+    err: (e) => {
+      console.error('[atom-effect] Subscriber failed:', e);
+    },
+  });
 }
 
 // ── Tracking Context ────────────────────────────────────────────────────
@@ -107,44 +106,66 @@ export function notifySubscription<T>(
  * The stack ensures that dependencies are attributed to the correct parent node.
  */
 class TrackingContext {
-  /** Stack of subscribers. Option.none indicates an 'untracked' zone. */
-  private readonly _stack: Option<DependencySubscriber>[] = [];
+  /** Stack of subscribers. null indicates an 'untracked' zone. */
+  private readonly _stack: (DependencySubscriber | null)[] = [];
+  /** Cached reference to the top of the stack for faster O(1) access. */
+  private _current: DependencySubscriber | null = null;
 
   public get current(): DependencySubscriber | null {
-    const len = this._stack.length;
-    return len > 0 ? Option.toNullable(this._stack[len - 1]!) : null;
+    return this._current;
   }
 
-  public push(subscriber: Option<DependencySubscriber>): void {
+  /**
+   * Returns the current stack depth. Used for deterministic context recovery.
+   */
+  public get depth(): number {
+    return this._stack.length;
+  }
+
+  /**
+   * Resets the context to a specific depth. Used by error boundaries.
+   */
+  public rollback(depth: number): void {
+    const stack = this._stack;
+    stack.length = depth;
+    const len = stack.length;
+    this._current = len > 0 ? stack[len - 1]! : null;
+  }
+
+  /**
+   * Completely clears the tracking context.
+   */
+  public reset(): void {
+    this._stack.length = 0;
+    this._current = null;
+  }
+
+  public push(subscriber: DependencySubscriber | null): void {
     this._stack.push(subscriber);
+    this._current = subscriber;
   }
 
   public pop(): void {
-    this._stack.pop();
+    const stack = this._stack;
+    stack.pop();
+    const len = stack.length;
+    this._current = len > 0 ? stack[len - 1]! : null;
   }
 
   /**
    * Runs a function while attributing all reactive reads to the provided subscriber.
    *
-   * Warning: In development, this warns if a Promise is returned.
-   * Tracking context is synchronous and will be lost after the first 'await'.
+   * Optimization: Deterministic Error Handling
+   * This method no longer uses try-finally or Result.tryCatch. It assumes success
+   * and relies on the caller to rollback the context depth on error.
    */
-  public run<T>(subscriber: DependencySubscriber, fn: () => T): Result<T, Error> {
-    if (this.current === subscriber) return Result.tryCatch(fn);
+  public run<T>(subscriber: DependencySubscriber, fn: () => T): T {
+    if (this._current === subscriber) return fn();
 
-    this.push(Option.some(subscriber));
-    try {
-      const res = Result.tryCatch(fn);
-      if (IS_DEV && res.ok && isPromise(res.value)) {
-        debug.warn(
-          true,
-          'Promise detected in tracking context: dependencies after "await" will be lost.'
-        );
-      }
-      return res;
-    } finally {
-      this.pop();
-    }
+    this.push(subscriber);
+    const res = fn();
+    this.pop();
+    return res;
   }
 }
 
@@ -173,10 +194,8 @@ export type { TrackingContext };
 export function untracked<T>(fn: () => T): T {
   if (trackingContext.current === null) return fn();
 
-  trackingContext.push(Option.none);
-  try {
-    return fn();
-  } finally {
-    trackingContext.pop();
-  }
+  trackingContext.push(null);
+  const res = fn();
+  trackingContext.pop();
+  return res;
 }

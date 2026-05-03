@@ -32,42 +32,28 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
   /** @internal */
   readonly [BRAND] = BrandFlags.Effect;
 
-  /**
-   * Logic: Tracking Session Data
-   * @internal
-   */
-  private _session = {
-    trackEpoch: EPOCH_CONSTANTS.UNINITIALIZED as number,
-    trackCount: 0,
-    sessionId: 0,
-  };
+  /** @internal */
+  private _trackEpoch = EPOCH_CONSTANTS.UNINITIALIZED as number;
+  /** @internal */
+  private _trackCount = 0;
+  /** @internal */
+  private _trackSessionId = 0;
 
-  /**
-   * Logic: Execution Budget Data
-   * Tracks execution counts across different time windows to detect infinite loops.
-   * @internal
-   */
-  private _budget = {
-    loopCount: 0,
-    lastFlushEpoch: EPOCH_CONSTANTS.UNINITIALIZED as number,
-    windowCount: 0,
-    windowStart: 0,
-    totalExecutions: 0,
-  };
+  private _budgetLoopCount = 0;
+  private _budgetLastFlushEpoch = EPOCH_CONSTANTS.UNINITIALIZED as number;
+  private _budgetWindowCount = 0;
+  private _budgetWindowStart = 0;
+  private _budgetTotalExecutions = 0;
 
-  private _cleanup: Option<() => void> = Option.none;
-  /**
-   * Buffered storage for reconciled subscriptions.
-   * @internal
-   */
+  /** Buffered storage for reconciled subscriptions. @internal */
   _deps = createDepBuffer();
 
-  /** @internal */
-  private readonly _notifyCallback: () => void;
-
-  private readonly _onError: Option<(error: unknown) => void>;
+  private _cleanup: Option<() => void> = Option.none;
 
   private readonly _fn: EffectFunction;
+  private readonly _onError: Option<(error: unknown) => void>;
+  private readonly _notifyCallback: () => void;
+
   private readonly _sync: boolean;
   private readonly _maxExecutions: number;
   private readonly _maxExecutionsPerFlush: number;
@@ -87,18 +73,13 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     debug.attachDebugInfo(this, 'effect', this.id, options.name);
   }
 
-  /**
-   * Manually triggers the effect.
-   */
+  // --- Public API ---
+
   public run(): void {
     if (this.isDisposed) throw new EffectError(ERROR_MESSAGES.EFFECT_DISPOSED);
     this.execute(true);
   }
 
-  /**
-   * Logic: Final Teardown
-   * Disposes of all internal dependencies and executes the remaining cleanup function.
-   */
   public dispose(): void {
     if (this.isDisposed) return;
     this.flags |= EFFECT_STATE_FLAGS.DISPOSED;
@@ -107,20 +88,92 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     if (this._deps) disposeAll(this._deps);
   }
 
+  /** Total executions since initialization. */
+  get executionCount(): number {
+    return this._budgetTotalExecutions;
+  }
+
+  /** True if the effect function is currently on the stack. */
+  get isExecuting(): boolean {
+    return (this.flags & EFFECT_STATE_FLAGS.EXECUTING) !== 0;
+  }
+
+  /** True if the effect has been stopped. */
+  get isDisposed(): boolean {
+    return (this.flags & EFFECT_STATE_FLAGS.DISPOSED) !== 0;
+  }
+
+  // --- Core Execution Pipeline ---
+
   /**
-   * Logic: Dependency Capture
-   * Invoked by observed atoms during the execution phase.
-   * Reuses existing subscriptions via O(1) reconciliation to minimize overhead.
-   * @internal
+   * Main execution cycle of the effect.
+   *
+   * Logic: Lifecycle Orchestration
+   * 1. Prepare: Check flags, budgets, and dirty state.
+   * 2. Cleanup: Execute previous session's teardown.
+   * 3. Track: Run user function within reactive context.
+   * 4. Finalize: Commit dependencies and handle result/error.
    */
+  public execute(force = false): void {
+    if (!this._prepareExecution(force)) return;
+
+    this._execCleanup();
+    const result = this._runTrackingSession();
+    this._finalizeExecution(result);
+  }
+
+  private _prepareExecution(force: boolean): boolean {
+    const flags = this.flags;
+    if ((flags & (EFFECT_STATE_FLAGS.DISPOSED | EFFECT_STATE_FLAGS.EXECUTING)) !== 0) return false;
+
+    // Logic: Skip execution if not forced and no actual changes detected.
+    if (!(force || this._deps.slots.length === 0 || this._isDirty())) return false;
+
+    this._validateBudget();
+    debug.trackUpdate(this.id, debug.getDebugName(this));
+
+    this.flags |= EFFECT_STATE_FLAGS.EXECUTING;
+    return true;
+  }
+
+  private _runTrackingSession(): Result<unknown, Error> {
+    this._startTracking();
+    const prevDepth = trackingContext.depth;
+
+    return Result.tryCatch(() => {
+      try {
+        return trackingContext.run(this, this._fn);
+      } catch (e) {
+        trackingContext.rollback(prevDepth);
+        throw e;
+      }
+    });
+  }
+
+  private _finalizeExecution(result: Result<unknown, Error>): void {
+    this._commitDeps();
+
+    Result.match(result, {
+      ok: (val) => {
+        this._handleResult(val);
+      },
+      err: (e) => {
+        this._handleExecutionError(e);
+      },
+    });
+
+    this.flags &= ~EFFECT_STATE_FLAGS.EXECUTING;
+  }
+
+  // --- Dependency Management ---
+
   public addDependency(dep: Dependency): void {
-    if ((this.flags & EFFECT_STATE_FLAGS.EXECUTING) === 0) return;
+    if (!this.isExecuting) return;
 
-    const session = this._session;
-    if (dep._lastSeenEpoch === session.trackEpoch) return;
-    dep._lastSeenEpoch = session.trackEpoch;
+    if (dep._lastSeenEpoch === this._trackEpoch) return;
+    dep._lastSeenEpoch = this._trackEpoch;
 
-    const trackIndex = session.trackCount++;
+    const trackIndex = this._trackCount++;
     const deps = this._deps;
     const version = dep.version;
 
@@ -138,109 +191,20 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
   }
 
   private _insertNewDependency(dep: Dependency, trackIndex: number, version: number): void {
-    const res = Result.tryCatch(() => dep.subscribe(this._notifyCallback));
-
-    const link = Result.match(res, {
-      ok: (unsubscribe) => createDependencyLink(dep, version, unsubscribe),
-      err: (error) => {
-        const wrapped = wrapError(error, EffectError, ERROR_MESSAGES.EFFECT_EXECUTION_FAILED);
-        console.error(wrapped);
-        this._handleExecutionError(wrapped);
-        return createDependencyLink(dep, version, undefined);
-      },
-    });
-
+    const unsubscribe = dep.subscribe(this._notifyCallback);
+    const link = createDependencyLink(dep, version, unsubscribe);
     insertNew(this._deps, trackIndex, link);
   }
 
-  /**
-   * Main execution cycle of the effect.
-   *
-   * Logic: Lifecycle Orchestration
-   * 1. Validate budgets (Loop protection).
-   * 2. Execute previous cleanup.
-   * 3. Run effect logic inside a tracking context.
-   * 4. Truncate stale dependencies.
-   */
-  public execute(force = false): void {
-    const flags = this.flags;
-    if ((flags & (EFFECT_STATE_FLAGS.DISPOSED | EFFECT_STATE_FLAGS.EXECUTING)) !== 0) return;
-
-    const shouldRun = force || this._deps.slots.length === 0 || this._isDirty();
-    if (!shouldRun) return;
-
-    this._validateBudget();
-
-    debug.trackUpdate(this.id, debug.getDebugName(this));
-
-    this.flags = flags | EFFECT_STATE_FLAGS.EXECUTING;
-    this._execCleanup();
-    this._startTracking();
-
-    try {
-      const result = trackingContext.run(this, this._fn);
-      this._commitDeps();
-
-      this._handleResult(result);
-    } finally {
-      this.flags &= ~EFFECT_STATE_FLAGS.EXECUTING;
-    }
-  }
-
-  /**
-   * Logic: Multi-Layered Loop Protection
-   * 1. Per-Effect Limit: Prevents a single effect from thrashing the scheduler.
-   * 2. Global Limit: Detects distributed loops across multiple effects.
-   * 3. Frequency Limit (Dev-only): Detects runaway loops across seconds.
-   */
-  private _validateBudget(): void {
-    const epoch = currentFlushEpoch();
-    const budget = this._budget;
-
-    if (budget.lastFlushEpoch !== epoch) {
-      budget.lastFlushEpoch = epoch;
-      budget.loopCount = 0;
-    }
-
-    if (++budget.loopCount > this._maxExecutionsPerFlush) {
-      this._abortExecution('per-effect');
-    }
-
-    if (incrementFlushExecutionCount() > SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH) {
-      this._abortExecution('global');
-    }
-
-    budget.totalExecutions++;
-    if (IS_DEV) this._checkFrequencyLimit();
-  }
-
-  private _handleResult(result: unknown): void {
-    Result.match(result as Result<unknown, Error>, {
-      ok: (val) => {
-        if (typeof val === 'function') {
-          this._cleanup = Option.some(val as () => void);
-        } else if (isPromise(val)) {
-          this._handleAsyncResult(val as Promise<undefined | (() => void)>);
-        } else {
-          this._cleanup = Option.none;
-        }
-      },
-      err: (e) => {
-        this._handleExecutionError(e);
-        this._cleanup = Option.none;
-      },
-    });
-  }
-
   private _startTracking(): void {
-    this._session.trackEpoch = nextEpoch();
-    this._session.trackCount = 0;
+    this._trackEpoch = nextEpoch();
+    this._trackCount = 0;
     prepareTracking(this._deps);
   }
 
   private _commitDeps(): void {
     try {
-      depBufferTruncateFrom(this._deps, this._session.trackCount);
+      depBufferTruncateFrom(this._deps, this._trackCount);
     } catch (commitErr) {
       if (IS_DEV) {
         console.warn('[atom-effect] _commitDeps failed during error recovery:', commitErr);
@@ -248,21 +212,24 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     }
   }
 
-  /**
-   * Logic: Async Cleanup Isolation
-   * Prevents stale async cleanups from overwriting newer sessions using
-   * unique session IDs.
-   *
-   * Constraint: Stale Discard
-   * Cleanups are immediately executed and discarded if the effect was
-   * disposed or re-triggered during the async wait.
-   */
+  // --- Result & Cleanup Handling ---
+
+  private _handleResult(val: unknown): void {
+    if (typeof val === 'function') {
+      this._cleanup = Option.some(val as () => void);
+    } else if (isPromise(val)) {
+      this._handleAsyncResult(val as Promise<undefined | (() => void)>);
+    } else {
+      this._cleanup = Option.none;
+    }
+  }
+
   private _handleAsyncResult(promise: Promise<unknown>): void {
-    const sessionId = ++this._session.sessionId;
+    const sessionId = ++this._trackSessionId;
 
     promise.then(
       (cleanup) => {
-        if (this._session.sessionId !== sessionId || this.isDisposed) {
+        if (this._trackSessionId !== sessionId || this.isDisposed) {
           if (typeof cleanup === 'function') {
             try {
               cleanup();
@@ -272,10 +239,99 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
           }
           return;
         }
+
         if (typeof cleanup === 'function') this._cleanup = Option.some(cleanup as () => void);
       },
-      (err) => this._session.sessionId === sessionId && this._handleExecutionError(err)
+      (err) => {
+        if (this._trackSessionId === sessionId) {
+          this._handleExecutionError(err);
+        }
+      }
     );
+  }
+
+  private _execCleanup(): void {
+    const cleanupOpt = this._cleanup;
+    if (Option.isNone(cleanupOpt)) return;
+
+    this._cleanup = Option.none;
+    const fn = cleanupOpt.value;
+
+    try {
+      fn();
+    } catch (e) {
+      this._handleExecutionError(e as Error, ERROR_MESSAGES.EFFECT_CLEANUP_FAILED);
+    }
+  }
+
+  // --- Budget & Safeguards ---
+
+  private _validateBudget(): void {
+    const epoch = currentFlushEpoch();
+
+    if (this._budgetLastFlushEpoch !== epoch) {
+      this._budgetLastFlushEpoch = epoch;
+      this._budgetLoopCount = 0;
+    }
+
+    if (++this._budgetLoopCount > this._maxExecutionsPerFlush) {
+      this._abortExecution('per-effect');
+    }
+
+    if (incrementFlushExecutionCount() > SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH) {
+      this._abortExecution('global');
+    }
+
+    this._budgetTotalExecutions++;
+    if (IS_DEV) this._checkFrequencyLimit();
+  }
+
+  private _checkFrequencyLimit(): void {
+    if (!Number.isFinite(this._maxExecutions)) return;
+
+    const now = Date.now();
+
+    if (now - this._budgetWindowStart >= DEBUG_CONFIG.EFFECT_FREQUENCY_WINDOW) {
+      this._budgetWindowStart = now;
+      this._budgetWindowCount = 1;
+      return;
+    }
+
+    if (++this._budgetWindowCount > this._maxExecutions) {
+      const err = new EffectError(ERROR_MESSAGES.EFFECT_FREQUENCY_LIMIT_EXCEEDED);
+      this.dispose();
+      this._handleExecutionError(err);
+      throw err;
+    }
+  }
+
+  private _abortExecution(type: 'per-effect' | 'global'): never {
+    const message =
+      type === 'per-effect'
+        ? `Infinite loop detected (per-effect): executed ${this._budgetLoopCount} times in current flush.`
+        : 'Infinite loop detected (global): exceeded total execution limit per flush.';
+
+    const error = new EffectError(message);
+    this.dispose();
+    console.error(error);
+    throw error;
+  }
+
+  private _handleExecutionError(
+    error: unknown,
+    message: string = ERROR_MESSAGES.EFFECT_EXECUTION_FAILED
+  ): Result<never, Error> {
+    const errorObj = wrapError(error, EffectError, message);
+    console.error(errorObj);
+
+    if (Option.isSome(this._onError)) {
+      try {
+        this._onError.value(errorObj);
+      } catch (e) {
+        console.error(wrapError(e, EffectError, ERROR_MESSAGES.CALLBACK_ERROR_IN_ERROR_HANDLER));
+      }
+    }
+    return Result.err(errorObj);
   }
 
   /** @internal */
@@ -286,84 +342,6 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
   /** @internal */
   protected override _deepDirtyCheck(): boolean {
     return isBufferDirty(this._deps);
-  }
-
-  private _execCleanup(): void {
-    const cleanupOpt = this._cleanup;
-    if (Option.isNone(cleanupOpt)) return;
-    this._cleanup = Option.none;
-    try {
-      cleanupOpt.value();
-    } catch (error) {
-      this._handleExecutionError(error, ERROR_MESSAGES.EFFECT_CLEANUP_FAILED);
-    }
-  }
-
-  /**
-   * Optimization: Development-Mode Loop Guard
-   * Prevents browser hangs during development by tracking execution density
-   * within a 1-second window.
-   */
-  private _checkFrequencyLimit(): void {
-    if (!Number.isFinite(this._maxExecutions)) return;
-
-    const now = Date.now();
-    const budget = this._budget;
-
-    if (now - budget.windowStart >= DEBUG_CONFIG.EFFECT_FREQUENCY_WINDOW) {
-      budget.windowStart = now;
-      budget.windowCount = 1;
-      return;
-    }
-
-    if (++budget.windowCount > this._maxExecutions) {
-      const err = new EffectError(ERROR_MESSAGES.EFFECT_FREQUENCY_LIMIT_EXCEEDED);
-      this.dispose();
-      this._handleExecutionError(err);
-      throw err;
-    }
-  }
-
-  /** Total executions since initialization. */
-  get executionCount(): number {
-    return this._budget.totalExecutions;
-  }
-
-  /** True if the effect function is currently on the stack. */
-  get isExecuting(): boolean {
-    return (this.flags & EFFECT_STATE_FLAGS.EXECUTING) !== 0;
-  }
-
-  /** True if the effect has been stopped. */
-  get isDisposed(): boolean {
-    return (this.flags & EFFECT_STATE_FLAGS.DISPOSED) !== 0;
-  }
-
-  private _abortExecution(type: 'per-effect' | 'global'): never {
-    const error = new EffectError(
-      `Infinite loop detected (${type}): executed ${this._budget.loopCount} times in current flush.`
-    );
-    this.dispose();
-    console.error(error);
-    throw error;
-  }
-
-  private _handleExecutionError(
-    error: unknown,
-    message: string = ERROR_MESSAGES.EFFECT_EXECUTION_FAILED
-  ): void {
-    const errorObj = wrapError(error, EffectError, message);
-    console.error(errorObj);
-    Option.match(this._onError, {
-      some: (handler) => {
-        try {
-          handler(errorObj);
-        } catch (e) {
-          console.error(wrapError(e, EffectError, ERROR_MESSAGES.CALLBACK_ERROR_IN_ERROR_HANDLER));
-        }
-      },
-      none: () => {},
-    });
   }
 }
 
@@ -393,7 +371,6 @@ export function effect(fn: EffectFunction, options: EffectOptions = {}): EffectO
   }
 
   const effectInstance = new EffectImpl(fn, options);
-  // Logic: Effects run immediately to establish the initial dependency graph.
   effectInstance.execute();
 
   return effectInstance;

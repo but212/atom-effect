@@ -228,7 +228,7 @@ Two-way binding for `<input>`, `<textarea>`, and `<select>`.
 
 - **Strategy Specialization**: Resolves optimized read/write strategies at construction time (e.g., for `multipleSelect` vs standard inputs). This ensures monomorphic execution paths and avoids feature-detection branching in hot paths.
 - **IME Stability**: Monitors composition states to prevent external updates from interrupting character entry (e.g., for CJK languages).
-- **Cursor Preservation**: Maintains selection range and focus stability during reactive updates using a selection buffer and `Result`-based safe execution to capture potential DOM exceptions.
+- **Cursor Preservation**: Maintains selection range and focus stability during reactive updates using a selection buffer and **Result-based execution** (e.g., `Result.unwrapOr`) to handle potential DOM exceptions through predefined fallbacks.
 - **Recursion Control**: Uses internal bitmask flags to prevent infinite update cycles between the DOM and the reactive graph.
 
 Natively supports `<select multiple>` as a `string[]` array.

@@ -3,8 +3,13 @@ import { COMPUTED_STATE_FLAGS, EPOCH_CONSTANTS, IS_DEV, SMI_MAX } from '@/consta
 import { AtomError, ERROR_MESSAGES, wrapError } from '@/errors';
 import type { DependencyId, Subscriber } from '@/types';
 import { generateId } from '@/utils/debug';
-import { type DepBufferState, isBufferDirty } from './buffers';
-import { createSubscription, notifySubscription, type Subscription } from './tracking';
+import { type DepBufferState, isBufferDirty, isBufferShallowDirty } from './buffers';
+import {
+  createSubscription,
+  notifySubscription,
+  type Subscription,
+  trackingContext,
+} from './tracking';
 
 /**
  * A unified base class for all reactive primitives, including Atoms, Computeds, and Effects.
@@ -58,12 +63,6 @@ export abstract class ReactiveNode<T> {
   _slots: SlotBuffer<Subscription<T>> | null;
 
   /**
-   * Re-entry guard counter used during subscriber notification loops.
-   * Constraint: Must be > 0 during `_notifySubscribers` to block `_slots.compact()`.
-   */
-  _notifying: number;
-
-  /**
    * Buffered storage for captured dependencies.
    * @internal
    */
@@ -75,10 +74,8 @@ export abstract class ReactiveNode<T> {
     this.flags = 0;
     this.version = 0;
     this._lastSeenEpoch = EPOCH_CONSTANTS.UNINITIALIZED;
-    this._notifying = 0;
-    this.id = generateId() & SMI_MAX;
-
     this._nextEpoch = undefined;
+    this.id = generateId() & SMI_MAX;
     this._slots = null;
     this._deps = null;
   }
@@ -87,14 +84,21 @@ export abstract class ReactiveNode<T> {
    * Indicates whether the node has been explicitly disposed.
    */
   get isDisposed(): boolean {
-    return this._hasFlag(COMPUTED_STATE_FLAGS.DISPOSED);
+    return (this.flags & COMPUTED_STATE_FLAGS.DISPOSED) !== 0;
   }
 
   /**
    * Indicates whether the node is a computed atom.
    */
   get isComputed(): boolean {
-    return this._hasFlag(COMPUTED_STATE_FLAGS.IS_COMPUTED);
+    return (this.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) !== 0;
+  }
+
+  /**
+   * Indicates whether the node is currently notifying subscribers.
+   */
+  get isNotifying(): boolean {
+    return this._slots?.isLocked ?? false;
   }
 
   private _hasFlag(flag: number): boolean {
@@ -134,10 +138,16 @@ export abstract class ReactiveNode<T> {
    * ```
    */
   subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
-    const isFn = typeof listener === 'function';
+    // Optimization: Guard clause + Imperative logic for raw speed (avoids lookup table overhead)
+    let link: Subscription<T> | undefined;
 
-    // Constraint: Validates input to ensure consistent execution during notification.
-    if (!isFn && (listener == null || typeof (listener as Subscriber).execute !== 'function')) {
+    if (typeof listener === 'function') {
+      link = createSubscription(listener as (n?: T, o?: T) => void, undefined);
+    } else if (listener != null && typeof (listener as Subscriber).execute === 'function') {
+      link = createSubscription(undefined, listener as Subscriber);
+    }
+
+    if (!link) {
       throw wrapError(
         new TypeError('Invalid subscriber'),
         AtomError,
@@ -153,25 +163,16 @@ export abstract class ReactiveNode<T> {
       return () => {};
     }
 
-    const link = createSubscription<T>(
-      isFn ? (listener as (newValue?: T, oldValue?: T) => void) : undefined,
-      !isFn ? (listener as Subscriber) : undefined
-    );
-
     slots.push(link);
-    return () => this._unsubscribe(link);
+    return () => this._unsubscribe(link as Subscription<T>);
   }
 
   private _hasSubscription(listener: unknown): boolean {
     const slots = this._slots;
     if (!slots || slots.length === 0) return false;
 
-    const length = slots.capacity;
-    for (let i = 0; i < length; i++) {
-      const link = slots.at(i);
-      if (link && (link.fn === listener || link.sub === listener)) return true;
-    }
-    return false;
+    // Optimization: Use early-exit some() to avoid redundant at() calls in a loop
+    return slots.some((link) => link.fn === listener || link.sub === listener);
   }
 
   /**
@@ -182,11 +183,8 @@ export abstract class ReactiveNode<T> {
    */
   protected _unsubscribe(link: Subscription<T>): void {
     const slots = this._slots;
-    if (slots === null) return;
-
-    slots.remove(link);
-    // Logic: Only compact if we are not currently iterating over the slots.
-    if (this._notifying === 0) {
+    if (slots !== null) {
+      slots.remove(link);
       slots.compact();
     }
   }
@@ -211,18 +209,23 @@ export abstract class ReactiveNode<T> {
    */
   protected _notifySubscribers(newValue: T | undefined, oldValue: T | undefined): void {
     const slots = this._slots;
-    if (!slots?.length) return;
+    if (!slots || slots.length === 0) return;
 
-    this._notifying++;
+    // Optimization: Batch Isolation
+    // Pushing null once for the entire loop is O(1) compared to O(N) previously.
+    const prevDepth = trackingContext.depth;
+    trackingContext.push(null);
+
+    slots.lock();
     try {
       slots.forEach((sub) => {
-        if (sub) notifySubscription(sub, newValue, oldValue);
+        // Optimization: notifySubscription is now unsafe (no try-finally/push-pop)
+        notifySubscription(sub, newValue, oldValue);
       });
     } finally {
-      // Logic: Deferred compaction occurs here if unsubscribe was called during the loop.
-      if (--this._notifying === 0) {
-        slots.compact();
-      }
+      // Deterministic recovery for the entire batch
+      trackingContext.rollback(prevDepth);
+      slots.unlock();
     }
   }
 
@@ -236,6 +239,15 @@ export abstract class ReactiveNode<T> {
    */
   protected _isDirty(): boolean {
     return this._deps ? isBufferDirty(this._deps) : false;
+  }
+
+  /**
+   * Performs a shallow validation of immediate dependencies.
+   * Logic: Used for fast path guards that must not trigger re-computation.
+   * @internal
+   */
+  protected _isShallowDirty(): boolean {
+    return this._deps ? isBufferShallowDirty(this._deps) : false;
   }
 
   /**

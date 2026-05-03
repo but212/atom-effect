@@ -1,6 +1,8 @@
 import { BRAND, BrandFlags } from '@/symbols';
 import type { Paths, PathValue, WritableAtom } from '../types';
 
+const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 /**
  * Creates a deep immutable copy with a new leaf value.
  *
@@ -19,7 +21,7 @@ export function setDeepValue(obj: unknown, keys: string[], index: number, value:
   if (index === keys.length) return value;
 
   const key = keys[index]!;
-  if (key === '__proto__' || key === 'constructor' || key === 'prototype') return obj;
+  if (FORBIDDEN_KEYS.has(key)) return obj;
 
   const isObj = obj != null && typeof obj === 'object';
   const curr = (isObj ? obj : {}) as Record<string, unknown>;
@@ -29,6 +31,7 @@ export function setDeepValue(obj: unknown, keys: string[], index: number, value:
   // Optimization: If the leaf value is identical, return the original branch.
   if (Object.is(oldVal, newVal)) return obj;
 
+  // Inline strategy for maximum performance (eliminates property lookup and function overhead)
   const res = (Array.isArray(curr) ? [...curr] : { ...curr }) as Record<string, unknown>;
   res[key] = newVal;
   return res;
@@ -40,7 +43,8 @@ export function setDeepValue(obj: unknown, keys: string[], index: number, value:
  */
 export function getPathValue(source: unknown, parts: string[]): unknown {
   let res = source;
-  for (let i = 0; i < parts.length; i++) {
+  const len = parts.length;
+  for (let i = 0; i < len; i++) {
     if (res == null) return undefined;
     res = (res as Record<string, unknown>)[parts[i]!];
   }
@@ -81,16 +85,12 @@ export function atomLens<T extends object, P extends Paths<T>>(
   path: P
 ): WritableAtom<PathValue<T, P>> {
   const parts = (path as string).split('.');
-  const isDangerous = parts.some(
-    (p) => p === '__proto__' || p === 'constructor' || p === 'prototype'
-  );
+  const isDangerous = parts.some((p) => FORBIDDEN_KEYS.has(p));
   const unsubs = new Set<() => void>();
-
-  const getValue = isDangerous ? () => undefined : (src: unknown) => getPathValue(src, parts);
 
   return {
     get value() {
-      return getValue(atom.value);
+      return isDangerous ? undefined : getPathValue(atom.value, parts);
     },
     set value(newVal: unknown) {
       if (isDangerous) return;
@@ -98,14 +98,13 @@ export function atomLens<T extends object, P extends Paths<T>>(
       const next = setDeepValue(cur, parts, 0, newVal);
       if (next !== cur) atom.value = next as T;
     },
-    peek: () => getValue(atom.peek()),
+    peek: () => (isDangerous ? undefined : getPathValue(atom.peek(), parts)),
     subscribe(listener: (nv: unknown, ov: unknown) => void) {
-      let prevValue = getValue(atom.peek());
+      let prevValue = isDangerous ? undefined : getPathValue(atom.peek(), parts);
 
       const unsub = atom.subscribe((np) => {
-        const nv = getValue(np);
+        const nv = isDangerous ? undefined : getPathValue(np, parts);
         // Logic: Scoped Notification
-        // Only notify the lens subscriber if the resolved slice is different.
         if (!Object.is(nv, prevValue)) {
           const ov = prevValue;
           prevValue = nv;

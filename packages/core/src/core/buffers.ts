@@ -1,7 +1,21 @@
-import { SlotBuffer } from '@but212/atom-effect-utils';
-import { IS_DEV } from '@/constants';
+import { Result, SlotBuffer } from '@but212/atom-effect-utils';
 import type { Dependency } from '@/types';
 import type { DependencyLink } from './tracking';
+
+/** @internal */
+export interface Indexer {
+  get(dep: Dependency): number | undefined;
+  set(dep: Dependency, index: number): void;
+  delete(dep: Dependency): void;
+}
+
+const NullIndexer: Indexer = {
+  get: () => undefined,
+  set: () => {},
+  delete: () => {},
+};
+
+class MapIndexer extends Map<Dependency, number> implements Indexer {}
 
 /**
  * Logic: Subscription Reconciliation State
@@ -16,10 +30,10 @@ export interface DepBufferState {
   slots: SlotBuffer<DependencyLink>;
   /**
    * Optimization: O(1) Lookup
-   * Only populated during active tracking to avoid O(N^2) complexity when
-   * reconciling large dependency sets.
+   * Always present via Indexer interface to avoid branching.
+   * Switched to NullIndexer when inactive.
    */
-  map: Map<Dependency, number> | null;
+  map: Indexer;
   /**
    * Optimization: Skip Check
    * When false, indicates no computed nodes are present, allowing the engine
@@ -35,7 +49,7 @@ export interface DepBufferState {
 export function createDepBuffer(): DepBufferState {
   return {
     slots: new SlotBuffer<DependencyLink>(),
-    map: null,
+    map: NullIndexer,
     hasComputeds: false,
   };
 }
@@ -96,10 +110,8 @@ export function claimExisting(state: DepBufferState, dep: Dependency, trackIndex
  * Switches between linear search and Map-based O(1) lookup based on buffer state.
  */
 function _findExistingIndex(state: DepBufferState, dep: Dependency, start: number): number {
-  if (state.map) {
-    const idx = state.map.get(dep);
-    return idx !== undefined && idx >= start ? idx : -1;
-  }
+  const idx = state.map.get(dep);
+  if (idx !== undefined) return idx >= start ? idx : -1;
 
   const slots = state.slots;
   for (let i = start + 1, len = slots.length; i < len; i++) {
@@ -136,9 +148,9 @@ export function depBufferSetAt(
   const old = state.slots.at(index);
   state.slots.setAt(index, item);
 
-  if (old) state.map?.delete(old.node);
+  if (old) state.map.delete(old.node);
   if (item?.unsub) {
-    if (!state.map) state.map = new Map();
+    if (state.map === NullIndexer) state.map = new MapIndexer();
     state.map.set(item.node, index);
   }
 }
@@ -150,7 +162,7 @@ export function depBufferSetAt(
 export function depBufferPush(state: DepBufferState, item: DependencyLink): number {
   const idx = state.slots.push(item);
   if (item.unsub) {
-    if (!state.map) state.map = new Map();
+    if (state.map === NullIndexer) state.map = new MapIndexer();
     state.map.set(item.node, idx);
   }
   return idx;
@@ -160,36 +172,77 @@ export function depBufferPush(state: DepBufferState, item: DependencyLink): numb
  * Logic: Dirty Propagation Check
  * Determines if any dependency has transitioned to a new version.
  *
- * Caution:
- * Accessing `dep.value` on computed nodes may trigger synchronous re-execution
- * of the dependency sub-graph.
- *
+ * Strategy: Table-based Validation
+ * Dispatches to the appropriate checker using a bitmask index.
+ */
+const DIRTY_CHECKERS: Record<number, (link: DependencyLink) => boolean> = {
+  // Atom path (IS_COMPUTED bit 1 is 0)
+  0: (link) => link.node.version !== link.version,
+  // Computed path (IS_COMPUTED bit 1 is 2)
+  2: (link) => {
+    const dep = link.node;
+    let res: Result<unknown, Error>;
+    try {
+      res = Result.ok(dep.value);
+    } catch (e) {
+      res = Result.err(e as Error);
+    }
+
+    Result.match(res, {
+      ok: () => {},
+      err: () => {
+        console.warn(`[atom-effect] Dependency #${dep.id} error in check`);
+      },
+    });
+    return dep.version !== link.version;
+  },
+};
+
+/**
+ * Logic: Dirty Propagation Check
  * @internal
  */
 export function isBufferDirty(state: DepBufferState): boolean {
-  for (let i = 0, len = state.slots.length; i < len; i++) {
-    const link = state.slots.at(i);
-    if (link && _checkLinkDirty(link)) return true;
+  const slots = state.slots;
+  const len = slots.length;
+  if (len === 0) return false;
+
+  const checkers = DIRTY_CHECKERS;
+  for (let i = 0; i < len; i++) {
+    const link = slots.at(i);
+    // Guard clause to reduce nesting and improve branch prediction
+    if (!link) continue;
+    // IS_COMPUTED = 2 (bit 1)
+    if (checkers[link.node.flags & 2]!(link)) return true;
   }
   return false;
 }
 
 /**
- * Logic: Lazy Refresh
- * Computed nodes only update their version when their value is accessed.
- * We must force a read to ensure the version we compare against is current.
+ * Logic: Push-Path Validation
+ * A non-recursive check used during the notification phase to avoid
+ * re-entrant computation cascades.
+ *
+ * It returns true if:
+ * 1. Any dependency version has already changed.
+ * 2. Any dependency is already marked as DIRTY.
+ *
+ * @internal
  */
-function _checkLinkDirty(link: DependencyLink): boolean {
-  const dep = link.node;
-  if (dep.isComputed) {
-    try {
-      // Logic: Pull-based Refresh
-      dep.value;
-    } catch {
-      if (IS_DEV) console.warn(`[atom-effect] Dependency #${dep.id} error in check`);
-    }
+export function isBufferShallowDirty(state: DepBufferState): boolean {
+  const slots = state.slots;
+  const len = slots.length;
+  for (let i = 0; i < len; i++) {
+    const link = slots.at(i);
+    if (!link) continue;
+
+    const dep = link.node;
+    const version = dep.version;
+    // Check for explicit version drift (already pulled changes)
+    // or pending changes (push-based dirty signals, 0x0100 is COMPUTED.DIRTY)
+    if (version !== link.version || (dep.flags & 0x0100) !== 0) return true;
   }
-  return dep.version !== link.version;
+  return false;
 }
 
 /**
@@ -205,15 +258,36 @@ function _checkLinkDirty(link: DependencyLink): boolean {
  */
 export function depBufferTruncateFrom(state: DepBufferState, index: number): void {
   const slots = state.slots;
-  for (let i = index; i < slots.length; i++) {
+  const len = slots.length;
+  for (let i = index; i < len; i++) {
     const link = slots.at(i);
-    if (link) link.unsub?.();
+    if (link) {
+      const unsub = link.unsub;
+      if (unsub) {
+        let unsubResult: Result<void, Error>;
+        try {
+          unsub();
+          unsubResult = Result.ok(undefined);
+        } catch (e) {
+          unsubResult = Result.err(e as Error);
+        }
+
+        Result.match(unsubResult, {
+          ok: () => {},
+          err: (e) => {
+            if (process.env.NODE_ENV !== 'production') {
+              console.error('[atom-effect] Unsubscribe failed:', e);
+            }
+          },
+        });
+      }
+    }
   }
   slots.truncateFrom(index);
 
   // Constraint: Phase Locality
   // The lookup map is only valid during the reconciliation phase.
-  state.map = null;
+  state.map = NullIndexer;
 }
 
 /**
