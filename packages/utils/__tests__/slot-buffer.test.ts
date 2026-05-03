@@ -53,4 +53,37 @@ describe('SlotBuffer: Structural Integrity', () => {
     expect(buf.length).toBe(0);
     expect(buf.capacity).toBe(5);
   });
+
+  it('some() should perform early-exit and return boolean result', () => {
+    const buf = new SlotBuffer<number>();
+    for (let i = 0; i < 10; i++) buf.push(i);
+
+    let count = 0;
+    const res = buf.some((val) => {
+      count++;
+      return val === 5;
+    });
+
+    expect(res).toBe(true);
+    expect(count).toBe(6); // 0, 1, 2, 3, 4, 5
+    expect(buf.some((val) => val === 99)).toBe(false);
+  });
+
+  it('lock() / unlock() should defer compact() execution', () => {
+    const buf = new SlotBuffer<number>();
+    for (let i = 0; i < 5; i++) buf.push(i);
+    buf.remove(1); // [0, null, 2, 3, 4]
+
+    buf.lock();
+    expect(buf.isLocked).toBe(true);
+
+    buf.compact(); // Should be deferred
+    expect(buf.length).toBe(4);
+    expect(buf.capacity).toBe(5);
+
+    buf.unlock();
+    expect(buf.isLocked).toBe(false);
+    expect(buf.length).toBe(4);
+    expect(buf.capacity).toBe(4); // Executed after unlock
+  });
 });
