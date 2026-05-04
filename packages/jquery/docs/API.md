@@ -14,7 +14,6 @@ This package extends jQuery with reactive capabilities. All methods are availabl
 - [Dependency Injection (`$.provideAtom`, `$.injectAtom`)](#dependency-injection)
 - [Static Methods](#static-methods)
 - [Data Fetching (`$.atomFetch`)](#data-fetching)
-- [Reactive URL (`$.atomUrl`)](#reactive-url)
 - [Routing (`$.route`)](#routing)
 - [PJAX Navigation (`$.atomNav`)](#pjax-navigation)
 - [Debug Mode](#debug-mode)
@@ -445,37 +444,6 @@ const user = $.atomFetch(() => `/api/users/${userId.value}`, {
 
 $('#name').atomText(user, u => u?.name ?? '');
 ```
-
----
-
-## Reactive URL
-
-### `$.atomUrl`
-
-A reactive manager for the application's URL state. It synchronizes with the browser's History API and provides localized atoms for different URL parts.
-
-| Property | Type | Description |
-| :--- | :--- | :--- |
-| `url` | `ReadonlyAtom<string>` | The full, absolute URL string. |
-| `path` | `WritableAtom<string>` | The normalized pathname. Setting this value triggers navigation. |
-| `search` | `WritableAtom<string>` | The raw query string (including the leading `?`). |
-| `hash` | `WritableAtom<string>` | The fragment identifier (including the leading `#`). |
-| `query` | `WritableAtom<Record<string, string>>` | Parsed query parameters as a key-value object. |
-| `state` | `WritableAtom<unknown>` | The current history state (`history.state`). |
-| `type` | `ReadonlyAtom<NavigationType>` | The last navigation type: `init`, `push`, `replace`, `pop`, or `hash`. |
-| `base` | `WritableAtom<string>` | The reactive base path for resolution. |
-
-#### Navigation Methods
-
-- **`push(url, state?)`**: Navigates to a new URL using `history.pushState`.
-- **`replace(url, state?)`**: Replaces the current URL using `history.replaceState`.
-- **`back()`**: Navigates backward in history (`history.back()`).
-- **`forward()`**: Navigates forward in history (`history.forward()`).
-- **`reset()`**: Re-initializes the state from the current platform location and restores event listeners if needed.
-- **`update(type)`**: Explicitly synchronizes the internal state with the current platform location.
-- **`dispose()`**: Removes all event listeners and disposes of internal reactive atoms.
-
----
 
 ---
 

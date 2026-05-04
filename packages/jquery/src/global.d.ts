@@ -5,7 +5,6 @@ import type {
   AtomNav,
   AtomNavOptions,
   AtomOptions,
-  AtomUrl,
   BindingOptions,
   ComponentFn,
   ComputedAtom,
@@ -448,27 +447,6 @@ declare global {
      * ```
      */
     useAtomComponent(element: HTMLElement): AtomComponentController;
-
-    /**
-     * Reactive manager for the application's URL state.
-     * Synchronizes browser history with reactive atoms.
-     *
-     * @example
-     * ```javascript
-     * // Reading
-     * $.effect(() => console.log($.atomUrl.path.value));
-     *
-     * // Writing (triggers navigation)
-     * $.atomUrl.path.value = '/new-route';
-     *
-     * // Batching (one history entry)
-     * $.batch(() => {
-     *   $.atomUrl.path.value = '/search';
-     *   $.atomUrl.params.value = { q: 'query' };
-     * });
-     * ```
-     */
-    atomUrl: AtomUrl;
 
     /**
      * Initializes the Atom-Effect jQuery library with custom settings.

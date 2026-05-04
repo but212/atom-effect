@@ -187,22 +187,6 @@ The router maintains visual state for navigation links using a targeted tracking
 - **Error Handling**: Standardizes error instances and isolates user hooks to prevent breaking the reactive chain.
 - **Abort Silence**: Catch and ignore `AbortError` internally during rapid re-evaluations.
 
-## 9. Reactive URL Engine (`$.atomUrl`)
-
-The URL engine provides a reactive interface to the browser's location and history, bridging the History API with `atom-effect` primitives.
-
-### 9.1 Implementation Details
-
-- **Resilient Atoms**: Singleton properties (like `path`, `query`) use a proxy wrapper that revives internal instances if they are disposed.
-- **Navigation Batching**: Property updates are coalesced via a microtask. If multiple properties change within the same tick, they are applied in a single History API call.
-- **Normalization**: Standardizes URL components (e.g., trailing slashes, search/hash empty states) during synchronization.
-- **Decoupled Parts**: Uses a `PartContext` and `URL_PARTS_CONFIG` to separate serialization logic from the main state manager.
-- **Bidirectional Synchronization**:
-  - **Downstream**: Listens to `popstate` and `hashchange` events.
-  - **Upstream**: Navigation is handled via explicit `push`/`replace` methods using priority-based strategies. (Monkey-patching of history methods was removed for better stability).
-  - **Reactive Base**: The application base path is managed as a `WritableAtom`, allowing the resolution logic to react to dynamic base path changes.
-  - **State Guarding**: Uses an internal flag to prevent recursive updates during atomic URL operations.
-
 ## 10. Security
 
 The binding layer includes several defensive measures:

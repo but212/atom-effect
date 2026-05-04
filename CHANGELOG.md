@@ -49,10 +49,6 @@
 
 #### Added
 
-- **Reactive URL Management (`$.atomUrl`)**: Introduced a centralized, reactive system for managing the browser's URL.
-  - Provides synchronized atoms for `path`, `search`, `hash`, `query` (formerly `params`), `state`, and a reactive `base` (formerly `basePath`).
-  - Supports navigation batching, explicit `update()` for manual synchronization, and a resilient auto-revive mechanism for singleton atoms.
-  - Features a re-engineered architecture using decoupled `PartContext` and removal of history monkey-patching for improved stability.
 - **Reactive Web Components (`$.useAtomComponent`)**: A comprehensive toolkit for building reactive Custom Elements with declarative bindings, FACE integration, and Shadow DOM support.
 - **Form Binding (`atomForm`)**: Declarative integration with the browser's Constraint Validation API and automatic field discovery.
 - **Dependency Injection**: Enhanced DI system with 100% Shadow DOM coverage and unified move detection.
