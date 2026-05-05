@@ -68,9 +68,9 @@
     "@vitest/coverage-v8": "^4.1.5",
     "@vitest/ui": "^4.1.5",
     "playwright": "^1.59.1",
-    "tinybench": "^6.0.0",
+    "tinybench": "^6.0.1",
     "vite": "^8.0.10",
-    "vite-plugin-dts": "^4.5.4",
+    "vite-plugin-dts": "^5.0.0",
     "vitest": "^4.1.5"
   }
 }
