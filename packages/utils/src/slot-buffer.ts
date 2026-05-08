@@ -1,15 +1,8 @@
 /**
- * SlotBuffer: A high-performance, hybrid container optimized for reactive subscriber lists.
- *
- * DESIGN INTENT:
- * - Minimizes heap allocations for small collections (0-4 items) using "fast slots" (_s0-_s3).
- * - Scales to unbounded capacity using an overflow array when needed.
- * - Uses a 4-bit occupancy mask for O(1) vacancy checks in the fast lanes.
- *
- * WHEN TO USE:
- * - Managing dependency lists (atoms, observers) where most instances have 1-4 items.
- * - When O(1) removal of items by reference is required (via free-index tracking).
+ * Table for scan of the first free bit in a 4-bit mask.
  */
+const FIRST_FREE_INDEX = [0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, -1];
+
 export class SlotBuffer<T> {
   /** Physical capacity including null gaps. Tracking this avoids unnecessary array scans. */
   protected _count = 0;
@@ -32,15 +25,18 @@ export class SlotBuffer<T> {
   protected _freeIndices: number[] | null = null;
 
   /**
+   * Internal guard to prevent structural changes during iteration.
+   * Logic: If > 0, compact() is deferred.
+   */
+  protected _lockCount = 0;
+  protected _pendingCompact = false;
+
+  /**
    * Optimization: Find the first free fast slot (0-3) using bit scanning.
    * @returns Index 0-3, or -1 if all fast slots are occupied.
    */
   protected _firstFreeSlot(mask: number): number {
-    if ((mask & 0b0001) === 0) return 0;
-    if ((mask & 0b0010) === 0) return 1;
-    if ((mask & 0b0100) === 0) return 2;
-    if ((mask & 0b1000) === 0) return 3;
-    return -1;
+    return FIRST_FREE_INDEX[mask & 0b1111]!;
   }
 
   /**
@@ -99,14 +95,14 @@ export class SlotBuffer<T> {
     this._rawWrite(idxB, a);
   }
 
-  /** Number of non-null items stored. */
+  /** Physical capacity (including null gaps). Safe for manual indexed loops. */
   get length(): number {
-    return this._actualCount;
+    return this._count;
   }
 
-  /** Physical capacity (including empty slots/holes). */
-  get capacity(): number {
-    return this._count;
+  /** Logical size (number of non-null items). */
+  get size(): number {
+    return this._actualCount;
   }
 
   /**
@@ -155,7 +151,7 @@ export class SlotBuffer<T> {
 
     if (this._count > 4) {
       const ov = this._overflow!;
-      while (this._count > 4 && ov[this._count - 5] === null) {
+      while (this._count > 4 && ov[this._count - 5] == null) {
         this._count--;
       }
     }
@@ -303,12 +299,41 @@ export class SlotBuffer<T> {
   }
 
   /**
+   * Returns true if at least one item satisfies the predicate.
+   * Optimization: Uses early-exit and bitmask to avoid null checks.
+   */
+  some(predicate: (item: T) => boolean): boolean {
+    if (this._actualCount === 0) return false;
+
+    const m = this._mask;
+    if (m & 0b0001 && predicate(this._s0!)) return true;
+    if (m & 0b0010 && predicate(this._s1!)) return true;
+    if (m & 0b0100 && predicate(this._s2!)) return true;
+    if (m & 0b1000 && predicate(this._s3!)) return true;
+
+    const ov = this._overflow;
+    if (ov) {
+      for (let i = 0, len = ov.length; i < len; i++) {
+        const item = ov[i];
+        if (item != null && predicate(item)) return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * Removes all gaps and shifts items toward the front.
-   * Recommendation: Call this after multiple remove() operations to improve iteration speed.
+   * Logic: Execution is deferred if the buffer is currently locked.
    */
   compact(): void {
+    if (this._lockCount > 0) {
+      this._pendingCompact = true;
+      return;
+    }
+
     const actual = this._actualCount;
-    if (actual === this._count) return;
+    const currentCount = this._count;
+    if (actual === currentCount) return;
 
     if (actual === 0) {
       this.clear();
@@ -316,25 +341,71 @@ export class SlotBuffer<T> {
     }
 
     let writeIdx = 0;
-    const limit = this._count;
-    for (let readIdx = 0; readIdx < limit; readIdx++) {
-      const item = this.at(readIdx);
+    const ov = this._overflow;
+
+    // Optimization: Inlined index logic to avoid redundant branches and at() calls
+    for (let readIdx = 0; readIdx < currentCount; readIdx++) {
+      let item: T | null;
+      if (readIdx < 4) {
+        item =
+          readIdx === 0 ? this._s0 : readIdx === 1 ? this._s1 : readIdx === 2 ? this._s2 : this._s3;
+      } else {
+        item = ov![readIdx - 4] ?? null;
+      }
+
       if (item !== null) {
         if (readIdx !== writeIdx) {
-          this._rawWrite(writeIdx, item);
-          this._rawWrite(readIdx, null);
+          // Write non-null item to new position
+          if (writeIdx < 4) {
+            this._mask |= 1 << writeIdx;
+            if (writeIdx === 0) this._s0 = item;
+            else if (writeIdx === 1) this._s1 = item;
+            else if (writeIdx === 2) this._s2 = item;
+            else this._s3 = item;
+          } else {
+            if (this._overflow === null) this._overflow = [];
+            this._overflow[writeIdx - 4] = item;
+          }
+
+          // Clear old slot
+          if (readIdx < 4) {
+            this._mask &= ~(1 << readIdx);
+            if (readIdx === 0) this._s0 = null;
+            else if (readIdx === 1) this._s1 = null;
+            else if (readIdx === 2) this._s2 = null;
+            else this._s3 = null;
+          } else {
+            ov![readIdx - 4] = null;
+          }
         }
-        writeIdx++;
-        if (writeIdx === actual) break;
+        if (++writeIdx === actual) break;
       }
     }
 
     this._count = actual;
-    if (this._overflow !== null) {
+    if (ov !== null) {
       if (writeIdx <= 4) this._overflow = null;
-      else this._overflow.length = writeIdx - 4;
+      else ov.length = writeIdx - 4;
     }
     this._freeIndices = null;
+    this._pendingCompact = false;
+  }
+
+  /**
+   * Prevents compaction until unlock() is called.
+   * Logic: Used to protect the buffer during iteration.
+   */
+  lock(): void {
+    this._lockCount++;
+  }
+
+  /**
+   * Decrements the lock counter and performs deferred compaction if needed.
+   */
+  unlock(): void {
+    if (--this._lockCount === 0 && this._pendingCompact) {
+      this.compact();
+    }
   }
 
   /** Reset the buffer to an empty state. */
@@ -350,5 +421,13 @@ export class SlotBuffer<T> {
   /** Alias for `clear`; kept for API compatibility. */
   dispose(): void {
     this.clear();
+  }
+
+  /**
+   * Indicates whether the buffer is currently locked.
+   * @internal
+   */
+  get isLocked(): boolean {
+    return this._lockCount > 0;
   }
 }

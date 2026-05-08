@@ -1,17 +1,15 @@
+import { Result } from '@but212/atom-effect-utils';
 import { IS_DEV, SCHEDULER_CONFIG, SMI_MAX } from '@/constants';
 import { ERROR_MESSAGES, SchedulerError } from '@/errors';
-
-// ── Epoch & Version Management ──────────────────────────────────────────
+import { resetTrackingContext, trackingContext } from './tracking';
 
 /**
- * Global counter for task deduplication. Incremented per flush/batch cycle.
+ * Optimization: V8 SMI (Small Integer) optimization.
+ * Wraps integers to stay within V8's SMI range (31-bit signed).
+ *
+ * Reason: Transitioning from SMIs to doubles (HeapNumbers) causes significant
+ * de-optimization in hot paths like version checking.
  * @internal
- */
-let collectorEpoch = 0;
-
-/**
- * Bitwise wrap-around to keep integers within V8's SMI (Small Integer) range.
- * Reason: Prevents performance drops caused by integer overflow transitioning to doubles.
  */
 const nextSmi = (v: number): number => {
   const next = (v + 1) & SMI_MAX;
@@ -19,401 +17,390 @@ const nextSmi = (v: number): number => {
 };
 
 /**
- * Advances the global tracking epoch.
- */
-export function nextEpoch(): number {
-  collectorEpoch = nextSmi(collectorEpoch);
-  return collectorEpoch;
-}
-
-export function currentEpoch(): number {
-  return collectorEpoch;
-}
-
-/**
- * Increments version numbers for stateful objects (Atoms).
+ * Generates the next version number for stateful objects (Atoms).
  */
 export function nextVersion(v: number): number {
   return nextSmi(v);
 }
 
+export interface SchedulerJobObject {
+  execute(): void;
+  /** Internal epoch tracking to prevent redundant scheduling in a single cycle. @internal */
+  _nextEpoch?: number | undefined;
+}
+
+export interface SchedulerJobFunction {
+  (): void;
+  /** Internal epoch tracking to prevent redundant scheduling in a single cycle. @internal */
+  _nextEpoch?: number | undefined;
+}
+
+export type SchedulerJob = SchedulerJobFunction | SchedulerJobObject;
+
 /**
- * Tracks the state of an active execution pass.
- * Data-driven approach to lifecycle management instead of scattered boolean flags.
+ * Bitwise state flags for the scheduler state machine.
  */
-interface FlushContext {
-  active: boolean;
+const S_IDLE = 0;
+const S_PROCESSING = 1 << 0;
+const S_FLUSHING_SYNC = 1 << 1;
+const S_BATCHING = 1 << 2;
+const MASK_DEFERRED = S_FLUSHING_SYNC | S_BATCHING;
+
+/**
+ * Internal state for the scheduler.
+ * @internal
+ */
+export interface SchedulerState {
+  size: number;
   epoch: number;
-  executionCount: number;
+  batchQueueSize: number;
+  state: number;
+  batchDepth: number;
+  maxFlushIterations: number;
+  sessionActive: boolean;
+  sessionEpoch: number;
+  sessionExecutionCount: number;
+  /** Primary queue for the current flush cycle. */
+  activeBuffer: (SchedulerJob | undefined)[];
+  /** Secondary queue to collect new jobs scheduled during the current flush. */
+  standbyBuffer: (SchedulerJob | undefined)[];
+  /** Queue for jobs scheduled during a batch session. */
+  batchBuffer: (SchedulerJob | undefined)[];
+  onOverflow: ((droppedCount: number) => void) | null;
 }
 
-const flushContext: FlushContext = {
-  active: false,
-  epoch: 0,
-  executionCount: 0,
-};
-
 /**
+ * Factory for scheduler state.
  * @internal
  */
-export function currentFlushEpoch(): number {
-  return flushContext.epoch;
+export function createSchedulerState(): SchedulerState {
+  return {
+    size: 0,
+    epoch: 0,
+    batchQueueSize: 0,
+    state: S_IDLE,
+    batchDepth: 0,
+    maxFlushIterations: SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS,
+    sessionActive: false,
+    sessionEpoch: 0,
+    sessionExecutionCount: 0,
+    activeBuffer: [],
+    standbyBuffer: [],
+    batchBuffer: [],
+    onOverflow: null,
+  };
 }
 
 /**
- * Locks the scheduler for a new execution pass.
- * Returns false if a flush is already in progress to prevent re-entrancy bugs.
+ * Logic: Batch Queue Consolidation
+ * Moves jobs from the batch buffer to the active execution queue.
  * @internal
  */
-export function startFlush(): boolean {
-  if (flushContext.active) {
+export function schedulerMergeBatchQueue(state: SchedulerState, nextEpoch: () => number): void {
+  const queueSize = state.batchQueueSize;
+  if (queueSize === 0) return;
+
+  const epoch = nextEpoch();
+  const bQueue = state.batchBuffer;
+  const targetBuffer = state.activeBuffer;
+  let currentSize = state.size;
+
+  for (let i = 0; i < queueSize; i++) {
+    const job = bQueue[i]!;
+    // Logic: Avoid redundant scheduling if the job is already marked for this epoch.
+    if (job._nextEpoch !== epoch) {
+      job._nextEpoch = epoch;
+      targetBuffer[currentSize++] = job;
+    }
+    bQueue[i] = undefined;
+  }
+
+  state.size = currentSize;
+  state.batchQueueSize = 0;
+
+  // Optimization: Release memory if the buffer grew significantly.
+  if (bQueue.length > SCHEDULER_CONFIG.BATCH_QUEUE_SHRINK_THRESHOLD) {
+    bQueue.length = 0;
+  }
+}
+
+/**
+ * Logic: Recursive Queue Drainage
+ * Continuously flushes the queues until no more jobs are pending.
+ *
+ * Caution: Subject to maxFlushIterations to prevent infinite loops from circular dependencies.
+ * @internal
+ */
+export function schedulerDrainQueue(
+  state: SchedulerState,
+  nextEpoch: () => number,
+  processQueue: (state: SchedulerState) => void,
+  handleOverflow: (state: SchedulerState) => void
+): void {
+  let iterations = 0;
+  const max = state.maxFlushIterations;
+
+  while (state.size > 0 || state.batchQueueSize > 0) {
+    if (++iterations > max) {
+      handleOverflow(state);
+      return;
+    }
+
+    if (state.batchQueueSize > 0) {
+      schedulerMergeBatchQueue(state, nextEpoch);
+    }
+
+    if (state.size > 0) {
+      processQueue(state);
+    }
+  }
+}
+
+/**
+ * Logic: Double-Buffering Job Execution
+ * Swaps active/standby buffers to allow safe scheduling during execution.
+ * @internal
+ */
+export function schedulerProcessQueue(state: SchedulerState, nextEpoch: () => number): void {
+  const jobs = state.activeBuffer;
+  const count = state.size;
+
+  // Logic: Double-buffering swap.
+  state.activeBuffer = state.standbyBuffer;
+  state.standbyBuffer = jobs;
+  state.size = 0;
+  nextEpoch();
+
+  for (let i = 0; i < count; i++) {
+    const job = jobs[i]!;
+    jobs[i] = undefined;
+
+    // Logic: Failure Isolation.
+    // Errors in one job should not prevent other jobs from executing.
+    const result = Result.tryCatch(() => {
+      if (typeof job === 'function') job();
+      else job.execute();
+    });
+
+    Result.match(result, {
+      ok: () => {},
+      err: (e) => {
+        console.error(new SchedulerError('Error occurred during scheduler execution', e));
+      },
+    });
+  }
+}
+
+/**
+ * Logic: Overflow Recovery
+ * Cleans up state when the maximum flush iterations are exceeded.
+ * @internal
+ */
+export function schedulerHandleFlushOverflow(state: SchedulerState): void {
+  const droppedCount = state.size + state.batchQueueSize;
+  console.error(
+    new SchedulerError(
+      ERROR_MESSAGES.SCHEDULER_FLUSH_OVERFLOW(state.maxFlushIterations, droppedCount)
+    )
+  );
+
+  state.size = 0;
+  state.activeBuffer.length = 0;
+  state.standbyBuffer.length = 0;
+  state.batchQueueSize = 0;
+  state.batchBuffer.length = 0;
+
+  if (state.onOverflow) {
+    try {
+      state.onOverflow(droppedCount);
+    } catch {
+      /* Suppress callback errors during overflow handling */
+    }
+  }
+}
+
+/** @internal */
+export function schedulerNextEpoch(state: SchedulerState): number {
+  state.epoch = nextSmi(state.epoch);
+  return state.epoch;
+}
+
+/** @internal */
+export function schedulerStartFlush(state: SchedulerState): boolean {
+  if (state.sessionActive) {
     if (IS_DEV) console.warn('startFlush() called during flush - ignored');
     return false;
   }
-
-  flushContext.active = true;
-  flushContext.epoch = nextEpoch();
-  flushContext.executionCount = 0;
+  state.sessionActive = true;
+  state.sessionEpoch = schedulerNextEpoch(state);
+  state.sessionExecutionCount = 0;
   return true;
 }
 
-/**
- * Releases the flush lock.
- * @internal
- */
-export function endFlush(): void {
-  flushContext.active = false;
+/** @internal */
+export function schedulerEndFlush(state: SchedulerState): void {
+  state.sessionActive = false;
 }
 
-/**
- * Scopes a function execution within a flush lifecycle.
- * Ensures the scheduler state is cleaned up even if the provided function throws.
- */
-export function runInFlushScope<T>(fn: () => T): T | undefined {
-  const started = startFlush();
-  try {
-    return fn();
-  } finally {
-    if (started) endFlush();
-  }
-}
-
-/**
- * Monitors the number of jobs executed in a single flush.
- *
- * Warning: This is the primary defense against infinite reactive loops.
- * If A triggers B, and B triggers A, this counter will hit the limit and
- * stop the execution before the browser UI freezes.
- */
-export function incrementFlushExecutionCount(): number {
-  if (!flushContext.active) return 0;
-
-  const count = ++flushContext.executionCount;
-  if (count <= SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH) {
-    return count;
-  }
+/** @internal */
+export function schedulerIncrementFlushExecutionCount(state: SchedulerState): number {
+  if (!state.sessionActive) return 0;
+  const count = ++state.sessionExecutionCount;
+  if (count <= SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH) return count;
 
   throw new Error(
     `[atom-effect] Infinite loop detected: flush execution count exceeded ${SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH}`
   );
 }
 
+/** @internal */
+export function schedulerResetFlushState(state: SchedulerState): void {
+  state.sessionEpoch = 0;
+  state.sessionExecutionCount = 0;
+  state.sessionActive = false;
+}
+
 /**
+ * Core scheduling logic. Decisions between microtask or synchronous flush are made here.
  * @internal
  */
-export function resetFlushState(): void {
-  flushContext.epoch = 0;
-  flushContext.executionCount = 0;
-  flushContext.active = false;
-}
-
-// ── Scheduler ───────────────────────────────────────────────────────────
-
-export interface SchedulerJobObject {
-  execute(): void;
-  /** Internal tracking for deduplication within a specific epoch. */
-  _nextEpoch?: number | undefined;
-}
-
-export interface SchedulerJobFunction {
-  (): void;
-  _nextEpoch?: number | undefined;
-}
-
-export type SchedulerJob = SchedulerJobFunction | SchedulerJobObject;
-
-// State flags used for fast bitwise checking of scheduler status.
-const S_IDLE = 0;
-const S_PROCESSING = 1 << 0; // Currently running the microtask loop.
-const S_FLUSHING_SYNC = 1 << 1; // Running a forced synchronous update.
-const S_BATCHING = 1 << 2; // Inside a user-defined batch() block.
-const MASK_DEFERRED = S_FLUSHING_SYNC | S_BATCHING;
-
-/**
- * Core engine managing the timing and deduplication of reactive updates.
- *
- * Uses a "Double-Buffer + Batch-Buffer" (Triple Buffer) design:
- * 1. Active: Jobs being processed right now.
- * 2. Standby: Jobs scheduled while the current buffer is being processed.
- * 3. Batch: Jobs held until a batching scope finishes.
- */
-class Scheduler {
-  private _size = 0;
-  private _epoch = 0;
-  private _batchQueueSize = 0;
-  private _state = S_IDLE;
-  private _batchDepth = 0;
-  private _maxFlushIterations: number = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
-
-  // Buffer layout: [Active, Standby, Batch]
-  private _buffers: (SchedulerJob | undefined)[][] = [[], [], []];
-  private _activeIdx = 0;
-  private _standbyIdx = 1;
-  private _batchIdx = 2;
-
-  /** Callback for telemetry or error handling when the job queue overflows. */
-  onOverflow: ((droppedCount: number) => void) | null = null;
-
-  private readonly _boundRunLoop = this._runLoop.bind(this);
-
-  get queueSize(): number {
-    return this._size + this._batchQueueSize;
-  }
-
-  get isBatching(): boolean {
-    return (this._state & S_BATCHING) !== 0;
-  }
-
-  /**
-   * Adds a task to the queue.
-   * Deduplicates automatically if the task was already added in this epoch.
-   */
-  schedule(callback: SchedulerJob): void {
-    if (IS_DEV) {
-      if (
-        typeof callback !== 'function' &&
-        (!callback || typeof (callback as SchedulerJobObject).execute !== 'function')
-      ) {
-        throw new SchedulerError(ERROR_MESSAGES.SCHEDULER_CALLBACK_MUST_BE_FUNCTION);
-      }
-    }
-
-    // Optimization: Skip if the job is already slated for the current/next cycle.
-    if (callback._nextEpoch === this._epoch) return;
-    callback._nextEpoch = this._epoch;
-
-    this._push(callback);
-
-    // If not already processing, schedule a microtask to flush.
-    if ((this._state & S_PROCESSING) === 0) {
-      this._flush();
+export function schedulerSchedule(state: SchedulerState, callback: SchedulerJob): void {
+  if (IS_DEV) {
+    if (
+      typeof callback !== 'function' &&
+      (!callback || typeof (callback as SchedulerJobObject).execute !== 'function')
+    ) {
+      throw new SchedulerError(ERROR_MESSAGES.SCHEDULER_CALLBACK_MUST_BE_FUNCTION);
     }
   }
 
-  private _push(job: SchedulerJob): void {
-    // If we are batching or forcing a sync flush, redirect jobs to the batch buffer.
-    const isDeferred = (this._state & MASK_DEFERRED) !== 0;
-    if (isDeferred) {
-      this._buffers[this._batchIdx]![this._batchQueueSize++] = job;
-    } else {
-      this._buffers[this._activeIdx]![this._size++] = job;
-    }
+  // Optimization: Prevents a job from being added to the queue multiple times in the same epoch.
+  if (callback._nextEpoch === state.epoch) return;
+  callback._nextEpoch = state.epoch;
+
+  // Logic: Queue selection based on current scheduler state.
+  if ((state.state & MASK_DEFERRED) === 0) {
+    state.activeBuffer[state.size++] = callback;
+  } else {
+    state.batchBuffer[state.batchQueueSize++] = callback;
   }
 
-  /**
-   * Schedules a microtask to process the queue.
-   */
-  private _flush(): void {
-    if ((this._state & S_PROCESSING) !== 0 || (this._size === 0 && this._batchQueueSize === 0))
-      return;
-    this._state |= S_PROCESSING;
-    queueMicrotask(this._boundRunLoop);
-  }
-
-  private _runLoop(): void {
-    try {
-      if (this._size === 0 && this._batchQueueSize === 0) return;
-
-      const started = startFlush();
-      this._drainQueue();
-      if (started) endFlush();
-    } finally {
-      this._state &= ~S_PROCESSING;
-    }
-  }
-
-  /**
-   * Forces all pending updates to execute immediately.
-   * Use this when you need synchronous state consistency (e.g., DOM measurements).
-   * @internal
-   */
-  _flushSync(): void {
-    if (this._size === 0 && this._batchQueueSize === 0) return;
-
-    const prevState = this._state;
-    this._state |= S_FLUSHING_SYNC;
-    const started = startFlush();
-    try {
-      this._mergeBatchQueue();
-      this._drainQueue();
-    } finally {
-      this._state = prevState;
-      if (started) endFlush();
-    }
-  }
-
-  /**
-   * Moves jobs from the batch buffer to the active buffer for processing.
-   */
-  private _mergeBatchQueue(): void {
-    const queueSize = this._batchQueueSize;
-    if (queueSize === 0) return;
-
-    // Bump epoch so that newly merged jobs aren't immediately deduplicated
-    // if they were added within the same batch.
-    this._epoch = nextSmi(this._epoch);
-    const epoch = this._epoch;
-    const bQueue = this._buffers[this._batchIdx]!;
-    const targetBuffer = this._buffers[this._activeIdx]!;
-    let currentSize = this._size;
-
-    for (let i = 0; i < queueSize; i++) {
-      const job = bQueue[i]!;
-      if (job._nextEpoch !== epoch) {
-        job._nextEpoch = epoch;
-        targetBuffer[currentSize++] = job;
-      }
-      bQueue[i] = undefined; // Help GC
-    }
-
-    this._size = currentSize;
-    this._batchQueueSize = 0;
-
-    // Memory optimization: shrink the array if it grew significantly.
-    if (bQueue.length > SCHEDULER_CONFIG.BATCH_QUEUE_SHRINK_THRESHOLD) bQueue.length = 0;
-  }
-
-  /**
-   * Iterates until all buffers are empty.
-   * Handles "Cascading Updates" (jobs scheduling other jobs).
-   */
-  private _drainQueue(): void {
-    let iterations = 0;
-
-    while (this.queueSize > 0) {
-      if (++iterations > this._maxFlushIterations) {
-        this._handleFlushOverflow();
-        return;
-      }
-
-      if (this._batchQueueSize > 0) {
-        this._mergeBatchQueue();
-      }
-
-      if (this._size > 0) {
-        this._processQueue();
-      }
-    }
-  }
-
-  /**
-   * Executes the active buffer.
-   * Swaps buffers (Standby becomes Active) to avoid array modification during iteration.
-   */
-  private _processQueue(): void {
-    const jobs = this._buffers[this._activeIdx]!;
-    const count = this._size;
-
-    // Swap indices: Standby buffer is used for any jobs scheduled during this loop.
-    const nextIdx = this._activeIdx;
-    this._activeIdx = this._standbyIdx;
-    this._standbyIdx = nextIdx;
-
-    this._size = 0;
-    this._epoch = nextSmi(this._epoch);
-
-    for (let i = 0; i < count; i++) {
-      const job = jobs[i]!;
-      jobs[i] = undefined; // Prevent memory leaks (GC optimization)
-
+  // Logic: Microtask entry point.
+  if ((state.state & S_PROCESSING) === 0) {
+    state.state |= S_PROCESSING;
+    queueMicrotask(() => {
       try {
-        if (typeof job === 'function') {
-          job();
-        } else {
-          job.execute();
-        }
+        if (state.size === 0 && state.batchQueueSize === 0) return;
+        const started = schedulerStartFlush(state);
+        schedulerDrainQueue(
+          state,
+          () => schedulerNextEpoch(state),
+          (s) => schedulerProcessQueue(s, () => schedulerNextEpoch(s)),
+          (s) => schedulerHandleFlushOverflow(s)
+        );
+        if (started) schedulerEndFlush(state);
       } catch (e) {
-        console.error(new SchedulerError('Error occurred during scheduler execution', e as Error));
+        // Caution: Reset tracking context to prevent leaking reactive state after a crash.
+        resetTrackingContext(trackingContext);
+        throw e;
+      } finally {
+        state.state &= ~S_PROCESSING;
       }
-    }
-  }
-
-  private _handleFlushOverflow(): void {
-    const droppedCount = this._size + this._batchQueueSize;
-    console.error(
-      new SchedulerError(
-        ERROR_MESSAGES.SCHEDULER_FLUSH_OVERFLOW(this._maxFlushIterations, droppedCount)
-      )
-    );
-
-    // Emergency cleanup to prevent permanent lockup.
-    this._size = 0;
-    this._buffers[this._activeIdx]!.length = 0;
-    this._buffers[this._standbyIdx]!.length = 0;
-    this._batchQueueSize = 0;
-    this._buffers[this._batchIdx]!.length = 0;
-
-    const onOverflow = this.onOverflow;
-    if (onOverflow) {
-      try {
-        onOverflow(droppedCount);
-      } catch {
-        /* Suppress user callback errors */
-      }
-    }
-  }
-
-  startBatch(): void {
-    this._batchDepth++;
-    this._state |= S_BATCHING;
-  }
-
-  endBatch(): void {
-    if (this._batchDepth === 0) {
-      if (IS_DEV) console.warn(ERROR_MESSAGES.SCHEDULER_END_BATCH_WITHOUT_START);
-      return;
-    }
-
-    if (--this._batchDepth === 0) {
-      this._state &= ~S_BATCHING;
-      // Only trigger sync flush if we aren't already inside another sync flush.
-      if ((this._state & S_FLUSHING_SYNC) === 0) {
-        this._flushSync();
-      }
-    }
-  }
-
-  setMaxFlushIterations(max: number): void {
-    if (max < SCHEDULER_CONFIG.MIN_FLUSH_ITERATIONS)
-      throw new SchedulerError(
-        `Max iterations must be at least ${SCHEDULER_CONFIG.MIN_FLUSH_ITERATIONS}`
-      );
-    this._maxFlushIterations = max;
+    });
   }
 }
 
-export const scheduler = new Scheduler();
+/**
+ * Forcefully flushes all pending jobs synchronously.
+ * @internal
+ */
+export function schedulerFlushSync(state: SchedulerState): void {
+  if (state.size === 0 && state.batchQueueSize === 0) return;
+
+  const prevState = state.state;
+  state.state |= S_FLUSHING_SYNC;
+  const started = schedulerStartFlush(state);
+  try {
+    schedulerMergeBatchQueue(state, () => schedulerNextEpoch(state));
+    schedulerDrainQueue(
+      state,
+      () => schedulerNextEpoch(state),
+      (s) => schedulerProcessQueue(s, () => schedulerNextEpoch(s)),
+      (s) => schedulerHandleFlushOverflow(s)
+    );
+  } finally {
+    state.state = prevState;
+    if (started) schedulerEndFlush(state);
+  }
+}
+
+/** @internal */
+export function schedulerStartBatch(state: SchedulerState): void {
+  state.batchDepth++;
+  state.state |= S_BATCHING;
+}
+
+/** @internal */
+export function schedulerEndBatch(state: SchedulerState): void {
+  if (state.batchDepth === 0) {
+    if (IS_DEV) console.warn(ERROR_MESSAGES.SCHEDULER_END_BATCH_WITHOUT_START);
+    return;
+  }
+
+  if (--state.batchDepth === 0) {
+    state.state &= ~S_BATCHING;
+    // Logic: Automatically trigger a sync flush at the end of the outermost batch
+    // unless already flushing synchronously.
+    if ((state.state & S_FLUSHING_SYNC) === 0) {
+      schedulerFlushSync(state);
+    }
+  }
+}
+
+/** @internal */
+export function schedulerSetMaxFlushIterations(state: SchedulerState, max: number): void {
+  if (max < SCHEDULER_CONFIG.MIN_FLUSH_ITERATIONS)
+    throw new SchedulerError(
+      `Max iterations must be at least ${SCHEDULER_CONFIG.MIN_FLUSH_ITERATIONS}`
+    );
+  state.maxFlushIterations = max;
+}
+
+/** @internal */
+export function schedulerIsBatching(state: SchedulerState): boolean {
+  return (state.state & S_BATCHING) !== 0;
+}
+
+/** @internal */
+export function schedulerQueueSize(state: SchedulerState): number {
+  return state.size + state.batchQueueSize;
+}
+
+export const scheduler = createSchedulerState();
+
+export const nextEpoch = (): number => schedulerNextEpoch(scheduler);
+export const currentEpoch = (): number => scheduler.epoch;
+export const currentFlushEpoch = (): number => scheduler.sessionEpoch;
+export const startFlush = (): boolean => schedulerStartFlush(scheduler);
+export const endFlush = (): void => schedulerEndFlush(scheduler);
+export const incrementFlushExecutionCount = (): number =>
+  schedulerIncrementFlushExecutionCount(scheduler);
+export const resetFlushState = (): void => schedulerResetFlushState(scheduler);
 
 /**
- * Groups multiple state updates into a single atomic change.
- * Effects will only trigger once after the provided function finishes.
+ * Groups multiple state updates into a single atomic change and flushes them synchronously.
+ *
+ * When to use:
+ * - Ensuring that all effects triggered by state changes are executed immediately before the function returns (Synchronous Settlement).
+ * - Creating a transactional scope where multiple updates are treated as one unit and settled predictably.
  *
  * @example
  * ```typescript
  * batch(() => {
  *   atomA.set(1);
  *   atomB.set(2);
- * }); // Effects listening to A or B run once here.
+ * });
+ * // At this point, all triggered effects have already finished executing.
  * ```
  */
 export function batch<T>(fn: () => T): T {
@@ -421,11 +408,27 @@ export function batch<T>(fn: () => T): T {
     throw new TypeError(ERROR_MESSAGES.BATCH_CALLBACK_MUST_BE_FUNCTION);
   }
 
-  scheduler.startBatch();
+  schedulerStartBatch(scheduler);
   try {
-    return fn();
+    const result = Result.tryCatch(fn);
+    return Result.unwrap(result);
   } finally {
-    scheduler.endBatch();
+    schedulerEndBatch(scheduler);
+  }
+}
+
+/**
+ * Scopes a function execution within a flush lifecycle.
+ * Ensures the scheduler state is cleaned up even if the provided function throws.
+ * @internal
+ */
+export function runInFlushScope<T>(fn: () => T): T | undefined {
+  const started = startFlush();
+  try {
+    const result = Result.tryCatch(fn);
+    return Result.unwrap(result);
+  } finally {
+    if (started) endFlush();
   }
 }
 
@@ -433,28 +436,35 @@ let sharedNextTickPromise: Promise<void> | null = null;
 
 /**
  * Returns a promise that resolves after the next scheduler flush.
- * Use this to wait for the reactive system to "settle" in tests or async logic.
+ *
+ * When to use:
+ * - Waiting for effects to finish in tests after state updates.
+ * - Synchronizing logic with the reactive system's "settled" state.
+ *
+ * @example
+ * ```typescript
+ * atom.set(100);
+ * await aeNextTick();
+ * // DOM or side effects are now guaranteed to be updated.
+ * ```
  */
 export function aeNextTick(fn?: () => void): Promise<void> {
   if (fn) {
     return new Promise<void>((resolve, reject) => {
-      scheduler.schedule(() => {
-        try {
-          fn();
-          resolve();
-        } catch (err) {
-          reject(err);
-        }
+      schedulerSchedule(scheduler, () => {
+        const result = Result.tryCatch(fn);
+        Result.match(result, {
+          ok: () => resolve(),
+          err: (err) => reject(err),
+        });
       });
     });
   }
 
-  if (sharedNextTickPromise) {
-    return sharedNextTickPromise;
-  }
+  if (sharedNextTickPromise) return sharedNextTickPromise;
 
   sharedNextTickPromise = new Promise<void>((resolve) => {
-    scheduler.schedule(() => {
+    schedulerSchedule(scheduler, () => {
       sharedNextTickPromise = null;
       resolve();
     });

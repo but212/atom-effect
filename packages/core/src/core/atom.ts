@@ -3,8 +3,22 @@ import { ReactiveNode } from '@/core/base';
 import { BRAND, BrandFlags } from '@/symbols';
 import type { AtomOptions, WritableAtom } from '@/types';
 import { debug } from '@/utils/debug';
-import { nextVersion, scheduler } from './scheduler';
+import { nextVersion, scheduler, schedulerIsBatching, schedulerSchedule } from './scheduler';
 import { trackingContext } from './tracking';
+
+/** @internal */
+const NOTIFY_ACTION = {
+  FLUSH: 0,
+  SCHEDULE: 1,
+} as const;
+
+/** @internal */
+const STRATEGY_TABLE = [
+  NOTIFY_ACTION.SCHEDULE, // !sync, !batching (0)
+  NOTIFY_ACTION.SCHEDULE, // !sync, batching  (1)
+  NOTIFY_ACTION.FLUSH, // sync, !batching  (2)
+  NOTIFY_ACTION.SCHEDULE, // sync, batching   (3)
+] as const;
 
 /**
  * Internal implementation of a {@link WritableAtom}.
@@ -66,28 +80,23 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
     this._scheduleNotification(oldValue);
   }
 
-  /**
-   * Logic: Notification Orchestration
-   * Determines whether to flush changes immediately (sync mode) or defer to the
-   * microtask scheduler. Sync flushes are suppressed if a global batch is active
-   * to maintain atomicity.
-   */
   private _scheduleNotification(oldValue: T): void {
+    const flags = this.flags;
     const SCHED = ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
 
-    // Constraint: Avoid redundant scheduling if no one is listening or already queued.
-    if ((this.flags & SCHED) !== 0 || !this._slots?.length) return;
+    if ((flags & SCHED) !== 0 || !this._slots?.length) return;
 
     this._pendingOldValue = oldValue;
     this.flags |= SCHED;
 
-    const isSync = (this.flags & ATOM_STATE_FLAGS.SYNC) !== 0;
-    if (isSync && !scheduler.isBatching) {
-      if (this._notifying === 0) this._flushNotifications();
-      return;
-    }
+    const syncBit = flags & ATOM_STATE_FLAGS.SYNC ? 2 : 0;
+    const batchBit = schedulerIsBatching(scheduler) ? 1 : 0;
 
-    scheduler.schedule(this);
+    if (STRATEGY_TABLE[syncBit | batchBit] === NOTIFY_ACTION.FLUSH) {
+      if (!this.isNotifying) this._flushNotifications();
+    } else {
+      schedulerSchedule(scheduler, this);
+    }
   }
 
   /**
@@ -97,30 +106,24 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
     this._flushNotifications();
   }
 
-  /**
-   * Optimization: Net-zero suppression
-   * If an atom's value is changed and then changed back to its original state
-   * within the same batch, this method suppresses unnecessary subscriber notifications.
-   */
   private _flushNotifications(): void {
     const SCHED = ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
-    const DISPOSED = ATOM_STATE_FLAGS.DISPOSED;
-    const SYNC = ATOM_STATE_FLAGS.SYNC;
+    const MASK = SCHED | ATOM_STATE_FLAGS.DISPOSED;
+    const isSyncActive =
+      (this.flags & ATOM_STATE_FLAGS.SYNC) !== 0 && !schedulerIsBatching(scheduler);
 
-    while ((this.flags & (SCHED | DISPOSED)) === SCHED) {
+    while ((this.flags & MASK) === SCHED) {
       const prev = this._pendingOldValue as T;
       const next = this._value;
 
       this._pendingOldValue = undefined;
       this.flags &= ~SCHED;
 
-      // Logic: Only notify if the final value differs from the pre-batch value.
       if (!this._equal(next, prev)) {
         this._notifySubscribers(next, prev);
       }
 
-      // Constraint: Break if we are not in sync mode or a batch is active.
-      if ((this.flags & SYNC) === 0 || scheduler.isBatching) break;
+      if (!isSyncActive) break;
     }
   }
 

@@ -146,6 +146,32 @@ describe('Computed', () => {
       });
       expect(() => e.value).toThrow(ComputedError);
     });
+
+    it('ensures async consistency by resolving in a single microtask cycle', async () => {
+      let resolvePromise!: (v: string) => void;
+      const promise = new Promise<string>((r) => {
+        resolvePromise = r;
+      });
+
+      // Constraint: Use a sync function returning a promise to avoid the extra
+      // microtask inherent in 'async' functions.
+      const c = computed(() => promise, { defaultValue: 'loading' });
+
+      // Trigger computation
+      expect(c.value).toBe('loading');
+      expect(c.isPending).toBe(true);
+
+      // Resolve the promise
+      resolvePromise('done');
+
+      // Check: In the very next microtask, the atom MUST be updated.
+      // If we used double .then, this would still be 'loading' / isPending: true.
+      await Promise.resolve(); // Single microtask
+
+      expect(c.isPending).toBe(false);
+      expect(c.isResolved).toBe(true);
+      expect(c.value).toBe('done');
+    });
   });
 
   describe('Lifecycle & Reactivity', () => {

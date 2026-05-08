@@ -77,7 +77,7 @@ describe('DepBuffer: Reuse & Lifecycle', () => {
 
     disposeAll(buf);
     expect(unsubs[0]).toHaveBeenCalled();
-    expect(buf.slots.length).toBe(0);
+    expect(buf.slots.size).toBe(0);
   });
 
   it('insertNew: should correctly manage logical size irrespective of occupancy', () => {
@@ -86,12 +86,12 @@ describe('DepBuffer: Reuse & Lifecycle', () => {
 
     // 1. Write to empty slot (logical size 0 -> 1)
     insertNew(buf, 2, l0);
-    expect(buf.slots.length).toBe(1);
+    expect(buf.slots.size).toBe(1);
 
     // 2. Write to occupied slot (relocate l0, write l1 -> logical size 1 -> 2)
     const l1 = createLink(createMockDep(1), 1, vi.fn());
     insertNew(buf, 2, l1);
-    expect(buf.slots.length).toBe(2);
+    expect(buf.slots.size).toBe(2);
     expect(buf.slots.at(2)).toBe(l1);
     expect(buf.slots.has(l0)).toBe(true); // Occupant must be relocated, not deleted
   });
@@ -137,12 +137,12 @@ describe('DepBuffer: Reuse & Lifecycle', () => {
     const d1 = createMockDep(1);
 
     insertNew(buf, 0, createLink(d0, 1, vi.fn()));
-    expect(buf.slots.length).toBe(1);
+    expect(buf.slots.size).toBe(1);
 
     depBufferTruncateFrom(buf, 0);
-    expect(buf.slots.length).toBe(0);
+    expect(buf.slots.size).toBe(0);
 
     insertNew(buf, 0, createLink(d1, 1, vi.fn()));
-    expect(buf.slots.length).toBe(1);
+    expect(buf.slots.size).toBe(1);
   });
 });

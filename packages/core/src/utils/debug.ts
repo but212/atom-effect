@@ -88,18 +88,15 @@ class DevDebugController implements DebugConfig {
    */
   public registerNode(node: object & { id: DependencyId }): void {
     const id = node.id;
-    const entry = this._registry.get(id);
+    let entry = this._registry.get(id);
 
-    if (entry) {
-      entry.ref = new WeakRef(node);
-    } else {
+    if (!entry) {
       const type = this.getDebugType(node) ?? 'unknown';
-      this._registry.set(id, {
-        name: `${type}_${id}`,
-        type,
-        ref: new WeakRef(node),
-      });
+      entry = { name: `${type}_${id}`, type };
+      this._registry.set(id, entry);
     }
+
+    entry.ref = new WeakRef(node);
     this._finalizer.register(node, id);
   }
 
@@ -107,26 +104,20 @@ class DevDebugController implements DebugConfig {
    * Links internal IDs to labels and types.
    */
   public attachDebugInfo(obj: object, type: string, id: DependencyId, customName?: string): void {
-    if (!this.enabled) return;
+    if (!this.enabled || (customName === undefined && !this.trackGraph)) return;
 
-    if (customName !== undefined || this.trackGraph) {
-      let entry = this._registry.get(id);
+    let entry = this._registry.get(id);
+    if (!entry) {
+      entry = { name: customName ?? `${type}_${id}`, type };
+      this._registry.set(id, entry);
+    } else {
+      if (customName !== undefined) entry.name = customName;
+      entry.type = type;
+    }
 
-      if (entry) {
-        if (customName !== undefined) entry.name = customName;
-        entry.type = type;
-      } else {
-        entry = {
-          name: customName ?? `${type}_${id}`,
-          type,
-        };
-        this._registry.set(id, entry);
-      }
-
-      if (this.trackGraph) {
-        entry.ref = new WeakRef(obj);
-        this._finalizer.register(obj, id);
-      }
+    if (this.trackGraph) {
+      entry.ref = new WeakRef(obj);
+      this._finalizer.register(obj, id);
     }
   }
 
@@ -170,20 +161,31 @@ class DevDebugController implements DebugConfig {
    * Use sparingly.
    */
   public dumpGraph(): Record<string, unknown>[] {
+    const registry = this._registry;
+    if (registry.size === 0) return [];
+
     const result: Record<string, unknown>[] = [];
     const counts = this._updateCounts;
 
-    for (const [id, meta] of this._registry) {
-      const node = meta.ref?.deref();
-      // If graph tracking is off, we show all registered metadata.
-      // If it's on, we only show nodes that haven't been GC'd yet.
-      if (!this.trackGraph || node !== undefined) {
+    if (!this.trackGraph) {
+      for (const [id, meta] of registry) {
         result.push({
           id,
           name: meta.name,
           type: meta.type,
-          updateCount: counts.get(id) || 0,
+          updateCount: counts.get(id) ?? 0,
         });
+      }
+    } else {
+      for (const [id, meta] of registry) {
+        if (meta.ref?.deref() !== undefined) {
+          result.push({
+            id,
+            name: meta.name,
+            type: meta.type,
+            updateCount: counts.get(id) ?? 0,
+          });
+        }
       }
     }
     return result;
@@ -214,7 +216,8 @@ class DevDebugController implements DebugConfig {
     if (meta) return Option.some(meta.type);
 
     const brand = (obj as { [BRAND]?: number })[BRAND];
-    return Option.fromNullable(brand !== undefined ? TYPE_BY_BRAND[brand & BRAND_MASK] : undefined);
+    const type = brand !== undefined ? TYPE_BY_BRAND[brand & BRAND_MASK] : undefined;
+    return Option.fromNullable(type);
   }
 }
 

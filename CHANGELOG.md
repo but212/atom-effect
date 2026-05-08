@@ -6,89 +6,82 @@
 
 #### Changed
 
-- **Architecture**: Replaced class-based `DepSlotBuffer` with a highly optimized functional `DepBufferState` to reduce object overhead and improve V8 Hidden Class performance.
-- **Architecture**: Overhauled the Scheduler with a "Triple-Buffer" system (Active, Standby, Batch) to robustly handle nested updates and eliminate redundant flushes.
-- **Performance**: Unified async drift detection into the `isDirty()` check, eliminating the overhead of DJB2 hashing for stale promise tracking.
-- **Performance**: Forced internal IDs and versions into the SMI (Small Integer) range to bypass heap allocation.
-- **Security**: Hardened `atomLens` and `setDeepValue` against prototype pollution by blocking dangerous keys like `__proto__`.
-- **Refactor**: Adopted functional `Option<T>` and `Result<T, E>` patterns for internal state management (tracking context, cleanup, and error handling) to improve null-safety and code robustness.
+- Refactored `Scheduler` and `TrackingContext` to a functional approach using data-centric state objects and a triple-buffer system to manage nested updates.
+- Optimized internal counters, IDs, and versions using V8 SMI (Small Integer) to reduce heap allocation and improve performance.
+- Enhanced `ReactiveNode` notification loop and `Effect` budget management for better cache locality.
+- Unified asynchronous drift detection into the `isDirty()` check, replacing DJB2 hashing for stale promise tracking.
+- Adopted functional `Option` and `Result` patterns for internal state management and error handling.
+
+#### Security
+
+- Prevented prototype pollution in `atomLens` and `setDeepValue` by blocking restricted keys like `__proto__`.
 
 ### Utils
 
 #### Breaking Changes
 
-- **Result API**: Re-engineered `Result<T, E>` from a class-based hierarchy to a high-performance, data-centric POJO design.
-  - Replaced method calls (e.g., `res.unwrap()`) with static utility calls (e.g., `Result.unwrap(res)`) for better tree-shaking and memory efficiency.
-- **Option API**: Re-engineered `Option<T>` into a functional API with plain object variants (`Some`, `None`), aligning with the `Result` architecture for better performance and consistency.
-- **SlotBuffer API**: Standardized API to match standard JavaScript collections.
-  - Renamed `size` -> `length`, `physicalSize` -> `capacity`, `add` -> `push`, and `getAt` -> `at`.
+- Re-engineered `Result` and `Option` from class-based hierarchies to functional POJO designs. Static utility calls replace method calls to improve tree-shaking and memory efficiency.
+- Standardized `SlotBuffer` API: `size` -> `length`, `physicalSize` -> `capacity`, `add` -> `push`, and `getAt` -> `at`.
 
 #### Added
 
-- **Type Guards**: Added `isResult` for robust Result identification using internal symbols.
-- **Functional Primitives**: Introduced `Option<T>` and `Result<T, E>` types for robust error handling and null-safety.
-  - **Railway Oriented Programming**: Added a comprehensive suite of static utilities to `Result` (`match`, `tap`, `andThen`, `all`) for declarative error pipelines.
-  - **Safe Execution**: Added `Result.tryCatch` and `Result.fromPromise` to unify synchronous and asynchronous error capture.
-- **Performance Benchmarks**: Introduced a comprehensive benchmarking suite for `utils` utilities using `vitest bench`.
+- Introduced functional primitives `Option` and `Result` with static utilities (`match`, `tap`, `andThen`, `tryCatch`, `fromPromise`) for robust error handling.
+- Added `isResult` type guard for nominal type identification.
+- Added performance benchmarks for utilities using `vitest bench`.
 
 #### Changed
 
-- **SlotBuffer**: Optimized `truncateFrom` by removing redundant hooks.
-- **Result/Option**: Integrated nominal type checking via symbols and added native comparison benchmarks.
-- **SlotBuffer**: Optimized with a 4-bit mask for "fast-lane" slot tracking and bit-scan slot discovery, significantly improving performance for small collections.
+- Optimized `SlotBuffer` with bit-scan slot discovery and removed redundant hooks in `truncateFrom`.
+- Integrated nominal type checking for `Result` and `Option` using symbols.
 
 #### Fixed
 
-- **Result**: Resolved a type-level edge case where `Promise` objects could be misidentified as `Err` results by `Result.isErr`.
+- Fixed a type-level edge case where `Result.isErr` could misidentify `Promise` objects as `Err` results.
 
 ### jQuery
 
 #### Breaking Changes
 
-- **Dependency**: Bumped minimum jQuery version to `4.0.0` for consistent `MutationObserver` behavior.
+- Increased minimum jQuery version requirement to `4.0.0` for consistent `MutationObserver` behavior.
 
 #### Added
 
-- **Reactive URL Management (`$.atomUrl`)**: Introduced a centralized, reactive system for managing the browser's URL. Provides synchronized atoms for `path`, `search`, `hash`, `params`, and `state`, with full support for navigation batching and `basePath` resolution.
-- **Reactive Web Components (`$.useAtomComponent`)**: A comprehensive toolkit for building reactive Custom Elements with declarative bindings, FACE integration, and Shadow DOM support.
-- **Form Binding (`atomForm`)**: Declarative integration with the browser's Constraint Validation API and automatic field discovery.
-- **Dependency Injection**: Enhanced DI system with 100% Shadow DOM coverage and unified move detection.
-- **CSS Bridge**: Automatic synchronization of reactive values to CSS custom properties (e.g., `--aej-key`).
-- **Diagnostics**: Integrated unregistered custom element detection (Debug Mode only).
+- Added `$.useAtomComponent` for building reactive Web Components with Shadow DOM and FACE integration.
+- Added `atomForm` for declarative form binding with browser Constraint Validation API support.
+- Enhanced Dependency Injection (DI) system with Shadow DOM support and move detection.
+- Added CSS Bridge for automatic synchronization of reactive values to CSS custom properties.
+- Added diagnostics for detecting unregistered custom elements in debug mode.
+- Added native `URLPattern` support and route comparison options to `$.route`.
 
 #### Changed
 
-- **Error Handling**: Adopted the new `Result` utility across all bindings and features for a more robust and declarative error handling model.
-- **Performance**: Optimized `InputBinding` by resolving synchronization strategies at construction time, ensuring monomorphic execution paths in V8.
-- **Performance**: Switched `$.route` to a registry-based link tracking system using `MutationObserver` and a `Set` to eliminate redundant `querySelectorAll` scans during navigation.
-- **Refactor**: Introduced `createChainableMethod` factory to unify argument normalization and iteration across chainable bindings (`atomClass`, `atomAttr`, etc.).
-- **Refactor**: Standardized `bindAttr` with a unified transformation pipeline and improved `bindVisibility` to preserve original `display` modes.
-- **`$.atomUrl`**: Enhanced with robust URL normalization (standardizing trailing slashes and empty parts), microtask-based property batching, and resilient singleton atoms that auto-revive if disposed.
-- **`$.route`**: Added native `URLPattern` support for dynamic segment extraction and an `isEqual` option for custom route comparison.
-- **`atomList`**: Improved reconciliation logic with an optional `isEqual` check and optimized `untracked` blocks for internal state management.
-- **`atomForm`**: Refined field discovery and validation error handling using functional `Option`/`Result` patterns for improved safety.
-- **Input Binding**: Strengthened IME (Composition) support for CJK languages, ensuring reactive updates do not interrupt active character entry.
+- Refactored navigation architecture (`atomNav` and `$.route`) to use a centralized coordinator and modular routing logic.
+- Implemented atomic fetch pipelines and `AbortSignal` management in navigation to prevent race conditions.
+- Optimized `InputBinding` and `$.route` performance using pre-resolved synchronization and registry-based link tracking.
+- Standardized chainable bindings and attribute transformations using unified factories.
+- Improved reconciliation logic in `atomList` and field discovery in `atomForm`.
+- Updated CJK IME support in input bindings to ensure reactive updates do not interrupt character composition.
+- Integrated the new `Result` utility across all features for more consistent error handling.
 
 #### Security
 
-- **Sanitization Engine**: Re-engineered `sanitizeHtml` with an inert parsing strategy and a priority-based rule system.
-- **XSS Hardening**: Implemented multi-pass entity decoding and text node neutralization to block bypass attempts.
+- Re-engineered `sanitizeHtml` with an inert parsing strategy and improved entity decoding to prevent XSS.
 
 #### Fixed
 
-- **Navigation**: Resolved a race condition where pending async hooks could overwrite state after a navigation.
+- Fixed a race condition in navigation where pending async hooks could overwrite state.
 
 ### Documentation & Infrastructure
 
 #### Added
 
-- **Standards**: Established formal TSDoc conventions and specialized annotations (`Logic:`, `Optimization:`, etc.) for architectural transparency.
-- **Documentation**: Added comprehensive JSDoc examples and design intent documentation for core utilities.
+- Established TSDoc conventions and specialized architectural annotations for transparency.
+- Added JSDoc examples and design documentation for core utilities.
 
 #### Changed
 
-- **Modernization**: Migrated to standard ESM and standardized `@/` path aliases across all packages.
-- **Testing**: Modularized the integration test suite and centralized form validation logic for better maintainability.
+- Migrated codebase to standard ESM and standardized `@/` path aliases.
+- Modularized integration test suite and centralized validation logic for better maintainability.
 
 ## [0.31.0]
 

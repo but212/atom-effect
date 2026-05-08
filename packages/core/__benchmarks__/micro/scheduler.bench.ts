@@ -36,16 +36,17 @@ describe('Scheduler: aeNextTick', () => {
 
 describe('Scheduler: untracked context', () => {
   const a = atom(0);
+  // Pre-creating computed avoids creation/disposal overhead in the hot path
+  const c = computed(() => {
+    let sum = 0;
+    for (let i = 0; i < REPEATS; i++) sum += a.value;
+    return sum;
+  });
 
   bench(
     `tracked read inside computed (x${REPEATS})`,
     () => {
-      // Creating a fresh computed each time forces dependency tracking
-      const c = computed(() => {
-        let sum = 0;
-        for (let i = 0; i < REPEATS; i++) sum += a.value;
-        return sum;
-      });
+      a.value++; // Force re-computation
       keep(c.value);
     },
     microBenchOptions

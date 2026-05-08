@@ -50,4 +50,16 @@ describe('SlotBuffer', () => {
       keep(buffer.compact());
     }
   });
+
+  bench(`some (early exit, x${REPEATS})`, () => {
+    for (let i = 0; i < REPEATS; i++) {
+      keep(filledBuffer.some((val) => val === 5));
+    }
+  });
+
+  bench(`some (full scan, x${REPEATS})`, () => {
+    for (let i = 0; i < REPEATS; i++) {
+      keep(filledBuffer.some((val) => val === 99));
+    }
+  });
 });

@@ -201,6 +201,27 @@ describe('Effect', () => {
       expect(staleCleanup).toHaveBeenCalled();
       expect(freshCleanup).toHaveBeenCalled();
     });
+
+    it('ensures async consistency by resolving results in the first microtask cycle', async () => {
+      vi.useRealTimers();
+      let resolvePromise!: (v: () => void) => void;
+      const promise = new Promise<() => void>((r) => {
+        resolvePromise = r;
+      });
+
+      const cleanup = vi.fn();
+      const e = effect(() => promise);
+
+      await sleep(10);
+      resolvePromise(cleanup);
+
+      // Check: In the very next microtask, the cleanup should be registered.
+      // If we used double .then, the handler that sets this._cleanup wouldn't have run yet.
+      await Promise.resolve(); // Single microtask
+
+      e.dispose();
+      expect(cleanup).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('Error Resilience & Safeguards', () => {

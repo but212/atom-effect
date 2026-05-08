@@ -14,7 +14,6 @@ This package extends jQuery with reactive capabilities. All methods are availabl
 - [Dependency Injection (`$.provideAtom`, `$.injectAtom`)](#dependency-injection)
 - [Static Methods](#static-methods)
 - [Data Fetching (`$.atomFetch`)](#data-fetching)
-- [Reactive URL (`$.atomUrl`)](#reactive-url)
 - [Routing (`$.route`)](#routing)
 - [PJAX Navigation (`$.atomNav`)](#pjax-navigation)
 - [Debug Mode](#debug-mode)
@@ -228,7 +227,7 @@ Two-way binding for `<input>`, `<textarea>`, and `<select>`.
 
 - **Strategy Specialization**: Resolves optimized read/write strategies at construction time (e.g., for `multipleSelect` vs standard inputs). This ensures monomorphic execution paths and avoids feature-detection branching in hot paths.
 - **IME Stability**: Monitors composition states to prevent external updates from interrupting character entry (e.g., for CJK languages).
-- **Cursor Preservation**: Maintains selection range and focus stability during reactive updates using a selection buffer and `Result`-based safe execution to capture potential DOM exceptions.
+- **Cursor Preservation**: Maintains selection range and focus stability during reactive updates using a selection buffer and **Result-based execution** (e.g., `Result.unwrapOr`) to handle potential DOM exceptions through predefined fallbacks.
 - **Recursion Control**: Uses internal bitmask flags to prevent infinite update cycles between the DOM and the reactive graph.
 
 Natively supports `<select multiple>` as a `string[]` array.
@@ -448,36 +447,6 @@ $('#name').atomText(user, u => u?.name ?? '');
 
 ---
 
-## Reactive URL
-
-### `$.atomUrl`
-
-A reactive manager for the application's URL state. It synchronizes with the browser's History API and provides localized atoms for different URL parts.
-
-| Property | Type | Description |
-| :--- | :--- | :--- |
-| `url` | `ReadonlyAtom<string>` | The full, absolute URL string. |
-| `path` | `WritableAtom<string>` | The normalized pathname. Setting this value triggers navigation. |
-| `search` | `WritableAtom<string>` | The raw query string (including the leading `?`). |
-| `hash` | `WritableAtom<string>` | The fragment identifier (including the leading `#`). |
-| `params` | `WritableAtom<Record<string, string>>` | Parsed query parameters as a key-value object. |
-| `state` | `WritableAtom<unknown>` | The current history state (`history.state`). |
-| `type` | `ReadonlyAtom<NavigationType>` | The last navigation type: `init`, `push`, `replace`, `pop`, or `hash`. |
-| `basePath` | `string` | The base path for resolution. |
-
-#### Navigation Methods
-
-- **`push(url, state?)`**: Navigates to a new URL using `history.pushState`.
-- **`replace(url, state?)`**: Replaces the current URL using `history.replaceState`.
-- **`back()`**: Navigates backward in history (`history.back()`).
-- **`forward()`**: Navigates forward in history (`history.forward()`).
-- **`reset()`**: Re-initializes the state from the current platform location and restores event listeners if needed.
-- **`dispose()`**: Removes all event listeners and disposes of internal reactive atoms.
-
----
-
----
-
 ## Routing
 
 ### `$.route(config)`
@@ -496,6 +465,12 @@ SPA router supporting hash-based and pushState routing.
 ### `$.atomNav(options)`
 
 Navigation module (PJAX) that intercepts link clicks, fetches content asynchronously, and updates target containers while maintaining browser history.
+
+- **Reactive State**: Exposes `currentUrl`, `isPending`, and `hasError` atoms for reactive UI feedback (e.g., loading spinners).
+- **Metadata Sync**: Automatically synchronizes document `title` and standard SEO `meta` tags (description, keywords) from the loaded page.
+- **Scroll Management**: Handles automatic scrolling to the top or to a specific `#hash` after content injection.
+- **Interoperability**: Integrates with the navigation coordinator to respect `onLeave` guards from nested routers or other managers.
+- **Race Condition Safety**: Implements a "last navigation wins" policy using internal versioning and `AbortSignal` cancellation.
 
 ---
 

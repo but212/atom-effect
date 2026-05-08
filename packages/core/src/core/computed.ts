@@ -21,6 +21,7 @@ import { isPromise } from '@/utils/type-guards';
 import {
   claimExisting,
   createDepBuffer,
+  type DepBufferState,
   depBufferTruncateFrom,
   disposeAll,
   insertNew,
@@ -28,7 +29,13 @@ import {
   prepareTracking,
 } from './buffers';
 import { nextEpoch, nextVersion } from './scheduler';
-import { createDependencyLink, trackingContext, untracked } from './tracking';
+import {
+  createDependencyLink,
+  rollbackTrackingSubscriber,
+  runInTrackingContext,
+  trackingContext,
+  untracked,
+} from './tracking';
 
 const {
   IDLE,
@@ -50,16 +57,113 @@ const MASK_LIFECYCLE = IDLE | DIRTY | PENDING | RESOLVED | REJECTED | HAS_ERROR;
 
 /**
  * Logic: Pragmatic Physics Transitions
- * Uses direct bitwise operations to transition the lifecycle state as data.
- * This ensures O(1) state management during high-frequency execution cycles.
+ * Pure bitmask descriptors for state transitions.
  * @internal
  */
-const TRANSITIONS = {
-  TO_RECOMPUTING: (f: number) => (f | RECOMPUTING) & ~FORCE_COMPUTE,
-  TO_RESOLVED: (f: number) => (f & ~MASK_LIFECYCLE) | RESOLVED,
-  TO_PENDING: (f: number) => (f & ~MASK_LIFECYCLE) | PENDING,
-  TO_REJECTED: (f: number) => (f & ~MASK_LIFECYCLE) | REJECTED | HAS_ERROR,
+const TRANSITION = {
+  TO_RECOMPUTING: { clear: FORCE_COMPUTE, set: RECOMPUTING },
+  TO_RESOLVED: { clear: MASK_LIFECYCLE | RECOMPUTING, set: RESOLVED },
+  TO_PENDING: { clear: MASK_LIFECYCLE | RECOMPUTING, set: PENDING },
+  TO_REJECTED: { clear: MASK_LIFECYCLE | RECOMPUTING, set: REJECTED | HAS_ERROR },
 } as const;
+
+/** @internal */
+const apply = (f: number, t: { readonly clear: number; readonly set: number }) =>
+  (f & ~t.clear) | t.set;
+
+/**
+ * Logic: Computed Result Resolution
+ * Determines the final value or error to return based on current flags and cache.
+ * @internal
+ */
+export function resolveComputedResult<T>(
+  flags: number,
+  value: T,
+  error: Option<Error>,
+  defaultValue: T
+): Result<T, Error> {
+  if ((flags & RESOLVED) !== 0) return Result.ok(value);
+
+  const hasDefault = defaultValue !== (NO_DEFAULT_VALUE as T);
+  const asyncState = flags & MASK_UNRESOLVED_ASYNC;
+
+  // Terminal/Non-async fallback
+  if (asyncState === 0) return Result.ok(value);
+
+  // Async handling priority
+  if (hasDefault) return Result.ok(defaultValue);
+
+  if (asyncState === REJECTED) {
+    return Result.err(Option.expect(error, 'REJECTED without error'));
+  }
+
+  return Result.err(new ComputedError(ERROR_MESSAGES.COMPUTED_ASYNC_PENDING_NO_DEFAULT));
+}
+
+/**
+ * Logic: Re-computation Heuristics
+ * Determines if a node requires re-evaluation based on its state and dependencies.
+ * @internal
+ */
+export function shouldRecompute(flags: number, deps: DepBufferState): boolean {
+  const isAwaitingAsync = (flags & MASK_UNRESOLVED_ASYNC) !== 0;
+
+  return (
+    (flags & PATTERN_RECOMPUTE_NEEDED) !== 0 ||
+    isBufferDirty(deps) ||
+    (!isAwaitingAsync && deps.slots.size === 0)
+  );
+}
+
+/** @internal */
+interface InternalComputedNode {
+  readonly id: number;
+  readonly flags: number;
+  readonly lastErrorOption: Option<Error>;
+  readonly _deps: DepBufferState | null;
+}
+
+/**
+ * Logic: Iterative Graph Traversal
+ * Crawls the dependency graph to collect errors.
+ * @internal
+ */
+export function collectErrorsRecursive(
+  startNode: InternalComputedNode,
+  stopOnFirst: boolean
+): Error[] {
+  const collected: Error[] = [];
+  const seen = new Set<number>();
+
+  const walk = (node: InternalComputedNode): boolean => {
+    if (seen.has(node.id)) return false;
+    seen.add(node.id);
+
+    if ((node.flags & MASK_ERROR) !== 0) {
+      collected.push(
+        Option.expect(
+          node.lastErrorOption,
+          'Internal Inconsistency: MASK_ERROR flag set but error is None'
+        )
+      );
+      if (stopOnFirst) return true;
+    }
+
+    const deps = node._deps;
+    if (deps?.hasComputeds) {
+      for (let i = 0, len = deps.slots.length; i < len; i++) {
+        const link = deps.slots.at(i);
+        if (link?.node.isComputed && walk(link.node as unknown as InternalComputedNode)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  walk(startNode);
+  return collected;
+}
 
 /**
  * Implementation of a derived reactive value.
@@ -69,13 +173,8 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
   /** @internal */
   readonly [BRAND] = BrandFlags.Atom | BrandFlags.Computed;
 
-  /**
-   * Logic: Async Drift Detection
-   * Stores the current async session. Promises that resolve from a previous
-   * session (stale) are ignored to prevent race conditions.
-   * @internal
-   */
-  private _session: { id: number; promise: Promise<T> } | null = null;
+  /** @internal */
+  private _activeSessionId = 0;
   private _sessionCounter = 0;
 
   /** @internal */
@@ -155,13 +254,15 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
       throw new ComputedError(ERROR_MESSAGES.COMPUTED_CIRCULAR_DEPENDENCY);
     }
 
-    if (this._needsRecompute()) {
+    if (shouldRecompute(this.flags, this._deps)) {
       this._recompute();
     } else {
       this.flags &= ~DIRTY;
     }
 
-    return this._resolveValue();
+    return Result.unwrap(
+      resolveComputedResult(this.flags, this._value, this._error, this._defaultValue)
+    );
   }
 
   /**
@@ -175,53 +276,6 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
 
   private _ensureNotDisposed(): void {
     if ((this.flags & DISPOSED) !== 0) throw new ComputedError(ERROR_MESSAGES.COMPUTED_DISPOSED);
-  }
-
-  /**
-   * Logic: Re-computation Heuristics
-   *
-   * Constraint: Async Isolation
-   * Async nodes in terminal states (PENDING/REJECTED) must not re-trigger
-   * solely because they have no tracked dependencies (common in fetch nodes).
-   */
-  private _needsRecompute(): boolean {
-    const flags = this.flags;
-    const isAwaitingAsync = (flags & (PENDING | REJECTED)) !== 0;
-    if (isAwaitingAsync) {
-      return (flags & PATTERN_RECOMPUTE_NEEDED) !== 0 || isBufferDirty(this._deps);
-    }
-    return (
-      (flags & PATTERN_RECOMPUTE_NEEDED) !== 0 ||
-      this._deps.slots.length === 0 ||
-      isBufferDirty(this._deps)
-    );
-  }
-
-  /**
-   * Logic: Value Resolution Priority
-   * 1. If RESOLVED, return cached value.
-   * 2. If PENDING/REJECTED and a defaultValue exists, return it.
-   * 3. If REJECTED and no defaultValue, throw the captured error.
-   */
-  private _resolveValue(): T {
-    const { flags } = this;
-
-    if ((flags & RESOLVED) !== 0) return this._value;
-
-    const hasDefault = this._defaultValue !== (NO_DEFAULT_VALUE as T);
-
-    if ((flags & MASK_UNRESOLVED_ASYNC) !== 0) {
-      if (hasDefault) return this._defaultValue;
-      if ((flags & REJECTED) !== 0) {
-        throw Option.expect(
-          this._error,
-          'Internal Inconsistency: Computed node is in REJECTED state but no error was found.'
-        );
-      }
-      throw new ComputedError(ERROR_MESSAGES.COMPUTED_ASYNC_PENDING_NO_DEFAULT);
-    }
-
-    return this._value;
   }
 
   /**
@@ -254,7 +308,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     if ((this.flags & MASK_ERROR) !== 0) return true;
     if (!this._deps.hasComputeds) return false;
 
-    return untracked(() => this._collectErrors(true).length > 0);
+    return untracked(() => collectErrorsRecursive(this, true).length > 0);
   }
 
   get isValid(): boolean {
@@ -274,46 +328,12 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
       });
     }
 
-    return untracked(() => Object.freeze(this._collectErrors(false)));
+    return untracked(() => Object.freeze(collectErrorsRecursive(this, false)));
   }
 
-  /**
-   * Logic: Iterative Graph Traversal
-   * Safely crawls the dependency graph to collect errors without risking
-   * stack overflow on deep trees.
-   */
-  private _collectErrors(stopOnFirst: boolean): Error[] {
-    const collected: Error[] = [];
-    const seen = new Set<number>();
-
-    const walk = (node: ComputedAtomImpl<unknown>): boolean => {
-      if (seen.has(node.id)) return false;
-      seen.add(node.id);
-
-      if ((node.flags & MASK_ERROR) !== 0) {
-        collected.push(
-          Option.expect(
-            node._error,
-            'Internal Inconsistency: MASK_ERROR flag set but error is None'
-          )
-        );
-        if (stopOnFirst) return true;
-      }
-
-      const deps = node._deps;
-      if (deps.hasComputeds) {
-        for (let i = 0, len = deps.slots.length; i < len; i++) {
-          const link = deps.slots.at(i);
-          if (link?.node.isComputed && walk(link.node as ComputedAtomImpl<unknown>)) {
-            return true;
-          }
-        }
-      }
-      return false;
-    };
-
-    walk(this as unknown as ComputedAtomImpl<unknown>);
-    return collected;
+  /** @internal */
+  get lastErrorOption(): Option<Error> {
+    return this._error;
   }
 
   get lastError(): Error | null {
@@ -393,25 +413,24 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     // Constraint: Prevent synchronous re-entrancy.
     if ((this.flags & RECOMPUTING) !== 0) return;
 
-    this.flags = TRANSITIONS.TO_RECOMPUTING(this.flags);
+    this.flags = apply(this.flags, TRANSITION.TO_RECOMPUTING);
+    const prevDepth = trackingContext.stack.length;
 
     this._startTracking();
 
-    try {
-      const result = trackingContext.run(this, this._computation);
-      this._commitDeps();
+    const result = Result.tryCatch(() => {
+      try {
+        return runInTrackingContext(trackingContext, this, this._computation);
+      } catch (e) {
+        rollbackTrackingSubscriber(trackingContext, prevDepth);
+        throw e;
+      }
+    });
 
-      this._handleResult(result);
-    } finally {
-      this._trackEpoch = EPOCH_CONSTANTS.UNINITIALIZED;
-      this._trackCount = 0;
-      this.flags &= ~RECOMPUTING;
-    }
-  }
-
-  private _handleResult(result: Result<T | Promise<T>, Error>): void {
     Result.match(result, {
       ok: (val) => {
+        this._commitDeps();
+
         if (isPromise(val)) {
           this._handleAsyncComputation(val as Promise<T>);
         } else {
@@ -419,9 +438,14 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
         }
       },
       err: (e) => {
-        this._handleError(e, ERROR_MESSAGES.COMPUTED_COMPUTATION_FAILED, true);
+        this._commitDeps();
+        this._handleError(e, ERROR_MESSAGES.COMPUTED_COMPUTATION_FAILED, false);
       },
     });
+
+    this._trackEpoch = EPOCH_CONSTANTS.UNINITIALIZED;
+    this._trackCount = 0;
+    this.flags &= ~RECOMPUTING;
   }
 
   private _startTracking(): void {
@@ -431,13 +455,18 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
   }
 
   private _commitDeps(): void {
-    try {
+    const result = Result.tryCatch(() => {
       depBufferTruncateFrom(this._deps, this._trackCount);
-    } catch (commitError) {
-      if (IS_DEV) {
-        console.warn('[atom-effect] _commitDeps failed during error recovery:', commitError);
-      }
-    }
+    });
+
+    Result.match(result, {
+      ok: () => {},
+      err: (commitError) => {
+        if (IS_DEV) {
+          console.warn('[atom-effect] _commitDeps failed during error recovery:', commitError);
+        }
+      },
+    });
   }
 
   /**
@@ -446,16 +475,15 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
    * results from invalidated computations (Drift Detection).
    */
   private _handleAsyncComputation(promise: Promise<T>): void {
-    this.flags = TRANSITIONS.TO_PENDING(this.flags);
+    this.flags = apply(this.flags, TRANSITION.TO_PENDING);
     this._notifySubscribers(undefined, undefined);
 
     const sessionId = ++this._sessionCounter;
-    const session = { id: sessionId, promise };
-    this._session = session;
+    this._activeSessionId = sessionId;
 
     promise.then(
       (result) => {
-        if (this._session?.id !== sessionId) return;
+        if (this._activeSessionId !== sessionId) return;
 
         // Constraint: If the node became dirty during the async wait,
         // defer resolution until the next read.
@@ -464,13 +492,14 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
         this._finalizeResolution(result);
         this._notifySubscribers(result, undefined);
       },
-      (error) =>
-        this._session?.id === sessionId &&
-        this._handleError(error, ERROR_MESSAGES.COMPUTED_ASYNC_COMPUTATION_FAILED)
+      (error) => {
+        if (this._activeSessionId !== sessionId) return;
+        this._handleError(error, ERROR_MESSAGES.COMPUTED_ASYNC_COMPUTATION_FAILED);
+      }
     );
   }
 
-  private _handleError(error: unknown, message: string, shouldThrow = false): void {
+  private _handleError(error: unknown, message: string, shouldThrow = false): Result<never, Error> {
     const wrappedError = wrapError(error, ComputedError, message);
 
     const oldError = Option.toNullable(this._error);
@@ -479,18 +508,22 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     }
 
     this._error = Option.some(wrappedError);
-    this.flags = TRANSITIONS.TO_REJECTED(this.flags);
+    this.flags = apply(this.flags, TRANSITION.TO_REJECTED);
 
     if (this._onError) {
-      try {
-        this._onError(wrappedError);
-      } catch (e) {
-        console.error(ERROR_MESSAGES.CALLBACK_ERROR_IN_ERROR_HANDLER, e);
-      }
+      const cbResult = Result.tryCatch(() => this._onError!(wrappedError));
+
+      Result.match(cbResult, {
+        ok: () => {},
+        err: (e) => {
+          console.error(ERROR_MESSAGES.CALLBACK_ERROR_IN_ERROR_HANDLER, e);
+        },
+      });
     }
 
     this._notifySubscribers(undefined, undefined);
     if (shouldThrow) throw wrappedError;
+    return Result.err(wrappedError);
   }
 
   /**
@@ -506,7 +539,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
 
     this._value = value;
     this._error = Option.none;
-    this.flags = TRANSITIONS.TO_RESOLVED(this.flags);
+    this.flags = apply(this.flags, TRANSITION.TO_RESOLVED);
   }
 
   /**
@@ -523,7 +556,15 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
    */
   _markDirty(): void {
     const flags = this.flags;
-    if ((flags & (RECOMPUTING | DIRTY)) !== 0) return;
+    // 1. Already recomputing or marked dirty (prevent redundant propagation)
+    // 2. OR (Not forced to compute AND no changes detected in dependencies)
+    if (
+      (flags & (RECOMPUTING | DIRTY)) !== 0 ||
+      (!(flags & FORCE_COMPUTE) && !this._isShallowDirty())
+    ) {
+      return;
+    }
+
     this.flags = flags | DIRTY;
     debug.trackUpdate(this.id, debug.getDebugName(this));
     this._notifySubscribers(undefined, undefined);

@@ -1,37 +1,53 @@
+import { Option } from './option';
 import { RESULT_SYMBOL } from './symbols';
 
 /**
- * Represents a successful computation result.
- *
- * When to use:
- * - When you need to return a value explicitly marked as successful.
+ * Base type for Result variants to ensure symbol-based identification.
  */
-export type Ok<T> = {
+type ResultBase = {
+  readonly [RESULT_SYMBOL]: true;
+};
+
+/**
+ * Represents a successful computation result.
+ */
+export type Ok<T> = ResultBase & {
   readonly ok: true;
   readonly value: T;
-  readonly [RESULT_SYMBOL]: true;
 };
 
 /**
  * Represents a failed computation result.
- *
- * When to use:
- * - When an operation fails and you want to pass error data without throwing.
  */
-export type Err<E> = {
+export type Err<E> = ResultBase & {
   readonly ok: false;
   readonly error: E;
-  readonly [RESULT_SYMBOL]: true;
 };
 
 /**
  * A discriminated union representing success (Ok) or failure (Err).
- *
- * When to use:
- * - As a return type for any function that can fail under normal conditions
- *   (e.g., validation, API calls, parsing).
  */
 export type Result<T, E = Error> = Ok<T> | Err<E>;
+
+/**
+ * Pre-allocated success result for void operations.
+ * Logic: Shared instance reduces allocation overhead for common 'return Result.ok()' calls.
+ */
+const VOID_SUCCESS: Result<void, never> = Object.freeze({
+  ok: true,
+  value: undefined,
+  [RESULT_SYMBOL]: true,
+} as const);
+
+/**
+ * Normalizes a caught value into an Error object.
+ * Logic: Ensures that even raw string throws or null values are wrapped in a standard Error.
+ */
+function toError(e: unknown): Error {
+  if (e instanceof Error) return e;
+  const message = typeof e === 'string' ? e : String(e ?? 'Unknown error');
+  return new Error(message);
+}
 
 /**
  * Utilities for creating and consuming Result types.
@@ -40,85 +56,120 @@ export const Result = {
   /**
    * Creates a successful Result.
    */
-  ok: <T>(value: T): Result<T, never> => ({
-    ok: true as const,
-    value,
-    [RESULT_SYMBOL]: true,
-  }),
+  ok: <T, E = never>(value: T): Result<T, E> => {
+    if ((value as unknown) === undefined) return VOID_SUCCESS as Result<T, E>;
+    return {
+      ok: true,
+      value,
+      [RESULT_SYMBOL]: true,
+    } as Ok<T>;
+  },
 
   /**
    * Creates a failed Result.
    */
-  err: <E>(error: E): Result<never, E> => ({
-    ok: false as const,
-    error,
-    [RESULT_SYMBOL]: true,
-  }),
+  err: <T = never, E = Error>(error: E): Result<T, E> =>
+    ({
+      ok: false,
+      error,
+      [RESULT_SYMBOL]: true,
+    }) as Err<E>,
+
+  /**
+   * Type guard for Ok variant.
+   */
+  isOk: <T, E>(res: Result<T, E>): res is Ok<T> => res.ok,
+
+  /**
+   * Type guard for Err variant.
+   */
+  isErr: <T, E>(res: Result<T, E>): res is Err<E> => !res.ok,
 
   /**
    * Exhaustively handles both possible states of a Result.
-   *
-   * When to use:
-   * - This is the recommended way to consume a Result, as it forces the developer
-   *   to handle the error case, preventing "forgotten" error checks.
-   *
-   * @example
-   * const res = Result.ok(42);
-   * const text = Result.match(res, {
-   *   ok: (val) => `Value is ${val}`,
-   *   err: (err) => `Failed: ${err.message}`
-   * });
    */
   match: <T, E, R>(res: Result<T, E>, matcher: { ok: (val: T) => R; err: (err: E) => R }): R =>
     res.ok ? matcher.ok(res.value) : matcher.err(res.error),
 
   /**
-   * Wraps a synchronous function call that might throw an exception.
-   *
-   * When to use:
-   * - When integrating with third-party libraries or legacy code that uses `throw`.
-   * - When performing operations like `JSON.parse` that are not safe by default.
-   *
-   * @example
-   * const res = Result.tryCatch(() => JSON.parse('{ invalid }'));
-   * if (!res.ok) console.error("Parse failed:", res.error);
+   * Extracts the value if Ok, otherwise throws the error.
+   */
+  unwrap: <T, E>(res: Result<T, E>): T => {
+    if (!res.ok) throw res.error;
+    return res.value;
+  },
+
+  /**
+   * Extracts the value if Ok, otherwise throws with a custom message.
+   */
+  expect: <T, E>(res: Result<T, E>, msg: string): T => {
+    if (!res.ok) throw new Error(msg);
+    return res.value;
+  },
+
+  /**
+   * Returns the value if Ok, otherwise returns the fallback value.
+   */
+  unwrapOr: <T, E, U>(res: Result<T, E>, fallback: U): T | U => (res.ok ? res.value : fallback),
+
+  /**
+   * Returns the value if Ok, otherwise computes a fallback via the provided function.
+   */
+  unwrapOrElse: <T, E, U>(res: Result<T, E>, fn: (err: E) => U): T | U =>
+    res.ok ? res.value : fn(res.error),
+
+  /**
+   * Transforms the inner value using the provided function if Ok.
+   * Optimization: Returns the original instance if the value remains unchanged.
+   */
+  map: <T, E, U>(res: Result<T, E>, fn: (val: T) => U): Result<U, E> => {
+    if (!res.ok) return res as unknown as Result<U, E>;
+    const newValue = fn(res.value);
+    return (newValue as unknown) === res.value
+      ? (res as unknown as Result<U, E>)
+      : Result.ok(newValue);
+  },
+
+  /**
+   * Transforms the inner error using the provided function if Err.
+   */
+  mapErr: <T, E, F>(res: Result<T, E>, fn: (err: E) => F): Result<T, F> =>
+    res.ok ? (res as unknown as Result<T, F>) : Result.err(fn(res.error)),
+
+  /**
+   * Chains a function that returns another Result if Ok.
+   */
+  andThen: <T, E, U, F>(res: Result<T, E>, fn: (val: T) => Result<U, F>): Result<U, E | F> =>
+    res.ok ? fn(res.value) : (res as unknown as Result<U, E | F>),
+
+  /**
+   * Wraps a synchronous function call that might throw.
    */
   tryCatch: <T, E = Error>(fn: () => T): Result<T, E> => {
     try {
-      return { ok: true as const, value: fn(), [RESULT_SYMBOL]: true };
+      return Result.ok(fn());
     } catch (e) {
-      return { ok: false as const, error: e as E, [RESULT_SYMBOL]: true };
+      return Result.err(toError(e) as unknown as E);
     }
   },
 
   /**
    * Wraps an asynchronous operation into a Result-bearing Promise.
-   *
-   * When to use:
-   * - When performing I/O, network requests, or timers that might reject.
-   *
-   * @example
-   * const res = await Result.tryAsync(() => fetch('/api/user'));
-   * Result.match(res, {
-   *   ok: (response) => console.log("Success"),
-   *   err: (err) => console.error("Network error")
-   * });
    */
   tryAsync: <T, E = Error>(fn: () => PromiseLike<T>): Promise<Result<T, E>> => {
-    // Logic: Catching sync throws
-    // We wrap the initial call in try-catch because fn() might throw
-    // synchronously before even returning a Promise.
     try {
       const p = fn();
-      // Optimization: Manual Promise orchestration
-      // We avoid 'async/await' here to skip the microtask overhead of the
-      // async state machine, resolving directly via .then().
       return Promise.resolve(p).then(
-        (value) => ({ ok: true as const, value, [RESULT_SYMBOL]: true }),
-        (error) => ({ ok: false as const, error: error as E, [RESULT_SYMBOL]: true })
+        (value) => Result.ok<T, E>(value),
+        (error) => Result.err<T, E>(toError(error) as unknown as E)
       );
     } catch (e) {
-      return Promise.resolve({ ok: false as const, error: e as E, [RESULT_SYMBOL]: true });
+      return Promise.resolve(Result.err<T, E>(toError(e) as unknown as E));
     }
   },
+
+  /**
+   * Converts a Result to an Option, dropping the error data.
+   */
+  toOption: <T, E>(res: Result<T, E>): Option<T> => (res.ok ? Option.some(res.value) : Option.none),
 };

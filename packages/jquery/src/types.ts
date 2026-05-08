@@ -231,6 +231,8 @@ export interface RouteLifecycle {
   onLeave?: (router: Router) => boolean | undefined;
   /** Optional document title for the route. */
   title?: string;
+  /** Optional metadata tags for the route (e.g., description, keywords). */
+  meta?: Record<string, string>;
 }
 
 /** Definition of a specific application route and its rendering logic. */
@@ -273,54 +275,14 @@ export interface RouteConfig {
   afterTransition?: (from: string, to: string) => void;
 }
 
-/** Navigation types for URL synchronization. */
-export type NavigationType = 'init' | 'push' | 'replace' | 'pop' | 'hash';
-
-/** Interface for managing reactive URL state. */
-export interface AtomUrl {
-  /** Reactive atom containing the full URL string. */
-  readonly url: ReadonlyAtom<string>;
-  /**
-   * Reactive atom containing the normalized pathname.
-   * Setting this value triggers navigation.
-   */
-  readonly path: WritableAtom<string>;
-  /**
-   * Reactive atom containing the query string (including '?').
-   * Setting this value triggers navigation.
-   */
-  readonly search: WritableAtom<string>;
-  /**
-   * Reactive atom containing the fragment identifier (including '#').
-   * Setting this value triggers navigation.
-   */
-  readonly hash: WritableAtom<string>;
-  /**
-   * Reactive atom containing parsed query parameters as an object.
-   * Setting this value triggers navigation.
-   */
-  readonly params: WritableAtom<Record<string, string>>;
-  /** Reactive atom containing the current navigation type. */
-  readonly type: ReadonlyAtom<NavigationType>;
-  /**
-   * Reactive atom containing the current history state.
-   * Setting this value updates history.state.
-   */
-  readonly state: WritableAtom<unknown>;
-  /** Base path for the application (useful for history mode). */
-  basePath: string;
-  /** Navigates to a new URL using pushState. */
-  push(url: string, state?: unknown): void;
-  /** Replaces the current URL using replaceState. */
-  replace(url: string, state?: unknown): void;
-  /** Navigates back in history. */
-  back(): void;
-  /** Navigates forward in history. */
-  forward(): void;
-  /** Resets the URL state to the current platform location. */
-  reset(): void;
-  /** Disposes of URL listeners and observers. */
-  dispose(): void;
+/** Represents a structured navigation location. */
+export interface RouteLocation {
+  /** The normalized path part of the URL. */
+  path: string;
+  /** Key-value pairs of query string parameters. */
+  query: Record<string, string>;
+  /** Extracted parameters from dynamic segments (e.g., :id). */
+  params: Record<string, string>;
 }
 
 /** Interface for programmatically interacting with the application router. */
@@ -331,8 +293,10 @@ export interface Router {
   queryParams: ReadonlyAtom<Record<string, string>>;
   /** Reactive atom containing the extracted path parameters. */
   params: ReadonlyAtom<Record<string, string>>;
-  /** Programmatically navigates to the specified path. */
-  navigate: (route: string) => void;
+  /** Reactive atom providing a unified snapshot of the current location. */
+  location: ReadonlyAtom<RouteLocation>;
+  /** Programmatically navigates to the specified path or location object. */
+  navigate: (to: string | Partial<RouteLocation>) => void;
   /** Shuts down the router and releases all observers. */
   destroy: () => void;
 }
