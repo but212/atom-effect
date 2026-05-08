@@ -12,7 +12,9 @@ The high-level API (`atom`, `computed`, `effect`) is built upon a unified intern
 - **Push-Pull Hybrid Model**:
   - **Push (Notification Phase)**: When a source atom changes, it propagates a "dirty" signal to its immediate subscribers. This phase marks nodes for re-evaluation without performing calculations.
   - **Pull (Evaluation Phase)**: When a node's value is accessed or an effect executes, it performs a "pull" to validate the versions of its dependencies, triggering re-computation only if necessary.
-- **Scheduler and Coalescing**: Effects do not execute immediately upon state change. Instead, they are queued in a **Scheduler** that utilizes a **Flattened Buffer Layout** (Active, Standby, Batch) and a **Flat Loop** to coalesce multiple updates into a single execution cycle. This layout is designed for better cache locality and reduced indirection overhead.
+- **Scheduler and Coalescing**: Effects do not execute immediately upon state change. Instead, they are queued in a **Scheduler** that utilizes a **Flattened Buffer Layout** (Active, Standby, Batch) managed by a data-centric **`SchedulerState`**. This layout is designed for better cache locality and reduced indirection overhead, utilizing a flat loop to coalesce multiple updates into a single execution cycle.
+- **Functional Tracking**: Dependency tracking is managed via a functional **`TrackingContext`** state. This allows for lightweight stack operations and deterministic recovery during nested evaluations or error scenarios.
+- **SMI Optimization**: The engine explicitly ensures that hot-path integers (versions, epochs, session IDs) stay within V8's **Small Integer (SMI)** range (31-bit signed). This prevents performance-degrading transitions from SMIs to heap-allocated doubles (HeapNumbers).
 - **Small Vector Optimization (SVO)**: To minimize heap allocations and GC pressure, the engine uses inline slots (`_s0` through `_s3`) tracked by a **4-bit occupancy mask**. This allows for constant-time availability checks and O(1) slot discovery via bit-scanning before falling back to dynamic arrays. These buffers implement a standardized **Array-like API** (`length`, `at()`, `push()`) for consistent, high-performance access.
 - **Bitwise Branding**: Primitives are identified using a bitwise mask (`BrandFlags`) stored on a single `BRAND` symbol. This allows for constant-time type identification without multiple property lookups.
 - **Isolated Debug Metadata**: Debug information such as IDs and names are attached via non-enumerable symbols, ensuring that debugging features do not interfere with object iteration, serialization, or production performance.
@@ -92,12 +94,13 @@ The engine enforces strict boundaries between logic and side effects.
 
 - **Symmetric Boundary**: Atoms and Computeds are intended to be pure logic. Side effects are restricted to `effect` nodes.
 - **Circularity Protection**: The `RECOMPUTING` flag detects synchronous circular dependencies, throwing an error to prevent infinite recursion.
-- **Deterministic Tracking Recovery**: The tracking context uses a stack depth pointer and a `rollback()` mechanism to restore state after errors. This mechanism avoids the overhead associated with `try-finally` blocks in the core execution loops while maintaining context integrity.
+- **Deterministic Tracking Recovery**: The tracking context uses a stack depth pointer and a **`rollbackTrackingSubscriber()`** mechanism to restore state after errors. This mechanism avoids the overhead associated with `try-finally` blocks in the core execution loops while maintaining context integrity.
 - **Synchronous Tracking Boundary**: Dependency tracking is strictly synchronous. Dependencies accessed after an `await` keyword are not tracked because the `trackingContext` is cleared when the function yields.
 - **Scheduler Integrity**:
   - **Deduplication**: Jobs are tagged with an epoch to prevent redundant scheduling within the same cycle.
-  - **Flat Loop**: Drains queues without recursion to ensure stack safety.
-  - **Memory Clearing**: Internal references are cleared to `undefined` immediately after execution to assist GC.
+  - **Double-Buffering**: Uses active and standby buffers within the **`SchedulerState`** to allow safe job scheduling even during an active flush cycle.
+  - **Flat Loop**: Drains queues without recursion via **`schedulerDrainQueue`** to ensure stack safety.
+  - **Memory Clearing**: Internal references in buffers are cleared to `undefined` immediately after execution to assist GC.
 
 ### Infinite Loop Defense
 
@@ -133,6 +136,6 @@ The debugging subsystem is designed for deep visibility with minimal production 
 
 Errors are treated as part of the reactive graph, enabling robust recovery and traceability.
 
-- **Iterative Accumulation**: Errors are collected using an iterative traversal logic with a stack and a `Set` for deduplication, avoiding recursion overhead.
+- **Iterative Accumulation**: Errors are collected using an iterative traversal logic (**`collectErrorsRecursive`**) with a stack and a `Set` for deduplication, avoiding recursion overhead.
 - **Dependency Isolation**: Accessing error properties (`hasError`, `errors`) is performed in an `untracked` scope to prevent the consumer from inadvertently subscribing to the entire dependency tree of a failing node.
 - **Recovery Signals**: The `recoverable` flag indicates whether a node can attempt re-evaluation if its dependencies change.

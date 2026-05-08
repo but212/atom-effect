@@ -3,7 +3,7 @@ import { ReactiveNode } from '@/core/base';
 import { BRAND, BrandFlags } from '@/symbols';
 import type { AtomOptions, WritableAtom } from '@/types';
 import { debug } from '@/utils/debug';
-import { nextVersion, scheduler } from './scheduler';
+import { nextVersion, scheduler, schedulerIsBatching, schedulerSchedule } from './scheduler';
 import { trackingContext } from './tracking';
 
 /** @internal */
@@ -90,12 +90,12 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
     this.flags |= SCHED;
 
     const syncBit = flags & ATOM_STATE_FLAGS.SYNC ? 2 : 0;
-    const batchBit = scheduler.isBatching ? 1 : 0;
+    const batchBit = schedulerIsBatching(scheduler) ? 1 : 0;
 
     if (STRATEGY_TABLE[syncBit | batchBit] === NOTIFY_ACTION.FLUSH) {
       if (!this.isNotifying) this._flushNotifications();
     } else {
-      scheduler.schedule(this);
+      schedulerSchedule(scheduler, this);
     }
   }
 
@@ -109,7 +109,8 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
   private _flushNotifications(): void {
     const SCHED = ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
     const MASK = SCHED | ATOM_STATE_FLAGS.DISPOSED;
-    const isSyncActive = (this.flags & ATOM_STATE_FLAGS.SYNC) !== 0 && !scheduler.isBatching;
+    const isSyncActive =
+      (this.flags & ATOM_STATE_FLAGS.SYNC) !== 0 && !schedulerIsBatching(scheduler);
 
     while ((this.flags & MASK) === SCHED) {
       const prev = this._pendingOldValue as T;

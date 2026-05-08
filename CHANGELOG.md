@@ -6,8 +6,11 @@
 
 #### Changed
 
-- **Architecture**: Replaced class-based `DepSlotBuffer` with a highly optimized functional `DepBufferState` to reduce object overhead and improve V8 Hidden Class performance.
+- **Architecture**: Refactored the `Scheduler` and `TrackingContext` from class-based to functional-based approach using data-centric state objects (`SchedulerState`, `TrackingContext`) and standalone utility functions, improving V8 stability and cache locality.
 - **Architecture**: Overhauled the Scheduler with a "Triple-Buffer" system (Active, Standby, Batch) to robustly handle nested updates and eliminate redundant flushes.
+- **Optimization**: Implemented V8 SMI (Small Integer) optimization for all internal counters (epoch, version, session ID) to maintain peak performance on hot paths.
+- **Optimization**: Enhanced `ReactiveNode` notification loop with a unified `notifyAllSubscribers` helper, improving cache locality and reducing closure overhead.
+- **Performance**: Optimized `Effect` budget management and frequency limiting with dedicated state objects and validation logic.
 - **Performance**: Unified async drift detection into the `isDirty()` check, eliminating the overhead of DJB2 hashing for stale promise tracking.
 - **Performance**: Forced internal IDs and versions into the SMI (Small Integer) range to bypass heap allocation.
 - **Security**: Hardened `atomLens` and `setDeepValue` against prototype pollution by blocking dangerous keys like `__proto__`.

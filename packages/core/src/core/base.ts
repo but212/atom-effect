@@ -7,9 +7,35 @@ import { type DepBufferState, isBufferDirty, isBufferShallowDirty } from './buff
 import {
   createSubscription,
   notifySubscription,
+  pushTrackingSubscriber,
+  rollbackTrackingSubscriber,
   type Subscription,
   trackingContext,
 } from './tracking';
+
+/**
+ * Logic: Subscriber Notification Loop
+ * Safely iterates through subscribers and triggers their callbacks.
+ * @internal
+ */
+export function notifyAllSubscribers<T>(
+  slots: SlotBuffer<Subscription<T>>,
+  newValue: T | undefined,
+  oldValue: T | undefined,
+  onStart: () => number,
+  onEnd: (depth: number) => void
+): void {
+  const depth = onStart();
+  slots.lock();
+  try {
+    slots.forEach((sub) => {
+      notifySubscription(sub, newValue, oldValue);
+    });
+  } finally {
+    onEnd(depth);
+    slots.unlock();
+  }
+}
 
 /**
  * A unified base class for all reactive primitives, including Atoms, Computeds, and Effects.
@@ -211,22 +237,17 @@ export abstract class ReactiveNode<T> {
     const slots = this._slots;
     if (!slots || slots.length === 0) return;
 
-    // Optimization: Batch Isolation
-    // Pushing null once for the entire loop is O(1) compared to O(N) previously.
-    const prevDepth = trackingContext.depth;
-    trackingContext.push(null);
-
-    slots.lock();
-    try {
-      slots.forEach((sub) => {
-        // Optimization: notifySubscription is now unsafe (no try-finally/push-pop)
-        notifySubscription(sub, newValue, oldValue);
-      });
-    } finally {
-      // Deterministic recovery for the entire batch
-      trackingContext.rollback(prevDepth);
-      slots.unlock();
-    }
+    notifyAllSubscribers(
+      slots,
+      newValue,
+      oldValue,
+      () => {
+        const depth = trackingContext.stack.length;
+        pushTrackingSubscriber(trackingContext, null);
+        return depth;
+      },
+      (depth) => rollbackTrackingSubscriber(trackingContext, depth)
+    );
   }
 
   // ============================================================================

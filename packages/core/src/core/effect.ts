@@ -21,8 +21,100 @@ import {
   isBufferDirty,
   prepareTracking,
 } from './buffers';
-import { currentFlushEpoch, incrementFlushExecutionCount, nextEpoch, scheduler } from './scheduler';
-import { createDependencyLink, type DependencyTracker, trackingContext } from './tracking';
+import {
+  currentFlushEpoch,
+  incrementFlushExecutionCount,
+  nextEpoch,
+  scheduler,
+  schedulerSchedule,
+} from './scheduler';
+import {
+  createDependencyLink,
+  type DependencyTracker,
+  rollbackTrackingSubscriber,
+  runInTrackingContext,
+  trackingContext,
+} from './tracking';
+
+/**
+ * Internal state for tracking effect execution budgets.
+ * @internal
+ */
+export interface EffectBudgetState {
+  loopCount: number;
+  lastFlushEpoch: number;
+  windowCount: number;
+  windowStart: number;
+  totalExecutions: number;
+}
+
+/**
+ * Factory for effect budget state.
+ * @internal
+ */
+export function createEffectBudgetState(): EffectBudgetState {
+  return {
+    loopCount: 0,
+    lastFlushEpoch: EPOCH_CONSTANTS.UNINITIALIZED,
+    windowCount: 0,
+    windowStart: 0,
+    totalExecutions: 0,
+  };
+}
+
+/**
+ * Logic: Effect Budget Validation
+ * Ensures an effect doesn't run too many times in a single flush cycle,
+ * preventing infinite loops.
+ * @internal
+ */
+export function validateEffectBudget(
+  state: EffectBudgetState,
+  maxExecutionsPerFlush: number,
+  currentFlushEpoch: number,
+  incrementGlobalFlushCount: () => number,
+  onAbort: (type: 'per-effect' | 'global') => never
+): void {
+  if (state.lastFlushEpoch !== currentFlushEpoch) {
+    state.lastFlushEpoch = currentFlushEpoch;
+    state.loopCount = 0;
+  }
+
+  if (++state.loopCount > maxExecutionsPerFlush) {
+    onAbort('per-effect');
+  }
+
+  if (incrementGlobalFlushCount() > SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH) {
+    onAbort('global');
+  }
+
+  state.totalExecutions++;
+}
+
+/**
+ * Logic: Frequency Limiter
+ * Throttles effects that fire too rapidly in development mode.
+ * @internal
+ */
+export function checkEffectFrequencyLimit(
+  state: EffectBudgetState,
+  maxExecutions: number,
+  onLimitExceeded: () => never
+): void {
+  if (!Number.isFinite(maxExecutions)) return;
+
+  const now = Date.now();
+
+  if (now - state.windowStart >= DEBUG_CONFIG.EFFECT_FREQUENCY_WINDOW) {
+    state.windowStart = now;
+    state.windowCount = 1;
+    return;
+  }
+
+  if (++state.windowCount > maxExecutions) {
+    onLimitExceeded();
+  }
+}
 
 /**
  * Implementation of a reactive side-effect.
@@ -39,11 +131,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
   /** @internal */
   private _trackSessionId = 0;
 
-  private _budgetLoopCount = 0;
-  private _budgetLastFlushEpoch = EPOCH_CONSTANTS.UNINITIALIZED as number;
-  private _budgetWindowCount = 0;
-  private _budgetWindowStart = 0;
-  private _budgetTotalExecutions = 0;
+  private _budget = createEffectBudgetState();
 
   /** Buffered storage for reconciled subscriptions. @internal */
   _deps = createDepBuffer();
@@ -68,7 +156,9 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     this._maxExecutionsPerFlush =
       options.maxExecutionsPerFlush ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_EFFECT;
 
-    this._notifyCallback = this._sync ? () => this.execute() : () => scheduler.schedule(this);
+    this._notifyCallback = this._sync
+      ? () => this.execute()
+      : () => schedulerSchedule(scheduler, this);
 
     debug.attachDebugInfo(this, 'effect', this.id, options.name);
   }
@@ -90,7 +180,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
 
   /** Total executions since initialization. */
   get executionCount(): number {
-    return this._budgetTotalExecutions;
+    return this._budget.totalExecutions;
   }
 
   /** True if the effect function is currently on the stack. */
@@ -138,13 +228,13 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
 
   private _runTrackingSession(): Result<unknown, Error> {
     this._startTracking();
-    const prevDepth = trackingContext.depth;
+    const prevDepth = trackingContext.stack.length;
 
     return Result.tryCatch(() => {
       try {
-        return trackingContext.run(this, this._fn);
+        return runInTrackingContext(trackingContext, this, this._fn);
       } catch (e) {
-        trackingContext.rollback(prevDepth);
+        rollbackTrackingSubscriber(trackingContext, prevDepth);
         throw e;
       }
     });
@@ -267,48 +357,28 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
   // --- Budget & Safeguards ---
 
   private _validateBudget(): void {
-    const epoch = currentFlushEpoch();
+    validateEffectBudget(
+      this._budget,
+      this._maxExecutionsPerFlush,
+      currentFlushEpoch(),
+      incrementFlushExecutionCount,
+      (type) => this._abortExecution(type)
+    );
 
-    if (this._budgetLastFlushEpoch !== epoch) {
-      this._budgetLastFlushEpoch = epoch;
-      this._budgetLoopCount = 0;
-    }
-
-    if (++this._budgetLoopCount > this._maxExecutionsPerFlush) {
-      this._abortExecution('per-effect');
-    }
-
-    if (incrementFlushExecutionCount() > SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH) {
-      this._abortExecution('global');
-    }
-
-    this._budgetTotalExecutions++;
-    if (IS_DEV) this._checkFrequencyLimit();
-  }
-
-  private _checkFrequencyLimit(): void {
-    if (!Number.isFinite(this._maxExecutions)) return;
-
-    const now = Date.now();
-
-    if (now - this._budgetWindowStart >= DEBUG_CONFIG.EFFECT_FREQUENCY_WINDOW) {
-      this._budgetWindowStart = now;
-      this._budgetWindowCount = 1;
-      return;
-    }
-
-    if (++this._budgetWindowCount > this._maxExecutions) {
-      const err = new EffectError(ERROR_MESSAGES.EFFECT_FREQUENCY_LIMIT_EXCEEDED);
-      this.dispose();
-      this._handleExecutionError(err);
-      throw err;
+    if (IS_DEV) {
+      checkEffectFrequencyLimit(this._budget, this._maxExecutions, () => {
+        const err = new EffectError(ERROR_MESSAGES.EFFECT_FREQUENCY_LIMIT_EXCEEDED);
+        this.dispose();
+        this._handleExecutionError(err);
+        throw err;
+      });
     }
   }
 
   private _abortExecution(type: 'per-effect' | 'global'): never {
     const message =
       type === 'per-effect'
-        ? `Infinite loop detected (per-effect): executed ${this._budgetLoopCount} times in current flush.`
+        ? `Infinite loop detected (per-effect): executed ${this._budget.loopCount} times in current flush.`
         : 'Infinite loop detected (global): exceeded total execution limit per flush.';
 
     const error = new EffectError(message);
