@@ -231,6 +231,8 @@ export interface RouteLifecycle {
   onLeave?: (router: Router) => boolean | undefined;
   /** Optional document title for the route. */
   title?: string;
+  /** Optional metadata tags for the route (e.g., description, keywords). */
+  meta?: Record<string, string>;
 }
 
 /** Definition of a specific application route and its rendering logic. */
@@ -273,6 +275,16 @@ export interface RouteConfig {
   afterTransition?: (from: string, to: string) => void;
 }
 
+/** Represents a structured navigation location. */
+export interface RouteLocation {
+  /** The normalized path part of the URL. */
+  path: string;
+  /** Key-value pairs of query string parameters. */
+  query: Record<string, string>;
+  /** Extracted parameters from dynamic segments (e.g., :id). */
+  params: Record<string, string>;
+}
+
 /** Interface for programmatically interacting with the application router. */
 export interface Router {
   /** Reactive atom containing the current route name. */
@@ -281,8 +293,10 @@ export interface Router {
   queryParams: ReadonlyAtom<Record<string, string>>;
   /** Reactive atom containing the extracted path parameters. */
   params: ReadonlyAtom<Record<string, string>>;
-  /** Programmatically navigates to the specified path. */
-  navigate: (route: string) => void;
+  /** Reactive atom providing a unified snapshot of the current location. */
+  location: ReadonlyAtom<RouteLocation>;
+  /** Programmatically navigates to the specified path or location object. */
+  navigate: (to: string | Partial<RouteLocation>) => void;
   /** Shuts down the router and releases all observers. */
   destroy: () => void;
 }

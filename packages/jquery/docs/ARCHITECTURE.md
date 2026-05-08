@@ -12,20 +12,22 @@ The jQuery package provides a reactive binding layer on top of `@but212/atom-eff
                  │  atom / computed / effect / batch │
                  └──────────────┬────────────────────┘
                                 │
-                 ┌──────────────▼────────────────────┐
-                 │    @but212/atom-effect-jquery     │
-                 │                                   │
-                 │  unified.ts   ← Binding handlers  │
-                 │  effect-factory.ts ← Effect reg.  │
-                 │  registry.ts  ← Lifecycle mgmt    │
-                 │  jquery-patch.ts ← jQuery patches │
-                 │  chainable.ts ← $.fn methods      │
-                 │  bindings/list/ ← Modular list    │
-                 │  route.ts     ← SPA router        │
-                 │  url.ts       ← Reactive URL      │
-                 │  mount.ts     ← Component mount   │
-                 │  core/dom.ts  ← Core DOM engine   │
-                 └───────────────────────────────────┘
+                 ┌──────────────▼─────────────────────┐
+                 │    @but212/atom-effect-jquery      │
+                 │                                    │
+                 │  unified.ts   ← Binding handlers   │
+                 │  effect-factory.ts ← Effect reg.   │
+                 │  registry.ts  ← Lifecycle mgmt     │
+                 │  jquery-patch.ts ← jQuery patches  │
+                 │  chainable.ts ← $.fn methods       │
+                 │  bindings/list/ ← Modular list     │
+                 │  route/       ← Modular SPA router │
+                 │  nav.ts       ← PJAX navigation    │
+                 │  fetch.ts     ← Reactive fetching  │
+                 │  mount.ts     ← Component mount    │
+                 │  core/navigation.ts ← Nav core     │
+                 │  core/dom.ts  ← Core DOM engine    │
+                 └────────────────────────────────────┘
 ```
 
 ## 2. Binding Pipeline
@@ -156,11 +158,27 @@ Event listeners are attached to the container rather than individual items, main
 
 ## 7. SPA Router
 
-The router utilizes reactive states for navigation management.
+The router utilizes reactive states for navigation management and is organized into specialized sub-modules for scalability.
 
-### 7.1 Mode Abstraction (`UrlAdapter`)
+### 7.1 Modular Architecture
 
-Decouples browser navigation using the `UrlAdapter` strategy pattern, allowing for both hash-based and History API modes.
+The router is decomposed into several high-cohesion modules:
+
+- **`core.ts`**: Implements `UrlAdapter` strategies (History/Hash) and the tiered Route Matcher.
+- **`router.ts`**: The main `RouterImpl` orchestrating the navigation lifecycle.
+- **`view.ts`**: Handles view rendering, link discovery via `MutationObserver`, and global click interception.
+
+### 7.2 Mode Abstraction (`UrlAdapter`)
+
+Decouples browser navigation using the `UrlAdapter` strategy pattern. This allows the router to remain agnostic of the underlying URL manipulation strategy (e.g., `pushState` vs `location.hash`).
+
+### 7.3 Tiered Route Matching
+
+To maximize performance, the router employs a tiered matching system:
+
+1. **Static Lookup**: O(1) matching for fixed paths using a `Map`.
+2. **Native `URLPattern`**: Utilizes the modern browser API for complex dynamic segments.
+3. **Regex Fallback**: Robust, anchored regex matching for browsers without `URLPattern` support.
 
 ### 7.2 Transition Lifecycle
 
@@ -202,10 +220,11 @@ The package is organized into core logic, binding handlers, features (Routing, F
 
 ## 11. PJAX Navigation (`$.atomNav`)
 
-`$.atomNav` treats the browser's URL as a reactive atom and manages metadata and attribute synchronization during navigation.
+`$.atomNav` (PJAX) treats the browser's URL as a reactive atom and manages partial page updates.
 
-- **Race Condition Safety**: Uses `AbortController` to manage the navigation lifecycle and prevent stale updates.
-- **Transitions**: Optimizes navigation paths by ignoring redundant requests and bypassing hooks for hash-only transitions.
+- **Shared Core**: Leverages `src/core/navigation.ts` for standardized URL normalization and metadata synchronization.
+- **Race Condition Safety**: Uses an atomic fetch pipeline and `AbortSignal` management to ensure that only the result of the most recent navigation is applied to the DOM.
+- **Transitions**: Optimizes navigation by bypassing re-fetches for hash-only changes and ignoring redundant requests to the current URL.
 
 ## 12. Performance & Memory Management
 
@@ -309,3 +328,19 @@ The library implements proactive diagnostics to prevent "silent failures," parti
 
 - **Registration Checks**: In `debug` mode, `$.route`, `$.useAtomComponent`, and `$.injectAtom` automatically verify that custom element tags are registered in `customElements`.
 - **Warning System**: Discovered issues are logged via `debug.warn` with the `[atom-component]` prefix to guide developers during initial setup.
+
+## 17. Navigation Interoperability
+
+The `navCoordinator` (`src/core/navigation.ts`) provides a unified layer for managing multiple navigation features within the same application.
+
+### 17.1 Target Collision Detection
+
+To prevent unpredictable UI states, the coordinator tracks all active target containers. If a developer attempts to attach both `atomNav` and `$.route` to the same element, a collision warning is issued.
+
+### 17.2 Hierarchical Guard Coordination
+
+When navigating, the system recursively checks `canLeave` guards across all registered managers within the transition scope. This ensures that a parent `atomNav` transition respects the "unsaved changes" guard of a nested `$.route` view.
+
+### 17.3 View Lifecycle Integration
+
+Routers nested within `atomNav` targets automatically skip initial scroll and focus management. This prevents redundant layout jumps as the parent `atomNav` handles the top-level page transition concerns.

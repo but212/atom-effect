@@ -466,6 +466,12 @@ SPA router supporting hash-based and pushState routing.
 
 Navigation module (PJAX) that intercepts link clicks, fetches content asynchronously, and updates target containers while maintaining browser history.
 
+- **Reactive State**: Exposes `currentUrl`, `isPending`, and `hasError` atoms for reactive UI feedback (e.g., loading spinners).
+- **Metadata Sync**: Automatically synchronizes document `title` and standard SEO `meta` tags (description, keywords) from the loaded page.
+- **Scroll Management**: Handles automatic scrolling to the top or to a specific `#hash` after content injection.
+- **Interoperability**: Integrates with the navigation coordinator to respect `onLeave` guards from nested routers or other managers.
+- **Race Condition Safety**: Implements a "last navigation wins" policy using internal versioning and `AbortSignal` cancellation.
+
 ---
 
 ## Debug Mode

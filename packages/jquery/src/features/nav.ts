@@ -1,227 +1,174 @@
 import { Option, Result } from '@but212/atom-effect-utils';
 import $ from 'jquery';
+import {
+  type ContentState,
+  extractContent,
+  getAbsoluteUrl,
+  getScrollDecision,
+  getUrlParts,
+  isInterceptee,
+  isNavigationClick,
+  type NavigationType,
+  navCoordinator,
+  performScroll,
+  syncMetaData,
+  updateAttributes,
+} from '@/core/navigation';
+import { registry } from '@/core/registry';
 import type { AtomNav, AtomNavOptions, ReadonlyAtom } from '@/types';
 import { sanitizeHtml } from '@/utils/sanitize';
 
-/** Internal type for tracking the origin of a navigation request. @internal */
-type NavigationType = 'init' | 'push' | 'replace' | 'pop';
-
-/** Internal state for the current location. @internal */
+/** @internal */
 interface NavState {
   url: string;
   type: NavigationType;
 }
 
-/** Represents extracted content from a fetched page. @internal */
-interface ContentState {
-  html: string;
-  title: string | null;
-  attributes?: Record<string, string>;
-  redirectUrl?: string | null | undefined;
-  meta?: Record<string, string>;
+/** @internal */
+interface NavSpec {
+  historyMethod: 'pushState' | 'replaceState' | null;
+  isInitial: boolean;
 }
+
+/** @internal Maps navigation types to History API methods. */
+const NAV_SPECS: Record<NavigationType, NavSpec> = {
+  push: { historyMethod: 'pushState', isInitial: false },
+  replace: { historyMethod: 'replaceState', isInitial: false },
+  init: { historyMethod: null, isInitial: true },
+  pop: { historyMethod: null, isInitial: false },
+};
 
 /**
- * Resolves an absolute URL given a relative path and a base.
+ * Logic: Data-to-DOM Registry
+ * Defines how specific parts of the fetched content state are applied to the browser environment.
  */
-function getAbsoluteUrl(url: string, base: string): Result<URL, Error> {
-  return Result.tryCatch(() => new URL(url, base));
-}
-
-/**
- * Extracts specific content fragments and metadata from a raw HTML string.
- *
- * Logic:
- * 1. Parses the full HTML to extract `<title>` and `<meta>` tags.
- * 2. Isolates the target content using the provided selector.
- * 3. Sanitizes the HTML to prevent XSS before it enters the DOM.
- */
-function extractContent(html: string, selector?: string, xhr?: JQuery.jqXHR): ContentState {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
-  const title = Option.unwrapOr(
-    Option.map(
-      Option.fromNullable(doc.querySelector('title')),
-      (el) => el.textContent?.trim() ?? null
-    ),
-    null
-  );
-
-  const contentNodeOpt = Option.fromNullable(selector ? doc.querySelector(selector) : null);
-  const rawHtml = Option.unwrapOrElse(
-    Option.map(contentNodeOpt, (node) => node.innerHTML),
-    () => doc.body?.innerHTML ?? html
-  );
-
-  const attributes = Option.unwrapOr(
-    Option.map(contentNodeOpt, (node) =>
-      Object.fromEntries(
-        Array.from(node.attributes)
-          .filter((a) => a.name !== 'id')
-          .map((a) => [a.name, a.value])
-      )
-    ),
-    {}
-  );
-
-  const getMeta = (sel: string) =>
-    Option.map(Option.fromNullable(doc.querySelector(sel)), (el) => el.getAttribute('content'));
-  const meta: Record<string, string> = {};
-
-  Option.map(getMeta('meta[name="description"]'), (v) => {
-    if (v) meta.description = v;
-  });
-  Option.map(getMeta('meta[name="keywords"]'), (v) => {
-    if (v) meta.keywords = v;
-  });
-  Option.map(Option.fromNullable(doc.querySelector('link[rel="canonical"]')), (el) => {
-    Option.map(Option.fromNullable(el.getAttribute('href')), (v) => {
-      meta.canonical = v;
-    });
-  });
-
-  return {
-    html: sanitizeHtml(rawHtml).trim(),
-    title,
-    attributes,
-    // Reason: X-PJAX-URL header is used by some servers to indicate the final URL after redirects.
-    redirectUrl: Option.unwrapOr(
-      Option.map(Option.fromNullable(xhr), (x) => x.getResponseHeader?.('X-PJAX-URL')),
-      undefined
-    ),
-    meta,
-  };
-}
-
-/** Metadata tag definitions for SEO and document integrity. @internal */
-const META_SCHEMA = [
+const SYNC_REGISTRY: Array<{
+  key: keyof ContentState;
+  apply: (win: Window, $target: JQuery, value: unknown, options: { syncTitle: boolean }) => void;
+}> = [
   {
-    selector: 'meta[name="description"]',
-    name: 'description',
-    key: 'description',
-    isLink: false,
+    key: 'title',
+    apply: (win, _, val, opts) => {
+      const title = val as string | null;
+      if (opts.syncTitle && title !== null && win.document.title !== title) {
+        win.document.title = title;
+      }
+    },
   },
-  { selector: 'meta[name="keywords"]', name: 'keywords', key: 'keywords', isLink: false },
-  { selector: 'link[rel="canonical"]', name: 'canonical', key: 'canonical', isLink: true },
-] as const;
+  { key: 'meta', apply: (win, _, val) => syncMetaData(win, val as Record<string, string>) },
+  {
+    key: 'attributes',
+    apply: (_, $target, val) => {
+      const el = $target[0] as HTMLElement | undefined;
+      if (el && val) updateAttributes(el, val as Record<string, string>);
+    },
+  },
+  { key: 'html', apply: (_, $target, val) => $target.html(val as string) },
+];
 
 /**
- * Synchronizes document metadata to maintain SEO and social sharing integrity.
+ * Logic: DOM Reconciliation
+ * Synchronizes the fetched content state with the physical DOM.
  *
- * Caution: This modifies the global `<head>` section. Existing tags matching
- * the schema are updated, while missing ones are created or removed.
+ * Constraint: Cleanup
+ * Must perform a deep cleanup of internal atom bindings within the target
+ * before replacing HTML to prevent memory leaks and redundant effects.
  */
-function syncMetaData(win: Window, meta?: Record<string, string>): void {
-  const doc = win.document;
-  const head = doc.head;
+function reconcileDOM(params: {
+  $target: JQuery;
+  state: ContentState;
+  url: string;
+  previousUrl: string;
+  win: Window;
+  syncTitle: boolean;
+  onMount?: ((el: JQuery, url: string) => void) | undefined;
+  onUnmount?: ((el: JQuery, url: string) => void) | undefined;
+}): void {
+  const { $target, state, url, previousUrl, win, syncTitle, onMount, onUnmount } = params;
 
-  for (const { selector, name, key, isLink } of META_SCHEMA) {
-    const valueOpt = Option.fromNullable(meta?.[key]);
-    const elOpt = Option.fromNullable(head.querySelector(selector));
+  $.untracked(() => {
+    onUnmount?.($target, previousUrl);
 
-    Option.match(valueOpt, {
-      some: (value) => {
-        const target = Option.unwrapOrElse(elOpt, () => {
-          const newEl = doc.createElement(isLink ? 'link' : 'meta');
-          if (isLink) newEl.setAttribute('rel', 'canonical');
-          else newEl.setAttribute('name', name);
-          head.appendChild(newEl);
-          return newEl;
-        }) as HTMLElement;
+    // Constraint: Clean up internal atom bindings within the target before replacing HTML
+    $target.children().atomUnbind();
 
-        const attr = isLink ? 'href' : 'content';
-        if (target.getAttribute(attr) !== value) {
-          target.setAttribute(attr, value);
-        }
-      },
-      none: () => {
-        Option.map(elOpt, (el) => el.remove());
-      },
+    for (const sync of SYNC_REGISTRY) {
+      const val = state[sync.key];
+      sync.apply(win, $target, val, { syncTitle });
+    }
+
+    onMount?.($target, url);
+  });
+}
+
+/**
+ * Logic: History Synchronization
+ * Performs an atomic update of the browser history and the internal reactive intent.
+ */
+function commitNavigation(params: {
+  url: string;
+  type: NavigationType;
+  win: Window;
+  state: { value: NavState };
+}): void {
+  const { url, type, win, state } = params;
+  const spec = NAV_SPECS[type];
+  if (spec.historyMethod) {
+    $.batch(() => {
+      win.history[spec.historyMethod!](null, '', url);
+      state.value = { url, type };
     });
   }
 }
 
 /**
- * Updates element attributes while preserving internal tracking IDs.
+ * Initializes a reactive navigation manager for PJAX transitions.
  *
- * Constraint: `id` and `data-atom-nav-target` are never touched to prevent
- * breaking the reactive binding system.
- */
-function updateAttributes(el: HTMLElement, next: Record<string, string>): void {
-  for (const attr of Array.from(el.attributes)) {
-    const { name } = attr;
-    if (name !== 'id' && name !== 'data-atom-nav-target' && !(name in next)) {
-      el.removeAttribute(name);
-    }
-  }
-  for (const [name, value] of Object.entries(next)) {
-    if (el.getAttribute(name) !== value) {
-      el.setAttribute(name, value);
-    }
-  }
-}
-
-/**
- * Handles viewport scrolling for hash navigation or page transitions.
- */
-function performScroll(win: Window, hash?: string, fallbackToTop = false): void {
-  const hashOpt = Option.fromNullable(hash);
-  Option.match(hashOpt, {
-    some: (h) => {
-      const elOpt = Option.fromNullable(win.document.getElementById(decodeURIComponent(h)));
-      Option.match(elOpt, {
-        some: (el) => el.scrollIntoView({ behavior: 'auto', block: 'start' }),
-        none: () => {
-          if (fallbackToTop) win.scrollTo(0, 0);
-        },
-      });
-    },
-    none: () => win.scrollTo(0, 0),
-  });
-}
-
-/**
- * Initializes a navigation manager that implements AJAX-based partial page updates.
+ * When to use:
+ * - Use when you want to enable "Single Page" behavior by fetching HTML
+ *   fragments from the server instead of performing full page reloads.
  *
- * Usage Example:
+ * @param options - Configuration for target containers, headers, and lifecycle hooks.
+ * @returns A navigation controller with reactive status monitoring and programmatic controls.
+ *
+ * @example
  * ```typescript
  * const nav = $.atomNav({
  *   target: '#main-content',
- *   onMount: ($el, url) => console.log(`Loaded ${url}`)
+ *   onMount: ($el) => console.log('Content swapped!'),
  * });
  *
- * nav.navigate('/profile');
+ * nav.navigate('/dashboard');
  * ```
  */
 export function atomNav(options: AtomNavOptions): AtomNav {
   const { target, selector = 'a[data-nav]', headers = {}, syncTitle = true } = options;
   const win = options.window ?? (window as Window & typeof globalThis);
-  const $target = $(target as string);
+  const $target =
+    typeof target === 'string'
+      ? $(target)
+      : target instanceof HTMLElement
+        ? $(target)
+        : (target as JQuery<HTMLElement>);
 
   $target.attr('data-atom-nav-target', 'true');
 
+  // Logic: Initial State Resolution
   const initialUrlObj = new URL(win.location.href);
   const initialUrl = initialUrlObj.pathname + initialUrlObj.search + initialUrlObj.hash;
   const initialPath = initialUrlObj.pathname + initialUrlObj.search;
 
-  // Reactive state management for navigation lifecycle
-  const _navState = $.atom<NavState>({ url: initialUrl, type: 'init' }, { name: 'nav:state' });
-  const _pendingHookCount = $.atom(0, { name: 'nav:hook-pending-count' });
-  const _renderedState = $.atom({ url: initialUrl, path: initialPath }, { name: 'nav:rendered' });
-
-  const _normalizedState = $.computed(
-    () => {
-      const { url } = _navState.value;
-      const urlObj = Result.unwrap(getAbsoluteUrl(url, win.location.href));
-      return {
-        url,
-        pathAndSearch: urlObj.pathname + urlObj.search,
-        hash: urlObj.hash.slice(1),
-        type: _navState.value.type,
-      };
-    },
-    { name: 'nav:normalized' }
-  );
+  // Logic: Reactive State Atoms
+  const state = {
+    // Current navigation intent (the URL desired in the address bar)
+    intent: $.atom<NavState>({ url: initialUrl, type: 'init' }, { name: 'nav:intent' }),
+    // Last successfully rendered state (prevents redundant fetches)
+    rendered: $.atom({ url: initialUrl, path: initialPath }, { name: 'nav:rendered' }),
+    // Version counter to force re-fetches for retrying failures
+    fetchVersion: $.atom(0, { name: 'nav:version' }),
+    // Trackers for asynchronous transition guards
+    pendingHooks: $.atom(0, { name: 'nav:hook-pending' }),
+  };
 
   const targetSelector = Option.unwrapOr(
     Option.map(
@@ -231,262 +178,301 @@ export function atomNav(options: AtomNavOptions): AtomNav {
     undefined
   );
 
-  // Automatic data fetching triggered by URL changes
-  const _content = $.atomFetch<ContentState>(() => _normalizedState.value.pathAndSearch, {
-    name: 'nav:content',
-    defaultValue: { html: '', title: null },
-    headers: { 'X-PJAX': 'true', ...headers },
-    eager: false,
-    transform: (raw, xhr) => extractContent(String(raw), targetSelector, xhr),
-  });
-
-  const _lifecycleController = new AbortController();
-  let _navController: AbortController | null = null;
+  const normalized = $.computed(
+    () => {
+      const { url, type } = state.intent.value;
+      const { pathAndSearch, hash } = getUrlParts(url, win.location.href);
+      return { url, pathAndSearch, hash, type };
+    },
+    { name: 'nav:normalized' }
+  );
 
   /**
-   * Cancels in-flight requests and returns a new signal for the current task.
+   * Logic: Fragment Fetch Pipeline
+   * Automates the AJAX request, fragment extraction, and security sanitization.
    */
-  function _renewAbortSignal(): AbortController {
-    Option.map(Option.fromNullable(_navController), (c) => c.abort());
-    (_content as unknown as { abort?: () => void }).abort?.();
+  const content = $.atomFetch<ContentState>(
+    () => {
+      state.fetchVersion.value;
+      return normalized.value.pathAndSearch;
+    },
+    {
+      name: 'nav:content',
+      defaultValue: { html: '', title: null },
+      headers: { 'X-PJAX': 'true', ...headers },
+      eager: false,
+      transform: (raw, xhr) => {
+        const redirectUrl = xhr?.getResponseHeader?.('X-PJAX-URL') ?? undefined;
+        const result = extractContent({
+          html: String(raw),
+          selector: targetSelector,
+          redirectUrl,
+        });
+        // Security: Ensure fetched HTML is sanitized before being injected into the DOM.
+        return { ...result, html: sanitizeHtml(result.html).trim() };
+      },
+    }
+  );
 
+  // Logic: Lifecycle Orchestration
+  let _navController: AbortController | null = null;
+  const _lifecycleController = new AbortController();
+
+  const renewAbortSignal = (): AbortController => {
+    _navController?.abort();
+    if ('abort' in content && typeof (content as { abort: Function }).abort === 'function') {
+      (content as { abort: Function }).abort();
+    }
     const controller = new AbortController();
     _navController = controller;
     return controller;
-  }
-
-  /**
-   * Applies the fetched HTML and metadata to the physical DOM.
-   */
-  function reconcileDOM(state: ContentState, url: string, previousUrl: string): void {
-    $.untracked(() => {
-      const doc = win.document;
-      if (syncTitle && state.title !== null && doc.title !== state.title) {
-        doc.title = state.title;
-      }
-
-      syncMetaData(win, state.meta);
-      Option.map(Option.fromNullable(options.onUnmount), (hook) => hook($target, previousUrl));
-
-      // Clean up internal atom bindings within the target before replacing HTML
-      $target.children().atomUnbind();
-
-      Option.map(Option.fromNullable($target[0] as HTMLElement | undefined), (el) => {
-        Option.map(Option.fromNullable(state.attributes), (attrs) => updateAttributes(el, attrs));
-      });
-
-      $target.html(state.html);
-      Option.map(Option.fromNullable(options.onMount), (hook) => hook($target, url));
-    });
-  }
-
-  /**
-   * Reactive effect body that synchronizes state to the UI.
-   */
-  function syncUI(): undefined {
-    const { url, pathAndSearch, hash, type } = _normalizedState.value;
-    const rendered = _renderedState.value;
-
-    // Fast-path: Handle hash navigation on the current page without re-fetching
-    if (type === 'init' && pathAndSearch === rendered.path) {
-      if (hash) performScroll(win, hash);
-      Option.map(Option.fromNullable(options.onMount), (hook) => hook($target, url));
-      return;
-    }
-
-    if (_content.hasError) {
-      const error = _content.lastError;
-      if (error instanceof Error && error.name === 'AbortError') return;
-
-      const shouldDefault = Option.unwrapOr(
-        Option.map(Option.fromNullable(options.onError), (hook) => hook(error, url)),
-        true
-      );
-      // Fallback: Perform full page reload if AJAX fails or onError suggests it
-      if (shouldDefault !== false) win.location.assign(url);
-      return;
-    }
-
-    const state = _content.value;
-    if (!_content.isResolved || _content.isPending) return;
-
-    const isRedirect = state.redirectUrl && state.redirectUrl !== url;
-    const previousUrl = rendered.url;
-
-    const finalUrl = isRedirect ? (state.redirectUrl ?? url) : url;
-    const redirectResOpt = isRedirect
-      ? Option.some(getAbsoluteUrl(finalUrl, win.location.href))
-      : Option.none;
-
-    const finalPath = Option.match(redirectResOpt, {
-      some: (res) =>
-        Result.unwrapOr(
-          Result.map(res, (obj) => obj.pathname + obj.search),
-          pathAndSearch
-        ),
-      none: () => pathAndSearch,
-    });
-    const isNewTarget = finalPath !== rendered.path;
-
-    $.batch(() => {
-      if (isRedirect) win.history.replaceState(null, '', finalUrl);
-      if (isNewTarget || isRedirect) reconcileDOM(state, finalUrl, previousUrl);
-
-      const { scrollToTop = true } = options;
-      const prevUrlObj = Result.unwrap(getAbsoluteUrl(_renderedState.value.url, win.location.href));
-      const isHashRemoval = !hash && prevUrlObj.hash !== '';
-      const isPop = type === 'pop';
-
-      // Determine if we should scroll based on hash presence or navigation type
-      const shouldScroll = !!hash || (!isPop && (isHashRemoval || (isNewTarget && scrollToTop)));
-
-      if (shouldScroll) performScroll(win, hash, !isPop && isNewTarget && scrollToTop);
-      _renderedState.value = { url: finalUrl, path: finalPath };
-    });
-
-    return undefined;
-  }
-
-  const _navEffect = $.effect(() => syncUI(), { name: 'nav:sync-effect' });
-
-  const handlePopState = (): void => {
-    _renewAbortSignal();
-    const loc = win.location;
-    _navState.value = { url: loc.pathname + loc.search + loc.hash, type: 'pop' };
   };
 
-  const doc = win.document;
-
   /**
-   * Event Interception Logic:
-   * Only intercepts links that are:
-   * - Same origin
-   * - Not a direct hash link (`#...`)
-   * - Not opening in a new tab/window
-   * - Not a download or external link
+   * Logic: Global Sync Effect
+   * The core engine that reacts to 'intent' changes and coordinates
+   * the fetch -> reconcile -> scroll flow.
    */
-  doc.addEventListener(
+  const mainEffect = $.effect(
+    (): undefined => {
+      const { url, pathAndSearch, hash, type } = normalized.value;
+      const rendered = $.untracked(() => state.rendered.value);
+
+      const spec = NAV_SPECS[type];
+
+      // Optimization: Skip re-fetching if the transition only involves a hash change.
+      if (pathAndSearch === rendered.path) {
+        $.untracked(() => {
+          if (hash) performScroll(win, hash);
+
+          if (spec.isInitial) {
+            options.onMount?.($target, url);
+            state.intent.value = { ...state.intent.peek(), type: 'push' };
+          } else if (url !== rendered.url) {
+            state.rendered.value = { ...rendered, url };
+          }
+        });
+        return undefined;
+      }
+
+      const pjaxState = content.value;
+
+      if (content.hasError) {
+        const error = content.lastError;
+        if (error instanceof Error && error.name === 'AbortError') return undefined;
+        // Logic: Error Recovery
+        // If the PJAX fetch fails, fallback to a full page reload unless overridden.
+        if ((options.onError?.(error, url) ?? true) !== false) {
+          win.location.assign(url);
+        }
+        return undefined;
+      }
+
+      if (!content.isResolved || content.isPending) return undefined;
+
+      const isRedirect = !!(pjaxState.redirectUrl && pjaxState.redirectUrl !== url);
+      const previousUrl = rendered.url;
+
+      let finalUrl = isRedirect ? (pjaxState.redirectUrl as string) : url;
+      if (isRedirect && hash && !finalUrl.includes('#')) {
+        finalUrl += `#${hash}`;
+      }
+
+      const { pathAndSearch: finalPath } = getUrlParts(finalUrl, win.location.href);
+      const isNewTarget = finalPath !== rendered.path;
+
+      $.batch(() => {
+        if (isRedirect) {
+          win.history.replaceState(null, '', finalUrl);
+          state.intent.value = { url: finalUrl, type: 'push' };
+        }
+
+        if (isNewTarget || isRedirect) {
+          reconcileDOM({
+            $target,
+            state: pjaxState,
+            url: finalUrl,
+            previousUrl,
+            win,
+            syncTitle,
+            onMount: options.onMount,
+            onUnmount: options.onUnmount,
+          });
+        }
+
+        const prevUrlObj = Result.unwrap(getAbsoluteUrl(rendered.url, win.location.href));
+        const { shouldScroll, resetScroll } = getScrollDecision({
+          hash,
+          type,
+          isNewTarget,
+          prevHash: prevUrlObj.hash.slice(1),
+          scrollToTop: options.scrollToTop ?? true,
+        });
+
+        if (shouldScroll) performScroll(win, hash, resetScroll);
+        state.rendered.value = { url: finalUrl, path: finalPath };
+      });
+
+      return undefined;
+    },
+    { name: 'nav:sync-effect' }
+  );
+
+  const handlePopState = (): void => {
+    renewAbortSignal();
+    const loc = win.location;
+    state.intent.value = { url: loc.pathname + loc.search + loc.hash, type: 'pop' };
+  };
+
+  win.addEventListener('popstate', handlePopState, { signal: _lifecycleController.signal });
+
+  // Logic: Click Interception
+  win.document.addEventListener(
     'click',
     (e) => {
-      const elOpt = Option.fromNullable((e.target as Element).closest<HTMLAnchorElement>(selector));
-      Option.map(elOpt, (el) => {
-        const targetAttr = el.dataset.target;
-        const myId = $target.attr('id');
-        const isExplicitTarget = targetAttr && myId && targetAttr === `#${myId}`;
+      if (e.defaultPrevented) return;
+      const el = (e.target as Element).closest<HTMLAnchorElement>(selector);
+      if (!el) return;
 
-        if (targetAttr && !isExplicitTarget) return;
+      const myId = $target.attr('id');
+      const targetAttr = el.dataset.target;
+      const isExplicitTarget = !!(targetAttr && myId && targetAttr === `#${myId}`);
 
+      if (targetAttr && !isExplicitTarget) return;
+      if (!isExplicitTarget) {
         const closestNavTarget = $(el).closest('[data-atom-nav-target="true"]')[0];
-        const isInsideOtherNav = closestNavTarget && closestNavTarget !== $target[0];
-        if (!isExplicitTarget && isInsideOtherNav) return;
+        if (closestNavTarget && closestNavTarget !== $target[0]) return;
+      }
 
-        const mouse = e as MouseEvent;
-        // Why: Respect manual preventDefault or specific key combos (Ctrl/Cmd) for new tabs
-        const isPrevented =
-          e.defaultPrevented ||
-          (e as unknown as JQuery.Event).isDefaultPrevented?.() ||
-          (e as unknown as { originalEvent?: { defaultPrevented?: boolean } }).originalEvent
-            ?.defaultPrevented;
-
-        if (isPrevented || mouse.ctrlKey || mouse.metaKey || mouse.shiftKey || mouse.button > 0)
-          return;
-
-        const isInterceptee =
-          el.href &&
-          !el.hash.startsWith('#') &&
-          el.target !== '_blank' &&
-          !el.hasAttribute('download') &&
-          el.getAttribute('rel') !== 'external' &&
-          el.dataset.nav !== 'false' &&
-          (el.protocol === 'http:' || el.protocol === 'https:');
-
-        if (isInterceptee && el.origin === win.location.origin) {
-          e.preventDefault();
-          navigator.navigate(el.href);
-        }
-      });
+      if (isNavigationClick(e) && isInterceptee(el, win)) {
+        e.preventDefault();
+        navigator.navigate(el.href);
+      }
     },
     { signal: _lifecycleController.signal }
   );
 
-  win.addEventListener('popstate', handlePopState, { signal: _lifecycleController.signal });
+  const navStatus = $.computed(
+    () => {
+      if (content.isPending || state.pendingHooks.value > 0) return 'pending';
+      if (content.hasError) return 'error';
+      return 'idle';
+    },
+    { name: 'nav:status' }
+  );
 
-  const commitNavigation = (url: string, type: NavigationType): void => {
-    $.batch(() => {
-      const method = type === 'replace' ? 'replaceState' : 'pushState';
-      win.history[method](null, '', url);
-      _navState.value = { url, type };
-    });
-  };
+  const isPending = $.computed(() => navStatus.value === 'pending', { name: 'nav:isPending' });
+  const hasError = $.computed(() => navStatus.value === 'error', { name: 'nav:hasError' });
 
+  // Logic: Public API Implementation
   const navigator: AtomNav = {
-    currentUrl: $.computed(() => _renderedState.value.url, { name: 'nav:public-url' }),
-    isPending: $.computed(() => _content.isPending || _pendingHookCount.value > 0, {
-      name: 'nav:isPending',
-    }),
-    hasError: $.computed(() => _content.hasError, { name: 'nav:hasError' }),
+    currentUrl: $.computed(() => state.rendered.value.url, { name: 'nav:public-url' }),
+    isPending,
+    hasError,
 
-    /**
-     * Programmatically navigates to a new URL using PJAX.
-     */
     async navigate(url: string, navOptions: { replace?: boolean } = {}): Promise<void> {
-      const { signal } = _renewAbortSignal();
+      const { signal } = renewAbortSignal();
       const type: NavigationType = navOptions.replace ? 'replace' : 'push';
 
       const base = win.document.baseURI ?? win.location.href;
       const targetRes = getAbsoluteUrl(url, base);
+      if (Result.isErr(targetRes)) return;
+
       const target = Result.unwrap(targetRes);
-      const current = new URL(win.location.href, base);
-
-      if (target.origin !== current.origin) {
-        return win.location.assign(url);
-      }
-
+      const current = new URL(win.location.href);
       const path = target.pathname + target.search;
       const isSamePath = path === current.pathname + current.search;
-      const isSameLoc = isSamePath && target.hash === (current.hash ?? '');
 
-      if (isSameLoc && type === 'push') {
-        if (url.includes('#')) performScroll(win, target.hash.slice(1), true);
-        return;
-      }
+      const policies: Array<() => boolean | Promise<boolean>> = [
+        () => {
+          // Reason: Only intercept same-origin requests.
+          if (target.origin !== current.origin) {
+            win.location.assign(url);
+            return false;
+          }
+          return true;
+        },
+        () => {
+          const isSameLoc = isSamePath && target.hash === (current.hash ?? '');
+          if (isSameLoc && type === 'push') {
+            if (hasError.peek()) {
+              state.fetchVersion.value++;
+            } else if (url.includes('#')) {
+              performScroll(win, target.hash.slice(1), true);
+            }
+            return false;
+          }
+          return true;
+        },
+        () => {
+          // Logic: Async Transition Guards
+          if (!isSamePath && options.onBeforeLoad) {
+            return (async () => {
+              state.pendingHooks.value++;
+              try {
+                const ok = await (
+                  options.onBeforeLoad as (
+                    url: string,
+                    signal: AbortSignal
+                  ) => Promise<boolean | undefined>
+                )(url, signal);
+                return !(signal.aborted || ok === false);
+              } finally {
+                state.pendingHooks.value = Math.max(0, state.pendingHooks.value - 1);
+              }
+            })();
+          }
+          return true;
+        },
+        () => {
+          const container = $target[0];
+          return !(container && !navCoordinator.canLeaveWithin(container));
+        },
+      ];
 
-      // Hook: Run async check before loading new content
-      if (!isSamePath && options.onBeforeLoad) {
-        _pendingHookCount.value++;
-        try {
-          const ok = await (options.onBeforeLoad as Function)(url, signal);
-          if (signal.aborted || ok === false) return;
-        } finally {
-          _pendingHookCount.value = Math.max(0, _pendingHookCount.value - 1);
+      for (const policy of policies) {
+        const result = policy();
+        if (result instanceof Promise) {
+          if (!(await result)) return;
+        } else if (!result) {
+          return;
         }
       }
 
-      commitNavigation(path + target.hash, type);
+      commitNavigation({ url: path + target.hash, type, win, state: state.intent });
     },
 
     /**
-     * Disposes of the navigation manager, removing all listeners and effects.
+     * Cleanup: Resource Disposal
+     * Unbinds all event listeners, stops pending fetches, and removes target markers.
      */
     destroy() {
       _lifecycleController.abort();
-      Option.map(Option.fromNullable(_navController), (c) => c.abort());
-      _navEffect.dispose();
-      _content.dispose();
+      _navController?.abort();
+      mainEffect.dispose();
+      content.dispose();
       $target.removeAttr('data-atom-nav-target');
 
       const atoms = [
-        _navState,
-        _pendingHookCount,
-        _renderedState,
-        _normalizedState,
+        state.intent,
+        state.fetchVersion,
+        state.pendingHooks,
+        state.rendered,
+        normalized,
         navigator.currentUrl,
-        navigator.isPending,
-        navigator.hasError,
+        navStatus,
+        isPending,
+        hasError,
       ];
       atoms.forEach((a) => (a as ReadonlyAtom).dispose?.());
     },
   };
+
+  // Logic: Automatic Lifecycle Coordination
+  if ($target[0]) {
+    navCoordinator.register($target[0], 'nav');
+    registry.onCleanup($target[0], () => navigator.destroy());
+  }
 
   return navigator;
 }
