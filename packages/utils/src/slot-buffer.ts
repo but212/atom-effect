@@ -95,8 +95,13 @@ export class SlotBuffer<T> {
     this._rawWrite(idxB, a);
   }
 
-  /** Number of non-null items stored. */
+  /** Physical capacity (including null gaps). Safe for manual indexed loops. */
   get length(): number {
+    return this._count;
+  }
+
+  /** Logical size (number of non-null items). */
+  get size(): number {
     return this._actualCount;
   }
 
@@ -146,7 +151,7 @@ export class SlotBuffer<T> {
 
     if (this._count > 4) {
       const ov = this._overflow!;
-      while (this._count > 4 && ov[this._count - 5] === null) {
+      while (this._count > 4 && ov[this._count - 5] == null) {
         this._count--;
       }
     }

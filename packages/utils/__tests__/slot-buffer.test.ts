@@ -7,12 +7,14 @@ describe('SlotBuffer', () => {
       const buf = new SlotBuffer<number>();
 
       expect(buf.length).toBe(0);
+      expect(buf.size).toBe(0);
       expect(buf.at(0)).toBeNull();
 
       buf.push(10);
       buf.push(20);
 
       expect(buf.length).toBe(2);
+      expect(buf.size).toBe(2);
       expect(buf.at(0)).toBe(10);
       expect(buf.at(1)).toBe(20);
       expect(buf.at(2)).toBeNull();
@@ -35,10 +37,11 @@ describe('SlotBuffer', () => {
       const buf = new SlotBuffer<number>();
       [1, 2, 3, 4, 5].forEach((i) => buf.push(i));
 
-      expect(buf.length).toBe(5);
+      expect(buf.size).toBe(5);
 
       buf.clear();
 
+      expect(buf.size).toBe(0);
       expect(buf.length).toBe(0);
       expect(buf.at(0)).toBeNull();
       expect(buf.at(4)).toBeNull();
@@ -52,13 +55,15 @@ describe('SlotBuffer', () => {
 
       // Create a hole in the "fast lane"
       buf.remove(1); // [0, null, 2]
-      expect(buf.length).toBe(2);
+      expect(buf.size).toBe(2);
+      expect(buf.length).toBe(3);
       expect(buf.at(1)).toBeNull();
       expect(buf.at(2)).toBe(2);
 
       // Reuse the hole
       buf.push(99); // [0, 99, 2]
       expect(buf.at(1)).toBe(99);
+      expect(buf.size).toBe(3);
       expect(buf.length).toBe(3);
     });
 
@@ -80,11 +85,13 @@ describe('SlotBuffer', () => {
       const buf = new SlotBuffer<string>();
       buf.setAt(10, 'far');
 
-      expect(buf.length).toBe(1);
+      expect(buf.size).toBe(1);
+      expect(buf.length).toBe(11);
       expect(buf.at(10)).toBe('far');
       expect(buf.at(0)).toBeNull();
 
       buf.setAt(10, null);
+      expect(buf.size).toBe(0);
       expect(buf.length).toBe(0);
       expect(buf.at(10)).toBeNull();
     });
@@ -94,6 +101,7 @@ describe('SlotBuffer', () => {
       for (let i = 0; i < 10; i++) buf.push(i);
 
       buf.truncateFrom(5);
+      expect(buf.size).toBe(5);
       expect(buf.length).toBe(5);
       expect(buf.at(4)).toBe(4);
       expect(buf.at(5)).toBeNull();
@@ -109,10 +117,12 @@ describe('SlotBuffer', () => {
       buf.remove(1); // [0, null, 2, 3, 4]
       buf.remove(4); // [0, null, 2, 3, null]
 
-      expect(buf.length).toBe(3);
+      expect(buf.size).toBe(3);
+      expect(buf.length).toBe(4); // [0, null, 2, 3]
 
       buf.compact();
 
+      expect(buf.size).toBe(3);
       expect(buf.length).toBe(3);
       expect(buf.at(0)).toBe(0);
       expect(buf.at(1)).toBe(2);
@@ -173,7 +183,8 @@ describe('SlotBuffer', () => {
 
       buf.compact(); // Deferred
       expect(buf.at(1)).toBeNull();
-      expect(buf.length).toBe(4);
+      expect(buf.size).toBe(4);
+      expect(buf.length).toBe(5);
 
       buf.unlock();
       expect(buf.isLocked).toBe(false);

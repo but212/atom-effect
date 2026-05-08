@@ -1,4 +1,5 @@
 import { Result, SlotBuffer } from '@but212/atom-effect-utils';
+import { IS_DEV } from '@/constants';
 import type { Dependency } from '@/types';
 import type { DependencyLink } from './tracking';
 
@@ -191,7 +192,9 @@ const DIRTY_CHECKERS: Record<number, (link: DependencyLink) => boolean> = {
     Result.match(res, {
       ok: () => {},
       err: () => {
-        console.warn(`[atom-effect] Dependency #${dep.id} error in check`);
+        if (IS_DEV) {
+          console.warn(`[atom-effect] Dependency #${dep.id} error in check`);
+        }
       },
     });
     return dep.version !== link.version;
@@ -205,7 +208,7 @@ const DIRTY_CHECKERS: Record<number, (link: DependencyLink) => boolean> = {
 export function isBufferDirty(state: DepBufferState): boolean {
   const slots = state.slots;
   const len = slots.length;
-  if (len === 0) return false;
+  if (slots.size === 0) return false;
 
   const checkers = DIRTY_CHECKERS;
   for (let i = 0; i < len; i++) {

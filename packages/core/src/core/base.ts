@@ -195,7 +195,7 @@ export abstract class ReactiveNode<T> {
 
   private _hasSubscription(listener: unknown): boolean {
     const slots = this._slots;
-    if (!slots || slots.length === 0) return false;
+    if (!slots || slots.size === 0) return false;
 
     // Optimization: Use early-exit some() to avoid redundant at() calls in a loop
     return slots.some((link) => link.fn === listener || link.sub === listener);
@@ -222,7 +222,7 @@ export abstract class ReactiveNode<T> {
    * - To monitor subscription health or detect leaks during development.
    */
   subscriberCount(): number {
-    return this._slots?.length ?? 0;
+    return this._slots?.size ?? 0;
   }
 
   /**
@@ -235,7 +235,7 @@ export abstract class ReactiveNode<T> {
    */
   protected _notifySubscribers(newValue: T | undefined, oldValue: T | undefined): void {
     const slots = this._slots;
-    if (!slots || slots.length === 0) return;
+    if (!slots || slots.size === 0) return;
 
     notifyAllSubscribers(
       slots,

@@ -111,7 +111,7 @@ export function shouldRecompute(flags: number, deps: DepBufferState): boolean {
   return (
     (flags & PATTERN_RECOMPUTE_NEEDED) !== 0 ||
     isBufferDirty(deps) ||
-    (!isAwaitingAsync && deps.slots.length === 0)
+    (!isAwaitingAsync && deps.slots.size === 0)
   );
 }
 
