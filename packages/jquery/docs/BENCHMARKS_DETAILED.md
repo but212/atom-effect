@@ -73,7 +73,7 @@
 
 | Scenario | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| Update 1 field in 10-field form (x10) | 1,309,078.73 | 0.0008 | 0.0000 |
-| Update 1 field in 100-field form (O(1) test, x10) | 1,330,032.67 | 0.0008 | 0.0000 |
+| Update 1 field in 10-field form (x10) | 1,309,078.73 | 0.0008 | 0.0008 |
+| Update 1 field in 100-field form (O(1) test, x10) | 1,330,032.67 | 0.0008 | 0.0008 |
 
 > **Technical Analysis**: The results indicate consistent performance across different form sizes. Field dispatch frequency remains stable at approximately 1.3M operations per second for both 10-field and 100-field forms, indicating O(1) scaling behavior for field updates.
