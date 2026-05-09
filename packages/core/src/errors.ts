@@ -205,7 +205,7 @@ export const ERROR_MESSAGES = {
   SCHEDULER_CALLBACK_MUST_BE_FUNCTION: 'Scheduler callback must be a function',
   SCHEDULER_END_BATCH_WITHOUT_START: 'endBatch() called without matching startBatch(). Ignoring.',
   BATCH_CALLBACK_MUST_BE_FUNCTION: 'Batch callback must be a function',
-} as const;
+} as const satisfies Record<string, string | ((...args: number[]) => string)>;
 
 /**
  * Normalizes an unknown error into the system's error hierarchy.

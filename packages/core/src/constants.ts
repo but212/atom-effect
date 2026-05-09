@@ -1,3 +1,5 @@
+import type { SchedulerConfig } from './types';
+
 /**
  * Logic: Bitspace Partitioning
  * Defines the starting bit index for different node types and states.
@@ -7,7 +9,7 @@ const OFFSET = {
   COMPUTED: 8,
   ASYNC: 16,
   PRIMITIVE: 24,
-} as const;
+} as const satisfies Record<string, number>;
 
 /**
  * Internal bitmask flags for `ReactiveNode` state management.
@@ -41,7 +43,7 @@ const FLAGS = {
 
   // Effect Specific (28-30)
   EFFECT_EXECUTING: 1 << (OFFSET.PRIMITIVE + 4),
-} as const;
+} as const satisfies Record<string, number>;
 
 /**
  * Compound bitmasks for multi-state validation and bulk resets.
@@ -79,7 +81,7 @@ export const AsyncState = Object.freeze({
   PENDING: 'pending',
   RESOLVED: 'resolved',
   REJECTED: 'rejected',
-});
+} satisfies Record<string, string>);
 
 /**
  * Logic: Shared State Interface
@@ -155,7 +157,7 @@ export const SCHEDULER_CONFIG = Object.freeze({
    * Threshold for shrinking the internal batch queue to release memory back to the heap.
    */
   BATCH_QUEUE_SHRINK_THRESHOLD: 1000,
-});
+} satisfies SchedulerConfig);
 
 /**
  * Optimization: V8 SMI (Small Integer) Limit
@@ -178,7 +180,7 @@ export const DEBUG_CONFIG = Object.freeze({
   EFFECT_FREQUENCY_WINDOW: 1000,
   /** The update count limit before triggering a loop warning. */
   LOOP_THRESHOLD: 100,
-});
+} satisfies Record<string, boolean | number>);
 
 /**
  * Sentinel values for epoch-based staleness tracking.

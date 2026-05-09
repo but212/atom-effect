@@ -177,7 +177,7 @@ export function depBufferPush(state: DepBufferState, item: DependencyLink): numb
  * Strategy: Table-based Validation
  * Dispatches to the appropriate checker using a bitmask index.
  */
-const DIRTY_CHECKERS: Record<number, (link: DependencyLink) => boolean> = {
+const DIRTY_CHECKERS = {
   // Atom path
   0: (link) => link.node.version !== link.version,
   // Computed path
@@ -197,7 +197,7 @@ const DIRTY_CHECKERS: Record<number, (link: DependencyLink) => boolean> = {
     }
     return dep.version !== link.version;
   },
-};
+} satisfies Record<number, (link: DependencyLink) => boolean>;
 
 /**
  * Logic: Dirty Propagation Check

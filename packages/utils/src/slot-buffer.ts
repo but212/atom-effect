@@ -1,7 +1,9 @@
 /**
  * Table for scan of the first free bit in a 4-bit mask.
  */
-const FIRST_FREE_INDEX = [0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, -1];
+const FIRST_FREE_INDEX = [
+  0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, -1,
+] as const satisfies readonly number[];
 const FAST_CAPACITY = 4;
 const FAST_MASK = 0b1111;
 

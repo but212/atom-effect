@@ -35,12 +35,12 @@ export type Result<T, E = Error> = Ok<T> | Err<E>;
  * Pre-allocated success result for void operations.
  * Logic: Shared instance reduces allocation overhead for common 'return Result.ok()' calls.
  */
-const VOID_SUCCESS: Result<void, never> = Object.freeze({
+const VOID_SUCCESS = Object.freeze({
   ok: true,
   value: undefined,
   error: undefined,
   [RESULT_SYMBOL]: true,
-} as const);
+} as const) satisfies Result<void, never>;
 
 /**
  * Normalizes a caught value into an Error object.

@@ -27,11 +27,11 @@ export type Option<T> = Some<T> | None;
 /**
  * A constant representing the absence of a value.
  */
-const NONE: None = Object.freeze({
+const NONE = Object.freeze({
   ok: false,
   value: undefined,
   [OPTION_SYMBOL]: true,
-} as const);
+} as const) satisfies None;
 
 /**
  * Utilities for creating and consuming Option types.

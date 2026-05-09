@@ -247,3 +247,22 @@ export interface DebugConfig {
   /** Generates a JSON snapshot of the dependency graph. */
   dumpGraph(): Record<string, unknown>[];
 }
+
+/**
+ * Global configuration parameters for the Scheduler.
+ * @internal
+ */
+export interface SchedulerConfig {
+  /** Prevents infinite loops or runaway effects from freezing the main thread. */
+  MAX_EXECUTIONS_PER_SECOND: number;
+  /** Detects and stops circular dependencies within a single microtask. */
+  MAX_EXECUTIONS_PER_EFFECT: number;
+  /** Limits the total workload per flush to maintain frame-rate stability. */
+  MAX_EXECUTIONS_PER_FLUSH: number;
+  /** Safety break for the drain-loop to prevent stack overflows or infinite flushing. */
+  MAX_FLUSH_ITERATIONS: number;
+  /** Ensures a minimum number of iterations are processed to allow for nested batched updates. */
+  MIN_FLUSH_ITERATIONS: number;
+  /** Threshold for shrinking the internal batch queue to release memory back to the heap. */
+  BATCH_QUEUE_SHRINK_THRESHOLD: number;
+}
