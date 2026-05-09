@@ -222,7 +222,33 @@ Lenses allow for the creation of reactive "views" into specific parts of an obje
 Creates a writable virtual atom pointing to a dot-path within a source atom. It uses structural sharing to ensure that only modified paths are updated, preserving reference equality for unrelated branches.
 
 - **Path Resolution Engine**: Supports fully typed dot-paths for deep object structures, including arrays (`user.items.0.name`) and open-ended dictionaries (`Record<string, T>`).
-- **Flexible Typing**: The setter and subscription callbacks accept broader types (`unknown`) to accommodate structural updates and dynamic keys.
+- **Supported Types**: In addition to plain objects and arrays, lenses now support **`Map`**, **`Set`**, and **custom Class instances**.
+- **Prototype Preservation**: Updates to class instances through a lens preserve the original prototype. This ensures that `instanceof` checks and class methods remain valid after updates.
+- **Optimization**: Multiple lenses pointing to the same source atom now share a single subscription, minimizing reactive overhead.
+
+#### Example: Classes and Maps
+
+```typescript
+class User {
+  constructor(public name: string) {}
+  greet() { return `Hi, ${this.name}`; }
+}
+
+const store = atom({ 
+  user: new User('Alice'),
+  metadata: new Map([['id', '123']])
+});
+
+// Class property lens
+const nameLens = atomLens(store, 'user.name');
+nameLens.value = 'Bob';
+console.log(store.value.user instanceof User); // true
+console.log(store.value.user.greet()); // "Hi, Bob"
+
+// Map lens (using dot-notation for keys)
+const idLens = atomLens(store, 'metadata.id');
+console.log(idLens.value); // "123"
+```
 
 ### `lensFor(atom)`
 

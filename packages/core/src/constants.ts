@@ -239,7 +239,8 @@ const DEV_SIGNALS = {
  * Indicates if the library is running in a development environment.
  * When true, additional validation, diagnostic warnings, and loop protections are active.
  */
-export const IS_DEV = Object.values(DEV_SIGNALS).some(Boolean);
+export const IS_DEV =
+  DEV_SIGNALS.node || DEV_SIGNALS.bundler || DEV_SIGNALS.esm || DEV_SIGNALS.runtime;
 
 declare const __DEV__: boolean;
 

@@ -1,4 +1,3 @@
-import { Result } from '@but212/atom-effect-utils';
 import type { Dependency, Subscriber } from '@/types';
 
 /**
@@ -84,20 +83,15 @@ export function notifySubscription<T>(
   if (subscription === null) return;
 
   // Logic: Failure Isolation
-  // Uses Result.tryCatch to ensure that a failing listener or subscriber
-  // does not interrupt the notification cycle for other nodes.
-  const result = Result.tryCatch(() => {
+  // Uses standard try/catch to avoid closure allocation overhead in the hot path.
+  // Ensures a failing listener or subscriber does not interrupt the notification cycle.
+  try {
     const { fn, sub } = subscription;
     if (fn !== undefined) fn(newValue, oldValue);
     if (sub !== undefined) sub.execute();
-  });
-
-  Result.match(result, {
-    ok: () => {},
-    err: (e) => {
-      console.error('[atom-effect] Subscriber failed:', e);
-    },
-  });
+  } catch (e) {
+    console.error('[atom-effect] Subscriber failed:', e);
+  }
 }
 
 /**

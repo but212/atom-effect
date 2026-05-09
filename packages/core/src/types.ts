@@ -5,139 +5,6 @@ import { BRAND } from '@/symbols';
 export type DependencyId = number;
 
 /**
- * Logic: Type-level Casting
- * Converts numeric string literals (e.g., "0") into numeric types (0).
- * Required for correct index signature resolution in lenses.
- *
- * @internal
- */
-export type StringKeyToNumber<S extends string> = S extends `${infer N extends number}` ? N : S;
-
-/**
- * Logic: Signature Detection
- * Identifies types with open-ended string indexers (Dictionaries).
- *
- * @internal
- */
-export type HasBroadStringKey<T> = string extends keyof T ? true : false;
-
-/**
- * Logic: Signature Detection
- * Identifies types with open-ended numeric indexers (Arrays/Collections).
- *
- * @internal
- */
-export type HasBroadNumberKey<T> = number extends keyof T ? true : false;
-
-/**
- * Logic: Value Extraction
- * Extracts the value type from a dictionary with a string index signature.
- *
- * @internal
- */
-export type StringIndexValue<T> = T extends Record<string, infer V> ? V : never;
-
-/**
- * Logic: Element Extraction
- * Extracts the inner type of an array or tuple.
- *
- * @internal
- */
-export type ArrayElement<T> = T extends readonly (infer U)[] ? U : never;
-
-/**
- * Constraint: Recursion Safety
- * The maximum depth for type-level path generation to prevent TS compiler exhaustion.
- */
-export type MaxDepth = 8;
-
-/**
- * Logic: Recursion Termination
- * Complex types that are treated as atomic units during path exploration.
- *
- * @internal
- */
-export type TerminalTypes =
-  | Date
-  | RegExp
-  | Map<unknown, unknown>
-  | Set<unknown>
-  | Promise<unknown>
-  | Function;
-
-/**
- * Generates a union of all possible dot-separated paths within a given type.
- *
- * Logic: Recursive Path Exploration
- * Explores object trees while excluding prototype methods and stopping at `TerminalTypes`.
- * Supports numeric indices for arrays and broad string keys for dictionaries.
- *
- * When to use:
- * - To provide IDE autocomplete and type safety for deep object lensing in `atomLens`.
- *
- * @example
- * ```typescript
- * interface User { profile: { id: number; tags: string[] } }
- * type UserPaths = Paths<User>; // "profile" | "profile.id" | "profile.tags" | "profile.tags.0"
- * ```
- */
-export type Paths<T, D extends unknown[] = []> = D['length'] extends MaxDepth
-  ? never
-  : T extends TerminalTypes
-    ? never
-    : T extends readonly unknown[]
-      ? NonNullable<ArrayElement<T>> extends object
-        ? `${number}` | `${number}.${Paths<NonNullable<ArrayElement<T>>, [...D, 1]>}`
-        : `${number}`
-      : T extends object
-        ? HasBroadStringKey<T> extends true
-          ? string
-          : {
-              [K in keyof T & (string | number)]: T[K] extends Function
-                ? never
-                : NonNullable<T[K]> extends object
-                  ? `${K}` | `${K}.${Paths<NonNullable<T[K]>, [...D, 1]>}`
-                  : `${K}`;
-            }[keyof T & (string | number)]
-        : never;
-
-/**
- * Resolves the type of the value located at a specific dot-path.
- *
- * Logic: Path Traversal
- * Recursively follows the path string to infer the final leaf type.
- * Handles nullable/optional properties using `NonNullable` to ensure the most specific type.
- *
- * When to use:
- * - To statically determine the return type of a lens atom.
- *
- * @example
- * ```typescript
- * type State = { data?: { value: string } };
- * type Val = PathValue<State, "data.value">; // string
- * ```
- */
-export type PathValue<T, P extends string> = P extends `${infer K}.${infer Rest}`
-  ? NonNullable<T> extends readonly unknown[]
-    ? K extends `${number}`
-      ? PathValue<NonNullable<ArrayElement<NonNullable<T>>>, Rest>
-      : never
-    : HasBroadStringKey<NonNullable<T>> extends true
-      ? PathValue<NonNullable<StringIndexValue<NonNullable<T>>>, Rest>
-      : StringKeyToNumber<K> extends keyof NonNullable<T>
-        ? PathValue<NonNullable<NonNullable<T>[StringKeyToNumber<K> & keyof NonNullable<T>]>, Rest>
-        : never
-  : NonNullable<T> extends readonly unknown[]
-    ? P extends `${number}`
-      ? NonNullable<ArrayElement<NonNullable<T>>>
-      : never
-    : HasBroadStringKey<NonNullable<T>> extends true
-      ? NonNullable<StringIndexValue<NonNullable<T>>>
-      : StringKeyToNumber<P> extends keyof NonNullable<T>
-        ? NonNullable<T>[StringKeyToNumber<P> & keyof NonNullable<T>]
-        : never;
-
-/**
  * Interface for objects requiring explicit resource release (timers, observers, listeners).
  */
 export interface Disposable {
@@ -161,63 +28,6 @@ export interface AtomOptions<T = unknown> {
   sync?: boolean;
   /** Custom comparator to prevent unnecessary updates if the value is structurally identical. */
   equal?: (a: T, b: T) => boolean;
-}
-
-/**
- * A read-only reactive container.
- *
- * When to use:
- * - To expose state while preventing external mutation (Unidirectional Data Flow).
- * - To serve as a base for computed or derived values.
- *
- * @example
- * ```typescript
- * function render(count: ReadonlyAtom<number>) {
- *   useEffect(() => count.subscribe(v => el.text = v), []);
- * }
- * ```
- */
-export interface ReadonlyAtom<T = unknown> extends Disposable {
-  /** @internal */
-  readonly [BRAND]?: number;
-
-  /**
-   * The current value.
-   * Logic: Accessing this property within a reactive context automatically
-   * registers the caller as a dependent.
-   */
-  readonly value: T;
-
-  /**
-   * Subscribes to value changes.
-   * @returns Cleanup function to terminate the subscription.
-   */
-  subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void;
-
-  /**
-   * Reads the current value without triggering reactive dependency tracking.
-   */
-  peek(): T;
-
-  /** Returns the active subscriber count for diagnostic purposes. */
-  subscriberCount(): number;
-}
-
-/**
- * A reactive container supporting read and write operations.
- *
- * When to use:
- * - As the primary source of truth for application state.
- *
- * @example
- * ```typescript
- * const count = atom(0);
- * count.value++; // Triggers downstream updates.
- * ```
- */
-export interface WritableAtom<T = unknown> extends ReadonlyAtom<T> {
-  /** Setting the value triggers a notification cycle for all dependents. */
-  value: T;
 }
 
 /**
@@ -262,6 +72,35 @@ export interface Dependency<T = unknown> {
 
   /** Current value. */
   readonly value: T;
+}
+
+/**
+ * A read-only reactive container.
+ *
+ * When to use:
+ * - To expose state while preventing external mutation (Unidirectional Data Flow).
+ * - To serve as a base for computed or derived values.
+ */
+export interface ReadonlyAtom<T = unknown> extends Dependency<T>, Disposable {
+  /** Returns the active subscriber count for diagnostic purposes. */
+  subscriberCount(): number;
+}
+
+/**
+ * A reactive container supporting read and write operations.
+ *
+ * When to use:
+ * - As the primary source of truth for application state.
+ *
+ * @example
+ * ```typescript
+ * const count = atom(0);
+ * count.value++; // Triggers downstream updates.
+ * ```
+ */
+export interface WritableAtom<T = unknown> extends ReadonlyAtom<T> {
+  /** Setting the value triggers a notification cycle for all dependents. */
+  value: T;
 }
 
 /** Configuration for derived computed atoms. */
@@ -403,6 +242,8 @@ export interface DebugConfig {
   trackUpdate(id: DependencyId, name?: string): void;
   /** Registers nodes for global graph snapshots. */
   registerNode(node: object & { id: DependencyId }): void;
+  /** Records evaluation failures during dirty checks. */
+  trackEvaluationFailure(id: DependencyId): void;
   /** Generates a JSON snapshot of the dependency graph. */
   dumpGraph(): Record<string, unknown>[];
 }

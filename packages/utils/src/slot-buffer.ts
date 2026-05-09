@@ -2,41 +2,58 @@
  * Table for scan of the first free bit in a 4-bit mask.
  */
 const FIRST_FREE_INDEX = [0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, -1];
+const FAST_CAPACITY = 4;
+const FAST_MASK = 0b1111;
 
 export class SlotBuffer<T> {
   /** Physical capacity including null gaps. Tracking this avoids unnecessary array scans. */
-  protected _count = 0;
+  protected _count: number;
   /** Actual number of non-null items stored. Used for early-exit in iterations. */
-  protected _actualCount = 0;
+  protected _actualCount: number;
 
   /**
    * Optimization: 4-bit mask for fast-lane (0-3) occupancy.
    * bit i = 1 means _si is occupied.
    */
-  protected _mask = 0;
+  protected _mask: number;
 
-  protected _s0: T | null = null;
-  protected _s1: T | null = null;
-  protected _s2: T | null = null;
-  protected _s3: T | null = null;
+  protected _s0: T | null;
+  protected _s1: T | null;
+  protected _s2: T | null;
+  protected _s3: T | null;
 
-  protected _overflow: (T | null)[] | null = null;
+  protected _overflow: (T | null)[] | null;
   /** Logic: Tracks indices of null holes in the overflow array for O(1) reuse. */
-  protected _freeIndices: number[] | null = null;
+  protected _freeIndices: number[] | null;
 
   /**
    * Internal guard to prevent structural changes during iteration.
    * Logic: If > 0, compact() is deferred.
    */
-  protected _lockCount = 0;
-  protected _pendingCompact = false;
+  protected _lockCount: number;
+  protected _pendingCompact: boolean;
+
+  constructor() {
+    // Hidden Class Optimization: Initialize all fields in the constructor to ensure a stable shape.
+    this._count = 0;
+    this._actualCount = 0;
+    this._mask = 0;
+    this._s0 = null;
+    this._s1 = null;
+    this._s2 = null;
+    this._s3 = null;
+    this._overflow = null;
+    this._freeIndices = null;
+    this._lockCount = 0;
+    this._pendingCompact = false;
+  }
 
   /**
    * Optimization: Find the first free fast slot (0-3) using bit scanning.
    * @returns Index 0-3, or -1 if all fast slots are occupied.
    */
   protected _firstFreeSlot(mask: number): number {
-    return FIRST_FREE_INDEX[mask & 0b1111]!;
+    return FIRST_FREE_INDEX[mask & FAST_MASK]!;
   }
 
   /**
@@ -44,7 +61,7 @@ export class SlotBuffer<T> {
    * Caution: Does not update _actualCount or _count. Use setAt for high-level operations.
    */
   protected _rawWrite(index: number, item: T | null): void {
-    if (index < 4) {
+    if (index < FAST_CAPACITY) {
       const bit = 1 << index;
       if (item === null) this._mask &= ~bit;
       else this._mask |= bit;
@@ -52,11 +69,10 @@ export class SlotBuffer<T> {
       if (index === 0) this._s0 = item;
       else if (index === 1) this._s1 = item;
       else if (index === 2) this._s2 = item;
-      else this._s3 = item;
+      else if (index === 3) this._s3 = item;
     } else {
-      if (this._overflow === null) this._overflow = [];
-      const ov = this._overflow;
-      ov[index - 4] = item;
+      if (!this._overflow) this._overflow = [];
+      this._overflow[index - FAST_CAPACITY] = item;
     }
   }
 
@@ -72,18 +88,17 @@ export class SlotBuffer<T> {
       else this._s3 = item;
       return fastIdx;
     }
-
-    if (this._overflow === null) this._overflow = [];
+    if (!this._overflow) this._overflow = [];
     const ov = this._overflow;
     const free = this._freeIndices;
     if (free?.length) {
       const reuseIdx = free.pop()!;
       ov[reuseIdx] = item;
-      return reuseIdx + 4;
+      return reuseIdx + FAST_CAPACITY;
     }
 
     ov.push(item);
-    return 3 + ov.length;
+    return FAST_CAPACITY - 1 + ov.length;
   }
 
   /** Swap the contents of two slots. */
@@ -110,7 +125,7 @@ export class SlotBuffer<T> {
    * @returns The item, or null if the slot is empty or out of bounds.
    */
   at(index: number): T | null {
-    if (index < 4) {
+    if (index < FAST_CAPACITY) {
       if (index === 0) return this._s0;
       if (index === 1) return this._s1;
       if (index === 2) return this._s2;
@@ -118,7 +133,7 @@ export class SlotBuffer<T> {
       return null;
     }
     const ov = this._overflow;
-    return ov ? (ov[index - 4] ?? null) : null;
+    return ov ? (ov[index - FAST_CAPACITY] ?? null) : null;
   }
 
   /**
@@ -149,14 +164,14 @@ export class SlotBuffer<T> {
     if (index !== this._count - 1) return;
     this._count--;
 
-    if (this._count > 4) {
+    if (this._count > FAST_CAPACITY) {
       const ov = this._overflow!;
-      while (this._count > 4 && ov[this._count - 5] == null) {
+      while (this._count > FAST_CAPACITY && ov[this._count - (FAST_CAPACITY + 1)] == null) {
         this._count--;
       }
     }
 
-    if (this._count <= 4) {
+    if (this._count <= FAST_CAPACITY) {
       // Logic: Calculates highest bit set in the mask (e.g., mask 0b1010 -> count 4).
       this._count = 32 - Math.clz32(this._mask);
     }
@@ -164,23 +179,16 @@ export class SlotBuffer<T> {
 
   /**
    * Efficiently clears all items from the given index to the end.
-   *
-   * @example
-   * // Keep only the first 2 items
-   * buffer.truncateFrom(2);
    */
   truncateFrom(index: number): void {
     const limit = this._count;
     if (index >= limit) return;
 
     for (let i = index; i < limit; i++) {
-      const item = this.at(i);
-      if (item !== null) {
-        this._actualCount--;
-      }
+      if (this.at(i) !== null) this._actualCount--;
     }
 
-    if (index < 4) {
+    if (index < FAST_CAPACITY) {
       // Optimization: Clear mask and fast slots in one go using bitwise AND.
       this._mask &= (1 << index) - 1;
       if (index <= 0) this._s0 = null;
@@ -189,7 +197,7 @@ export class SlotBuffer<T> {
       if (index <= 3) this._s3 = null;
       this._overflow = null;
     } else if (this._overflow) {
-      this._overflow.length = index - 4;
+      this._overflow.length = index - FAST_CAPACITY;
     }
 
     this._count = index;
@@ -216,30 +224,10 @@ export class SlotBuffer<T> {
     if (this._actualCount === 0) return false;
 
     const m = this._mask;
-    if (m & 0b0001 && this._s0 === item) {
-      this._rawWrite(0, null);
-      this._actualCount--;
-      this._shrinkPhysicalSizeFrom(0);
-      return true;
-    }
-    if (m & 0b0010 && this._s1 === item) {
-      this._rawWrite(1, null);
-      this._actualCount--;
-      this._shrinkPhysicalSizeFrom(1);
-      return true;
-    }
-    if (m & 0b0100 && this._s2 === item) {
-      this._rawWrite(2, null);
-      this._actualCount--;
-      this._shrinkPhysicalSizeFrom(2);
-      return true;
-    }
-    if (m & 0b1000 && this._s3 === item) {
-      this._rawWrite(3, null);
-      this._actualCount--;
-      this._shrinkPhysicalSizeFrom(3);
-      return true;
-    }
+    if (m & 0b0001 && this._s0 === item) return this._removeAt(0);
+    if (m & 0b0010 && this._s1 === item) return this._removeAt(1);
+    if (m & 0b0100 && this._s2 === item) return this._removeAt(2);
+    if (m & 0b1000 && this._s3 === item) return this._removeAt(3);
 
     const ov = this._overflow;
     if (ov) {
@@ -247,7 +235,7 @@ export class SlotBuffer<T> {
         if (ov[i] === item) {
           ov[i] = null;
           this._actualCount--;
-          this._shrinkPhysicalSizeFrom(i + 4);
+          this._shrinkPhysicalSizeFrom(i + FAST_CAPACITY);
           if (!this._freeIndices) this._freeIndices = [];
           this._freeIndices.push(i);
           return true;
@@ -255,6 +243,13 @@ export class SlotBuffer<T> {
       }
     }
     return false;
+  }
+
+  protected _removeAt(index: number): boolean {
+    this._rawWrite(index, null);
+    this._actualCount--;
+    this._shrinkPhysicalSizeFrom(index);
+    return true;
   }
 
   /** Return true if the buffer contains the given item. */
@@ -300,7 +295,6 @@ export class SlotBuffer<T> {
 
   /**
    * Returns true if at least one item satisfies the predicate.
-   * Optimization: Uses early-exit and bitmask to avoid null checks.
    */
   some(predicate: (item: T) => boolean): boolean {
     if (this._actualCount === 0) return false;
@@ -323,7 +317,6 @@ export class SlotBuffer<T> {
 
   /**
    * Removes all gaps and shifts items toward the front.
-   * Logic: Execution is deferred if the buffer is currently locked.
    */
   compact(): void {
     if (this._lockCount > 0) {
@@ -343,40 +336,12 @@ export class SlotBuffer<T> {
     let writeIdx = 0;
     const ov = this._overflow;
 
-    // Optimization: Inlined index logic to avoid redundant branches and at() calls
     for (let readIdx = 0; readIdx < currentCount; readIdx++) {
-      let item: T | null;
-      if (readIdx < 4) {
-        item =
-          readIdx === 0 ? this._s0 : readIdx === 1 ? this._s1 : readIdx === 2 ? this._s2 : this._s3;
-      } else {
-        item = ov![readIdx - 4] ?? null;
-      }
-
+      const item = this.at(readIdx);
       if (item !== null) {
         if (readIdx !== writeIdx) {
-          // Write non-null item to new position
-          if (writeIdx < 4) {
-            this._mask |= 1 << writeIdx;
-            if (writeIdx === 0) this._s0 = item;
-            else if (writeIdx === 1) this._s1 = item;
-            else if (writeIdx === 2) this._s2 = item;
-            else this._s3 = item;
-          } else {
-            if (this._overflow === null) this._overflow = [];
-            this._overflow[writeIdx - 4] = item;
-          }
-
-          // Clear old slot
-          if (readIdx < 4) {
-            this._mask &= ~(1 << readIdx);
-            if (readIdx === 0) this._s0 = null;
-            else if (readIdx === 1) this._s1 = null;
-            else if (readIdx === 2) this._s2 = null;
-            else this._s3 = null;
-          } else {
-            ov![readIdx - 4] = null;
-          }
+          this._rawWrite(writeIdx, item);
+          this._rawWrite(readIdx, null);
         }
         if (++writeIdx === actual) break;
       }
@@ -384,24 +349,19 @@ export class SlotBuffer<T> {
 
     this._count = actual;
     if (ov !== null) {
-      if (writeIdx <= 4) this._overflow = null;
-      else ov.length = writeIdx - 4;
+      if (writeIdx <= FAST_CAPACITY) this._overflow = null;
+      else ov.length = writeIdx - FAST_CAPACITY;
     }
     this._freeIndices = null;
     this._pendingCompact = false;
   }
 
-  /**
-   * Prevents compaction until unlock() is called.
-   * Logic: Used to protect the buffer during iteration.
-   */
+  /** Iteration lock. */
   lock(): void {
     this._lockCount++;
   }
 
-  /**
-   * Decrements the lock counter and performs deferred compaction if needed.
-   */
+  /** Iteration unlock. */
   unlock(): void {
     if (--this._lockCount === 0 && this._pendingCompact) {
       this.compact();
@@ -416,17 +376,15 @@ export class SlotBuffer<T> {
     this._mask = 0;
     this._overflow = null;
     this._freeIndices = null;
+    this._pendingCompact = false;
   }
 
-  /** Alias for `clear`; kept for API compatibility. */
+  /** Alias for `clear`. */
   dispose(): void {
     this.clear();
   }
 
-  /**
-   * Indicates whether the buffer is currently locked.
-   * @internal
-   */
+  /** @internal */
   get isLocked(): boolean {
     return this._lockCount > 0;
   }

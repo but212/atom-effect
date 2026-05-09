@@ -13,9 +13,9 @@ The high-level API (`atom`, `computed`, `effect`) is built upon a unified intern
   - **Push (Notification Phase)**: When a source atom changes, it propagates a "dirty" signal to its immediate subscribers. This phase marks nodes for re-evaluation without performing calculations.
   - **Pull (Evaluation Phase)**: When a node's value is accessed or an effect executes, it performs a "pull" to validate the versions of its dependencies, triggering re-computation only if necessary.
 - **Scheduler and Coalescing**: Effects do not execute immediately upon state change. Instead, they are queued in a **Scheduler** that utilizes a **Flattened Buffer Layout** (Active, Standby, Batch) managed by a data-centric **`SchedulerState`**. This layout is designed for better cache locality and reduced indirection overhead, utilizing a flat loop to coalesce multiple updates into a single execution cycle.
-- **Functional Tracking**: Dependency tracking is managed via a functional **`TrackingContext`** state. This allows for lightweight stack operations and deterministic recovery during nested evaluations or error scenarios.
+- **Functional Tracking**: Dependency tracking is managed via a functional **`TrackingContext`** state. This allows for lightweight stack operations and deterministic recovery during nested evaluations or error scenarios. While functional `Option` and `Result` patterns are available for utility logic, the core engine utilizes native `try/catch` and `null/undefined` in high-frequency hot paths to minimize allocation overhead.
 - **SMI Optimization**: The engine explicitly ensures that hot-path integers (versions, epochs, session IDs) stay within V8's **Small Integer (SMI)** range (31-bit signed). This prevents performance-degrading transitions from SMIs to heap-allocated doubles (HeapNumbers).
-- **Small Vector Optimization (SVO)**: To minimize heap allocations and GC pressure, the engine uses inline slots (`_s0` through `_s3`) tracked by a **4-bit occupancy mask**. This allows for constant-time availability checks and O(1) slot discovery via bit-scanning before falling back to dynamic arrays. These buffers implement a standardized **Array-like API** (`length`, `at()`, `push()`) for consistent, high-performance access.
+- **Small Vector Optimization (SVO)**: To minimize heap allocations and GC pressure, the engine uses inline slots (`_s0` through `_s3`) tracked by a **4-bit occupancy mask**. These buffers implement a standardized **Array-like API** (`length`, `at()`, `push()`) and use explicit constructor initialization to ensure V8 Hidden Class stability, preventing polymorphic transitions during high-frequency slot discovery.
 - **Bitwise Branding**: Primitives are identified using a bitwise mask (`BrandFlags`) stored on a single `BRAND` symbol. This allows for constant-time type identification without multiple property lookups.
 - **Isolated Debug Metadata**: Debug information such as IDs and names are attached via non-enumerable symbols, ensuring that debugging features do not interfere with object iteration, serialization, or production performance.
 
@@ -116,9 +116,9 @@ The system implements hard limits to prevent runaway reactive cycles:
 
 Lenses provide reactive access to nested properties within monolithic state objects.
 
-- **Structural Sharing**: When updating a value through a lens, only the objects along the modified path are cloned. Unrelated branches maintain reference equality (`===`), preventing unnecessary downstream updates.
+- **Structural Sharing**: When updating a value through a lens, only the objects along the modified path are cloned. Unrelated branches maintain reference equality (`===`), preventing unnecessary downstream updates. The engine explicitly handles Arrays, Maps, Sets, and custom Class prototypes, ensuring structural integrity and prototype preservation.
 - **Security**: The `setDeepValue` utility blocks access to `__proto__`, `constructor`, and `prototype` to prevent prototype pollution.
-- **Type Safety**: Recursive utility types (`Paths`, `PathValue`) provide IDE autocompletion up to 8 levels deep. The engine explicitly handles arrays and broad string/number dictionaries, ensuring type stability across complex, dynamic state structures.
+- **Type Safety**: Recursive utility types (`Paths`, `PathValue`) provide IDE autocompletion up to 8 levels deep.
 
 ---
 

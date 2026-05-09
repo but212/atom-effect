@@ -1,6 +1,7 @@
-import { Result, SlotBuffer } from '@but212/atom-effect-utils';
-import { IS_DEV } from '@/constants';
+import { SlotBuffer } from '@but212/atom-effect-utils';
+import { COMPUTED_STATE_FLAGS, IS_DEV } from '@/constants';
 import type { Dependency } from '@/types';
+import { debug } from '@/utils/debug';
 import type { DependencyLink } from './tracking';
 
 /** @internal */
@@ -177,26 +178,23 @@ export function depBufferPush(state: DepBufferState, item: DependencyLink): numb
  * Dispatches to the appropriate checker using a bitmask index.
  */
 const DIRTY_CHECKERS: Record<number, (link: DependencyLink) => boolean> = {
-  // Atom path (IS_COMPUTED bit 1 is 0)
+  // Atom path
   0: (link) => link.node.version !== link.version,
-  // Computed path (IS_COMPUTED bit 1 is 2)
-  2: (link) => {
+  // Computed path
+  [COMPUTED_STATE_FLAGS.IS_COMPUTED]: (link) => {
     const dep = link.node;
-    let res: Result<unknown, Error>;
     try {
-      res = Result.ok(dep.value);
-    } catch (e) {
-      res = Result.err(e as Error);
+      // Trigger evaluation if dirty by accessing value.
+      // This is the core of the recursive "pull" strategy.
+      dep.value;
+    } catch {
+      // Logic: Silencing transient failures
+      // If evaluation fails during a dirty check, we catch it here to prevent
+      // interrupting the propagation cycle.
+      if (IS_DEV) {
+        debug.trackEvaluationFailure(dep.id);
+      }
     }
-
-    Result.match(res, {
-      ok: () => {},
-      err: () => {
-        if (IS_DEV) {
-          console.warn(`[atom-effect] Dependency #${dep.id} error in check`);
-        }
-      },
-    });
     return dep.version !== link.version;
   },
 };
@@ -215,8 +213,8 @@ export function isBufferDirty(state: DepBufferState): boolean {
     const link = slots.at(i);
     // Guard clause to reduce nesting and improve branch prediction
     if (!link) continue;
-    // IS_COMPUTED = 2 (bit 1)
-    if (checkers[link.node.flags & 2]!(link)) return true;
+    // IS_COMPUTED bit check
+    if (checkers[link.node.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED]!(link)) return true;
   }
   return false;
 }
@@ -242,8 +240,8 @@ export function isBufferShallowDirty(state: DepBufferState): boolean {
     const dep = link.node;
     const version = dep.version;
     // Check for explicit version drift (already pulled changes)
-    // or pending changes (push-based dirty signals, 0x0100 is COMPUTED.DIRTY)
-    if (version !== link.version || (dep.flags & 0x0100) !== 0) return true;
+    // or pending changes (push-based dirty signals)
+    if (version !== link.version || (dep.flags & COMPUTED_STATE_FLAGS.DIRTY) !== 0) return true;
   }
   return false;
 }
@@ -267,22 +265,13 @@ export function depBufferTruncateFrom(state: DepBufferState, index: number): voi
     if (link) {
       const unsub = link.unsub;
       if (unsub) {
-        let unsubResult: Result<void, Error>;
         try {
           unsub();
-          unsubResult = Result.ok(undefined);
         } catch (e) {
-          unsubResult = Result.err(e as Error);
+          if (IS_DEV) {
+            console.error('[atom-effect] Unsubscribe failed:', e);
+          }
         }
-
-        Result.match(unsubResult, {
-          ok: () => {},
-          err: (e) => {
-            if (process.env.NODE_ENV !== 'production') {
-              console.error('[atom-effect] Unsubscribe failed:', e);
-            }
-          },
-        });
       }
     }
   }

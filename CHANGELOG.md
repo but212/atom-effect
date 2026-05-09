@@ -6,11 +6,10 @@
 
 #### Changed
 
-- Refactored `Scheduler` and `TrackingContext` to a functional approach using data-centric state objects and a triple-buffer system to manage nested updates.
-- Optimized internal counters, IDs, and versions using V8 SMI (Small Integer) to reduce heap allocation and improve performance.
-- Enhanced `ReactiveNode` notification loop and `Effect` budget management for better cache locality.
-- Unified asynchronous drift detection into the `isDirty()` check, replacing DJB2 hashing for stale promise tracking.
-- Adopted functional `Option` and `Result` patterns for internal state management and error handling.
+- Enhanced `atomLens` and `setDeepValue` to support `Map`, `Set`, and custom class instances with full prototype preservation.
+- Introduced `trackEvaluationFailure` in the debug system to record failures during dependency dirty checks.
+- Improved loop detection with warning deduplication to prevent console clutter.
+- Moved `Paths` and `PathValue` to `core/lens.ts` for consistent module structure.
 
 #### Security
 
@@ -42,7 +41,7 @@
 
 #### Breaking Changes
 
-- Increased minimum jQuery version requirement to `4.0.0` for consistent `MutationObserver` behavior.
+- Increased minimum jQuery version requirement to `4.0.0`
 
 #### Added
 

@@ -14,6 +14,7 @@ type ResultBase = {
 export type Ok<T> = ResultBase & {
   readonly ok: true;
   readonly value: T;
+  readonly error: undefined;
 };
 
 /**
@@ -21,6 +22,7 @@ export type Ok<T> = ResultBase & {
  */
 export type Err<E> = ResultBase & {
   readonly ok: false;
+  readonly value: undefined;
   readonly error: E;
 };
 
@@ -36,6 +38,7 @@ export type Result<T, E = Error> = Ok<T> | Err<E>;
 const VOID_SUCCESS: Result<void, never> = Object.freeze({
   ok: true,
   value: undefined,
+  error: undefined,
   [RESULT_SYMBOL]: true,
 } as const);
 
@@ -57,10 +60,11 @@ export const Result = {
    * Creates a successful Result.
    */
   ok: <T, E = never>(value: T): Result<T, E> => {
-    if ((value as unknown) === undefined) return VOID_SUCCESS as Result<T, E>;
+    if ((value as unknown) === undefined) return VOID_SUCCESS as unknown as Result<T, E>;
     return {
       ok: true,
       value,
+      error: undefined,
       [RESULT_SYMBOL]: true,
     } as Ok<T>;
   },
@@ -71,6 +75,7 @@ export const Result = {
   err: <T = never, E = Error>(error: E): Result<T, E> =>
     ({
       ok: false,
+      value: undefined,
       error,
       [RESULT_SYMBOL]: true,
     }) as Err<E>,
@@ -124,10 +129,8 @@ export const Result = {
    */
   map: <T, E, U>(res: Result<T, E>, fn: (val: T) => U): Result<U, E> => {
     if (!res.ok) return res as unknown as Result<U, E>;
-    const newValue = fn(res.value);
-    return (newValue as unknown) === res.value
-      ? (res as unknown as Result<U, E>)
-      : Result.ok(newValue);
+    const next = fn(res.value);
+    return (next as unknown) === res.value ? (res as unknown as Result<U, E>) : Result.ok(next);
   },
 
   /**

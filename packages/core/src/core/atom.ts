@@ -6,20 +6,6 @@ import { debug } from '@/utils/debug';
 import { nextVersion, scheduler, schedulerIsBatching, schedulerSchedule } from './scheduler';
 import { trackingContext } from './tracking';
 
-/** @internal */
-const NOTIFY_ACTION = {
-  FLUSH: 0,
-  SCHEDULE: 1,
-} as const;
-
-/** @internal */
-const STRATEGY_TABLE = [
-  NOTIFY_ACTION.SCHEDULE, // !sync, !batching (0)
-  NOTIFY_ACTION.SCHEDULE, // !sync, batching  (1)
-  NOTIFY_ACTION.FLUSH, // sync, !batching  (2)
-  NOTIFY_ACTION.SCHEDULE, // sync, batching   (3)
-] as const;
-
 /**
  * Internal implementation of a {@link WritableAtom}.
  *
@@ -89,10 +75,7 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
     this._pendingOldValue = oldValue;
     this.flags |= SCHED;
 
-    const syncBit = flags & ATOM_STATE_FLAGS.SYNC ? 2 : 0;
-    const batchBit = schedulerIsBatching(scheduler) ? 1 : 0;
-
-    if (STRATEGY_TABLE[syncBit | batchBit] === NOTIFY_ACTION.FLUSH) {
+    if ((flags & ATOM_STATE_FLAGS.SYNC) !== 0 && !schedulerIsBatching(scheduler)) {
       if (!this.isNotifying) this._flushNotifications();
     } else {
       schedulerSchedule(scheduler, this);

@@ -1,18 +1,8 @@
-import { Option } from '@but212/atom-effect-utils';
 import { DEBUG_CONFIG, IS_DEV } from '@/constants';
 import { BRAND, BrandFlags } from '@/symbols';
 import type { DebugConfig, DependencyId } from '@/types';
 
 // ── Debug Symbols ────────────────────────────────────────────────────────
-
-/**
- * Internal metadata keys used for debugging.
- * Stored as symbols to guarantee zero collision with user-defined properties.
- */
-
-export const DEBUG_NAME = Symbol('AtomEffect.DebugName');
-export const DEBUG_ID = Symbol('AtomEffect.Id');
-export const DEBUG_TYPE = Symbol('AtomEffect.Type');
 
 /** Sentinel value used to distinguish between 'undefined' and 'not set'. */
 export const NO_DEFAULT_VALUE = Symbol('AtomEffect.NoDefaultValue');
@@ -77,6 +67,9 @@ class DevDebugController implements DebugConfig {
 
   private _cleanupScheduled = false;
 
+  private _failedEvaluations = new Set<DependencyId>();
+  private _failureCleanupScheduled = false;
+
   public warn(cond: boolean, msg: string): void {
     if (this.enabled && cond) {
       console.warn(`${PREFIX} ${msg}`);
@@ -88,13 +81,7 @@ class DevDebugController implements DebugConfig {
    */
   public registerNode(node: object & { id: DependencyId }): void {
     const id = node.id;
-    let entry = this._registry.get(id);
-
-    if (!entry) {
-      const type = this.getDebugType(node) ?? 'unknown';
-      entry = { name: `${type}_${id}`, type };
-      this._registry.set(id, entry);
-    }
+    const entry = this._getOrCreateMetadata(node, id);
 
     entry.ref = new WeakRef(node);
     this._finalizer.register(node, id);
@@ -115,10 +102,9 @@ class DevDebugController implements DebugConfig {
       entry.type = type;
     }
 
-    if (this.trackGraph) {
-      entry.ref = new WeakRef(obj);
-      this._finalizer.register(obj, id);
-    }
+    // Always register for finalization if we are keeping metadata to avoid memory leaks.
+    // This also ensures entry.ref is populated for consistent dumpGraph() behavior.
+    this.registerNode(obj as object & { id: DependencyId });
   }
 
   /**
@@ -132,14 +118,16 @@ class DevDebugController implements DebugConfig {
 
     const counts = this._updateCounts;
     const count = (counts.get(id) || 0) + 1;
+    counts.set(id, count);
 
     if (count > this._threshold) {
-      console.warn(
-        `${PREFIX} Infinite loop detected for ${name ?? `dependency ${id}`}. ` +
-          `Detected ${count} updates within a single execution scope, exceeding the threshold of ${this._threshold}.`
-      );
-    } else {
-      counts.set(id, count);
+      // Only warn once per cycle to prevent console spam.
+      if (count === this._threshold + 1) {
+        console.warn(
+          `${PREFIX} Infinite loop detected for ${name ?? `dependency ${id}`}. ` +
+            `Detected ${count} updates within a single execution scope, exceeding the threshold of ${this._threshold}.`
+        );
+      }
     }
 
     if (!this._cleanupScheduled) {
@@ -155,6 +143,27 @@ class DevDebugController implements DebugConfig {
   };
 
   /**
+   * Logic: Warning Deduplication
+   * Records evaluation failures during dirty checks and warns once per dependency per cycle.
+   */
+  public trackEvaluationFailure(id: DependencyId): void {
+    if (!this.enabled || this._failedEvaluations.has(id)) return;
+
+    this._failedEvaluations.add(id);
+    console.warn(`${PREFIX} Dependency #${id} evaluation failed during dirty check.`);
+
+    if (!this._failureCleanupScheduled) {
+      this._failureCleanupScheduled = true;
+      queueMicrotask(this._resetFailedEvaluations);
+    }
+  }
+
+  private _resetFailedEvaluations = (): void => {
+    this._failedEvaluations.clear();
+    this._failureCleanupScheduled = false;
+  };
+
+  /**
    * Captures the current state of all active reactive nodes.
    *
    * Performance: O(N) where N is the number of live nodes.
@@ -167,26 +176,16 @@ class DevDebugController implements DebugConfig {
     const result: Record<string, unknown>[] = [];
     const counts = this._updateCounts;
 
-    if (!this.trackGraph) {
-      for (const [id, meta] of registry) {
-        result.push({
-          id,
-          name: meta.name,
-          type: meta.type,
-          updateCount: counts.get(id) ?? 0,
-        });
+    for (const [id, meta] of registry) {
+      if (this.trackGraph && meta.ref?.deref() === undefined) {
+        continue;
       }
-    } else {
-      for (const [id, meta] of registry) {
-        if (meta.ref?.deref() !== undefined) {
-          result.push({
-            id,
-            name: meta.name,
-            type: meta.type,
-            updateCount: counts.get(id) ?? 0,
-          });
-        }
-      }
+      result.push({
+        id,
+        name: meta.name,
+        type: meta.type,
+        updateCount: counts.get(id) ?? 0,
+      });
     }
     return result;
   }
@@ -199,25 +198,34 @@ class DevDebugController implements DebugConfig {
     const meta = this._registry.get(id);
     if (meta) return meta.name;
 
-    const typeOpt = this.getDebugTypeInternal(obj);
-    return Option.toUndefined(Option.map(typeOpt, (type) => `${type}_${id}`));
+    const type = this._getTypeFromBrand(obj) ?? 'unknown';
+    return `${type}_${id}`;
   }
 
   public getDebugType(obj: object | null | undefined): string | undefined {
-    return Option.toUndefined(this.getDebugTypeInternal(obj));
-  }
-
-  private getDebugTypeInternal(obj: object | null | undefined): Option<string> {
-    if (!this.enabled || !obj) return Option.none;
+    if (!this.enabled || !obj) return undefined;
     const id = (obj as { id?: DependencyId }).id;
-    if (id === undefined) return Option.none;
+    if (id === undefined) return undefined;
 
     const meta = this._registry.get(id);
-    if (meta) return Option.some(meta.type);
+    if (meta) return meta.type;
 
+    return this._getTypeFromBrand(obj);
+  }
+
+  private _getOrCreateMetadata(obj: object, id: DependencyId): NodeMetadata {
+    let entry = this._registry.get(id);
+    if (!entry) {
+      const type = this._getTypeFromBrand(obj) ?? 'unknown';
+      entry = { name: `${type}_${id}`, type };
+      this._registry.set(id, entry);
+    }
+    return entry;
+  }
+
+  private _getTypeFromBrand(obj: object): string | undefined {
     const brand = (obj as { [BRAND]?: number })[BRAND];
-    const type = brand !== undefined ? TYPE_BY_BRAND[brand & BRAND_MASK] : undefined;
-    return Option.fromNullable(type);
+    return brand !== undefined ? TYPE_BY_BRAND[brand & BRAND_MASK] : undefined;
   }
 }
 
@@ -236,6 +244,7 @@ const ProdDebugController: DebugConfig = {
   dumpGraph: () => [],
   getDebugName: () => undefined,
   getDebugType: () => undefined,
+  trackEvaluationFailure: noop,
 };
 
 /**

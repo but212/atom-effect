@@ -1,4 +1,3 @@
-import { Result } from '@but212/atom-effect-utils';
 import { IS_DEV, SCHEDULER_CONFIG, SMI_MAX } from '@/constants';
 import { ERROR_MESSAGES, SchedulerError } from '@/errors';
 import { resetTrackingContext, trackingContext } from './tracking';
@@ -177,17 +176,12 @@ export function schedulerProcessQueue(state: SchedulerState, nextEpoch: () => nu
 
     // Logic: Failure Isolation.
     // Errors in one job should not prevent other jobs from executing.
-    const result = Result.tryCatch(() => {
+    try {
       if (typeof job === 'function') job();
       else job.execute();
-    });
-
-    Result.match(result, {
-      ok: () => {},
-      err: (e) => {
-        console.error(new SchedulerError('Error occurred during scheduler execution', e));
-      },
-    });
+    } catch (e) {
+      console.error(new SchedulerError('Error occurred during scheduler execution', e));
+    }
   }
 }
 
@@ -410,8 +404,7 @@ export function batch<T>(fn: () => T): T {
 
   schedulerStartBatch(scheduler);
   try {
-    const result = Result.tryCatch(fn);
-    return Result.unwrap(result);
+    return fn();
   } finally {
     schedulerEndBatch(scheduler);
   }
@@ -425,8 +418,7 @@ export function batch<T>(fn: () => T): T {
 export function runInFlushScope<T>(fn: () => T): T | undefined {
   const started = startFlush();
   try {
-    const result = Result.tryCatch(fn);
-    return Result.unwrap(result);
+    return fn();
   } finally {
     if (started) endFlush();
   }
@@ -452,11 +444,12 @@ export function aeNextTick(fn?: () => void): Promise<void> {
   if (fn) {
     return new Promise<void>((resolve, reject) => {
       schedulerSchedule(scheduler, () => {
-        const result = Result.tryCatch(fn);
-        Result.match(result, {
-          ok: () => resolve(),
-          err: (err) => reject(err),
-        });
+        try {
+          fn();
+          resolve();
+        } catch (err) {
+          reject(err);
+        }
       });
     });
   }
