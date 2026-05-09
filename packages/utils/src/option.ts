@@ -1,22 +1,25 @@
 import { OPTION_SYMBOL } from './symbols';
+import type { Prettify } from './types';
 
 /**
- * Represents a present value.
+ * Logic: Present Value
+ * Represents a state where a value of type T is guaranteed to exist.
  */
-export type Some<T> = {
+export type Some<T> = Prettify<{
   readonly ok: true;
   readonly value: T;
   readonly [OPTION_SYMBOL]: true;
-};
+}>;
 
 /**
- * Represents the absence of a value.
+ * Logic: Absent Value
+ * Represents a state where no value is present.
  */
-export type None = {
+export type None = Prettify<{
   readonly ok: false;
   readonly value: undefined;
   readonly [OPTION_SYMBOL]: true;
-};
+}>;
 
 /**
  * A discriminated union representing either a value ({@link Some})

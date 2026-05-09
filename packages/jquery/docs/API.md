@@ -227,7 +227,7 @@ Two-way binding for `<input>`, `<textarea>`, and `<select>`.
 
 - **Strategy Specialization**: Resolves optimized read/write strategies at construction time (e.g., for `multipleSelect` vs standard inputs). This ensures monomorphic execution paths and avoids feature-detection branching in hot paths.
 - **IME Stability**: Monitors composition states to prevent external updates from interrupting character entry (e.g., for CJK languages).
-- **Cursor Preservation**: Maintains selection range and focus stability during reactive updates using a selection buffer and **Result-based execution** (e.g., `Result.unwrapOr`) to handle potential DOM exceptions through predefined fallbacks.
+- **Cursor Preservation**: Maintains selection range and focus stability during reactive updates using a selection buffer.
 - **Recursion Control**: Uses internal bitmask flags to prevent infinite update cycles between the DOM and the reactive graph.
 
 Natively supports `<select multiple>` as a `string[]` array.
@@ -411,6 +411,25 @@ Creates a two-way reactive lens for a specific property path on an object-based 
 ```javascript
 const nameLens = $.atomLens(store, 'user.profile.name');
 $('#name-input').atomVal(nameLens);
+```
+
+### `$.mergeAtoms(...atoms)`
+
+Combines multiple object-based atoms into a single read-only computed atom with a flattened type.
+
+```javascript
+const a = $.atom({ x: 1 });
+const b = $.atom({ y: 2 });
+const combined = $.mergeAtoms(a, b);
+// combined.value is { x: number, y: number }
+```
+
+### `$.mergeLenses(...lenses)`
+
+Merges multiple writable lenses into a single unified lens. Getting the value returns a merged object, and setting the value propagates changes back to the source lenses.
+
+```javascript
+const combinedLens = $.mergeLenses(lensA, lensB);
 ```
 
 ### `$.batch(fn)`

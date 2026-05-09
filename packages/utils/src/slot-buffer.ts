@@ -1,4 +1,5 @@
 /**
+ * Logic: Bitwise Occupancy Table
  * Table for scan of the first free bit in a 4-bit mask.
  */
 const FIRST_FREE_INDEX = [

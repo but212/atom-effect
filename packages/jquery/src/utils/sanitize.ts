@@ -217,15 +217,21 @@ const Guard = {
 /**
  * @internal
  * Logic: Core Sanitization Engine
- * Shared internal implementation for recursive and fragment-based sanitization.
+ * Implementation for recursive and fragment-based sanitization.
+ *
+ * Security: Re-entrancy
+ * Does not use global singletons for parser/serializer to ensure that
+ * recursive calls (e.g., for srcdoc) do not corrupt the state of
+ * outer sanitization cycles.
  */
 function _sanitize(html: string, policy: SanitizationPolicy): string {
   const parser = DOM.createElement<HTMLTemplateElement>('template');
-  parser.innerHTML = html;
+  const serializer = document.createElement('div');
 
+  parser.innerHTML = html;
   walkTree(parser.content, policy);
 
-  const serializer = document.createElement('div');
+  serializer.innerHTML = '';
   serializer.appendChild(parser.content);
   return serializer.innerHTML;
 }

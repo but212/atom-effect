@@ -31,21 +31,18 @@ interface NavSpec {
 }
 
 /** @internal Maps navigation types to History API methods. */
-const NAV_SPECS: Record<NavigationType, NavSpec> = {
+const NAV_SPECS = {
   push: { historyMethod: 'pushState', isInitial: false },
   replace: { historyMethod: 'replaceState', isInitial: false },
   init: { historyMethod: null, isInitial: true },
   pop: { historyMethod: null, isInitial: false },
-};
+} as const satisfies Record<NavigationType, NavSpec>;
 
 /**
  * Logic: Data-to-DOM Registry
  * Defines how specific parts of the fetched content state are applied to the browser environment.
  */
-const SYNC_REGISTRY: Array<{
-  key: keyof ContentState;
-  apply: (win: Window, $target: JQuery, value: unknown, options: { syncTitle: boolean }) => void;
-}> = [
+const SYNC_REGISTRY = [
   {
     key: 'title',
     apply: (win, _, val, opts) => {
@@ -64,7 +61,10 @@ const SYNC_REGISTRY: Array<{
     },
   },
   { key: 'html', apply: (_, $target, val) => $target.html(val as string) },
-];
+] as const satisfies Array<{
+  key: keyof ContentState;
+  apply: (win: Window, $target: JQuery, value: unknown, options: { syncTitle: boolean }) => void;
+}>;
 
 /**
  * Logic: DOM Reconciliation

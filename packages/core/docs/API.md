@@ -256,6 +256,50 @@ A factory utility for creating multiple lenses bound to the same source atom.
 
 ---
 
+## State Composition
+
+Utilities for combining multiple reactive nodes into unified object structures.
+
+### `mergeAtoms(...atoms)`
+
+Combines multiple object-based atoms or computeds into a single read-only computed atom with a flattened type.
+
+- **Flattening**: If source atoms have overlapping keys, the last one wins.
+- **Reactivity**: The merged atom automatically updates when any of the source nodes change.
+
+```typescript
+const a = atom({ x: 1 });
+const b = atom({ y: 2 });
+const combined = mergeAtoms(a, b);
+
+console.log(combined.value); // { x: 1, y: 2 }
+```
+
+### `mergeLenses(...lenses)`
+
+Merges multiple writable lenses into a single unified writable atom (lens) with a flattened type.
+
+- **Two-way Binding**: Updates to the merged object's properties are propagated back to the respective source atoms.
+- **Noise Filtering**: Uses deep equality checking to prevent redundant notifications when the merged result hasn't effectively changed.
+- **Subscription Sharing**: Efficiently manages underlying subscriptions, ensuring source atoms are only tracked when the merged lens is active.
+
+```typescript
+const user = atom({ profile: { name: 'Alice' }, settings: { age: 25 } });
+const nameL = atomLens(user, 'profile');
+const ageL = atomLens(user, 'settings');
+
+const combined = mergeLenses(nameL, ageL);
+
+// Read merged state
+console.log(combined.value); // { name: 'Alice', age: 25 }
+
+// Unified write
+combined.value = { name: 'Bob', age: 30 };
+console.log(user.value.profile.name); // "Bob"
+```
+
+---
+
 ## Debugging Utilities
 
 The `runtimeDebug` object (exported from the core) provides tools for inspecting the reactive graph. In production, these are typically no-op functions unless explicitly enabled.

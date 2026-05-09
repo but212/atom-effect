@@ -1,5 +1,4 @@
 import { effect, untracked } from '@but212/atom-effect';
-import { Option } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { registry } from '@/core/registry';
 import type { EffectObject, ListKey, ListKeyFn, ListOptions, ReadonlyAtom } from '@/types';
@@ -131,22 +130,23 @@ function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptio
 }
 
 function setupEvents<T>(ctx: ListContext<T>, $container: JQuery, bindings: EventBinding[]): void {
-  for (const binding of bindings) {
-    const { type, selector, callback } = binding;
+  for (let i = 0, len = bindings.length; i < len; i++) {
+    const { type, selector, callback } = bindings[i]!;
 
     $container.on(
       `${type}.atomList`,
       selector,
       function (this: HTMLElement, e: JQuery.TriggeredEvent) {
-        Option.andThen(
-          Option.fromNullable(e.target.closest?.('[data-atom-key]') as HTMLElement | null),
-          (target) =>
-            Option.andThen(Option.fromNullable(target.getAttribute('data-atom-key')), (rawKey) =>
-              Option.map(Option.fromNullable(ctx.getIndex(rawKey)), (index) =>
-                callback.call(target, ctx.oldItems[index]!, index, e)
-              )
-            )
-        );
+        const target = (e.target as HTMLElement).closest?.('[data-atom-key]') as HTMLElement | null;
+        if (!target) return;
+
+        const rawKey = target.getAttribute('data-atom-key');
+        if (rawKey === null) return;
+
+        const index = ctx.getIndex(rawKey);
+        if (index !== undefined) {
+          callback.call(target, ctx.oldItems[index]!, index, e);
+        }
       }
     );
   }

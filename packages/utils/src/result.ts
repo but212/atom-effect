@@ -1,30 +1,36 @@
 import { Option } from './option';
 import { RESULT_SYMBOL } from './symbols';
+import type { Prettify } from './types';
 
 /**
  * Base type for Result variants to ensure symbol-based identification.
+ * @internal
  */
 type ResultBase = {
   readonly [RESULT_SYMBOL]: true;
 };
 
 /**
- * Represents a successful computation result.
+ * Logic: Success Variant
+ * Represents a successful computation result holding a value of type T.
  */
-export type Ok<T> = ResultBase & {
-  readonly ok: true;
-  readonly value: T;
-  readonly error: undefined;
-};
+export type Ok<T> = ResultBase &
+  Prettify<{
+    readonly ok: true;
+    readonly value: T;
+    readonly error: undefined;
+  }>;
 
 /**
- * Represents a failed computation result.
+ * Logic: Failure Variant
+ * Represents a failed computation holding an error of type E.
  */
-export type Err<E> = ResultBase & {
-  readonly ok: false;
-  readonly value: undefined;
-  readonly error: E;
-};
+export type Err<E> = ResultBase &
+  Prettify<{
+    readonly ok: false;
+    readonly value: undefined;
+    readonly error: E;
+  }>;
 
 /**
  * A discriminated union representing success (Ok) or failure (Err).

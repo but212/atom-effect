@@ -6,13 +6,12 @@ import {
   type ReadonlyAtom,
   untracked,
 } from '@but212/atom-effect';
-import { Option, Result, SlotBuffer } from '@but212/atom-effect-utils';
+import { Option, Result, SlotBuffer, shallowEqual } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { SYSTEM_ROUTE } from '@/constants';
 import { navCoordinator, normalizePath, parseQuery, splitPath } from '@/core/navigation';
 import { registry } from '@/core/registry';
 import type { RouteConfig, RouteDefinition, RouteLocation, Router, WritableAtom } from '@/types';
-import { shallowEqual } from '@/utils';
 import { debug } from '@/utils/debug';
 import {
   createAdapter,
@@ -365,7 +364,7 @@ export class RouterImpl implements Router {
     if (state.isDestroyed) return;
     this.stateAtom.value = { ...state, isDestroyed: true };
     runRendererCleanups(this.renderer);
-    this.cleanups.forEach((fn) => Result.tryCatch(fn));
+    this.cleanups.forEach((fn: () => void) => Result.tryCatch(fn));
     this.cleanups.dispose();
   }
 }

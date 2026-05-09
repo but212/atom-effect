@@ -1,4 +1,3 @@
-import { Option } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { SYSTEM_LIST } from '@/constants';
 import type { ListOptions } from '@/types';
@@ -28,9 +27,10 @@ export function insertOrAppend(
   if (elOrJq instanceof Element) {
     container.insertBefore(elOrJq, nextNode);
   } else {
-    Array.from(elOrJq as JQuery).forEach((el) => {
+    for (let i = 0, len = elOrJq.length; i < len; i++) {
+      const el = elOrJq[i];
       if (el) container.insertBefore(el, nextNode);
-    });
+    }
   }
 }
 
@@ -133,7 +133,8 @@ export function renderItems<T>(
   }
 
   let sIdx = 0;
-  toRender.forEach((entry, i) => {
+  for (let i = 0, len = toRender.length; i < len; i++) {
+    const entry = toRender[i]!;
     const { key, index: targetIdx } = entry;
     const raw = results[i]!;
     const $el = (typeof raw === 'string'
@@ -151,7 +152,7 @@ export function renderItems<T>(
     }
 
     newNodes[targetIdx] = $el.length === 1 ? ($el[0] as Element) : $el;
-  });
+  }
 
   return null;
 }
@@ -245,16 +246,18 @@ export function placeItems<T>(
 
   if (ctx.oldKeys.length === 0 && ctx.removingKeys.size === 0) {
     const frag = document.createDocumentFragment();
-    newNodes.forEach((node) => {
-      if (!node) return;
+    for (let i = 0; i < count; i++) {
+      const node = newNodes[i];
+      if (!node) continue;
       if (node instanceof Element) {
         frag.appendChild(node);
       } else {
-        Array.from(node as JQuery).forEach((entry) => {
+        for (let j = 0, jLen = node.length; j < jLen; j++) {
+          const entry = node[j];
           if (entry) frag.appendChild(entry);
-        });
+        }
       }
-    });
+    }
     container.innerHTML = '';
     container.appendChild(frag);
   } else {
@@ -277,26 +280,27 @@ export function placeItems<T>(
     }
   }
 
-  newStates.forEach((state, i) => {
+  const { onAdd, bind, update } = callbacks;
+  for (let i = 0; i < count; i++) {
+    const state = newStates[i]!;
     const actions = ACTION_TABLE[state] ?? [];
     const node = newNodes[i];
-    if (actions.length === 0 || !node) return;
+    if (actions.length === 0 || !node) continue;
 
     const $el = wrap(node as Element | JQuery<Element>);
     const item = newItems[i]!;
 
-    actions.forEach((action) => {
-      if (action === 'onAdd') {
-        Option.map(Option.fromNullable(callbacks.onAdd), (cb) => {
-          cb($el);
-          ctx.removingKeys.delete(newKeys[i]!);
-          debug.domUpdated(SYSTEM_LIST.PREFIX, $el, 'list.add', item);
-        });
-      } else {
-        Option.map(Option.fromNullable(callbacks[action as keyof PlaceCallbacks<T>]), (cb) =>
-          (cb as Function)($el, item, i)
-        );
+    for (let j = 0, aLen = actions.length; j < aLen; j++) {
+      const action = actions[j]!;
+      if (action === 'onAdd' && onAdd) {
+        onAdd($el);
+        ctx.removingKeys.delete(newKeys[i]!);
+        debug.domUpdated(SYSTEM_LIST.PREFIX, $el, 'list.add', item);
+      } else if (action === 'bind' && bind) {
+        bind($el, item, i);
+      } else if (action === 'update' && update) {
+        update($el, item, i);
       }
-    });
-  });
+    }
+  }
 }

@@ -10,12 +10,14 @@ import type {
   ComputedAtom,
   ComputedOptions,
   CssBindings,
+  Dependency,
   DisposableWritableAtom,
   EffectObject,
   EffectResult,
   FetchOptions,
   FormOptions,
   ListOptions,
+  MergedDependencyValue,
   PrimitiveValue,
   ReadonlyAtom,
   RouteConfig,
@@ -212,6 +214,40 @@ declare global {
      * @returns A promise resolving on the next tick.
      */
     nextTick(): Promise<void>;
+
+    /**
+     * Combines multiple object-based atoms into a single computed atom with a flattened type.
+     *
+     * This utility merges the value types of all input atoms into a single
+     * unified object type.
+     *
+     * @param atoms - A variadic list of atoms or computed nodes to merge.
+     * @returns A read-only reactive computed atom containing the merged object.
+     *
+     * @example
+     * ```typescript
+     * const a = $.atom({ x: 1 });
+     * const b = $.atom({ y: 2 });
+     * const combined = $.mergeAtoms(a, b);
+     * // combined.value is { x: number, y: number }
+     * ```
+     */
+    mergeAtoms<T extends Dependency<unknown>[]>(
+      ...atoms: T
+    ): ComputedAtom<MergedDependencyValue<T>>;
+
+    /**
+     * Merges multiple writable lenses into a single unified lens with a flattened type.
+     *
+     * Getting the value returns a merged object, and setting the value propagates
+     * the changes back to the constituent lenses.
+     *
+     * @param lenses - A variadic list of WritableAtoms (lenses).
+     * @returns A writable reactive atom (lens) containing the merged object.
+     */
+    mergeLenses<L extends WritableAtom<unknown>[]>(
+      ...lenses: L
+    ): WritableAtom<MergedDependencyValue<L>>;
 
     /**
      * Global diagnostic system for inspecting reactive behavior.

@@ -9,6 +9,8 @@ import {
   isAtom,
   isComputed,
   lensFor,
+  mergeAtoms,
+  mergeLenses,
   untracked,
 } from '@but212/atom-effect';
 import $ from 'jquery';
@@ -57,6 +59,7 @@ $.extend({
   atomLens,
   composeLens,
   lensFor,
-
+  mergeAtoms,
+  mergeLenses,
   debug,
 });

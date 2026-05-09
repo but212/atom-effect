@@ -1,5 +1,4 @@
 import { batch } from '@but212/atom-effect';
-import { Option } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { registry } from '@/core/registry';
 import type { PatchOptions } from '@/types';
@@ -13,6 +12,11 @@ const handlerMap = new WeakMap<EventHandler, EventHandler>();
 
 /** Internal union type for various jQuery event map values. @internal */
 type JQueryEventHandler = EventHandler | boolean;
+
+/** Extended EventHandler interface to include internal marker. @internal */
+interface InternalHandler extends EventHandler {
+  [INTERNAL_HANDLER]?: boolean;
+}
 
 /** Metadata storing references to native jQuery methods before patching. */
 type OriginalMethods = {
@@ -31,27 +35,20 @@ let originals: OriginalMethods | null = null;
  * Wraps a standard event handler function in a reactive batch.
  *
  * Logic: Auto-Batching
- * This ensures that multiple atom updates triggered by a single interaction
- * (e.g., a 'click' event) are processed atomically. This prevents intermediate
- * UI states, visual jitter, and redundant re-computations.
- *
- * @param fn - The original event handler function.
- * @returns A wrapped handler function that executes within a batch.
+ * Performance Note: Removed Option utility to minimize overhead in event hot-paths.
  * @internal
  */
 const wrapHandler = (fn: EventHandler): EventHandler => {
-  if ((fn as unknown as { [INTERNAL_HANDLER]?: boolean })[INTERNAL_HANDLER]) {
-    return fn;
-  }
+  if ((fn as InternalHandler)[INTERNAL_HANDLER]) return fn;
 
-  const cached = Option.fromNullable(handlerMap.get(fn));
-  if (Option.isSome(cached)) return cached.value;
+  const cached = handlerMap.get(fn);
+  if (cached) return cached;
 
   const wrapped = function (this: unknown, ...args: unknown[]) {
     return batch(() => fn.apply(this, args as Parameters<EventHandler>));
-  } as unknown as EventHandler;
+  } as unknown as InternalHandler;
 
-  (wrapped as unknown as { [INTERNAL_HANDLER]?: boolean })[INTERNAL_HANDLER] = true;
+  wrapped[INTERNAL_HANDLER] = true;
   handlerMap.set(fn, wrapped);
   return wrapped;
 };
@@ -64,28 +61,36 @@ const unwrapHandler = (fn: EventHandler): EventHandler => {
   return handlerMap.get(fn) ?? fn;
 };
 
-/** Normalizes and wraps all handlers within a jQuery event map. @internal */
+/**
+ * Normalizes and wraps all handlers within a jQuery event map.
+ * Optimized with a for-in loop to avoid intermediate entry arrays.
+ * @internal
+ */
 function wrapEventMap(
   map: Record<string, JQueryEventHandler | undefined>
-): Record<string, JQueryEventHandler> {
-  return Object.fromEntries(
-    Object.entries(map).map(([key, fn]) => [
-      key,
-      typeof fn === 'function' ? wrapHandler(fn) : (fn as JQueryEventHandler),
-    ])
-  );
+): Record<string, JQueryEventHandler | undefined> {
+  const result: Record<string, JQueryEventHandler> = {};
+  for (const key in map) {
+    const fn = map[key];
+    result[key] = typeof fn === 'function' ? wrapHandler(fn) : (fn as JQueryEventHandler);
+  }
+  return result;
 }
 
-/** Normalizes and unwraps all handlers within a jQuery event map. @internal */
+/**
+ * Normalizes and unwraps all handlers within a jQuery event map.
+ * Optimized with a for-in loop.
+ * @internal
+ */
 function unwrapEventMap(
   map: Record<string, JQueryEventHandler | undefined>
 ): Record<string, JQueryEventHandler | undefined> {
-  return Object.fromEntries(
-    Object.entries(map).map(([key, handler]) => [
-      key,
-      typeof handler === 'function' ? unwrapHandler(handler) : handler,
-    ])
-  );
+  const result: Record<string, JQueryEventHandler | undefined> = {};
+  for (const key in map) {
+    const fn = map[key];
+    result[key] = typeof fn === 'function' ? unwrapHandler(fn) : fn;
+  }
+  return result;
 }
 
 /**
@@ -103,6 +108,8 @@ function patchArguments(
   if (first && typeof first === 'object') {
     args[0] = mapProcessor(first as Record<string, JQueryEventHandler | undefined>);
   } else {
+    // Standard jQuery signature: .on( types [, selector ] [, data ], handler )
+    // We scan for function arguments to wrap/unwrap them.
     for (let i = 1; i < args.length; i++) {
       if (typeof args[i] === 'function') {
         args[i] = handlerProcessor(args[i] as EventHandler);
@@ -111,26 +118,8 @@ function patchArguments(
   }
 }
 
-/** Creates a patched version of a jQuery event attachment method. @internal */
-function createPatch(original: Function) {
-  return function (this: JQuery, ...args: unknown[]) {
-    patchArguments(args, wrapEventMap, wrapHandler);
-    return original.apply(this, args) ?? this;
-  };
-}
-
 /**
  * Enables global patches for jQuery to integrate reactive state management.
- *
- * Logic: Global Patch Responsibilities
- * 1. Auto-Batching: Intercepts `$.fn.on` and `$.fn.one` to wrap all event handlers
- *    in `batch()`, ensuring atomic UI updates.
- * 2. Automated Cleanup: Hooks into `$.fn.remove` and `$.fn.empty` to automatically
- *    dispose of reactive effects via the `registry` when elements are destroyed.
- * 3. Lifecycle Preservation: Hooks into `$.fn.detach` to allow reactive resources
- *    to be kept in memory for later re-attachment.
- *
- * @param options - Configuration to selectively enable event or lifecycle patches.
  * @internal
  */
 export function enablejQueryOverrides(options: PatchOptions = {}): void {
@@ -159,25 +148,18 @@ export function enablejQueryOverrides(options: PatchOptions = {}): void {
           registry.cleanupTree(el);
         }
       }
-
-      // Logic: Use Option.expect to ensure the original method is preserved.
-      const originalRemove = Option.expect(
-        Option.fromNullable(prev.remove),
-        'Internal Inconsistency: Original jQuery .remove() method is missing during patch execution.'
-      );
-      return originalRemove.call(this, selector);
+      return prev.remove.call(this, selector);
     };
 
     $.fn.empty = function (this: JQuery) {
       const len = this.length;
       for (let i = 0; i < len; i++) {
         const el = this[i];
-        // Logic: Clean up all reactive resources within the container's subtree.
         if (el?.hasChildNodes()) {
           registry.cleanupDescendants(el);
         }
       }
-      return prev.empty.call(this) ?? this;
+      return prev.empty.call(this);
     };
 
     $.fn.detach = function (this: JQuery, selector?: string) {
@@ -185,22 +167,28 @@ export function enablejQueryOverrides(options: PatchOptions = {}): void {
       const len = targets.length;
       for (let i = 0; i < len; i++) {
         const el = targets[i];
-        // Logic: Mark the element tree to preserve its reactive resources despite detachment.
         if (el) {
           registry.keep(el);
         }
       }
-      return prev.detach.call(this, selector) ?? this;
+      return prev.detach.call(this, selector);
     };
   }
 
   if (events) {
-    $.fn.on = createPatch(prev.on) as typeof $.fn.on;
-    $.fn.one = createPatch(prev.one) as typeof $.fn.one;
+    $.fn.on = function (this: JQuery, ...args: unknown[]) {
+      patchArguments(args, wrapEventMap, wrapHandler);
+      return prev.on.apply(this, args as Parameters<typeof $.fn.on>);
+    };
+
+    $.fn.one = function (this: JQuery, ...args: unknown[]) {
+      patchArguments(args, wrapEventMap, wrapHandler);
+      return prev.one.apply(this, args as Parameters<typeof $.fn.one>);
+    };
 
     $.fn.off = function (this: JQuery, ...args: unknown[]) {
       patchArguments(args, unwrapEventMap, unwrapHandler);
-      return prev.off.apply(this, args as Parameters<typeof $.fn.off>) ?? this;
+      return prev.off.apply(this, args as Parameters<typeof $.fn.off>);
     };
   }
 }

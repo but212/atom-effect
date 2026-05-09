@@ -13,9 +13,10 @@ import type {
   ComputedAtom,
   ComputedOptions,
   Dependency,
+  MergedDependencyValue,
   Subscriber,
 } from '@/types';
-import { debug, NO_DEFAULT_VALUE } from '@/utils/debug';
+import { debug, mergeAtomValues, NO_DEFAULT_VALUE } from '@/utils';
 import { isPromise } from '@/utils/type-guards';
 import {
   claimExisting,
@@ -598,4 +599,28 @@ export function computed<T>(
   options: ComputedOptions<T> = {}
 ): ComputedAtom<T> {
   return new ComputedAtomImpl(fn, options);
+}
+
+/**
+ * Combines multiple object-based atoms into a single computed atom with a flattened type.
+ *
+ * This utility merges the value types of all input atoms into a single
+ * unified object type using the {@link Merge} utility.
+ *
+ * @param atoms - A variadic list of atoms or computed nodes to merge.
+ *
+ * @example
+ * ```typescript
+ * const a = atom({ x: 1 });
+ * const b = atom({ y: 2 });
+ * const c = computed(() => ({ z: 3 }));
+ *
+ * const combined = mergeAtoms(a, b, c);
+ * // combined.value is { x: number; y: number; z: number }
+ * ```
+ */
+export function mergeAtoms<T extends Dependency<unknown>[]>(
+  ...atoms: T
+): ComputedAtom<MergedDependencyValue<T>> {
+  return computed(() => mergeAtomValues(atoms));
 }

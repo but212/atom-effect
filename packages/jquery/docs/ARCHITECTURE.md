@@ -54,7 +54,7 @@ $.fn.atomText(atom)
 
 ### 2.2 DOM Engine
 
-`atomEachElement(jq, fn)` in `core/dom.ts` provides the iteration engine for reactive bindings. It handles jQuery sets, filters for `HTMLElement`, and utilizes optimized loops to manage performance in critical paths.
+`atomEachElement(jq, fn)` in `core/dom.ts` provides the iteration engine for reactive bindings. It handles jQuery sets, filters for `HTMLElement`.
 
 Internal binding handlers in `unified.ts` operate on native `HTMLElement` references, utilizing jQuery for event delegation or multi-event management (e.g., in `bindEvents`).
 
@@ -234,7 +234,7 @@ Internal state records are initialized with a fixed set of fields to maintain mo
 
 ### 12.2 Branching Optimizations
 
-The library minimizes branching in performance-critical paths through task-based dispatch in `atomBind` and strategy specialization in `InputBinding`. Static snapshots are used during registry cleanup to stabilize loop prediction.
+The library minimizes branching in performance-critical paths through task-based dispatch in `atomBind` and strategy specialization in `InputBinding`. Static snapshots are used during registry cleanup to stabilize loop prediction. Hot paths utilize native `for` loops and have been stripped of functional utility overhead (e.g., `Option`, `Result`) to maximize execution speed.
 
 ### 13. Lenses & Structural Sharing
 

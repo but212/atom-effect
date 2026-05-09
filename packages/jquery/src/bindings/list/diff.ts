@@ -1,6 +1,6 @@
+import { shallowEqual } from '@but212/atom-effect-utils';
 import { SYSTEM_LIST } from '@/constants';
 import type { ListKey, ListKeyFn, ListOptions } from '@/types';
-import { shallowEqual } from '@/utils';
 import { debug } from '@/utils/debug';
 import type { ListContext } from './context';
 import { ItemState, type PreparedDiff } from './types';

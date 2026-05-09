@@ -1,4 +1,3 @@
-import { Option } from '@but212/atom-effect-utils';
 import type { EffectObject, ListKey } from '@/types';
 import { setAtomKey } from './utils';
 
@@ -65,17 +64,14 @@ export class ListContext<T> {
    * but the internal `_keyToIndex` map might use numbers.
    */
   getIndex(key: ListKey | string): number | undefined {
-    return Option.unwrapOrElse(Option.fromNullable(this._keyToIndex.get(key as ListKey)), () =>
-      Option.toUndefined(
-        Option.andThen(
-          Option.filter(
-            Option.map(Option.fromNullable(typeof key === 'string' ? key : null), Number),
-            (n) => !Number.isNaN(n)
-          ),
-          (n) => Option.fromNullable(this._keyToIndex.get(n))
-        )
-      )
-    );
+    const idx = this._keyToIndex.get(key as ListKey);
+    if (idx !== undefined) return idx;
+
+    if (typeof key === 'string') {
+      const n = Number(key);
+      if (!Number.isNaN(n)) return this._keyToIndex.get(n);
+    }
+    return undefined;
   }
 
   /**

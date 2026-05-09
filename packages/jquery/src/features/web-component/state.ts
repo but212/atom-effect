@@ -1,178 +1,104 @@
 import { Option, SlotBuffer } from '@but212/atom-effect-utils';
-import $ from 'jquery';
 import { disableAutoCleanupFor } from '@/core/registry';
 import { CLEANUP_MARKER, HYDRATION_MARKER } from '@/core/symbols';
 import type { EffectObject, WritableAtom } from '@/types';
-
-/** Resolves the active ShadowRoot for component-local operations. @internal */
-export const resolveShadowRoot = (
-  element: HTMLElement,
-  root: Node | ShadowRoot | null | undefined
-): Option<ShadowRoot> =>
-  root instanceof ShadowRoot
-    ? Option.some(root)
-    : element.shadowRoot instanceof ShadowRoot
-      ? Option.some(element.shadowRoot)
-      : Option.none;
+import { resolveShadowRoot } from './utils';
 
 /**
  * Centralizes all component-specific reactive state and resource tracking.
- *
- * Logic: Data Dominates
- * Consolidates lifecycle resources (effects, observers, lenses) into a
- * single class instance to simplify teardown and state management.
- *
+ * Consolidates lifecycle resources into a single class instance to simplify teardown.
  * @internal
  */
 export class ComponentState {
-  /** The root node (host or shadowRoot) managed by this state. */
+  /** The root node (host or shadowRoot) where bindings and styles are applied. */
   root: Option<Node & { [CLEANUP_MARKER]?: boolean }> = Option.none;
-  /** Initialization status to prevent redundant setups. */
+
+  /** Guards against double-initialization of the same host element. */
   isInitialized = false;
-  /** Collection of active effects managed by the component. */
+
+  /**
+   * A buffer for all reactive effects created during setup.
+   * Disposed as a single unit in `dispose()`.
+   */
   effects = new SlotBuffer<EffectObject>();
-  /** Set of nodes that have been hydrated with data-bind mappings. */
+
+  /** Set of nodes that have been processed by the hydration engine. */
   hydratedNodes = new Set<Element>();
 
-  // Attributes Tracking
-  /** Source atom containing the snapshot of all observed attributes. */
-  attributeAtom: Option<WritableAtom<Record<string, string | null>>> = Option.none;
-  /** Observer monitoring attribute changes on the host. */
-  attributeObserver: Option<MutationObserver> = Option.none;
-  /** Map of individual attribute names to their lens atoms. */
+  /** The root atom containing the full snapshot of attributes. */
+  attributeAtom: WritableAtom<Record<string, string | null>> | null = null;
+  /** The observer that keeps `attributeAtom` in sync with the DOM. */
+  attributeObserver: MutationObserver | null = null;
+  /** Memoized lenses into `attributeAtom` to avoid redundant atom creation. */
   attributeLenses = new Map<string, WritableAtom<string | null>>();
 
-  // Slots Tracking
-  /** Source atom containing the mapping of slot names to assigned nodes. */
-  slotsAtom: Option<WritableAtom<Record<string, Node[]>>> = Option.none;
-  /** Map of individual slot names to their lens atoms. */
+  /** The root atom containing the current mapping of assigned nodes per slot. */
+  slotsAtom: WritableAtom<Record<string, Node[]>> | null = null;
+  /** Memoized lenses into `slotsAtom`. */
   slotLenses = new Map<string, WritableAtom<Node[]>>();
-  /** Internal listeners for slotchange events. */
+  /** Tracks listeners to allow precise removal during teardown. */
   slotListeners = new Map<string, (e: Event) => void>();
 
-  /** List of constructable stylesheets applied to the root. */
+  /** References to constructable stylesheets that must be removed from the root. */
   appliedStyles: CSSStyleSheet[] = [];
 
   constructor(public host: HTMLElement) {}
 
   /**
-   * Initializes attribute tracking if not already active.
-   */
-  ensureAttributeTracking() {
-    if (Option.isSome(this.attributeObserver)) return;
-
-    const getObserved = () =>
-      (this.host.constructor as typeof HTMLElement & { observedAttributes?: string[] })
-        .observedAttributes || [];
-
-    const snapshot = () => {
-      const observed = getObserved();
-      if (observed.length > 0) {
-        return Object.fromEntries(observed.map((n) => [n, this.host.getAttribute(n)]));
-      }
-      return Object.fromEntries(Array.from(this.host.attributes).map((a) => [a.name, a.value]));
-    };
-
-    const atom = $.atom(snapshot());
-    this.attributeAtom = Option.some(atom);
-
-    const observer = new MutationObserver(() => {
-      atom.value = snapshot();
-    });
-    this.attributeObserver = Option.some(observer);
-
-    const options: MutationObserverInit = { attributes: true };
-    const observed = getObserved();
-    if (observed.length > 0) options.attributeFilter = observed;
-
-    observer.observe(this.host, options);
-  }
-
-  /**
-   * Initializes reactive slot tracking.
-   */
-  ensureSlotTracking(root?: ShadowRoot | null) {
-    const srOpt = resolveShadowRoot(this.host, root || Option.toNullable(this.root));
-
-    const snapshot = (sr: ShadowRoot | null) => {
-      const next: Record<string, Node[]> = {};
-      if (sr) {
-        sr.querySelectorAll('slot').forEach((s) => (next[s.name || ''] = s.assignedNodes()));
-      }
-      return next;
-    };
-
-    if (Option.isNone(this.slotsAtom)) {
-      this.slotsAtom = Option.some($.atom(snapshot(Option.toNullable(srOpt))));
-    }
-
-    Option.match(srOpt, {
-      some: (sr) => {
-        if (this.slotListeners.has('all')) return;
-
-        // Initial sync
-        const atom = Option.expect(
-          this.slotsAtom,
-          'ComponentState: slotsAtom missing after initialization'
-        );
-        atom.value = snapshot(sr);
-
-        const listener = (e: Event) => {
-          const target = e.target as HTMLSlotElement;
-          const current = { ...atom.peek() };
-          current[target.name || ''] = target.assignedNodes();
-          atom.value = current;
-        };
-
-        sr.addEventListener('slotchange', listener);
-        this.slotListeners.set('all', listener);
-      },
-      none: () => {},
-    });
-  }
-
-  /**
    * Deterministically releases all reactive resources and observers.
+   *
+   * Warning: Failure to call this on unmount will lead to memory leaks
+   * as the MutationObservers and effects will remain active.
    */
   dispose() {
+    // 1. Release all reactive effects
     this.effects.forEach((e) => e.dispose());
     this.effects.dispose();
 
-    this.hydratedNodes.forEach(
-      (n) => delete (n as Element & { [HYDRATION_MARKER]?: boolean })[HYDRATION_MARKER]
-    );
+    // 2. Clear hydration markers to allow re-hydration if moved back to DOM
+    this.hydratedNodes.forEach((n) => {
+      delete (n as Element & { [HYDRATION_MARKER]?: boolean })[HYDRATION_MARKER];
+    });
     this.hydratedNodes.clear();
 
-    Option.map(this.attributeObserver, (obs) => obs.disconnect());
-    this.attributeObserver = Option.none;
-    this.attributeAtom = Option.none;
+    // 3. Attribute Cleanup
+    if (this.attributeObserver) {
+      this.attributeObserver.disconnect();
+      this.attributeObserver = null;
+    }
+    this.attributeAtom = null;
     this.attributeLenses.clear();
 
-    const srOpt = resolveShadowRoot(this.host, Option.toNullable(this.root));
-    Option.map(srOpt, (sr) => {
+    // 4. Slot Cleanup (Remove listeners from ShadowRoot)
+    const sr = resolveShadowRoot(this.host, Option.toNullable(this.root));
+    if (sr) {
       this.slotListeners.forEach((l) => sr.removeEventListener('slotchange', l));
-    });
-
+    }
     this.slotListeners.clear();
-    this.slotsAtom = Option.none;
+    this.slotsAtom = null;
     this.slotLenses.clear();
 
-    Option.map(this.root, (root) => {
+    // 5. Root Node Reset (Styles & Registry)
+    const rootNode = Option.toNullable(this.root);
+    if (rootNode) {
+      // Reason: We must filter our styles out of adoptedStyleSheets rather than
+      // resetting the array, as other libraries might have added their own sheets.
       if (
         this.appliedStyles.length > 0 &&
-        (root instanceof ShadowRoot || root instanceof Document)
+        (rootNode instanceof ShadowRoot || rootNode instanceof Document)
       ) {
-        root.adoptedStyleSheets = root.adoptedStyleSheets.filter(
+        rootNode.adoptedStyleSheets = rootNode.adoptedStyleSheets.filter(
           (s) => !this.appliedStyles.includes(s)
         );
       }
       this.appliedStyles = [];
 
-      if (root[CLEANUP_MARKER]) {
-        disableAutoCleanupFor(root);
-        root[CLEANUP_MARKER] = false;
+      const markerNode = rootNode as unknown as { [CLEANUP_MARKER]?: boolean };
+      if (markerNode[CLEANUP_MARKER]) {
+        disableAutoCleanupFor(rootNode as Element);
+        markerNode[CLEANUP_MARKER] = false;
       }
-    });
+    }
 
     this.root = Option.none;
     this.isInitialized = false;

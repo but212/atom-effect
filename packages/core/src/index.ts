@@ -10,6 +10,8 @@ export {
   effect,
   getPathValue,
   lensFor,
+  mergeAtoms,
+  mergeLenses,
   scheduler as globalScheduler,
   setDeepValue,
   untracked,
@@ -32,6 +34,7 @@ export type {
   EffectFunction,
   EffectObject,
   EffectOptions,
+  MergedDependencyValue,
   ReadonlyAtom,
   WritableAtom,
 } from '@/types';
