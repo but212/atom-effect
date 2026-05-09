@@ -1,3 +1,4 @@
+import { shallowEqual } from '@but212/atom-effect-utils';
 import { BRAND, BrandFlags } from '@/symbols';
 import type { Equal, MergedDependencyValue, WritableAtom } from '@/types';
 import { mergeAtomValues } from '@/utils';
@@ -326,7 +327,7 @@ export function mergeLenses<L extends WritableAtom<unknown>[]>(
 
   const notify = () => {
     const nv = mergeAtomValues(lenses, true) as MergedValue;
-    if (JSON.stringify(nv) !== JSON.stringify(prevValue)) {
+    if (!shallowEqual(nv, prevValue)) {
       const ov = prevValue;
       prevValue = nv;
       for (const listener of listeners) {
