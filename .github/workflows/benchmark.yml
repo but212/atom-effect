@@ -5,8 +5,8 @@ on:
     branches: [main]
 
 jobs:
-  benchmark:
-    name: Run ${{ matrix.package }} (${{ matrix.type }})
+  logic_benchmark:
+    name: Logic - ${{ matrix.package }} (${{ matrix.type }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -20,12 +20,47 @@ jobs:
             type: state
           - package: core
             type: realistic
+          - package: utils
+            type: all
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
+        with:
+          install-playwright: "false"
+
+      - name: Build
+        run: pnpm build
+
+      - name: Run benchmark
+        working-directory: packages/${{ matrix.package }}
+        env:
+          BENCH_OUTPUT: ../../results/${{ matrix.package }}-${{ matrix.type }}.txt
+        run: |
+          mkdir -p ../../results
+          if [ "${{ matrix.type }}" = "all" ]; then
+            pnpm bench:all > $BENCH_OUTPUT
+          else
+            pnpm bench:${{ matrix.type }} > $BENCH_OUTPUT
+          fi
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ matrix.package }}-${{ matrix.type }}
+          path: results/
+
+  browser_benchmark:
+    name: Browser - ${{ matrix.package }} (${{ matrix.type }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
           - package: jquery
             type: micro
           - package: jquery
             type: macro
-          - package: utils
-            type: all
 
     steps:
       - uses: actions/checkout@v6
@@ -42,11 +77,7 @@ jobs:
           BENCH_OUTPUT: ../../results/${{ matrix.package }}-${{ matrix.type }}.txt
         run: |
           mkdir -p ../../results
-          if [ "${{ matrix.type }}" = "all" ]; then
-            pnpm bench:all > $BENCH_OUTPUT
-          else
-            pnpm bench:${{ matrix.type }} > $BENCH_OUTPUT
-          fi
+          pnpm bench:${{ matrix.type }} > $BENCH_OUTPUT
 
       - name: Upload results
         uses: actions/upload-artifact@v4
