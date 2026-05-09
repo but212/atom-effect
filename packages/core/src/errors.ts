@@ -235,7 +235,7 @@ export function wrapError(
   const meta = getErrorMetadata(error);
 
   return new ErrorClass(
-    `${meta.name} (${context}): ${meta.message}`,
+    AtomError.format(meta.name, context, meta.message),
     error,
     meta.recoverable,
     meta.code
@@ -257,12 +257,20 @@ function getErrorMetadata(error: unknown) {
     };
   }
 
-  const e = error as Record<string, unknown>;
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      recoverable: true,
+      code: (error as unknown as Record<string, unknown>)?.code as string | undefined,
+    };
+  }
+
   return {
-    name: e?.name || (error instanceof Error ? 'Error' : 'Unexpected error'),
-    message: e?.message || String(error),
+    name: 'Unexpected error',
+    message: String(error),
     recoverable: true,
-    code: e?.code as string | undefined,
+    code: undefined,
   };
 }
 
@@ -272,13 +280,18 @@ function getErrorMetadata(error: unknown) {
  * @internal
  */
 function serializeErrorValue(value: unknown, seen: Set<unknown>): unknown {
+  if (value == null || typeof value !== 'object') return value;
+  if (seen.has(value)) return '[Circular Reference]';
+
   if (value instanceof AtomError) return value.toJSON(seen);
+
   if (value instanceof Error) {
+    seen.add(value);
     return {
       name: value.name,
       message: value.message,
       stack: value.stack,
-      cause: (value as { cause?: unknown }).cause,
+      cause: serializeErrorValue((value as { cause?: unknown }).cause, seen),
     };
   }
   return value;

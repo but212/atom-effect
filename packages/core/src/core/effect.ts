@@ -1,4 +1,3 @@
-import { Option, Result } from '@but212/atom-effect-utils';
 import {
   DEBUG_CONFIG,
   EFFECT_STATE_FLAGS,
@@ -136,10 +135,10 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
   /** Buffered storage for reconciled subscriptions. @internal */
   _deps = createDepBuffer();
 
-  private _cleanup: Option<() => void> = Option.none;
+  private _cleanup: (() => void) | null = null;
 
   private readonly _fn: EffectFunction;
-  private readonly _onError: Option<(error: unknown) => void>;
+  private readonly _onError: ((error: unknown) => void) | null;
   private readonly _notifyCallback: () => void;
 
   private readonly _sync: boolean;
@@ -149,7 +148,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
   constructor(fn: EffectFunction, options: EffectOptions = {}) {
     super();
     this._fn = fn;
-    this._onError = Option.fromNullable(options.onError);
+    this._onError = options.onError ?? null;
     this._sync = options.sync ?? false;
     this._maxExecutions =
       options.maxExecutionsPerSecond ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_SECOND;
@@ -208,8 +207,35 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     if (!this._prepareExecution(force)) return;
 
     this._execCleanup();
-    const result = this._runTrackingSession();
-    this._finalizeExecution(result);
+
+    this._startTracking();
+    const prevDepth = trackingContext.stack.length;
+
+    let val: unknown;
+    let hasError = false;
+    let errorObj: unknown;
+
+    try {
+      try {
+        val = runInTrackingContext(trackingContext, this, this._fn);
+      } catch (e) {
+        rollbackTrackingSubscriber(trackingContext, prevDepth);
+        throw e;
+      }
+    } catch (e) {
+      hasError = true;
+      errorObj = e;
+    }
+
+    this._commitDeps();
+
+    if (hasError) {
+      this._handleExecutionError(errorObj);
+    } else {
+      this._handleResult(val);
+    }
+
+    this.flags &= ~EFFECT_STATE_FLAGS.EXECUTING;
   }
 
   private _prepareExecution(force: boolean): boolean {
@@ -224,35 +250,6 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
 
     this.flags |= EFFECT_STATE_FLAGS.EXECUTING;
     return true;
-  }
-
-  private _runTrackingSession(): Result<unknown, Error> {
-    this._startTracking();
-    const prevDepth = trackingContext.stack.length;
-
-    return Result.tryCatch(() => {
-      try {
-        return runInTrackingContext(trackingContext, this, this._fn);
-      } catch (e) {
-        rollbackTrackingSubscriber(trackingContext, prevDepth);
-        throw e;
-      }
-    });
-  }
-
-  private _finalizeExecution(result: Result<unknown, Error>): void {
-    this._commitDeps();
-
-    Result.match(result, {
-      ok: (val) => {
-        this._handleResult(val);
-      },
-      err: (e) => {
-        this._handleExecutionError(e);
-      },
-    });
-
-    this.flags &= ~EFFECT_STATE_FLAGS.EXECUTING;
   }
 
   // --- Dependency Management ---
@@ -306,11 +303,11 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
 
   private _handleResult(val: unknown): void {
     if (typeof val === 'function') {
-      this._cleanup = Option.some(val as () => void);
+      this._cleanup = val as () => void;
     } else if (isPromise(val)) {
       this._handleAsyncResult(val as Promise<undefined | (() => void)>);
     } else {
-      this._cleanup = Option.none;
+      this._cleanup = null;
     }
   }
 
@@ -330,7 +327,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
           return;
         }
 
-        if (typeof cleanup === 'function') this._cleanup = Option.some(cleanup as () => void);
+        if (typeof cleanup === 'function') this._cleanup = cleanup as () => void;
       },
       (err) => {
         if (this._trackSessionId === sessionId) {
@@ -341,11 +338,10 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
   }
 
   private _execCleanup(): void {
-    const cleanupOpt = this._cleanup;
-    if (Option.isNone(cleanupOpt)) return;
+    const fn = this._cleanup;
+    if (!fn) return;
 
-    this._cleanup = Option.none;
-    const fn = cleanupOpt.value;
+    this._cleanup = null;
 
     try {
       fn();
@@ -390,18 +386,17 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
   private _handleExecutionError(
     error: unknown,
     message: string = ERROR_MESSAGES.EFFECT_EXECUTION_FAILED
-  ): Result<never, Error> {
+  ): void {
     const errorObj = wrapError(error, EffectError, message);
     console.error(errorObj);
 
-    if (Option.isSome(this._onError)) {
+    if (this._onError) {
       try {
-        this._onError.value(errorObj);
+        this._onError(errorObj);
       } catch (e) {
         console.error(wrapError(e, EffectError, ERROR_MESSAGES.CALLBACK_ERROR_IN_ERROR_HANDLER));
       }
     }
-    return Result.err(errorObj);
   }
 
   /** @internal */

@@ -14,30 +14,6 @@ import {
 } from './tracking';
 
 /**
- * Logic: Subscriber Notification Loop
- * Safely iterates through subscribers and triggers their callbacks.
- * @internal
- */
-export function notifyAllSubscribers<T>(
-  slots: SlotBuffer<Subscription<T>>,
-  newValue: T | undefined,
-  oldValue: T | undefined,
-  onStart: () => number,
-  onEnd: (depth: number) => void
-): void {
-  const depth = onStart();
-  slots.lock();
-  try {
-    slots.forEach((sub) => {
-      notifySubscription(sub, newValue, oldValue);
-    });
-  } finally {
-    onEnd(depth);
-    slots.unlock();
-  }
-}
-
-/**
  * A unified base class for all reactive primitives, including Atoms, Computeds, and Effects.
  *
  * When to use:
@@ -237,17 +213,17 @@ export abstract class ReactiveNode<T> {
     const slots = this._slots;
     if (!slots || slots.size === 0) return;
 
-    notifyAllSubscribers(
-      slots,
-      newValue,
-      oldValue,
-      () => {
-        const depth = trackingContext.stack.length;
-        pushTrackingSubscriber(trackingContext, null);
-        return depth;
-      },
-      (depth) => rollbackTrackingSubscriber(trackingContext, depth)
-    );
+    const depth = trackingContext.stack.length;
+    pushTrackingSubscriber(trackingContext, null);
+    slots.lock();
+    try {
+      slots.forEach((sub) => {
+        notifySubscription(sub, newValue, oldValue);
+      });
+    } finally {
+      rollbackTrackingSubscriber(trackingContext, depth);
+      slots.unlock();
+    }
   }
 
   // ============================================================================

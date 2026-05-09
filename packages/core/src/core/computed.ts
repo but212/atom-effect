@@ -1,4 +1,3 @@
-import { Option, Result } from '@but212/atom-effect-utils';
 import {
   AsyncState,
   COMPUTED_STATE_FLAGS,
@@ -79,25 +78,25 @@ const apply = (f: number, t: { readonly clear: number; readonly set: number }) =
 export function resolveComputedResult<T>(
   flags: number,
   value: T,
-  error: Option<Error>,
+  error: Error | null,
   defaultValue: T
-): Result<T, Error> {
-  if ((flags & RESOLVED) !== 0) return Result.ok(value);
+): T {
+  if ((flags & RESOLVED) !== 0) return value;
 
   const hasDefault = defaultValue !== (NO_DEFAULT_VALUE as T);
   const asyncState = flags & MASK_UNRESOLVED_ASYNC;
 
   // Terminal/Non-async fallback
-  if (asyncState === 0) return Result.ok(value);
+  if (asyncState === 0) return value;
 
   // Async handling priority
-  if (hasDefault) return Result.ok(defaultValue);
+  if (hasDefault) return defaultValue;
 
   if (asyncState === REJECTED) {
-    return Result.err(Option.expect(error, 'REJECTED without error'));
+    throw error ?? new Error('REJECTED without error');
   }
 
-  return Result.err(new ComputedError(ERROR_MESSAGES.COMPUTED_ASYNC_PENDING_NO_DEFAULT));
+  throw new ComputedError(ERROR_MESSAGES.COMPUTED_ASYNC_PENDING_NO_DEFAULT);
 }
 
 /**
@@ -119,7 +118,7 @@ export function shouldRecompute(flags: number, deps: DepBufferState): boolean {
 interface InternalComputedNode {
   readonly id: number;
   readonly flags: number;
-  readonly lastErrorOption: Option<Error>;
+  readonly lastError: Error | null;
   readonly _deps: DepBufferState | null;
 }
 
@@ -141,10 +140,7 @@ export function collectErrorsRecursive(
 
     if ((node.flags & MASK_ERROR) !== 0) {
       collected.push(
-        Option.expect(
-          node.lastErrorOption,
-          'Internal Inconsistency: MASK_ERROR flag set but error is None'
-        )
+        node.lastError ?? new Error('Internal Inconsistency: MASK_ERROR flag set but error is null')
       );
       if (stopOnFirst) return true;
     }
@@ -183,7 +179,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
   private _trackCount = 0;
 
   private _value: T;
-  private _error: Option<Error> = Option.none;
+  private _error: Error | null = null;
 
   /**
    * Internal dependency buffer managing subscription reconciliation.
@@ -260,9 +256,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
       this.flags &= ~DIRTY;
     }
 
-    return Result.unwrap(
-      resolveComputedResult(this.flags, this._value, this._error, this._defaultValue)
-    );
+    return resolveComputedResult(this.flags, this._value, this._error, this._defaultValue);
   }
 
   /**
@@ -322,23 +316,15 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     trackingContext.current?.addDependency(this);
 
     if (!this._deps.hasComputeds) {
-      return Option.match(this._error, {
-        some: (err) => Object.freeze([err]),
-        none: () => EMPTY_ERROR_ARRAY,
-      });
+      return this._error ? Object.freeze([this._error]) : EMPTY_ERROR_ARRAY;
     }
 
     return untracked(() => Object.freeze(collectErrorsRecursive(this, false)));
   }
 
-  /** @internal */
-  get lastErrorOption(): Option<Error> {
-    return this._error;
-  }
-
   get lastError(): Error | null {
     trackingContext.current?.addDependency(this);
-    return Option.toNullable(this._error);
+    return this._error;
   }
 
   get isPending(): boolean {
@@ -372,7 +358,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     this._slots?.clear();
     this.flags = DISPOSED | DIRTY | IDLE;
 
-    this._error = Option.none;
+    this._error = null;
     this._value = undefined as T;
   }
 
@@ -418,30 +404,33 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
 
     this._startTracking();
 
-    const result = Result.tryCatch(() => {
+    let val: T | Promise<T> | undefined;
+    let hasError = false;
+    let errorToThrow: unknown;
+
+    try {
       try {
-        return runInTrackingContext(trackingContext, this, this._computation);
+        val = runInTrackingContext(trackingContext, this, this._computation);
       } catch (e) {
         rollbackTrackingSubscriber(trackingContext, prevDepth);
         throw e;
       }
-    });
+    } catch (e) {
+      hasError = true;
+      errorToThrow = e;
+    }
 
-    Result.match(result, {
-      ok: (val) => {
-        this._commitDeps();
-
-        if (isPromise(val)) {
-          this._handleAsyncComputation(val as Promise<T>);
-        } else {
-          this._finalizeResolution(val as T);
-        }
-      },
-      err: (e) => {
-        this._commitDeps();
-        this._handleError(e, ERROR_MESSAGES.COMPUTED_COMPUTATION_FAILED, false);
-      },
-    });
+    if (hasError) {
+      this._commitDeps();
+      this._handleError(errorToThrow, ERROR_MESSAGES.COMPUTED_COMPUTATION_FAILED, false);
+    } else {
+      this._commitDeps();
+      if (isPromise(val!)) {
+        this._handleAsyncComputation(val as Promise<T>);
+      } else {
+        this._finalizeResolution(val as T);
+      }
+    }
 
     this._trackEpoch = EPOCH_CONSTANTS.UNINITIALIZED;
     this._trackCount = 0;
@@ -455,18 +444,13 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
   }
 
   private _commitDeps(): void {
-    const result = Result.tryCatch(() => {
+    try {
       depBufferTruncateFrom(this._deps, this._trackCount);
-    });
-
-    Result.match(result, {
-      ok: () => {},
-      err: (commitError) => {
-        if (IS_DEV) {
-          console.warn('[atom-effect] _commitDeps failed during error recovery:', commitError);
-        }
-      },
-    });
+    } catch (commitError) {
+      if (IS_DEV) {
+        console.warn('[atom-effect] _commitDeps failed during error recovery:', commitError);
+      }
+    }
   }
 
   /**
@@ -499,31 +483,27 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     );
   }
 
-  private _handleError(error: unknown, message: string, shouldThrow = false): Result<never, Error> {
+  private _handleError(error: unknown, message: string, shouldThrow = false): void {
     const wrappedError = wrapError(error, ComputedError, message);
 
-    const oldError = Option.toNullable(this._error);
+    const oldError = this._error;
     if (!this.isRejected || oldError !== wrappedError) {
       this.version = nextVersion(this.version);
     }
 
-    this._error = Option.some(wrappedError);
+    this._error = wrappedError;
     this.flags = apply(this.flags, TRANSITION.TO_REJECTED);
 
     if (this._onError) {
-      const cbResult = Result.tryCatch(() => this._onError!(wrappedError));
-
-      Result.match(cbResult, {
-        ok: () => {},
-        err: (e) => {
-          console.error(ERROR_MESSAGES.CALLBACK_ERROR_IN_ERROR_HANDLER, e);
-        },
-      });
+      try {
+        this._onError(wrappedError);
+      } catch (e) {
+        console.error(ERROR_MESSAGES.CALLBACK_ERROR_IN_ERROR_HANDLER, e);
+      }
     }
 
     this._notifySubscribers(undefined, undefined);
     if (shouldThrow) throw wrappedError;
-    return Result.err(wrappedError);
   }
 
   /**
@@ -538,7 +518,7 @@ class ComputedAtomImpl<T> extends ReactiveNode<T> implements ComputedAtom<T>, Su
     }
 
     this._value = value;
-    this._error = Option.none;
+    this._error = null;
     this.flags = apply(this.flags, TRANSITION.TO_RESOLVED);
   }
 
