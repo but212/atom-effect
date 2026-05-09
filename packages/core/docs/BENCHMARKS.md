@@ -4,7 +4,7 @@ This document outlines the benchmarking suite for `@but212/atom-effect`. The sui
 
 ## Performance Metrics Summary
 
-The following table summarizes key performance metrics observed in version `0.32.0`.
+The following table summarizes key performance metrics observed in version `0.32.1`.
 
 | Category | Metric | Result | Context |
 | :--- | :--- | :--- | :--- |
@@ -106,7 +106,7 @@ Located in `__benchmarks__/realistic/`, these tests evaluate the system under co
 
 ## Technical Specifications
 
-**Version**: v0.32.0
+**Version**: v0.32.1
 **Last Updated**: 2026-05-09
 **Environment**:
 
