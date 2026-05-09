@@ -2,7 +2,7 @@
 
 This document provides raw data and detailed breakdowns for the `@but212/atom-effect-utils` performance suite.
 
-**Last Updated**: 2026-05-09
+**Last Updated**: 2026-05-10
 **Version**: v0.32.1
 
 - **Runtime**: Node.js v22.x
@@ -16,22 +16,22 @@ This document provides raw data and detailed breakdowns for the `@but212/atom-ef
 
 | Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :--- | :--- | :--- | :--- |
-| Literal assignment | 437,390.86 | 0.0023 | 0.0024 |
-| Null check | 438,260.95 | 0.0023 | 0.0023 |
-| Nullish coalescing (mixed) | 232,257.83 | 0.0043 | 0.0071 |
-| Inline ternary map | 429,683.29 | 0.0023 | 0.0045 |
-| If-Else branch (mixed) | 231,166.87 | 0.0043 | 0.0044 |
+| Literal assignment | 411,397.35 | 0.0024 | 0.0046 |
+| Null check | 426,317.32 | 0.0023 | 0.0023 |
+| Nullish coalescing (mixed) | 224,589.64 | 0.0045 | 0.0079 |
+| Inline ternary map | 420,416.40 | 0.0024 | 0.0028 |
+| If-Else branch (mixed) | 233,634.89 | 0.0043 | 0.0046 |
 
 ### Option Operations
 
 | Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :--- | :--- | :--- | :--- |
-| Some creation | 257,518.48 | 0.0039 | 0.0046 |
-| isSome | 294,479.17 | 0.0034 | 0.0062 |
-| unwrapOr (mixed) | 182,966.15 | 0.0055 | 0.0061 |
-| map | 248,562.98 | 0.0040 | 0.0045 |
-| match (mixed) | 180,733.38 | 0.0055 | 0.0059 |
-| fromNullable (mixed) | 179,240.00 | 0.0056 | 0.0062 |
+| Some creation | 253,729.06 | 0.0039 | 0.0046 |
+| isSome | 293,255.83 | 0.0034 | 0.0036 |
+| unwrapOr (mixed) | 171,674.38 | 0.0058 | 0.0065 |
+| map | 244,916.07 | 0.0041 | 0.0045 |
+| match (mixed) | 181,223.36 | 0.0055 | 0.0064 |
+| fromNullable (mixed) | 173,806.55 | 0.0058 | 0.0065 |
 
 ---
 
@@ -39,9 +39,9 @@ This document provides raw data and detailed breakdowns for the `@but212/atom-ef
 
 | Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :--- | :--- | :--- | :--- |
-| Result.ok creation | 253,760.10 | 0.0039 | 0.0070 |
-| Result.match (mixed) | 183,014.27 | 0.0055 | 0.0098 |
-| Result.tryCatch (mixed) | 4,296.16 | 0.2328 | 0.2771 |
+| Result.ok creation | 231,797.51 | 0.0043 | 0.0083 |
+| Result.match (mixed) | 184,095.76 | 0.0054 | 0.0070 |
+| Result.tryCatch (mixed) | 4,443.34 | 0.2251 | 0.3185 |
 
 ---
 
@@ -49,13 +49,13 @@ This document provides raw data and detailed breakdowns for the `@but212/atom-ef
 
 | Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :--- | :--- | :--- | :--- |
-| push (small, x100) | 325,262.60 | 0.0031 | 0.0061 |
-| push (large, x10) | 50,266.99 | 0.0199 | 0.0305 |
-| has (x100) | 177,378.73 | 0.0056 | 0.0065 |
-| forEach (x100) | 69,952.25 | 0.0143 | 0.0238 |
-| compact (x100) | 38,239.68 | 0.0262 | 0.0375 |
-| some (early exit, x100) | 352,437.87 | 0.0028 | 0.0028 |
-| some (full scan, x100) | 106,159.04 | 0.0094 | 0.0175 |
+| push (small, x100) | 331,711.49 | 0.0030 | 0.0059 |
+| push (large, x10) | 47,790.66 | 0.0209 | 0.0355 |
+| has (x100) | 174,982.10 | 0.0057 | 0.0062 |
+| forEach (x100) | 69,763.17 | 0.0143 | 0.0236 |
+| compact (x100) | 39,083.22 | 0.0256 | 0.0365 |
+| some (early exit, x100) | 341,605.00 | 0.0029 | 0.0029 |
+| some (full scan, x100) | 104,573.81 | 0.0096 | 0.0175 |
 
 ---
 
@@ -63,9 +63,9 @@ This document provides raw data and detailed breakdowns for the `@but212/atom-ef
 
 | Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :--- | :--- | :--- | :--- |
-| isPromise: native promise | 287,991.22 | 0.0035 | 0.0042 |
-| isPromise: thenable | 290,726.73 | 0.0034 | 0.0070 |
-| isPromise: object | 268,001.70 | 0.0037 | 0.0075 |
-| isOption: true | 288,328.98 | 0.0035 | 0.0069 |
-| isOption: false | 291,089.37 | 0.0034 | 0.0034 |
-| isPromise: mixed data | 169,857.32 | 0.0059 | 0.0099 |
+| isPromise: native promise | 290,555.62 | 0.0034 | 0.0070 |
+| isPromise: thenable | 276,260.28 | 0.0036 | 0.0070 |
+| isPromise: object | 287,849.49 | 0.0035 | 0.0035 |
+| isOption: true | 282,765.16 | 0.0035 | 0.0062 |
+| isOption: false | 290,306.60 | 0.0034 | 0.0039 |
+| isPromise: mixed data | 163,432.77 | 0.0061 | 0.0112 |

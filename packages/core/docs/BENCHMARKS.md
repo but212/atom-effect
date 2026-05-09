@@ -8,11 +8,11 @@ The following table summarizes key performance metrics observed in version `0.32
 
 | Category | Metric | Result | Context |
 | :--- | :--- | :--- | :--- |
-| **Atom** | Read (untracked) | 3.17M ops/sec | Performance of non-reactive reads (x10) |
-| **Computed** | Recompute (cached) | 343.1K ops/sec | Cached re-evaluation performance (x10) |
-| **Effect** | Propagation | 1.13M ops/sec | Full atom → computed → effect cycle (x10) |
-| **Workflow** | Todo App | 93.3K ops/sec | Comprehensive workflow performance |
-| **Latency** | 100 Atom updates | 0.0055 ms | Mean execution time for batched updates |
+| **Atom** | Read (untracked) | 3.16M ops/sec | Performance of non-reactive reads (x10) |
+| **Computed** | Recompute (cached) | 351.3K ops/sec | Cached re-evaluation performance (x10) |
+| **Effect** | Propagation | 1.14M ops/sec | Full atom → computed → effect cycle (x10) |
+| **Workflow** | Todo App | 84.6K ops/sec | Comprehensive workflow performance |
+| **Latency** | 100 Atom updates | 0.0051 ms | Mean execution time for batched updates |
 
 ---
 
@@ -107,7 +107,7 @@ Located in `__benchmarks__/realistic/`, these tests evaluate the system under co
 ## Technical Specifications
 
 **Version**: v0.32.1
-**Last Updated**: 2026-05-09
+**Last Updated**: 2026-05-10
 **Environment**:
 
 - **Runtime**: Node.js v22.x
