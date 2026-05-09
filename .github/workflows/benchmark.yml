@@ -5,30 +5,27 @@ on:
     branches: [main]
 
 jobs:
-  setup:
-    name: Discover Packages
-    runs-on: ubuntu-latest
-    outputs:
-      packages: ${{ steps.list.outputs.packages }}
-    steps:
-      - uses: actions/checkout@v6
-      - id: list
-        run: |
-          PKGS=$(ls packages | jq -R . | jq -s -c .)
-          echo "packages=$PKGS" >> $GITHUB_OUTPUT
-
   benchmark:
     name: Run ${{ matrix.package }} (${{ matrix.type }})
-    needs: setup
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        package: ${{ fromJSON(needs.setup.outputs.packages) }}
-        type: [micro, macro, realistic]
-        exclude:
-          - package: jquery
+        include:
+          - package: core
+            type: micro
+          - package: core
+            type: macro
+          - package: core
+            type: state
+          - package: core
             type: realistic
+          - package: jquery
+            type: micro
+          - package: jquery
+            type: macro
+          - package: utils
+            type: all
 
     steps:
       - uses: actions/checkout@v6
@@ -45,10 +42,14 @@ jobs:
           BENCH_OUTPUT: ../../results/${{ matrix.package }}-${{ matrix.type }}.txt
         run: |
           mkdir -p ../../results
-          pnpm bench:${{ matrix.type }} > ../../results/${{ matrix.package }}-${{ matrix.type }}.txt
+          if [ "${{ matrix.type }}" = "all" ]; then
+            pnpm bench:all > $BENCH_OUTPUT
+          else
+            pnpm bench:${{ matrix.type }} > $BENCH_OUTPUT
+          fi
 
       - name: Upload results
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
-          name: benchmark-results
+          name: benchmark-results-${{ matrix.package }}-${{ matrix.type }}
           path: results/
