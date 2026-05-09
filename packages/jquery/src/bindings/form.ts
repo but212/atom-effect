@@ -1,4 +1,6 @@
 import {
+  computed,
+  type Disposable,
   effect,
   lensFor,
   mergeLenses,
@@ -104,12 +106,19 @@ function createInterceptedLens<T extends object>(
   options: FormOptions<unknown>
 ): WritableAtom<unknown> {
   const { transform, onChange } = options;
-  const intercepted = Object.create(baseLens);
 
-  Object.defineProperty(intercepted, 'value', {
-    get() {
-      return baseLens.value;
-    },
+  /**
+   * Logic: Reactive Proxy Node
+   * Uses 'computed' to create a first-class reactive node that tracks the base lens.
+   * This ensures the intercepted lens has its own unique identity (id, version)
+   * compatible with the core library's internal WeakMaps and debugging tools.
+   */
+  const intercepted = computed(() => baseLens.value) as unknown as WritableAtom<unknown>;
+
+  const proto = Object.getPrototypeOf(intercepted);
+  const descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
+
+  const newDescriptor: PropertyDescriptor = {
     set(val: unknown) {
       let transformed = val;
       try {
@@ -128,9 +137,30 @@ function createInterceptedLens<T extends object>(
         }
       }
     },
-  });
+    configurable: true,
+  };
 
-  return intercepted as WritableAtom<unknown>;
+  if (descriptor?.get) {
+    newDescriptor.get = descriptor.get;
+  }
+
+  Object.defineProperty(intercepted, 'value', newDescriptor);
+
+  /**
+   * Logic: Cascading Disposal
+   * Ensures that disposing the intercepted lens also disposes the underlying
+   * lens to release its root subscriptions and prevent memory leaks.
+   */
+  const originalDispose = intercepted.dispose;
+  intercepted.dispose = () => {
+    originalDispose.call(intercepted);
+    const disposable = baseLens as Partial<Disposable>;
+    if (typeof disposable.dispose === 'function') {
+      disposable.dispose();
+    }
+  };
+
+  return intercepted;
 }
 
 /**
