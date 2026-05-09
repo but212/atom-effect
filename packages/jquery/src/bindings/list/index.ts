@@ -2,7 +2,7 @@ import { effect, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
 import { registry } from '@/core/registry';
 import type { EffectObject, ListKey, ListKeyFn, ListOptions, ReadonlyAtom } from '@/types';
-import { getSelector, hasOwn } from '@/utils';
+import { getSelector } from '@/utils';
 import { ListContext } from './context';
 import { buildIndices } from './diff';
 import { cleanupRemoved, handleEmpty, placeItems, renderItems } from './dom';
@@ -13,6 +13,12 @@ import type { PlaceCallbacks } from './types';
  * list contexts and controlling effects.
  */
 const instances = new WeakMap<Element, { fx: EffectObject; ctx: ListContext<unknown> }>();
+
+interface EventBinding {
+  type: string;
+  selector: string;
+  callback: Function;
+}
 
 /**
  * Synchronizes a reactive atom array with a jQuery container for automated list rendering.
@@ -63,11 +69,21 @@ function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptio
     events: options.events,
   };
 
+  const eventBindings: EventBinding[] = options.events
+    ? Object.entries(options.events).map(([eventKey, callback]) => {
+        const [type, ...selectorParts] = eventKey.trim().split(/\s+/);
+        return {
+          type: type!,
+          selector: selectorParts.length > 0 ? selectorParts.join(' ') : '> *',
+          callback: callback!,
+        };
+      })
+    : [];
+
   for (let i = 0, len = this.length; i < len; i++) {
     const element = this[i]!;
     const $c = $(element);
 
-    // Lifecycle: Dispose of existing instances to prevent memory leaks and conflicting effects.
     const prev = instances.get(element);
     if (prev) {
       prev.fx.dispose();
@@ -79,9 +95,6 @@ function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptio
       const items = source.value;
       const count = items.length;
 
-      // Reason: Reconciliation and diffing logic is executed within an `untracked`
-      // block to prevent the engine from recording internal DOM state management
-      // as reactive dependencies, which avoids infinite loops.
       untracked(() => {
         handleEmpty(ctx, count, $c, options.empty);
         if (count === 0) return;
@@ -96,7 +109,6 @@ function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptio
         cleanupRemoved(ctx, diff);
         placeItems(ctx, diff, element, callbacks, fragment);
 
-        // Logic: Commit the new state to the persistent context for the next diffing cycle.
         ctx.oldKeys = diff.newKeys;
         ctx.oldItems = diff.newItems;
         ctx.oldNodes = diff.newNodes;
@@ -104,9 +116,8 @@ function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptio
     });
 
     ctx.fx = fx;
-    if (options.events) setupEvents(ctx, $c, options.events);
+    if (eventBindings.length > 0) setupEvents(ctx, $c, eventBindings);
 
-    // Lifecycle: Register the effect and context for automatic cleanup when the DOM node is removed.
     registry.trackEffect(element, fx);
     instances.set(element, { fx, ctx });
 
@@ -118,55 +129,23 @@ function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptio
   return this;
 }
 
-/**
- * Attaches delegated event listeners to the container based on user-provided configurations.
- *
- * Logic:
- * 1. Delegation: Efficiently attaches a single listener to the container per event type.
- * 2. Resolution: Maps the event target back to the corresponding data item using the
- *    stable `data-atom-key` attribute and the context's lookup map.
- * 3. Coercion: Automatically handles the resolution of numeric keys that may have
- *    been serialized to strings when stored in HTML attributes.
- *
- * @param ctx - The list context for item lookup.
- * @param $container - The jQuery-wrapped container element.
- * @param events - A record of event selectors and their associated callback functions.
- * @internal
- */
-function setupEvents<T>(
-  ctx: ListContext<T>,
-  $container: JQuery,
-  events: Record<string, Function>
-): void {
-  for (const eventKey in events) {
-    if (!hasOwn.call(events, eventKey)) continue;
-    const spacePos = eventKey.indexOf(' ');
-    const type = spacePos === -1 ? eventKey : eventKey.slice(0, spacePos);
-    const selector = spacePos === -1 ? '> *' : eventKey.slice(spacePos + 1).trim();
-    const callback = events[eventKey]!;
+function setupEvents<T>(ctx: ListContext<T>, $container: JQuery, bindings: EventBinding[]): void {
+  for (let i = 0, len = bindings.length; i < len; i++) {
+    const { type, selector, callback } = bindings[i]!;
 
     $container.on(
       `${type}.atomList`,
       selector,
       function (this: HTMLElement, e: JQuery.TriggeredEvent) {
-        const target = e.target.closest?.('[data-atom-key]') as HTMLElement | null;
-        const rawKey = target?.getAttribute('data-atom-key');
-        if (rawKey === null || rawKey === undefined) return;
+        const target = (e.target as HTMLElement).closest?.('[data-atom-key]') as HTMLElement | null;
+        if (!target) return;
 
-        let key: ListKey = rawKey;
+        const rawKey = target.getAttribute('data-atom-key');
+        if (rawKey === null) return;
 
-        // Reason: Numeric keys are serialized to strings in the DOM. This check
-        // ensures that the correct typed key is used for index resolution.
-        if (!ctx.keyToIndex.has(rawKey)) {
-          const numKey = Number(rawKey);
-          if (!Number.isNaN(numKey) && ctx.keyToIndex.has(numKey)) {
-            key = numKey;
-          }
-        }
-
-        const index = ctx.keyToIndex.get(key);
+        const index = ctx.getIndex(rawKey);
         if (index !== undefined) {
-          callback.call(target as HTMLElement, ctx.oldItems[index]!, index, e);
+          callback.call(target, ctx.oldItems[index]!, index, e);
         }
       }
     );

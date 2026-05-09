@@ -1,4 +1,5 @@
 export { AsyncState, IS_DEV, SCHEDULER_CONFIG } from '@/constants';
+export type { Paths, PathValue } from '@/core';
 export {
   aeNextTick,
   atom,
@@ -9,11 +10,12 @@ export {
   effect,
   getPathValue,
   lensFor,
+  mergeAtoms,
+  mergeLenses,
   scheduler as globalScheduler,
   setDeepValue,
   untracked,
 } from '@/core';
-
 export {
   AtomError,
   ComputedError,
@@ -21,7 +23,6 @@ export {
   SchedulerError,
 } from '@/errors';
 export { BRAND, BrandFlags } from '@/symbols';
-
 export type {
   AsyncStateType,
   AtomOptions,
@@ -33,8 +34,7 @@ export type {
   EffectFunction,
   EffectObject,
   EffectOptions,
-  Paths,
-  PathValue,
+  MergedDependencyValue,
   ReadonlyAtom,
   WritableAtom,
 } from '@/types';

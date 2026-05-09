@@ -32,10 +32,9 @@ export function setAtomKey(node: Element | Node | JQuery, key: string | null): v
       node.setAttribute('data-atom-key', key);
     }
   } else if (!(node as Node).nodeType) {
-    // Logic: Iterate through jQuery collections to apply the key to all member elements.
-    const elOrJq = node as JQuery;
-    for (let i = 0, len = elOrJq.length; i < len; i++) {
-      const el = elOrJq[i];
+    const jq = node as JQuery;
+    for (let i = 0, len = jq.length; i < len; i++) {
+      const el = jq[i];
       if (el instanceof Element) {
         if (key === null) {
           el.removeAttribute('data-atom-key');
@@ -61,9 +60,9 @@ export function cleanupNodes(node: Element | JQuery): void {
   if (node instanceof Element) {
     registry.cleanupTree(node);
   } else {
-    // Logic: Perform tree cleanup for every root element in the jQuery collection.
-    for (let j = 0, nLen = (node as JQuery).length; j < nLen; j++) {
-      const el = (node as JQuery)[j];
+    const jq = node as JQuery;
+    for (let i = 0, len = jq.length; i < len; i++) {
+      const el = jq[i];
       if (el instanceof Element) {
         registry.cleanupTree(el);
       }

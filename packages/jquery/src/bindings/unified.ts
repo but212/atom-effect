@@ -1,4 +1,5 @@
 import { effect, untracked } from '@but212/atom-effect';
+import { Option } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { applyInputBinding } from '@/bindings/input-binding';
 import { SYSTEM_BINDING, SYSTEM_SECURITY } from '@/constants';
@@ -18,16 +19,11 @@ import { debug } from '@/utils/debug';
 import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '@/utils/sanitize';
 
 /**
- * Converts a kebab-case property name to camelCase.
- *
- * @param property - The kebab-case string (e.g., 'background-color').
- * @returns The camelCase version (e.g., 'backgroundColor').
+ * Converts a camelCase property name to kebab-case.
  * @internal
  */
-function toCamel(property: string): string {
-  return property.includes('-')
-    ? property.replace(/-./g, (match) => match[1]!.toUpperCase())
-    : property;
+function toKebab(str: string): string {
+  return str.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
 }
 
 /**
@@ -75,7 +71,10 @@ export function bindText<T = unknown>(
     element,
     value,
     (val) => {
-      const textContent = formatter ? formatter(val) : String(val ?? '');
+      const textContent = Option.unwrapOr(
+        Option.map(Option.fromNullable(formatter), (fn: Function) => fn(val)),
+        String(val ?? '')
+      );
       if (element.textContent !== textContent) {
         element.textContent = textContent;
       }
@@ -135,41 +134,31 @@ export function bindClass(
   element: HTMLElement,
   classMap: Record<string, AsyncReactiveValue<boolean>>
 ): void {
-  const tokens: Record<string, string[]> = {};
-  let prevActive = new Set<string>();
+  const tokensMap = new Map<string, string[]>();
 
-  for (const key of Object.keys(classMap)) {
-    const trimmedKey = key.trim();
-    tokens[key] = trimmedKey.includes(' ') ? trimmedKey.split(/\s+/).filter(Boolean) : [trimmedKey];
-  }
+  Object.keys(classMap).forEach((key) => {
+    const trimmed = key.trim();
+    tokensMap.set(key, trimmed.includes(' ') ? trimmed.split(/\s+/).filter(Boolean) : [trimmed]);
+  });
 
   registerMapEffect(
     element,
     classMap,
     (states) => {
-      const currentActiveTokens = new Set<string>();
+      // Logic: Aggregate all active tokens to handle overlapping definitions.
+      const activeTokens = new Set<string>();
       for (const [key, isActive] of Object.entries(states)) {
         if (isActive) {
-          for (const token of tokens[key]!) {
-            currentActiveTokens.add(token);
-          }
+          tokensMap.get(key)?.forEach((t) => activeTokens.add(t));
         }
       }
 
-      // Logic: Atomic token updates — only apply changes for tokens that have transitioned.
-      for (const token of currentActiveTokens) {
-        if (!prevActive.has(token)) {
-          element.classList.add(token);
-        }
-      }
-
-      for (const token of prevActive) {
-        if (!currentActiveTokens.has(token)) {
-          element.classList.remove(token);
-        }
-      }
-
-      prevActive = currentActiveTokens;
+      // Logic: Atomic toggle using native classList API.
+      Array.from(tokensMap.values())
+        .flat()
+        .forEach((token) => {
+          element.classList.toggle(token, activeTokens.has(token));
+        });
     },
     'class'
   );
@@ -186,32 +175,32 @@ export function bindClass(
  * @internal
  */
 export function bindCss(element: HTMLElement, cssMap: Record<string, CssValue>): void {
-  const style = element.style as unknown as Record<string, string | null>;
+  const { style } = element;
   const reactiveMap: Record<string, ReactiveValue<unknown>> = {};
-  const metaMap: Record<string, { camelCase: string; unit: string }> = {};
-  const prev: Record<string, string | null> = {};
+  const metaMap: Record<string, string> = {};
+  const prev = new Map<string, string>();
 
-  for (const [property, value] of Object.entries(cssMap)) {
+  Object.entries(cssMap).forEach(([property, value]) => {
     const [source, unit] = Array.isArray(value) ? value : [value, ''];
     reactiveMap[property] = source;
-    metaMap[property] = { camelCase: toCamel(property), unit };
-  }
+    metaMap[property] = unit;
+  });
 
   registerMapEffect(
     element,
     reactiveMap,
     (states) => {
-      for (const [property, value] of Object.entries(states)) {
-        const meta = metaMap[property]!;
-        const str = meta.unit ? `${value}${meta.unit}` : String(value);
+      Object.entries(states).forEach(([property, value]) => {
+        const unit = metaMap[property] ?? '';
+        const str = unit ? `${value}${unit}` : String(value);
 
-        if (prev[property] !== str) {
+        if (prev.get(property) !== str) {
           if (!isDangerousCssValue(str)) {
-            style[meta.camelCase] = str;
+            style.setProperty(toKebab(property), str);
           }
-          prev[property] = str;
+          prev.set(property, str);
         }
-      }
+      });
     },
     'css'
   );
@@ -220,11 +209,15 @@ export function bindCss(element: HTMLElement, cssMap: Record<string, CssValue>):
 /**
  * Binds HTML attributes to reactive sources.
  *
- * Logic:
- * - Boolean Attributes: Specifically handles attributes like `disabled` where
- *   false results in attribute removal.
- * - ARIA: Maps boolean values to 'true'/'false' strings for accessibility attributes.
- * - Protocol Validation: Blocks dangerous URL protocols in `href` or `src` attributes.
+ * Logic: Attribute Transformation Pipeline
+ * Implements a unified transformation flow for different attribute categories:
+ * - Boolean Attributes: Automatically removed when the condition is `false`.
+ * - ARIA Attributes: Boolean values are mapped to 'true'/'false' strings.
+ * - Standard Attributes: Values are coerced to strings.
+ *
+ * Security: Protocol Validation
+ * Validates 'href' and 'src' attributes against dangerous URL protocols to
+ * mitigate potential XSS vectors.
  *
  * @param element - The target HTMLElement.
  * @param attrMap - A record mapping attribute names to reactive values.
@@ -249,27 +242,31 @@ export function bindAttr(
     safeMap,
     (states) => {
       for (const [name, value] of Object.entries(states)) {
-        const meta = metaMap[name]!;
-        const val = value as PrimitiveValue;
+        const meta = metaMap[name];
+        if (!meta) continue;
 
-        if (val == null || (val === false && !meta.isAria)) {
-          if (prev[name] !== null) {
-            element.removeAttribute(name);
-          }
-          prev[name] = null;
-          continue;
-        }
+        const attrVal = Option.unwrapOr(
+          Option.map(Option.fromNullable(value), (val) => {
+            if (val === true) return meta.isAria ? 'true' : name;
+            if (val === false) return meta.isAria ? 'false' : null;
+            return String(val);
+          }),
+          null
+        );
 
-        const next = val === true ? (meta.isAria ? 'true' : name) : String(val);
-
-        if (isDangerousUrl(name, next)) {
+        // 2. Validate and Apply
+        if (attrVal !== null && isDangerousUrl(name, attrVal as string)) {
           console.warn(`${SYSTEM_BINDING.PREFIX} ${SYSTEM_SECURITY.ERRORS.BLOCKED_PROTOCOL(name)}`);
           continue;
         }
 
-        if (prev[name] !== next) {
-          element.setAttribute(name, next);
-          prev[name] = next;
+        if (prev[name] !== attrVal) {
+          if (attrVal === null) {
+            element.removeAttribute(name);
+          } else {
+            element.setAttribute(name, attrVal as string);
+          }
+          prev[name] = attrVal as string | null;
         }
       }
     },
@@ -319,8 +316,9 @@ export function bindProp(
 /**
  * Manages element visibility based on a reactive condition.
  *
- * Logic: The original `display` mode (e.g., `flex`, `grid`) is preserved and
- * restored when the element is shown, ensuring the intended layout remains intact.
+ * Logic: Layout Preservation
+ * Transitions between 'visible' and 'hidden' states while preserving the
+ * element's original 'display' mode (e.g., flex, grid) when restored.
  *
  * @param element - The target HTMLElement.
  * @param condition - The reactive boolean condition governing visibility.
@@ -332,19 +330,23 @@ export function bindVisibility(
   condition: AsyncReactiveValue<boolean>,
   invert: boolean
 ): void {
-  let prevDisplay = element.style.display === 'none' ? '' : element.style.display;
+  // Capture initial display state, excluding 'none'.
+  let baseDisplay = element.style.display === 'none' ? '' : element.style.display;
 
   registerReactiveEffect(
     element,
     condition,
     (value) => {
       const isVisible = invert !== !!value;
+      const current = element.style.display;
+
+      // Data-centric state application:
       if (isVisible) {
-        if (element.style.display === 'none') {
-          element.style.display = prevDisplay;
+        if (current === 'none') {
+          element.style.display = baseDisplay;
         }
-      } else if (element.style.display !== 'none') {
-        prevDisplay = element.style.display;
+      } else if (current !== 'none') {
+        baseDisplay = current;
         element.style.display = 'none';
       }
     },

@@ -1,212 +1,210 @@
-import { IS_DEV } from '@/constants';
 import type { Dependency, Subscriber } from '@/types';
-import { debug } from '@/utils/debug';
-import { isPromise } from '@/utils/type-guards';
-
-// ── Tracking Types ──────────────────────────────────────────────────────
 
 /**
- * An interface for objects capable of consuming reactive dependencies.
+ * Interface for nodes capable of recording reactive dependencies during execution.
+ * @internal
+ *
+ * Reason: Decouples dependency collection from the specific node implementation,
+ * allowing any object to participate in tracking as long as it can record dependencies.
  */
 export interface DependencySubscriber {
-  /**
-   * Registers a dependency to this subscriber during a tracking cycle.
-   */
   addDependency(dep: Dependency): void;
 }
 
 /**
- * An interface for objects that can be executed as a unit of reactive work.
+ * Interface for nodes that can be scheduled for re-execution.
+ * @internal
+ *
+ * Reason: Provides a unified interface for the scheduler to trigger updates
+ * without knowing the internal logic of the node.
  */
 export interface ExecutableSubscriber {
-  /**
-   * Triggers the execution of the reactive node or effect.
-   */
   execute(): void;
 }
 
 /**
- * A unified interface combining dependency collection and execution capabilities.
+ * Unified interface for nodes that both consume dependencies and execute logic.
+ * (e.g., Effects, Computed Atoms, Observers)
+ * @internal
  */
 export interface DependencyTracker extends DependencySubscriber, ExecutableSubscriber {}
 
 /**
- * A function type that also serves as a dependency consumer.
- */
-export type TrackableFunction = (() => void) & DependencySubscriber;
-
-// ── Dependency Link & Subscription ───────────────────────────────────────
-
-/**
- * Represents an edge in the dependency graph between a subscriber and a dependency.
+ * Represents a single directed edge in the dependency graph (Subscriber -> Dependency).
+ * @internal
  *
- * This class is designed to maintain a consistent V8 hidden class shape by ensuring
- * all fields are initialized in the constructor.
+ * Logic: Includes a version field to implement efficient stale checks.
+ * If the dependency's version doesn't match this version, the subscriber may need re-evaluation.
  */
-export class DependencyLink {
-  constructor(
-    /** The reactive node being depended upon. */
-    public node: Dependency,
-    /** The version of the dependency at the time of tracking. */
-    public version: number,
-    /**
-     * The cleanup function to terminate the subscription.
-     * @internal
-     */
-    public unsub: (() => void) | undefined = undefined
-  ) {}
+export interface DependencyLink {
+  /** The node being watched. */
+  node: Dependency;
+  /** The version of the node when this link was established. */
+  version: number;
+  /** Cleanup function returned by the dependency. */
+  unsub: (() => void) | undefined;
+}
+
+/** @internal */
+export function createDependencyLink(
+  node: Dependency,
+  version: number,
+  unsub: (() => void) | undefined = undefined
+): DependencyLink {
+  return { node, version, unsub };
 }
 
 /**
- * Represents a registration entry for a reactive subscriber.
+ * A handle for an active listener on a reactive node.
+ * Supports both raw callbacks and internal graph subscribers.
+ * @internal
  */
-export class Subscription<T> {
-  constructor(
-    /**
-     * An optional callback function to invoke on change.
-     * @internal
-     */
-    public fn: ((newValue?: T, oldValue?: T) => void) | undefined = undefined,
-    /**
-     * An optional Subscriber object to execute on change.
-     * @internal
-     */
-    public sub: Subscriber | undefined = undefined
-  ) {}
-
-  /**
-   * Dispatches a notification to the registered listener or subscriber.
-   *
-   * Logic: The method performs a context switch by temporarily clearing the
-   * active tracking context. This ensures that any reactive property access
-   * occurring within a subscriber's callback does not create accidental
-   * dependency cycles.
-   *
-   * Optimization: The `untracked` logic is inlined here to eliminate closure
-   * allocation overhead in the notification hot-path.
-   */
-  notify(newValue?: T, oldValue?: T): void {
-    const fn = this.fn;
-    const sub = this.sub;
-
-    if (fn === undefined && sub === undefined) return;
-
-    const ctx = trackingContext;
-    const prev = ctx.current;
-
-    if (prev === null) {
-      if (fn !== undefined) fn(newValue, oldValue);
-      if (sub !== undefined) sub.execute();
-      return;
-    }
-
-    // Logic: Context switch is required to maintain notification safety and prevent cycles.
-    ctx.current = null;
-    try {
-      if (fn !== undefined) fn(newValue, oldValue);
-      if (sub !== undefined) sub.execute();
-    } finally {
-      ctx.current = prev;
-    }
-  }
+export interface Subscription<T> {
+  /** Raw callback for external listeners. */
+  fn: ((newValue?: T, oldValue?: T) => void) | undefined;
+  /** Internal subscriber for graph-based updates. */
+  sub: Subscriber | undefined;
 }
 
-// ── Tracking Context ────────────────────────────────────────────────────
+/** @internal */
+export function createSubscription<T>(
+  fn: ((newValue?: T, oldValue?: T) => void) | undefined = undefined,
+  sub: Subscriber | undefined = undefined
+): Subscription<T> {
+  return { fn, sub };
+}
 
-/**
- * Manages the global singleton state for automatic dependency collection.
- *
- * This class maintains the current active subscriber and provides a mechanism
- * to execute functions within a specific reactive scope.
- */
-class TrackingContext {
-  /** The current active subscriber at the top of the execution stack. */
-  public current: DependencySubscriber | null = null;
+/** @internal */
+export function notifySubscription<T>(
+  subscription: Subscription<T> | null,
+  newValue?: T,
+  oldValue?: T
+): void {
+  if (subscription === null) return;
 
-  /**
-   * Executes a function within the scope of a specific subscriber.
-   *
-   * @param subscriber - The subscriber to collect dependencies for.
-   * @param fn - The logic to execute.
-   * @returns The result of the provided function.
-   */
-  public run<T>(subscriber: DependencySubscriber, fn: () => T): T {
-    if (this.current === subscriber) {
-      return fn();
-    }
-
-    const prev = this.current;
-    this.current = subscriber;
-
-    try {
-      if (!IS_DEV) return fn();
-
-      const result = fn();
-
-      // Caution: Dependency tracking is strictly synchronous.
-      if (isPromise(result)) {
-        debug.warn(
-          true,
-          'Detected Promise returned within tracking context. ' +
-            'Dependencies accessed after an "await" boundary will NOT be captured. ' +
-            'Ensure all reactive dependencies are accessed before the first asynchronous operation.'
-        );
-      }
-
-      return result;
-    } finally {
-      // Constraint: Restoration of the previous context is required to ensure tracking integrity.
-      this.current = prev;
-    }
+  // Logic: Failure Isolation
+  // Uses standard try/catch to avoid closure allocation overhead in the hot path.
+  // Ensures a failing listener or subscriber does not interrupt the notification cycle.
+  try {
+    const { fn, sub } = subscription;
+    if (fn !== undefined) fn(newValue, oldValue);
+    if (sub !== undefined) sub.execute();
+  } catch (e) {
+    console.error('[atom-effect] Subscriber failed:', e);
   }
 }
 
 /**
- * The global tracking context singleton.
+ * Internal state for the reactive tracking system.
+ * @internal
+ *
+ * Logic: Stack-based approach
+ * The stack enables nested tracking. When a computed atom is read inside an effect,
+ * the computed atom becomes the 'current' subscriber while it calculates its value,
+ * and the effect is restored as 'current' after the computation finishes.
  */
-export const trackingContext = new TrackingContext();
+export interface TrackingContext {
+  stack: (DependencySubscriber | null)[];
+  current: DependencySubscriber | null;
+}
+
+/** @internal */
+export function createTrackingContext(): TrackingContext {
+  return { stack: [], current: null };
+}
+
+/** @internal */
+export function pushTrackingSubscriber(
+  context: TrackingContext,
+  subscriber: DependencySubscriber | null
+): void {
+  context.stack.push(subscriber);
+  context.current = subscriber;
+}
+
+/** @internal */
+export function popTrackingSubscriber(context: TrackingContext): void {
+  const stack = context.stack;
+  stack.pop();
+  const len = stack.length;
+  context.current = len > 0 ? stack[len - 1]! : null;
+}
 
 /**
- * The type representing the global tracking context.
+ * Resets the tracking stack to a specific depth.
+ * @internal
+ *
+ * Reason: Used during error recovery or transaction rollbacks where
+ * the execution stack might be corrupted or partially executed.
  */
-export type { TrackingContext };
-
-// ── Untracked ───────────────────────────────────────────────────────────
+export function rollbackTrackingSubscriber(context: TrackingContext, depth: number): void {
+  const stack = context.stack;
+  stack.length = depth;
+  const len = stack.length;
+  context.current = len > 0 ? stack[len - 1]! : null;
+}
 
 /**
- * Executes a function without recording any reactive dependencies.
+ * Executes a function within the scope of a specific subscriber.
+ * @internal
+ */
+export function runInTrackingContext<T>(
+  context: TrackingContext,
+  subscriber: DependencySubscriber,
+  fn: () => T
+): T {
+  // Optimization: Avoid redundant stack operations if already in the same context.
+  if (context.current === subscriber) return fn();
+
+  pushTrackingSubscriber(context, subscriber);
+  try {
+    return fn();
+  } finally {
+    popTrackingSubscriber(context);
+  }
+}
+
+/** @internal */
+export function resetTrackingContext(context: TrackingContext): void {
+  context.stack.length = 0;
+  context.current = null;
+}
+
+export const trackingContext = createTrackingContext();
+
+/**
+ * Executes a function scope where reactive dependencies are ignored.
  *
  * When to use:
- * - To read the value of an atom or computed without subscribing to its changes.
- * - To perform side effects inside a reactive computation that should not trigger re-runs.
- * - To prevent infinite dependency loops in complex reactive interactions.
+ * - Accessing atom values inside an effect or computed without creating a dependency.
+ * - Performing side-effects (logging, analytics) that shouldn't trigger re-runs.
+ * - Breaking circular dependencies by reading a value "silently".
  *
- * @param fn - The function to execute.
- * @returns The result of the provided function.
+ * @param fn - The function to execute in an untracked scope.
+ * @returns The result of the function.
  *
  * @example
  * ```typescript
- * import { effect, untracked } from '@but212/atom-effect';
- *
+ * const count = atom(0);
  * effect(() => {
- *   const val = untracked(() => someAtom.value);
- *   console.log('Read without tracking:', val);
+ *   // This effect only runs when count changes.
+ *   const current = count.value;
+ *
+ *   untracked(() => {
+ *     // This read does NOT create a dependency.
+ *     // It won't cause the effect to re-run if logging was reactive.
+ *     console.log('Logging untracked value:', count.value);
+ *   });
  * });
  * ```
  */
 export function untracked<T>(fn: () => T): T {
-  const ctx = trackingContext;
-  const prev = ctx.current;
+  if (trackingContext.current === null) return fn();
 
-  if (prev === null) {
-    return fn();
-  }
-
-  // Logic: Suspend tracking by temporarily clearing the current subscriber.
-  ctx.current = null;
+  pushTrackingSubscriber(trackingContext, null);
   try {
     return fn();
   } finally {
-    ctx.current = prev;
+    popTrackingSubscriber(trackingContext);
   }
 }

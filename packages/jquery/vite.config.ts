@@ -1,41 +1,26 @@
-import { defineConfig } from 'vite';
-import dts from 'vite-plugin-dts';
+import { defineViteConfig } from '@but212/atom-effect-configs';
 
-export default defineConfig(({ mode }) => ({
-  define: {
-    'process.env.NODE_ENV': JSON.stringify(mode),
-  },
-  build: {
-    target: 'es2021',
-    lib: {
-      entry: `${import.meta.dirname}/src/index.ts`,
-      name: 'AtomEffectJQuery',
-      formats: ['es', 'cjs', 'umd'],
-      fileName: (format: string) =>
-        format === 'umd' ? 'atom-effect-jquery.min.js' : `index.${format === 'es' ? 'mjs' : 'cjs'}`,
+export default defineViteConfig(
+  {
+    packageDir: import.meta.dirname,
+    name: 'AtomEffectJQuery',
+    libFileNames: {
+      umd: 'atom-effect-jquery.min.js',
+      es: 'index.mjs',
+      cjs: 'index.cjs',
     },
-    rollupOptions: {
-      external: ['jquery', '@but212/atom-effect'],
-      output: {
-        globals: {
-          '@but212/atom-effect': 'AtomEffect',
-          jquery: 'jQuery',
+  },
+  {
+    build: {
+      rollupOptions: {
+        external: ['jquery', '@but212/atom-effect'],
+        output: {
+          globals: {
+            '@but212/atom-effect': 'AtomEffect',
+            jquery: 'jQuery',
+          },
         },
-        exports: 'named',
       },
     },
-    sourcemap: true,
-  },
-  resolve: {
-    alias: {
-      '@': `${import.meta.dirname}/src`,
-    },
-  },
-  plugins: [
-    dts({
-      include: ['src/**/*'],
-      exclude: ['src/**/*.test.ts', '__tests__/**/*', '__benchmarks__/**/*', 'node_modules'],
-      tsconfigPath: './tsconfig.build.json',
-    }),
-  ],
-}));
+  }
+);

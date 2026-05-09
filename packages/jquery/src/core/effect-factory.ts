@@ -27,11 +27,6 @@ export type BindingDebugType =
  * Logic: Monotonic ID Tracking
  * Every update request is assigned a unique, incrementing ID. If a promise resolves
  * but its ID no longer matches the latest issued ID, the result is discarded.
- * This effectively prevents "out-of-order" race conditions where stale data
- * could overwrite newer state.
- *
- * Lifecycle: The runner monitors the element's lifecycle through the registry
- * and prevents updates if the element has been disposed.
  *
  * @param el - The target element for the update.
  * @param debugType - The type of binding for logging purposes.
@@ -55,6 +50,9 @@ function createAsyncRunner<T>(
     const currentId = ++latestId;
 
     if (!isPromise(value)) {
+      // Sync Path: Direct execution to minimize overhead
+      if (isDisposed || currentId !== latestId) return;
+
       untracked(() => {
         try {
           updater(value);
@@ -70,29 +68,30 @@ function createAsyncRunner<T>(
       return;
     }
 
-    value
-      .then((resolved) => {
-        // Logic: Discard results if a newer update was initiated or the element was removed.
-        if (currentId === latestId && !isDisposed) {
-          untracked(() => {
-            try {
-              updater(resolved);
-              debug.domUpdated(SYSTEM_BINDING.PREFIX, el, `${debugType} (async)`, resolved);
-            } catch (error) {
-              debug.error(
-                SYSTEM_BINDING.PREFIX,
-                SYSTEM_BINDING.ERRORS.UPDATER_ERROR(debugType),
-                error
-              );
-            }
-          });
-        }
-      })
-      .catch((error) => {
+    // Async Path
+    value.then(
+      (resolved) => {
+        if (isDisposed || currentId !== latestId) return;
+        untracked(() => {
+          try {
+            updater(resolved);
+            debug.domUpdated(SYSTEM_BINDING.PREFIX, el, `${debugType} (async)`, resolved);
+          } catch (error) {
+            debug.error(
+              SYSTEM_BINDING.PREFIX,
+              SYSTEM_BINDING.ERRORS.UPDATER_ERROR(debugType, false),
+              error
+            );
+          }
+        });
+      },
+      (error) => {
+        // Caution: Network or source errors are logged if they are still relevant.
         if (currentId === latestId && !isDisposed) {
           debug.error(SYSTEM_BINDING.PREFIX, SYSTEM_BINDING.ERRORS.UPDATER_ERROR(debugType), error);
         }
-      });
+      }
+    );
   };
 }
 
@@ -100,8 +99,7 @@ function createAsyncRunner<T>(
  * Establishes a reactive effect between a single source and a DOM element.
  *
  * Lifecycle: The created effect is automatically registered with the global
- * `registry` and linked to the target element, ensuring it is disposed of
- * when the element is removed from the DOM.
+ * `registry` and linked to the target element.
  *
  * @param el - The target DOM element.
  * @param source - The reactive atom, function, or static value.
@@ -134,7 +132,6 @@ export function registerReactiveEffect<T>(
       )
     );
   } else {
-    // Logic: Static values are handled directly via the runner to support initial sync.
     runner(source as T | Promise<T>);
   }
 }
@@ -142,47 +139,53 @@ export function registerReactiveEffect<T>(
 /**
  * Establishes a reactive effect between a map of sources and a DOM element.
  *
- * Optimization: Batch Resolution
- * Aggregates multiple asynchronous sources into a single `Promise.all` resolution.
- * This minimizes DOM thrashing by ensuring the UI update only occurs once all
- * parts of the map are ready.
+ * Optimization: Single-pass Collection
+ * Replaces multiple array methods (map/filter/forEach) with a single for-loop
+ * to reduce memory allocation and GC pressure on every state change.
  *
  * @param el - The target DOM element.
- * @param map - A record of property keys and reactive values.
+ * @param sourceMap - A record of property keys and reactive values.
  * @param updater - The function that applies the entire map to the DOM.
  * @param debugType - Metadata for debugging.
  * @internal
  */
 export function registerMapEffect<T>(
   el: Element,
-  map: Record<string, AsyncReactiveValue<T>>,
+  sourceMap: Record<string, AsyncReactiveValue<T>>,
   updater: (map: Record<string, T>) => void,
   debugType: BindingDebugType
 ): void {
   const runner = createAsyncRunner(el, debugType, updater);
-  const entries = Object.entries(map);
+  const keys = Object.keys(sourceMap);
+  const len = keys.length;
 
+  /** Pre-check if any source in the map is reactive. */
   let hasReactive = false;
-  for (let i = 0, len = entries.length; i < len; i++) {
-    const value = entries[i]![1];
-    if (isAtom(value) || typeof value === 'function') {
+  for (let i = 0; i < len; i++) {
+    const val = sourceMap[keys[i]!];
+    if (isAtom(val) || typeof val === 'function') {
       hasReactive = true;
       break;
     }
   }
 
-  /** Collects current values from the map and resolves any pending promises. */
+  /** Collects current values from the map in a single pass. */
   const collect = () => {
-    const promises: Promise<{ key: string; value: T }>[] = [];
     const resolved: Record<string, T> = {};
+    const promises: Promise<{ key: string; value: T }>[] = [];
 
-    for (let i = 0, len = entries.length; i < len; i++) {
-      const [key, source] = entries[i]!;
-      const value = isAtom(source)
-        ? (source as ReadonlyAtom<T | Promise<T>>).value
-        : typeof source === 'function'
-          ? (source as () => T | Promise<T>)()
-          : (source as T | Promise<T>);
+    for (let i = 0; i < len; i++) {
+      const key = keys[i]!;
+      const source = sourceMap[key];
+
+      let value: T | Promise<T>;
+      if (isAtom(source)) {
+        value = (source as ReadonlyAtom<T | Promise<T>>).value;
+      } else if (typeof source === 'function') {
+        value = (source as Function)();
+      } else {
+        value = source as T | Promise<T>;
+      }
 
       if (isPromise(value)) {
         promises.push(value.then((v) => ({ key, value: v })));
@@ -193,9 +196,9 @@ export function registerMapEffect<T>(
 
     if (promises.length > 0) {
       return Promise.all(promises).then((results) => {
-        for (let i = 0, len = results.length; i < len; i++) {
-          const result = results[i]!;
-          resolved[result.key] = result.value;
+        for (let i = 0, rLen = results.length; i < rLen; i++) {
+          const res = results[i]!;
+          resolved[res.key] = res.value;
         }
         return resolved;
       });

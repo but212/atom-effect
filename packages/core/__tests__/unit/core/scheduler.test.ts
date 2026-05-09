@@ -1,5 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  scheduler,
+  schedulerEndBatch,
+  schedulerIsBatching,
+  schedulerQueueSize,
+  schedulerSchedule,
+  schedulerSetMaxFlushIterations,
+} from '@/core/scheduler';
+import {
   aeNextTick,
   atom,
   batch,
@@ -7,16 +15,15 @@ import {
   effect,
   SCHEDULER_CONFIG,
   SchedulerError,
-  globalScheduler as scheduler,
 } from '@/index';
 import { sleep } from '../../utils/test-helpers';
 
 describe('Scheduler', () => {
   beforeEach(async () => {
-    // Wait for any pending flushes and reset batch depth via public API
+    // Wait for any pending flushes and reset batch depth
     await aeNextTick();
-    while (scheduler.isBatching) {
-      scheduler.endBatch();
+    while (schedulerIsBatching(scheduler)) {
+      schedulerEndBatch(scheduler);
     }
   });
 
@@ -26,11 +33,11 @@ describe('Scheduler', () => {
       const job2 = vi.fn();
 
       // 1. Deduplication (Same epoch)
-      scheduler.schedule(job1);
-      scheduler.schedule(job1);
-      scheduler.schedule(job2);
+      schedulerSchedule(scheduler, job1);
+      schedulerSchedule(scheduler, job1);
+      schedulerSchedule(scheduler, job2);
 
-      expect(scheduler.queueSize).toBe(2);
+      expect(schedulerQueueSize(scheduler)).toBe(2);
       expect(job1).not.toHaveBeenCalled();
 
       // 2. Async Execution
@@ -38,7 +45,7 @@ describe('Scheduler', () => {
 
       expect(job1).toHaveBeenCalledTimes(1);
       expect(job2).toHaveBeenCalledTimes(1);
-      expect(scheduler.queueSize).toBe(0);
+      expect(schedulerQueueSize(scheduler)).toBe(0);
     });
 
     it('handles nested batch scopes correctly', () => {
@@ -91,7 +98,7 @@ describe('Scheduler', () => {
       }).toThrow('batch-fail');
 
       expect(a.value).toBe(42); // Value committed despite error
-      expect(scheduler.isBatching).toBe(false); // Depth reset correctly
+      expect(schedulerIsBatching(scheduler)).toBe(false); // Depth reset correctly
       consoleError.mockRestore();
     });
 
@@ -145,8 +152,8 @@ describe('Scheduler', () => {
       });
       const success = vi.fn();
 
-      scheduler.schedule(fail);
-      scheduler.schedule(success);
+      schedulerSchedule(scheduler, fail);
+      schedulerSchedule(scheduler, success);
 
       await sleep(10);
 
@@ -162,28 +169,30 @@ describe('Scheduler', () => {
       scheduler.onOverflow = onOverflow;
 
       const originalMax = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
-      scheduler.setMaxFlushIterations(10);
+      schedulerSetMaxFlushIterations(scheduler, 10);
 
-      const loop = () => scheduler.schedule(loop);
-      scheduler.schedule(loop);
+      const loop = () => schedulerSchedule(scheduler, loop);
+      schedulerSchedule(scheduler, loop);
 
       await sleep(20);
 
       expect(onOverflow).toHaveBeenCalled();
       expect(consoleError).toHaveBeenCalledWith(expect.any(SchedulerError));
-      expect(scheduler.queueSize).toBe(0); // Queues must be purged
+      expect(schedulerQueueSize(scheduler)).toBe(0); // Queues must be purged
 
       scheduler.onOverflow = null;
-      scheduler.setMaxFlushIterations(originalMax);
+      schedulerSetMaxFlushIterations(scheduler, originalMax);
       consoleError.mockRestore();
     });
 
     it('validates configuration and inputs', () => {
-      expect(() => scheduler.schedule(null as unknown as () => void)).toThrow(SchedulerError);
-      expect(() => scheduler.setMaxFlushIterations(0)).toThrow();
+      expect(() => schedulerSchedule(scheduler, null as unknown as () => void)).toThrow(
+        SchedulerError
+      );
+      expect(() => schedulerSetMaxFlushIterations(scheduler, 0)).toThrow();
 
       const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      scheduler.endBatch(); // Unbalanced call
+      schedulerEndBatch(scheduler); // Unbalanced call
       expect(consoleWarn).toHaveBeenCalled();
       consoleWarn.mockRestore();
     });

@@ -1,3 +1,4 @@
+import { Option, Result, SlotBuffer } from '@but212/atom-effect-utils';
 import { SYSTEM_BINDING, SYSTEM_CORE, SYSTEM_MOUNT } from '@/constants';
 import type { EffectObject } from '@/types';
 import { getSelector } from '@/utils';
@@ -30,8 +31,12 @@ const MARK_SHADOW = '_aes-has-shadow';
  * @internal
  */
 export interface BindingRecord {
-  /** A collection of individual cleanup tasks (e.g., effect disposals). */
-  tasks?: Array<() => void>;
+  /**
+   * A collection of individual cleanup tasks (e.g., effect disposals).
+   * Optimization: Uses SlotBuffer to minimize heap allocations for small
+   * collections (1-4 items), which represents the vast majority of use cases.
+   */
+  tasks?: SlotBuffer<() => void>;
   /** An optional component-level teardown function. */
   teardown?: (() => void) | undefined;
 }
@@ -168,7 +173,10 @@ class BindingRegistry {
    * @internal
    */
   getShadow(host: Element): ShadowRoot | null {
-    return host.shadowRoot || this.shadows.get(host) || null;
+    return Option.unwrapOr(
+      Option.fromNullable(host.shadowRoot),
+      Option.toNullable(Option.fromNullable(this.shadows.get(host)))
+    );
   }
 
   /**
@@ -187,20 +195,20 @@ class BindingRegistry {
       this.autoCleanupScheduled = true;
       enableAutoCleanup(document.body);
     }
-    let result = this.records.get(element);
-    if (!result) {
-      result = {};
+
+    return Option.unwrapOrElse(Option.fromNullable(this.records.get(element)), () => {
+      const result: BindingRecord = {};
       this.records.set(element, result);
       this.safeMark(element, MARK_BOUND);
-    }
-    return result;
+      return result;
+    });
   }
 
   /** Internal helper to append a cleanup task to an element's record. */
   private addCleanup(element: Element, cleanupFunction: () => void): void {
     const record = this.getOrCreateRecord(element);
     if (!record.tasks) {
-      record.tasks = [];
+      record.tasks = new SlotBuffer<() => void>();
     }
     record.tasks.push(cleanupFunction);
   }
@@ -217,13 +225,12 @@ class BindingRegistry {
   trackEffect(element: Element, effect: EffectObject): void {
     const selector = getSelector(element);
     this.addCleanup(element, () => {
-      try {
-        effect.dispose();
-      } catch (error) {
+      const res = Result.tryCatch(() => effect.dispose());
+      if (!res.ok) {
         debug.error(
           SYSTEM_BINDING.PREFIX,
           SYSTEM_CORE.ERRORS.EFFECT_DISPOSE_ERROR(selector),
-          error
+          res.error
         );
       }
     });
@@ -233,10 +240,13 @@ class BindingRegistry {
   onCleanup(element: Element, cleanupFunction: () => void): void {
     const selector = getSelector(element);
     this.addCleanup(element, () => {
-      try {
-        cleanupFunction();
-      } catch (error) {
-        debug.error(SYSTEM_BINDING.PREFIX, SYSTEM_BINDING.ERRORS.CLEANUP_ERROR(selector), error);
+      const res = Result.tryCatch(() => cleanupFunction());
+      if (!res.ok) {
+        debug.error(
+          SYSTEM_BINDING.PREFIX,
+          SYSTEM_BINDING.ERRORS.CLEANUP_ERROR(selector),
+          res.error
+        );
       }
     });
   }
@@ -262,26 +272,41 @@ class BindingRegistry {
 
     if (node.nodeType !== 1) return;
     const element = node as Element;
-    const record = this.records.get(element);
 
-    this.records.delete(element);
-    element.classList.remove(MARK_BOUND);
+    const recordOpt = Option.fromNullable(this.records.get(element));
 
-    if (!record) return;
+    if (Option.isSome(recordOpt)) {
+      const record = recordOpt.value;
+      this.records.delete(element);
+      element.classList.remove(MARK_BOUND);
 
-    if (record.teardown) {
-      try {
-        record.teardown();
-      } catch (error) {
-        const selector = getSelector(element);
-        debug.error(SYSTEM_MOUNT.PREFIX, SYSTEM_MOUNT.ERRORS.CLEANUP_ERROR(selector), error);
-      }
-    }
+      // Execute component teardown if present
+      Option.match(Option.fromNullable(record.teardown), {
+        some: (teardown) => {
+          const res = Result.tryCatch(() => teardown());
+          if (!res.ok) {
+            const selector = getSelector(element);
+            debug.error(
+              SYSTEM_MOUNT.PREFIX,
+              SYSTEM_MOUNT.ERRORS.CLEANUP_ERROR(selector),
+              res.error
+            );
+          }
+        },
+        none: () => {},
+      });
 
-    if (record.tasks) {
-      for (const cleanupFunction of record.tasks) {
-        cleanupFunction();
-      }
+      // Execute and dispose of all cleanup tasks
+      Option.match(Option.fromNullable(record.tasks), {
+        some: (tasks) => {
+          tasks.forEach((cleanupFunction) => cleanupFunction());
+          tasks.dispose();
+        },
+        none: () => {},
+      });
+    } else {
+      // Logic: Ensure idempotency. If no record exists, just remove the marker class.
+      element.classList.remove(MARK_BOUND);
     }
   }
 

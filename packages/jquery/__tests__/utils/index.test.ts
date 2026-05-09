@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import $ from '@/index';
-import { getSelector, isPromise, shallowEqual } from '@/utils';
+import { getSelector, isPromise } from '@/utils';
 import { sanitizeHtml } from '@/utils/sanitize';
 
 describe('Utils', () => {
@@ -44,27 +44,6 @@ describe('Utils', () => {
       const thenableFn = () => {};
       thenableFn.then = () => {};
       expect(isPromise(thenableFn)).toBe(true);
-    });
-  });
-
-  describe('shallowEqual', () => {
-    it('compares objects correctly including NaN handling', () => {
-      const obj = { a: 1 };
-      const cases = [
-        [obj, obj, true],
-        [{ a: 1, b: 2 }, { a: 1, b: 2 }, true],
-        [{ a: 1 }, { a: 2 }, false],
-        [{ a: 1 }, { b: 1 }, false],
-        [{ a: 1 }, { a: 1, b: 2 }, false],
-        [null, {}, false],
-        [{ a: NaN }, { a: NaN }, true],
-        [1, 1, true],
-        [1, '1', false],
-      ] as const;
-
-      for (const [a, b, expected] of cases) {
-        expect(shallowEqual(a, b)).toBe(expected);
-      }
     });
   });
 

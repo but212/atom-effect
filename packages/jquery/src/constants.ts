@@ -1,3 +1,5 @@
+import type { RouteConfig, ValOptions } from './types';
+
 /**
  * Centralized repository for library-wide constants, defaults, and error templates.
  *
@@ -24,7 +26,7 @@ export const SYSTEM_ROUTE = {
     basePath: '',
     autoBindLinks: false,
     activeClass: 'active',
-  } as const),
+  } as const) satisfies Partial<RouteConfig>,
   ERRORS: {
     NOT_FOUND: (n: string) => `Route "${n}" not found`,
     TEMPLATE_NOT_FOUND: (s: string) => `Template "${s}" not found`,
@@ -36,7 +38,9 @@ export const SYSTEM_ROUTE = {
 /** Configuration and error templates for reactive bindings. @internal */
 export const SYSTEM_BINDING = {
   PREFIX: '[atom-binding]',
-  INPUT_DEFAULTS: Object.freeze({ EVENT: 'input change', DEBOUNCE: 0 } as const),
+  INPUT_DEFAULTS: Object.freeze({ event: 'input change', debounce: 0 } as const) satisfies Partial<
+    ValOptions<unknown>
+  >,
   VALID_INPUT_TAGS: ['input', 'select', 'textarea'] as const,
   ERRORS: {
     INVALID_INPUT_ELEMENT: (t: string) => `Invalid element <${t}> for val.`,
@@ -67,7 +71,7 @@ export const SYSTEM_SECURITY = {
     '__proto__',
     'constructor',
     'prototype',
-  ] as const,
+  ] as const satisfies readonly string[],
   /** Attributes that must be validated for dangerous URI protocols. */
   URL_PROPS: [
     'src',
@@ -84,7 +88,7 @@ export const SYSTEM_SECURITY = {
     'classid',
     'codebase',
     'xlink:href',
-  ] as const,
+  ] as const satisfies readonly string[],
   /** Pattern for identifying malicious URI protocols. */
   DANGEROUS_PROTOCOL_PATTERN: '(?:javascript|vbscript)',
   ERRORS: {
@@ -116,6 +120,11 @@ export const SYSTEM_MOUNT = {
 /** Error templates for Web Components. @internal */
 export const SYSTEM_COMPONENT = {
   PREFIX: '[atom-component]',
+  ATTRS: {
+    BIND: 'data-aej-bind',
+    PART: 'data-aej-part',
+    LEGACY_BIND: 'data-bind',
+  },
   ERRORS: {
     NOT_REGISTERED: (tagName: string) => `Custom Element <${tagName}> is not registered.`,
   },
@@ -123,5 +132,7 @@ export const SYSTEM_COMPONENT = {
 
 /** Defaults for the visual debug system. @internal */
 export const SYSTEM_DEBUG = {
-  DEFAULTS: Object.freeze({ HIGHLIGHT_DURATION_MS: 500 } as const),
+  DEFAULTS: {
+    HIGHLIGHT_DURATION_MS: 500,
+  },
 } as const;

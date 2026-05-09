@@ -13,9 +13,7 @@
 export function atomEachElement(jq: JQuery, fn: (el: HTMLElement) => void): JQuery {
   for (let i = 0, len = jq.length; i < len; i++) {
     const node = jq[i];
-
-    // Logic: Filter for ELEMENT_NODE (type 1) to ensure the callback only receives HTMLElements.
-    if (node?.nodeType === 1) {
+    if (node && node.nodeType === Node.ELEMENT_NODE) {
       fn(node as HTMLElement);
     }
   }
@@ -39,14 +37,14 @@ export function unpack<T, O>(val: T | [T, O]): [T, O?] {
   }
 
   const second = val[1];
+  if (second === null || second === undefined) {
+    return [val as T];
+  }
 
-  // Logic: Configuration tuples typically contain a transformation function or a
-  // static options object. To avoid misidentifying array-based state values as
-  // options, we explicitly verify that the second element is not a reactive
-  // atom (possessing a 'value' property) or a promise (possessing a 'then' method).
+  // Logic: Check if the second element qualifies as a configuration object or function.
   const isTuple =
     typeof second === 'function' ||
-    (second !== null && typeof second === 'object' && !('value' in second) && !('then' in second));
+    (typeof second === 'object' && !('value' in second) && !('then' in second));
 
-  return isTuple ? (val as [T, O]) : [val as T];
+  return isTuple ? (val as [T, O]) : ([val as T] as [T, O?]);
 }

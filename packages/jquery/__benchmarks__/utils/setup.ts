@@ -6,6 +6,8 @@
 import $ from 'jquery';
 import type { BenchOptions } from 'vitest';
 
+export const REPEATS = 10;
+
 /**
  * Standard benchmark options for micro-benchmarks
  * Reduced iterations vs core since DOM creation/teardown per iteration is expensive in jsdom
@@ -41,20 +43,18 @@ export const benchEffectOptions = {
  * Creates a fresh container element attached to document.body.
  */
 export function createContainer(): JQuery {
-  const $container = $('<div class="bench-root"></div>');
-  $(document.body).append($container);
-  return $container;
+  const el = document.createElement('div');
+  el.className = 'bench-root';
+  document.body.appendChild(el);
+  return $(el);
 }
 
 /**
  * Cleans up a container: unbinds all atom bindings and removes from DOM.
  */
 export function cleanupContainer($container: JQuery): void {
-  $container
-    .find('*')
-    .addBack()
-    .each(function () {
-      $(this).atomUnbind();
-    });
+  // Logic: atomUnbind calls registry.cleanupTree(el), which is already recursive.
+  // Calling it on descendants manually causes O(N^2) traversal overhead.
+  $container.atomUnbind();
   $container.remove();
 }

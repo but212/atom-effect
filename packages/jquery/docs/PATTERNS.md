@@ -399,3 +399,4 @@ class MyInput extends HTMLElement {
   }
 }
 customElements.define('my-input', MyInput);
+```

@@ -69,7 +69,7 @@ console.log(double.value); // 2
 - `state`: Returns the current `AsyncState` (`'idle'`, `'pending'`, `'resolved'`, or `'rejected'`).
 - `hasError`: A boolean indicating if the computation or any of its dependencies failed.
 - `isValid`: A shortcut for `!hasError`.
-- `errors`: A read-only array containing all errors collected from the local dependency sub-graph.
+- `errors`: A read-only array containing all errors collected from the local dependency sub-graph. It uses an iterative traversal strategy to ensure stability and completeness even in deep dependency chains.
 - `lastError`: The specific error thrown by this node's computation, if any.
 - `isPending`: Boolean indicating if an asynchronous computation is currently in progress.
 - `isResolved`: Boolean indicating if the computation has successfully resolved.
@@ -91,6 +91,8 @@ const userData = computed(async () => {
 ```
 
 > [!IMPORTANT]
+> **Async Consistency**: Asynchronous computations resolve and update their state (`value`, `isPending`, `isResolved`) within the microtask following the settlement of the underlying Promise.
+>
 > **Async Dependency Tracking**: Only dependencies accessed **before** the first `await` are tracked. Dependencies accessed after an `await` will return their current value but will not trigger re-evaluations when they change.
 
 ### Options
@@ -135,6 +137,7 @@ handle.dispose();
 - `run()`: Manually triggers the effect execution, even if dependencies haven't changed.
 - `isDisposed`: Boolean indicating if the effect has been stopped.
 - `isExecuting`: Boolean indicating if the effect logic is currently running.
+- `isNotifying`: Boolean indicating if the effect is currently propagating updates to its own subscribers.
 - `executionCount`: The total number of times the effect has executed.
 
 ### Options
@@ -154,6 +157,13 @@ Updates to atoms inside the `batch` block are coalesced. Effects and computed va
 
 - **Nesting**: Supports nested batches. The flush occurs only after the outermost batch ends.
 - **Atomicity**: State changes are committed even if the callback throws an error.
+- **Return Value**: Returns the result of the provided function `fn`.
+
+---
+
+## `runInFlushScope<T>(fn: () => T): T | undefined`
+
+Executes a function while the scheduler is locked for a new execution pass. This utility groups updates to be processed within a single, atomic flush cycle. Returns the result of `fn`, or `undefined` if the flush could not be started (e.g., already in progress).
 
 ---
 
@@ -212,11 +222,81 @@ Lenses allow for the creation of reactive "views" into specific parts of an obje
 Creates a writable virtual atom pointing to a dot-path within a source atom. It uses structural sharing to ensure that only modified paths are updated, preserving reference equality for unrelated branches.
 
 - **Path Resolution Engine**: Supports fully typed dot-paths for deep object structures, including arrays (`user.items.0.name`) and open-ended dictionaries (`Record<string, T>`).
-- **Flexible Typing**: The setter and subscription callbacks accept broader types (`unknown`) to accommodate structural updates and dynamic keys.
+- **Supported Types**: In addition to plain objects and arrays, lenses now support **`Map`**, **`Set`**, and **custom Class instances**.
+- **Prototype Preservation**: Updates to class instances through a lens preserve the original prototype. This ensures that `instanceof` checks and class methods remain valid after updates.
+- **Optimization**: Multiple lenses pointing to the same source atom now share a single subscription, minimizing reactive overhead.
+
+#### Example: Classes and Maps
+
+```typescript
+class User {
+  constructor(public name: string) {}
+  greet() { return `Hi, ${this.name}`; }
+}
+
+const store = atom({ 
+  user: new User('Alice'),
+  metadata: new Map([['id', '123']])
+});
+
+// Class property lens
+const nameLens = atomLens(store, 'user.name');
+nameLens.value = 'Bob';
+console.log(store.value.user instanceof User); // true
+console.log(store.value.user.greet()); // "Hi, Bob"
+
+// Map lens (using dot-notation for keys)
+const idLens = atomLens(store, 'metadata.id');
+console.log(idLens.value); // "123"
+```
 
 ### `lensFor(atom)`
 
 A factory utility for creating multiple lenses bound to the same source atom.
+
+---
+
+## State Composition
+
+Utilities for combining multiple reactive nodes into unified object structures.
+
+### `mergeAtoms(...atoms)`
+
+Combines multiple object-based atoms or computeds into a single read-only computed atom with a flattened type.
+
+- **Flattening**: If source atoms have overlapping keys, the last one wins.
+- **Reactivity**: The merged atom automatically updates when any of the source nodes change.
+
+```typescript
+const a = atom({ x: 1 });
+const b = atom({ y: 2 });
+const combined = mergeAtoms(a, b);
+
+console.log(combined.value); // { x: 1, y: 2 }
+```
+
+### `mergeLenses(...lenses)`
+
+Merges multiple writable lenses into a single unified writable atom (lens) with a flattened type.
+
+- **Two-way Binding**: Updates to the merged object's properties are propagated back to the respective source atoms.
+- **Noise Filtering**: Uses deep equality checking to prevent redundant notifications when the merged result hasn't effectively changed.
+- **Subscription Sharing**: Efficiently manages underlying subscriptions, ensuring source atoms are only tracked when the merged lens is active.
+
+```typescript
+const user = atom({ profile: { name: 'Alice' }, settings: { age: 25 } });
+const nameL = atomLens(user, 'profile');
+const ageL = atomLens(user, 'settings');
+
+const combined = mergeLenses(nameL, ageL);
+
+// Read merged state
+console.log(combined.value); // { name: 'Alice', age: 25 }
+
+// Unified write
+combined.value = { name: 'Bob', age: 30 };
+console.log(user.value.profile.name); // "Bob"
+```
 
 ---
 
@@ -239,14 +319,17 @@ The library uses specialized buffers (`SlotBuffer`, `DepSlotBuffer`) for high-pe
 
 ### `SlotBuffer<T>`
 
-A hybrid buffer using Small Vector Optimization (SVO).
+A high-performance container using a 4-bit mask for "fast-lane" slot management and an overflow array for unbounded capacity.
 
 - `length`: The number of active (non-null) items in the buffer.
 - `capacity`: The highest physical index occupied plus one.
 - `push(item: T): number`: Adds an item to the buffer, reusing holes if possible. Returns the index.
 - `at(index: number): T | null`: Returns the item at the specified index.
 - `remove(item: T): boolean`: Removes an item and leaves a hole for future reuse.
+- `has(item: T): boolean`: Returns true if the buffer contains the item.
+- `forEach(fn: (item: T) => void): void`: Executes a callback for every non-null entry.
 - `compact(): void`: Eliminates all internal holes and resets physical boundaries.
+- `clear(): void`: Resets the buffer to an empty state.
 
 ### `DepSlotBuffer`
 

@@ -28,11 +28,10 @@
     "bench": "vitest bench --config vitest.bench.config.ts",
     "bench:micro": "pnpm run bench __benchmarks__/micro",
     "bench:macro": "pnpm run bench __benchmarks__/macro",
-    "bench:atom": "pnpm run bench __benchmarks__/micro/atom.bench",
-    "bench:computed": "pnpm run bench __benchmarks__/micro/computed.bench",
-    "bench:effect": "pnpm run bench __benchmarks__/micro/effect.bench",
+    "bench:state": "pnpm run bench __benchmarks__/state",
     "bench:realistic": "pnpm run bench __benchmarks__/realistic",
-    "bench:propagation": "pnpm run bench __benchmarks__/micro/propagation.bench"
+    "bench:scheduler": "pnpm run bench __benchmarks__/micro/scheduler.bench.ts",
+    "bench:all": "pnpm run bench"
   },
   "keywords": [
     "reactive",
@@ -62,14 +61,16 @@
     "directory": "packages/core"
   },
   "devDependencies": {
-    "@types/node": "^25.6.0",
+    "@but212/atom-effect-configs": "workspace:*",
+    "@but212/atom-effect-utils": "workspace:*",
+    "@types/node": "^25.6.2",
     "@vitest/browser": "^4.1.5",
     "@vitest/browser-playwright": "^4.1.5",
     "@vitest/coverage-v8": "^4.1.5",
     "@vitest/ui": "^4.1.5",
     "playwright": "^1.59.1",
-    "tinybench": "^6.0.0",
-    "vite": "^8.0.10",
+    "tinybench": "^6.0.1",
+    "vite": "^8.0.11",
     "vite-plugin-dts": "^4.5.4",
     "vitest": "^4.1.5"
   }

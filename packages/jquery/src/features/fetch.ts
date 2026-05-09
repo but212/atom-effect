@@ -1,4 +1,5 @@
 import { computed } from '@but212/atom-effect';
+import { Result } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import type { ComputedAtom, FetchError, FetchOptions } from '@/types';
 
@@ -92,10 +93,6 @@ function atomFetch<T>(source: string | (() => string), options: FetchOptions<T>)
   let active: AbortController | null = null;
 
   const execute = async (): Promise<T> => {
-    // Logic: Dependency tracking must occur synchronously before the first 'await'.
-    const url = getUrl();
-    const settings = toSettings(url, options);
-
     // Logic: Abort the previous request if a new execution cycle starts.
     active?.abort();
     const controller = new AbortController();
@@ -108,35 +105,63 @@ function atomFetch<T>(source: string | (() => string), options: FetchOptions<T>)
       }
     };
 
-    try {
-      xhr = $.ajax(settings);
+    controller.signal.addEventListener('abort', cleanup);
+    if (controller.signal.aborted) {
+      cleanup();
+    }
 
-      controller.signal.addEventListener('abort', cleanup);
-      if (controller.signal.aborted) {
-        cleanup();
+    try {
+      // Logic: Execute the request and capture the result.
+      // Note: We use manual try-catch for the AJAX part to ensure perfect compatibility
+      // with jqXHR await behavior, which can be tricky with automated wrappers.
+      let ajaxResult: Result<unknown, Error>;
+      try {
+        // 1. Initialize (capture sync errors for onError hook)
+        // Dependency tracking must occur synchronously before the first 'await'.
+        const url = getUrl();
+        const settings = toSettings(url, options);
+        xhr = $.ajax(settings);
+        const data = await xhr;
+        ajaxResult = Result.ok(data);
+      } catch (err) {
+        ajaxResult = Result.err(toError(err));
       }
 
-      const data = await xhr;
-      return options.transform ? options.transform(data, xhr) : (data as T);
-    } catch (err: unknown) {
-      if (controller.signal.aborted) {
-        const error = new Error('AbortError');
-        error.name = 'AbortError';
+      // 2. Transformation Pipeline (Railway approach)
+      if (!ajaxResult.ok) {
+        const error = ajaxResult.error;
+        if (controller.signal.aborted) {
+          const abortErr = new Error('AbortError');
+          abortErr.name = 'AbortError';
+          throw abortErr;
+        }
+
+        if (options.onError) {
+          const hookResult = Result.tryCatch(() => options.onError!(error));
+          if (!hookResult.ok) {
+            console.error('atomFetch: onError hook threw an error', hookResult.error);
+          }
+        }
         throw error;
       }
 
-      const error = toError(err);
+      // Handle transformation (supports both sync and async)
+      const data = ajaxResult.value;
+      try {
+        const transformedResult = options.transform
+          ? options.transform(data as unknown, xhr!)
+          : (data as T);
 
-      // Caution: Exceptions in user hooks are logged but suppressed to
-      // avoid breaking the atom evaluation chain.
-      if (options.onError) {
-        try {
-          options.onError(error);
-        } catch (hookErr) {
-          console.error('atomFetch: onError hook threw an error', hookErr);
+        const transformed =
+          transformedResult instanceof Promise ? await transformedResult : transformedResult;
+        return transformed as T;
+      } catch (err) {
+        const error = toError(err);
+        if (options.onError) {
+          Result.tryCatch(() => options.onError!(error));
         }
+        throw error;
       }
-      throw error;
     } finally {
       controller.signal.removeEventListener('abort', cleanup);
       // Logic: Only clear the reference if this execution is the latest.

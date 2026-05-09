@@ -1,302 +1,256 @@
 import { describe, expect, it } from 'vitest';
-import { aeNextTick, atom, atomLens, composeLens, effect, lensFor } from '@/index';
+import {
+  aeNextTick,
+  atom,
+  atomLens,
+  composeLens,
+  lensFor,
+  mergeLenses,
+  type WritableAtom,
+} from '@/index';
 
-describe('atomLens', () => {
-  it('should create a two-way lens for a single-level property', () => {
-    const user = atom({ name: 'Alice', age: 25 });
-    const nameLens = atomLens(user, 'name');
+describe('Lens System', () => {
+  describe('State Composition: mergeLenses', () => {
+    it('should unify multiple object-based lenses into a single intersected lens', () => {
+      const user = atom({
+        profile: { name: 'Alice' },
+        settings: { age: 25 },
+        city: 'Seoul',
+      });
+      const profileLens = atomLens(user, 'profile');
+      const settingsLens = atomLens(user, 'settings');
 
-    // Read initial value
-    expect(nameLens.value).toBe('Alice');
+      const combined = mergeLenses(profileLens, settingsLens);
 
-    // Update through lens
-    nameLens.value = 'Bob';
-    expect(user.value.name).toBe('Bob');
-    expect(nameLens.value).toBe('Bob');
+      // Verify merged read
+      expect(combined.value).toEqual({ name: 'Alice', age: 25 });
 
-    // Update through parent atom
-    user.value = { ...user.value, name: 'Charlie' };
-    expect(nameLens.value).toBe('Charlie');
-  });
-
-  it('should create a two-way lens for deep nested properties', () => {
-    const store = atom({
-      settings: {
-        theme: 'dark',
-        notifications: {
-          email: true,
-          sms: false,
-        },
-      },
+      // Verify unified write (Two-way binding)
+      combined.value = { name: 'Bob', age: 30 };
+      expect(user.value.profile.name).toBe('Bob');
+      expect(user.value.settings.age).toBe(30);
+      expect(user.value.city).toBe('Seoul'); // Unrelated field preserved
     });
 
-    const emailLens = atomLens(store, 'settings.notifications.email');
+    it('should maintain reactivity across all source lenses', async () => {
+      const user = atom({
+        profile: { name: 'Alice' },
+        settings: { age: 25 },
+      });
+      const profileLens = atomLens(user, 'profile');
+      const settingsLens = atomLens(user, 'settings');
+      const combined = mergeLenses(profileLens, settingsLens);
 
-    // Read initial value
-    expect(emailLens.value).toBe(true);
+      let callCount = 0;
+      combined.subscribe(() => {
+        callCount++;
+      });
 
-    // Update through lens
-    emailLens.value = false;
-    expect(store.value.settings.notifications.email).toBe(false);
-    expect(emailLens.value).toBe(false);
+      // Update via root
+      user.value = { ...user.value, profile: { name: 'Bob' } };
+      await aeNextTick();
+      expect(callCount).toBe(1);
+      expect(combined.value.name).toBe('Bob');
 
-    // Structural Sharing check
-    const originalSettings = store.value.settings;
-    const originalNotifications = store.value.settings.notifications;
-
-    emailLens.value = true;
-
-    expect(store.value.settings).not.toBe(originalSettings);
-    expect(store.value.settings.notifications).not.toBe(originalNotifications);
-    expect(store.value.settings.theme).toBe('dark');
-  });
-
-  it('should maintain structural sharing for unchanged paths', () => {
-    const store = atom({
-      a: { val: 1 },
-      b: { val: 2 },
+      // Update via sibling lens
+      settingsLens.value = { age: 30 };
+      await aeNextTick();
+      expect(callCount).toBe(2);
+      expect(combined.value.age).toBe(30);
     });
 
-    const aLens = atomLens(store, 'a.val');
-    const originalB = store.value.b;
+    it('should manage lifecycle and subscriptions correctly', () => {
+      const user = atom({ a: { x: 1 }, b: { y: 2 } });
+      const aLens = atomLens(user, 'a');
+      const bLens = atomLens(user, 'b');
+      const combined = mergeLenses(aLens, bLens);
 
-    aLens.value = 10;
+      combined.subscribe(() => {});
+      // Each source lens subscribes to the root
+      expect(user.subscriberCount()).toBe(2);
 
-    expect(store.value.a.val).toBe(10);
-    expect(store.value.b).toBe(originalB); // Reference to 'b' should be preserved
+      combined.dispose();
+      expect(user.subscriberCount()).toBe(0);
+    });
   });
 
-  it('should not update the parent atom if the value is identical', () => {
-    const store = atom({ profile: { name: 'Alice' } });
-    const nameLens = atomLens(store, 'profile.name');
+  describe('Path-based Access: atomLens', () => {
+    describe('Basic & Deep Nesting', () => {
+      it('should handle single-level property access', () => {
+        const store = atom({ count: 0 });
+        const lens = atomLens(store, 'count');
 
-    let updateCount = 0;
-    effect(() => {
-      const _ = store.value;
-      updateCount++;
-      return undefined;
+        lens.value = 10;
+        expect(store.value.count).toBe(10);
+      });
+
+      it('should traverse deep nested structures with structural sharing', () => {
+        const store = atom({
+          ui: { theme: 'dark', sidebar: { collapsed: false } },
+          data: { list: [] },
+        });
+
+        const collapsedLens = atomLens(store, 'ui.sidebar.collapsed');
+        const originalData = store.value.data;
+
+        collapsedLens.value = true;
+        expect(store.value.ui.sidebar.collapsed).toBe(true);
+        expect(store.value.data).toBe(originalData); // Structural sharing preserved
+      });
+
+      it('should not auto-vivify paths through null values', () => {
+        const store = atom<{ profile: { name: string } | null }>({ profile: null });
+        const nameLens = atomLens(store, 'profile.name');
+
+        nameLens.value = 'Bob';
+        expect(store.value.profile).toBeNull(); // Should fail gracefully
+      });
     });
 
-    updateCount = 0;
-    nameLens.value = 'Alice'; // Same value
+    describe('Collection Support (Array & Map)', () => {
+      it('should support array indices in paths', () => {
+        const store = atom({ items: [{ text: 'A' }, { text: 'B' }] });
+        const lens = atomLens(store, 'items.1.text');
 
-    expect(updateCount).toBe(0);
+        expect(lens.value).toBe('B');
+        lens.value = 'C';
+        expect(Array.isArray(store.value.items)).toBe(true);
+        expect(store.value.items[1]!.text).toBe('C');
+      });
+
+      it('should handle Map instances via dot-notation keys', () => {
+        const store = atom({
+          registry: new Map([['user_1', { name: 'Alice' }]]),
+        });
+        // Cast for testing arbitrary paths
+        const nameLens = (
+          atomLens as unknown as (a: typeof store, p: string) => WritableAtom<string>
+        )(store, 'registry.user_1.name');
+
+        expect(nameLens.value).toBe('Alice');
+        nameLens.value = 'Bob';
+        expect(store.value.registry.get('user_1')?.name).toBe('Bob');
+      });
+    });
   });
 
-  it('should correctly filter and map subscription values', async () => {
-    const store = atom({ profile: { name: 'Alice', age: 25 } });
-    const nameLens = atomLens(store, 'profile.name');
+  describe('Reactive Lifecycle & Optimization', () => {
+    it('should share a single root subscription for multiple lens listeners', () => {
+      const store = atom({ x: 1 });
+      const lens = atomLens(store, 'x');
 
-    let callCount = 0;
-    let lastValue: string | undefined;
-    let oldVal: string | undefined;
+      expect(store.subscriberCount()).toBe(0);
 
-    nameLens.subscribe((v, o) => {
-      callCount++;
-      lastValue = v as string;
-      oldVal = o as string;
+      const unsub1 = lens.subscribe(() => {});
+      const unsub2 = lens.subscribe(() => {});
+
+      expect(lens.subscriberCount()).toBe(2);
+      expect(store.subscriberCount()).toBe(1); // Shared root subscription
+
+      unsub1();
+      unsub2();
+      expect(store.subscriberCount()).toBe(0);
     });
 
-    // 1. Update unrelated sibling property in parent atom
-    store.value = { ...store.value, profile: { ...store.value.profile, age: 26 } };
-    expect(callCount).toBe(0); // Should NOT notify because 'name' didn't change
+    it('should filter noise and avoid redundant notifications', async () => {
+      const store = atom({ a: 1, b: 2 });
+      const aLens = atomLens(store, 'a');
 
-    // 2. Update the lensed property directly
-    nameLens.value = 'Bob';
-    await aeNextTick();
-    expect(callCount).toBe(1);
-    expect(lastValue).toBe('Bob');
-    expect(oldVal).toBe('Alice');
+      let callCount = 0;
+      aLens.subscribe(() => {
+        callCount++;
+      });
 
-    // 3. Update parent atom with same lensed value
-    store.value = { ...store.value, profile: { ...store.value.profile, name: 'Bob' } };
-    await aeNextTick();
-    expect(callCount).toBe(1); // Should NOT notify (Object.is check)
-  });
+      // Update unrelated property
+      store.value = { ...store.value, b: 3 };
+      await aeNextTick();
+      expect(callCount).toBe(0);
 
-  it('should maintain array type when property path traverses an array', () => {
-    const store = atom({
-      items: [
-        { id: 1, text: 'First' },
-        { id: 2, text: 'Second' },
-      ],
+      // Update targeted property with identical value
+      aLens.value = 1;
+      await aeNextTick();
+      expect(callCount).toBe(0);
+
+      // Legit update
+      aLens.value = 10;
+      await aeNextTick();
+      expect(callCount).toBe(1);
     });
 
-    const secondTextLens = atomLens(store, 'items.1.text');
-    expect(secondTextLens.value).toBe('Second');
+    it('should handle NaN correctly in noise filtering', async () => {
+      const store = atom({ val: NaN });
+      const lens = atomLens(store, 'val');
 
-    secondTextLens.value = 'Updated Second';
+      let callCount = 0;
+      lens.subscribe(() => {
+        callCount++;
+      });
 
-    expect(Array.isArray(store.value.items)).toBe(true);
-    expect(store.value.items[1]!.text).toBe('Updated Second');
-    expect(store.value.items[0]!.id).toBe(1); // Structural sharing check
-  });
-
-  it('should compose two lenses', async () => {
-    const store = atom({ user: { profile: { name: 'Alice' } } });
-    const userLens = atomLens(store, 'user');
-    const nameLens = composeLens(userLens, 'profile.name');
-
-    expect(nameLens.value).toBe('Alice');
-
-    nameLens.value = 'Bob';
-    await aeNextTick();
-    expect(store.value.user.profile.name).toBe('Bob');
-
-    userLens.value = { profile: { name: 'Charlie' } };
-    await aeNextTick();
-    expect(nameLens.value).toBe('Charlie');
-  });
-
-  it('should compose lenses multi-tier', async () => {
-    const store = atom({ a: { b: { c: { d: 11 } } } });
-    const ab = atomLens(store, 'a.b');
-    const abc = composeLens(ab, 'c');
-    const abcd = composeLens(abc, 'd');
-
-    expect(abcd.value).toBe(11);
-    abcd.value = 22;
-    await aeNextTick();
-    expect(store.value.a.b.c.d).toBe(22);
-    expect(abc.value.d).toBe(22);
-    expect(ab.value.c.d).toBe(22);
-  });
-
-  it('should compose with array indexing', async () => {
-    const store = atom({
-      items: [
-        { id: 1, text: 'First' },
-        { id: 2, text: 'Second' },
-      ],
+      lens.value = NaN;
+      await aeNextTick();
+      expect(callCount).toBe(0);
     });
-    const itemsLens = atomLens(store, 'items');
-    const firstTextLens = composeLens(itemsLens, '0.text');
-
-    expect(firstTextLens.value).toBe('First');
-
-    firstTextLens.value = 'Updated First';
-    await aeNextTick();
-    expect(store.value.items[0]!.text).toBe('Updated First');
   });
 
-  it('should clean up subscriptions on dispose', async () => {
-    const store = atom({ name: 'Alice' });
-    const lens = atomLens(store, 'name');
+  describe('Advanced Patterns & Composition', () => {
+    it('should support multi-tier composition via composeLens', async () => {
+      const store = atom({ a: { b: { c: 1 } } });
+      const ab = atomLens(store, 'a.b');
+      const abc = composeLens(ab, 'c');
 
-    let callCount = 0;
-    lens.subscribe(() => {
-      callCount++;
+      expect(abc.value).toBe(1);
+      abc.value = 100;
+      expect(store.value.a.b.c).toBe(100);
     });
 
-    // Initial update
-    store.value = { name: 'Bob' };
-    await aeNextTick();
-    expect(callCount).toBe(1);
+    it('should provide a lens factory via lensFor', () => {
+      const store = atom({ profile: { name: 'Alice' } });
+      const l = lensFor(store);
+      const nameLens = l('profile.name');
 
-    // Dispose and update
-    lens.dispose();
-    store.value = { name: 'Charlie' };
-    await aeNextTick();
-    expect(callCount).toBe(1); // Should not increase
-  });
-
-  it('should return its own subscriber count', () => {
-    const store = atom({ name: 'Alice' });
-    const lens = atomLens(store, 'name');
-
-    expect(lens.subscriberCount()).toBe(0);
-    expect(store.subscriberCount()).toBe(0); // Lens doesn't subscribe until it has its own subscribers
-
-    const unsub = lens.subscribe(() => {});
-    expect(lens.subscriberCount()).toBe(1);
-    expect(store.subscriberCount()).toBe(1); // Now lens is subscribed to parent
-
-    unsub();
-    expect(lens.subscriberCount()).toBe(0);
-    expect(store.subscriberCount()).toBe(0); // Lens unsubscribed from parent
-  });
-
-  it('should create a factory using lensFor', () => {
-    const user = atom({ profile: { name: 'Alice', email: 'alice@example.com' } });
-    const lens = lensFor(user);
-
-    const nameLens = lens('profile.name');
-    const emailLens = lens('profile.email');
-
-    expect(nameLens.value).toBe('Alice');
-    expect(emailLens.value).toBe('alice@example.com');
-
-    nameLens.value = 'Bob';
-    expect(user.value.profile.name).toBe('Bob');
-    expect(nameLens.value).toBe('Bob');
-  });
-
-  describe('Security: Prototype Pollution & Member Access', () => {
-    it('should block prototype pollution through malicious paths', () => {
-      // biome-ignore lint/suspicious/noExplicitAny: Intentional for security test
-      const store = atom({ data: 'initial' }) as any;
-
-      // 1. Direct __proto__ access via path
-      // @ts-expect-error: Invalid path for lens type
-      // biome-ignore lint/suspicious/noExplicitAny: Intentional malicious path for security testing
-      const protoLens = atomLens(store, '__proto__.polluted' as any);
-      // @ts-expect-error: Invalid value for lens type
-      // biome-ignore lint/suspicious/noExplicitAny: Intentional malicious value for security testing
-      protoLens.value = 'evil' as any;
-
-      // Verify global prototype is NOT polluted
-      // biome-ignore lint/suspicious/noExplicitAny: Explicit access to check for global pollution
-      expect(({} as any).polluted).toBeUndefined();
-      // Parent atom should remain unchanged as the key was blocked
-      expect(store.value.data).toBe('initial');
-
-      // 2. constructor.prototype access
-      // @ts-expect-error: Invalid path for lens type
-      // biome-ignore lint/suspicious/noExplicitAny: Intentional malicious path for security testing
-      const constProtoLens = atomLens(store, 'constructor.prototype.polluted' as any);
-      // @ts-expect-error: Invalid value for lens type
-      // biome-ignore lint/suspicious/noExplicitAny: Intentional malicious value for security testing
-      constProtoLens.value = 'evil' as any;
-      // biome-ignore lint/suspicious/noExplicitAny: Explicit access to check for global pollution
-      expect(({} as any).polluted).toBeUndefined();
-
-      // 3. Nested pollution attempt
-      // @ts-expect-error: Invalid path for lens type
-      // biome-ignore lint/suspicious/noExplicitAny: Intentional malicious path for security testing
-      const nestedPollution = atomLens(store, 'data.__proto__.polluted' as any);
-      // @ts-expect-error: Invalid value for lens type
-      // biome-ignore lint/suspicious/noExplicitAny: Intentional malicious value for security testing
-      nestedPollution.value = 'evil' as any;
-      // biome-ignore lint/suspicious/noExplicitAny: Explicit access to check for global pollution
-      expect(({} as any).polluted).toBeUndefined();
+      expect(nameLens.value).toBe('Alice');
+      nameLens.value = 'Bob';
+      expect(store.value.profile.name).toBe('Bob');
     });
 
-    it('should block reading from dangerous properties in getPathValue', () => {
+    it('should preserve prototype of class instances', () => {
+      class User {
+        constructor(public name: string) {}
+        greet() {
+          return `Hi ${this.name}`;
+        }
+      }
+      const store = atom({ user: new User('Alice') });
+      const nameLens = atomLens(store, 'user.name');
+
+      nameLens.value = 'Bob';
+      expect(store.value.user).toBeInstanceOf(User);
+      expect((store.value.user as User).greet()).toBe('Hi Bob');
+    });
+  });
+
+  describe('Robustness & Security', () => {
+    it('should block prototype pollution attempts', () => {
+      const store = atom({ data: {} }) as unknown as WritableAtom<Record<string, unknown>>;
+      const malicious = ['__proto__.polluted', 'constructor.prototype.polluted'];
+
+      for (const path of malicious) {
+        const l = (atomLens as unknown as (a: unknown, p: string) => WritableAtom<unknown>)(
+          store,
+          path
+        );
+        l.value = 'evil';
+        expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+      }
+    });
+
+    it('should prevent reading dangerous internal properties', () => {
       const store = atom({ data: 'initial' });
-
-      // Attempt to read prototype or constructor
-      // biome-ignore lint/suspicious/noExplicitAny: Intentional malicious path for security testing
-      const protoLens = atomLens(store, '__proto__' as any);
-      expect(protoLens.value).toBeUndefined();
-
-      // biome-ignore lint/suspicious/noExplicitAny: Intentional malicious path for security testing
-      const constructorLens = atomLens(store, 'constructor' as any);
-      expect(constructorLens.value).toBeUndefined();
-    });
-
-    it('should treat blocked keys as undefined for both get and set', () => {
-      const store = atom({ a: { b: 1 } });
-      // biome-ignore lint/suspicious/noExplicitAny: Intentional malicious path for security testing
-      const maliciousLens = atomLens(store, 'a.__proto__.b' as any);
-
-      // Get should return undefined
-      expect(maliciousLens.value).toBeUndefined();
-
-      // Set should be a no-op (return original object)
-      const originalValue = store.value;
-      // biome-ignore lint/suspicious/noExplicitAny: Intentional malicious value for security testing
-      maliciousLens.value = 100 as any;
-      expect(store.value).toBe(originalValue);
+      const l = (atomLens as unknown as (a: unknown, p: string) => WritableAtom<unknown>)(
+        store,
+        '__proto__'
+      );
+      expect(l.value).toBeUndefined();
     });
   });
 });

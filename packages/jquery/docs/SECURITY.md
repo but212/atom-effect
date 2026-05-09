@@ -15,12 +15,13 @@ To prevent **DOM Clobbering** attacks—where malicious elements (like `<input i
 - Accesses `attributes`, `localName`, and `innerHTML` using `Element.prototype` descriptors.
 - Ensures native logic is used even if the target element's instance properties have been tampered with.
 
-### 2. Hybrid Parsing Strategy
+### 2. Inert Template-based Parsing
 
-The `sanitizeHtml` engine automatically switches between parsing strategies to ensure content integrity:
+The `sanitizeHtml` engine utilizes dedicated, local parsing contexts using detached `<template>` and `<div>` elements for each operation. This ensures that:
 
-- **Fragment Parsing**: Uses a detached `<template>` element for standard HTML fragments.
-- **Document Parsing**: Uses `document.implementation.createHTMLDocument` when top-level tags like `<body>` or `<html>` are detected, preventing the browser from stripping them.
+- **Inertness**: Content is parsed but never executed, preventing script execution or network requests during the sanitization phase.
+- **Structural Integrity**: The template's `.content` DocumentFragment provides a clean, isolated environment for tree-walking and transformation.
+- **Re-entrancy Safety**: Local instances prevent state corruption during recursive sanitization calls (e.g., when processing `srcdoc` within an existing cycle).
 
 ---
 
@@ -42,14 +43,15 @@ The library performs deep inspection of all element attributes:
 
 - **Event Handlers**: Any attribute starting with `on` (e.g., `onclick`) is removed and logged in a `data-unsafe-attr` attribute.
 - **Attribute Name Smuggling**: Dangerous URI protocols detected within attribute names (e.g., `<div javascript:alert(1)="...">`) are blocked.
+- **Text Node Neutralization**: Detects and neutralizes HTML tags hidden within text content (e.g., `&lt;script&gt;` becomes `[script]`) to prevent parser-level bypasses.
 - **Foreign Contexts**: SVG/MathML animation attributes (`attributeName`, `from`, `to`, `values`) are scrubbed if they point to event handlers or dangerous protocols.
 
 ### URI & Protocol Sanitization
 
-The library employs **Advanced Normalization** to reveal hidden protocols:
+The library employs **Multi-pass Normalization** to reveal hidden protocols and bypass attempts:
 
-- **Entity Decoding**: Decodes hex (`&#x61;`), decimal (`&#97;`), and named (`&colon;`) entities.
-- **Control Character Stripping**: Removes null bytes (`\0`), control characters (`\x01-\x1f`), and Unicode replacement characters ().
+- **Double Entity Decoding**: Decodes HTML entities twice to catch evasion attempts that use multiple layers of encoding (e.g., `&#x26;#x6A;`).
+- **Control Character Stripping**: Removes null bytes (`\0`), control characters (`\x01-\x1f`), and Unicode replacement characters (`\ufffd`).
 - **Protocol Blocking**: Neutralizes `javascript:`, `vbscript:`, and dangerous `data:` types (e.g., `text/html`, `image/svg+xml`).
 
 ---
@@ -69,8 +71,9 @@ Validates the `name` and `value` against the security policy.
 
 ### `$.fn.atomCss(prop, atom)`
 
-Validates CSS values against dangerous patterns:
+Filters CSS declarations using the internal `Guard.isDangerousCss` logic:
 
+- Strips CSS comments to expose hidden payloads.
 - Blocks `expression()`, `behavior:`, and `-moz-binding`.
 - Blocks `url()` values containing dangerous protocols.
 
@@ -104,8 +107,8 @@ The library is fully compatible with strict CSPs. It does not use `eval()` or `n
 | :--- | :--- |
 | **XSS (Tag)** | Neutralized to `<span>` via `blacklistedTags`. |
 | **XSS (Event)** | Stripped via `on*` pattern matching. |
-| **XSS (Protocol)** | Blocked via `isDangerousUri` (with normalization). |
-| **DOM Clobbering** | Prevented via `DOM_PROTOTYPE_BRIDGE`. |
-| **CSS Injection** | Blocked via `cssDangerPatterns`. |
+| **XSS (Protocol)** | Blocked via `Guard.isDangerousUri` (with multi-pass normalization). |
+| **DOM Clobbering** | Prevented via **Prototype Hardening**. |
+| **CSS Injection** | Filtered via `Guard.isDangerousCss`. |
 | **SVG/MathML Vectors** | Explicitly scrubbed via animation attribute checks. |
-| **Srcset/Srcdoc** | Recursively sanitized or segment-validated. |
+| **Srcset/Srcdoc** | Protocol-blocked or keyword-filtered. |

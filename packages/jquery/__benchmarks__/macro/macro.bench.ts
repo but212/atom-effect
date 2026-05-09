@@ -5,7 +5,7 @@
 
 import { afterAll, bench, describe } from 'vitest';
 import $ from '../../dist';
-import { cleanupContainer, createContainer, macroBenchOptions } from '../utils/setup';
+import { cleanupContainer, createContainer, macroBenchOptions, REPEATS } from '../utils/setup';
 
 // ============================================================================
 // 1. Todo App: Comprehensive Workflow (CRUD + Stats)
@@ -242,17 +242,17 @@ describe('Macro: atomForm O(1) Scaling', () => {
   const u100 = createUpdater(f100);
 
   bench(
-    'Update 1 field in 10-field form (x100)',
+    `Update 1 field in 10-field form (x${REPEATS})`,
     () => {
-      for (let i = 0; i < 100; i++) u10(i);
+      for (let i = 0; i < REPEATS; i++) u10(i);
     },
     macroBenchOptions
   );
 
   bench(
-    'Update 1 field in 100-field form (O(1) test, x100)',
+    `Update 1 field in 100-field form (O(1) test, x${REPEATS})`,
     () => {
-      for (let i = 0; i < 100; i++) u100(i);
+      for (let i = 0; i < REPEATS; i++) u100(i);
     },
     macroBenchOptions
   );

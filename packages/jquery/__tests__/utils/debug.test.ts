@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SYSTEM_BINDING, SYSTEM_MOUNT } from '@/constants';
+import { SYSTEM_BINDING, SYSTEM_DEBUG, SYSTEM_MOUNT } from '@/constants';
 import { debug } from '@/utils/debug';
 
 describe('Debug Module', () => {
@@ -69,12 +69,16 @@ describe('Debug Module', () => {
 
       // Verify highlighting application
       await new Promise((r) => requestAnimationFrame(r));
-      expect(htmlEl.classList.contains('atom-debug-highlight')).toBe(true);
+      const anims = htmlEl.getAnimations();
+      expect(anims.length).toBeGreaterThan(0);
+      expect(anims[0]?.effect?.getTiming().duration).toBe(
+        SYSTEM_DEBUG.DEFAULTS.HIGHLIGHT_DURATION_MS
+      );
 
       // Verify cleanup lifecycle (even if element is disconnected during the wait)
       htmlEl.remove();
-      await new Promise((r) => setTimeout(r, 600)); // duration + buffer for reliability
-      expect(htmlEl.classList.contains('atom-debug-highlight')).toBe(false);
+      await new Promise((r) => setTimeout(r, SYSTEM_DEBUG.DEFAULTS.HIGHLIGHT_DURATION_MS + 100));
+      expect(htmlEl.getAnimations().length).toBe(0);
 
       svgEl.remove();
       textNode.remove();
@@ -83,14 +87,31 @@ describe('Debug Module', () => {
     it('should ensure idempotent style injection', () => {
       debug.enabled = true;
       const el = document.createElement('div');
+      document.body.appendChild(el);
 
-      // Triggering update multiple times should result in exactly one <style> tag
+      // Triggering update multiple times should result in exactly one injection method
       debug.domUpdated(SYSTEM_BINDING.PREFIX, el, 'a', '1');
       debug.domUpdated(SYSTEM_BINDING.PREFIX, el, 'b', '2');
 
-      const styles = document.querySelectorAll('style[data-atom-debug]');
-      expect(styles.length).toBe(1);
-      expect(styles[0]?.textContent).toMatch(/\[data-atom-debug\]\s*\{.*transition/);
+      const hasAdopted =
+        'adoptedStyleSheets' in document && 'replaceSync' in CSSStyleSheet.prototype;
+
+      if (hasAdopted) {
+        const sheets = document.adoptedStyleSheets;
+        const hasDebugSheet = sheets.some((s) => {
+          try {
+            return Array.from(s.cssRules).some((r) => r.cssText.includes('data-atom-debug'));
+          } catch {
+            return false;
+          }
+        });
+        expect(hasDebugSheet).toBe(true);
+      } else {
+        const styles = document.querySelectorAll('style[data-atom-debug]');
+        expect(styles.length).toBe(1);
+        expect(styles[0]?.textContent).toMatch(/\[data-atom-debug\]/);
+      }
+      el.remove();
     });
   });
 

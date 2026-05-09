@@ -182,6 +182,20 @@ describe('$.atomFetch', () => {
       expect(data.lastError?.message).toContain('bad shape');
     });
 
+    it('should handle asynchronous transform functions', async () => {
+      vi.spyOn($, 'ajax').mockResolvedValue({ id: 1 });
+
+      const data = $.atomFetch<{ id: number; name: string }>('/api/async', {
+        defaultValue: { id: 0, name: 'unknown' },
+        transform: async (raw: unknown) => {
+          await new Promise((r) => setTimeout(r, 10));
+          return { ...(raw as { id: number }), name: 'Async Alice' };
+        },
+      });
+
+      await vi.waitFor(() => expect(data.value).toEqual({ id: 1, name: 'Async Alice' }));
+    });
+
     it('should log (but not swallow) exceptions thrown by the onError hook (Regression Fix)', async () => {
       vi.spyOn($, 'ajax').mockRejectedValue(new Error('Network fail'));
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});

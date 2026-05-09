@@ -12,19 +12,22 @@ The jQuery package provides a reactive binding layer on top of `@but212/atom-eff
                  │  atom / computed / effect / batch │
                  └──────────────┬────────────────────┘
                                 │
-                 ┌──────────────▼────────────────────┐
-                 │    @but212/atom-effect-jquery     │
-                 │                                   │
-                 │  unified.ts   ← Binding handlers  │
-                 │  effect-factory.ts ← Effect reg.  │
-                 │  registry.ts  ← Lifecycle mgmt    │
-                 │  jquery-patch.ts ← jQuery patches │
-                 │  chainable.ts ← $.fn methods      │
-                 │  bindings/list/ ← Modular list    │
-                 │  route.ts     ← SPA router        │
-                 │  mount.ts     ← Component mount   │
-                 │  core/dom.ts  ← Core DOM engine   │
-                 └───────────────────────────────────┘
+                 ┌──────────────▼─────────────────────┐
+                 │    @but212/atom-effect-jquery      │
+                 │                                    │
+                 │  unified.ts   ← Binding handlers   │
+                 │  effect-factory.ts ← Effect reg.   │
+                 │  registry.ts  ← Lifecycle mgmt     │
+                 │  jquery-patch.ts ← jQuery patches  │
+                 │  chainable.ts ← $.fn methods       │
+                 │  bindings/list/ ← Modular list     │
+                 │  route/       ← Modular SPA router │
+                 │  nav.ts       ← PJAX navigation    │
+                 │  fetch.ts     ← Reactive fetching  │
+                 │  mount.ts     ← Component mount    │
+                 │  core/navigation.ts ← Nav core     │
+                 │  core/dom.ts  ← Core DOM engine    │
+                 └────────────────────────────────────┘
 ```
 
 ## 2. Binding Pipeline
@@ -51,7 +54,7 @@ $.fn.atomText(atom)
 
 ### 2.2 DOM Engine
 
-`atomEachElement(jq, fn)` in `core/dom.ts` provides the iteration engine for reactive bindings. It handles jQuery sets, filters for `HTMLElement`, and utilizes optimized loops to manage performance in critical paths.
+`atomEachElement(jq, fn)` in `core/dom.ts` provides the iteration engine for reactive bindings. It handles jQuery sets, filters for `HTMLElement`.
 
 Internal binding handlers in `unified.ts` operate on native `HTMLElement` references, utilizing jQuery for event delegation or multi-event management (e.g., in `bindEvents`).
 
@@ -72,7 +75,8 @@ Handlers are standalone functions, which facilitates tree-shaking and reduces cy
 To manage performance during high-frequency updates, `unified.ts` implements several techniques:
 
 - **Metadata Caching**: Bindings such as `atomClass`, `atomCss`, `atomAttr`, and `atomProp` pre-calculate metadata during initial registration. Map objects are hoisted outside the iteration loop to reduce allocations.
-- **Monomorphic Dispatch**: The `InputBinding` class specializes its logic at construction time, removing branching from synchronization paths.
+- **Argument Normalization Factory**: Chainable methods are generated via `createChainableMethod`, which encapsulates argument resolution and iteration to ensure consistent behavior and reduced boilerplate.
+- **Monomorphic Strategy Dispatch**: The `InputBinding` class resolves its synchronization strategy (e.g., `multipleSelect` vs `default`) at construction time. This ensures monomorphic execution paths in V8 and avoids expensive conditional branching within high-frequency event loops.
 - **JS-Level Value Caching**: Handlers maintain a local cache of the last written value to avoid redundant DOM reads and writes.
 - **Batched Map Updates**: `registerMapEffect` processes dictionaries of reactive values in a single effect to improve subscription efficiency.
 - **Async Consolidation**: `registerMapEffect` uses `Promise.all` to synchronize multiple asynchronous dependencies within a map.
@@ -135,10 +139,10 @@ The `.on()` patch ensures that multiple atom writes within a single event handle
 
 `atomList` renders reactive arrays using a 3-pass reconciliation algorithm:
 
-1. **Prefix/Suffix Trimming**: Skips common items at the start and end of the list.
-2. **Middle Diffing**: Reconciles the middle range using bitwise state flags and key mapping.
-3. **Patching**: Synchronizes the DOM using a greedy placement strategy and native DOM APIs to bypass jQuery overhead.
-4. **Initial Render**: Uses bulk-sanitized fragments where possible to optimize hydration.
+1. **Prefix/Suffix Trimming**: Identifies and skips common items at the start and end of the list to reduce diffing overhead.
+2. **Keyed Diffing**: Reconciles the middle range using a double-ended diffing strategy and persistent key mapping.
+3. **Patching**: Synchronizes the DOM using a greedy placement strategy and native DOM APIs.
+4. **Initial Render**: Utilizes sanitized fragments to optimize initial population.
 
 ### 5.1 Reconciliation Lifecycle
 
@@ -154,11 +158,27 @@ Event listeners are attached to the container rather than individual items, main
 
 ## 7. SPA Router
 
-The router utilizes reactive states for navigation management.
+The router utilizes reactive states for navigation management and is organized into specialized sub-modules for scalability.
 
-### 7.1 Mode Abstraction (`UrlAdapter`)
+### 7.1 Modular Architecture
 
-Decouples browser navigation using the `UrlAdapter` strategy pattern, allowing for both hash-based and History API modes.
+The router is decomposed into several high-cohesion modules:
+
+- **`core.ts`**: Implements `UrlAdapter` strategies (History/Hash) and the tiered Route Matcher.
+- **`router.ts`**: The main `RouterImpl` orchestrating the navigation lifecycle.
+- **`view.ts`**: Handles view rendering, link discovery via `MutationObserver`, and global click interception.
+
+### 7.2 Mode Abstraction (`UrlAdapter`)
+
+Decouples browser navigation using the `UrlAdapter` strategy pattern. This allows the router to remain agnostic of the underlying URL manipulation strategy (e.g., `pushState` vs `location.hash`).
+
+### 7.3 Tiered Route Matching
+
+To maximize performance, the router employs a tiered matching system:
+
+1. **Static Lookup**: O(1) matching for fixed paths using a `Map`.
+2. **Native `URLPattern`**: Utilizes the modern browser API for complex dynamic segments.
+3. **Regex Fallback**: Robust, anchored regex matching for browsers without `URLPattern` support.
 
 ### 7.2 Transition Lifecycle
 
@@ -168,6 +188,15 @@ Navigation follows a defined pipeline: Link Interception -> Leave Guards -> Brow
 
 Includes a resolution cache for route links and centralized path utilities for string manipulation. Asset links are automatically ignored to prevent interference with file downloads.
 
+### 7.4 Active State Tracking Optimization
+
+The router maintains visual state for navigation links using a targeted tracking system:
+
+- **Link Registry**: Uses a `Set<HTMLElement>` to track all navigation links (`a`, `[data-route]`) currently in the DOM.
+- **Automated Discovery**: A persistent `MutationObserver` monitors `document.body` to automatically register newly added links and remove disconnected ones.
+- **Targeted Updates**: When the route changes, the router iterates only over the tracked set rather than performing a full DOM scan (`querySelectorAll`).
+- **Memory Management**: Links are automatically deregistered from the tracking set via `registry.onCleanup` when they are removed from the DOM.
+
 ## 8. Reactive Data Fetching (`$.atomFetch`)
 
 `$.atomFetch` provides a declarative AJAX primitive that integrates `$.ajax` with computed atoms.
@@ -176,14 +205,14 @@ Includes a resolution cache for route links and centralized path utilities for s
 - **Error Handling**: Standardizes error instances and isolates user hooks to prevent breaking the reactive chain.
 - **Abort Silence**: Catch and ignore `AbortError` internally during rapid re-evaluations.
 
-## 9. Security
+## 10. Security
 
 The binding layer includes several defensive measures:
 
-- **Sanitization**: Uses a recursive DOM-based sanitizer that transforms untrusted tags into inert wrappers.
-- **DOM Clobbering Protection**: element interactions are routed through prototype-level descriptors.
-- **Attribute & Sink Protection**: Blocks `on*` event handlers and monitors sensitive sinks like `srcdoc`.
-- **CSS Validation**: Blocks CSS values containing untrusted patterns.
+- **Sanitization**: Uses a rule-based engine (`DEFENSE_RULES`) that transforms untrusted tags into inert wrappers and neutralizes hidden tags in text content.
+- **Prototype Hardening**: Element interactions are routed through prototype-bound methods to bypass DOM Clobbering vectors.
+- **Attribute & Sink Protection**: Blocks `on*` event handlers and enforces protocol white-listing on URI-carrying attributes (including `srcdoc`).
+- **CSS Filtering**: Dynamically filters CSS declarations to allow safe styles while neutralizing dangerous patterns like `expression()` or `url(javascript:)`.
 
 ## 10. Module Structure
 
@@ -191,10 +220,11 @@ The package is organized into core logic, binding handlers, features (Routing, F
 
 ## 11. PJAX Navigation (`$.atomNav`)
 
-`$.atomNav` treats the browser's URL as a reactive atom and manages metadata and attribute synchronization during navigation.
+`$.atomNav` (PJAX) treats the browser's URL as a reactive atom and manages partial page updates.
 
-- **Race Condition Safety**: Uses `AbortController` to manage the navigation lifecycle and prevent stale updates.
-- **Transitions**: Optimizes navigation paths by ignoring redundant requests and bypassing hooks for hash-only transitions.
+- **Shared Core**: Leverages `src/core/navigation.ts` for standardized URL normalization and metadata synchronization.
+- **Race Condition Safety**: Uses an atomic fetch pipeline and `AbortSignal` management to ensure that only the result of the most recent navigation is applied to the DOM.
+- **Transitions**: Optimizes navigation by bypassing re-fetches for hash-only changes and ignoring redundant requests to the current URL.
 
 ## 12. Performance & Memory Management
 
@@ -204,7 +234,7 @@ Internal state records are initialized with a fixed set of fields to maintain mo
 
 ### 12.2 Branching Optimizations
 
-The library minimizes branching in performance-critical paths through task-based dispatch in `atomBind` and strategy specialization in `InputBinding`. Static snapshots are used during registry cleanup to stabilize loop prediction.
+The library minimizes branching in performance-critical paths through task-based dispatch in `atomBind` and strategy specialization in `InputBinding`. Static snapshots are used during registry cleanup to stabilize loop prediction. Hot paths utilize native `for` loops and have been stripped of functional utility overhead (e.g., `Option`, `Result`) to maximize execution speed.
 
 ### 13. Lenses & Structural Sharing
 
@@ -298,3 +328,19 @@ The library implements proactive diagnostics to prevent "silent failures," parti
 
 - **Registration Checks**: In `debug` mode, `$.route`, `$.useAtomComponent`, and `$.injectAtom` automatically verify that custom element tags are registered in `customElements`.
 - **Warning System**: Discovered issues are logged via `debug.warn` with the `[atom-component]` prefix to guide developers during initial setup.
+
+## 17. Navigation Interoperability
+
+The `navCoordinator` (`src/core/navigation.ts`) provides a unified layer for managing multiple navigation features within the same application.
+
+### 17.1 Target Collision Detection
+
+To prevent unpredictable UI states, the coordinator tracks all active target containers. If a developer attempts to attach both `atomNav` and `$.route` to the same element, a collision warning is issued.
+
+### 17.2 Hierarchical Guard Coordination
+
+When navigating, the system recursively checks `canLeave` guards across all registered managers within the transition scope. This ensures that a parent `atomNav` transition respects the "unsaved changes" guard of a nested `$.route` view.
+
+### 17.3 View Lifecycle Integration
+
+Routers nested within `atomNav` targets automatically skip initial scroll and focus management. This prevents redundant layout jumps as the parent `atomNav` handles the top-level page transition concerns.

@@ -26,163 +26,184 @@ function markInternal(handlerFunction: Function): void {
   (handlerFunction as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
 }
 
+/** Represents a specialized synchronization strategy for different form element types. @internal */
+interface BindingStrategy<T> {
+  readonly read: (el: FormElement, $el: JQuery, parse?: (v: string) => T) => T;
+  readonly write: (el: FormElement, $el: JQuery, value: T, formatted: string) => void;
+  readonly equal: (a: T, b: T, baseEqual: (a: T, b: T) => boolean) => boolean;
+  readonly format: (value: T, customFormat?: (v: T) => string) => string;
+}
+
+/** Registry of binding strategies for various form controls. @internal */
+const STRATEGIES = {
+  multipleSelect: {
+    read: (el: FormElement): unknown => {
+      if (!(el instanceof HTMLSelectElement)) return [];
+      const options = el.selectedOptions;
+      const result: string[] = [];
+      for (let i = 0, len = options.length; i < len; i++) {
+        result.push(options[i]!.value);
+      }
+      return result;
+    },
+    write: (_: FormElement, $el: JQuery, value: unknown) => {
+      $el.val(value as string[]);
+    },
+    equal: (a: unknown, b: unknown, baseEqual: (a: unknown, b: unknown) => boolean) => {
+      if (baseEqual(a, b)) return true;
+      if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+      for (let i = 0, len = a.length; i < len; i++) {
+        if (!Object.is(a[i], b[i])) return false;
+      }
+      return true;
+    },
+    format: (v: unknown, custom?: (v: unknown) => string) => {
+      if (custom) return custom(v);
+      return Array.isArray(v) ? v.join(',') : String(v ?? '');
+    },
+  } as BindingStrategy<unknown>,
+
+  default: {
+    read: (el: FormElement, _: JQuery, parse?: (v: string) => unknown) => {
+      return parse ? parse(el.value) : el.value;
+    },
+    write: (el: FormElement, _: JQuery, __: unknown, formatted: string) => {
+      if (
+        (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) &&
+        document.activeElement === el
+      ) {
+        const input = el as HTMLInputElement;
+        try {
+          const { selectionStart, selectionEnd } = input;
+          input.value = formatted;
+          if (selectionStart !== null && selectionEnd !== null) {
+            const length = formatted.length;
+            input.setSelectionRange(
+              Math.min(selectionStart, length),
+              Math.min(selectionEnd, length)
+            );
+          }
+        } catch {
+          input.value = formatted;
+        }
+      } else {
+        el.value = formatted;
+      }
+    },
+    equal: (a: unknown, b: unknown, baseEqual: (a: unknown, b: unknown) => boolean) =>
+      baseEqual(a, b),
+    format: (v: unknown, custom?: (v: unknown) => string) => {
+      if (custom) return custom(v);
+      return String(v ?? '');
+    },
+  } as BindingStrategy<unknown>,
+} as const;
+
 /**
- * The internal engine coordinating two-way data synchronization between DOM
- * inputs and reactive atoms.
+ * The internal engine coordinating two-way synchronization between DOM inputs and reactive atoms.
  *
- * Optimization: Read, write, equality, and formatting strategies are specialized
- * at construction time. This ensures monomorphic execution paths in V8 and
- * avoids expensive conditional branching within high-frequency synchronization loops.
+ * Optimization: Strategy Selection
+ * Read, write, equality, and formatting strategies are resolved at construction time.
+ * This ensures monomorphic execution paths and avoids conditional branching
+ * within high-frequency synchronization loops.
  *
- * Logic:
- * - Composition Safety: Manages IME composition states (Korean, Japanese, Chinese)
- *   to prevent partial data synchronization during multi-stroke input.
- * - Cursor Stability: Maintains the user's cursor position during atom-to-DOM
- *   updates to ensure a seamless typing experience.
- * - Loop Protection: Utilizes bitmask-based flags to prevent infinite recursive
- *   updates between the DOM and the reactive graph.
+ * Logic: Input Stability
+ * - Composition Safety: Manages IME composition states to prevent partial
+ *   synchronization during multi-stroke input.
+ * - Cursor Stability: Preserves selection ranges during atom-to-DOM updates
+ *   to maintain focus state.
+ * - Recursion Control: Utilizes bitmask flags to prevent infinite update cycles.
  *
  * @internal
  */
 class InputBinding<T> {
-  private readonly namespace = `.atomBind-${++instanceCounter}`;
+  private readonly $element: JQuery;
   private readonly readValue: () => T;
   private readonly writeToDom: (value: T, formatted: string) => void;
-  private readonly areEqual: (first: T, second: T) => boolean;
+  private readonly areEqual: (a: T, b: T) => boolean;
   private readonly formatValue: (value: T) => string;
+  private readonly eventNamespace: string;
+  private readonly abortController = new AbortController();
 
   private flags = BindingFlags.None;
   private debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(
-    private readonly $element: JQuery,
+    $element: JQuery,
     private readonly atom: WritableAtom<T>,
     private readonly options: ValOptions<T>
   ) {
+    this.atom = atom;
+    this.options = options;
+    this.$element = $element;
+    this.eventNamespace = `.atomBind-${++instanceCounter}`;
     const element = $element[0] as FormElement;
     const isMultipleSelect =
       element.tagName === 'SELECT' && (element as HTMLSelectElement).multiple;
-    const isTextControl = element.tagName === 'INPUT' || element.tagName === 'TEXTAREA';
 
-    const parse = options.parse ?? ((value: string) => value as unknown as T);
+    const strategy = (
+      isMultipleSelect ? STRATEGIES.multipleSelect : STRATEGIES.default
+    ) as BindingStrategy<T>;
+    const parse = options.parse;
     const baseEqual = options.equal ?? Object.is;
 
-    // Optimization: Strategy selection occurs once here, allowing the hot-path
-    // to execute specialized logic without repeated feature detection.
-    if (isMultipleSelect) {
-      this.readValue = () => (($element.val() as string[]) || []) as unknown as T;
-      this.writeToDom = (value) => {
-        $element.val(value as unknown as string[]);
-      };
-      this.areEqual = (a, b) => {
-        if (baseEqual(a, b)) return true;
-        return (
-          Array.isArray(a) &&
-          Array.isArray(b) &&
-          a.length === b.length &&
-          a.every((v, i) => Object.is(v, b[i]))
-        );
-      };
-      this.formatValue =
-        options.format ?? ((v: unknown) => (Array.isArray(v) ? v : v ? [String(v)] : []).join(','));
-    } else {
-      this.readValue = () => parse(element.value);
-      this.writeToDom = (_, formatted) => {
-        // Logic: Cursor preservation logic is applied to focused text controls
-        // to prevent the input from "jumping" or losing focus during reactive updates.
-        if (isTextControl && document.activeElement === element) {
-          const input = element as HTMLInputElement;
-          try {
-            const { selectionStart, selectionEnd } = input;
-            input.value = formatted;
-            if (selectionStart !== null && selectionEnd !== null) {
-              const length = formatted.length;
-              input.setSelectionRange(
-                Math.min(selectionStart, length),
-                Math.min(selectionEnd, length)
-              );
-            }
-          } catch {
-            input.value = formatted;
-          }
-        } else {
-          element.value = formatted;
-        }
-      };
-      this.areEqual = baseEqual;
-      this.formatValue = options.format ?? ((v: T) => String(v ?? ''));
-    }
+    this.readValue = () => (strategy as BindingStrategy<T>).read(element, this.$element, parse);
+    this.writeToDom = (value, formatted) =>
+      strategy.write(element, this.$element, value, formatted);
+    this.areEqual = (a, b) => strategy.equal(a, b, baseEqual);
+    this.formatValue = (value) => strategy.format(value, options.format);
 
     this.initializeEvents();
   }
 
   /** Normalizes and attaches all required DOM event listeners for the binding. */
   private initializeEvents(): void {
-    const namespace = this.namespace;
-    const debounce = this.options.debounce ?? 0;
+    const namespace = this.eventNamespace;
+    const debounce = this.options.debounce ?? SYSTEM_BINDING.INPUT_DEFAULTS.debounce;
 
-    const syncToAtomDelegate = () => {
-      // Constraint: Synchronization is deferred while an IME composition is active.
-      if (!(this.flags & BindingFlags.Composing)) {
-        this.syncToAtom();
-      }
+    const syncToAtomDelegate = (e?: Event | JQuery.TriggeredEvent) => {
+      const native = (e && 'originalEvent' in e ? e.originalEvent : e) as InputEvent;
+      // Logic: Synchronization is deferred while an IME composition is active (Standard InputEvent).
+      if (native?.isComposing) return;
+      this.syncToAtom();
     };
 
     const handleInput =
       debounce > 0
-        ? () => {
+        ? (e: JQuery.TriggeredEvent) => {
             clearTimeout(this.debounceTimer);
-            this.debounceTimer = setTimeout(syncToAtomDelegate, debounce);
+            this.debounceTimer = setTimeout(() => syncToAtomDelegate(e), debounce);
           }
         : syncToAtomDelegate;
 
-    [
-      this.handleFocus,
-      this.handleBlur,
-      this.handleCompositionStart,
-      this.handleCompositionEnd,
-      handleInput,
-    ].forEach(markInternal);
+    const onFocus = () => (this.flags |= BindingFlags.Focused);
+    const onBlur = () => this.handleBlur();
 
-    const eventNames = (this.options.event ?? SYSTEM_BINDING.INPUT_DEFAULTS.EVENT)
-      .trim()
-      .split(/\s+/)
-      .map((name) => `${name}${namespace}`)
-      .join(' ');
+    [onFocus, onBlur, handleInput].forEach(markInternal);
 
+    const rawEventNames = this.options.event ?? SYSTEM_BINDING.INPUT_DEFAULTS.event;
+    const names = rawEventNames.trim().split(/\s+/);
+    let eventNames = '';
+    for (let i = 0, len = names.length; i < len; i++) {
+      eventNames += (i > 0 ? ' ' : '') + names[i] + namespace;
+    }
+
+    // Use jQuery .on() for compatibility with $el.trigger().
     this.$element
-      .on(`focus${namespace}`, this.handleFocus)
-      .on(`blur${namespace}`, this.handleBlur)
-      .on(`compositionstart${namespace}`, this.handleCompositionStart)
-      .on(`compositionend${namespace}`, this.handleCompositionEnd)
-      .on(eventNames, handleInput);
+      .on(`focus${namespace}`, onFocus)
+      .on(`blur${namespace}`, onBlur)
+      .on(eventNames, handleInput as JQuery.EventHandler<HTMLElement>);
   }
 
-  private handleFocus = () => {
-    this.flags |= BindingFlags.Focused;
-  };
-
-  private handleCompositionStart = () => {
-    this.flags |= BindingFlags.Composing;
-  };
-
-  private handleCompositionEnd = () => {
-    this.flags &= ~BindingFlags.Composing;
-    this.syncToAtom();
-  };
-
   /** Handles final synchronization and value normalization when the control loses focus. */
-  private handleBlur = () => {
-    const wasComposing = !!(this.flags & BindingFlags.Composing);
-    this.flags &= ~(BindingFlags.Focused | BindingFlags.Composing);
+  private handleBlur(): void {
+    this.flags &= ~BindingFlags.Focused;
 
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
       this.debounceTimer = undefined;
-      this.syncToAtom();
-    } else if (wasComposing) {
-      this.syncToAtom();
     }
+    this.syncToAtom();
 
     // Logic: Value normalization ensures that the physical DOM value exactly
     // matches the reactive state once user interaction has concluded.
@@ -190,7 +211,7 @@ class InputBinding<T> {
     if (!this.isDomUpToDate(atomValue)) {
       this.writeToDom(atomValue, this.formatValue(atomValue));
     }
-  };
+  }
 
   /** Reads from the DOM and updates the reactive atom if the value has changed. */
   private syncToAtom(): void {
@@ -201,9 +222,10 @@ class InputBinding<T> {
       if (!this.areEqual(this.atom.peek(), domValue)) {
         this.atom.value = domValue;
       }
-    } finally {
-      this.flags &= ~BindingFlags.SyncingToAtom;
+    } catch (err) {
+      debug.warn(SYSTEM_BINDING.PREFIX, 'syncToAtom failed:', err);
     }
+    this.flags &= ~BindingFlags.SyncingToAtom;
   }
 
   /** Synchronizes the atom's current value back to the physical DOM element. */
@@ -220,9 +242,10 @@ class InputBinding<T> {
         const formatted = this.formatValue(atomValue);
         this.writeToDom(atomValue, formatted);
         debug.domUpdated(SYSTEM_BINDING.PREFIX, this.$element, 'val', formatted);
-      } finally {
-        this.flags &= ~BindingFlags.SyncingToDom;
+      } catch (err) {
+        debug.warn(SYSTEM_BINDING.PREFIX, 'syncToDom failed:', err);
       }
+      this.flags &= ~BindingFlags.SyncingToDom;
     });
   };
 
@@ -240,9 +263,9 @@ class InputBinding<T> {
 
   /** Cleans up all event listeners and timers associated with the binding. */
   public cleanup(): void {
-    // Constraint: Strict namespacing prevents accidental removal of
-    // user-defined listeners or handlers from other binding instances.
-    this.$element.off(this.namespace);
+    // Logic: Multiple cleanup mechanisms for maximum resilience.
+    this.$element.off(this.eventNamespace);
+    this.abortController.abort();
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
     }

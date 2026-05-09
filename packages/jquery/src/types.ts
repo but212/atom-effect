@@ -2,7 +2,9 @@ import type {
   AtomOptions as BaseAtomOptions,
   ComputedAtom,
   ComputedOptions,
+  Dependency,
   EffectObject,
+  MergedDependencyValue,
   ReadonlyAtom,
   WritableAtom,
 } from '@but212/atom-effect';
@@ -196,7 +198,7 @@ export interface FetchOptions<T> {
   /** Custom HTTP headers to include in the request. */
   headers?: Record<string, string>;
   /** Function to transform the raw response before it is stored in the atom. */
-  transform?: (raw: unknown, xhr: JQuery.jqXHR) => T;
+  transform?: (raw: unknown, xhr: JQuery.jqXHR) => T | Promise<T>;
   /** Direct overrides for the underlying jQuery AJAX settings. */
   ajaxOptions?: JQuery.AjaxSettings | (() => JQuery.AjaxSettings);
   /** Callback triggered when the request fails. */
@@ -231,6 +233,8 @@ export interface RouteLifecycle {
   onLeave?: (router: Router) => boolean | undefined;
   /** Optional document title for the route. */
   title?: string;
+  /** Optional metadata tags for the route (e.g., description, keywords). */
+  meta?: Record<string, string>;
 }
 
 /** Definition of a specific application route and its rendering logic. */
@@ -273,6 +277,16 @@ export interface RouteConfig {
   afterTransition?: (from: string, to: string) => void;
 }
 
+/** Represents a structured navigation location. */
+export interface RouteLocation {
+  /** The normalized path part of the URL. */
+  path: string;
+  /** Key-value pairs of query string parameters. */
+  query: Record<string, string>;
+  /** Extracted parameters from dynamic segments (e.g., :id). */
+  params: Record<string, string>;
+}
+
 /** Interface for programmatically interacting with the application router. */
 export interface Router {
   /** Reactive atom containing the current route name. */
@@ -281,8 +295,10 @@ export interface Router {
   queryParams: ReadonlyAtom<Record<string, string>>;
   /** Reactive atom containing the extracted path parameters. */
   params: ReadonlyAtom<Record<string, string>>;
-  /** Programmatically navigates to the specified path. */
-  navigate: (route: string) => void;
+  /** Reactive atom providing a unified snapshot of the current location. */
+  location: ReadonlyAtom<RouteLocation>;
+  /** Programmatically navigates to the specified path or location object. */
+  navigate: (to: string | Partial<RouteLocation>) => void;
   /** Shuts down the router and releases all observers. */
   destroy: () => void;
 }
@@ -400,11 +416,16 @@ export type JQueryScopedSelector = (
 ) => JQuery;
 
 /**
- * Interface representing the reactive capabilities injected into a component.
+ * Composition-based controller for managing a component's reactive lifecycle.
+ *
+ * When to use:
+ * - To build Custom Elements that require reactive attribute and slot synchronization.
+ * - To manage complex component lifecycles with automated resource disposal.
+ * - To provide or inject reactive state across Shadow DOM boundaries.
  *
  * @public
  */
-export interface AtomComponentFeatures {
+export interface AtomComponentController {
   /** The raw host element of the component. */
   readonly host: HTMLElement;
   /** The active root node (ShadowRoot or Host container). */
@@ -415,23 +436,6 @@ export interface AtomComponentFeatures {
    */
   readonly $: JQueryScopedSelector;
 
-  /** Registers a reactive provider on this element for dependency injection. */
-  provideAtom<T = unknown>(key: string | symbol, val: T): void;
-  /** Injects a reactive value provided by an ancestor element. */
-  injectAtom<T = unknown>(key: string | symbol): WritableAtom<T> | null;
-}
-
-/**
- * Composition-based controller for managing a component's reactive lifecycle.
- *
- * When to use:
- * - To build Custom Elements that require reactive attribute and slot synchronization.
- * - To manage complex component lifecycles with automated resource disposal.
- * - To provide or inject reactive state across Shadow DOM boundaries.
- *
- * @public
- */
-export interface AtomComponentController extends AtomComponentFeatures {
   /**
    * Factory function that returns a reactive lens atom for a specific HTML attribute.
    * Accessing a name returns a WritableAtom<string | null>.
@@ -448,7 +452,12 @@ export interface AtomComponentController extends AtomComponentFeatures {
    * Access to the component's internal state and accessibility properties via ElementInternals.
    * Available only if the browser supports attachInternals().
    */
-  readonly internals?: ElementInternals;
+  readonly internals?: ElementInternals | undefined;
+
+  /** Registers a reactive provider on this element for dependency injection. */
+  provideAtom<T = unknown>(key: string | symbol, val: T): void;
+  /** Injects a reactive value provided by an ancestor element. */
+  injectAtom<T = unknown>(key: string | symbol): WritableAtom<T> | null;
 
   /**
    * Initializes the component's reactive lifecycle and observers.
@@ -536,4 +545,12 @@ export interface AtomComponentStatic {
     | ((val: unknown) => ValidityStateFlags | string);
 }
 
-export type { ComputedAtom, ComputedOptions, EffectObject, ReadonlyAtom, WritableAtom };
+export type {
+  ComputedAtom,
+  ComputedOptions,
+  Dependency,
+  EffectObject,
+  MergedDependencyValue,
+  ReadonlyAtom,
+  WritableAtom,
+};

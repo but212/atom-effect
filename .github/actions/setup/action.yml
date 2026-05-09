@@ -8,6 +8,9 @@ inputs:
   registry-url:
     description: "NPM registry URL for publishing"
     default: ""
+  install-playwright:
+    description: "Whether to install Playwright browsers"
+    default: "false"
 
 runs:
   using: "composite"
@@ -30,5 +33,6 @@ runs:
       shell: bash
 
     - name: Install Playwright Browsers
+      if: inputs.install-playwright == 'true'
       run: pnpm dlx playwright install --with-deps chromium
       shell: bash

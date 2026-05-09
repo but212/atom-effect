@@ -56,9 +56,6 @@ class FormBinder<T extends object> {
   /** A map of field names to their corresponding reactive entries. */
   private entries = new Map<string, FieldEntry>();
 
-  /** A flat list of entries maintained for efficient iteration. */
-  private entryList: FieldEntry[] = [];
-
   /** A mapping of DOM elements to their current 'name' identifier for reconciliation. */
   private names = new WeakMap<Element, string>();
 
@@ -85,11 +82,20 @@ class FormBinder<T extends object> {
    * @param el - The root element of the subtree to scan.
    */
   public bindSubtree(el: Element): void {
-    const targets = el.matches?.(SELECTOR)
-      ? [el]
-      : (el as HTMLElement).querySelectorAll?.(SELECTOR) || [];
-    for (let i = 0, len = targets.length; i < len; i++) {
-      this.bindField(targets[i] as Element);
+    if (el === this.form) {
+      const elements = this.form.elements;
+      for (let i = 0, len = elements.length; i < len; i++) {
+        this.bindField(elements[i]! as Element);
+      }
+    } else if (el.matches?.(SELECTOR)) {
+      this.bindField(el);
+    } else {
+      const targets = (el as HTMLElement).querySelectorAll?.(SELECTOR);
+      if (targets) {
+        for (let i = 0, len = targets.length; i < len; i++) {
+          this.bindField(targets[i]! as Element);
+        }
+      }
     }
   }
 
@@ -103,28 +109,21 @@ class FormBinder<T extends object> {
    * @param el - The form control element to bind.
    */
   private bindField(el: Element): void {
-    if (!el.getAttribute('name')) return;
-
     const control = el as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
-    const name = control.name || el.getAttribute('name')!;
+    const name = control.name || el.getAttribute('name');
     if (!name) return;
 
-    // Logic: Identity Reconciliation
-    // Detects changes to the 'name' attribute and triggers a cleanup of the
-    // previous association to prevent stale state updates.
     const oldName = this.names.get(control);
     if (oldName !== undefined && oldName !== name) {
       registry.cleanup(control);
     }
 
-    if (this.names.has(control) && oldName === name) return;
+    if (this.names.has(control) && this.names.get(control) === name) return;
 
     const entry = this.ensureField(name);
     this.names.set(control, name);
 
     // Logic: Resource Cleanup
-    // Registers a cleanup hook to release the field reference and associated
-    // lens effects when the element is disconnected.
     registry.onCleanup(control, () => this.unbindField(control, name));
 
     if (
@@ -146,19 +145,29 @@ class FormBinder<T extends object> {
    * Maps validation results from the reactive schema to the browser's native
    * Constraint Validation API (`setCustomValidity`).
    */
-  private applyValidation(control: Element, name: string, atom: WritableAtom<unknown>): void {
-    const opts = this.options as FormOptions<unknown>;
-    const validator = opts.validation?.[name];
-    if (!validator) return;
+  private applyValidation(
+    control: HTMLFormElement['elements'][number],
+    name: string,
+    atom: WritableAtom<unknown>
+  ): void {
+    const validate = this.options.validation?.[name];
+    if (!validate) return;
 
     registry.trackEffect(
       control,
       effect(() => {
-        const v = atom.value;
-        const res = validator(v);
-        const msg = typeof res === 'string' ? res : res ? '' : 'Invalid';
-        if ('setCustomValidity' in control) {
-          (control as unknown as HTMLInputElement).setCustomValidity(msg);
+        try {
+          const res = validate(atom.value);
+          let msg = '';
+          if (typeof res === 'string') {
+            msg = res;
+          } else if (res === false) {
+            msg = 'Invalid';
+          }
+          (control as HTMLInputElement).setCustomValidity?.(msg);
+        } catch (err) {
+          console.error(`Validation error in field "${name}":`, err);
+          (control as HTMLInputElement).setCustomValidity?.('Validation failed');
         }
       })
     );
@@ -183,11 +192,7 @@ class FormBinder<T extends object> {
 
       if (isCheck && Array.isArray(curr)) {
         const s = new Set(curr.map(String));
-        if (el.checked) {
-          s.add(val);
-        } else {
-          s.delete(val);
-        }
+        el.checked ? s.add(val) : s.delete(val);
         atom.value = Array.from(s);
       } else {
         atom.value = isCheck ? el.checked : val;
@@ -250,9 +255,7 @@ class FormBinder<T extends object> {
     });
 
     entry = { atom: customLens as WritableAtom<unknown>, name, refCount: 1 };
-
     this.entries.set(name, entry);
-    this.entryList.push(entry);
     return entry;
   }
 
@@ -263,10 +266,6 @@ class FormBinder<T extends object> {
   private unbindField(el: Element, name: string): void {
     const entry = this.entries.get(name);
     if (entry && --entry.refCount <= 0) {
-      const idx = this.entryList.indexOf(entry);
-      if (idx !== -1) {
-        this.entryList.splice(idx, 1);
-      }
       const disposableAtom = entry.atom as Partial<{ dispose: () => void }>;
       if (typeof disposableAtom.dispose === 'function') {
         disposableAtom.dispose();
@@ -278,25 +277,20 @@ class FormBinder<T extends object> {
 
   /**
    * Monitors the form for structural changes using a MutationObserver.
-   *
-   * Optimization: Batch Processing
-   * Iterates through mutation records in a single pass to minimize DOM
-   * re-scanning when multiple elements are injected simultaneously.
    */
   private observe(): void {
     const observer = new MutationObserver((ms) => {
       for (let i = 0, len = ms.length; i < len; i++) {
         const m = ms[i]!;
         if (m.type === 'childList') {
-          for (let j = 0; j < m.addedNodes.length; j++) {
-            const node = m.addedNodes[j]!;
-            if (node.nodeType === 1) {
+          const added = m.addedNodes;
+          for (let j = 0, jLen = added.length; j < jLen; j++) {
+            const node = added[j]!;
+            if (node.nodeType === Node.ELEMENT_NODE) {
               this.bindSubtree(node as Element);
             }
           }
         } else if (m.attributeName === 'name') {
-          // Logic: Attribute Change detection
-          // Triggers re-binding if the 'name' attribute is modified.
           this.bindSubtree(m.target as Element);
         }
       }

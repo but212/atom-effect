@@ -1,9 +1,6 @@
 import { SYSTEM_DEBUG } from '@/constants';
 import { getSelector } from '@/utils';
 
-/** The CSS class applied to elements during a visual debug highlight. @internal */
-const HIGHLIGHT_CLASS = 'atom-debug-highlight';
-
 /** The data attribute used to identify and style elements under debug observation. @internal */
 const ATTR_MARKER = 'data-atom-debug';
 
@@ -11,15 +8,12 @@ const ATTR_MARKER = 'data-atom-debug';
 const IS_BROWSER = typeof window !== 'undefined';
 
 /**
- * Logic: Memory-Safe DOM Tracking
- * Uses `WeakMap` to associate temporal debug state with DOM elements.
- * This prevents diagnostic metadata from creating memory leaks, as references
- * do not block the garbage collector from reclaiming detached elements.
- *
+ * Logic: Memory-Safe Animation Tracking
+ * Uses `WeakMap` to store active Animation objects, allowing the browser
+ * to manage the lifecycle of visual feedback without manual JS timers.
  * @internal
  */
-const timers = new WeakMap<Element, ReturnType<typeof setTimeout>>();
-const rafs = new WeakMap<Element, number>();
+const animations = new WeakMap<Element, Animation>();
 
 /** Internal flag to prevent redundant style injections. @internal */
 let styleInjected = false;
@@ -36,13 +30,24 @@ let styleInjected = false;
  */
 function injectStyle(): void {
   if (styleInjected || !IS_BROWSER) return;
-  const style = document.createElement('style');
-  style.setAttribute(ATTR_MARKER, '');
-  style.textContent = `
-    [${ATTR_MARKER}] { transition: outline ${SYSTEM_DEBUG.DEFAULTS.HIGHLIGHT_DURATION_MS / 1000}s ease-out; }
-    .${HIGHLIGHT_CLASS} { outline: 2px solid rgba(255, 68, 68, 0.8); outline-offset: 1px; }
+  const css = `
+    [${ATTR_MARKER}] { outline: 0px solid transparent; transition: outline 0.1s ease-out; }
+    @keyframes atom-flash {
+      0% { outline: 2px solid rgba(255, 68, 68, 0.9); outline-offset: 1px; }
+      100% { outline: 0px solid transparent; outline-offset: 1px; }
+    }
   `.replace(/\s+/g, ' ');
-  document.head.appendChild(style);
+
+  if ('adoptedStyleSheets' in document && 'replaceSync' in CSSStyleSheet.prototype) {
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(css);
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+  } else {
+    const style = document.createElement('style');
+    style.setAttribute(ATTR_MARKER, '');
+    style.textContent = css;
+    document.head.appendChild(style);
+  }
   styleInjected = true;
 }
 
@@ -59,10 +64,10 @@ function resolveInitialState(): boolean {
     __ATOM_DEBUG__?: boolean;
     process?: { env?: { NODE_ENV?: string } };
   };
-  if (g.__ATOM_DEBUG__ !== undefined) {
+  if (g.__ATOM_DEBUG__ != null) {
     return !!g.__ATOM_DEBUG__;
   }
-  return g.process?.env?.NODE_ENV !== 'production' && g.process?.env?.NODE_ENV !== undefined;
+  return g.process?.env?.NODE_ENV !== 'production' && g.process?.env?.NODE_ENV != null;
 }
 
 const IS_DEV = resolveInitialState();
@@ -114,7 +119,7 @@ export const debug = {
     const el = 'jquery' in target ? target[0] : target;
 
     // Safety: Instrumentation is skipped for elements not currently connected to the document.
-    if (el && el.nodeType === 1 && (el as Element).isConnected) {
+    if (el?.nodeType === 1 && (el as Element).isConnected) {
       console.log(`${prefix} DOM updated: ${getSelector(el as Element)}.${type} =`, value);
       triggerVisualHighlight(el as Element);
     }
@@ -134,36 +139,29 @@ export const debug = {
  * @internal
  */
 function triggerVisualHighlight(el: Element): void {
-  const g = globalThis;
-  if (!IS_BROWSER || typeof g.requestAnimationFrame !== 'function') return;
+  if (!IS_BROWSER || typeof el.animate !== 'function') return;
   injectStyle();
 
-  const existingRaf = rafs.get(el);
-  const existingTimer = timers.get(el);
-  if (existingRaf !== undefined) {
-    g.cancelAnimationFrame(existingRaf);
-  }
-  if (existingTimer !== undefined) {
-    clearTimeout(existingTimer);
-  }
+  // Logic: Idempotent Animation Management
+  // Cancel any existing debug animation before starting a new one.
+  animations.get(el)?.cancel();
 
   if (!el.hasAttribute(ATTR_MARKER)) {
     el.setAttribute(ATTR_MARKER, '');
   }
 
-  rafs.set(
-    el,
-    g.requestAnimationFrame(() => {
-      rafs.delete(el);
-      if (!el.isConnected) return;
-      el.classList.add(HIGHLIGHT_CLASS);
-      timers.set(
-        el,
-        setTimeout(() => {
-          el.classList.remove(HIGHLIGHT_CLASS);
-          timers.delete(el);
-        }, SYSTEM_DEBUG.DEFAULTS.HIGHLIGHT_DURATION_MS)
-      );
-    })
+  // Use Web Animations API (ES2015+) to offload timing to the browser.
+  const anim = el.animate(
+    [
+      { outline: '2px solid rgba(255, 68, 68, 0.9)', outlineOffset: '1px' },
+      { outline: '0px solid transparent', outlineOffset: '1px' },
+    ],
+    {
+      duration: SYSTEM_DEBUG.DEFAULTS.HIGHLIGHT_DURATION_MS,
+      easing: 'ease-out',
+    }
   );
+
+  animations.set(el, anim);
+  anim.onfinish = () => animations.delete(el);
 }

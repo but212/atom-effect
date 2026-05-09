@@ -1,14 +1,10 @@
+import { isPromise } from '@but212/atom-effect-utils';
 import { BRAND, BrandFlags } from '@/symbols';
 import type { ComputedAtom, EffectObject, ReadonlyAtom, WritableAtom } from '@/types';
 
 /** @internal */
 interface Branded {
   [BRAND]?: number;
-}
-
-/** @internal */
-interface Thenable {
-  then: unknown;
 }
 
 /**
@@ -121,31 +117,4 @@ export function isEffect(obj: unknown): obj is EffectObject {
   return isBranded(obj, BrandFlags.Effect);
 }
 
-/**
- * Determines whether a value is a Promise or a Thenable.
- *
- * Logic: Implements a multi-tiered detection strategy that prioritizes native
- * `Promise` performance via `instanceof` before falling back to duck-typed
- * thenable identification for compatibility across different Promise implementations.
- *
- * @param value - The value to examine.
- * @returns True if the value is a promise-like object.
- *
- * @example
- * ```typescript
- * import { isPromise } from '@but212/atom-effect';
- *
- * if (isPromise(result)) {
- *   result.then((val) => console.log(val));
- * }
- * ```
- */
-export function isPromise<T>(value: unknown): value is Promise<T> {
-  // Optimization: Prioritize native Promise check for performance.
-  if (value instanceof Promise) return true;
-
-  if (value === null || typeof value !== 'object') return false;
-
-  // Logic: Fallback to duck-typing for cross-library compatibility.
-  return typeof (value as Thenable).then === 'function';
-}
+export { isPromise };

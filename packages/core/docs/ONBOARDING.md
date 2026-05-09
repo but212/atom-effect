@@ -158,6 +158,32 @@ Errors in effects are caught by the scheduler. You can provide an `onError` call
 
 ---
 
+## State Composition
+
+As your application grows, you may need to combine multiple atoms into a single view or manage related pieces of state together.
+
+### `mergeAtoms` (Read-only)
+
+Combine multiple atoms into a single read-only object.
+
+```typescript
+const settings = atom({ theme: 'dark' });
+const user = atom({ name: 'Alice' });
+const state = mergeAtoms(settings, user); 
+// state.value -> { theme: 'dark', name: 'Alice' }
+```
+
+### `mergeLenses` (Two-way)
+
+Unify multiple writable lenses into a single writable atom. Perfect for form handling or unified state management.
+
+```typescript
+const combined = mergeLenses(themeLens, nameLens);
+combined.value = { theme: 'light', name: 'Bob' }; // Updates both source atoms
+```
+
+---
+
 ## Best Practices and Considerations
 
 1. **Manual Disposal**: Effects and atoms should be disposed of when they are no longer needed to prevent memory leaks, especially in component-based architectures.

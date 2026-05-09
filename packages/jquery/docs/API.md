@@ -104,12 +104,13 @@ $el.atomBind({ text: [count, c => `Count: ${c}`] });
 Updates `innerHTML`.
 
 > **🛡️ Security Implementation**:
-> This method implements a multi-layered sanitization pipeline to protect the DOM from untrusted data:
+> This method implements a hardened, rule-based sanitization engine to protect the DOM from untrusted data:
 >
-> 1. **Inert Parsing**: Data is parsed within an inert `<template>` element, preventing the execution of any embedded scripts during initial DOM construction.
-> 2. **Recursive Tree-walking**: Every node is inspected, transforming untrusted tags (e.g., `<script>`, `<iframe>`, `<object>`) into safe, inert `<span>` wrappers.
-> 3. **Attribute Scrubbing**: All `on*` event handlers and attributes containing sensitive protocols (`javascript:`, `data:`) are strictly stripped.
-> 4. **Prototype Protection**: Interaction with DOM properties is routed through prototype-level descriptors to mitigate DOM Clobbering attacks.
+> 1. **Inert Parsing**: Data is parsed within an inert `<template>` element, preventing the execution of any embedded scripts or network requests during initial parsing.
+> 2. **Multi-pass Normalization**: Performs double-decoding of HTML entities and strips control characters to reveal hidden payloads and bypass attempts.
+> 3. **Structural Neutralization**: Transforms untrusted tags (e.g., `<script>`, `<iframe>`) into safe `<span>` wrappers. It also detects and neutralizes tags hidden within text content.
+> 4. **Priority Defense Rules**: Orchestrates attribute-level defense, stripping inline event handlers, protocol-blocking URI sinks, and filtering dangerous CSS patterns.
+> 5. **Prototype Hardening**: Interaction with DOM properties is routed through prototype-bound methods to mitigate DOM Clobbering attacks.
 >
 > For complex user-generated content, integrating a library like [DOMPurify](https://github.com/cure53/DOMPurify) is supported.
 >
@@ -147,8 +148,11 @@ $('.box').atomCss('width', widthAtom, 'px');
 Updates an HTML attribute.
 
 - **Security**: Blocks `on*` event handlers and protocols such as `javascript:`. This applies to both HTML and SVG attributes (e.g., `fill`, `filter`).
-- **HTML Sinks**: Monitors and sanitizes sensitive sinks like `srcdoc`.
-- **WAI-ARIA**: Boolean `false` is preserved as the string `"false"` for `aria-*` attributes instead of being removed.
+- **Attribute Transformation Pipeline**: Implements a unified flow for different categories:
+  - **Boolean Attributes**: Automatically removed when the reactive condition is `false`.
+  - **WAI-ARIA**: Boolean values are mapped to `"true"`/`"false"` strings for accessibility compatibility.
+  - **Standard Attributes**: Values are coerced to strings.
+- **HTML Sinks**: Monitors and enforces protocol security on sensitive sinks like `srcdoc`.
 
 ```javascript
 $('img').atomAttr('src', imageUrl);
@@ -173,7 +177,7 @@ $('input').atomProp('disabled', shouldDisable);
 
 Toggles visibility via `display: none`. `atomHide` is the inverse.
 
-- **Style Preservation**: Captures and restores the last non-none display style.
+- **Layout Preservation**: Captures and restores the element's original `display` mode (e.g., `flex`, `grid`) when transitioning from `none`, ensuring the intended layout remains intact.
 
 ```javascript
 $('.loading-spinner').atomShow(isLoading);
@@ -190,6 +194,7 @@ Renders a list of items using keyed diffing.
 - **`bind`**: `($el, item, index) => void` — Reactive binding logic for the element.
 - **`update`**: `($el, item, index) => void` — Manual update logic for existing elements.
 - **`onAdd`** / **`onRemove`**: Lifecycle callbacks. `onRemove` supports async exit animations.
+- **`isEqual`**: `(a, b) => boolean` — Optional custom equality check for item comparison.
 - **`events`**: Delegated event handlers attached to the container.
 
 ```javascript
@@ -220,9 +225,10 @@ Two-way binding for `<input>`, `<textarea>`, and `<select>`.
 
 **Implementation Details**:
 
+- **Strategy Specialization**: Resolves optimized read/write strategies at construction time (e.g., for `multipleSelect` vs standard inputs). This ensures monomorphic execution paths and avoids feature-detection branching in hot paths.
 - **IME Stability**: Monitors composition states to prevent external updates from interrupting character entry (e.g., for CJK languages).
-- **Cursor Preservation**: Maintains selection range during reactive updates when the input is focused.
-- **Cycle Prevention**: Includes guards against infinite feedback loops.
+- **Cursor Preservation**: Maintains selection range and focus stability during reactive updates using a selection buffer.
+- **Recursion Control**: Uses internal bitmask flags to prevent infinite update cycles between the DOM and the reactive graph.
 
 Natively supports `<select multiple>` as a `string[]` array.
 
@@ -407,6 +413,25 @@ const nameLens = $.atomLens(store, 'user.profile.name');
 $('#name-input').atomVal(nameLens);
 ```
 
+### `$.mergeAtoms(...atoms)`
+
+Combines multiple object-based atoms into a single read-only computed atom with a flattened type.
+
+```javascript
+const a = $.atom({ x: 1 });
+const b = $.atom({ y: 2 });
+const combined = $.mergeAtoms(a, b);
+// combined.value is { x: number, y: number }
+```
+
+### `$.mergeLenses(...lenses)`
+
+Merges multiple writable lenses into a single unified lens. Getting the value returns a merged object, and setting the value propagates changes back to the source lenses.
+
+```javascript
+const combinedLens = $.mergeLenses(lensA, lensB);
+```
+
 ### `$.batch(fn)`
 
 Groups multiple atom writes into a single synchronous notification cycle.
@@ -445,7 +470,10 @@ $('#name').atomText(user, u => u?.name ?? '');
 
 ### `$.route(config)`
 
-SPA router supporting hash-based and pushState routing. Includes features for dynamic segments, template cloning, and implicit auto-discovery of routes from the DOM.
+SPA router supporting hash-based and pushState routing.
+
+- **`isEqual`**: `(a, b) => boolean` — Optional custom equality check for route comparison.
+- **URLPattern Support**: Uses the native `URLPattern` API for segment extraction when available.
 
 > **DX Diagnostic**: In debug mode, the router automatically scans rendered content for unregistered custom elements and logs warnings to prevent silent failures during view transitions.
 
@@ -456,6 +484,12 @@ SPA router supporting hash-based and pushState routing. Includes features for dy
 ### `$.atomNav(options)`
 
 Navigation module (PJAX) that intercepts link clicks, fetches content asynchronously, and updates target containers while maintaining browser history.
+
+- **Reactive State**: Exposes `currentUrl`, `isPending`, and `hasError` atoms for reactive UI feedback (e.g., loading spinners).
+- **Metadata Sync**: Automatically synchronizes document `title` and standard SEO `meta` tags (description, keywords) from the loaded page.
+- **Scroll Management**: Handles automatic scrolling to the top or to a specific `#hash` after content injection.
+- **Interoperability**: Integrates with the navigation coordinator to respect `onLeave` guards from nested routers or other managers.
+- **Race Condition Safety**: Implements a "last navigation wins" policy using internal versioning and `AbortSignal` cancellation.
 
 ---
 

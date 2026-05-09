@@ -1,44 +1,25 @@
-import { defineConfig } from 'vite';
-import dts from 'vite-plugin-dts';
+import { defineViteConfig } from '@but212/atom-effect-configs';
 
-export default defineConfig(({ mode }) => ({
-  define: {
-    'process.env.NODE_ENV': JSON.stringify(mode),
-  },
-  build: {
-    lib: {
-      entry: `${import.meta.dirname}/src/index.ts`,
-      name: 'AtomEffect',
-      fileName: (format: string) => {
-        if (format === 'umd') return 'atom-effect.min.js';
-        return `index.${format === 'es' ? 'mjs' : 'cjs'}`;
-      },
-      formats: ['es', 'cjs', 'umd'],
+export default defineViteConfig(
+  {
+    packageDir: import.meta.dirname,
+    name: 'AtomEffect',
+    libFileNames: {
+      umd: 'atom-effect.min.js',
+      es: 'index.mjs',
+      cjs: 'index.cjs',
     },
-    sourcemap: true,
-    outDir: 'dist',
-    emptyOutDir: true,
-    minify: 'esbuild',
-    target: 'es2021',
-    rollupOptions: {
-      external: [],
-      output: {
-        preserveModules: false,
-        exports: 'named',
-      },
-    },
-  },
-  resolve: {
-    alias: {
-      '@': `${import.meta.dirname}/src`,
-    },
-  },
-  plugins: [
-    dts({
-      include: ['src/**/*'],
-      exclude: ['src/**/*.test.ts', 'node_modules'],
+    dtsOptions: {
       insertTypesEntry: true,
-      tsconfigPath: './tsconfig.build.json',
-    }),
-  ],
-}));
+    },
+  },
+  {
+    build: {
+      rollupOptions: {
+        output: {
+          preserveModules: false,
+        },
+      },
+    },
+  }
+);

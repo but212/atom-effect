@@ -5,19 +5,19 @@
 
 import { bench, describe } from 'vitest';
 import { atom, atomLens, computed, effect } from '../../dist';
-import type { DataGridRow, TodoItem } from '../fixtures/index.js';
-import { generateGridData } from '../fixtures/index.js';
 import {
   benchEffectOptions,
+  type DataGridRow,
   forceGC,
+  generateGridData,
+  generateTodosBySizeKey,
   getMemoryUsage,
   keep,
   macroBenchOptions,
   memoryBenchOptions,
-  microBenchOptions,
+  REPEATS,
+  type TodoItem,
 } from '../utils/setup.js';
-
-const REPEATS = 100;
 
 describe('Todo App: Comprehensive Workflow', () => {
   // Vanilla implementation
@@ -115,6 +115,49 @@ describe('Todo App: Comprehensive Workflow', () => {
     },
     macroBenchOptions
   );
+});
+
+describe('Todo App: Input Size Tiers', () => {
+  for (const size of ['small', 'medium', 'large'] as const) {
+    const data = generateTodosBySizeKey(size);
+    const todosAtom = atom<TodoItem[]>(data);
+    const filterAtom = atom<'all' | 'active' | 'completed'>('all');
+    const filtered = computed(() => {
+      const f = filterAtom.value;
+      if (f === 'all') return todosAtom.value;
+      if (f === 'active') return todosAtom.value.filter((t) => !t.completed);
+      return todosAtom.value.filter((t) => t.completed);
+    });
+    let _count = 0;
+    effect(() => {
+      _count = filtered.value.length;
+    }, benchEffectOptions);
+
+    bench(
+      `[Atom] toggle filter (${size}: ${data.length} items)`,
+      () => {
+        filterAtom.value = filterAtom.value === 'all' ? 'active' : 'all';
+        keep(_count);
+      },
+      macroBenchOptions
+    );
+
+    let vanillaFilter: 'all' | 'active' | 'completed' = 'all';
+    bench(
+      `[Vanilla] toggle filter (${size}: ${data.length} items)`,
+      () => {
+        vanillaFilter = vanillaFilter === 'all' ? 'active' : 'all';
+        const r =
+          vanillaFilter === 'all'
+            ? data
+            : vanillaFilter === 'active'
+              ? data.filter((t) => !t.completed)
+              : data.filter((t) => t.completed);
+        keep(r.length);
+      },
+      macroBenchOptions
+    );
+  }
 });
 
 describe('Data Grid: Core Operations (1000 Rows)', () => {
@@ -391,7 +434,7 @@ describe('Dynamic Dependency Patterns', () => {
         keep(condResult.value);
       }
     },
-    microBenchOptions
+    macroBenchOptions
   );
 
   bench(
@@ -404,7 +447,7 @@ describe('Dynamic Dependency Patterns', () => {
         keep(arrSelected.value);
       }
     },
-    microBenchOptions
+    macroBenchOptions
   );
 });
 
