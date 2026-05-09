@@ -14,6 +14,10 @@
   - Implemented a 3-pass reconciliation pipeline (Head/Tail optimization, keyed diffing, and greedy placement) for O(N) linear performance and reduced memory overhead.
   - Refactored core logic to use functional POJO contexts and unified structural binding via `lensFor` and `mergeLenses`.
 
+#### Fixed
+
+- **Build**: Included the `atom-effect` core in the AEJ bundle, fixing several related issues.
+
 ## [0.32.0]
 
 ### Core
