@@ -34,6 +34,7 @@ export type {
   EffectFunction,
   EffectObject,
   EffectOptions,
+  MergedDependencyValue,
   ReadonlyAtom,
   WritableAtom,
 } from '@/types';

@@ -460,7 +460,7 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
 
       ContextEngine.bump();
       state.dispose();
-      registry.deferCleanup(element);
+      registry.cleanupTree(element);
     },
   } as unknown as AtomComponentController;
 

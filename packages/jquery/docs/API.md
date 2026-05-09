@@ -413,6 +413,25 @@ const nameLens = $.atomLens(store, 'user.profile.name');
 $('#name-input').atomVal(nameLens);
 ```
 
+### `$.mergeAtoms(...atoms)`
+
+Combines multiple object-based atoms into a single read-only computed atom with a flattened type.
+
+```javascript
+const a = $.atom({ x: 1 });
+const b = $.atom({ y: 2 });
+const combined = $.mergeAtoms(a, b);
+// combined.value is { x: number, y: number }
+```
+
+### `$.mergeLenses(...lenses)`
+
+Merges multiple writable lenses into a single unified lens. Getting the value returns a merged object, and setting the value propagates changes back to the source lenses.
+
+```javascript
+const combinedLens = $.mergeLenses(lensA, lensB);
+```
+
 ### `$.batch(fn)`
 
 Groups multiple atom writes into a single synchronous notification cycle.

@@ -17,10 +17,11 @@ To prevent **DOM Clobbering** attacks—where malicious elements (like `<input i
 
 ### 2. Inert Template-based Parsing
 
-The `sanitizeHtml` engine utilizes a single, robust parsing context using a detached `<template>` element. This ensures that:
+The `sanitizeHtml` engine utilizes dedicated, local parsing contexts using detached `<template>` and `<div>` elements for each operation. This ensures that:
 
 - **Inertness**: Content is parsed but never executed, preventing script execution or network requests during the sanitization phase.
 - **Structural Integrity**: The template's `.content` DocumentFragment provides a clean, isolated environment for tree-walking and transformation.
+- **Re-entrancy Safety**: Local instances prevent state corruption during recursive sanitization calls (e.g., when processing `srcdoc` within an existing cycle).
 
 ---
 

@@ -2,7 +2,9 @@ import type {
   AtomOptions as BaseAtomOptions,
   ComputedAtom,
   ComputedOptions,
+  Dependency,
   EffectObject,
+  MergedDependencyValue,
   ReadonlyAtom,
   WritableAtom,
 } from '@but212/atom-effect';
@@ -543,4 +545,12 @@ export interface AtomComponentStatic {
     | ((val: unknown) => ValidityStateFlags | string);
 }
 
-export type { ComputedAtom, ComputedOptions, EffectObject, ReadonlyAtom, WritableAtom };
+export type {
+  ComputedAtom,
+  ComputedOptions,
+  Dependency,
+  EffectObject,
+  MergedDependencyValue,
+  ReadonlyAtom,
+  WritableAtom,
+};
