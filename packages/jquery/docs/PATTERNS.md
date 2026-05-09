@@ -228,6 +228,17 @@ When validation fails:
 - The element matches the `:invalid` CSS pseudo-class.
 - Native browser validation bubbles will appear on form submission.
 
+### Multi-Atom Merging
+
+`atomForm` can accept an array of atoms, which are automatically merged into a single writable context. This is useful for forms that span multiple state domains.
+
+```javascript
+const user = $.atom({ name: 'Alice' });
+const settings = $.atom({ theme: 'dark' });
+
+$('form').atomForm([user, settings]);
+```
+
 ## 7. Reactive Lists
 
 The `atomList` method uses a 3-pass reconciliation algorithm to synchronize DOM operations with array state.

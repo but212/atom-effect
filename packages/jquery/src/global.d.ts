@@ -637,7 +637,10 @@ declare global {
      * });
      * ```
      */
-    atomForm<T extends object>(atom: WritableAtom<T>, opts?: FormOptions<T>): this;
+    atomForm<T extends object>(
+      atom: WritableAtom<T> | WritableAtom<unknown>[],
+      opts?: FormOptions<T>
+    ): this;
 
     /**
      * Registers an event listener with automatic lifecycle cleanup.
@@ -659,14 +662,22 @@ declare global {
     atomBind<T = unknown>(opts: BindingOptions<T>): this;
 
     /**
-     * Synchronizes a reactive data source with a list of DOM elements.
+     * High-performance reactive list renderer for jQuery.
      *
-     * Logic: List Reconciliation
-     * Employs a double-ended diffing algorithm to minimize DOM manipulations
-     * by identifying moves, additions, and deletions via unique keys.
+     * Usage Example:
+     * ```javascript
+     * $('#todo-list').atomList(todosAtom, {
+     *   key: 'id',
+     *   render: (todo) => `<li class="item">${todo.text}</li>`,
+     *   events: {
+     *     'click .remove': (todo, index, e) => removeTodo(todo.id)
+     *   }
+     * });
+     * ```
      *
-     * @param src - The read-only atom containing the source array.
-     * @param opts - Configuration for rendering, key extraction, and animations.
+     * Lifecycle:
+     * - Automatically cleans up via `registry` when the element is removed from DOM.
+     * - Re-binding to the same element replaces the previous reactive effect.
      */
     atomList<T>(src: ReadonlyAtom<T[]>, opts: ListOptions<T>): this;
 

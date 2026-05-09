@@ -1,6 +1,7 @@
 import {
-  atomLens,
   effect,
+  lensFor,
+  mergeLenses,
   type Paths,
   type PathValue,
   untracked,
@@ -10,6 +11,7 @@ import $ from 'jquery';
 import { registry } from '@/core/registry';
 import { INTERNAL_HANDLER } from '@/core/symbols';
 import type { FormOptions } from '@/types';
+import { normalizePath } from '@/utils';
 import { bindVal } from './unified';
 
 /**
@@ -24,10 +26,8 @@ import { bindVal } from './unified';
 interface FieldEntry {
   /** The reactive lens atom providing access to a specific nested property. */
   atom: WritableAtom<unknown>;
-
   /** The unique name of the field derived from the `name` attribute. */
   name: string;
-
   /** Reference count for lifecycle management. */
   refCount: number;
 }
@@ -39,12 +39,150 @@ interface FieldEntry {
 const SELECTOR = 'input, select, textarea, [name]';
 
 /**
- * Orchestrates the synchronization between a complex reactive object and an HTML Form.
+ * Logic: Multi-checkbox Array Sync
+ * Optimization: High-performance set population
+ * Uses an imperative loop to populate the Set in a single pass, avoiding the
+ * memory overhead and GC pressure of intermediate array allocations from `.map()`.
  *
- * This class implements a two-way binding system that maps form controls (via `name`
- * attributes) to nested properties of a source atom using lenses. It ensures
- * that the DOM and the reactive state remain consistent even as the form structure
- * changes dynamically.
+ * @internal
+ */
+function getNextToggleValue(
+  current: unknown,
+  checked: boolean,
+  val: string,
+  isCheck: boolean
+): unknown {
+  if (!isCheck) return val;
+  if (!Array.isArray(current)) return checked;
+
+  const s = new Set<string>();
+  const len = current.length;
+  for (let i = 0; i < len; i++) {
+    s.add(String(current[i]));
+  }
+
+  if (checked) {
+    s.add(val);
+  } else {
+    s.delete(val);
+  }
+  return Array.from(s);
+}
+
+/**
+ * Logic: Toggle State Resolution
+ * Optimization: Low-overhead early exit
+ * Replaces functional iteration with an imperative loop to allow for early
+ * termination once a match is found, reducing unnecessary string conversions.
+ *
+ * @internal
+ */
+function isToggleChecked(v: unknown, val: string, isCheck: boolean): boolean {
+  if (!isCheck) return String(v) === val;
+  if (!Array.isArray(v)) return !!v;
+
+  const len = v.length;
+  for (let i = 0; i < len; i++) {
+    if (String(v[i]) === val) return true;
+  }
+  return false;
+}
+
+/**
+ * Creates a lens that intercepts write operations to apply transformations
+ * and trigger change callbacks.
+ *
+ * Logic: Interception Proxy
+ * Uses Object.create to inherit ReadonlyAtom/Disposable methods while
+ * overriding the .value setter for custom hooks.
+ *
+ * @internal
+ */
+function createInterceptedLens<T extends object>(
+  name: string,
+  baseLens: WritableAtom<PathValue<T, Paths<T>>>,
+  options: FormOptions<unknown>
+): WritableAtom<unknown> {
+  const { transform, onChange } = options;
+  const intercepted = Object.create(baseLens);
+
+  Object.defineProperty(intercepted, 'value', {
+    get() {
+      return baseLens.value;
+    },
+    set(val: unknown) {
+      let transformed = val;
+      try {
+        transformed = transform ? transform(name, val) : val;
+      } catch (err) {
+        console.error(`[bindForm] Transform error in field "${name}":`, err);
+      }
+
+      baseLens.value = transformed as PathValue<T, Paths<T>>;
+
+      if (onChange) {
+        try {
+          untracked(() => onChange(name, transformed));
+        } catch (err) {
+          console.error(`[bindForm] onChange error in field "${name}":`, err);
+        }
+      }
+    },
+  });
+
+  return intercepted as WritableAtom<unknown>;
+}
+
+/**
+ * Logic: Constraint Validation Bridge
+ * Synchronizes reactive validation results with the browser's native
+ * Constraint Validation API (`setCustomValidity`).
+ *
+ * @internal
+ */
+function syncValidationEffect(
+  control: Element,
+  name: string,
+  atom: WritableAtom<unknown>,
+  validate: (v: unknown) => string | boolean | undefined
+) {
+  return effect(() => {
+    try {
+      const res = validate(atom.value);
+      let msg = '';
+      if (typeof res === 'string') {
+        msg = res;
+      } else if (res === false) {
+        msg = 'Invalid';
+      }
+      (control as HTMLInputElement).setCustomValidity?.(msg);
+    } catch (err) {
+      console.error(`Validation error in field "${name}":`, err);
+      (control as HTMLInputElement).setCustomValidity?.('Validation failed');
+    }
+  });
+}
+
+/**
+ * Logic: Toggle Value Synchronization
+ * Synchronizes checkbox/radio states based on reactive atom updates.
+ *
+ * @internal
+ */
+function syncToggleEffect(
+  el: HTMLInputElement,
+  atom: WritableAtom<unknown>,
+  val: string,
+  isCheck: boolean
+) {
+  return effect(() => {
+    const checked = isToggleChecked(atom.value, val, isCheck);
+    if (el.checked !== checked) el.checked = checked;
+  });
+}
+
+/**
+ * Orchestrates the synchronization between a complex reactive object and an HTML Form.
  *
  * Logic: Hybrid Discovery
  * Combines initial scanning with a MutationObserver to maintain bindings for
@@ -55,7 +193,6 @@ const SELECTOR = 'input, select, textarea, [name]';
 class FormBinder<T extends object> {
   /** A map of field names to their corresponding reactive entries. */
   private entries = new Map<string, FieldEntry>();
-
   /** A mapping of DOM elements to their current 'name' identifier for reconciliation. */
   private names = new WeakMap<Element, string>();
 
@@ -79,22 +216,30 @@ class FormBinder<T extends object> {
   /**
    * Scans a DOM subtree for form controls and establishes reactive bindings.
    *
-   * @param el - The root element of the subtree to scan.
+   * Optimization: Loop invariant hoisting
+   * Caches collection lengths and uses guard clauses to minimize branching
+   * in deep subtree scans.
    */
   public bindSubtree(el: Element): void {
     if (el === this.form) {
       const elements = this.form.elements;
-      for (let i = 0, len = elements.length; i < len; i++) {
+      const len = elements.length;
+      for (let i = 0; i < len; i++) {
         this.bindField(elements[i]! as Element);
       }
-    } else if (el.matches?.(SELECTOR)) {
+      return;
+    }
+
+    if (el.matches?.(SELECTOR)) {
       this.bindField(el);
-    } else {
-      const targets = (el as HTMLElement).querySelectorAll?.(SELECTOR);
-      if (targets) {
-        for (let i = 0, len = targets.length; i < len; i++) {
-          this.bindField(targets[i]! as Element);
-        }
+      return;
+    }
+
+    const targets = (el as HTMLElement).querySelectorAll?.(SELECTOR);
+    if (targets) {
+      const len = targets.length;
+      for (let i = 0; i < len; i++) {
+        this.bindField(targets[i]! as Element);
       }
     }
   }
@@ -103,10 +248,11 @@ class FormBinder<T extends object> {
    * Establishes a two-way binding for an individual form control.
    *
    * Logic: Field Identification
-   * Identification is based on the control's `name` attribute. If the name attribute
-   * changes, the previous binding is cleaned up and a new lens is established.
+   * Identification is based on the control's `name` attribute. If the name
+   * changes, the previous binding is cleaned up.
    *
-   * @param el - The form control element to bind.
+   * Optimization: Minimized Map lookups
+   * Reduces WeakMap access from 3 to 1 in the hot path of field reconciliation.
    */
   private bindField(el: Element): void {
     const control = el as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
@@ -114,16 +260,15 @@ class FormBinder<T extends object> {
     if (!name) return;
 
     const oldName = this.names.get(control);
-    if (oldName !== undefined && oldName !== name) {
+    if (oldName === name) return;
+
+    if (oldName !== undefined) {
       registry.cleanup(control);
     }
-
-    if (this.names.has(control) && this.names.get(control) === name) return;
 
     const entry = this.ensureField(name);
     this.names.set(control, name);
 
-    // Logic: Resource Cleanup
     registry.onCleanup(control, () => this.unbindField(control, name));
 
     if (
@@ -138,13 +283,6 @@ class FormBinder<T extends object> {
     this.applyValidation(control, name, entry.atom);
   }
 
-  /**
-   * Integrates declarative validation for a specific form control.
-   *
-   * Logic: Constraint Validation Bridge
-   * Maps validation results from the reactive schema to the browser's native
-   * Constraint Validation API (`setCustomValidity`).
-   */
   private applyValidation(
     control: HTMLFormElement['elements'][number],
     name: string,
@@ -153,34 +291,9 @@ class FormBinder<T extends object> {
     const validate = this.options.validation?.[name];
     if (!validate) return;
 
-    registry.trackEffect(
-      control,
-      effect(() => {
-        try {
-          const res = validate(atom.value);
-          let msg = '';
-          if (typeof res === 'string') {
-            msg = res;
-          } else if (res === false) {
-            msg = 'Invalid';
-          }
-          (control as HTMLInputElement).setCustomValidity?.(msg);
-        } catch (err) {
-          console.error(`Validation error in field "${name}":`, err);
-          (control as HTMLInputElement).setCustomValidity?.('Validation failed');
-        }
-      })
-    );
+    registry.trackEffect(control, syncValidationEffect(control as Element, name, atom, validate));
   }
 
-  /**
-   * Specifically handles two-way binding for toggleable controls (checkboxes and radios).
-   *
-   * Logic: Multi-checkbox Arrays
-   * For checkboxes bound to an array, synchronization is performed by maintaining
-   * a Set of values, ensuring order-independent updates and preventing
-   * duplicate entries during reactive flushes.
-   */
   private bindToggle(
     el: HTMLInputElement,
     atom: WritableAtom<unknown>,
@@ -188,44 +301,22 @@ class FormBinder<T extends object> {
     isCheck: boolean
   ): void {
     const handler = () => {
-      const curr = atom.peek();
-
-      if (isCheck && Array.isArray(curr)) {
-        const s = new Set(curr.map(String));
-        el.checked ? s.add(val) : s.delete(val);
-        atom.value = Array.from(s);
-      } else {
-        atom.value = isCheck ? el.checked : val;
-      }
+      atom.value = getNextToggleValue(atom.peek(), el.checked, val, isCheck);
     };
 
-    // Logic: Batch Coalescing
-    // Marks the handler as an internal AEJ handler to prevent redundant
-    // wrapping during multiple patch cycles, maintaining a flat execution stack.
     (handler as unknown as { [INTERNAL_HANDLER]: boolean })[INTERNAL_HANDLER] = true;
     $(el).on('change', handler);
     registry.onCleanup(el, () => $(el).off('change', handler));
 
-    registry.trackEffect(
-      el,
-      effect(() => {
-        const v = atom.value;
-        const checked = isCheck
-          ? Array.isArray(v)
-            ? v.some((x) => String(x) === val)
-            : !!v
-          : String(v) === val;
-        if (el.checked !== checked) el.checked = checked;
-      })
-    );
+    registry.trackEffect(el, syncToggleEffect(el, atom, val, isCheck));
   }
 
   /**
    * Retrieves or creates a reactive entry for a specific field name.
    *
    * Logic: Path Transformation
-   * Flat HTML 'name' attributes (e.g., 'user.profile[0].name') are converted
-   * into dot-separated paths compatible with the `atomLens` structural sharing engine.
+   * Flat HTML 'name' attributes are converted into dot-separated paths
+   * compatible with the structural sharing engine.
    */
   private ensureField(name: string): FieldEntry {
     let entry = this.entries.get(name);
@@ -234,35 +325,15 @@ class FormBinder<T extends object> {
       return entry;
     }
 
-    const dotPath = name.replace(/\[(\w+)\]/g, '.$1').replace(/^\./, '');
+    const dotPath = normalizePath(name);
+    const baseLens = lensFor(this.atom)(dotPath as Paths<T>);
+    const atom = createInterceptedLens(name, baseLens, this.options);
 
-    const baseLens = atomLens(this.atom, dotPath as Paths<T>);
-    const customLens = Object.create(baseLens);
-
-    const { transform, onChange } = this.options;
-
-    Object.defineProperty(customLens, 'value', {
-      get() {
-        return baseLens.value;
-      },
-      set(val: unknown) {
-        const transformed = transform ? transform(name, val) : val;
-        baseLens.value = transformed as PathValue<T, Paths<T>>;
-        if (onChange) {
-          untracked(() => onChange(name, transformed));
-        }
-      },
-    });
-
-    entry = { atom: customLens as WritableAtom<unknown>, name, refCount: 1 };
+    entry = { atom, name, refCount: 1 };
     this.entries.set(name, entry);
     return entry;
   }
 
-  /**
-   * Releases a field binding and disposes of the associated lens if no other
-   * controls are referencing it.
-   */
   private unbindField(el: Element, name: string): void {
     const entry = this.entries.get(name);
     if (entry && --entry.refCount <= 0) {
@@ -277,16 +348,23 @@ class FormBinder<T extends object> {
 
   /**
    * Monitors the form for structural changes using a MutationObserver.
+   *
+   * Optimization: Numeric constant comparison
+   * Uses numeric constants for `nodeType` checks to avoid property access overhead
+   * during rapid DOM mutations.
    */
   private observe(): void {
     const observer = new MutationObserver((ms) => {
-      for (let i = 0, len = ms.length; i < len; i++) {
+      const mLen = ms.length;
+      for (let i = 0; i < mLen; i++) {
         const m = ms[i]!;
         if (m.type === 'childList') {
           const added = m.addedNodes;
-          for (let j = 0, jLen = added.length; j < jLen; j++) {
+          const jLen = added.length;
+          for (let j = 0; j < jLen; j++) {
             const node = added[j]!;
-            if (node.nodeType === Node.ELEMENT_NODE) {
+            if (node.nodeType === 1) {
+              // Node.ELEMENT_NODE
               this.bindSubtree(node as Element);
             }
           }
@@ -317,7 +395,11 @@ class FormBinder<T extends object> {
  *   browser-native APIs.
  *
  * @param form - The target form element to bind.
- * @param atom - A writable atom containing the state model.
+ * @param atom - A writable atom or an array of atoms.
+ *               Logic: Polymorphic Input
+ *               If an array is provided, it is merged via `mergeLenses`.
+ *               Note: When merging, later atoms in the array override
+ *               properties with the same path from earlier atoms.
  * @param options - Configuration for transformations and reactive validation.
  *
  * @example
@@ -334,9 +416,10 @@ class FormBinder<T extends object> {
  */
 export function bindForm<T extends object>(
   form: HTMLFormElement,
-  atom: WritableAtom<T>,
+  atom: WritableAtom<T> | WritableAtom<unknown>[],
   options: FormOptions<unknown> = {}
 ): void {
+  const targetAtom = Array.isArray(atom) ? mergeLenses(...atom) : atom;
   registry.cleanup(form);
-  new FormBinder(form, atom, options);
+  new FormBinder(form, targetAtom as WritableAtom<T>, options);
 }

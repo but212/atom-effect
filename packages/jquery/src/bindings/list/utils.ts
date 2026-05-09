@@ -4,43 +4,53 @@ import { registry } from '@/core/registry';
 /**
  * Normalizes a raw DOM element or a jQuery collection into a standard jQuery object.
  *
- * @param $el - The element or collection to normalize.
- * @returns A standard jQuery object.
+ * Logic: Polymorphic Input
+ * Supports both raw Element for single operations and JQuery collections for bulk
+ * processing, ensuring consistent API behavior.
+ *
  * @internal
  */
 export function wrap($el: Element | JQuery<Element>): JQuery {
-  return ($el instanceof Element ? $($el) : $el) as unknown as JQuery;
+  // nodeType check is slightly faster than instanceof Element in hot paths.
+  return ('nodeType' in $el && $el.nodeType === 1 ? $($el) : $el) as unknown as JQuery;
 }
 
 /**
  * Assigns or removes a stable reactive identifier on a DOM node or collection.
  *
- * Logic: The `data-atom-key` attribute serves as the primary stable identifier
- * for DOM nodes within the list reconciliation engine. This allows the diffing
- * algorithm to perform O(N) re-ordering and node reuse, avoiding the overhead
- * of positional comparisons.
- *
- * @param node - The DOM element, Node, or jQuery collection.
- * @param key - The unique string key to assign, or null to remove the identifier.
+ * @param node - The target DOM element or collection.
+ * @param key - Unique string key for identification, or null to remove.
  * @internal
  */
 export function setAtomKey(node: Element | Node | JQuery, key: string | null): void {
-  if (node instanceof Element) {
-    if (key === null) {
-      node.removeAttribute('data-atom-key');
-    } else {
-      node.setAttribute('data-atom-key', key);
+  if (!node) return;
+  const ATTR = 'data-atom-key';
+
+  if ('nodeType' in node) {
+    if (node.nodeType === 1) {
+      const el = node as Element;
+      if (key === null) {
+        el.removeAttribute(ATTR);
+      } else if (el.getAttribute(ATTR) !== key) {
+        el.setAttribute(ATTR, key);
+      }
     }
-  } else if (!(node as Node).nodeType) {
-    const jq = node as JQuery;
-    for (let i = 0, len = jq.length; i < len; i++) {
-      const el = jq[i];
-      if (el instanceof Element) {
-        if (key === null) {
-          el.removeAttribute('data-atom-key');
-        } else {
-          el.setAttribute('data-atom-key', key);
-        }
+    return;
+  }
+
+  const col = node as unknown as ArrayLike<Node>;
+  const len = col.length | 0;
+  if (key === null) {
+    for (let i = 0; i < len; i++) {
+      const n = col[i];
+      if (n && n.nodeType === 1) (n as Element).removeAttribute(ATTR);
+    }
+  } else {
+    for (let i = 0; i < len; i++) {
+      const n = col[i];
+      if (n && n.nodeType === 1) {
+        const el = n as Element;
+        if (el.getAttribute(ATTR) !== key) el.setAttribute(ATTR, key);
       }
     }
   }
@@ -49,23 +59,28 @@ export function setAtomKey(node: Element | Node | JQuery, key: string | null): v
 /**
  * Performs a deep recursive cleanup of reactive resources associated with a DOM tree.
  *
- * Caution: This method must be executed before an element is permanently detached
- * from the DOM or replaced. Failure to do so may result in "zombie" reactive
- * effects remaining in the registry, leading to significant memory leaks.
+ * Constraint: Teardown Order
+ * Must be executed before an element is permanently detached or replaced.
  *
- * @param node - The root element or jQuery collection to clean up.
+ * Caution: Memory Leak
+ * Failure to call this results in "zombie" reactive effects remaining in the
+ * global registry, leading to significant memory growth over time.
+ *
+ * @param node - The root element or collection to purge from the registry.
  * @internal
  */
 export function cleanupNodes(node: Element | JQuery): void {
-  if (node instanceof Element) {
-    registry.cleanupTree(node);
-  } else {
-    const jq = node as JQuery;
-    for (let i = 0, len = jq.length; i < len; i++) {
-      const el = jq[i];
-      if (el instanceof Element) {
-        registry.cleanupTree(el);
-      }
-    }
+  if (!node) return;
+
+  if ('nodeType' in node) {
+    if (node.nodeType === 1) registry.cleanupTree(node as Element);
+    return;
+  }
+
+  const col = node as unknown as ArrayLike<Node>;
+  const len = col.length | 0;
+  for (let i = 0; i < len; i++) {
+    const n = col[i];
+    if (n && n.nodeType === 1) registry.cleanupTree(n as Element);
   }
 }

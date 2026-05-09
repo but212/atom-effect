@@ -3,32 +3,24 @@ import { SYSTEM_LIST } from '@/constants';
 import type { ListKey, ListKeyFn, ListOptions } from '@/types';
 import { debug } from '@/utils/debug';
 import type { ListContext } from './context';
-import { ItemState, type PreparedDiff } from './types';
+import { type DiffSlot, ItemState, type PreparedDiff } from './types';
 
 /**
- * Generates a reconciliation plan by calculating the difference between the
- * current list state and the new item set.
- *
- * Logic: This function implements a double-ended diffing algorithm to identify
- * reusable DOM nodes, new entries, and required replacements. It optimizes
- * performance by isolating the "dirty" range — skipping unchanged items at
- * both the head and tail of the list.
+ * Generates a reconciliation plan between the previous and next state of a list.
  *
  * When to use:
  * - Internal orchestration of DOM mutations for the `atomList` binding.
  *
- * @param ctx - The current list context containing historical DOM state.
- * @param items - The new set of items to render.
- * @param itemCount - The total number of new items.
- * @param getKey - A function to derive a unique key for each item.
- * @param update - An optional callback used to patch existing DOM nodes.
- * @param isEqual - An optional equality comparator for items.
- * @returns A detailed diff plan used to execute DOM updates.
+ * Performance:
+ * - O(N) time complexity.
+ * - Best case: O(1) for pure appends/prepends via head/tail fast-forwarding.
+ *
+ * @param ctx - Persistent state containing historical DOM and keys.
+ * @param items - The new data array from the source atom.
  *
  * @example
- * ```typescript
- * const diff = buildIndices(context, nextItems, nextItems.length, getKey, onUpdate, onEqual);
- * ```
+ * const diff = buildIndices(ctx, nextItems, nextItems.length, getKey, update, isEqual);
+ * // diff.slots now contains the mapping instructions for each index.
  *
  * @internal
  */
@@ -40,128 +32,124 @@ export function buildIndices<T>(
   update: ListOptions<T>['update'],
   isEqual: ListOptions<T>['isEqual']
 ): PreparedDiff<T> {
-  const { oldKeys, oldItems, oldNodes, removingKeys, keyToIndex } = ctx;
-  const oldLen = oldKeys.length;
+  const { snapshots, removingKeys, keyToIndex: oldIndexMap } = ctx;
+  const oldLen = snapshots.length;
+  const newIndexMap = new Map<ListKey, number>();
   const eq = isEqual || shallowEqual;
 
   let startIndex = 0;
   let oldEndIndex = oldLen - 1;
   let newEndIndex = itemCount - 1;
 
-  const newKeySet = new Set<ListKey>();
-  const newKeys: ListKey[] = new Array(itemCount);
-  const newItems: T[] = new Array(itemCount);
-  const newNodes: (Element | JQuery | undefined)[] = new Array(itemCount);
-  const newStates: ItemState[] = new Array(itemCount);
-  const newIndices: number[] = new Array(itemCount);
-  const toRender: { key: ListKey; item: T; index: number }[] = [];
+  const slots: DiffSlot<T>[] = new Array(itemCount);
+  const toRender: DiffSlot<T>[] = [];
 
-  // Optimization: Fast-forward through identical items at the start of the list.
-  // This bypasses the mapping and diffing logic for static sections of the list.
+  // PASS 1: Head Fast-Forward
   while (startIndex <= oldEndIndex && startIndex <= newEndIndex) {
     const item = items[startIndex]!;
     const k = getKey(item, startIndex);
-    if (oldKeys[startIndex] !== k || !eq(oldItems[startIndex]!, item) || !oldNodes[startIndex]) {
+    const oldRow = snapshots[startIndex]!;
+    const oldKey = oldRow.key;
+    const oldNode = oldRow.node;
+
+    if (oldKey !== k || !oldNode || !eq(oldRow.item, item)) {
       break;
     }
-    keyToIndex.set(k, startIndex++);
+
+    slots[startIndex] = {
+      key: k,
+      item,
+      state: ItemState.Unchanged,
+      oldIndex: startIndex,
+      targetIndex: startIndex,
+      node: oldNode,
+    };
+
+    newIndexMap.set(k, startIndex);
+    startIndex++;
   }
 
-  // Optimization: Fast-forward through identical items at the end of the list.
-  // Narrowing the "dirty" middle range minimizes the complexity of the O(N) mapping phase.
+  // PASS 2: Tail Fast-Forward
   while (oldEndIndex >= startIndex && newEndIndex >= startIndex) {
     const item = items[newEndIndex]!;
     const k = getKey(item, newEndIndex);
-    if (oldKeys[oldEndIndex] !== k || !eq(oldItems[oldEndIndex]!, item) || !oldNodes[oldEndIndex]) {
+    const oldRow = snapshots[oldEndIndex]!;
+    const oldKey = oldRow.key;
+    const oldNode = oldRow.node;
+
+    if (oldKey !== k || !oldNode || !eq(oldRow.item, item)) {
       break;
     }
-    keyToIndex.set(k, newEndIndex--);
+
+    slots[newEndIndex] = {
+      key: k,
+      item,
+      state: ItemState.Unchanged,
+      oldIndex: oldEndIndex,
+      targetIndex: newEndIndex,
+      node: oldNode,
+    };
+
+    newIndexMap.set(k, newEndIndex);
     oldEndIndex--;
+    newEndIndex--;
   }
 
-  // Logic: Re-populate unchanged head items into the new state buffers.
-  for (let i = 0; i < startIndex; i++) {
-    const k = oldKeys[i]!;
-    newKeys[i] = k;
-    newItems[i] = items[i]!;
-    newNodes[i] = oldNodes[i]!;
-    newStates[i] = ItemState.Unchanged;
-    newIndices[i] = i;
-    newKeySet.add(k);
-  }
+  // PASS 3: Middle-Range Reconciliation
+  const hasRemovingKeys = removingKeys.size > 0;
 
-  // Logic: Re-populate unchanged tail items into the new state buffers.
-  for (let j = oldLen - 1, i = itemCount - 1; i > newEndIndex; i--, j--) {
-    const k = oldKeys[j]!;
-    newKeys[i] = k;
-    newItems[i] = items[i]!;
-    newNodes[i] = oldNodes[j]!;
-    newStates[i] = ItemState.Unchanged;
-    newIndices[i] = j;
-    newKeySet.add(k);
-  }
-
-  const oldIndexMap = new Map<ListKey, number>();
-  for (let i = startIndex; i <= oldEndIndex; i++) {
-    oldIndexMap.set(oldKeys[i]!, i);
-  }
-
-  // Logic: Reconcile the remaining "dirty" middle section of the list.
   for (let i = startIndex; i <= newEndIndex; i++) {
     const item = items[i]!;
     const k = getKey(item, i);
-    newKeys[i] = k;
-    newItems[i] = item;
-    keyToIndex.set(k, i);
 
-    if (newKeySet.has(k)) {
+    if (newIndexMap.has(k)) {
       debug.warn(SYSTEM_LIST.PREFIX, SYSTEM_LIST.ERRORS.DUPLICATE_KEY(k, i));
-      newIndices[i] = -1;
+      slots[i] = {
+        key: k,
+        item,
+        state: ItemState.New,
+        oldIndex: -1,
+        targetIndex: i,
+        node: undefined,
+      };
       continue;
     }
-    newKeySet.add(k);
+
+    newIndexMap.set(k, i);
 
     const foundIdx = oldIndexMap.get(k);
+    const oldIdx =
+      foundIdx !== undefined && (!hasRemovingKeys || !removingKeys.has(k)) ? foundIdx : -1;
 
-    // Caution: Reclaiming animating nodes.
-    // If a key is present in `removingKeys`, its DOM node is currently undergoing
-    // a removal transition. To prevent inconsistent UI states, we treat this
-    // as a 'New' item (forcing a fresh node creation) rather than attempting
-    // to reclaim the transitioning node.
-    const oldIdx = foundIdx !== undefined && !removingKeys.has(k) ? foundIdx : undefined;
-
-    if (oldIdx === undefined) {
-      toRender.push({ key: k, item, index: i });
-      newIndices[i] = -1;
-      newStates[i] = ItemState.New;
+    if (oldIdx === -1) {
+      const slot: DiffSlot<T> = {
+        key: k,
+        item,
+        state: ItemState.New,
+        oldIndex: -1,
+        targetIndex: i,
+        node: undefined,
+      };
+      slots[i] = slot;
+      toRender.push(slot);
       continue;
     }
 
-    newNodes[i] = oldNodes[oldIdx]!;
+    const oldRow = snapshots[oldIdx]!;
+    const needsForceReplace = !update && !eq(oldRow.item, item);
+    const slot: DiffSlot<T> = {
+      key: k,
+      item,
+      state: needsForceReplace ? ItemState.ForceReplace : ItemState.Existing,
+      oldIndex: oldIdx,
+      targetIndex: i,
+      node: oldRow.node!,
+    };
 
-    // Logic: Node reuse strategy.
-    // If no custom `update` callback is provided and the item content has changed,
-    // the existing DOM node cannot be patched. In this case, we trigger a
-    // 'ForceReplace' state to ensure the node is fully re-rendered.
-    if (!update && !eq(oldItems[oldIdx]!, item)) {
-      toRender.push({ key: k, item, index: i });
-      newStates[i] = ItemState.ForceReplace;
-    } else {
-      newStates[i] = ItemState.Existing;
-    }
-    newIndices[i] = oldIdx;
+    slots[i] = slot;
+    if (needsForceReplace) toRender.push(slot);
   }
 
-  return {
-    newKeys,
-    newKeySet,
-    newItems,
-    newNodes,
-    newStates,
-    newIndices,
-    toRender,
-    startIndex,
-    oldEndIndex,
-    newEndIndex,
-  };
+  ctx.keyToIndex = newIndexMap;
+  return { slots, toRender };
 }

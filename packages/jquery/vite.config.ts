@@ -13,10 +13,9 @@ export default defineViteConfig(
   {
     build: {
       rollupOptions: {
-        external: ['jquery', '@but212/atom-effect'],
+        external: ['jquery'],
         output: {
           globals: {
-            '@but212/atom-effect': 'AtomEffect',
             jquery: 'jQuery',
           },
         },

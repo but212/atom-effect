@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.32.1]
+
+### jQuery
+
+#### Added
+
+- **atomForm**: Major feature update for complex state management, including multi-atom support (`mergeLenses`), granular `transform`/`onChange` hooks, `debounce` support, and native integration with **FACE** and the **Constraint Validation API**.
+
+#### Changed
+
+- **Performance & Architecture**: Complete overhaul of **atomList** and **atomForm** engines.
+  - Implemented a 3-pass reconciliation pipeline (Head/Tail optimization, keyed diffing, and greedy placement) for O(N) linear performance and reduced memory overhead.
+  - Refactored core logic to use functional POJO contexts and unified structural binding via `lensFor` and `mergeLenses`.
+
 ## [0.32.0]
 
 ### Core

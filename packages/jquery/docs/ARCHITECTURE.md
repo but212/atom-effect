@@ -139,10 +139,10 @@ The `.on()` patch ensures that multiple atom writes within a single event handle
 
 `atomList` renders reactive arrays using a 3-pass reconciliation algorithm:
 
-1. **Prefix/Suffix Trimming**: Identifies and skips common items at the start and end of the list to reduce diffing overhead.
-2. **Keyed Diffing**: Reconciles the middle range using a double-ended diffing strategy and persistent key mapping.
-3. **Patching**: Synchronizes the DOM using a greedy placement strategy and native DOM APIs.
-4. **Initial Render**: Utilizes sanitized fragments to optimize initial population.
+1. **Head/Tail Fast-forwarding**: Identifies and skips unchanged items at the start and end of the list to minimize diffing work.
+2. **Middle-range Reconciliation**: Reconciles the remaining "dirty" section using a persistent key mapping and O(N) diffing.
+3. **Greedy Placement**: Synchronizes the DOM using reverse-order insertion (`insertBefore`) for optimal performance across JS engines.
+4. **Initial Render Fast-path**: Utilizes sanitized HTML strings for direct `innerHTML` injection during cold starts, bypassing jQuery object overhead.
 
 ### 5.1 Reconciliation Lifecycle
 
@@ -238,7 +238,11 @@ The library minimizes branching in performance-critical paths through task-based
 
 ### 13. Lenses & Structural Sharing
 
-Lenses are re-exported from the core package. `atomForm` leverages these for deep property binding while maintaining performance through leaf atoms and a centralized dispatcher. It also integrates with the browser's **Constraint Validation API**, reactively calling `setCustomValidity` on form controls based on the provided validation schema.
+Lenses are re-exported from the core package. `atomForm` leverages `lensFor` and `mergeLenses` for deep property binding while maintaining performance through leaf atoms and a centralized dispatcher. It also integrates with the browser's **Constraint Validation API**, reactively calling `setCustomValidity` on form controls based on the provided validation schema.
+
+### 13.1 Intercepted Lenses
+
+To support `transform` and `onChange` hooks without polluting the base atoms, `atomForm` creates **Intercepted Lenses**. These proxies inherit from the base lens but override the `.value` setter to apply transformations and trigger callbacks before propagating the change to the source atom.
 
 ## 14. Debugging & Visual Highlighting
 
