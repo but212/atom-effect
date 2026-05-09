@@ -209,7 +209,7 @@ $('ul').atomList(usersAtom, {
 
 #### Performance Implementation
 
-The `atomList` engine uses a greedy placement strategy with native DOM APIs (`insertBefore`, `appendChild`) for structural updates. This avoids jQuery's internal overhead (script scanning, context normalization), resulting in linear (O(N)) performance for large lists.
+The `atomList` engine uses a high-performance 3-pass reconciliation pipeline (Head/Tail fast-forwarding, middle-range diffing, and greedy placement) with native DOM APIs. This strategy minimizes DOM mutations and memory allocations, ensuring O(N) performance and reduced GC pressure even for massive datasets.
 
 #### Lifecycle & Async Management
 
@@ -253,15 +253,16 @@ Two-way binding for checkbox and radio elements.
 $('#agree').atomChecked(isAgreedAtom);
 ```
 
-### `.atomForm(atom, options?)`
+### `.atomForm(atom | atom[], options?)`
 
 Automated two-way binding for an entire form. Maps form controls to atom properties based on their `name` attribute.
 
-- **Nested Paths**: Supports dot-notation and array access (e.g., `user.profile.name`) via `atomLens`.
+- **Multi-Atom Support**: Accepts an array of atoms, which are merged via `mergeLenses`. Later atoms in the array override properties with the same path from earlier atoms.
+- **Nested Paths**: Supports dot-notation and array access (e.g., `user.profile.name`) via `lensFor`.
 - **Dynamic DOM**: Detects and binds new form controls added via `MutationObserver`.
-- **Group Support**: Maps radio and checkbox groups to boolean, string, or array values.
-- **Sync Logic**: Prioritizes `atomLens` data structures to manage synchronization and avoid redundant propagation.
-- **Performance**: Uses the lens recursive update engine to maintain performance for leaf updates in complex forms.
+- **Group Support**: Maps radio and checkbox groups to boolean, string, or array values (supports multi-checkbox array synchronization).
+- **Validation Bridge**: Integrates with the browser's native **Constraint Validation API**, reactively calling `setCustomValidity` on form controls.
+- **Performance**: Uses logic-invariant hoisting and minimized lookup strategies for efficient scaling.
 
 ```javascript
 const user = $.atom({ name: 'Alice', age: 30, items: [{ text: 'Item 1' }] });

@@ -92,3 +92,16 @@ export function flattenToFormData(fd: FormData, prefix: string, obj: unknown): v
     fd.append(prefix, obj instanceof Blob ? obj : String(obj ?? ''));
   }
 }
+
+/**
+ * Normalizes an HTML field name (e.g., 'user[profile][name]') into a
+ * dot-separated path (e.g., 'user.profile.name') compatible with lenses.
+ *
+ * @param name - The field name to normalize.
+ * @returns A dot-separated path string.
+ *
+ * @internal
+ */
+export function normalizePath(name: string): string {
+  return name.replace(/\[(\w+)\]/g, '.$1').replace(/^\./, '');
+}

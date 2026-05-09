@@ -110,8 +110,9 @@ export interface BindingOptions<T = unknown> {
   /** Orchestrates two-way bindings for an entire form element. */
   form?:
     | WritableAtom<T extends object ? T : unknown>
+    | WritableAtom<unknown>[]
     | [
-        atom: WritableAtom<T extends object ? T : unknown>,
+        atom: WritableAtom<T extends object ? T : unknown> | WritableAtom<unknown>[],
         options: FormOptions<T extends object ? T : unknown>,
       ];
   /** Registers event listeners with automatic lifecycle management. */
