@@ -42,6 +42,7 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           registry-url: "https://registry.npmjs.org"
+          install-playwright: "true"
 
       - name: Build and Test
         run: |
