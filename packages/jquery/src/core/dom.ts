@@ -1,5 +1,3 @@
-import { Option } from '@but212/atom-effect-utils';
-
 /**
  * Iterates over a jQuery collection and executes a callback for each HTMLElement.
  *
@@ -14,11 +12,10 @@ import { Option } from '@but212/atom-effect-utils';
  */
 export function atomEachElement(jq: JQuery, fn: (el: HTMLElement) => void): JQuery {
   for (let i = 0, len = jq.length; i < len; i++) {
-    Option.map(Option.fromNullable(jq[i]), (node) => {
-      if (node.nodeType === Node.ELEMENT_NODE) {
-        fn(node as HTMLElement);
-      }
-    });
+    const node = jq[i];
+    if (node && node.nodeType === Node.ELEMENT_NODE) {
+      fn(node as HTMLElement);
+    }
   }
   return jq;
 }
@@ -39,17 +36,15 @@ export function unpack<T, O>(val: T | [T, O]): [T, O?] {
     return [val as T];
   }
 
+  const second = val[1];
+  if (second === null || second === undefined) {
+    return [val as T];
+  }
+
   // Logic: Check if the second element qualifies as a configuration object or function.
-  return Option.match(Option.fromNullable(val[1]), {
-    some: (second) => {
-      const isTuple =
-        typeof second === 'function' ||
-        (second !== null &&
-          typeof second === 'object' &&
-          !('value' in second) &&
-          !('then' in second));
-      return isTuple ? (val as [T, O]) : ([val as T] as [T, O?]);
-    },
-    none: () => [val as T],
-  });
+  const isTuple =
+    typeof second === 'function' ||
+    (typeof second === 'object' && !('value' in second) && !('then' in second));
+
+  return isTuple ? (val as [T, O]) : ([val as T] as [T, O?]);
 }

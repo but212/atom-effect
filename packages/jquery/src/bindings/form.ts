@@ -6,7 +6,6 @@ import {
   untracked,
   type WritableAtom,
 } from '@but212/atom-effect';
-import { Option, Result } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { registry } from '@/core/registry';
 import { INTERNAL_HANDLER } from '@/core/symbols';
@@ -57,9 +56,6 @@ class FormBinder<T extends object> {
   /** A map of field names to their corresponding reactive entries. */
   private entries = new Map<string, FieldEntry>();
 
-  /** A flat list of entries maintained for efficient iteration. */
-  private entryList: FieldEntry[] = [];
-
   /** A mapping of DOM elements to their current 'name' identifier for reconciliation. */
   private names = new WeakMap<Element, string>();
 
@@ -86,15 +82,21 @@ class FormBinder<T extends object> {
    * @param el - The root element of the subtree to scan.
    */
   public bindSubtree(el: Element): void {
-    // Optimization: Use native form.elements for the root form, otherwise fallback to querySelectorAll.
-    const targets =
-      el === this.form
-        ? Array.from(this.form.elements)
-        : el.matches?.(SELECTOR)
-          ? [el]
-          : Array.from((el as HTMLElement).querySelectorAll?.(SELECTOR) || []);
-
-    targets.forEach((target) => this.bindField(target as Element));
+    if (el === this.form) {
+      const elements = this.form.elements;
+      for (let i = 0, len = elements.length; i < len; i++) {
+        this.bindField(elements[i]! as Element);
+      }
+    } else if (el.matches?.(SELECTOR)) {
+      this.bindField(el);
+    } else {
+      const targets = (el as HTMLElement).querySelectorAll?.(SELECTOR);
+      if (targets) {
+        for (let i = 0, len = targets.length; i < len; i++) {
+          this.bindField(targets[i]! as Element);
+        }
+      }
+    }
   }
 
   /**
@@ -108,34 +110,32 @@ class FormBinder<T extends object> {
    */
   private bindField(el: Element): void {
     const control = el as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+    const name = control.name || el.getAttribute('name');
+    if (!name) return;
 
-    Option.map(Option.fromNullable(control.name || el.getAttribute('name')), (name: string) => {
-      // Logic: Identity Reconciliation
-      Option.map(Option.fromNullable(this.names.get(control)), (oldName: string) => {
-        if (oldName !== name) registry.cleanup(control);
-      });
+    const oldName = this.names.get(control);
+    if (oldName !== undefined && oldName !== name) {
+      registry.cleanup(control);
+    }
 
-      if (this.names.has(control) && this.names.get(control) === name) return;
+    if (this.names.has(control) && this.names.get(control) === name) return;
 
-      const entry = this.ensureField(name);
-      this.names.set(control, name);
+    const entry = this.ensureField(name);
+    this.names.set(control, name);
 
-      // Logic: Resource Cleanup
-      // Registers a cleanup hook to release the field reference and associated
-      // lens effects when the element is disconnected.
-      registry.onCleanup(control, () => this.unbindField(control, name));
+    // Logic: Resource Cleanup
+    registry.onCleanup(control, () => this.unbindField(control, name));
 
-      if (
-        control instanceof HTMLInputElement &&
-        (control.type === 'radio' || control.type === 'checkbox')
-      ) {
-        this.bindToggle(control, entry.atom, control.value, control.type === 'checkbox');
-      } else {
-        bindVal(control, entry.atom, this.options);
-      }
+    if (
+      control instanceof HTMLInputElement &&
+      (control.type === 'radio' || control.type === 'checkbox')
+    ) {
+      this.bindToggle(control, entry.atom, control.value, control.type === 'checkbox');
+    } else {
+      bindVal(control, entry.atom, this.options);
+    }
 
-      this.applyValidation(control, name, entry.atom);
-    });
+    this.applyValidation(control, name, entry.atom);
   }
 
   /**
@@ -156,25 +156,19 @@ class FormBinder<T extends object> {
     registry.trackEffect(
       control,
       effect(() => {
-        const value = atom.value;
-        const res = Result.tryCatch(() => validate(value));
-
-        Result.match(res, {
-          ok: (errorMsg) => {
-            const msg = Option.unwrapOr(
-              Option.map(
-                Option.fromNullable(errorMsg as string | boolean | undefined),
-                (res: string | boolean) => (typeof res === 'string' ? res : res ? '' : 'Invalid')
-              ),
-              ''
-            );
-            (control as HTMLInputElement).setCustomValidity?.(msg);
-          },
-          err: (err) => {
-            console.error(`Validation error in field "${name}":`, err);
-            (control as HTMLInputElement).setCustomValidity?.('Validation failed');
-          },
-        });
+        try {
+          const res = validate(atom.value);
+          let msg = '';
+          if (typeof res === 'string') {
+            msg = res;
+          } else if (res === false) {
+            msg = 'Invalid';
+          }
+          (control as HTMLInputElement).setCustomValidity?.(msg);
+        } catch (err) {
+          console.error(`Validation error in field "${name}":`, err);
+          (control as HTMLInputElement).setCustomValidity?.('Validation failed');
+        }
       })
     );
   }
@@ -261,9 +255,7 @@ class FormBinder<T extends object> {
     });
 
     entry = { atom: customLens as WritableAtom<unknown>, name, refCount: 1 };
-
     this.entries.set(name, entry);
-    this.entryList.push(entry);
     return entry;
   }
 
@@ -274,10 +266,6 @@ class FormBinder<T extends object> {
   private unbindField(el: Element, name: string): void {
     const entry = this.entries.get(name);
     if (entry && --entry.refCount <= 0) {
-      const idx = this.entryList.indexOf(entry);
-      if (idx !== -1) {
-        this.entryList.splice(idx, 1);
-      }
       const disposableAtom = entry.atom as Partial<{ dispose: () => void }>;
       if (typeof disposableAtom.dispose === 'function') {
         disposableAtom.dispose();
@@ -292,15 +280,20 @@ class FormBinder<T extends object> {
    */
   private observe(): void {
     const observer = new MutationObserver((ms) => {
-      ms.forEach((m) => {
+      for (let i = 0, len = ms.length; i < len; i++) {
+        const m = ms[i]!;
         if (m.type === 'childList') {
-          Array.from(m.addedNodes)
-            .filter((node) => node.nodeType === Node.ELEMENT_NODE)
-            .forEach((node) => this.bindSubtree(node as Element));
+          const added = m.addedNodes;
+          for (let j = 0, jLen = added.length; j < jLen; j++) {
+            const node = added[j]!;
+            if (node.nodeType === Node.ELEMENT_NODE) {
+              this.bindSubtree(node as Element);
+            }
+          }
         } else if (m.attributeName === 'name') {
           this.bindSubtree(m.target as Element);
         }
-      });
+      }
     });
 
     observer.observe(this.form, {

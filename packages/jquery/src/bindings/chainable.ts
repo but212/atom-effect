@@ -355,13 +355,21 @@ $.fn.atomBind = function <T>(this: JQuery, options: BindingOptions<T>): JQuery {
   const opt = options as Record<string, unknown>;
 
   // Check if there are any valid tasks to run.
-  const activeTasks = BINDING_TASKS.filter((task) => opt[task.key] !== undefined);
+  const activeTasks: BindingTask[] = [];
+  for (let i = 0, len = BINDING_TASKS.length; i < len; i++) {
+    const task = BINDING_TASKS[i]!;
+    if (opt[task.key] !== undefined) {
+      activeTasks.push(task);
+    }
+  }
+
   if (activeTasks.length === 0) return this;
 
   return atomEachElement(this, (el) => {
-    activeTasks.forEach((task) => {
+    for (let i = 0, len = activeTasks.length; i < len; i++) {
+      const task = activeTasks[i]!;
       task.run(el, opt[task.key]);
-    });
+    }
   });
 };
 

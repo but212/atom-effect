@@ -57,6 +57,8 @@
 - Refactored navigation architecture (`atomNav` and `$.route`) to use a centralized coordinator and modular routing logic.
 - Implemented atomic fetch pipelines and `AbortSignal` management in navigation to prevent race conditions.
 - Optimized `InputBinding` and `$.route` performance using pre-resolved synchronization and registry-based link tracking.
+- Optimized performance in hot paths (binding resolution, element iteration) by replacing high-level array methods with standard `for` loops.
+- Reduced internal overhead by removing `Option` and `Result` dependencies from `@but212/atom-effect-utils` in performance-critical modules.
 - Standardized chainable bindings and attribute transformations using unified factories.
 - Improved reconciliation logic in `atomList` and field discovery in `atomForm`.
 - Updated CJK IME support in input bindings to ensure reactive updates do not interrupt character composition.
@@ -65,6 +67,8 @@
 #### Security
 
 - Re-engineered `sanitizeHtml` with an inert parsing strategy and improved entity decoding to prevent XSS.
+- Added `satisfies` to constants for improved type-level contract validation.
+- Updated `SYSTEM_COMPONENT.ATTRS` for better internal attribute management.
 
 #### Fixed
 

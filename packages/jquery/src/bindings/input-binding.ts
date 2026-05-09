@@ -1,5 +1,4 @@
 import { effect, untracked } from '@but212/atom-effect';
-import { Option, Result } from '@but212/atom-effect-utils';
 import { SYSTEM_BINDING } from '@/constants';
 import { INTERNAL_HANDLER } from '@/core/symbols';
 import type { EffectObject, ValOptions, WritableAtom } from '@/types';
@@ -31,47 +30,50 @@ function markInternal(handlerFunction: Function): void {
 interface BindingStrategy<T> {
   readonly read: (el: FormElement, $el: JQuery, parse?: (v: string) => T) => T;
   readonly write: (el: FormElement, $el: JQuery, value: T, formatted: string) => void;
-  readonly equal: (a: T, b: T, baseEqual: (a: unknown, b: unknown) => boolean) => boolean;
+  readonly equal: (a: T, b: T, baseEqual: (a: T, b: T) => boolean) => boolean;
   readonly format: (value: T, customFormat?: (v: T) => string) => string;
 }
 
 /** Registry of binding strategies for various form controls. @internal */
 const STRATEGIES = {
   multipleSelect: {
-    read: (el: FormElement) =>
-      el instanceof HTMLSelectElement ? Array.from(el.selectedOptions, (o) => o.value) : [],
+    read: (el: FormElement): unknown => {
+      if (!(el instanceof HTMLSelectElement)) return [];
+      const options = el.selectedOptions;
+      const result: string[] = [];
+      for (let i = 0, len = options.length; i < len; i++) {
+        result.push(options[i]!.value);
+      }
+      return result;
+    },
     write: (_: FormElement, $el: JQuery, value: unknown) => {
       $el.val(value as string[]);
     },
     equal: (a: unknown, b: unknown, baseEqual: (a: unknown, b: unknown) => boolean) => {
       if (baseEqual(a, b)) return true;
-      return (
-        Array.isArray(a) &&
-        Array.isArray(b) &&
-        a.length === b.length &&
-        a.every((v, i) => Object.is(v, b[i]))
-      );
+      if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+      for (let i = 0, len = a.length; i < len; i++) {
+        if (!Object.is(a[i], b[i])) return false;
+      }
+      return true;
     },
-    format: (v: unknown, custom?: (v: unknown) => string) =>
-      Option.unwrapOr(
-        Option.map(Option.fromNullable(custom), (fn: Function) => fn(v)),
-        Array.isArray(v) ? v.join(',') : String(v ?? '')
-      ),
+    format: (v: unknown, custom?: (v: unknown) => string) => {
+      if (custom) return custom(v);
+      return Array.isArray(v) ? v.join(',') : String(v ?? '');
+    },
   } as BindingStrategy<unknown>,
 
   default: {
-    read: (el: FormElement, _: JQuery, parse?: (v: string) => unknown) =>
-      Option.unwrapOr(
-        Option.map(Option.fromNullable(parse), (p: Function) => p(el.value)),
-        el.value
-      ),
+    read: (el: FormElement, _: JQuery, parse?: (v: string) => unknown) => {
+      return parse ? parse(el.value) : el.value;
+    },
     write: (el: FormElement, _: JQuery, __: unknown, formatted: string) => {
       if (
         (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) &&
         document.activeElement === el
       ) {
         const input = el as HTMLInputElement;
-        const res = Result.tryCatch(() => {
+        try {
           const { selectionStart, selectionEnd } = input;
           input.value = formatted;
           if (selectionStart !== null && selectionEnd !== null) {
@@ -81,8 +83,7 @@ const STRATEGIES = {
               Math.min(selectionEnd, length)
             );
           }
-        });
-        if (!res.ok) {
+        } catch {
           input.value = formatted;
         }
       } else {
@@ -91,11 +92,10 @@ const STRATEGIES = {
     },
     equal: (a: unknown, b: unknown, baseEqual: (a: unknown, b: unknown) => boolean) =>
       baseEqual(a, b),
-    format: (v: unknown, custom?: (v: unknown) => string) =>
-      Option.unwrapOr(
-        Option.map(Option.fromNullable(custom), (fn: Function) => fn(v)),
-        String(v ?? '')
-      ),
+    format: (v: unknown, custom?: (v: unknown) => string) => {
+      if (custom) return custom(v);
+      return String(v ?? '');
+    },
   } as BindingStrategy<unknown>,
 } as const;
 
@@ -159,7 +159,7 @@ class InputBinding<T> {
   /** Normalizes and attaches all required DOM event listeners for the binding. */
   private initializeEvents(): void {
     const namespace = this.eventNamespace;
-    const debounce = this.options.debounce ?? 0;
+    const debounce = this.options.debounce ?? SYSTEM_BINDING.INPUT_DEFAULTS.debounce;
 
     const syncToAtomDelegate = (e?: Event | JQuery.TriggeredEvent) => {
       const native = (e && 'originalEvent' in e ? e.originalEvent : e) as InputEvent;
@@ -181,11 +181,12 @@ class InputBinding<T> {
 
     [onFocus, onBlur, handleInput].forEach(markInternal);
 
-    const eventNames = (this.options.event ?? SYSTEM_BINDING.INPUT_DEFAULTS.EVENT)
-      .trim()
-      .split(/\s+/)
-      .map((name) => `${name}${namespace}`)
-      .join(' ');
+    const rawEventNames = this.options.event ?? SYSTEM_BINDING.INPUT_DEFAULTS.event;
+    const names = rawEventNames.trim().split(/\s+/);
+    let eventNames = '';
+    for (let i = 0, len = names.length; i < len; i++) {
+      eventNames += (i > 0 ? ' ' : '') + names[i] + namespace;
+    }
 
     // Use jQuery .on() for compatibility with $el.trigger().
     this.$element
@@ -216,14 +217,13 @@ class InputBinding<T> {
   private syncToAtom(): void {
     if (this.flags & BindingFlags.Busy) return;
     this.flags |= BindingFlags.SyncingToAtom;
-    const res = Result.tryCatch(() => {
+    try {
       const domValue = this.readValue();
       if (!this.areEqual(this.atom.peek(), domValue)) {
         this.atom.value = domValue;
       }
-    });
-    if (!res.ok) {
-      debug.warn(SYSTEM_BINDING.PREFIX, 'syncToAtom failed:', res.error);
+    } catch (err) {
+      debug.warn(SYSTEM_BINDING.PREFIX, 'syncToAtom failed:', err);
     }
     this.flags &= ~BindingFlags.SyncingToAtom;
   }
@@ -238,11 +238,13 @@ class InputBinding<T> {
     untracked(() => {
       if (this.isDomUpToDate(atomValue)) return;
       this.flags |= BindingFlags.SyncingToDom;
-      Result.tryCatch(() => {
+      try {
         const formatted = this.formatValue(atomValue);
         this.writeToDom(atomValue, formatted);
         debug.domUpdated(SYSTEM_BINDING.PREFIX, this.$element, 'val', formatted);
-      });
+      } catch (err) {
+        debug.warn(SYSTEM_BINDING.PREFIX, 'syncToDom failed:', err);
+      }
       this.flags &= ~BindingFlags.SyncingToDom;
     });
   };
