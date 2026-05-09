@@ -4,15 +4,15 @@ This document outlines the benchmarking suite for `@but212/atom-effect`. The sui
 
 ## Performance Metrics Summary
 
-The following table summarizes key performance metrics observed in version `0.31.0`.
+The following table summarizes key performance metrics observed in version `0.32.0`.
 
 | Category | Metric | Result | Context |
 | :--- | :--- | :--- | :--- |
-| **Atom** | Read (untracked) | 1.36M ops/sec | Performance of non-reactive reads (x100) |
-| **Computed** | Recompute (cached) | 80.6K ops/sec | Cached re-evaluation performance (x100) |
-| **Effect** | Propagation | 1.50M ops/sec | Full atom → computed → effect cycle (x100) |
-| **Workflow** | Todo App | 96.8K ops/sec | Comprehensive workflow performance |
-| **Latency** | 100 Atom updates | 0.0154 ms | Mean execution time for batched updates |
+| **Atom** | Read (untracked) | 3.17M ops/sec | Performance of non-reactive reads (x10) |
+| **Computed** | Recompute (cached) | 343.1K ops/sec | Cached re-evaluation performance (x10) |
+| **Effect** | Propagation | 1.13M ops/sec | Full atom → computed → effect cycle (x10) |
+| **Workflow** | Todo App | 93.3K ops/sec | Comprehensive workflow performance |
+| **Latency** | 100 Atom updates | 0.0055 ms | Mean execution time for batched updates |
 
 ---
 
@@ -34,6 +34,9 @@ pnpm bench:macro
 
 # Execute realistic scenario benchmarks
 pnpm bench:realistic
+
+# Execute state start benchmarks
+pnpm bench:state
 ```
 
 ### Targeted Execution
@@ -103,8 +106,8 @@ Located in `__benchmarks__/realistic/`, these tests evaluate the system under co
 
 ## Technical Specifications
 
-**Version**: v0.31.0
-**Last Updated**: 2026-04-20
+**Version**: v0.32.0
+**Last Updated**: 2026-05-09
 **Environment**:
 
 - **Runtime**: Node.js v22.x
