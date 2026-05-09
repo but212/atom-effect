@@ -255,7 +255,7 @@ $.fn.atomChecked = function (atom: WritableAtom<boolean>): JQuery {
  * @returns The original jQuery collection for chaining.
  */
 $.fn.atomForm = function <T extends object>(
-  atom: WritableAtom<T>,
+  atom: WritableAtom<T> | WritableAtom<unknown>[],
   options: FormOptions<T> = {}
 ): JQuery {
   return atomEachElement(this, (el) => {
@@ -322,7 +322,10 @@ const BINDING_TASKS: BindingTask[] = [
     key: 'form',
     run: (el, v) => {
       if (el instanceof HTMLFormElement) {
-        bindForm(el, ...(unpack(v) as [WritableAtom<object>, FormOptions<unknown>]));
+        bindForm(
+          el,
+          ...(unpack(v) as [WritableAtom<object> | WritableAtom<unknown>[], FormOptions<unknown>])
+        );
       }
     },
   },

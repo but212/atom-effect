@@ -4,19 +4,16 @@ import type { ListOptions } from '@/types';
 import { debug } from '@/utils/debug';
 import { sanitizeHtml } from '@/utils/sanitize';
 import type { ListContext } from './context';
+import { removeListItem } from './context';
 import { ItemState, type PlaceCallbacks, type PreparedDiff } from './types';
 import { cleanupNodes, setAtomKey, wrap } from './utils';
 
 /**
- * A low-level DOM utility for inserting elements before a specific reference node.
+ * Inserts elements before a reference node with zero-allocation for jQuery collections.
  *
- * This helper supports both raw `Element` instances and jQuery collections,
- * ensuring consistent insertion behavior regardless of the input type.
- *
- * @param elOrJq - The element or jQuery collection to insert.
- * @param nextNode - The reference node to insert before. If null, appends to the container.
- * @param container - The parent container element.
- * @internal
+ * Why:
+ * - Directly iterates over JQuery objects to avoid `.get()` or `Array.from()` array allocations.
+ * - Handles polymorphic inputs (Element | JQuery) to keep the caller's logic simple.
  */
 export function insertOrAppend(
   elOrJq: Element | JQuery | undefined,
@@ -24,31 +21,24 @@ export function insertOrAppend(
   container: Element
 ): void {
   if (!elOrJq) return;
+
   if (elOrJq instanceof Element) {
     container.insertBefore(elOrJq, nextNode);
-  } else {
-    for (let i = 0, len = elOrJq.length; i < len; i++) {
-      const el = elOrJq[i];
-      if (el) container.insertBefore(el, nextNode);
-    }
+    return;
+  }
+
+  for (let i = 0, len = elOrJq.length; i < len; i++) {
+    const el = elOrJq[i];
+    if (el) container.insertBefore(el, nextNode);
   }
 }
 
 /**
- * Orchestrates the cleanup of a list container and the rendering of empty placeholders.
+ * Resets the container or renders an empty placeholder.
  *
- * Logic: If an `onRemove` callback is provided, the function performs asynchronous
- * removals for each item to allow for exit animations. Otherwise, it executes a
- * destructive `empty()` on the container for efficiency.
- *
- * When to use:
- * - To reset a list container during reconciliation or when the data source becomes empty.
- *
- * @param ctx - The list context containing historical state.
- * @param itemCount - The number of items in the new data set.
- * @param $container - The jQuery-wrapped container.
- * @param empty - The template or element to display when the list is empty.
- * @internal
+ * Why:
+ * - Decouples destructive cleanup (`.empty()`) from animated cleanup (`removeItem`).
+ * - Ensures the historical context is cleared only after the DOM reflects the empty state.
  */
 export function handleEmpty<T>(
   ctx: ListContext<T>,
@@ -62,18 +52,19 @@ export function handleEmpty<T>(
   }
   if (itemCount !== 0) return;
 
-  const { onRemove } = ctx;
+  const { onRemove, snapshots } = ctx;
+
+  // Reason: Use destructive empty for speed if no exit animations are required.
   if (!onRemove) {
     $container.empty();
   } else {
-    // Reason: Coordinated exit animations are triggered for every existing row
-    // to maintain visual consistency during batch updates.
-    ctx.oldKeys.forEach((k, i) => {
-      const node = ctx.oldNodes[i];
-      if (node) {
-        ctx.removeItem(k, wrap(node as Element | JQuery<Element>));
+    const len = snapshots.length;
+    for (let i = 0; i < len; i++) {
+      const row = snapshots[i]!;
+      if (row.node) {
+        removeListItem(ctx, row.key, wrap(row.node as Element | JQuery<Element>));
       }
-    });
+    }
   }
 
   if (empty && !ctx.$emptyEl) {
@@ -82,143 +73,136 @@ export function handleEmpty<T>(
     ctx.$emptyEl.appendTo($container);
   }
 
-  ctx.oldKeys = [];
-  ctx.oldItems = [];
-  ctx.oldNodes = [];
+  ctx.keyToIndex.clear();
+  ctx.snapshots = [];
 }
 
 /**
- * Transforms items into DOM handles based on the reconciliation plan.
+ * Transforms items into DOM nodes or sanitized HTML strings.
  *
- * Optimization: If all items utilize string templates and the list is undergoing
- * an initial render (cold start), the function returns sanitized HTML fragments
- * for direct `innerHTML` injection, bypassing the overhead of individual jQuery
- * object construction.
+ * Performance:
+ * - Provides a "Cold Start" optimization: returns raw HTML strings for initial render
+ *   to allow direct `innerHTML` injection, bypassing jQuery construction overhead.
  *
- * When to use:
- * - Internal processing of new items within the `atomList` lifecycle.
- *
- * @param diff - The prepared diff plan.
- * @param options - Configuration options for the list.
- * @param isInitial - Indicates whether this is the first render of the list.
- * @returns An array of sanitized HTML strings if the fast-path is applicable; otherwise null.
- * @internal
+ * Why:
+ * - String parsing is batched (`batchSanitize`) to reduce sanitization engine overhead.
  */
 export function renderItems<T>(
   diff: PreparedDiff<T>,
   options: ListOptions<T>,
   isInitial: boolean
 ): string[] | null {
-  const { toRender, newNodes, newStates } = diff;
+  const { toRender } = diff;
   const renderCount = toRender.length;
   if (renderCount === 0) return null;
 
-  const results = toRender.map((entry) => options.render(entry.item, entry.index));
-  const htmlParts = results.filter((raw): raw is string => typeof raw === 'string');
-  const isAllStrings = htmlParts.length === renderCount;
+  const results = new Array(renderCount);
+  const htmlParts: string[] = [];
+  let isAllStrings = true;
+
+  for (let i = 0; i < renderCount; i++) {
+    const entry = toRender[i]!;
+    const res = options.render(entry.item, entry.targetIndex);
+    results[i] = res;
+
+    if (typeof res === 'string') {
+      htmlParts.push(res);
+    } else {
+      isAllStrings = false;
+    }
+  }
 
   let sanitized: string[] | null = null;
   if (htmlParts.length > 0) sanitized = batchSanitize(htmlParts);
 
-  // Optimization: Fast-path for initial renders using string-only templates without custom bindings.
-  if (
-    isInitial &&
-    isAllStrings &&
-    sanitized &&
-    !options.bind &&
-    !options.onAdd &&
-    !options.events
-  ) {
-    if ($.parseHTML(sanitized.join('')).length === renderCount) return sanitized;
+  let bulkNodes: Node[] | null = null;
+  if (isAllStrings && sanitized) {
+    const allNodes = $.parseHTML(sanitized.join(''));
+    if (allNodes && allNodes.length === renderCount) {
+      let allElements = true;
+      for (let i = 0; i < renderCount; i++) {
+        if (allNodes[i]!.nodeType !== 1) {
+          allElements = false;
+          break;
+        }
+      }
+      if (allElements) {
+        if (isInitial && !options.events) return sanitized;
+        bulkNodes = allNodes;
+      }
+    }
   }
 
   let sIdx = 0;
-  for (let i = 0, len = toRender.length; i < len; i++) {
-    const entry = toRender[i]!;
-    const { key, index: targetIdx } = entry;
+  for (let i = 0; i < renderCount; i++) {
+    const slot = toRender[i]!;
     const raw = results[i]!;
-    const $el = (typeof raw === 'string'
-      ? $($.parseHTML(sanitized![sIdx++]!))
-      : $(raw as Element | DocumentFragment | JQuery)) as unknown as JQuery;
 
-    setAtomKey($el, String(key));
+    let $el: JQuery;
+    if (bulkNodes) {
+      $el = $(bulkNodes[i] as Element) as unknown as JQuery;
+    } else {
+      const html = typeof raw === 'string' ? sanitized![sIdx++]! : raw;
+      $el = $(
+        (typeof html === 'string' ? $.parseHTML(html) : html) as Element | DocumentFragment | JQuery
+      ) as unknown as JQuery;
+    }
 
-    if (newStates[targetIdx] === ItemState.ForceReplace && newNodes[targetIdx]) {
-      const node = newNodes[targetIdx]!;
-      cleanupNodes(node as Element | JQuery);
-      const $old = wrap(node as Element | JQuery<Element>);
+    setAtomKey($el, String(slot.key));
+
+    const oldNode = slot.node;
+    if (slot.state === ItemState.ForceReplace && oldNode) {
+      cleanupNodes(oldNode as Element | JQuery);
+      const $old = wrap(oldNode as Element | JQuery<Element>);
       $old.first().before($el);
       $old.remove();
     }
 
-    newNodes[targetIdx] = $el.length === 1 ? ($el[0] as Element) : $el;
+    slot.node = $el.length === 1 ? ($el[0] as Element) : $el;
   }
 
   return null;
 }
 
 /**
- * Sanitizes a batch of HTML strings in a single pass to improve performance.
+ * Sanitizes multiple fragments in a single pass using a sentinel separator.
  *
- * Reason: Reduces the overhead of the sanitization engine (e.g., DOMPurify)
- * by merging multiple fragments into a single string separated by unique sentinels.
- *
- * @param parts - An array of HTML strings to sanitize.
- * @returns An array of sanitized HTML strings.
- * @internal
+ * Why:
+ * - Reduces the fixed overhead of sanitizers (e.g., DOMPurify) which is significant for many small strings.
  */
 function batchSanitize(parts: string[]): string[] {
   if (parts.length === 1) return [sanitizeHtml(parts[0]!)];
   const sep = `<template data-atom-sep="s${Math.random().toString(36).slice(2)}"></template>`;
-
   return sanitizeHtml(parts.join(sep)).split(sep);
 }
 
 /**
- * Identifies and removes items that are no longer present in the reactive data set.
+ * Triggers removal lifecycle for items missing in the new data set.
  *
- * Logic: Iterates through the historical key set and triggers the removal
- * lifecycle for any key that is not found in the new state.
- *
- * @param ctx - The list context containing historical state.
- * @param diff - The prepared diff plan.
- * @internal
+ * When to use:
+ * - Called during the diffing phase before new items are placed.
  */
-export function cleanupRemoved<T>(ctx: ListContext<T>, diff: PreparedDiff<T>): void {
-  const { startIndex, oldEndIndex, newKeySet } = diff;
-  for (let i = startIndex; i <= oldEndIndex; i++) {
-    const k = ctx.oldKeys[i]!;
-    // Note: Items within the head/tail optimization range are excluded.
-    if (!newKeySet.has(k) && ctx.oldNodes[i]) {
-      ctx.removeItem(k, wrap(ctx.oldNodes[i] as Element | JQuery<Element>));
+export function cleanupRemoved<T>(ctx: ListContext<T>): void {
+  const { snapshots, keyToIndex } = ctx;
+  for (let i = 0, len = snapshots.length; i < len; i++) {
+    const row = snapshots[i]!;
+    if (row.node && !keyToIndex.has(row.key)) {
+      removeListItem(ctx, row.key, wrap(row.node as Element | JQuery<Element>));
     }
   }
 }
 
 /**
- * Strategically places item nodes into the DOM container based on the reconciliation plan.
+ * Positions items in the DOM and executes lifecycle callbacks.
  *
- * Logic: This function selects the most efficient injection path (innerHTML,
- * Fragment, or complex Moves) based on the current state of the container.
+ * Logic:
+ * 1. Initial Render: Replaces entire innerHTML or appends via DocumentFragment.
+ * 2. Reconciliation: Moves existing nodes or inserts new ones based on the diff plan.
  *
- * Optimization: When performing moves, the loop iterates backwards to use
- * `insertBefore(nextNode)`, which is more efficient across most JS engines
- * than forward insertions.
- *
- * @param ctx - The list context.
- * @param diff - The prepared diff plan.
- * @param container - The parent DOM element.
- * @param callbacks - User-provided hooks for binding and updates.
- * @param htmlFragments - Optional pre-rendered HTML strings from the fast-path.
- * @internal
+ * Performance:
+ * - Uses a reverse loop for reconciliation to maintain DOM order with minimal moves.
+ * - Uses `switch` instead of a handler Map to avoid object allocation in the hot loop.
  */
-const ACTION_TABLE: Record<number, (keyof PlaceCallbacks<unknown>)[]> = {
-  [ItemState.Unchanged]: [],
-  [ItemState.Existing]: ['update'],
-  [ItemState.New]: ['bind', 'onAdd'],
-  [ItemState.ForceReplace]: ['bind'],
-};
-
 export function placeItems<T>(
   ctx: ListContext<T>,
   diff: PreparedDiff<T>,
@@ -226,28 +210,51 @@ export function placeItems<T>(
   callbacks: PlaceCallbacks<T>,
   htmlFragments: string[] | null
 ): void {
-  const { newKeys, newItems, newNodes, newStates, newIndices } = diff;
-  const count = newKeys.length;
+  const { slots } = diff;
+  const count = slots.length;
 
   if (htmlFragments) {
     container.innerHTML = htmlFragments.join('');
     let el = container.firstElementChild;
-    newKeys.forEach((key, i) => {
-      if (!el) return;
-      const $el = $(el) as unknown as JQuery;
-      el.setAttribute('data-atom-key', String(key));
-      newNodes[i] = el;
-      newStates[i] = ItemState.Existing;
-      debug.domUpdated(SYSTEM_LIST.PREFIX, $el, 'list.add', newItems[i]);
-      el = el.nextElementSibling;
-    });
+    const { bind, onAdd } = callbacks;
+
+    if (!bind && !onAdd) {
+      for (let i = 0; i < count; i++) {
+        if (!el) break;
+        const slot = slots[i]!;
+        el.setAttribute('data-atom-key', String(slot.key));
+        slot.node = el;
+        slot.state = ItemState.Existing;
+        el = el.nextElementSibling;
+      }
+    } else {
+      for (let i = 0; i < count; i++) {
+        if (!el) break;
+        const slot = slots[i]!;
+        const { key, item } = slot;
+
+        el.setAttribute('data-atom-key', String(key));
+        slot.node = el;
+        slot.state = ItemState.Existing;
+
+        const $el = $(el) as unknown as JQuery;
+        if (bind) bind($el, item, i);
+        if (onAdd) {
+          onAdd($el);
+          ctx.removingKeys.delete(key);
+          debug.domUpdated(SYSTEM_LIST.PREFIX, $el, 'list.add', item);
+        }
+        el = el.nextElementSibling;
+      }
+    }
     return;
   }
 
-  if (ctx.oldKeys.length === 0 && ctx.removingKeys.size === 0) {
+  // Fast-path: Initial render without HTML fragments
+  if (ctx.snapshots.length === 0 && ctx.removingKeys.size === 0) {
     const frag = document.createDocumentFragment();
     for (let i = 0; i < count; i++) {
-      const node = newNodes[i];
+      const node = slots[i]!.node;
       if (!node) continue;
       if (node instanceof Element) {
         frag.appendChild(node);
@@ -261,14 +268,16 @@ export function placeItems<T>(
     container.innerHTML = '';
     container.appendChild(frag);
   } else {
+    // Reconciliation path: Minimal moves using reverse-order insertion
     let next: Node | null = null;
     let min = Infinity;
     for (let i = count - 1; i >= 0; i--) {
-      const idx = newIndices[i]!;
-      const node = newNodes[i];
+      const slot = slots[i]!;
+      const idx = slot.oldIndex;
+      const node = slot.node;
       if (!node) continue;
 
-      const first = node instanceof Element ? node : (node as JQuery)[0];
+      const first = node instanceof Element ? node : node[0];
       if (first) {
         if (idx !== -1 && idx < min) {
           min = idx;
@@ -281,26 +290,29 @@ export function placeItems<T>(
   }
 
   const { onAdd, bind, update } = callbacks;
+
   for (let i = 0; i < count; i++) {
-    const state = newStates[i]!;
-    const actions = ACTION_TABLE[state] ?? [];
-    const node = newNodes[i];
-    if (actions.length === 0 || !node) continue;
+    const slot = slots[i]!;
+    const { state, node, item, key } = slot;
+    if (state === ItemState.Unchanged || !node) continue;
 
-    const $el = wrap(node as Element | JQuery<Element>);
-    const item = newItems[i]!;
-
-    for (let j = 0, aLen = actions.length; j < aLen; j++) {
-      const action = actions[j]!;
-      if (action === 'onAdd' && onAdd) {
-        onAdd($el);
-        ctx.removingKeys.delete(newKeys[i]!);
-        debug.domUpdated(SYSTEM_LIST.PREFIX, $el, 'list.add', item);
-      } else if (action === 'bind' && bind) {
-        bind($el, item, i);
-      } else if (action === 'update' && update) {
-        update($el, item, i);
+    switch (state) {
+      case ItemState.Existing:
+        if (update) update(wrap(node as Element | JQuery<Element>), item, i);
+        break;
+      case ItemState.New: {
+        const $el = wrap(node as Element | JQuery<Element>);
+        if (bind) bind($el, item, i);
+        if (onAdd) {
+          onAdd($el);
+          ctx.removingKeys.delete(key);
+          debug.domUpdated(SYSTEM_LIST.PREFIX, $el, 'list.add', item);
+        }
+        break;
       }
+      case ItemState.ForceReplace:
+        if (bind) bind(wrap(node as Element | JQuery<Element>), item, i);
+        break;
     }
   }
 }

@@ -2,125 +2,145 @@ import type { EffectObject, ListKey } from '@/types';
 import { setAtomKey } from './utils';
 
 /**
- * Manages the reconciliation state and lifecycle for the `$.fn.atomList` binding.
+ * Represents the state of a single list item at a point in time.
+ * Used by the reconciler to calculate moves, updates, and removals.
+ */
+export interface ListSnapshot<T> {
+  key: ListKey;
+  item: T;
+  /** The actual DOM element or JQuery wrapper currently representing this item. */
+  node?: Element | JQuery | undefined;
+}
+
+/**
+ * Persistent state for the `$.fn.atomList` binding.
  *
- * This context tracks historical DOM nodes and keys to enable efficient diffing.
- * Its primary responsibility is coordinating asynchronous item removals (e.g., animations)
- * while ensuring that elements reused in the same cycle are not accidentally destroyed.
+ * WHY:
+ * Reactive lists require a stable reference to track historical DOM nodes across
+ * multiple rendering cycles. Using a POJO (Plain Old JavaScript Object) ensures
+ * state is decoupled from logic, following a functional "Relation Function" pattern.
  *
  * @internal
  */
-export class ListContext<T> {
-  private _oldKeys: ListKey[] = [];
-  private _oldItems: T[] = [];
-  private _oldNodes: (Element | JQuery | undefined)[] = [];
-  private readonly _removingKeys = new Set<ListKey>();
-  private _emptyEl: JQuery | null = null;
-  private readonly _keyToIndex = new Map<ListKey, number>();
+export interface ListContext<T> {
+  /** Sequential snapshot of the previous render state. */
+  snapshots: ListSnapshot<T>[];
+  /** Keys currently undergoing asynchronous exit animations. */
+  readonly removingKeys: Set<ListKey>;
+  /** Cached reference to the placeholder element shown when the list is empty. */
+  $emptyEl: JQuery | null;
+  /** Inverse lookup for O(1) index retrieval from a key. */
+  keyToIndex: Map<ListKey, number>;
+  /** The reactive effect controlling this list. Needed to check disposal state during async tasks. */
+  fx?: EffectObject;
+  /** Target container element. */
+  readonly $container: JQuery;
+  /** Selector for the container. */
+  readonly containerSelector: string;
+  /** Optional removal lifecycle hook. */
+  readonly onRemove: (($el: JQuery) => Promise<void> | void) | undefined;
+}
 
-  public fx?: EffectObject;
+/**
+ * Factory to initialize a new ListContext.
+ */
+export function createListContext<T>(
+  $container: JQuery,
+  containerSelector: string,
+  onRemove: (($el: JQuery) => Promise<void> | void) | undefined
+): ListContext<T> {
+  return {
+    snapshots: [],
+    removingKeys: new Set<ListKey>(),
+    $emptyEl: null,
+    keyToIndex: new Map<ListKey, number>(),
+    $container,
+    containerSelector,
+    onRemove,
+  };
+}
 
-  constructor(
-    public readonly $container: JQuery,
-    public readonly containerSelector: string,
-    public readonly onRemove: (($el: JQuery) => Promise<void> | void) | undefined
-  ) {}
+/**
+ * Retrieves the index of a key, handling string-to-number normalization.
+ *
+ * WHY: DOM `data-atom-key` attributes are always strings. If the original
+ * atom keys were numbers, a direct Map lookup will fail.
+ *
+ * @internal
+ */
+export function getListIndex<T>(ctx: ListContext<T>, key: ListKey | string): number | undefined {
+  const map = ctx.keyToIndex;
+  const idx = map.get(key as ListKey);
+  if (idx !== undefined) return idx;
 
-  get oldKeys() {
-    return this._oldKeys;
-  }
-  set oldKeys(v) {
-    this._oldKeys = v;
-  }
-  get oldItems() {
-    return this._oldItems;
-  }
-  set oldItems(v) {
-    this._oldItems = v;
-  }
-  get oldNodes() {
-    return this._oldNodes;
-  }
-  set oldNodes(v) {
-    this._oldNodes = v;
-  }
-  get removingKeys() {
-    return this._removingKeys;
-  }
-  get keyToIndex() {
-    return this._keyToIndex;
-  }
-  get $emptyEl() {
-    return this._emptyEl;
-  }
-  set $emptyEl(v) {
-    this._emptyEl = v;
-  }
-
-  /**
-   * Retrieves the index of a key, supporting string-to-number normalization.
-   *
-   * Reason: DOM attributes (like `data-atom-key`) are always returned as strings,
-   * but the internal `_keyToIndex` map might use numbers.
-   */
-  getIndex(key: ListKey | string): number | undefined {
-    const idx = this._keyToIndex.get(key as ListKey);
-    if (idx !== undefined) return idx;
-
-    if (typeof key === 'string') {
-      const n = Number(key);
-      if (!Number.isNaN(n)) return this._keyToIndex.get(n);
-    }
-    return undefined;
+  if (typeof key === 'string') {
+    const n = +key;
+    if (!Number.isNaN(n)) return map.get(n);
   }
 
-  /**
-   * Orchestrates the physical removal of an element from the DOM.
-   *
-   * Logic:
-   * 1. If `onRemove` returns a Promise, it waits for completion (e.g., a fade-out animation).
-   * 2. Constraint: Before calling `.remove()`, it checks if the element has been "resurrected"
-   *    (assigned a new `data-atom-key`) by a subsequent render cycle.
-   */
-  scheduleRemoval(k: ListKey, $el: JQuery): void {
-    const commit = () => {
-      if (this.fx?.isDisposed) return;
-      // Why: Prevent removing an element that was reused/resurrected during the removal delay.
-      if ($el[0] instanceof Element && $el[0].hasAttribute('data-atom-key')) return;
-      if ($el[0]?.isConnected) $el.remove();
-      this._removingKeys.delete(k);
-    };
+  return undefined;
+}
 
-    const res = this.onRemove?.($el);
-    if (res instanceof Promise) {
-      res.then(commit, commit);
-    } else {
-      commit();
-    }
-  }
+/**
+ * Marks a key as "in transit" and starts the removal lifecycle.
+ * @internal
+ */
+export function removeListItem<T>(ctx: ListContext<T>, k: ListKey, $el: JQuery): void {
+  setAtomKey($el, null);
+  ctx.removingKeys.add(k);
+  scheduleListItemRemoval(ctx, k, $el);
+}
 
-  /**
-   * Marks a key as "removing" and initiates the removal sequence.
-   *
-   * Note: The `data-atom-key` attribute is cleared immediately to prevent the reconciler
-   * from finding this "ghost" element via DOM lookups while animations are still running.
-   */
-  removeItem(k: ListKey, $el: JQuery): void {
-    setAtomKey($el, null);
-    this._removingKeys.add(k);
-    this.scheduleRemoval(k, $el);
-  }
+/**
+ * Initiates the physical removal of an element.
+ *
+ * PERFORMANCE: Allocation-free path for synchronous removals.
+ * Closures are only created if `onRemove` returns a Promise.
+ * @internal
+ */
+export function scheduleListItemRemoval<T>(ctx: ListContext<T>, k: ListKey, $el: JQuery): void {
+  const res = ctx.onRemove?.($el);
 
-  /**
-   * Performs full cleanup of the list state and event listeners.
-   */
-  dispose(): void {
-    this._removingKeys.clear();
-    this._oldKeys = [];
-    this._oldItems = [];
-    this._oldNodes = [];
-    this._keyToIndex.clear();
-    this._emptyEl?.remove();
-    this.$container.off('.atomList');
+  if (res instanceof Promise) {
+    const commit = () => commitListItemRemoval(ctx, k, $el);
+    res.then(commit, commit);
+  } else {
+    commitListItemRemoval(ctx, k, $el);
   }
+}
+
+/**
+ * Finalizes DOM removal and state cleanup.
+ *
+ * GUARD: If an element is "resurrected" (reused for a new key) during the
+ * asynchronous removal delay, this method aborts to prevent accidental destruction.
+ * @internal
+ */
+export function commitListItemRemoval<T>(ctx: ListContext<T>, k: ListKey, $el: JQuery): void {
+  const fx = ctx.fx;
+  if (fx?.isDisposed) return;
+
+  const el = $el[0];
+  // Check if the element was re-bound to the list while we were waiting.
+  if (el instanceof Element && el.hasAttribute('data-atom-key')) return;
+
+  if (el?.isConnected) {
+    $el.remove();
+  }
+  ctx.removingKeys.delete(k);
+}
+
+/**
+ * Full cleanup of state and DOM references.
+ *
+ * GC: Reuses the `snapshots` array instance (length = 0) to reduce
+ * memory fragmentation on high-frequency list swaps.
+ * @internal
+ */
+export function disposeListContext<T>(ctx: ListContext<T>): void {
+  ctx.removingKeys.clear();
+  ctx.snapshots.length = 0;
+  ctx.keyToIndex.clear();
+  ctx.$emptyEl?.remove();
+  ctx.$container.off('.atomList');
 }

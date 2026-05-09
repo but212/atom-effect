@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import $ from '@/index';
 
+/** Helper to wait for MutationObserver and microtask flushes */
+const waitMutation = () => new Promise((r) => setTimeout(r, 20));
+
 describe('Form Binding (atomForm)', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
@@ -11,51 +14,100 @@ describe('Form Binding (atomForm)', () => {
     vi.restoreAllMocks();
   });
 
-  describe('Core Synchronization', () => {
-    it('should synchronize various input types and deep paths (Two-way Binding)', async () => {
-      const data = $.atom({
-        user: { name: 'Alice' },
-        gender: 'male',
-        hobbies: ['coding'],
-        status: 'active',
-      });
+  describe('Two-way Binding by Input Type', () => {
+    it('should synchronize text inputs and deep paths', async () => {
+      const data = $.atom({ user: { name: 'Alice' } });
+      const $form = $('<form><input name="user.name"></form>').appendTo(document.body);
 
+      $form.atomForm(data);
+      await $.nextTick();
+
+      // Initial Sync
+      expect($form.find('input').val()).toBe('Alice');
+
+      // DOM -> Atom
+      $form.find('input').val('Bob').trigger('input');
+      await $.nextTick();
+      expect(data.value.user.name).toBe('Bob');
+    });
+
+    it('should synchronize radio buttons', async () => {
+      const data = $.atom({ gender: 'male' });
       const $form = $(`
         <form>
-          <input name="user.name">
           <input type="radio" name="gender" value="male" id="r-male">
           <input type="radio" name="gender" value="female" id="r-female">
-          <input type="checkbox" name="hobbies" value="coding">
-          <input type="checkbox" name="hobbies" value="music">
-          <input name="status">
         </form>
       `).appendTo(document.body);
 
       $form.atomForm(data);
       await $.nextTick();
 
-      // 1. Initial Sync
-      expect($form.find('[name="user.name"]').val()).toBe('Alice');
       expect($form.find('#r-male').prop('checked')).toBe(true);
-      expect($form.find('[value="coding"]').prop('checked')).toBe(true);
 
-      // 2. DOM -> Atom (Deep & Group)
-      $form.find('[name="user.name"]').val('Bob').trigger('input');
       $form.find('#r-female').prop('checked', true).trigger('change');
-      $form.find('[value="music"]').prop('checked', true).trigger('change');
       await $.nextTick();
-
-      expect(data.value.user.name).toBe('Bob');
       expect(data.value.gender).toBe('female');
-      expect(data.value.hobbies).toEqual(['coding', 'music']);
-
-      // 3. Atom -> DOM (Bulk Update)
-      data.value = { ...data.value, status: 'inactive' };
-      await $.nextTick();
-      expect($form.find('[name="status"]').val()).toBe('inactive');
     });
 
-    it('should prevent infinite loops and co-exist with other bindings', async () => {
+    it('should synchronize checkbox arrays', async () => {
+      const data = $.atom({ hobbies: ['coding'] });
+      const $form = $(`
+        <form>
+          <input type="checkbox" name="hobbies" value="coding" id="cb-coding">
+          <input type="checkbox" name="hobbies" value="music" id="cb-music">
+        </form>
+      `).appendTo(document.body);
+
+      $form.atomForm(data);
+      await $.nextTick();
+
+      expect($form.find('#cb-coding').prop('checked')).toBe(true);
+      expect($form.find('#cb-music').prop('checked')).toBe(false);
+
+      // DOM -> Atom
+      $form.find('#cb-music').prop('checked', true).trigger('change');
+      await $.nextTick();
+      expect(data.value.hobbies).toEqual(['coding', 'music']);
+
+      // Atom -> DOM
+      data.value = { hobbies: ['music'] };
+      await $.nextTick();
+      expect($form.find('#cb-coding').prop('checked')).toBe(false);
+      expect($form.find('#cb-music').prop('checked')).toBe(true);
+    });
+
+    it('should synchronize boolean toggles (single checkbox)', async () => {
+      const data = $.atom({ isActive: true });
+      const $form = $(
+        '<form><input type="checkbox" name="isActive" id="cb-active"></form>'
+      ).appendTo(document.body);
+
+      $form.atomForm(data);
+      await $.nextTick();
+
+      expect($form.find('#cb-active').prop('checked')).toBe(true);
+
+      $form.find('#cb-active').prop('checked', false).trigger('change');
+      await $.nextTick();
+      expect(data.value.isActive).toBe(false);
+    });
+  });
+
+  describe('Reactivity & Lifecycle', () => {
+    it('should reflect bulk atom updates to the DOM', async () => {
+      const data = $.atom({ status: 'active' });
+      const $form = $('<form><input name="status"></form>').appendTo(document.body);
+
+      $form.atomForm(data);
+      await $.nextTick();
+
+      data.value = { status: 'inactive' };
+      await $.nextTick();
+      expect($form.find('input').val()).toBe('inactive');
+    });
+
+    it('should co-exist safely with other bindings and prevent infinite loops', async () => {
       const data = $.atom({ text: 'val' });
       const active = $.atom(true);
       const $form = $('<form><input name="text"></form>').appendTo(document.body);
@@ -78,74 +130,195 @@ describe('Form Binding (atomForm)', () => {
       expect($input.hasClass('active')).toBe(false);
       expect($input.val()).toBe('new');
     });
+
+    it('should support multiple source atoms via array (mergeLenses)', async () => {
+      const user = $.atom({ name: 'Alice' });
+      const settings = $.atom({ theme: 'dark' });
+
+      const $form = $(`
+        <form>
+          <input name="name">
+          <input name="theme">
+        </form>
+      `).appendTo(document.body);
+
+      $form.atomForm([user, settings]);
+      await $.nextTick();
+
+      expect($form.find('[name="name"]').val()).toBe('Alice');
+      expect($form.find('[name="theme"]').val()).toBe('dark');
+
+      $form.find('[name="name"]').val('Bob').trigger('input');
+      $form.find('[name="theme"]').val('light').trigger('input');
+      await $.nextTick();
+
+      expect(user.value.name).toBe('Bob');
+      expect(settings.value.theme).toBe('light');
+
+      user.value = { name: 'Charlie' };
+      settings.value = { theme: 'high-contrast' };
+      await $.nextTick();
+
+      expect($form.find('[name="name"]').val()).toBe('Charlie');
+      expect($form.find('[name="theme"]').val()).toBe('high-contrast');
+    });
   });
 
-  describe('Dynamic Lifecycle & Discovery', () => {
-    it('should handle dynamic element addition and renaming (MutationObserver)', async () => {
+  describe('Dynamic DOM Discovery (MutationObserver)', () => {
+    it('should handle dynamic element addition, renaming, and removal', async () => {
       const data = $.atom({ a: '1', b: '2', c: '3' });
       const $form = $('<form><input name="a" id="id-a"></form>').appendTo(document.body);
+
       $form.atomForm(data);
       await $.nextTick();
 
       // 1. Dynamic Addition
       $form.append('<div><input name="b" id="id-b"></div>');
-      await new Promise((r) => setTimeout(r, 20));
+      await waitMutation();
       expect($form.find('#id-b').val()).toBe('2');
 
       // 2. Dynamic Renaming
       const $inputA = $form.find('#id-a');
       $inputA.attr('name', 'c');
-      await new Promise((r) => setTimeout(r, 20));
+      await waitMutation();
       expect($inputA.val()).toBe('3');
 
       // 3. Removal & Sync Check
       $inputA.remove();
-      await new Promise((r) => setTimeout(r, 20));
+      await waitMutation();
       data.value = { ...data.value, b: 'changed-b' };
       await $.nextTick();
       expect($form.find('#id-b').val()).toBe('changed-b');
     });
   });
 
-  describe('Configuration & Transformation', () => {
-    it('should apply transform and debounce options', async () => {
-      const data = $.atom({ age: 20, text: 'init', ids: [1] });
-      const onChange = vi.fn();
-      const $form = $(`
-        <form>
-          <input name="age">
-          <input name="text">
-          <input type="checkbox" name="ids" value="2" id="id-2">
-        </form>
-      `).appendTo(document.body);
+  describe('FormOptions', () => {
+    describe('transform & onChange', () => {
+      it('should apply transform and trigger onChange correctly', async () => {
+        const data = $.atom({ age: 20, ids: [1] });
+        const onChange = vi.fn();
+        const $form = $(`
+          <form>
+            <input name="age">
+            <input type="checkbox" name="ids" value="2" id="id-2">
+          </form>
+        `).appendTo(document.body);
 
-      $form.atomForm(data, {
-        debounce: 30,
-        transform: (p: string, v: unknown) => {
-          if (p === 'age') return Number(v);
-          if (p === 'ids' && Array.isArray(v)) return v.map(Number);
-          return v;
-        },
-        onChange,
+        $form.atomForm(data, {
+          transform: (p, v) => {
+            if (p === 'age') return Number(v);
+            if (p === 'ids' && Array.isArray(v)) return v.map(Number);
+            return v;
+          },
+          onChange,
+        });
+        await $.nextTick();
+
+        $form.find('[name="age"]').val('25').trigger('input');
+        await $.nextTick();
+
+        expect(data.value.age).toBe(25);
+        expect(onChange).toHaveBeenCalledWith('age', 25);
+
+        $form.find('#id-2').prop('checked', true).trigger('change');
+        await $.nextTick();
+        expect(data.value.ids).toEqual([1, 2]);
       });
-      await $.nextTick();
 
-      // 1. Transform & OnChange
-      $form.find('[name="age"]').val('25').trigger('input');
-      await new Promise((r) => setTimeout(r, 50));
-      expect(data.value.age).toBe(25);
-      expect(onChange).toHaveBeenCalledWith('age', 25);
+      it('should handle exceptions gracefully without breaking sync', async () => {
+        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const data = $.atom({ age: 20, text: 'init' });
 
-      // 2. Debounce
-      $form.find('[name="text"]').val('delayed').trigger('input');
-      expect(data.value.text).toBe('init');
-      await new Promise((r) => setTimeout(r, 50));
-      expect(data.value.text).toBe('delayed');
+        const $form = $(`
+          <form>
+            <input name="age">
+            <input name="text">
+          </form>
+        `).appendTo(document.body);
+
+        $form.atomForm(data, {
+          transform: (p: string, v: unknown) => {
+            if (p === 'age') throw new Error('Transform error');
+            return v;
+          },
+          onChange: (p: string) => {
+            if (p === 'text') throw new Error('onChange error');
+          },
+        });
+        await $.nextTick();
+
+        // Transform exception
+        $form.find('[name="age"]').val('25').trigger('input');
+        await $.nextTick();
+        expect(String(data.value.age)).toBe('25'); // Value falls back to raw input
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+          '[bindForm] Transform error in field "age":',
+          expect.any(Error)
+        );
+
+        // onChange exception
+        $form.find('[name="text"]').val('changed').trigger('input');
+        await $.nextTick();
+        expect(data.value.text).toBe('changed');
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+          '[bindForm] onChange error in field "text":',
+          expect.any(Error)
+        );
+      });
+    });
+
+    describe('debounce', () => {
+      it('should debounce rapid input events', async () => {
+        vi.useFakeTimers();
+        const data = $.atom({ text: 'init' });
+        const $form = $('<form><input name="text"></form>').appendTo(document.body);
+
+        $form.atomForm(data, { debounce: 30 });
+        await $.nextTick();
+
+        $form.find('input').val('delayed').trigger('input');
+        expect(data.value.text).toBe('init'); // Not updated yet
+
+        vi.advanceTimersByTime(50);
+        await $.nextTick();
+        expect(data.value.text).toBe('delayed'); // Updated after debounce
+
+        vi.useRealTimers();
+      });
+    });
+
+    describe('validation', () => {
+      it('should integrate declarative validation with form controls', async () => {
+        const data = $.atom({ email: 'invalid' });
+        const $form = $('<form><input name="email" id="email-input"></form>').appendTo(
+          document.body
+        );
+
+        $form.atomForm(data, {
+          validation: {
+            email: (v: unknown) => (String(v).includes('@') ? '' : 'Invalid Email'),
+          },
+        });
+        await $.nextTick();
+
+        const input = document.getElementById('email-input') as HTMLInputElement;
+
+        // 1. Initial State
+        expect(input.validationMessage).toBe('Invalid Email');
+        expect(($form[0] as HTMLFormElement).checkValidity()).toBe(false);
+
+        // 2. Reactive Correction
+        data.value = { email: 'user@example.com' };
+        await $.nextTick();
+
+        expect(input.validationMessage).toBe('');
+        expect(($form[0] as HTMLFormElement).checkValidity()).toBe(true);
+      });
     });
   });
 
-  describe('Modern Web Standards (FACE)', () => {
-    it('should automatically bind to Form-Associated Custom Elements', async () => {
+  describe('Modern Web Standards Integration', () => {
+    it('should automatically bind to Form-Associated Custom Elements (FACE)', async () => {
       const data = $.atom({ custom: 'initial' });
       const tagName = `face-field-${Math.random().toString(36).slice(2, 7)}`;
 
@@ -170,11 +343,9 @@ describe('Form Binding (atomForm)', () => {
         }
       );
 
-      const $form = $(`
-        <form>
-          <${tagName} name="custom"></${tagName}>
-        </form>
-      `).appendTo(document.body);
+      const $form = $(`<form><${tagName} name="custom"></${tagName}></form>`).appendTo(
+        document.body
+      );
 
       $form.atomForm(data);
       await $.nextTick();
@@ -186,35 +357,6 @@ describe('Form Binding (atomForm)', () => {
       $(faceEl).trigger('change');
       await $.nextTick();
       expect(data.value.custom).toBe('changed');
-    });
-
-    it('should integrate declarative validation with form controls', async () => {
-      const data = $.atom({ email: 'invalid' });
-      const $form = $(`
-        <form>
-          <input name="email" id="email-input">
-        </form>
-      `).appendTo(document.body);
-
-      $form.atomForm(data, {
-        validation: {
-          email: (v: unknown) => (String(v).includes('@') ? '' : 'Invalid Email'),
-        },
-      });
-      await $.nextTick();
-
-      const input = document.getElementById('email-input') as HTMLInputElement;
-
-      // 1. Initial State
-      expect(input.validationMessage).toBe('Invalid Email');
-      expect(($form[0] as HTMLFormElement).checkValidity()).toBe(false);
-
-      // 2. Reactive Correction
-      data.value = { email: 'user@example.com' };
-      await $.nextTick();
-
-      expect(input.validationMessage).toBe('');
-      expect(($form[0] as HTMLFormElement).checkValidity()).toBe(true);
     });
   });
 });
