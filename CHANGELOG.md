@@ -7,9 +7,15 @@
 #### Changed
 
 - Enhanced `atomLens` and `setDeepValue` to support `Map`, `Set`, and custom class instances with full prototype preservation.
+- Introduced `mergeAtoms` and `mergeLenses` for reactive state composition and object merging.
 - Introduced `trackEvaluationFailure` in the debug system to record failures during dependency dirty checks.
 - Improved loop detection with warning deduplication to prevent console clutter.
 - Moved `Paths` and `PathValue` to `core/lens.ts` for consistent module structure.
+
+#### Added
+
+- Added `mergeAtoms` to `computed.ts` for flattening multiple reactive sources into a single object.
+- Added `mergeLenses` to `lens.ts` for unifying multiple writable lenses into a two-way bound object.
 
 #### Security
 
@@ -26,6 +32,7 @@
 
 - Introduced functional primitives `Option` and `Result` with static utilities (`match`, `tap`, `andThen`, `tryCatch`, `fromPromise`) for robust error handling.
 - Added `isResult` type guard for nominal type identification.
+- Added a comprehensive set of logic and structural type utilities (`Equal`, `If`, `Merge`, `Prettify`, etc.).
 - Added performance benchmarks for utilities using `vitest bench`.
 
 #### Changed
@@ -45,24 +52,26 @@
 
 #### Added
 
-- Added `$.useAtomComponent` for building reactive Web Components with Shadow DOM and FACE integration.
-- Added `atomForm` for declarative form binding with browser Constraint Validation API support.
-- Enhanced Dependency Injection (DI) system with Shadow DOM support and move detection.
-- Added CSS Bridge for automatic synchronization of reactive values to CSS custom properties.
-- Added diagnostics for detecting unregistered custom elements in debug mode.
-- Added native `URLPattern` support and route comparison options to `$.route`.
+- **Reactive Web Components**: Introduced `$.useAtomComponent` and a high-performance orchestration engine featuring:
+  - Shadow DOM support and global `CSSStyleSheet` caching for optimized style injection.
+  - Form-Associated Custom Elements (FACE) integration with native validation support.
+  - Reactive attribute and slot monitoring via optimized `atomLens` integration.
+  - Synchronous lifecycle management (`teardown`) for deterministic resource disposal and memory safety.
+- **Dependency Injection (DI)**: Re-engineered the context system with Shadow DOM transparency and debounced move-detection using `ContextEngine`.
+- **CSS Bridge**: Automatic synchronization of reactive values to CSS custom properties (`--aej-*`) on host elements.
+- **atomForm**: Declarative form binding with O(1) field scaling and native Constraint Validation support.
+- **Diagnostics**: Added real-time detection for unregistered custom elements and duplicate controllers in debug mode.
+- **Routing**: Added native `URLPattern` support and enhanced route comparison options to `$.route`.
 
 #### Changed
 
-- Refactored navigation architecture (`atomNav` and `$.route`) to use a centralized coordinator and modular routing logic.
-- Implemented atomic fetch pipelines and `AbortSignal` management in navigation to prevent race conditions.
-- Optimized `InputBinding` and `$.route` performance using pre-resolved synchronization and registry-based link tracking.
-- Optimized performance in hot paths (binding resolution, element iteration) by replacing high-level array methods with standard `for` loops.
-- Reduced internal overhead by removing `Option` and `Result` dependencies from `@but212/atom-effect-utils` in performance-critical modules.
+- Refactored navigation architecture (`atomNav` and `$.route`) to use a centralized coordinator and modular routing logic with `AbortSignal` management.
+- Optimized performance in hot paths (binding resolution, element iteration) by replacing high-level array methods with native `for` loops.
+- Reduced internal overhead by stripping `Option` and `Result` dependencies from performance-critical modules in `@but212/atom-effect-jquery`.
 - Standardized chainable bindings and attribute transformations using unified factories.
 - Improved reconciliation logic in `atomList` and field discovery in `atomForm`.
 - Updated CJK IME support in input bindings to ensure reactive updates do not interrupt character composition.
-- Integrated the new `Result` utility across all features for more consistent error handling.
+- Integrated the new functional `Result` utility across all features for consistent error handling.
 
 #### Security
 

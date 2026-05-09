@@ -1,5 +1,7 @@
 import { BRAND, BrandFlags } from '@/symbols';
-import type { WritableAtom } from '../types';
+import type { Equal, MergedDependencyValue, WritableAtom } from '@/types';
+import { mergeAtomValues } from '@/utils';
+import { batch } from './scheduler';
 
 /**
  * Logic: Numeric Key Conversion
@@ -43,55 +45,60 @@ export type TerminalTypes =
  * Constraint: If T has a broad string indexer, it returns `string` to avoid
  * infinite union generation.
  */
-export type Paths<T, D extends unknown[] = []> = 0 extends 1 & T
-  ? string
-  : D['length'] extends MaxDepth
-    ? never
-    : T extends TerminalTypes
+export type Paths<T, D extends unknown[] = []> =
+  // biome-ignore lint/suspicious/noExplicitAny: 'any' check is required to prevent infinite recursion in paths
+  Equal<T, any> extends true
+    ? string
+    : D['length'] extends MaxDepth
       ? never
-      : T extends readonly unknown[]
-        ? NonNullable<ArrayElement<T>> extends object
-          ? `${number}` | `${number}.${Paths<NonNullable<ArrayElement<T>>, [...D, 1]>}`
-          : `${number}`
-        : T extends object
-          ? HasBroadStringKey<T> extends true
-            ? string
-            : {
-                [K in keyof T & (string | number)]: T[K] extends Function
-                  ? never
-                  : NonNullable<T[K]> extends object
-                    ? `${K}` | `${K}.${Paths<NonNullable<T[K]>, [...D, 1]>}`
-                    : `${K}`;
-              }[keyof T & (string | number)]
-          : never;
+      : T extends TerminalTypes
+        ? never
+        : T extends readonly unknown[]
+          ? NonNullable<ArrayElement<T>> extends object
+            ? `${number}` | `${number}.${Paths<NonNullable<ArrayElement<T>>, [...D, 1]>}`
+            : `${number}`
+          : T extends object
+            ? HasBroadStringKey<T> extends true
+              ? string
+              : {
+                  [K in keyof T & (string | number)]: T[K] extends Function
+                    ? never
+                    : NonNullable<T[K]> extends object
+                      ? `${K}` | `${K}.${Paths<NonNullable<T[K]>, [...D, 1]>}`
+                      : `${K}`;
+                }[keyof T & (string | number)]
+            : never;
 
 /**
  * Resolves the type of a value at a given dot-path string.
  */
-export type PathValue<T, P extends string> = 0 extends 1 & T
-  ? unknown
-  : P extends `${infer K}.${infer Rest}`
-    ? NonNullable<T> extends readonly unknown[]
-      ? K extends `${number}`
-        ? PathValue<NonNullable<ArrayElement<NonNullable<T>>>, Rest>
-        : never
-      : HasBroadStringKey<NonNullable<T>> extends true
-        ? PathValue<NonNullable<StringIndexValue<NonNullable<T>>>, Rest>
-        : StringKeyToNumber<K> extends keyof NonNullable<T>
-          ? PathValue<
-              NonNullable<NonNullable<T>[StringKeyToNumber<K> & keyof NonNullable<T>]>,
-              Rest
-            >
+export type PathValue<T, P extends string> =
+  // biome-ignore lint/suspicious/noExplicitAny: 'any' check is required for correct path resolution
+  Equal<T, any> extends true
+    ? // biome-ignore lint/suspicious/noExplicitAny: 'any' check is required for correct path resolution
+      any
+    : P extends `${infer K}.${infer Rest}`
+      ? NonNullable<T> extends readonly unknown[]
+        ? K extends `${number}`
+          ? PathValue<NonNullable<ArrayElement<NonNullable<T>>>, Rest>
           : never
-    : NonNullable<T> extends readonly unknown[]
-      ? P extends `${number}`
-        ? NonNullable<ArrayElement<NonNullable<T>>>
-        : never
-      : HasBroadStringKey<NonNullable<T>> extends true
-        ? NonNullable<StringIndexValue<NonNullable<T>>>
-        : StringKeyToNumber<P> extends keyof NonNullable<T>
-          ? NonNullable<T>[StringKeyToNumber<P> & keyof NonNullable<T>]
-          : never;
+        : HasBroadStringKey<NonNullable<T>> extends true
+          ? PathValue<NonNullable<StringIndexValue<NonNullable<T>>>, Rest>
+          : StringKeyToNumber<K> extends keyof NonNullable<T>
+            ? PathValue<
+                NonNullable<NonNullable<T>[StringKeyToNumber<K> & keyof NonNullable<T>]>,
+                Rest
+              >
+            : never
+      : NonNullable<T> extends readonly unknown[]
+        ? P extends `${number}`
+          ? NonNullable<ArrayElement<NonNullable<T>>>
+          : never
+        : HasBroadStringKey<NonNullable<T>> extends true
+          ? NonNullable<StringIndexValue<NonNullable<T>>>
+          : StringKeyToNumber<P> extends keyof NonNullable<T>
+            ? NonNullable<T>[StringKeyToNumber<P> & keyof NonNullable<T>]
+            : never;
 
 /**
  * Security: Protects internal JS properties from being modified via dot-paths.
@@ -299,3 +306,69 @@ export const lensFor =
   <T extends object>(atom: WritableAtom<T>) =>
   <P extends Paths<T>>(path: P) =>
     atomLens(atom, path);
+
+/**
+ * Merges multiple writable lenses into a single unified lens with a flattened type.
+ *
+ * This utility combines the value types of all input lenses into a single
+ * unified object type using the {@link Merge} utility.
+ *
+ * @param lenses - A variadic list of WritableAtoms (lenses).
+ */
+export function mergeLenses<L extends WritableAtom<unknown>[]>(
+  ...lenses: L
+): WritableAtom<MergedDependencyValue<L>> {
+  type MergedValue = MergedDependencyValue<L>;
+
+  let prevValue: MergedValue | undefined;
+  const listeners = new Set<(nv?: MergedValue, ov?: MergedValue) => void>();
+  const unsubs: (() => void)[] = [];
+
+  const notify = () => {
+    const nv = mergeAtomValues(lenses, true) as MergedValue;
+    if (JSON.stringify(nv) !== JSON.stringify(prevValue)) {
+      const ov = prevValue;
+      prevValue = nv;
+      for (const listener of listeners) {
+        listener(nv, ov);
+      }
+    }
+  };
+
+  return {
+    get value() {
+      return mergeAtomValues(lenses) as MergedValue;
+    },
+    set value(newVal: MergedValue) {
+      batch(() => {
+        for (let i = 0; i < lenses.length; i++) {
+          lenses[i]!.value = newVal;
+        }
+      });
+    },
+    peek: () => mergeAtomValues(lenses, true) as MergedValue,
+    subscribe: (listener: (nv?: MergedValue, ov?: MergedValue) => void) => {
+      if (listeners.size === 0) {
+        prevValue = mergeAtomValues(lenses, true) as MergedValue;
+        for (let i = 0; i < lenses.length; i++) {
+          unsubs.push(lenses[i]!.subscribe(notify));
+        }
+      }
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+        if (listeners.size === 0) {
+          for (const unsub of unsubs) unsub();
+          unsubs.length = 0;
+        }
+      };
+    },
+    subscriberCount: () => listeners.size,
+    dispose: () => {
+      for (const unsub of unsubs) unsub();
+      unsubs.length = 0;
+      listeners.clear();
+    },
+    [BRAND]: BrandFlags.Atom | BrandFlags.Writable,
+  } as unknown as WritableAtom<MergedValue>;
+}

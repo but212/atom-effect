@@ -6,3 +6,4 @@ export {
 } from '@/result';
 export { SlotBuffer } from '@/slot-buffer';
 export * from '@/type-guard';
+export * from '@/types';

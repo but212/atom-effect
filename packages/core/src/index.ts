@@ -10,6 +10,8 @@ export {
   effect,
   getPathValue,
   lensFor,
+  mergeAtoms,
+  mergeLenses,
   scheduler as globalScheduler,
   setDeepValue,
   untracked,

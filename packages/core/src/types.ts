@@ -1,5 +1,22 @@
+import type { Equal, If, Merge, Prettify } from '@but212/atom-effect-utils';
 import type { AsyncState } from '@/constants';
 import { BRAND } from '@/symbols';
+
+export type { Equal, If, Merge, Prettify };
+
+/**
+ * Logic: Dependency Value Extraction
+ * Extracts the inner value type `V` from a `Dependency<V>`.
+ * @internal
+ */
+export type UnboxDependency<D> = D extends Dependency<infer V> ? V : never;
+
+/**
+ * Logic: Safe Object Merging
+ * Merges a union of dependency values into a single object.
+ * @internal
+ */
+export type MergedDependencyValue<T extends readonly unknown[]> = Merge<UnboxDependency<T[number]>>;
 
 /** A unique monotonic identifier for reactive dependencies. */
 export type DependencyId = number;

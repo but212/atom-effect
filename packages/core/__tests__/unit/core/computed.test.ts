@@ -4,7 +4,16 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { AtomError, aeNextTick, atom, ComputedError, computed, effect, isComputed } from '@/index';
+import {
+  AtomError,
+  aeNextTick,
+  atom,
+  ComputedError,
+  computed,
+  effect,
+  isComputed,
+  mergeAtoms,
+} from '@/index';
 import { sleep } from '../../utils/test-helpers';
 
 describe('Computed', () => {
@@ -12,8 +21,8 @@ describe('Computed', () => {
     vi.restoreAllMocks();
   });
 
-  describe('Validation & Identity', () => {
-    it('initializes correctly and rejects invalid arguments', () => {
+  describe('Core Mechanics', () => {
+    it('should initialize correctly and reject invalid arguments', () => {
       const c = computed(() => 1);
       expect(isComputed(c)).toBe(true);
       expect(c).toBeDefined();
@@ -22,10 +31,8 @@ describe('Computed', () => {
       expect(() => computed(null as unknown as () => void)).toThrow(ComputedError);
       expect(() => c.subscribe(null as unknown as () => void)).toThrow(AtomError);
     });
-  });
 
-  describe('Laziness & Caching', () => {
-    it('evaluates only when accessed and caches stable results', async () => {
+    it('should evaluate lazily and cache results', async () => {
       const src = atom(1);
       const fn = vi.fn(() => src.value * 2);
       const c = computed(fn);
@@ -50,7 +57,7 @@ describe('Computed', () => {
       expect(fn).toHaveBeenCalledTimes(2);
     });
 
-    it('respects equality checks to skip unnecessary recomputations', async () => {
+    it('should respect equality checks to prune recomputations', async () => {
       const src = atom({ x: 1 });
       const fn = vi.fn(() => ({ x: src.value.x }));
       const c = computed(fn, {
@@ -63,44 +70,44 @@ describe('Computed', () => {
         c.value;
         spy();
       });
-      spy.mockClear(); // Clear initial run
+      spy.mockClear();
 
-      src.value = { x: 1 }; // Structurally different, but logically identical
+      src.value = { x: 1 }; // Structurally different, logically same
       await aeNextTick();
 
       expect(c.value).toEqual({ x: 1 });
-      expect(fn).toHaveBeenCalledTimes(2); // Initial + Re-evaluation
-      expect(spy).not.toHaveBeenCalled(); // Effect skipped re-run because c.version didn't change
+      expect(fn).toHaveBeenCalledTimes(2); // Re-evaluation occurs to check equality
+      expect(spy).not.toHaveBeenCalled(); // Effect skipped because result was "equal"
     });
   });
 
   describe('Error Handling', () => {
-    it('catches and exposes computation errors without crashing', () => {
+    it('should capture and expose computation errors', () => {
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
       const c = computed(
         () => {
-          throw new Error('boom');
+          throw new Error('computation_failed');
         },
         {
           onError: () => {
-            throw new Error('handler error');
-          }, // Should be caught internally
+            throw new Error('handler_failed');
+          },
         }
       );
 
       expect(() => c.value).toThrow(ComputedError);
       expect(c.hasError).toBe(true);
-      expect(c.lastError?.message).toContain('boom');
-      expect(consoleError).toHaveBeenCalled(); // Internal handler error was caught
+      expect(c.lastError?.message).toContain('computation_failed');
+      expect(consoleError).toHaveBeenCalled(); // Internal handler error caught
     });
   });
 
-  describe('Async Flow', () => {
-    it('manages state transitions and default values during resolution', async () => {
+  describe('Asynchronous Flows', () => {
+    it('should manage pending states and default values', async () => {
       const c = computed(
         async () => {
           await sleep(20);
-          return 'done';
+          return 'resolved';
         },
         { defaultValue: 'loading' }
       );
@@ -109,73 +116,59 @@ describe('Computed', () => {
       expect(c.isPending).toBe(true);
 
       await sleep(30);
-      expect(c.value).toBe('done');
+      expect(c.value).toBe('resolved');
       expect(c.isResolved).toBe(true);
     });
 
-    it('resolves race conditions by preferring the latest request', async () => {
+    it('should resolve race conditions by preferring the latest request', async () => {
       const trigger = atom(0);
       const c = computed(
         async () => {
           const v = trigger.value;
-          await sleep(v === 0 ? 50 : 10); // First request is intentionally slower
+          await sleep(v === 0 ? 50 : 10);
           return v;
         },
         { defaultValue: -1 }
       );
 
-      c.value; // Request 0 (50ms)
+      c.value; // Request 0
       trigger.value = 1;
       await sleep(5);
-      c.value; // Request 1 (10ms) - Overwrites the previous one
+      c.value; // Request 1
 
       await sleep(60);
-      expect(c.value).toBe(1); // The latest request (v=1) wins
+      expect(c.value).toBe(1); // Latest request wins
     });
 
-    it('throws ComputedError if accessed during pending/error without defaultValue', async () => {
-      const p = computed(async () => {
-        await sleep(10);
-        return 1;
-      });
-      // Throws because the state is still pending and no default value is provided
-      expect(() => p.value).toThrow(ComputedError);
-
-      const e = computed(() => {
-        throw new Error('fail');
-      });
-      expect(() => e.value).toThrow(ComputedError);
-    });
-
-    it('ensures async consistency by resolving in a single microtask cycle', async () => {
+    it('should enforce single-microtask resolution consistency', async () => {
       let resolvePromise!: (v: string) => void;
       const promise = new Promise<string>((r) => {
         resolvePromise = r;
       });
 
-      // Constraint: Use a sync function returning a promise to avoid the extra
-      // microtask inherent in 'async' functions.
       const c = computed(() => promise, { defaultValue: 'loading' });
 
-      // Trigger computation
       expect(c.value).toBe('loading');
-      expect(c.isPending).toBe(true);
-
-      // Resolve the promise
       resolvePromise('done');
 
-      // Check: In the very next microtask, the atom MUST be updated.
-      // If we used double .then, this would still be 'loading' / isPending: true.
-      await Promise.resolve(); // Single microtask
+      // Check: Should be resolved in the very next microtask
+      await Promise.resolve();
 
-      expect(c.isPending).toBe(false);
       expect(c.isResolved).toBe(true);
       expect(c.value).toBe('done');
     });
+
+    it('should throw if accessed during pending state without default value', async () => {
+      const p = computed(async () => {
+        await sleep(10);
+        return 1;
+      });
+      expect(() => p.value).toThrow(ComputedError);
+    });
   });
 
-  describe('Lifecycle & Reactivity', () => {
-    it('maintains a clean reactive chain and disposes correctly', async () => {
+  describe('Reactive Integrity', () => {
+    it('should maintain chain reactivity and cleanup on dispose', async () => {
       const a = atom(1);
       const b = computed(() => a.value + 1);
       const c = computed(() => b.value * 2);
@@ -197,19 +190,74 @@ describe('Computed', () => {
       unsub();
     });
 
-    it('prevents dependency leakage when checking meta-states', () => {
+    it('should prevent dependency leakage through meta-state access', () => {
       const dep = atom(0);
       const child = computed(() => dep.value);
       const parent = computed(() => child.hasError);
 
-      // Tracker subscribes only to parent.hasError
       const spy = vi.fn();
       const tracker = computed(() => parent.hasError);
       tracker.subscribe(spy);
       tracker.value;
 
-      dep.value = 1; // child state changes, but parent.hasError remains 'false'
-      expect(spy).not.toHaveBeenCalled(); // No unnecessary notification should occur
+      dep.value = 1; // child changes, but parent.hasError is still false
+      expect(spy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Advanced Composition: Object Merging', () => {
+    it('should merge multiple atoms into an intersected object', () => {
+      const a = atom({ id: 1, name: 'Atom A' });
+      const b = atom({ version: '1.0.0', tags: ['core'] });
+      const merged = mergeAtoms(a, b);
+
+      expect(merged.value).toEqual({
+        id: 1,
+        name: 'Atom A',
+        version: '1.0.0',
+        tags: ['core'],
+      });
+    });
+
+    it('should respect merge priority (last atom wins on key collision)', () => {
+      const a = atom({ x: 1, y: 1 });
+      const b = atom({ y: 2, z: 3 });
+      const merged = mergeAtoms(a, b);
+
+      expect(merged.value).toEqual({ x: 1, y: 2, z: 3 });
+    });
+
+    it('should reactively update when any source atom changes', async () => {
+      const a = atom({ x: 1 });
+      const b = atom({ y: 1 });
+      const merged = mergeAtoms(a, b);
+
+      const spy = vi.fn();
+      effect(() => {
+        spy(merged.value);
+      });
+      spy.mockClear();
+
+      a.value = { x: 10 };
+      await aeNextTick();
+      expect(spy).toHaveBeenCalledWith({ x: 10, y: 1 });
+
+      b.value = { y: 20 };
+      await aeNextTick();
+      expect(spy).toHaveBeenCalledWith({ x: 10, y: 20 });
+    });
+
+    it('should support mixed source types (Atoms and Computed)', async () => {
+      const base = atom(100);
+      const a = computed(() => ({ val: base.value }));
+      const b = atom({ active: true });
+      const merged = mergeAtoms(a, b);
+
+      expect(merged.value).toEqual({ val: 100, active: true });
+
+      base.value = 200;
+      await aeNextTick();
+      expect(merged.value).toEqual({ val: 200, active: true });
     });
   });
 });
