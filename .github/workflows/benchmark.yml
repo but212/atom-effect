@@ -5,8 +5,8 @@ on:
     branches: [main]
 
 jobs:
-  benchmark:
-    name: Run ${{ matrix.package }} (${{ matrix.type }})
+  logic_benchmark:
+    name: Logic - ${{ matrix.package }} (${{ matrix.type }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -20,10 +20,6 @@ jobs:
             type: state
           - package: core
             type: realistic
-          - package: jquery
-            type: micro
-          - package: jquery
-            type: macro
           - package: utils
             type: all
 
@@ -31,7 +27,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup
         with:
-          install-playwright: "true"
+          install-playwright: "false"
 
       - name: Build
         run: pnpm build
@@ -49,7 +45,42 @@ jobs:
           fi
 
       - name: Upload results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
+        with:
+          name: benchmark-results-${{ matrix.package }}-${{ matrix.type }}
+          path: results/
+
+  browser_benchmark:
+    name: Browser - ${{ matrix.package }} (${{ matrix.type }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: jquery
+            type: micro
+          - package: jquery
+            type: macro
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
+        with:
+          install-playwright: "true"
+
+      - name: Build
+        run: pnpm build
+
+      - name: Run benchmark
+        working-directory: packages/${{ matrix.package }}
+        env:
+          BENCH_OUTPUT: ../../results/${{ matrix.package }}-${{ matrix.type }}.txt
+        run: |
+          mkdir -p ../../results
+          pnpm bench:${{ matrix.type }} > $BENCH_OUTPUT
+
+      - name: Upload results
+        uses: actions/upload-artifact@v7
         with:
           name: benchmark-results-${{ matrix.package }}-${{ matrix.type }}
           path: results/
