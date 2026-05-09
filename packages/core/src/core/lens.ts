@@ -1,23 +1,34 @@
 import { BRAND, BrandFlags } from '@/symbols';
 import type { WritableAtom } from '../types';
 
-/** Casts numeric string literals to numbers for correct array index typing. */
+/**
+ * Logic: Numeric Key Conversion
+ * Casts numeric string literals to numbers for correct array index typing.
+ */
 export type StringKeyToNumber<S extends string> = S extends `${infer N extends number}` ? N : S;
 
-/** Detects if a type has a broad string indexer (e.g., Record<string, any>). */
+/**
+ * Logic: Broad Index Detection
+ * Detects if a type has a broad string indexer (e.g., Record<string, any>).
+ */
 export type HasBroadStringKey<T> = string extends keyof T ? true : false;
 
+/** @public */
 export type StringIndexValue<T> = T extends Record<string, infer V> ? V : never;
 
+/** @public */
 export type ArrayElement<T> = T extends readonly (infer U)[] ? U : never;
 
 /**
- * Depth limit for recursive path generation to prevent TypeScript recursion errors
- * and IDE lag in complex schemas.
+ * Constraint: Depth limit for recursive path generation to prevent TypeScript
+ * recursion errors and IDE lag in complex schemas.
  */
 export type MaxDepth = 8;
 
-/** Types that stop the recursive path exploration. */
+/**
+ * Logic: Recursion Termination
+ * Types that stop the recursive path exploration.
+ */
 export type TerminalTypes =
   | Date
   | RegExp
@@ -56,9 +67,6 @@ export type Paths<T, D extends unknown[] = []> = 0 extends 1 & T
 
 /**
  * Resolves the type of a value at a given dot-path string.
- *
- * Logic: If the source type T is 'any', we resolve to 'unknown' to satisfy
- * strict type checking while acknowledging that the leaf could be anything.
  */
 export type PathValue<T, P extends string> = 0 extends 1 & T
   ? unknown
@@ -85,17 +93,55 @@ export type PathValue<T, P extends string> = 0 extends 1 & T
           ? NonNullable<T>[StringKeyToNumber<P> & keyof NonNullable<T>]
           : never;
 
+/**
+ * Security: Protects internal JS properties from being modified via dot-paths.
+ */
 const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 /**
- * Core engine for immutable deep updates.
+ * @internal
+ * Optimization: Structural Sharing
+ * Creates a shallow copy of the container and updates one of its keys.
+ * Ensures that unchanged sibling branches retain reference equality.
+ */
+function cloneAndSet(container: object, key: string, value: unknown): object {
+  if (Array.isArray(container)) {
+    const next = [...container];
+    (next as unknown as Record<string, unknown>)[key] = value;
+    return next;
+  }
+
+  if (container instanceof Map) {
+    const next = new Map(container);
+    next.set(key, value);
+    return next;
+  }
+
+  const proto = Object.getPrototypeOf(container);
+
+  // Optimization: Fast-path for plain objects (the most common case)
+  if (proto === Object.prototype || proto === null) {
+    return { ...container, [key]: value };
+  }
+
+  // Reason: Ensures class instances maintain their prototype and methods
+  // after an immutable update.
+  const next = Object.create(proto);
+  Object.assign(next, container);
+  (next as Record<string, unknown>)[key] = value;
+  return next;
+}
+
+// ============================================================================
+// Core Engine
+// ============================================================================
+
+/**
+ * Core engine for recursive immutable deep updates.
  *
- * Why:
- * It ensures structural sharing—only the path being modified is cloned.
- * Sibling branches retain reference equality, maximizing `memo` efficiency.
- *
- * Performance:
- * Returns the original `obj` if the new value is identical (via `Object.is`).
+ * Optimization: Net-zero suppression
+ * Returns the original object if the leaf value is identical (Object.is),
+ * preventing unnecessary allocation and downstream notifications.
  *
  * @internal
  */
@@ -103,45 +149,29 @@ export function setDeepValue(obj: unknown, keys: string[], index: number, value:
   if (index === keys.length) return value;
 
   const key = keys[index]!;
-  // Security: Prevent prototype pollution via malicious path segments.
-  if (FORBIDDEN_KEYS.has(key)) return obj;
 
-  // Resilience: Returns source if the path doesn't exist to prevent accidental schema creation.
-  if (obj == null || typeof obj !== 'object') return obj;
+  // Security: Prevent prototype pollution
+  // Resilience: Guard against non-object targets in the path
+  if (FORBIDDEN_KEYS.has(key) || obj == null || typeof obj !== 'object') {
+    return obj;
+  }
 
-  const curr = obj as Record<string, unknown>;
-  const oldVal = curr[key];
+  // Logic: Heterogeneous Collection Support
+  // Uniformly handles entries for both standard objects and Map instances.
+  const oldVal = obj instanceof Map ? obj.get(key) : (obj as Record<string, unknown>)[key];
   const newVal = setDeepValue(oldVal, keys, index + 1, value);
 
-  if (Object.is(oldVal, newVal)) return obj;
-
-  if (Array.isArray(curr)) {
-    const next = [...curr];
-    (next as unknown as Record<string, unknown>)[key] = newVal;
-    return next;
+  if (Object.is(oldVal, newVal)) {
+    return obj;
   }
 
-  if (curr instanceof Map) {
-    const next = new Map(curr);
-    next.set(key, newVal);
-    return next;
-  }
-
-  if (curr instanceof Set) {
-    const next = new Set(curr);
-    (next as unknown as Record<string, unknown>)[key] = newVal;
-    return next;
-  }
-
-  // Why Object.create: Ensures that class instances keep their methods/prototype
-  // after an immutable update.
-  const next = Object.create(Object.getPrototypeOf(curr));
-  Object.assign(next, curr);
-  next[key] = newVal;
-  return next;
+  return cloneAndSet(obj as object, key, newVal);
 }
 
 /**
+ * Reads a value from a nested path.
+ * Supports standard property access and Map.get().
+ *
  * @internal
  */
 export function getPathValue(source: unknown, parts: string[]): unknown {
@@ -157,32 +187,32 @@ export function getPathValue(source: unknown, parts: string[]): unknown {
   }
   return res;
 }
-
 /**
  * Creates a reactive, two-way Lens into a nested atom property.
  *
  * When to use:
- * - When you need to pass a specific sub-field (e.g., `user.address.zip`) to a component.
- * - To prevent a component from re-rendering when unrelated parts of the root state change.
+ * - When a component only needs a specific sub-field of a complex state object.
+ * - To implement "noise filtering": the lens only notifies subscribers if its
+ *   specific nested value changes, even if other parts of the root atom update.
+ * - For type-safe deep state management.
  *
- * Behavior:
- * - Updates to the lens propagate immutably to the root atom.
- * - Subscriptions only trigger if the specific nested value changes (Noise Filtering).
+ * @param atom - The root WritableAtom to project from.
+ * @param path - A dot-separated string representing the path to the nested property.
  *
- * Example:
- * ```ts
- * const userAtom = atom({ profile: { name: 'Alice', age: 25 } });
- * const nameLens = atomLens(userAtom, 'profile.name');
+ * @example
+ * const user = atom({ profile: { name: 'Alice', score: 10 } });
+ * const scoreLens = atomLens(user, 'profile.score');
  *
- * nameLens.subscribe(name => console.log(`Name is now ${name}`));
- * nameLens.value = 'Bob'; // Updates root userAtom; triggers console.log
- * ```
+ * $.effect(() => console.log('Score:', scoreLens.value));
+ * scoreLens.value = 20; // Propagates to 'user' atom.
  */
 export function atomLens<T extends object, P extends Paths<T>>(
   atom: WritableAtom<T>,
   path: P
 ): WritableAtom<PathValue<T, P>> {
   const parts = (path as string).split('.');
+
+  // Security: Pre-validate path segments to prevent access to forbidden keys.
   const isDangerous = parts.some((p) => FORBIDDEN_KEYS.has(p));
 
   const listeners = new Set<(nv: unknown, ov: unknown) => void>();
@@ -192,13 +222,12 @@ export function atomLens<T extends object, P extends Paths<T>>(
   const getValue = (source: unknown) => (isDangerous ? undefined : getPathValue(source, parts));
 
   /**
-   * Propagates changes from the root atom to lens subscribers.
-   * Logic: Performs an Object.is check on the leaf value to filter out noise from
-   * other branches of the root object.
+   * Logic: Noise Filtering
+   * Only triggers lens subscribers if the resolved leaf value is different
+   * from the previously tracked value.
    */
-  const notify = (nextParent?: T) => {
-    if (nextParent === undefined) return;
-    const nv = getValue(nextParent);
+  const notify = () => {
+    const nv = getValue(atom.peek());
     if (!Object.is(nv, prevValue)) {
       const ov = prevValue;
       prevValue = nv;
@@ -214,11 +243,17 @@ export function atomLens<T extends object, P extends Paths<T>>(
       if (isDangerous) return;
       const cur = atom.peek();
       const next = setDeepValue(cur, parts, 0, newVal);
-      if (next !== cur) atom.value = next as T;
+
+      // Optimization: Only write to root if the mutation resulted in a new reference.
+      if (next !== cur) {
+        atom.value = next as T;
+      }
     },
     peek: () => getValue(atom.peek()),
     subscribe(listener: (nv: unknown, ov: unknown) => void) {
-      // Lazy Subscription: Only listens to the root atom if the lens has its own subscribers.
+      // Optimization: Lazy Subscription
+      // The lens only subscribes to the root atom when it has its first listener.
+      // It detaches automatically when the last listener disappears.
       if (listeners.size === 0) {
         prevValue = getValue(atom.peek());
         sharedUnsub = atom.subscribe(notify);
@@ -234,7 +269,7 @@ export function atomLens<T extends object, P extends Paths<T>>(
     },
     subscriberCount: () => listeners.size,
     dispose: () => {
-      if (sharedUnsub) sharedUnsub();
+      sharedUnsub?.();
       sharedUnsub = null;
       listeners.clear();
     },
@@ -243,13 +278,22 @@ export function atomLens<T extends object, P extends Paths<T>>(
 }
 
 /**
- * Chains a lens with a further sub-path.
+ * Chains a lens with a further sub-path to create a more specific lens.
+ *
+ * @example
+ * const userLens = atomLens(rootAtom, 'user');
+ * const nameLens = composeLens(userLens, 'name');
  */
 export const composeLens = <T extends object, P extends Paths<T>>(lens: WritableAtom<T>, path: P) =>
   atomLens(lens, path);
 
 /**
- * Creates a factory for generating multiple lenses from a single root atom.
+ * Creates a factory function for generating multiple lenses from a single root atom.
+ *
+ * @example
+ * const fromUser = lensFor(userAtom);
+ * const nameLens = fromUser('name');
+ * const ageLens = fromUser('age');
  */
 export const lensFor =
   <T extends object>(atom: WritableAtom<T>) =>
