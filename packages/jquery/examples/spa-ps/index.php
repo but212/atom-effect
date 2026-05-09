@@ -11,7 +11,7 @@
     href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&family=Inter:ital,wght@0,100..900;1,100..900&display=swap"
     rel="stylesheet" />
   <script src="https://code.jquery.com/jquery-4.0.0.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.32.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.32.1"></script>
   <link rel="stylesheet" href="./styles.css" />
 
   <style>
