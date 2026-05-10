@@ -1,15 +1,7 @@
 import { SlotBuffer } from '@but212/atom-effect-utils';
 import { COMPUTED_STATE_FLAGS, IS_DEV } from '@/constants';
-import type { Dependency } from '@/types';
+import type { DepBufferState, Dependency, DependencyLink, Indexer } from '@/types';
 import { debug } from '@/utils/debug';
-import type { DependencyLink } from './tracking';
-
-/** @internal */
-export interface Indexer {
-  get(dep: Dependency): number | undefined;
-  set(dep: Dependency, index: number): void;
-  delete(dep: Dependency): void;
-}
 
 const NullIndexer: Indexer = {
   get: () => undefined,
@@ -18,31 +10,6 @@ const NullIndexer: Indexer = {
 };
 
 class MapIndexer extends Map<Dependency, number> implements Indexer {}
-
-/**
- * Logic: Subscription Reconciliation State
- * Orchestrates the transition of dependencies between execution cycles.
- * @internal
- */
-export interface DepBufferState {
-  /**
-   * Ordered sequence of active subscriptions.
-   * Optimization: Uses SlotBuffer for contiguous memory and fast iteration.
-   */
-  slots: SlotBuffer<DependencyLink>;
-  /**
-   * Optimization: O(1) Lookup
-   * Always present via Indexer interface to avoid branching.
-   * Switched to NullIndexer when inactive.
-   */
-  map: Indexer;
-  /**
-   * Optimization: Skip Check
-   * When false, indicates no computed nodes are present, allowing the engine
-   * to skip recursive dirty validation.
-   */
-  hasComputeds: boolean;
-}
 
 /**
  * Factory for dependency buffers.

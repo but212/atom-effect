@@ -1,4 +1,4 @@
-import type { Equal, If, Merge, Prettify } from '@but212/atom-effect-utils';
+import type { Equal, If, Merge, Prettify, SlotBuffer } from '@but212/atom-effect-utils';
 import type { AsyncState } from '@/constants';
 import { BRAND } from '@/symbols';
 
@@ -211,9 +211,6 @@ export interface EffectOptions {
   onError?: (error: unknown) => void;
 }
 
-/**
- * Handle for a managed reactive effect.
- */
 export interface EffectObject extends Disposable {
   /** @internal */
   readonly [BRAND]?: number;
@@ -226,6 +223,107 @@ export interface EffectObject extends Disposable {
   /** True while the effect function is running. */
   readonly isExecuting: boolean;
 }
+
+/**
+ * A handle for an active listener on a reactive node.
+ * Uses Kind-based structure for data-driven dispatch.
+ * @internal
+ */
+export interface Subscription<T> {
+  /** The kind of subscriber (0: Function, 1: Object). */
+  readonly k: number;
+  /** The subscriber target (callback or Subscriber object). */
+  readonly t: ((newValue?: T, oldValue?: T) => void) | Subscriber;
+}
+
+/**
+ * Represents a single directed edge in the dependency graph (Subscriber -> Dependency).
+ * @internal
+ *
+ * Logic: Includes a version field to implement efficient stale checks.
+ * If the dependency's version doesn't match this version, the subscriber may need re-evaluation.
+ */
+export interface DependencyLink {
+  /** The node being watched. */
+  node: Dependency;
+  /** The version of the node when this link was established. */
+  version: number;
+  /** Cleanup function returned by the dependency. */
+  unsub: (() => void) | undefined;
+}
+
+/** @internal */
+export interface Indexer {
+  get(dep: Dependency): number | undefined;
+  set(dep: Dependency, index: number): void;
+  delete(dep: Dependency): void;
+}
+
+/**
+ * Logic: Subscription Reconciliation State
+ * Orchestrates the transition of dependencies between execution cycles.
+ * @internal
+ */
+export interface DepBufferState {
+  /**
+   * Ordered sequence of active subscriptions.
+   * Optimization: Uses SlotBuffer for contiguous memory and fast iteration.
+   */
+  slots: SlotBuffer<DependencyLink>;
+  /**
+   * Optimization: O(1) Lookup
+   * Always present via Indexer interface to avoid branching.
+   * Switched to NullIndexer when inactive.
+   */
+  map: Indexer;
+  /**
+   * Optimization: Skip Check
+   * When false, indicates no computed nodes are present, allowing the engine
+   * to skip recursive dirty validation.
+   */
+  hasComputeds: boolean;
+}
+
+/**
+ * The base structure for any reactive node in the graph.
+ *
+ * Caution: Property order is strictly enforced for V8 performance.
+ * Do not reorder fields without profiling hot-paths.
+ */
+export interface ReactiveNode<T> {
+  flags: number;
+  version: number;
+  _lastSeenEpoch: number;
+  _nextEpoch: number | undefined;
+  readonly id: DependencyId;
+  _storage: {
+    slots: SlotBuffer<Subscription<T>> | null;
+    deps: DepBufferState | null;
+  };
+}
+
+/**
+ * Interface for nodes capable of recording reactive dependencies during execution.
+ * @internal
+ */
+export interface DependencySubscriber {
+  addDependency(dep: Dependency): void;
+}
+
+/**
+ * Interface for nodes that can be scheduled for re-execution.
+ * @internal
+ */
+export interface ExecutableSubscriber {
+  execute(): void;
+}
+
+/**
+ * Unified interface for nodes that both consume dependencies and execute logic.
+ * (e.g., Effects, Computed Atoms, Observers)
+ * @internal
+ */
+export interface DependencyTracker extends DependencySubscriber, ExecutableSubscriber {}
 
 /** Diagnostic metrics for memory and resource management. @internal */
 export interface PoolStats {

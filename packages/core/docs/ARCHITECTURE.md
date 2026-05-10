@@ -8,7 +8,7 @@ This document describes the internal architecture of `@but212/atom-effect`. It d
 
 The high-level API (`atom`, `computed`, `effect`) is built upon a unified internal execution engine designed for V8 performance and memory efficiency.
 
-- **Unified Base Class**: All reactive primitives are specialized instances of the internal **`ReactiveNode`** class. This ensures a consistent memory layout (Hidden Class Monomorphism), allowing the JavaScript engine to optimize property access.
+- **Unified Core Interface**: All reactive primitives implement the internal **`ReactiveNode`** interface. This ensures a consistent data structure and property layout across different node types, allowing the engine to handle them uniformly and efficiently.
 - **Push-Pull Hybrid Model**:
   - **Push (Notification Phase)**: When a source atom changes, it propagates a "dirty" signal to its immediate subscribers. This phase marks nodes for re-evaluation without performing calculations.
   - **Pull (Evaluation Phase)**: When a node's value is accessed or an effect executes, it performs a "pull" to validate the versions of its dependencies, triggering re-computation only if necessary.
@@ -33,10 +33,10 @@ The system is designed around autonomous nodes that manage their own state and d
 
 ### Class Hierarchy
 
-- **`ReactiveNode<T>`**: The foundation for all primitives. It manages subscriber lists (`_slots`) and the dependency tracking state (`_deps`). It implements the `Disposable` interface for resource cleanup.
-- **`AtomImpl<T>`**: A pure producer node for mutable state. It keeps its dependency list (`_deps`) null to save memory. It handles synchronous re-entrancy through a breadth-first notification loop.
+- **`ReactiveNode<T>`**: The foundation for all primitives. It defines a standardized data structure including versioning, status flags, and a dedicated `_storage` object for managing subscriber lists and dependency buffers.
+- **`AtomImpl<T>`**: A pure producer node for mutable state. It keeps its dependency list (`_storage.deps`) null to save memory. It handles synchronous re-entrancy through a breadth-first notification loop.
 - **`ComputedAtomImpl<T>`**: A hybrid node that acts as both a consumer (of dependencies) and a producer (of derived values). It manages lazy evaluation and result caching.
-- **`EffectImpl`**: A pure consumer node for side effects. It keeps its subscriber list (`_slots`) null as it is a terminal node in the graph.
+- **`EffectImpl`**: A pure consumer node for side effects. It keeps its subscriber list (`_storage.slots`) null as it is a terminal node in the graph.
 
 ---
 

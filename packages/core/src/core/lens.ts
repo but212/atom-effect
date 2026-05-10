@@ -1,8 +1,8 @@
 import { shallowEqual } from '@but212/atom-effect-utils';
+import { batch } from '@/core/base';
 import { BRAND, BrandFlags } from '@/symbols';
 import type { Equal, MergedDependencyValue, WritableAtom } from '@/types';
 import { mergeAtomValues } from '@/utils';
-import { batch } from './scheduler';
 
 /**
  * Logic: Numeric Key Conversion

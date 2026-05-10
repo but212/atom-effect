@@ -1,10 +1,25 @@
-import { ATOM_STATE_FLAGS, IS_DEV } from '@/constants';
-import { ReactiveNode } from '@/core/base';
+import type { SlotBuffer } from '@but212/atom-effect-utils';
+import { ATOM_STATE_FLAGS, EPOCH_CONSTANTS, IS_DEV, SMI_MAX } from '@/constants';
+import {
+  nextVersion,
+  nodeNotifySubscribers,
+  nodeSubscribe,
+  scheduler,
+  schedulerIsBatching,
+  schedulerSchedule,
+  trackingContext,
+} from '@/core/base';
 import { BRAND, BrandFlags } from '@/symbols';
-import type { AtomOptions, WritableAtom } from '@/types';
-import { debug } from '@/utils/debug';
-import { nextVersion, scheduler, schedulerIsBatching, schedulerSchedule } from './scheduler';
-import { trackingContext } from './tracking';
+import type {
+  AtomOptions,
+  DepBufferState,
+  DependencyId,
+  ReactiveNode,
+  Subscriber,
+  Subscription,
+  WritableAtom,
+} from '@/types';
+import { debug, generateId, nodeIsDisposed, nodeIsNotifying, nodeSubscriberCount } from '@/utils';
 
 /**
  * Internal implementation of a {@link WritableAtom}.
@@ -15,7 +30,21 @@ import { trackingContext } from './tracking';
  *
  * @internal
  */
-class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
+class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
+  // ReactiveNode implementation
+  flags: number = 0;
+  version: number = 0;
+  _lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
+  _nextEpoch: number | undefined = undefined;
+  readonly id: DependencyId = generateId() & SMI_MAX;
+  _storage: {
+    slots: SlotBuffer<Subscription<T>> | null;
+    deps: DepBufferState | null;
+  } = {
+    slots: null,
+    deps: null,
+  };
+
   private _value: T;
   /** Optimization: Captured during mutation to allow net-zero suppression in batches. */
   private _pendingOldValue: T | undefined;
@@ -25,7 +54,6 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
   readonly [BRAND] = BrandFlags.Atom | BrandFlags.Writable;
 
   constructor(initialValue: T, options: AtomOptions<T>) {
-    super();
     this._value = initialValue;
     this._equal = options.equal ?? Object.is;
 
@@ -34,6 +62,22 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
     }
 
     debug.attachDebugInfo(this, 'atom', this.id, options.name);
+  }
+
+  get isDisposed(): boolean {
+    return nodeIsDisposed(this);
+  }
+
+  get isComputed(): boolean {
+    return false;
+  }
+
+  get isNotifying(): boolean {
+    return nodeIsNotifying(this);
+  }
+
+  get hasError(): boolean {
+    return false;
   }
 
   /** @internal */
@@ -66,11 +110,19 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
     this._scheduleNotification(oldValue);
   }
 
+  subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
+    return nodeSubscribe(this, listener);
+  }
+
+  subscriberCount(): number {
+    return nodeSubscriberCount(this);
+  }
+
   private _scheduleNotification(oldValue: T): void {
     const flags = this.flags;
     const SCHED = ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
 
-    if ((flags & SCHED) !== 0 || !this._slots?.length) return;
+    if ((flags & SCHED) !== 0 || !this._storage.slots?.length) return;
 
     this._pendingOldValue = oldValue;
     this.flags |= SCHED;
@@ -103,7 +155,7 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
       this.flags &= ~SCHED;
 
       if (!this._equal(next, prev)) {
-        this._notifySubscribers(next, prev);
+        nodeNotifySubscribers(this, next, prev);
       }
 
       if (!isSyncActive) break;
@@ -129,20 +181,12 @@ class AtomImpl<T> extends ReactiveNode<T> implements WritableAtom<T> {
     if ((this.flags & DISP) !== 0) return;
 
     this.flags |= DISP;
-    this._slots?.clear();
+    this._storage.slots?.clear();
 
     // Reason: Release references immediately to assist GC in large-scale state trees.
     this._value = undefined as T;
     this._pendingOldValue = undefined;
     this._equal = Object.is;
-  }
-
-  /**
-   * Logic: Atoms are leaf nodes; they change only via explicit assignment,
-   * so they never require upstream dirty checking.
-   */
-  protected override _deepDirtyCheck(): boolean {
-    return false;
   }
 }
 

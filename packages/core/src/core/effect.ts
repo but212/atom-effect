@@ -1,15 +1,38 @@
+import type { SlotBuffer } from '@but212/atom-effect-utils';
 import {
   DEBUG_CONFIG,
   EFFECT_STATE_FLAGS,
   EPOCH_CONSTANTS,
   IS_DEV,
   SCHEDULER_CONFIG,
+  SMI_MAX,
 } from '@/constants';
-import { ReactiveNode } from '@/core/base';
+import {
+  createDependencyLink,
+  currentFlushEpoch,
+  incrementFlushExecutionCount,
+  nextEpoch,
+  rollbackTrackingSubscriber,
+  runInTrackingContext,
+  scheduler,
+  schedulerSchedule,
+  trackingContext,
+} from '@/core/base';
 import { EffectError, ERROR_MESSAGES, wrapError } from '@/errors';
 import { BRAND, BrandFlags } from '@/symbols';
-import type { Dependency, EffectFunction, EffectObject, EffectOptions } from '@/types';
-import { debug } from '@/utils/debug';
+import type {
+  DepBufferState,
+  Dependency,
+  DependencyId,
+  DependencyTracker,
+  EffectFunction,
+  EffectObject,
+  EffectOptions,
+  ReactiveNode,
+  Subscriber,
+  Subscription,
+} from '@/types';
+import { debug, generateId, nodeIsDirty, nodeIsDisposed } from '@/utils';
 import { isPromise } from '@/utils/type-guards';
 import {
   claimExisting,
@@ -17,23 +40,8 @@ import {
   depBufferTruncateFrom,
   disposeAll,
   insertNew,
-  isBufferDirty,
   prepareTracking,
 } from './buffers';
-import {
-  currentFlushEpoch,
-  incrementFlushExecutionCount,
-  nextEpoch,
-  scheduler,
-  schedulerSchedule,
-} from './scheduler';
-import {
-  createDependencyLink,
-  type DependencyTracker,
-  rollbackTrackingSubscriber,
-  runInTrackingContext,
-  trackingContext,
-} from './tracking';
 
 /**
  * Internal state for tracking effect execution budgets.
@@ -119,7 +127,21 @@ export function checkEffectFrequencyLimit(
  * Implementation of a reactive side-effect.
  * @internal
  */
-class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyTracker {
+class EffectImpl implements EffectObject, DependencyTracker, Subscriber, ReactiveNode<void> {
+  // ReactiveNode implementation
+  flags: number = 0;
+  version: number = 0;
+  _lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
+  _nextEpoch: number | undefined = undefined;
+  readonly id: DependencyId = generateId() & SMI_MAX;
+  _storage: {
+    slots: SlotBuffer<Subscription<void>> | null;
+    deps: DepBufferState | null;
+  } = {
+    slots: null,
+    deps: createDepBuffer(),
+  };
+
   /** @internal */
   readonly [BRAND] = BrandFlags.Effect;
 
@@ -132,9 +154,6 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
 
   private _budget = createEffectBudgetState();
 
-  /** Buffered storage for reconciled subscriptions. @internal */
-  _deps = createDepBuffer();
-
   private _cleanup: (() => void) | null = null;
 
   private readonly _fn: EffectFunction;
@@ -146,7 +165,6 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
   private readonly _maxExecutionsPerFlush: number;
 
   constructor(fn: EffectFunction, options: EffectOptions = {}) {
-    super();
     this._fn = fn;
     this._onError = options.onError ?? null;
     this._sync = options.sync ?? false;
@@ -174,7 +192,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     this.flags |= EFFECT_STATE_FLAGS.DISPOSED;
 
     this._execCleanup();
-    if (this._deps) disposeAll(this._deps);
+    if (this._storage.deps) disposeAll(this._storage.deps!);
   }
 
   /** Total executions since initialization. */
@@ -189,7 +207,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
 
   /** True if the effect has been stopped. */
   get isDisposed(): boolean {
-    return (this.flags & EFFECT_STATE_FLAGS.DISPOSED) !== 0;
+    return nodeIsDisposed(this);
   }
 
   // --- Core Execution Pipeline ---
@@ -243,7 +261,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     if ((flags & (EFFECT_STATE_FLAGS.DISPOSED | EFFECT_STATE_FLAGS.EXECUTING)) !== 0) return false;
 
     // Logic: Skip execution if not forced and no actual changes detected.
-    if (!(force || this._deps.slots.length === 0 || this._isDirty())) return false;
+    if (!(force || this._storage.deps!.slots.length === 0 || nodeIsDirty(this))) return false;
 
     this._validateBudget();
     debug.trackUpdate(this.id, debug.getDebugName(this));
@@ -261,7 +279,7 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
     dep._lastSeenEpoch = this._trackEpoch;
 
     const trackIndex = this._trackCount++;
-    const deps = this._deps;
+    const deps = this._storage.deps!;
     const version = dep.version;
 
     const existing = deps.slots.at(trackIndex);
@@ -280,18 +298,18 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
   private _insertNewDependency(dep: Dependency, trackIndex: number, version: number): void {
     const unsubscribe = dep.subscribe(this._notifyCallback);
     const link = createDependencyLink(dep, version, unsubscribe);
-    insertNew(this._deps, trackIndex, link);
+    insertNew(this._storage.deps!, trackIndex, link);
   }
 
   private _startTracking(): void {
     this._trackEpoch = nextEpoch();
     this._trackCount = 0;
-    prepareTracking(this._deps);
+    prepareTracking(this._storage.deps!);
   }
 
   private _commitDeps(): void {
     try {
-      depBufferTruncateFrom(this._deps, this._trackCount);
+      depBufferTruncateFrom(this._storage.deps!, this._trackCount);
     } catch (commitErr) {
       if (IS_DEV) {
         console.warn('[atom-effect] _commitDeps failed during error recovery:', commitErr);
@@ -397,16 +415,6 @@ class EffectImpl extends ReactiveNode<void> implements EffectObject, DependencyT
         console.error(wrapError(e, EffectError, ERROR_MESSAGES.CALLBACK_ERROR_IN_ERROR_HANDLER));
       }
     }
-  }
-
-  /** @internal */
-  protected override _isDirty(): boolean {
-    return isBufferDirty(this._deps);
-  }
-
-  /** @internal */
-  protected override _deepDirtyCheck(): boolean {
-    return isBufferDirty(this._deps);
   }
 }
 
