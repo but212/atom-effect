@@ -4,16 +4,20 @@
 
 ### Core & Infrastructure
 
+#### Breaking Changes
+
+- **Build System**: Partitioned the build process into `types`, `lib` (ESM/CJS), and `bundle` (UMD) targets for better optimization. This may affect direct file references in the `dist/` directory.
+
 #### Changed
 
-- **Build System**: Partitioned the build process into `types`, `lib`, and `bundle` targets for better optimization and faster builds.
 - **Environment**: Introduced `cross-env` to ensure OS-independent build script execution.
 
 ### jQuery
 
-#### Changed
+#### Breaking Changes
 
-- **Packaging**: Externalized `@but212/atom-effect` in library builds (`es`, `cjs`) to prevent code duplication and enforce peer dependency usage.
+- **Packaging**: Externalized `@but212/atom-effect` in ESM and CJS library builds to prevent code duplication. This enforces the use of `@but212/atom-effect` as a peer dependency.
+- **CDN**: The default entry point for CDNs has changed. Use the explicit path to the UMD bundle (e.g., `<script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.32.1/dist/atom-effect-jquery.min.js"></script>`) instead of the base package URL.
 
 #### Fixed
 
