@@ -55,8 +55,12 @@ This project uses `pnpm` workspaces for dependency management and build orchestr
 # Install dependencies across all packages
 pnpm install
 
-# Build all packages in dependency order
-pnpm build
+# Build all packages (types, lib, and bundle)
+pnpm run build
+
+# Build specific targets
+pnpm run build:lib    # ESM/CJS only
+pnpm run build:bundle # UMD bundle only
 
 # Execute test suite for all projects
 pnpm test

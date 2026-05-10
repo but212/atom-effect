@@ -130,4 +130,25 @@ describe('Atom List Edge Cases', () => {
 
     $container.remove();
   });
+
+  it('should correctly render many items without losing sentinels during batchSanitize', async () => {
+    // This triggers the internal batchSanitize logic in renderItems
+    const count = 20;
+    const items = $.atom(Array.from({ length: count }, (_, i) => ({ id: i, text: `Item ${i}` })));
+    const $container = $('<div>').appendTo(document.body);
+
+    $container.atomList(items, {
+      key: 'id',
+      render: (item: { id: number; text: string }) => `<div>${item.text}</div>`,
+    });
+
+    await $.nextTick();
+
+    expect($container.children().length).toBe(count);
+    for (let i = 0; i < count; i++) {
+      expect($container.children().eq(i).text()).toBe(`Item ${i}`);
+    }
+
+    $container.remove();
+  });
 });
