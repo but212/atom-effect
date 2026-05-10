@@ -1,3 +1,17 @@
+/**
+ * @module Effects
+ *
+ * Responsibility:
+ * Orchestrates reactive side-effects that synchronize internal state changes
+ * with external systems (DOM, APIs, logging). Manages execution budgets and
+ * automated resource cleanup.
+ *
+ * Design Intent:
+ * Effects serve as terminal nodes in the reactive graph. They utilize an
+ * automated tracking phase to capture dependencies and provide a structured
+ * teardown mechanism for side-effects.
+ */
+
 import type { SlotBuffer } from '@but212/atom-effect-utils';
 import {
   BRAND,
@@ -5,6 +19,7 @@ import {
   DEBUG_CONFIG,
   EFFECT_STATE_FLAGS,
   EPOCH_CONSTANTS,
+  ERROR_MESSAGES,
   IS_DEV,
   KIND,
   SCHEDULER_CONFIG,
@@ -33,7 +48,7 @@ import type {
   Subscriber,
   Subscription,
 } from '@/types';
-import { debug, EffectError, ERROR_MESSAGES, generateId } from '@/utils';
+import { debug, EffectError, generateId } from '@/utils';
 import { isPromise } from '@/utils/type-guards';
 import { createDepBuffer, disposeAll, prepareTracking } from './buffers';
 import {
@@ -44,7 +59,7 @@ import {
 } from './scheduler';
 
 /**
- * Internal state for tracking effect execution budgets.
+ * Role: State container for monitoring effect execution health.
  * @internal
  */
 export interface EffectBudgetState {
@@ -56,7 +71,7 @@ export interface EffectBudgetState {
 }
 
 /**
- * Factory for effect budget state.
+ * Role: Factory for initializing effect budget monitors.
  * @internal
  */
 export function createEffectBudgetState(): EffectBudgetState {
@@ -70,9 +85,11 @@ export function createEffectBudgetState(): EffectBudgetState {
 }
 
 /**
- * Logic: Effect Budget Validation
- * Ensures an effect doesn't run too many times in a single flush cycle,
- * preventing infinite loops.
+ * Logic: Execution Budget Validation
+ * Enforces limits on the number of times an effect can fire within a single
+ * flush cycle. This prevents runaway reactive loops that would otherwise
+ * hang the main thread.
+ *
  * @internal
  */
 export function validateEffectBudget(
@@ -91,6 +108,7 @@ export function validateEffectBudget(
     onAbort('per-effect');
   }
 
+  // Constraint: Global safeguard against aggregate scheduler instability.
   if (incrementGlobalFlushCount() > SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH) {
     onAbort('global');
   }
@@ -99,8 +117,9 @@ export function validateEffectBudget(
 }
 
 /**
- * Logic: Frequency Limiter
- * Throttles effects that fire too rapidly in development mode.
+ * Logic: Frequency Throttling (Development Only)
+ * Detects and intercepts effects that fire at a frequency suggesting
+ * unintentional rapid updates or performance degradation.
  * @internal
  */
 export function checkEffectFrequencyLimit(
@@ -124,11 +143,10 @@ export function checkEffectFrequencyLimit(
 }
 
 /**
- * Implementation of a reactive side-effect.
+ * Role: Orchestrator for a reactive side-effect.
  * @internal
  */
 class EffectImpl implements EffectObject, DependencyTracker, Subscriber, ReactiveNode<void> {
-  // ReactiveNode implementation
   flags: number = 0;
   version: number = 0;
   _lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
@@ -177,13 +195,16 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
     debug.attachDebugInfo(this, 'effect', this.id, options.name);
   }
 
-  // --- Public API ---
-
+  /** Triggers the effect execution immediately. */
   public run(): void {
     if (this.isDisposed) throw new EffectError(ERROR_MESSAGES.EFFECT_DISPOSED);
     this.execute(true);
   }
 
+  /**
+   * Logic: Final Resource Release
+   * Releases all dependencies and executes the current cleanup handle.
+   */
   public dispose(): void {
     if (this.isDisposed) return;
     this.flags |= EFFECT_STATE_FLAGS.DISPOSED;
@@ -197,26 +218,25 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
     return this._budget.totalExecutions;
   }
 
-  /** True if the effect function is currently on the stack. */
+  /** Returns true if the effect is currently executing its function. */
   get isExecuting(): boolean {
     return (this.flags & EFFECT_STATE_FLAGS.EXECUTING) !== 0;
   }
 
-  /** True if the effect has been stopped. */
+  /** Returns true if the effect has been permanently stopped. */
   get isDisposed(): boolean {
     return nodeIsDisposed(this);
   }
 
-  // --- Core Execution Pipeline ---
-
   /**
-   * Main execution cycle of the effect.
+   * Logic: Execution Lifecycle Orchestration
+   * Synchronizes the effect state with its captured dependencies.
    *
-   * Logic: Lifecycle Orchestration
-   * 1. Prepare: Check flags, budgets, and dirty state.
-   * 2. Cleanup: Execute previous session's teardown.
-   * 3. Track: Run user function within reactive context.
-   * 4. Finalize: Commit dependencies and handle result/error.
+   * Strategy:
+   * 1. Validate: Verify flags, budgets, and dirty state.
+   * 2. Teardown: Invoke the cleanup handle from the previous session.
+   * 3. Track: Run the user function within a tracking context.
+   * 4. Finalize: Reconcile dependencies and process the returned value.
    */
   public execute(force = false): void {
     if (!this._prepareExecution(force)) return;
@@ -235,6 +255,7 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
       try {
         val = runInTrackingContext(trackingContext, this, this._fn);
       } catch (e) {
+        // Impact: Preserves tracking context integrity if the effect crashes.
         rollbackTrackingSubscriber(trackingContext, prevDepth);
         throw e;
       }
@@ -258,7 +279,8 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
     const flags = this.flags;
     if ((flags & (EFFECT_STATE_FLAGS.DISPOSED | EFFECT_STATE_FLAGS.EXECUTING)) !== 0) return false;
 
-    // Logic: Skip execution if not forced and no actual changes detected.
+    // Logic: Selective Skipping
+    // Skip if not forced and the dependency buffer remains clean.
     if (!(force || this._storage.deps!.slots.length === 0 || nodeIsDirty(this))) return false;
 
     this._validateBudget();
@@ -268,15 +290,16 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
     return true;
   }
 
-  // --- Dependency Management ---
-
+  /** Registers a dependency during the tracking session. */
   public addDependency(dep: Dependency): void {
     if (!this.isExecuting) return;
     nodeTrackDependency(this, dep, this._notifyCallback);
   }
 
-  // --- Result & Cleanup Handling ---
-
+  /**
+   * Logic: Resolution Handling
+   * Synchronously assigns the cleanup handle or delegates to the async handler.
+   */
   private _handleResult(val: unknown): void {
     if (typeof val === 'function') {
       this._cleanup = val as () => void;
@@ -287,12 +310,20 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
     }
   }
 
+  /**
+   * Logic: Async Cleanup Tracking
+   * Orchestrates cleanup handles returned from Promises. Uses session IDs
+   * to discard stale handles from invalidated tracking cycles.
+   */
   private _handleAsyncResult(promise: Promise<unknown>): void {
     const sessionId = ++this._trackSessionId;
 
     promise.then(
       (cleanup) => {
         if (this._trackSessionId !== sessionId || this.isDisposed) {
+          // Logic: Stale or Disposed Teardown
+          // If the handle arrived after a new session started, it is invoked
+          // immediately and discarded to prevent memory leaks.
           if (typeof cleanup === 'function') {
             try {
               cleanup();
@@ -326,8 +357,6 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
     }
   }
 
-  // --- Budget & Safeguards ---
-
   private _validateBudget(): void {
     validateEffectBudget(
       this._budget,
@@ -347,6 +376,11 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
     }
   }
 
+  /**
+   * Logic: Safety Interruption
+   * Terminates the effect and signals a terminal failure to prevent
+   * system-wide instability from infinite loops.
+   */
   private _abortExecution(type: 'per-effect' | 'global'): never {
     const message =
       type === 'per-effect'
@@ -368,23 +402,31 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
 }
 
 /**
- * Creates a reactive side-effect.
+ * Creates a reactive side-effect to synchronize state with external systems.
  *
  * When to use:
- * - To synchronize reactive state with the DOM or external APIs.
- * - To perform logging or diagnostic tasks.
- * - To manage timers or subscriptions that depend on atom values.
+ * - To update the DOM or integrate with third-party libraries.
+ * - To perform logging, monitoring, or diagnostic tasks.
+ * - To manage timers, network requests, or global subscriptions.
+ *
+ * @param fn - The function to execute. Can return a synchronous or asynchronous cleanup handle.
+ * @param options - Configuration for execution limits, custom error handlers, and sync delivery.
+ * @returns An `EffectObject` to manually run or dispose of the effect.
  *
  * @example
  * ```typescript
- * const count = atom(0);
- * effect(() => {
- *   const el = document.getElementById('display')!;
- *   el.textContent = `Value: ${count.value}`;
+ * import { atom, effect } from '@but212/atom-effect';
  *
- *   // Optional teardown
- *   return () => console.log('Cleaning up effect...');
+ * const count = atom(0);
+ *
+ * effect(() => {
+ *   console.log('Value changed:', count.value);
+ *
+ *   // Optional teardown called before the next run or on disposal
+ *   return () => console.log('Cleaning up...');
  * });
+ *
+ * count.value++; // Triggers "Value changed: 1"
  * ```
  */
 export function effect(fn: EffectFunction, options: EffectOptions = {}): EffectObject {

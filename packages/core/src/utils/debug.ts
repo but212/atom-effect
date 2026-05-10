@@ -1,38 +1,27 @@
-import { BRAND, BrandFlags, DEBUG_CONFIG, IS_DEV } from '@/constants';
-import type { DebugConfig, DependencyId } from '@/types';
+/**
+ * @module Debug
+ *
+ * Responsibility:
+ * Provides diagnostic utilities for development, including graph visualization,
+ * infinite loop detection, and node identification.
+ *
+ * Design Intent:
+ * Decouples diagnostic state from reactive nodes to prevent de-optimization
+ * in the V8 hot-path. Uses a zero-cost replacement (ProdDebugController)
+ * in production environments.
+ */
 
-// ── Debug Symbols ────────────────────────────────────────────────────────
-
-/** Sentinel value used to distinguish between 'undefined' and 'not set'. */
-export const NO_DEFAULT_VALUE = Symbol('AtomEffect.NoDefaultValue');
-
-/** @internal */
-interface NodeMetadata {
-  name: string;
-  type: string;
-  ref?: WeakRef<object>;
-}
-
-const TYPE_BY_BRAND: Record<number, string> = {
-  [BrandFlags.Atom]: 'atom',
-  [BrandFlags.Computed]: 'computed',
-  [BrandFlags.Effect]: 'effect',
-};
-
-const BRAND_MASK = BrandFlags.Atom | BrandFlags.Computed | BrandFlags.Effect;
-
-const PREFIX = '[Atom Effect]';
+import { BRAND, BRAND_MASK, DEBUG_CONFIG, DEBUG_PREFIX, IS_DEV, TYPE_BY_BRAND } from '@/constants';
+import type { DebugConfig, DependencyId, NodeMetadata } from '@/types';
 
 /** Shared no-op function to reduce memory pressure in production. @internal */
 const noop = () => {};
 
 /**
- * Controller for development-time diagnostics.
+ * Role: Primary diagnostic engine used during development.
  *
- * Responsibilities:
- * - Detecting infinite reactive loops.
- * - Tracking the global dependency graph.
- * - Mapping unique IDs to human-readable names.
+ * Manages the lifecycle of debug metadata and enforces runtime constraints
+ * such as infinite loop detection.
  *
  * @internal
  */
@@ -45,18 +34,22 @@ class DevDebugController implements DebugConfig {
   private _updateCounts = new Map<DependencyId, number>();
 
   /**
-   * External storage for metadata.
-   * Reason: Keeps the reactive objects 'thin' and prevents de-optimization.
+   * Reason: Decoupling metadata from reactive objects prevents object shape
+   * changes (transitions) that could lead to V8 de-optimization.
    */
   private _registry = new Map<DependencyId, NodeMetadata>();
 
   /**
-   * Enables full graph inspection via `dumpGraph()`.
-   * Warning: High overhead. Only enable during deep debugging.
+   * Impact: Enabling this increases memory overhead as it prevents
+   * immediate GC of metadata until the node is fully collected.
    */
   public trackGraph = false;
 
-  /** Automatically purges metadata when a reactive node is garbage collected. */
+  /**
+   * Logic: Memory Management
+   * Automatically purges diagnostic metadata when the associated reactive
+   * node is garbage collected to prevent memory leaks in long-running dev sessions.
+   */
   private _finalizer = new FinalizationRegistry((id: DependencyId) => {
     this._registry.delete(id);
     this._updateCounts.delete(id);
@@ -69,14 +62,18 @@ class DevDebugController implements DebugConfig {
   private _failedEvaluations = new Set<DependencyId>();
   private _failureCleanupScheduled = false;
 
+  /**
+   * Standardized warning logger for the library.
+   */
   public warn(cond: boolean, msg: string): void {
     if (this.enabled && cond) {
-      console.warn(`${PREFIX} ${msg}`);
+      console.warn(`${DEBUG_PREFIX} ${msg}`);
     }
   }
 
   /**
-   * Tracks a live node in the registry for graph visualization.
+   * Registers a node for lifecycle tracking.
+   * Required for graph visualization and automatic cleanup.
    */
   public registerNode(node: object & { id: DependencyId }): void {
     const id = node.id;
@@ -87,7 +84,12 @@ class DevDebugController implements DebugConfig {
   }
 
   /**
-   * Links internal IDs to labels and types.
+   * Attaches human-readable labels and type information to a node.
+   *
+   * @param obj - The reactive node to label.
+   * @param type - The node type (e.g., 'atom', 'computed').
+   * @param id - Internal unique identifier.
+   * @param customName - Optional user-provided label.
    */
   public attachDebugInfo(obj: object, type: string, id: DependencyId, customName?: string): void {
     if (!this.enabled || (customName === undefined && !this.trackGraph)) return;
@@ -101,16 +103,16 @@ class DevDebugController implements DebugConfig {
       entry.type = type;
     }
 
-    // Always register for finalization if we are keeping metadata to avoid memory leaks.
-    // This also ensures entry.ref is populated for consistent dumpGraph() behavior.
     this.registerNode(obj as object & { id: DependencyId });
   }
 
   /**
-   * Monitors update frequency to prevent UI hangs.
+   * Monitors update frequency to detect and warn about infinite reactive loops.
    *
-   * Logic: Counts updates per node and resets via microtask.
-   * If a node exceeds the threshold before the microtask runs, a loop is suspected.
+   * Logic: Cycle-based Threshold
+   * Increments an update counter for the given ID. A microtask is scheduled
+   * to reset all counters at the end of the current execution cycle. If a
+   * counter exceeds the threshold before the reset, a loop is suspected.
    */
   public trackUpdate(id: DependencyId, name?: string): void {
     if (!this.enabled || !this.warnInfiniteLoop) return;
@@ -120,10 +122,12 @@ class DevDebugController implements DebugConfig {
     counts.set(id, count);
 
     if (count > this._threshold) {
-      // Only warn once per cycle to prevent console spam.
+      // Logic: Warning Deduplication
+      // Only warns once per cycle when the threshold is first crossed
+      // to avoid flooding the console during an active loop.
       if (count === this._threshold + 1) {
         console.warn(
-          `${PREFIX} Infinite loop detected for ${name ?? `dependency ${id}`}. ` +
+          `${DEBUG_PREFIX} Infinite loop detected for ${name ?? `dependency ${id}`}. ` +
             `Detected ${count} updates within a single execution scope, exceeding the threshold of ${this._threshold}.`
         );
       }
@@ -131,7 +135,8 @@ class DevDebugController implements DebugConfig {
 
     if (!this._cleanupScheduled) {
       this._cleanupScheduled = true;
-      // Task scheduled at the end of the current execution cycle.
+      // Constraint: Must be cleared at the end of the microtask queue
+      // to ensure all synchronous updates in the current tick are counted.
       queueMicrotask(this._resetUpdateCounts);
     }
   }
@@ -143,13 +148,15 @@ class DevDebugController implements DebugConfig {
 
   /**
    * Logic: Warning Deduplication
-   * Records evaluation failures during dirty checks and warns once per dependency per cycle.
+   * Records evaluation failures during dirty checks. Failures are tracked
+   * in a Set and cleared via microtask to ensure only one warning per
+   * dependency is emitted per execution cycle.
    */
   public trackEvaluationFailure(id: DependencyId): void {
     if (!this.enabled || this._failedEvaluations.has(id)) return;
 
     this._failedEvaluations.add(id);
-    console.warn(`${PREFIX} Dependency #${id} evaluation failed during dirty check.`);
+    console.warn(`${DEBUG_PREFIX} Dependency #${id} evaluation failed during dirty check.`);
 
     if (!this._failureCleanupScheduled) {
       this._failureCleanupScheduled = true;
@@ -163,10 +170,20 @@ class DevDebugController implements DebugConfig {
   };
 
   /**
-   * Captures the current state of all active reactive nodes.
+   * Captures a snapshot of all active reactive nodes and their diagnostic state.
    *
-   * Performance: O(N) where N is the number of live nodes.
-   * Use sparingly.
+   * Optimization: Performs a linear scan O(N) of the metadata registry.
+   * Performance impact is proportional to the number of live reactive nodes.
+   *
+   * @returns An array of diagnostic records for active nodes.
+   *
+   * @example
+   * ```typescript
+   * import { debug } from '@but212/atom-effect';
+   *
+   * // Inspect the current state of the reactive graph
+   * console.table(debug.dumpGraph());
+   * ```
    */
   public dumpGraph(): Record<string, unknown>[] {
     const registry = this._registry;
@@ -176,6 +193,7 @@ class DevDebugController implements DebugConfig {
     const counts = this._updateCounts;
 
     for (const [id, meta] of registry) {
+      // Skip entries that have been garbage collected if graph tracking is strict.
       if (this.trackGraph && meta.ref?.deref() === undefined) {
         continue;
       }
@@ -189,6 +207,10 @@ class DevDebugController implements DebugConfig {
     return result;
   }
 
+  /**
+   * Retrieves the human-readable name of a reactive node.
+   * Fallback: Returns a generated name based on the node's type and ID.
+   */
   public getDebugName(obj: object | null | undefined): string | undefined {
     if (!this.enabled || !obj) return undefined;
     const id = (obj as { id?: DependencyId }).id;
@@ -201,6 +223,9 @@ class DevDebugController implements DebugConfig {
     return `${type}_${id}`;
   }
 
+  /**
+   * Retrieves the diagnostic type of a reactive node.
+   */
   public getDebugType(obj: object | null | undefined): string | undefined {
     if (!this.enabled || !obj) return undefined;
     const id = (obj as { id?: DependencyId }).id;
@@ -229,8 +254,12 @@ class DevDebugController implements DebugConfig {
 }
 
 /**
- * Inert implementation for production.
- * Replaces all logic with no-ops to ensure the JIT compiler can optimize them away.
+ * Role: Production-safe replacement for the debug controller.
+ *
+ * Logic: Dead-Code Elimination
+ * All methods are no-ops. When bundled for production, modern minifiers
+ * and JIT compilers can inline these calls or remove them entirely,
+ * ensuring zero runtime overhead.
  */
 const ProdDebugController: DebugConfig = {
   enabled: false,
@@ -247,13 +276,21 @@ const ProdDebugController: DebugConfig = {
 };
 
 /**
- * Global diagnostic hub.
+ * Global diagnostic hub for the atom-effect library.
+ *
+ * When to use:
+ * - Debugging infinite reactive loops in development.
+ * - Inspecting the active reactive graph via `dumpGraph()`.
+ * - Monitoring evaluation failures during dirty checks.
  *
  * @example
  * ```typescript
  * import { debug } from '@but212/atom-effect';
  *
- * // View all active nodes in the console
+ * // Enable graph tracking (disabled by default due to overhead)
+ * debug.trackGraph = true;
+ *
+ * // View all active nodes
  * console.table(debug.dumpGraph());
  * ```
  */
@@ -263,6 +300,9 @@ export const debug: DebugConfig = IS_DEV ? new DevDebugController() : ProdDebugC
 let nextId = 1;
 
 /**
- * Generates an internal unique ID for a reactive node.
+ * Logic: Stable Identification
+ * Generates an internal unique ID for a reactive node. These IDs are
+ * used to map metadata in the debug registry without holding strong
+ * references to the nodes themselves.
  */
 export const generateId = (): DependencyId => nextId++ as DependencyId;

@@ -6,17 +6,20 @@
 import { describe, expect, it } from 'vitest';
 import {
   AtomError,
+  type AtomErrorJSON,
   atom,
   ComputedError,
   computed,
   EffectError,
   effect,
+  getErrorChain,
   isAtom,
   isComputed,
   isEffect,
   isPromise,
   isWritable,
   SchedulerError,
+  serializeError,
 } from '@/index';
 
 describe('Error Handling System', () => {
@@ -24,16 +27,17 @@ describe('Error Handling System', () => {
 
   describe('Error Hierarchy', () => {
     const errorTypes = [
-      { Class: AtomError, name: 'AtomError', recoverable: true },
-      { Class: ComputedError, name: 'ComputedError', recoverable: true },
-      { Class: EffectError, name: 'EffectError', recoverable: false },
-      { Class: SchedulerError, name: 'SchedulerError', recoverable: false },
+      { Class: AtomError, name: 'AtomError', recoverable: true, tag: 'AtomError' },
+      { Class: ComputedError, name: 'ComputedError', recoverable: true, tag: 'ComputedError' },
+      { Class: EffectError, name: 'EffectError', recoverable: false, tag: 'EffectError' },
+      { Class: SchedulerError, name: 'SchedulerError', recoverable: false, tag: 'SchedulerError' },
     ] as const;
 
     it.each(errorTypes)('$name confirms inheritance, default state, and optional parameters', ({
       Class,
       name,
       recoverable: defaultRecoverable,
+      tag,
     }) => {
       const cause = new Error('root');
 
@@ -41,6 +45,7 @@ describe('Error Handling System', () => {
       const err = new Class('msg', cause);
       expect(err).toBeInstanceOf(AtomError);
       expect(err.name).toBe(name);
+      expect(err._tag).toBe(tag);
       expect(err.recoverable).toBe(defaultRecoverable);
       expect(err.cause).toBe(cause);
 
@@ -84,16 +89,16 @@ describe('Error Handling System', () => {
   // ── Traceability & Serialization ───────────────────────────────────────────
 
   describe('Advanced Features', () => {
-    it('getChain handles falsy causes and prevents circular loops', () => {
+    it('getErrorChain handles falsy causes and prevents circular loops', () => {
       // Falsy cause preservation
-      expect(new AtomError('m', 0).getChain()[1]).toBe(0);
+      expect(getErrorChain(new AtomError('m', 0))[1]).toBe(0);
 
       // Circularity protection
       const err1 = new AtomError('1');
       const err2 = new AtomError('2', err1);
       (err1 as unknown as { cause: unknown }).cause = err2;
 
-      const chain = err1.getChain();
+      const chain = getErrorChain(err1);
       expect(chain).toHaveLength(2);
       expect(chain[chain.length - 1]).toBe(err2);
     });
@@ -103,7 +108,7 @@ describe('Error Handling System', () => {
         'top',
         new ComputedError('mid', new TypeError('native'), true, 'C1')
       );
-      const json = top.toJSON();
+      const json = serializeError(top) as AtomErrorJSON;
 
       expect(json.message).toBe('top');
       const mid = json.cause as { code?: string; cause?: { name?: string; stack?: string } };

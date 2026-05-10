@@ -1,23 +1,20 @@
 /**
- * Core Reactive Engine
+ * @module BaseEngine
  *
  * Responsibility:
- * - Orchestrates internal tracking, scheduling, and subscription propagation.
- * - Manages the global tracking stack for nested reactive contexts.
+ * Orchestrates the fundamental reactive primitives, including tracking context
+ * management, dependency registration, and subscription propagation.
  *
- * Design Goals:
- * - Glitch-free propagation via unified epoch-based scheduling.
- * - V8 SMI (Small Integer) and Hidden Class optimizations for peak performance.
- * - Atomic updates through batched notification cycles.
- *
- * Boundaries:
- * - Agnostic to node implementations (Atoms, Computeds, effects).
- * - All reactive access within this module must be synchronous.
+ * Design Intent:
+ * Provides the low-level orchestration required for glitch-free propagation
+ * and efficient memory management. Decouples node implementation from
+ * the tracking and notification logic.
  */
 
 import { SlotBuffer } from '@but212/atom-effect-utils';
-import { COMPUTED_STATE_FLAGS, IS_DEV, KIND, LOG_PREFIX } from '@/constants';
+import { COMPUTED_STATE_FLAGS, ERROR_MESSAGES, IS_DEV, KIND, LOG_PREFIX } from '@/constants';
 import type {
+  AtomErrorConstructor,
   Dependency,
   DependencyLink,
   DependencySubscriber,
@@ -31,7 +28,7 @@ import type {
   Subscription,
   TrackingContext,
 } from '@/types';
-import { AtomError, type AtomErrorConstructor, ERROR_MESSAGES, wrapError } from '@/utils';
+import { AtomError, wrapError } from '@/utils';
 import {
   claimExisting,
   depBufferTruncateFrom,
@@ -65,10 +62,9 @@ export function popTrackingSubscriber(context: TrackingContext): void {
 }
 
 /**
- * Resets the tracking stack to a specific depth.
- *
- * Why: Prevents dependency leakage during error recovery if a
- * computation fails mid-execution.
+ * Logic: Tracking Recovery
+ * Resets the tracking stack to a specific depth to prevent dependency
+ * leakage if a computation fails during execution.
  * @internal
  */
 export function rollbackTrackingSubscriber(context: TrackingContext, depth: number): void {
@@ -86,7 +82,7 @@ export function runInTrackingContext<T>(
   subscriber: DependencySubscriber,
   fn: () => T
 ): T {
-  // Optimization: Skip stack operations if already in the same context.
+  // Optimization: Skip stack operations if already in the target context.
   if (context.current === subscriber) return fn();
 
   pushTrackingSubscriber(context, subscriber);
@@ -108,12 +104,15 @@ export function createTrackingContextObject(): TrackingContext {
   return createTrackingContext();
 }
 
-/** @internal */
+/**
+ * Role: Global singleton orchestrating the current reactive tracking state.
+ * @internal
+ */
 export const trackingContext = createTrackingContext();
 
 /**
- * Dispatch table for subscriber notification strategies.
- * Avoids branch logic in hot loops.
+ * Logic: Strategy Dispatch
+ * Table-driven notification strategies to avoid branching in hot-path loops.
  * @internal
  */
 const NOTIFIER_STRATEGY: Record<
@@ -125,18 +124,25 @@ const NOTIFIER_STRATEGY: Record<
 };
 
 /**
- * Executes a scope where reactive dependencies are ignored.
+ * Executes a scope where reactive dependencies are suppressed.
  *
  * When to use:
- * - Accessing atoms without creating a subscription.
- * - Side-effects (logging) that shouldn't trigger re-runs.
- * - Breaking circular dependencies by reading "silently".
+ * - Accessing atoms without creating an automatic subscription.
+ * - Side-effects (e.g., logging) that must not trigger re-computation.
+ * - Breaking circular dependencies by performing silent reads.
  *
- * Example:
- * ```ts
+ * @param fn - The non-reactive scope to execute.
+ * @returns The value returned by the provided function.
+ *
+ * @example
+ * ```typescript
+ * import { untracked, effect } from '@but212/atom-effect';
+ *
  * effect(() => {
- *   const val = count.value; // Tracked
- *   untracked(() => console.log(count.value)); // Not tracked
+ *   const val = count.value; // Tracked dependency
+ *
+ *   // Read count without subscribing to it
+ *   untracked(() => console.log('Current value:', count.value));
  * });
  * ```
  */
@@ -161,10 +167,13 @@ export function createDependencyLink(
 }
 
 /**
- * Shared logic for registering a dependency during a reactive session.
+ * Logic: Dependency Registration
+ * Registers a dependency for the current tracker during a reactive session.
  *
- * Optimization: Uses `_lastSeenEpoch` for O(1) session-level deduplication,
- * avoiding expensive buffer lookups for already visited nodes.
+ * Optimization:
+ * Uses session-level deduplication via `_lastSeenEpoch` to avoid redundant
+ * buffer lookups for dependencies already visited in the current tick.
+ *
  * @internal
  */
 export function nodeTrackDependency<T>(
@@ -175,14 +184,15 @@ export function nodeTrackDependency<T>(
   const internal = tracker as unknown as InternalNode;
   const trackEpoch = internal._trackEpoch;
 
-  // Logic: Session-level Deduplication
-  // Avoids buffer lookup if the dependency was already seen in the current epoch.
   if (dep._lastSeenEpoch === trackEpoch) return;
   dep._lastSeenEpoch = trackEpoch;
 
   const trackIndex = internal._trackCount++;
   const deps = tracker._storage.deps!;
 
+  // Logic: Subscription Reconciliation
+  // Attempts to reuse an existing subscription from a previous run to minimize
+  // listener attachment overhead.
   if (!claimExisting(deps, dep, trackIndex)) {
     const unsubscribe = dep.subscribe(notifyCallback);
     insertNew(deps, trackIndex, { node: dep, version: dep.version, unsub: unsubscribe });
@@ -202,18 +212,20 @@ export function createSubscription<T, K extends SubscriberKind>(
 }
 
 /**
- * Generates the next version number for stateful objects.
- * Uses SMI-safe increments to prevent de-optimization.
+ * Generates the next version number for reactive state.
+ * Logic: Uses SMI-safe increments to prevent V8 hidden class de-optimization.
  */
 export function nextVersion(v: number): number {
   return nextSmi(v);
 }
 
 /**
- * Registers a subscriber to a reactive node.
+ * Attaches a subscriber to a reactive node.
  *
- * Performance: Uses a SlotBuffer to allow O(1) removal of listeners
- * during batch notifications.
+ * Optimization:
+ * Utilizes a `SlotBuffer` to support O(1) removal of listeners during
+ * high-frequency batch notification cycles.
+ *
  * @internal
  */
 export function nodeSubscribe<T>(node: ReactiveNode<T>, listener: SubscriberTarget<T>): () => void {
@@ -237,7 +249,7 @@ export function nodeSubscribe<T>(node: ReactiveNode<T>, listener: SubscriberTarg
     node._storage.slots = slots = new SlotBuffer<Subscription<T>>();
   } else if (nodeHasSubscription(node, listener)) {
     if (IS_DEV) console.warn(`${LOG_PREFIX} Duplicate subscription ignored on node ${node.id}`);
-    return () => {}; // Deduplication
+    return () => {};
   }
 
   slots.push(link);
@@ -254,11 +266,14 @@ export function nodeUnsubscribe<T>(node: ReactiveNode<T>, link: Subscription<T>)
 }
 
 /**
- * Notifies all subscribers of a node change.
+ * Logic: Subscriber Notification
+ * Synchronizes the state change across all attached subscribers.
  *
- * Safety:
- * - Locks the SlotBuffer to prevent index shifts if a subscriber unsubscribes itself during execution.
- * - Suppresses tracking during notification to prevent accidental dependency capture.
+ * Constraint: Phase Integrity
+ * 1. Locks the `SlotBuffer` to prevent index shifts if a subscriber unsubscribes itself.
+ * 2. Suppresses reactive tracking during execution to prevent accidental
+ *    dependency capture or infinite reactive loops.
+ *
  * @internal
  */
 export function nodeNotifySubscribers<T>(
@@ -273,8 +288,6 @@ export function nodeNotifySubscribers<T>(
   const prevCurrent = ctx.current;
   const isTracking = prevCurrent !== null;
 
-  // Reason: Suppress tracking during subscriber execution to prevent "reactive loops"
-  // or accidental dependencies if a subscriber reads another reactive node.
   if (isTracking) {
     ctx.stack.push(null);
     ctx.current = null;
@@ -302,10 +315,7 @@ export function nodeNotifySubscribers<T>(
   }
 }
 
-/**
- * Checks for duplicate listeners.
- * @internal
- */
+/** @internal */
 export function nodeHasSubscription<T>(node: ReactiveNode<T>, listener: unknown): boolean {
   const slots = node._storage.slots;
   if (slots === null || slots.size === 0) return false;
@@ -321,8 +331,8 @@ export function nodeHasSubscription<T>(node: ReactiveNode<T>, listener: unknown)
 }
 
 /**
- * Logic: Tracking Orchestrator - Start
- * Prepares a node for a new tracking session by initializing the epoch and resetting counters.
+ * Logic: Tracking Orchestrator - Initialization
+ * Prepares a node for a new tracking session by advancing the epoch.
  * @internal
  */
 export function nodeStartTracking<T>(node: Prettify<DependencyTracker & ReactiveNode<T>>): number {
@@ -334,8 +344,8 @@ export function nodeStartTracking<T>(node: Prettify<DependencyTracker & Reactive
 }
 
 /**
- * Logic: Tracking Orchestrator - Commit
- * Finalizes the tracking session by truncating unused dependencies.
+ * Logic: Tracking Orchestrator - Commitment
+ * Finalizes the tracking session by truncating unused dependencies from the buffer.
  * @internal
  */
 export function nodeCommitDeps<T>(node: DependencyTracker & ReactiveNode<T>): void {
@@ -355,8 +365,11 @@ export function nodeCommitDeps<T>(node: DependencyTracker & ReactiveNode<T>): vo
 /**
  * Logic: Reactive Error Boundary
  *
- * Why: Computeds increment their version on error to signal a state change
- * even if a valid value was not produced.
+ * Why:
+ * Computed nodes increment their version on error to signal a state change
+ * even if a valid value was not produced. This ensures downstream nodes
+ * can react to the failure state.
+ *
  * @internal
  */
 export function nodeHandleError<T, E extends Error>(
@@ -389,27 +402,33 @@ export function nodeHandleError<T, E extends Error>(
   nodeNotifySubscribers(node, undefined, undefined);
 }
 
+/** Returns true if the node is in a disposed state. */
 export function nodeIsDisposed<T>(node: ReactiveNode<T>): boolean {
   return (node.flags & COMPUTED_STATE_FLAGS.DISPOSED) !== 0;
 }
 
+/** Returns true if the node is a computed atom. */
 export function nodeIsComputed<T>(node: ReactiveNode<T>): boolean {
   return (node.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) !== 0;
 }
 
+/** Returns true if the node is currently broadcasting notifications. */
 export function nodeIsNotifying<T>(node: ReactiveNode<T>): boolean {
   return node._storage.slots?.isLocked ?? false;
 }
 
+/** Returns the number of active subscribers attached to the node. */
 export function nodeSubscriberCount<T>(node: ReactiveNode<T>): number {
   return node._storage.slots?.size ?? 0;
 }
 
+/** Performs a recursive check to determine if any upstream dependencies are dirty. */
 export function nodeIsDirty<T>(node: ReactiveNode<T>): boolean {
   const deps = node._storage.deps;
   return deps !== null && isBufferDirty(deps);
 }
 
+/** Performs a shallow check to determine if any upstream dependencies have pending signals. */
 export function nodeIsShallowDirty<T>(node: ReactiveNode<T>): boolean {
   const deps = node._storage.deps;
   return deps !== null && isBufferShallowDirty(deps);

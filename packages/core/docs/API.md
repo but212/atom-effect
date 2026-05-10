@@ -196,10 +196,14 @@ An exported object representing the possible states of an asynchronous computed 
 
 The library utilizes a structured error hierarchy for identifying and recovering from issues within the reactive graph.
 
+> [!IMPORTANT]
+> **Breaking Change**: Since version 0.33.0, instance methods like `AtomError.getChain()` and `AtomError.toJSON()` have been removed. Use the standalone `getErrorChain()` and `serializeError()` utilities instead.
+
 ### `AtomError`
 
 The base class for all library-specific errors.
 
+- `_tag`: String discriminator for cross-realm identification (e.g., `'AtomError'`, `'ComputedError'`).
 - `message`: Description of the error.
 - `cause`: The underlying error or value that triggered the failure.
 - `recoverable`: Boolean indicating if the system can recover if dependencies change.
@@ -210,6 +214,11 @@ The base class for all library-specific errors.
 - `ComputedError`: Errors occurring during computed value evaluation.
 - `EffectError`: Errors occurring during effect execution or cleanup.
 - `SchedulerError`: Errors from the internal execution engine (e.g., infinite loop detection).
+
+### Utility Functions
+
+- `getErrorChain(error: unknown): Array<unknown>`: Traverses the `.cause` chain to reconstruct the full error trace. Handles circular references.
+- `serializeError(error: unknown): AtomErrorJSON | unknown`: Converts an error into a plain JSON-serializable object. Replaces circular references with a sentinel object.
 
 ---
 

@@ -1,3 +1,16 @@
+/**
+ * @module LensEngine
+ *
+ * Responsibility:
+ * Provides two-way reactive lenses for type-safe deep state management.
+ * Orchestrates immutable deep updates with structural sharing and path flattening.
+ *
+ * Design Intent:
+ * Enables granular subscriptions to nested properties of complex state objects,
+ * minimizing re-renders and preventing prototype pollution through strict
+ * security guards.
+ */
+
 import { shallowEqual } from '@but212/atom-effect-utils';
 import { BRAND, BrandFlags, DEFAULT_EQUAL, type LENS_CONFIG } from '@/constants';
 import { batch } from '@/index';
@@ -6,13 +19,13 @@ import { mergeAtomValues } from '@/utils';
 
 /**
  * Logic: Numeric Key Conversion
- * Casts numeric string literals to numbers for correct array index typing.
+ * Casts numeric string literals to numbers to ensure correct array index typing.
  */
 export type StringKeyToNumber<S extends string> = S extends `${infer N extends number}` ? N : S;
 
 /**
  * Logic: Broad Index Detection
- * Detects if a type has a broad string indexer (e.g., Record<string, any>).
+ * Detects if a type contains a broad string indexer (e.g., Record<string, any>).
  */
 export type HasBroadStringKey<T> = string extends keyof T ? true : false;
 
@@ -23,13 +36,8 @@ export type StringIndexValue<T> = T extends Record<string, infer V> ? V : never;
 export type ArrayElement<T> = T extends readonly (infer U)[] ? U : never;
 
 /**
- * Constraint: Depth limit for recursive path generation to prevent TypeScript
- * recursion errors and IDE lag in complex schemas.
- */
-
-/**
  * Logic: Recursion Termination
- * Types that stop the recursive path exploration.
+ * Defines primitive and built-in types that terminate recursive path exploration.
  */
 export type TerminalTypes =
   | Date
@@ -42,8 +50,9 @@ export type TerminalTypes =
 /**
  * Computes a union of all valid dot-separated paths for type T.
  *
- * Constraint: If T has a broad string indexer, it returns `string` to avoid
- * infinite union generation.
+ * Constraint: Recursion Safety
+ * If T contains a broad string indexer, it returns `string` to prevent
+ * infinite union generation and TypeScript recursion errors.
  */
 export type Paths<T, D extends unknown[] = []> =
   // biome-ignore lint/suspicious/noExplicitAny: 'any' check is required to prevent infinite recursion in paths
@@ -70,7 +79,8 @@ export type Paths<T, D extends unknown[] = []> =
             : never;
 
 /**
- * Resolves the type of a value at a given dot-path string.
+ * Logic: Path Resolution
+ * Resolves the type of the value located at a specific dot-path string.
  */
 export type PathValue<T, P extends string> =
   // biome-ignore lint/suspicious/noExplicitAny: 'any' check is required for correct path resolution
@@ -101,7 +111,8 @@ export type PathValue<T, P extends string> =
             : never;
 
 /**
- * Security: Protects internal JS properties from being modified via dot-paths.
+ * Security: Prototype Pollution Guard
+ * Protects internal JavaScript properties from unauthorized modification via dot-paths.
  */
 const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
@@ -109,10 +120,15 @@ const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 const isForbiddenKey = (key: string) => FORBIDDEN_KEYS.has(key);
 
 /**
- * @internal
  * Optimization: Structural Sharing
- * Creates a shallow copy of the container and updates one of its keys.
- * Ensures that unchanged sibling branches retain reference equality.
+ * Creates a shallow copy of the container and updates a specific key.
+ * Ensures that unchanged sibling branches maintain reference equality.
+ *
+ * Reason:
+ * By maintaining reference equality for unchanged branches, we allow
+ * downstream reactive nodes to perform net-zero suppression.
+ *
+ * @internal
  */
 function cloneAndSet(container: object, key: string, value: unknown): object {
   if (Array.isArray(container)) {
@@ -129,12 +145,13 @@ function cloneAndSet(container: object, key: string, value: unknown): object {
 
   const proto = Object.getPrototypeOf(container);
 
-  // Optimization: Fast-path for plain objects (the most common case)
+  // Optimization: Fast-path for plain objects.
   if (proto === Object.prototype || proto === null) {
     return { ...container, [key]: value };
   }
 
-  // Reason: Ensures class instances maintain their prototype and methods
+  // Logic: Class Instance Preservation
+  // Ensures class instances maintain their prototype chain and methods
   // after an immutable update.
   const next = Object.create(proto);
   Object.assign(next, container);
@@ -153,11 +170,12 @@ interface LensInternal<T = unknown> extends WritableAtom<T> {
 }
 
 /**
- * Core engine for recursive immutable deep updates.
+ * Logic: Immutable Deep Update
+ * Performs a recursive update along a key path.
  *
- * Optimization: Net-zero suppression
- * Returns the original object if the leaf value is identical (Object.is),
- * preventing unnecessary allocation and downstream notifications.
+ * Optimization: Net-zero Suppression
+ * Returns the original object if the new leaf value is identical (via Object.is),
+ * preventing unnecessary allocations and downstream notification cascades.
  *
  * @internal
  */
@@ -166,12 +184,12 @@ export function setDeepValue(obj: unknown, keys: string[], index: number, value:
 
   const key = keys[index]!;
 
-  // Resilience: Guard against non-object targets in the path
+  // Resilience: Terminates update if the target path is non-traversable.
   if (obj == null || typeof obj !== 'object' || isForbiddenKey(key)) {
     return obj;
   }
 
-  // Logic: Heterogeneous Collection Support
+  // Logic: Heterogeneous Collection Support (Object, Array, Map)
   const oldVal = obj instanceof Map ? obj.get(key) : (obj as Record<string, unknown>)[key];
   const newVal = setDeepValue(oldVal, keys, index + 1, value);
 
@@ -183,8 +201,9 @@ export function setDeepValue(obj: unknown, keys: string[], index: number, value:
 }
 
 /**
- * Reads a value from a nested path.
- * Supports standard property access and Map.get().
+ * Logic: Deep Read
+ * Traverses a source object to retrieve a value at a specified path.
+ * Supports standard properties and Map collections.
  *
  * @internal
  */
@@ -201,31 +220,39 @@ export function getPathValue(source: unknown, parts: string[]): unknown {
   }
   return res;
 }
+
 /**
- * Creates a reactive, two-way Lens into a nested atom property.
+ * Creates a reactive, two-way Lens into a nested property of an atom.
  *
  * When to use:
- * - When a component only needs a specific sub-field of a complex state object.
+ * - To expose a specific sub-field of a complex state object to a component.
  * - To implement "noise filtering": the lens only notifies subscribers if its
- *   specific nested value changes, even if other parts of the root atom update.
- * - For type-safe deep state management.
+ *   target nested value changes, regardless of other root atom updates.
+ * - For type-safe deep state manipulation without manual boilerplate.
  *
  * @param atom - The root WritableAtom to project from.
- * @param path - A dot-separated string representing the path to the nested property.
+ * @param path - A dot-separated string representing the path to the property.
+ * @returns A WritableAtom that synchronizes with the nested property.
  *
  * @example
+ * ```typescript
+ * import { atom, atomLens, effect } from '@but212/atom-effect';
+ *
  * const user = atom({ profile: { name: 'Alice', score: 10 } });
  * const scoreLens = atomLens(user, 'profile.score');
  *
- * $.effect(() => console.log('Score:', scoreLens.value));
- * scoreLens.value = 20; // Propagates to 'user' atom.
+ * effect(() => console.log('Score updated:', scoreLens.value));
+ *
+ * scoreLens.value = 20; // Propagates update to 'user' atom and triggers effect.
+ * ```
  */
 export function atomLens<T extends object, P extends Paths<T>>(
   atom: WritableAtom<T>,
   path: P
 ): WritableAtom<PathValue<T, P>> {
   // Optimization: Path Flattening
-  // If the target is already a lens, we merge paths to avoid deep subscription chains.
+  // If the target is already a lens, paths are merged to avoid deep
+  // subscription chains and redundant intermediate notifications.
   const brand = (atom as unknown as { [BRAND]?: number })[BRAND] || 0;
   if ((brand & BrandFlags.Lens) !== 0) {
     const parent = atom as unknown as LensInternal<T>;
@@ -285,7 +312,7 @@ export function atomLens<T extends object, P extends Paths<T>>(
       sharedUnsub = null;
       listeners.clear();
     },
-    // Metadata for path flattening
+    // Metadata for path flattening logic
     _root: atom,
     _path: path as string,
     [BRAND]: BrandFlags.Atom | BrandFlags.Writable | BrandFlags.Lens,
@@ -293,22 +320,32 @@ export function atomLens<T extends object, P extends Paths<T>>(
 }
 
 /**
- * Chains a lens with a further sub-path to create a more specific lens.
+ * Chains a lens with a further sub-path to create a more specific projection.
+ *
+ * @param lens - The existing lens to extend.
+ * @param path - The additional sub-path to append.
  *
  * @example
+ * ```typescript
  * const userLens = atomLens(rootAtom, 'user');
  * const nameLens = composeLens(userLens, 'name');
+ * ```
  */
 export const composeLens = <T extends object, P extends Paths<T>>(lens: WritableAtom<T>, path: P) =>
   atomLens(lens, path);
 
 /**
- * Creates a factory function for generating multiple lenses from a single root atom.
+ * Creates a factory for generating multiple lenses from a single root atom.
+ *
+ * @param atom - The root atom to project from.
+ * @returns A factory function that accepts a path and returns a lens.
  *
  * @example
+ * ```typescript
  * const fromUser = lensFor(userAtom);
  * const nameLens = fromUser('name');
  * const ageLens = fromUser('age');
+ * ```
  */
 export const lensFor =
   <T extends object>(atom: WritableAtom<T>) =>
@@ -316,12 +353,19 @@ export const lensFor =
     atomLens(atom, path);
 
 /**
+ * Logic: Two-way Snapshot Merging
  * Merges multiple writable lenses into a single unified lens with a flattened type.
+ * Updates to the merged lens are distributed back to the individual source lenses
+ * within a single atomic batch.
  *
- * This utility combines the value types of all input lenses into a single
- * unified object type using the {@link Merge} utility.
+ * @param lenses - A variadic list of lenses to merge.
+ * @returns A unified WritableAtom.
  *
- * @param lenses - A variadic list of WritableAtoms (lenses).
+ * @example
+ * ```typescript
+ * const merged = mergeLenses(nameLens, scoreLens);
+ * merged.value = { name: 'Bob', score: 25 }; // Batched update to source atoms.
+ * ```
  */
 export function mergeLenses<L extends WritableAtom<unknown>[]>(
   ...lenses: L

@@ -1,6 +1,23 @@
 /**
- * Logic: Bitspace Partitioning
- * Defines the starting bit index for different node types and states.
+ * @module BitfieldEngine
+ *
+ * Responsibility:
+ * This module defines the low-level bitfield architecture used by all `ReactiveNode`
+ * instances.
+ *
+ * Design Intent:
+ * By using bitwise flags instead of boolean properties, we store the entire
+ * lifecycle and capability state of a node in a single 31-bit integer. This
+ * drastically reduces heap memory per node and enables high-speed batch
+ * validations using bitmasking.
+ */
+
+/**
+ * Bitspace partitioning offsets.
+ *
+ * Why: Offsets organize the 32-bit space into logical segments to prevent
+ * flag collisions between different node types (Atom vs. Effect) and states.
+ *
  * @internal
  */
 const OFFSET = {
@@ -11,67 +28,69 @@ const OFFSET = {
 } as const satisfies Record<string, number>;
 
 /**
- * Internal bitmask flags for `ReactiveNode` state management.
+ * Individual bitmask flags for internal state management.
  *
  * Logic: State Representation
- * Uses a single bit per state to allow for compound checks via bitwise OR (|)
- * and state transitions via bitwise XOR (^) or AND NOT (& ~).
+ * Each state occupies exactly one bit. This allows for compound state
+ * transitions (e.g., clearing DIRTY while setting RECOMPUTING) in a single
+ * atomic operation using bitwise operators.
  *
  * @internal
  */
 const FLAGS = {
-  // Shared Core (0-7)
+  // Shared Core (Bits 0-7): Fundamental lifecycle flags
   DISPOSED: 1 << (OFFSET.CORE + 0),
   IS_COMPUTED: 1 << (OFFSET.CORE + 1),
 
-  // Computed Flags (8-15)
+  // Computed Flags (Bits 8-15): Dependency and derivation state
   DIRTY: 1 << (OFFSET.COMPUTED + 0),
   RECOMPUTING: 1 << (OFFSET.COMPUTED + 1),
   HAS_ERROR: 1 << (OFFSET.COMPUTED + 2),
   FORCE_COMPUTE: 1 << (OFFSET.COMPUTED + 3),
 
-  // Async States (16-23)
+  // Async States (Bits 16-23): Asynchronous lifecycle tracking
   IDLE: 1 << (OFFSET.ASYNC + 0),
   PENDING: 1 << (OFFSET.ASYNC + 1),
   RESOLVED: 1 << (OFFSET.ASYNC + 2),
   REJECTED: 1 << (OFFSET.ASYNC + 3),
 
-  // Atom Specific (24-27)
+  // Atom Specific (Bits 24-27): State source characteristics
   ATOM_SYNC: 1 << (OFFSET.PRIMITIVE + 0),
   ATOM_NOTIFICATION_SCHEDULED: 1 << (OFFSET.PRIMITIVE + 1),
 
-  // Effect Specific (28-30)
+  // Effect Specific (Bits 28-30): Subscription execution state
   EFFECT_EXECUTING: 1 << (OFFSET.PRIMITIVE + 4),
 } as const satisfies Record<string, number>;
 
 /**
- * Compound bitmasks for multi-state validation and bulk resets.
+ * Compound bitmasks for high-performance validation.
  *
  * Optimization: Bulk Validation
- * Using compound masks reduces the number of bitwise comparisons in hot paths
- * (e.g., checking if a node is in any async state).
+ * These masks allow the engine to verify complex conditions (e.g., "is the
+ * node in any async state?") using a single bitwise comparison instead of
+ * multiple logical branches.
  *
  * @internal
  */
 export const STATE_MASKS = Object.freeze({
-  /** Covers all asynchronous lifecycle states. */
+  /** Captures all possible asynchronous states. */
   ASYNC_STATE: FLAGS.IDLE | FLAGS.PENDING | FLAGS.RESOLVED | FLAGS.REJECTED,
-  /** Covers all states indicating a requirement for re-computation. */
+  /** Captures all conditions that signify a stale or dirty value. */
   COMPUTED_DIRTY_MASK: FLAGS.DIRTY | FLAGS.RECOMPUTING | FLAGS.FORCE_COMPUTE,
-  /** Covers asynchronous states that have not yet produced a final value. */
+  /** Captures async states that represent an ongoing or failed operation. */
   ASYNC_UNRESOLVED_MASK: FLAGS.PENDING | FLAGS.REJECTED,
-  /** Pattern of flags that trigger an immediate re-computation on access. */
+  /** Condition pattern that triggers an immediate computation upon node access. */
   COMPUTED_RECOMPUTE_NEEDED_MASK: FLAGS.IDLE | FLAGS.FORCE_COMPUTE,
-  /** Covers states indicating an error occurred during computation. */
+  /** Captures both synchronous and asynchronous error states. */
   ERROR_MASK: FLAGS.REJECTED | FLAGS.HAS_ERROR,
-  /** Covers all primary lifecycle states. */
+  /** Captures the primary reactive lifecycle states. */
   LIFECYCLE_MASK:
     FLAGS.IDLE | FLAGS.DIRTY | FLAGS.PENDING | FLAGS.RESOLVED | FLAGS.REJECTED | FLAGS.HAS_ERROR,
 });
 
 /**
  * Logic: Shared State Interface
- * Defines the bitmask contract for Effect-type nodes.
+ * Defines the public-facing flag contract for Effect nodes.
  * @internal
  */
 export const EFFECT_STATE_FLAGS = Object.freeze({
@@ -81,7 +100,7 @@ export const EFFECT_STATE_FLAGS = Object.freeze({
 
 /**
  * Logic: Shared State Interface
- * Defines the bitmask contract for Computed-type nodes.
+ * Defines the public-facing flag contract for Computed nodes.
  * @internal
  */
 export const COMPUTED_STATE_FLAGS = Object.freeze({
@@ -99,7 +118,7 @@ export const COMPUTED_STATE_FLAGS = Object.freeze({
 
 /**
  * Logic: Shared State Interface
- * Defines the bitmask contract for Atom-type nodes.
+ * Defines the public-facing flag contract for Atom nodes.
  * @internal
  */
 export const ATOM_STATE_FLAGS = Object.freeze({

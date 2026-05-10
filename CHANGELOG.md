@@ -7,6 +7,8 @@
 #### Breaking Changes
 
 - **Build System**: Partitioned the build process into `types`, `lib` (ESM/CJS), and `bundle` (UMD) targets for better optimization. This may affect direct file references in the `dist/` directory.
+- **Error Handling**: Removed `AtomError.getChain()` and `AtomError.toJSON()` instance methods. Use the new standalone `getErrorChain()` and `serializeError()` functions instead. This improves decoupling and enables better tree-shaking.
+- **Error Handling**: Relocated `AtomErrorConstructor` and `AtomErrorJSON` types to the core types module.
 
 #### Changed
 

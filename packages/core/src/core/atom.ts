@@ -1,3 +1,16 @@
+/**
+ * @module Atom
+ *
+ * Responsibility:
+ * Defines the primary stateful primitive (`Atom`) for the reactive system.
+ * Manages synchronous value updates and coordinates notification scheduling.
+ *
+ * Design Intent:
+ * Atoms serve as source nodes in the reactive graph. They minimize overhead
+ * by avoiding dependency tracking of their own, focusing on efficient
+ * propagation to downstream subscribers.
+ */
+
 import type { SlotBuffer } from '@but212/atom-effect-utils';
 import {
   ATOM_STATE_FLAGS,
@@ -31,16 +44,15 @@ import { debug, generateId } from '@/utils';
 import { scheduler, schedulerIsBatching, schedulerSchedule } from './scheduler';
 
 /**
- * Internal implementation of a {@link WritableAtom}.
+ * Role: Internal implementation of a {@link WritableAtom}.
  *
  * Logic: Dependency Graph Integration
- * As a leaf node, it doesn't have dependencies of its own but serves as
- * a source for `Computed` and `Effect` nodes.
+ * As a leaf node, an atom does not track upstream dependencies. It persists
+ * as a source for `Computed` and `Effect` nodes.
  *
  * @internal
  */
 class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
-  // ReactiveNode implementation
   flags: number = 0;
   version: number = 0;
   _lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
@@ -56,7 +68,8 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
   };
 
   private _value: T;
-  /** Optimization: Captured during mutation to allow net-zero suppression in batches. */
+
+  /** Optimization: Captured during mutation to enable net-zero suppression in batches. */
   private _pendingOldValue: T | undefined;
   private _equal: (a: T, b: T) => boolean;
 
@@ -101,7 +114,9 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
   }
 
   /**
-   * Retrieves the current value and registers a dependency if called in a reactive context.
+   * Logic: Reactive Tracking
+   * Retrieves the current value and automatically registers the caller
+   * as a subscriber if executed within a tracking context.
    */
   get value(): T {
     trackingContext.current?.addDependency(this);
@@ -120,14 +135,25 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
     this._scheduleNotification(oldValue);
   }
 
+  /**
+   * Attaches a listener to be notified when the atom's value changes.
+   */
   subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
     return nodeSubscribe(this, listener);
   }
 
+  /**
+   * Returns the current number of active subscribers.
+   */
   subscriberCount(): number {
     return nodeSubscriberCount(this);
   }
 
+  /**
+   * Logic: Notification Orchestration
+   * Schedules a notification cycle. If the atom is configured for synchronous
+   * delivery and no batch is active, the flush occurs immediately.
+   */
   private _scheduleNotification(oldValue: T): void {
     const flags = this.flags;
     const SCHED = ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
@@ -145,12 +171,20 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
   }
 
   /**
-   * @internal - Entry point for the global scheduler.
+   * @internal - Interface for the global scheduler.
    */
   execute(): void {
     this._flushNotifications();
   }
 
+  /**
+   * Logic: Notification Batching
+   * Synchronizes the internal state with all subscribers.
+   *
+   * Constraint:
+   * Only proceeds if the notification is still scheduled and the atom
+   * has not been disposed.
+   */
   private _flushNotifications(): void {
     const SCHED = ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
     const MASK = SCHED | ATOM_STATE_FLAGS.DISPOSED;
@@ -173,18 +207,22 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
   }
 
   /**
-   * Accesses the value without registering a dependency.
+   * Accesses the current value without triggering reactive tracking.
    *
    * When to use:
-   * - In event handlers or outside reactive contexts where tracking is undesirable.
+   * - Inside event handlers or callbacks where tracking is undesirable.
+   * - During initialization phases where no reactive connection is required.
    */
   peek(): T {
     return this._value;
   }
 
   /**
-   * Caution: Disposed atoms release their values and equality checks.
-   * Subsequent access may result in undefined behavior or errors.
+   * Logic: Resource Disposal
+   * Permanently releases the atom's value and clears all subscriptions.
+   *
+   * Caution:
+   * Subsequent access to a disposed atom may lead to undefined behavior.
    */
   dispose(): void {
     const DISP = ATOM_STATE_FLAGS.DISPOSED;
@@ -193,7 +231,7 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
     this.flags |= DISP;
     this._storage.slots?.clear();
 
-    // Reason: Release references immediately to assist GC in large-scale state trees.
+    // Reason: Release references immediately to facilitate GC in large-scale state trees.
     this._value = undefined as T;
     this._pendingOldValue = undefined;
     this._equal = DEFAULT_EQUAL;
@@ -201,19 +239,23 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
 }
 
 /**
- * Creates a reactive atom holding mutable state.
+ * Creates a reactive atom to manage mutable state.
  *
  * When to use:
- * - As a primary source of truth for local or global state.
- * - When state needs to be updated manually via `.value = ...`.
+ * - As the primary source of truth for local or shared application state.
+ * - When data must be manually updated via the `.value` property.
  *
- * @param initialValue - The starting value.
- * @param options - Configuration for custom equality or synchronous delivery.
+ * @param initialValue - The initial data stored in the atom.
+ * @param options - Configuration for custom equality checks or delivery strategies.
  *
  * @example
  * ```typescript
+ * import { atom } from '@but212/atom-effect';
+ *
  * const count = atom(0);
- * count.value++; // Triggers downstream updates
+ * count.value++; // Triggers downstream reactive updates
+ *
+ * console.log(count.value); // 1
  * ```
  */
 export function atom<T>(initialValue: T, options: AtomOptions<T> = {}): WritableAtom<T> {

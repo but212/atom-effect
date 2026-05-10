@@ -1,19 +1,43 @@
-import { IS_DEV, KIND, LOG_PREFIX, SCHEDULER_CONFIG, SCHEDULER_STATE, SMI_MAX } from '@/constants';
+/**
+ * @module ReactiveScheduler
+ *
+ * Responsibility:
+ * Orchestrates the execution of reactive jobs (Effects, Computeds) using
+ * a prioritized queuing system. Manages batching cycles and ensures
+ * glitch-free propagation through asynchronous microtasks.
+ *
+ * Design Intent:
+ * Implements a double-buffering strategy to allow safe job queuing during
+ * execution phases. Utilizes SMI-safe versioning and epoch tracking to minimize
+ * V8 de-optimization in high-frequency hot paths.
+ */
+
+import {
+  ERROR_MESSAGES,
+  IS_DEV,
+  KIND,
+  LOG_PREFIX,
+  SCHEDULER_CONFIG,
+  SCHEDULER_STATE,
+  SMI_MAX,
+} from '@/constants';
 import type {
   SchedulerJob,
   SchedulerJobFunction,
   SchedulerJobObject,
   SchedulerState,
 } from '@/types';
-import { ERROR_MESSAGES, SchedulerError } from '@/utils';
+import { SchedulerError } from '@/utils';
 
 import { resetTrackingContext, trackingContext } from './base';
 
 /**
- * Wraps integers to stay within V8's SMI range (31-bit signed).
+ * Optimization: SMI-safe Arithmetic
+ * Wraps integers to stay within V8's 31-bit signed range (SMI).
  *
- * Why: Transitioning from SMIs to HeapNumbers (doubles) causes significant
- * de-optimization in hot paths like version checking and epoch comparison.
+ * Why:
+ * Transitioning from SMIs to HeapNumbers (doubles) triggers significant
+ * de-optimization in hot paths such as version checking and epoch comparison.
  * @internal
  */
 export const nextSmi = (v: number): number => {
@@ -48,7 +72,8 @@ export const scheduler = createSchedulerState();
 // --- Internal Scheduler Logic ---
 
 /**
- * Consolidation: Moves batch jobs to the active execution queue.
+ * Logic: Batch Consolidation
+ * Transfers jobs from the batch buffer to the active execution queue.
  * @internal
  */
 export function schedulerMergeBatchQueue(state: SchedulerState, nextEpochFn: () => number): void {
@@ -64,6 +89,8 @@ export function schedulerMergeBatchQueue(state: SchedulerState, nextEpochFn: () 
 
   for (let i = 0; i < queueSize; i++) {
     const job = bItems[i]!;
+    // Logic: Deduplication via Epoch
+    // Prevents redundant scheduling of the same job within the same flush cycle.
     if (job._nextEpoch !== epoch) {
       job._nextEpoch = epoch;
       targetItems[currentSize++] = job;
@@ -74,15 +101,20 @@ export function schedulerMergeBatchQueue(state: SchedulerState, nextEpochFn: () 
   active.size = currentSize;
   batch.size = 0;
 
-  // Cleanup: Shrink buffer if it grew significantly beyond threshold.
+  // Optimization: Buffer Management
+  // Shrinks the buffer if it grew significantly beyond the configured threshold.
   if (bItems.length > SCHEDULER_CONFIG.BATCH_QUEUE_SHRINK_THRESHOLD) {
     bItems.length = 0;
   }
 }
 
 /**
- * Drainage: Loops until all buffers are empty.
- * Caution: Subject to maxFlushIterations to prevent infinite recursion in circular graphs.
+ * Logic: Queue Drainage
+ * Iteratively flushes active and batch buffers until the system stabilizes.
+ *
+ * Constraint: Infinite Loop Prevention
+ * Subject to `maxFlushIterations` to interrupt circular dependency graphs
+ * that would otherwise freeze the execution environment.
  * @internal
  */
 export function schedulerDrainQueue(
@@ -111,7 +143,9 @@ export function schedulerDrainQueue(
 }
 
 /**
- * Execution: Swaps buffers to allow new jobs to be safely queued during execution.
+ * Optimization: Double-Buffering
+ * Swaps internal buffers to allow new jobs to be safely queued while
+ * the current set is being executed.
  * @internal
  */
 export function schedulerProcessQueue(state: SchedulerState, nextEpochFn: () => number): void {
@@ -119,7 +153,8 @@ export function schedulerProcessQueue(state: SchedulerState, nextEpochFn: () => 
   const jobs = active.items;
   const count = active.size;
 
-  // Double-buffering swap: active becomes standby (cleared), standby becomes active.
+  // Logic: Atomic Buffer Swap
+  // active becomes standby (cleared), standby becomes active.
   state.active = state.standby;
   state.standby = active;
   state.active.size = 0;
@@ -161,7 +196,9 @@ export function schedulerFlushQueues(state: SchedulerState): void {
 }
 
 /**
- * Recovery: Clears state when an infinite loop is detected.
+ * Logic: Overflow Recovery
+ * Purges all pending jobs and logs a terminal error when an infinite loop
+ * is detected during the flush cycle.
  * @internal
  */
 export function schedulerHandleFlushOverflow(state: SchedulerState): void {
@@ -228,8 +265,10 @@ export function schedulerResetFlushState(state: SchedulerState): void {
 }
 
 /**
- * Entry point for scheduling jobs.
- * Uses microtasks for deferred execution by default.
+ * Logic: Job Delivery
+ * Entry point for scheduling reactive tasks. Utilizes microtasks for
+ * deferred execution by default to allow for update consolidation.
+ *
  * @internal
  */
 export function schedulerSchedule(state: SchedulerState, callback: SchedulerJob): void {
@@ -242,7 +281,8 @@ export function schedulerSchedule(state: SchedulerState, callback: SchedulerJob)
     }
   }
 
-  // Deduplication: Avoid scheduling the same job twice in the same epoch.
+  // Logic: Job Deduplication
+  // Prevents the same job from being queued multiple times in the same epoch.
   if (callback._nextEpoch === state.epoch) return;
   callback._nextEpoch = state.epoch;
 
@@ -334,15 +374,23 @@ export const incrementFlushExecutionCount = (): number =>
 export const resetFlushState = (): void => schedulerResetFlushState(scheduler);
 
 /**
- * Groups multiple updates into a single atomic change.
- * Affected effects/computeds are flushed synchronously after the callback.
+ * Logic: Atomic Update Batching
+ * Groups multiple state updates into a single atomic change cycle.
+ * Dependent effects and computeds are flushed synchronously after the callback.
  *
- * Example:
- * ```ts
+ * @param fn - The function containing multiple reactive updates.
+ *
+ * @example
+ * ```typescript
+ * import { atom, batch } from '@but212/atom-effect';
+ *
+ * const a = atom(0);
+ * const b = atom(0);
+ *
  * batch(() => {
- *   atomA.value = 1;
- *   atomB.value = 2;
- * }); // Sync flush happens here.
+ *   a.value = 1;
+ *   b.value = 2;
+ * }); // Dependent effects are triggered once here.
  * ```
  */
 export function batch<T>(fn: () => T): T {
@@ -370,13 +418,18 @@ export function runInFlushScope<T>(fn: () => T): T | undefined {
 let sharedNextTickPromise: Promise<void> | null = null;
 
 /**
- * Returns a promise that resolves after the next scheduler flush.
- * Useful for awaiting side-effects in tests.
+ * Logic: Asynchronous Synchronization
+ * Returns a promise that resolves after the next scheduler flush is completed.
+ * primarily used for awaiting side-effects in testing environments.
  *
- * Example:
- * ```ts
+ * @param fn - Optional callback to execute after the next tick.
+ *
+ * @example
+ * ```typescript
+ * import { aeNextTick } from '@but212/atom-effect';
+ *
  * atom.value = 100;
- * await aeNextTick(); // Wait for effects to run.
+ * await aeNextTick(); // Wait for effects to stabilize.
  * ```
  */
 export function aeNextTick(fn?: () => void): Promise<void> {

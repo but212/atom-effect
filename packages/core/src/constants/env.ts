@@ -1,63 +1,84 @@
 /**
- * Optimization: V8 SMI (Small Integer) Limit
+ * @module EnvironmentConfiguration
  *
- * Values within this range (up to 30-bit signed) are stored directly in CPU registers
- * by V8, bypassing heap allocation and boxing overhead.
+ * Responsibility:
+ * This module handles environment detection (Node.js, Vite, ESM) and defines
+ * performance-tuning constants used for heuristics and loop protection.
+ */
+
+/**
+ * V8 SMI (Small Integer) Limit.
+ *
+ * Why: V8 stores 31-bit signed integers (on 64-bit systems) directly in CPU
+ * registers. Values within this range avoid heap allocation and boxing,
+ * making them ideal for high-frequency epoch counters and indices.
  *
  * @internal
  */
 export const SMI_MAX = 0x3fffffff;
 
 /**
- * Thresholds for development-time diagnostics.
+ * Development-time diagnostic thresholds.
+ *
+ * Why: These limits prevent memory-exhausting infinite loops during development
+ * without imposing overhead in production.
+ *
  * @internal
  */
 export const DEBUG_CONFIG = Object.freeze({
-  /** Enables console warnings when potential infinite loops are detected. */
+  /** Enables console warnings for potential infinite recursion or update loops. */
   WARN_INFINITE_LOOP: true,
-  /** The time window (ms) for monitoring update frequency. */
+  /** Sliding window size (ms) for calculating update frequency. */
   EFFECT_FREQUENCY_WINDOW: 1000,
-  /** The update count limit before triggering a loop warning. */
+  /** Max updates per window allowed before flagging a potential loop. */
   LOOP_THRESHOLD: 100,
 } satisfies Record<string, boolean | number>);
 
 /**
- * Internal configuration for dependency buffers and lookup heuristics.
+ * Internal heuristics for dependency management.
+ *
+ * Why: For small sets of dependencies, a linear search on a flat array is
+ * faster than a Map lookup due to CPU cache locality and lower initialization cost.
+ *
  * @internal
  */
 export const BUFFER_CONFIG = Object.freeze({
-  /** The threshold for switching from linear search to Map-based lookup. */
+  /** The item count threshold where we pivot from linear search to Map lookup. */
   MAP_THRESHOLD: 8,
 });
 
 /**
- * Internal configuration for Lenses and path resolution.
+ * Lenses and path resolution constraints.
+ *
+ * Why: Prevents infinite recursion and stack overflow in cases of circular
+ * object references or extremely deep state trees.
+ *
  * @internal
  */
 export const LENS_CONFIG = Object.freeze({
-  /** Maximum depth for recursive path generation to prevent stack overflow. */
+  /** Maximum nesting depth permitted for Lens-based path generation. */
   MAX_PATH_DEPTH: 8,
 });
 
 /**
- * Sentinel values for epoch-based staleness tracking.
+ * Epoch-based staleness tracking constants.
  *
- * Logic: Drift Detection
- * Epochs are used to determine if a dependency has changed since the last
- * computation without needing deep comparison.
+ * Logic:
+ * We use an incrementing integer (Epoch) to track state drift. If a node's
+ * epoch differs from its recorded dependency epoch, it is considered stale.
  *
  * @internal
  */
 export const EPOCH_CONSTANTS = Object.freeze({
-  /** Initial state indicating no computation has occurred. */
+  /** Initial state indicating no computation has occurred yet. */
   UNINITIALIZED: -1,
-  /** Reset floor for epoch counters to avoid 0/falsy confusion. */
+  /** The starting value for valid epochs to avoid falsy (0) ambiguity. */
   MIN: 1,
 });
 
 /**
- * Logic: Runtime Debug Override
- * Checks for explicit debug flags in the global environment or session storage.
+ * Logic: Checks for runtime debug overrides via global variables or storage.
+ * This allows toggling debug mode in production browsers for troubleshooting.
  */
 const getRuntimeDebug = (): boolean => {
   try {
@@ -72,8 +93,7 @@ const getRuntimeDebug = (): boolean => {
 };
 
 /**
- * Logic: Environment Metadata
- * Heuristic detection of bundler-injected development environment flags.
+ * Logic: Detects bundler-injected environment flags (e.g., Vite/Webpack).
  */
 const getImportMetaDev = (): boolean => {
   try {
@@ -84,8 +104,7 @@ const getImportMetaDev = (): boolean => {
 };
 
 /**
- * Logic: Multi-Environment Resolution
- * Aggregates signals from Node.js, Vite/Web-pack, ESM, and manual runtime overrides.
+ * Aggregated signals used to resolve the library environment.
  */
 const DEV_SIGNALS = {
   node: typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production',
@@ -95,8 +114,11 @@ const DEV_SIGNALS = {
 } as const;
 
 /**
- * Indicates if the library is running in a development environment.
- * When true, additional validation, diagnostic warnings, and loop protections are active.
+ * A diagnostic flag indicating if development features should be enabled.
+ *
+ * Impact:
+ * When true, the engine enables extra validation, loop detection, and
+ * descriptive error logging that is stripped or disabled in production.
  */
 export const IS_DEV =
   DEV_SIGNALS.node || DEV_SIGNALS.bundler || DEV_SIGNALS.esm || DEV_SIGNALS.runtime;

@@ -1,32 +1,67 @@
 /**
- * The global brand symbol used for type identification across all reactive primitives.
+ * @module Branding
  *
- * Optimization: A single consolidated symbol is used to store multiple type markers
- * using bitwise flags. This strategy minimizes property lookup overhead and reduces
- * the overall object size by avoiding multiple type-specific properties.
+ * This module provides the internal type-branding mechanism for all reactive primitives.
  *
- * When to use:
- * - To access the internal type metadata of a reactive node.
- * - To implement custom branded objects that need to integrate with the reactive system.
+ * Design Intent:
+ * Instead of multiple boolean properties (e.g., `_isAtom`, `_isComputed`), we use a single
+ * property keyed by the `BRAND` symbol to store bitwise flags. This reduces object
+ * size and minimizes "hidden class" transitions in the V8 engine, keeping property
+ * lookups on the hot path highly efficient.
+ */
+
+/**
+ * The unique identifier for internal metadata lookups.
+ *
+ * Why: Using a single Symbol avoids property name collisions and consolidates
+ * multiple type markers into one memory slot.
+ *
+ * @example
+ * // Accessing flags from a reactive node
+ * const flags = (node as any)[BRAND];
+ * const isReactive = flags !== undefined;
  */
 export const BRAND: unique symbol = Symbol.for('atom-effect/brand');
 
 /**
- * A collection of bitwise flags used for precise type discrimination.
+ * Bitwise flags for granular type and capability discrimination.
  *
- * When to use:
- * - To identify the specific category of a reactive node (e.g., Atom, Computed, Effect).
- * - To verify the capabilities of a node (e.g., checking if it is writable).
+ * Constraints:
+ * - Values must be powers of 2 to maintain bitwise integrity.
+ * - Checking for a type MUST use the bitwise AND operator.
+ *
+ * @example
+ * // Correct check for Writable capability
+ * const isWritable = !!(flags & BrandFlags.Writable);
+ *
+ * // Correct check for Atom type
+ * const isAtom = !!(flags & BrandFlags.Atom);
  */
 export const BrandFlags = {
-  /** Indicates that the primitive is an atom (either Readonly or Writable). */
+  /** The primitive represents a state source (Readonly or Writable). */
   Atom: 1 << 0,
-  /** Indicates that the primitive supports write operations, such as `.set()` or `.update()`. */
+  /** The primitive supports external mutation via .set() or .update(). */
   Writable: 1 << 1,
-  /** Indicates that the primitive is a computed value with dependency tracking logic. */
+  /** The primitive derives its value from other reactive dependencies. */
   Computed: 1 << 2,
-  /** Indicates that the primitive is an effect handle. */
+  /** The handle represents an active side-effect subscription. */
   Effect: 1 << 3,
-  /** Indicates that the primitive is a lens into a nested property. */
+  /** The primitive is a focused view into a nested state structure. */
   Lens: 1 << 4,
 } as const;
+
+/**
+ * Mapping of BrandFlags to human-readable node type names.
+ * @internal
+ */
+export const TYPE_BY_BRAND: Record<number, string> = {
+  [BrandFlags.Atom]: 'atom',
+  [BrandFlags.Computed]: 'computed',
+  [BrandFlags.Effect]: 'effect',
+};
+
+/**
+ * Mask for filtering core reactive types (Atom, Computed, Effect).
+ * @internal
+ */
+export const BRAND_MASK = BrandFlags.Atom | BrandFlags.Computed | BrandFlags.Effect;

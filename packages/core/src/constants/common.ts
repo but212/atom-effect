@@ -1,5 +1,17 @@
 /**
- * Subscriber Kind Discriminators
+ * @module CommonConstants
+ *
+ * Responsibility:
+ * Provides shared primitive constants, discriminators, and default configurations
+ * used across the reactive engine.
+ */
+
+/**
+ * Subscriber Kind Discriminators.
+ *
+ * Why: Used to differentiate between function-based and object-based subscribers
+ * in the reactive propagation loop without expensive `typeof` or `instanceof` checks.
+ *
  * @internal
  */
 export const KIND = {
@@ -8,19 +20,21 @@ export const KIND = {
 } as const;
 
 /**
- * Asynchronous operation states for public API consumption.
+ * States for asynchronous operations.
  *
  * When to use:
- * - To verify or branch logic based on the status of an asynchronous atom or computed node.
+ * - To branch logic or UI transitions based on the status of an asynchronous node.
+ * - To check if a computation is currently fetching data.
+ *
+ * Constraints:
+ * - These are read-only string literals.
  *
  * @example
- * ```typescript
  * import { AsyncState } from '@but212/atom-effect';
  *
- * if (userProfile.status === AsyncState.PENDING) {
- *   showSpinner();
+ * if (node.status === AsyncState.PENDING) {
+ *   renderSpinner();
  * }
- * ```
  */
 export const AsyncState = Object.freeze({
   IDLE: 'idle',
@@ -30,23 +44,34 @@ export const AsyncState = Object.freeze({
 } satisfies Record<string, string>);
 
 /**
- * Optimization: Shared Immutable Empty State
+ * Shared Immutable Empty State.
  *
- * Constraint: Must remain immutable to prevent memory leaks and unexpected
- * side-effects in subscriber logic that expects an array structure.
+ * Why: Reduces GC pressure by avoiding repeated empty array allocations
+ * during frequent state updates in nodes that have no errors.
  *
  * @internal
  */
 export const EMPTY_ERROR_ARRAY: readonly Error[] = Object.freeze([]);
 
 /**
- * Standard log prefix for consistent console output.
+ * Prefix for all internal logging, warnings, and errors.
  * @internal
  */
 export const LOG_PREFIX = '[atom-effect]';
 
 /**
- * Default equality function used across the core engine.
+ * Prefix for development diagnostic messages.
+ * @internal
+ */
+export const DEBUG_PREFIX = '[Atom Effect]';
+
+/**
+ * Default equality check for state change detection.
+ *
+ * Why: `Object.is` is used instead of `===` because it correctly handles
+ * edge cases like `NaN` and `+0/-0`, preventing unnecessary re-computations
+ * or infinite loops when these values are updated.
+ *
  * @internal
  */
 export const DEFAULT_EQUAL = Object.is;

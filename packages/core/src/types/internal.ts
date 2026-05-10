@@ -1,78 +1,94 @@
+/**
+ * @module Internal_Engine_Types
+ *
+ * Responsibility:
+ * Defines engine-private interfaces and state schemas. These types are
+ * used for core reactive propagation and are not exposed to the public API.
+ */
+
 import type { KIND } from '@/constants';
-import type { DependencyId } from './base';
 import type { Dependency, Subscriber } from './reactive';
 
 /**
- * Internal state for the reactive tracking system.
+ * Global tracking state for dependency collection.
+ *
+ * Why: Manages a stack of active computations to correctly associate
+ * dependencies during nested computed or effect evaluations.
+ *
  * @internal
  */
 export interface TrackingContext {
+  /** The stack of parent computations currently being evaluated. */
   stack: (DependencySubscriber | null)[];
+  /** The current active subscriber recording dependencies. */
   current: DependencySubscriber | null;
 }
 
 /**
- * Interface for nodes capable of recording reactive dependencies.
+ * Role: A node capable of recording reactive dependencies.
  * @internal
  */
 export interface DependencySubscriber {
+  /** Records a dependency in the current computation's tracking buffer. */
   addDependency(dep: Dependency): void;
 }
 
 /**
- * Interface for nodes that can be scheduled for re-execution.
+ * Role: A node that can be scheduled and executed by the scheduler.
  * @internal
  */
 export interface ExecutableSubscriber {
+  /** Performs the core computation or side-effect logic. */
   execute(): void;
 }
 
 /**
- * Unified interface for nodes that both consume dependencies and execute logic.
+ * Role: A unified consumer that both tracks dependencies and executes logic.
  * @internal
  */
 export interface DependencyTracker extends DependencySubscriber, ExecutableSubscriber {}
 
-/** @internal */
+/**
+ * Internal discriminator used for fast subscriber dispatch.
+ * @internal
+ */
 export type SubscriberKind = (typeof KIND)[keyof typeof KIND];
 
-/** @internal */
+/**
+ * Internal type for objects or functions that can receive update notifications.
+ * @internal
+ */
 export type SubscriberTarget<T> = ((newValue?: T, oldValue?: T) => void) | Subscriber;
 
-/** Diagnostic metrics for memory and resource management. @internal */
+/**
+ * Diagnostic metrics for analyzing memory health and pooling efficiency.
+ * @internal
+ */
 export interface PoolStats {
   acquired: number;
   released: number;
+  /** Reasons for object rejection from the recycler. */
   rejected: { frozen: number; tooLarge: number; poolFull: number };
   leaked: number;
   poolSize: number;
 }
 
 /**
- * Internal interface for engine instrumentation and debugging.
- * @internal
- */
-export interface DebugConfig {
-  enabled: boolean;
-  warnInfiniteLoop: boolean;
-  trackGraph: boolean;
-  warn(condition: boolean, message: string): void;
-  attachDebugInfo(obj: object, type: string, id: number, customName?: string): void;
-  getDebugName(obj: object | null | undefined): string | undefined;
-  getDebugType(obj: object | null | undefined): string | undefined;
-  trackUpdate(id: DependencyId, name?: string): void;
-  registerNode(node: object & { id: DependencyId }): void;
-  trackEvaluationFailure(id: DependencyId): void;
-  dumpGraph(): Record<string, unknown>[];
-}
-
-/**
- * Metadata for reactive nodes used in hot paths.
+ * Metadata for reactive nodes used in performance-critical hot paths.
+ *
+ * Optimization:
+ * Properties prefixed with `_` are used for internal drift detection logic
+ * and are optimized for direct property access in the V8 engine.
+ *
  * @internal
  */
 export interface InternalNode {
+  /** Tracks the computation epoch to detect dependency drift. */
   _trackEpoch: number;
+  /** Current count of recorded dependencies in the tracking buffer. */
   _trackCount: number;
+  /** Captures the last error encountered during node evaluation. */
   _error: Error | null;
+  /** Indicates if the node is in a failed async state. */
   isRejected: boolean;
 }

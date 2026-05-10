@@ -1,44 +1,58 @@
+/**
+ * @module Reactive_Graph_Types
+ *
+ * Responsibility:
+ * Defines the core building blocks of the reactive dependency graph, including
+ * Atoms, Computed nodes, and internal Link structures.
+ */
+
 import type { Prettify, SlotBuffer } from '@but212/atom-effect-utils';
 import type { BRAND, KIND } from '@/constants';
 import type { AsyncStateType, DependencyId, Disposable } from './base';
 
 /**
- * Internal contract for dependency tracking and re-execution.
+ * The internal contract for any node that can act as a reactive dependency.
  *
  * Optimization: Monomorphic Access
  * All properties are non-optional to ensure V8 optimizes property access
- * during high-frequency graph traversals.
+ * via "Hidden Classes" during high-frequency graph traversals.
  *
  * @internal
  */
 export interface Dependency<T = unknown> {
   /** @internal */
   readonly [BRAND]?: number;
-  /** Unique engine-level ID. */
+  /** Unique engine-level ID for graph indexing. */
   readonly id: DependencyId;
 
-  /** Monotonic update counter used for drift detection. */
+  /**
+   * Monotonic update counter.
+   * Used by subscribers to detect if this dependency has drifted.
+   */
   version: number;
 
-  /** State bitmask defined in `constants.ts`. */
+  /** Combined bitmask representing lifecycle, type, and async state. */
   flags: number;
 
-  /** Used by the scheduler to identify if a node was visited in the current epoch. */
+  /** Tracks if this node was visited during the current scheduler epoch. */
   _lastSeenEpoch: number;
 
-  /** Type discriminator for fast-path checks. */
+  /** Fast-path discriminator for computed logic. */
   readonly isComputed: boolean;
 
-  /** Error state flag. */
+  /** Quick-check flag for error presence. */
   readonly hasError: boolean;
 
-  /** Engine-level subscription method. */
+  /**
+   * Core engine method for establishing a reactive connection.
+   * Returns a cleanup function.
+   */
   subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void;
 
-  /** Non-reactive read. */
+  /** Retrieves the value without triggering dependency tracking. */
   peek(): T;
 
-  /** Current value. */
+  /** The current value of the node. */
   readonly value: T;
 }
 
@@ -46,7 +60,7 @@ export interface Dependency<T = unknown> {
  * A read-only reactive container.
  */
 export interface ReadonlyAtom<T = unknown> extends Dependency<T>, Disposable {
-  /** Returns the active subscriber count for diagnostic purposes. */
+  /** Returns the count of active listeners for diagnostic purposes. */
   subscriberCount(): number;
 }
 
@@ -54,7 +68,7 @@ export interface ReadonlyAtom<T = unknown> extends Dependency<T>, Disposable {
  * A reactive container supporting read and write operations.
  */
 export interface WritableAtom<T = unknown> extends ReadonlyAtom<T> {
-  /** Setting the value triggers a notification cycle for all dependents. */
+  /** Triggers a notification cycle to all dependent subscribers upon assignment. */
   value: T;
 }
 
@@ -65,77 +79,93 @@ export interface ComputedAtom<T = unknown> extends ReadonlyAtom<T> {
   /** @internal */
   readonly [BRAND]?: number;
 
-  /** Current async status (idle, pending, resolved, rejected). */
+  /** The current status in the asynchronous lifecycle. */
   readonly state: AsyncStateType;
-  /** True if the last computation threw an error. */
+  /** Indicates if the most recent computation resulted in an error. */
   readonly hasError: boolean;
-  /** The most recent error encountered. */
+  /** The specific Error object if `hasError` is true. */
   readonly lastError: Error | null;
 
-  /** True during async execution. */
+  /** True while an asynchronous formula is executing. */
   readonly isPending: boolean;
-  /** True if at least one successful resolution has occurred. */
+  /** True if the node has resolved to a valid value at least once. */
   readonly isResolved: boolean;
-  /** True if the current value is valid (resolved and no active error). */
+  /** True if the current value is safe to read (resolved and error-free). */
   readonly isValid: boolean;
 
   /**
-   * Aggregate list of errors from the last evaluation cycle.
+   * The complete list of errors caught during the last evaluation batch.
    */
   readonly errors: readonly Error[];
 
   /**
-   * Manually flags the computation as dirty.
+   * Manually marks the node as stale, forcing a re-computation on next access.
    */
   invalidate(): void;
 }
 
+/**
+ * Represents a target that can react to dependency updates.
+ */
 export interface Subscriber {
   /** Invoked by the scheduler to perform the node's update logic. */
   execute(): void;
 }
 
+/**
+ * A handle for a running side-effect.
+ */
 export interface EffectObject extends Disposable {
   /** @internal */
   readonly [BRAND]?: number;
-  /** Manually triggers the effect. */
+  /** Forces an immediate execution of the effect logic. */
   run(): void;
-  /** True if the effect is no longer active. */
+  /** Indicates if the effect has been permanently stopped. */
   readonly isDisposed: boolean;
-  /** Total execution count since creation. */
+  /** Cumulative count of effect executions for debugging and frequency monitoring. */
   readonly executionCount: number;
-  /** True while the effect function is running. */
+  /** True while the user-provided effect function is actively running. */
   readonly isExecuting: boolean;
 }
 
 /**
- * A handle for an active listener on a reactive node.
+ * Optimized internal handle for a single listener.
+ *
+ * Logic: Dispatch Speed
+ * Uses the `KIND` discriminator to allow the scheduler to invoke the target
+ * without performing `typeof` checks in the update loop.
+ *
  * @internal
  */
 export type Subscription<T> = {
   [K in (typeof KIND)[keyof typeof KIND]]: Prettify<{
-    /** The kind of subscriber (0: Function, 1: Object). */
+    /** Discriminator (0: Function, 1: Object). */
     readonly k: K;
-    /** The subscriber target (callback or Subscriber object). */
+    /** The target payload (callback or Subscriber object). */
     readonly t: K extends typeof KIND.Fn ? (newValue?: T, oldValue?: T) => void : Subscriber;
   }>;
 }[(typeof KIND)[keyof typeof KIND]];
 
 /**
- * Represents a single directed edge in the dependency graph (Subscriber -> Dependency).
+ * Represents a single directed edge in the graph (Subscriber -> Dependency).
+ *
+ * Logic: Drift Detection
+ * Stores the dependency's `version` at the time of the link creation.
+ * If the link's version doesn't match the node's version, the edge is stale.
+ *
  * @internal
  */
 export interface DependencyLink {
-  /** The node being watched. */
+  /** The dependency node being observed. */
   node: Dependency;
-  /** The version of the node when this link was established. */
+  /** The version of the node when the link was established. */
   version: number;
-  /** Cleanup function returned by the dependency. */
+  /** The unsubscription cleanup function. */
   unsub: (() => void) | undefined;
 }
 
 /**
- * The base structure for any reactive node in the graph.
+ * The base structure for any reactive node participating in the graph.
  * @internal
  */
 export interface ReactiveNode<T> {
@@ -144,20 +174,30 @@ export interface ReactiveNode<T> {
   _lastSeenEpoch: number;
   _nextEpoch: number | undefined;
   readonly id: DependencyId;
+  /** Optimized storage for listeners and upstream dependencies. */
   _storage: {
     slots: SlotBuffer<Subscription<T>> | null;
     deps: DepBufferState | null;
   };
 }
 
-/** @internal */
+/**
+ * State container for the dependency tracking buffer.
+ * @internal
+ */
 export interface DepBufferState {
+  /** Flat buffer of active links. */
   slots: SlotBuffer<DependencyLink>;
+  /** Indexer for fast O(1) dependency lookup. */
   map: Indexer;
+  /** Optimization: Skip graph checks if no computed nodes are present. */
   hasComputeds: boolean;
 }
 
-/** @internal */
+/**
+ * Strategy interface for high-speed dependency deduplication.
+ * @internal
+ */
 export interface Indexer {
   get(dep: Dependency): number | undefined;
   set(dep: Dependency, index: number): void;

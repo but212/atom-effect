@@ -1,18 +1,36 @@
+/**
+ * @module DependencyBuffers
+ *
+ * Responsibility:
+ * Orchestrates the lifecycle of reactive connections between nodes. Manages
+ * memory-efficient tracking, reconciliation, and dirty propagation checks.
+ *
+ * Design Intent:
+ * Uses a hybrid storage strategy (SlotBuffer + O(1) Lookup Map) to minimize
+ * allocation overhead during hot-path execution while maintaining fast
+ * dependency resolution for large graphs.
+ */
+
 import { SlotBuffer } from '@but212/atom-effect-utils';
 import { BUFFER_CONFIG, COMPUTED_STATE_FLAGS, IS_DEV, LOG_PREFIX } from '@/constants';
 import type { DepBufferState, Dependency, DependencyLink, Indexer } from '@/types';
 import { debug } from '@/utils/debug';
 
+/**
+ * Role: No-op implementation of the Indexer interface for empty buffers.
+ * Optimization: Prevents Map allocation for small or empty dependency sets.
+ */
 const NullIndexer: Indexer = {
   get: () => undefined,
   set: () => {},
   delete: () => {},
 };
 
+/** @internal */
 class MapIndexer extends Map<Dependency, number> implements Indexer {}
 
 /**
- * Factory for dependency buffers.
+ * Role: Internal factory for dependency buffer states.
  * @internal
  */
 export function createDepBuffer(): DepBufferState {
@@ -34,17 +52,16 @@ export function prepareTracking(state: DepBufferState): void {
 /**
  * Logic: Subscription Reuse (Claiming)
  * Attempts to locate and move an existing subscription to the current
- * tracking index.
+ * tracking index to avoid redundant listener attachments.
  *
- * Why:
- * Re-attaching listeners is expensive. Reusing the `unsub` handle from a
- * previous run maintains the reactive connection without triggering
- * subscriber count changes.
+ * Reason:
+ * Re-attaching listeners triggers expensive internal state transitions and
+ * subscriber count changes. Reusing handles maintains the reactive connection.
  *
  * Strategy:
- * 1. Check if the current slot already holds the dependency (Fast Path).
- * 2. Look ahead using the lookup map or linear search.
- * 3. If found, swap the link to the front to preserve order for the next run.
+ * 1. Validates current slot for a direct match (Optimized Fast Path).
+ * 2. Performs a heuristic look-ahead search using the lookup map or linear scan.
+ * 3. Synchronizes the version and swaps the link to the front to preserve order.
  *
  * @internal
  */
@@ -53,7 +70,7 @@ export function claimExisting(state: DepBufferState, dep: Dependency, trackIndex
   if (slots.length <= trackIndex) return false;
 
   const current = slots.at(trackIndex);
-  // Optimization: Direct hit. Just synchronize the version to mark it as "checked".
+  // Optimization: Direct hit synchronization.
   if (current?.node === dep && current.unsub) {
     current.version = dep.version;
     return true;
@@ -66,8 +83,8 @@ export function claimExisting(state: DepBufferState, dep: Dependency, trackIndex
   link.version = dep.version;
 
   // Logic: Order Preservation
-  // Swap the discovered link with whatever occupies the current track index.
-  // This ensures "live" dependencies stay at the head of the buffer.
+  // Swaps the discovered link with the occupant at the current track index.
+  // This ensures active dependencies occupy the head of the buffer.
   const temp = slots.at(trackIndex);
   depBufferSetAt(state, trackIndex, link);
   depBufferSetAt(state, existingIndex, temp);
@@ -76,7 +93,8 @@ export function claimExisting(state: DepBufferState, dep: Dependency, trackIndex
 
 /**
  * Logic: Heuristic Search
- * Switches between linear search and Map-based O(1) lookup based on buffer state.
+ * Dynamically switches between linear search and Map-based O(1) lookup based on
+ * buffer size and the MAP_THRESHOLD configuration.
  */
 function _findExistingIndex(state: DepBufferState, dep: Dependency, start: number): number {
   const idx = state.map.get(dep);
@@ -92,8 +110,8 @@ function _findExistingIndex(state: DepBufferState, dep: Dependency, start: numbe
 
 /**
  * Logic: Displaced Occupant Preservation
- * Inserts a new link at the current index. If an existing link is displaced,
- * it is pushed to the tail so it can be reclaimed later in the same cycle.
+ * Inserts a new dependency link. If the current index is occupied, the
+ * previous occupant is moved to the tail for potential reclamation.
  * @internal
  */
 export function insertNew(state: DepBufferState, trackIdx: number, link: DependencyLink): void {
@@ -106,7 +124,9 @@ export function insertNew(state: DepBufferState, trackIdx: number, link: Depende
 }
 
 /**
- * Atomic mutation that synchronizes the O(1) lookup map with the slot buffer.
+ * Logic: Atomic Mutation & Index Synchronization
+ * Updates a specific slot and synchronizes the O(1) lookup map.
+ * Handles automatic escalation from NullIndexer to MapIndexer.
  * @internal
  */
 export function depBufferSetAt(
@@ -131,7 +151,8 @@ export function depBufferSetAt(
 }
 
 /**
- * Atomic append operation that maintains the lookup map.
+ * Logic: Atomic Append
+ * Appends a link to the buffer tail and maintains lookup map integrity.
  * @internal
  */
 export function depBufferPush(state: DepBufferState, item: DependencyLink): number {
@@ -150,26 +171,21 @@ export function depBufferPush(state: DepBufferState, item: DependencyLink): numb
 }
 
 /**
- * Logic: Dirty Propagation Check
- * Determines if any dependency has transitioned to a new version.
- *
- * Strategy: Table-based Validation
- * Dispatches to the appropriate checker using a bitmask index.
+ * Logic: Table-based Dirty Validation
+ * Dispatches validation logic based on the IS_COMPUTED bitmask.
  */
 const DIRTY_CHECKERS = {
-  // Atom path
+  // Logic: Direct Version Check for Atoms
   0: (link) => link.node.version !== link.version,
-  // Computed path
+  // Logic: Recursive "Pull" for Computed Nodes
   [COMPUTED_STATE_FLAGS.IS_COMPUTED]: (link) => {
     const dep = link.node;
     try {
-      // Trigger evaluation if dirty by accessing value.
-      // This is the core of the recursive "pull" strategy.
+      // Impact: Triggering the getter enforces evaluation of upstream dependencies.
       dep.value;
     } catch {
-      // Logic: Silencing transient failures
-      // If evaluation fails during a dirty check, we catch it here to prevent
-      // interrupting the propagation cycle.
+      // Caution: Transient failures during dirty checks are suppressed to
+      // avoid halting the propagation cycle. Failures are logged to the debugger.
       if (IS_DEV) {
         debug.trackEvaluationFailure(dep.id);
       }
@@ -179,7 +195,9 @@ const DIRTY_CHECKERS = {
 } satisfies Record<number, (link: DependencyLink) => boolean>;
 
 /**
- * Logic: Dirty Propagation Check
+ * Logic: Dirty Propagation Check (Recursive)
+ * Evaluates the buffer to determine if any dependency has transitioned.
+ * Uses bitmask dispatch to optimize checker selection.
  * @internal
  */
 export function isBufferDirty(state: DepBufferState): boolean {
@@ -190,23 +208,17 @@ export function isBufferDirty(state: DepBufferState): boolean {
   const checkers = DIRTY_CHECKERS;
   for (let i = 0; i < len; i++) {
     const link = slots.at(i);
-    // Guard clause to reduce nesting and improve branch prediction
     if (!link) continue;
-    // IS_COMPUTED bit check
+    // Optimized bitwise dispatch
     if (checkers[link.node.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED]!(link)) return true;
   }
   return false;
 }
 
 /**
- * Logic: Push-Path Validation
- * A non-recursive check used during the notification phase to avoid
- * re-entrant computation cascades.
- *
- * It returns true if:
- * 1. Any dependency version has already changed.
- * 2. Any dependency is already marked as DIRTY.
- *
+ * Logic: Shallow Propagation Check (Push-Path)
+ * Validates dependency versions without triggering re-evaluation.
+ * Used during the notification phase to detect pending changes.
  * @internal
  */
 export function isBufferShallowDirty(state: DepBufferState): boolean {
@@ -218,8 +230,7 @@ export function isBufferShallowDirty(state: DepBufferState): boolean {
 
     const dep = link.node;
     const version = dep.version;
-    // Check for explicit version drift (already pulled changes)
-    // or pending changes (push-based dirty signals)
+    // Detects both pulled changes (version drift) and pending signals (DIRTY flag).
     if (version !== link.version || (dep.flags & COMPUTED_STATE_FLAGS.DIRTY) !== 0) return true;
   }
   return false;
@@ -227,12 +238,11 @@ export function isBufferShallowDirty(state: DepBufferState): boolean {
 
 /**
  * Logic: Post-Tracking Cleanup
- * Removes and unsubscribes from all dependencies that were not reclaimed
- * during the last tracking cycle.
+ * Disposes of and unsubscribes from all dependencies that were not reclaimed.
  *
  * Constraint: Memory Integrity
- * Failure to invoke `link.unsub()` results in "Ghost Executions" where
- * disposed or inactive nodes continue to react to state changes.
+ * Mandatory teardown of inactive subscriptions prevents "Ghost Executions"
+ * and memory leaks in the reactive graph.
  *
  * @internal
  */
@@ -256,13 +266,12 @@ export function depBufferTruncateFrom(state: DepBufferState, index: number): voi
   }
   slots.truncateFrom(index);
 
-  // Constraint: Phase Locality
-  // The lookup map is only valid during the reconciliation phase.
+  // Phase Locality: The lookup map is invalidated outside reconciliation.
   state.map = NullIndexer;
 }
 
 /**
- * Releases all subscriptions and resets the buffer to an empty state.
+ * Releases all subscriptions and clears the buffer.
  * @internal
  */
 export function disposeAll(state: DepBufferState): void {
