@@ -1,5 +1,24 @@
 # Changelog
 
+## [Unreleased]
+
+### Core & Infrastructure
+
+#### Changed
+
+- **Build System**: Partitioned the build process into `types`, `lib`, and `bundle` targets for better optimization and faster builds.
+- **Environment**: Introduced `cross-env` to ensure OS-independent build script execution.
+
+### jQuery
+
+#### Changed
+
+- **Packaging**: Externalized `@but212/atom-effect` in library builds (`es`, `cjs`) to prevent code duplication and enforce peer dependency usage.
+
+#### Fixed
+
+- **atomList**: Improved stability of internal sentinel management during `batchSanitize` when rendering large numbers of items simultaneously.
+
 ## [0.32.1]
 
 ### jQuery

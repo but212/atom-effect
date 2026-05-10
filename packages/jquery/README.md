@@ -22,13 +22,16 @@ This package enables declarative synchronization between reactive state and the 
 npm install @but212/atom-effect-jquery jquery
 ```
 
+> [!IMPORTANT]
+> When using the ESM or CJS version, ensure that `@but212/atom-effect` is also installed in your project as a peer dependency.
+
 ### CDN
 
 ```html
 <!-- jQuery -->
 <script src="https://code.jquery.com/jquery-4.0.0.min.js"></script>
 <!-- atom-effect-jquery -->
-<script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.32.1"></script>
+<script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.32.1/dist/atom-effect-jquery.min.js"></script>
 
 <script>
   // Initializing global state

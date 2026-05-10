@@ -12,8 +12,12 @@
     "dist"
   ],
   "scripts": {
-    "build": "vite build",
+    "build": "pnpm run build:types && pnpm run build:lib && pnpm run build:bundle",
+    "build:types": "cross-env BUILD_TARGET=types vite build",
+    "build:lib": "cross-env BUILD_TARGET=lib vite build",
+    "build:bundle": "cross-env BUILD_TARGET=bundle vite build",
     "clean": "rimraf dist",
+
     "test": "vitest",
     "test:run": "vitest run",
     "test:unit": "vitest __tests__/unit",

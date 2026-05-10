@@ -1,4 +1,4 @@
-import { defineConfig, mergeConfig, type UserConfig } from 'vite';
+import { defineConfig, type LibraryFormats, mergeConfig, type UserConfig } from 'vite';
 import dts, { type PluginOptions } from 'vite-plugin-dts';
 
 export interface BaseViteConfigOptions {
@@ -7,6 +7,9 @@ export interface BaseViteConfigOptions {
   entry?: string;
   libFileNames?: Record<string, string>;
   dtsOptions?: PluginOptions;
+  formats?: LibraryFormats[];
+  emptyOutDir?: boolean;
+  skipDts?: boolean;
 }
 
 export const getBaseViteConfig = (options: BaseViteConfigOptions): UserConfig => {
@@ -16,6 +19,9 @@ export const getBaseViteConfig = (options: BaseViteConfigOptions): UserConfig =>
     entry = `${packageDir}/src/index.ts`,
     libFileNames,
     dtsOptions,
+    formats = ['es', 'cjs', 'umd'],
+    emptyOutDir = true,
+    skipDts = false,
   } = options;
 
   return {
@@ -23,12 +29,12 @@ export const getBaseViteConfig = (options: BaseViteConfigOptions): UserConfig =>
       target: 'es2021',
       sourcemap: true,
       outDir: 'dist',
-      emptyOutDir: true,
+      emptyOutDir,
       minify: 'esbuild',
       lib: {
         entry,
         name,
-        formats: ['es', 'cjs', 'umd'],
+        formats,
         ...(libFileNames
           ? {
               fileName: (format: string) =>
@@ -49,13 +55,14 @@ export const getBaseViteConfig = (options: BaseViteConfigOptions): UserConfig =>
       },
     },
     plugins: [
-      dts({
-        include: ['src/**/*'],
-        exclude: ['src/**/*.test.ts', '__tests__/**/*', '__benchmarks__/**/*', 'node_modules'],
-        tsconfigPath: './tsconfig.build.json',
-        ...dtsOptions,
-      }),
-    ],
+      !skipDts &&
+        dts({
+          include: ['src/**/*'],
+          exclude: ['src/**/*.test.ts', '__tests__/**/*', '__benchmarks__/**/*', 'node_modules'],
+          tsconfigPath: './tsconfig.build.json',
+          ...dtsOptions,
+        }),
+    ].filter(Boolean),
   };
 };
 
