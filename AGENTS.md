@@ -1,51 +1,48 @@
 # Agent Guide: atom-effect
 
-This document provides technical context, operational constraints, and architectural standards for AI systems and developers working on the `atom-effect` monorepo.
+This document provides essential context and operational mandates for AI agents working on the `atom-effect` monorepo.
 
-## Project Context & Mission
+## 1. Project Mission & Core Architecture
 
-`atom-effect` is a high-performance reactive state management library. The primary design goals are V8 optimization, memory efficiency, and glitch-free asynchronous propagation.
+`atom-effect` is a high-performance reactive state management library optimized for V8. It ensures glitch-free asynchronous propagation with minimal memory overhead.
 
-## Primary Workflows & Commands
+## 2. Monorepo Structure
 
-Operational tasks should be executed from the root directory unless package-specific context is required.
+- **`packages/core`**: The core reactive engine (Atoms, Computeds, Effects).
+- **`packages/jquery`**: jQuery bindings with automatic lifecycle management and security sanitization.
+- **`packages/utils`**: Functional primitives (Option, Result) and internal type guards.
+- **`packages/configs`**: Shared build and test configurations.
 
-- **Environment Setup**: `pnpm install`
-- **Build System**: `pnpm build` (Uses Turbo)
-- **Validation**: `pnpm test` (Vitest)
-- **Static Analysis**: `pnpm typecheck` & `pnpm lint` (Biome)
-- **Performance Auditing**: `cd packages/core && pnpm bench`
+## 3. Core Commands
 
-## Key Symbol Map (AI Discovery)
+Execute from the root directory:
 
-For deep understanding of the reactive engine, prioritize these files:
+- **Setup**: `pnpm install`
+- **Build**: `pnpm build` (Turbo-powered)
+- **Test**: `pnpm test` (Vitest)
+- **Lint/Format**: `pnpm lint` (Biome)
+- **Type Check**: `pnpm typecheck`
 
-- **Base Node**: `packages/core/src/core/base.ts` (`ReactiveNode`)
-- **State Source**: `packages/core/src/core/atom.ts` (`AtomImpl`)
-- **Derived Logic**: `packages/core/src/core/computed.ts` (`ComputedAtomImpl`)
-- **Side Effects**: `packages/core/src/core/effect.ts` (`EffectImpl`)
-- **Lifecycle Management**: `packages/jquery/src/core/registry.ts` (`BindingRegistry`)
+## 4. Validation Protocol
 
-## Architectural Constraints
+Before completing any task, ensure:
 
-### 1. Reactive Integrity
+1. **Zero Regressions**: `pnpm test` passes for all packages.
+2. **Type Safety**: `pnpm typecheck` returns no errors.
+3. **Style Consistency**: `pnpm lint` (Biome) is clean.
+4. **Surgical Precision**: **ONLY modify files and code blocks strictly required for the task. Avoid broad refactoring or unrelated cleanup.**
 
-- **Synchronous Dependency Capture**: Dependencies must be accessed before any `await` point.
-- **Glitch Prevention**: Use the global epoch and local versioning system to ensure consistent state across the graph.
+## 5. Operational Constraints
 
-### 2. Security Standards (jQuery Integration)
+- **Local Context**: Prefer local fixes over global architectural changes unless explicitly requested.
+- **Reactive Integrity**: Dependencies MUST be accessed synchronously before any `await`.
+- **Security**: All DOM mutations in `packages/jquery` MUST use `sanitizeHtml`.
+- **Memory**: Always use `.dispose()` for effects/subscriptions to prevent leaks.
+- **Purity**: Formulas in `computed()` MUST be idempotent and side-effect free.
 
-- **Mandatory Sanitization**: All DOM injections (HTML, Attr, CSS) must pass through `packages/jquery/src/utils/sanitize.ts`.
-- **Clobbering Protection**: Interact with the DOM via `Element.prototype` to avoid shadowed property vectors.
+## 6. Documentation Index
 
-## Coding Patterns & Idioms
-
-- **Purity**: Formulas in `computed()` must be idempotent and free of side effects.
-- **Explicit Disposal**: Manage resources via `.dispose()` or the automated `MutationObserver` registry in the jQuery package.
-- **Type Safety**: Avoid `any` or type assertions; rely on structural typing and internal type guards (`packages/utils/src/type-guard.ts`).
-
-## Modification Guidelines (Operational Mandates)
-
-- **Surgical Precision**: Apply changes only to the files and logic directly related to the task. Avoid broad refactoring or unrelated "cleanup" to minimize the risk of regressions.
-- **Verification Cycle**: Every modification must be validated via the project's testing suite (`pnpm test`). Bug fixes must include a reproduction test case to prevent future regressions.
-- **Documentation Sync**: If an internal invariant or public API is altered, corresponding documentation in `docs/` or package directories must be updated concurrently.
+- **Core Architecture**: [packages/core/docs/ARCHITECTURE.md](./packages/core/docs/ARCHITECTURE.md)
+- **jQuery Security**: [packages/jquery/docs/SECURITY.md](./packages/jquery/docs/SECURITY.md)
+- **Coding Patterns**: [packages/jquery/docs/PATTERNS.md](./packages/jquery/docs/PATTERNS.md)
+- **API Reference**: [packages/core/docs/API.md](./packages/core/docs/API.md) | [packages/jquery/docs/API.md](./packages/jquery/docs/API.md)
