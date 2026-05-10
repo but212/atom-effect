@@ -1,71 +1,46 @@
 /**
  * Core Reactive Engine
  *
- * This module consolidates the internal tracking, scheduling, and subscription mechanisms.
- * It is designed to be the "heart" of the reactive system, ensuring:
- * 1. Glitch-free propagation via a unified scheduler.
- * 2. High performance through V8 SMI (Small Integer) and Hidden Class optimizations.
- * 3. Atomic state updates via batching.
+ * Responsibility:
+ * - Orchestrates internal tracking, scheduling, and subscription propagation.
+ * - Manages the global tracking stack for nested reactive contexts.
+ *
+ * Design Goals:
+ * - Glitch-free propagation via unified epoch-based scheduling.
+ * - V8 SMI (Small Integer) and Hidden Class optimizations for peak performance.
+ * - Atomic updates through batched notification cycles.
  *
  * Boundaries:
- * - This module handles the execution flow but is agnostic to specific node implementations (Atoms/Computeds).
- * - All dependencies accessed here must be accessed synchronously.
+ * - Agnostic to node implementations (Atoms, Computeds, effects).
+ * - All reactive access within this module must be synchronous.
  */
 
 import { SlotBuffer } from '@but212/atom-effect-utils';
-import { IS_DEV, SCHEDULER_CONFIG, SMI_MAX } from '@/constants';
-import { AtomError, ERROR_MESSAGES, SchedulerError, wrapError } from '@/errors';
+import { COMPUTED_STATE_FLAGS, IS_DEV, KIND, LOG_PREFIX } from '@/constants';
 import type {
   Dependency,
   DependencyLink,
   DependencySubscriber,
+  DependencyTracker,
+  InternalNode,
+  Prettify,
   ReactiveNode,
   Subscriber,
+  SubscriberKind,
+  SubscriberTarget,
+  Subscription,
+  TrackingContext,
 } from '@/types';
+import { AtomError, type AtomErrorConstructor, ERROR_MESSAGES, wrapError } from '@/utils';
+import {
+  claimExisting,
+  depBufferTruncateFrom,
+  insertNew,
+  isBufferDirty,
+  isBufferShallowDirty,
+} from './buffers';
 
-/**
- * Subscriber Kind Discriminators
- * Reason: Using numeric flags instead of `typeof` or `instanceof` in hot loops
- * significantly improves JIT dispatch speed.
- * @internal
- */
-const Kind = {
-  Fn: 0,
-  Obj: 1,
-} as const;
-
-/**
- * Wraps integers to stay within V8's SMI range (31-bit signed).
- *
- * Why: Transitioning from SMIs to HeapNumbers (doubles) causes significant
- * de-optimization in hot paths like version checking and epoch comparison.
- * @internal
- */
-const nextSmi = (v: number): number => {
-  const next = (v + 1) & SMI_MAX;
-  return next === 0 ? 1 : next;
-};
-
-/**
- * Generates the next version number for stateful objects.
- * Uses SMI-safe increments to prevent de-optimization.
- */
-export function nextVersion(v: number): number {
-  return nextSmi(v);
-}
-
-/**
- * Internal state for the reactive tracking system.
- *
- * Design: Stack-based approach enables nested tracking.
- * When a computed atom is evaluated inside an effect, the stack preserves
- * the effect's context while the computed atom tracks its own dependencies.
- * @internal
- */
-export interface TrackingContext {
-  stack: (DependencySubscriber | null)[];
-  current: DependencySubscriber | null;
-}
+import { nextEpoch, nextSmi } from './scheduler';
 
 /** @internal */
 export function createTrackingContext(): TrackingContext {
@@ -92,15 +67,14 @@ export function popTrackingSubscriber(context: TrackingContext): void {
 /**
  * Resets the tracking stack to a specific depth.
  *
- * Why: Used during error recovery to prevent dependency leakage if a
+ * Why: Prevents dependency leakage during error recovery if a
  * computation fails mid-execution.
  * @internal
  */
 export function rollbackTrackingSubscriber(context: TrackingContext, depth: number): void {
   const stack = context.stack;
   stack.length = depth;
-  const len = stack.length;
-  context.current = len > 0 ? stack[len - 1]! : null;
+  context.current = depth > 0 ? stack[depth - 1]! : null;
 }
 
 /**
@@ -129,21 +103,40 @@ export function resetTrackingContext(context: TrackingContext): void {
   context.current = null;
 }
 
+/** @internal */
+export function createTrackingContextObject(): TrackingContext {
+  return createTrackingContext();
+}
+
+/** @internal */
 export const trackingContext = createTrackingContext();
+
+/**
+ * Dispatch table for subscriber notification strategies.
+ * Avoids branch logic in hot loops.
+ * @internal
+ */
+const NOTIFIER_STRATEGY: Record<
+  SubscriberKind,
+  (sub: Subscription<unknown>, newValue?: unknown, oldValue?: unknown) => void
+> = {
+  [KIND.Fn]: (sub, n, o) => (sub.t as (n?: unknown, o?: unknown) => void)(n, o),
+  [KIND.Obj]: (sub) => (sub.t as Subscriber).execute(),
+};
 
 /**
  * Executes a scope where reactive dependencies are ignored.
  *
  * When to use:
- * - Accessing atoms inside an effect/computed without creating a subscription.
- * - Side-effects (logging, analytics) that shouldn't trigger re-runs.
- * - Breaking circular dependencies by reading a value "silently".
+ * - Accessing atoms without creating a subscription.
+ * - Side-effects (logging) that shouldn't trigger re-runs.
+ * - Breaking circular dependencies by reading "silently".
  *
  * Example:
  * ```ts
  * effect(() => {
  *   const val = count.value; // Tracked
- *   untracked(() => console.log('Current value:', count.value)); // Not tracked
+ *   untracked(() => console.log(count.value)); // Not tracked
  * });
  * ```
  */
@@ -168,483 +161,68 @@ export function createDependencyLink(
 }
 
 /**
- * Internal subscription record.
- * Using Kind-based dispatch for performance.
+ * Shared logic for registering a dependency during a reactive session.
+ *
+ * Optimization: Uses `_lastSeenEpoch` for O(1) session-level deduplication,
+ * avoiding expensive buffer lookups for already visited nodes.
  * @internal
  */
-export interface Subscription<T> {
-  readonly k: number;
-  readonly t: ((newValue?: T, oldValue?: T) => void) | Subscriber;
+export function nodeTrackDependency<T>(
+  tracker: DependencyTracker & ReactiveNode<T>,
+  dep: Dependency,
+  notifyCallback: () => void
+): void {
+  const internal = tracker as unknown as InternalNode;
+  const trackEpoch = internal._trackEpoch;
+
+  // Logic: Session-level Deduplication
+  // Avoids buffer lookup if the dependency was already seen in the current epoch.
+  if (dep._lastSeenEpoch === trackEpoch) return;
+  dep._lastSeenEpoch = trackEpoch;
+
+  const trackIndex = internal._trackCount++;
+  const deps = tracker._storage.deps!;
+
+  if (!claimExisting(deps, dep, trackIndex)) {
+    const unsubscribe = dep.subscribe(notifyCallback);
+    insertNew(deps, trackIndex, { node: dep, version: dep.version, unsub: unsubscribe });
+  }
+
+  if (dep.isComputed) {
+    deps.hasComputeds = true;
+  }
 }
 
 /** @internal */
-export function createSubscription<T>(
-  k: number,
-  t: ((newValue?: T, oldValue?: T) => void) | Subscriber
+export function createSubscription<T, K extends SubscriberKind>(
+  k: K,
+  t: K extends typeof KIND.Fn ? (newValue?: T, oldValue?: T) => void : Subscriber
 ): Subscription<T> {
-  return { k, t };
+  return { k, t } as Subscription<T>;
 }
 
 /**
- * Notifies a subscriber of a change.
- * Failure Isolation: Errors in one subscriber do not stop the notification of others.
- * @internal
+ * Generates the next version number for stateful objects.
+ * Uses SMI-safe increments to prevent de-optimization.
  */
-export function notifySubscription<T>(
-  subscription: Subscription<T>,
-  newValue?: T,
-  oldValue?: T
-): void {
-  try {
-    if (subscription.k === Kind.Fn) {
-      (subscription.t as (n?: T, o?: T) => void)(newValue, oldValue);
-    } else {
-      (subscription.t as Subscriber).execute();
-    }
-  } catch (e) {
-    console.error('[atom-effect] Subscriber failed:', e);
-  }
-}
-
-export interface SchedulerJobObject {
-  execute(): void;
-  _nextEpoch?: number | undefined;
-  _k?: number | undefined;
-}
-
-export interface SchedulerJobFunction {
-  (): void;
-  _nextEpoch?: number | undefined;
-  _k?: number | undefined;
-}
-
-export type SchedulerJob = SchedulerJobFunction | SchedulerJobObject;
-
-const S_IDLE = 0;
-const S_PROCESSING = 1 << 0;
-const S_FLUSHING_SYNC = 1 << 1;
-const S_BATCHING = 1 << 2;
-
-/** @internal */
-export interface JobBuffer {
-  items: (SchedulerJob | undefined)[];
-  size: number;
-}
-
-/**
- * Internal Scheduler State
- *
- * Managed via multiple buffers to allow "Double-Buffering" during flushes.
- * @internal
- */
-export interface SchedulerState {
-  epoch: number;
-  state: number;
-  batchDepth: number;
-  maxFlushIterations: number;
-  sessionActive: boolean;
-  sessionEpoch: number;
-  sessionExecutionCount: number;
-  active: JobBuffer; // Queue for the current flush.
-  standby: JobBuffer; // Collects jobs scheduled during an active flush.
-  batch: JobBuffer; // Collects jobs scheduled during an active batch.
-  _current: JobBuffer;
-  onOverflow: ((droppedCount: number) => void) | null;
-}
-
-/** @internal */
-export function createSchedulerState(): SchedulerState {
-  const active = { items: [], size: 0 };
-  const standby = { items: [], size: 0 };
-  const batch = { items: [], size: 0 };
-  return {
-    epoch: 0,
-    state: S_IDLE,
-    batchDepth: 0,
-    maxFlushIterations: SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS,
-    sessionActive: false,
-    sessionEpoch: 0,
-    sessionExecutionCount: 0,
-    active,
-    standby,
-    batch,
-    _current: active,
-    onOverflow: null,
-  };
-}
-
-/**
- * Consolidation: Moves batch jobs to the active execution queue.
- * @internal
- */
-export function schedulerMergeBatchQueue(state: SchedulerState, nextEpoch: () => number): void {
-  const batch = state.batch;
-  const queueSize = batch.size;
-  if (queueSize === 0) return;
-
-  const epoch = nextEpoch();
-  const bItems = batch.items;
-  const active = state.active;
-  const targetItems = active.items;
-  let currentSize = active.size;
-
-  for (let i = 0; i < queueSize; i++) {
-    const job = bItems[i]!;
-    if (job._nextEpoch !== epoch) {
-      job._nextEpoch = epoch;
-      targetItems[currentSize++] = job;
-    }
-    bItems[i] = undefined;
-  }
-
-  active.size = currentSize;
-  batch.size = 0;
-
-  // Cleanup: Shrink buffer if it grew significantly beyond threshold.
-  if (bItems.length > SCHEDULER_CONFIG.BATCH_QUEUE_SHRINK_THRESHOLD) {
-    bItems.length = 0;
-  }
-}
-
-/**
- * Drainage: Loops until all buffers are empty.
- * Caution: Subject to maxFlushIterations to prevent infinite recursion in circular graphs.
- * @internal
- */
-export function schedulerDrainQueue(
-  state: SchedulerState,
-  nextEpoch: () => number,
-  processQueue: (state: SchedulerState) => void,
-  handleOverflow: (state: SchedulerState) => void
-): void {
-  let iterations = 0;
-  const max = state.maxFlushIterations;
-
-  while (state.active.size > 0 || state.batch.size > 0) {
-    if (++iterations > max) {
-      handleOverflow(state);
-      return;
-    }
-
-    if (state.batch.size > 0) {
-      schedulerMergeBatchQueue(state, nextEpoch);
-    }
-
-    if (state.active.size > 0) {
-      processQueue(state);
-    }
-  }
-}
-
-/**
- * Execution: Swaps buffers to allow new jobs to be safely queued during execution.
- * @internal
- */
-export function schedulerProcessQueue(state: SchedulerState, nextEpoch: () => number): void {
-  const active = state.active;
-  const jobs = active.items;
-  const count = active.size;
-
-  // Double-buffering swap: active becomes standby (cleared), standby becomes active.
-  state.active = state.standby;
-  state.standby = active;
-  state.active.size = 0;
-  if (state._current === active) state._current = state.active;
-
-  nextEpoch();
-
-  for (let i = 0; i < count; i++) {
-    const job = jobs[i]!;
-    jobs[i] = undefined;
-
-    try {
-      const k = job._k!;
-      if (k === Kind.Fn) {
-        (job as () => void)();
-      } else {
-        (job as SchedulerJobObject).execute();
-      }
-    } catch (e) {
-      console.error(new SchedulerError('Error occurred during scheduler execution', e));
-    }
-  }
-}
-
-/**
- * Recovery: Clears state when an infinite loop is detected.
- * @internal
- */
-export function schedulerHandleFlushOverflow(state: SchedulerState): void {
-  const droppedCount = state.active.size + state.batch.size;
-  console.error(
-    new SchedulerError(
-      ERROR_MESSAGES.SCHEDULER_FLUSH_OVERFLOW(state.maxFlushIterations, droppedCount)
-    )
-  );
-
-  state.active.size = 0;
-  state.active.items.length = 0;
-  state.standby.size = 0;
-  state.standby.items.length = 0;
-  state.batch.size = 0;
-  state.batch.items.length = 0;
-
-  if (state.onOverflow) {
-    try {
-      state.onOverflow(droppedCount);
-    } catch {
-      /* Suppress user callback errors */
-    }
-  }
-}
-
-/** @internal */
-export function schedulerNextEpoch(state: SchedulerState): number {
-  state.epoch = nextSmi(state.epoch);
-  return state.epoch;
-}
-
-/** @internal */
-export function schedulerStartFlush(state: SchedulerState): boolean {
-  if (state.sessionActive) {
-    if (IS_DEV) console.warn('startFlush() called during flush - ignored');
-    return false;
-  }
-  state.sessionActive = true;
-  state.sessionEpoch = schedulerNextEpoch(state);
-  state.sessionExecutionCount = 0;
-  return true;
-}
-
-/** @internal */
-export function schedulerEndFlush(state: SchedulerState): void {
-  state.sessionActive = false;
-}
-
-/** @internal */
-export function schedulerIncrementFlushExecutionCount(state: SchedulerState): number {
-  if (!state.sessionActive) return 0;
-  const count = ++state.sessionExecutionCount;
-  if (count <= SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH) return count;
-
-  throw new Error(`[atom-effect] Infinite loop detected: limit exceeded.`);
-}
-
-/** @internal */
-export function schedulerResetFlushState(state: SchedulerState): void {
-  state.sessionEpoch = 0;
-  state.sessionExecutionCount = 0;
-  state.sessionActive = false;
-}
-
-/**
- * Entry point for scheduling jobs.
- * Uses microtasks for deferred execution by default.
- * @internal
- */
-export function schedulerSchedule(state: SchedulerState, callback: SchedulerJob): void {
-  if (IS_DEV) {
-    if (
-      typeof callback !== 'function' &&
-      (!callback || typeof (callback as SchedulerJobObject).execute !== 'function')
-    ) {
-      throw new SchedulerError(ERROR_MESSAGES.SCHEDULER_CALLBACK_MUST_BE_FUNCTION);
-    }
-  }
-
-  // Deduplication: Avoid scheduling the same job twice in the same epoch.
-  if (callback._nextEpoch === state.epoch) return;
-  callback._nextEpoch = state.epoch;
-
-  if (callback._k === undefined) {
-    callback._k = typeof callback === 'function' ? Kind.Fn : Kind.Obj;
-  }
-
-  const target = state._current;
-  target.items[target.size++] = callback;
-
-  if ((state.state & S_PROCESSING) === 0) {
-    state.state |= S_PROCESSING;
-    queueMicrotask(() => {
-      try {
-        if (state.active.size === 0 && state.batch.size === 0) return;
-        const started = schedulerStartFlush(state);
-        schedulerDrainQueue(
-          state,
-          () => schedulerNextEpoch(state),
-          (s) => schedulerProcessQueue(s, () => schedulerNextEpoch(s)),
-          (s) => schedulerHandleFlushOverflow(s)
-        );
-        if (started) schedulerEndFlush(state);
-      } catch (e) {
-        resetTrackingContext(trackingContext);
-        throw e;
-      } finally {
-        state.state &= ~S_PROCESSING;
-      }
-    });
-  }
-}
-
-/** @internal */
-export function schedulerFlushSync(state: SchedulerState): void {
-  if (state.active.size === 0 && state.batch.size === 0) return;
-
-  const prevState = state.state;
-  state.state |= S_FLUSHING_SYNC;
-  const started = schedulerStartFlush(state);
-  try {
-    schedulerMergeBatchQueue(state, () => schedulerNextEpoch(state));
-    schedulerDrainQueue(
-      state,
-      () => schedulerNextEpoch(state),
-      (s) => schedulerProcessQueue(s, () => schedulerNextEpoch(s)),
-      (s) => schedulerHandleFlushOverflow(s)
-    );
-  } finally {
-    state.state = prevState;
-    if (started) schedulerEndFlush(state);
-  }
-}
-
-/** @internal */
-export function schedulerStartBatch(state: SchedulerState): void {
-  state.batchDepth++;
-  state.state |= S_BATCHING;
-  state._current = state.batch;
-}
-
-/** @internal */
-export function schedulerEndBatch(state: SchedulerState): void {
-  if (state.batchDepth === 0) {
-    if (IS_DEV) console.warn(ERROR_MESSAGES.SCHEDULER_END_BATCH_WITHOUT_START);
-    return;
-  }
-
-  if (--state.batchDepth === 0) {
-    state.state &= ~S_BATCHING;
-    state._current = state.active;
-    if ((state.state & S_FLUSHING_SYNC) === 0) {
-      schedulerFlushSync(state);
-    }
-  }
-}
-
-/** @internal */
-export function schedulerSetMaxFlushIterations(state: SchedulerState, max: number): void {
-  if (max < SCHEDULER_CONFIG.MIN_FLUSH_ITERATIONS) throw new SchedulerError(`Invalid limit.`);
-  state.maxFlushIterations = max;
-}
-
-/** @internal */
-export function schedulerIsBatching(state: SchedulerState): boolean {
-  return (state.state & S_BATCHING) !== 0;
-}
-
-/** @internal */
-export function schedulerQueueSize(state: SchedulerState): number {
-  return state.active.size + state.batch.size;
-}
-
-export const scheduler = createSchedulerState();
-
-export const nextEpoch = (): number => schedulerNextEpoch(scheduler);
-export const currentEpoch = (): number => scheduler.epoch;
-export const currentFlushEpoch = (): number => scheduler.sessionEpoch;
-export const startFlush = (): boolean => schedulerStartFlush(scheduler);
-export const endFlush = (): void => schedulerEndFlush(scheduler);
-export const incrementFlushExecutionCount = (): number =>
-  schedulerIncrementFlushExecutionCount(scheduler);
-export const resetFlushState = (): void => schedulerResetFlushState(scheduler);
-
-/**
- * Groups multiple updates into a single atomic change.
- * Affected effects/computeds are flushed synchronously after the callback.
- *
- * Example:
- * ```ts
- * batch(() => {
- *   atomA.value = 1;
- *   atomB.value = 2;
- * }); // Sync flush happens here.
- * ```
- */
-export function batch<T>(fn: () => T): T {
-  if (IS_DEV && typeof fn !== 'function')
-    throw new TypeError(ERROR_MESSAGES.BATCH_CALLBACK_MUST_BE_FUNCTION);
-
-  schedulerStartBatch(scheduler);
-  try {
-    return fn();
-  } finally {
-    schedulerEndBatch(scheduler);
-  }
-}
-
-/** @internal */
-export function runInFlushScope<T>(fn: () => T): T | undefined {
-  const started = startFlush();
-  try {
-    return fn();
-  } finally {
-    if (started) endFlush();
-  }
-}
-
-let sharedNextTickPromise: Promise<void> | null = null;
-
-/**
- * Returns a promise that resolves after the next scheduler flush.
- * Useful for awaiting side-effects in tests.
- *
- * Example:
- * ```ts
- * atom.value = 100;
- * await aeNextTick(); // Wait for effects to run.
- * ```
- */
-export function aeNextTick(fn?: () => void): Promise<void> {
-  if (fn) {
-    return new Promise<void>((resolve, reject) => {
-      schedulerSchedule(scheduler, () => {
-        try {
-          fn();
-          resolve();
-        } catch (err) {
-          reject(err);
-        }
-      });
-    });
-  }
-
-  if (sharedNextTickPromise) return sharedNextTickPromise;
-
-  sharedNextTickPromise = new Promise<void>((resolve) => {
-    schedulerSchedule(scheduler, () => {
-      sharedNextTickPromise = null;
-      resolve();
-    });
-  });
-
-  return sharedNextTickPromise;
+export function nextVersion(v: number): number {
+  return nextSmi(v);
 }
 
 /**
  * Registers a subscriber to a reactive node.
  *
- * Performance: Uses a SlotBuffer to manage listeners, allowing O(1) removals.
+ * Performance: Uses a SlotBuffer to allow O(1) removal of listeners
+ * during batch notifications.
  * @internal
  */
-export function nodeSubscribe<T>(
-  node: ReactiveNode<T>,
-  listener: ((newValue?: T, oldValue?: T) => void) | Subscriber
-): () => void {
+export function nodeSubscribe<T>(node: ReactiveNode<T>, listener: SubscriberTarget<T>): () => void {
   let link: Subscription<T> | undefined;
 
   if (typeof listener === 'function') {
-    link = createSubscription(Kind.Fn, listener as (n?: T, o?: T) => void);
+    link = createSubscription(KIND.Fn, listener);
   } else if (listener != null && typeof (listener as Subscriber).execute === 'function') {
-    link = createSubscription(Kind.Obj, listener as Subscriber);
+    link = createSubscription(KIND.Obj, listener);
   }
 
   if (!link)
@@ -658,7 +236,7 @@ export function nodeSubscribe<T>(
   if (slots === null) {
     node._storage.slots = slots = new SlotBuffer<Subscription<T>>();
   } else if (nodeHasSubscription(node, listener)) {
-    if (IS_DEV) console.warn(`[atom-effect] Duplicate subscription ignored on node ${node.id}`);
+    if (IS_DEV) console.warn(`${LOG_PREFIX} Duplicate subscription ignored on node ${node.id}`);
     return () => {}; // Deduplication
   }
 
@@ -676,10 +254,11 @@ export function nodeUnsubscribe<T>(node: ReactiveNode<T>, link: Subscription<T>)
 }
 
 /**
- * Notifies all subscribers of a node.
+ * Notifies all subscribers of a node change.
  *
- * Safety: Locks the SlotBuffer during iteration to prevent index shifting
- * if a subscriber unsubscribes itself during the notification.
+ * Safety:
+ * - Locks the SlotBuffer to prevent index shifts if a subscriber unsubscribes itself during execution.
+ * - Suppresses tracking during notification to prevent accidental dependency capture.
  * @internal
  */
 export function nodeNotifySubscribers<T>(
@@ -691,18 +270,34 @@ export function nodeNotifySubscribers<T>(
   if (slots === null || slots.size === 0) return;
 
   const ctx = trackingContext;
-  const isUntracked = ctx.current === null;
-  const depth = ctx.stack.length;
+  const prevCurrent = ctx.current;
+  const isTracking = prevCurrent !== null;
 
-  if (!isUntracked) pushTrackingSubscriber(ctx, null);
+  // Reason: Suppress tracking during subscriber execution to prevent "reactive loops"
+  // or accidental dependencies if a subscriber reads another reactive node.
+  if (isTracking) {
+    ctx.stack.push(null);
+    ctx.current = null;
+  }
 
   slots.lock();
   try {
-    slots.forEach((sub) => {
-      notifySubscription(sub, newValue, oldValue);
-    });
+    const len = slots.length;
+    for (let i = 0; i < len; i++) {
+      const sub = slots.at(i);
+      if (sub !== null) {
+        try {
+          NOTIFIER_STRATEGY[sub.k](sub as Subscription<unknown>, newValue, oldValue);
+        } catch (e) {
+          console.error(`${LOG_PREFIX} Subscriber failed:`, e);
+        }
+      }
+    }
   } finally {
-    if (!isUntracked) rollbackTrackingSubscriber(ctx, depth);
+    if (isTracking) {
+      ctx.stack.pop();
+      ctx.current = prevCurrent;
+    }
     slots.unlock();
   }
 }
@@ -714,5 +309,108 @@ export function nodeNotifySubscribers<T>(
 export function nodeHasSubscription<T>(node: ReactiveNode<T>, listener: unknown): boolean {
   const slots = node._storage.slots;
   if (slots === null || slots.size === 0) return false;
-  return slots.some((link) => link.t === listener);
+
+  const len = slots.length;
+  for (let i = 0; i < len; i++) {
+    const sub = slots.at(i);
+    if (sub != null && sub.t === listener) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Logic: Tracking Orchestrator - Start
+ * Prepares a node for a new tracking session by initializing the epoch and resetting counters.
+ * @internal
+ */
+export function nodeStartTracking<T>(node: Prettify<DependencyTracker & ReactiveNode<T>>): number {
+  const epoch = nextEpoch();
+  const internal = node as unknown as InternalNode;
+  internal._trackEpoch = epoch;
+  internal._trackCount = 0;
+  return epoch;
+}
+
+/**
+ * Logic: Tracking Orchestrator - Commit
+ * Finalizes the tracking session by truncating unused dependencies.
+ * @internal
+ */
+export function nodeCommitDeps<T>(node: DependencyTracker & ReactiveNode<T>): void {
+  const internal = node as unknown as InternalNode;
+  const deps = node._storage.deps;
+  if (deps) {
+    try {
+      depBufferTruncateFrom(deps, internal._trackCount);
+    } catch (e) {
+      if (IS_DEV) {
+        console.warn(`${LOG_PREFIX} nodeCommitDeps failed for node ${node.id}:`, e);
+      }
+    }
+  }
+}
+
+/**
+ * Logic: Reactive Error Boundary
+ *
+ * Why: Computeds increment their version on error to signal a state change
+ * even if a valid value was not produced.
+ * @internal
+ */
+export function nodeHandleError<T, E extends Error>(
+  node: ReactiveNode<T> & { isComputed?: boolean; isRejected?: boolean; version: number },
+  error: unknown,
+  ErrorClass: AtomErrorConstructor,
+  message: string,
+  onError?: ((error: E) => void) | null
+): void {
+  const wrappedError = wrapError(error, ErrorClass, message) as unknown as E;
+
+  if (node.isComputed) {
+    const internal = node as unknown as InternalNode;
+    if (!internal.isRejected || internal._error !== wrappedError) {
+      node.version = nextVersion(node.version);
+    }
+    internal._error = wrappedError;
+  } else {
+    console.error(wrappedError);
+  }
+
+  if (onError) {
+    try {
+      onError(wrappedError);
+    } catch (e) {
+      console.error(ERROR_MESSAGES.CALLBACK_ERROR_IN_ERROR_HANDLER, e);
+    }
+  }
+
+  nodeNotifySubscribers(node, undefined, undefined);
+}
+
+export function nodeIsDisposed<T>(node: ReactiveNode<T>): boolean {
+  return (node.flags & COMPUTED_STATE_FLAGS.DISPOSED) !== 0;
+}
+
+export function nodeIsComputed<T>(node: ReactiveNode<T>): boolean {
+  return (node.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) !== 0;
+}
+
+export function nodeIsNotifying<T>(node: ReactiveNode<T>): boolean {
+  return node._storage.slots?.isLocked ?? false;
+}
+
+export function nodeSubscriberCount<T>(node: ReactiveNode<T>): number {
+  return node._storage.slots?.size ?? 0;
+}
+
+export function nodeIsDirty<T>(node: ReactiveNode<T>): boolean {
+  const deps = node._storage.deps;
+  return deps !== null && isBufferDirty(deps);
+}
+
+export function nodeIsShallowDirty<T>(node: ReactiveNode<T>): boolean {
+  const deps = node._storage.deps;
+  return deps !== null && isBufferShallowDirty(deps);
 }

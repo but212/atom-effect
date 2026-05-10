@@ -1,25 +1,26 @@
 import type { SlotBuffer } from '@but212/atom-effect-utils';
 import {
+  BRAND,
+  BrandFlags,
   DEBUG_CONFIG,
   EFFECT_STATE_FLAGS,
   EPOCH_CONSTANTS,
   IS_DEV,
+  KIND,
   SCHEDULER_CONFIG,
   SMI_MAX,
 } from '@/constants';
 import {
-  createDependencyLink,
-  currentFlushEpoch,
-  incrementFlushExecutionCount,
-  nextEpoch,
+  nodeCommitDeps,
+  nodeHandleError,
+  nodeIsDirty,
+  nodeIsDisposed,
+  nodeStartTracking,
+  nodeTrackDependency,
   rollbackTrackingSubscriber,
   runInTrackingContext,
-  scheduler,
-  schedulerSchedule,
   trackingContext,
 } from '@/core/base';
-import { EffectError, ERROR_MESSAGES, wrapError } from '@/errors';
-import { BRAND, BrandFlags } from '@/symbols';
 import type {
   DepBufferState,
   Dependency,
@@ -32,16 +33,15 @@ import type {
   Subscriber,
   Subscription,
 } from '@/types';
-import { debug, generateId, nodeIsDirty, nodeIsDisposed } from '@/utils';
+import { debug, EffectError, ERROR_MESSAGES, generateId } from '@/utils';
 import { isPromise } from '@/utils/type-guards';
+import { createDepBuffer, disposeAll, prepareTracking } from './buffers';
 import {
-  claimExisting,
-  createDepBuffer,
-  depBufferTruncateFrom,
-  disposeAll,
-  insertNew,
-  prepareTracking,
-} from './buffers';
+  currentFlushEpoch,
+  incrementFlushExecutionCount,
+  scheduler,
+  schedulerSchedule,
+} from './scheduler';
 
 /**
  * Internal state for tracking effect execution budgets.
@@ -133,6 +133,7 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
   version: number = 0;
   _lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
   _nextEpoch: number | undefined = undefined;
+  _k: typeof KIND.Obj = KIND.Obj;
   readonly id: DependencyId = generateId() & SMI_MAX;
   _storage: {
     slots: SlotBuffer<Subscription<void>> | null;
@@ -145,10 +146,6 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
   /** @internal */
   readonly [BRAND] = BrandFlags.Effect;
 
-  /** @internal */
-  private _trackEpoch = EPOCH_CONSTANTS.UNINITIALIZED as number;
-  /** @internal */
-  private _trackCount = 0;
   /** @internal */
   private _trackSessionId = 0;
 
@@ -226,7 +223,8 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
 
     this._execCleanup();
 
-    this._startTracking();
+    nodeStartTracking(this);
+    prepareTracking(this._storage.deps!);
     const prevDepth = trackingContext.stack.length;
 
     let val: unknown;
@@ -245,7 +243,7 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
       errorObj = e;
     }
 
-    this._commitDeps();
+    nodeCommitDeps(this);
 
     if (hasError) {
       this._handleExecutionError(errorObj);
@@ -274,47 +272,7 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
 
   public addDependency(dep: Dependency): void {
     if (!this.isExecuting) return;
-
-    if (dep._lastSeenEpoch === this._trackEpoch) return;
-    dep._lastSeenEpoch = this._trackEpoch;
-
-    const trackIndex = this._trackCount++;
-    const deps = this._storage.deps!;
-    const version = dep.version;
-
-    const existing = deps.slots.at(trackIndex);
-
-    if (existing?.node === dep) {
-      existing.version = version;
-    } else if (!claimExisting(deps, dep, trackIndex)) {
-      this._insertNewDependency(dep, trackIndex, version);
-    }
-
-    if (dep.isComputed && !deps.hasComputeds) {
-      deps.hasComputeds = true;
-    }
-  }
-
-  private _insertNewDependency(dep: Dependency, trackIndex: number, version: number): void {
-    const unsubscribe = dep.subscribe(this._notifyCallback);
-    const link = createDependencyLink(dep, version, unsubscribe);
-    insertNew(this._storage.deps!, trackIndex, link);
-  }
-
-  private _startTracking(): void {
-    this._trackEpoch = nextEpoch();
-    this._trackCount = 0;
-    prepareTracking(this._storage.deps!);
-  }
-
-  private _commitDeps(): void {
-    try {
-      depBufferTruncateFrom(this._storage.deps!, this._trackCount);
-    } catch (commitErr) {
-      if (IS_DEV) {
-        console.warn('[atom-effect] _commitDeps failed during error recovery:', commitErr);
-      }
-    }
+    nodeTrackDependency(this, dep, this._notifyCallback);
   }
 
   // --- Result & Cleanup Handling ---
@@ -405,16 +363,7 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
     error: unknown,
     message: string = ERROR_MESSAGES.EFFECT_EXECUTION_FAILED
   ): void {
-    const errorObj = wrapError(error, EffectError, message);
-    console.error(errorObj);
-
-    if (this._onError) {
-      try {
-        this._onError(errorObj);
-      } catch (e) {
-        console.error(wrapError(e, EffectError, ERROR_MESSAGES.CALLBACK_ERROR_IN_ERROR_HANDLER));
-      }
-    }
+    nodeHandleError(this, error, EffectError, message, this._onError);
   }
 }
 

@@ -27,4 +27,6 @@ export const BrandFlags = {
   Computed: 1 << 2,
   /** Indicates that the primitive is an effect handle. */
   Effect: 1 << 3,
+  /** Indicates that the primitive is a lens into a nested property. */
+  Lens: 1 << 4,
 } as const;

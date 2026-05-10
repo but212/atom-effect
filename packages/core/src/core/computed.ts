@@ -1,25 +1,33 @@
 import type { SlotBuffer } from '@but212/atom-effect-utils';
 import {
   AsyncState,
+  BRAND,
+  BrandFlags,
   COMPUTED_STATE_FLAGS,
+  DEFAULT_EQUAL,
   EMPTY_ERROR_ARRAY,
   EPOCH_CONSTANTS,
-  IS_DEV,
+  KIND,
   SMI_MAX,
+  STATE_MASKS,
 } from '@/constants';
 import {
-  createDependencyLink,
-  nextEpoch,
   nextVersion,
+  nodeCommitDeps,
+  nodeHandleError,
+  nodeIsDirty,
+  nodeIsDisposed,
+  nodeIsShallowDirty,
   nodeNotifySubscribers,
+  nodeStartTracking,
   nodeSubscribe,
+  nodeSubscriberCount,
+  nodeTrackDependency,
   rollbackTrackingSubscriber,
   runInTrackingContext,
   trackingContext,
   untracked,
 } from '@/core/base';
-import { ComputedError, ERROR_MESSAGES, wrapError } from '@/errors';
-import { BRAND, BrandFlags } from '@/symbols';
 import type {
   AsyncStateType,
   ComputedAtom,
@@ -33,43 +41,15 @@ import type {
   Subscription,
 } from '@/types';
 import {
+  ComputedError,
   debug,
+  ERROR_MESSAGES,
   generateId,
   mergeAtomValues,
   NO_DEFAULT_VALUE,
-  nodeIsDirty,
-  nodeIsDisposed,
-  nodeIsShallowDirty,
-  nodeSubscriberCount,
 } from '@/utils';
 import { isPromise } from '@/utils/type-guards';
-import {
-  claimExisting,
-  createDepBuffer,
-  depBufferTruncateFrom,
-  disposeAll,
-  insertNew,
-  isBufferDirty,
-  prepareTracking,
-} from './buffers';
-
-const {
-  IDLE,
-  DIRTY,
-  PENDING,
-  RESOLVED,
-  REJECTED,
-  HAS_ERROR,
-  RECOMPUTING,
-  DISPOSED,
-  IS_COMPUTED,
-  FORCE_COMPUTE,
-} = COMPUTED_STATE_FLAGS;
-
-const MASK_UNRESOLVED_ASYNC = PENDING | REJECTED;
-const PATTERN_RECOMPUTE_NEEDED = IDLE | FORCE_COMPUTE;
-const MASK_ERROR = REJECTED | HAS_ERROR;
-const MASK_LIFECYCLE = IDLE | DIRTY | PENDING | RESOLVED | REJECTED | HAS_ERROR;
+import { createDepBuffer, disposeAll, isBufferDirty, prepareTracking } from './buffers';
 
 /**
  * Logic: Pragmatic Physics Transitions
@@ -77,10 +57,22 @@ const MASK_LIFECYCLE = IDLE | DIRTY | PENDING | RESOLVED | REJECTED | HAS_ERROR;
  * @internal
  */
 const TRANSITION = {
-  TO_RECOMPUTING: { clear: FORCE_COMPUTE, set: RECOMPUTING },
-  TO_RESOLVED: { clear: MASK_LIFECYCLE | RECOMPUTING, set: RESOLVED },
-  TO_PENDING: { clear: MASK_LIFECYCLE | RECOMPUTING, set: PENDING },
-  TO_REJECTED: { clear: MASK_LIFECYCLE | RECOMPUTING, set: REJECTED | HAS_ERROR },
+  TO_RECOMPUTING: {
+    clear: COMPUTED_STATE_FLAGS.FORCE_COMPUTE,
+    set: COMPUTED_STATE_FLAGS.RECOMPUTING,
+  },
+  TO_RESOLVED: {
+    clear: STATE_MASKS.LIFECYCLE_MASK | COMPUTED_STATE_FLAGS.RECOMPUTING,
+    set: COMPUTED_STATE_FLAGS.RESOLVED,
+  },
+  TO_PENDING: {
+    clear: STATE_MASKS.LIFECYCLE_MASK | COMPUTED_STATE_FLAGS.RECOMPUTING,
+    set: COMPUTED_STATE_FLAGS.PENDING,
+  },
+  TO_REJECTED: {
+    clear: STATE_MASKS.LIFECYCLE_MASK | COMPUTED_STATE_FLAGS.RECOMPUTING,
+    set: COMPUTED_STATE_FLAGS.REJECTED | COMPUTED_STATE_FLAGS.HAS_ERROR,
+  },
 } as const;
 
 /** @internal */
@@ -98,10 +90,10 @@ export function resolveComputedResult<T>(
   error: Error | null,
   defaultValue: T
 ): T {
-  if ((flags & RESOLVED) !== 0) return value;
+  if ((flags & COMPUTED_STATE_FLAGS.RESOLVED) !== 0) return value;
 
   const hasDefault = defaultValue !== (NO_DEFAULT_VALUE as T);
-  const asyncState = flags & MASK_UNRESOLVED_ASYNC;
+  const asyncState = flags & STATE_MASKS.ASYNC_UNRESOLVED_MASK;
 
   // Terminal/Non-async fallback
   if (asyncState === 0) return value;
@@ -109,7 +101,7 @@ export function resolveComputedResult<T>(
   // Async handling priority
   if (hasDefault) return defaultValue;
 
-  if (asyncState === REJECTED) {
+  if (asyncState === COMPUTED_STATE_FLAGS.REJECTED) {
     throw error ?? new Error('REJECTED without error');
   }
 
@@ -122,10 +114,10 @@ export function resolveComputedResult<T>(
  * @internal
  */
 export function shouldRecompute(flags: number, deps: DepBufferState): boolean {
-  const isAwaitingAsync = (flags & MASK_UNRESOLVED_ASYNC) !== 0;
+  const isAwaitingAsync = (flags & STATE_MASKS.ASYNC_UNRESOLVED_MASK) !== 0;
 
   return (
-    (flags & PATTERN_RECOMPUTE_NEEDED) !== 0 ||
+    (flags & STATE_MASKS.COMPUTED_RECOMPUTE_NEEDED_MASK) !== 0 ||
     isBufferDirty(deps) ||
     (!isAwaitingAsync && deps.slots.size === 0)
   );
@@ -157,7 +149,7 @@ export function collectErrorsRecursive(
     if (seen.has(node.id)) return false;
     seen.add(node.id);
 
-    if ((node.flags & MASK_ERROR) !== 0) {
+    if ((node.flags & STATE_MASKS.ERROR_MASK) !== 0) {
       collected.push(
         node.lastError ?? new Error('Internal Inconsistency: MASK_ERROR flag set but error is null')
       );
@@ -186,10 +178,12 @@ export function collectErrorsRecursive(
  */
 class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T> {
   // ReactiveNode implementation
-  flags: number = IS_COMPUTED | DIRTY | IDLE;
+  flags: number =
+    COMPUTED_STATE_FLAGS.IS_COMPUTED | COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE;
   version: number = 0;
   _lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
   _nextEpoch: number | undefined = undefined;
+  _k: typeof KIND.Obj = KIND.Obj;
   readonly id: DependencyId = generateId() & SMI_MAX;
   _storage: {
     slots: SlotBuffer<Subscription<T>> | null;
@@ -206,11 +200,6 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
   private _activeSessionId = 0;
   private _sessionCounter = 0;
 
-  /** @internal */
-  private _trackEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
-  /** @internal */
-  private _trackCount = 0;
-
   private _value: T;
   private _error: Error | null = null;
 
@@ -218,6 +207,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
   private readonly _computation: () => T | Promise<T>;
   private readonly _defaultValue: T;
   private readonly _onError: ((error: Error) => void) | null;
+  private readonly _notifyCallback: () => void;
 
   constructor(computation: () => T | Promise<T>, options: ComputedOptions<T> = {}) {
     if (typeof computation !== 'function')
@@ -225,10 +215,11 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
 
     this._value = undefined as T;
 
-    this._equal = options.equal ?? Object.is;
+    this._equal = options.equal ?? DEFAULT_EQUAL;
     this._computation = computation;
     this._defaultValue = 'defaultValue' in options ? options.defaultValue : (NO_DEFAULT_VALUE as T);
     this._onError = options.onError ?? null;
+    this._notifyCallback = this.execute.bind(this);
 
     debug.attachDebugInfo(this, 'computed', this.id, options.name);
 
@@ -242,7 +233,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
   }
 
   get isDirty(): boolean {
-    return (this.flags & DIRTY) !== 0;
+    return (this.flags & COMPUTED_STATE_FLAGS.DIRTY) !== 0;
   }
 
   get isDisposed(): boolean {
@@ -254,11 +245,11 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
   }
 
   get isRejected(): boolean {
-    return (this.flags & REJECTED) !== 0;
+    return (this.flags & COMPUTED_STATE_FLAGS.REJECTED) !== 0;
   }
 
   get isRecomputing(): boolean {
-    return (this.flags & RECOMPUTING) !== 0;
+    return (this.flags & COMPUTED_STATE_FLAGS.RECOMPUTING) !== 0;
   }
 
   /**
@@ -278,7 +269,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
 
     this._ensureNotDisposed();
 
-    if ((this.flags & RECOMPUTING) !== 0) {
+    if ((this.flags & COMPUTED_STATE_FLAGS.RECOMPUTING) !== 0) {
       if (this._defaultValue !== (NO_DEFAULT_VALUE as T)) return this._defaultValue;
       throw new ComputedError(ERROR_MESSAGES.COMPUTED_CIRCULAR_DEPENDENCY);
     }
@@ -286,7 +277,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
     if (shouldRecompute(this.flags, this._storage.deps!)) {
       this._recompute();
     } else {
-      this.flags &= ~DIRTY;
+      this.flags &= ~COMPUTED_STATE_FLAGS.DIRTY;
     }
 
     return resolveComputedResult(this.flags, this._value, this._error, this._defaultValue);
@@ -297,12 +288,18 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
    * A node is stable if it is RESOLVED and not marked DIRTY or currently computing.
    */
   private _isStable(): boolean {
-    const STABLE_MASK = RESOLVED | DIRTY | IDLE | DISPOSED | RECOMPUTING;
-    return (this.flags & STABLE_MASK) === RESOLVED;
+    const STABLE_MASK =
+      COMPUTED_STATE_FLAGS.RESOLVED |
+      COMPUTED_STATE_FLAGS.DIRTY |
+      COMPUTED_STATE_FLAGS.IDLE |
+      COMPUTED_STATE_FLAGS.DISPOSED |
+      COMPUTED_STATE_FLAGS.RECOMPUTING;
+    return (this.flags & STABLE_MASK) === COMPUTED_STATE_FLAGS.RESOLVED;
   }
 
   private _ensureNotDisposed(): void {
-    if ((this.flags & DISPOSED) !== 0) throw new ComputedError(ERROR_MESSAGES.COMPUTED_DISPOSED);
+    if ((this.flags & COMPUTED_STATE_FLAGS.DISPOSED) !== 0)
+      throw new ComputedError(ERROR_MESSAGES.COMPUTED_DISPOSED);
   }
 
   /**
@@ -318,9 +315,9 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
   get state(): AsyncStateType {
     trackingContext.current?.addDependency(this);
     const flags = this.flags;
-    if ((flags & RESOLVED) !== 0) return AsyncState.RESOLVED;
-    if ((flags & PENDING) !== 0) return AsyncState.PENDING;
-    if ((flags & REJECTED) !== 0) return AsyncState.REJECTED;
+    if ((flags & COMPUTED_STATE_FLAGS.RESOLVED) !== 0) return AsyncState.RESOLVED;
+    if ((flags & COMPUTED_STATE_FLAGS.PENDING) !== 0) return AsyncState.PENDING;
+    if ((flags & COMPUTED_STATE_FLAGS.REJECTED) !== 0) return AsyncState.REJECTED;
     return AsyncState.IDLE;
   }
 
@@ -332,7 +329,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
   get hasError(): boolean {
     trackingContext.current?.addDependency(this);
 
-    if ((this.flags & MASK_ERROR) !== 0) return true;
+    if ((this.flags & STATE_MASKS.ERROR_MASK) !== 0) return true;
     if (!this._storage.deps!.hasComputeds) return false;
 
     return untracked(() => collectErrorsRecursive(this, true).length > 0);
@@ -362,12 +359,12 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
 
   get isPending(): boolean {
     trackingContext.current?.addDependency(this);
-    return (this.flags & PENDING) !== 0;
+    return (this.flags & COMPUTED_STATE_FLAGS.PENDING) !== 0;
   }
 
   get isResolved(): boolean {
     trackingContext.current?.addDependency(this);
-    return (this.flags & RESOLVED) !== 0;
+    return (this.flags & COMPUTED_STATE_FLAGS.RESOLVED) !== 0;
   }
 
   subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
@@ -382,7 +379,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
    * Manually flags the node for re-computation.
    */
   invalidate(): void {
-    this.flags |= FORCE_COMPUTE;
+    this.flags |= COMPUTED_STATE_FLAGS.FORCE_COMPUTE;
     this._markDirty();
   }
 
@@ -392,12 +389,13 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
    */
   dispose(): void {
     const flags = this.flags;
-    if ((flags & DISPOSED) !== 0) return;
+    if ((flags & COMPUTED_STATE_FLAGS.DISPOSED) !== 0) return;
 
     disposeAll(this._storage.deps!);
 
     this._storage.slots?.clear();
-    this.flags = DISPOSED | DIRTY | IDLE;
+    this.flags =
+      COMPUTED_STATE_FLAGS.DISPOSED | COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE;
 
     this._error = null;
     this._value = undefined as T;
@@ -410,26 +408,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
    * @internal
    */
   addDependency(dependency: Dependency): void {
-    const trackEpoch = this._trackEpoch;
-    // Optimization: Deduplicate tracking within the same execution epoch.
-    if (dependency._lastSeenEpoch === trackEpoch) return;
-    dependency._lastSeenEpoch = trackEpoch;
-
-    const trackIndex = this._trackCount++;
-    const dependencies = this._storage.deps!;
-
-    const existing = dependencies.slots.at(trackIndex);
-
-    if (existing?.node === dependency) {
-      existing.version = dependency.version;
-    } else if (!claimExisting(dependencies, dependency, trackIndex)) {
-      const link = createDependencyLink(dependency, dependency.version, dependency.subscribe(this));
-      insertNew(dependencies, trackIndex, link);
-    }
-
-    if ((dependency.flags & IS_COMPUTED) !== 0) {
-      dependencies.hasComputeds = true;
-    }
+    nodeTrackDependency(this, dependency, this._notifyCallback);
   }
 
   /**
@@ -438,12 +417,13 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
    */
   private _recompute(): void {
     // Constraint: Prevent synchronous re-entrancy.
-    if ((this.flags & RECOMPUTING) !== 0) return;
+    if ((this.flags & COMPUTED_STATE_FLAGS.RECOMPUTING) !== 0) return;
 
     this.flags = apply(this.flags, TRANSITION.TO_RECOMPUTING);
     const prevDepth = trackingContext.stack.length;
 
-    this._startTracking();
+    nodeStartTracking(this);
+    prepareTracking(this._storage.deps!);
 
     let val: T | Promise<T> | undefined;
     let hasError = false;
@@ -461,37 +441,17 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
       errorToThrow = e;
     }
 
+    nodeCommitDeps(this);
+
     if (hasError) {
-      this._commitDeps();
       this._handleError(errorToThrow, ERROR_MESSAGES.COMPUTED_COMPUTATION_FAILED, false);
+    } else if (isPromise(val!)) {
+      this._handleAsyncComputation(val as Promise<T>);
     } else {
-      this._commitDeps();
-      if (isPromise(val!)) {
-        this._handleAsyncComputation(val as Promise<T>);
-      } else {
-        this._finalizeResolution(val as T);
-      }
+      this._finalizeResolution(val as T);
     }
 
-    this._trackEpoch = EPOCH_CONSTANTS.UNINITIALIZED;
-    this._trackCount = 0;
-    this.flags &= ~RECOMPUTING;
-  }
-
-  private _startTracking(): void {
-    this._trackEpoch = nextEpoch();
-    this._trackCount = 0;
-    prepareTracking(this._storage.deps!);
-  }
-
-  private _commitDeps(): void {
-    try {
-      depBufferTruncateFrom(this._storage.deps!, this._trackCount);
-    } catch (commitError) {
-      if (IS_DEV) {
-        console.warn('[atom-effect] _commitDeps failed during error recovery:', commitError);
-      }
-    }
+    this.flags &= ~COMPUTED_STATE_FLAGS.RECOMPUTING;
   }
 
   /**
@@ -525,26 +485,9 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
   }
 
   private _handleError(error: unknown, message: string, shouldThrow = false): void {
-    const wrappedError = wrapError(error, ComputedError, message);
-
-    const oldError = this._error;
-    if (!this.isRejected || oldError !== wrappedError) {
-      this.version = nextVersion(this.version);
-    }
-
-    this._error = wrappedError;
+    nodeHandleError(this, error, ComputedError, message, this._onError);
     this.flags = apply(this.flags, TRANSITION.TO_REJECTED);
-
-    if (this._onError) {
-      try {
-        this._onError(wrappedError);
-      } catch (e) {
-        console.error(ERROR_MESSAGES.CALLBACK_ERROR_IN_ERROR_HANDLER, e);
-      }
-    }
-
-    nodeNotifySubscribers(this, undefined, undefined);
-    if (shouldThrow) throw wrappedError;
+    if (shouldThrow) throw this._error;
   }
 
   /**
@@ -554,7 +497,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
    */
   private _finalizeResolution(value: T): void {
     const flags = this.flags;
-    if ((flags & RESOLVED) === 0 || !this._equal(this._value, value)) {
+    if ((flags & COMPUTED_STATE_FLAGS.RESOLVED) === 0 || !this._equal(this._value, value)) {
       this.version = nextVersion(this.version);
     }
 
@@ -568,6 +511,8 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
    * @internal
    */
   execute(): void {
+    if ((this.flags & (COMPUTED_STATE_FLAGS.RECOMPUTING | COMPUTED_STATE_FLAGS.DIRTY)) !== 0)
+      return;
     this._markDirty();
   }
 
@@ -577,16 +522,17 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
    */
   _markDirty(): void {
     const flags = this.flags;
-    // 1. Already recomputing or marked dirty (prevent redundant propagation)
-    // 2. OR (Not forced to compute AND no changes detected in dependencies)
+
+    // 1. Check if we need to filter the notification
+    // Optimization: Only perform O(N) check if we have subscribers to notify
     if (
-      (flags & (RECOMPUTING | DIRTY)) !== 0 ||
-      (!(flags & FORCE_COMPUTE) && !nodeIsShallowDirty(this))
+      (flags & (COMPUTED_STATE_FLAGS.RECOMPUTING | COMPUTED_STATE_FLAGS.DIRTY)) !== 0 ||
+      (!(flags & COMPUTED_STATE_FLAGS.FORCE_COMPUTE) && !nodeIsShallowDirty(this))
     ) {
       return;
     }
 
-    this.flags = flags | DIRTY;
+    this.flags = flags | COMPUTED_STATE_FLAGS.DIRTY;
     debug.trackUpdate(this.id, debug.getDebugName(this));
     nodeNotifySubscribers(this, undefined, undefined);
   }

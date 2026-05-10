@@ -315,11 +315,11 @@ Debug features can be enabled at runtime by setting `window.__ATOM_DEBUG__ = tru
 
 ## Internal Buffers (Advanced)
 
-The library uses specialized buffers (`SlotBuffer`, `DepSlotBuffer`) for high-performance dependency and subscriber management. While primarily internal, they are exported for advanced use cases and testing.
+The library uses specialized buffers (`SlotBuffer`) and state management objects (`DepBufferState`) for high-performance dependency and subscriber management. While primarily internal, they are exported for advanced use cases and testing.
 
 ### `SlotBuffer<T>`
 
-A high-performance container using a 4-bit mask for "fast-lane" slot management and an overflow array for unbounded capacity.
+A high-performance container using a 4-bit mask for "fast-lane" slot management and an overflow array for unbounded capacity. It is optimized for V8 hidden class stability.
 
 - `length`: The number of active (non-null) items in the buffer.
 - `capacity`: The highest physical index occupied plus one.
@@ -331,6 +331,10 @@ A high-performance container using a 4-bit mask for "fast-lane" slot management 
 - `compact(): void`: Eliminates all internal holes and resets physical boundaries.
 - `clear(): void`: Resets the buffer to an empty state.
 
-### `DepSlotBuffer`
+### `DepBufferState`
 
-A specialized `SlotBuffer` for `DependencyLink` objects, adding a Map-based fallback for $O(1)$ lookups when the collection grows large (> 32 items).
+A specialized state object (defined in `types/reactive.ts`) for managing dependency links. It features:
+
+- **Slot Integration**: Uses a `SlotBuffer<DependencyLink>` for ordered dependency storage.
+- **Dynamic Indexing**: Employs an `Indexer` interface that automatically transitions from linear scans to a `Map`-based lookup when the dependency count exceeds a performance threshold (defined in `BUFFER_CONFIG`).
+- **Version Tracking**: Stores the `version` of dependencies at the time of link establishment for efficient drift detection.

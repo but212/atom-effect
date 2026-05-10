@@ -1,6 +1,4 @@
-import { COMPUTED_STATE_FLAGS } from '@/constants';
-import { isBufferDirty, isBufferShallowDirty } from '@/core/buffers';
-import type { Dependency, MergedDependencyValue, ReactiveNode } from '@/types';
+import type { Dependency, MergedDependencyValue } from '@/types';
 
 /**
  * Merges the values of multiple object-based atoms into a single object.
@@ -27,30 +25,14 @@ export function mergeAtomValues<T extends Dependency<unknown>[]>(
 }
 
 export { debug, generateId, NO_DEFAULT_VALUE } from './debug';
+export type { AtomErrorJSON } from './errors';
+export {
+  AtomError,
+  type AtomErrorConstructor,
+  ComputedError,
+  EffectError,
+  ERROR_MESSAGES,
+  SchedulerError,
+  wrapError,
+} from './errors';
 export { isAtom, isComputed, isEffect, isPromise, isWritable } from './type-guards';
-
-export function nodeIsDisposed<T>(node: ReactiveNode<T>): boolean {
-  return (node.flags & COMPUTED_STATE_FLAGS.DISPOSED) !== 0;
-}
-
-export function nodeIsComputed<T>(node: ReactiveNode<T>): boolean {
-  return (node.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) !== 0;
-}
-
-export function nodeIsNotifying<T>(node: ReactiveNode<T>): boolean {
-  return node._storage.slots?.isLocked ?? false;
-}
-
-export function nodeSubscriberCount<T>(node: ReactiveNode<T>): number {
-  return node._storage.slots?.size ?? 0;
-}
-
-export function nodeIsDirty<T>(node: ReactiveNode<T>): boolean {
-  const deps = node._storage.deps;
-  return deps !== null && isBufferDirty(deps);
-}
-
-export function nodeIsShallowDirty<T>(node: ReactiveNode<T>): boolean {
-  const deps = node._storage.deps;
-  return deps !== null && isBufferShallowDirty(deps);
-}

@@ -12,11 +12,12 @@ The high-level API (`atom`, `computed`, `effect`) is built upon a unified intern
 - **Push-Pull Hybrid Model**:
   - **Push (Notification Phase)**: When a source atom changes, it propagates a "dirty" signal to its immediate subscribers. This phase marks nodes for re-evaluation without performing calculations.
   - **Pull (Evaluation Phase)**: When a node's value is accessed or an effect executes, it performs a "pull" to validate the versions of its dependencies, triggering re-computation only if necessary.
-- **Scheduler and Coalescing**: Effects do not execute immediately upon state change. Instead, they are queued in a **Scheduler** that utilizes a **Flattened Buffer Layout** (Active, Standby, Batch) managed by a data-centric **`SchedulerState`**. This layout is designed for better cache locality and reduced indirection overhead, utilizing a flat loop to coalesce multiple updates into a single execution cycle.
+- **Scheduler and Coalescing**: Effects do not execute immediately upon state change. Instead, they are queued in a **Scheduler** (defined in `core/scheduler.ts`) that utilizes a **Double-Buffering Strategy** (Active, Standby, Batch) managed by a data-centric **`SchedulerState`**. This layout ensures that new jobs scheduled during a flush do not interfere with the current execution cycle while maintaining high cache locality.
 - **Functional Tracking**: Dependency tracking is managed via a functional **`TrackingContext`** state. This allows for lightweight stack operations and deterministic recovery during nested evaluations or error scenarios. While functional `Option` and `Result` patterns are available for utility logic, the core engine utilizes native `try/catch` and `null/undefined` in high-frequency hot paths to minimize allocation overhead.
 - **SMI Optimization**: The engine explicitly ensures that hot-path integers (versions, epochs, session IDs) stay within V8's **Small Integer (SMI)** range (31-bit signed). This prevents performance-degrading transitions from SMIs to heap-allocated doubles (HeapNumbers).
 - **Small Vector Optimization (SVO)**: To minimize heap allocations and GC pressure, the engine uses inline slots (`_s0` through `_s3`) tracked by a **4-bit occupancy mask**. These buffers implement a standardized **Array-like API** (`length`, `at()`, `push()`) and use explicit constructor initialization to ensure V8 Hidden Class stability, preventing polymorphic transitions during high-frequency slot discovery.
-- **Bitwise Branding**: Primitives are identified using a bitwise mask (`BrandFlags`) stored on a single `BRAND` symbol. This allows for constant-time type identification without multiple property lookups.
+- **Bitwise Branding**: Primitives are identified using a bitwise mask (`BrandFlags`) stored on a single `BRAND` symbol, defined in `constants/branding.ts`. This allows for constant-time type identification without multiple property lookups.
+- **Strategy-Based Notification**: Subscriber notifications use a dispatch table strategy (in `core/base.ts`) to eliminate conditional branching in hot notification loops, improving JIT dispatch performance.
 - **Isolated Debug Metadata**: Debug information such as IDs and names are attached via non-enumerable symbols, ensuring that debugging features do not interfere with object iteration, serialization, or production performance.
 
 ---
@@ -68,7 +69,7 @@ Asynchronous computed nodes manage their lifecycle as state machines, protecting
 
 - **Async Drift Detection**: If dependencies change while a Promise is pending, the resolution is ignored. This is handled via an integrated `isDirty` check during the resolution phase. Resolution and state updates occur within the microtask cycle following the settlement of the Promise.
 - **Session Management**: A rolling `_activeSessionId` (SMI optimized) ensures that only the result from the most current asynchronous session can resolve the node's state, preventing race conditions from stale computations.
-- **Bitwise Partitioning**: Internal state is managed via a 31-bit integer field (V8 SMI optimized):
+- **Bitwise Partitioning**: Internal state is managed via a 31-bit integer field (V8 SMI optimized) with flags defined in `constants/flags.ts`:
   - **[0-7] Core**: `DISPOSED`, `IS_COMPUTED`.
   - **[8-15] Computed**: `DIRTY`, `RECOMPUTING`, `HAS_ERROR`.
   - **[16-23] Async**: `IDLE`, `PENDING`, `RESOLVED`, `REJECTED`.
@@ -99,7 +100,7 @@ The engine enforces strict boundaries between logic and side effects.
 - **Scheduler Integrity**:
   - **Deduplication**: Jobs are tagged with an epoch to prevent redundant scheduling within the same cycle.
   - **Double-Buffering**: Uses active and standby buffers within the **`SchedulerState`** to allow safe job scheduling even during an active flush cycle.
-  - **Flat Loop**: Drains queues without recursion via **`schedulerDrainQueue`** to ensure stack safety.
+  - **Flat Loop**: Drains queues without recursion via **`schedulerDrainQueue`** (in `core/scheduler.ts`) to ensure stack safety.
   - **Memory Clearing**: Internal references in buffers are cleared to `undefined` immediately after execution to assist GC.
 
 ### Infinite Loop Defense

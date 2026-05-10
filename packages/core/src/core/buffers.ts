@@ -1,5 +1,5 @@
 import { SlotBuffer } from '@but212/atom-effect-utils';
-import { COMPUTED_STATE_FLAGS, IS_DEV } from '@/constants';
+import { BUFFER_CONFIG, COMPUTED_STATE_FLAGS, IS_DEV, LOG_PREFIX } from '@/constants';
 import type { DepBufferState, Dependency, DependencyLink, Indexer } from '@/types';
 import { debug } from '@/utils/debug';
 
@@ -119,8 +119,14 @@ export function depBufferSetAt(
 
   if (old) state.map.delete(old.node);
   if (item?.unsub) {
-    if (state.map === NullIndexer) state.map = new MapIndexer();
-    state.map.set(item.node, index);
+    if (state.map === NullIndexer && state.slots.length > BUFFER_CONFIG.MAP_THRESHOLD) {
+      state.map = new MapIndexer();
+      for (let i = 0; i < state.slots.length; i++) {
+        const link = state.slots.at(i);
+        if (link?.unsub) state.map.set(link.node, i);
+      }
+    }
+    if (state.map !== NullIndexer) state.map.set(item.node, index);
   }
 }
 
@@ -131,8 +137,14 @@ export function depBufferSetAt(
 export function depBufferPush(state: DepBufferState, item: DependencyLink): number {
   const idx = state.slots.push(item);
   if (item.unsub) {
-    if (state.map === NullIndexer) state.map = new MapIndexer();
-    state.map.set(item.node, idx);
+    if (state.map === NullIndexer && state.slots.length > BUFFER_CONFIG.MAP_THRESHOLD) {
+      state.map = new MapIndexer();
+      for (let i = 0; i < state.slots.length; i++) {
+        const link = state.slots.at(i);
+        if (link?.unsub) state.map.set(link.node, i);
+      }
+    }
+    if (state.map !== NullIndexer) state.map.set(item.node, idx);
   }
   return idx;
 }
@@ -236,7 +248,7 @@ export function depBufferTruncateFrom(state: DepBufferState, index: number): voi
           unsub();
         } catch (e) {
           if (IS_DEV) {
-            console.error('[atom-effect] Unsubscribe failed:', e);
+            console.error(`${LOG_PREFIX} Unsubscribe failed:`, e);
           }
         }
       }

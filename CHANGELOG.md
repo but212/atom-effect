@@ -11,10 +11,11 @@
 #### Changed
 
 - **Internal Architecture**: Major refactoring of the reactive engine.
-  - Consolidated `scheduler` and `tracking` modules into a unified core engine (`base.ts`) to minimize cross-module indirection.
-  - Refactored `ReactiveNode` from an abstract class to a strictly ordered interface.
-  - Encapsulated internal reactive state (`slots`, `deps`) into a dedicated `_storage` property.
-- **Environment**: Introduced `cross-env` to ensure OS-independent build script execution.
+  - Partitioned the reactive engine into specialized modules: `core/base.ts` (tracking/propagation) and `core/scheduler.ts` (job execution) to improve maintainability and performance isolation.
+  - Reorganized global resources into focused directories: `src/constants/` (flags, environment, branding) and `src/types/` (reactive, internal, API).
+  - Optimized `atomLens` with automatic path flattening to reduce reactive overhead in nested state trees.
+  - Refined subscriber notification cycles using a strategy-based dispatch table, eliminating branching in hot loops.
+  - Encapsulated internal reactive state (`slots`, `deps`) into a dedicated `_storage` property for better V8 hidden class stability.
 
 ### jQuery
 

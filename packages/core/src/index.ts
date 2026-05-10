@@ -1,4 +1,4 @@
-export { AsyncState, IS_DEV, SCHEDULER_CONFIG } from '@/constants';
+export { AsyncState, BRAND, BrandFlags, IS_DEV, SCHEDULER_CONFIG } from '@/constants';
 export type { Paths, PathValue } from '@/core';
 export {
   aeNextTick,
@@ -16,13 +16,6 @@ export {
   setDeepValue,
   untracked,
 } from '@/core';
-export {
-  AtomError,
-  ComputedError,
-  EffectError,
-  SchedulerError,
-} from '@/errors';
-export { BRAND, BrandFlags } from '@/symbols';
 export type {
   AsyncStateType,
   AtomOptions,
@@ -38,12 +31,15 @@ export type {
   ReadonlyAtom,
   WritableAtom,
 } from '@/types';
-
 export {
+  AtomError,
+  ComputedError,
   debug as runtimeDebug,
+  EffectError,
   isAtom,
   isComputed,
   isEffect,
   isPromise,
   isWritable,
+  SchedulerError,
 } from '@/utils';

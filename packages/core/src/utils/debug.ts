@@ -1,5 +1,4 @@
-import { DEBUG_CONFIG, IS_DEV } from '@/constants';
-import { BRAND, BrandFlags } from '@/symbols';
+import { BRAND, BrandFlags, DEBUG_CONFIG, IS_DEV } from '@/constants';
 import type { DebugConfig, DependencyId } from '@/types';
 
 // ── Debug Symbols ────────────────────────────────────────────────────────

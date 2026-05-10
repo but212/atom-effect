@@ -1,6 +1,6 @@
 import { shallowEqual } from '@but212/atom-effect-utils';
-import { batch } from '@/core/base';
-import { BRAND, BrandFlags } from '@/symbols';
+import { BRAND, BrandFlags, DEFAULT_EQUAL, type LENS_CONFIG } from '@/constants';
+import { batch } from '@/index';
 import type { Equal, MergedDependencyValue, WritableAtom } from '@/types';
 import { mergeAtomValues } from '@/utils';
 
@@ -26,7 +26,6 @@ export type ArrayElement<T> = T extends readonly (infer U)[] ? U : never;
  * Constraint: Depth limit for recursive path generation to prevent TypeScript
  * recursion errors and IDE lag in complex schemas.
  */
-export type MaxDepth = 8;
 
 /**
  * Logic: Recursion Termination
@@ -50,7 +49,7 @@ export type Paths<T, D extends unknown[] = []> =
   // biome-ignore lint/suspicious/noExplicitAny: 'any' check is required to prevent infinite recursion in paths
   Equal<T, any> extends true
     ? string
-    : D['length'] extends MaxDepth
+    : D['length'] extends typeof LENS_CONFIG.MAX_PATH_DEPTH
       ? never
       : T extends TerminalTypes
         ? never
@@ -106,6 +105,9 @@ export type PathValue<T, P extends string> =
  */
 const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
+/** @internal */
+const isForbiddenKey = (key: string) => FORBIDDEN_KEYS.has(key);
+
 /**
  * @internal
  * Optimization: Structural Sharing
@@ -144,6 +146,12 @@ function cloneAndSet(container: object, key: string, value: unknown): object {
 // Core Engine
 // ============================================================================
 
+/** @internal */
+interface LensInternal<T = unknown> extends WritableAtom<T> {
+  _root: WritableAtom<object>;
+  _path: string;
+}
+
 /**
  * Core engine for recursive immutable deep updates.
  *
@@ -158,18 +166,16 @@ export function setDeepValue(obj: unknown, keys: string[], index: number, value:
 
   const key = keys[index]!;
 
-  // Security: Prevent prototype pollution
   // Resilience: Guard against non-object targets in the path
-  if (FORBIDDEN_KEYS.has(key) || obj == null || typeof obj !== 'object') {
+  if (obj == null || typeof obj !== 'object' || isForbiddenKey(key)) {
     return obj;
   }
 
   // Logic: Heterogeneous Collection Support
-  // Uniformly handles entries for both standard objects and Map instances.
   const oldVal = obj instanceof Map ? obj.get(key) : (obj as Record<string, unknown>)[key];
   const newVal = setDeepValue(oldVal, keys, index + 1, value);
 
-  if (Object.is(oldVal, newVal)) {
+  if (DEFAULT_EQUAL(oldVal, newVal)) {
     return obj;
   }
 
@@ -218,25 +224,27 @@ export function atomLens<T extends object, P extends Paths<T>>(
   atom: WritableAtom<T>,
   path: P
 ): WritableAtom<PathValue<T, P>> {
+  // Optimization: Path Flattening
+  // If the target is already a lens, we merge paths to avoid deep subscription chains.
+  const brand = (atom as unknown as { [BRAND]?: number })[BRAND] || 0;
+  if ((brand & BrandFlags.Lens) !== 0) {
+    const parent = atom as unknown as LensInternal<T>;
+    const combined = `${parent._path}.${path}` as P;
+    return atomLens(parent._root as WritableAtom<T>, combined) as WritableAtom<PathValue<T, P>>;
+  }
+
   const parts = (path as string).split('.');
+  const isDangerous = parts.some(isForbiddenKey);
 
-  // Security: Pre-validate path segments to prevent access to forbidden keys.
-  const isDangerous = parts.some((p) => FORBIDDEN_KEYS.has(p));
-
-  const listeners = new Set<(nv: unknown, ov: unknown) => void>();
   let sharedUnsub: (() => void) | null = null;
   let prevValue: unknown;
+  const listeners = new Set<(nv: unknown, ov: unknown) => void>();
 
   const getValue = (source: unknown) => (isDangerous ? undefined : getPathValue(source, parts));
 
-  /**
-   * Logic: Noise Filtering
-   * Only triggers lens subscribers if the resolved leaf value is different
-   * from the previously tracked value.
-   */
   const notify = () => {
     const nv = getValue(atom.peek());
-    if (!Object.is(nv, prevValue)) {
+    if (!DEFAULT_EQUAL(nv, prevValue)) {
       const ov = prevValue;
       prevValue = nv;
       listeners.forEach((l) => l(nv, ov));
@@ -252,16 +260,12 @@ export function atomLens<T extends object, P extends Paths<T>>(
       const cur = atom.peek();
       const next = setDeepValue(cur, parts, 0, newVal);
 
-      // Optimization: Only write to root if the mutation resulted in a new reference.
       if (next !== cur) {
         atom.value = next as T;
       }
     },
     peek: () => getValue(atom.peek()),
     subscribe(listener: (nv: unknown, ov: unknown) => void) {
-      // Optimization: Lazy Subscription
-      // The lens only subscribes to the root atom when it has its first listener.
-      // It detaches automatically when the last listener disappears.
       if (listeners.size === 0) {
         prevValue = getValue(atom.peek());
         sharedUnsub = atom.subscribe(notify);
@@ -281,7 +285,10 @@ export function atomLens<T extends object, P extends Paths<T>>(
       sharedUnsub = null;
       listeners.clear();
     },
-    [BRAND]: BrandFlags.Atom | BrandFlags.Writable,
+    // Metadata for path flattening
+    _root: atom,
+    _path: path as string,
+    [BRAND]: BrandFlags.Atom | BrandFlags.Writable | BrandFlags.Lens,
   } as unknown as WritableAtom<PathValue<T, P>>;
 }
 

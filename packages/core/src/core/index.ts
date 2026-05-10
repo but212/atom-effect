@@ -1,18 +1,12 @@
+export { atom } from './atom';
 export {
-  aeNextTick,
-  batch,
   createDependencyLink,
-  nextEpoch,
   nextVersion,
   rollbackTrackingSubscriber,
   runInTrackingContext,
-  scheduler,
-  schedulerIsBatching,
-  schedulerSchedule,
   trackingContext,
   untracked,
-} from '@/core/base';
-export { atom } from './atom';
+} from './base';
 export { computed, mergeAtoms } from './computed';
 export { effect } from './effect';
 export type { Paths, PathValue } from './lens';
@@ -24,3 +18,11 @@ export {
   mergeLenses,
   setDeepValue,
 } from './lens';
+export {
+  aeNextTick,
+  batch,
+  nextEpoch,
+  scheduler,
+  schedulerIsBatching,
+  schedulerSchedule,
+} from './scheduler';

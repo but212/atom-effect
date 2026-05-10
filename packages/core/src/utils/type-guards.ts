@@ -1,6 +1,15 @@
 import { isPromise } from '@but212/atom-effect-utils';
-import { BRAND, BrandFlags } from '@/symbols';
-import type { ComputedAtom, EffectObject, ReadonlyAtom, WritableAtom } from '@/types';
+import { BRAND, BrandFlags, KIND } from '@/constants';
+import type {
+  ComputedAtom,
+  EffectObject,
+  ReadonlyAtom,
+  SchedulerJob,
+  SchedulerJobFunction,
+  SchedulerJobObject,
+  Subscription,
+  WritableAtom,
+} from '@/types';
 
 /** @internal */
 interface Branded {
@@ -115,6 +124,56 @@ export function isComputed(obj: unknown): obj is ComputedAtom {
  */
 export function isEffect(obj: unknown): obj is EffectObject {
   return isBranded(obj, BrandFlags.Effect);
+}
+
+/**
+ * Determines whether a value is a Subscription union.
+ * @internal
+ */
+export function isSubscription<T>(obj: unknown): obj is Subscription<T> {
+  if (!obj || typeof obj !== 'object') return false;
+  const k = (obj as { k?: number }).k;
+  return k === KIND.Fn || k === KIND.Obj;
+}
+
+/**
+ * Narrowing guard for function-based subscribers.
+ * @internal
+ */
+export function isFnSubscriber<T>(
+  sub: Subscription<T>
+): sub is Subscription<T> & { k: typeof KIND.Fn } {
+  return sub.k === KIND.Fn;
+}
+
+/**
+ * Narrowing guard for object-based subscribers.
+ * @internal
+ */
+export function isObjSubscriber<T>(
+  sub: Subscription<T>
+): sub is Subscription<T> & { k: typeof KIND.Obj } {
+  return sub.k === KIND.Obj;
+}
+
+/**
+ * Narrowing guard for function-based scheduler jobs.
+ * @internal
+ */
+export function isSchedulerJobFunction(
+  job: SchedulerJob
+): job is SchedulerJobFunction & { _k: typeof KIND.Fn } {
+  return job._k === KIND.Fn;
+}
+
+/**
+ * Narrowing guard for object-based scheduler jobs.
+ * @internal
+ */
+export function isSchedulerJobObject(
+  job: SchedulerJob
+): job is SchedulerJobObject & { _k: typeof KIND.Obj } {
+  return job._k === KIND.Obj;
 }
 
 export { isPromise };

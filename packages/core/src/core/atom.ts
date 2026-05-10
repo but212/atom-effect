@@ -1,15 +1,23 @@
 import type { SlotBuffer } from '@but212/atom-effect-utils';
-import { ATOM_STATE_FLAGS, EPOCH_CONSTANTS, IS_DEV, SMI_MAX } from '@/constants';
+import {
+  ATOM_STATE_FLAGS,
+  BRAND,
+  BrandFlags,
+  DEFAULT_EQUAL,
+  EPOCH_CONSTANTS,
+  IS_DEV,
+  KIND,
+  SMI_MAX,
+} from '@/constants';
 import {
   nextVersion,
+  nodeIsDisposed,
+  nodeIsNotifying,
   nodeNotifySubscribers,
   nodeSubscribe,
-  scheduler,
-  schedulerIsBatching,
-  schedulerSchedule,
+  nodeSubscriberCount,
   trackingContext,
 } from '@/core/base';
-import { BRAND, BrandFlags } from '@/symbols';
 import type {
   AtomOptions,
   DepBufferState,
@@ -19,7 +27,8 @@ import type {
   Subscription,
   WritableAtom,
 } from '@/types';
-import { debug, generateId, nodeIsDisposed, nodeIsNotifying, nodeSubscriberCount } from '@/utils';
+import { debug, generateId } from '@/utils';
+import { scheduler, schedulerIsBatching, schedulerSchedule } from './scheduler';
 
 /**
  * Internal implementation of a {@link WritableAtom}.
@@ -36,6 +45,7 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
   version: number = 0;
   _lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
   _nextEpoch: number | undefined = undefined;
+  _k: typeof KIND.Obj = KIND.Obj;
   readonly id: DependencyId = generateId() & SMI_MAX;
   _storage: {
     slots: SlotBuffer<Subscription<T>> | null;
@@ -55,7 +65,7 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
 
   constructor(initialValue: T, options: AtomOptions<T>) {
     this._value = initialValue;
-    this._equal = options.equal ?? Object.is;
+    this._equal = options.equal ?? DEFAULT_EQUAL;
 
     if (options.sync) {
       this.flags |= ATOM_STATE_FLAGS.SYNC;
@@ -186,7 +196,7 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
     // Reason: Release references immediately to assist GC in large-scale state trees.
     this._value = undefined as T;
     this._pendingOldValue = undefined;
-    this._equal = Object.is;
+    this._equal = DEFAULT_EQUAL;
   }
 }
 
