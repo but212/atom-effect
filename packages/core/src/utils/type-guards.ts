@@ -1,25 +1,43 @@
-import { isPromise } from '@but212/atom-effect-utils';
-import { BRAND, BrandFlags } from '@/symbols';
-import type { ComputedAtom, EffectObject, ReadonlyAtom, WritableAtom } from '@/types';
+/**
+ * @module TypeGuards
+ *
+ * Responsibility:
+ * Provides runtime type-narrowing utilities for the reactive system.
+ *
+ * Design Intent:
+ * Uses bitwise brand checks for high-performance identification of reactive
+ * nodes, avoiding the overhead of `instanceof` or complex property lookups.
+ */
 
-/** @internal */
+import { isPromise } from '@but212/atom-effect-utils';
+import { BRAND, BrandFlags, KIND } from '@/constants';
+import type {
+  ComputedAtom,
+  EffectObject,
+  ReadonlyAtom,
+  SchedulerJob,
+  SchedulerJobFunction,
+  SchedulerJobObject,
+  Subscription,
+  WritableAtom,
+} from '@/types';
+
+/**
+ * Role: Internal interface for reactive nodes that carry diagnostic branding.
+ * @internal
+ */
 interface Branded {
   [BRAND]?: number;
 }
 
 /**
- * Validates whether an object or function possesses a specific reactive brand flag.
+ * Logic: Bitwise Branding
+ * Validates whether an object or function possesses a specific reactive flag.
  *
- * Logic: This helper utilizes a bitwise identity check on a single consolidated
- * `BRAND` symbol.
+ * Optimization:
+ * Bitwise checks on a consolidated symbol are significantly faster than
+ * multiple property lookups, making them ideal for high-frequency execution loops.
  *
- * Optimization: Bitwise checks are significantly faster than multiple property
- * lookups or `instanceof` checks, making this suitable for high-frequency use
- * within reactive execution loops.
- *
- * @param obj - The value to examine.
- * @param flag - The bitwise flag to check for.
- * @returns True if the value contains the specified flag.
  * @internal
  */
 function isBranded<T>(obj: unknown, flag: number): obj is T {
@@ -34,9 +52,6 @@ function isBranded<T>(obj: unknown, flag: number): obj is T {
  * When to use:
  * - To validate user input in APIs that expect reactive atoms.
  * - To differentiate between raw values and reactive containers.
- *
- * @param obj - The value to check.
- * @returns True if the value is an atom.
  *
  * @example
  * ```typescript
@@ -55,10 +70,7 @@ export function isAtom(obj: unknown): obj is ReadonlyAtom {
  * Determines whether a value is a WritableAtom.
  *
  * When to use:
- * - To verify if an atom can be modified via `.set()` or `.update()` before attempting the operation.
- *
- * @param obj - The value to check.
- * @returns True if the value is a writable atom.
+ * - To verify if an atom can be modified before attempting a write operation.
  *
  * @example
  * ```typescript
@@ -77,17 +89,14 @@ export function isWritable(obj: unknown): obj is WritableAtom {
  * Determines whether a value is a ComputedAtom.
  *
  * When to use:
- * - To identify derived state containers that may have underlying dependencies.
- *
- * @param obj - The value to check.
- * @returns True if the value is a computed atom.
+ * - To identify derived state containers in debug or optimization logic.
  *
  * @example
  * ```typescript
  * import { isComputed } from '@but212/atom-effect';
  *
  * if (isComputed(maybeAtom)) {
- *   console.log('This atom is a derived value.');
+ *   console.log('This node is a derived computation.');
  * }
  * ```
  */
@@ -99,10 +108,7 @@ export function isComputed(obj: unknown): obj is ComputedAtom {
  * Determines whether a value is an EffectObject.
  *
  * When to use:
- * - To validate objects that manage reactive side-effects.
- *
- * @param obj - The value to check.
- * @returns True if the value is an effect handle.
+ * - To validate handles that manage reactive side-effects.
  *
  * @example
  * ```typescript
@@ -115,6 +121,56 @@ export function isComputed(obj: unknown): obj is ComputedAtom {
  */
 export function isEffect(obj: unknown): obj is EffectObject {
   return isBranded(obj, BrandFlags.Effect);
+}
+
+/**
+ * Role: Internal validator for Subscription unions.
+ * @internal
+ */
+export function isSubscription<T>(obj: unknown): obj is Subscription<T> {
+  if (!obj || typeof obj !== 'object') return false;
+  const k = (obj as { k?: number }).k;
+  return k === KIND.Fn || k === KIND.Obj;
+}
+
+/**
+ * Role: Narrowing guard for function-based subscribers.
+ * @internal
+ */
+export function isFnSubscriber<T>(
+  sub: Subscription<T>
+): sub is Subscription<T> & { k: typeof KIND.Fn } {
+  return sub.k === KIND.Fn;
+}
+
+/**
+ * Role: Narrowing guard for object-based subscribers.
+ * @internal
+ */
+export function isObjSubscriber<T>(
+  sub: Subscription<T>
+): sub is Subscription<T> & { k: typeof KIND.Obj } {
+  return sub.k === KIND.Obj;
+}
+
+/**
+ * Role: Narrowing guard for function-based scheduler jobs.
+ * @internal
+ */
+export function isSchedulerJobFunction(
+  job: SchedulerJob
+): job is SchedulerJobFunction & { _k: typeof KIND.Fn } {
+  return job._k === KIND.Fn;
+}
+
+/**
+ * Role: Narrowing guard for object-based scheduler jobs.
+ * @internal
+ */
+export function isSchedulerJobObject(
+  job: SchedulerJob
+): job is SchedulerJobObject & { _k: typeof KIND.Obj } {
+  return job._k === KIND.Obj;
 }
 
 export { isPromise };

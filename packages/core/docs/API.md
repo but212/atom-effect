@@ -196,10 +196,14 @@ An exported object representing the possible states of an asynchronous computed 
 
 The library utilizes a structured error hierarchy for identifying and recovering from issues within the reactive graph.
 
+> [!IMPORTANT]
+> **Breaking Change**: Since version 0.33.0, instance methods like `AtomError.getChain()` and `AtomError.toJSON()` have been removed. Use the standalone `getErrorChain()` and `serializeError()` utilities instead.
+
 ### `AtomError`
 
 The base class for all library-specific errors.
 
+- `_tag`: String discriminator for cross-realm identification (e.g., `'AtomError'`, `'ComputedError'`).
 - `message`: Description of the error.
 - `cause`: The underlying error or value that triggered the failure.
 - `recoverable`: Boolean indicating if the system can recover if dependencies change.
@@ -210,6 +214,11 @@ The base class for all library-specific errors.
 - `ComputedError`: Errors occurring during computed value evaluation.
 - `EffectError`: Errors occurring during effect execution or cleanup.
 - `SchedulerError`: Errors from the internal execution engine (e.g., infinite loop detection).
+
+### Utility Functions
+
+- `getErrorChain(error: unknown): Array<unknown>`: Traverses the `.cause` chain to reconstruct the full error trace. Handles circular references.
+- `serializeError(error: unknown): AtomErrorJSON | unknown`: Converts an error into a plain JSON-serializable object. Replaces circular references with a sentinel object.
 
 ---
 
@@ -302,7 +311,17 @@ console.log(user.value.profile.name); // "Bob"
 
 ## Debugging Utilities
 
-The `runtimeDebug` object (exported from the core) provides tools for inspecting the reactive graph. In production, these are typically no-op functions unless explicitly enabled.
+The `debug` object (exported from the core) provides tools for inspecting the reactive graph. In production, these are replaced by a high-performance static controller that ensures zero runtime overhead.
+
+### Automatic Naming
+
+Reactive nodes are automatically assigned human-readable identities based on their type:
+
+- **Atoms**: `atom_{id}`
+- **Computeds**: `calc_{id}`
+- **Effects**: `fx_{id}`
+
+If a `name` option is provided during node creation, it will be used as the primary identifier.
 
 - `dumpGraph()`: Returns metadata for all currently active reactive nodes.
 - `trackUpdate(id, name)`: Increments the update count for a node (used for loop detection).
@@ -315,11 +334,11 @@ Debug features can be enabled at runtime by setting `window.__ATOM_DEBUG__ = tru
 
 ## Internal Buffers (Advanced)
 
-The library uses specialized buffers (`SlotBuffer`, `DepSlotBuffer`) for high-performance dependency and subscriber management. While primarily internal, they are exported for advanced use cases and testing.
+The library uses specialized buffers (`SlotBuffer`) and state management objects (`DepBufferState`) for high-performance dependency and subscriber management. While primarily internal, they are exported for advanced use cases and testing.
 
 ### `SlotBuffer<T>`
 
-A high-performance container using a 4-bit mask for "fast-lane" slot management and an overflow array for unbounded capacity.
+A high-performance container using a 4-bit mask for "fast-lane" slot management and an overflow array for unbounded capacity. It is optimized for V8 hidden class stability.
 
 - `length`: The number of active (non-null) items in the buffer.
 - `capacity`: The highest physical index occupied plus one.
@@ -331,6 +350,10 @@ A high-performance container using a 4-bit mask for "fast-lane" slot management 
 - `compact(): void`: Eliminates all internal holes and resets physical boundaries.
 - `clear(): void`: Resets the buffer to an empty state.
 
-### `DepSlotBuffer`
+### `DepBufferState`
 
-A specialized `SlotBuffer` for `DependencyLink` objects, adding a Map-based fallback for $O(1)$ lookups when the collection grows large (> 32 items).
+A specialized state object (defined in `types/reactive.ts`) for managing dependency links. It features:
+
+- **Slot Integration**: Uses a `SlotBuffer<DependencyLink>` for ordered dependency storage.
+- **Dynamic Indexing**: Employs an `Indexer` interface that automatically transitions from linear scans to a `Map`-based lookup when the dependency count exceeds a performance threshold (defined in `BUFFER_CONFIG`).
+- **Version Tracking**: Stores the `version` of dependencies at the time of link establishment for efficient drift detection.

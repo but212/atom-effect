@@ -8,15 +8,16 @@ This document describes the internal architecture of `@but212/atom-effect`. It d
 
 The high-level API (`atom`, `computed`, `effect`) is built upon a unified internal execution engine designed for V8 performance and memory efficiency.
 
-- **Unified Base Class**: All reactive primitives are specialized instances of the internal **`ReactiveNode`** class. This ensures a consistent memory layout (Hidden Class Monomorphism), allowing the JavaScript engine to optimize property access.
+- **Unified Core Interface**: All reactive primitives implement the internal **`ReactiveNode`** interface. This ensures a consistent data structure and property layout across different node types, allowing the engine to handle them uniformly and efficiently.
 - **Push-Pull Hybrid Model**:
   - **Push (Notification Phase)**: When a source atom changes, it propagates a "dirty" signal to its immediate subscribers. This phase marks nodes for re-evaluation without performing calculations.
   - **Pull (Evaluation Phase)**: When a node's value is accessed or an effect executes, it performs a "pull" to validate the versions of its dependencies, triggering re-computation only if necessary.
-- **Scheduler and Coalescing**: Effects do not execute immediately upon state change. Instead, they are queued in a **Scheduler** that utilizes a **Flattened Buffer Layout** (Active, Standby, Batch) managed by a data-centric **`SchedulerState`**. This layout is designed for better cache locality and reduced indirection overhead, utilizing a flat loop to coalesce multiple updates into a single execution cycle.
+- **Scheduler and Coalescing**: Effects do not execute immediately upon state change. Instead, they are queued in a **Scheduler** (defined in `core/scheduler.ts`) that utilizes a **Double-Buffering Strategy** (Active, Standby, Batch) managed by a data-centric **`SchedulerState`**. This layout ensures that new jobs scheduled during a flush do not interfere with the current execution cycle while maintaining high cache locality.
 - **Functional Tracking**: Dependency tracking is managed via a functional **`TrackingContext`** state. This allows for lightweight stack operations and deterministic recovery during nested evaluations or error scenarios. While functional `Option` and `Result` patterns are available for utility logic, the core engine utilizes native `try/catch` and `null/undefined` in high-frequency hot paths to minimize allocation overhead.
 - **SMI Optimization**: The engine explicitly ensures that hot-path integers (versions, epochs, session IDs) stay within V8's **Small Integer (SMI)** range (31-bit signed). This prevents performance-degrading transitions from SMIs to heap-allocated doubles (HeapNumbers).
 - **Small Vector Optimization (SVO)**: To minimize heap allocations and GC pressure, the engine uses inline slots (`_s0` through `_s3`) tracked by a **4-bit occupancy mask**. These buffers implement a standardized **Array-like API** (`length`, `at()`, `push()`) and use explicit constructor initialization to ensure V8 Hidden Class stability, preventing polymorphic transitions during high-frequency slot discovery.
-- **Bitwise Branding**: Primitives are identified using a bitwise mask (`BrandFlags`) stored on a single `BRAND` symbol. This allows for constant-time type identification without multiple property lookups.
+- **Bitwise Branding**: Primitives are identified using a bitwise mask (`BrandFlags`) stored on a single `BRAND` symbol, defined in `constants/branding.ts`. This allows for constant-time type identification without multiple property lookups.
+- **Strategy-Based Notification**: Subscriber notifications use a dispatch table strategy (in `core/base.ts`) to eliminate conditional branching in hot notification loops, improving JIT dispatch performance.
 - **Isolated Debug Metadata**: Debug information such as IDs and names are attached via non-enumerable symbols, ensuring that debugging features do not interfere with object iteration, serialization, or production performance.
 
 ---
@@ -33,10 +34,10 @@ The system is designed around autonomous nodes that manage their own state and d
 
 ### Class Hierarchy
 
-- **`ReactiveNode<T>`**: The foundation for all primitives. It manages subscriber lists (`_slots`) and the dependency tracking state (`_deps`). It implements the `Disposable` interface for resource cleanup.
-- **`AtomImpl<T>`**: A pure producer node for mutable state. It keeps its dependency list (`_deps`) null to save memory. It handles synchronous re-entrancy through a breadth-first notification loop.
+- **`ReactiveNode<T>`**: The foundation for all primitives. It defines a standardized data structure including versioning, status flags, and a dedicated `_storage` object for managing subscriber lists and dependency buffers.
+- **`AtomImpl<T>`**: A pure producer node for mutable state. It keeps its dependency list (`_storage.deps`) null to save memory. It handles synchronous re-entrancy through a breadth-first notification loop.
 - **`ComputedAtomImpl<T>`**: A hybrid node that acts as both a consumer (of dependencies) and a producer (of derived values). It manages lazy evaluation and result caching.
-- **`EffectImpl`**: A pure consumer node for side effects. It keeps its subscriber list (`_slots`) null as it is a terminal node in the graph.
+- **`EffectImpl`**: A pure consumer node for side effects. It keeps its subscriber list (`_storage.slots`) null as it is a terminal node in the graph.
 
 ---
 
@@ -68,7 +69,7 @@ Asynchronous computed nodes manage their lifecycle as state machines, protecting
 
 - **Async Drift Detection**: If dependencies change while a Promise is pending, the resolution is ignored. This is handled via an integrated `isDirty` check during the resolution phase. Resolution and state updates occur within the microtask cycle following the settlement of the Promise.
 - **Session Management**: A rolling `_activeSessionId` (SMI optimized) ensures that only the result from the most current asynchronous session can resolve the node's state, preventing race conditions from stale computations.
-- **Bitwise Partitioning**: Internal state is managed via a 31-bit integer field (V8 SMI optimized):
+- **Bitwise Partitioning**: Internal state is managed via a 31-bit integer field (V8 SMI optimized) with flags defined in `constants/flags.ts`:
   - **[0-7] Core**: `DISPOSED`, `IS_COMPUTED`.
   - **[8-15] Computed**: `DIRTY`, `RECOMPUTING`, `HAS_ERROR`.
   - **[16-23] Async**: `IDLE`, `PENDING`, `RESOLVED`, `REJECTED`.
@@ -99,7 +100,7 @@ The engine enforces strict boundaries between logic and side effects.
 - **Scheduler Integrity**:
   - **Deduplication**: Jobs are tagged with an epoch to prevent redundant scheduling within the same cycle.
   - **Double-Buffering**: Uses active and standby buffers within the **`SchedulerState`** to allow safe job scheduling even during an active flush cycle.
-  - **Flat Loop**: Drains queues without recursion via **`schedulerDrainQueue`** to ensure stack safety.
+  - **Flat Loop**: Drains queues without recursion via **`schedulerDrainQueue`** (in `core/scheduler.ts`) to ensure stack safety.
   - **Memory Clearing**: Internal references in buffers are cleared to `undefined` immediately after execution to assist GC.
 
 ### Infinite Loop Defense
@@ -126,8 +127,9 @@ Lenses provide reactive access to nested properties within monolithic state obje
 
 The debugging subsystem is designed for deep visibility with minimal production impact.
 
-- **Dual-Controller Strategy**: In development, `DevDebugController` manages node registries and update counters. In production, these are replaced by `ProdDebugController` (no-op), which JavaScript engines can optimize away.
-- **WeakRef Registry**: The debug registry uses `WeakRef` to ensure that tracking nodes for inspection does not prevent them from being garbage collected.
+- **Object-based Diagnostic Hub**: In development, a functional debug object manages node registries and update counters. In production, these are replaced by a static no-op controller, which JavaScript engines can optimize away or inline for zero runtime overhead.
+- **Identity Mapping**: The system uses a centralized `BRAND_IDENTITY_MAP` to resolve human-readable names with standardized prefixes (`atom_`, `calc_`, `fx_`), ensuring consistent identification across the reactive graph.
+- **Finalization Tracking**: The debug registry uses `FinalizationRegistry` paired with `WeakRef` to ensure that tracking nodes for inspection does not prevent them from being garbage collected, while providing automatic metadata cleanup.
 - **Traceability**: Errors are wrapped with contextual messages and machine-readable codes for easier debugging.
 
 ---

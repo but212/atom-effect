@@ -197,8 +197,7 @@ combined.value = { theme: 'light', name: 'Bob' }; // Updates both source atoms
 
 For contributors, here is an overview of the core package layout:
 
-- `packages/core/src/core/`: Implementation of atoms, computeds, effects, and the scheduler.
-- `packages/core/src/utils/`: Debugging tools and type guards.
-- `packages/core/src/types.ts`: Public TypeScript interfaces.
-- `packages/core/src/errors.ts`: Error hierarchy and message registry.
-- `packages/core/src/constants.ts`: Internal configuration and state flags.
+- `packages/core/src/core/`: Reactive primitives (atoms, computeds, effects) and core engine logic.
+- `packages/core/src/constants/`: Reusable state flags, environment settings, and branding symbols.
+- `packages/core/src/types/`: Partitioned TypeScript interfaces (reactive, internal, API, scheduler).
+- `packages/core/src/utils/`: Utility functions, debug controllers, and the error hierarchy.

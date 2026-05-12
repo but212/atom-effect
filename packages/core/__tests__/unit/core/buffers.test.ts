@@ -4,6 +4,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
+import { createDependencyLink } from '@/core/base';
 import {
   claimExisting,
   createDepBuffer,
@@ -13,8 +14,8 @@ import {
   disposeAll,
   insertNew,
 } from '@/core/buffers';
-import { createDependencyLink, type DependencyLink } from '@/core/tracking';
 import type { Dependency } from '@/index';
+import type { DependencyLink } from '@/types';
 
 // Helper to create a structure compatible with DependencyLink for internal buffer testing
 const createLink = (node: Dependency, version: number, unsub?: () => void): DependencyLink =>

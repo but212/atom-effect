@@ -17,7 +17,6 @@
     "build:lib": "cross-env BUILD_TARGET=lib vite build",
     "build:bundle": "cross-env BUILD_TARGET=bundle vite build",
     "clean": "rimraf dist",
-
     "test": "vitest",
     "test:run": "vitest run",
     "test:unit": "vitest __tests__/unit",
@@ -75,7 +74,6 @@
     "playwright": "^1.59.1",
     "tinybench": "^6.0.1",
     "vite": "^8.0.11",
-    "vite-plugin-dts": "^4.5.4",
     "vitest": "^4.1.5"
   }
 }

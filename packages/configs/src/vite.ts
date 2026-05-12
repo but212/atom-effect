@@ -1,5 +1,6 @@
+import type { PluginOptions } from 'unplugin-dts';
+import dts from 'unplugin-dts/vite';
 import { defineConfig, type LibraryFormats, mergeConfig, type UserConfig } from 'vite';
-import dts, { type PluginOptions } from 'vite-plugin-dts';
 
 export interface BaseViteConfigOptions {
   packageDir: string;
@@ -60,6 +61,7 @@ export const getBaseViteConfig = (options: BaseViteConfigOptions): UserConfig =>
           include: ['src/**/*'],
           exclude: ['src/**/*.test.ts', '__tests__/**/*', '__benchmarks__/**/*', 'node_modules'],
           tsconfigPath: './tsconfig.build.json',
+          bundleTypes: true,
           ...dtsOptions,
         }),
     ].filter(Boolean),

@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  aeNextTick,
+  batch,
   scheduler,
   schedulerEndBatch,
   schedulerIsBatching,
@@ -7,18 +9,10 @@ import {
   schedulerSchedule,
   schedulerSetMaxFlushIterations,
 } from '@/core/scheduler';
-import {
-  aeNextTick,
-  atom,
-  batch,
-  computed,
-  effect,
-  SCHEDULER_CONFIG,
-  SchedulerError,
-} from '@/index';
+import { atom, computed, effect, SCHEDULER_CONFIG, SchedulerError } from '@/index';
 import { sleep } from '../../utils/test-helpers';
 
-describe('Scheduler', () => {
+describe('Scheduler Engine', () => {
   beforeEach(async () => {
     // Wait for any pending flushes and reset batch depth
     await aeNextTick();
