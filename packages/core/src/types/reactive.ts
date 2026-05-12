@@ -16,36 +16,51 @@ import type { AsyncStateType, DependencyId, Disposable } from './base';
  * Optimization: Monomorphic Access
  * All properties are non-optional to ensure V8 optimizes property access
  * via "Hidden Classes" during high-frequency graph traversals.
- *
- * @internal
  */
 export interface Dependency<T = unknown> {
   /** @internal */
   readonly [BRAND]?: number;
-  /** Unique engine-level ID for graph indexing. */
+  /**
+   * Unique engine-level ID for graph indexing.
+   * @internal
+   */
   readonly id: DependencyId;
 
   /**
    * Monotonic update counter.
    * Used by subscribers to detect if this dependency has drifted.
+   * @internal
    */
   version: number;
 
-  /** Combined bitmask representing lifecycle, type, and async state. */
+  /**
+   * Combined bitmask representing lifecycle, type, and async state.
+   * @internal
+   */
   flags: number;
 
-  /** Tracks if this node was visited during the current scheduler epoch. */
+  /**
+   * Tracks if this node was visited during the current scheduler epoch.
+   * @internal
+   */
   _lastSeenEpoch: number;
 
-  /** Fast-path discriminator for computed logic. */
+  /**
+   * Fast-path discriminator for computed logic.
+   * @internal
+   */
   readonly isComputed: boolean;
 
-  /** Quick-check flag for error presence. */
+  /**
+   * Quick-check flag for error presence.
+   * @internal
+   */
   readonly hasError: boolean;
 
   /**
    * Core engine method for establishing a reactive connection.
    * Returns a cleanup function.
+   * @internal
    */
   subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void;
 
