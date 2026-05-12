@@ -302,7 +302,7 @@ export function nodeNotifySubscribers<T>(
         try {
           NOTIFIER_STRATEGY[sub.k](sub as Subscription<unknown>, newValue, oldValue);
         } catch (e) {
-          console.error(`${LOG_PREFIX} Subscriber failed:`, e);
+          console.error(`${LOG_PREFIX} Subscriber failed on node ${node.id}:`, e);
         }
       }
     }
