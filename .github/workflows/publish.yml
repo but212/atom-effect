@@ -66,7 +66,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Download Release Notes
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: release-notes
 
