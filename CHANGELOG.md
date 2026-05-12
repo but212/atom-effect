@@ -18,6 +18,10 @@
   - Optimized `atomLens` with automatic path flattening to reduce reactive overhead in nested state trees.
   - Refined subscriber notification cycles using a strategy-based dispatch table, eliminating branching in hot loops.
   - Encapsulated internal reactive state (`slots`, `deps`) into a dedicated `_storage` property for better V8 hidden class stability.
+  - **Debug System**: Refactored the debug controller from a class-based implementation to an object-literal hub.
+  - **Debug System**: Enhanced node identification with standardized prefixes (`atom_`, `calc_`, `fx_`) and automated lifecycle tracking via `FinalizationRegistry`.
+  - **Error Handling**: Implemented a data-driven `ErrorStrategy` pattern for extensible and robust error metadata extraction.
+  - **Type Safety**: Integrated `satisfies` across all internal configuration objects to ensure contract validation without losing literal type precision.
 
 ### jQuery
 
@@ -42,7 +46,7 @@
 
 - **Performance & Architecture**: Complete overhaul of **atomList** and **atomForm** engines.
   - Implemented a 3-pass reconciliation pipeline (Head/Tail optimization, keyed diffing, and greedy placement) for O(N) linear performance and reduced memory overhead.
-  - Refactored core logic to use functional POJO contexts and unified structural binding via `lensFor` and `mergeLenses`.
+  - Refactored core logic to use functional object contexts and unified structural binding via `lensFor` and `mergeLenses`.
 
 #### Fixed
 
@@ -73,7 +77,7 @@
 
 #### Breaking Changes
 
-- Re-engineered `Result` and `Option` from class-based hierarchies to functional POJO designs. Static utility calls replace method calls to improve tree-shaking and memory efficiency.
+- Re-engineered `Result` and `Option` from class-based hierarchies to functional object-literal designs. Static utility calls replace method calls to improve tree-shaking and memory efficiency.
 - Standardized `SlotBuffer` API: `size` -> `length`, `physicalSize` -> `capacity`, `add` -> `push`, and `getAt` -> `at`.
 
 #### Added

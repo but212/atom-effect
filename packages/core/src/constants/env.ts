@@ -45,7 +45,7 @@ export const DEBUG_CONFIG = Object.freeze({
 export const BUFFER_CONFIG = Object.freeze({
   /** The item count threshold where we pivot from linear search to Map lookup. */
   MAP_THRESHOLD: 8,
-});
+} satisfies Record<string, number>);
 
 /**
  * Lenses and path resolution constraints.
@@ -58,7 +58,7 @@ export const BUFFER_CONFIG = Object.freeze({
 export const LENS_CONFIG = Object.freeze({
   /** Maximum nesting depth permitted for Lens-based path generation. */
   MAX_PATH_DEPTH: 8,
-});
+} satisfies Record<string, number>);
 
 /**
  * Epoch-based staleness tracking constants.
@@ -74,7 +74,7 @@ export const EPOCH_CONSTANTS = Object.freeze({
   UNINITIALIZED: -1,
   /** The starting value for valid epochs to avoid falsy (0) ambiguity. */
   MIN: 1,
-});
+} satisfies Record<string, number>);
 
 /**
  * Logic: Checks for runtime debug overrides via global variables or storage.

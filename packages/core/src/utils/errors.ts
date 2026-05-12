@@ -10,6 +10,7 @@
  * while ensuring that errors remain serializable for cross-context logging.
  */
 
+import { ERROR_STRATEGIES } from '@/constants';
 import type { AtomErrorConstructor, AtomErrorJSON } from '@/types';
 
 /**
@@ -34,7 +35,7 @@ import type { AtomErrorConstructor, AtomErrorJSON } from '@/types';
 export class AtomError extends Error {
   /**
    * Logic: Brand-based Identification
-   * Allows for POJO-style checks and identification without relying
+   * Allows for plain-object checks and identification without relying
    * solely on `instanceof`, which can fail across context boundaries.
    */
   readonly _tag: string = 'AtomError';
@@ -202,22 +203,10 @@ export function wrapError(
  * @internal
  */
 function getErrorMetadata(error: unknown) {
-  if (error instanceof AtomError) {
-    return {
-      name: error.name,
-      message: error.message,
-      recoverable: error.recoverable,
-      code: error.code,
-    };
-  }
-
-  if (error instanceof Error) {
-    return {
-      name: error.name,
-      message: error.message,
-      recoverable: true,
-      code: (error as unknown as Record<string, unknown>)?.code as string | undefined,
-    };
+  for (const strategy of ERROR_STRATEGIES) {
+    if (strategy.test(error)) {
+      return strategy.fetch(error as never);
+    }
   }
 
   return {

@@ -51,17 +51,17 @@ export const BrandFlags = {
 } as const;
 
 /**
- * Mapping of BrandFlags to human-readable node type names.
- * @internal
- */
-export const TYPE_BY_BRAND: Record<number, string> = {
-  [BrandFlags.Atom]: 'atom',
-  [BrandFlags.Computed]: 'computed',
-  [BrandFlags.Effect]: 'effect',
-};
-
-/**
  * Mask for filtering core reactive types (Atom, Computed, Effect).
  * @internal
  */
 export const BRAND_MASK = BrandFlags.Atom | BrandFlags.Computed | BrandFlags.Effect;
+
+/**
+ * Metadata for resolving human-readable node identities.
+ * @internal
+ */
+export const BRAND_IDENTITY_MAP = {
+  [BrandFlags.Atom]: { type: 'atom', prefix: 'atom_' },
+  [BrandFlags.Computed]: { type: 'computed', prefix: 'calc_' },
+  [BrandFlags.Effect]: { type: 'effect', prefix: 'fx_' },
+} as const satisfies Record<number, { type: string; prefix: string }>;

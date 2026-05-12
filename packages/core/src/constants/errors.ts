@@ -40,3 +40,42 @@ export const ERROR_MESSAGES = {
   SCHEDULER_END_BATCH_WITHOUT_START: 'endBatch() called without matching startBatch(). Ignoring.',
   BATCH_CALLBACK_MUST_BE_FUNCTION: 'Batch callback must be a function',
 } as const satisfies Record<string, string | ((...args: number[]) => string)>;
+
+/** @internal */
+export type ErrorStrategy = {
+  test: (e: unknown) => boolean;
+  fetch: (e: unknown) => {
+    name: string;
+    message: string;
+    recoverable: boolean;
+    code: string | undefined;
+  };
+};
+
+/**
+ * Data-driven strategies for extracting metadata from different error types.
+ * @internal
+ */
+export const ERROR_STRATEGIES: readonly ErrorStrategy[] = [
+  {
+    /** Logic: Brand-based check for system errors */
+    test: (e: unknown): boolean =>
+      typeof e === 'object' && e !== null && '_tag' in e && String(e._tag).endsWith('Error'),
+    fetch: (e: unknown) => ({
+      name: String((e as Record<string, unknown>).name),
+      message: String((e as Record<string, unknown>).message),
+      recoverable: Boolean((e as Record<string, unknown>).recoverable),
+      code: (e as Record<string, unknown>).code as string | undefined,
+    }),
+  },
+  {
+    /** Logic: Fallback for standard JavaScript Errors */
+    test: (e: unknown): e is Error => e instanceof Error,
+    fetch: (e: unknown) => ({
+      name: (e as Error).name,
+      message: (e as Error).message,
+      recoverable: true,
+      code: (e as Record<string, unknown>).code as string | undefined,
+    }),
+  },
+];

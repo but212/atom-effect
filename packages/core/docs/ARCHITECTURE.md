@@ -127,8 +127,9 @@ Lenses provide reactive access to nested properties within monolithic state obje
 
 The debugging subsystem is designed for deep visibility with minimal production impact.
 
-- **Dual-Controller Strategy**: In development, `DevDebugController` manages node registries and update counters. In production, these are replaced by `ProdDebugController` (no-op), which JavaScript engines can optimize away.
-- **WeakRef Registry**: The debug registry uses `WeakRef` to ensure that tracking nodes for inspection does not prevent them from being garbage collected.
+- **Object-based Diagnostic Hub**: In development, a functional debug object manages node registries and update counters. In production, these are replaced by a static no-op controller, which JavaScript engines can optimize away or inline for zero runtime overhead.
+- **Identity Mapping**: The system uses a centralized `BRAND_IDENTITY_MAP` to resolve human-readable names with standardized prefixes (`atom_`, `calc_`, `fx_`), ensuring consistent identification across the reactive graph.
+- **Finalization Tracking**: The debug registry uses `FinalizationRegistry` paired with `WeakRef` to ensure that tracking nodes for inspection does not prevent them from being garbage collected, while providing automatic metadata cleanup.
 - **Traceability**: Errors are wrapped with contextual messages and machine-readable codes for easier debugging.
 
 ---

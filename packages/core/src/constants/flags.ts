@@ -86,7 +86,7 @@ export const STATE_MASKS = Object.freeze({
   /** Captures the primary reactive lifecycle states. */
   LIFECYCLE_MASK:
     FLAGS.IDLE | FLAGS.DIRTY | FLAGS.PENDING | FLAGS.RESOLVED | FLAGS.REJECTED | FLAGS.HAS_ERROR,
-});
+} as const satisfies Record<string, number>);
 
 /**
  * Logic: Shared State Interface
@@ -96,7 +96,7 @@ export const STATE_MASKS = Object.freeze({
 export const EFFECT_STATE_FLAGS = Object.freeze({
   DISPOSED: FLAGS.DISPOSED,
   EXECUTING: FLAGS.EFFECT_EXECUTING,
-});
+} as const satisfies Record<string, number>);
 
 /**
  * Logic: Shared State Interface
@@ -114,7 +114,7 @@ export const COMPUTED_STATE_FLAGS = Object.freeze({
   RECOMPUTING: FLAGS.RECOMPUTING,
   HAS_ERROR: FLAGS.HAS_ERROR,
   FORCE_COMPUTE: FLAGS.FORCE_COMPUTE,
-});
+} as const satisfies Record<string, number>);
 
 /**
  * Logic: Shared State Interface
@@ -125,4 +125,4 @@ export const ATOM_STATE_FLAGS = Object.freeze({
   DISPOSED: FLAGS.DISPOSED,
   SYNC: FLAGS.ATOM_SYNC,
   NOTIFICATION_SCHEDULED: FLAGS.ATOM_NOTIFICATION_SCHEDULED,
-});
+} as const satisfies Record<string, number>);

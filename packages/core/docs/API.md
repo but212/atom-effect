@@ -311,7 +311,17 @@ console.log(user.value.profile.name); // "Bob"
 
 ## Debugging Utilities
 
-The `runtimeDebug` object (exported from the core) provides tools for inspecting the reactive graph. In production, these are typically no-op functions unless explicitly enabled.
+The `debug` object (exported from the core) provides tools for inspecting the reactive graph. In production, these are replaced by a high-performance static controller that ensures zero runtime overhead.
+
+### Automatic Naming
+
+Reactive nodes are automatically assigned human-readable identities based on their type:
+
+- **Atoms**: `atom_{id}`
+- **Computeds**: `calc_{id}`
+- **Effects**: `fx_{id}`
+
+If a `name` option is provided during node creation, it will be used as the primary identifier.
 
 - `dumpGraph()`: Returns metadata for all currently active reactive nodes.
 - `trackUpdate(id, name)`: Increments the update count for a node (used for loop detection).
