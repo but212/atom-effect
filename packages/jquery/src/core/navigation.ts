@@ -318,45 +318,48 @@ export function resolveAnchorPath(el: Element, base?: string): string {
   return normalizePath(p) + s;
 }
 
+/** @internal */
+function getElementAttributes(el: Element): Record<string, string> {
+  const attributes: Record<string, string> = {};
+  const attrs = el.attributes;
+  for (let i = 0, len = attrs.length; i < len; i++) {
+    const attr = attrs[i];
+    if (attr && !ATTR_EXTRACT_EXCLUDE.has(attr.name)) {
+      attributes[attr.name] = attr.value;
+    }
+  }
+  return attributes;
+}
+
 /**
  * Parses raw HTML strings into a structured `ContentState`.
  *
  * Why: Allows the router to perform "Fragment Extraction" — extracting
  * only specific container content and page metadata from a full server response.
+ *
+ * Performance Note: DOMParser.parseFromString() can be a bottleneck for very large
+ * HTML strings (> 1MB). To maximize performance, the server should honor the
+ * 'X-PJAX' header and return only the required HTML fragment rather than the full page.
  */
 export function extractContent(params: {
   html: string;
   selector?: string | undefined;
   redirectUrl?: string | null | undefined;
+  title?: string | null | undefined;
 }): ContentState {
-  const { html, selector, redirectUrl } = params;
+  const { html, selector, redirectUrl, title: titleOverride } = params;
   const doc = PARSER.parseFromString(html, 'text/html');
 
-  const titleEl = doc.querySelector('title');
-  const title = titleEl ? (titleEl.textContent?.trim() ?? null) : null;
-
-  const meta = extractMetaData(doc);
-
+  // Optimization: Skip title query if override is provided from headers
+  const title = titleOverride ?? doc.querySelector('title')?.textContent?.trim() ?? null;
   const contentNode = selector ? doc.querySelector(selector) : null;
-  const rawHtml = contentNode ? contentNode.innerHTML : (doc.body?.innerHTML ?? html);
-
-  const attributes: Record<string, string> = {};
-  if (contentNode) {
-    const attrs = contentNode.attributes;
-    for (let i = 0, len = attrs.length; i < len; i++) {
-      const attr = attrs[i];
-      if (attr && !ATTR_EXTRACT_EXCLUDE.has(attr.name)) {
-        attributes[attr.name] = attr.value;
-      }
-    }
-  }
 
   return {
-    html: rawHtml.trim(),
+    html: (contentNode?.innerHTML ?? doc.body?.innerHTML ?? html).trim(),
     title,
-    attributes,
+    attributes: contentNode ? getElementAttributes(contentNode) : {},
     redirectUrl,
-    meta,
+    meta: extractMetaData(doc),
   };
 }
 

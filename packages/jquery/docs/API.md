@@ -484,13 +484,20 @@ SPA router supporting hash-based and pushState routing.
 
 ### `$.atomNav(options)`
 
-Navigation module (PJAX) that intercepts link clicks, fetches content asynchronously, and updates target containers while maintaining browser history.
+ Navigation module (PJAX) that intercepts link clicks, fetches content asynchronously, and updates target containers while maintaining browser history.
 
 - **Reactive State**: Exposes `currentUrl`, `isPending`, and `hasError` atoms for reactive UI feedback (e.g., loading spinners).
 - **Metadata Sync**: Automatically synchronizes document `title` and standard SEO `meta` tags (description, keywords) from the loaded page.
 - **Scroll Management**: Handles automatic scrolling to the top or to a specific `#hash` after content injection.
 - **Interoperability**: Integrates with the navigation coordinator to respect `onLeave` guards from nested routers or other managers.
 - **Race Condition Safety**: Implements a "last navigation wins" policy using internal versioning and `AbortSignal` cancellation.
+
+#### Protocol & Header Support
+
+- **`X-PJAX-Container` Header**: Includes the target selector in the `X-PJAX-Container` request header, enabling server-side coordination for fragment rendering.
+- **`X-PJAX-Title` Support**: Synchronizes the document title using the `X-PJAX-Title` response header when provided, falling back to the `<title>` tag in the response body.
+- **`X-PJAX-URL` Support**: Resolves server-side redirects by following the URL provided in the `X-PJAX-URL` response header.
+- **Fragment Extraction**: Implements automated content extraction based on the `target` selector. If no selector is matched, the system falls back to extracting the `<body>` content or the raw HTML string.
 
 ---
 
