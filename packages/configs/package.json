@@ -40,14 +40,14 @@
   },
   "peerDependencies": {
     "tsup": "^8.5.1",
-    "vite": "^8.0.0",
     "unplugin-dts": "^1.0.0",
+    "vite": "^8.0.0",
     "vitest": "^4.0.0"
   },
   "devDependencies": {
     "tsup": "^8.5.1",
     "unplugin-dts": "^1.0.0",
-    "vite": "^8.0.11",
-    "vitest": "^4.1.5"
+    "vite": "^8.0.12",
+    "vitest": "^4.1.6"
   }
 }
