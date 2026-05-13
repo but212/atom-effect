@@ -1,3 +1,16 @@
+/**
+ * @module AEJGlobalDefinitions
+ *
+ * Responsibility:
+ * Extends the global JQuery and JQueryStatic interfaces with reactive binding
+ * capabilities, lifecycle management hooks, and diagnostic utilities.
+ *
+ * Design Intent:
+ * Provides the definitive type system for the `atom-effect-jquery` library,
+ * ensuring seamless IDE support and type safety for both core reactive
+ * primitives and DOM-bound extensions.
+ */
+
 import type { EffectOptions, Paths, PathValue } from '@but212/atom-effect';
 import type {
   AEJConfig,
@@ -88,34 +101,37 @@ declare global {
    */
   interface JQueryStatic {
     /**
-     * Creates a writable reactive atom.
+     * Creates a reactive atom to manage mutable state.
      *
      * When to use:
-     * - When you need a source of truth for a specific piece of application state.
-     * - When state needs to be updated manually in response to user actions.
+     * - As the primary source of truth for local or shared application state.
+     * - When data needs to be manually updated via the `.value` property.
      *
-     * @param initialValue - The initial state value.
-     * @param options - Configuration for sync mode, custom equality, or naming.
-     * @returns A writable reactive atom.
+     * @param initialValue - The starting value of the atom.
+     * @param options - Configuration for custom equality logic or delivery strategy.
      *
      * @example
      * ```typescript
      * const count = $.atom(0);
-     * console.log(count.value); // 0
-     * count.value++;
+     *
+     * // Subscribing to changes
+     * count.subscribe((next, prev) => console.log(`${prev} -> ${next}`));
+     *
+     * // Updating value
+     * count.value += 1; // Logs: "0 -> 1"
      * ```
      */
     atom<T>(initialValue: T, options?: AtomOptions): WritableAtom<T>;
     /**
-     * Creates a read-only atom that derives its value from other reactive sources.
+     * Creates a reactive computation derived from other atoms or computed nodes.
      *
      * When to use:
-     * - When a value needs to be automatically calculated based on other atoms.
-     * - To optimize performance by caching expensive derived results.
+     * - To define values that automatically update when their dependencies change.
+     * - To optimize performance through caching of expensive calculations.
+     * - To transform or aggregate raw state for UI presentation.
      *
-     * @param fn - The calculation function.
-     * @param options - Configuration for custom equality or default values.
-     * @returns A read-only reactive computed atom.
+     * @param fn - The computation function.
+     * @param options - Configuration for custom equality checks or error handlers.
      *
      * @example
      * ```typescript
@@ -128,108 +144,186 @@ declare global {
      * ```
      */
     computed<T>(fn: () => T, options?: ComputedOptions<T>): ComputedAtom<T>;
+    /**
+     * Creates an asynchronous reactive computation.
+     *
+     * When to use:
+     * - For logic involving fetch, database queries, or long-running tasks.
+     *
+     * Attention:
+     * A `defaultValue` is mandatory for async computations to provide a valid
+     * state while the Promise is PENDING.
+     */
     computed<T>(
       fn: () => Promise<T>,
       options: ComputedOptions<T> & { defaultValue: T }
     ): ComputedAtom<T>;
     /**
-     * Registers a side effect that automatically re-runs when its dependencies change.
+     * Creates a reactive side-effect that synchronizes state with external systems.
      *
      * When to use:
-     * - To perform logging, data fetching, or manual DOM updates in response to state changes.
-     * - To synchronize external systems (e.g., local storage) with the reactive state.
+     * - To update the DOM or integrate with third-party libraries.
+     * - To perform logging, monitoring, or diagnostic tasks.
+     * - To manage timers, network requests, or global subscriptions.
      *
-     * @param fn - The function to execute. Can return a cleanup callback.
-     * @param options - Configuration for sync mode or error handling.
-     * @returns A handle for manual control or disposal of the effect.
+     * @param fn - The function to execute. Can return a synchronous or asynchronous cleanup handle.
+     * @param options - Configuration for execution limits, custom error handlers, and sync delivery.
+     * @returns An `EffectObject` used to manually trigger or stop the effect.
+     *
+     * @throws {EffectError} If the provided `fn` is not a function.
      *
      * @example
      * ```typescript
      * const count = $.atom(0);
-     * $.effect(() => {
-     *   console.log(`Current count: ${count.value}`);
-     *   return () => console.log('Cleanup before next run');
+     *
+     * // Automatically logs whenever 'count' changes
+     * const sub = $.effect(() => {
+     *   console.log('Value:', count.value);
+     *
+     *   // Optional teardown called before the next run or on disposal
+     *   return () => console.log('Cleaning up...');
      * });
      *
-     * count.value++; // Logs: "Cleanup before next run", "Current count: 1"
+     * count.value++; // Logs: "Value: 1"
+     * sub.dispose(); // Stops the effect
      * ```
      */
     effect(fn: () => EffectResult, options?: EffectOptions): EffectObject;
     /**
-     * Executes multiple state updates in a single atomic cycle.
+     * Logic: Atomic Update Batching
+     * Groups multiple state updates into a single atomic change cycle.
      *
      * When to use:
-     * - When performing multiple related atom updates to prevent redundant effect triggers.
+     * - When performing multiple related updates to different atoms.
+     * - To prevent intermediate re-computations or redundant effect executions.
      *
-     * @param fn - Function containing multiple atom updates.
+     * @param fn - The function containing multiple state updates.
+     * @returns The value returned by the provided function.
      *
      * @example
      * ```typescript
-     * const a = $.atom(0);
-     * const b = $.atom(0);
-     * $.effect(() => console.log(a.value + b.value));
+     * const firstName = $.atom('John');
+     * const lastName = $.atom('Doe');
      *
+     * $.effect(() => console.log(`Full name: ${firstName.value} ${lastName.value}`));
+     *
+     * // Without batch, the effect would run twice.
      * $.batch(() => {
-     *   a.value = 1;
-     *   b.value = 2;
-     * }); // Logs "3" once.
+     *   firstName.value = 'Jane';
+     *   lastName.value = 'Smith';
+     * }); // Effect runs once here.
      * ```
      */
-    batch(fn: () => void): void;
+    batch<T>(fn: () => T): T;
     /**
-     * Reads a reactive value without creating a dependency relationship.
+     * Executes a scope where reactive dependencies are suppressed.
      *
      * When to use:
-     * - To access reactive state inside an effect without causing the effect to re-run.
+     * - Accessing atoms without creating an automatic subscription.
+     * - Performing side-effects (e.g., logging, DOM analytics) that must not trigger re-runs.
+     * - Breaking circular dependencies by performing silent reads.
      *
-     * @param fn - Function to execute in untracked mode.
-     * @returns The result of the function.
+     * @param fn - The non-reactive scope to execute.
+     * @returns The value returned by the provided function.
      *
      * @example
      * ```typescript
+     * const count = $.atom(0);
+     *
      * $.effect(() => {
-     *   const val = $.untracked(() => someAtom.value);
-     *   console.log('Read without tracking:', val);
+     *   // Re-runs only when 'someOtherAtom' changes, ignoring updates to 'count'
+     *   $.untracked(() => console.log('Current count:', count.value));
      * });
      * ```
      */
     untracked<T>(fn: () => T): T;
     /**
-     * Determines if a value is a reactive atom.
+     * Determines whether a value is a ReadonlyAtom.
      *
-     * @param obj - The value to check.
-     * @returns True if the value is an atom.
+     * When to use:
+     * - To validate user input in APIs that expect reactive atoms.
+     * - To differentiate between raw values and reactive containers.
+     *
+     * @example
+     * ```typescript
+     * if ($.isAtom(maybeAtom)) {
+     *   console.log(maybeAtom.value);
+     * }
+     * ```
      */
     isAtom(obj: unknown): obj is WritableAtom<unknown> | ReadonlyAtom<unknown>;
     /**
-     * Determines if a value is a derived computed atom.
+     * Determines whether a value is a ComputedAtom.
      *
-     * @param obj - The value to check.
-     * @returns True if the value is a computed atom.
+     * When to use:
+     * - To identify derived state containers in debug or optimization logic.
+     *
+     * @example
+     * ```typescript
+     * if ($.isComputed(maybeAtom)) {
+     *   console.log('This node is a derived computation.');
+     * }
+     * ```
      */
     isComputed(obj: unknown): obj is ComputedAtom<unknown>;
     /**
-     * Returns a promise that resolves after the next reactive scheduler cycle.
+     * Determines whether a value is an EffectObject.
      *
-     * @returns A promise resolving on the next tick.
+     * When to use:
+     * - To validate handles that manage reactive side-effects.
+     *
+     * @example
+     * ```typescript
+     * if ($.isEffect(maybeEffect)) {
+     *   maybeEffect.dispose();
+     * }
+     * ```
+     */
+    isEffect(obj: unknown): obj is EffectObject;
+    /**
+     * Determines whether a value is a Promise or a Thenable.
+     *
+     * When to use:
+     * - When you need to handle potentially asynchronous values from third-party
+     *   libraries that might not use native Promises.
+     *
+     * Logic:
+     * - Implements a tiered detection strategy. It prioritizes native `Promise`
+     *   performance via `instanceof` before falling back to duck-typed thenable
+     *   identification for Promises/A+ compatibility.
+     *
+     * @example
+     * if ($.isPromise(value)) {
+     *   value.then(result => console.log(result));
+     * }
+     */
+    isPromise<T = unknown>(value: unknown): value is PromiseLike<T>;
+    /**
+     * Logic: Asynchronous Update Synchronization
+     * Returns a promise that resolves after the next reactive update cycle.
+     *
+     * When to use:
+     * - Perform manual DOM measurements after reactive changes.
+     * - Coordinate external library initializations dependent on current DOM state.
      */
     nextTick(): Promise<void>;
 
     /**
      * Combines multiple object-based atoms into a single computed atom with a flattened type.
      *
-     * This utility merges the value types of all input atoms into a single
-     * unified object type.
+     * Logic: Snapshot Aggregation
+     * Merges the value types of all input atoms into a single unified object.
      *
      * @param atoms - A variadic list of atoms or computed nodes to merge.
-     * @returns A read-only reactive computed atom containing the merged object.
      *
      * @example
      * ```typescript
      * const a = $.atom({ x: 1 });
      * const b = $.atom({ y: 2 });
-     * const combined = $.mergeAtoms(a, b);
-     * // combined.value is { x: number, y: number }
+     * const c = $.computed(() => ({ z: 3 }));
+     *
+     * const combined = $.mergeAtoms(a, b, c);
+     * // combined.value is { x: number; y: number; z: number }
      * ```
      */
     mergeAtoms<T extends Dependency<unknown>[]>(
@@ -237,13 +331,25 @@ declare global {
     ): ComputedAtom<MergedDependencyValue<T>>;
 
     /**
-     * Merges multiple writable lenses into a single unified lens with a flattened type.
+     * Merges multiple writable lenses into a single unified lens.
      *
-     * Getting the value returns a merged object, and setting the value propagates
-     * the changes back to the constituent lenses.
+     * When to use:
+     * - To synchronize multiple fields across different state trees.
+     * - To create a single "form" atom from multiple disparate source atoms.
      *
-     * @param lenses - A variadic list of WritableAtoms (lenses).
-     * @returns A writable reactive atom (lens) containing the merged object.
+     * @param lenses - A list of writable atoms/lenses to merge.
+     * @returns A unified writable atom that synchronizes all input lenses.
+     *
+     * @example
+     * ```typescript
+     * const firstName = $.atom('Alice');
+     * const lastName = $.atom('Smith');
+     *
+     * const fullName = $.mergeLenses(firstName, lastName);
+     *
+     * // Sets both firstName and lastName to 'Bob'
+     * fullName.value = 'Bob';
+     * ```
      */
     mergeLenses<L extends WritableAtom<unknown>[]>(
       ...lenses: L
@@ -279,17 +385,30 @@ declare global {
     };
 
     /**
-     * Creates a two-way reactive proxy for a nested property path.
+     * Creates a reactive, two-way Lens into a nested property of an atom.
      *
-     * @param atom - The source atom.
-     * @param path - Dot-separated path to the property (e.g., 'user.name').
-     * @returns A new writable lens atom.
+     * When to use:
+     * - To bind UI inputs to specific fields in a large state object.
+     * - To minimize re-renders by subscribing only to a specific sub-path.
+     * - To create "slices" of state that can be passed to components.
+     *
+     * Logic: Path Flattening
+     * If the source atom is already a lens, this factory flattens the path
+     * (e.g., lens(lens(a, 'b'), 'c') -> lens(a, 'b.c')) to reduce proxy overhead.
+     *
+     * @param atom - The source atom or lens to derive from.
+     * @param path - A dot-separated string representing the path to the property.
+     * @returns A writable atom representing the value at the specified path.
      *
      * @example
      * ```typescript
-     * const store = $.atom({ user: { name: 'Alice' } });
-     * const nameLens = $.atomLens(store, 'user.name');
-     * nameLens.value = 'Bob'; // Updates the original store
+     * const user = $.atom({ profile: { name: 'Alice', age: 25 } });
+     *
+     * // Create a two-way lens for the 'name' property
+     * const nameLens = $.atomLens(user, 'profile.name');
+     *
+     * console.log(nameLens.value); // 'Alice'
+     * nameLens.value = 'Bob';      // Updates user.value.profile.name
      * ```
      */
     atomLens<T extends object, P extends Paths<T>>(
@@ -298,11 +417,16 @@ declare global {
     ): DisposableWritableAtom<PathValue<T, P>>;
 
     /**
-     * Composes an existing lens with a sub-path.
+     * Composes an existing lens with a new sub-path.
      *
-     * @param lens - The parent lens atom.
-     * @param path - Sub-path relative to the lens.
-     * @returns A new writable lens atom.
+     * Logic: Composition
+     * This is a semantic alias for {@link atomLens}. It creates a new lens
+     * starting from the value of the provided lens and navigating down the
+     * specified path.
+     *
+     * @param lens - The base lens to compose from.
+     * @param path - The sub-path relative to the base lens.
+     * @returns A new lens targeting the nested property.
      */
     composeLens<T extends object, P extends Paths<T>>(
       lens: WritableAtom<T>,
@@ -310,84 +434,67 @@ declare global {
     ): DisposableWritableAtom<PathValue<T, P>>;
 
     /**
-     * Creates a lens factory bound to a specific source atom.
+     * Creates a lens factory for a specific atom.
      *
-     * @param atom - The source atom.
-     * @returns A function that generates lenses for the atom's paths.
+     * When to use:
+     * - To create multiple lenses from the same root atom without repeating the root.
+     * - To enhance readability when defining many field bindings for a single state object.
+     *
+     * @param atom - The root atom to create lenses for.
+     * @returns A function that accepts a path and returns a lens for that path.
+     *
+     * @example
+     * ```typescript
+     * const user = $.atom({ profile: { name: 'Alice', age: 25 } });
+     * const userLens = $.lensFor(user);
+     *
+     * const nameLens = userLens('profile.name');
+     * const ageLens = userLens('profile.age');
+     * ```
      */
     lensFor<T extends object>(
       atom: WritableAtom<T>
     ): <P extends Paths<T>>(p: P) => DisposableWritableAtom<PathValue<T, P>>;
 
     /**
-     * Initializes a reactive router for synchronizing URL state with DOM views.
-     *
-     * When to use:
-     * - Invoke during application bootstrap to define your routing manifest
-     *   and bind a target container for dynamic content rendering.
-     *
-     * Logic: Reactive Routing
-     * This manager orchestrates URL synchronization, path matching, and dynamic
-     * view rendering. It exposes reactive atoms (`currentRoute`, `params`)
-     * allowing the rest of your UI to respond automatically to navigation changes.
-     *
-     * Capabilities:
-     * - Multi-mode support: Modern 'history' (clean URLs) or 'hash' for legacy/static hosting.
-     * - Dynamic matching: High-performance parameter extraction for named segments.
+     * - Multi-mode support: Modern 'history' or 'hash' for legacy environments.
+     * - Dynamic matching: High-performance parameter extraction via tiered compilers.
      * - Lifecycle guards: Navigation control via `onEnter` and `onLeave` hooks.
-     * - Accessibility: Built-in focus management for Screen Readers on route transitions.
-     *
-     * @param config - Configuration for routes, target containers, and lifecycle hooks.
-     * @returns A router interface for programmatic control and state monitoring.
+     * - Accessibility: Built-in focus and scroll management on transitions.
      *
      * @example
      * ```typescript
      * const router = $.route({
-     *   target: '#app-root',
+     *   target: '#app',
      *   routes: {
      *     '/': { template: '#home-tmpl' },
-     *     '/user/:id': {
-     *       onEnter: (params) => console.log('Entering user:', params.id),
-     *       render: (el, name, params) => {
-     *         $(el).text(`User Profile: ${params.id}`);
-     *       }
-     *     }
+     *     '/users/:id': { render: (el, name, params) => renderUser(el, params.id) }
      *   }
      * });
-     *
-     * // Programmatic navigation
-     * router.navigate('/user/42');
      * ```
      */
     route(config: RouteConfig): Router;
 
     /**
-     * Creates a computed atom that manages an asynchronous AJAX lifecycle.
-     *
-     * Logic: Concurrency Control
-     * - Uses `AbortController` and `jqXHR.abort()` to ensures that only the
-     *   result of the most recent request is reflected in the atom's state.
-     * - Discards older, "out-of-order" responses to prevent UI flickering
-     *   and data race conditions.
+     * Creates a computed atom that synchronizes with a network request.
      *
      * When to use:
-     * - Fetching data that depends on other reactive atoms.
-     * - Implementing automatic refetching and request cancellation.
-     *
-     * @param source - A static URL or a reactive function returning a URL.
-     * @param opts - Fetch configuration and response transformation.
-     * @returns A computed atom with abort and disposal capabilities.
+     * - To fetch data automatically when reactive dependencies (e.g., atoms) change.
+     * - To enforce "latest-only" concurrency where stale requests are cancelled.
+     * - To unify error handling and data transformation for remote resources.
      *
      * @example
-     * ```typescript
-     * const userId = $.atom(1);
-     * const user = $.atomFetch(() => `/api/users/${userId.value}`, {
-     *   defaultValue: { name: 'Loading...' },
-     *   eager: true
+     * ```ts
+     * const userId = atom(1);
+     * const userProfile = $.atomFetch(() => `/api/users/${userId.get()}`, {
+     *   transform: (data) => data.profile
      * });
      * ```
      *
-     * @public
+     * Logic: Concurrency Control
+     * Uses AbortController and jqXHR.abort() to enforce a "latest-only"
+     * resolution strategy. Older requests are canceled to prevent stale data
+     * from overwriting newer updates.
      */
     atomFetch<T>(
       url: string | (() => string),
@@ -400,55 +507,90 @@ declare global {
     };
 
     /**
-     * Initializes fragment-based SPA navigation.
+     * Logic: Reactive Navigation Orchestrator
+     * Provides a PJAX-style manager that synchronizes the URL with server-fetched fragments.
      *
      * When to use:
-     * - To implement partial page updates via AJAX without full reloads.
-     * - When automatic cleanup of bindings in replaced containers is required.
+     * - When building a "Single Page" experience within a JQuery environment.
+     * - When specific DOM containers need to reflect the current URL state.
      *
-     * @param options - Navigation configuration.
-     * @returns An interface for managing fragment navigation.
+     * Performance Characteristics:
+     * - Implements hash-only transition optimization to avoid redundant network requests.
+     * - Uses batched reactive updates to minimize layout thrashing during navigation.
      *
-     * @public
+     * @example
+     * ```typescript
+     * const nav = $.atomNav({
+     *   target: '#main-content',
+     *   onMount: ($el) => console.log('Swapped!'),
+     * });
+     *
+     * // Monitor navigation status
+     * $.effect(() => {
+     *   if (nav.isPending.value) showSpinner();
+     *   else hideSpinner();
+     * });
+     *
+     * // Programmatic navigation
+     * $('#link').on('click', () => nav.navigate('/settings'));
+     * ```
      */
     atomNav(options: AtomNavOptions): AtomNav;
 
     /**
-     * Registers a reactive context value at a specific DOM root.
+     * Logic: Dependency Provider
+     * Registers a value or atom to be provided to all descendant elements.
+     *
+     * Logic: CSS Variable Synchronization
+     * Automatically synchronizes the provided value to a CSS variable
+     * `--aej-[key]` on the host element for state-driven styling.
      *
      * When to use:
-     * - Recommended for sharing state (atoms) with deep descendants without
-     *   explicit prop drilling.
-     * - Suitable for establishing theme or configuration contexts at specific DOM roots.
+     * - When you need to share state (like themes or user sessions) across a deep DOM tree.
+     * - When you want to control CSS properties reactively via atoms.
      *
-     * Logic: Dependency Injection
-     * Shares state with descendant elements via the bubbling `aej:context-request` event.
-     *
-     * Logic: CSS Bridge
-     * Automatically synchronizes provided values with CSS custom properties (`--aej-[key]`),
-     * enabling reactive styling driven by application state.
-     *
-     * @param element - The host element, selector, or collection acting as provider.
-     * @param key - Unique identifier for the context (string or symbol).
+     * @param element - The host element or collection acting as provider.
+     * @param key - Unique identifier for the context.
      * @param val - The reactive atom or static value to share.
+     *
+     * @example
+     * ```typescript
+     * const theme = $.atom('dark');
+     * $.provideAtom('#app', 'theme', theme);
+     *
+     * // In CSS:
+     * // .child { color: var(--aej-theme); }
+     * ```
      */
     provideAtom(element: HTMLElement | JQuery | string, key: string | symbol, val: unknown): void;
 
     /**
-     * Injects a reactive context provided by an ancestor element.
+     * Logic: Dependency Injection
+     * Injects a provided value or atom from an ancestor.
      *
-     * When to use:
-     * - Recommended for consuming state from an ancestor without direct coupling.
-     * - Suitable for creating context-aware components that adapt to their
-     *   DOM hierarchy position.
-     *
-     * Logic: Hybrid Discovery
+     * Logic: Late-Bound Proxy
      * Returns a reactive proxy atom that automatically re-locates providers
      * if the element is moved within the DOM hierarchy.
      *
-     * @param element - The element or selector requesting the context.
+     * When to use:
+     * - To consume state provided by a `provideAtom` ancestor.
+     * - When components might be moved (drag-and-drop) and need to stay synced with their new context.
+     *
+     * @param element - The element requesting the context.
      * @param key - The unique identifier of the context to locate.
      * @returns A reactive proxy atom representing the injected context.
+     *
+     * @example
+     * ```typescript
+     * class MyChild extends HTMLElement {
+     *   connectedCallback() {
+     *     const theme = $.injectAtom(this, 'theme');
+     *     $.effect(() => {
+     *       this.style.color = theme.value === 'dark' ? 'white' : 'black';
+     *     });
+     *   }
+     * }
+     * ```
      */
     injectAtom<T = unknown>(
       element: HTMLElement | JQuery | string,
@@ -456,35 +598,29 @@ declare global {
     ): WritableAtom<T>;
 
     /**
-     * Composition-based helper for building reactive Web Components.
+     * Logic: Component Lifecycle Controller
+     * Orchestrates reactive features for a specific DOM element, managing
+     * bindings, styles, and resource cleanup.
      *
      * When to use:
-     * - Recommended for integrating reactive state management into standard
-     *   Custom Elements.
-     * - Suitable for mapping HTML attributes and slots to reactive atoms.
+     * - Recommended for integrating reactive state into standard Custom Elements.
+     * - Suitable for mapping attributes and slots to reactive atoms.
+     * - When you need automatic cleanup of effects when an element is removed.
      *
-     * Logic: Lifecycle Integration
-     * Returns a controller that orchestrates the initialization and teardown
-     * of component-specific reactive resources.
-     *
-     * @param element - The host Custom Element (usually `this`).
+     * @param element - The host element (usually `this` in a Custom Element).
      * @returns A controller for managing the component's reactive lifecycle.
      *
      * @example
      * ```typescript
-     * class MyComponent extends HTMLElement {
+     * class MyToggle extends HTMLElement {
      *   private aej = $.useAtomComponent(this);
-     *   private count = $.atom(0);
+     *   private active = $.atom(false);
      *
      *   connectedCallback() {
      *     this.aej.setup({
-     *       bind: { count: this.count }
+     *       bind: { label: $.computed(() => this.active.value ? 'ON' : 'OFF') },
+     *       dispatch: { toggle: this.active }
      *     });
-     *     this.aej.$('.btn').on('click', () => console.log('Action performed'));
-     *   }
-     *
-     *   disconnectedCallback() {
-     *     this.aej.teardown();
      *   }
      * }
      * ```
@@ -492,9 +628,29 @@ declare global {
     useAtomComponent(element: HTMLElement): AtomComponentController;
 
     /**
-     * Initializes the Atom-Effect jQuery library with custom settings.
+     * Role: Library Orchestrator
+     * Initializes Atom-Effect jQuery with the specified configuration.
      *
-     * @param config - Global configuration for patches and cleanup observers.
+     * When to use:
+     * - At the application entry point to configure global reactive behavior.
+     * - During runtime to toggle debugging or change auto-cleanup roots.
+     *
+     * Caution: Memory Leaks
+     * If both `patch` and `autoCleanup` are disabled, the engine cannot track
+     * DOM removal. You MUST call `cleanup(element)` manually to prevent
+     * memory leaks.
+     *
+     * @param config - Configuration options for patches and cleanup safety nets.
+     *
+     * @example
+     * ```typescript
+     * import { initAEJ } from '@but212/atom-effect-jquery';
+     *
+     * initAEJ({
+     *   patch: { html: true, text: true },
+     *   autoCleanup: { root: document.getElementById('app') }
+     * });
+     * ```
      */
     initAEJ(config?: AEJConfig): void;
   }
@@ -506,135 +662,181 @@ declare global {
    */
   interface JQuery<TElement = HTMLElement> {
     /**
-     * Reactively synchronizes the element's text content.
+     * Binds the text content of elements to a reactive source.
      *
      * When to use:
-     * - Rendering labels, status messages, or counters that track state.
+     * - Recommended for label synchronization, counters, or status messages.
+     * - Suitable for displaying formatted strings derived from reactive data.
      *
-     * @param src - The reactive source value.
-     * @param fmt - Optional function to format the value for display.
-     * @returns The original jQuery collection.
+     * @param source - The reactive atom or computed value.
+     * @param formatter - Optional function to transform the value into a string.
+     * @returns The original jQuery collection for chaining.
      *
      * @example
      * ```typescript
-     * $('.status').atomText(isOnline, (v) => v ? 'Online' : 'Offline');
+     * $('.count-display').atomText(counterAtom, (val) => `Total: ${val}`);
      * ```
      */
     atomText<T>(src: AsyncReactiveValue<T>, fmt?: (v: T) => string): this;
     /**
-     * Reactively synchronizes the element's inner HTML.
+     * Binds the HTML content of elements to a reactive source.
      *
-     * Caution: Security Risk
-     * Rendering unsanitized HTML from user input can lead to XSS attacks.
-     * Always ensure the source data is trusted or sanitized.
+     * Security: XSS Prevention
+     * Ensure the source data is trusted. Rendering unsanitized HTML from user
+     * input can lead to XSS vulnerabilities.
      *
-     * @param src - The reactive source for the HTML content.
-     * @returns The original jQuery collection.
-     */
-    atomHtml(src: AsyncReactiveValue<string>): this;
-    /**
-     * Toggles CSS classes based on reactive conditions.
+     * When to use:
+     * - Recommended for rendering complex markup or rich text with formatting tags.
      *
-     * Logic: Supports both individual class toggling and batch management
-     * via mapping objects.
+     * @param source - The reactive atom containing the HTML string.
+     * @returns The original jQuery collection for chaining.
      *
      * @example
      * ```typescript
-     * $('.btn').atomClass('is-active', isActive);
-     * $('.card').atomClass({ 'is-hidden': isHidden, 'is-loading': isLoading });
+     * $('.content').atomHtml(htmlAtom);
+     * ```
+     */
+    atomHtml(src: AsyncReactiveValue<string>): this;
+    /**
+     * Binds CSS classes to reactive conditions.
+     *
+     * When to use:
+     * - Recommended for toggling stateful classes (e.g., 'is-active', 'is-loading').
+     * - Suitable for managing complex UI states defined by multiple simultaneous flags.
+     *
+     * Logic: Class Toggling
+     * Supports both toggling a single class based on a condition and managing
+     * multiple classes through a mapping object.
+     *
+     * @param classNameOrMap - A class name string or a map of `{ className: conditionAtom }`.
+     * @param condition - The condition for the class (required if `classNameOrMap` is a string).
+     * @returns The original jQuery collection for chaining.
+     *
+     * @example
+     * ```typescript
+     * $('.tab').atomClass('active', activeAtom);
      * ```
      */
     atomClass(name: string, cond: AsyncReactiveValue<boolean>): this;
     atomClass(map: Record<string, AsyncReactiveValue<boolean>>): this;
     /**
-     * Reactively synchronizes CSS styles.
+     * Binds inline CSS properties to reactive sources.
      *
-     * Logic: Normalizes property names and units (e.g., 'px') to ensure
-     * cross-browser consistency for dynamic layouts.
+     * Logic: Unit Support
+     * Standardizes property values with optional units (e.g., 'px', 'em')
+     * before applying them to the element's style.
+     *
+     * @param propOrMap - A CSS property name or a binding map.
+     * @param source - The reactive atom providing the value.
+     * @param unit - Optional unit suffix (e.g., 'px').
+     * @returns The original jQuery collection for chaining.
      *
      * @example
      * ```typescript
-     * $('.box').atomCss('width', progress, '%');
-     * $('.overlay').atomCss({ opacity: transparency });
+     * $('.box').atomCss('width', widthAtom, 'px');
      * ```
      */
     atomCss(prop: string, src: AsyncReactiveValue<string | number>, unit?: string): this;
     atomCss(map: CssBindings): this;
     /**
-     * Reactively synchronizes HTML attributes.
-     *
-     * When to use:
-     * - Updating `id`, `title`, `alt`, or `aria-*` attributes.
+     * Binds HTML attributes to reactive sources.
      *
      * @example
      * ```typescript
-     * $('.icon').atomAttr('title', tooltipAtom);
+     * $('.link').atomAttr('href', urlAtom);
      * ```
      */
     atomAttr(name: string, src: AsyncReactiveValue<PrimitiveValue>): this;
     atomAttr(map: Record<string, AsyncReactiveValue<PrimitiveValue>>): this;
     /**
-     * Reactively synchronizes DOM properties (e.g., `disabled`, `checked`).
+     * Binds DOM properties directly to reactive sources.
      *
-     * When to use:
-     * - Toggling stateful properties that require boolean values or direct access.
+     * @example
+     * ```typescript
+     * $('.input').atomProp('disabled', disabledAtom);
+     * ```
      */
     atomProp<T>(name: string, src: AsyncReactiveValue<T>): this;
     atomProp(map: Record<string, AsyncReactiveValue<unknown>>): this;
     /**
-     * Shows the element (`display: block/initial`) when the condition is true.
+     * Controls the visibility of elements based on a reactive condition.
      *
-     * @param cond - Reactive condition for visibility.
+     * When to use:
+     * - Recommended for conditional rendering where the element should be
+     *   visible when the condition is truthy.
+     *
+     * @param condition - The reactive condition governing visibility.
+     * @returns The original jQuery collection for chaining.
+     *
+     * @example
+     * ```typescript
+     * $('.modal').atomShow(isOpenAtom);
+     * ```
      */
     atomShow(cond: AsyncReactiveValue<boolean>): this;
     /**
-     * Hides the element (`display: none`) when the condition is true.
+     * Controls the invisibility of elements based on a reactive condition.
      *
-     * @param cond - Reactive condition for hiding.
+     * When to use:
+     * - Recommended for conditional rendering where the element should be
+     *   hidden when the condition is truthy.
+     *
+     * @param condition - The reactive condition governing invisibility.
+     * @returns The original jQuery collection for chaining.
+     *
+     * @example
+     * ```typescript
+     * $('.overlay').atomHide(isLoadedAtom);
+     * ```
      */
     atomHide(cond: AsyncReactiveValue<boolean>): this;
 
     /**
-     * Establishes a two-way binding for form input values.
+     * Performs two-way binding for form input values.
      *
-     * Logic: Synchronization Engine
-     * Automatically coordinates updates between the DOM's `value` and a
-     * writable atom, handling cursor stability and IME composition.
+     * When to use:
+     * - Recommended for text inputs, textareas, and select menus.
      *
-     * @param atom - The writable atom to synchronize with.
-     * @param opts - Configuration for debouncing, parsing, and formatting.
+     * Logic: Two-Way Sync
+     * Synchronizes the input's `value` with a writable atom, handling both
+     * atom-to-DOM updates and DOM-to-atom changes (via `input` or `change` events).
+     *
+     * @param atom - The writable atom to synchronize with the input value.
+     * @param options - Configuration for debouncing or event triggers.
+     * @returns The original jQuery collection for chaining.
+     *
+     * @example
+     * ```typescript
+     * $('.search-input').atomVal(queryAtom, { debounce: 300 });
+     * ```
      */
     atomVal<T>(atom: WritableAtom<T>, opts?: ValOptions<T>): this;
 
     /**
-     * Establishes a two-way binding for checkboxes and radio buttons.
+     * Performs two-way binding for checkbox and radio button checked states.
      *
-     * @param atom - The writable atom to synchronize with.
+     * @param atom - The writable atom to synchronize with the checked state.
+     * @returns The original jQuery collection for chaining.
      */
     atomChecked(atom: WritableAtom<boolean>): this;
 
     /**
-     * Orchestrates two-way bindings for an entire form element.
+     * Orchestrates two-way binding for an entire form element.
      *
      * When to use:
-     * - Recommended for synchronizing standard HTML forms with complex, nested
-     *   reactive state objects.
-     * - Suitable for scenarios requiring declarative validation integrated with
-     *   browser-native APIs.
+     * - Recommended for synchronizing complex data models with HTML forms.
      *
-     * Logic: Path Mapping
-     * Maps form field `name` attributes to nested properties of a reactive
-     * object atom using lenses, allowing for structural sharing updates.
+     * Logic: Field Mapping
+     * Maps form fields (via `name` attributes) to nested properties within a
+     * reactive object atom using structural lenses.
      *
-     * @param atom - The writable atom containing the form data object.
-     * @param opts - Configuration for transformation and validation callbacks.
+     * @param atom - The writable atom containing the form's data model.
+     * @param options - Configuration for validation or submission handling.
+     * @returns The original jQuery collection for chaining.
      *
      * @example
      * ```typescript
-     * const user = $.atom({ name: 'Alice' });
-     * $('form').atomForm(user, {
-     *   validation: { name: (v) => !!v }
-     * });
+     * $('form').atomForm(userProfileAtom);
      * ```
      */
     atomForm<T extends object>(
@@ -643,29 +845,52 @@ declare global {
     ): this;
 
     /**
-     * Registers an event listener with automatic lifecycle cleanup.
+     * Binds a reactive event listener to elements.
      *
-     * @param event - The event name to listen for.
+     * @param event - The name of the DOM event.
      * @param handler - The event handler function.
+     * @returns The original jQuery collection for chaining.
      */
     atomOn(event: string, handler: (e: JQuery.Event) => void): this;
 
     /**
-     * Entry point for declaring multiple reactive bindings in a single call.
+     * A unified entry point for declaring multiple reactive bindings in a single call.
      *
-     * Logic: Batch Initialization
-     * Iterates through the provided options and executes the corresponding
-     * binding logic in a deterministic order for optimal performance.
+     * When to use:
+     * - Recommended for efficiently initializing multiple bindings on an element.
+     * - Suitable for maintaining organized declarations in complex UIs.
      *
-     * @param opts - A mapping of binding types to their reactive sources.
+     * Logic: Task Orchestration
+     * Iterates through the provided configuration and executes the corresponding
+     * binding tasks in a predefined, deterministic order.
+     *
+     * @param options - A configuration object defining multiple bindings.
+     * @returns The original jQuery collection for chaining.
+     *
+     * @example
+     * ```typescript
+     * $('.submit-btn').atomBind({
+     *   text: labelAtom,
+     *   class: { 'is-loading': loadingAtom },
+     *   on: { click: handleSubmit }
+     * });
+     * ```
      */
     atomBind<T = unknown>(opts: BindingOptions<T>): this;
 
     /**
-     * High-performance reactive list renderer for jQuery.
+     * Synchronizes an element's children with a reactive list source.
      *
-     * Usage Example:
-     * ```javascript
+     * When to use:
+     * - Recommended for rendering dynamic collections with high-performance O(N) updates.
+     * - Suitable for lists requiring complex item templates or delegated event handling.
+     *
+     * @param source - The reactive atom containing the array of items.
+     * @param options - Configuration for rendering, identification, and lifecycle hooks.
+     * @returns The original jQuery collection for chaining.
+     *
+     * @example
+     * ```typescript
      * $('#todo-list').atomList(todosAtom, {
      *   key: 'id',
      *   render: (todo) => `<li class="item">${todo.text}</li>`,
@@ -674,35 +899,59 @@ declare global {
      *   }
      * });
      * ```
-     *
-     * Lifecycle:
-     * - Automatically cleans up via `registry` when the element is removed from DOM.
-     * - Re-binding to the same element replaces the previous reactive effect.
      */
     atomList<T>(src: ReadonlyAtom<T[]>, opts: ListOptions<T>): this;
 
     /**
-     * Mounts a reactive component and manages its isolated lifecycle.
+     * Logic: Component Lifecycle Orchestration
+     * Initializes and mounts a reactive UI component onto a jQuery collection.
      *
-     * Logic: Component Sandbox
-     * Handles automatic teardown of existing content, isolated component
-     * execution, and registration of cleanup hooks in the global registry.
+     * When to use:
+     * - Initialize complex UI modules with internal reactive effects or listeners.
+     * - Build reusable "Logic Units" that require dedicated cleanup phases.
      *
-     * @param comp - The component function to mount.
-     * @param props - Properties to pass to the component.
+     * Lifecycle: Execution Pipeline
+     * 1. Cleanup: Existing reactive bindings on the target are destroyed to prevent conflicts.
+     * 2. Isolation: Component executes within `untracked` and `batch` scopes to prevent
+     *    dependency leaks to/from the parent context.
+     * 3. Registration: Teardown hooks are registered for automatic execution on DOM removal.
+     *
+     * @example
+     * ```typescript
+     * // 1. Define a component
+     * const MyCounter = ($el, props) => {
+     *   const count = $.atom(0);
+     *   const fx = $.effect(() => $el.text(`${props.title}: ${count.value}`));
+     *   return () => fx.dispose(); // Teardown hook
+     * };
+     *
+     * // 2. Mount onto a collection
+     * $('.counter-host').atomMount(MyCounter, { title: 'Click Count' });
+     * ```
      */
     atomMount<P>(comp: ComponentFn<P>, props?: P): this;
     /**
-     * Manually triggers the teardown phase for the component and its bindings.
+     * Logic: Manual Resource Teardown
+     * Explicitly triggers unmounting and resource cleanup for elements in the collection.
      *
-     * @returns The original jQuery collection.
+     * When to use:
+     * - When you need to manually destroy a component before its host element is removed.
      */
     atomUnmount(): this;
 
     /**
-     * Manually destroys all reactive bindings associated with the elements.
+     * Removes all reactive bindings and cleans up resources.
      *
-     * @returns The original jQuery collection.
+     * Caution: Teardown Order
+     * This method should be called when elements are permanently removed from
+     * the DOM to prevent memory leaks from active effects.
+     *
+     * @returns The original jQuery collection for chaining.
+     *
+     * @example
+     * ```typescript
+     * $('.list-item').atomUnbind().remove();
+     * ```
      */
     atomUnbind(): this;
   }

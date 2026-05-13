@@ -1,3 +1,15 @@
+/**
+ * @module AEJEntry
+ *
+ * Responsibility:
+ * Main entry point for the `atom-effect-jquery` package. Orchestrates library
+ * initialization, global JQuery patches, and reactive registry lifecycles.
+ *
+ * Design Intent:
+ * Provides a low-friction "drop-in" experience for existing JQuery projects
+ * while maintaining strict memory safety through MutationObserver-based
+ * automatic cleanup.
+ */
 import $ from 'jquery';
 
 import '@/core/namespace';
@@ -18,28 +30,43 @@ import {
 } from './core/registry';
 
 /**
+ * Role: Library Orchestrator
  * Initializes Atom-Effect jQuery with the specified configuration.
  *
- * This function resets the library's state according to the provided config.
- * It is safe to call multiple times to reconfigure features at runtime.
+ * When to use:
+ * - At the application entry point to configure global reactive behavior.
+ * - During runtime to toggle debugging or change auto-cleanup roots.
  *
- * @param config - Configuration options.
+ * Caution: Memory Leaks
+ * If both `patch` and `autoCleanup` are disabled, the engine cannot track
+ * DOM removal. You MUST call `cleanup(element)` manually to prevent
+ * memory leaks.
  *
- * @warning If both `patch` and `autoCleanup` are set to `false`, you are
- * responsible for calling `cleanup(element)` manually when
- * elements are removed to prevent memory leaks.
+ * @param config - Configuration options for patches and cleanup safety nets.
+ *
+ * @example
+ * ```typescript
+ * import { initAEJ } from '@but212/atom-effect-jquery';
+ *
+ * initAEJ({
+ *   patch: { html: true, text: true },
+ *   autoCleanup: { root: document.getElementById('app') }
+ * });
+ * ```
  */
 export function initAEJ(config: AEJConfig = {}): void {
   const { patch = true, autoCleanup = true } = config;
 
-  // 1. Install jQuery patches (granular options handled inside)
+  // Reason: Disable existing overrides first to ensure a clean state and prevent
+  // double-patching if the library is re-initialized with different settings.
   disablejQueryOverrides();
   if (patch !== false) {
     const patchOpts = typeof patch === 'object' ? patch : {};
     enablejQueryOverrides(patchOpts);
   }
 
-  // 2. Configure MutationObserver safety net
+  // Security: The MutationObserver safety net is the primary defense against memory
+  // leaks in long-running Single Page Applications (SPAs).
   disableAutoCleanup();
   if (autoCleanup !== false) {
     setAutoCleanupAllowed(true);
@@ -53,8 +80,9 @@ export function initAEJ(config: AEJConfig = {}): void {
   }
 }
 
-// Logic: Legacy support for automatic initialization.
-// Allows opting out via window.AEJ_NO_AUTO_INIT = true.
+// Logic: Legacy Auto-Initialization
+// Automatically initializes the library on DOM ready to support traditional
+// JQuery script tag usage. Can be disabled via global configuration.
 $(() => {
   const win = window as unknown as { AEJ_NO_AUTO_INIT?: boolean };
   if (!win.AEJ_NO_AUTO_INIT) initAEJ();
@@ -64,13 +92,23 @@ export { disablejQueryOverrides, enablejQueryOverrides } from '@/core/jquery-pat
 export { disableAutoCleanup, enableAutoCleanup } from '@/core/registry';
 
 /**
+ * Role: Manual Memory Management
  * Performs a deep recursive cleanup on a node and its entire Shadow DOM subtrees.
  *
  * When to use:
- * - Manually cleaning up an element that was removed from the DOM if autoCleanup is disabled.
- * - Forcing a cleanup cycle on a specific container.
+ * - If `autoCleanup` is disabled and you are removing elements from the DOM.
+ * - To immediately release reactive resources before a large container removal.
  *
- * @param element - The element to clean up.
+ * @param element - The element or JQuery collection to clean up.
+ *
+ * @example
+ * ```typescript
+ * import { cleanup } from '@but212/atom-effect-jquery';
+ *
+ * // Cleanup a specific container after manual removal
+ * $('.old-widget').remove();
+ * cleanup($('.old-widget'));
+ * ```
  */
 export function cleanup(element: HTMLElement | JQuery): void {
   if (element instanceof HTMLElement) {

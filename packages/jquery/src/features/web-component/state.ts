@@ -1,3 +1,16 @@
+/**
+ * @module AEJComponentState
+ *
+ * Responsibility:
+ * Manages the internal lifecycle state, reactive resources, and DOM observers
+ * for individual Custom Element instances.
+ *
+ * Design Intent:
+ * Encapsulates all transient state for a component instance into a single
+ * object. this ensures that resource cleanup is atomic and deterministic,
+ * preventing memory leaks even in complex "move" scenarios (DOM re-parenting).
+ */
+
 import { Option, SlotBuffer } from '@but212/atom-effect-utils';
 import { disableAutoCleanupFor } from '@/core/registry';
 import { CLEANUP_MARKER, HYDRATION_MARKER } from '@/core/symbols';
@@ -5,8 +18,9 @@ import type { EffectObject, WritableAtom } from '@/types';
 import { resolveShadowRoot } from './utils';
 
 /**
- * Centralizes all component-specific reactive state and resource tracking.
- * Consolidates lifecycle resources into a single class instance to simplify teardown.
+ * Logic: Resource Consolidation
+ * Centralizes all component-specific reactive state and resource tracking
+ * into a single class instance to ensure atomic teardown and prevent memory leaks.
  * @internal
  */
 export class ComponentState {
@@ -25,14 +39,20 @@ export class ComponentState {
   /** Set of nodes that have been processed by the hydration engine. */
   hydratedNodes = new Set<Element>();
 
-  /** The root atom containing the full snapshot of attributes. */
+  /**
+   * Logic: Attribute Synchronization
+   * The root atom containing the full snapshot of attributes.
+   */
   attributeAtom: WritableAtom<Record<string, string | null>> | null = null;
   /** The observer that keeps `attributeAtom` in sync with the DOM. */
   attributeObserver: MutationObserver | null = null;
   /** Memoized lenses into `attributeAtom` to avoid redundant atom creation. */
   attributeLenses = new Map<string, WritableAtom<string | null>>();
 
-  /** The root atom containing the current mapping of assigned nodes per slot. */
+  /**
+   * Logic: Slot Lifecycle Tracking
+   * The root atom containing the current mapping of assigned nodes per slot.
+   */
   slotsAtom: WritableAtom<Record<string, Node[]>> | null = null;
   /** Memoized lenses into `slotsAtom`. */
   slotLenses = new Map<string, WritableAtom<Node[]>>();
@@ -47,8 +67,9 @@ export class ComponentState {
   /**
    * Deterministically releases all reactive resources and observers.
    *
-   * Warning: Failure to call this on unmount will lead to memory leaks
-   * as the MutationObservers and effects will remain active.
+   * Caution:
+   * Failure to call this on unmount will lead to memory leaks as the
+   * MutationObservers and reactive effects will remain active in the background.
    */
   dispose() {
     // 1. Release all reactive effects
@@ -56,9 +77,9 @@ export class ComponentState {
     this.effects.dispose();
 
     // 2. Clear hydration markers to allow re-hydration if moved back to DOM
-    this.hydratedNodes.forEach((n) => {
+    for (const n of this.hydratedNodes) {
       delete (n as Element & { [HYDRATION_MARKER]?: boolean })[HYDRATION_MARKER];
-    });
+    }
     this.hydratedNodes.clear();
 
     // 3. Attribute Cleanup
@@ -95,6 +116,8 @@ export class ComponentState {
 
       const markerNode = rootNode as unknown as { [CLEANUP_MARKER]?: boolean };
       if (markerNode[CLEANUP_MARKER]) {
+        // Caution: Removing the auto-cleanup listener is critical to prevent
+        // the registry from attempting to clean up a half-disposed node.
         disableAutoCleanupFor(rootNode as Element);
         markerNode[CLEANUP_MARKER] = false;
       }
