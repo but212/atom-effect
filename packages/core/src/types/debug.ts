@@ -1,5 +1,5 @@
 /**
- * @module Debug_Types
+ * @module DebugTypes
  *
  * Responsibility:
  * Defines interfaces and sentinels for engine diagnostics and visualization.

@@ -52,6 +52,7 @@ import type {
   DependencyId,
   MergedDependencyValue,
   ReactiveNode,
+  ReactiveNodeBase,
   Subscriber,
   Subscription,
 } from '@/types';
@@ -83,7 +84,7 @@ const TRANSITION = {
   },
 } as const;
 
-/** @internal */
+/** @internal - Helper to apply state transitions. */
 const apply = (f: number, t: { readonly clear: number; readonly set: number }) =>
   (f & ~t.clear) | t.set;
 
@@ -133,36 +134,23 @@ export function shouldRecompute(flags: number, deps: DepBufferState): boolean {
   );
 }
 
-/** @internal */
-interface InternalComputedNode {
-  readonly id: number;
-  readonly flags: number;
-  readonly lastError: Error | null;
-  readonly _storage: {
-    deps: DepBufferState | null;
-  };
-}
-
 /**
  * Logic: Error Collection (Graph Traversal)
  * Iteratively crawls the dependency graph to collect errors while maintaining
  * a visited set to handle potential cycles or diamonds.
  * @internal
  */
-export function collectErrorsRecursive(
-  startNode: InternalComputedNode,
-  stopOnFirst: boolean
-): Error[] {
+export function collectErrorsRecursive(startNode: ReactiveNodeBase, stopOnFirst: boolean): Error[] {
   const collected: Error[] = [];
   const seen = new Set<number>();
 
-  const walk = (node: InternalComputedNode): boolean => {
+  const walk = (node: ReactiveNodeBase): boolean => {
     if (seen.has(node.id)) return false;
     seen.add(node.id);
 
     if ((node.flags & STATE_MASKS.ERROR_MASK) !== 0) {
       collected.push(
-        node.lastError ?? new Error('Internal Inconsistency: MASK_ERROR flag set but error is null')
+        node._error ?? new Error('Internal Inconsistency: MASK_ERROR flag set but error is null')
       );
       if (stopOnFirst) return true;
     }
@@ -171,7 +159,7 @@ export function collectErrorsRecursive(
     if (deps?.hasComputeds) {
       for (let i = 0, len = deps.slots.length; i < len; i++) {
         const link = deps.slots.at(i);
-        if (link?.node.isComputed && walk(link.node as unknown as InternalComputedNode)) {
+        if (link?.node.isComputed && walk(link.node as unknown as ReactiveNodeBase)) {
           return true;
         }
       }
@@ -186,19 +174,27 @@ export function collectErrorsRecursive(
 /**
  * Role: Implementation of a derived reactive value.
  *
- * Logic: Pull-based reactive node that performs lazy evaluation and caches the
- * result until an upstream dependency marks it as dirty.
+ * Logic: Pull-based lazy evaluation
+ * This node only re-computes its value when accessed (if dirty). It tracks
+ * upstream dependencies dynamically during execution and supports both
+ * synchronous and promise-based computations.
+ *
  * @internal
  */
 class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T> {
-  flags: number =
+  // Logic: Engine-exposed state (Public fields for monomorphic performance)
+  public flags: number =
     COMPUTED_STATE_FLAGS.IS_COMPUTED | COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE;
-  version: number = 0;
-  _lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
-  _nextEpoch: number | undefined = undefined;
-  _k: typeof KIND.Obj = KIND.Obj;
-  readonly id: DependencyId = generateId() & SMI_MAX;
-  _storage: {
+  public version: number = 0;
+  public _lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
+  public _nextEpoch: number | undefined = undefined;
+  public _trackEpoch: number = 0;
+  public _trackCount: number = 0;
+  public _error: Error | null = null;
+  public _k: typeof KIND.Obj = KIND.Obj;
+  public readonly id: DependencyId = generateId() & SMI_MAX;
+
+  public _storage: {
     slots: SlotBuffer<Subscription<T>> | null;
     deps: DepBufferState | null;
   } = {
@@ -207,40 +203,38 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
   };
 
   /** @internal */
-  readonly [BRAND] = BrandFlags.Atom | BrandFlags.Computed;
+  public readonly [BRAND] = BrandFlags.Atom | BrandFlags.Computed;
 
-  /** @internal */
-  private _activeSessionId = 0;
-  private _sessionCounter = 0;
+  // Logic: Strictly encapsulated state
+  #activeSessionId = 0;
+  #sessionCounter = 0;
 
-  private _value: T;
-  private _error: Error | null = null;
-
-  private readonly _equal: (a: T, b: T) => boolean;
-  private readonly _computation: () => T | Promise<T>;
-  private readonly _defaultValue: T;
-  private readonly _onError: ((error: Error) => void) | null;
-  private readonly _notifyCallback: () => void;
+  #value: T;
+  #equal: (a: T, b: T) => boolean;
+  #computation: () => T | Promise<T>;
+  #defaultValue: T;
+  #onError: ((error: Error) => void) | null;
+  #notifyCallback: () => void;
 
   constructor(computation: () => T | Promise<T>, options: ComputedOptions<T> = {}) {
     if (typeof computation !== 'function')
       throw new ComputedError(ERROR_MESSAGES.COMPUTED_MUST_BE_FUNCTION);
 
-    this._value = undefined as T;
+    this.#value = undefined as T;
 
-    this._equal = options.equal ?? DEFAULT_EQUAL;
-    this._computation = computation;
-    this._defaultValue = 'defaultValue' in options ? options.defaultValue : (NO_DEFAULT_VALUE as T);
-    this._onError = options.onError ?? null;
-    this._notifyCallback = this.execute.bind(this);
+    this.#equal = options.equal ?? DEFAULT_EQUAL;
+    this.#computation = computation;
+    this.#defaultValue = 'defaultValue' in options ? options.defaultValue : (NO_DEFAULT_VALUE as T);
+    this.#onError = options.onError ?? null;
+    this.#notifyCallback = this.execute.bind(this);
 
     debug.attachDebugInfo(this, 'computed', this.id, options.name);
 
     if (options.lazy === false) {
       try {
-        this._recompute();
+        this.#recompute();
       } catch {
-        /* Error handling is performed within _recompute */
+        /* Error handling is performed within #recompute */
       }
     }
   }
@@ -248,19 +242,15 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
   get isDirty(): boolean {
     return (this.flags & COMPUTED_STATE_FLAGS.DIRTY) !== 0;
   }
-
   get isDisposed(): boolean {
     return nodeIsDisposed(this);
   }
-
   get isComputed(): boolean {
     return true;
   }
-
   get isRejected(): boolean {
     return (this.flags & COMPUTED_STATE_FLAGS.REJECTED) !== 0;
   }
-
   get isRecomputing(): boolean {
     return (this.flags & COMPUTED_STATE_FLAGS.RECOMPUTING) !== 0;
   }
@@ -277,22 +267,22 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
   get value(): T {
     trackingContext.current?.addDependency(this);
 
-    if (this._isStable()) return this._value;
+    if (this.#isStable()) return this.#value;
 
-    this._ensureNotDisposed();
+    this.#ensureNotDisposed();
 
     if ((this.flags & COMPUTED_STATE_FLAGS.RECOMPUTING) !== 0) {
-      if (this._defaultValue !== (NO_DEFAULT_VALUE as T)) return this._defaultValue;
+      if (this.#defaultValue !== (NO_DEFAULT_VALUE as T)) return this.#defaultValue;
       throw new ComputedError(ERROR_MESSAGES.COMPUTED_CIRCULAR_DEPENDENCY);
     }
 
     if (shouldRecompute(this.flags, this._storage.deps!)) {
-      this._recompute();
+      this.#recompute();
     } else {
       this.flags &= ~COMPUTED_STATE_FLAGS.DIRTY;
     }
 
-    return resolveComputedResult(this.flags, this._value, this._error, this._defaultValue);
+    return resolveComputedResult(this.flags, this.#value, this._error, this.#defaultValue);
   }
 
   /**
@@ -300,7 +290,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
    * A node is stable if it is RESOLVED and not marked as DIRTY or currently
    * undergoing re-computation.
    */
-  private _isStable(): boolean {
+  #isStable(): boolean {
     const STABLE_MASK =
       COMPUTED_STATE_FLAGS.RESOLVED |
       COMPUTED_STATE_FLAGS.DIRTY |
@@ -310,7 +300,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
     return (this.flags & STABLE_MASK) === COMPUTED_STATE_FLAGS.RESOLVED;
   }
 
-  private _ensureNotDisposed(): void {
+  #ensureNotDisposed(): void {
     if ((this.flags & COMPUTED_STATE_FLAGS.DISPOSED) !== 0)
       throw new ComputedError(ERROR_MESSAGES.COMPUTED_DISPOSED);
   }
@@ -319,7 +309,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
    * Reads the current cached value without triggering reactive tracking.
    */
   peek(): T {
-    return this._value;
+    return this.#value;
   }
 
   /**
@@ -394,7 +384,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
    */
   invalidate(): void {
     this.flags |= COMPUTED_STATE_FLAGS.FORCE_COMPUTE;
-    this._markDirty();
+    this.#markDirty();
   }
 
   /**
@@ -412,7 +402,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
       COMPUTED_STATE_FLAGS.DISPOSED | COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE;
 
     this._error = null;
-    this._value = undefined as T;
+    this.#value = undefined as T;
   }
 
   /**
@@ -421,7 +411,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
    * @internal
    */
   addDependency(dependency: Dependency): void {
-    nodeTrackDependency(this, dependency, this._notifyCallback);
+    nodeTrackDependency(this, dependency, this.#notifyCallback);
   }
 
   /**
@@ -429,7 +419,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
    * Manages the tracking lifecycle (epoch advance, commit, rollback) during
    * computation execution.
    */
-  private _recompute(): void {
+  #recompute(): void {
     // Constraint: Prevent re-entrant synchronous calls.
     if ((this.flags & COMPUTED_STATE_FLAGS.RECOMPUTING) !== 0) return;
 
@@ -445,7 +435,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
 
     try {
       try {
-        val = runInTrackingContext(trackingContext, this, this._computation);
+        val = runInTrackingContext(trackingContext, this, this.#computation);
       } catch (e) {
         // Impact: Ensures tracking context integrity if the computation fails.
         rollbackTrackingSubscriber(trackingContext, prevDepth);
@@ -459,11 +449,11 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
     nodeCommitDeps(this);
 
     if (hasError) {
-      this._handleError(errorToThrow, ERROR_MESSAGES.COMPUTED_COMPUTATION_FAILED, false);
+      this.#handleError(errorToThrow, ERROR_MESSAGES.COMPUTED_COMPUTATION_FAILED, false);
     } else if (isPromise(val!)) {
-      this._handleAsyncComputation(val as Promise<T>);
+      this.#handleAsyncComputation(val as Promise<T>);
     } else {
-      this._finalizeResolution(val as T);
+      this.#finalizeResolution(val as T);
     }
 
     this.flags &= ~COMPUTED_STATE_FLAGS.RECOMPUTING;
@@ -474,33 +464,33 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
    * Orchestrates Promise resolution using unique session IDs (Drift Detection)
    * to discard results from computation cycles that are no longer valid.
    */
-  private _handleAsyncComputation(promise: Promise<T>): void {
+  #handleAsyncComputation(promise: Promise<T>): void {
     this.flags = apply(this.flags, TRANSITION.TO_PENDING);
     nodeNotifySubscribers(this, undefined, undefined);
 
-    const sessionId = ++this._sessionCounter;
-    this._activeSessionId = sessionId;
+    const sessionId = ++this.#sessionCounter;
+    this.#activeSessionId = sessionId;
 
     promise.then(
       (result) => {
-        if (this._activeSessionId !== sessionId) return;
+        if (this.#activeSessionId !== sessionId) return;
 
         // Logic: Stale Result Suppression
         // If the node became dirty during the wait, defer resolution.
-        if (this._isDirty()) return this._markDirty();
+        if (this.#isDirty()) return this.#markDirty();
 
-        this._finalizeResolution(result);
+        this.#finalizeResolution(result);
         nodeNotifySubscribers(this, result, undefined);
       },
       (error) => {
-        if (this._activeSessionId !== sessionId) return;
-        this._handleError(error, ERROR_MESSAGES.COMPUTED_ASYNC_COMPUTATION_FAILED);
+        if (this.#activeSessionId !== sessionId) return;
+        this.#handleError(error, ERROR_MESSAGES.COMPUTED_ASYNC_COMPUTATION_FAILED);
       }
     );
   }
 
-  private _handleError(error: unknown, message: string, shouldThrow = false): void {
-    nodeHandleError(this, error, ComputedError, message, this._onError);
+  #handleError(error: unknown, message: string, shouldThrow = false): void {
+    nodeHandleError(this, error, ComputedError, message, this.#onError);
     this.flags = apply(this.flags, TRANSITION.TO_REJECTED);
     if (shouldThrow) throw this._error;
   }
@@ -510,24 +500,22 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
    * Increments the node's version ONLY if the new value is structurally different
    * (via `_equal`). This prevents unnecessary downstream propagation cascades.
    */
-  private _finalizeResolution(value: T): void {
+  #finalizeResolution(value: T): void {
     const flags = this.flags;
-    if ((flags & COMPUTED_STATE_FLAGS.RESOLVED) === 0 || !this._equal(this._value, value)) {
+    if ((flags & COMPUTED_STATE_FLAGS.RESOLVED) === 0 || !this.#equal(this.#value, value)) {
       this.version = nextVersion(this.version);
     }
 
-    this._value = value;
+    this.#value = value;
     this._error = null;
     this.flags = apply(this.flags, TRANSITION.TO_RESOLVED);
   }
 
-  /**
-   * @internal - Interface for the global scheduler.
-   */
+  /** @internal - Interface for the global scheduler. */
   execute(): void {
     if ((this.flags & (COMPUTED_STATE_FLAGS.RECOMPUTING | COMPUTED_STATE_FLAGS.DIRTY)) !== 0)
       return;
-    this._markDirty();
+    this.#markDirty();
   }
 
   /**
@@ -536,7 +524,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
    * changes are detected in dependencies.
    * @internal
    */
-  _markDirty(): void {
+  #markDirty(): void {
     const flags = this.flags;
 
     if (
@@ -551,7 +539,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
     nodeNotifySubscribers(this, undefined, undefined);
   }
 
-  private _isDirty(): boolean {
+  #isDirty(): boolean {
     return nodeIsDirty(this);
   }
 }
@@ -563,6 +551,9 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
  * - To define values that automatically update when their dependencies change.
  * - To optimize performance through caching of expensive calculations.
  * - To transform or aggregate raw state for UI presentation.
+ *
+ * @param fn - The computation function.
+ * @param options - Configuration for custom equality checks or error handlers.
  *
  * @example
  * ```typescript
@@ -586,19 +577,6 @@ export function computed<T>(fn: () => T, options?: ComputedOptions<T>): Computed
  * Attention:
  * A `defaultValue` is mandatory for async computations to provide a valid
  * state while the Promise is PENDING.
- *
- * @example
- * ```typescript
- * import { computed } from '@but212/atom-effect';
- *
- * const user = computed(
- *   async () => {
- *     const response = await fetch(`/api/user/${userId.value}`);
- *     return response.json();
- *   },
- *   { defaultValue: null }
- * );
- * ```
  */
 export function computed<T>(
   fn: () => Promise<T>,

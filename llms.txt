@@ -1,6 +1,6 @@
 # atom-effect
 
-atom-effect is a high-performance reactive state management library designed for ES2021+ environments. It features a decentralized, epoch-based propagation engine with first-class support for asynchronous computations and automatic memory management.
+atom-effect is a high-performance reactive state management library designed for ES2022+ environments. It features a decentralized, epoch-based propagation engine with first-class support for asynchronous computations and automatic memory management.
 
 ## Packages
 

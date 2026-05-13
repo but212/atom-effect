@@ -2,7 +2,7 @@
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/but212/atom-effect)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-![ES2021+](https://img.shields.io/badge/target-ES2021%2B-blue)
+![ES2022+](https://img.shields.io/badge/target-ES2022%2B-blue)
 
 A monorepo for reactive state management with asynchronous orchestration.
 

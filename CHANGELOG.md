@@ -7,21 +7,25 @@
 #### Breaking Changes
 
 - **Build System**: Partitioned the build process into `types`, `lib` (ESM/CJS), and `bundle` (UMD) targets for better optimization. This may affect direct file references in the `dist/` directory.
-- **Error Handling**: Removed `AtomError.getChain()` and `AtomError.toJSON()` instance methods. Use the new standalone `getErrorChain()` and `serializeError()` functions instead. This improves decoupling and enables better tree-shaking.
 - **Error Handling**: Relocated `AtomErrorConstructor` and `AtomErrorJSON` types to the core types module.
+
+#### Deprecated
+
+- **Error Handling**: Deprecated `AtomError.getChain()` and `AtomError.toJSON()` instance methods in favor of standalone `getErrorChain()` and `serializeError()` functions. This improves tree-shaking while maintaining backward compatibility. **These methods are scheduled for removal in v0.34.0.** See [MIGRATION.md](./MIGRATION.md) for details.
 
 #### Changed
 
-- **Internal Architecture**: Major refactoring of the reactive engine.
+- **Internal Architecture**: Major refactoring of the reactive engine to an **ES2022-based architecture**.
+  - Migrated core primitives (`AtomImpl`, `ComputedAtomImpl`, `EffectImpl`) and internal controllers (`ReactiveScheduler`, `ReactiveTrackingEngine`, `DependencyBuffer`) to encapsulated ES2022 classes utilizing **private class fields (`#`)** for internal state management.
   - Partitioned the reactive engine into specialized modules: `core/base.ts` (tracking/propagation) and `core/scheduler.ts` (job execution) to improve maintainability and performance isolation.
   - Reorganized global resources into focused directories: `src/constants/` (flags, environment, branding) and `src/types/` (reactive, internal, API).
   - Optimized `atomLens` with automatic path flattening to reduce reactive overhead in nested state trees.
   - Refined subscriber notification cycles using a strategy-based dispatch table, eliminating branching in hot loops.
   - Encapsulated internal reactive state (`slots`, `deps`) into a dedicated `_storage` property for better V8 hidden class stability.
-  - **Debug System**: Refactored the debug controller from a class-based implementation to an object-literal hub.
+  - **Debug System**: Migrated the diagnostic controller to an encapsulated ES2022 class-based architecture for both core engine and jQuery instrumentation.
   - **Debug System**: Enhanced node identification with standardized prefixes (`atom_`, `calc_`, `fx_`) and automated lifecycle tracking via `FinalizationRegistry`.
   - **Error Handling**: Implemented a data-driven `ErrorStrategy` pattern for extensible and robust error metadata extraction.
-  - **Type Safety**: Integrated `satisfies` across all internal configuration objects to ensure contract validation without losing literal type precision.
+  - **Type Safety**: Integrated `satisfies` and modern TypeScript features across all internal configuration objects to ensure contract validation without losing literal type precision.
 
 ### jQuery
 

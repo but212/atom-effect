@@ -1,5 +1,5 @@
 /**
- * @module API_Types
+ * @module APITypes
  *
  * Responsibility:
  * Defines the public configuration interfaces for atoms, computed values,

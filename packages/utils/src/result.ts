@@ -54,7 +54,7 @@ const VOID_SUCCESS = Object.freeze({
 function toError(e: unknown): Error {
   if (e instanceof Error) return e;
   const message = typeof e === 'string' ? e : String(e ?? 'Unknown error');
-  return new Error(message);
+  return new Error(message, { cause: e });
 }
 
 /**

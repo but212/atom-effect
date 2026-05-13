@@ -1,9 +1,14 @@
 /**
- * @module Reactive_Graph_Types
+ * @module ReactiveGraphTypes
  *
  * Responsibility:
  * Defines the core building blocks of the reactive dependency graph, including
  * Atoms, Computed nodes, and internal Link structures.
+ *
+ * Design Intent:
+ * Provides a highly optimized, type-safe foundation for reactive propagation.
+ * Prioritizes low memory overhead and fast graph traversals through strict
+ * property ordering and bitmasking.
  */
 
 import type { Prettify, SlotBuffer } from '@but212/atom-effect-utils';
@@ -11,55 +16,65 @@ import type { BRAND, KIND } from '@/constants';
 import type { AsyncStateType, DependencyId, Disposable } from './base';
 
 /**
- * The internal contract for any node that can act as a reactive dependency.
+ * Role: Reactive Dependency Node
+ * Represents any source of state that can be observed by subscribers.
  *
  * Optimization: Monomorphic Access
- * All properties are non-optional to ensure V8 optimizes property access
- * via "Hidden Classes" during high-frequency graph traversals.
+ * All properties are non-optional and ordered to ensure V8 optimizes access
+ * via stable "Hidden Classes" during high-frequency graph traversals.
  */
 export interface Dependency<T = unknown> {
   /** @internal */
   readonly [BRAND]?: number;
   /**
-   * Unique engine-level ID for graph indexing.
+   * Logic: Engine-Level Identity
+   * Used for indexing and identifying nodes within the global reactive graph.
    * @internal
    */
   readonly id: DependencyId;
 
   /**
-   * Monotonic update counter.
-   * Used by subscribers to detect if this dependency has drifted.
+   * Logic: Version Tracking
+   * Monotonic counter incremented whenever the value changes.
+   * Subscribers compare this against their cached version to detect "drift".
    * @internal
    */
   version: number;
 
   /**
-   * Combined bitmask representing lifecycle, type, and async state.
+   * Logic: Bitmask Flags
+   * Encodes lifecycle (disposed), type (computed), and async status into a
+   * single integer for low-overhead status checks.
    * @internal
    */
   flags: number;
 
   /**
-   * Tracks if this node was visited during the current scheduler epoch.
+   * Logic: Epoch Tracking
+   * Tracks the last scheduler epoch this node was visited to prevent redundant
+   * evaluations during a single flush cycle.
    * @internal
    */
   _lastSeenEpoch: number;
 
   /**
-   * Fast-path discriminator for computed logic.
+   * Optimization: Fast Computed Check
+   * discriminator for skipping complex logic for non-derived atoms.
    * @internal
    */
   readonly isComputed: boolean;
 
   /**
-   * Quick-check flag for error presence.
+   * Optimization: Quick Error Check
+   * flag for immediate error detection without inspecting deep state.
    * @internal
    */
   readonly hasError: boolean;
 
   /**
-   * Core engine method for establishing a reactive connection.
-   * Returns a cleanup function.
+   * Role: Reactive Connection Factory
+   * Establishes a link between this dependency and a subscriber.
+   * Returns a cleanup handle to sever the connection.
    */
   subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void;
 
@@ -87,7 +102,8 @@ export interface WritableAtom<T = unknown> extends ReadonlyAtom<T> {
 }
 
 /**
- * A derived reactive value resolving synchronously or asynchronously.
+ * Role: Derived Reactive Atom
+ * Represents a value computed from other atoms or reactive nodes.
  */
 export interface ComputedAtom<T = unknown> extends ReadonlyAtom<T> {
   /** @internal */
@@ -113,13 +129,16 @@ export interface ComputedAtom<T = unknown> extends ReadonlyAtom<T> {
   readonly errors: readonly Error[];
 
   /**
-   * Manually marks the node as stale, forcing a re-computation on next access.
+   * Logic: Forced Re-computation
+   * Manually marks the node as stale, forcing it to re-evaluate on next access
+   * regardless of dependency status.
    */
   invalidate(): void;
 }
 
 /**
- * Represents a target that can react to dependency updates.
+ * Role: Reactive Update Consumer
+ * Represents a target that can react to dependency changes.
  */
 export interface Subscriber {
   /** Invoked by the scheduler to perform the node's update logic. */
@@ -127,7 +146,8 @@ export interface Subscriber {
 }
 
 /**
- * A handle for a running side-effect.
+ * Role: Effect Lifecycle Handle
+ * Provides control and diagnostic information for a running side-effect.
  */
 export interface EffectObject extends Disposable {
   /** @internal */
@@ -136,7 +156,10 @@ export interface EffectObject extends Disposable {
   run(): void;
   /** Indicates if the effect has been permanently stopped. */
   readonly isDisposed: boolean;
-  /** Cumulative count of effect executions for debugging and frequency monitoring. */
+  /**
+   * Impact: Frequency Monitoring
+   * Cumulative count of executions used to detect runaway loops.
+   */
   readonly executionCount: number;
   /** True while the user-provided effect function is actively running. */
   readonly isExecuting: boolean;
@@ -179,15 +202,34 @@ export interface DependencyLink {
 }
 
 /**
- * The base structure for any reactive node participating in the graph.
+ * Role: Reactive Node Payload (Internal)
+ * Base structure for any reactive node containing properties independent
+ * of the value type.
  * @internal
  */
-export interface ReactiveNode<T> {
+export interface ReactiveNodeBase {
   flags: number;
   version: number;
   _lastSeenEpoch: number;
   _nextEpoch: number | undefined;
+  _trackEpoch: number;
+  _trackCount: number;
+  _error: Error | null;
+  readonly isRejected: boolean;
   readonly id: DependencyId;
+  /** Optimized storage for upstream dependencies. */
+  _storage: {
+    deps: DepBufferState | null;
+  };
+}
+
+/**
+ * Role: Full Reactive Node (Internal)
+ * The complete structure for a reactive node participating in the graph,
+ * including listeners and upstream buffers.
+ * @internal
+ */
+export interface ReactiveNode<T> extends ReactiveNodeBase {
   /** Optimized storage for listeners and upstream dependencies. */
   _storage: {
     slots: SlotBuffer<Subscription<T>> | null;
@@ -196,20 +238,25 @@ export interface ReactiveNode<T> {
 }
 
 /**
- * State container for the dependency tracking buffer.
+ * Role: Dependency Buffer State
+ * State container for managing a node's upstream links.
  * @internal
  */
 export interface DepBufferState {
   /** Flat buffer of active links. */
   slots: SlotBuffer<DependencyLink>;
-  /** Indexer for fast O(1) dependency lookup. */
+  /**
+   * Optimization: Fast O(1) Lookup
+   * Indexer for immediate dependency retrieval during tracking sessions.
+   */
   map: Indexer;
   /** Optimization: Skip graph checks if no computed nodes are present. */
   hasComputeds: boolean;
 }
 
 /**
- * Strategy interface for high-speed dependency deduplication.
+ * Role: Deduplication Strategy
+ * Interface for high-speed dependency deduplication within the tracking buffer.
  * @internal
  */
 export interface Indexer {

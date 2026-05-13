@@ -1,5 +1,5 @@
 /**
- * @module Base_Types
+ * @module BaseTypes
  *
  * Responsibility:
  * Defines the fundamental primitives and lifecycle interfaces shared across

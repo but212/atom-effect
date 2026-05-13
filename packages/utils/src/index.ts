@@ -9,12 +9,6 @@ export * from '@/type-guard';
 export * from '@/types';
 
 /**
- * Checks if an object has a specified property as its own property.
- * Alias for `Object.prototype.hasOwnProperty.call`.
- */
-export const hasOwn = Object.prototype.hasOwnProperty;
-
-/**
  * Performs a shallow equality comparison between two values.
  *
  * Logic: Strict Comparison
@@ -41,7 +35,7 @@ export function shallowEqual(a: unknown, b: unknown): boolean {
   }
 
   for (const key of keysA) {
-    if (!hasOwn.call(objB, key) || !Object.is(objA[key], objB[key])) {
+    if (!Object.hasOwn(objB, key) || !Object.is(objA[key], objB[key])) {
       return false;
     }
   }

@@ -1,5 +1,5 @@
 /**
- * @module Type_Utilities
+ * @module TypeUtilities
  *
  * Responsibility:
  * Provides internal helper types for manipulating and extracting data from

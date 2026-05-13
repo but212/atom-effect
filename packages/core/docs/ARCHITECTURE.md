@@ -12,8 +12,8 @@ The high-level API (`atom`, `computed`, `effect`) is built upon a unified intern
 - **Push-Pull Hybrid Model**:
   - **Push (Notification Phase)**: When a source atom changes, it propagates a "dirty" signal to its immediate subscribers. This phase marks nodes for re-evaluation without performing calculations.
   - **Pull (Evaluation Phase)**: When a node's value is accessed or an effect executes, it performs a "pull" to validate the versions of its dependencies, triggering re-computation only if necessary.
-- **Scheduler and Coalescing**: Effects do not execute immediately upon state change. Instead, they are queued in a **Scheduler** (defined in `core/scheduler.ts`) that utilizes a **Double-Buffering Strategy** (Active, Standby, Batch) managed by a data-centric **`SchedulerState`**. This layout ensures that new jobs scheduled during a flush do not interfere with the current execution cycle while maintaining high cache locality.
-- **Functional Tracking**: Dependency tracking is managed via a functional **`TrackingContext`** state. This allows for lightweight stack operations and deterministic recovery during nested evaluations or error scenarios. While functional `Option` and `Result` patterns are available for utility logic, the core engine utilizes native `try/catch` and `null/undefined` in high-frequency hot paths to minimize allocation overhead.
+- **Scheduler and Coalescing**: Effects do not execute immediately upon state change. Instead, they are queued in a **`ReactiveScheduler`** (defined in `core/scheduler.ts`) that utilizes a **Double-Buffering Strategy** (Active, Standby, Batch). The scheduler is implemented as an encapsulated class, ensuring that internal scheduling state remains protected during execution cycles while maintaining high cache locality.
+- **Encapsulated Tracking**: Dependency tracking is managed via the **`ReactiveTrackingEngine`** class. This approach provides lightweight stack operations and deterministic recovery during nested evaluations or error scenarios using private fields for the tracking stack. While functional `Option` and `Result` patterns are available for utility logic, the core engine utilizes native `try/catch` and `null/undefined` in high-frequency hot paths to minimize allocation overhead.
 - **SMI Optimization**: The engine explicitly ensures that hot-path integers (versions, epochs, session IDs) stay within V8's **Small Integer (SMI)** range (31-bit signed). This prevents performance-degrading transitions from SMIs to heap-allocated doubles (HeapNumbers).
 - **Small Vector Optimization (SVO)**: To minimize heap allocations and GC pressure, the engine uses inline slots (`_s0` through `_s3`) tracked by a **4-bit occupancy mask**. These buffers implement a standardized **Array-like API** (`length`, `at()`, `push()`) and use explicit constructor initialization to ensure V8 Hidden Class stability, preventing polymorphic transitions during high-frequency slot discovery.
 - **Bitwise Branding**: Primitives are identified using a bitwise mask (`BrandFlags`) stored on a single `BRAND` symbol, defined in `constants/branding.ts`. This allows for constant-time type identification without multiple property lookups.
@@ -35,9 +35,9 @@ The system is designed around autonomous nodes that manage their own state and d
 ### Class Hierarchy
 
 - **`ReactiveNode<T>`**: The foundation for all primitives. It defines a standardized data structure including versioning, status flags, and a dedicated `_storage` object for managing subscriber lists and dependency buffers.
-- **`AtomImpl<T>`**: A pure producer node for mutable state. It keeps its dependency list (`_storage.deps`) null to save memory. It handles synchronous re-entrancy through a breadth-first notification loop.
-- **`ComputedAtomImpl<T>`**: A hybrid node that acts as both a consumer (of dependencies) and a producer (of derived values). It manages lazy evaluation and result caching.
-- **`EffectImpl`**: A pure consumer node for side effects. It keeps its subscriber list (`_storage.slots`) null as it is a terminal node in the graph.
+- **`AtomImpl<T>`**: A pure producer node for mutable state. It utilizes **private class fields (`#`)** for value storage and notification scheduling, protecting internal state from external mutation while maintaining synchronous re-entrancy through a breadth-first notification loop.
+- **`ComputedAtomImpl<T>`**: A hybrid node that acts as both a consumer (of dependencies) and a producer (of derived values). It manages lazy evaluation, result caching, and asynchronous session tracking using encapsulated private state.
+- **`EffectImpl`**: A pure consumer node for side effects. It keeps its subscriber list (`_storage.slots`) null as it is a terminal node in the graph, managing its execution lifecycle through private orchestration fields.
 
 ---
 
@@ -81,11 +81,10 @@ Asynchronous computed nodes manage their lifecycle as state machines, protecting
 
 Memory and performance are managed through specialized structures:
 
-- **`DepBufferState`**: A high-performance state object for dependency tracking that features:
-  - **Reconciliation API**: Uses functional utilities like `claimExisting` and `insertNew` for predictable access and memory efficiency.
-  - **Memory Efficiency**: Transitions from linear scans to an $O(1)$ `Map` lookup via the `Indexer` interface (`MapIndexer`) only when the dependency count exceeds 32, reducing the number of conditional checks for small sets. Uses `NullIndexer` when inactive to bypass property checks.
-  - **Order Preservation**: Swaps active links to the head of the buffer during tracking to optimize future reconciliation cycles.
-  - **Subscription Reuse**: Reuses established dependency links (`DependencyLink`) to eliminate the overhead of repeated event listener attachment and detachment.
+- **`DependencyBuffer`**: An encapsulated class for dependency tracking that features:
+  - **Reconciliation API**: Uses internal methods like `claimExisting` and `insertNew` for predictable access and memory efficiency.
+  - **Memory Efficiency**: Transitions from linear scans to an $O(1)$ `Map` lookup via the `Indexer` interface (`MapIndexer`) only when the dependency count exceeds a performance threshold, reducing the number of conditional checks for small sets.
+  - **Encapsulated State**: All internal buffers and maps are managed via private fields, ensuring that the reactive connection state is only modified through designated methods.
 
 ---
 
@@ -127,8 +126,8 @@ Lenses provide reactive access to nested properties within monolithic state obje
 
 The debugging subsystem is designed for deep visibility with minimal production impact.
 
-- **Object-based Diagnostic Hub**: In development, a functional debug object manages node registries and update counters. In production, these are replaced by a static no-op controller, which JavaScript engines can optimize away or inline for zero runtime overhead.
-- **Identity Mapping**: The system uses a centralized `BRAND_IDENTITY_MAP` to resolve human-readable names with standardized prefixes (`atom_`, `calc_`, `fx_`), ensuring consistent identification across the reactive graph.
+- **Class-based Diagnostic Hub**: In development, an encapsulated `DebugController` class manages node registries and update counters. In production, these are replaced by a static no-op controller, which JavaScript engines can optimize away or inline for zero runtime overhead.
+- **Encapsulated Instrumentation**: By utilizing class-based controllers, the debug system isolates diagnostic state from the core reactive logic, ensuring that instrumentation does not interfere with engine performance or stability.
 - **Finalization Tracking**: The debug registry uses `FinalizationRegistry` paired with `WeakRef` to ensure that tracking nodes for inspection does not prevent them from being garbage collected, while providing automatic metadata cleanup.
 - **Traceability**: Errors are wrapped with contextual messages and machine-readable codes for easier debugging.
 
@@ -141,3 +140,13 @@ Errors are treated as part of the reactive graph, enabling robust recovery and t
 - **Iterative Accumulation**: Errors are collected using an iterative traversal logic (**`collectErrorsRecursive`**) with a stack and a `Set` for deduplication, avoiding recursion overhead.
 - **Dependency Isolation**: Accessing error properties (`hasError`, `errors`) is performed in an `untracked` scope to prevent the consumer from inadvertently subscribing to the entire dependency tree of a failing node.
 - **Recovery Signals**: The `recoverable` flag indicates whether a node can attempt re-evaluation if its dependencies change.
+
+---
+
+## 10. ES2022 Migration & Encapsulation
+
+Starting with version 0.32.1, the engine has been migrated to an **ES2022-based architecture**. This transition focuses on:
+
+- **Private State Isolation**: Utilizing native private class fields (`#`) to protect internal engine mechanics. This ensures that the internal state of atoms, schedulers, and tracking engines cannot be accessed or modified from outside the core logic.
+- **Monomorphic Stability**: The class-based structure ensures that object shapes remain stable throughout the application lifecycle, facilitating V8's hidden class optimizations.
+- **Modern Syntax**: Adoption of logical assignment operators and other ES2022 features to reduce boilerplate and improve code clarity without sacrificing performance.

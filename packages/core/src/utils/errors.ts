@@ -7,67 +7,86 @@
  *
  * Design Intent:
  * Provides a structured way to trace failures across asynchronous boundaries
- * while ensuring that errors remain serializable for cross-context logging.
+ * while ensuring that errors remain serializable for cross-context logging
+ * and persistent diagnostics.
  */
 
 import { ERROR_STRATEGIES } from '@/constants';
-import type { AtomErrorConstructor, AtomErrorJSON } from '@/types';
+import type { AtomErrorConstructor, AtomErrorJSON, AtomErrorOptions } from '@/types';
 
 /**
- * The base error class for the reactive system.
+ * Role: Base Reactive Error
+ * The foundational error class for the reactive system, supporting causal chains
+ * and serializable metadata.
  *
  * When to use:
  * - To define custom error categories within the engine.
- * - To wrap third-party errors with system-specific metadata.
+ * - To wrap third-party errors with system-specific reactive metadata.
  *
  * @example
  * ```typescript
  * import { AtomError } from '@but212/atom-effect';
  *
- * throw new AtomError(
- *   'Validation failed',
- *   { input: -1 },
- *   true,
- *   'ERR_VAL_001'
- * );
+ * throw new AtomError('Operation failed', {
+ *   cause: new Error('Network timeout'),
+ *   recoverable: true,
+ *   code: 'ERR_NET_001'
+ * });
  * ```
  */
 export class AtomError extends Error {
   /**
-   * Logic: Brand-based Identification
-   * Allows for plain-object checks and identification without relying
-   * solely on `instanceof`, which can fail across context boundaries.
+   * Logic: Brand-Based Identification
+   * Enables plain-object identity checks without relying on `instanceof`,
+   * which often fails across context boundaries (e.g., Worker threads).
    */
   readonly _tag: string = 'AtomError';
   override readonly name: string = 'AtomError';
 
-  constructor(
-    message: string,
+  public readonly cause: unknown;
+  public readonly recoverable: boolean;
+  public readonly code?: string | undefined;
+
+  constructor(message: string, options: AtomErrorOptions = {}) {
     /**
-     * Logic: Causal Chain
-     * The raw value or error that triggered this instance. Allows for
-     * deep trace reconstruction across reactive nodes.
+     * Why: ES2022 Options Passing
+     * Automatically sets the standard `.cause` property on the Error instance
+     * for native platform compatibility.
      */
-    public readonly cause: unknown = null,
-    /**
-     * Logic: Error Recovery
-     * When true, indicates the state may be corrected by a subsequent
-     * update. When false, the node is marked as permanently failed.
-     */
-    public readonly recoverable: boolean = true,
-    /** Unique category identifier for programmatic handling. */
-    public readonly code?: string
-  ) {
-    super(message);
+    super(message, options);
+
+    this.cause = options.cause ?? null;
+    this.recoverable = options.recoverable ?? true;
+    this.code = options.code;
 
     /**
      * Optimization: V8 Fast Path
      * Captures stack traces while maintaining a stable hidden class shape
-     * to ensure high-performance object creation in the engine core.
+     * to ensure high-performance object creation during high-frequency errors.
      */
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, this.constructor);
     }
+  }
+
+  /**
+   * @deprecated since v0.33.0 — Use standalone `getErrorChain(error)` instead.
+   * Will be removed in v0.34.0.
+   * Migration: Replace `err.getChain()` with `getErrorChain(err)`.
+   * @see getErrorChain
+   */
+  public getChain(): Array<unknown> {
+    return getErrorChain(this);
+  }
+
+  /**
+   * @deprecated since v0.33.0 — Use standalone `serializeError(error)` instead.
+   * Will be removed in v0.34.0.
+   * Migration: Replace `err.toJSON()` with `serializeError(err)`.
+   * @see serializeError
+   */
+  public toJSON(): AtomErrorJSON {
+    return serializeError(this) as AtomErrorJSON;
   }
 
   /**
@@ -80,7 +99,8 @@ export class AtomError extends Error {
 }
 
 /**
- * Role: Specific error thrown during the evaluation phase of a computed atom.
+ * Role: Evaluation Failure
+ * Specific error thrown during the evaluation phase of a computed atom.
  */
 export class ComputedError extends AtomError {
   override readonly _tag = 'ComputedError';
@@ -88,36 +108,42 @@ export class ComputedError extends AtomError {
 }
 
 /**
- * Role: Error thrown during the execution or cleanup phase of a reactive effect.
+ * Role: Side-Effect Failure
+ * Error thrown during the execution or cleanup phase of a reactive effect.
+ * Defaults to non-recoverable status to prevent infinite retry loops.
  */
 export class EffectError extends AtomError {
   override readonly _tag = 'EffectError';
   override readonly name = 'EffectError';
 
-  constructor(message: string, cause: unknown = null, recoverable = false, code?: string) {
-    super(message, cause, recoverable, code);
+  constructor(message: string, options: AtomErrorOptions = {}) {
+    super(message, { recoverable: false, ...options });
   }
 }
 
 /**
- * Role: Engine error thrown when scheduling or flush limits are violated.
+ * Role: System Level Failure
+ * Engine error thrown when scheduling constraints or flush limits are violated.
  */
 export class SchedulerError extends AtomError {
   override readonly _tag = 'SchedulerError';
   override readonly name = 'SchedulerError';
 
-  constructor(message: string, cause: unknown = null, recoverable = false, code?: string) {
-    super(message, cause, recoverable, code);
+  constructor(message: string, options: AtomErrorOptions = {}) {
+    super(message, { recoverable: false, ...options });
   }
 }
 
 /**
- * Logic: Trace Reconstruction (Pure Function)
+ * Logic: Trace Reconstruction
  * Recursively traverses the `.cause` property to reconstruct the error chain.
  *
- * Constraint: Implements circular reference protection via `Set` tracking.
+ * Constraint: Circular Reference Protection
+ * Uses a `Set` to track visited errors and prevent infinite loops during
+ * chain traversal.
  *
- * @returns Sequential array of errors, starting from the current instance.
+ * @param error - The root error to trace.
+ * @returns Sequential array of errors, starting from the input.
  */
 export function getErrorChain(error: unknown): Array<unknown> {
   const chain: Array<unknown> = [];
@@ -133,11 +159,15 @@ export function getErrorChain(error: unknown): Array<unknown> {
 }
 
 /**
- * Logic: Safe Serialization (Pure Function)
+ * Logic: Safe Serialization
  * Converts any error or value into a plain JSON-serializable object.
  *
- * Caution: Automatically replaces circular references with a sentinel
- * message to prevent serialization crashes.
+ * Caution: Circular Dependency Detection
+ * Replaces circular references with a sentinel message (`[Circular Reference]`)
+ * to prevent serialization crashes in logging or storage pipelines.
+ *
+ * @param error - The error or object to serialize.
+ * @param seen - @internal Internal set for circular tracking.
  */
 export function serializeError(
   error: unknown,
@@ -182,6 +212,15 @@ export function serializeError(
 
 /**
  * Normalizes an unknown error into the system's error hierarchy.
+ *
+ * When to use:
+ * - To catch and re-throw external exceptions (DOM, Fetch) with system metadata.
+ * - To unify error reporting formats across different engine modules.
+ *
+ * @param error - The raw error to wrap.
+ * @param ErrorClass - The system error class to instantiate.
+ * @param context - Human-readable context (e.g., 'Computed: userId').
+ * @returns A structured `AtomError` instance.
  */
 export function wrapError(
   error: unknown,
@@ -190,16 +229,17 @@ export function wrapError(
 ): AtomError {
   const meta = getErrorMetadata(error);
 
-  return new ErrorClass(
-    AtomError.format(meta.name, context, meta.message),
-    error,
-    meta.recoverable,
-    meta.code
-  );
+  return new ErrorClass(AtomError.format(meta.name, context, meta.message), {
+    cause: error,
+    recoverable: meta.recoverable,
+    code: meta.code,
+  });
 }
 
 /**
  * Logic: Heuristic Metadata Extraction
+ * Iterates through configured strategies to extract meaningful data from
+ * non-standard error objects or primitives.
  * @internal
  */
 function getErrorMetadata(error: unknown) {
