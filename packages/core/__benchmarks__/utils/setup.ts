@@ -262,10 +262,6 @@ export function randomNumbers(count: number, min = 0, max = 1000): number[] {
   return Array.from({ length: count }, () => randomInt(min, max));
 }
 
-// ---------------------------------------------------------------------------
-// Size-keyed helpers
-// ---------------------------------------------------------------------------
-
 export const SIZES = { small: 10, medium: 100, large: 1000 } as const;
 export type SizeKey = keyof typeof SIZES;
 

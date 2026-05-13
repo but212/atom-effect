@@ -9,7 +9,6 @@
  * Role: Centralized registry of standardized error messages for the engine.
  */
 export const ERROR_MESSAGES = {
-  // --- Computed Phase ---
   COMPUTED_MUST_BE_FUNCTION: 'Computed target must be a function',
   COMPUTED_ASYNC_PENDING_NO_DEFAULT: 'Async computation pending with no default value',
   COMPUTED_COMPUTATION_FAILED: 'Computation execution failed',
@@ -17,21 +16,17 @@ export const ERROR_MESSAGES = {
   COMPUTED_CIRCULAR_DEPENDENCY: 'Circular dependency detected',
   COMPUTED_DISPOSED: 'Attempted to access disposed computed',
 
-  // --- Atom Phase ---
   ATOM_SUBSCRIBER_MUST_BE_FUNCTION: 'Subscriber must be a function or Subscriber object',
   ATOM_INDIVIDUAL_SUBSCRIBER_FAILED: 'Subscriber execution failed',
 
-  // --- Effect Phase ---
   EFFECT_MUST_BE_FUNCTION: 'Effect target must be a function',
   EFFECT_EXECUTION_FAILED: 'Effect execution failed',
   EFFECT_CLEANUP_FAILED: 'Effect cleanup failed',
   EFFECT_DISPOSED: 'Attempted to run disposed effect',
 
-  // --- Engine/Scheduler Phase ---
   SCHEDULER_FLUSH_OVERFLOW: (max: number, dropped: number): string =>
     `Maximum flush iterations (${max}) exceeded. ${dropped} jobs dropped. Possible infinite loop.`,
 
-  // --- System Diagnostics ---
   CALLBACK_ERROR_IN_ERROR_HANDLER: 'Exception encountered in onError handler',
   /** Logic: Loop Protection */
   EFFECT_FREQUENCY_LIMIT_EXCEEDED:

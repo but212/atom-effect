@@ -378,8 +378,6 @@ class ReactiveScheduler implements SchedulerState {
 /** @internal */
 export const scheduler = new ReactiveScheduler();
 
-// --- Compatibility Exports (Internal Proxies) ---
-
 /** @internal */
 export const schedulerMergeBatchQueue = (state: SchedulerState) =>
   (state as ReactiveScheduler).nextEpoch();
@@ -424,8 +422,6 @@ export const schedulerIsBatching = (state: SchedulerState) =>
   (state.state & SCHEDULER_STATE.BATCHING) !== 0;
 /** @internal */
 export const schedulerQueueSize = (state: SchedulerState) => state.active.size + state.batch.size;
-
-// --- Public API ---
 
 /** Returns the next reactive epoch identifier. */
 export const nextEpoch = (): number => scheduler.nextEpoch();

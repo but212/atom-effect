@@ -8,10 +8,6 @@ import { bench, describe } from 'vitest';
 import { aeNextTick, atom, batch, computed, effect, untracked } from '../../dist';
 import { benchEffectOptions, keep, microBenchOptions, REPEATS } from '../utils/setup.js';
 
-// ---------------------------------------------------------------------------
-// aeNextTick: microtask scheduling latency
-// ---------------------------------------------------------------------------
-
 describe('Scheduler: aeNextTick', () => {
   bench(
     'schedule 1 microtask',
@@ -29,10 +25,6 @@ describe('Scheduler: aeNextTick', () => {
     { time: 1500, iterations: 100, warmupTime: 200, warmupIterations: 5, throws: true }
   );
 });
-
-// ---------------------------------------------------------------------------
-// untracked: tracking context switch overhead
-// ---------------------------------------------------------------------------
 
 describe('Scheduler: untracked context', () => {
   const a = atom(0);
@@ -74,10 +66,6 @@ describe('Scheduler: untracked context', () => {
     microBenchOptions
   );
 });
-
-// ---------------------------------------------------------------------------
-// batch: nesting and write coalescing
-// ---------------------------------------------------------------------------
 
 describe('Scheduler: batch nesting', () => {
   const atoms = Array.from({ length: REPEATS }, (_, i) => atom(i));
