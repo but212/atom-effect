@@ -534,9 +534,40 @@ export function mergeLenses<L extends WritableAtom<unknown>[]>(
   return new MergedLensImpl(lenses);
 }
 
+/**
+ * Composes an existing lens with a new sub-path.
+ *
+ * Logic: Composition
+ * This is a semantic alias for {@link atomLens}. It creates a new lens
+ * starting from the value of the provided lens and navigating down the
+ * specified path.
+ *
+ * @param lens - The base lens to compose from.
+ * @param path - The sub-path relative to the base lens.
+ * @returns A new lens targeting the nested property.
+ */
 export const composeLens = <T extends object, P extends Paths<T>>(lens: WritableAtom<T>, path: P) =>
   atomLens(lens, path);
 
+/**
+ * Creates a lens factory for a specific atom.
+ *
+ * When to use:
+ * - To create multiple lenses from the same root atom without repeating the root.
+ * - To enhance readability when defining many field bindings for a single state object.
+ *
+ * @param atom - The root atom to create lenses for.
+ * @returns A function that accepts a path and returns a lens for that path.
+ *
+ * @example
+ * ```typescript
+ * const user = atom({ profile: { name: 'Alice', age: 25 } });
+ * const userLens = lensFor(user);
+ *
+ * const nameLens = userLens('profile.name');
+ * const ageLens = userLens('profile.age');
+ * ```
+ */
 export const lensFor =
   <T extends object>(atom: WritableAtom<T>) =>
   <P extends Paths<T>>(path: P) =>
