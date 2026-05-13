@@ -309,6 +309,20 @@ describe('$.atomNav', () => {
       });
     });
 
+    it('should fallback to <title> tag in body if X-PJAX-Title header is an empty string', async () => {
+      harness.mockAjax({
+        data: '<div><title>Body Title</title>Content</div>',
+        headers: { 'X-PJAX-Title': '' },
+      });
+      const nav = await harness.create();
+
+      await nav.navigate('/title-empty-header-fallback');
+
+      await vi.waitFor(() => {
+        expect(document.title).toBe('Body Title');
+      });
+    });
+
     it.each([
       {
         label: 'partial fragment',

@@ -351,7 +351,7 @@ export function extractContent(params: {
   const doc = PARSER.parseFromString(html, 'text/html');
 
   // Optimization: Skip title query if override is provided from headers
-  const title = titleOverride ?? doc.querySelector('title')?.textContent?.trim() ?? null;
+  const title = titleOverride || doc.querySelector('title')?.textContent?.trim() || null;
   const contentNode = selector ? doc.querySelector(selector) : null;
 
   return {
