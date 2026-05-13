@@ -66,12 +66,12 @@
     "@but212/atom-effect-configs": "workspace:*",
     "@but212/atom-effect-utils": "workspace:*",
     "@types/jquery": "^4.0.0",
-    "@vitest/browser": "^4.1.5",
-    "@vitest/browser-playwright": "^4.1.5",
-    "@vitest/coverage-v8": "^4.1.5",
+    "@vitest/browser": "^4.1.6",
+    "@vitest/browser-playwright": "^4.1.6",
+    "@vitest/coverage-v8": "^4.1.6",
     "jquery": "^4.0.0",
     "playwright": "^1.59.1",
-    "vite": "^8.0.11",
-    "vitest": "^4.1.5"
+    "vite": "^8.0.12",
+    "vitest": "^4.1.6"
   }
 }
