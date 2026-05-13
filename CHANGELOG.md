@@ -25,6 +25,13 @@
 
 ### jQuery
 
+#### Added
+
+- **PJAX Navigation**: Enhanced `$.atomNav` with standard PJAX header support and protocol coordination.
+  - **Request Headers**: Includes `X-PJAX-Container` to facilitate server-side fragment rendering.
+  - **Response Headers**: Supports `X-PJAX-Title` for document title synchronization from partial HTML responses.
+  - **Fragment Extraction**: Refined content parsing logic to handle full pages, partial fragments, and inner HTML responses.
+
 #### Breaking Changes
 
 - **Packaging**: Externalized `@but212/atom-effect` in ESM and CJS library builds to prevent code duplication. This enforces the use of `@but212/atom-effect` as a peer dependency.

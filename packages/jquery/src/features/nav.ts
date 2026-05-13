@@ -199,14 +199,18 @@ export function atomNav(options: AtomNavOptions): AtomNav {
     {
       name: 'nav:content',
       defaultValue: { html: '', title: null },
-      headers: { 'X-PJAX': 'true', ...headers },
+      headers: {
+        'X-PJAX': 'true',
+        ...(targetSelector ? { 'X-PJAX-Container': targetSelector } : {}),
+        ...headers,
+      },
       eager: false,
       transform: (raw, xhr) => {
-        const redirectUrl = xhr?.getResponseHeader?.('X-PJAX-URL') ?? undefined;
         const result = extractContent({
           html: String(raw),
           selector: targetSelector,
-          redirectUrl,
+          redirectUrl: xhr?.getResponseHeader?.('X-PJAX-URL') ?? undefined,
+          title: xhr?.getResponseHeader?.('X-PJAX-Title') ?? undefined,
         });
         // Security: Ensure fetched HTML is sanitized before being injected into the DOM.
         return { ...result, html: sanitizeHtml(result.html).trim() };

@@ -225,6 +225,7 @@ The package is organized into core logic, binding handlers, features (Routing, F
 - **Shared Core**: Leverages `src/core/navigation.ts` for standardized URL normalization and metadata synchronization.
 - **Race Condition Safety**: Uses an atomic fetch pipeline and `AbortSignal` management to ensure that only the result of the most recent navigation is applied to the DOM.
 - **Transitions**: Optimizes navigation by bypassing re-fetches for hash-only changes and ignoring redundant requests to the current URL.
+- **Standardized Headers**: Implements support for standard PJAX headers (`X-PJAX-Container`, `X-PJAX-Title`) to coordinate server-side fragment rendering and title synchronization without requiring full-body parsing.
 
 ## 12. Performance & Memory Management
 
