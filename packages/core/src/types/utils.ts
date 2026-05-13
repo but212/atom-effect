@@ -25,7 +25,5 @@ export type UnboxDependency<D> = D extends Dependency<infer V> ? V : never;
  *
  * Why: Provides a unified type for consumers (such as multi-atom effects
  * or aggregate lenses) that operate on multiple dependencies simultaneously.
- *
- * @internal
  */
 export type MergedDependencyValue<T extends readonly unknown[]> = Merge<UnboxDependency<T[number]>>;

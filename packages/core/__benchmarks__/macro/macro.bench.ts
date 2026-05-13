@@ -501,11 +501,17 @@ describe('Large Grid with Lenses (50x50)', () => {
 
 describe('Recursive Lens Depth Stress', () => {
   const DEPTH = 100;
-  const source = atom({ child: null as any });
-  let currentLens: any = source;
-  for (let i = 0; i < DEPTH; i++) {
-    // @ts-expect-error - dynamic recursive path exceeds static Path depth limits
-    currentLens = atomLens(currentLens as any, 'child');
+  // Logic: Bypass Path Depth Limit
+  // By using a broad string indexer, we force Paths<T> to resolve to 'string',
+  // allowing us to create extremely deep lens chains for performance stress testing
+  // without triggering TypeScript's static recursion guards.
+  type StressTarget = { child: any };
+
+  const source = atom({ child: null } as StressTarget);
+  let currentLens = atomLens(source, 'child');
+
+  for (let i = 1; i < DEPTH; i++) {
+    currentLens = atomLens(currentLens, 'child');
   }
 
   let deepestSource = source.value;

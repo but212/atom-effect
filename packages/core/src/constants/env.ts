@@ -58,7 +58,7 @@ export const BUFFER_CONFIG = Object.freeze({
 export const LENS_CONFIG = Object.freeze({
   /** Maximum nesting depth permitted for Lens-based path generation. */
   MAX_PATH_DEPTH: 8,
-} satisfies Record<string, number>);
+} as const);
 
 /**
  * Epoch-based staleness tracking constants.

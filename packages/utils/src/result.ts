@@ -4,7 +4,6 @@ import type { Prettify } from './types';
 
 /**
  * Base type for Result variants to ensure symbol-based identification.
- * @internal
  */
 type ResultBase = {
   readonly [RESULT_SYMBOL]: true;

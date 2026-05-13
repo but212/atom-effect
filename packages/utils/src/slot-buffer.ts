@@ -387,7 +387,6 @@ export class SlotBuffer<T> {
     this.clear();
   }
 
-  /** @internal */
   get isLocked(): boolean {
     return this._lockCount > 0;
   }

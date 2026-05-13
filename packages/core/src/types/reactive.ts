@@ -60,7 +60,6 @@ export interface Dependency<T = unknown> {
   /**
    * Core engine method for establishing a reactive connection.
    * Returns a cleanup function.
-   * @internal
    */
   subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void;
 
