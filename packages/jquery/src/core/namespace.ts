@@ -1,3 +1,11 @@
+/**
+ * @module AEJNamespace
+ *
+ * Responsibility:
+ * Extends the global jQuery ($) object with reactive state management
+ * primitives from the core atom-effect library.
+ */
+
 import {
   aeNextTick,
   atom,
@@ -8,33 +16,31 @@ import {
   effect,
   isAtom,
   isComputed,
+  isEffect,
   lensFor,
   mergeAtoms,
   mergeLenses,
   untracked,
 } from '@but212/atom-effect';
+import { isPromise } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { debug } from '@/utils/debug';
 
 /**
- * Returns a promise that resolves after the next reactive update cycle has completed.
+ * Logic: Asynchronous Update Synchronization
+ * Returns a promise that resolves after the next reactive update cycle.
  *
  * When to use:
- * - To perform manual DOM measurements after reactive changes have been applied.
- * - To coordinate external library initializations that depend on the current DOM state.
- *
- * @returns A promise that resolves when the DOM has been synchronized with the latest state.
+ * - Perform manual DOM measurements after reactive changes.
+ * - Coordinate external library initializations dependent on current DOM state.
  */
 export const nextTick = (): Promise<void> => aeNextTick();
 
 /**
- * Extends the global jQuery namespace with reactive state management primitives.
+ * Logic: Unified Reactive Namespace
+ * Extends jQuery with reactive primitives to allow managing state
+ * and DOM within a single, familiar context.
  *
- * Reason: This unified namespace allows developers to manage both reactive state
- * and DOM manipulation within the familiar `$` context, reducing the need for
- * additional imports and minimizing context switching.
- *
- * @example
  * ```typescript
  * // Reactive state management via the jQuery namespace
  * const count = $.atom(0);
@@ -55,6 +61,8 @@ $.extend({
   untracked,
   isAtom,
   isComputed,
+  isEffect,
+  isPromise,
   nextTick,
   atomLens,
   composeLens,

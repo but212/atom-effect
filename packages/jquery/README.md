@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/@but212/atom-effect-jquery.svg)](https://www.npmjs.com/package/@but212/atom-effect-jquery)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-![ES2021+](https://img.shields.io/badge/target-ES2021%2B-blue)
+![ES2022+](https://img.shields.io/badge/target-ES2022%2B-blue)
 
 Reactive DOM bindings for jQuery, implemented as an integration layer for the `atom-effect` core.
 
@@ -10,7 +10,7 @@ Reactive DOM bindings for jQuery, implemented as an integration layer for the `a
 
 This package enables declarative synchronization between reactive state and the DOM using jQuery selectors and chainable methods. It enforces automatic resource management via `MutationObserver` and provides specialized support for complex state flows, including IME composition and list reconciliation.
 
-- **Target**: ES2021+
+- **Target**: ES2022+
 - **Compatibility**: jQuery 3.x+
 - **Environment**: Modern browsers (legacy environments such as IE11 are not supported).
 

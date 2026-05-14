@@ -4,46 +4,55 @@
 
 ### Core & Infrastructure
 
-#### Breaking Changes
+#### Added
 
-- **Build System**: Partitioned the build process into `types`, `lib` (ESM/CJS), and `bundle` (UMD) targets for better optimization. This may affect direct file references in the `dist/` directory.
-- **Error Handling**: Relocated `AtomErrorConstructor` and `AtomErrorJSON` types to the core types module.
-
-#### Deprecated
-
-- **Error Handling**: Deprecated `AtomError.getChain()` and `AtomError.toJSON()` instance methods in favor of standalone `getErrorChain()` and `serializeError()` functions. This improves tree-shaking while maintaining backward compatibility. **These methods are scheduled for removal in v0.34.0.** See [MIGRATION.md](./MIGRATION.md) for details.
+- Implemented a data-driven `ErrorStrategy` pattern for standardized error metadata extraction.
+- Standardized node identification with `atom_`, `calc_`, and `fx_` prefixes and automated lifecycle tracking via `FinalizationRegistry`.
+- Integrated `satisfies` and modern TypeScript features across internal configuration objects for improved contract validation.
 
 #### Changed
 
-- **Internal Architecture**: Major refactoring of the reactive engine to an **ES2022-based architecture**.
-  - Migrated core primitives (`AtomImpl`, `ComputedAtomImpl`, `EffectImpl`) and internal controllers (`ReactiveScheduler`, `ReactiveTrackingEngine`, `DependencyBuffer`) to encapsulated ES2022 classes utilizing **private class fields (`#`)** for internal state management.
-  - Partitioned the reactive engine into specialized modules: `core/base.ts` (tracking/propagation) and `core/scheduler.ts` (job execution) to improve maintainability and performance isolation.
-  - Reorganized global resources into focused directories: `src/constants/` (flags, environment, branding) and `src/types/` (reactive, internal, API).
-  - Optimized `atomLens` with automatic path flattening to reduce reactive overhead in nested state trees.
-  - Refined subscriber notification cycles using a strategy-based dispatch table, eliminating branching in hot loops.
-  - Encapsulated internal reactive state (`slots`, `deps`) into a dedicated `_storage` property for better V8 hidden class stability.
-  - **Debug System**: Migrated the diagnostic controller to an encapsulated ES2022 class-based architecture for both core engine and jQuery instrumentation.
-  - **Debug System**: Enhanced node identification with standardized prefixes (`atom_`, `calc_`, `fx_`) and automated lifecycle tracking via `FinalizationRegistry`.
-  - **Error Handling**: Implemented a data-driven `ErrorStrategy` pattern for extensible and robust error metadata extraction.
-  - **Type Safety**: Integrated `satisfies` and modern TypeScript features across all internal configuration objects to ensure contract validation without losing literal type precision.
+- Migrated core engine primitives and diagnostic controllers to an ES2022 architecture utilizing private class fields (`#`) for internal state encapsulation.
+- Partitioned the reactive engine into specialized modules: `core/base.ts` (tracking) and `core/scheduler.ts` (job execution).
+- Reorganized global resources into focused `src/constants/` and `src/types/` directories.
+- Optimized `atomLens` with automatic path flattening for nested state trees.
+- Refined subscriber notification cycles using a strategy-based dispatch table to eliminate branching in hot loops.
+- Encapsulated internal reactive state (`slots`, `deps`) into a dedicated `_storage` property to stabilize V8 hidden class transitions.
+
+#### Deprecated
+
+- `AtomError.getChain()` and `AtomError.toJSON()` instance methods. Use standalone `getErrorChain()` and `serializeError()` functions instead. Removal is scheduled for v0.34.0.
+
+#### Breaking Changes
+
+- **Build System**: Partitioned the build process into `types`, `lib` (ESM/CJS), and `bundle` (UMD) targets. Direct file references in the `dist/` directory may require updates.
+- **Error Handling**: Relocated `AtomErrorConstructor` and `AtomErrorJSON` types to the core types module.
 
 ### jQuery
 
 #### Added
 
-- **PJAX Navigation**: Enhanced `$.atomNav` with standard PJAX header support and protocol coordination.
-  - **Request Headers**: Includes `X-PJAX-Container` to facilitate server-side fragment rendering.
-  - **Response Headers**: Supports `X-PJAX-Title` for document title synchronization from partial HTML responses.
-  - **Fragment Extraction**: Refined content parsing logic to handle full pages, partial fragments, and inner HTML responses.
+- **PJAX Navigation**: Enhanced `$.atomNav` with standard PJAX header support (`X-PJAX-Container`, `X-PJAX-Title`) and protocol coordination.
+  - Refined content parsing logic to handle full pages, partial fragments, and inner HTML responses.
 
-#### Breaking Changes
+#### Changed
 
-- **Packaging**: Externalized `@but212/atom-effect` in ESM and CJS library builds to prevent code duplication. This enforces the use of `@but212/atom-effect` as a peer dependency.
-- **CDN**: The default entry point for CDNs has changed. Use the explicit path to the UMD bundle (e.g., `<script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.32.1/dist/atom-effect-jquery.min.js"></script>`) instead of the base package URL.
+- Migrated the jQuery integration layer and diagnostic controller to an ES2022-based architecture with private class fields.
+- Converted `ListContext` from an interface to an encapsulated class for improved state management.
+- Modernized core DOM iteration (`atomEachElement`) and property verification (`Object.hasOwn`) for better runtime efficiency.
+- Enhanced `atomFetch` error normalization to include the original error as the `cause` property.
+- Optimized the internal binding registry with scoped tree disposal and improved memory safety for detached nodes.
+- Refined internal source documentation with structured annotations for design intent and optimization rationale.
 
 #### Fixed
 
-- **atomList**: Improved stability of internal sentinel management during `batchSanitize` when rendering large numbers of items simultaneously.
+- **atomList**: Resolved stability issues with internal sentinel management during `batchSanitize` in concurrent rendering scenarios.
+- **Diagnostics**: Standardized log prefixes and improved the reliability of visual highlighting in debug mode.
+
+#### Breaking Changes
+
+- **Packaging**: Externalized `@but212/atom-effect` in ESM and CJS library builds. It must now be provided as a peer dependency.
+- **CDN**: Updated the default entry point for CDNs. Use the explicit path to the UMD bundle instead of the base package URL.
 
 ## [0.32.1]
 

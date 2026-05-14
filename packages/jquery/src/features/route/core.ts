@@ -1,3 +1,11 @@
+/**
+ * @module AEJRouteCore
+ *
+ * Responsibility:
+ * Provides the low-level engine for the routing system, including URL
+ * adapter abstractions (History/Hash) and a tiered route matching compiler.
+ */
+
 import { untracked } from '@but212/atom-effect';
 import { Option, Result } from '@but212/atom-effect-utils';
 import { normalizePath, parseQuery, resolveAnchorPath, splitPath } from '@/core/navigation';
@@ -5,8 +13,8 @@ import type { RouteDefinition, Router } from '@/types';
 import type { MatchEntry, MatchResult, UrlAdapter } from './types';
 
 /**
- * Logic: History API Adapter
- * Orchestrates modern URL synchronization using window.history.
+ * Logic: Modern History API Adapter
+ * Orchestrates URL synchronization using the standard window.history API.
  */
 const HISTORY_ADAPTER: UrlAdapter = {
   get: (base) => {
@@ -41,8 +49,9 @@ const HISTORY_ADAPTER: UrlAdapter = {
 };
 
 /**
- * Logic: Hash Adapter
- * Legacy/Compatibility mode for static hosting or environments without URL rewrite support.
+ * Logic: Legacy Hash Adapter
+ * Compatibility mode for static hosting or environments without
+ * server-side URL rewrite support.
  */
 const HASH_ADAPTER: UrlAdapter = {
   get: () => {
@@ -66,17 +75,12 @@ const HASH_ADAPTER: UrlAdapter = {
 };
 
 /**
- * Factory for creating a URL adapter based on the application's routing strategy.
+ * Logic: URL Adapter Factory
+ * Creates a URL adapter based on the application's routing strategy.
  *
  * When to use:
- * - Use 'history' for clean URLs (requires server-side fallback to index.html).
- * - Use 'hash' for legacy support or environments where the server is not configurable.
- *
- * @param mode - 'history' or 'hash'.
- * @param basePath - Optional root segment (e.g., '/admin') if the app is not at domain root.
- *
- * @example
- * const adapter = createAdapter('history', '/my-app');
+ * - Use 'history' for clean URLs (requires server-side fallback).
+ * - Use 'hash' for legacy support or zero-config static hosting.
  */
 export const createAdapter = (mode: 'history' | 'hash', basePath?: string) => {
   const adapter = mode === 'history' ? HISTORY_ADAPTER : HASH_ADAPTER;
@@ -98,8 +102,12 @@ export interface RouteMatcher {
 const SUPPORTS_URL_PATTERN = typeof URLPattern !== 'undefined';
 
 /**
- * Optimization: Tiered Compilation Strategy
- * Routes are compiled into the most efficient matcher possible to minimize matching overhead.
+ * Optimization: Tiered Route Compilation
+ * Routes are compiled into the most efficient matcher possible based on
+ * pattern complexity and browser capability.
+ *
+ * Reason: Minimizes matching overhead by prioritizing O(1) lookups for
+ * static routes and leveraging native URLPattern API where available.
  */
 const COMPILERS: Array<{
   test: (pattern: string) => boolean;
@@ -133,8 +141,10 @@ const COMPILERS: Array<{
           const params: Record<string, string> = {};
           const groups = result.pathname.groups;
           for (const key in groups) {
-            const val = groups[key];
-            if (val != null) params[key] = val;
+            if (Object.hasOwn(groups, key)) {
+              const val = groups[key];
+              if (val != null) params[key] = val;
+            }
           }
           return Option.some({ route: { pattern, def }, params });
         },
@@ -180,6 +190,7 @@ const COMPILERS: Array<{
 ];
 
 /**
+ * Logic: Adaptive Compilation
  * Selects and executes the optimal compiler for a given pattern.
  */
 function compile(pattern: string, def: RouteDefinition): MatchEntry {
@@ -187,28 +198,32 @@ function compile(pattern: string, def: RouteDefinition): MatchEntry {
     const compiler = COMPILERS[i]!;
     if (compiler.test(pattern)) return compiler.compile(pattern, def);
   }
-  return COMPILERS[COMPILERS.length - 1]!.compile(pattern, def);
+  return COMPILERS.at(-1)!.compile(pattern, def);
 }
 
 /**
- * Optimization: Separation of Concerns
- * Partitions routes into 'exact' and 'dynamic' buckets to enable O(1) lookups for static paths.
+ * Optimization: Route Partitioning
+ * Partitions routes into 'exact' and 'dynamic' buckets to enable O(1)
+ * lookups for static paths while preserving order for dynamic patterns.
  */
 export function createRouteMatcher(routes: Record<string, RouteDefinition>): RouteMatcher {
   const exact = new Map<string, MatchEntry>();
   const dynamic: MatchEntry[] = [];
   for (const path in routes) {
-    const def = routes[path];
-    if (def === undefined) continue;
-    const normalized = normalizePath(path);
-    const entry = compile(normalized, def);
-    if (normalized.includes(':')) dynamic.push(entry);
-    else exact.set(normalized, entry);
+    if (Object.hasOwn(routes, path)) {
+      const def = routes[path];
+      if (def === undefined) continue;
+      const normalized = normalizePath(path);
+      const entry = compile(normalized, def);
+      if (normalized.includes(':')) dynamic.push(entry);
+      else exact.set(normalized, entry);
+    }
   }
   return { exact, dynamic };
 }
 
 /**
+ * Logic: Routing Table Matcher
  * Attempts to match a path against the compiled routing table.
  */
 export function matchRoute(matcher: RouteMatcher, path: string): MatchResult {
@@ -222,6 +237,7 @@ export function matchRoute(matcher: RouteMatcher, path: string): MatchResult {
 }
 
 /**
+ * Logic: Pattern Resolution
  * Finds the canonical route pattern for a given resolved path.
  */
 export function getRoutePattern(matcher: RouteMatcher, path: string): string {
@@ -232,7 +248,9 @@ export function getRoutePattern(matcher: RouteMatcher, path: string): string {
 }
 
 /**
- * Resolves a raw path into a matched route definition with parameters and 404 fallback logic.
+ * Logic: Route Resolution
+ * Resolves a raw path into a matched route definition with parameters
+ * and 404 fallback logic.
  */
 export function resolveRoute(
   matcher: RouteMatcher,
@@ -252,13 +270,11 @@ export function resolveRoute(
 
 /**
  * Logic: Navigation Pipeline Orchestration
- * Coordinates the full transition sequence: matching, parameter merging, and guard execution.
+ * Coordinates the full transition sequence: matching, parameter merging,
+ * and guard execution.
  *
  * When to use:
  * - Invoked internally by the router during navigation requests.
- *
- * Caution:
- * - Guards (`onEnter`) must be side-effect free relative to the router's internal state.
  */
 export function resolveNavigation(
   matcher: RouteMatcher,

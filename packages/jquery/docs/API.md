@@ -433,6 +433,14 @@ Merges multiple writable lenses into a single unified lens. Getting the value re
 const combinedLens = $.mergeLenses(lensA, lensB);
 ```
 
+### `$.isAtom(val)` / `$.isComputed(val)` / `$.isEffect(val)`
+
+Type guards for identifying reactive primitives.
+
+### `$.isPromise(val)`
+
+Utility for identifying `Promise` or thenable objects.
+
 ### `$.batch(fn)`
 
 Groups multiple atom writes into a single synchronous notification cycle.

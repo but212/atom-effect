@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from 'vitest';
 import '@/index';
 
 describe('Input Bindings (Two-way)', () => {
-  // --- 1. Basic Synchronization & Data Transformation ---
   it('should sync values between Atom and DOM with parse/format/debounce', async () => {
     const val = $.atom(10);
     const $el = $('<input>').appendTo(document.body);
@@ -34,7 +33,6 @@ describe('Input Bindings (Two-way)', () => {
     $el.remove();
   });
 
-  // --- 2. IME & Blur Stability (Core UX Logic) ---
   it('should maintain stability during IME composition and handle blur correctly', async () => {
     const val = $.atom('initial');
     let syncCount = 0;
@@ -43,12 +41,12 @@ describe('Input Bindings (Two-way)', () => {
     const el = $el[0] as HTMLInputElement;
 
     // Track atom setter calls to detect redundant syncs
+    const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(val), 'value')!;
     Object.defineProperty(val, 'value', {
       get: () => val.peek(),
       set: (v) => {
         syncCount++;
-        // @ts-expect-error - accessing internal atom state for testing
-        val._value = v;
+        descriptor.set!.call(val, v);
       },
       configurable: true,
     });
@@ -75,7 +73,6 @@ describe('Input Bindings (Two-way)', () => {
     $el.remove();
   });
 
-  // --- 3. Cursor Preservation & Type Safety ---
   it('should preserve cursor position and handle selection-restricted types', async () => {
     const val = $.atom('hello');
     const $text = $('<input type="text">').appendTo(document.body);
@@ -100,7 +97,6 @@ describe('Input Bindings (Two-way)', () => {
     $num.remove();
   });
 
-  // --- 4. Checkboxes & Multiple Select ---
   it('should handle boolean and collection bindings (checkbox, select-multiple)', async () => {
     // Checkbox with Cycle Prevention
     const isChecked = $.atom(false);
@@ -143,7 +139,6 @@ describe('Input Bindings (Two-way)', () => {
     $sel.remove();
   });
 
-  // --- 5. Lifecycle & Cleanup ---
   it('should dispose all effects and remove event listeners on unbind', async () => {
     const val = $.atom('initial');
     const $el = $('<input>').appendTo(document.body);
@@ -166,7 +161,6 @@ describe('Input Bindings (Two-way)', () => {
     $el.remove();
   });
 
-  // --- 6. Performance & Strict Normalization ---
   it('should normalize DOM value on blur even if parsed value matches atom', async () => {
     const val = $.atom(10);
     const $el = $('<input>').appendTo(document.body);
