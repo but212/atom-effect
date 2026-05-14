@@ -43,6 +43,12 @@ export const nextSmi = (v: number): number => {
   return next === 0 ? 1 : next;
 };
 
+/** @internal */
+const JOB_EXECUTORS: Record<number, (job: SchedulerJob) => void> = {
+  [KIND.Fn]: (job) => (job as SchedulerJobFunction)(),
+  [KIND.Obj]: (job) => (job as SchedulerJobObject).execute(),
+};
+
 /**
  * Role: Central orchestrator for the reactive task lifecycle.
  *
@@ -88,43 +94,15 @@ class ReactiveScheduler implements SchedulerState {
   get sessionExecutionCount() {
     return this.#sessionExecutionCount;
   }
-  get active() {
-    return this.#active;
-  }
-  get standby() {
-    return this.#standby;
-  }
-  get batch() {
-    return this.#batch;
-  }
-  get _current() {
-    return this.#current;
+  get queueSize() {
+    return this.#active.size + this.#batch.size;
   }
   get onOverflow() {
     return this.#onOverflow;
   }
-
-  set state(v) {
-    this.#state = v;
-  }
-  set batchDepth(v) {
-    this.#batchDepth = v;
-  }
   set maxFlushIterations(v) {
     if (v < SCHEDULER_CONFIG.MIN_FLUSH_ITERATIONS) throw new SchedulerError('Invalid limit.');
     this.#maxFlushIterations = v;
-  }
-  set sessionActive(v) {
-    this.#sessionActive = v;
-  }
-  set sessionEpoch(v) {
-    this.#sessionEpoch = v;
-  }
-  set sessionExecutionCount(v) {
-    this.#sessionExecutionCount = v;
-  }
-  set _current(v) {
-    this.#current = v;
   }
   set onOverflow(v) {
     this.#onOverflow = v;
@@ -147,12 +125,13 @@ class ReactiveScheduler implements SchedulerState {
 
     for (let i = 0; i < queueSize; i++) {
       const job = bItems[i]!;
+      bItems[i] = undefined;
+
       // Optimization: Avoid redundant re-queuing within the same epoch.
       if (job._nextEpoch !== epoch) {
         job._nextEpoch = epoch;
         targetItems[currentSize++] = job;
       }
-      bItems[i] = undefined;
     }
 
     active.size = currentSize;
@@ -208,17 +187,14 @@ class ReactiveScheduler implements SchedulerState {
     if (this.#current === active) this.#current = this.#active;
 
     this.nextEpoch();
+    const executors = JOB_EXECUTORS;
 
     for (let i = 0; i < count; i++) {
       const job = jobs[i]!;
       jobs[i] = undefined;
 
       try {
-        if (job._k === KIND.Fn) {
-          (job as SchedulerJobFunction)();
-        } else if (job._k === KIND.Obj) {
-          (job as SchedulerJobObject).execute();
-        }
+        executors[job._k!]!(job);
       } catch (e) {
         console.error(
           new SchedulerError('Error occurred during scheduler execution', { cause: e })
@@ -322,10 +298,7 @@ class ReactiveScheduler implements SchedulerState {
     const target = this.#current;
     target.items[target.size++] = callback;
 
-    if (
-      (this.#state & SCHEDULER_STATE.IDLE) === 0 &&
-      (this.#state & SCHEDULER_STATE.PROCESSING) === 0
-    ) {
+    if ((this.#state & SCHEDULER_STATE.PROCESSING) === 0) {
       this.#state |= SCHEDULER_STATE.PROCESSING;
       queueMicrotask(() => {
         try {
@@ -421,7 +394,7 @@ export const schedulerSetMaxFlushIterations = (state: SchedulerState, max: numbe
 export const schedulerIsBatching = (state: SchedulerState) =>
   (state.state & SCHEDULER_STATE.BATCHING) !== 0;
 /** @internal */
-export const schedulerQueueSize = (state: SchedulerState) => state.active.size + state.batch.size;
+export const schedulerQueueSize = (state: SchedulerState) => state.queueSize;
 
 /** Returns the next reactive epoch identifier. */
 export const nextEpoch = (): number => scheduler.nextEpoch();

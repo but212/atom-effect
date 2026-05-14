@@ -113,14 +113,8 @@ export type SchedulerState = Prettify<{
   sessionEpoch: number;
   sessionExecutionCount: number;
 
-  /** Jobs currently awaiting execution. */
-  active: JobBuffer;
-  /** Jobs scheduled during the current flush that will run in the next iteration. */
-  standby: JobBuffer;
-  /** Temporary buffer for accumulating updates during a `batch()` block. */
-  batch: JobBuffer;
-  /** @internal Pointer to the buffer currently being flushed. */
-  _current: JobBuffer;
+  /** Logic: Current total number of jobs across all buffers. */
+  queueSize: number;
 
   /** Callback triggered if the job buffers exceed their capacity limits. */
   onOverflow: ((droppedCount: number) => void) | null;
