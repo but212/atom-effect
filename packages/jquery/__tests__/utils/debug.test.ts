@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { debug } from '@/index';
+import $ from '@/index';
 
 describe('Debug Module (Black-box)', () => {
   const logSpy = vi.fn();
@@ -13,12 +13,12 @@ describe('Debug Module (Black-box)', () => {
     [logSpy, warnSpy, errorSpy].forEach((s) => s.mockClear());
 
     // Ensure we start with a clean state
-    debug.enabled = false;
+    $.debug.enabled = false;
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
-    debug.enabled = false;
+    $.debug.enabled = false;
 
     // Clean up any styles or elements created during tests
     document.querySelectorAll('style[data-atom-debug]').forEach((s) => s.remove());
@@ -29,11 +29,11 @@ describe('Debug Module (Black-box)', () => {
 
   describe('Visibility & Gating', () => {
     it('should suppress instrumentation logs when disabled', () => {
-      debug.enabled = false;
+      $.debug.enabled = false;
       const el = document.createElement('div');
       document.body.appendChild(el);
 
-      debug.domUpdated('[TEST]', el, 'text', 'new value');
+      $.debug.domUpdated('[TEST]', el, 'text', 'new value');
 
       expect(logSpy).not.toHaveBeenCalled();
       expect(el.hasAttribute('data-atom-debug')).toBe(false);
@@ -41,11 +41,11 @@ describe('Debug Module (Black-box)', () => {
     });
 
     it('should always log critical messages (warn/error) regardless of enabled state', () => {
-      debug.enabled = false;
+      $.debug.enabled = false;
       const error = new Error('critical failure');
 
-      debug.warn('[WARN]', 'something is wrong');
-      debug.error('[ERROR]', 'failed', error);
+      $.debug.warn('[WARN]', 'something is wrong');
+      $.debug.error('[ERROR]', 'failed', error);
 
       expect(warnSpy).toHaveBeenCalledWith('[WARN] something is wrong');
       expect(errorSpy).toHaveBeenCalledWith('[ERROR] failed', error);
@@ -54,7 +54,7 @@ describe('Debug Module (Black-box)', () => {
 
   describe('DOM Feedback Behavior', () => {
     it('should identify and highlight diverse targets (HTML, SVG, JQuery)', async () => {
-      debug.enabled = true;
+      $.debug.enabled = true;
 
       const htmlEl = Object.assign(document.createElement('div'), { id: 'app' });
       const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -68,17 +68,17 @@ describe('Debug Module (Black-box)', () => {
       document.body.append(htmlEl, svgEl, jqElement);
 
       // 1. Verify HTML Identification & Logging
-      debug.domUpdated('[UI]', htmlEl, 'text', 'v1');
+      $.debug.domUpdated('[UI]', htmlEl, 'text', 'v1');
       expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('div#app.text'), 'v1');
       expect(htmlEl.hasAttribute('data-atom-debug')).toBe(true);
 
       // 2. Verify SVG Identification
-      debug.domUpdated('[SVG]', svgEl, 'attr', 'v2');
+      $.debug.domUpdated('[SVG]', svgEl, 'attr', 'v2');
       expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('svg.attr'), 'v2');
       expect(svgEl.hasAttribute('data-atom-debug')).toBe(true);
 
       // 3. Verify JQuery Identification
-      debug.domUpdated('[JQ]', jqEl, 'prop', 'v3');
+      $.debug.domUpdated('[JQ]', jqEl, 'prop', 'v3');
       expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('span.prop'), 'v3');
       expect(jqElement.hasAttribute('data-atom-debug')).toBe(true);
 
@@ -90,26 +90,26 @@ describe('Debug Module (Black-box)', () => {
     });
 
     it('should ignore disconnected elements and non-element nodes', () => {
-      debug.enabled = true;
+      $.debug.enabled = true;
 
       const disconnected = document.createElement('div');
       const textNode = document.createTextNode('text node');
 
-      debug.domUpdated('[SKIP]', disconnected, 'text', 'v1');
-      debug.domUpdated('[SKIP]', textNode as unknown as Element, 'text', 'v2');
+      $.debug.domUpdated('[SKIP]', disconnected, 'text', 'v1');
+      $.debug.domUpdated('[SKIP]', textNode as unknown as Element, 'text', 'v2');
 
       expect(logSpy).not.toHaveBeenCalled();
       expect(disconnected.hasAttribute('data-atom-debug')).toBe(false);
     });
 
     it('should ensure idempotent style injection occurs', () => {
-      debug.enabled = true;
+      $.debug.enabled = true;
       const el = document.createElement('div');
       document.body.appendChild(el);
 
       // Trigger multiple times; should not cause multiple redundant injections
-      debug.domUpdated('[UI]', el, 'a', '1');
-      debug.domUpdated('[UI]', el, 'b', '2');
+      $.debug.domUpdated('[UI]', el, 'a', '1');
+      $.debug.domUpdated('[UI]', el, 'b', '2');
 
       const styleTags = document.querySelectorAll('style[data-atom-debug]');
       const adoptedSheetsCount = (document.adoptedStyleSheets as unknown[])?.length || 0;
@@ -123,13 +123,15 @@ describe('Debug Module (Black-box)', () => {
 
   describe('Environment Resilience', () => {
     it('should handle malformed or missing targets gracefully without crashing', () => {
-      debug.enabled = true;
+      $.debug.enabled = true;
 
       // Passing invalid types should not throw ReferenceErrors or crash the system
       expect(() =>
-        debug.domUpdated('[UI]', null as unknown as Element, 'test', 'val')
+        $.debug.domUpdated('[UI]', null as unknown as Element, 'test', 'val')
       ).not.toThrow();
-      expect(() => debug.domUpdated('[UI]', {} as unknown as Element, 'test', 'val')).not.toThrow();
+      expect(() =>
+        $.debug.domUpdated('[UI]', {} as unknown as Element, 'test', 'val')
+      ).not.toThrow();
       expect(logSpy).not.toHaveBeenCalled();
     });
   });
