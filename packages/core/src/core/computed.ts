@@ -31,7 +31,6 @@ import {
   nodeCommitDeps,
   nodeHandleError,
   nodeIsDirty,
-  nodeIsDisposed,
   nodeIsShallowDirty,
   nodeNotifySubscribers,
   nodeStartTracking,
@@ -58,7 +57,13 @@ import type {
 } from '@/types';
 import { ComputedError, debug, generateId, mergeAtomValues, NO_DEFAULT_VALUE } from '@/utils';
 import { isPromise } from '@/utils/type-guards';
-import { createDepBuffer, disposeAll, isBufferDirty, prepareTracking } from './buffers';
+import {
+  BUFFER_FLAGS,
+  createDepBuffer,
+  disposeAll,
+  isBufferDirty,
+  prepareTracking,
+} from './buffers';
 
 /**
  * Logic: State Transition Descriptors
@@ -156,7 +161,7 @@ export function collectErrorsRecursive(startNode: ReactiveNodeBase, stopOnFirst:
     }
 
     const deps = node._storage.deps;
-    if (deps?.hasComputeds) {
+    if (deps && (deps.flags & BUFFER_FLAGS.HAS_COMPUTEDS) !== 0) {
       for (let i = 0, len = deps.slots.length; i < len; i++) {
         const link = deps.slots.at(i);
         if (link?.node.isComputed && walk(link.node as unknown as ReactiveNodeBase)) {
@@ -243,7 +248,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
     return (this.flags & COMPUTED_STATE_FLAGS.DIRTY) !== 0;
   }
   get isDisposed(): boolean {
-    return nodeIsDisposed(this);
+    return (this.flags & COMPUTED_STATE_FLAGS.DISPOSED) !== 0;
   }
   get isComputed(): boolean {
     return true;
@@ -334,7 +339,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
     trackingContext.current?.addDependency(this);
 
     if ((this.flags & STATE_MASKS.ERROR_MASK) !== 0) return true;
-    if (!this._storage.deps!.hasComputeds) return false;
+    if (!(this._storage.deps!.flags & BUFFER_FLAGS.HAS_COMPUTEDS)) return false;
 
     return untracked(() => collectErrorsRecursive(this, true).length > 0);
   }
@@ -349,7 +354,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
   get errors(): readonly Error[] {
     trackingContext.current?.addDependency(this);
 
-    if (!this._storage.deps!.hasComputeds) {
+    if (!(this._storage.deps!.flags & BUFFER_FLAGS.HAS_COMPUTEDS)) {
       return this._error ? Object.freeze([this._error]) : EMPTY_ERROR_ARRAY;
     }
 
@@ -434,14 +439,10 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
     let errorToThrow: unknown;
 
     try {
-      try {
-        val = runInTrackingContext(trackingContext, this, this.#computation);
-      } catch (e) {
-        // Impact: Ensures tracking context integrity if the computation fails.
-        rollbackTrackingSubscriber(trackingContext, prevDepth);
-        throw e;
-      }
+      val = runInTrackingContext(trackingContext, this, this.#computation);
     } catch (e) {
+      // Impact: Preserves tracking context integrity if the computation fails.
+      rollbackTrackingSubscriber(trackingContext, prevDepth);
       hasError = true;
       errorToThrow = e;
     }

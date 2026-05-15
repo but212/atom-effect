@@ -24,8 +24,6 @@ import {
 } from '@/constants';
 import {
   nextVersion,
-  nodeIsDisposed,
-  nodeIsNotifying,
   nodeNotifySubscribers,
   nodeSubscribe,
   nodeSubscriberCount,
@@ -53,20 +51,17 @@ import { scheduler, schedulerIsBatching, schedulerSchedule } from './scheduler';
  * @internal
  */
 class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
-  #flags: number = 0;
-  #version: number = 0;
-  #lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
-  #nextEpoch: number | undefined = undefined;
-  #trackEpoch: number = 0;
-  #trackCount: number = 0;
-  #error: Error | null = null;
-  #k: typeof KIND.Obj = KIND.Obj;
+  flags: number = 0;
+  version: number = 0;
+  _lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
+  _nextEpoch: number | undefined = undefined;
+  _trackEpoch: number = 0;
+  _trackCount: number = 0;
+  _error: Error | null = null;
+  readonly kind: typeof KIND.Obj = KIND.Obj;
+  readonly id: DependencyId = generateId() & SMI_MAX;
 
-  // Why: Uses bitwise AND with SMI_MAX to ensure the ID remains within V8's
-  // Small Integer (Smi) range for optimized property access.
-  #id: DependencyId = generateId() & SMI_MAX;
-
-  #storage: {
+  _storage: {
     slots: SlotBuffer<Subscription<T>> | null;
     deps: DepBufferState | null;
   } = {
@@ -75,9 +70,6 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
   };
 
   #value: T;
-
-  // Why: Stores the value prior to update to provide it to subscribers
-  // during the notification phase, ensuring accurate 'oldValue' reporting.
   #pendingOldValue: T | undefined;
   #equal: (a: T, b: T) => boolean;
 
@@ -89,87 +81,32 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
     this.#equal = options.equal ?? DEFAULT_EQUAL;
 
     if (options.sync) {
-      this.#flags |= ATOM_STATE_FLAGS.SYNC;
+      this.flags |= ATOM_STATE_FLAGS.SYNC;
     }
 
-    debug.attachDebugInfo(this, 'atom', this.id, options.name);
+    if (IS_DEV) debug.attachDebugInfo(this, 'atom', this.id, options.name);
   }
 
-  // ReactiveNode Interface Implementation
-  // These getters/setters integrate the Atom into the core reactive engine.
-  get flags() {
-    return this.#flags;
-  }
-  set flags(v) {
-    this.#flags = v;
-  }
-  get version() {
-    return this.#version;
-  }
-  set version(v) {
-    this.#version = v;
-  }
-  get _lastSeenEpoch() {
-    return this.#lastSeenEpoch;
-  }
-  set _lastSeenEpoch(v) {
-    this.#lastSeenEpoch = v;
-  }
-  get _nextEpoch() {
-    return this.#nextEpoch;
-  }
-  set _nextEpoch(v) {
-    this.#nextEpoch = v;
-  }
-  get _trackEpoch() {
-    return this.#trackEpoch;
-  }
-  set _trackEpoch(v) {
-    this.#trackEpoch = v;
-  }
-  get _trackCount() {
-    return this.#trackCount;
-  }
-  set _trackCount(v) {
-    this.#trackCount = v;
-  }
-  get _error() {
-    return this.#error;
-  }
-  set _error(v) {
-    this.#error = v;
-  }
-  get id() {
-    return this.#id;
-  }
-  get _storage() {
-    return this.#storage;
-  }
+  // ReactiveNode Personality Traits (Declarative Data)
+  readonly isComputed = false;
+  readonly isRejected = false;
+  readonly hasError = false;
 
   get isDisposed(): boolean {
-    return nodeIsDisposed(this);
-  }
-  get isComputed(): boolean {
-    return false;
-  }
-  get isRejected(): boolean {
-    return false;
+    return (this.flags & ATOM_STATE_FLAGS.DISPOSED) !== 0;
   }
   get isNotifying(): boolean {
-    return nodeIsNotifying(this);
-  }
-  get hasError(): boolean {
-    return false;
+    return this._storage.slots?.isLocked ?? false;
   }
 
   /** @internal */
   get isNotificationScheduled(): boolean {
-    return (this.#flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED) !== 0;
+    return (this.flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED) !== 0;
   }
 
   /** @internal */
   get isSync(): boolean {
-    return (this.#flags & ATOM_STATE_FLAGS.SYNC) !== 0;
+    return (this.flags & ATOM_STATE_FLAGS.SYNC) !== 0;
   }
 
   /**
@@ -178,7 +115,8 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
    * a dependent of this atom.
    */
   get value(): T {
-    trackingContext.current?.addDependency(this);
+    const ctx = trackingContext.current;
+    if (ctx) ctx.addDependency(this);
     return this.#value;
   }
 
@@ -195,9 +133,9 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
 
     // Logic: Versioning
     // Incremented to signal to dependents that the source has changed.
-    this.#version = nextVersion(this.#version);
+    this.version = nextVersion(this.version);
 
-    if (IS_DEV) debug.trackUpdate(this.#id, debug.getDebugName(this));
+    if (IS_DEV) debug.trackUpdate(this.id, debug.getDebugName(this));
 
     this.#scheduleNotification(oldValue);
   }
@@ -225,17 +163,18 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
    * or defer to the global scheduler (batched mode).
    */
   #scheduleNotification(oldValue: T): void {
-    const flags = this.#flags;
+    const flags = this.flags;
     const SCHED = ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
+    const slots = this._storage.slots;
 
     // Optimization: Avoid redundant scheduling if already queued or no subscribers exist.
-    if ((flags & SCHED) !== 0 || !this.#storage.slots?.length) return;
+    if ((flags & SCHED) !== 0 || !slots || slots.length === 0) return;
 
     this.#pendingOldValue = oldValue;
-    this.#flags |= SCHED;
+    this.flags |= SCHED;
 
     if ((flags & ATOM_STATE_FLAGS.SYNC) !== 0 && !schedulerIsBatching(scheduler)) {
-      if (!this.isNotifying) this.#flushNotifications();
+      if (!slots?.isLocked) this.#flushNotifications();
     } else {
       schedulerSchedule(scheduler, this);
     }
@@ -258,14 +197,14 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
     const SCHED = ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
     const MASK = SCHED | ATOM_STATE_FLAGS.DISPOSED;
     const isSyncActive =
-      (this.#flags & ATOM_STATE_FLAGS.SYNC) !== 0 && !schedulerIsBatching(scheduler);
+      (this.flags & ATOM_STATE_FLAGS.SYNC) !== 0 && !schedulerIsBatching(scheduler);
 
-    while ((this.#flags & MASK) === SCHED) {
+    while ((this.flags & MASK) === SCHED) {
       const prev = this.#pendingOldValue as T;
       const next = this.#value;
 
       this.#pendingOldValue = undefined;
-      this.#flags &= ~SCHED;
+      this.flags &= ~SCHED;
 
       if (!this.#equal(next, prev)) {
         nodeNotifySubscribers(this, next, prev);
@@ -299,11 +238,13 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
    * will not trigger further notifications.
    */
   dispose(): void {
+    const flags = this.flags;
     const DISP = ATOM_STATE_FLAGS.DISPOSED;
-    if ((this.#flags & DISP) !== 0) return;
+    if ((flags & DISP) !== 0) return;
 
-    this.#flags |= DISP;
-    this.#storage.slots?.clear();
+    this.flags |= DISP;
+    const slots = this._storage.slots;
+    if (slots) slots.clear();
 
     // Reason: Release references immediately to facilitate efficient GC.
     this.#value = undefined as T;

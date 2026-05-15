@@ -29,6 +29,7 @@ import type {
 } from '@/types';
 import { AtomError, wrapError } from '@/utils';
 import {
+  BUFFER_FLAGS,
   claimExisting,
   depBufferTruncateFrom,
   insertNew,
@@ -38,56 +39,9 @@ import {
 
 import { nextEpoch, nextSmi } from './scheduler';
 
-/**
- * Role: Internal tracking state manager.
- *
- * Logic: Tracking Stack
- * Encapsulates the tracking stack and current subscriber using private fields
- * to prevent unauthorized external state mutation.
- *
- * @internal
- */
-class ReactiveTrackingEngine implements TrackingContext {
-  #stack: (DependencySubscriber | null)[] = [];
-  #current: DependencySubscriber | null = null;
-
-  get stack() {
-    return this.#stack;
-  }
-  get current() {
-    return this.#current;
-  }
-  set current(v: DependencySubscriber | null) {
-    this.#current = v;
-  }
-
-  push(subscriber: DependencySubscriber | null): void {
-    this.#stack.push(subscriber);
-    this.#current = subscriber;
-  }
-
-  pop(): void {
-    const stack = this.#stack;
-    stack.pop();
-    const len = stack.length;
-    this.#current = len > 0 ? stack[len - 1]! : null;
-  }
-
-  rollback(depth: number): void {
-    const stack = this.#stack;
-    stack.length = depth;
-    this.#current = depth > 0 ? stack[depth - 1]! : null;
-  }
-
-  reset(): void {
-    this.#stack.length = 0;
-    this.#current = null;
-  }
-}
-
 /** @internal */
 export function createTrackingContext(): TrackingContext {
-  return new ReactiveTrackingEngine();
+  return { stack: [], current: null };
 }
 
 /** @internal */
@@ -95,22 +49,26 @@ export function pushTrackingSubscriber(
   context: TrackingContext,
   subscriber: DependencySubscriber | null
 ): void {
-  (context as ReactiveTrackingEngine).push(subscriber);
+  context.stack.push(subscriber);
+  context.current = subscriber;
 }
 
 /** @internal */
 export function popTrackingSubscriber(context: TrackingContext): void {
-  (context as ReactiveTrackingEngine).pop();
+  const stack = context.stack;
+  stack.pop();
+  const len = stack.length;
+  context.current = len > 0 ? stack[len - 1]! : null;
 }
 
 /**
  * Logic: Tracking Recovery
- * Resets the tracking stack to a specific depth to prevent dependency
- * leakage if a computation fails mid-execution.
  * @internal
  */
 export function rollbackTrackingSubscriber(context: TrackingContext, depth: number): void {
-  (context as ReactiveTrackingEngine).rollback(depth);
+  const stack = context.stack;
+  stack.length = depth;
+  context.current = depth > 0 ? stack[depth - 1]! : null;
 }
 
 /**
@@ -136,7 +94,8 @@ export function runInTrackingContext<T>(
 
 /** @internal */
 export function resetTrackingContext(context: TrackingContext): void {
-  (context as ReactiveTrackingEngine).reset();
+  context.stack.length = 0;
+  context.current = null;
 }
 
 /** @internal */
@@ -187,14 +146,14 @@ const NOTIFIER_STRATEGY: Record<
  * ```
  */
 export function untracked<T>(fn: () => T): T {
-  const ctx = trackingContext as ReactiveTrackingEngine;
+  const ctx = trackingContext;
   if (ctx.current === null) return fn();
 
-  ctx.push(null);
+  pushTrackingSubscriber(ctx, null);
   try {
     return fn();
   } finally {
-    ctx.pop();
+    popTrackingSubscriber(ctx);
   }
 }
 
@@ -222,13 +181,13 @@ export function nodeTrackDependency<T>(
   dep: Dependency,
   notifyCallback: () => void
 ): void {
-  const internal = tracker;
-  const trackEpoch = internal._trackEpoch;
+  const trackEpoch = tracker._trackEpoch;
 
   if (dep._lastSeenEpoch === trackEpoch) return;
   dep._lastSeenEpoch = trackEpoch;
 
-  const trackIndex = internal._trackCount++;
+  const trackIndex = tracker._trackCount;
+  tracker._trackCount = trackIndex + 1;
   const deps = tracker._storage.deps!;
 
   // Logic: Subscription Reconciliation
@@ -239,8 +198,8 @@ export function nodeTrackDependency<T>(
     insertNew(deps, trackIndex, { node: dep, version: dep.version, unsub: unsubscribe });
   }
 
-  if (dep.isComputed) {
-    deps.hasComputeds = true;
+  if (!(deps.flags & BUFFER_FLAGS.HAS_COMPUTEDS) && dep.isComputed) {
+    deps.flags |= BUFFER_FLAGS.HAS_COMPUTEDS;
   }
 }
 
@@ -327,30 +286,38 @@ export function nodeNotifySubscribers<T>(
   const slots = node._storage.slots;
   if (slots === null || slots.size === 0) return;
 
-  const ctx = trackingContext as ReactiveTrackingEngine;
+  const ctx = trackingContext;
   const prevCurrent = ctx.current;
   const isTracking = prevCurrent !== null;
 
   if (isTracking) {
-    ctx.push(null);
+    pushTrackingSubscriber(ctx, null);
   }
 
   slots.lock();
   try {
     const len = slots.length;
+    const fnStrategy = NOTIFIER_STRATEGY[KIND.Fn];
+    const objStrategy = NOTIFIER_STRATEGY[KIND.Obj];
+    const fnKind = KIND.Fn;
+
     for (let i = 0; i < len; i++) {
       const sub = slots.at(i);
-      if (sub !== null) {
-        try {
-          NOTIFIER_STRATEGY[sub.k](sub as Subscription<unknown>, newValue, oldValue);
-        } catch (e) {
-          console.error(`${LOG_PREFIX} Subscriber failed on node ${node.id}:`, e);
+      if (sub === null) continue;
+
+      try {
+        if (sub.k === fnKind) {
+          fnStrategy(sub as Subscription<unknown>, newValue, oldValue);
+        } else {
+          objStrategy(sub as Subscription<unknown>, newValue, oldValue);
         }
+      } catch (e) {
+        console.error(`${LOG_PREFIX} Subscriber failed on node ${node.id}:`, e);
       }
     }
   } finally {
     if (isTracking) {
-      ctx.pop();
+      popTrackingSubscriber(ctx);
     }
     slots.unlock();
   }
@@ -430,11 +397,6 @@ export function nodeHandleError<T, E extends Error>(
   }
 
   nodeNotifySubscribers(node, undefined, undefined);
-}
-
-/** @internal - Checks disposal flag. */
-export function nodeIsDisposed<T>(node: ReactiveNode<T>): boolean {
-  return (node.flags & COMPUTED_STATE_FLAGS.DISPOSED) !== 0;
 }
 
 /** @internal - Checks computed flag. */

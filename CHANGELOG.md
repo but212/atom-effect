@@ -6,26 +6,38 @@
 
 #### Added
 
-- Implemented a data-driven `ErrorStrategy` pattern for standardized error metadata extraction.
-- Standardized node identification with `atom_`, `calc_`, and `fx_` prefixes and automated lifecycle tracking via `FinalizationRegistry`.
-- Integrated `satisfies` and modern TypeScript features across internal configuration objects for improved contract validation.
+- `ErrorStrategy` data-driven pattern for standardized error metadata extraction.
+- Standardized node identification prefixes (`atom_`, `calc_`, `fx_`) with automated lifecycle tracking via `FinalizationRegistry`.
+- `satisfies` constraints on internal configuration objects for compile-time contract validation.
+- `BUFFER_FLAGS` bitmask on `DepBufferState` for extensible state encoding (initial flag: `HAS_COMPUTEDS`).
 
 #### Changed
 
-- Migrated core engine primitives and diagnostic controllers to an ES2022 architecture utilizing private class fields (`#`) for internal state encapsulation.
-- Partitioned the reactive engine into specialized modules: `core/base.ts` (tracking) and `core/scheduler.ts` (job execution).
-- Reorganized global resources into focused `src/constants/` and `src/types/` directories.
+- Adopted a dual-layer encapsulation model for all reactive nodes: engine-visible fields (`flags`, `version`, `_storage`) use direct public class properties; behavioral state (values, computation functions, cleanup handles) uses native `#` private fields.
+- Replaced `ReactiveTrackingEngine` class with a plain `TrackingContext` object and standalone functions (`pushTrackingSubscriber`, `popTrackingSubscriber`, `rollbackTrackingSubscriber`).
+- Decomposed `DependencyBuffer` methods into module-level free functions; replaced the `Indexer` abstraction with a nullable `Map<Dependency, number>` that is lazily initialized above `MAP_THRESHOLD` and released when the buffer shrinks below it.
+- Unified `isDirty`/`isShallowDirty` into a single parameterized `checkDirty(state, deep)` function; replaced `hasComputeds` boolean with a `flags` bitmask on `DepBufferState`.
+- Consolidated `maxExecutionsPerFlush` and `maxExecutionsPerSecond` into `EffectBudgetState`; extracted `ABORT_MESSAGES` lookup table for abort message generation.
+- Standardized error handling in `ComputedAtomImpl.#recompute()` to use a single try-catch with inline tracking rollback, consistent with `EffectImpl.execute()`.
+- Inlined disposal and notification-lock checks across `AtomImpl`, `ComputedAtomImpl`, and `EffectImpl`.
+- Guarded `debug.attachDebugInfo` in `AtomImpl` with `IS_DEV` to skip the call in production builds.
+- Optimized subscriber notification loop with pre-hoisted strategy references and direct `KIND`-based dispatch.
+- Partitioned the reactive engine into `core/base.ts` (tracking) and `core/scheduler.ts` (job execution).
+- Reorganized global resources into `src/constants/` and `src/types/` directories.
 - Optimized `atomLens` with automatic path flattening for nested state trees.
-- Refined subscriber notification cycles using a strategy-based dispatch table to eliminate branching in hot loops.
-- Encapsulated internal reactive state (`slots`, `deps`) into a dedicated `_storage` property to stabilize V8 hidden class transitions.
+- Consolidated reactive node storage (`slots`, `deps`) into a `_storage` property for hidden class stability.
+
+#### Removed
+
+- `ReactiveTrackingEngine` class, `nodeIsDisposed` helper, `Indexer`/`NullIndexer`/`MapIndexer` types, and `DependencyBuffer` proxy functions.
 
 #### Deprecated
 
-- `AtomError.getChain()` and `AtomError.toJSON()` instance methods. Use standalone `getErrorChain()` and `serializeError()` functions instead. Removal is scheduled for v0.34.0.
+- `AtomError.getChain()` and `AtomError.toJSON()` instance methods. Use standalone `getErrorChain()` and `serializeError()` instead. Removal scheduled for v0.34.0.
 
 #### Breaking Changes
 
-- **Build System**: Partitioned the build process into `types`, `lib` (ESM/CJS), and `bundle` (UMD) targets. Direct file references in the `dist/` directory may require updates.
+- **Build System**: Partitioned the build into `types`, `lib` (ESM/CJS), and `bundle` (UMD) targets. Direct `dist/` file references may require updates.
 - **Error Handling**: Relocated `AtomErrorConstructor` and `AtomErrorJSON` types to the core types module.
 
 ### jQuery

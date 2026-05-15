@@ -29,7 +29,6 @@ import {
   nodeCommitDeps,
   nodeHandleError,
   nodeIsDirty,
-  nodeIsDisposed,
   nodeStartTracking,
   nodeTrackDependency,
   rollbackTrackingSubscriber,
@@ -68,19 +67,26 @@ export interface EffectBudgetState {
   windowCount: number;
   windowStart: number;
   totalExecutions: number;
+  readonly maxPerFlush: number;
+  readonly maxPerSecond: number;
 }
 
 /**
  * Role: Factory for initializing effect budget monitors.
  * @internal
  */
-export function createEffectBudgetState(): EffectBudgetState {
+export function createEffectBudgetState(
+  maxPerFlush: number,
+  maxPerSecond: number
+): EffectBudgetState {
   return {
     loopCount: 0,
     lastFlushEpoch: EPOCH_CONSTANTS.UNINITIALIZED,
     windowCount: 0,
     windowStart: 0,
     totalExecutions: 0,
+    maxPerFlush,
+    maxPerSecond,
   };
 }
 
@@ -97,7 +103,6 @@ export function createEffectBudgetState(): EffectBudgetState {
  */
 export function validateEffectBudget(
   state: EffectBudgetState,
-  maxExecutionsPerFlush: number,
   currentFlushEpoch: number,
   incrementGlobalFlushCount: () => number,
   onAbort: (type: 'per-effect' | 'global') => never
@@ -107,7 +112,7 @@ export function validateEffectBudget(
     state.loopCount = 0;
   }
 
-  if (++state.loopCount > maxExecutionsPerFlush) {
+  if (++state.loopCount > state.maxPerFlush) {
     onAbort('per-effect');
   }
 
@@ -131,10 +136,10 @@ export function validateEffectBudget(
  */
 export function checkEffectFrequencyLimit(
   state: EffectBudgetState,
-  maxExecutions: number,
   onLimitExceeded: () => never
 ): void {
-  if (!Number.isFinite(maxExecutions)) return;
+  const limit = state.maxPerSecond;
+  if (!Number.isFinite(limit)) return;
 
   const now = Date.now();
 
@@ -144,10 +149,17 @@ export function checkEffectFrequencyLimit(
     return;
   }
 
-  if (++state.windowCount > maxExecutions) {
+  if (++state.windowCount > limit) {
     onLimitExceeded();
   }
 }
+
+const ABORT_MESSAGES = {
+  'per-effect': (state: EffectBudgetState) =>
+    `Infinite loop detected (per-effect): executed ${state.loopCount} times in current flush.`,
+  global: (_state: EffectBudgetState) =>
+    'Infinite loop detected (global): exceeded total execution limit per flush.',
+} as const;
 
 /**
  * Role: Orchestrator for a reactive side-effect.
@@ -189,7 +201,7 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
   // Session IDs ensure that cleanup handles from asynchronous operations are
   // discarded if a new tracking cycle starts before the Promise resolves.
   #trackSessionId = 0;
-  #budget = createEffectBudgetState();
+  #budget: EffectBudgetState;
   #cleanup: (() => void) | null = null;
 
   #fn: EffectFunction;
@@ -197,17 +209,17 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
   #notifyCallback: () => void;
 
   #sync: boolean;
-  #maxExecutions: number;
-  #maxExecutionsPerFlush: number;
 
   constructor(fn: EffectFunction, options: EffectOptions = {}) {
     this.#fn = fn;
     this.#onError = options.onError ?? null;
     this.#sync = options.sync ?? false;
-    this.#maxExecutions =
+
+    const maxPerSecond =
       options.maxExecutionsPerSecond ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_SECOND;
-    this.#maxExecutionsPerFlush =
-      options.maxExecutionsPerFlush ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_EFFECT;
+    const maxPerFlush = options.maxExecutionsPerFlush ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_EFFECT;
+
+    this.#budget = createEffectBudgetState(maxPerFlush, maxPerSecond);
 
     this.#notifyCallback = this.#sync
       ? () => this.execute()
@@ -246,7 +258,7 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
 
   /** Returns true if the effect has been permanently stopped. */
   get isDisposed(): boolean {
-    return nodeIsDisposed(this);
+    return (this.flags & EFFECT_STATE_FLAGS.DISPOSED) !== 0;
   }
 
   get isComputed(): boolean {
@@ -266,8 +278,9 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
 
     this.#execCleanup();
 
+    const deps = this._storage.deps!;
     nodeStartTracking(this);
-    prepareTracking(this._storage.deps!);
+    prepareTracking(deps);
     const prevDepth = trackingContext.stack.length;
 
     let val: unknown;
@@ -275,14 +288,10 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
     let errorObj: unknown;
 
     try {
-      try {
-        val = runInTrackingContext(trackingContext, this, this.#fn);
-      } catch (e) {
-        // Impact: Preserves tracking context integrity if the effect crashes.
-        rollbackTrackingSubscriber(trackingContext, prevDepth);
-        throw e;
-      }
+      val = runInTrackingContext(trackingContext, this, this.#fn);
     } catch (e) {
+      // Impact: Preserves tracking context integrity if the effect crashes.
+      rollbackTrackingSubscriber(trackingContext, prevDepth);
       hasError = true;
       errorObj = e;
     }
@@ -306,7 +315,8 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
     // Execution is skipped if the effect is not 'forced', has no dependencies
     // yet, and its dependencies haven't changed (dirty check). This minimizes
     // redundant computations during the flush cycle.
-    if (!(force || this._storage.deps!.slots.length === 0 || nodeIsDirty(this))) return false;
+    const deps = this._storage.deps!;
+    if (!(force || deps.slots.length === 0 || nodeIsDirty(this))) return false;
 
     this.#validateBudget();
     debug.trackUpdate(this.id, debug.getDebugName(this));
@@ -326,6 +336,11 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
    * Synchronously assigns the cleanup handle or delegates to the async handler.
    */
   #handleResult(val: unknown): void {
+    if (val === undefined || val === null) {
+      this.#cleanup = null;
+      return;
+    }
+
     if (typeof val === 'function') {
       this.#cleanup = val as () => void;
     } else if (isPromise(val)) {
@@ -345,21 +360,22 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
 
     promise.then(
       (cleanup) => {
-        if (this.#trackSessionId !== sessionId || this.isDisposed) {
+        const isStale = this.#trackSessionId !== sessionId || this.isDisposed;
+        if (typeof cleanup !== 'function') return;
+
+        if (isStale) {
           // Logic: Stale or Disposed Teardown
           // If the handle arrived after a new session started, it is invoked
           // immediately and discarded to prevent memory leaks.
-          if (typeof cleanup === 'function') {
-            try {
-              cleanup();
-            } catch (e) {
-              this.#handleExecutionError(e, ERROR_MESSAGES.EFFECT_CLEANUP_FAILED);
-            }
+          try {
+            cleanup();
+          } catch (e) {
+            this.#handleExecutionError(e, ERROR_MESSAGES.EFFECT_CLEANUP_FAILED);
           }
           return;
         }
 
-        if (typeof cleanup === 'function') this.#cleanup = cleanup as () => void;
+        this.#cleanup = cleanup as () => void;
       },
       (err) => {
         if (this.#trackSessionId === sessionId) {
@@ -383,16 +399,12 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
   }
 
   #validateBudget(): void {
-    validateEffectBudget(
-      this.#budget,
-      this.#maxExecutionsPerFlush,
-      currentFlushEpoch(),
-      incrementFlushExecutionCount,
-      (type) => this.#abortExecution(type)
+    validateEffectBudget(this.#budget, currentFlushEpoch(), incrementFlushExecutionCount, (type) =>
+      this.#abortExecution(type)
     );
 
     if (IS_DEV) {
-      checkEffectFrequencyLimit(this.#budget, this.#maxExecutions, () => {
+      checkEffectFrequencyLimit(this.#budget, () => {
         const err = new EffectError(ERROR_MESSAGES.EFFECT_FREQUENCY_LIMIT_EXCEEDED);
         this.dispose();
         this.#handleExecutionError(err);
@@ -406,12 +418,8 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
    * Terminates the effect and signals a terminal failure to prevent
    * system-wide instability from infinite loops.
    */
-  #abortExecution(type: 'per-effect' | 'global'): never {
-    const message =
-      type === 'per-effect'
-        ? `Infinite loop detected (per-effect): executed ${this.#budget.loopCount} times in current flush.`
-        : 'Infinite loop detected (global): exceeded total execution limit per flush.';
-
+  #abortExecution(type: keyof typeof ABORT_MESSAGES): never {
+    const message = ABORT_MESSAGES[type](this.#budget);
     const error = new EffectError(message);
     this.dispose();
     console.error(error);

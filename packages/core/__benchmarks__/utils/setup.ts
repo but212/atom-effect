@@ -4,6 +4,19 @@
  */
 
 import type { BenchOptions } from 'vitest';
+import { runtimeDebug } from '../../dist/';
+
+/**
+ * Benchmark configuration and diagnostic overrides.
+ *
+ * Logic: Disable infinite loop detection in benchmarks.
+ * Why: Benchmarks intentionally update reactive nodes thousands of times in a
+ * single task to measure performance, which would otherwise trigger the
+ * infinite loop protection threshold (default: 100).
+ */
+if (runtimeDebug) {
+  runtimeDebug.warnInfiniteLoop = false;
+}
 
 export const REPEATS = 10;
 

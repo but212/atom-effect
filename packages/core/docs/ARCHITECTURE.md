@@ -13,7 +13,7 @@ The high-level API (`atom`, `computed`, `effect`) is built upon a unified intern
   - **Push (Notification Phase)**: When a source atom changes, it propagates a "dirty" signal to its immediate subscribers. This phase marks nodes for re-evaluation without performing calculations.
   - **Pull (Evaluation Phase)**: When a node's value is accessed or an effect executes, it performs a "pull" to validate the versions of its dependencies, triggering re-computation only if necessary.
 - **Scheduler and Coalescing**: Effects do not execute immediately upon state change. Instead, they are queued in a **`ReactiveScheduler`** (defined in `core/scheduler.ts`) that utilizes a **Double-Buffering Strategy** (Active, Standby, Batch). The scheduler is implemented as an encapsulated class, ensuring that internal scheduling state remains protected during execution cycles while maintaining high cache locality.
-- **Encapsulated Tracking**: Dependency tracking is managed via the **`ReactiveTrackingEngine`** class. This approach provides lightweight stack operations and deterministic recovery during nested evaluations or error scenarios using private fields for the tracking stack. While functional `Option` and `Result` patterns are available for utility logic, the core engine utilizes native `try/catch` and `null/undefined` in high-frequency hot paths to minimize allocation overhead.
+- **Lightweight Tracking**: Dependency tracking is managed via a plain `TrackingContext` object with dedicated free functions (`pushTrackingSubscriber`, `popTrackingSubscriber`, `rollbackTrackingSubscriber`). This approach minimizes object creation overhead while providing deterministic recovery during nested evaluations or error scenarios. The core engine utilizes native `try/catch` and `null/undefined` in high-frequency hot paths to minimize allocation overhead.
 - **SMI Optimization**: The engine explicitly ensures that hot-path integers (versions, epochs, session IDs) stay within V8's **Small Integer (SMI)** range (31-bit signed). This prevents performance-degrading transitions from SMIs to heap-allocated doubles (HeapNumbers).
 - **Small Vector Optimization (SVO)**: To minimize heap allocations and GC pressure, the engine uses inline slots (`_s0` through `_s3`) tracked by a **4-bit occupancy mask**. These buffers implement a standardized **Array-like API** (`length`, `at()`, `push()`) and use explicit constructor initialization to ensure V8 Hidden Class stability, preventing polymorphic transitions during high-frequency slot discovery.
 - **Bitwise Branding**: Primitives are identified using a bitwise mask (`BrandFlags`) stored on a single `BRAND` symbol, defined in `constants/branding.ts`. This allows for constant-time type identification without multiple property lookups.
@@ -35,9 +35,9 @@ The system is designed around autonomous nodes that manage their own state and d
 ### Class Hierarchy
 
 - **`ReactiveNode<T>`**: The foundation for all primitives. It defines a standardized data structure including versioning, status flags, and a dedicated `_storage` object for managing subscriber lists and dependency buffers.
-- **`AtomImpl<T>`**: A pure producer node for mutable state. It utilizes **private class fields (`#`)** for value storage and notification scheduling, protecting internal state from external mutation while maintaining synchronous re-entrancy through a breadth-first notification loop.
-- **`ComputedAtomImpl<T>`**: A hybrid node that acts as both a consumer (of dependencies) and a producer (of derived values). It manages lazy evaluation, result caching, and asynchronous session tracking using encapsulated private state.
-- **`EffectImpl`**: A pure consumer node for side effects. It keeps its subscriber list (`_storage.slots`) null as it is a terminal node in the graph, managing its execution lifecycle through private orchestration fields.
+- **`AtomImpl<T>`**: A pure producer node for mutable state. Engine-visible fields (`flags`, `version`, `_storage`) are exposed as **public properties** for V8 monomorphic access, while value storage and notification scheduling remain **private (`#`)**. Maintains synchronous re-entrancy through a breadth-first notification loop.
+- **`ComputedAtomImpl<T>`**: A hybrid node that acts as both a consumer (of dependencies) and a producer (of derived values). Follows the same dual-layer strategy: public engine fields for graph traversal, private fields for computation state, session tracking, and result caching.
+- **`EffectImpl`**: A pure consumer node for side effects. It keeps its subscriber list (`_storage.slots`) null as it is a terminal node in the graph, managing its execution lifecycle and budget state through private orchestration fields.
 
 ---
 
@@ -81,10 +81,10 @@ Asynchronous computed nodes manage their lifecycle as state machines, protecting
 
 Memory and performance are managed through specialized structures:
 
-- **`DependencyBuffer`**: An encapsulated class for dependency tracking that features:
-  - **Reconciliation API**: Uses internal methods like `claimExisting` and `insertNew` for predictable access and memory efficiency.
-  - **Memory Efficiency**: Transitions from linear scans to an $O(1)$ `Map` lookup via the `Indexer` interface (`MapIndexer`) only when the dependency count exceeds a performance threshold, reducing the number of conditional checks for small sets.
-  - **Encapsulated State**: All internal buffers and maps are managed via private fields, ensuring that the reactive connection state is only modified through designated methods.
+- **`DependencyBuffer`**: A lightweight state container with module-level free functions for dependency tracking:
+  - **Reconciliation API**: Uses exported functions (`claimExisting`, `insertNew`, `depBufferTruncateFrom`) for predictable access and memory efficiency.
+  - **Memory Efficiency**: Transitions from linear scans to an $O(1)$ `Map` lookup only when the dependency count exceeds a performance threshold. The map is lazily initialized and released when the buffer shrinks below the threshold, reclaiming memory on long-lived nodes.
+  - **Bitmask State**: Buffer status (e.g., `HAS_COMPUTEDS`) is encoded into a `flags` bitmask for efficient bulk checks and future extensibility.
 
 ---
 
@@ -143,10 +143,11 @@ Errors are treated as part of the reactive graph, enabling robust recovery and t
 
 ---
 
-## 10. ES2022 Migration & Encapsulation
+## 10. Encapsulation Strategy
 
-Starting with version 0.32.1, the engine has been migrated to an **ES2022-based architecture**. This transition focuses on:
+The engine uses a **dual-layer encapsulation** model optimized for both V8 performance and API safety:
 
-- **Private State Isolation**: Utilizing native private class fields (`#`) to protect internal engine mechanics. This ensures that the internal state of atoms, schedulers, and tracking engines cannot be accessed or modified from outside the core logic.
-- **Monomorphic Stability**: The class-based structure ensures that object shapes remain stable throughout the application lifecycle, facilitating V8's hidden class optimizations.
+- **Public Engine Fields**: Properties required by the reactive graph traversal engine (`flags`, `version`, `_lastSeenEpoch`, `_trackEpoch`, `_trackCount`, `_error`, `_storage`) are declared as **public class fields**. This ensures V8 generates stable Hidden Classes with direct property access, avoiding getter/setter overhead in hot-path operations like dirty checking and notification.
+- **Private Behavioral State**: Properties that control node-specific behavior (values, computation functions, equality checks, cleanup handles, session IDs, budget state) use **native private class fields (`#`)**. This protects behavioral invariants from external mutation while keeping the engine-visible shape uniform across node types.
+- **Monomorphic Consistency**: All reactive node types (`AtomImpl`, `ComputedAtomImpl`, `EffectImpl`) follow the same field layout strategy, ensuring that shared engine functions (`nodeNotifySubscribers`, `nodeTrackDependency`, etc.) encounter a consistent property access pattern and remain monomorphic in V8's inline caches.
 - **Modern Syntax**: Adoption of logical assignment operators and other ES2022 features to reduce boilerplate and improve code clarity without sacrificing performance.

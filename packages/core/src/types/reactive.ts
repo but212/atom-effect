@@ -212,8 +212,8 @@ export interface ReactiveNodeBase {
   version: number;
   _lastSeenEpoch: number;
   _nextEpoch: number | undefined;
-  _trackEpoch: number;
   _trackCount: number;
+  _trackEpoch: number;
   _error: Error | null;
   readonly isRejected: boolean;
   readonly id: DependencyId;
@@ -249,18 +249,10 @@ export interface DepBufferState {
    * Optimization: Fast O(1) Lookup
    * Indexer for immediate dependency retrieval during tracking sessions.
    */
-  map: Indexer;
-  /** Optimization: Skip graph checks if no computed nodes are present. */
-  hasComputeds: boolean;
-}
-
-/**
- * Role: Deduplication Strategy
- * Interface for high-speed dependency deduplication within the tracking buffer.
- * @internal
- */
-export interface Indexer {
-  get(dep: Dependency): number | undefined;
-  set(dep: Dependency, index: number): void;
-  delete(dep: Dependency): void;
+  map: Map<Dependency, number> | null;
+  /**
+   * Optimization: State Flags
+   * Encodes buffer status (e.g., hasComputeds) into a bitmask.
+   */
+  flags: number;
 }
