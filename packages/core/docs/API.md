@@ -352,7 +352,7 @@ A high-performance container using a 4-bit mask for "fast-lane" slot management 
 - `compact(): void`: Eliminates all internal holes and resets physical boundaries.
 - `clear(): void`: Resets the buffer to an empty state.
 
-### `DependencyBuffer` (Class)
+### `DependencyBuffer`
 
 The internal state management for dependency tracking is now implemented as an encapsulated **`DependencyBuffer`** class. It features:
 

@@ -79,11 +79,11 @@ const unwrapHandler = (fn: EventHandler): EventHandler => {
 function wrapEventMap(
   map: Record<string, JQueryEventHandler | undefined>
 ): Record<string, JQueryEventHandler | undefined> {
-  const result: Record<string, JQueryEventHandler> = {};
+  const result: Record<string, JQueryEventHandler | undefined> = {};
   for (const key in map) {
     if (Object.hasOwn(map, key)) {
       const fn = map[key];
-      result[key] = typeof fn === 'function' ? wrapHandler(fn) : (fn as JQueryEventHandler);
+      result[key] = typeof fn === 'function' ? wrapHandler(fn) : fn;
     }
   }
   return result;
@@ -101,7 +101,7 @@ function unwrapEventMap(
   for (const key in map) {
     if (Object.hasOwn(map, key)) {
       const fn = map[key];
-      result[key] = typeof fn === 'function' ? unwrapHandler(fn) : fn;
+      result[key] = typeof fn === 'function' ? wrapHandler(fn) : fn;
     }
   }
   return result;
