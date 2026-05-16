@@ -192,7 +192,7 @@ function getNavigationPolicies(params: {
       return true;
     },
     () => {
-      const isSameLoc = isSamePath && target.hash === (current.hash ?? '');
+      const isSameLoc = isSamePath && target.hash === current.hash;
       if (isSameLoc && type === 'push') {
         if (hasError.peek()) {
           state.fetchVersion.value++;
@@ -204,16 +204,12 @@ function getNavigationPolicies(params: {
       return true;
     },
     () => {
-      if (!isSamePath && options.onBeforeLoad) {
+      const { onBeforeLoad } = options;
+      if (!isSamePath && onBeforeLoad) {
         return (async () => {
           state.pendingHooks.value++;
           try {
-            const ok = await (
-              options.onBeforeLoad as (
-                url: string,
-                signal: AbortSignal
-              ) => Promise<boolean | undefined>
-            )(url, signal);
+            const ok = await onBeforeLoad(url, signal);
             return !(signal.aborted || ok === false);
           } finally {
             state.pendingHooks.value = Math.max(0, state.pendingHooks.value - 1);
@@ -491,8 +487,8 @@ export function atomNav(options: AtomNavOptions): AtomNav {
       const isSamePath = path === current.pathname + current.search;
 
       const policies = getNavigationPolicies({
-        target: targetRes.value,
-        current: new URL(win.location.href),
+        target,
+        current,
         type,
         win,
         url,

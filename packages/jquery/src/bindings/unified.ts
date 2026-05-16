@@ -57,6 +57,25 @@ function checkBindingSafety(
 }
 
 /**
+ * Filters a map of binding entries, validating each key for safety.
+ * Logs warnings for unsafe properties or attributes.
+ * @internal
+ */
+function getSafeEntries<T>(
+  map: Record<string, T>,
+  isProperty: boolean
+): [string, T][] {
+  return Object.entries(map).filter(([name]) => {
+    const res = checkBindingSafety(name, isProperty);
+    if (!res.ok) {
+      console.warn(`${SYSTEM_BINDING.PREFIX} ${res.error}`);
+      return false;
+    }
+    return true;
+  });
+}
+
+/**
  * Logic: XSS-Safe Text Binding
  *
  * When to use:
@@ -215,14 +234,7 @@ export function bindAttr(
   element: HTMLElement,
   attrMap: Record<string, AsyncReactiveValue<PrimitiveValue>>
 ): void {
-  const safeEntries = Object.entries(attrMap).filter(([name]) => {
-    const res = checkBindingSafety(name, false);
-    if (!res.ok) {
-      console.warn(`${SYSTEM_BINDING.PREFIX} ${res.error}`);
-      return false;
-    }
-    return true;
-  });
+  const safeEntries = getSafeEntries(attrMap, false);
   const safeMap = Object.fromEntries(safeEntries);
   const metaMap: Record<string, { isAria: boolean }> = {};
   const prev: Record<string, string | null> = {};
@@ -282,14 +294,7 @@ export function bindProp(
   propMap: Record<string, AsyncReactiveValue<unknown>>
 ): void {
   const target = element as unknown as Record<string, unknown>;
-  const safeEntries = Object.entries(propMap).filter(([name]) => {
-    const res = checkBindingSafety(name, true);
-    if (!res.ok) {
-      console.warn(`${SYSTEM_BINDING.PREFIX} ${res.error}`);
-      return false;
-    }
-    return true;
-  });
+  const safeEntries = getSafeEntries(propMap, true);
   const safeMap = Object.fromEntries(safeEntries);
   const previousValues: Record<string, unknown> = {};
 
