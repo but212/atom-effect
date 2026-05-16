@@ -158,6 +158,5 @@ export function buildIndices<T>(
     if (needsForceReplace) toRender.push(slot);
   }
 
-  ctx.keyToIndex = newIndexMap;
-  return { slots, toRender };
+  return { slots, toRender, keyToIndex: newIndexMap };
 }

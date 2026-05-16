@@ -93,6 +93,8 @@ export interface PreparedDiff<T> {
    * A collection of slots that require new DOM construction or HTML parsing.
    */
   toRender: DiffSlot<T>[];
+  /** The new index map generated during the diff process. */
+  keyToIndex: Map<ListKey, number>;
 }
 
 /**

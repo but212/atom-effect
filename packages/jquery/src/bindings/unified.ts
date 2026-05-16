@@ -39,20 +39,40 @@ function toKebab(str: string): string {
  * Validates whether a property or attribute name is safe for reactive binding.
  *
  * Logic: Security Strategy
- * Prevents XSS by blocking 'on*' event attributes and sensitive properties
- * like `innerHTML` from being manipulated via standard bindings.
+ * Returns a validation result indicating if the property/attribute is safe,
+ * allowing the caller to handle side effects like logging.
  */
-function isSafeBinding(name: string, isProperty: boolean): boolean {
+function checkBindingSafety(
+  name: string,
+  isProperty: boolean
+): { ok: true } | { ok: false; error: string } {
   const lowerName = name.toLowerCase();
   if (lowerName.startsWith('on')) {
-    console.warn(`${SYSTEM_BINDING.PREFIX} ${SYSTEM_SECURITY.ERRORS.BLOCKED_EVENT_HANDLER(name)}`);
-    return false;
+    return { ok: false, error: SYSTEM_SECURITY.ERRORS.BLOCKED_EVENT_HANDLER(name) };
   }
   if (isProperty && (SYSTEM_SECURITY.DANGEROUS_PROPS as readonly string[]).includes(name)) {
-    console.warn(`${SYSTEM_BINDING.PREFIX} ${SYSTEM_SECURITY.ERRORS.BLOCKED_PROP(name)}`);
-    return false;
+    return { ok: false, error: SYSTEM_SECURITY.ERRORS.BLOCKED_PROP(name) };
   }
-  return true;
+  return { ok: true };
+}
+
+/**
+ * Filters a map of binding entries, validating each key for safety.
+ * Logs warnings for unsafe properties or attributes.
+ * @internal
+ */
+function getSafeEntries<T>(
+  map: Record<string, T>,
+  isProperty: boolean
+): [string, T][] {
+  return Object.entries(map).filter(([name]) => {
+    const res = checkBindingSafety(name, isProperty);
+    if (!res.ok) {
+      console.warn(`${SYSTEM_BINDING.PREFIX} ${res.error}`);
+      return false;
+    }
+    return true;
+  });
 }
 
 /**
@@ -126,10 +146,12 @@ export function bindClass(
 ): void {
   const tokensMap = new Map<string, string[]>();
 
-  Object.keys(classMap).forEach((key) => {
-    const trimmed = key.trim();
-    tokensMap.set(key, trimmed.includes(' ') ? trimmed.split(/\s+/).filter(Boolean) : [trimmed]);
-  });
+  for (const key in classMap) {
+    if (Object.hasOwn(classMap, key)) {
+      const trimmed = key.trim();
+      tokensMap.set(key, trimmed.includes(' ') ? trimmed.split(/\s+/).filter(Boolean) : [trimmed]);
+    }
+  }
 
   registerMapEffect(
     element,
@@ -146,11 +168,12 @@ export function bindClass(
       // Logic: Atomic Synchronization
       // Synchronizes the element's class list with the current state map
       // in a single pass using the native classList API.
-      Array.from(tokensMap.values())
-        .flat()
-        .forEach((token) => {
+      for (const tokens of tokensMap.values()) {
+        for (let i = 0, len = tokens.length; i < len; i++) {
+          const token = tokens[i]!;
           element.classList.toggle(token, activeTokens.has(token));
-        });
+        }
+      }
     },
     'class'
   );
@@ -211,7 +234,7 @@ export function bindAttr(
   element: HTMLElement,
   attrMap: Record<string, AsyncReactiveValue<PrimitiveValue>>
 ): void {
-  const safeEntries = Object.entries(attrMap).filter(([name]) => isSafeBinding(name, false));
+  const safeEntries = getSafeEntries(attrMap, false);
   const safeMap = Object.fromEntries(safeEntries);
   const metaMap: Record<string, { isAria: boolean }> = {};
   const prev: Record<string, string | null> = {};
@@ -271,7 +294,7 @@ export function bindProp(
   propMap: Record<string, AsyncReactiveValue<unknown>>
 ): void {
   const target = element as unknown as Record<string, unknown>;
-  const safeEntries = Object.entries(propMap).filter(([name]) => isSafeBinding(name, true));
+  const safeEntries = getSafeEntries(propMap, true);
   const safeMap = Object.fromEntries(safeEntries);
   const previousValues: Record<string, unknown> = {};
 

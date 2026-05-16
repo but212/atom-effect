@@ -141,6 +141,90 @@ function commitNavigation(params: {
   }
 }
 
+/** @internal */
+function initNavAtoms(win: Window) {
+  const initialUrlObj = new URL(win.location.href);
+  const initialUrl = initialUrlObj.pathname + initialUrlObj.search + initialUrlObj.hash;
+  const initialPath = initialUrlObj.pathname + initialUrlObj.search;
+
+  return {
+    intent: $.atom<NavState>({ url: initialUrl, type: 'init' }, { name: 'nav:intent' }),
+    rendered: $.atom({ url: initialUrl, path: initialPath }, { name: 'nav:rendered' }),
+    fetchVersion: $.atom(0, { name: 'nav:version' }),
+    pendingHooks: $.atom(0, { name: 'nav:hook-pending' }),
+  };
+}
+
+/** @internal */
+function resolveTargetSelector(target: unknown, $target: JQuery): string | undefined {
+  return Option.unwrapOr(
+    Option.map(
+      Option.fromNullable(typeof target === 'string' ? target : $target.attr('id')),
+      (id) => (id.startsWith('#') ? id : `#${$.escapeSelector(id)}`)
+    ),
+    undefined
+  );
+}
+
+/** @internal */
+function getNavigationPolicies(params: {
+  target: URL;
+  current: URL;
+  type: NavigationType;
+  win: Window;
+  url: string;
+  isSamePath: boolean;
+  options: AtomNavOptions;
+  state: ReturnType<typeof initNavAtoms>;
+  hasError: ReadonlyAtom<boolean>;
+  $target: JQuery;
+  signal: AbortSignal;
+}): Array<() => boolean | Promise<boolean>> {
+  const { target, current, type, win, url, isSamePath, options, state, hasError, $target, signal } =
+    params;
+
+  return [
+    () => {
+      if (target.origin !== current.origin) {
+        win.location.assign(url);
+        return false;
+      }
+      return true;
+    },
+    () => {
+      const isSameLoc = isSamePath && target.hash === current.hash;
+      if (isSameLoc && type === 'push') {
+        if (hasError.peek()) {
+          state.fetchVersion.value++;
+        } else if (url.includes('#')) {
+          performScroll(win, target.hash.slice(1), true);
+        }
+        return false;
+      }
+      return true;
+    },
+    () => {
+      const { onBeforeLoad } = options;
+      if (!isSamePath && onBeforeLoad) {
+        return (async () => {
+          state.pendingHooks.value++;
+          try {
+            const ok = await onBeforeLoad(url, signal);
+            return !(signal.aborted || ok === false);
+          } finally {
+            state.pendingHooks.value = Math.max(0, state.pendingHooks.value - 1);
+          }
+        })();
+      }
+      return true;
+    },
+    () => {
+      const container = $target[0];
+      return !(container && !navCoordinator.canLeaveWithin(container));
+    },
+  ];
+}
+
 /**
  * Logic: Reactive Navigation Orchestrator
  * Provides a PJAX-style manager that synchronizes the URL with server-fetched fragments.
@@ -182,30 +266,8 @@ export function atomNav(options: AtomNavOptions): AtomNav {
 
   $target.attr('data-atom-nav-target', 'true');
 
-  // Logic: Initial State Resolution
-  const initialUrlObj = new URL(win.location.href);
-  const initialUrl = initialUrlObj.pathname + initialUrlObj.search + initialUrlObj.hash;
-  const initialPath = initialUrlObj.pathname + initialUrlObj.search;
-
-  // Logic: Reactive State Atoms
-  const state = {
-    // Current navigation intent (the URL desired in the address bar)
-    intent: $.atom<NavState>({ url: initialUrl, type: 'init' }, { name: 'nav:intent' }),
-    // Last successfully rendered state (prevents redundant fetches)
-    rendered: $.atom({ url: initialUrl, path: initialPath }, { name: 'nav:rendered' }),
-    // Version counter to force re-fetches for retrying failures
-    fetchVersion: $.atom(0, { name: 'nav:version' }),
-    // Trackers for asynchronous transition guards
-    pendingHooks: $.atom(0, { name: 'nav:hook-pending' }),
-  };
-
-  const targetSelector = Option.unwrapOr(
-    Option.map(
-      Option.fromNullable(typeof target === 'string' ? target : $target.attr('id')),
-      (id) => (id.startsWith('#') ? id : `#${$.escapeSelector(id)}`)
-    ),
-    undefined
-  );
+  const state = initNavAtoms(win);
+  const targetSelector = resolveTargetSelector(target, $target);
 
   const normalized = $.computed(
     () => {
@@ -424,56 +486,22 @@ export function atomNav(options: AtomNavOptions): AtomNav {
       const path = target.pathname + target.search;
       const isSamePath = path === current.pathname + current.search;
 
-      const policies: Array<() => boolean | Promise<boolean>> = [
-        () => {
-          // Reason: Only intercept same-origin requests to prevent security
-          // risks and cross-origin state contamination.
-          if (target.origin !== current.origin) {
-            win.location.assign(url);
-            return false;
-          }
-          return true;
-        },
-        () => {
-          const isSameLoc = isSamePath && target.hash === (current.hash ?? '');
-          if (isSameLoc && type === 'push') {
-            if (hasError.peek()) {
-              state.fetchVersion.value++;
-            } else if (url.includes('#')) {
-              performScroll(win, target.hash.slice(1), true);
-            }
-            return false;
-          }
-          return true;
-        },
-        () => {
-          // Logic: Async Transition Guards
-          if (!isSamePath && options.onBeforeLoad) {
-            return (async () => {
-              state.pendingHooks.value++;
-              try {
-                const ok = await (
-                  options.onBeforeLoad as (
-                    url: string,
-                    signal: AbortSignal
-                  ) => Promise<boolean | undefined>
-                )(url, signal);
-                return !(signal.aborted || ok === false);
-              } finally {
-                state.pendingHooks.value = Math.max(0, state.pendingHooks.value - 1);
-              }
-            })();
-          }
-          return true;
-        },
-        () => {
-          const container = $target[0];
-          return !(container && !navCoordinator.canLeaveWithin(container));
-        },
-      ];
+      const policies = getNavigationPolicies({
+        target,
+        current,
+        type,
+        win,
+        url,
+        isSamePath,
+        options,
+        state,
+        hasError,
+        $target,
+        signal,
+      });
 
-      for (const policy of policies) {
-        const result = policy();
+      for (let i = 0, len = policies.length; i < len; i++) {
+        const result = policies[i]!();
         if (result instanceof Promise) {
           if (!(await result)) return;
         } else if (!result) {
