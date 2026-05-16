@@ -375,7 +375,10 @@ export interface AtomNavOptions {
   /** Custom HTTP headers for navigation requests. */
   headers?: Record<string, string>;
   /** Hook triggered before a navigation request is initiated. */
-  onBeforeLoad?: (url: string, signal: AbortSignal) => boolean | undefined | Promise<boolean | undefined>;
+  onBeforeLoad?: (
+    url: string,
+    signal: AbortSignal
+  ) => boolean | undefined | Promise<boolean | undefined>;
   /** Callback triggered after the content has been injected. */
   onMount?: ($container: JQuery, url: string) => void;
   /** Callback triggered before content is replaced. */

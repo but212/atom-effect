@@ -61,10 +61,7 @@ function checkBindingSafety(
  * Logs warnings for unsafe properties or attributes.
  * @internal
  */
-function getSafeEntries<T>(
-  map: Record<string, T>,
-  isProperty: boolean
-): [string, T][] {
+function getSafeEntries<T>(map: Record<string, T>, isProperty: boolean): [string, T][] {
   return Object.entries(map).filter(([name]) => {
     const res = checkBindingSafety(name, isProperty);
     if (!res.ok) {
