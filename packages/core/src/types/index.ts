@@ -1,5 +1,5 @@
 /**
- * @module Types_Index
+ * @module TypesIndex
  *
  * Responsibility:
  * Central entry point for all type definitions in the core reactive engine.

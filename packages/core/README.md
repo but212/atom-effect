@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/@but212/atom-effect.svg)](https://www.npmjs.com/package/@but212/atom-effect)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-![ES2021+](https://img.shields.io/badge/target-ES2021%2B-blue)
+![ES2022+](https://img.shields.io/badge/target-ES2022%2B-blue)
 
 Core reactive state management engine implementing an epoch-based dependency tracking system.
 
@@ -10,7 +10,7 @@ Core reactive state management engine implementing an epoch-based dependency tra
 
 This package provides the foundational primitives for reactive programming in JavaScript environments. It manages state synchronization through a pull-based dependency graph, ensuring deterministic execution and automatic resource management.
 
-- **Target**: ES2021+
+- **Target**: ES2022+
 - **Architecture**: Epoch-based push/pull propagation
 - **Features**: Atomic batching, lazy evaluation, and explicit effect cleanup.
 

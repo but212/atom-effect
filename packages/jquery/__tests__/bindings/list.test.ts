@@ -252,10 +252,6 @@ describe('$.atomList (Integration)', () => {
     });
   });
 
-  // ---------------------------------------------------------------------------
-  // Regression & Edge Cases
-  // ---------------------------------------------------------------------------
-
   it('should manage DOM integrity during async removals and re-entries', async () => {
     let resolveRemove!: () => void;
     const items = $.atom([{ id: 1 }, { id: 2 }, { id: 3 }]);

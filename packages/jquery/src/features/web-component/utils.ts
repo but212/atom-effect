@@ -1,8 +1,23 @@
+/**
+ * @module AEJWebComponentUtilities
+ *
+ * Responsibility:
+ * Provides resolution helpers for Shadow DOM access and reactive value
+ * extraction specifically for Custom Element controllers.
+ *
+ * Design Intent:
+ * Provides stateless, side-effect-free helper functions that normalize
+ * differences between various DOM structures (Shadow DOM vs Light DOM)
+ * and input types (Atoms vs Getters).
+ */
+
 import { isAtom } from '@but212/atom-effect';
 import type { ReactiveValue } from '@/types';
 
 /**
- * Resolves the active ShadowRoot for component-local operations.
+ * Logic: Shadow DOM Discovery
+ * Resolves the active ShadowRoot for component-local operations,
+ * prioritizing explicit roots over host-attached roots.
  * @internal
  */
 export const resolveShadowRoot = (
@@ -16,8 +31,9 @@ export const resolveShadowRoot = (
       : null;
 
 /**
- * Resolves a reactive source into its current value.
- * Supports static values, atoms, and getter functions.
+ * Logic: Polymorphic Resolution
+ * Resolves a reactive source into its current value. Supports static values,
+ * atoms (via `.value`), and getter functions (via execution).
  * @internal
  */
 export const resolveValue = <T>(source: ReactiveValue<T>): T => {

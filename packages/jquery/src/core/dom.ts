@@ -1,34 +1,36 @@
 /**
- * Iterates over a jQuery collection and executes a callback for each HTMLElement.
+ * @module AEJDomUtils
+ *
+ * Responsibility:
+ * Provides low-level DOM utilities for jQuery collections and binding
+ * source normalization. Ensures type-safe element iteration and
+ * consistent handling of overloaded binding signatures.
+ */
+
+/**
+ * Logic: Element-Only Iteration
  *
  * Reason: jQuery collections can contain non-element nodes (e.g., text or
- * comment nodes). This utility provides a safe, element-only iteration path
- * required for establishing reactive bindings and event listeners.
+ * comment nodes) which are incompatible with reactive binding logic.
+ * This utility ensures a safe execution path for DOM-specific operations.
  *
- * @param jq - The jQuery collection to iterate over.
- * @param fn - The callback function to execute for each element.
- * @returns The original jQuery collection for chaining.
  * @internal
  */
 export function atomEachElement(jq: JQuery, fn: (el: HTMLElement) => void): JQuery {
-  for (let i = 0, len = jq.length; i < len; i++) {
-    const node = jq[i];
-    if (node && node.nodeType === Node.ELEMENT_NODE) {
-      fn(node as HTMLElement);
-    }
+  for (const node of jq) {
+    if (node.nodeType === Node.ELEMENT_NODE) fn(node as HTMLElement);
   }
   return jq;
 }
 
 /**
- * Normalizes a binding source into a tuple containing the source and optional configuration.
+ * Logic: Overload Normalization Heuristics
+ * Normalizes a binding source into a tuple containing the source and optional config.
  *
- * Logic: This utility uses heuristics to determine if an input represents a
- * configuration tuple (e.g., `[source, options]`) or a simple array-based
- * data value. This is used in unified bindings to support overloaded signatures.
+ * Logic: Heuristics
+ * Determines if an input represents a configuration tuple (e.g., `[source, options]`)
+ * or a simple array-based data value. Supports unified binding overloads.
  *
- * @param val - The value or tuple to unpack.
- * @returns A tuple where the first element is the source and the second is optional config.
  * @internal
  */
 export function unpack<T, O>(val: T | [T, O]): [T, O?] {

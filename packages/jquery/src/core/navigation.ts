@@ -1,3 +1,11 @@
+/**
+ * @module AEJNavigation
+ *
+ * Responsibility:
+ * Provides low-level navigation utilities, metadata synchronization,
+ * click interception logic, and cross-feature coordination for SPA routing.
+ */
+
 import { Option, Result } from '@but212/atom-effect-utils';
 import { debug } from '@/utils/debug';
 import { registry } from './registry';
@@ -21,7 +29,11 @@ const ATTR_EXTRACT_EXCLUDE = new Set(['id']);
 
 const PARSER = new DOMParser();
 
-/** @internal */
+/**
+ * Logic: Path Normalization
+ * Ensures consistent path matching by stripping redundant slashes.
+ * @internal
+ */
 export const normalizePath = (path: string): string => {
   const len = path.length;
   if (len === 0) return path;
@@ -32,7 +44,11 @@ export const normalizePath = (path: string): string => {
   return start === 0 && end === len ? path : path.slice(start, end);
 };
 
-/** @internal */
+/**
+ * Logic: Path & Query Separation
+ * Splits a raw URL into its route pattern and optional query string.
+ * @internal
+ */
 export const splitPath = (path: string): { route: string; query: Option<string> } => {
   const idx = path.indexOf('?');
   if (idx === -1) {
@@ -81,19 +97,17 @@ export const META_SCHEMA = [
 ] as const;
 
 /**
+ * Logic: SEO Metadata Synchronization
  * Synchronizes document head metadata with the provided state.
  *
- * Why: Ensures SEO-critical tags stay in sync during SPA transitions
- * without a full page reload.
- *
- * Side Effect: Creates missing tags in `<head>` if defined in `meta` record.
+ * When to use:
+ * - Ensures SEO-critical tags stay in sync during SPA transitions
+ *   without a full page reload.
  */
 export function syncMetaData(win: Window, meta?: Record<string, string>): void {
   const doc = win.document;
   const head = doc.head;
-  for (let i = 0; i < META_SCHEMA.length; i++) {
-    const s = META_SCHEMA[i];
-    if (!s) continue;
+  for (const s of META_SCHEMA) {
     const value = meta ? meta[s.key] : undefined;
     const el = head.querySelector(s.selector) as HTMLElement | null;
 
@@ -106,8 +120,10 @@ export function syncMetaData(win: Window, meta?: Record<string, string>): void {
     if (!el) {
       const sAttrs = s.staticAttrs as Record<string, string>;
       for (const k in sAttrs) {
-        const val = sAttrs[k];
-        if (val !== undefined) target.setAttribute(k, val);
+        if (Object.hasOwn(sAttrs, k)) {
+          const val = sAttrs[k];
+          if (val !== undefined) target.setAttribute(k, val);
+        }
       }
     }
     if (target.getAttribute(s.attr) !== value) {
@@ -117,10 +133,12 @@ export function syncMetaData(win: Window, meta?: Record<string, string>): void {
 }
 
 /**
+ * Logic: Persistent Attribute Management
  * Updates element attributes while preserving internal tracking IDs.
  *
- * Constraint: Attributes in `ATTR_PRESERVE` (like `id`) are never removed,
- * even if missing from the next state, to prevent breaking DOM references.
+ * Constraint: Attribute Preservation
+ * Attributes in `ATTR_PRESERVE` (like `id`) are never removed to
+ * prevent breaking persistent DOM references.
  */
 export function updateAttributes(el: HTMLElement, next: Record<string, string>): void {
   const attrs = el.attributes;
@@ -128,20 +146,23 @@ export function updateAttributes(el: HTMLElement, next: Record<string, string>):
     const attr = attrs[i];
     if (!attr) continue;
     const name = attr.name;
-    if (!ATTR_PRESERVE.has(name) && !(name in next)) {
+    if (!ATTR_PRESERVE.has(name) && !Object.hasOwn(next, name)) {
       el.removeAttribute(name);
     }
   }
 
   for (const name in next) {
-    const value = next[name];
-    if (value !== undefined && el.getAttribute(name) !== value) {
-      el.setAttribute(name, value);
+    if (Object.hasOwn(next, name)) {
+      const value = next[name];
+      if (value !== undefined && el.getAttribute(name) !== value) {
+        el.setAttribute(name, value);
+      }
     }
   }
 }
 
 /**
+ * Logic: Viewport Scroll Orchestration
  * Manages viewport scrolling after a navigation event.
  * Priority: Hash element > Window top (if fallback enabled).
  */
@@ -168,10 +189,11 @@ interface NavEventLike {
 }
 
 /**
+ * Logic: Click Interception Filter
  * Filters click events to determine if they should trigger client-side navigation.
  *
  * Why: Ignores modified clicks (Ctrl+Click) or right-clicks to preserve native
- * browser features (e.g., "Open in new tab").
+ * browser features like "Open in new tab".
  */
 export function isNavigationClick(e: MouseEvent | JQuery.TriggeredEvent): boolean {
   const ne = e as NavEventLike;
@@ -187,7 +209,11 @@ export function isNavigationClick(e: MouseEvent | JQuery.TriggeredEvent): boolea
   return me.button === 0 || me.button === undefined;
 }
 
-/** @internal Priority-ordered rules for link interception. */
+/**
+ * Logic: Link Interception Rules
+ * Priority-ordered heuristics for deciding whether to hijack a link click.
+ * @internal
+ */
 const INTERCEPT_RULES: Array<{
   match: (el: Element, win: Window) => boolean;
   result: boolean;
@@ -224,17 +250,13 @@ const INTERCEPT_RULES: Array<{
 ];
 
 /**
- * Determines if a link click should be intercepted by the SPA router.
+ * Logic: Router Interception Decision
+ * Determines if a click should be hijacked by the SPA engine or left to
+ * the browser's native navigation.
  *
- * Example:
- * ```ts
- * $(document).on('click', 'a', (e) => {
- *   if (isInterceptee(e.currentTarget)) {
- *     e.preventDefault();
- *     navigate(e.currentTarget.href);
- *   }
- * });
- * ```
+ * Logic: Interception Heuristics
+ * Rules prioritize developer intent (data-nav="false") and security
+ * (cross-origin checks) over automatic PJAX tracking.
  */
 export function isInterceptee(el: Element, win: Window = window): boolean {
   for (const rule of INTERCEPT_RULES) {
@@ -255,9 +277,10 @@ export function getUrlParts(url: string, base: string): { pathAndSearch: string;
 }
 
 /**
+ * Logic: Scroll Transition Decision
  * Calculates whether the viewport should scroll after a navigation transition.
  *
- * Why: Prevents jarring scroll jumps during 'Pop' (Back/Forward) events while
+ * Why: Prevents jarring jumps during 'Pop' (Back/Forward) events while
  * ensuring 'Push' events start at the top of the new content.
  */
 export function getScrollDecision(params: {
@@ -281,7 +304,6 @@ export function getScrollDecision(params: {
 export function extractMetaData(doc: Document | Element): Record<string, string> {
   const meta: Record<string, string> = {};
   for (const schema of META_SCHEMA) {
-    if (!schema) continue;
     const el = doc.querySelector(schema.selector);
     const value = el?.getAttribute(schema.attr);
     if (value) meta[schema.key] = value;
@@ -289,7 +311,11 @@ export function extractMetaData(doc: Document | Element): Record<string, string>
   return meta;
 }
 
-/** @internal Extracts path relative to a base for routing logic. */
+/**
+ * Logic: Anchor Path Resolution
+ * Extracts a router-compatible path relative to a base from an element.
+ * @internal
+ */
 export function resolveAnchorPath(el: Element, base?: string): string {
   const attr = el.getAttribute('href') || el.getAttribute('xlink:href') || '';
   if (attr.startsWith('#')) return normalizePath(attr.substring(1));
@@ -321,10 +347,8 @@ export function resolveAnchorPath(el: Element, base?: string): string {
 /** @internal */
 function getElementAttributes(el: Element): Record<string, string> {
   const attributes: Record<string, string> = {};
-  const attrs = el.attributes;
-  for (let i = 0, len = attrs.length; i < len; i++) {
-    const attr = attrs[i];
-    if (attr && !ATTR_EXTRACT_EXCLUDE.has(attr.name)) {
+  for (const attr of el.attributes) {
+    if (!ATTR_EXTRACT_EXCLUDE.has(attr.name)) {
       attributes[attr.name] = attr.value;
     }
   }
@@ -332,14 +356,16 @@ function getElementAttributes(el: Element): Record<string, string> {
 }
 
 /**
+ * Logic: Fragment Extraction Engine
  * Parses raw HTML strings into a structured `ContentState`.
  *
- * Why: Allows the router to perform "Fragment Extraction" — extracting
- * only specific container content and page metadata from a full server response.
+ * Logic: Selective Extraction
+ * Extracts specific container content and metadata from full server
+ * responses, enabling seamless PJAX-style updates.
  *
- * Performance Note: DOMParser.parseFromString() can be a bottleneck for very large
- * HTML strings (> 1MB). To maximize performance, the server should honor the
- * 'X-PJAX' header and return only the required HTML fragment rather than the full page.
+ * Optimization:
+ * For large responses, ensure the server honors the 'X-PJAX' header
+ * to return only the required fragment, minimizing parsing overhead.
  */
 export function extractContent(params: {
   html: string;
@@ -350,7 +376,9 @@ export function extractContent(params: {
   const { html, selector, redirectUrl, title: titleOverride } = params;
   const doc = PARSER.parseFromString(html, 'text/html');
 
-  // Optimization: Skip title query if override is provided from headers
+  // Logic: Header Priority
+  // Header-provided titles take precedence to support minimal PJAX responses
+  // that may omit the <title> tag for performance.
   const title = titleOverride || doc.querySelector('title')?.textContent?.trim() || null;
   const contentNode = selector ? doc.querySelector(selector) : null;
 
@@ -391,23 +419,26 @@ interface NavManager {
 }
 
 /**
- * Coordination layer to prevent feature collisions.
+ * Logic: Navigation Feature Coordination
+ * Prevents race conditions and feature collisions when multiple navigation
+ * modules (e.g., atomNav and $.route) manage the same DOM tree.
  *
- * Why: Prevents race conditions when both `atomNav` and `$.route` are applied
- * to the same DOM element. It also aggregates 'Leave' guards for the entire tree.
+ * Logic: Guard Aggregation
+ * Scans all registered components within a container to aggregate
+ * 'Leave' guards before transition.
  *
  * @internal
  */
 class NavigationCoordinator {
-  private managers = new Map<Element, NavManager>();
+  #managers = new Map<Element, NavManager>();
 
   /**
-   * Registers a navigation manager.
-   * Warning: Throws a console warning if a target is double-managed by
-   * different navigation features.
+   * Logic: Collision Prevention
+   * Prevents unpredictable state by ensuring a single element is not
+   * simultaneously managed by conflicting modules (e.g., atomNav and $.route).
    */
   register(target: Element, type: NavFeatureType, canLeave?: () => boolean): void {
-    const existing = this.managers.get(target);
+    const existing = this.#managers.get(target);
     if (existing && existing.type !== type) {
       debug.warn(
         '[atom-navigation]',
@@ -416,10 +447,10 @@ class NavigationCoordinator {
       );
     }
 
-    this.managers.set(target, { type, canLeave });
+    this.#managers.set(target, { type, canLeave });
 
     registry.onCleanup(target, () => {
-      this.managers.delete(target);
+      this.#managers.delete(target);
     });
   }
 
@@ -428,8 +459,8 @@ class NavigationCoordinator {
    * within the container.
    */
   canLeaveWithin(container: Element): boolean {
-    if (this.managers.size === 0) return true;
-    for (const [el, manager] of this.managers) {
+    if (this.#managers.size === 0) return true;
+    for (const [el, manager] of this.#managers) {
       if (manager.canLeave && container.contains(el)) {
         if (manager.canLeave() === false) return false;
       }
@@ -441,7 +472,7 @@ class NavigationCoordinator {
   isNestedIn(el: Element, type: NavFeatureType): boolean {
     let curr: Element | null = el.parentElement;
     while (curr) {
-      const manager = this.managers.get(curr);
+      const manager = this.#managers.get(curr);
       if (manager?.type === type) return true;
       curr = curr.parentElement;
     }
@@ -450,7 +481,7 @@ class NavigationCoordinator {
 
   /** @internal */
   getManagerType(target: Element): NavFeatureType | undefined {
-    return this.managers.get(target)?.type;
+    return this.#managers.get(target)?.type;
   }
 }
 

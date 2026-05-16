@@ -1,3 +1,11 @@
+/**
+ * @module AEJUnifiedBindings
+ *
+ * Responsibility:
+ * Provides a suite of unified reactive bindings for synchronizing state
+ * with DOM properties, attributes, styles, and content.
+ */
+
 import { effect, untracked } from '@but212/atom-effect';
 import { Option } from '@but212/atom-effect-utils';
 import $ from 'jquery';
@@ -27,16 +35,12 @@ function toKebab(str: string): string {
 }
 
 /**
+ * Logic: XSS Protection Filter
  * Validates whether a property or attribute name is safe for reactive binding.
  *
- * Logic: This utility prevents XSS attacks by blocking 'on*' event attributes
- * and sensitive properties like `innerHTML` from being manipulated via
- * standard attribute or property bindings.
- *
- * @param name - The name of the property or attribute.
- * @param isProperty - True if checking a DOM property, false for attributes.
- * @returns True if the binding is considered safe.
- * @internal
+ * Logic: Security Strategy
+ * Prevents XSS by blocking 'on*' event attributes and sensitive properties
+ * like `innerHTML` from being manipulated via standard bindings.
  */
 function isSafeBinding(name: string, isProperty: boolean): boolean {
   const lowerName = name.toLowerCase();
@@ -52,15 +56,11 @@ function isSafeBinding(name: string, isProperty: boolean): boolean {
 }
 
 /**
- * Binds the text content of an element to a reactive source.
+ * Logic: XSS-Safe Text Binding
  *
  * When to use:
- * - To synchronize labels or counts with an atom without the risk of XSS.
- *
- * @param element - The target HTMLElement.
- * @param value - The reactive source atom or computed.
- * @param formatter - An optional function to format the value before display.
- * @internal
+ * - Use as the primary method for rendering dynamic content to ensure
+ *   data is strictly treated as text, preventing script injection.
  */
 export function bindText<T = unknown>(
   element: HTMLElement,
@@ -84,21 +84,15 @@ export function bindText<T = unknown>(
 }
 
 /**
+ * Logic: Sanitized HTML Binding
  * Binds the HTML content of an element to a reactive source.
  *
- * Logic: To prevent memory leaks from detached nodes, all reactive bindings
- * within the element's descendants are automatically cleaned up via the
- * registry before the `innerHTML` is overwritten.
+ * Logic: Subtree Cleanup
+ * Before overwriting `innerHTML`, all reactive bindings within descendants
+ * are cleaned up to prevent memory leaks from detached nodes.
  *
- * Caution: Even with sanitization, rendering user-provided HTML remains a
- * security risk. Prefer `bindText` whenever possible.
- *
- * When to use:
- * - To render trusted templates or rich text containing formatting tags.
- *
- * @param element - The target HTMLElement.
- * @param value - The reactive source containing the HTML string.
- * @internal
+ * Caution: Security Risk
+ * Even with sanitization, rendering raw HTML is risky. Prefer `bindText`.
  */
 export function bindHtml(element: HTMLElement, value: AsyncReactiveValue<string>): void {
   let prevHtml: string | null = null;
@@ -119,16 +113,12 @@ export function bindHtml(element: HTMLElement, value: AsyncReactiveValue<string>
 }
 
 /**
+ * Logic: Reactive Class Token Management
  * Binds a set of CSS classes to reactive conditions.
  *
- * Logic: Token Management
- * - Supports space-separated class names within keys.
- * - Active tokens are tracked in a `Set` to ensure classes are only removed
- *   if no other active definition within the map requires them.
- *
- * @param element - The target HTMLElement.
- * @param classMap - A record mapping class names to reactive boolean conditions.
- * @internal
+ * Logic: Token Aggregation
+ * Active tokens are tracked in a `Set` to ensure classes are only removed
+ * if no other active definition within the map requires them.
  */
 export function bindClass(
   element: HTMLElement,
@@ -153,7 +143,9 @@ export function bindClass(
         }
       }
 
-      // Logic: Atomic toggle using native classList API.
+      // Logic: Atomic Synchronization
+      // Synchronizes the element's class list with the current state map
+      // in a single pass using the native classList API.
       Array.from(tokensMap.values())
         .flat()
         .forEach((token) => {
@@ -165,14 +157,11 @@ export function bindClass(
 }
 
 /**
+ * Logic: Reactive Style Binding
  * Binds inline CSS styles to reactive sources.
  *
- * Security: Dangerous CSS values (e.g., `url()` containing javascript: protocols)
- * are blocked to prevent XSS and style-based injection attacks.
- *
- * @param element - The target HTMLElement.
- * @param cssMap - A record mapping style properties to reactive values.
- * @internal
+ * Security: Style Injection Protection
+ * Dangerous CSS values (e.g., `url()` with `javascript:`) are blocked.
  */
 export function bindCss(element: HTMLElement, cssMap: Record<string, CssValue>): void {
   const { style } = element;
@@ -207,21 +196,16 @@ export function bindCss(element: HTMLElement, cssMap: Record<string, CssValue>):
 }
 
 /**
- * Binds HTML attributes to reactive sources.
- *
  * Logic: Attribute Transformation Pipeline
- * Implements a unified transformation flow for different attribute categories:
- * - Boolean Attributes: Automatically removed when the condition is `false`.
- * - ARIA Attributes: Boolean values are mapped to 'true'/'false' strings.
- * - Standard Attributes: Values are coerced to strings.
+ * Binds HTML attributes to reactive sources with unified transformations.
+ *
+ * Logic: Category Flow
+ * - Boolean: Automatically removed when `false`.
+ * - ARIA: Boolean values mapped to 'true'/'false' strings.
+ * - Standard: Values coerced to strings.
  *
  * Security: Protocol Validation
- * Validates 'href' and 'src' attributes against dangerous URL protocols to
- * mitigate potential XSS vectors.
- *
- * @param element - The target HTMLElement.
- * @param attrMap - A record mapping attribute names to reactive values.
- * @internal
+ * Validates 'href' and 'src' against dangerous protocols.
  */
 export function bindAttr(
   element: HTMLElement,
@@ -275,14 +259,12 @@ export function bindAttr(
 }
 
 /**
+ * Logic: Direct Property Binding
  * Binds DOM properties directly to reactive sources.
  *
- * Security: Blocks sensitive properties (e.g., `innerHTML`, event handlers)
- * and validates URL-based properties to prevent prototype pollution or XSS.
- *
- * @param element - The target HTMLElement.
- * @param propMap - A record mapping property names to reactive values.
- * @internal
+ * Security: Prototype Pollution Guard
+ * Blocks sensitive properties (e.g., `innerHTML`, event handlers)
+ * and validates URL-based properties.
  */
 export function bindProp(
   element: HTMLElement,
@@ -314,16 +296,12 @@ export function bindProp(
 }
 
 /**
+ * Logic: Layout-Preserving Visibility
  * Manages element visibility based on a reactive condition.
  *
- * Logic: Layout Preservation
- * Transitions between 'visible' and 'hidden' states while preserving the
- * element's original 'display' mode (e.g., flex, grid) when restored.
- *
- * @param element - The target HTMLElement.
- * @param condition - The reactive boolean condition governing visibility.
- * @param invert - If true, hides the element when the condition is met.
- * @internal
+ * Logic: Strategy
+ * Transitions between 'visible' and 'hidden' while preserving the original
+ * 'display' mode (e.g., flex, grid) when restored.
  */
 export function bindVisibility(
   element: HTMLElement,
@@ -340,7 +318,9 @@ export function bindVisibility(
       const isVisible = invert !== !!value;
       const current = element.style.display;
 
-      // Data-centric state application:
+      // Logic: Layout Preservation
+      // Toggles 'none' to hide the element while restoring the previously
+      // captured display mode (e.g., flex, grid) when showing.
       if (isVisible) {
         if (current === 'none') {
           element.style.display = baseDisplay;
@@ -355,15 +335,11 @@ export function bindVisibility(
 }
 
 /**
+ * Logic: Two-Way Value Synchronization
  * Binds a form control's value to a writable atom.
  *
  * When to use:
- * - To implement two-way synchronization for inputs, selects, and textareas.
- *
- * @param element - The form control element.
- * @param atom - The writable atom to synchronize with.
- * @param options - Configuration for debouncing and transformation.
- * @internal
+ * - Implement two-way sync for inputs, selects, and textareas.
  */
 export function bindVal(
   element: HTMLElement,
@@ -407,11 +383,8 @@ function syncRadios(element: HTMLInputElement): void {
 }
 
 /**
+ * Logic: Two-Way Checked State Synchronization
  * Binds a checkbox or radio button's checked state to a writable atom.
- *
- * @param element - The target input element.
- * @param atom - The writable atom to synchronize with the checked state.
- * @internal
  */
 export function bindChecked(element: HTMLElement, atom: WritableAtom<boolean>): void {
   if (!(element instanceof HTMLInputElement)) {

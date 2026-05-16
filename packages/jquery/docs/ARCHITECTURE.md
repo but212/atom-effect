@@ -6,6 +6,9 @@ This document explains the internal mechanics of `@but212/atom-effect-jquery`. I
 
 The jQuery package provides a reactive binding layer on top of `@but212/atom-effect` core. It bridges reactive primitives to the DOM via jQuery.
 
+> [!NOTE]
+> The jQuery package has been refactored to an **ES2022-based architecture**. All core engines and controllers (e.g., `FormBinder`, `InputBinding`, `ListContext`, `BindingRegistry`, `RouterImpl`, `NavigationCoordinator`) are implemented as encapsulated ES2022 classes utilizing **private class fields (`#`)** for internal state management. This ensures better runtime isolation and stabilizes V8 hidden classes for optimal performance.
+
 ```text
                  ┌───────────────────────────────────┐
                  │       @but212/atom-effect         │
@@ -247,7 +250,7 @@ To support `transform` and `onChange` hooks without polluting the base atoms, `a
 
 ## 14. Debugging & Visual Highlighting
 
-The `DebugController` provides visual feedback via non-blocking outlines using `requestAnimationFrame`. Selector logic generates human-readable identifier strings for elements in logs.
+The **`DebugController`** (class-based) provides visual feedback via non-blocking outlines using `requestAnimationFrame`. Selector logic generates human-readable identifier strings for elements in logs. Internal diagnostic state is encapsulated using private class fields to prevent interference with application logic.
 
 ## 15. Web Component & DI Integration
 
@@ -272,6 +275,10 @@ graph TD
     AA -.-> AL[Attribute Lenses]
     SA -.-> SL[Slot Lenses]
 ```
+
+#### 15.1.1 Stylesheet Caching
+
+To optimize memory usage across multiple component instances, identical style strings are parsed into a shared global cache. This cache employs a **FIFO (First-In-First-Out)** eviction strategy, removing the oldest entries when the cache exceeds its limit (default: 100), ensuring a stable memory footprint.
 
 ### 15.2 Declarative Synthesis & Features (`SetupFeatures`)
 
@@ -305,6 +312,8 @@ sequenceDiagram
 ```
 
 - **Logic: Just-in-Time Observation**: The global `MutationObserver` is only active when there are "offline" components (created but not yet connected) or active context injections. This minimizes the performance impact on the main thread during heavy DOM manipulations.
+- **Contract: Synchronous Discovery**: `ContextEngine.discover` relies on synchronous DOM event dispatching to resolve providers. The request callback must be executed during the `dispatchEvent` call to ensure the context is captured before the event finishes bubbling.
+- **Race Condition Resilience**: The initialization process uses an **Atomic Take & Release** pattern. Elements are removed from the internal tracking map and the retain count is released *before* triggering the component's `setup()` method. This prevents potential counter imbalances if the setup logic synchronously triggers a component teardown.
 
 ### 15.4 Form Integration (FACE)
 

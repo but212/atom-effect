@@ -1,12 +1,17 @@
 /**
- * @module Debug
+ * @module DebugDiagnostics
  *
  * Responsibility:
  * Provides diagnostic utilities for development, including graph visualization,
  * infinite loop detection, and node identification.
  *
  * Design Intent:
- * Decouples diagnostic state from reactive nodes to prevent de-optimization
+ * Decouples diagnostic state from reactive nodes to prevent de-optimization of
+ * the reactive hot-path.
+ *
+ * Memory Strategy:
+ * Uses `FinalizationRegistry` and `WeakRef` to ensure that debug metadata does
+ * not prevent the garbage collection of reactive nodes.
  */
 
 import {
@@ -22,170 +27,188 @@ import type { DebugConfig, DependencyId, NodeMetadata } from '@/types';
 /** Shared no-op function to reduce memory pressure in production. @internal */
 const noop = () => {};
 
-// --- Private Development State ---
-/** @internal */
-const devState = IS_DEV
-  ? {
-      updateCounts: new Map<DependencyId, number>(),
-      registry: new Map<DependencyId, NodeMetadata>(),
-      failedEvaluations: new Set<DependencyId>(),
-      cleanupScheduled: false,
-      failureCleanupScheduled: false,
-      finalizer: new FinalizationRegistry((id: DependencyId) => {
-        devState!.registry.delete(id);
-        devState!.updateCounts.delete(id);
-      }),
+/**
+ * Role: Diagnostic Engine (Development)
+ * Encapsulates development-only diagnostic state and provides high-performance
+ * tracking using ES2022 private class fields.
+ * @internal
+ */
+class DevDebugEngine implements DebugConfig {
+  #updateCounts = new Map<DependencyId, number>();
+  #registry = new Map<DependencyId, NodeMetadata>();
+  #failedEvaluations = new Set<DependencyId>();
+  #cleanupScheduled = false;
+  #failureCleanupScheduled = false;
+
+  /**
+   * Logic: Automatic Metadata Cleanup
+   * Monitors node lifecycle to prune internal registries when reactive nodes
+   * are garbage collected, preventing memory leaks in long-running dev sessions.
+   */
+  #finalizer = new FinalizationRegistry((id: DependencyId) => {
+    this.#registry.delete(id);
+    this.#updateCounts.delete(id);
+  });
+
+  enabled = true;
+  warnInfiniteLoop = DEBUG_CONFIG.WARN_INFINITE_LOOP;
+  trackGraph = false;
+
+  /**
+   * Logic: Structural Identity Resolution
+   * Discovers the name and type of a node by inspecting its internal ID and
+   * BRAND discriminator. Falls back to structural probing if the node is not
+   * yet registered.
+   */
+  #resolveIdentity(obj: object): { name: string; type: string } | undefined {
+    if (obj === null || typeof obj !== 'object') {
+      return undefined;
     }
-  : null;
 
-// --- Helper Functions ---
+    const id = (obj as { id?: DependencyId }).id;
+    if (id === undefined) {
+      return undefined;
+    }
 
-const _resolveIdentity = (obj: object): { name: string; type: string } | undefined => {
-  const id = (obj as { id?: DependencyId }).id;
-  if (id === undefined) return undefined;
+    const meta = this.#registry.get(id);
+    if (meta) return meta;
 
-  const meta = devState!.registry.get(id);
-  if (meta) return meta;
+    const brand = (obj as { [BRAND]?: number })[BRAND];
+    const info = brand !== undefined ? BRAND_IDENTITY_MAP[brand & BRAND_MASK] : undefined;
 
-  const brand = (obj as { [BRAND]?: number })[BRAND];
-  const info = brand !== undefined ? BRAND_IDENTITY_MAP[brand & BRAND_MASK] : undefined;
+    const type = info?.type ?? 'unknown';
+    const prefix = info?.prefix ?? `${type}_`;
 
-  const type = info?.type ?? 'unknown';
-  const prefix = info?.prefix ?? `${type}_`;
-
-  return { name: `${prefix}${id}`, type };
-};
-
-const _getOrCreateMetadata = (obj: object, id: DependencyId): NodeMetadata => {
-  let entry = devState!.registry.get(id);
-  if (!entry) {
-    const identity = _resolveIdentity(obj)!;
-    entry = { name: identity.name, type: identity.type };
-    devState!.registry.set(id, entry);
-  }
-  return entry;
-};
-
-const _resetUpdateCounts = (): void => {
-  devState!.updateCounts.clear();
-  devState!.cleanupScheduled = false;
-};
-
-const _resetFailedEvaluations = (): void => {
-  devState!.failedEvaluations.clear();
-  devState!.failureCleanupScheduled = false;
-};
-
-// --- Core Diagnostic Functions ---
-
-/** Standardized warning logger for the library. */
-export const warn = (cond: boolean, msg: string): void => {
-  if (IS_DEV && debug.enabled && cond) {
-    console.warn(`${DEBUG_PREFIX} ${msg}`);
-  }
-};
-
-/** Registers a node for lifecycle tracking and automatic cleanup. */
-export const registerNode = (node: object & { id: DependencyId }): void => {
-  if (!IS_DEV) return;
-  const id = node.id;
-  const entry = _getOrCreateMetadata(node, id);
-
-  entry.ref = new WeakRef(node);
-  devState!.finalizer.register(node, id);
-};
-
-/** Attaches human-readable labels and type information to a node. */
-export const attachDebugInfo = (
-  obj: object,
-  type: string,
-  id: DependencyId,
-  customName?: string
-): void => {
-  if (!IS_DEV || !debug.enabled || (customName === undefined && !debug.trackGraph)) return;
-
-  let entry = devState!.registry.get(id);
-  if (!entry) {
-    entry = { name: customName ?? `${type}_${id}`, type };
-    devState!.registry.set(id, entry);
-  } else {
-    if (customName !== undefined) entry.name = customName;
-    entry.type = type;
+    return { name: `${prefix}${id}`, type };
   }
 
-  debug.registerNode(obj as object & { id: DependencyId });
-};
+  #getOrCreateMetadata(obj: object, id: DependencyId): NodeMetadata {
+    let entry = this.#registry.get(id);
+    if (!entry) {
+      const identity = this.#resolveIdentity(obj)!;
+      entry = { name: identity.name, type: identity.type };
+      this.#registry.set(id, entry);
+    }
+    return entry;
+  }
 
-/** Monitors update frequency to detect and warn about infinite loops. */
-export const trackUpdate = (id: DependencyId, name?: string): void => {
-  if (!IS_DEV || !debug.enabled || !debug.warnInfiniteLoop) return;
+  #resetUpdateCounts = (): void => {
+    this.#updateCounts.clear();
+    this.#cleanupScheduled = false;
+  };
 
-  const count = (devState!.updateCounts.get(id) || 0) + 1;
-  devState!.updateCounts.set(id, count);
+  #resetFailedEvaluations = (): void => {
+    this.#failedEvaluations.clear();
+    this.#failureCleanupScheduled = false;
+  };
 
-  const threshold = DEBUG_CONFIG.LOOP_THRESHOLD;
-  if (count > threshold) {
-    if (count === threshold + 1) {
-      console.warn(
-        `${DEBUG_PREFIX} Infinite loop detected for ${name ?? `dependency ${id}`}. ` +
-          `Detected ${count} updates within a single execution scope, exceeding the threshold of ${threshold}.`
-      );
+  warn(cond: boolean, msg: string): void {
+    if (this.enabled && cond) {
+      console.warn(`${DEBUG_PREFIX} ${msg}`);
     }
   }
 
-  if (!devState!.cleanupScheduled) {
-    devState!.cleanupScheduled = true;
-    queueMicrotask(_resetUpdateCounts);
+  registerNode(node: object & { id: DependencyId }): void {
+    const id = node.id;
+    const entry = this.#getOrCreateMetadata(node, id);
+
+    entry.ref = new WeakRef(node);
+    this.#finalizer.register(node, id);
   }
-};
 
-/** Records evaluation failures during dirty checks. */
-export const trackEvaluationFailure = (id: DependencyId): void => {
-  if (!IS_DEV || !debug.enabled || devState!.failedEvaluations.has(id)) return;
+  attachDebugInfo(obj: object, type: string, id: DependencyId, customName?: string): void {
+    if (!this.enabled || (customName === undefined && !this.trackGraph)) return;
 
-  devState!.failedEvaluations.add(id);
-  console.warn(`${DEBUG_PREFIX} Dependency #${id} evaluation failed during dirty check.`);
-
-  if (!devState!.failureCleanupScheduled) {
-    devState!.failureCleanupScheduled = true;
-    queueMicrotask(_resetFailedEvaluations);
-  }
-};
-
-/** Retrieves the human-readable name of a reactive node. */
-export const getDebugName = (obj: object | null | undefined): string | undefined => {
-  if (!IS_DEV || !debug.enabled || !obj) return undefined;
-  return _resolveIdentity(obj)?.name;
-};
-
-/** Retrieves the diagnostic type of a reactive node. */
-export const getDebugType = (obj: object | null | undefined): string | undefined => {
-  if (!IS_DEV || !debug.enabled || !obj) return undefined;
-  return _resolveIdentity(obj)?.type;
-};
-
-/** Captures a snapshot of all active reactive nodes and their diagnostic state. */
-export const dumpGraph = (): Record<string, unknown>[] => {
-  if (!IS_DEV) return [];
-  if (devState!.registry.size === 0) return [];
-
-  const result: Record<string, unknown>[] = [];
-  for (const [id, meta] of devState!.registry) {
-    if (debug.trackGraph && meta.ref?.deref() === undefined) {
-      continue;
+    let entry = this.#registry.get(id);
+    if (!entry) {
+      entry = { name: customName ?? `${type}_${id}`, type };
+      this.#registry.set(id, entry);
+    } else {
+      if (customName !== undefined) entry.name = customName;
+      entry.type = type;
     }
-    result.push({
-      id,
-      name: meta.name,
-      type: meta.type,
-      updateCount: devState!.updateCounts.get(id) ?? 0,
-    });
+
+    this.registerNode(obj as object & { id: DependencyId });
   }
-  return result;
-};
 
-// --- Production Controller (Static No-ops) ---
+  /**
+   * Logic: Infinite Loop Detection
+   * Tracks update frequency per-node within a single microtask scope.
+   * If updates exceed the threshold, a warning is emitted.
+   *
+   * Why: Microtask Scoping
+   * Resets counts using `queueMicrotask` to isolate the detection logic to a
+   * single reactive flush cycle, avoiding false positives across user interactions.
+   */
+  trackUpdate(id: DependencyId, name?: string): void {
+    if (!this.enabled || !this.warnInfiniteLoop) return;
 
+    const count = (this.#updateCounts.get(id) || 0) + 1;
+    this.#updateCounts.set(id, count);
+
+    const threshold = DEBUG_CONFIG.LOOP_THRESHOLD;
+    if (count > threshold) {
+      if (count === threshold + 1) {
+        console.warn(
+          `${DEBUG_PREFIX} Infinite loop detected for ${name ?? `dependency ${id}`}. ` +
+            `Detected ${count} updates within a single execution scope, exceeding the threshold of ${threshold}.`
+        );
+      }
+    }
+
+    if (!this.#cleanupScheduled) {
+      this.#cleanupScheduled = true;
+      queueMicrotask(this.#resetUpdateCounts);
+    }
+  }
+
+  trackEvaluationFailure(id: DependencyId): void {
+    if (!this.enabled || this.#failedEvaluations.has(id)) return;
+
+    this.#failedEvaluations.add(id);
+    console.warn(`${DEBUG_PREFIX} Dependency #${id} evaluation failed during dirty check.`);
+
+    if (!this.#failureCleanupScheduled) {
+      this.#failureCleanupScheduled = true;
+      queueMicrotask(this.#resetFailedEvaluations);
+    }
+  }
+
+  getDebugName(obj: object | null | undefined): string | undefined {
+    if (!this.enabled || !obj) return undefined;
+    return this.#resolveIdentity(obj)?.name;
+  }
+
+  getDebugType(obj: object | null | undefined): string | undefined {
+    if (!this.enabled || !obj) return undefined;
+    return this.#resolveIdentity(obj)?.type;
+  }
+
+  dumpGraph(): Record<string, unknown>[] {
+    if (this.#registry.size === 0) return [];
+
+    const result: Record<string, unknown>[] = [];
+    for (const [id, meta] of this.#registry) {
+      if (this.trackGraph && meta.ref?.deref() === undefined) {
+        continue;
+      }
+      result.push({
+        id,
+        name: meta.name,
+        type: meta.type,
+        updateCount: this.#updateCounts.get(id) ?? 0,
+      });
+    }
+    return result;
+  }
+}
+
+/**
+ * Role: Production No-op Stub
+ * Provides a compliant but zero-overhead implementation for production bundles.
+ * All methods are optimized away as no-ops.
+ * @internal
+ */
 const ProdDebugController: DebugConfig = {
   enabled: false,
   warnInfiniteLoop: false,
@@ -200,32 +223,34 @@ const ProdDebugController: DebugConfig = {
   trackEvaluationFailure: noop,
 };
 
-// --- Global Export ---
+/**
+ * Role: Global Diagnostic Hub
+ * The primary entry point for all diagnostic and debugging operations.
+ * Resolves to a no-op controller in production to ensure zero performance impact.
+ */
+export const debug: DebugConfig = IS_DEV ? new DevDebugEngine() : ProdDebugController;
 
 /**
- * Global diagnostic hub for the atom-effect library.
- * Refactored as an object literal for optimal V8 performance.
+ * Individual exports for direct usage (proxied to the debug singleton).
  */
-export const debug: DebugConfig = IS_DEV
-  ? {
-      enabled: true,
-      warnInfiniteLoop: DEBUG_CONFIG.WARN_INFINITE_LOOP,
-      trackGraph: false,
-      warn,
-      registerNode,
-      attachDebugInfo,
-      trackUpdate,
-      dumpGraph,
-      getDebugName,
-      getDebugType,
-      trackEvaluationFailure,
-    }
-  : ProdDebugController;
+export const warn = (cond: boolean, msg: string) => debug.warn(cond, msg);
+export const registerNode = (node: object & { id: DependencyId }) => debug.registerNode(node);
+export const attachDebugInfo = (obj: object, type: string, id: DependencyId, customName?: string) =>
+  debug.attachDebugInfo(obj, type, id, customName);
+export const trackUpdate = (id: DependencyId, name?: string) => debug.trackUpdate(id, name);
+export const trackEvaluationFailure = (id: DependencyId) => debug.trackEvaluationFailure(id);
+export const getDebugName = (obj: object | null | undefined) => debug.getDebugName(obj);
+export const getDebugType = (obj: object | null | undefined) => debug.getDebugType(obj);
+export const dumpGraph = () => debug.dumpGraph();
 
 /** @internal */
 let nextId = 1;
 
 /**
- * Generates an internal unique ID for a reactive node.
+ * Logic: Unique Node Identity
+ * Generates an internal unique ID for each reactive node.
+ * IDs are used for dependency tracking, graph visualization, and debugging.
+ *
+ * @returns A unique `DependencyId`.
  */
 export const generateId = (): DependencyId => nextId++ as DependencyId;

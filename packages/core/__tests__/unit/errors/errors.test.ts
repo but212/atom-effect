@@ -42,7 +42,7 @@ describe('Error Handling System', () => {
       const cause = new Error('root');
 
       // Default behavior
-      const err = new Class('msg', cause);
+      const err = new Class('msg', { cause });
       expect(err).toBeInstanceOf(AtomError);
       expect(err.name).toBe(name);
       expect(err._tag).toBe(tag);
@@ -50,7 +50,11 @@ describe('Error Handling System', () => {
       expect(err.cause).toBe(cause);
 
       // Override & Code (Merged: removed separate it blocks)
-      const custom = new Class('msg', null, !defaultRecoverable, 'ERR_CODE');
+      const custom = new Class('msg', {
+        cause: null,
+        recoverable: !defaultRecoverable,
+        code: 'ERR_CODE',
+      });
       expect(custom.recoverable).toBe(!defaultRecoverable);
       expect(custom.code).toBe('ERR_CODE');
     });
@@ -91,11 +95,11 @@ describe('Error Handling System', () => {
   describe('Advanced Features', () => {
     it('getErrorChain handles falsy causes and prevents circular loops', () => {
       // Falsy cause preservation
-      expect(getErrorChain(new AtomError('m', 0))[1]).toBe(0);
+      expect(getErrorChain(new AtomError('m', { cause: 0 }))[1]).toBe(0);
 
       // Circularity protection
       const err1 = new AtomError('1');
-      const err2 = new AtomError('2', err1);
+      const err2 = new AtomError('2', { cause: err1 });
       (err1 as unknown as { cause: unknown }).cause = err2;
 
       const chain = getErrorChain(err1);
@@ -104,10 +108,13 @@ describe('Error Handling System', () => {
     });
 
     it('deeply serializes complex error chains to JSON', () => {
-      const top = new AtomError(
-        'top',
-        new ComputedError('mid', new TypeError('native'), true, 'C1')
-      );
+      const top = new AtomError('top', {
+        cause: new ComputedError('mid', {
+          cause: new TypeError('native'),
+          recoverable: true,
+          code: 'C1',
+        }),
+      });
       const json = serializeError(top) as AtomErrorJSON;
 
       expect(json.message).toBe('top');

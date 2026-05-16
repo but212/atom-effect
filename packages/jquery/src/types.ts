@@ -1,3 +1,15 @@
+/**
+ * @module AEJReactiveTypes
+ *
+ * Responsibility:
+ * Defines the core type system for reactive JQuery bindings, including lifecycle
+ * hooks, polymorphic inputs, and component specifications.
+ *
+ * Design Intent:
+ * Provides a type-safe interface for declarative DOM manipulation while
+ * ensuring compatibility with the underlying atom-effect core.
+ */
+
 import type {
   AtomOptions as BaseAtomOptions,
   ComputedAtom,
@@ -12,22 +24,35 @@ import type {
 /** A function that performs cleanup tasks for a reactive effect or component. */
 export type EffectCleanup = () => void;
 
-/** Represents the unmounting phase of a component's lifecycle. */
+/**
+ * Role: Lifecycle Teardown
+ * Encapsulates cleanup logic executed during the unmount phase.
+ */
 export interface ComponentLifecycle {
-  /** Cleanup task executed during the unmount phase. */
+  /** Task to release resources, observers, or listeners. */
   unmount: EffectCleanup;
 }
 
 /** The result of a reactive effect function, which may include cleanup logic. */
 export type EffectResult = undefined | EffectCleanup | ComponentLifecycle;
 
-/** A function used to determine equality between two reactive values. */
+/**
+ * Logic: Equality Comparison
+ * Used to optimize reactivity by preventing updates when values are
+ * logically equivalent, even if object references have changed.
+ */
 export type EqualFn<T> = (a: T, b: T) => boolean;
 
 /**
  * Configuration options for creating reactive atoms.
  *
+ * When to use:
+ * - When creating a new state atom that requires a name for diagnostics
+ *   or specific update scheduling (sync vs batched).
+ *
  * @public
+ * @example
+ * const count = atom(0, { name: 'counter', sync: true });
  */
 export interface AtomOptions extends BaseAtomOptions {
   /** Optional name for debugging and diagnostic purposes. */
@@ -37,13 +62,12 @@ export interface AtomOptions extends BaseAtomOptions {
 }
 
 /**
- * A value that can be a static literal, a reactive atom, or a getter function.
- *
  * Logic: Polymorphic Input
  * Supports raw values for static initialization, reactive atoms for state-driven
  * updates, or functional getters for deferred execution of complex logic.
  *
- * @public
+ * When to use:
+ * - In component props or binding options where the input source is uncertain.
  */
 export type ReactiveValue<T> = T | ReadonlyAtom<T> | (() => T);
 
@@ -66,7 +90,11 @@ export type AsyncReactiveValue<T> =
 /** Supported primitive types for attribute and property bindings. */
 export type PrimitiveValue = string | number | boolean | null | undefined;
 
-/** A CSS property value or a tuple containing a value and its unit (e.g., [10, 'px']). */
+/**
+ * Reason: Unit Standardization
+ * Tuples allow for reactive numeric values to be automatically suffixed
+ * with a unit string (e.g., 'px', '%') during DOM synchronization.
+ */
 export type CssValue =
   | AsyncReactiveValue<string | number>
   | [source: AsyncReactiveValue<number>, unit: string];
@@ -83,6 +111,14 @@ export type CssBindings = Record<string, CssValue>;
  * and optimize resource cleanup automatically.
  *
  * @public
+ * @example
+ * // Single element binding
+ * $('#user-card').bind({
+ *   text: [nameAtom, (v) => `Hello, ${v}`],
+ *   class: { 'is-active': isActiveAtom },
+ *   css: { color: themeColorAtom },
+ *   on: { click: () => console.log('Clicked!') }
+ * });
  */
 export interface BindingOptions<T = unknown> {
   /** Binds the element's text content. Can include an optional formatter. */
@@ -142,6 +178,14 @@ export type ListKeyFn<T> = (item: T, index: number) => ListKey;
  * existing elements instead of re-rendering the entire list when data changes.
  *
  * @public
+ * @example
+ * const items = atom([{ id: 1, text: 'A' }, { id: 2, text: 'B' }]);
+ *
+ * $('#list').list(items, {
+ *   key: 'id',
+ *   render: (item) => `<li>${item.text}</li>`,
+ *   onAdd: ($el) => $el.fadeIn()
+ * });
  */
 export interface ListOptions<T> {
   /** The property name or function used to extract unique keys. */
@@ -188,7 +232,17 @@ export interface FormOptions<T> extends ValOptions<T> {
   validation?: Record<string, (val: unknown) => string | boolean>;
 }
 
-/** Configuration for reactive AJAX requests. */
+/**
+ * Configuration for reactive AJAX requests.
+ *
+ * @public
+ * @example
+ * const userData = $.fetch('https://api.example.com/user', {
+ *   defaultValue: null,
+ *   eager: true,
+ *   transform: (res) => res.data
+ * });
+ */
 export interface FetchOptions<T> {
   /** The value returned while the request is pending or if it fails. */
   defaultValue: T;
@@ -288,7 +342,15 @@ export interface RouteLocation {
   params: Record<string, string>;
 }
 
-/** Interface for programmatically interacting with the application router. */
+/**
+ * Interface for programmatically interacting with the application router.
+ *
+ * @public
+ * @example
+ * // In a component or effect
+ * router.navigate('/dashboard?tab=overview');
+ * console.log(router.currentRoute.value);
+ */
 export interface Router {
   /** Reactive atom containing the current route name. */
   currentRoute: ReadonlyAtom<string>;

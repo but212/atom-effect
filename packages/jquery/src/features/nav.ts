@@ -1,3 +1,15 @@
+/**
+ * @module AtomNavigation
+ *
+ * Responsibility:
+ * Provides a reactive PJAX-style navigation manager (atomNav) that enables
+ * seamless fragment updates without full page reloads.
+ *
+ * Design Intent:
+ * Synchronizes the browser History API, reactive application state, and DOM
+ * reconciliation to provide a single-page application experience within JQuery.
+ */
+
 import { Option, Result } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import {
@@ -30,7 +42,12 @@ interface NavSpec {
   isInitial: boolean;
 }
 
-/** @internal Maps navigation types to History API methods. */
+/**
+ * Logic: History Transition Config
+ * Defines the mapping between reactive navigation types and their
+ * respective browser History API operations.
+ * @internal
+ */
 const NAV_SPECS = {
   push: { historyMethod: 'pushState', isInitial: false },
   replace: { historyMethod: 'replaceState', isInitial: false },
@@ -72,7 +89,10 @@ const SYNC_REGISTRY = [
  *
  * Constraint: Cleanup
  * Must perform a deep cleanup of internal atom bindings within the target
- * before replacing HTML to prevent memory leaks and redundant effects.
+ * before replacing HTML.
+ *
+ * Reason: Prevents memory leaks and 'ghost' reactive effects from elements
+ * that are no longer in the document but still registered in the registry.
  */
 function reconcileDOM(params: {
   $target: JQuery;
@@ -122,23 +142,32 @@ function commitNavigation(params: {
 }
 
 /**
- * Initializes a reactive navigation manager for PJAX transitions.
+ * Logic: Reactive Navigation Orchestrator
+ * Provides a PJAX-style manager that synchronizes the URL with server-fetched fragments.
  *
  * When to use:
- * - Use when you want to enable "Single Page" behavior by fetching HTML
- *   fragments from the server instead of performing full page reloads.
+ * - When building a "Single Page" experience within a JQuery environment.
+ * - When specific DOM containers need to reflect the current URL state.
  *
- * @param options - Configuration for target containers, headers, and lifecycle hooks.
- * @returns A navigation controller with reactive status monitoring and programmatic controls.
+ * Performance Characteristics:
+ * - Implements hash-only transition optimization to avoid redundant network requests.
+ * - Uses batched reactive updates to minimize layout thrashing during navigation.
  *
  * @example
  * ```typescript
  * const nav = $.atomNav({
  *   target: '#main-content',
- *   onMount: ($el) => console.log('Content swapped!'),
+ *   onMount: ($el) => console.log('Swapped!'),
  * });
  *
- * nav.navigate('/dashboard');
+ * // Monitor navigation status
+ * $.effect(() => {
+ *   if (nav.isPending.value) showSpinner();
+ *   else hideSpinner();
+ * });
+ *
+ * // Programmatic navigation
+ * $('#link').on('click', () => nav.navigate('/settings'));
  * ```
  */
 export function atomNav(options: AtomNavOptions): AtomNav {
@@ -212,7 +241,11 @@ export function atomNav(options: AtomNavOptions): AtomNav {
           redirectUrl: xhr?.getResponseHeader?.('X-PJAX-URL') ?? undefined,
           title: xhr?.getResponseHeader?.('X-PJAX-Title') ?? undefined,
         });
-        // Security: Ensure fetched HTML is sanitized before being injected into the DOM.
+        /**
+         * Security: Content Sanitization
+         * Ensures that the fetched fragment is sanitized before injection to
+         * prevent XSS from untrusted or compromised server responses.
+         */
         return { ...result, html: sanitizeHtml(result.html).trim() };
       },
     }
@@ -244,7 +277,11 @@ export function atomNav(options: AtomNavOptions): AtomNav {
 
       const spec = NAV_SPECS[type];
 
-      // Optimization: Skip re-fetching if the transition only involves a hash change.
+      /**
+       * Optimization: Hash-only Transition
+       * Skips the full fetch-reconcile cycle if the navigation only involves
+       * changing the URL hash within the same resource path.
+       */
       if (pathAndSearch === rendered.path) {
         $.untracked(() => {
           if (hash) performScroll(win, hash);
@@ -389,7 +426,8 @@ export function atomNav(options: AtomNavOptions): AtomNav {
 
       const policies: Array<() => boolean | Promise<boolean>> = [
         () => {
-          // Reason: Only intercept same-origin requests.
+          // Reason: Only intercept same-origin requests to prevent security
+          // risks and cross-origin state contamination.
           if (target.origin !== current.origin) {
             win.location.assign(url);
             return false;

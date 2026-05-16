@@ -1,3 +1,12 @@
+/**
+ * @module AEJEffectFactory
+ *
+ * Responsibility:
+ * Orchestrates the creation and registration of reactive effects that
+ * bind state to DOM elements. Manages asynchronous race conditions
+ * and ensures deterministic resource cleanup via the registry.
+ */
+
 import { effect, isAtom, type ReadonlyAtom, untracked } from '@but212/atom-effect';
 import { SYSTEM_BINDING } from '@/constants';
 import { registry } from '@/core/registry';
@@ -22,16 +31,12 @@ export type BindingDebugType =
   | (string & {});
 
 /**
- * Creates an execution wrapper that manages asynchronous race conditions.
+ * Logic: Monotonic Async Race Protection
  *
- * Logic: Monotonic ID Tracking
- * Every update request is assigned a unique, incrementing ID. If a promise resolves
- * but its ID no longer matches the latest issued ID, the result is discarded.
+ * Strategy:
+ * Assigns an incrementing ID to each update. If a promise resolves after a
+ * newer update has started, the stale result is discarded to prevent UI flicker.
  *
- * @param el - The target element for the update.
- * @param debugType - The type of binding for logging purposes.
- * @param updater - The callback to execute when a value is ready.
- * @returns A function that accepts a value or a promise.
  * @internal
  */
 function createAsyncRunner<T>(
@@ -96,15 +101,13 @@ function createAsyncRunner<T>(
 }
 
 /**
+ * Logic: Reactive Value Binding
  * Establishes a reactive effect between a single source and a DOM element.
  *
- * Lifecycle: The created effect is automatically registered with the global
- * `registry` and linked to the target element.
+ * Lifecycle: Resource Linking
+ * The created effect is automatically registered with the global `registry`
+ * and bound to the element's lifecycle for synchronous disposal.
  *
- * @param el - The target DOM element.
- * @param source - The reactive atom, function, or static value.
- * @param updater - The function that applies the value to the DOM.
- * @param debugType - Metadata for debugging.
  * @internal
  */
 export function registerReactiveEffect<T>(
@@ -137,16 +140,13 @@ export function registerReactiveEffect<T>(
 }
 
 /**
+ * Optimization: Multi-Source Reactive Binding
  * Establishes a reactive effect between a map of sources and a DOM element.
  *
  * Optimization: Single-pass Collection
  * Replaces multiple array methods (map/filter/forEach) with a single for-loop
- * to reduce memory allocation and GC pressure on every state change.
+ * to reduce memory allocation and GC pressure during state changes.
  *
- * @param el - The target DOM element.
- * @param sourceMap - A record of property keys and reactive values.
- * @param updater - The function that applies the entire map to the DOM.
- * @param debugType - Metadata for debugging.
  * @internal
  */
 export function registerMapEffect<T>(
@@ -157,12 +157,11 @@ export function registerMapEffect<T>(
 ): void {
   const runner = createAsyncRunner(el, debugType, updater);
   const keys = Object.keys(sourceMap);
-  const len = keys.length;
 
   /** Pre-check if any source in the map is reactive. */
   let hasReactive = false;
-  for (let i = 0; i < len; i++) {
-    const val = sourceMap[keys[i]!];
+  for (const key of keys) {
+    const val = sourceMap[key];
     if (isAtom(val) || typeof val === 'function') {
       hasReactive = true;
       break;
@@ -174,8 +173,7 @@ export function registerMapEffect<T>(
     const resolved: Record<string, T> = {};
     const promises: Promise<{ key: string; value: T }>[] = [];
 
-    for (let i = 0; i < len; i++) {
-      const key = keys[i]!;
+    for (const key of keys) {
       const source = sourceMap[key];
 
       let value: T | Promise<T>;
@@ -196,8 +194,7 @@ export function registerMapEffect<T>(
 
     if (promises.length > 0) {
       return Promise.all(promises).then((results) => {
-        for (let i = 0, rLen = results.length; i < rLen; i++) {
-          const res = results[i]!;
+        for (const res of results) {
           resolved[res.key] = res.value;
         }
         return resolved;

@@ -1,19 +1,31 @@
+/**
+ * @module List DOM Orchestrator
+ *
+ * Responsibility:
+ * Orchestrates the physical DOM mutations, sanitization, and lifecycle callback
+ * execution for the reactive list binding.
+ *
+ * Design Intent:
+ * Minimizes DOM churn and memory pressure by combining "Cold Start" HTML string
+ * injection with a multi-pass reconciliation algorithm for updates.
+ */
+
 import $ from 'jquery';
 import { SYSTEM_LIST } from '@/constants';
 import type { ListOptions } from '@/types';
 import { debug } from '@/utils/debug';
 import { sanitizeHtml } from '@/utils/sanitize';
 import type { ListContext } from './context';
-import { removeListItem } from './context';
 import { ItemState, type PlaceCallbacks, type PreparedDiff } from './types';
 import { cleanupNodes, setAtomKey, wrap } from './utils';
 
 /**
- * Inserts elements before a reference node with zero-allocation for jQuery collections.
+ * Optimization: Zero-allocation
+ * Inserts elements before a reference node while avoiding unnecessary array
+ * allocations for jQuery collections.
  *
  * Why:
- * - Directly iterates over JQuery objects to avoid `.get()` or `Array.from()` array allocations.
- * - Handles polymorphic inputs (Element | JQuery) to keep the caller's logic simple.
+ * Directly iterates over JQuery objects to avoid `.get()` or `Array.from()`.
  */
 export function insertOrAppend(
   elOrJq: Element | JQuery | undefined,
@@ -34,11 +46,12 @@ export function insertOrAppend(
 }
 
 /**
+ * Logic: State Transition
  * Resets the container or renders an empty placeholder.
  *
  * Why:
- * - Decouples destructive cleanup (`.empty()`) from animated cleanup (`removeItem`).
- * - Ensures the historical context is cleared only after the DOM reflects the empty state.
+ * Decouples destructive cleanup from animated cleanup, ensuring the context
+ * is cleared only after the DOM reflects the empty state.
  */
 export function handleEmpty<T>(
   ctx: ListContext<T>,
@@ -62,7 +75,7 @@ export function handleEmpty<T>(
     for (let i = 0; i < len; i++) {
       const row = snapshots[i]!;
       if (row.node) {
-        removeListItem(ctx, row.key, wrap(row.node as Element | JQuery<Element>));
+        ctx.remove(row.key, wrap(row.node as Element | JQuery<Element>));
       }
     }
   }
@@ -78,14 +91,16 @@ export function handleEmpty<T>(
 }
 
 /**
- * Transforms items into DOM nodes or sanitized HTML strings.
+ * Role: Template Processor
+ * Transforms data items into DOM nodes or sanitized HTML strings.
  *
- * Performance:
- * - Provides a "Cold Start" optimization: returns raw HTML strings for initial render
- *   to allow direct `innerHTML` injection, bypassing jQuery construction overhead.
+ * Optimization: Cold Start
+ * Returns raw HTML strings for initial render to allow direct `innerHTML`
+ * injection, bypassing jQuery construction overhead.
  *
- * Why:
- * - String parsing is batched (`batchSanitize`) to reduce sanitization engine overhead.
+ * Security: XSS Prevention
+ * Batches string parsing via `batchSanitize` to apply consistent sanitization
+ * across all render fragments.
  */
 export function renderItems<T>(
   diff: PreparedDiff<T>,
@@ -165,10 +180,12 @@ export function renderItems<T>(
 }
 
 /**
+ * Optimization: Batched Sanitization
  * Sanitizes multiple fragments in a single pass using a sentinel separator.
  *
- * Why:
- * - Reduces the fixed overhead of sanitizers (e.g., DOMPurify) which is significant for many small strings.
+ * Security: XSS Prevention
+ * Reduces the fixed overhead of the sanitizer while maintaining high safety
+ * for many small fragments.
  */
 function batchSanitize(parts: string[]): string[] {
   if (parts.length === 1) return [sanitizeHtml(parts[0]!)];
@@ -177,31 +194,26 @@ function batchSanitize(parts: string[]): string[] {
 }
 
 /**
- * Triggers removal lifecycle for items missing in the new data set.
- *
- * When to use:
- * - Called during the diffing phase before new items are placed.
+ * Logic: Removal Trigger
+ * Executes the removal lifecycle for items missing in the new data set.
  */
 export function cleanupRemoved<T>(ctx: ListContext<T>): void {
   const { snapshots, keyToIndex } = ctx;
   for (let i = 0, len = snapshots.length; i < len; i++) {
     const row = snapshots[i]!;
     if (row.node && !keyToIndex.has(row.key)) {
-      removeListItem(ctx, row.key, wrap(row.node as Element | JQuery<Element>));
+      ctx.remove(row.key, wrap(row.node as Element | JQuery<Element>));
     }
   }
 }
 
 /**
+ * Logic: Dual-path Synchronization
  * Positions items in the DOM and executes lifecycle callbacks.
  *
- * Logic:
- * 1. Initial Render: Replaces entire innerHTML or appends via DocumentFragment.
- * 2. Reconciliation: Moves existing nodes or inserts new ones based on the diff plan.
- *
- * Performance:
- * - Uses a reverse loop for reconciliation to maintain DOM order with minimal moves.
- * - Uses `switch` instead of a handler Map to avoid object allocation in the hot loop.
+ * Optimization: Reverse Loop
+ * Uses a reverse iteration for reconciliation to maintain DOM order with
+ * minimal moves.
  */
 export function placeItems<T>(
   ctx: ListContext<T>,

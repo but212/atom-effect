@@ -1,3 +1,11 @@
+/**
+ * @module AEJMount
+ *
+ * Responsibility:
+ * Orchestrates the lifecycle and mounting of reactive UI components
+ * onto jQuery collections, ensuring isolated execution and automated teardown.
+ */
+
 import { batch, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
 import { atomEachElement } from '@/core/dom';
@@ -11,43 +19,29 @@ import type { ComponentFn } from '@/types';
 const DEFAULT_PROPS = Object.freeze({});
 
 /**
- * Orchestrates the lifecycle and mounting of a reactive UI component onto a jQuery collection.
- *
- * This function manages the initialization, reactive isolation, and teardown
- * registration for discrete UI units. It ensures that components are executed
- * within a safe window to prevent dependency leaks and that their resources
- * are automatically released when the element is removed from the DOM.
+ * Logic: Component Lifecycle Orchestration
+ * Initializes and mounts a reactive UI component onto a jQuery collection.
  *
  * When to use:
- * - To initialize complex UI modules that manage internal reactive effects,
- *   event listeners, or child bindings.
- * - To build reusable "Logic Units" that require dedicated cleanup phases.
+ * - Initialize complex UI modules with internal reactive effects or listeners.
+ * - Build reusable "Logic Units" that require dedicated cleanup phases.
  *
- * Lifecycle:
- * 1. Cleanup: Existing reactive bindings on the target elements are destroyed to prevent conflicts.
- * 2. Isolation: The component is executed within `untracked` and `batch` scopes to
- *    prevent the parent context from tracking the component's internal dependencies.
- * 3. Registration: The returned cleanup function (or unmount hook) is registered
- *    in the global registry for automatic execution during disposal.
- *
- * @param component - The component function to initialize.
- * @param props - Optional properties to pass to the component.
- * @returns The original jQuery collection for chaining.
+ * Lifecycle: Execution Pipeline
+ * 1. Cleanup: Existing reactive bindings on the target are destroyed to prevent conflicts.
+ * 2. Isolation: Component executes within `untracked` and `batch` scopes to prevent
+ *    dependency leaks to/from the parent context.
+ * 3. Registration: Teardown hooks are registered for automatic execution on DOM removal.
  *
  * @example
  * ```typescript
- * import { atom, effect } from '@but212/atom-effect';
- *
  * // 1. Define a component
  * const MyCounter = ($el, props) => {
- *   const count = atom(0);
- *   const fx = effect(() => $el.text(`${props.title}: ${count.value}`));
- *
- *   // Return a teardown function
- *   return () => fx.dispose();
+ *   const count = $.atom(0);
+ *   const fx = $.effect(() => $el.text(`${props.title}: ${count.value}`));
+ *   return () => fx.dispose(); // Teardown hook
  * };
  *
- * // 2. Mount the component
+ * // 2. Mount onto a collection
  * $('.counter-host').atomMount(MyCounter, { title: 'Click Count' });
  * ```
  */
@@ -72,12 +66,11 @@ $.fn.atomMount = function <P>(this: JQuery, component: ComponentFn<P>, props?: P
 };
 
 /**
- * Manually triggers the unmounting and resource cleanup for elements in the collection.
+ * Logic: Manual Resource Teardown
+ * Explicitly triggers unmounting and resource cleanup for elements in the collection.
  *
  * When to use:
- * - To explicitly destroy a mounted component and its associated reactive effects.
- *
- * @returns The original jQuery collection for chaining.
+ * - When you need to manually destroy a component before its host element is removed.
  */
 $.fn.atomUnmount = function (this: JQuery): JQuery {
   return atomEachElement(this, (element) => registry.cleanupTree(element));

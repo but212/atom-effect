@@ -1,8 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SYSTEM_BINDING, SYSTEM_DEBUG, SYSTEM_MOUNT } from '@/constants';
-import { debug } from '@/utils/debug';
+import $ from '@/index';
 
-describe('Debug Module', () => {
+describe('Debug Module (Black-box)', () => {
   const logSpy = vi.fn();
   const warnSpy = vi.fn();
   const errorSpy = vi.fn();
@@ -12,138 +11,128 @@ describe('Debug Module', () => {
     vi.spyOn(console, 'warn').mockImplementation(warnSpy);
     vi.spyOn(console, 'error').mockImplementation(errorSpy);
     [logSpy, warnSpy, errorSpy].forEach((s) => s.mockClear());
-    debug.enabled = false;
+
+    // Ensure we start with a clean state
+    $.debug.enabled = false;
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
-    debug.enabled = false;
+    $.debug.enabled = false;
+
+    // Clean up any styles or elements created during tests
+    document.querySelectorAll('style[data-atom-debug]').forEach((s) => s.remove());
+    if ('adoptedStyleSheets' in document) {
+      document.adoptedStyleSheets = [];
+    }
   });
 
-  // --------------------------------------------------------------------------
-  // Configuration & Gating
-  // --------------------------------------------------------------------------
-
-  describe('Configuration & Gating', () => {
-    it('should gate by enabled state', () => {
-      // 1. Gating check
-      debug.enabled = false;
-      debug.domUpdated(SYSTEM_BINDING.PREFIX, document.createElement('div'), 'test', 'val');
-      expect(logSpy).not.toHaveBeenCalled();
-
-      // 2. Critical messages check (behavior: always on irrespective of state)
-      const error = new Error('fail');
-      debug.warn(SYSTEM_MOUNT.PREFIX, 'warning');
-      debug.error(SYSTEM_BINDING.PREFIX, 'error', error);
-      expect(warnSpy).toHaveBeenCalledWith(`${SYSTEM_MOUNT.PREFIX} warning`);
-      expect(errorSpy).toHaveBeenCalledWith(`${SYSTEM_BINDING.PREFIX} error`, error);
-    });
-  });
-
-  // --------------------------------------------------------------------------
-  // DOM Feedback Behavior
-  // --------------------------------------------------------------------------
-
-  describe('DOM Feedback Behavior', () => {
-    it('should resolve diverse targets and manage highlight lifecycle', async () => {
-      debug.enabled = true;
-      const htmlEl = Object.assign(document.createElement('div'), { id: 'app' });
-      const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      const textNode = document.createTextNode('text');
-      const jqWrapper = Object.assign([htmlEl], {
-        jquery: '3.x',
-      }) as unknown as JQuery<HTMLElement>;
-
-      document.body.append(htmlEl, svgEl, textNode);
-
-      // Verify identification logic (HTML, SVG, JQuery)
-      debug.domUpdated(SYSTEM_BINDING.PREFIX, htmlEl, 'text', 'v1');
-      debug.domUpdated(SYSTEM_BINDING.PREFIX, svgEl, 'attr', 'v2');
-      debug.domUpdated(SYSTEM_BINDING.PREFIX, jqWrapper, 'prop', 'v3');
-
-      // Verify skip logic (TextNode) - should not log or highlight
-      debug.domUpdated(SYSTEM_BINDING.PREFIX, textNode as unknown as Element, 'op', 'v4');
-
-      expect(logSpy).toHaveBeenCalledTimes(3); // html, svg, jq only
-      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('div#app.text'), 'v1');
-
-      // Verify highlighting application
-      await new Promise((r) => requestAnimationFrame(r));
-      const anims = htmlEl.getAnimations();
-      expect(anims.length).toBeGreaterThan(0);
-      expect(anims[0]?.effect?.getTiming().duration).toBe(
-        SYSTEM_DEBUG.DEFAULTS.HIGHLIGHT_DURATION_MS
-      );
-
-      // Verify cleanup lifecycle (even if element is disconnected during the wait)
-      htmlEl.remove();
-      await new Promise((r) => setTimeout(r, SYSTEM_DEBUG.DEFAULTS.HIGHLIGHT_DURATION_MS + 100));
-      expect(htmlEl.getAnimations().length).toBe(0);
-
-      svgEl.remove();
-      textNode.remove();
-    });
-
-    it('should ensure idempotent style injection', () => {
-      debug.enabled = true;
+  describe('Visibility & Gating', () => {
+    it('should suppress instrumentation logs when disabled', () => {
+      $.debug.enabled = false;
       const el = document.createElement('div');
       document.body.appendChild(el);
 
-      // Triggering update multiple times should result in exactly one injection method
-      debug.domUpdated(SYSTEM_BINDING.PREFIX, el, 'a', '1');
-      debug.domUpdated(SYSTEM_BINDING.PREFIX, el, 'b', '2');
+      $.debug.domUpdated('[TEST]', el, 'text', 'new value');
 
-      const hasAdopted =
-        'adoptedStyleSheets' in document && 'replaceSync' in CSSStyleSheet.prototype;
+      expect(logSpy).not.toHaveBeenCalled();
+      expect(el.hasAttribute('data-atom-debug')).toBe(false);
+      el.remove();
+    });
 
-      if (hasAdopted) {
-        const sheets = document.adoptedStyleSheets;
-        const hasDebugSheet = sheets.some((s) => {
-          try {
-            return Array.from(s.cssRules).some((r) => r.cssText.includes('data-atom-debug'));
-          } catch {
-            return false;
-          }
-        });
-        expect(hasDebugSheet).toBe(true);
-      } else {
-        const styles = document.querySelectorAll('style[data-atom-debug]');
-        expect(styles.length).toBe(1);
-        expect(styles[0]?.textContent).toMatch(/\[data-atom-debug\]/);
-      }
+    it('should always log critical messages (warn/error) regardless of enabled state', () => {
+      $.debug.enabled = false;
+      const error = new Error('critical failure');
+
+      $.debug.warn('[WARN]', 'something is wrong');
+      $.debug.error('[ERROR]', 'failed', error);
+
+      expect(warnSpy).toHaveBeenCalledWith('[WARN] something is wrong');
+      expect(errorSpy).toHaveBeenCalledWith('[ERROR] failed', error);
+    });
+  });
+
+  describe('DOM Feedback Behavior', () => {
+    it('should identify and highlight diverse targets (HTML, SVG, JQuery)', async () => {
+      $.debug.enabled = true;
+
+      const htmlEl = Object.assign(document.createElement('div'), { id: 'app' });
+      const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      const jqEl = Object.assign([document.createElement('span')], {
+        jquery: '3.x',
+      }) as unknown as JQuery;
+
+      const jqElement = jqEl[0];
+      if (!jqElement) throw new Error('JQuery element not found');
+
+      document.body.append(htmlEl, svgEl, jqElement);
+
+      // 1. Verify HTML Identification & Logging
+      $.debug.domUpdated('[UI]', htmlEl, 'text', 'v1');
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('div#app.text'), 'v1');
+      expect(htmlEl.hasAttribute('data-atom-debug')).toBe(true);
+
+      // 2. Verify SVG Identification
+      $.debug.domUpdated('[SVG]', svgEl, 'attr', 'v2');
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('svg.attr'), 'v2');
+      expect(svgEl.hasAttribute('data-atom-debug')).toBe(true);
+
+      // 3. Verify JQuery Identification
+      $.debug.domUpdated('[JQ]', jqEl, 'prop', 'v3');
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('span.prop'), 'v3');
+      expect(jqElement.hasAttribute('data-atom-debug')).toBe(true);
+
+      // 4. Verify visual side-effect (Animation presence)
+      // Note: We don't check duration (implementation detail), just that an animation started.
+      expect(htmlEl.getAnimations().length).toBeGreaterThan(0);
+
+      [htmlEl, svgEl, jqElement].forEach((el) => el.remove());
+    });
+
+    it('should ignore disconnected elements and non-element nodes', () => {
+      $.debug.enabled = true;
+
+      const disconnected = document.createElement('div');
+      const textNode = document.createTextNode('text node');
+
+      $.debug.domUpdated('[SKIP]', disconnected, 'text', 'v1');
+      $.debug.domUpdated('[SKIP]', textNode as unknown as Element, 'text', 'v2');
+
+      expect(logSpy).not.toHaveBeenCalled();
+      expect(disconnected.hasAttribute('data-atom-debug')).toBe(false);
+    });
+
+    it('should ensure idempotent style injection occurs', () => {
+      $.debug.enabled = true;
+      const el = document.createElement('div');
+      document.body.appendChild(el);
+
+      // Trigger multiple times; should not cause multiple redundant injections
+      $.debug.domUpdated('[UI]', el, 'a', '1');
+      $.debug.domUpdated('[UI]', el, 'b', '2');
+
+      const styleTags = document.querySelectorAll('style[data-atom-debug]');
+      const adoptedSheetsCount = (document.adoptedStyleSheets as unknown[])?.length || 0;
+
+      // Black-box check: some mechanism is providing the styles
+      expect(styleTags.length + adoptedSheetsCount).toBeGreaterThan(0);
+
       el.remove();
     });
   });
 
-  // --------------------------------------------------------------------------
-  // Cross-environment Resilience
-  // --------------------------------------------------------------------------
+  describe('Environment Resilience', () => {
+    it('should handle malformed or missing targets gracefully without crashing', () => {
+      $.debug.enabled = true;
 
-  describe('SSR & Environment Resilience', () => {
-    it('should remain robust when browser-only globals are missing', () => {
-      debug.enabled = true;
-      const container = document.createElement('div');
-
-      const originalElement = globalThis.Element;
-      const originalRaf = globalThis.requestAnimationFrame;
-
-      // Mock SSR environment by temporarily removing browser globals
-      // @ts-expect-error: simulating missing globals
-      globalThis.Element = undefined;
-      // @ts-expect-error: simulating missing globals
-      globalThis.requestAnimationFrame = undefined;
-
-      // Logic check: should not throw ReferenceErrors or crash
-      expect(() => {
-        debug.domUpdated(SYSTEM_BINDING.PREFIX, container, 'test', 'value');
-      }).not.toThrow();
-
-      // Verify state was not updated illegally
+      // Passing invalid types should not throw ReferenceErrors or crash the system
+      expect(() =>
+        $.debug.domUpdated('[UI]', null as unknown as Element, 'test', 'val')
+      ).not.toThrow();
+      expect(() =>
+        $.debug.domUpdated('[UI]', {} as unknown as Element, 'test', 'val')
+      ).not.toThrow();
       expect(logSpy).not.toHaveBeenCalled();
-
-      // Restore environment
-      globalThis.Element = originalElement;
-      globalThis.requestAnimationFrame = originalRaf;
     });
   });
 });

@@ -145,7 +145,7 @@ describe('Effect', () => {
       await vi.runAllTimersAsync();
 
       e.dispose();
-      // e[Symbol.dispose](); // Removed for ES2021 compatibility
+      // e[Symbol.dispose](); // Removed for ES2022 compatibility
 
       expect(order).toEqual(['run', 'cleanup', 'run', 'cleanup']);
       expect(e.isDisposed).toBe(true);

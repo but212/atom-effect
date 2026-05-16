@@ -42,6 +42,23 @@ describe('Scheduler Engine', () => {
       expect(schedulerQueueSize(scheduler)).toBe(0);
     });
 
+    it('ensures nested schedules are deferred to the next iteration (double buffering)', async () => {
+      const log: string[] = [];
+      const nestedJob = vi.fn(() => log.push('nested'));
+      const initialJob = vi.fn(() => {
+        log.push('initial');
+        schedulerSchedule(scheduler, nestedJob);
+        expect(schedulerQueueSize(scheduler)).toBe(1);
+      });
+
+      schedulerSchedule(scheduler, initialJob);
+      await sleep(10);
+
+      expect(log).toEqual(['initial', 'nested']);
+      expect(initialJob).toHaveBeenCalledTimes(1);
+      expect(nestedJob).toHaveBeenCalledTimes(1);
+    });
+
     it('handles nested batch scopes correctly', () => {
       const log: string[] = [];
 

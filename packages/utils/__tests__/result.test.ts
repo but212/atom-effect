@@ -128,14 +128,16 @@ describe('Result', () => {
       expect(err).toMatchObject(Result.err(error));
     });
 
-    it('tryCatch should handle non-Error throws', () => {
+    it('tryCatch should handle non-Error throws and preserve cause', () => {
+      const original = 'not an error object';
       const err = Result.tryCatch(() => {
-        throw 'not an error object';
+        throw original;
       });
       expect(err.ok).toBe(false);
       if (Result.isErr(err)) {
         expect(err.error).toBeInstanceOf(Error);
-        expect(err.error.message).toBe('not an error object');
+        expect(err.error.message).toBe(original);
+        expect(err.error.cause).toBe(original);
       }
     });
 
@@ -160,6 +162,19 @@ describe('Result', () => {
     it('tryAsync should reuse VOID_SUCCESS for undefined returns', async () => {
       const res = await Result.tryAsync(async () => {});
       expect(res).toBe(Result.ok(undefined));
+    });
+
+    it('tryAsync should handle non-Error throws and preserve cause', async () => {
+      const original = 'async failure';
+      const err = await Result.tryAsync(async () => {
+        throw original;
+      });
+      expect(err.ok).toBe(false);
+      if (Result.isErr(err)) {
+        expect(err.error).toBeInstanceOf(Error);
+        expect(err.error.message).toBe(original);
+        expect(err.error.cause).toBe(original);
+      }
     });
   });
 

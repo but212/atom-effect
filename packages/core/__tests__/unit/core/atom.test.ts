@@ -191,7 +191,7 @@ describe('Atom', () => {
 
       a.subscribe(spy);
       a.dispose();
-      // a[Symbol.dispose](); // Removed for ES2021 compatibility
+      // a[Symbol.dispose](); // Removed for ES2022 compatibility
 
       expect(a.subscriberCount()).toBe(0);
 

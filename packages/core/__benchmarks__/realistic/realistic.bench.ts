@@ -101,10 +101,6 @@ describe('Stability: Component Churn & Memory', () => {
   );
 });
 
-// ---------------------------------------------------------------------------
-// Search-as-you-type
-// ---------------------------------------------------------------------------
-
 describe('Search-as-you-type (1000 items)', () => {
   const corpus = generateSearchCorpus('large' as SizeKey);
 
@@ -146,10 +142,6 @@ describe('Search-as-you-type (1000 items)', () => {
     macroBenchOptions
   );
 });
-
-// ---------------------------------------------------------------------------
-// Shopping Cart Workflow
-// ---------------------------------------------------------------------------
 
 describe('Shopping Cart Workflow', () => {
   type CartItem = { id: number; name: string; price: number; qty: number };
@@ -195,10 +187,6 @@ describe('Shopping Cart Workflow', () => {
     macroBenchOptions
   );
 });
-
-// ---------------------------------------------------------------------------
-// Dashboard KPI Pipeline
-// ---------------------------------------------------------------------------
 
 describe('Dashboard KPI Pipeline (10 sources → 5 KPIs → 1 summary)', () => {
   const vanillaSources = Array.from({ length: 10 }, (_, i) => i * 100);

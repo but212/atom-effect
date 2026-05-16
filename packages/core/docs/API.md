@@ -197,7 +197,9 @@ An exported object representing the possible states of an asynchronous computed 
 The library utilizes a structured error hierarchy for identifying and recovering from issues within the reactive graph.
 
 > [!IMPORTANT]
-> **Breaking Change**: Since version 0.33.0, instance methods like `AtomError.getChain()` and `AtomError.toJSON()` have been removed. Use the standalone `getErrorChain()` and `serializeError()` utilities instead.
+> **ES2022+ Requirement**: Starting with version 0.33.0, the library targets ES2022. It utilizes modern JavaScript features such as private class fields (`#`) for internal state encapsulation.
+>
+> **Breaking Change**: Instance methods like `AtomError.getChain()` and `AtomError.toJSON()` have been removed. Use the standalone `getErrorChain()` and `serializeError()` utilities instead for improved tree-shaking.
 
 ### `AtomError`
 
@@ -350,10 +352,10 @@ A high-performance container using a 4-bit mask for "fast-lane" slot management 
 - `compact(): void`: Eliminates all internal holes and resets physical boundaries.
 - `clear(): void`: Resets the buffer to an empty state.
 
-### `DepBufferState`
+### `DependencyBuffer`
 
-A specialized state object (defined in `types/reactive.ts`) for managing dependency links. It features:
+The internal state management for dependency tracking is now implemented as an encapsulated **`DependencyBuffer`** class. It features:
 
-- **Slot Integration**: Uses a `SlotBuffer<DependencyLink>` for ordered dependency storage.
-- **Dynamic Indexing**: Employs an `Indexer` interface that automatically transitions from linear scans to a `Map`-based lookup when the dependency count exceeds a performance threshold (defined in `BUFFER_CONFIG`).
-- **Version Tracking**: Stores the `version` of dependencies at the time of link establishment for efficient drift detection.
+- **Private Encapsulation**: Uses ES2022 private fields (`#`) to isolate reactive links and lookup indexing from external access.
+- **Dynamic Indexing**: Employs an `Indexer` interface that automatically transitions from linear scans to a `Map`-based lookup when the dependency count exceeds 32.
+- **Lifecycle Logic**: Encapsulates reconciliation logic (`claimExisting`, `insertNew`) and memory-safe truncation within class methods.

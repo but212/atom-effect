@@ -1,3 +1,15 @@
+/**
+ * @module List Utilities
+ *
+ * Responsibility:
+ * Provides low-level DOM manipulation and cleanup helpers specialized for
+ * the reactive list reconciliation engine.
+ *
+ * Design Intent:
+ * Abstracts away differences between raw DOM nodes and jQuery collections
+ * while enforcing strict memory management and identity tracking via 'data-atom-key'.
+ */
+
 import $ from 'jquery';
 import { registry } from '@/core/registry';
 
@@ -16,6 +28,7 @@ export function wrap($el: Element | JQuery<Element>): JQuery {
 }
 
 /**
+ * Role: DOM Identity Tracking
  * Assigns or removes a stable reactive identifier on a DOM node or collection.
  *
  * @param node - The target DOM element or collection.

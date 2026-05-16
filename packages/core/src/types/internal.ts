@@ -1,19 +1,28 @@
 /**
- * @module Internal_Engine_Types
+ * @module InternalEngineTypes
  *
  * Responsibility:
- * Defines engine-private interfaces and state schemas. These types are
- * used for core reactive propagation and are not exposed to the public API.
+ * Defines engine-private interfaces and state schemas for core reactive
+ * propagation.
+ *
+ * Design Intent:
+ * Provides the structural foundation for dependency tracking, scheduler
+ * execution, and memory management. These types are strictly internal and
+ * must not be exposed to the public API.
  */
 
 import type { KIND } from '@/constants';
 import type { Dependency, Subscriber } from './reactive';
 
 /**
- * Global tracking state for dependency collection.
+ * Role: Dependency Tracking Registry
+ * Manages the global state of active computations to ensure correct
+ * association between dependencies and their consumers.
  *
- * Why: Manages a stack of active computations to correctly associate
- * dependencies during nested computed or effect evaluations.
+ * Why:
+ * A stack is required to handle nested evaluations (e.g., an effect reading
+ * a computed value), ensuring that dependencies are attributed to the
+ * correct subscriber at each level of depth.
  *
  * @internal
  */
@@ -49,19 +58,25 @@ export interface ExecutableSubscriber {
 export interface DependencyTracker extends DependencySubscriber, ExecutableSubscriber {}
 
 /**
- * Internal discriminator used for fast subscriber dispatch.
+ * Logic: Fast Dispatch Discriminator
+ * Used by the scheduler and reactive engine to identify subscriber types
+ * without expensive `instanceof` checks.
  * @internal
  */
 export type SubscriberKind = (typeof KIND)[keyof typeof KIND];
 
 /**
- * Internal type for objects or functions that can receive update notifications.
+ * Role: Polymorphic Notification Target
+ * Supports both functional callbacks for external listeners and structured
+ * `Subscriber` nodes for internal propagation.
  * @internal
  */
 export type SubscriberTarget<T> = ((newValue?: T, oldValue?: T) => void) | Subscriber;
 
 /**
- * Diagnostic metrics for analyzing memory health and pooling efficiency.
+ * Role: Memory Health Diagnostics
+ * Provides metrics for analyzing pooling efficiency and identifying potential
+ * resource leaks or recycler rejections.
  * @internal
  */
 export interface PoolStats {
@@ -71,24 +86,4 @@ export interface PoolStats {
   rejected: { frozen: number; tooLarge: number; poolFull: number };
   leaked: number;
   poolSize: number;
-}
-
-/**
- * Metadata for reactive nodes used in performance-critical hot paths.
- *
- * Optimization:
- * Properties prefixed with `_` are used for internal drift detection logic
- * and are optimized for direct property access in the V8 engine.
- *
- * @internal
- */
-export interface InternalNode {
-  /** Tracks the computation epoch to detect dependency drift. */
-  _trackEpoch: number;
-  /** Current count of recorded dependencies in the tracking buffer. */
-  _trackCount: number;
-  /** Captures the last error encountered during node evaluation. */
-  _error: Error | null;
-  /** Indicates if the node is in a failed async state. */
-  isRejected: boolean;
 }

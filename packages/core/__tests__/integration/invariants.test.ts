@@ -236,7 +236,7 @@ describe('Disposal Finality', () => {
       const _safeEffect = effect(() => {
         safeContainer.push(source.value);
       });
-      // Manual disposal replaces ES2023 'using' for ES2021 compatibility
+      // Manual disposal replaces ES2023 'using' for ES2022 compatibility
       _safeEffect.dispose();
     }
 

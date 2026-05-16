@@ -27,7 +27,7 @@ export const getBaseViteConfig = (options: BaseViteConfigOptions): UserConfig =>
 
   return {
     build: {
-      target: 'es2021',
+      target: 'ES2022',
       sourcemap: true,
       outDir: 'dist',
       emptyOutDir,

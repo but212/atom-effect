@@ -1,4 +1,18 @@
-import { BRAND, BrandFlags, isAtom, isWritable, untracked } from '@but212/atom-effect';
+/**
+ * @module AEJWebComponent
+ *
+ * Responsibility:
+ * Orchestrates reactive Web Component features, including custom element
+ * controllers, dependency injection (provide/inject), and Shadow DOM
+ * synchronization.
+ *
+ * Design Intent:
+ * Bridges the gap between JQuery-style imperative DOM manipulation and
+ * modern reactive Custom Elements. It enables state-driven component
+ * development with automatic lifecycle management.
+ */
+
+import { isAtom } from '@but212/atom-effect';
 import { Option } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { SYSTEM_COMPONENT } from '@/constants';
@@ -7,72 +21,21 @@ import { CLEANUP_MARKER, CONTEXT_REQUEST, type ContextRequestDetail } from '@/co
 import type {
   AtomComponentController,
   AtomComponentStatic,
-  EffectObject,
   JQueryScopedSelector,
-  ReadonlyAtom,
   WritableAtom,
 } from '@/types';
 import { debug } from '@/utils/debug';
+import {
+  autoSetupMap,
+  ContextEngine,
+  createContextProxy,
+  getInternalState,
+  getOrCreateSheet,
+  nodeStateMap,
+} from './engine';
 import { SetupFeatures } from './setup';
 import { ComponentState } from './state';
 import { resolveShadowRoot } from './utils';
-
-/**
- * Diagnostic access for internal engine state.
- * Exposed on `window.__AEJ_INTERNAL__` in debug mode.
- * @internal
- */
-interface DebugPortal {
-  nodeStateMap: WeakMap<Node, NodeInternalState>;
-  sheetCache: Map<string, CSSStyleSheet>;
-  version: string;
-}
-
-/**
- * Metadata container for AEJ-managed nodes.
- * Using a WeakMap ensures metadata is GC'd when the Node is removed from memory.
- * @internal
- */
-interface NodeInternalState {
-  providers?: Map<string | symbol, unknown>;
-  providerEffects?: Map<string | symbol, EffectObject>;
-  injects?: Map<string | symbol, WritableAtom<unknown>>;
-  controller?: AtomComponentController;
-}
-
-// ─── Internal State Storage ──────────────────────────────────────────────────
-
-const nodeStateMap = new WeakMap<Node, NodeInternalState>();
-const sheetCache = new Map<string, CSSStyleSheet>();
-const MAX_SHEET_CACHE_SIZE = 100;
-
-// ─── Debug Portal ──────────────────────────────────────────────────
-
-if (debug.enabled && typeof window !== 'undefined') {
-  (window as unknown as { __AEJ_INTERNAL__: DebugPortal }).__AEJ_INTERNAL__ = {
-    nodeStateMap,
-    sheetCache,
-    version: '0.32.1',
-  };
-}
-
-/**
- * WeakMap for elements that were declared as components via static properties
- * but are not yet connected to the DOM.
- */
-const autoSetupMap = new WeakMap<HTMLElement, AtomComponentStatic>();
-
-/** Retrieves or initializes the internal metadata state for a node. @internal */
-const getInternalState = (node: Node): NodeInternalState => {
-  let state = nodeStateMap.get(node);
-  if (!state) {
-    state = {};
-    nodeStateMap.set(node, state);
-  }
-  return state;
-};
-
-// ─── Environment & Compatibility ───────────────────────────────────────────────
 
 const supportsConstructableStylesheets =
   typeof window !== 'undefined' &&
@@ -83,225 +46,35 @@ const supportsInternals =
   typeof window !== 'undefined' && 'attachInternals' in HTMLElement.prototype;
 
 /**
- * Manages a global cache of CSSStyleSheets to prevent redundant parsing
- * of identical style strings across component instances.
- */
-const getOrCreateSheet = (source: string | CSSStyleSheet): CSSStyleSheet => {
-  if (source instanceof CSSStyleSheet) return source;
-  let sheet = sheetCache.get(source);
-  if (!sheet) {
-    sheet = new CSSStyleSheet();
-    sheet.replaceSync(source);
-    // Simple LRU-ish eviction: remove the first added entry if cache exceeds limit
-    if (sheetCache.size >= MAX_SHEET_CACHE_SIZE) {
-      const firstKey = sheetCache.keys().next().value;
-      if (firstKey !== undefined) sheetCache.delete(firstKey);
-    }
-    sheetCache.set(source, sheet);
-  }
-  return sheet;
-};
-
-// ─── Context Engine ─────────────────────────────────────────────────────────
-
-/**
- * Internal singleton that coordinates Dependency Injection (DI) across the DOM.
+ * Logic: Component Lifecycle Controller
+ * Orchestrates reactive features for a specific DOM element, managing
+ * bindings, styles, and resource cleanup.
  *
- * Why: DOM tree changes (adding/removing nodes) affect context resolution.
- * This engine tracks those changes and notifies observers.
- */
-const ContextEngine = (() => {
-  const version = $.atom(0);
-  let isBumpPending = false;
-  let observer: MutationObserver | null = null;
-  let activeCount = 0;
-
-  /**
-   * Signals that the DOM tree has changed, potentially invalidating cached injections.
-   * Debounced to a microtask to avoid excessive re-computations during bulk updates.
-   */
-  const bump = () => {
-    if (isBumpPending) return;
-    isBumpPending = true;
-    queueMicrotask(() => {
-      version.value++;
-      isBumpPending = false;
-    });
-  };
-
-  /**
-   * Initializes a "late-bound" component that was discovered in the DOM.
-   */
-  const init = (el: HTMLElement) => {
-    const specs = autoSetupMap.get(el);
-    if (specs) {
-      const ctrl = nodeStateMap.get(el)?.controller;
-      if (ctrl) {
-        ctrl.setup({
-          ...(specs.aejStyles && { styles: specs.aejStyles }),
-          ...(specs.aejBind && { bind: specs.aejBind }),
-          ...(specs.aejAria && { aria: specs.aejAria }),
-          ...(specs.aejParts && { parts: specs.aejParts }),
-          ...(specs.aejDispatch && { dispatch: specs.aejDispatch }),
-          ...(specs.aejValue && { value: specs.aejValue }),
-          ...(specs.aejValidation && { validation: specs.aejValidation }),
-        });
-      }
-      autoSetupMap.delete(el);
-      ContextEngine.release();
-    }
-  };
-
-  const ensureObserver = () => {
-    if (observer || typeof document === 'undefined') return;
-    observer = new MutationObserver((mutations) => {
-      let needsBump = false;
-      for (let i = 0; i < mutations.length; i++) {
-        const m = mutations[i]!;
-        if (m.addedNodes.length > 0) {
-          needsBump = true;
-          for (let j = 0; j < m.addedNodes.length; j++) {
-            const node = m.addedNodes[j];
-            if (node instanceof HTMLElement) {
-              init(node);
-              // Deep scan for nested components that might have been added in a fragment
-              const children = node.querySelectorAll('*');
-              for (let k = 0; k < children.length; k++) {
-                init(children[k] as HTMLElement);
-              }
-            }
-          }
-        }
-        if (m.removedNodes.length > 0) needsBump = true;
-      }
-      if (needsBump) bump();
-    });
-    observer.observe(document.documentElement, { childList: true, subtree: true });
-  };
-
-  const releaseObserver = () => {
-    if (observer) {
-      observer.disconnect();
-      observer = null;
-    }
-  };
-
-  return {
-    get version() {
-      return version;
-    },
-    bump,
-    /** Activates DOM monitoring when at least one component is waiting for connection. */
-    retain() {
-      activeCount++;
-      if (activeCount === 1) ensureObserver();
-    },
-    /** Deactivates DOM monitoring when no components are pending. */
-    release() {
-      activeCount--;
-      if (activeCount === 0) releaseObserver();
-    },
-    /**
-     * Resolves a context key by dispatching a bubbling DOM event.
-     * This mimics the native Web Component Context API proposal.
-     */
-    discover(target: HTMLElement, key: string | symbol): Option<unknown> {
-      let found: Option<unknown> = Option.none;
-      const event = new CustomEvent<ContextRequestDetail>(CONTEXT_REQUEST, {
-        detail: {
-          key,
-          callback: (atom) => {
-            found = Option.some(atom);
-          },
-        },
-        bubbles: true,
-        composed: true, // Traverse shadow boundaries
-      });
-      target.dispatchEvent(event);
-      return found;
-    },
-  };
-})();
-
-// ─── Context Proxy Resolver ─────────────────────────────────────────────────
-
-/**
- * Creates a reactive proxy that follows a context value as it moves in the DOM.
+ * When to use:
+ * - Recommended for integrating reactive state into standard Custom Elements.
+ * - Suitable for mapping attributes and slots to reactive atoms.
+ * - When you need automatic cleanup of effects when an element is removed.
  *
- * If the element is moved under a different provider, this proxy will automatically
- * update to the new provider's value because it tracks `ContextEngine.version`.
- */
-function createContextProxy<T>(target: HTMLElement, key: string | symbol): WritableAtom<T> {
-  const resolve = (isPeek: boolean) => {
-    // Tracking version makes the calling computed/effect re-run when DOM structure changes
-    if (isPeek) ContextEngine.version.peek();
-    else ContextEngine.version.value;
-
-    return untracked(() => ContextEngine.discover(target, key)) as Option<WritableAtom<T> | T>;
-  };
-
-  const getLiveValue = (isPeek: boolean) => {
-    const res = resolve(isPeek);
-    if (Option.isNone(res)) return null as T;
-    const p = Option.unwrap(res);
-    // If the provider provided an Atom, we return its value. Otherwise return the raw value.
-    return (isAtom(p) ? (isPeek ? p.peek() : p.value) : p) as T;
-  };
-
-  let sharedAtom: ReadonlyAtom<T> | null = null;
-  const getShared = () => {
-    if (!sharedAtom) sharedAtom = $.computed(() => getLiveValue(false));
-    return sharedAtom;
-  };
-
-  return {
-    get value() {
-      return getLiveValue(false);
-    },
-    set value(v: T) {
-      const res = resolve(true);
-      if (Option.isSome(res)) {
-        const p = Option.unwrap(res);
-        if (isWritable(p)) p.value = v;
-      }
-    },
-    peek() {
-      return getLiveValue(true);
-    },
-    subscribe: (fn) => {
-      ContextEngine.retain(); // Keep observer alive while there are active subscribers
-      const unsub = getShared().subscribe(fn);
-      return () => {
-        unsub();
-        ContextEngine.release();
-      };
-    },
-    subscriberCount: () => (sharedAtom ? sharedAtom.subscriberCount() : 0),
-    dispose: () => {
-      if (sharedAtom) {
-        sharedAtom.dispose();
-        sharedAtom = null;
-      }
-    },
-    [BRAND]: BrandFlags.Atom | BrandFlags.Writable,
-  } as WritableAtom<T>;
-}
-
-// ─── Controller Implementation ───────────────────────────────────────────────
-
-/**
- * Orchestrates AEJ features for a specific DOM element.
+ * @param element - The host element (usually `this` in a Custom Element).
+ * @returns A controller for managing the component's reactive lifecycle.
  *
- * Usage:
- * ```ts
- * const ctrl = useAtomComponent(el);
- * ctrl.setup({
- *   bind: { '.title': { text: titleAtom } }
- * });
+ * @example
+ * ```typescript
+ * class MyToggle extends HTMLElement {
+ *   private aej = $.useAtomComponent(this);
+ *   private active = $.atom(false);
+ *
+ *   connectedCallback() {
+ *     this.aej.setup({
+ *       bind: { label: $.computed(() => this.active.value ? 'ON' : 'OFF') },
+ *       dispatch: { toggle: this.active }
+ *     });
+ *   }
+ * }
  * ```
  */
 export function useAtomComponent(element: HTMLElement): AtomComponentController {
-  // Guard: Warn if used on an unregistered custom element (potential typo)
+  // Security: Guard against use on unregistered elements to prevent silent initialization failures.
   if (debug.enabled && typeof customElements !== 'undefined') {
     const tagName = element.tagName.toLowerCase();
     if (tagName.includes('-') && !customElements.get(tagName)) {
@@ -312,13 +85,12 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
   const internal = getInternalState(element);
   if (internal.controller) return internal.controller;
 
-  // ElementInternals allows custom elements to participate in forms and accessibility
   let internals: ElementInternals | undefined;
   if (supportsInternals) {
     try {
       internals = element.attachInternals();
     } catch {
-      /* Native exception if attachInternals is called twice or not on a custom element */
+      /* ignored */
     }
   }
 
@@ -333,7 +105,11 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       return internals;
     },
 
-    /** Returns a reactive lens for a DOM attribute. Updates when the attribute changes. */
+    /**
+     * Logic: Lazy Attribute Mapping
+     * Returns a reactive lens for a DOM attribute. Updates when the
+     * attribute changes via MutationObserver.
+     */
     get attrs() {
       if (!state.attributeAtom) {
         const { atom, observer } = SetupFeatures.attributes(element);
@@ -350,7 +126,11 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       };
     },
 
-    /** Returns a reactive lens for named slots. Useful in Shadow DOM components. */
+    /**
+     * Logic: Lazy Slot Mapping
+     * Returns a reactive lens for named slots. Automatically tracks
+     * `assignedNodes` changes in Shadow DOM.
+     */
     get slots() {
       if (!state.slotsAtom) {
         const sr = resolveShadowRoot(element, Option.toNullable(state.root));
@@ -369,7 +149,6 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       };
     },
 
-    /** Scoped jQuery selector. Defaults to searching within the component's root. */
     $: ((selector, context) => {
       const ctx = context ?? Option.toNullable(state.root) ?? element;
       if (typeof selector !== 'string') return $(selector) as unknown as JQuery;
@@ -382,7 +161,8 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
     injectAtom: <T = unknown>(key: string | symbol) => injectAtom<T>(element, key),
 
     /**
-     * Bootstraps component features (bindings, styles, etc.)
+     * Logic: Atomic Setup
+     * Bootstraps component features (bindings, styles, etc.).
      * This is idempotent; calling it twice with the same root does nothing.
      */
     setup(options: Parameters<AtomComponentController['setup']>[0]) {
@@ -402,19 +182,14 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
         registry.registerShadow(element, sr);
       });
 
-      const rootNode = Option.unwrapOr(srOpt, element) as Node & {
-        [CLEANUP_MARKER]?: boolean;
-      };
+      const rootNode = Option.unwrapOr(srOpt, element) as Node & { [CLEANUP_MARKER]?: boolean };
       state.root = Option.some(rootNode);
 
-      // Memory Management: Ensure the root node (ShadowRoot or Element)
-      // automatically cleans up AEJ effects when disconnected from the DOM.
       if (!rootNode[CLEANUP_MARKER]) {
         enableAutoCleanup(rootNode as Element);
         rootNode[CLEANUP_MARKER] = true;
       }
 
-      // Feature Initialization Sequence
       if (!state.slotsAtom) {
         const sr = Option.toNullable(srOpt);
         const { atom, listener } = SetupFeatures.slots(sr);
@@ -444,6 +219,11 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       state.isInitialized = true;
     },
 
+    /**
+     * Logic: Deterministic Teardown
+     * Releases all reactive resources, providers, and observers
+     * associated with this component instance.
+     */
     teardown() {
       const s = nodeStateMap.get(element);
       if (s) {
@@ -463,8 +243,6 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       registry.cleanupTree(element);
     },
   } as unknown as AtomComponentController;
-
-  // ─── Automatic Setup for Static Declarations ──────────────────────────────
 
   const ctor = element.constructor as typeof HTMLElement & AtomComponentStatic;
   const hasStaticSpecs = !!(
@@ -489,26 +267,40 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
         ...(ctor.aejValidation && { validation: ctor.aejValidation }),
       });
     } else {
-      // If not connected, defer setup until the element is inserted into the DOM.
       autoSetupMap.set(element, ctor);
       ContextEngine.retain();
     }
   }
 
   registry.setTeardown(element, () => controller.teardown());
-
   internal.controller = controller;
   return controller;
 }
 
 /**
+ * Logic: Dependency Provider
  * Registers a value or atom to be provided to all descendant elements.
  *
- * Side-effect: Synchronizes the value to a CSS variable `--aej-[key]`
- * on the host element for hybrid styling (CSS-in-JS lite).
+ * Logic: CSS Variable Synchronization
+ * Automatically synchronizes the provided value to a CSS variable
+ * `--aej-[key]` on the host element for state-driven styling.
+ *
+ * When to use:
+ * - When you need to share state (like themes or user sessions) across a deep DOM tree.
+ * - When you want to control CSS properties reactively via atoms.
+ *
+ * @param element - The host element or collection acting as provider.
+ * @param key - Unique identifier for the context.
+ * @param val - The reactive atom or static value to share.
  *
  * @example
- * provideAtom(el, 'theme', $.atom('dark'));
+ * ```typescript
+ * const theme = $.atom('dark');
+ * $.provideAtom('#app', 'theme', theme);
+ *
+ * // In CSS:
+ * // .child { color: var(--aej-theme); }
+ * ```
  */
 export function provideAtom(
   element: HTMLElement | JQuery | string,
@@ -522,12 +314,10 @@ export function provideAtom(
         ? Array.from(document.querySelectorAll<HTMLElement>(element))
         : ((element as JQuery).toArray() as HTMLElement[]);
 
-  for (let i = 0; i < targets.length; i++) {
-    const el = targets[i]!;
+  for (const el of targets) {
     const state = getInternalState(el);
     if (!state.providers) {
       state.providers = new Map();
-      // Listen for injection requests from descendants
       el.addEventListener(CONTEXT_REQUEST, (e: Event) => {
         const { key: reqKey, callback } = (e as CustomEvent<ContextRequestDetail>).detail;
         if (state.providers?.has(reqKey)) {
@@ -538,7 +328,6 @@ export function provideAtom(
     }
     state.providers.set(key, val);
 
-    // CSS Variable Sync Logic
     const keyStr = typeof key === 'symbol' ? key.description : String(key);
     if (keyStr) {
       const varName = `--aej-${keyStr}`;
@@ -560,12 +349,32 @@ export function provideAtom(
 }
 
 /**
+ * Logic: Dependency Injection
  * Injects a provided value or atom from an ancestor.
- * Returns a proxy atom that tracks the provider's location in the DOM.
+ *
+ * Logic: Late-Bound Proxy
+ * Returns a reactive proxy atom that automatically re-locates providers
+ * if the element is moved within the DOM hierarchy.
+ *
+ * When to use:
+ * - To consume state provided by a `provideAtom` ancestor.
+ * - When components might be moved (drag-and-drop) and need to stay synced with their new context.
+ *
+ * @param element - The element requesting the context.
+ * @param key - The unique identifier of the context to locate.
+ * @returns A reactive proxy atom representing the injected context.
  *
  * @example
- * const theme = injectAtom(el, 'theme');
- * $.effect(() => console.log(theme.value));
+ * ```typescript
+ * class MyChild extends HTMLElement {
+ *   connectedCallback() {
+ *     const theme = $.injectAtom(this, 'theme');
+ *     $.effect(() => {
+ *       this.style.color = theme.value === 'dark' ? 'white' : 'black';
+ *     });
+ *   }
+ * }
+ * ```
  */
 export function injectAtom<T = unknown>(
   element: HTMLElement | JQuery | string,
@@ -597,5 +406,7 @@ export function injectAtom<T = unknown>(
   return existing as WritableAtom<T>;
 }
 
-// Attach to jQuery namespace for global accessibility
+// Attach to jQuery namespace
 $.extend({ provideAtom, injectAtom, useAtomComponent });
+
+export { ContextEngine }; // Export for diagnostic tests if needed

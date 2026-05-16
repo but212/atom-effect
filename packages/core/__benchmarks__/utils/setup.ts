@@ -4,6 +4,19 @@
  */
 
 import type { BenchOptions } from 'vitest';
+import { runtimeDebug } from '../../dist/';
+
+/**
+ * Benchmark configuration and diagnostic overrides.
+ *
+ * Logic: Disable infinite loop detection in benchmarks.
+ * Why: Benchmarks intentionally update reactive nodes thousands of times in a
+ * single task to measure performance, which would otherwise trigger the
+ * infinite loop protection threshold (default: 100).
+ */
+if (runtimeDebug) {
+  runtimeDebug.warnInfiniteLoop = false;
+}
 
 export const REPEATS = 10;
 
@@ -261,10 +274,6 @@ export function randomString(length: number): string {
 export function randomNumbers(count: number, min = 0, max = 1000): number[] {
   return Array.from({ length: count }, () => randomInt(min, max));
 }
-
-// ---------------------------------------------------------------------------
-// Size-keyed helpers
-// ---------------------------------------------------------------------------
 
 export const SIZES = { small: 10, medium: 100, large: 1000 } as const;
 export type SizeKey = keyof typeof SIZES;
