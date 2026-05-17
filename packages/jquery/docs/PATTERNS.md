@@ -239,6 +239,7 @@ $('form').atomForm(user, {
 ```
 
 When validation fails:
+
 - The input matches the `:invalid` CSS pseudo-class.
 - Native browser validation tooltips appear upon form submission.
 
@@ -357,7 +358,7 @@ customElements.define('advanced-component', AdvancedComponent);
 
 ## 10. Dependency Injection
 
-Share state across the DOM tree across Shadow DOM boundaries.
+Share state across the DOM tree, including through Shadow DOM boundaries.
 
 ### Providing Context
 

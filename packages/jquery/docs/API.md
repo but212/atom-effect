@@ -203,7 +203,9 @@ $('ul').atomList(usersAtom, {
 ```
 
 #### Reconciliation Implementation
+
 The `atomList` engine utilizes a 3-pass reconciliation pipeline:
+
 1. **Head/Tail Fast-forwarding**: Identifies stable elements at the start and end of the list.
 2. **Middle-range Diffing**: Processes insertions, deletions, and moves.
 3. **Greedy Placement**: Optimizes DOM insertion operations.
@@ -217,11 +219,13 @@ The `atomList` engine utilizes a 3-pass reconciliation pipeline:
 Two-way synchronization for `<input>`, `<textarea>`, and `<select>`. Natively supports `<select multiple>` via `string[]`.
 
 **Implementation Details**:
+
 - **Strategy Specialization**: Resolves read/write strategies during initialization to ensure monomorphic execution paths.
 - **IME Stability**: Monitors composition states (e.g., CJK input) to prevent external state changes from interrupting character entry.
 - **Cursor Preservation**: Maintains selection ranges and focus during updates.
 
 **Options**:
+
 - `debounce`: number (ms) — Delays updates to the atom.
 - `format` / `parse`: Transformation functions applied between the atom and the DOM.
 - `equal`: Custom equality check to prevent redundant updates.
@@ -355,7 +359,7 @@ customElements.define('my-comp', MyComp);
 
 Registers a reactive value for consumption by descendant elements.
 
-- **Shadow DOM**: Transverses Shadow DOM boundaries using the `aej:context-request` event protocol.
+- **Shadow DOM**: Traverses Shadow DOM boundaries using the `aej:context-request` event protocol.
 - **CSS Synchronization**: Exposes the value as a CSS custom property (`--aej-[key]`) on the provider.
 
 ### `$.injectAtom<T>(target, key)`

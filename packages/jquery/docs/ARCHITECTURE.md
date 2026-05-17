@@ -82,7 +82,7 @@ To prevent memory leaks in Single Page Applications, the engine deploys a global
 Standard `MutationObserver` instances do not penetrate Shadow boundaries. The registry manages this via:
 
 - **Host Marking**: Hosts with open or closed Shadow DOMs are registered with an `_aes-has-shadow` class.
-- **Boundary Penetration**: The `cleanupTree` method explicitly checks marked hosts and transverses their associated `ShadowRoot` objects.
+- **Boundary Penetration**: The `cleanupTree` method explicitly checks marked hosts and traverses their associated `ShadowRoot` objects.
 
 ---
 
