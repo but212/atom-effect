@@ -4,62 +4,44 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![ES2022+](https://img.shields.io/badge/target-ES2022%2B-blue)
 
-Reactive DOM bindings for jQuery, implemented as an integration layer for the `atom-effect` core.
+Reactive DOM bindings and integration layer for jQuery, built upon the `atom-effect` core engine.
 
 ## Overview
 
-This package enables declarative synchronization between reactive state and the DOM using jQuery selectors and chainable methods. It enforces automatic resource management via `MutationObserver` and provides specialized support for complex state flows, including IME composition and list reconciliation.
+This package enables declarative synchronization between reactive state and the DOM using jQuery collections and chainable methods. It features automated resource management via `MutationObserver` and provides specialized support for complex state flows, including form synchronization, list reconciliation, and SPA routing.
 
-- **Target**: ES2022+
-- **Compatibility**: jQuery 3.x+
-- **Environment**: Modern browsers (legacy environments such as IE11 are not supported).
+### Key Characteristics
+
+- **Target**: ES2022+ environments.
+- **Compatibility**: jQuery 4.0.0+ (ESM/CJS and UMD support).
+- **Security**: Built-in sanitization engine to mitigate XSS and DOM Clobbering.
+- **Lifecycle**: Automatic cleanup of reactive resources synchronized with DOM removal.
 
 ## Installation
 
 ### Package Manager
 
 ```bash
-npm install @but212/atom-effect-jquery jquery
+pnpm add @but212/atom-effect-jquery jquery
 ```
 
 > [!IMPORTANT]
-> When using the ESM or CJS version, ensure that `@but212/atom-effect` is also installed in your project as a peer dependency.
+> This package requires `@but212/atom-effect` as a peer dependency.
 
-### CDN
+### CDN (UMD)
 
 ```html
-<!-- jQuery -->
 <script src="https://code.jquery.com/jquery-4.0.0.min.js"></script>
-<!-- atom-effect-jquery -->
 <script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.32.1/dist/atom-effect-jquery.min.js"></script>
 
 <script>
-  // Initializing global state
-  const { initAEJ } = AtomEffectJQuery;
-  initAEJ({ autoCleanup: true });
-</script>
-```
-
-or
-
-```html
-<!-- jQuery -->
-<script src="https://code.jquery.com/jquery-4.0.0.min.js"></script>
-<!-- atom-effect-core -->
-<script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect@0.32.1"></script>
-<!-- atom-effect-jquery -->
-<script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.32.1"></script>
-
-<script>
-  // Initializing global state
+  // Initializing global state and safety net
   const { initAEJ } = AtomEffectJQuery;
   initAEJ({ autoCleanup: true });
 </script>
 ```
 
 ## Usage
-
-Bindings allow for declarative relationship definitions between reactive atoms and DOM elements.
 
 ```javascript
 import $ from 'jquery';
@@ -71,30 +53,21 @@ const count = $.atom(0);
 // 2. Declarative Binding
 $('#count-display').atomText(count);
 
-// 3. Interaction
+// 3. Update State via Interaction
 $('#btn-increment').on('click', () => count.value++);
 
-// 4. Derived State
-const isThresholdReached = $.computed(() => count.value > 10);
-$('#warning-msg').atomShow(isThresholdReached);
-```
-
-## Security
-
-The `atomHtml` method renders raw HTML strings. To mitigate XSS risks, ensure input is sanitized before synchronization.
-
-```javascript
-import DOMPurify from 'dompurify';
-
-// Sanitize before binding to the DOM
-$('#content').atomHtml($.computed(() => DOMPurify.sanitize(rawHTML.value)));
+// 4. Reactive Visibility
+const isWarningVisible = $.computed(() => count.value > 10);
+$('#warning-msg').atomShow(isWarningVisible);
 ```
 
 ## Documentation
 
-- [**API Reference**](./docs/API.md): Detailed specification of reactive methods (`atomText`, `atomVal`, `atomList`, etc.).
-- [**Architecture**](./docs/ARCHITECTURE.md): Internal implementation details including the binding pipeline and memory management.
-- [**Security**](./docs/SECURITY.md): Protocols for HTML sanitization and secure data flow.
+- [**API Reference**](./docs/API.md): Detailed specification of reactive methods (`atomBind`, `atomList`, `atomForm`, etc.).
+- [**Common Patterns**](./docs/PATTERNS.md): Standard architectural patterns for UI updates, modals, and routing.
+- [**Architecture & Design**](./docs/ARCHITECTURE.md): Implementation details of the binding pipeline and memory management.
+- [**Security Guide**](./docs/SECURITY.md): Protocols for HTML sanitization and safe data flow.
+- [**Lifecycle Invariants**](./docs/LIFECYCLE.md): Timing and behavior of reactive teardown.
 
 ## License
 

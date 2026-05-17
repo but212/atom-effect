@@ -4,55 +4,52 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![ES2022+](https://img.shields.io/badge/target-ES2022%2B-blue)
 
-Core reactive state management engine implementing an epoch-based dependency tracking system.
+The core reactive engine for `atom-effect`, implementing an epoch-based propagation system with asynchronous orchestration.
 
 ## Overview
 
-This package provides the foundational primitives for reactive programming in JavaScript environments. It manages state synchronization through a pull-based dependency graph, ensuring deterministic execution and automatic resource management.
+This package provides high-performance reactive primitives for JavaScript environments. It manages state synchronization through a deterministic push-pull dependency graph, ensuring glitch-free updates and automated resource management.
 
-- **Target**: ES2022+
-- **Architecture**: Epoch-based push/pull propagation
-- **Features**: Atomic batching, lazy evaluation, and explicit effect cleanup.
+### Key Characteristics
+
+- **Target**: ES2022+ environments.
+- **Architecture**: Epoch-based propagation with local version tracking.
+- **Async First**: Native `async/await` support in computed nodes with built-in race condition protection.
 
 ## Installation
 
 ```bash
-npm install @but212/atom-effect
+pnpm add @but212/atom-effect
 ```
 
 ## Usage
 
-The following example demonstrates the primary primitives for state initialization, derivation, and side-effect orchestration.
-
 ```typescript
 import { atom, computed, effect } from '@but212/atom-effect';
 
-// 1. Initialize State
+// 1. Initialize Mutable State
 const count = atom(0);
-const multiplier = atom(2);
 
-// 2. Derive State (Lazy Evaluation & Identity Caching)
-const doubled = computed(() => count.value * multiplier.value);
+// 2. Define Derived State (Lazy & Cached)
+const double = computed(() => count.value * 2);
 
-// 3. Side-Effect Orchestration
-const effectHandle = effect(() => {
-  console.log(`Count: ${count.value}, Doubled: ${doubled.value}`);
+// 3. Register Reactive Side-Effect
+const handle = effect(() => {
+  console.log(`Count: ${count.value}, Double: ${double.value}`);
 });
-// Output: "Count: 0, Doubled: 0"
 
-// 4. State Modification
-count.value = 1;
-// Output: "Count: 1, Doubled: 2"
+// 4. Update State
+count.value++; // Logs: "Count: 1, Double: 2"
 
-// 5. Explicit Disposal
-effectHandle.dispose();
+// 5. Cleanup
+handle.dispose();
 ```
 
 ## Documentation
 
-- [**Technical Overview**](./docs/ONBOARDING.md): Core concepts, mental model, and architectural boundaries.
-- [**API Reference**](./docs/API.md): Specification for `atom`, `computed`, `effect`, `batch`, and `untracked`.
-- [**Internals**](./docs/ARCHITECTURE.md): Deep dive into the epoch-based propagation algorithm and dependency slot management.
+- [**Onboarding Guide**](./docs/ONBOARDING.md): Core concepts, mental model, and best practices.
+- [**API Reference**](./docs/API.md): Specification for `atom`, `computed`, `effect`, `batch`, and `lenses`.
+- [**Architecture & Design**](./docs/ARCHITECTURE.md): Deep dive into the internal engine, scheduler, and performance optimizations.
 
 ## License
 

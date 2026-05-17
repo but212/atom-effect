@@ -1,153 +1,119 @@
 # Architecture & Design
 
-This document describes the internal architecture of `@but212/atom-effect`. It details the relationship between core reactive principles and the technical implementations designed to optimize performance and reliability.
+This document provides a formal overview of the internal architecture of `@but212/atom-effect`. It details the structural patterns, reactive principles, and performance-critical implementations that drive the core engine.
 
 ---
 
-## 0. Conceptual Overview: From API to Engine
+## 0. Glossary of Terms
 
-The high-level API (`atom`, `computed`, `effect`) is built upon a unified internal execution engine designed for V8 performance and memory efficiency.
+To ensure technical clarity, the following definitions are used throughout the system:
 
-- **Unified Core Interface**: All reactive primitives implement the internal **`ReactiveNode`** interface. This ensures a consistent data structure and property layout across different node types, allowing the engine to handle them uniformly and efficiently.
-- **Push-Pull Hybrid Model**:
-  - **Push (Notification Phase)**: When a source atom changes, it propagates a "dirty" signal to its immediate subscribers. This phase marks nodes for re-evaluation without performing calculations.
-  - **Pull (Evaluation Phase)**: When a node's value is accessed or an effect executes, it performs a "pull" to validate the versions of its dependencies, triggering re-computation only if necessary.
-- **Scheduler and Coalescing**: Effects do not execute immediately upon state change. Instead, they are queued in a **`ReactiveScheduler`** (defined in `core/scheduler.ts`) that utilizes a **Double-Buffering Strategy** (Active, Standby, Batch). The scheduler is implemented as an encapsulated class, ensuring that internal scheduling state remains protected during execution cycles while maintaining high cache locality.
-- **Lightweight Tracking**: Dependency tracking is managed via a plain `TrackingContext` object with dedicated free functions (`pushTrackingSubscriber`, `popTrackingSubscriber`, `rollbackTrackingSubscriber`). This approach minimizes object creation overhead while providing deterministic recovery during nested evaluations or error scenarios. The core engine utilizes native `try/catch` and `null/undefined` in high-frequency hot paths to minimize allocation overhead.
-- **SMI Optimization**: The engine explicitly ensures that hot-path integers (versions, epochs, session IDs) stay within V8's **Small Integer (SMI)** range (31-bit signed). This prevents performance-degrading transitions from SMIs to heap-allocated doubles (HeapNumbers).
-- **Small Vector Optimization (SVO)**: To minimize heap allocations and GC pressure, the engine uses inline slots (`_s0` through `_s3`) tracked by a **4-bit occupancy mask**. These buffers implement a standardized **Array-like API** (`length`, `at()`, `push()`) and use explicit constructor initialization to ensure V8 Hidden Class stability, preventing polymorphic transitions during high-frequency slot discovery.
-- **Bitwise Branding**: Primitives are identified using a bitwise mask (`BrandFlags`) stored on a single `BRAND` symbol, defined in `constants/branding.ts`. This allows for constant-time type identification without multiple property lookups.
-- **Strategy-Based Notification**: Subscriber notifications use a dispatch table strategy (in `core/base.ts`) to eliminate conditional branching in hot notification loops, improving JIT dispatch performance.
-- **Isolated Debug Metadata**: Debug information such as IDs and names are attached via non-enumerable symbols, ensuring that debugging features do not interfere with object iteration, serialization, or production performance.
+- **Reactive Node**: The atomic unit of the dependency graph (Atom, Computed, or Effect).
+- **Epoch**: A monotonically increasing global counter used to track logical time across the system. Used for job deduplication and session validation.
+- **Version**: A node-specific counter that increments only when the node's output value changes.
+- **Drift**: A state where a subscriber's cached version of a dependency no longer matches the dependency's current version.
+- **Glitch**: A transient inconsistency in the graph where a node observes intermediate or stale state during a propagation cycle.
+- **SVO (Small Vector Optimization)**: A memory management technique using inline slots to avoid heap allocations for small collections.
 
 ---
 
-## 1. Principles of Reactive Nodes
+## 1. System Architecture: The Push-Pull Hybrid
 
-The system is designed around autonomous nodes that manage their own state and dependencies.
+The engine utilizes a hybrid notification and evaluation model to balance update responsiveness with computation efficiency.
 
-### Key Mechanisms
+### Propagation Lifecycle
 
-1. **Local Versioning**: Every node maintains a `version` counter. A node determines if it is stale by comparing its stored dependency versions with the current versions of those dependencies.
-2. **Implicit Subscription**: Dependency relationships are established automatically when a node's `.value` is read within a reactive context (tracked via `trackingContext`).
-3. **Version Snapshots**: Asynchronous operations capture snapshots of dependency versions. If these versions change before the operation completes, the result is considered stale and discarded.
+1. **Notification (Push)**: A mutation in a source **Atom** triggers a breadth-first propagation of "dirty" signals to immediate subscribers.
+    - **Computed Nodes**: Marked as `DIRTY`.
+    - **Effects**: Scheduled in the **ReactiveScheduler**.
+2. **Scheduling (Batching)**: Notifications are coalesced within a microtask. Multiple updates to the same source or related sources result in a single execution pass for downstream nodes.
+3. **Validation (Pull)**: When a node is accessed or an effect executes, it validates its dependencies.
+    - **Re-computation**: Only occurs if a dependency's **Version** has incremented.
+    - **Short-circuit**: If a dependency re-evaluates but produces an identical result (version unchanged), the pull phase terminates early.
 
-### Class Hierarchy
+### Sequence Visualization
 
-- **`ReactiveNode<T>`**: The foundation for all primitives. It defines a standardized data structure including versioning, status flags, and a dedicated `_storage` object for managing subscriber lists and dependency buffers.
-- **`AtomImpl<T>`**: A pure producer node for mutable state. Engine-visible fields (`flags`, `version`, `_storage`) are exposed as **public properties** for V8 monomorphic access, while value storage and notification scheduling remain **private (`#`)**. Maintains synchronous re-entrancy through a breadth-first notification loop.
-- **`ComputedAtomImpl<T>`**: A hybrid node that acts as both a consumer (of dependencies) and a producer (of derived values). Follows the same dual-layer strategy: public engine fields for graph traversal, private fields for computation state, session tracking, and result caching.
-- **`EffectImpl`**: A pure consumer node for side effects. It keeps its subscriber list (`_storage.slots`) null as it is a terminal node in the graph, managing its execution lifecycle and budget state through private orchestration fields.
+```mermaid
+sequenceDiagram
+    participant A as Atom (Source)
+    participant C as Computed (Derived)
+    participant E as Effect (Terminal)
+    participant S as Scheduler
+
+    Note over A: value = newValue
+    A->>C: Push: Mark DIRTY
+    A->>E: Push: Schedule Job
+    E-->>S: Queue in Active Buffer
+    
+    Note over S: Microtask Flush
+    S->>E: Execute()
+    E->>C: Pull: read .value
+    C->>A: Pull: Check Version
+    A-->>C: Version unchanged? (No)
+    C-->>C: Re-compute()
+    C-->>E: Return result
+```
 
 ---
 
-## 2. Consistency: Global Epoch and Local Version
+## 2. Component Architecture
 
-To prevent "glitches" (observing inconsistent intermediate states), the engine distinguishes between time and value:
+### Class Hierarchy & Dual-Layer Encapsulation
 
-- **Global Epoch**: A global counter incremented whenever a mutation occurs. It serves as a logical clock to identify when changes happen across the system.
-- **Local Version**: A node-specific counter incremented only when its *value* actually changes. If a computation re-evaluates but produces the same result (as determined by an equality check), its version remains unchanged, preventing downstream re-evaluations.
-- **Zero-Value Reservation**: Both counters avoid the value `0` (wrapping to `1`). This allows `0` to be used as a reliable marker for "uninitialized" or "never seen" states.
+The system employs a dual-layer encapsulation model designed for both V8 JIT optimization and API safety.
+
+- **`ReactiveNode<T>`**: The foundation interface ensuring monomorphic property access across the engine.
+- **Public Engine Fields**: Properties required for graph traversal (`flags`, `version`, `_storage`) are public. This ensures V8 generates stable **Hidden Classes** with direct property access, bypassing getter/setter overhead in hot paths.
+- **Private Behavioral State**: Value storage (`#value`), computation logic (`#fn`), and budget states use **native private fields (`#`)**. This protects internal invariants and prevents external tampering.
+
+### Node Roles
+
+| Role | Implementation | Input | Output | Characteristic |
+| :--- | :--- | :--- | :--- | :--- |
+| **Source** | `AtomImpl` | Manual | State | Leaf node, non-tracking. |
+| **Transform** | `ComputedImpl` | Reactive | State | Hybrid node, lazy, cached. |
+| **Sink** | `EffectImpl` | Reactive | Void | Terminal node, side-effects. |
 
 ---
 
-## 3. Efficiency: Two-Phase Propagation
+## 3. Performance & Optimization
 
-The engine utilizes a **Notify-and-Check** strategy to minimize redundant computations.
+### V8-Optimized Memory Layout
 
-1. **Notification Phase**: A changed atom notifies its immediate subscribers. Computed nodes are marked as `DIRTY`, and effects are scheduled for execution.
-2. **Validation Phase (Sweep)**:
-   - **Computed**: When accessed, it checks if any dependency has a newer version. It uses a **Hot-path Optimization** (`_hotIndex`) to first check the dependency that most recently caused a change, providing $O(1)$ dirty detection in many cases.
-   - **Iterative Check**: Dirty checking and error detection perform an iterative walk using a stack and a `Set` for deduplication. It utilizes **lookup tables** for state validation to manage internal transitions without explicit conditional branching. This prevents stack overflow in deep chains and provides consistent $O(1)$ lookup for already-visited nodes.
-   - **Effect**: Before execution, it performs a structural walk to verify dependency versions.
+1. **SMI (Small Integer) Safeguards**: All counters (Epoch, Version, ID) are bit-masked to 31 bits to ensure they remain within the SMI range, avoiding heap-allocated `HeapNumber` transitions.
+2. **SlotBuffer (SVO)**: Subscriber and dependency lists use `#s0`–`#s3` inline slots. This avoids array allocation for the majority of nodes that have fewer than 4 connections.
+3. **Bitwise Partitioning**: Node state is packed into a single 31-bit integer. Offsets (Core, Computed, Async, Primitive) allow atomic state checks and transitions via bitwise masks.
+
+### Subscription Reconciliation
+
+During re-computation, the engine performs **Link Swapping**. It compares new dependencies against the previous run's buffer. By swapping active links to the front and truncating the remainder, it avoids the high cost of tearing down and re-establishing listener relationships for stable dependencies.
 
 ---
 
 ## 4. Async Boundary Integrity
 
-Asynchronous computed nodes manage their lifecycle as state machines, protecting against race conditions and stale data.
+Asynchronous computations are treated as state machines.
 
-- **Async Drift Detection**: If dependencies change while a Promise is pending, the resolution is ignored. This is handled via an integrated `isDirty` check during the resolution phase. Resolution and state updates occur within the microtask cycle following the settlement of the Promise.
-- **Session Management**: A rolling `_activeSessionId` (SMI optimized) ensures that only the result from the most current asynchronous session can resolve the node's state, preventing race conditions from stale computations.
-- **Bitwise Partitioning**: Internal state is managed via a 31-bit integer field (V8 SMI optimized) with flags defined in `constants/flags.ts`:
-  - **[0-7] Core**: `DISPOSED`, `IS_COMPUTED`.
-  - **[8-15] Computed**: `DIRTY`, `RECOMPUTING`, `HAS_ERROR`.
-  - **[16-23] Async**: `IDLE`, `PENDING`, `RESOLVED`, `REJECTED`.
-  - **[24-30] implementation-specific**: `ATOM_SYNC`, `EFFECT_EXECUTING`.
+- **Session Locking**: A rolling session ID ensures that only the result from the *most recent* asynchronous trigger can resolve the node. Results from previous, now-stale sessions are discarded.
+- **Synchronous Tracking Boundary**: Tracking is strictly synchronous. Dependencies accessed after an `await` are not captured because the tracking context is cleared when the function yields. This design choice ensures deterministic tracking and prevents memory leaks from accidentally long-lived tracking sessions.
 
 ---
 
-## 5. Resource Stewardship
+## 5. Security & Stability
 
-Memory and performance are managed through specialized structures:
+### Circularity & Infinite Loops
 
-- **`DependencyBuffer`**: A lightweight state container with module-level free functions for dependency tracking:
-  - **Reconciliation API**: Uses exported functions (`claimExisting`, `insertNew`, `depBufferTruncateFrom`) for predictable access and memory efficiency.
-  - **Memory Efficiency**: Transitions from linear scans to an $O(1)$ `Map` lookup only when the dependency count exceeds a performance threshold. The map is lazily initialized and released when the buffer shrinks below the threshold, reclaiming memory on long-lived nodes.
-  - **Bitmask State**: Buffer status (e.g., `HAS_COMPUTEDS`) is encoded into a `flags` bitmask for efficient bulk checks and future extensibility.
+- **Circular Detection**: The `RECOMPUTING` flag identifies nodes that are accessed during their own derivation pass, throwing a `ComputedError`.
+- **Execution Budgets**: Effects have a mandatory `maxExecutionsPerFlush` (default 100) to prevent runaway reactive loops from hanging the main thread.
 
----
+### Prototype Integrity
 
-## 6. Security and Boundaries
-
-The engine enforces strict boundaries between logic and side effects.
-
-- **Symmetric Boundary**: Atoms and Computeds are intended to be pure logic. Side effects are restricted to `effect` nodes.
-- **Circularity Protection**: The `RECOMPUTING` flag detects synchronous circular dependencies, throwing an error to prevent infinite recursion.
-- **Deterministic Tracking Recovery**: The tracking context uses a stack depth pointer and a **`rollbackTrackingSubscriber()`** mechanism to restore state after errors. This mechanism avoids the overhead associated with `try-finally` blocks in the core execution loops while maintaining context integrity.
-- **Synchronous Tracking Boundary**: Dependency tracking is strictly synchronous. Dependencies accessed after an `await` keyword are not tracked because the `trackingContext` is cleared when the function yields.
-- **Scheduler Integrity**:
-  - **Deduplication**: Jobs are tagged with an epoch to prevent redundant scheduling within the same cycle.
-  - **Double-Buffering**: Uses active and standby buffers within the **`SchedulerState`** to allow safe job scheduling even during an active flush cycle.
-  - **Flat Loop**: Drains queues without recursion via **`schedulerDrainQueue`** (in `core/scheduler.ts`) to ensure stack safety.
-  - **Memory Clearing**: Internal references in buffers are cleared to `undefined` immediately after execution to assist GC.
-
-### Infinite Loop Defense
-
-The system implements hard limits to prevent runaway reactive cycles:
-
-- **Per-Effect**: 100 executions per flush.
-- **Global**: 10,000 executions per flush.
-- **Frequency**: 1,000 executions per second (Development mode only).
+Lenses utilize a prototype-preserving clone-and-set mechanism. Updates to nested properties of class instances preserve `instanceof` relationships and access to class methods, ensuring structural integrity across the reactive boundary.
 
 ---
 
-## 7. Lenses and Structural Sharing
+## 6. Design Trade-offs
 
-Lenses provide reactive access to nested properties within monolithic state objects.
-
-- **Structural Sharing**: When updating a value through a lens, only the objects along the modified path are cloned. Unrelated branches maintain reference equality (`===`), preventing unnecessary downstream updates. The engine explicitly handles Arrays, Maps, Sets, and custom Class prototypes, ensuring structural integrity and prototype preservation.
-- **Security**: The `setDeepValue` utility blocks access to `__proto__`, `constructor`, and `prototype` to prevent prototype pollution.
-- **Type Safety**: Recursive utility types (`Paths`, `PathValue`) provide IDE autocompletion up to 8 levels deep.
-
----
-
-## 8. Debugging and Observability
-
-The debugging subsystem is designed for deep visibility with minimal production impact.
-
-- **Class-based Diagnostic Hub**: In development, an encapsulated `DebugController` class manages node registries and update counters. In production, these are replaced by a static no-op controller, which JavaScript engines can optimize away or inline for zero runtime overhead.
-- **Encapsulated Instrumentation**: By utilizing class-based controllers, the debug system isolates diagnostic state from the core reactive logic, ensuring that instrumentation does not interfere with engine performance or stability.
-- **Finalization Tracking**: The debug registry uses `FinalizationRegistry` paired with `WeakRef` to ensure that tracking nodes for inspection does not prevent them from being garbage collected, while providing automatic metadata cleanup.
-- **Traceability**: Errors are wrapped with contextual messages and machine-readable codes for easier debugging.
-
----
-
-## 9. Error Handling
-
-Errors are treated as part of the reactive graph, enabling robust recovery and traceability.
-
-- **Iterative Accumulation**: Errors are collected using an iterative traversal logic (**`collectErrorsRecursive`**) with a stack and a `Set` for deduplication, avoiding recursion overhead.
-- **Dependency Isolation**: Accessing error properties (`hasError`, `errors`) is performed in an `untracked` scope to prevent the consumer from inadvertently subscribing to the entire dependency tree of a failing node.
-- **Recovery Signals**: The `recoverable` flag indicates whether a node can attempt re-evaluation if its dependencies change.
-
----
-
-## 10. Encapsulation Strategy
-
-The engine uses a **dual-layer encapsulation** model optimized for both V8 performance and API safety:
-
-- **Public Engine Fields**: Properties required by the reactive graph traversal engine (`flags`, `version`, `_lastSeenEpoch`, `_trackEpoch`, `_trackCount`, `_error`, `_storage`) are declared as **public class fields**. This ensures V8 generates stable Hidden Classes with direct property access, avoiding getter/setter overhead in hot-path operations like dirty checking and notification.
-- **Private Behavioral State**: Properties that control node-specific behavior (values, computation functions, equality checks, cleanup handles, session IDs, budget state) use **native private class fields (`#`)**. This protects behavioral invariants from external mutation while keeping the engine-visible shape uniform across node types.
-- **Monomorphic Consistency**: All reactive node types (`AtomImpl`, `ComputedAtomImpl`, `EffectImpl`) follow the same field layout strategy, ensuring that shared engine functions (`nodeNotifySubscribers`, `nodeTrackDependency`, etc.) encounter a consistent property access pattern and remain monomorphic in V8's inline caches.
-- **Modern Syntax**: Adoption of logical assignment operators and other ES2022 features to reduce boilerplate and improve code clarity without sacrificing performance.
+1. **Memory vs. Diagnostic Metadata**: Debug names and IDs are non-enumerable symbols. While this increases object header size slightly, it provides essential observability for complex dependency graphs.
+2. **Sync Tracking vs. Async Support**: By not tracking dependencies after `await`, the library prioritizes predictability and performance. Users must ensure all reactive sources are accessed before the first asynchronous yield.
+3. **Class-based implementation**: Choosing classes over closures for internal nodes allows for better monomorphic optimization in V8 but requires more disciplined state management.
