@@ -17,24 +17,25 @@ This design choice provides:
 1. **Runtime Isolation**: Prevents external mutation of internal state matrices.
 2. **Monomorphic Consistency**: Standardized field initialization ensures V8 generates stable Hidden Classes, optimizing JIT property access during high-frequency reactive loops.
 
-```text
-                 ┌───────────────────────────────────┐
-                 │       @but212/atom-effect         │
-                 │  atom / computed / effect / batch │
-                 └──────────────┬────────────────────┘
-                                │
-                 ┌──────────────▼─────────────────────┐
-                 │    @but212/atom-effect-jquery      │
-                 │                                    │
-                 │  unified.ts   ← Binding handlers   │
-                 │  effect-factory.ts ← Effect reg.   │
-                 │  registry.ts  ← Lifecycle mgmt     │
-                 │  jquery-patch.ts ← Native patches  │
-                 │  bindings/list/ ← DOM Diffing      │
-                 │  route/       ← SPA Router         │
-                 │  nav.ts       ← PJAX Coordinator   │
-                 │  web-component/ ← Custom Elements  │
-                 └────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph Core ["@but212/atom-effect (Core Engine)"]
+        core_nodes["atom / computed / effect / batch"]
+    end
+
+    subgraph JQuery ["@but212/atom-effect-jquery (Adapter Layer)"]
+        direction TB
+        unified["unified.ts (Binding Handlers)"]
+        factory["effect-factory.ts (Effect Registry)"]
+        registry["registry.ts (Lifecycle Management)"]
+        patch["jquery-patch.ts (Native Patches)"]
+        list["bindings/list/ (DOM Diffing)"]
+        route["route/ (SPA Router)"]
+        nav["nav.ts (PJAX Coordinator)"]
+        wc["web-component/ (Custom Elements)"]
+    end
+
+    Core --> JQuery
 ```
 
 ---
