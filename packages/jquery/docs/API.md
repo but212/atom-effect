@@ -1,6 +1,6 @@
 # jQuery Integration API
 
-This package extends jQuery with reactive capabilities. All methods are available on jQuery objects (`$(selector).method()`).
+This package extends jQuery with reactive capabilities. All methods are available on jQuery collections (`$(selector).method()`).
 
 ## Table of Contents
 
@@ -22,23 +22,23 @@ This package extends jQuery with reactive capabilities. All methods are availabl
 
 ## CDN / UMD Usage
 
-When using the library via a CDN (e.g., jsDelivr or unpkg), the library is exposed through the global `AtomEffectJQuery` namespace.
+When accessed via a CDN (e.g., jsDelivr or unpkg), the library exposes the global `AtomEffectJQuery` namespace.
 
 ### Global Namespace
 
 The following utilities and constants are available on the global `AtomEffectJQuery` object:
 
 - `initAEJ(config)`: Unified entry point for library configuration (patches, auto-cleanup).
-- `enableAutoCleanup(container)`: Attach a MutationObserver to a specific element.
-- `disableAutoCleanup()`: Remove all global observers.
-- `enablejQueryOverrides(options)`: Enable patches for jQuery's native methods.
+- `enableAutoCleanup(container)`: Attaches a MutationObserver to a specific element for automated resource disposal.
+- `disableAutoCleanup()`: Removes all global observers.
+- `enablejQueryOverrides(options)`: Enables patches for native jQuery methods (e.g., `.remove()`, `.empty()`).
 - `nextTick()`: Utility for waiting until the next reactive flush.
-- `cleanup(element)`: Trigger a recursive cleanup on an element.
-- `debug`: Access to the runtime-toggleable debug controller.
+- `cleanup(element)`: Triggers a recursive teardown of reactive resources on an element and its Shadow DOM.
+- `debug`: Access to the runtime diagnostic controller.
 
 ### Library Configuration (`$.initAEJ`)
 
-The library auto-initializes on `document.body` by default. You can use `$.initAEJ` to configure behavior or target specific roots:
+The library auto-initializes on `document.body` by default. You can use `$.initAEJ` to configure behavior or target specific container roots:
 
 ```javascript
 // Example: Customize patches and target a specific container
@@ -47,7 +47,7 @@ $.initAEJ({
   autoCleanup: { root: myContainer }
 });
 
-// Example: Manual mode (disable auto features)
+// Example: Manual mode (disable automated features)
 $.initAEJ({ patch: false, autoCleanup: false });
 ```
 
@@ -55,7 +55,7 @@ $.initAEJ({ patch: false, autoCleanup: false });
 
 ### Extending jQuery
 
-The library extends the global `jQuery` (or `$`) object. Methods like `$.atom()`, `$.computed()`, and `.atom*()` chainable methods are available upon script load.
+The library extends the global `jQuery` (or `$`) object. Methods like `$.atom()`, `$.computed()`, and `.atom*()` instance methods become available upon script evaluation.
 
 ---
 
@@ -63,21 +63,21 @@ The library extends the global `jQuery` (or `$`) object. Methods like `$.atom()`
 
 ### `.atomBind(bindings)`
 
-A centralized method for applying multiple bindings. It utilizes a task-based loop strategy that filters active tasks prior to element iteration to manage overhead.
+A centralized method for applying multiple bindings concurrently. It utilizes a task-based loop strategy to manage DOM updates efficiently.
 
 ```javascript
 $('.user-card').atomBind({
-  text: nameAtom,                 // Binds textContent (reactive source or Promise)
+  text: nameAtom,                 // Binds textContent (atom or static value)
   html: bioAtom,                  // Binds sanitized innerHTML
-  class: { 'active': isActive },  // Toggles class
-  css: { 'color': colorAtom },    // Style property
-  attr: { 'data-id': idAtom },    // Attribute
+  class: { 'active': isActive },  // Toggles CSS class
+  css: { 'color': colorAtom },    // Inline style property
+  attr: { 'data-id': idAtom },    // HTML attribute
   prop: { 'disabled': isDisabled },// DOM property
-  show: isVisible,                // show/hide
+  show: isVisible,                // Toggles display (show/hide)
   hide: isHidden,                 // Inverse of show
-  val: inputAtom,                 // Two-way binding: atom or [atom, options]
-  checked: isChecked,             // Two-way binding for checkbox/radio
-  form: userAtom,                 // Automated two-way form binding
+  val: inputAtom,                 // Two-way binding for form inputs
+  checked: isChecked,             // Two-way binding for checkboxes/radios
+  form: userAtom,                 // Automated form synchronization
   on: { click: handleClick }      // Event handler
 });
 ```
@@ -90,12 +90,13 @@ $('.user-card').atomBind({
 
 Updates `textContent`. Supports `AsyncReactiveValue` (direct Promise or atom yielding Promise).
 
-- **formatter**: optional function `(val) => string`.
-- **Binding Support**: When used via `.atomBind()`, can be expressed as a tuple `text: [source, formatter]`. Supports both atoms and static values.
+- **formatter**: Optional function `(val) => string`.
+- **Tuple Support**: When used inside `.atomBind()`, can be expressed as a tuple `text: [source, formatter]`.
 
 ```javascript
 $('#price').atomText(price, p => `$${p.toFixed(2)}`);
-// Via atomBind
+
+// Using atomBind
 $el.atomBind({ text: [count, c => `Count: ${c}`] });
 ```
 
@@ -103,40 +104,38 @@ $el.atomBind({ text: [count, c => `Count: ${c}`] });
 
 Updates `innerHTML`.
 
-> **🛡️ Security Implementation**:
-> This method implements a hardened, rule-based sanitization engine to protect the DOM from untrusted data:
+> **Security Implementation**:
+> This method utilizes an internal sanitization engine (`sanitizeHtml`) to mitigate DOM Clobbering and XSS vulnerabilities:
 >
-> 1. **Inert Parsing**: Data is parsed within an inert `<template>` element, preventing the execution of any embedded scripts or network requests during initial parsing.
-> 2. **Multi-pass Normalization**: Performs double-decoding of HTML entities and strips control characters to reveal hidden payloads and bypass attempts.
-> 3. **Structural Neutralization**: Transforms untrusted tags (e.g., `<script>`, `<iframe>`) into safe `<span>` wrappers. It also detects and neutralizes tags hidden within text content.
-> 4. **Priority Defense Rules**: Orchestrates attribute-level defense, stripping inline event handlers, protocol-blocking URI sinks, and filtering dangerous CSS patterns.
-> 5. **Prototype Hardening**: Interaction with DOM properties is routed through prototype-bound methods to mitigate DOM Clobbering attacks.
+> 1. **Inert Parsing**: Data is parsed within an inert `<template>` to prevent execution during construction.
+> 2. **Multi-pass Normalization**: Double-decodes HTML entities and strips control characters.
+> 3. **Structural Neutralization**: Transforms untrusted tags (e.g., `<script>`, `<iframe>`) into safe `<span>` wrappers.
+> 4. **Priority Defense Rules**: Strips inline event handlers, blocks protocol-based URI sinks (e.g., `javascript:`), and filters dangerous CSS.
+> 5. **Prototype Hardening**: DOM property access is routed through prototype-bound methods to mitigate DOM Clobbering.
 >
-> For complex user-generated content, integrating a library like [DOMPurify](https://github.com/cure53/DOMPurify) is supported.
+> For extensive sanitization requirements, integrating a dedicated library like DOMPurify is supported via computed atoms:
 >
 > ```javascript
 > import DOMPurify from 'dompurify';
 >
-> // Pattern for external sanitization
 > const safeContent = $.computed(() => DOMPurify.sanitize(rawHtml.value));
 > $('#container').atomHtml(safeContent);
 > ```
 
 ### `.atomClass(className, atom)` or `.atomClass(classMap)`
 
-Toggles `className` based on the atom's truthiness. Supports multiple space-separated classes in a single key.
+Toggles CSS classes based on truthiness. Supports multiple space-separated classes.
 
-- **Class Management**: Handles duplicate classes across multiple reactive keys. A class remains if any associated condition is active.
+- **Class Deduplication**: A specific class remains applied if any of its associated reactive conditions are true.
 
 ```javascript
 $('#btn').atomClass('disabled', isLoading);
-// Multi-class example
 $el.atomClass({ 'active highlight': atom1, 'active large': atom2 });
 ```
 
 ### `.atomCss(property, atom, unit?)` or `.atomCss(propertyMap)`
 
-Updates a single CSS property. An optional `unit` string (e.g. `'px'`) is appended to the value.
+Updates inline CSS properties. An optional `unit` string (e.g., `'px'`) can be appended.
 
 ```javascript
 $('.box').atomCss('opacity', opacityLevel);
@@ -145,14 +144,11 @@ $('.box').atomCss('width', widthAtom, 'px');
 
 ### `.atomAttr(attribute, atom)` or `.atomAttr(attributeMap)`
 
-Updates an HTML attribute.
+Updates HTML and SVG attributes.
 
-- **Security**: Blocks `on*` event handlers and protocols such as `javascript:`. This applies to both HTML and SVG attributes (e.g., `fill`, `filter`).
-- **Attribute Transformation Pipeline**: Implements a unified flow for different categories:
-  - **Boolean Attributes**: Automatically removed when the reactive condition is `false`.
-  - **WAI-ARIA**: Boolean values are mapped to `"true"`/`"false"` strings for accessibility compatibility.
-  - **Standard Attributes**: Values are coerced to strings.
-- **HTML Sinks**: Monitors and enforces protocol security on sensitive sinks like `srcdoc`.
+- **Security**: Blocks `on*` event handlers and protocol-based payloads.
+- **Boolean Attributes**: Removed entirely when the condition evaluates to `false`.
+- **WAI-ARIA**: Boolean values are coerced to `"true"` or `"false"` strings for screen reader compatibility.
 
 ```javascript
 $('img').atomAttr('src', imageUrl);
@@ -160,10 +156,9 @@ $('img').atomAttr('src', imageUrl);
 
 ### `.atomProp(property, atom)` or `.atomProp(propertyMap)`
 
-Updates a DOM property.
+Updates DOM object properties directly.
 
-- **Type Safety**: Uses the `unknown` type for property values.
-- **Security**: Blocks access to sensitive properties (`innerHTML`, `outerHTML`, `srcdoc`) and prototype vectors (`__proto__`, `constructor`, `prototype`).
+- **Security**: Blocks access to structural properties (`innerHTML`, `outerHTML`) and prototype vectors (`__proto__`, `constructor`, `prototype`).
 
 ```javascript
 $('input').atomProp('disabled', shouldDisable);
@@ -175,9 +170,9 @@ $('input').atomProp('disabled', shouldDisable);
 
 ### `.atomShow(atom)` / `.atomHide(atom)`
 
-Toggles visibility via `display: none`. `atomHide` is the inverse.
+Toggles element visibility.
 
-- **Layout Preservation**: Captures and restores the element's original `display` mode (e.g., `flex`, `grid`) when transitioning from `none`, ensuring the intended layout remains intact.
+- **Layout Preservation**: Captures and restores the element's original `display` value (e.g., `flex`, `grid`) when transitioning from `none`.
 
 ```javascript
 $('.loading-spinner').atomShow(isLoading);
@@ -185,17 +180,17 @@ $('.loading-spinner').atomShow(isLoading);
 
 ### `.atomList(listAtom, options)`
 
-Renders a list of items using keyed diffing.
+Renders and reconciles a list of DOM elements against an array.
 
 #### Options
 
-- **`key`**: `keyof T | (item, index) => string | number` (Required) — Property name or function returning a unique ID.
-- **`render`**: `(item, index) => string | Element | DocumentFragment | JQuery` — Template for new items.
-- **`bind`**: `($el, item, index) => void` — Reactive binding logic for the element.
-- **`update`**: `($el, item, index) => void` — Manual update logic for existing elements.
-- **`onAdd`** / **`onRemove`**: Lifecycle callbacks. `onRemove` supports async exit animations.
-- **`isEqual`**: `(a, b) => boolean` — Optional custom equality check for item comparison.
-- **`events`**: Delegated event handlers attached to the container.
+- **`key`**: `keyof T | (item, index) => string | number` (Required) — Function or property name returning a unique identifier.
+- **`render`**: `(item, index) => string | Element | DocumentFragment | JQuery` — Template generator for new items.
+- **`bind`**: `($el, item, index) => void` — Applies reactive bindings to newly rendered elements.
+- **`update`**: `($el, item, index) => void` — Manual reconciliation logic for existing elements.
+- **`onAdd`** / **`onRemove`**: Lifecycle hooks. `onRemove` supports asynchronous execution for exit animations.
+- **`isEqual`**: `(a, b) => boolean` — Custom equality check for item comparisons.
+- **`events`**: Delegated event handlers applied to the list container.
 
 ```javascript
 $('ul').atomList(usersAtom, {
@@ -207,13 +202,11 @@ $('ul').atomList(usersAtom, {
 });
 ```
 
-#### Performance Implementation
-
-The `atomList` engine uses a high-performance 3-pass reconciliation pipeline (Head/Tail fast-forwarding, middle-range diffing, and greedy placement) with native DOM APIs. This strategy minimizes DOM mutations and memory allocations, ensuring O(N) performance and reduced GC pressure even for massive datasets.
-
-#### Lifecycle & Async Management
-
-Reactive bindings include lifecycle management that cancels pending asynchronous updates if the element is disconnected from the DOM. `atomBind` synchronizes multi-promise maps to prevent partial state updates during transitions.
+#### Reconciliation Implementation
+The `atomList` engine utilizes a 3-pass reconciliation pipeline:
+1. **Head/Tail Fast-forwarding**: Identifies stable elements at the start and end of the list.
+2. **Middle-range Diffing**: Processes insertions, deletions, and moves.
+3. **Greedy Placement**: Optimizes DOM insertion operations.
 
 ---
 
@@ -221,22 +214,17 @@ Reactive bindings include lifecycle management that cancels pending asynchronous
 
 ### `.atomVal(atom, options?)`
 
-Two-way binding for `<input>`, `<textarea>`, and `<select>`.
+Two-way synchronization for `<input>`, `<textarea>`, and `<select>`. Natively supports `<select multiple>` via `string[]`.
 
 **Implementation Details**:
-
-- **Strategy Specialization**: Resolves optimized read/write strategies at construction time (e.g., for `multipleSelect` vs standard inputs). This ensures monomorphic execution paths and avoids feature-detection branching in hot paths.
-- **IME Stability**: Monitors composition states to prevent external updates from interrupting character entry (e.g., for CJK languages).
-- **Cursor Preservation**: Maintains selection range and focus stability during reactive updates using a selection buffer.
-- **Recursion Control**: Uses internal bitmask flags to prevent infinite update cycles between the DOM and the reactive graph.
-
-Natively supports `<select multiple>` as a `string[]` array.
+- **Strategy Specialization**: Resolves read/write strategies during initialization to ensure monomorphic execution paths.
+- **IME Stability**: Monitors composition states (e.g., CJK input) to prevent external state changes from interrupting character entry.
+- **Cursor Preservation**: Maintains selection ranges and focus during updates.
 
 **Options**:
-
-- `debounce`: number (ms) - Delay updates to the atom.
-- `format` / `parse`: Value transformation hooks.
-- `equal`: Custom equality check.
+- `debounce`: number (ms) — Delays updates to the atom.
+- `format` / `parse`: Transformation functions applied between the atom and the DOM.
+- `equal`: Custom equality check to prevent redundant updates.
 
 ```javascript
 $('#search').atomVal(queryAtom, { debounce: 300 });
@@ -244,10 +232,9 @@ $('#search').atomVal(queryAtom, { debounce: 300 });
 
 ### `.atomChecked(atom)`
 
-Two-way binding for checkbox and radio elements.
+Two-way synchronization for checkbox and radio inputs.
 
-- **Radio Sync**: Synchronizes all radio buttons in the same group (`name`) upon value changes.
-- **Selectors**: Uses `$.escapeSelector` to handle names with special characters.
+- **Radio Groups**: Synchronizes all radio inputs sharing the same `name` attribute.
 
 ```javascript
 $('#agree').atomChecked(isAgreedAtom);
@@ -255,17 +242,15 @@ $('#agree').atomChecked(isAgreedAtom);
 
 ### `.atomForm(atom | atom[], options?)`
 
-Automated two-way binding for an entire form. Maps form controls to atom properties based on their `name` attribute.
+Automated two-way synchronization for forms, mapping inputs to atom properties via their `name` attributes.
 
-- **Multi-Atom Support**: Accepts an array of atoms, which are merged via `mergeLenses`. Later atoms in the array override properties with the same path from earlier atoms.
-- **Nested Paths**: Supports dot-notation and array access (e.g., `user.profile.name`) via `lensFor`.
-- **Dynamic DOM**: Detects and binds new form controls added via `MutationObserver`.
-- **Group Support**: Maps radio and checkbox groups to boolean, string, or array values (supports multi-checkbox array synchronization).
-- **Validation Bridge**: Integrates with the browser's native **Constraint Validation API**, reactively calling `setCustomValidity` on form controls.
-- **Performance**: Uses logic-invariant hoisting and minimized lookup strategies for efficient scaling.
+- **Multi-Atom Support**: Accepts an array of atoms (merged via `mergeLenses`). Later atoms take precedence on overlapping keys.
+- **Nested Paths**: Resolves dot-notation paths (e.g., `user.profile.name`).
+- **Dynamic DOM**: Uses `MutationObserver` to detect and bind inputs added after initialization.
+- **Validation**: Integrates with the native Constraint Validation API via `setCustomValidity`.
 
 ```javascript
-const user = $.atom({ name: 'Alice', age: 30, items: [{ text: 'Item 1' }] });
+const user = $.atom({ name: 'Alice', age: 30 });
 
 $('form').atomForm(user, {
   debounce: 200,
@@ -279,7 +264,7 @@ $('form').atomForm(user, {
 
 ### `.atomOn(event, handler)`
 
-Lifecycle-aware event listener. Handlers are removed when the element is unbound and are wrapped in `batch()` to consolidate reactive updates.
+Lifecycle-aware event delegation. Handlers are executed within a `batch()` cycle and are automatically unbound during teardown.
 
 ```javascript
 $('#btn').atomOn('click', () => doSomething());
@@ -291,17 +276,17 @@ $('#btn').atomOn('click', () => doSomething());
 
 ### `.atomMount(component, props?)`
 
-Mounts a functional component to selected elements. Manages cleanup of existing components and reactive bindings.
+Mounts a functional component structure to the selected elements.
 
-- **Batching**: Executes inside a `batch()` cycle to consolidate initial updates.
-- **Isolation**: Executed within an `untracked()` block to prevent subscription to parent reactive contexts.
+- **Batching**: Executes within a `batch()` cycle.
+- **Isolation**: Runs within an `untracked()` scope to prevent unintentional subscription to parent reactive contexts.
 
 ```javascript
 const UserProfile = ($el, { id }) => {
   const data = $.atomFetch(`/api/user/${id}`, { defaultValue: {} });
   $el.atomText($.computed(() => data.value.name));
 
-  return () => console.log('Cleanup logic...');
+  return () => console.log('Cleanup execution');
 };
 
 $('#root').atomMount(UserProfile, { id: 42 });
@@ -313,58 +298,41 @@ $('#root').atomMount(UserProfile, { id: 42 });
 
 ### `$.useAtomComponent(element)`
 
-Integrates reactive state management into standard Custom Elements. This utility returns an `AtomComponentController` that handles the initialization and cleanup of reactive resources synchronized with the component's lifecycle.
+Integrates the reactive engine into standard Custom Elements, returning an `AtomComponentController` for lifecycle and state synchronization.
 
-> **DX Diagnostic**: In debug mode (`$.debug.enabled = true`), this utility warns if the host element's tag name is a custom element (contains a hyphen) but has not been registered via `customElements.define()`.
+> **Diagnostic**: In debug mode, the utility warns if the host element contains a hyphen but is not registered via `customElements.define()`.
 
-#### Declarative Static Specs
+#### Declarative Configuration
 
-Standard-compliant Custom Elements can define their reactive behavior declaratively using static properties. This approach eliminates the boilerplate of calling `setup()` manually in `connectedCallback` and ensures deterministic initialization managed by the `ContextEngine`.
+Custom Elements can configure reactivity via static properties.
 
-| Property | Type (Pseudo-type) | Description |
+| Property | Type | Description |
 | :--- | :--- | :--- |
-| `aejStyles` | `(string \| CSSStyleSheet)[]` | Array of styles to be applied via `adoptedStyleSheets`. |
-| `aejBind` | `Record<string, ReadonlyAtom<any>>` | Text-content bindings for elements with `data-aej-bind`. |
+| `aejStyles` | `(string \| CSSStyleSheet)[]` | Array of styles applied via `adoptedStyleSheets`. |
+| `aejBind` | `Record<string, ReadonlyAtom<any>>` | Text bindings targeting `data-aej-bind` attributes. |
 | `aejAria` | `Record<string, ReadonlyAtom<any>>` | Reactive ARIA synchronization via `ElementInternals`. |
-| `aejParts` | `Record<string, ReadonlyAtom<any>>` | Reactive CSS Shadow Parts control for elements with `data-aej-part`. |
+| `aejParts` | `Record<string, ReadonlyAtom<any>>` | Reactive CSS Shadow Parts control. |
 | `aejDispatch` | `Record<string, ReactiveValue<any>>` | Automatic `CustomEvent` dispatching on state changes. |
-| `aejValue` | `Atom<any> \| { val: Atom, state?: Atom }` | Form-Associated Custom Element (FACE) value/state sync. |
+| `aejValue` | `Atom<any> \| { val: Atom, state?: Atom }` | Form-Associated Custom Element (FACE) data synchronization. |
 | `aejValidation` | `Atom<ValidityStateFlags \| string> \| Function` | Native Constraint Validation API integration. |
-
-> **Auto-Setup Logic**: If these static specs are present, the controller automatically registers the element for observation. If the element is disconnected at the time of `useAtomComponent` call, the `ContextEngine` defers initialization until it is attached to the DOM.
 
 #### Controller API
 
-- **`attrs(name: string)`**: Returns a **Lens Atom** for a specific attribute.
-  - If `static observedAttributes` is defined, the controller only monitors those attributes to optimize memory and performance.
-  - If undefined, it falls back to monitoring all attribute mutations via a `MutationObserver`.
-- **`slots(name?: string)`**: Returns a `ReadonlyAtom<Node[]>` representing the assigned nodes of a specific `<slot>`.
-  - Use `'default'` or omit the argument to track the unnamed slot.
-- **`internals`**: Provides direct access to the `ElementInternals` instance, enabling advanced form participation and accessibility features.
-- **`$(selector: string | Element)`**: A scoped jQuery selector that isolates lookups to the component's `ShadowRoot` or the host element.
+- **`attrs(name: string)`**: Returns a Lens Atom targeting a specific attribute. Respects `static observedAttributes` if defined.
+- **`slots(name?: string)`**: Returns a `ReadonlyAtom<Node[]>` representing the assigned nodes of a Shadow DOM `<slot>`.
+- **`internals`**: Provides access to the `ElementInternals` object.
+- **`$(selector)`**: A scoped jQuery selector isolated to the component's `ShadowRoot` or host container.
 
 #### `setup(options?)`
 
-Configures reactive observers, event dispatching, and data binding.
-
-- **`shadowRoot`**: The `ShadowRoot` instance used for scoped selectors and slot tracking (required for 'closed' mode).
-- **`dispatch`**: An object mapping event names to atoms or functions. A `CustomEvent` is automatically dispatched from the host whenever the state changes.
-- **`bind`**: An object mapping keys to atoms. Elements within the component containing `data-aej-bind="key"` will have their text content updated when the atom changes.
-- **`styles`**: An array of `string` or `CSSStyleSheet` objects to be shared across all instances of the component via `adoptedStyleSheets`.
-- **`aria`**: An object mapping ARIA properties (e.g., `ariaExpanded`) to atoms, updated via `ElementInternals`.
-- **`parts`**: An object mapping part keys to atoms. Elements with `data-aej-part="key"` will have their `part` attribute synchronized reactively.
-- **`value`**: For Form-Associated Custom Elements (FACE). Synchronizes an atom value with the native `<form>` submission data.
-- **`validation`**: For FACE. Integrates an atom or function with the native Constraint Validation API (`setCustomValidity`).
-
-#### Example: Declarative Custom Element
+Bootstraps the reactive features based on the provided configuration or the static specs defined on the element class.
 
 ```javascript
 class MyComp extends HTMLElement {
   static aejStyles = [':host { display: block; }'];
   static aejBind = { title: $.atom('Hello World') };
-  static aejDispatch = { 'init': () => ({ time: Date.now() }) };
 
-  private aej = $.useAtomComponent(this); // Auto-setup handles everything
+  private aej = $.useAtomComponent(this); 
   
   connectedCallback() {
     this.attachShadow({ mode: 'open' }).innerHTML = `
@@ -385,19 +353,17 @@ customElements.define('my-comp', MyComp);
 
 ### `$.provideAtom<T>(target, key, atom)`
 
-Exposes a reactive value to all descendant elements in the DOM tree.
+Registers a reactive value for consumption by descendant elements.
 
-- **Shadow DOM Support**: Uses event-based discovery to allow state to cross Shadow DOM boundaries via the `aej:context-request` event.
-- **CSS Synchronization**: Automatically mirrors the provided value to a CSS custom property (`--aej-[key]`) on the provider element, enabling state-driven styling.
+- **Shadow DOM**: Transverses Shadow DOM boundaries using the `aej:context-request` event protocol.
+- **CSS Synchronization**: Exposes the value as a CSS custom property (`--aej-[key]`) on the provider.
 
 ### `$.injectAtom<T>(target, key)`
 
-Retrieves a reactive value provided by an ancestor element.
+Retrieves a value registered by an ancestor via `provideAtom`.
 
-- **Dynamic Resolution**: Returns a proxy that maintains the connection even if the element is moved to a different position in the DOM hierarchy.
-- **Lazy Connection**: Supports disconnected elements by deferring the provider search until the element is attached to the document.
-- **Performance**: Utilizes an internal versioning system to minimize re-discovery overhead during structural DOM changes.
-- **DX Warning**: In debug mode, warns if the target element is an unregistered custom element.
+- **Dynamic Resolution**: Maintains connection mapping if elements are relocated within the DOM hierarchy.
+- **Lazy Initialization**: Defers provider lookup if the requesting element is disconnected from the document.
 
 ---
 
@@ -405,53 +371,35 @@ Retrieves a reactive value provided by an ancestor element.
 
 ### `$.atomLens(atom, path)`
 
-Creates a two-way reactive lens for a specific property path on an object-based atom.
-
-- **Returns**: A `WritableAtom` that updates the parent atom using structural sharing. Includes compile-time path validation.
-
-```javascript
-const nameLens = $.atomLens(store, 'user.profile.name');
-$('#name-input').atomVal(nameLens);
-```
+Creates a two-way reactive lens addressing a specific nested property path. Supports structural sharing.
 
 ### `$.mergeAtoms(...atoms)`
 
-Combines multiple object-based atoms into a single read-only computed atom with a flattened type.
-
-```javascript
-const a = $.atom({ x: 1 });
-const b = $.atom({ y: 2 });
-const combined = $.mergeAtoms(a, b);
-// combined.value is { x: number, y: number }
-```
+Combines object-based atoms into a read-only computed atom with a flattened type structure.
 
 ### `$.mergeLenses(...lenses)`
 
-Merges multiple writable lenses into a single unified lens. Getting the value returns a merged object, and setting the value propagates changes back to the source lenses.
-
-```javascript
-const combinedLens = $.mergeLenses(lensA, lensB);
-```
+Unifies writable lenses. Setting the unified value propagates changes back to the respective source lenses.
 
 ### `$.isAtom(val)` / `$.isComputed(val)` / `$.isEffect(val)`
 
-Type guards for identifying reactive primitives.
+Runtime type guards for reactive primitives.
 
 ### `$.isPromise(val)`
 
-Utility for identifying `Promise` or thenable objects.
+Identifies `Promise` or thenable objects.
 
 ### `$.batch(fn)`
 
-Groups multiple atom writes into a single synchronous notification cycle.
+Executes a callback, deferring all reactive notifications until the callback completes.
 
 ### `$.untracked(fn)`
 
-Executes a function without establishing reactive dependencies.
+Executes a callback without registering reactive dependencies.
 
 ### `$.nextTick()`
 
-Returns a `Promise` that resolves after the next scheduler flush, waiting for all pending reactive effects.
+Returns a `Promise` resolving after the next reactive scheduler flush cycle.
 
 ---
 
@@ -459,18 +407,15 @@ Returns a `Promise` that resolves after the next scheduler flush, waiting for al
 
 ### `$.atomFetch(urlOrFn, options)`
 
-AJAX primitive that wraps `$.ajax` with reactive capabilities.
+A reactive wrapper for AJAX requests.
 
-- **Concurrency**: Aborts previous requests using `AbortController` when dependencies change.
-- **Normalization**: Standardizes `jqXHR` objects into native `Error` instances.
-- **Integration**: Re-fetches automatically if parameters depend on other atoms.
+- **Concurrency**: Integrates `AbortController` to cancel pending requests when dependencies update.
+- **Normalization**: Standardizes `jqXHR` objects into native `Error` classes.
 
 ```javascript
 const user = $.atomFetch(() => `/api/users/${userId.value}`, {
   defaultValue: null,
 });
-
-$('#name').atomText(user, u => u?.name ?? '');
 ```
 
 ---
@@ -479,12 +424,10 @@ $('#name').atomText(user, u => u?.name ?? '');
 
 ### `$.route(config)`
 
-SPA router supporting hash-based and pushState routing.
+A Single Page Application router supporting both HTML5 History and Hash modes.
 
-- **`isEqual`**: `(a, b) => boolean` — Optional custom equality check for route comparison.
-- **URLPattern Support**: Uses the native `URLPattern` API for segment extraction when available.
-
-> **DX Diagnostic**: In debug mode, the router automatically scans rendered content for unregistered custom elements and logs warnings to prevent silent failures during view transitions.
+- **Pattern Matching**: Leverages the native `URLPattern` API for segment extraction, falling back to Regex when unsupported.
+- **Route Lifecycle**: Provides `onEnter` and `onLeave` hooks for navigation guards.
 
 ---
 
@@ -492,20 +435,20 @@ SPA router supporting hash-based and pushState routing.
 
 ### `$.atomNav(options)`
 
- Navigation module (PJAX) that intercepts link clicks, fetches content asynchronously, and updates target containers while maintaining browser history.
+A PJAX-style navigation manager that intercepts link clicks to fetch and swap HTML fragments asynchronously without full page reloads.
 
-- **Reactive State**: Exposes `currentUrl`, `isPending`, and `hasError` atoms for reactive UI feedback (e.g., loading spinners).
-- **Metadata Sync**: Automatically synchronizes document `title` and standard SEO `meta` tags (description, keywords) from the loaded page.
-- **Scroll Management**: Handles automatic scrolling to the top or to a specific `#hash` after content injection.
-- **Interoperability**: Integrates with the navigation coordinator to respect `onLeave` guards from nested routers or other managers.
-- **Race Condition Safety**: Implements a "last navigation wins" policy using internal versioning and `AbortSignal` cancellation.
+- **Request Coordination**: Utilizes `X-PJAX-Container` headers and `AbortSignal` cancellation to manage network concurrency ("last navigation wins").
+- **DOM Reconciliation**: Performs resource cleanup on existing DOM nodes before injecting new content to prevent memory leaks.
+- **Scroll Management**: Determines scrolling behavior (e.g., `#hash` targeting or resetting to top) based on the URL transition type.
+- **Metadata**: Automatically synchronizes the document `<title>` and `<meta>` tags from the fetched response.
 
-#### Protocol & Header Support
-
-- **`X-PJAX-Container` Header**: Includes the target selector in the `X-PJAX-Container` request header, enabling server-side coordination for fragment rendering.
-- **`X-PJAX-Title` Support**: Synchronizes the document title using the `X-PJAX-Title` response header when provided, falling back to the `<title>` tag in the response body.
-- **`X-PJAX-URL` Support**: Resolves server-side redirects by following the URL provided in the `X-PJAX-URL` response header.
-- **Fragment Extraction**: Implements automated content extraction based on the `target` selector. If no selector is matched, the system falls back to extracting the `<body>` content or the raw HTML string.
+```javascript
+const nav = $.atomNav({
+  target: '#main-content',
+  selector: '#main-content',
+  onMount: ($container, url) => console.log(`Navigated to ${url}`)
+});
+```
 
 ---
 
@@ -513,8 +456,8 @@ SPA router supporting hash-based and pushState routing.
 
 ### Visual Feedback
 
-When enabled via `$.debug.enabled`:
+When enabled via `$.debug.enabled = true`:
 
-- **Console Logs**: Logs DOM updates with selectors.
-- **Visual Highlighting**: Updated elements are outlined with a red border using a `requestAnimationFrame` loop.
-- **Precision**: Logs use a `tag#id.class` format for identification.
+- **Console Diagnostics**: Logs node updates and specific DOM operations.
+- **Visual Highlighting**: Outlines updated elements using `requestAnimationFrame` for performance profiling.
+- **Precision**: Logs structural paths utilizing the `tag#id.class` format.
