@@ -1,12 +1,18 @@
+/**
+ * @module AEJRouteTypes
+ *
+ * Responsibility:
+ * Defines the core data structures and interfaces for the AEJ routing system,
+ * including URL state snapshots, adapter contracts, and matching results.
+ */
+
 import type { Option } from '@but212/atom-effect-utils';
 import type { RouteDefinition } from '@/types';
 
 /**
- * Represents the current parsed state of a URL.
- *
- * Logic: Data Contract
- * Provides an immutable snapshot used to bridge the gap between browser-specific
- * URL states and the router's internal reactive state.
+ * Logic: Immutable Navigation State
+ * Represents a parsed snapshot of a URL, serving as the bridge between
+ * browser-specific location data and the router's reactive engine.
  */
 export type URLState = {
   readonly path: string;
@@ -15,11 +21,9 @@ export type URLState = {
 };
 
 /**
- * Interface for browser URL interaction.
- *
- * Logic: State Adaptation
- * Abstracting History and Hash behavior behind this interface allows the router
- * to remain agnostic of the underlying URL strategy.
+ * Logic: URL Strategy Contract
+ * Interface for browser URL synchronization. Decouples the core router from
+ * specific browser APIs (History, Hash) to support polymorphic navigation.
  */
 export interface UrlAdapter {
   /** Retrieves the current path and query from the browser. */
@@ -39,7 +43,8 @@ export interface UrlAdapter {
 }
 
 /**
- * Internal metadata for a compiled route pattern.
+ * Logic: Compiled Route Metadata
+ * Internal metadata container for a resolved route pattern and its definition.
  */
 export interface CompiledRoute {
   readonly pattern: string;
@@ -47,10 +52,9 @@ export interface CompiledRoute {
 }
 
 /**
- * Outcome of a route matching operation.
- *
- * Logic: Polymorphic Result
- * Uses the `Option` type to represent a successful match with params or a miss.
+ * Logic: Polymorphic Match Result
+ * Outcome of a route matching operation, using `Option` to safely represent
+ * successful matches (with params) or misses.
  */
 export type MatchResult = Option<{
   readonly route: CompiledRoute;
@@ -58,7 +62,9 @@ export type MatchResult = Option<{
 }>;
 
 /**
- * A single entry in the route matcher containing both metadata and matching logic.
+ * Logic: Route Matcher Entry
+ * A single registration in the route matcher containing metadata and
+ * specific matching logic.
  */
 export interface MatchEntry {
   readonly pattern: string;

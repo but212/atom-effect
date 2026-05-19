@@ -1,13 +1,26 @@
-/** Symbol used to mark a DOM element as hydrated with reactive bindings. */
+/**
+ * @module AEJSymbols
+ *
+ * Responsibility:
+ * Defines unique symbols and event names used for internal library state
+ * tracking, dependency injection, and resource management.
+ */
+
+/**
+ * Logic: Hydration State Tracking
+ * Marks a DOM element as having been processed by reactive bindings.
+ */
 export const HYDRATION_MARKER = Symbol.for('aej:hydrated');
 
-/** Symbol used to indicate that an element has an active lifecycle MutationObserver attached. */
+/**
+ * Logic: Resource Disposal Orchestration
+ * Indicates that an element has an active lifecycle MutationObserver attached.
+ */
 export const CLEANUP_MARKER = Symbol.for('aej:cleanup-enabled');
 
 /**
+ * Logic: Reactive Dependency Injection
  * Event name used for the bubbling context discovery mechanism.
- *
- * Logic: Dependency Injection
  * Descendant elements dispatch this event to locate reactive providers
  * higher in the DOM tree, including across Shadow DOM boundaries.
  */
@@ -25,11 +38,12 @@ export interface ContextRequestDetail {
 }
 
 /**
- * A unique symbol used to mark event handlers as already wrapped in a batch.
+ * Logic: Batch Coalescing Marker
+ * Marks event handlers as already wrapped in a reactive batch.
  *
- * Reason: Batch Coalescing
- * This prevents redundant nested `batch()` calls when re-binding
- * handlers or during multiple patch cycles, maintaining flat execution stacks.
+ * Reason: Execution Stack Flattening
+ * Prevents redundant nested `batch()` calls when re-binding handlers
+ * or during multiple patch cycles.
  *
  * @internal
  */

@@ -1,22 +1,22 @@
 # Onboarding Guide
 
-This guide is designed to help developers quickly understand the core concepts, mental model, and common patterns of `@but212/atom-effect`.
+This guide introduces the core concepts, mental model, and standard patterns of the `@but212/atom-effect` reactive engine. It is intended to help developers understand how to architect applications using the library's primitives.
 
 ## Mental Model
 
-The reactive system in `@but212/atom-effect` can be compared to a **spreadsheet**:
+The reactive system in `@but212/atom-effect` operates on a deterministic push-pull graph, conceptually similar to a spreadsheet:
 
-- **Atoms** represent cells containing raw data (inputs).
-- **Computeds** represent cells with formulas that automatically update based on their inputs.
-- **Effects** represent observers that perform actions (such as updating the DOM or logging) whenever the relevant cells change.
+- **Atoms**: Source cells containing raw data (inputs).
+- **Computeds**: Derived cells with formulas that automatically re-evaluate based on their inputs.
+- **Effects**: Observers that perform side-effects (e.g., DOM updates, network requests) when their dependencies change.
 
 ```text
   [Atom A]  ──┐
-              ├──▶  [Computed C = A + B]  ──▶  [Effect: Update UI]
+              ├──▶  [Computed C]  ──▶  [Effect (Side-effect)]
   [Atom B]  ──┘
 ```
 
-Dependency tracking is handled **automatically**. By reading a reactive value inside a `computed` or `effect` function, the system registers that relationship without requiring manual declaration.
+Dependency tracking is implicit and synchronous. Reading a reactive value (`.value`) inside a `computed` or `effect` registers a dependency, ensuring the node updates when the source changes.
 
 ---
 
@@ -24,96 +24,77 @@ Dependency tracking is handled **automatically**. By reading a reactive value in
 
 ### 1. `atom(initialValue, options?)`
 
-Atoms are the primary source of state. They are writable and notify subscribers when their value changes.
+Atoms are the primary container for mutable state.
 
 ```typescript
 import { atom } from '@but212/atom-effect';
 
 const count = atom(0);
 
-// Accessing the value (tracks dependency if inside effect/computed)
+// Reading the value (registers a dependency in a reactive context)
 console.log(count.value);
 
-// Updating the value (triggers notifications)
+// Updating the value (schedules notifications for subscribers)
 count.value = 5;
 
-// Reading without tracking
+// Reading without registering a dependency
 console.log(count.peek());
 
-// Explicitly cleaning up resources
+// Releasing resources
 count.dispose();
 ```
 
-**Note**: By default, atom updates are batched using microtasks. Multiple updates in the same synchronous block result in a single notification cycle.
-
 ### 2. `computed(fn, options?)`
 
-Computeds are read-only nodes that derive their state from other atoms or computeds.
+Computeds are read-only nodes that derive their state from other reactive nodes.
 
 ```typescript
+import { atom, computed } from '@but212/atom-effect';
+
 const price = atom(100);
 const tax = atom(0.1);
 const total = computed(() => price.value * (1 + tax.value));
 
-console.log(total.value); // 110 (Calculated lazily)
+console.log(total.value); // 110 (Evaluated lazily upon access)
 ```
 
 **Key Characteristics**:
 
-- **Lazy Evaluation**: The calculation only runs when the `.value` is accessed.
-- **Caching**: The result is cached and only re-calculated if dependencies change.
-- **Async Support**: Can return a `Promise`. Use the `defaultValue` option to provide a value while the promise is pending.
+- **Lazy Evaluation**: The computation executes only when the value is accessed.
+- **Caching**: Results are cached. Re-evaluation occurs only if upstream dependencies have changed.
+- **Async Support**: Computeds can return a `Promise`. An explicit `defaultValue` is required to provide a synchronous state while the Promise is pending.
 
 ### 3. `effect(fn, options?)`
 
-Effects are used to perform side effects in response to state changes.
+Effects execute side-effects in response to state changes.
 
 ```typescript
+import { atom, effect } from '@but212/atom-effect';
+
 const name = atom('Developer');
 
 const handle = effect(() => {
   console.log(`Hello, ${name.value}`);
 
-  // Optional cleanup function called before re-execution or disposal
+  // Optional cleanup function executed before the next run or upon disposal
   return () => console.log('Cleaning up...');
 });
 
 name.value = 'User';
-// Console logs: "Cleaning up...", then "Hello, User"
-```
+// Console: "Cleaning up..." -> "Hello, User"
 
----
-
-## Scheduling and Batching
-
-### Microtask Batching
-
-The scheduler uses `queueMicrotask` by default to coalesce multiple state changes into a single notification flush. This prevents redundant executions.
-
-### Explicit Batching with `batch()`
-
-The `batch()` utility allows you to group multiple updates and ensure a synchronous flush of all affected effects and computeds immediately after the batch callback finishes.
-
-```typescript
-import { batch } from '@but212/atom-effect';
-
-batch(() => {
-  atomA.value = 1;
-  atomB.value = 2;
-  // Notifications are deferred until the end of this block
-});
-// Synchronous flush occurs here
+handle.dispose();
 ```
 
 ---
 
 ## Dependency Tracking
 
-Tracking occurs whenever a `.value` property is accessed within a tracking context (like an `effect` or `computed`).
+Tracking occurs synchronously when a `.value` property is accessed within a `computed` or `effect` execution context.
 
-### Dynamic Dependencies
+### Dynamic Graph
 
-The dependency graph is dynamic. If a computation branches, it only tracks the dependencies it actually accesses during the last execution.
+The dependency graph is dynamic. Only branches executed during the current evaluation pass are tracked.
 
 ```typescript
 const show = atom(true);
@@ -123,22 +104,64 @@ const b = atom(2);
 const result = computed(() => {
   return show.value ? a.value : b.value;
 });
-// If show.value is true, only 'show' and 'a' are tracked.
+// If `show.value` is true, changes to `b` will not trigger a re-evaluation.
 ```
 
-### Bypassing Tracking
+### Untracked Reads
 
-Use `.peek()` on an atom or wrap logic in `untracked(() => ...)` to read reactive state without creating a dependency.
+To access a value without establishing a reactive dependency, use `.peek()` on an atom or wrap the execution block in `untracked`.
+
+```typescript
+import { untracked } from '@but212/atom-effect';
+
+effect(() => {
+  // `a.value` triggers the effect, `b.value` does not.
+  const aVal = a.value;
+  const bVal = untracked(() => b.value); 
+});
+```
+
+---
+
+## Scheduling and Batching
+
+### Microtask Flush
+
+By default, the scheduler coalesces multiple state changes into a single asynchronous microtask cycle. This prevents redundant executions of computeds and effects during synchronous operations.
+
+### Atomic Updates with `batch()`
+
+The `batch()` utility groups multiple synchronous updates into a single atomic transaction.
+
+```typescript
+import { atom, batch } from '@but212/atom-effect';
+
+const x = atom(0);
+const y = atom(0);
+
+batch(() => {
+  x.value = 1;
+  y.value = 2;
+  // Downstream effects are deferred until the batch block completes.
+});
+```
 
 ---
 
 ## Asynchronous Operations
 
-Async computeds are natively supported. It is important to remember that **dependency tracking is synchronous**. Always read dependencies before the first `await` keyword.
+The library supports asynchronous data fetching via `computed`.
+
+**Constraint: Synchronous Tracking**
+Dependency tracking is strictly synchronous. You must read all required reactive values before the first `await` keyword in an async computed.
 
 ```typescript
-const data = computed(async () => {
-  const currentId = userId.value; // Tracked
+const userId = atom(123);
+
+const userData = computed(async () => {
+  // CORRECT: Read dependencies synchronously before awaiting
+  const currentId = userId.value; 
+  
   const response = await fetch(`/api/user/${currentId}`);
   return response.json();
 }, { defaultValue: null });
@@ -148,57 +171,52 @@ const data = computed(async () => {
 
 ## Error Handling
 
-### Computed Nodes
+### Error Propagation
 
-Computeds catch errors during evaluation. You can inspect them using `.hasError`, `.lastError`, or `.errors`. Providing a `defaultValue` allows the system to return that value instead of throwing when the node is accessed in an error state.
+Errors thrown during a computed's evaluation are caught and stored. The node transitions to an error state (`hasError: true`).
 
-### Effect Nodes
+If a node in an error state is accessed, it will propagate the error by throwing a `ComputedError`, unless a `defaultValue` was provided during initialization.
 
-Errors in effects are caught by the scheduler. You can provide an `onError` callback in the effect options to handle these errors (e.g., for logging to a service).
+### Error Inspection
+
+You can inspect errors without triggering exceptions by using the `.hasError`, `.lastError`, or `.errors` properties on a computed node.
 
 ---
 
 ## State Composition
 
-As your application grows, you may need to combine multiple atoms into a single view or manage related pieces of state together.
+For complex applications, utilities are provided to compose and flatten state structures.
 
 ### `mergeAtoms` (Read-only)
 
-Combine multiple atoms into a single read-only object.
+Combines multiple atoms or computeds into a single read-only computed node with a flattened object structure.
 
 ```typescript
+import { mergeAtoms } from '@but212/atom-effect';
+
 const settings = atom({ theme: 'dark' });
 const user = atom({ name: 'Alice' });
+
 const state = mergeAtoms(settings, user); 
 // state.value -> { theme: 'dark', name: 'Alice' }
 ```
 
-### `mergeLenses` (Two-way)
+### `mergeLenses` (Two-way Synchronization)
 
-Unify multiple writable lenses into a single writable atom. Perfect for form handling or unified state management.
+Unifies multiple writable lenses into a single writable atom, allowing coordinated updates.
 
 ```typescript
-const combined = mergeLenses(themeLens, nameLens);
-combined.value = { theme: 'light', name: 'Bob' }; // Updates both source atoms
+import { mergeLenses, atomLens } from '@but212/atom-effect';
+
+const combined = mergeLenses(atomLens(user, 'profile'), atomLens(settings, 'config'));
+combined.value = { /* updates both source atoms */ };
 ```
 
 ---
 
-## Best Practices and Considerations
+## Standard Practices
 
-1. **Manual Disposal**: Effects and atoms should be disposed of when they are no longer needed to prevent memory leaks, especially in component-based architectures.
-2. **Purity in Computeds**: Computed functions should be pure and free of side effects. Avoid modifying atoms inside a computed function, as this can lead to infinite loops.
-3. **Circular Dependencies**: The library detects circular dependency chains and throws an error to maintain graph integrity.
-4. **`aeNextTick`**: Use `await aeNextTick()` in tests or complex logic to wait for the scheduler to finish its current flush cycle.
-
----
-
-## Project Structure
-
-For contributors, here is an overview of the core package layout:
-
-- `packages/core/src/core/`: Implementation of atoms, computeds, effects, and the scheduler.
-- `packages/core/src/utils/`: Debugging tools and type guards.
-- `packages/core/src/types.ts`: Public TypeScript interfaces.
-- `packages/core/src/errors.ts`: Error hierarchy and message registry.
-- `packages/core/src/constants.ts`: Internal configuration and state flags.
+1. **Resource Disposal**: Always call `.dispose()` on effects and atoms when they are no longer needed (e.g., component unmount) to prevent memory leaks.
+2. **Deterministic Computations**: Computed functions must be pure. Modifying atoms or performing side effects inside a computed function will lead to unpredictable behavior and potential infinite loops.
+3. **Execution Limits**: The scheduler implements a maximum execution limit per flush cycle (default 100 per effect) to prevent the main thread from hanging due to circular updates.
+4. **Testing Synchronization**: Use `await aeNextTick()` in test environments to ensure the scheduler has finished flushing pending microtasks before making assertions.

@@ -1,21 +1,29 @@
+/**
+ * @module AtomFetch
+ *
+ * Responsibility:
+ * Orchestrates reactive network requests by synchronizing computed atoms with
+ * asynchronous jQuery AJAX operations.
+ *
+ * Design Intent:
+ * Provides a declarative interface for data fetching that automatically handles
+ * dependency tracking, concurrency control, and lifecycle-bound cancellation.
+ */
+
 import { computed } from '@but212/atom-effect';
 import { Result } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import type { ComputedAtom, FetchError, FetchOptions } from '@/types';
 
 /**
- * Normalizes user configuration into jQuery Ajax settings.
- *
  * Logic: Priority Resolution
  * Precedence is established as follows: Direct Options > Dynamic Options > Static Options.
  *
- * Constraint: Direct callback options (`success`, `error`, `complete`) are
- * explicitly cleared to prevent interference with the automated state
- * transitions and concurrency management.
+ * Constraint: Callback Isolation
+ * Direct callback options (`success`, `error`, `complete`) are explicitly
+ * cleared to prevent interference with the automated state transitions
+ * and concurrency management.
  *
- * @param url - The target URL.
- * @param options - The fetch configuration options.
- * @returns A normalized JQuery.AjaxSettings object.
  * @internal
  */
 function toSettings<T>(url: string, options: FetchOptions<T>): JQuery.AjaxSettings {
@@ -36,14 +44,10 @@ function toSettings<T>(url: string, options: FetchOptions<T>): JQuery.AjaxSettin
 }
 
 /**
- * Normalizes jQuery-specific XHR errors into a standard Error format.
- *
  * Logic: Error Normalization
- * Returns a standard `Error` while preserving the original `jqXHR` context,
- * enabling advanced diagnostics in reactive hooks.
+ * Standardizes non-uniform jQuery AJAX errors into native Error objects
+ * while preserving the original XHR context for diagnostics.
  *
- * @param err - The raw error from jQuery.ajax.
- * @returns A normalized Error object containing XHR metadata.
  * @internal
  */
 function toError(err: unknown): Error {
@@ -52,48 +56,40 @@ function toError(err: unknown): Error {
     // Reason: A status of 0 typically indicates a network timeout or DNS
     // failure where statusText might be empty.
     const message = xhr.statusText || (xhr.status === 0 ? 'Network Error' : 'Request Failed');
-    const error = new Error(`Network Error: ${message} (${xhr.status})`);
+    const error = new Error(`Network Error: ${message} (${xhr.status})`, { cause: err });
     (error as FetchError).jqXHR = xhr;
     return error;
   }
-  return err instanceof Error ? err : new Error(String(err ?? 'Unknown error'));
+  return err instanceof Error ? err : new Error(String(err ?? 'Unknown error'), { cause: err });
 }
 
 /**
- * Creates a reactive computed atom that synchronizes with an asynchronous network request.
+ * Creates a computed atom that synchronizes with a network request.
  *
  * When to use:
- * - To fetch data that depends on other atoms (automated refetching on dependency changes).
- * - To implement built-in concurrency management (automated cancellation of stale requests).
- *
- * Logic: Concurrency Control
- * Uses `AbortController` and `jqXHR.abort()` to ensure that only the response
- * from the most recent request is reflected in the atom's state. Older,
- * "out-of-order" responses are discarded to prevent UI flickering.
- *
- * @param source - A static URL string or a reactive function returning a URL.
- * @param options - Configuration for default values, transformation, and error handling.
- * @returns A computed atom augmented with an `abort()` method.
+ * - To fetch data automatically when reactive dependencies (e.g., atoms) change.
+ * - To enforce "latest-only" concurrency where stale requests are cancelled.
+ * - To unify error handling and data transformation for remote resources.
  *
  * @example
- * ```typescript
- * const userId = $.atom(1);
- * const user = $.atomFetch(() => `/api/users/${userId.value}`, {
- *   defaultValue: { name: 'Loading...' },
- *   eager: true
- * });
- *
- * $.effect(() => {
- *   console.log(`Current user: ${user.value.name}`);
+ * ```ts
+ * const userId = atom(1);
+ * const userProfile = $.atomFetch(() => `/api/users/${userId.get()}`, {
+ *   transform: (data) => data.profile
  * });
  * ```
+ *
+ * Logic: Concurrency Control
+ * Uses AbortController and jqXHR.abort() to enforce a "latest-only"
+ * resolution strategy. Older requests are canceled to prevent stale data
+ * from overwriting newer updates.
  */
 function atomFetch<T>(source: string | (() => string), options: FetchOptions<T>): ComputedAtom<T> {
   const getUrl = typeof source === 'string' ? () => source : source;
   let active: AbortController | null = null;
 
   const execute = async (): Promise<T> => {
-    // Logic: Abort the previous request if a new execution cycle starts.
+    // Why: Abort the previous request if a new execution cycle starts to prevent race conditions.
     active?.abort();
     const controller = new AbortController();
     active = controller;
@@ -111,13 +107,15 @@ function atomFetch<T>(source: string | (() => string), options: FetchOptions<T>)
     }
 
     try {
-      // Logic: Execute the request and capture the result.
-      // Note: We use manual try-catch for the AJAX part to ensure perfect compatibility
-      // with jqXHR await behavior, which can be tricky with automated wrappers.
+      /**
+       * Reason: Manual Error Handling
+       * Uses manual try-catch blocks to ensure compatibility with jqXHR's
+       * unique 'await' behavior and capture synchronous initialization errors
+       * for the `onError` hook.
+       */
       let ajaxResult: Result<unknown, Error>;
       try {
-        // 1. Initialize (capture sync errors for onError hook)
-        // Dependency tracking must occur synchronously before the first 'await'.
+        // Constraint: Dependency tracking must occur synchronously before the first 'await'.
         const url = getUrl();
         const settings = toSettings(url, options);
         xhr = $.ajax(settings);
@@ -127,7 +125,7 @@ function atomFetch<T>(source: string | (() => string), options: FetchOptions<T>)
         ajaxResult = Result.err(toError(err));
       }
 
-      // 2. Transformation Pipeline (Railway approach)
+      // Logic: Railway Transformation Pipeline
       if (!ajaxResult.ok) {
         const error = ajaxResult.error;
         if (controller.signal.aborted) {

@@ -27,6 +27,24 @@ To maintain a professional and consistent standard, follow these diction rules:
 
 ---
 
+## Module-Level Documentation
+
+Every file (module) **MUST** begin with a `@module` header. This provides context for the entire file and helps with automated documentation generation.
+
+```typescript
+/**
+ * @module [Module_Name]
+ *
+ * Responsibility:
+ * [One or two sentences describing the module's core purpose and scope.]
+ *
+ * Design Intent:
+ * [Optional: High-level architectural reasoning or design philosophy for the module.]
+ */
+```
+
+---
+
 ## TSDoc Patterns (For Users)
 
 ### 1. Public API (Functions/Classes/Interfaces)
@@ -93,12 +111,15 @@ Deprecation is a critical communication tool for users. Always include:
 
 Use specialized prefixes to categorize maintenance information. These can be used in JSDoc blocks for internal members or as single-line comments.
 
-* **`Reason:`**: Explains non-obvious design choices or why a simpler approach was discarded.
-* **`Constraint:`**: Documents hard requirements (e.g., "Must be called before removal").
-* **`Caution:`**: Highlights fragile code prone to regressions or tricky side effects.
+* **`Why:`**: Explains the rationale behind a specific value, constant, or design choice (e.g., "Why 31 bits?").
+* **`Logic:`**: Explains the *intent* or implementation mechanics behind complex transitions, bitmasking, or non-linear branching.
+* **`Optimization:`**: Explains performance-related complexity, monomorphic access patterns, batching strategies, or diffing algorithms.
+* **`Reason:`**: Explains why a particular (perhaps non-obvious) approach was taken or why a simpler approach was discarded.
+* **`Constraint:`**: Documents hard requirements or limits (e.g., "Must be called before removal", "Max depth is 8").
+* **`Caution:`**: Highlights fragile code prone to regressions, tricky side effects, or potential "glitches".
 * **`Security:`**: **(Required)** Documents mechanisms for XSS mitigation, DOM Clobbering prevention, or sensitive data handling.
-* **`Optimization:`**: Explains performance-related complexity, batching strategies, or diffing algorithms.
-* **`Logic:`**: Explains the *intent* behind complex state transitions or non-linear branching.
+* **`Role:`**: Defines the purpose of an interface or class in the broader system architecture.
+* **`Impact:`**: Describes the consequences or side effects of a configuration flag or constant.
 
 ---
 

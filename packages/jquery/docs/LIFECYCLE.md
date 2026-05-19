@@ -1,36 +1,52 @@
 # Lifecycle Invariants
 
-This document defines the behavior and cleanup timing for elements managed by `atom-effect-jquery`.
+This document defines the lifecycle states, transition behaviors, and resource management strategies for elements managed by `@but212/atom-effect-jquery`.
+
+---
 
 ## Core States
 
-| State | Description | Trigger |
+| State | Description | Primary Triggers |
 | :--- | :--- | :--- |
-| **ATTACHED** | Element is in the DOM and reactive effects are active. | `setup()`, `$.fn.atomMount()`, Static Specs (Auto-Setup), or DOM insertion. |
-| **DETACHED** | Element is temporarily disconnected from the DOM. Effects are preserved. | `$.fn.detach()` or relocation within the same document. |
-| **DESTROYED** | Element is permanently removed. Effects and bindings are disposed. | `$.fn.remove()`, `$.fn.empty()`, or `teardown()`. |
+| **ATTACHED** | The element is connected to the DOM and all reactive effects/bindings are active. | `setup()`, `$.fn.atomMount()`, static specs (Auto-Setup), or DOM insertion. |
+| **DETACHED** | The element is disconnected from the DOM but retains its reactive state. | `$.fn.detach()` or synchronous relocation within the document. |
+| **DESTROYED** | The element is permanently removed. All reactive resources are released. | `$.fn.remove()`, `$.fn.empty()`, or `teardown()`. |
+
+---
 
 ## Scenario Matrix
 
-| Scenario | State Transition | Cleanup Timing | Implementation Logic |
+| Scenario | State Transition | Cleanup Timing | Implementation Mechanism |
 | :--- | :--- | :--- | :--- |
-| **DOM Move** | `ATTACHED` → `DETACHED` → `ATTACHED` | **None** | Microtask buffer prevents cleanup during synchronous moves, preserving reactive subscriptions. |
-| **$.detach()** | `ATTACHED` → `DETACHED` | **None** | Node is marked via `registry.keep()` to bypass the next cleanup cycle. |
-| **Native Removal** | `ATTACHED` → `DESTROYED` | **Deferred** | `MutationObserver` detects removal and queues cleanup as a microtask to allow for potential relocation. |
-| **Auto-Setup** | `OFFLINE` → `ATTACHED` | **Immediate** | `ContextEngine` detects insertion of components with static specs and triggers `setup()` within the same microtask. |
-| **teardown()** | `ATTACHED` → `DESTROYED` | **Deterministic** | Immediate disposal of internal state via `ComponentState.dispose()`. Triggers `ContextEngine.release()`. |
+| **DOM Relocation** | `ATTACHED` → `DETACHED` → `ATTACHED` | **None** | `MutationObserver` checks `isConnected` status during its microtask cycle. Synchronous moves preserve bindings. |
+| **`$.detach()`** | `ATTACHED` → `DETACHED` | **None** | The node is marked via `registry.keep()` to bypass automated cleanup cycles. |
+| **Native Removal** | `ATTACHED` → `DESTROYED` | **Deferred** | `MutationObserver` detects removal and executes `cleanupTree()` in a microtask if the node remains disconnected. |
+| **Auto-Setup** | `OFFLINE` → `ATTACHED` | **Immediate** | `ContextEngine` identifies elements with static specs upon insertion and executes `setup()` within the same microtask. |
+| **`teardown()`** | `ATTACHED` → `DESTROYED` | **Deterministic** | Synchronous disposal of internal state via `ComponentState.dispose()`, followed by `ContextEngine.release()`. |
+
+---
 
 ## Resource Management (Reference Counting)
 
-The library employs a **Reference Counting** strategy via `ContextEngine` to manage heavy resources like the global `MutationObserver`.
+The library utilizes a **Reference Counting** strategy within the `ContextEngine` to manage global resources, such as the `MutationObserver` safety net.
 
-1. **Retain**: When a component is created with static specs but not yet connected, or when a reactive context is injected (`injectAtom`), `ContextEngine.retain()` is called.
-2. **Activation**: The first retain call initializes and connects the global `MutationObserver`.
-3. **Release**: Upon component `teardown()` or context disposal, `ContextEngine.release()` is called.
-4. **Deactivation**: When the count reaches zero, the observer is disconnected and nullified to free up system resources.
+1. **Retain**: Triggered when a component with static specs is instantiated (but not yet connected) or when a context is requested via `injectAtom`.
+2. **Initialization**: The first `retain` call initializes and connects the global `MutationObserver` to `document.documentElement`.
+3. **Release**: Triggered upon component `teardown()` or when a context injection proxy is disposed.
+4. **Teardown**: When the active reference count reaches zero, the observer is disconnected and internal caches are cleared to minimize system overhead.
+
+---
 
 ## Invariant Rules
 
-1. **Idempotent Cleanup**: Sequential cleanup calls on a single node must be side-effect free and result in a stable `DESTROYED` state.
-2. **Context Continuity**: Component `teardown()` or structural DOM changes must trigger a `ContextEngine.version` bump. This invalidates cached injection proxies, ensuring they re-resolve to the nearest valid provider.
-3. **Shadow DOM Transparency**: Resource discovery (DI) and cleanup must traverse Shadow DOM boundaries unless an element is explicitly marked for isolation.
+### 1. Idempotent Cleanup
+
+Sequential or redundant calls to `cleanup()` or `teardown()` on the same node must be side-effect free. Once a node enters the `DESTROYED` state, subsequent operations should not re-initialize reactive resources.
+
+### 2. Context Consistency
+
+Operations that mutate the DOM structure or release component state must trigger a version bump in the `ContextEngine`. This ensures that late-bound injection proxies re-evaluate their provider hierarchy, preventing "ghost" context references.
+
+### 3. Shadow DOM Transparency
+
+Resource discovery and lifecycle management must account for Shadow DOM boundaries. The registry tracks both open and closed `ShadowRoot` instances to ensure that recursive cleanup (`cleanupTree`) penetrates encapsulated subtrees.

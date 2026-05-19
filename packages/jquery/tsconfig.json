@@ -5,7 +5,7 @@
       "@/*": ["./src/*"]
     },
     "outDir": "./dist",
-    "lib": ["ES2021", "DOM", "DOM.Iterable"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "noImplicitAny": true
   },
   "include": ["src/**/*.ts", "__tests__/**/*.ts", "__benchmarks__/**/*.ts", "*.config.ts"],

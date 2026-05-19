@@ -1,24 +1,33 @@
-import type { RouteConfig, ValOptions } from './types';
-
 /**
- * Centralized repository for library-wide constants, defaults, and error templates.
+ * @module AEJConstants
  *
- * Logic: Subsystem Organization
- * Consolidates global prefixes, defaults, and error templates into logical
- * namespaces. This organization ensures consistency across the library and
- * provides a central location for modifying system behavior.
+ * Responsibility:
+ * Provides a centralized repository for library-wide defaults, configuration schemas,
+ * and error message templates.
  *
- * @internal
+ * Design Intent:
+ * Consolidates all "magic values" and system-wide settings to ensure consistency
+ * across subsystems and simplify global behavior modifications.
  */
 
-/** Constants for the core reactive engine. @internal */
+import type { RouteConfig, ValOptions } from './types';
+
+/** Role: Error templates for the reactive core engine. @internal */
 export const SYSTEM_CORE = {
   ERRORS: {
     EFFECT_DISPOSE_ERROR: (i?: string) => `Dispose error${i ? `: ${i}` : ''}`,
   },
 } as const;
 
-/** Configuration and error templates for the routing subsystem. @internal */
+/**
+ * Role: Configuration and error templates for the routing subsystem.
+ *
+ * Logic: Immutable Defaults
+ * Uses `Object.freeze` to ensure system defaults cannot be mutated at runtime,
+ * maintaining a predictable routing baseline.
+ *
+ * @internal
+ */
 export const SYSTEM_ROUTE = {
   PREFIX: '[atom-route]',
   DEFAULTS: Object.freeze({
@@ -35,7 +44,15 @@ export const SYSTEM_ROUTE = {
   },
 } as const;
 
-/** Configuration and error templates for reactive bindings. @internal */
+/**
+ * Role: Configuration for reactive DOM bindings.
+ *
+ * Constraint: Input Validation
+ * `VALID_INPUT_TAGS` defines the subset of HTML elements compatible with
+ * two-way data binding (`val()` logic).
+ *
+ * @internal
+ */
 export const SYSTEM_BINDING = {
   PREFIX: '[atom-binding]',
   INPUT_DEFAULTS: Object.freeze({ event: 'input change', debounce: 0 } as const) satisfies Partial<
@@ -53,17 +70,20 @@ export const SYSTEM_BINDING = {
 } as const;
 
 /**
- * Constants for the security and sanitization engine.
+ * Role: Security and Sanitization Policy
  *
  * Logic: Sanitization Schema
- * Defines the properties and URI protocols considered inherently dangerous.
- * These constants form the basis of the library's XSS and DOM Clobbering
- * prevention strategy.
+ * This configuration defines the library's defense-in-depth strategy against
+ * XSS and DOM Clobbering.
  *
  * @internal
  */
 export const SYSTEM_SECURITY = {
-  /** Property names that are blocked to prevent XSS and property hijacking. */
+  /**
+   * Security: Blocked Properties
+   * These properties are restricted to prevent direct HTML injection (XSS)
+   * and Prototype Pollution attacks.
+   */
   DANGEROUS_PROPS: [
     'innerHTML',
     'outerHTML',
@@ -72,7 +92,11 @@ export const SYSTEM_SECURITY = {
     'constructor',
     'prototype',
   ] as const satisfies readonly string[],
-  /** Attributes that must be validated for dangerous URI protocols. */
+  /**
+   * Security: URI Validation Vectors
+   * Attributes that are frequently exploited for script execution via
+   * malicious URI protocols (e.g., `javascript:`).
+   */
   URL_PROPS: [
     'src',
     'href',
@@ -89,7 +113,7 @@ export const SYSTEM_SECURITY = {
     'codebase',
     'xlink:href',
   ] as const satisfies readonly string[],
-  /** Pattern for identifying malicious URI protocols. */
+  /** Security: Targets common script-capable protocols in URI strings. */
   DANGEROUS_PROTOCOL_PATTERN: '(?:javascript|vbscript)',
   ERRORS: {
     UNSAFE_CONTENT: () => 'Unsafe content neutralized.',
@@ -100,7 +124,7 @@ export const SYSTEM_SECURITY = {
   },
 } as const;
 
-/** Error templates for list rendering. @internal */
+/** Role: Diagnostics for collection rendering. @internal */
 export const SYSTEM_LIST = {
   PREFIX: '[atom-list]',
   ERRORS: {
@@ -108,7 +132,7 @@ export const SYSTEM_LIST = {
   },
 } as const;
 
-/** Error templates for component mounting. @internal */
+/** Role: Diagnostics for dynamic component lifecycles. @internal */
 export const SYSTEM_MOUNT = {
   PREFIX: '[atom-mount]',
   ERRORS: {
@@ -117,7 +141,14 @@ export const SYSTEM_MOUNT = {
   },
 } as const;
 
-/** Error templates for Web Components. @internal */
+/**
+ * Role: Configuration for JQuery-native Web Component patterns.
+ *
+ * Why: `BIND` and `PART` attributes allow declarative binding within
+ * Shadow DOM or standard templates.
+ *
+ * @internal
+ */
 export const SYSTEM_COMPONENT = {
   PREFIX: '[atom-component]',
   ATTRS: {
@@ -130,7 +161,7 @@ export const SYSTEM_COMPONENT = {
   },
 } as const;
 
-/** Defaults for the visual debug system. @internal */
+/** Role: Tuning parameters for the visual instrumentation hub. @internal */
 export const SYSTEM_DEBUG = {
   DEFAULTS: {
     HIGHLIGHT_DURATION_MS: 500,

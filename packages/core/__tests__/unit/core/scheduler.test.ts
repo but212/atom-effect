@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  aeNextTick,
+  batch,
   scheduler,
   schedulerEndBatch,
   schedulerIsBatching,
@@ -7,18 +9,10 @@ import {
   schedulerSchedule,
   schedulerSetMaxFlushIterations,
 } from '@/core/scheduler';
-import {
-  aeNextTick,
-  atom,
-  batch,
-  computed,
-  effect,
-  SCHEDULER_CONFIG,
-  SchedulerError,
-} from '@/index';
+import { atom, computed, effect, SCHEDULER_CONFIG, SchedulerError } from '@/index';
 import { sleep } from '../../utils/test-helpers';
 
-describe('Scheduler', () => {
+describe('Scheduler Engine', () => {
   beforeEach(async () => {
     // Wait for any pending flushes and reset batch depth
     await aeNextTick();
@@ -46,6 +40,23 @@ describe('Scheduler', () => {
       expect(job1).toHaveBeenCalledTimes(1);
       expect(job2).toHaveBeenCalledTimes(1);
       expect(schedulerQueueSize(scheduler)).toBe(0);
+    });
+
+    it('ensures nested schedules are deferred to the next iteration (double buffering)', async () => {
+      const log: string[] = [];
+      const nestedJob = vi.fn(() => log.push('nested'));
+      const initialJob = vi.fn(() => {
+        log.push('initial');
+        schedulerSchedule(scheduler, nestedJob);
+        expect(schedulerQueueSize(scheduler)).toBe(1);
+      });
+
+      schedulerSchedule(scheduler, initialJob);
+      await sleep(10);
+
+      expect(log).toEqual(['initial', 'nested']);
+      expect(initialJob).toHaveBeenCalledTimes(1);
+      expect(nestedJob).toHaveBeenCalledTimes(1);
     });
 
     it('handles nested batch scopes correctly', () => {

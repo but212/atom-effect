@@ -1,11 +1,21 @@
+/**
+ * @module AEJUtilities
+ *
+ * Responsibility:
+ * Provides low-level utility primitives for DOM inspection, path normalization,
+ * and object serialization.
+ *
+ * Design Intent:
+ * Provides stateless, high-performance helpers that abstract away browser
+ * inconsistencies (e.g. SVG classNames) and normalize data for reactive state access.
+ */
+
 import type { RouteDefinition } from '@/types';
 
 /**
- * Determines if a value is a Promise or a thenable object.
- *
- * Logic: Duck-Typing
- * Uses a standard thenable check to identify asynchronous objects across
- * different implementation libraries.
+ * Logic: Async Identification
+ * Identifies thenable objects to ensure uniform handling of both native
+ * Promises and third-party async primitives across different environments.
  *
  * @internal
  */
@@ -56,29 +66,28 @@ export function getSelector(el: Element): string {
 }
 
 /**
- * Determines if a route is defined by a template selector.
+ * Logic: Template Type Guard
+ * Determines if a route definition is configured to use a template selector.
  * @internal
  */
 export const isTemplateRoute = (r: RouteDefinition): boolean =>
   r !== null && typeof r === 'object' && typeof r.template === 'string';
 
 /**
- * Determines if a route is defined by a custom render function.
+ * Logic: Render Type Guard
+ * Determines if a route definition is configured with a custom render function.
  * @internal
  */
 export const isRenderRoute = (r: RouteDefinition): boolean =>
   r !== null && typeof r === 'object' && typeof r.render === 'function';
 
 /**
- * Recursively flattens an object into a FormData instance.
+ * Logic: Nested Serialization
+ * Recursively flattens an object into a FormData instance using bracket notation
+ * (e.g., 'user[profile][name]') for framework compatibility.
  *
- * Logic: Nested Naming
- * Converts nested structures into bracket-notation strings (e.g., 'user[profile][name]')
- * to ensure compatibility with standard form parsers in most backend frameworks.
- *
- * @param fd - The FormData instance to populate.
- * @param prefix - The name prefix for the current path.
- * @param obj - The value to flatten.
+ * When to use:
+ * - Synchronizing complex reactive state objects with standard HTML form submissions.
  *
  * @internal
  */
@@ -94,8 +103,10 @@ export function flattenToFormData(fd: FormData, prefix: string, obj: unknown): v
 }
 
 /**
+ * Logic: Path Normalization
  * Normalizes an HTML field name (e.g., 'user[profile][name]') into a
- * dot-separated path (e.g., 'user.profile.name') compatible with lenses.
+ * dot-separated path (e.g., 'user.profile.name') compatible with lens-based
+ * state access.
  *
  * @param name - The field name to normalize.
  * @returns A dot-separated path string.

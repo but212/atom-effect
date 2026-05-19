@@ -9,10 +9,6 @@ import { bench, describe } from 'vitest';
 import { atom, computed, effect } from '../../dist';
 import { benchEffectOptions, coldBenchOptions, keep, microBenchOptions } from '../utils/setup.js';
 
-// ---------------------------------------------------------------------------
-// Cold Start: first evaluation cost
-// ---------------------------------------------------------------------------
-
 describe('Cold Start: First Evaluation', () => {
   bench(
     '[Vanilla] object allocation (baseline)',
@@ -71,10 +67,6 @@ describe('Cold Start: First Evaluation', () => {
   );
 });
 
-// ---------------------------------------------------------------------------
-// Steady State: warm repeated operations
-// ---------------------------------------------------------------------------
-
 describe('Steady State: Repeated Operations', () => {
   const warmAtom = atom(0);
   const warmComputed = computed(() => warmAtom.value * 2);
@@ -120,10 +112,6 @@ describe('Steady State: Repeated Operations', () => {
   );
 });
 
-// ---------------------------------------------------------------------------
-// Cold vs Warm: computed cache
-// ---------------------------------------------------------------------------
-
 describe('Cold vs Warm: Computed Cache', () => {
   bench(
     '[Cold] new computed each iteration',
@@ -161,10 +149,6 @@ describe('Cold vs Warm: Computed Cache', () => {
     microBenchOptions
   );
 });
-
-// ---------------------------------------------------------------------------
-// Cold vs Warm: effect subscription
-// ---------------------------------------------------------------------------
 
 describe('Cold vs Warm: Effect Subscription', () => {
   const src = atom(0);

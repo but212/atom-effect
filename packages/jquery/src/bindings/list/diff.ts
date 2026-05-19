@@ -1,3 +1,15 @@
+/**
+ * @module List Reconciliation
+ *
+ * Responsibility:
+ * Implements the core reconciliation algorithm to determine minimal DOM changes
+ * between list states.
+ *
+ * Design Intent:
+ * Employs a multi-pass O(N) diffing strategy (Fast-Forward Head/Tail) to
+ * generate an atomic mutation plan while minimizing memory pressure.
+ */
+
 import { shallowEqual } from '@but212/atom-effect-utils';
 import { SYSTEM_LIST } from '@/constants';
 import type { ListKey, ListKeyFn, ListOptions } from '@/types';
@@ -11,16 +23,12 @@ import { type DiffSlot, ItemState, type PreparedDiff } from './types';
  * When to use:
  * - Internal orchestration of DOM mutations for the `atomList` binding.
  *
- * Performance:
- * - O(N) time complexity.
- * - Best case: O(1) for pure appends/prepends via head/tail fast-forwarding.
+ * Optimization: Multi-pass O(N)
+ * Uses head/tail fast-forward passes to achieve O(1) performance for common
+ * append/prepend operations.
  *
  * @param ctx - Persistent state containing historical DOM and keys.
  * @param items - The new data array from the source atom.
- *
- * @example
- * const diff = buildIndices(ctx, nextItems, nextItems.length, getKey, update, isEqual);
- * // diff.slots now contains the mapping instructions for each index.
  *
  * @internal
  */
@@ -44,7 +52,7 @@ export function buildIndices<T>(
   const slots: DiffSlot<T>[] = new Array(itemCount);
   const toRender: DiffSlot<T>[] = [];
 
-  // PASS 1: Head Fast-Forward
+  // Logic: PASS 1 — Head Fast-Forward
   while (startIndex <= oldEndIndex && startIndex <= newEndIndex) {
     const item = items[startIndex]!;
     const k = getKey(item, startIndex);
@@ -69,7 +77,7 @@ export function buildIndices<T>(
     startIndex++;
   }
 
-  // PASS 2: Tail Fast-Forward
+  // Logic: PASS 2 — Tail Fast-Forward
   while (oldEndIndex >= startIndex && newEndIndex >= startIndex) {
     const item = items[newEndIndex]!;
     const k = getKey(item, newEndIndex);
@@ -95,7 +103,7 @@ export function buildIndices<T>(
     newEndIndex--;
   }
 
-  // PASS 3: Middle-Range Reconciliation
+  // Logic: PASS 3 — Middle-Range Reconciliation
   const hasRemovingKeys = removingKeys.size > 0;
 
   for (let i = startIndex; i <= newEndIndex; i++) {
@@ -150,6 +158,5 @@ export function buildIndices<T>(
     if (needsForceReplace) toRender.push(slot);
   }
 
-  ctx.keyToIndex = newIndexMap;
-  return { slots, toRender };
+  return { slots, toRender, keyToIndex: newIndexMap };
 }

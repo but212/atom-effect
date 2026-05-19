@@ -1,3 +1,12 @@
+/**
+ * @module AEJRouteView
+ *
+ * Responsibility:
+ * Orchestrates DOM rendering for route transitions, manages document-wide
+ * navigation link tracking, and handles global click interception for
+ * SPA-style navigation.
+ */
+
 import { computed, effect, type ReadonlyAtom, untracked } from '@but212/atom-effect';
 import { Result, SlotBuffer } from '@but212/atom-effect-utils';
 import $ from 'jquery';
@@ -28,9 +37,10 @@ type RenderStrategy = (
 ) => void;
 
 /**
- * Logic: Polymorphic Rendering
- * Decouples the view definition from the actual mounting logic.
- * Supports both manual JS rendering and declarative HTML templates.
+ * Logic: Polymorphic Rendering Strategies
+ * Decouples the route definition from the mounting mechanism.
+ * Supports both manual JS rendering (for component-based views) and
+ * declarative HTML templates.
  */
 const RENDER_STRATEGIES: Record<string, RenderStrategy> = {
   render: (container, def, routeName, params, onUnmount, router) => {
@@ -58,7 +68,8 @@ export interface RouteRenderer {
 }
 
 /**
- * Initializes a renderer state for a target element.
+ * Logic: Renderer State Initialization
+ * Initializes a renderer state for a target container element.
  */
 export function createRouteRenderer(
   $target: JQuery<HTMLElement>,
@@ -69,19 +80,17 @@ export function createRouteRenderer(
 }
 
 /**
- * Orchestrates the transition between views within a target container.
+ * Logic: View Transition Orchestration
+ * Manages the transition between views within a target container.
  *
  * When to use:
- * - Invoked by the router whenever a route match is confirmed.
+ * - Invoked by the router whenever a route match is confirmed to update the UI.
  *
- * Logic: View Update Pipeline
+ * Logic: Update Pipeline
  * 1. Synchronizes document metadata (Title/Meta).
  * 2. Clears the container and triggers previous view cleanups.
  * 3. Renders the new content using the defined strategy.
  * 4. Manages focus and scroll for Accessibility compliance.
- *
- * @example
- * renderRoute(renderer, homeDef, '/home', {}, routerInstance);
  */
 export function renderRoute(
   renderer: RouteRenderer,
@@ -151,6 +160,7 @@ export function renderRoute(
 }
 
 /**
+ * Logic: Resource Disposal
  * Disposes of all resources and effects bound to the current route view.
  */
 export function runRendererCleanups(renderer: RouteRenderer) {
@@ -173,7 +183,8 @@ export interface RouteScanner {
 }
 
 /**
- * Creates a scanner that tracks elements to apply "active" CSS classes.
+ * Logic: Scanner State Initialization
+ * Creates a scanner state for document-wide link tracking.
  */
 export function createRouteScanner(
   config: Required<RouteConfig> & { routes: Record<string, RouteDefinition> },
@@ -193,21 +204,17 @@ export function createRouteScanner(
 }
 
 /**
+ * Logic: Reactive Link Tracking
  * Initializes reactive tracking for navigation links across the entire document.
  *
  * When to use:
- * - Call once during application bootstrap to enable automatic "active" link styling.
+ * - Call once during application bootstrap to enable automatic "active"
+ *   styling for all links matching the navigation spec.
  *
- * Logic: Link Lifecycle Management
+ * Logic: Lifecycle Management
  * 1. Uses MutationObserver to detect links injected via AJAX or templates.
- * 2. Binds reactive effects to each link to toggle classes based on the current atom state.
+ * 2. Binds reactive effects to each link to toggle classes based on current route.
  * 3. Automatically cleans up effects when elements are removed from the DOM.
- *
- * @param scanner - The scanner state.
- * @param currentRouteAtom - The reactive atom containing the current path.
- *
- * @example
- * setupRouteScanner(scanner, router.current);
  */
 export function setupRouteScanner(scanner: RouteScanner, currentRouteAtom: ReadonlyAtom<string>) {
   const resolvePath = (el: Element, stripQuery = false) => {
@@ -222,7 +229,9 @@ export function setupRouteScanner(scanner: RouteScanner, currentRouteAtom: Reado
   );
 
   const updateActive = (el: Element, current: string, pattern: string) => {
-    // Optimization: Cache path strings and state to avoid redundant DOM reads and class toggles.
+    // Optimization: Structural Caching
+    // Reason: Prevents expensive DOM attribute reads and layout-triggering
+    // class toggles during rapid navigation intent changes.
     const path = scanner.pathCache.get(el) || resolvePath(el, true);
     const active = path === current || path === pattern;
     if (scanner.activeStateCache.get(el) === active) return;
@@ -281,17 +290,12 @@ export function setupRouteScanner(scanner: RouteScanner, currentRouteAtom: Reado
 }
 
 /**
+ * Logic: Declarative Route Discovery
  * Scans the initial DOM for declarative route definitions.
  *
- * Logic: Declarative Route Manifest Discovery
- * Extracts route definitions from `<template data-path="...">` tags.
- * This allows defining the application structure directly in HTML.
- *
- * @returns A partial route manifest and the identified default path.
- *
- * @example
- * // HTML: <template data-path="/home" data-default>...</template>
- * const { routes, default: def } = discoverRoutes();
+ * Logic: Discovery Mechanism
+ * Extracts route definitions from `<template data-path="...">` tags,
+ * allowing the application structure to be defined in pure HTML.
  */
 export function discoverRoutes(): {
   routes: Record<string, RouteDefinition>;
@@ -319,15 +323,14 @@ export function discoverRoutes(): {
 }
 
 /**
+ * Logic: Navigation Interception
  * Intercepts document-level clicks to implement "hijack" navigation.
  *
- * Logic: Global Click Interception
+ * Logic: Global Interception Strategy
  * Decides whether a click should be handled by the router based on:
- * 1. Is it a valid navigation click (e.g., Left click without modifiers)?
- * 2. Does the target match a known route or the 'notFound' handler?
- * 3. Does the target represent a file download? (Heuristic: ignore dots in paths unless matched).
- *
- * @returns A cleanup function to unbind the global listener.
+ * 1. Click validity (Left click without modifiers).
+ * 2. Route matching (Matches a known pattern or the 'notFound' handler).
+ * 3. File download heuristic (Ignores dots unless a specific route matches).
  */
 export function setupRouteInterceptor(
   config: Required<RouteConfig> & { routes: Record<string, RouteDefinition> },

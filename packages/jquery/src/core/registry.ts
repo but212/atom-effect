@@ -1,3 +1,12 @@
+/**
+ * @module AEJRegistry
+ *
+ * Responsibility:
+ * Central engine for reactive resource tracking and deterministic memory
+ * management. Coordinates the lifecycle of effects and component state
+ * through a combination of WeakMap storage and MutationObserver safety nets.
+ */
+
 import { Option, Result, SlotBuffer } from '@but212/atom-effect-utils';
 import { SYSTEM_BINDING, SYSTEM_CORE, SYSTEM_MOUNT } from '@/constants';
 import type { EffectObject } from '@/types';
@@ -27,7 +36,8 @@ const MARK_BOUND = '_aes-bound';
 const MARK_SHADOW = '_aes-has-shadow';
 
 /**
- * Represents the lifecycle metadata for a bound element.
+ * Logic: Lifecycle Metadata Contract
+ * Represents the internal metadata for a bound element's reactive resources.
  * @internal
  */
 export interface BindingRecord {
@@ -42,55 +52,51 @@ export interface BindingRecord {
 }
 
 /**
- * The central registry for managing reactive resources and element lifecycles.
+ * Logic: Central Lifecycle Engine
+ * Manages the mapping between DOM elements and their reactive resources.
  *
- * Logic: Safety & Memory Management
- * - WeakMap Storage: Binding records are stored in `WeakMap` instances to avoid
- *   holding strong references to DOM elements. This allows the garbage collector
- *   to reclaim memory even if elements are not explicitly unmounted.
- * - Flag System: `WeakSet` is used for `keep` and `ignored` states to ensure that
- *   metadata does not leak for nodes that are removed without a cleanup call.
- * - Performance: The registry uses CSS markers (`_aes-bound`, `_aes-has-shadow`)
- *   to perform high-speed scoped queries (`querySelectorAll`) during tree
- *   disposal, avoiding expensive full-tree traversals.
+ * Logic: Memory Management
+ * - WeakMap Storage: Avoids holding strong references to DOM elements.
+ * - Flag System: Uses WeakSet for efficient state tracking without leaks.
+ * - Scoped Traversal: Employs CSS markers for high-speed tree disposal.
  *
  * @internal
  */
 class BindingRegistry {
-  private records = new WeakMap<Element, BindingRecord>();
+  #records = new WeakMap<Element, BindingRecord>();
 
-  private kept = new WeakSet<Node>();
+  #kept = new WeakSet<Node>();
 
-  private ignored = new WeakSet<Node>();
+  #ignored = new WeakSet<Node>();
 
-  private shadows = new WeakMap<Element, ShadowRoot>();
+  #shadows = new WeakMap<Element, ShadowRoot>();
 
-  private autoCleanupScheduled = false;
+  #autoCleanupScheduled = false;
 
   /**
-   * Marks a node to preserve its reactive resources even if detached from the DOM.
-   * (e.g., used by jQuery's `.detach()` method).
+   * Logic: Resource Preservation
+   * Marks a node to preserve its reactive resources even if detached.
    */
   keep(node: Node): void {
-    this.kept.add(node);
+    this.#kept.add(node);
   }
 
   /** Determines if a node is marked for resource preservation. */
   isKept(node: Node): boolean {
-    return this.kept.has(node);
+    return this.#kept.has(node);
   }
 
   /**
-   * Marks a node to be ignored by the next automated cleanup cycle.
-   * This prevents redundant cleanup calls during complex DOM manipulations.
+   * Logic: Cleanup Suppression
+   * Prevents automated cleanup during complex multi-step DOM manipulations.
    */
   markIgnored(node: Node): void {
-    this.ignored.add(node);
+    this.#ignored.add(node);
   }
 
   /** Determines if a node is currently marked to be ignored. */
   isIgnored(node: Node): boolean {
-    return this.ignored.has(node);
+    return this.#ignored.has(node);
   }
 
   /**
@@ -98,33 +104,29 @@ class BindingRegistry {
    * @internal
    */
   unmarkIgnored(node: Node): void {
-    this.ignored.delete(node);
+    this.#ignored.delete(node);
   }
 
   /** @internal */
   isAutoCleanupScheduled(): boolean {
-    return this.autoCleanupScheduled;
+    return this.#autoCleanupScheduled;
   }
 
   /** @internal */
   setAutoCleanupScheduled(scheduled: boolean): void {
-    this.autoCleanupScheduled = scheduled;
+    this.#autoCleanupScheduled = scheduled;
   }
 
   /**
-   * Performs a move-aware cleanup of a node and its descendants.
-   *
-   * Logic: Deferring the cleanup to a microtask allows elements to be
-   * disconnected and then immediately reconnected (moved) without
-   * losing their reactive state.
-   *
-   * @param node - The node to tentatively clean up.
+   * Logic: Move-Aware Deferred Cleanup
+   * Defers cleanup to a microtask to allow elements to be disconnected
+   * and immediately reconnected without state loss.
    */
   deferCleanup(node: Node): void {
-    this.ignored.add(node);
+    this.#ignored.add(node);
     queueMicrotask(() => {
       if (node.isConnected) {
-        this.ignored.delete(node);
+        this.#ignored.delete(node);
       } else {
         this.cleanupTree(node);
       }
@@ -139,13 +141,13 @@ class BindingRegistry {
    * @internal
    */
   registerShadow(host: Element, sr: ShadowRoot): void {
-    this.shadows.set(host, sr);
+    this.#shadows.set(host, sr);
   }
 
   /**
    * Safely adds a CSS marker to an element, deferring if it's currently being constructed.
    */
-  private safeMark(element: Element, className: string): void {
+  #safeMark(element: Element, className: string): void {
     if (element.isConnected) {
       element.classList.add(className);
     } else {
@@ -165,7 +167,7 @@ class BindingRegistry {
    * @internal
    */
   markHost(host: Element): void {
-    this.safeMark(host, MARK_SHADOW);
+    this.#safeMark(host, MARK_SHADOW);
   }
 
   /**
@@ -175,56 +177,51 @@ class BindingRegistry {
   getShadow(host: Element): ShadowRoot | null {
     return Option.unwrapOr(
       Option.fromNullable(host.shadowRoot),
-      Option.toNullable(Option.fromNullable(this.shadows.get(host)))
+      Option.toNullable(Option.fromNullable(this.#shadows.get(host)))
     );
   }
 
   /**
-   * Retrieves or initializes the binding record for a specific element.
-   *
-   * Logic: The auto-cleanup MutationObserver is lazily initialized when
-   * the first reactive binding is registered in the document.
+   * Logic: Record Resolution
+   * Retrieves or initializes the metadata record for an element, ensuring
+   * the auto-cleanup safety net is active before the first binding is applied.
    */
-  private getOrCreateRecord(element: Element): BindingRecord {
+  #getOrCreateRecord(element: Element): BindingRecord {
     if (
       isAutoCleanupEnabled &&
-      !this.autoCleanupScheduled &&
+      !this.#autoCleanupScheduled &&
       typeof document !== 'undefined' &&
       document.body
     ) {
-      this.autoCleanupScheduled = true;
+      this.#autoCleanupScheduled = true;
       enableAutoCleanup(document.body);
     }
 
-    return Option.unwrapOrElse(Option.fromNullable(this.records.get(element)), () => {
+    return Option.unwrapOrElse(Option.fromNullable(this.#records.get(element)), () => {
       const result: BindingRecord = {};
-      this.records.set(element, result);
-      this.safeMark(element, MARK_BOUND);
+      this.#records.set(element, result);
+      this.#safeMark(element, MARK_BOUND);
       return result;
     });
   }
 
-  /** Internal helper to append a cleanup task to an element's record. */
-  private addCleanup(element: Element, cleanupFunction: () => void): void {
-    const record = this.getOrCreateRecord(element);
-    if (!record.tasks) {
-      record.tasks = new SlotBuffer<() => void>();
-    }
+  /** Logic: Task Aggregation @internal */
+  #addCleanup(element: Element, cleanupFunction: () => void): void {
+    const record = this.#getOrCreateRecord(element);
+    record.tasks ??= new SlotBuffer<() => void>();
     record.tasks.push(cleanupFunction);
   }
 
   /**
-   * Registers a reactive effect to be tracked and disposed with the element.
+   * Logic: Reactive Effect Tracking
+   * Binds an effect to an element's lifecycle for deterministic disposal.
    *
-   * Constraint: Effects must be registered to ensure synchronous disposal
-   * when the host element is destroyed or unmounted.
-   *
-   * @param element - The host element.
-   * @param effect - The reactive effect object.
+   * Constraint: Deterministic Disposal
+   * Ensures effects are released synchronously when the host is unmounted.
    */
   trackEffect(element: Element, effect: EffectObject): void {
     const selector = getSelector(element);
-    this.addCleanup(element, () => {
+    this.#addCleanup(element, () => {
       const res = Result.tryCatch(() => effect.dispose());
       if (!res.ok) {
         debug.error(
@@ -236,10 +233,14 @@ class BindingRegistry {
     });
   }
 
-  /** Registers a generic cleanup function to be executed with the element. @internal */
+  /**
+   * Logic: Lifecycle Hook
+   * Registers a generic cleanup callback for manual resource management.
+   * @internal
+   */
   onCleanup(element: Element, cleanupFunction: () => void): void {
     const selector = getSelector(element);
-    this.addCleanup(element, () => {
+    this.#addCleanup(element, () => {
       const res = Result.tryCatch(() => cleanupFunction());
       if (!res.ok) {
         debug.error(
@@ -253,12 +254,12 @@ class BindingRegistry {
 
   /** Assigns a component-level teardown function to an element. @internal */
   setTeardown(element: Element, teardownFunction: (() => void) | undefined): void {
-    this.getOrCreateRecord(element).teardown = teardownFunction;
+    this.#getOrCreateRecord(element).teardown = teardownFunction;
   }
 
   /** Determines if an element has any active bindings. */
   hasBind(element: Element): boolean {
-    return this.records.has(element);
+    return this.#records.has(element);
   }
 
   /**
@@ -267,20 +268,21 @@ class BindingRegistry {
    * @param node - The node to clean up.
    */
   cleanup(node: Node): void {
-    this.kept.delete(node);
-    this.ignored.delete(node);
+    this.#kept.delete(node);
+    this.#ignored.delete(node);
 
     if (node.nodeType !== 1) return;
     const element = node as Element;
 
-    const recordOpt = Option.fromNullable(this.records.get(element));
+    const recordOpt = Option.fromNullable(this.#records.get(element));
 
     if (Option.isSome(recordOpt)) {
       const record = recordOpt.value;
-      this.records.delete(element);
+      this.#records.delete(element);
       element.classList.remove(MARK_BOUND);
 
-      // Execute component teardown if present
+      // Logic: Component Teardown
+      // Releases higher-level component resources (e.g., states, store connections).
       Option.match(Option.fromNullable(record.teardown), {
         some: (teardown) => {
           const res = Result.tryCatch(() => teardown());
@@ -296,7 +298,8 @@ class BindingRegistry {
         none: () => {},
       });
 
-      // Execute and dispose of all cleanup tasks
+      // Logic: Atomic Cleanup Tasks
+      // Disposes of individual effects and low-level reactive bindings.
       Option.match(Option.fromNullable(record.tasks), {
         some: (tasks) => {
           tasks.forEach((cleanupFunction) => cleanupFunction());
@@ -311,20 +314,17 @@ class BindingRegistry {
   }
 
   /**
+   * Optimization: Scoped Tree Disposal
    * Efficiently cleans up reactive bindings within a DOM subtree.
    *
-   * Logic: Snapshot Strategy
-   * This method uses `querySelectorAll` to obtain a static snapshot of bound
-   * elements before iteration begins. This ensures stability and prevents
-   * missed nodes if the DOM structure or classes are modified during cleanup.
-   *
-   * @param root - The root of the subtree or fragment to clean up.
+   * Logic: Snapshot Stability
+   * Uses `querySelectorAll` to obtain a static snapshot, preventing missed
+   * nodes if the DOM structure shifts during the iteration cycle.
    */
   cleanupDescendants(root: Element | DocumentFragment | ShadowRoot): void {
     const nodes = root.querySelectorAll(`.${MARK_BOUND}`);
 
-    for (let i = 0, length = nodes.length; i < length; i++) {
-      const node = nodes[i];
+    for (const node of nodes) {
       if (node) {
         this.cleanup(node);
       }
@@ -334,8 +334,8 @@ class BindingRegistry {
     // Instead of a full-tree walk, we jump directly to hosts known to possess
     // managed ShadowRoots to perform recursive cleanup.
     const shadowHosts = root.querySelectorAll(`.${MARK_SHADOW}`);
-    for (let i = 0, length = shadowHosts.length; i < length; i++) {
-      const el = shadowHosts[i] as Element;
+    for (const node of shadowHosts) {
+      const el = node as Element;
       const sr = this.getShadow(el);
       if (sr) {
         this.cleanupTree(sr);
@@ -372,25 +372,16 @@ export const registry = new BindingRegistry();
 const observerMap = new Map<Node, MutationObserver>();
 
 /**
- * Initializes an automated MutationObserver safety net for a specific root.
- *
  * Logic: DOM Safety Net
- * Standard browser operations (e.g., setting `innerHTML = ''`) bypass jQuery's
- * internal hooks. This observer acts as a fallback, detecting removed nodes
- * that were not processed by patched jQuery methods.
- *
- * @param root - The DOM element or fragment to monitor.
- * @internal
+ * Automated fallback for standard DOM operations (like innerHTML = '')
+ * that bypass jQuery's internal hooks.
  */
 export function enableAutoCleanup(root: Element | ShadowRoot | DocumentFragment): void {
   if (observerMap.has(root)) return;
 
   const observer = new MutationObserver((mutations) => {
-    for (let i = 0, mutationsLength = mutations.length; i < mutationsLength; i++) {
-      const removedNodes = mutations[i]!.removedNodes;
-      for (let j = 0, removedNodesLength = removedNodes.length; j < removedNodesLength; j++) {
-        const node = removedNodes[j]!;
-
+    for (const m of mutations) {
+      for (const node of m.removedNodes) {
         // Condition: Clean up only elements that are genuinely disconnected
         // from the document and are not marked for preservation.
         if (node.nodeType !== 1 || (node as Element).isConnected) {
@@ -422,15 +413,9 @@ export function disableAutoCleanup(): void {
 }
 
 /**
- * Disconnects the auto-cleanup observer for a specific root node.
- *
- * Logic: Scoped Disposal
- * This is used to release strong references held by the registry to specific
- * boundaries (e.g., ShadowRoots) to prevent memory leaks when components
- * are permanently removed.
- *
- * @param root - The specific node to stop monitoring.
- * @internal
+ * Logic: Boundary Leak Prevention
+ * Releases strong references to specific roots (e.g., ShadowRoots) to
+ * prevent memory leaks when components are permanently removed.
  */
 export function disableAutoCleanupFor(root: Node): void {
   const observer = observerMap.get(root);

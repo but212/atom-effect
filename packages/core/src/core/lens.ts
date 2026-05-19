@@ -1,18 +1,50 @@
+/**
+ * @module LensEngine
+ *
+ * Responsibility:
+ * Provides two-way reactive lenses for type-safe deep state management.
+ * Orchestrates immutable deep updates with structural sharing and path flattening.
+ *
+ * Design Intent:
+ * Enables granular subscriptions to nested properties of complex state objects,
+ * minimizing re-renders.
+ *
+ * Security: Prototype Pollution Guard
+ * Prevents unauthorized modifications to object prototypes during deep updates
+ * by blacklisting sensitive keys like `__proto__`.
+ */
+
 import { shallowEqual } from '@but212/atom-effect-utils';
-import { BRAND, BrandFlags } from '@/symbols';
-import type { Equal, MergedDependencyValue, WritableAtom } from '@/types';
-import { mergeAtomValues } from '@/utils';
-import { batch } from './scheduler';
+import {
+  ATOM_STATE_FLAGS,
+  BRAND,
+  BrandFlags,
+  DEFAULT_EQUAL,
+  EPOCH_CONSTANTS,
+  KIND,
+  type LENS_CONFIG,
+  SMI_MAX,
+} from '@/constants';
+import { batch } from '@/index';
+import type {
+  DepBufferState,
+  Equal,
+  MergedDependencyValue,
+  ReactiveNode,
+  SubscriberTarget,
+  WritableAtom,
+} from '@/types';
+import { debug, generateId, mergeAtomValues } from '@/utils';
 
 /**
  * Logic: Numeric Key Conversion
- * Casts numeric string literals to numbers for correct array index typing.
+ * Casts numeric string literals to numbers to ensure correct array index typing.
  */
 export type StringKeyToNumber<S extends string> = S extends `${infer N extends number}` ? N : S;
 
 /**
  * Logic: Broad Index Detection
- * Detects if a type has a broad string indexer (e.g., Record<string, any>).
+ * Detects if a type contains a broad string indexer (e.g., Record<string, any>).
  */
 export type HasBroadStringKey<T> = string extends keyof T ? true : false;
 
@@ -23,14 +55,8 @@ export type StringIndexValue<T> = T extends Record<string, infer V> ? V : never;
 export type ArrayElement<T> = T extends readonly (infer U)[] ? U : never;
 
 /**
- * Constraint: Depth limit for recursive path generation to prevent TypeScript
- * recursion errors and IDE lag in complex schemas.
- */
-export type MaxDepth = 8;
-
-/**
  * Logic: Recursion Termination
- * Types that stop the recursive path exploration.
+ * Defines primitive and built-in types that terminate recursive path exploration.
  */
 export type TerminalTypes =
   | Date
@@ -41,16 +67,18 @@ export type TerminalTypes =
   | Function;
 
 /**
+ * Logic: Path Generation
  * Computes a union of all valid dot-separated paths for type T.
  *
- * Constraint: If T has a broad string indexer, it returns `string` to avoid
- * infinite union generation.
+ * Constraint: Depth Limit
+ * Recursion is capped by `LENS_CONFIG.MAX_PATH_DEPTH` to prevent infinite
+ * type instantiation for circular or deeply nested structures.
  */
 export type Paths<T, D extends unknown[] = []> =
   // biome-ignore lint/suspicious/noExplicitAny: 'any' check is required to prevent infinite recursion in paths
   Equal<T, any> extends true
     ? string
-    : D['length'] extends MaxDepth
+    : D['length'] extends typeof LENS_CONFIG.MAX_PATH_DEPTH
       ? never
       : T extends TerminalTypes
         ? never
@@ -71,7 +99,9 @@ export type Paths<T, D extends unknown[] = []> =
             : never;
 
 /**
- * Resolves the type of a value at a given dot-path string.
+ * Logic: Path Resolution
+ * Resolves the type of the value located at a specific dot-path string.
+ * Supports array indices, record keys, and nested objects.
  */
 export type PathValue<T, P extends string> =
   // biome-ignore lint/suspicious/noExplicitAny: 'any' check is required for correct path resolution
@@ -102,15 +132,19 @@ export type PathValue<T, P extends string> =
             : never;
 
 /**
- * Security: Protects internal JS properties from being modified via dot-paths.
+ * Security: Prototype Pollution Guard
+ * Blacklists keys that could be exploited to modify object prototypes.
  */
 const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
+/** @internal */
+const isForbiddenKey = (key: string) => FORBIDDEN_KEYS.has(key);
+
 /**
- * @internal
  * Optimization: Structural Sharing
- * Creates a shallow copy of the container and updates one of its keys.
- * Ensures that unchanged sibling branches retain reference equality.
+ * Creates a shallow copy of the container and applies the update.
+ * Supports Arrays, Maps, and plain Objects while preserving prototypes.
+ * @internal
  */
 function cloneAndSet(container: object, key: string, value: unknown): object {
   if (Array.isArray(container)) {
@@ -126,60 +160,34 @@ function cloneAndSet(container: object, key: string, value: unknown): object {
   }
 
   const proto = Object.getPrototypeOf(container);
-
-  // Optimization: Fast-path for plain objects (the most common case)
   if (proto === Object.prototype || proto === null) {
     return { ...container, [key]: value };
   }
 
-  // Reason: Ensures class instances maintain their prototype and methods
-  // after an immutable update.
   const next = Object.create(proto);
   Object.assign(next, container);
   (next as Record<string, unknown>)[key] = value;
   return next;
 }
 
-// ============================================================================
-// Core Engine
-// ============================================================================
-
 /**
- * Core engine for recursive immutable deep updates.
- *
- * Optimization: Net-zero suppression
- * Returns the original object if the leaf value is identical (Object.is),
- * preventing unnecessary allocation and downstream notifications.
- *
+ * Logic: Immutable Deep Update
  * @internal
  */
 export function setDeepValue(obj: unknown, keys: string[], index: number, value: unknown): unknown {
   if (index === keys.length) return value;
-
   const key = keys[index]!;
+  if (obj == null || typeof obj !== 'object' || isForbiddenKey(key)) return obj;
 
-  // Security: Prevent prototype pollution
-  // Resilience: Guard against non-object targets in the path
-  if (FORBIDDEN_KEYS.has(key) || obj == null || typeof obj !== 'object') {
-    return obj;
-  }
-
-  // Logic: Heterogeneous Collection Support
-  // Uniformly handles entries for both standard objects and Map instances.
   const oldVal = obj instanceof Map ? obj.get(key) : (obj as Record<string, unknown>)[key];
   const newVal = setDeepValue(oldVal, keys, index + 1, value);
 
-  if (Object.is(oldVal, newVal)) {
-    return obj;
-  }
-
+  if (DEFAULT_EQUAL(oldVal, newVal)) return obj;
   return cloneAndSet(obj as object, key, newVal);
 }
 
 /**
- * Reads a value from a nested path.
- * Supports standard property access and Map.get().
- *
+ * Logic: Deep Read
  * @internal
  */
 export function getPathValue(source: unknown, parts: string[]): unknown {
@@ -195,181 +203,372 @@ export function getPathValue(source: unknown, parts: string[]): unknown {
   }
   return res;
 }
+
+// ============================================================================
+// Core Engine
+// ============================================================================
+
 /**
- * Creates a reactive, two-way Lens into a nested atom property.
+ * Role: Orchestrator for a Single-Property Reactive Lens.
+ *
+ * Optimization: Monomorphic Access
+ * Uses public fields for engine compatibility to ensure consistent V8 hidden
+ * class shapes in the reactive hot-path.
+ *
+ * Logic: Shared Subscription
+ * Only subscribes to the root atom when the lens itself has active listeners,
+ * preventing memory leaks and unnecessary computations for unused lenses.
+ *
+ * @internal
+ */
+class LensImpl<T extends object, P extends string>
+  implements WritableAtom<PathValue<T, P>>, ReactiveNode<void>
+{
+  // Optimization: Engine Compatibility (Public JS fields)
+  public flags: number = 0;
+  public version: number = 0;
+  public _lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
+  public _nextEpoch: number | undefined = undefined;
+  public _trackEpoch: number = 0;
+  public _trackCount: number = 0;
+  public _error: Error | null = null;
+  public _k: typeof KIND.Obj = KIND.Obj;
+  public readonly id: number = generateId() & SMI_MAX;
+
+  public _storage: {
+    slots: null; // Lenses manage their own listeners via #listeners
+    deps: DepBufferState | null;
+  } = {
+    slots: null,
+    deps: null,
+  };
+
+  #root: WritableAtom<T>;
+  #path: P;
+  #parts: string[];
+  #isDangerous: boolean;
+  #listeners = new Set<SubscriberTarget<PathValue<T, P>>>();
+  #sharedUnsub: (() => void) | null = null;
+  #prevValue: PathValue<T, P> | undefined;
+
+  constructor(root: WritableAtom<T>, path: P) {
+    this.#root = root;
+    this.#path = path;
+    this.#parts = path.split('.');
+    this.#isDangerous = this.#parts.some(isForbiddenKey);
+    debug.attachDebugInfo(this, 'lens', this.id, path);
+  }
+
+  get value(): PathValue<T, P> {
+    return this.#getValue(this.#root.value);
+  }
+
+  set value(newVal: PathValue<T, P>) {
+    if (this.#isDangerous) return;
+    const cur = this.#root.peek();
+    const next = setDeepValue(cur, this.#parts, 0, newVal);
+
+    if (next !== cur) {
+      this.#root.value = next as T;
+    }
+  }
+
+  peek(): PathValue<T, P> {
+    return this.#getValue(this.#root.peek());
+  }
+
+  subscribe(listener: SubscriberTarget<PathValue<T, P>>): () => void {
+    if (this.#listeners.size === 0) {
+      this.#prevValue = this.peek();
+      this.#sharedUnsub = this.#root.subscribe(() => this.#notify());
+    }
+    this.#listeners.add(listener);
+    return () => {
+      this.#listeners.delete(listener);
+      if (this.#listeners.size === 0 && this.#sharedUnsub) {
+        this.#sharedUnsub();
+        this.#sharedUnsub = null;
+      }
+    };
+  }
+
+  subscriberCount(): number {
+    return this.#listeners.size;
+  }
+
+  dispose(): void {
+    this.#sharedUnsub?.();
+    this.#sharedUnsub = null;
+    this.#listeners.clear();
+  }
+
+  #getValue(source: T): PathValue<T, P> {
+    return (this.#isDangerous ? undefined : getPathValue(source, this.#parts)) as PathValue<T, P>;
+  }
+
+  #notify(): void {
+    const nv = this.peek();
+    if (!DEFAULT_EQUAL(nv, this.#prevValue)) {
+      const ov = this.#prevValue as PathValue<T, P>;
+      this.#prevValue = nv;
+      for (const listener of this.#listeners) {
+        if (typeof listener === 'function') {
+          listener(nv, ov);
+        } else {
+          listener.execute();
+        }
+      }
+    }
+  }
+
+  get isDisposed() {
+    return (this.flags & ATOM_STATE_FLAGS.DISPOSED) !== 0;
+  }
+  get isComputed() {
+    return false;
+  }
+  get isRejected() {
+    return false;
+  }
+  get hasError() {
+    return false;
+  }
+
+  // Path flattening metadata
+  get _root() {
+    return this.#root;
+  }
+  get _path() {
+    return this.#path;
+  }
+  get [BRAND]() {
+    return BrandFlags.Atom | BrandFlags.Writable | BrandFlags.Lens;
+  }
+}
+
+/**
+ * Creates a reactive, two-way Lens into a nested property of an atom.
  *
  * When to use:
- * - When a component only needs a specific sub-field of a complex state object.
- * - To implement "noise filtering": the lens only notifies subscribers if its
- *   specific nested value changes, even if other parts of the root atom update.
- * - For type-safe deep state management.
+ * - To bind UI inputs to specific fields in a large state object.
+ * - To minimize re-renders by subscribing only to a specific sub-path.
+ * - To create "slices" of state that can be passed to components.
  *
- * @param atom - The root WritableAtom to project from.
- * @param path - A dot-separated string representing the path to the nested property.
+ * Logic: Path Flattening
+ * If the source atom is already a lens, this factory flattens the path
+ * (e.g., lens(lens(a, 'b'), 'c') -> lens(a, 'b.c')) to reduce proxy overhead.
+ *
+ * @param atom - The source atom or lens to derive from.
+ * @param path - A dot-separated string representing the path to the property.
+ * @returns A writable atom representing the value at the specified path.
  *
  * @example
- * const user = atom({ profile: { name: 'Alice', score: 10 } });
- * const scoreLens = atomLens(user, 'profile.score');
+ * ```typescript
+ * import { atom, atomLens } from '@but212/atom-effect';
  *
- * $.effect(() => console.log('Score:', scoreLens.value));
- * scoreLens.value = 20; // Propagates to 'user' atom.
+ * const user = atom({ profile: { name: 'Alice', age: 25 } });
+ *
+ * // Create a two-way lens for the 'name' property
+ * const nameLens = atomLens(user, 'profile.name');
+ *
+ * console.log(nameLens.value); // 'Alice'
+ * nameLens.value = 'Bob';      // Updates user.value.profile.name
+ * ```
  */
 export function atomLens<T extends object, P extends Paths<T>>(
   atom: WritableAtom<T>,
   path: P
 ): WritableAtom<PathValue<T, P>> {
-  const parts = (path as string).split('.');
+  const brand = (atom as unknown as { [BRAND]?: number })[BRAND] || 0;
+  if ((brand & BrandFlags.Lens) !== 0) {
+    const parent = atom as unknown as { _root: WritableAtom<T>; _path: string };
+    const combined = `${parent._path}.${path as string}`;
+    return atomLens(parent._root, combined as Paths<T>) as unknown as WritableAtom<PathValue<T, P>>;
+  }
 
-  // Security: Pre-validate path segments to prevent access to forbidden keys.
-  const isDangerous = parts.some((p) => FORBIDDEN_KEYS.has(p));
-
-  const listeners = new Set<(nv: unknown, ov: unknown) => void>();
-  let sharedUnsub: (() => void) | null = null;
-  let prevValue: unknown;
-
-  const getValue = (source: unknown) => (isDangerous ? undefined : getPathValue(source, parts));
-
-  /**
-   * Logic: Noise Filtering
-   * Only triggers lens subscribers if the resolved leaf value is different
-   * from the previously tracked value.
-   */
-  const notify = () => {
-    const nv = getValue(atom.peek());
-    if (!Object.is(nv, prevValue)) {
-      const ov = prevValue;
-      prevValue = nv;
-      listeners.forEach((l) => l(nv, ov));
-    }
-  };
-
-  return {
-    get value() {
-      return getValue(atom.value);
-    },
-    set value(newVal: unknown) {
-      if (isDangerous) return;
-      const cur = atom.peek();
-      const next = setDeepValue(cur, parts, 0, newVal);
-
-      // Optimization: Only write to root if the mutation resulted in a new reference.
-      if (next !== cur) {
-        atom.value = next as T;
-      }
-    },
-    peek: () => getValue(atom.peek()),
-    subscribe(listener: (nv: unknown, ov: unknown) => void) {
-      // Optimization: Lazy Subscription
-      // The lens only subscribes to the root atom when it has its first listener.
-      // It detaches automatically when the last listener disappears.
-      if (listeners.size === 0) {
-        prevValue = getValue(atom.peek());
-        sharedUnsub = atom.subscribe(notify);
-      }
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-        if (listeners.size === 0 && sharedUnsub) {
-          sharedUnsub();
-          sharedUnsub = null;
-        }
-      };
-    },
-    subscriberCount: () => listeners.size,
-    dispose: () => {
-      sharedUnsub?.();
-      sharedUnsub = null;
-      listeners.clear();
-    },
-    [BRAND]: BrandFlags.Atom | BrandFlags.Writable,
-  } as unknown as WritableAtom<PathValue<T, P>>;
+  return new LensImpl(atom, path as string) as unknown as WritableAtom<PathValue<T, P>>;
 }
 
 /**
- * Chains a lens with a further sub-path to create a more specific lens.
+ * Role: Implementation of a Unified Merged Lens.
+ *
+ * Logic: Multi-Write Batching
+ * When setting a value on a merged lens, all underlying lenses are updated
+ * within a single `batch()` to prevent intermediate inconsistent states.
+ *
+ * @internal
+ */
+class MergedLensImpl<L extends WritableAtom<unknown>[]>
+  implements WritableAtom<MergedDependencyValue<L>>, ReactiveNode<void>
+{
+  // Optimization: Engine Compatibility (Public JS fields)
+  public flags: number = 0;
+  public version: number = 0;
+  public _lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
+  public _nextEpoch: number | undefined = undefined;
+  public _trackEpoch: number = 0;
+  public _trackCount: number = 0;
+  public _error: Error | null = null;
+  public _k: typeof KIND.Obj = KIND.Obj;
+  public readonly id: number = generateId() & SMI_MAX;
+
+  public _storage: {
+    slots: null;
+    deps: DepBufferState | null;
+  } = {
+    slots: null,
+    deps: null,
+  };
+
+  #lenses: L;
+  #listeners = new Set<SubscriberTarget<MergedDependencyValue<L>>>();
+  #unsubs: (() => void)[] = [];
+  #prevValue: MergedDependencyValue<L> | undefined;
+
+  constructor(lenses: L) {
+    this.#lenses = lenses;
+    debug.attachDebugInfo(this, 'merged-lens', this.id);
+  }
+
+  get value(): MergedDependencyValue<L> {
+    return mergeAtomValues(this.#lenses) as MergedDependencyValue<L>;
+  }
+
+  set value(newVal: MergedDependencyValue<L>) {
+    batch(() => {
+      for (let i = 0; i < this.#lenses.length; i++) {
+        this.#lenses[i]!.value = newVal;
+      }
+    });
+  }
+
+  peek(): MergedDependencyValue<L> {
+    return mergeAtomValues(this.#lenses, true) as MergedDependencyValue<L>;
+  }
+
+  subscribe(listener: SubscriberTarget<MergedDependencyValue<L>>): () => void {
+    if (this.#listeners.size === 0) {
+      this.#prevValue = this.peek();
+      const notify = () => this.#notify();
+      for (let i = 0; i < this.#lenses.length; i++) {
+        this.#unsubs.push(this.#lenses[i]!.subscribe(notify));
+      }
+    }
+    this.#listeners.add(listener);
+    return () => {
+      this.#listeners.delete(listener);
+      if (this.#listeners.size === 0) {
+        for (const unsub of this.#unsubs) unsub();
+        this.#unsubs.length = 0;
+      }
+    };
+  }
+
+  subscriberCount(): number {
+    return this.#listeners.size;
+  }
+
+  dispose(): void {
+    for (const unsub of this.#unsubs) unsub();
+    this.#unsubs.length = 0;
+    this.#listeners.clear();
+  }
+
+  #notify(): void {
+    const nv = this.peek();
+    if (!shallowEqual(nv, this.#prevValue)) {
+      const ov = this.#prevValue;
+      this.#prevValue = nv;
+      for (const listener of this.#listeners) {
+        if (typeof listener === 'function') {
+          listener(nv, ov);
+        } else {
+          listener.execute();
+        }
+      }
+    }
+  }
+
+  get isDisposed() {
+    return (this.flags & ATOM_STATE_FLAGS.DISPOSED) !== 0;
+  }
+  get isComputed() {
+    return false;
+  }
+  get isRejected() {
+    return false;
+  }
+  get hasError() {
+    return false;
+  }
+
+  get [BRAND]() {
+    return BrandFlags.Atom | BrandFlags.Writable;
+  }
+}
+
+/**
+ * Merges multiple writable lenses into a single unified lens.
+ *
+ * When to use:
+ * - To synchronize multiple fields across different state trees.
+ * - To create a single "form" atom from multiple disparate source atoms.
+ *
+ * @param lenses - A list of writable atoms/lenses to merge.
+ * @returns A unified writable atom that synchronizes all input lenses.
  *
  * @example
- * const userLens = atomLens(rootAtom, 'user');
- * const nameLens = composeLens(userLens, 'name');
+ * ```typescript
+ * const firstName = atom('Alice');
+ * const lastName = atom('Smith');
+ *
+ * const fullName = mergeLenses(firstName, lastName);
+ *
+ * // Sets both firstName and lastName to 'Bob'
+ * fullName.value = 'Bob';
+ * ```
+ */
+export function mergeLenses<L extends WritableAtom<unknown>[]>(
+  ...lenses: L
+): WritableAtom<MergedDependencyValue<L>> {
+  return new MergedLensImpl(lenses);
+}
+
+/**
+ * Composes an existing lens with a new sub-path.
+ *
+ * Logic: Composition
+ * This is a semantic alias for {@link atomLens}. It creates a new lens
+ * starting from the value of the provided lens and navigating down the
+ * specified path.
+ *
+ * @param lens - The base lens to compose from.
+ * @param path - The sub-path relative to the base lens.
+ * @returns A new lens targeting the nested property.
  */
 export const composeLens = <T extends object, P extends Paths<T>>(lens: WritableAtom<T>, path: P) =>
   atomLens(lens, path);
 
 /**
- * Creates a factory function for generating multiple lenses from a single root atom.
+ * Creates a lens factory for a specific atom.
+ *
+ * When to use:
+ * - To create multiple lenses from the same root atom without repeating the root.
+ * - To enhance readability when defining many field bindings for a single state object.
+ *
+ * @param atom - The root atom to create lenses for.
+ * @returns A function that accepts a path and returns a lens for that path.
  *
  * @example
- * const fromUser = lensFor(userAtom);
- * const nameLens = fromUser('name');
- * const ageLens = fromUser('age');
+ * ```typescript
+ * const user = atom({ profile: { name: 'Alice', age: 25 } });
+ * const userLens = lensFor(user);
+ *
+ * const nameLens = userLens('profile.name');
+ * const ageLens = userLens('profile.age');
+ * ```
  */
 export const lensFor =
   <T extends object>(atom: WritableAtom<T>) =>
   <P extends Paths<T>>(path: P) =>
     atomLens(atom, path);
-
-/**
- * Merges multiple writable lenses into a single unified lens with a flattened type.
- *
- * This utility combines the value types of all input lenses into a single
- * unified object type using the {@link Merge} utility.
- *
- * @param lenses - A variadic list of WritableAtoms (lenses).
- */
-export function mergeLenses<L extends WritableAtom<unknown>[]>(
-  ...lenses: L
-): WritableAtom<MergedDependencyValue<L>> {
-  type MergedValue = MergedDependencyValue<L>;
-
-  let prevValue: MergedValue | undefined;
-  const listeners = new Set<(nv?: MergedValue, ov?: MergedValue) => void>();
-  const unsubs: (() => void)[] = [];
-
-  const notify = () => {
-    const nv = mergeAtomValues(lenses, true) as MergedValue;
-    if (!shallowEqual(nv, prevValue)) {
-      const ov = prevValue;
-      prevValue = nv;
-      for (const listener of listeners) {
-        listener(nv, ov);
-      }
-    }
-  };
-
-  return {
-    get value() {
-      return mergeAtomValues(lenses) as MergedValue;
-    },
-    set value(newVal: MergedValue) {
-      batch(() => {
-        for (let i = 0; i < lenses.length; i++) {
-          lenses[i]!.value = newVal;
-        }
-      });
-    },
-    peek: () => mergeAtomValues(lenses, true) as MergedValue,
-    subscribe: (listener: (nv?: MergedValue, ov?: MergedValue) => void) => {
-      if (listeners.size === 0) {
-        prevValue = mergeAtomValues(lenses, true) as MergedValue;
-        for (let i = 0; i < lenses.length; i++) {
-          unsubs.push(lenses[i]!.subscribe(notify));
-        }
-      }
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-        if (listeners.size === 0) {
-          for (const unsub of unsubs) unsub();
-          unsubs.length = 0;
-        }
-      };
-    },
-    subscriberCount: () => listeners.size,
-    dispose: () => {
-      for (const unsub of unsubs) unsub();
-      unsubs.length = 0;
-      listeners.clear();
-    },
-    [BRAND]: BrandFlags.Atom | BrandFlags.Writable,
-  } as unknown as WritableAtom<MergedValue>;
-}

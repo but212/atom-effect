@@ -30,7 +30,10 @@
   ],
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "pnpm run build:types && pnpm run build:lib && pnpm run build:bundle",
+    "build:types": "cross-env BUILD_TARGET=types vite build",
+    "build:lib": "cross-env BUILD_TARGET=lib vite build",
+    "build:bundle": "cross-env BUILD_TARGET=bundle vite build",
     "clean": "rimraf dist",
     "test": "vitest",
     "test:run": "vitest run",
@@ -63,13 +66,12 @@
     "@but212/atom-effect-configs": "workspace:*",
     "@but212/atom-effect-utils": "workspace:*",
     "@types/jquery": "^4.0.0",
-    "@vitest/browser": "^4.1.5",
-    "@vitest/browser-playwright": "^4.1.5",
-    "@vitest/coverage-v8": "^4.1.5",
+    "@vitest/browser": "^4.1.6",
+    "@vitest/browser-playwright": "^4.1.6",
+    "@vitest/coverage-v8": "^4.1.6",
     "jquery": "^4.0.0",
-    "playwright": "^1.59.1",
-    "vite": "^8.0.11",
-    "vite-plugin-dts": "^4.5.4",
-    "vitest": "^4.1.5"
+    "playwright": "^1.60.0",
+    "vite": "^8.0.12",
+    "vitest": "^4.1.6"
   }
 }

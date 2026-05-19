@@ -17,13 +17,6 @@ describe('Effect', () => {
     vi.useRealTimers();
   });
 
-  interface InternalEffect {
-    _deps: {
-      slots: { truncateFrom(index: number): void };
-    };
-    dispose(): void;
-  }
-
   describe('Validation & Initialization', () => {
     it('rejects invalid constructor inputs', () => {
       expect(() => effect(null as unknown as () => void)).toThrow(EffectError);
@@ -152,7 +145,7 @@ describe('Effect', () => {
       await vi.runAllTimersAsync();
 
       e.dispose();
-      // e[Symbol.dispose](); // Removed for ES2021 compatibility
+      // e[Symbol.dispose](); // Removed for ES2022 compatibility
 
       expect(order).toEqual(['run', 'cleanup', 'run', 'cleanup']);
       expect(e.isDisposed).toBe(true);
@@ -358,27 +351,6 @@ describe('Effect', () => {
       await vi.runAllTimersAsync();
       expect(consoleError).toHaveBeenCalled();
       expect(onError).toHaveBeenCalled();
-      e.dispose();
-    });
-
-    it('handles errors in _commitDeps during recovery', async () => {
-      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      const a = atom(0);
-      const e = effect(() => {
-        a.value;
-        throw new Error('exec fail');
-      }) as unknown as InternalEffect;
-
-      vi.spyOn(e._deps.slots, 'truncateFrom').mockImplementationOnce(() => {
-        throw new Error('truncate fail');
-      });
-
-      a.value = 1;
-      await vi.runAllTimersAsync();
-      expect(consoleWarn).toHaveBeenCalledWith(
-        expect.stringContaining('_commitDeps failed'),
-        expect.anything()
-      );
       e.dispose();
     });
   });

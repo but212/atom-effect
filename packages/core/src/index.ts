@@ -1,4 +1,16 @@
-export { AsyncState, IS_DEV, SCHEDULER_CONFIG } from '@/constants';
+/**
+ * @module AtomEffect
+ *
+ * Responsibility:
+ * Primary public entry point for the atom-effect reactive state management
+ * library. Flattens the internal package structure into a cohesive public API.
+ *
+ * Design Intent:
+ * Provides consumers with a single point of access to all core primitives
+ * including Atoms, Computeds, Effects, Lenses, and utility type guards.
+ */
+
+export { AsyncState, BRAND, BrandFlags, IS_DEV, SCHEDULER_CONFIG } from '@/constants';
 export type { Paths, PathValue } from '@/core';
 export {
   aeNextTick,
@@ -16,15 +28,9 @@ export {
   setDeepValue,
   untracked,
 } from '@/core';
-export {
-  AtomError,
-  ComputedError,
-  EffectError,
-  SchedulerError,
-} from '@/errors';
-export { BRAND, BrandFlags } from '@/symbols';
 export type {
   AsyncStateType,
+  AtomErrorJSON,
   AtomOptions,
   ComputedAtom,
   ComputedOptions,
@@ -38,12 +44,17 @@ export type {
   ReadonlyAtom,
   WritableAtom,
 } from '@/types';
-
 export {
+  AtomError,
+  ComputedError,
   debug as runtimeDebug,
+  EffectError,
+  getErrorChain,
   isAtom,
   isComputed,
   isEffect,
   isPromise,
   isWritable,
+  SchedulerError,
+  serializeError,
 } from '@/utils';

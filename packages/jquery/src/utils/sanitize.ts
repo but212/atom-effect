@@ -1,7 +1,27 @@
+/**
+ * @module AEJSanitizationEngine
+ *
+ * Responsibility:
+ * Provides a high-performance, fragment-based HTML sanitization engine to
+ * mitigate XSS and DOM Clobbering vulnerabilities.
+ *
+ * Design Intent:
+ * Uses prototype-bound DOM methods and multi-pass normalization to neutralize
+ * malicious payloads while preserving safe UI structures.
+ *
+ * Security:
+ * The engine is designed for re-entrancy, using isolated template elements for
+ * each cycle to prevent state corruption during recursive sanitization (e.g., srcdoc).
+ */
+
 import { SYSTEM_SECURITY } from '@/constants';
 
 /**
  * Configuration for the HTML sanitization engine.
+ *
+ * When to use:
+ * - Defining custom whitelists/blacklists for specific component requirements.
+ * - Restricting URI-carrying attributes beyond the default set.
  */
 export interface SanitizationPolicy {
   /** List of attribute names whose values should be validated as URIs. */
@@ -59,11 +79,11 @@ export const DEFAULT_POLICY: SanitizationPolicy = {
   ],
 };
 
-// ─── Internal Constants ──────────────────────────────────────────────────────
-
 /**
+ * Logic: Security Dictionaries
+ * Lookup maps for HTML entity normalization and values targeted for
+ * DOM Clobbering prevention.
  * @internal
- * Dictionaries for entity mapping and DOM protection.
  */
 const DICT = {
   /** Map of safe replacements for common HTML entities. */
@@ -98,13 +118,21 @@ const DICT = {
 } as const;
 
 /**
+ * Logic: Security Pattern Library
+ * Consolidated regex patterns for neutralizing common XSS vectors,
+ * control characters, and protocol obfuscation techniques.
  * @internal
- * Regular expressions for security pattern matching.
  */
 const REGEX = {
-  /** Captures numeric HTML entities (hex or decimal). */
+  /**
+   * Security: Normalization
+   * Captures numeric entities to normalize obfuscated character references.
+   */
   NUMERIC_ENTITY: /&#x([0-9a-f]+);?|&#([0-9]+);?/gi,
-  /** Captures named HTML entities defined in DICT.ENTITIES. */
+  /**
+   * Security: Normalization
+   * Captures named HTML entities defined in DICT.ENTITIES to reveal hidden tags/protocols.
+   */
   NAMED_ENTITY: new RegExp(`&(${Object.keys(DICT.ENTITIES).join('|')});?`, 'gi'),
   /**
    * Security: Filter Evasion
@@ -124,8 +152,6 @@ const REGEX = {
   CSS_CLEAN: /\/\*[\s\S]*?\*\//g,
 } as const;
 
-// ─── DOM Bridge (Low-level Primitives) ───────────────────────────────────────
-
 /**
  * @internal
  * Low-level DOM bridge using proto-bound methods to bypass potential DOM Clobbering.
@@ -137,14 +163,19 @@ const REGEX = {
 const _call = Function.prototype.call.bind(Function.prototype.call);
 const _get = (p: object, k: string) => Object.getOwnPropertyDescriptor(p, k)?.get;
 
-/** @internal */
+/**
+ * Logic: Prototype-Bound Bridge
+ * Provides deterministic access to native DOM methods, bypassing potential
+ * instance-level shadowing (DOM Clobbering) for critical security operations.
+ * @internal
+ */
 const DOM = {
-  /** Retrieves all attributes of an element reliably. */
+  /** Retrieves all attributes from the prototype to ensure integrity. */
   getAttributes: (el: Element) => {
     const getter = _get(Element.prototype, 'attributes');
     return Array.from((getter ? _call(getter, el) : el.attributes) as NamedNodeMap);
   },
-  /** Sets an attribute value bypassing instance-level shadowing. */
+  /** Sets an attribute bypassing instance-level shadowing. */
   setAttribute: (el: Element, key: string, val: string) =>
     _call(Element.prototype.setAttribute, el, key, val),
   /** Removes an attribute bypassing instance-level shadowing. */
@@ -157,7 +188,7 @@ const DOM = {
     }
     return false;
   },
-  /** Retrieves the lowercase local name of an element reliably. */
+  /** Retrieves the lowercase local name reliably via the prototype. */
   getLocalName: (node: Node) => {
     if (node.nodeType !== Node.ELEMENT_NODE) return '';
     const el = node as Element;
@@ -167,8 +198,6 @@ const DOM = {
   /** Creates an HTMLElement in the current document context. */
   createElement: <T extends HTMLElement>(tag: string) => document.createElement(tag) as T,
 };
-
-// ─── Guard Logic (Pure Security Functions) ───────────────────────────────────
 
 /**
  * @internal
@@ -235,8 +264,6 @@ function _sanitize(html: string, policy: SanitizationPolicy): string {
   serializer.appendChild(parser.content);
   return serializer.innerHTML;
 }
-
-// ─── Rule Engine ─────────────────────────────────────────────────────────────
 
 /** @internal */
 interface DefenseRule {
@@ -322,8 +349,6 @@ const DEFENSE_RULES: DefenseRule[] = [
     action: (el, k) => DOM.removeAttribute(el, k),
   },
 ];
-
-// ─── Traversal & Processing ──────────────────────────────────────────────────
 
 /**
  * @internal
@@ -429,17 +454,19 @@ function walkTree(root: Node, policy: SanitizationPolicy): void {
   }
 }
 
-// ─── Public APIs ─────────────────────────────────────────────────────────────
-
 /**
  * Sanitizes an HTML string based on a security policy.
  *
  * When to use:
- * - Before injecting untrusted HTML content into the DOM via `atomHtml` or jQuery methods.
- * - To filter potentially malicious attributes, event handlers, and active scripts.
+ * - Mandatory before injecting untrusted content via `atomHtml` or jQuery's `html()`.
+ * - Establishing a security boundary between reactive state and the DOM.
  *
- * @param html The raw HTML string to be sanitized.
- * @param policy Custom sanitization policy. Defaults to `DEFAULT_POLICY`.
+ * Caution:
+ * Sanitization is performed in the context of a detached `<template>`,
+ * ensuring that active scripts are never executed during the process.
+ *
+ * @param html - The raw HTML string to be sanitized.
+ * @param policy - The policy defining safe/unsafe elements. Defaults to `DEFAULT_POLICY`.
  *
  * @returns A safe HTML string with dangerous elements neutralized and attributes scrubbed.
  *
@@ -456,13 +483,11 @@ export function sanitizeHtml(
 }
 
 /**
- * Validates if a specific attribute/value pair is considered dangerous under the policy.
+ * Validates if a specific attribute/value pair is considered dangerous.
  *
- * @param attr The attribute name to check.
- * @param val The value to validate.
- * @param policy The policy defining URL-carrying attributes.
- *
- * @returns True if the value contains a dangerous protocol or is a restricted sink.
+ * When to use:
+ * - Performing ad-hoc validation on individual attributes (e.g., in a custom `attr` binding).
+ * - Early rejection of malicious URIs before they reach the DOM.
  */
 export const isDangerousUrl = (
   attr: string,

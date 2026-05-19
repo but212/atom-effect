@@ -1,3 +1,17 @@
+/**
+ * @module AEJComponentSetup
+ *
+ * Responsibility:
+ * Decomposes the complex activation logic for Custom Elements into
+ * maintainable features, including event dispatching, style injection,
+ * hydration, and form integration.
+ *
+ * Design Intent:
+ * Follows a "feature-based" decomposition strategy where each reactive
+ * capability is isolated into a discrete activation function. This simplifies
+ * testing and allows for granular optimization of DOM-heavy operations.
+ */
+
 import { isAtom } from '@but212/atom-effect';
 import type { SlotBuffer } from '@but212/atom-effect-utils';
 import $ from 'jquery';
@@ -8,15 +22,18 @@ import { flattenToFormData } from '@/utils';
 import { resolveValue } from './utils';
 
 /**
- * Collection of decomposed activation logic for setup components.
- * Separates concerns for different reactive integrations to maintain maintainability.
+ * Logic: Feature Decomposition
+ * A collection of activation strategies for component-specific integrations.
+ * Decouples reactive orchestration from the main controller to ensure
+ * granular maintainability.
  * @internal
  */
 export const SetupFeatures = {
   /**
+   * Logic: Reactive Event Dispatching
    * Synchronizes atom values to custom events dispatched from the host.
    *
-   * Logic:
+   * Logic: Payload Wrapping
    * - If the source is a function returning an object, it is used as the event `detail`.
    * - Otherwise, the value is wrapped in `{ value: val }` for a predictable API.
    */
@@ -42,8 +59,11 @@ export const SetupFeatures = {
   },
 
   /**
+   * Logic: Style Injection
    * Applies constructable stylesheets to a ShadowRoot or Document.
-   * Note: This appends to existing sheets rather than replacing them.
+   *
+   * Note: This appends to existing sheets rather than replacing them to
+   * maintain compatibility with global or inherited styles.
    */
   styles(root: ShadowRoot | Document, sheets: CSSStyleSheet[]) {
     root.adoptedStyleSheets = [...root.adoptedStyleSheets, ...sheets];
@@ -51,8 +71,12 @@ export const SetupFeatures = {
   },
 
   /**
+   * Logic: Accessibility Synchronization
    * Synchronizes atoms to AriaMixin properties via ElementInternals.
-   * Useful for high-level accessibility state (e.g. `aria-pressed`, `aria-valuenow`).
+   *
+   * When to use:
+   * - Managing high-level accessibility state (e.g. `aria-pressed`, `aria-valuenow`)
+   *   without manual attribute manipulation.
    */
   aria(
     internals: ElementInternals,
@@ -73,10 +97,12 @@ export const SetupFeatures = {
   },
 
   /**
-   * Performs declarative hydration of text content based on data-aej-bind attributes.
+   * Logic: Declarative Hydration
+   * Performs reactive text synchronization for nodes marked with `data-aej-bind`.
    *
-   * Constraint: Uses `HYDRATION_MARKER` to ensure a node is only bound once,
-   * even if multiple hydration passes occur.
+   * Constraint: Idempotency
+   * Uses `HYDRATION_MARKER` to ensure a node is only bound once,
+   * even if multiple hydration passes occur during DOM moves.
    */
   hydrate(
     root: ParentNode,
@@ -92,13 +118,14 @@ export const SetupFeatures = {
       if (target[HYDRATION_MARKER]) return;
 
       const key = node.getAttribute(BIND) || node.getAttribute(LEGACY_BIND);
-      const atom = key ? bindings[key] : null;
+      const atom = key && Object.hasOwn(bindings, key) ? bindings[key] : null;
 
       if (atom) {
         effects.push(
           $.effect(() => {
             const val = String(atom.value ?? '');
-            // Only update DOM if value actually changed to avoid layout thrashing
+            // Why: Only update DOM if value actually changed to avoid layout thrashing
+            // and unnecessary DOM mutations which can trigger further MutationObservers.
             if (node.textContent !== val) node.textContent = val;
             return undefined;
           })
@@ -112,12 +139,16 @@ export const SetupFeatures = {
   },
 
   /**
-   * Synchronizes atoms to CSS Parts (`part` attribute) based on data-aej-part.
+   * Logic: Polymorphic CSS Part Mapping
+   * Synchronizes atoms to CSS Parts (`part` attribute) based on `data-aej-part`.
    *
-   * Input Support:
-   * - String: "part1 part2"
-   * - Array: ["part1", "part2"]
-   * - Object: { part1: true, part2: false }
+   * Logic: Normalization
+   * Supports String ("part1 part2"), Array (["part1", "part2"]), or
+   * Object ({ part1: true }) inputs for flexible styling control.
+   *
+   * Constraint: Shadow DOM Scope
+   * `part` attributes are only functional on elements within a ShadowRoot
+   * that are explicitly exposed to the outer document.
    */
   parts(
     root: ParentNode,
@@ -127,7 +158,7 @@ export const SetupFeatures = {
     const attr = SYSTEM_COMPONENT.ATTRS.PART;
     const apply = (node: Element) => {
       const key = node.getAttribute(attr);
-      const atom = key ? parts[key] : null;
+      const atom = key && Object.hasOwn(parts, key) ? parts[key] : null;
 
       if (atom) {
         effects.push(
@@ -158,8 +189,9 @@ export const SetupFeatures = {
   },
 
   /**
-   * Shared DOM observer for detecting dynamically added elements matching a selector.
-   * This is the engine behind "late-binding" hydration for dynamically inserted nodes.
+   * Logic: Hybrid DOM Discovery
+   * Shared observer for detecting dynamically added elements matching a selector.
+   * Serves as the engine for "late-binding" hydration for dynamically inserted nodes.
    */
   observe(
     root: ParentNode,
@@ -170,21 +202,19 @@ export const SetupFeatures = {
     // Phase 1: Initial sync for already existing nodes
     if (root instanceof Element && root.matches(selector)) apply(root);
     const initial = root.querySelectorAll(selector);
-    for (let i = 0; i < initial.length; i++) {
-      apply(initial[i]!);
+    for (const node of initial) {
+      apply(node);
     }
 
     // Phase 2: Live monitoring for future nodes
     const obs = new MutationObserver((mutations) => {
-      for (let i = 0; i < mutations.length; i++) {
-        const added = mutations[i]!.addedNodes;
-        for (let j = 0; j < added.length; j++) {
-          const node = added[j];
+      for (const m of mutations) {
+        for (const node of m.addedNodes) {
           if (node instanceof Element) {
             if (node.matches(selector)) apply(node);
             const children = node.querySelectorAll(selector);
-            for (let k = 0; k < children.length; k++) {
-              apply(children[k]!);
+            for (const child of children) {
+              apply(child);
             }
           }
         }
@@ -197,9 +227,11 @@ export const SetupFeatures = {
   },
 
   /**
+   * Logic: Form-Associated Element Integration
    * Integrates reactive state with Form-Associated Custom Element (FACE) internals.
    *
-   * This handles both the value state (via `setFormValue`) and the validity state
+   * Design Intent:
+   * Handles both value state (via `setFormValue`) and validity state
    * (via `setValidity`), making the component behave like a native input.
    */
   form(
@@ -262,10 +294,12 @@ export const SetupFeatures = {
   },
 
   /**
-   * Initializes attribute tracking.
+   * Logic: Reactive Attribute Tracking
+   * Initializes real-time attribute monitoring.
    *
-   * Optimisation: If `observedAttributes` is defined on the class,
-   * we only watch those specific attributes to reduce MutationObserver overhead.
+   * Optimization: Selective Monitoring
+   * If `observedAttributes` is defined on the class, only those specific
+   * attributes are watched to minimize MutationObserver overhead.
    */
   attributes(host: HTMLElement): {
     atom: ReadonlyAtom<Record<string, string | null>>;
@@ -279,15 +313,12 @@ export const SetupFeatures = {
       const observed = getObserved();
       const res: Record<string, string | null> = {};
       if (observed.length > 0) {
-        for (let i = 0; i < observed.length; i++) {
-          const name = observed[i]!;
+        for (const name of observed) {
           res[name] = host.getAttribute(name);
         }
       } else {
         // Fallback: watch ALL attributes if no whitelist provided.
-        const attrs = host.attributes;
-        for (let i = 0; i < attrs.length; i++) {
-          const a = attrs[i]!;
+        for (const a of host.attributes) {
           res[a.name] = a.value;
         }
       }
@@ -310,8 +341,9 @@ export const SetupFeatures = {
   },
 
   /**
-   * Initializes reactive slot tracking.
-   * Tracks `assignedNodes` for every slot in the ShadowRoot.
+   * Logic: Slot Assignment Tracking
+   * Initializes reactive tracking of `assignedNodes` for every slot in
+   * the ShadowRoot.
    */
   slots(root: ShadowRoot | null): {
     atom: ReadonlyAtom<Record<string, Node[]>>;
@@ -321,8 +353,7 @@ export const SetupFeatures = {
       const next: Record<string, Node[]> = {};
       if (targetSr) {
         const slots = targetSr.querySelectorAll('slot');
-        for (let i = 0; i < slots.length; i++) {
-          const s = slots[i]!;
+        for (const s of slots) {
           next[s.name || ''] = s.assignedNodes();
         }
       }

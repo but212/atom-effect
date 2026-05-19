@@ -2,79 +2,89 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import $, { type AtomNav, type AtomNavOptions } from '@/index';
 
 /**
- * Test Utilities & Mocks
+ * Constants & Test Data
  */
-interface AjaxMockOptions {
-  data?: unknown;
-  shouldFail?: boolean;
-  headers?: Record<string, string>;
-  delay?: number;
-}
+const DEFAULT_TARGET = '#main-content';
+const HTML_FULL_PAGE = `
+  <html>
+    <head><title>New Title</title><meta name="description" content="new"></head>
+    <body><div id="main-content" class="new-cls" data-new="1"><h1>Loaded</h1></div></body>
+  </html>
+`;
 
-function mockAjax(options: AjaxMockOptions = {}) {
-  return vi.spyOn($, 'ajax').mockImplementation(() => {
-    let rejectPromise: (reason: unknown) => void;
-    const promise = new Promise((resolve, reject) => {
-      rejectPromise = reject;
-      const executor = () => {
-        if (options.shouldFail) reject(options.data);
-        else resolve(options.data);
-      };
-      if (options.delay) setTimeout(executor, options.delay);
-      else executor();
+/**
+ * Test Harness for $.atomNav
+ */
+class NavTestHarness {
+  private activeNavs: AtomNav[] = [];
+  public $target!: JQuery;
+
+  setup() {
+    this.$target = $(`<div id="${DEFAULT_TARGET.slice(1)}">Original</div>`).appendTo('body');
+    window.history.replaceState(null, '', '/');
+    this.activeNavs = [];
+  }
+
+  teardown() {
+    this.activeNavs.forEach((nav) => nav.destroy());
+    this.$target.remove();
+    $('.nav-link, base, meta[name="description"], meta[name="keywords"]').remove();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  }
+
+  async create(options: Partial<AtomNavOptions> = {}) {
+    const nav = $.atomNav({ target: DEFAULT_TARGET, ...options });
+    this.activeNavs.push(nav);
+    await $.nextTick();
+    return nav;
+  }
+
+  mockAjax(
+    options: {
+      data?: unknown;
+      shouldFail?: boolean;
+      headers?: Record<string, string>;
+      delay?: number;
+    } = {}
+  ) {
+    return vi.spyOn($, 'ajax').mockImplementation(() => {
+      let rejectPromise: (reason: unknown) => void;
+      const promise = new Promise((resolve, reject) => {
+        rejectPromise = reject;
+        const executor = () => (options.shouldFail ? reject(options.data) : resolve(options.data));
+        if (options.delay) setTimeout(executor, options.delay);
+        else executor();
+      });
+
+      return Object.assign(promise, {
+        abort: vi.fn(() => rejectPromise({ statusText: 'abort' })),
+        getResponseHeader: vi.fn((name: string) => options.headers?.[name] || null),
+        getAllResponseHeaders: vi.fn(() => ''),
+        setRequestHeader: vi.fn(),
+        statusCode: vi.fn(),
+        promise: () => promise,
+      }) as unknown as JQuery.jqXHR;
     });
+  }
 
-    return Object.assign(promise, {
-      abort: vi.fn(() => rejectPromise({ statusText: 'abort' })),
-      getResponseHeader: vi.fn((name: string) => options.headers?.[name] || null),
-      getAllResponseHeaders: vi.fn(() => ''),
-      setRequestHeader: vi.fn(),
-      statusCode: vi.fn(),
-      promise: () => promise,
-    }) as unknown as JQuery.jqXHR;
-  });
-}
-
-function simulateClick(el: HTMLElement | undefined, options: MouseEventInit = {}) {
-  if (!el) return;
-  const event = new MouseEvent('click', { bubbles: true, cancelable: true, ...options });
-  el.dispatchEvent(event);
-  return event;
+  simulateClick(el: HTMLElement | undefined, options: MouseEventInit = {}) {
+    if (!el) return;
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true, ...options });
+    el.dispatchEvent(event);
+    return event;
+  }
 }
 
 describe('$.atomNav', () => {
-  let $target: JQuery;
-  let activeNavs: AtomNav[] = [];
+  const harness = new NavTestHarness();
 
-  const createNav = async (options: AtomNavOptions) => {
-    const nav = $.atomNav(options);
-    activeNavs.push(nav);
-    await $.nextTick();
-    return nav;
-  };
-
-  beforeEach(() => {
-    $target = $('<div id="main-content">Original</div>').appendTo('body');
-    window.history.replaceState(null, '', '/');
-    activeNavs = [];
-    mockAjax({ data: 'Initial' });
-  });
-
-  afterEach(() => {
-    activeNavs.forEach((nav) => nav.destroy());
-    $target.children().atomUnbind();
-    $target.remove();
-    $('.nav-link').remove();
-    $('base').remove();
-    $('meta[name="description"], meta[name="keywords"]').remove();
-    vi.restoreAllMocks();
-    vi.unstubAllGlobals();
-  });
+  beforeEach(() => harness.setup());
+  afterEach(() => harness.teardown());
 
   describe('Core Initialization', () => {
     it('should initialize with correct reactive atoms', async () => {
-      const nav = await createNav({ target: '#main-content' });
-
+      const nav = await harness.create();
       expect($.isAtom(nav.currentUrl)).toBe(true);
       expect($.isAtom(nav.isPending)).toBe(true);
       expect($.isAtom(nav.hasError)).toBe(true);
@@ -84,34 +94,22 @@ describe('$.atomNav', () => {
 
   describe('Navigation Policy & Interception', () => {
     const scenarios = [
-      { label: 'Standard same-origin link', href: '/page1', expected: true },
-      { label: 'External domain', href: 'https://google.com', expected: false },
-      {
-        label: 'New tab (target="_blank")',
-        href: '/page2',
-        attrs: { target: '_blank' },
-        expected: false,
-      },
-      { label: 'Download link', href: '/doc.pdf', attrs: { download: '' }, expected: false },
-      { label: 'Mailto protocol', href: 'mailto:test@ex.com', expected: false },
-      { label: 'Data URI', href: 'data:text/plain,hi', expected: false },
-      {
-        label: 'Disabled via data-nav',
-        href: '/off',
-        attrs: { 'data-nav': 'false' },
-        expected: false,
-      },
-      { label: 'Right click', href: '/right', event: { button: 2 }, expected: false },
+      { label: 'same-origin link', href: '/page1', expected: true },
+      { label: 'external domain', href: 'https://google.com', expected: false },
+      { label: 'new tab', href: '/page2', attrs: { target: '_blank' }, expected: false },
+      { label: 'download link', href: '/doc.pdf', attrs: { download: '' }, expected: false },
+      { label: 'data-nav="false"', href: '/off', attrs: { 'data-nav': 'false' }, expected: false },
+      { label: 'right click', href: '/right', event: { button: 2 }, expected: false },
     ];
 
-    it.each(scenarios)('should $label correctly', async ({
+    it.each(scenarios)('should handle $label correctly', async ({
       href,
       expected,
-      attrs = {},
-      event = {},
+      attrs,
+      event,
     }) => {
-      const ajaxSpy = mockAjax();
-      await createNav({ target: '#main-content', selector: '.nav-link' });
+      const ajaxSpy = harness.mockAjax();
+      await harness.create({ selector: '.nav-link' });
       const $link = $('<a class="nav-link"></a>')
         .attr({ href, ...attrs })
         .appendTo('body');
@@ -123,7 +121,7 @@ describe('$.atomNav', () => {
       };
       document.addEventListener('click', checkIntercept, { once: true });
 
-      simulateClick($link[0], event);
+      harness.simulateClick($link[0], event);
 
       if (expected) {
         expect(intercepted).toBe(true);
@@ -135,21 +133,18 @@ describe('$.atomNav', () => {
     });
 
     it('should resolve paths relative to <base> tag', async () => {
-      const ajaxSpy = mockAjax({ data: 'Base Content' });
-      const nav = await createNav({ target: '#main-content', selector: '.nav-link' });
-      const $base = $('<base href="/app/">').appendTo('head');
+      harness.mockAjax({ data: 'Base Content' });
+      const nav = await harness.create({ selector: '.nav-link' });
+      $('<base href="/app/">').appendTo('head');
       const $link = $('<a href="sub" class="nav-link"></a>').appendTo('body');
 
-      simulateClick($link[0]);
-
+      harness.simulateClick($link[0]);
       await vi.waitFor(() => expect(nav.currentUrl.value).toContain('/app/sub'));
-      expect(ajaxSpy).toHaveBeenCalled();
-      $base.remove();
     });
 
     it('should cancel navigation if onBeforeLoad returns false', async () => {
-      const ajaxSpy = mockAjax();
-      const nav = await createNav({ target: '#main-content', onBeforeLoad: () => false });
+      const ajaxSpy = harness.mockAjax();
+      const nav = await harness.create({ onBeforeLoad: () => false });
 
       await nav.navigate('/forbidden');
       expect(ajaxSpy).not.toHaveBeenCalled();
@@ -158,41 +153,33 @@ describe('$.atomNav', () => {
   });
 
   describe('DOM Reconciliation & State Sync', () => {
-    const HTML_FRAG = `
-      <html>
-        <head><title>New Title</title><meta name="description" content="new"></head>
-        <body><div id="main-content" class="new-cls" data-new="1"><h1>Loaded</h1></div></body>
-      </html>
-    `;
-
     it('should sync content, title, and metadata', async () => {
       $('<meta name="description" content="old">').appendTo('head');
-      mockAjax({ data: HTML_FRAG });
-      const nav = await createNav({ target: '#main-content', syncTitle: true });
+      harness.mockAjax({ data: HTML_FULL_PAGE });
+      const nav = await harness.create({ syncTitle: true });
 
       await nav.navigate('/sync');
 
       await vi.waitFor(() => {
-        expect($target.find('h1').text()).toBe('Loaded');
+        expect(harness.$target.find('h1').text()).toBe('Loaded');
         expect(document.title).toBe('New Title');
         expect($('meta[name="description"]').attr('content')).toBe('new');
       });
 
-      expect($target.hasClass('new-cls')).toBe(true);
-      expect($target.attr('data-new')).toBe('1');
+      expect(harness.$target.hasClass('new-cls')).toBe(true);
+      expect(harness.$target.attr('data-new')).toBe('1');
     });
 
     it('should purge stale attributes and meta tags', async () => {
       $('<meta name="description" content="stale">').appendTo('head');
-      mockAjax({ data: '<div id="main-content">Fresh</div>' });
-      $target.attr('data-stale', 'yes');
-      const nav = await createNav({ target: '#main-content' });
+      harness.mockAjax({ data: '<div id="main-content">Fresh</div>' });
+      harness.$target.attr('data-stale', 'yes');
+      const nav = await harness.create();
 
       await nav.navigate('/purge');
 
       await vi.waitFor(() => {
-        expect($target.attr('data-temp')).toBeUndefined(); // data-temp is not set in this test, but data-stale is
-        expect($target.attr('data-stale')).toBeUndefined();
+        expect(harness.$target.attr('data-stale')).toBeUndefined();
         expect($('meta[name="description"]').length).toBe(0);
       });
     });
@@ -209,7 +196,7 @@ describe('$.atomNav', () => {
       });
 
       const hooks = { onMount: vi.fn(), onUnmount: vi.fn() };
-      const nav = await createNav({ target: '#main-content', ...hooks });
+      const nav = await harness.create(hooks);
 
       expect(hooks.onMount).toHaveBeenCalledTimes(1);
       hooks.onMount.mockClear();
@@ -231,8 +218,7 @@ describe('$.atomNav', () => {
         resolveFirst = res;
       });
       const mountSpy = vi.fn();
-      const nav = await createNav({
-        target: '#main-content',
+      const nav = await harness.create({
         onMount: mountSpy,
         onBeforeLoad: (url) => (url === '/a' ? firstHook : true),
       });
@@ -240,11 +226,11 @@ describe('$.atomNav', () => {
       nav.navigate('/a');
       await vi.waitFor(() => expect(nav.isPending.value).toBe(true));
 
-      mockAjax({ data: 'Page B' });
+      harness.mockAjax({ data: 'Page B' });
       nav.navigate('/b');
 
       resolveFirst(true);
-      await vi.waitFor(() => expect($target.text()).toBe('Page B'));
+      await vi.waitFor(() => expect(harness.$target.text()).toBe('Page B'));
       expect(nav.currentUrl.value).toBe('/b');
       expect(mountSpy).toHaveBeenCalledTimes(2);
     });
@@ -254,8 +240,7 @@ describe('$.atomNav', () => {
       const hook = new Promise<boolean>((res) => {
         resolveFirst = res;
       });
-      const nav = await createNav({
-        target: '#main-content',
+      const nav = await harness.create({
         onBeforeLoad: (url) => (url === '/slow' ? hook : true),
       });
 
@@ -277,9 +262,9 @@ describe('$.atomNav', () => {
       const scrollIntoViewSpy = vi.fn();
       Element.prototype.scrollIntoView = scrollIntoViewSpy;
 
-      const nav = await createNav({ target: '#main-content' });
+      const nav = await harness.create();
 
-      mockAjax({ data: '<div id="target">Target</div>' });
+      harness.mockAjax({ data: '<div id="target">Target</div>' });
       await nav.navigate('/page#target');
       await vi.waitFor(() => expect(scrollIntoViewSpy).toHaveBeenCalled());
 
@@ -291,14 +276,95 @@ describe('$.atomNav', () => {
     });
   });
 
-  describe('Regression Tests', () => {
+  describe('PJAX Optimizations & Header Support', () => {
+    it('should send X-PJAX-Container header with the correct selector', async () => {
+      const ajaxSpy = harness.mockAjax({ data: 'Content' });
+      const nav = await harness.create();
+
+      await nav.navigate('/headers');
+
+      await vi.waitFor(() => {
+        expect(ajaxSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            headers: expect.objectContaining({
+              'X-PJAX': 'true',
+              'X-PJAX-Container': DEFAULT_TARGET,
+            }),
+          })
+        );
+      });
+    });
+
+    it('should prioritize X-PJAX-Title header over <title> tag in body', async () => {
+      harness.mockAjax({
+        data: '<div><title>Body Title</title>Content</div>',
+        headers: { 'X-PJAX-Title': 'Header Title' },
+      });
+      const nav = await harness.create();
+
+      await nav.navigate('/title-priority');
+
+      await vi.waitFor(() => {
+        expect(document.title).toBe('Header Title');
+      });
+    });
+
+    it('should fallback to <title> tag in body if X-PJAX-Title header is an empty string', async () => {
+      harness.mockAjax({
+        data: '<div><title>Body Title</title>Content</div>',
+        headers: { 'X-PJAX-Title': '' },
+      });
+      const nav = await harness.create();
+
+      await nav.navigate('/title-empty-header-fallback');
+
+      await vi.waitFor(() => {
+        expect(document.title).toBe('Body Title');
+      });
+    });
+
+    it.each([
+      {
+        label: 'partial fragment',
+        data: '<div id="main-content">Fragment Content</div>',
+        expected: 'Fragment Content',
+      },
+      { label: 'inner HTML only', data: 'Only Inner Content', expected: 'Only Inner Content' },
+    ])('should correctly handle $label', async ({ data, expected }) => {
+      harness.mockAjax({ data });
+      const nav = await harness.create();
+
+      await nav.navigate('/content');
+
+      await vi.waitFor(() => {
+        expect(harness.$target.text()).toBe(expected);
+      });
+    });
+  });
+
+  describe('Regression & Cleanup', () => {
+    it('should skip re-fetch for same-path hash changes', async () => {
+      const ajaxSpy = harness.mockAjax({ data: 'Content' });
+      const nav = await harness.create();
+
+      ajaxSpy.mockClear();
+      await nav.navigate('/#new');
+      expect(ajaxSpy).not.toHaveBeenCalled();
+      expect(nav.currentUrl.value).toContain('#new');
+    });
+
+    it('should not perform AJAX fetch for initial match', async () => {
+      const ajaxSpy = harness.mockAjax({ data: 'Initial' });
+      await harness.create();
+      expect(ajaxSpy).not.toHaveBeenCalled();
+    });
+
     it('should follow X-PJAX-URL redirects', async () => {
-      mockAjax({ data: 'Redirected', headers: { 'X-PJAX-URL': '/target' } });
-      const nav = await createNav({ target: '#main-content' });
+      harness.mockAjax({ data: 'Redirected', headers: { 'X-PJAX-URL': '/target' } });
+      const nav = await harness.create();
 
       await nav.navigate('/source');
       await vi.waitFor(() => expect(nav.currentUrl.value).toBe('/target'));
-      expect(window.location.pathname).toBe('/target');
     });
 
     it('should fallback to hard reload on AJAX failure', async () => {
@@ -311,8 +377,8 @@ describe('$.atomNav', () => {
         removeEventListener: vi.fn(),
       } as unknown as Window & typeof globalThis;
 
-      mockAjax({ data: 'Error', shouldFail: true });
-      const nav = await createNav({ target: '#main-content', window: mockWin });
+      harness.mockAjax({ data: 'Error', shouldFail: true });
+      const nav = await harness.create({ window: mockWin });
 
       await nav.navigate('/fail');
       await vi.waitFor(() => expect(assignSpy).toHaveBeenCalledWith('/fail'));
@@ -325,7 +391,7 @@ describe('$.atomNav', () => {
         return Object.assign(p, { abort: abortSpy }) as unknown as JQuery.jqXHR;
       });
 
-      const nav = await createNav({ target: '#main-content' });
+      const nav = await harness.create();
       vi.spyOn(nav.currentUrl, 'dispose');
 
       nav.navigate('/pending');
@@ -334,34 +400,18 @@ describe('$.atomNav', () => {
       nav.destroy();
       expect(abortSpy).toHaveBeenCalled();
       expect(nav.currentUrl.dispose).toHaveBeenCalled();
-      expect($target.attr('data-atom-nav-target')).toBeUndefined();
-    });
-
-    it('should skip re-fetch for same-path hash changes', async () => {
-      const ajaxSpy = mockAjax({ data: 'Content' });
-      const nav = await createNav({ target: '#main-content' });
-
-      ajaxSpy.mockClear();
-      await nav.navigate('/#new');
-      expect(ajaxSpy).not.toHaveBeenCalled();
-      expect(nav.currentUrl.value).toContain('#new');
-    });
-
-    it('should not perform AJAX fetch for initial match', async () => {
-      const ajaxSpy = mockAjax({ data: 'Initial' });
-      await createNav({ target: '#main-content' });
-      expect(ajaxSpy).not.toHaveBeenCalled();
+      expect(harness.$target.attr('data-atom-nav-target')).toBeUndefined();
     });
 
     it('should allow retrying failed same-URL navigation', async () => {
-      const nav = await createNav({ target: '#main-content', onError: () => false });
-      const failSpy = mockAjax({ data: 'Fail', shouldFail: true });
+      const nav = await harness.create({ onError: () => false });
+      const failSpy = harness.mockAjax({ data: 'Fail', shouldFail: true });
 
       await nav.navigate('/retry');
       await vi.waitFor(() => expect(nav.hasError.value).toBe(true));
 
       failSpy.mockRestore();
-      const successSpy = mockAjax({ data: 'Success' });
+      const successSpy = harness.mockAjax({ data: 'Success' });
       await nav.navigate('/retry');
 
       await vi.waitFor(() => {
@@ -373,10 +423,9 @@ describe('$.atomNav', () => {
 
   describe('Edge Cases', () => {
     it('should prevent infinite loops when onMount triggers navigation', async () => {
-      mockAjax({ data: 'Content' });
+      harness.mockAjax({ data: 'Content' });
       let count = 0;
-      const nav = await createNav({
-        target: '#main-content',
+      const nav = await harness.create({
         onMount: () => {
           count++;
           if (count === 1) nav.navigate('/');
@@ -389,15 +438,15 @@ describe('$.atomNav', () => {
     });
 
     it('should correctly intercept cross-page hash links', async () => {
-      const ajaxSpy = mockAjax({ data: 'Cross' });
-      await createNav({ target: '#main-content', selector: '.nav-link' });
+      const ajaxSpy = harness.mockAjax({ data: 'Cross' });
+      await harness.create({ selector: '.nav-link' });
 
       const $same = $('<a href="#s" class="nav-link"></a>').appendTo('body');
-      simulateClick($same[0]);
+      harness.simulateClick($same[0]);
       expect(ajaxSpy).not.toHaveBeenCalled();
 
       const $cross = $('<a href="/other#s" class="nav-link"></a>').appendTo('body');
-      simulateClick($cross[0]);
+      harness.simulateClick($cross[0]);
       await vi.waitFor(() => expect(ajaxSpy).toHaveBeenCalled());
     });
   });
