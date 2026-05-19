@@ -3,7 +3,7 @@
 This document provides raw data and detailed breakdowns for the `@but212/atom-effect-utils` performance suite.
 
 **Last Updated**: 2026-05-19
-**Version**: v0.32.1
+**Version**: v0.33.0
 
 - **Runtime**: Node.js v22.x
 - **Infrastructure**: ubuntu-latest (GitHub Actions)

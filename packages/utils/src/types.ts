@@ -14,8 +14,6 @@
 export type Equal<X, Y> =
   (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2 ? true : false;
 
-
-
 /**
  * Utility type that merges a union of object types into a single flattened object type.
  * It combines {@link UnionToIntersection} and {@link Prettify} for a clean, readable result.

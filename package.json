@@ -1,6 +1,6 @@
 {
   "name": "atom-effect-monorepo",
-  "version": "0.32.1",
+  "version": "0.33.0",
   "private": true,
   "type": "module",
   "description": "Monorepo for atom-effect reactive state management library and its ecosystem",
@@ -46,7 +46,7 @@
     "vite": "^8.0.12",
     "vitest": "^4.1.6"
   },
-  "packageManager": "pnpm@10.32.1",
+  "packageManager": "pnpm@10.33.0",
   "engines": {
     "node": ">=22.0.0"
   }

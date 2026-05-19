@@ -466,7 +466,7 @@ function renderFragment(string $page, array $current): void
     </div>
 
     <script src="https://code.jquery.com/jquery-4.0.0.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.32.1/dist/atom-effect-jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.33.0/dist/atom-effect-jquery.min.js"></script>
     <script src="app.js"></script>
 </body>
 

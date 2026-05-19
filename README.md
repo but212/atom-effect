@@ -14,8 +14,8 @@ The `atom-effect` project provides a set of reactive primitives designed for ES2
 
 | Package | Version | Role | Description |
 | --- | --- | --- | --- |
-| **[@but212/atom-effect](./packages/core)** | `0.32.1` | Core Engine | Core reactive primitives: `atom`, `computed`, and `effect`. |
-| **[@but212/atom-effect-jquery](./packages/jquery)** | `0.32.1` | Adapter | Reactive DOM bindings, form synchronization, and SPA routing for jQuery. |
+| **[@but212/atom-effect](./packages/core)** | `0.33.0` | Core Engine | Core reactive primitives: `atom`, `computed`, and `effect`. |
+| **[@but212/atom-effect-jquery](./packages/jquery)** | `0.33.0` | Adapter | Reactive DOM bindings, form synchronization, and SPA routing for jQuery. |
 
 ## Quick Start
 
