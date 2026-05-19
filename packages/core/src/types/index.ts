@@ -15,7 +15,7 @@
 /**
  * Re-exports frequently used structural utility types for developer convenience.
  */
-export type { Equal, If, Merge, Prettify } from '@but212/atom-effect-utils';
+export type { Equal, Merge, Prettify } from '@but212/atom-effect-utils';
 
 export * from './api';
 export * from './base';
