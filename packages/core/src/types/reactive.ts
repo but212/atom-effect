@@ -11,7 +11,7 @@
  * property ordering and bitmasking.
  */
 
-import type { Prettify, SlotBuffer } from '@but212/atom-effect-utils';
+import type { SlotBuffer } from '@but212/atom-effect-utils';
 import type { BRAND, KIND } from '@/constants';
 import type { AsyncStateType, DependencyId, Disposable } from './base';
 
@@ -174,14 +174,19 @@ export interface EffectObject extends Disposable {
  *
  * @internal
  */
-export type Subscription<T> = {
-  [K in (typeof KIND)[keyof typeof KIND]]: Prettify<{
-    /** Discriminator (0: Function, 1: Object). */
-    readonly k: K;
-    /** The target payload (callback or Subscriber object). */
-    readonly t: K extends typeof KIND.Fn ? (newValue?: T, oldValue?: T) => void : Subscriber;
-  }>;
-}[(typeof KIND)[keyof typeof KIND]];
+export type Subscription<T> =
+  | {
+      /** Discriminator (0: Function, 1: Object). */
+      readonly k: typeof KIND.Fn;
+      /** The target payload (callback or Subscriber object). */
+      readonly t: (newValue?: T, oldValue?: T) => void;
+    }
+  | {
+      /** Discriminator (0: Function, 1: Object). */
+      readonly k: typeof KIND.Obj;
+      /** The target payload (callback or Subscriber object). */
+      readonly t: Subscriber;
+    };
 
 /**
  * Represents a single directed edge in the graph (Subscriber -> Dependency).
@@ -217,8 +222,11 @@ export interface ReactiveNodeBase {
   _error: Error | null;
   readonly isRejected: boolean;
   readonly id: DependencyId;
+  /** Fast Dispatch Discriminator */
+  _k?: typeof KIND.Obj | undefined;
   /** Optimized storage for upstream dependencies. */
   _storage: {
+    slots?: unknown | null;
     deps: DepBufferState | null;
   };
 }
