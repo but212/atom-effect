@@ -31,6 +31,7 @@ import type {
   Equal,
   MergedDependencyValue,
   ReactiveNode,
+  ReactiveNodeBase,
   SubscriberTarget,
   WritableAtom,
 } from '@/types';
@@ -221,10 +222,13 @@ export function getPathValue(source: unknown, parts: string[]): unknown {
  *
  * @internal
  */
-class LensImpl<T extends object, P extends string>
-  implements WritableAtom<PathValue<T, P>>, ReactiveNode<void>
-{
-  // Optimization: Engine Compatibility (Public JS fields)
+/**
+ * Base class providing common engine properties for reactive nodes to guarantee consistent
+ * hidden class shapes and monomorphic hot-path access in V8.
+ *
+ * @internal
+ */
+abstract class BaseLens implements ReactiveNodeBase {
   public flags: number = 0;
   public version: number = 0;
   public _lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
@@ -236,13 +240,31 @@ class LensImpl<T extends object, P extends string>
   public readonly id: number = generateId() & SMI_MAX;
 
   public _storage: {
-    slots: null; // Lenses manage their own listeners via #listeners
+    slots: null;
     deps: DepBufferState | null;
   } = {
     slots: null,
     deps: null,
   };
 
+  get isDisposed() {
+    return (this.flags & ATOM_STATE_FLAGS.DISPOSED) !== 0;
+  }
+  get isComputed() {
+    return false;
+  }
+  get isRejected() {
+    return false;
+  }
+  get hasError() {
+    return false;
+  }
+}
+
+class LensImpl<T extends object, P extends string>
+  extends BaseLens
+  implements WritableAtom<PathValue<T, P>>, ReactiveNode<void>
+{
   #root: WritableAtom<T>;
   #path: P;
   #parts: string[];
@@ -252,6 +274,7 @@ class LensImpl<T extends object, P extends string>
   #prevValue: PathValue<T, P> | undefined;
 
   constructor(root: WritableAtom<T>, path: P) {
+    super();
     this.#root = root;
     this.#path = path;
     this.#parts = path.split('.');
@@ -289,8 +312,9 @@ class LensImpl<T extends object, P extends string>
       if (self && lis) {
         self.#listeners.delete(lis);
         if (self.#listeners.size === 0 && self.#sharedUnsub) {
-          self.#sharedUnsub();
+          const unsub = self.#sharedUnsub;
           self.#sharedUnsub = null;
+          unsub();
         }
         self = undefined;
         lis = undefined;
@@ -325,19 +349,6 @@ class LensImpl<T extends object, P extends string>
         }
       }
     }
-  }
-
-  get isDisposed() {
-    return (this.flags & ATOM_STATE_FLAGS.DISPOSED) !== 0;
-  }
-  get isComputed() {
-    return false;
-  }
-  get isRejected() {
-    return false;
-  }
-  get hasError() {
-    return false;
   }
 
   // Path flattening metadata
@@ -405,33 +416,16 @@ export function atomLens<T extends object, P extends Paths<T>>(
  * @internal
  */
 class MergedLensImpl<L extends WritableAtom<unknown>[]>
+  extends BaseLens
   implements WritableAtom<MergedDependencyValue<L>>, ReactiveNode<void>
 {
-  // Optimization: Engine Compatibility (Public JS fields)
-  public flags: number = 0;
-  public version: number = 0;
-  public _lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
-  public _nextEpoch: number | undefined = undefined;
-  public _trackEpoch: number = 0;
-  public _trackCount: number = 0;
-  public _error: Error | null = null;
-  public _k: typeof KIND.Obj = KIND.Obj;
-  public readonly id: number = generateId() & SMI_MAX;
-
-  public _storage: {
-    slots: null;
-    deps: DepBufferState | null;
-  } = {
-    slots: null,
-    deps: null,
-  };
-
   #lenses: L;
   #listeners = new Set<SubscriberTarget<MergedDependencyValue<L>>>();
   #unsubs: (() => void)[] = [];
   #prevValue: MergedDependencyValue<L> | undefined;
 
   constructor(lenses: L) {
+    super();
     this.#lenses = lenses;
     debug.attachDebugInfo(this, 'merged-lens', this.id);
   }
@@ -467,8 +461,9 @@ class MergedLensImpl<L extends WritableAtom<unknown>[]>
       if (self && lis) {
         self.#listeners.delete(lis);
         if (self.#listeners.size === 0) {
-          for (const unsub of self.#unsubs) unsub();
-          self.#unsubs.length = 0;
+          const unsubs = self.#unsubs;
+          self.#unsubs = [];
+          for (const unsub of unsubs) unsub();
         }
         self = undefined;
         lis = undefined;
@@ -499,19 +494,6 @@ class MergedLensImpl<L extends WritableAtom<unknown>[]>
         }
       }
     }
-  }
-
-  get isDisposed() {
-    return (this.flags & ATOM_STATE_FLAGS.DISPOSED) !== 0;
-  }
-  get isComputed() {
-    return false;
-  }
-  get isRejected() {
-    return false;
-  }
-  get hasError() {
-    return false;
   }
 
   get [BRAND]() {

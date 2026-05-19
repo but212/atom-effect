@@ -9,6 +9,38 @@ import {
   type WritableAtom,
 } from '@/index';
 
+function unsafeAtomLens<T extends object, V = unknown>(
+  atom: WritableAtom<T>,
+  path: string
+): WritableAtom<V> {
+  return atomLens(atom, path as never) as unknown as WritableAtom<V>;
+}
+
+function setupReentrantSubscription<T, U>(source: WritableAtom<T>, subscribeTo: WritableAtom<U>) {
+  const originalSubscribe = source.subscribe.bind(source);
+  let nestedUnsub: (() => void) | null = null;
+  let reentered = false;
+
+  source.subscribe = (listener) => {
+    const unsub = originalSubscribe(listener);
+    return () => {
+      if (!reentered) {
+        reentered = true;
+        nestedUnsub = subscribeTo.subscribe(() => {});
+      }
+      unsub();
+    };
+  };
+
+  return {
+    cleanup: () => {
+      if (nestedUnsub) {
+        nestedUnsub();
+      }
+    },
+  };
+}
+
 describe('Lens System', () => {
   describe('State Composition: mergeLenses', () => {
     it('should unify multiple object-based lenses into a single intersected lens', () => {
@@ -122,10 +154,7 @@ describe('Lens System', () => {
         const store = atom({
           registry: new Map([['user_1', { name: 'Alice' }]]),
         });
-        // Cast for testing arbitrary paths
-        const nameLens = (
-          atomLens as unknown as (a: typeof store, p: string) => WritableAtom<string>
-        )(store, 'registry.user_1.name');
+        const nameLens = unsafeAtomLens(store, 'registry.user_1.name');
 
         expect(nameLens.value).toBe('Alice');
         nameLens.value = 'Bob';
@@ -213,6 +242,53 @@ describe('Lens System', () => {
       expect(merged.subscriberCount()).toBe(0);
       expect(() => mergedUnsub()).not.toThrow();
     });
+
+    it('should handle re-entrant subscription safely in LensImpl', () => {
+      const store = atom({ x: 1 });
+      const lens = atomLens(store, 'x');
+
+      const tracker = setupReentrantSubscription(store, lens);
+
+      const unsubLens = lens.subscribe(() => {});
+      expect(store.subscriberCount()).toBe(1);
+
+      // Trigger unsubscribe which causes re-entrancy
+      unsubLens();
+
+      // After unsubLens, we should still have the active nested subscription on the store
+      expect(store.subscriberCount()).toBe(1);
+      expect(lens.subscriberCount()).toBe(1);
+
+      // Cleaning up the nested subscription should successfully unsubscribe from the store
+      tracker.cleanup();
+      expect(store.subscriberCount()).toBe(0);
+      expect(lens.subscriberCount()).toBe(0);
+    });
+
+    it('should handle re-entrant subscription safely in MergedLensImpl', () => {
+      const store = atom({ x: 1, y: 2 });
+      const l1 = atomLens(store, 'x');
+      const l2 = atomLens(store, 'y');
+      const merged = mergeLenses(l1, l2);
+
+      const tracker = setupReentrantSubscription(l1, merged);
+
+      const unsubMerged = merged.subscribe(() => {});
+      expect(l1.subscriberCount()).toBe(1);
+
+      unsubMerged();
+
+      // In the buggy implementation, self.#unsubs.length = 0 is run AFTER the loop,
+      // which clears the new unsubscriptions.
+      // So l1.subscriberCount() and l2.subscriberCount() would stay at 1.
+      expect(merged.subscriberCount()).toBe(1);
+
+      // If we unsubscribe the nested subscription, it should clean up
+      tracker.cleanup();
+      expect(l1.subscriberCount()).toBe(0);
+      expect(l2.subscriberCount()).toBe(0);
+      expect(merged.subscriberCount()).toBe(0);
+    });
   });
 
   describe('Advanced Patterns & Composition', () => {
@@ -254,14 +330,11 @@ describe('Lens System', () => {
 
   describe('Robustness & Security', () => {
     it('should block prototype pollution attempts', () => {
-      const store = atom({ data: {} }) as unknown as WritableAtom<Record<string, unknown>>;
+      const store = atom({ data: {} });
       const malicious = ['__proto__.polluted', 'constructor.prototype.polluted'];
 
       for (const path of malicious) {
-        const l = (atomLens as unknown as (a: unknown, p: string) => WritableAtom<unknown>)(
-          store,
-          path
-        );
+        const l = unsafeAtomLens(store, path);
         l.value = 'evil';
         expect(({} as Record<string, unknown>).polluted).toBeUndefined();
       }
@@ -269,10 +342,7 @@ describe('Lens System', () => {
 
     it('should prevent reading dangerous internal properties', () => {
       const store = atom({ data: 'initial' });
-      const l = (atomLens as unknown as (a: unknown, p: string) => WritableAtom<unknown>)(
-        store,
-        '__proto__'
-      );
+      const l = unsafeAtomLens(store, '__proto__');
       expect(l.value).toBeUndefined();
     });
   });
