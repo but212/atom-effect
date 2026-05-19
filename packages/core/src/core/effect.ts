@@ -104,7 +104,6 @@ export function createEffectBudgetState(
 export function validateEffectBudget(
   state: EffectBudgetState,
   currentFlushEpoch: number,
-  incrementGlobalFlushCount: () => number,
   onAbort: (type: 'per-effect' | 'global') => never
 ): void {
   if (state.lastFlushEpoch !== currentFlushEpoch) {
@@ -117,7 +116,7 @@ export function validateEffectBudget(
   }
 
   // Constraint: Global safeguard against aggregate scheduler instability.
-  if (incrementGlobalFlushCount() > SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH) {
+  if (incrementFlushExecutionCount() > SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH) {
     onAbort('global');
   }
 
@@ -399,9 +398,7 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
   }
 
   #validateBudget(): void {
-    validateEffectBudget(this.#budget, currentFlushEpoch(), incrementFlushExecutionCount, (type) =>
-      this.#abortExecution(type)
-    );
+    validateEffectBudget(this.#budget, currentFlushEpoch(), (type) => this.#abortExecution(type));
 
     if (IS_DEV) {
       checkEffectFrequencyLimit(this.#budget, () => {

@@ -190,6 +190,20 @@ describe('Computed', () => {
       unsub();
     });
 
+    it('should clear internal references in unsubscribe returned closure to prevent memory leaks', () => {
+      const src = atom(1);
+      const c = computed(() => src.value * 2);
+      const spy = vi.fn();
+      const unsub = c.subscribe(spy);
+
+      expect(c.subscriberCount()).toBe(1);
+      unsub();
+      expect(c.subscriberCount()).toBe(0);
+
+      // Verify calling unsubscribe again does not throw or cause issues
+      expect(() => unsub()).not.toThrow();
+    });
+
     it('should prevent dependency leakage through meta-state access', () => {
       const dep = atom(0);
       const child = computed(() => dep.value);

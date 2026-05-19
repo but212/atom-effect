@@ -283,11 +283,17 @@ class LensImpl<T extends object, P extends string>
       this.#sharedUnsub = this.#root.subscribe(() => this.#notify());
     }
     this.#listeners.add(listener);
+    let self: LensImpl<T, P> | undefined = this;
+    let lis: SubscriberTarget<PathValue<T, P>> | undefined = listener;
     return () => {
-      this.#listeners.delete(listener);
-      if (this.#listeners.size === 0 && this.#sharedUnsub) {
-        this.#sharedUnsub();
-        this.#sharedUnsub = null;
+      if (self && lis) {
+        self.#listeners.delete(lis);
+        if (self.#listeners.size === 0 && self.#sharedUnsub) {
+          self.#sharedUnsub();
+          self.#sharedUnsub = null;
+        }
+        self = undefined;
+        lis = undefined;
       }
     };
   }
@@ -455,11 +461,17 @@ class MergedLensImpl<L extends WritableAtom<unknown>[]>
       }
     }
     this.#listeners.add(listener);
+    let self: MergedLensImpl<L> | undefined = this;
+    let lis: SubscriberTarget<MergedDependencyValue<L>> | undefined = listener;
     return () => {
-      this.#listeners.delete(listener);
-      if (this.#listeners.size === 0) {
-        for (const unsub of this.#unsubs) unsub();
-        this.#unsubs.length = 0;
+      if (self && lis) {
+        self.#listeners.delete(lis);
+        if (self.#listeners.size === 0) {
+          for (const unsub of self.#unsubs) unsub();
+          self.#unsubs.length = 0;
+        }
+        self = undefined;
+        lis = undefined;
       }
     };
   }

@@ -10,6 +10,7 @@ import { SlotBuffer } from '@but212/atom-effect-utils';
 import { BUFFER_CONFIG, COMPUTED_STATE_FLAGS, IS_DEV, LOG_PREFIX } from '@/constants';
 import type { DepBufferState, Dependency, DependencyLink } from '@/types';
 import { trackEvaluationFailure } from '@/utils/debug';
+import { untracked } from './base';
 
 /** @internal */
 export const BUFFER_FLAGS = {
@@ -188,7 +189,7 @@ function checkDirty(state: DepBufferState, deep: boolean): boolean {
       // Logic: Accessing .value on a computed dependency triggers its internal
       // check/refresh logic. If it throws, we track it for debugging.
       try {
-        dep.value;
+        untracked(() => dep.value);
       } catch {
         trackEvaluationFailure(dep.id);
       }

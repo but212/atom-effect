@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   aeNextTick,
   atom,
@@ -189,6 +189,29 @@ describe('Lens System', () => {
       lens.value = NaN;
       await aeNextTick();
       expect(callCount).toBe(0);
+    });
+
+    it('should clear internal references in unsubscribe returned closure to prevent memory leaks', () => {
+      const store = atom({ x: 1, y: 2 });
+      const lens = atomLens(store, 'x');
+      const spy = vi.fn();
+      const unsub = lens.subscribe(spy);
+
+      expect(lens.subscriberCount()).toBe(1);
+      unsub();
+      expect(lens.subscriberCount()).toBe(0);
+      expect(() => unsub()).not.toThrow();
+
+      const l1 = atomLens(store, 'x');
+      const l2 = atomLens(store, 'y');
+      const merged = mergeLenses(l1, l2);
+      const mergedSpy = vi.fn();
+      const mergedUnsub = merged.subscribe(mergedSpy);
+
+      expect(merged.subscriberCount()).toBe(1);
+      mergedUnsub();
+      expect(merged.subscriberCount()).toBe(0);
+      expect(() => mergedUnsub()).not.toThrow();
     });
   });
 
