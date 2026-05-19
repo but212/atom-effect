@@ -352,19 +352,7 @@ class ReactiveScheduler implements SchedulerState {
 export const scheduler = new ReactiveScheduler();
 
 /** @internal */
-export const schedulerMergeBatchQueue = (state: SchedulerState) =>
-  (state as ReactiveScheduler).nextEpoch();
-/** @internal */
-export const schedulerDrainQueue = (state: SchedulerState) =>
-  (state as ReactiveScheduler).flushQueues();
-/** @internal */
-export const schedulerProcessQueue = (state: SchedulerState) =>
-  (state as ReactiveScheduler).nextEpoch();
-/** @internal */
 export const schedulerFlushQueues = (state: SchedulerState) =>
-  (state as ReactiveScheduler).flushQueues();
-/** @internal */
-export const schedulerHandleFlushOverflow = (state: SchedulerState) =>
   (state as ReactiveScheduler).flushQueues();
 /** @internal */
 export const schedulerNextEpoch = (state: SchedulerState) => state.nextEpoch();
