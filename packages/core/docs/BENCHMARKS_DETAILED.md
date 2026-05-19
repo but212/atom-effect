@@ -2,8 +2,8 @@
 
 This document provides raw data and detailed breakdowns for the `@but212/atom-effect` performance suite. These measurements quantify internal engine throughput and latency across various operational scenarios.
 
-**Last Updated**: 2026-05-10
-**Version**: v0.32.1
+**Last Updated**: 2026-05-19
+**Version**: v0.33.0
 
 - **Runtime**: Node.js v22.x
 - **Infrastructure**: ubuntu-latest (GitHub Actions)
@@ -19,37 +19,37 @@ This document provides raw data and detailed breakdowns for the `@but212/atom-ef
 
 | Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :--- | :--- | :--- | :--- |
-| creation: primitive atom | 1,040,903.10 | 0.0010 | 0.0014 |
-| creation: object atom | 1,021,123.99 | 0.0010 | 0.0013 |
-| read/write performance: active | 653,350.32 | 0.0015 | 0.0031 |
-| untracked read: active | 3,160,084.83 | 0.0003 | 0.0004 |
+| creation: primitive atom | 1,002,541.69 | 0.0010 | 0.0012 |
+| creation: object atom | 991,826.23 | 0.0010 | 0.0013 |
+| read/write performance: active | 971,979.96 | 0.0010 | 0.0015 |
+| untracked read: active | 3,096,756.62 | 0.0003 | 0.0004 |
 
 ### Computed Operations (x10)
 
 | Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :--- | :--- | :--- | :--- |
-| creation: flat vs chain (10 levels) | 433,605.77 | 0.0023 | 0.0031 |
-| recomputation & cache | 351,363.40 | 0.0028 | 0.0049 |
-| lazy evaluation overhead | 321,933.70 | 0.0031 | 0.0053 |
+| creation: flat vs chain (10 levels) | 471,480.57 | 0.0021 | 0.0027 |
+| recomputation & cache | 376,983.35 | 0.0027 | 0.0030 |
+| lazy evaluation overhead | 327,460.85 | 0.0031 | 0.0042 |
 
 ### Effect Operations (x10)
 
 | Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :--- | :--- | :--- | :--- |
-| creation & disposal | 181,556.79 | 0.0055 | 0.0110 |
-| propagation: atom → computed → effect | 1,141,308.36 | 0.0009 | 0.0015 |
-| cleanup execution | 589,351.85 | 0.0017 | 0.0022 |
+| creation & disposal | 247,732.17 | 0.0040 | 0.0046 |
+| propagation: atom → computed → effect | 1,260,437.38 | 0.0008 | 0.0010 |
+| cleanup execution | 721,972.93 | 0.0014 | 0.0022 |
 
 ### Lenses (x10)
 
 | Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :--- | :--- | :--- | :--- |
-| read: lens | 861,415.80 | 0.0012 | 0.0012 |
-| read: computed active | 1,319,834.62 | 0.0008 | 0.0008 |
-| read: direct object access | 1,320,466.26 | 0.0008 | 0.0008 |
-| write: lens | 161,415.23 | 0.0062 | 0.0104 |
-| write: manual spread | 859,883.28 | 0.0012 | 0.0016 |
-| composition & scaling (100 active lenses) | 1,794,824.40 | 0.0006 | 0.0007 |
+| read: lens | 917,289.24 | 0.0011 | 0.0011 |
+| read: computed active | 1,300,433.94 | 0.0008 | 0.0008 |
+| read: direct object access | 1,291,167.29 | 0.0008 | 0.0008 |
+| write: lens | 222,180.97 | 0.0045 | 0.0049 |
+| write: manual spread | 949,673.05 | 0.0011 | 0.0013 |
+| composition & scaling (100 active lenses) | 2,499,400.98 | 0.0004 | 0.0005 |
 
 ---
 
@@ -61,24 +61,24 @@ Measurements for internal scheduling and execution context management.
 
 | Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :--- | :--- | :--- | :--- |
-| schedule 1 microtask | 2,255,007.31 | 0.0004 | 0.0007 |
-| schedule 10 microtasks (parallel) | 441,131.19 | 0.0023 | 0.0028 |
+| schedule 1 microtask | 2,207,522.24 | 0.0005 | 0.0008 |
+| schedule 10 microtasks (parallel) | 441,408.77 | 0.0023 | 0.0026 |
 
 ### Untracked Context (x10)
 
 | Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :--- | :--- | :--- | :--- |
-| tracked read inside computed | 2,070,654.30 | 0.0005 | 0.0007 |
-| untracked(() => read) | 3,127,825.66 | 0.0003 | 0.0003 |
-| peek() read — no context | 3,820,507.84 | 0.0003 | 0.0003 |
+| tracked read inside computed | 2,446,242.91 | 0.0004 | 0.0006 |
+| untracked(() => read) | 3,466,631.72 | 0.0003 | 0.0003 |
+| peek() read — no context | 3,676,409.87 | 0.0003 | 0.0003 |
 
 ### Batch Nesting (10 writes)
 
 | Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :--- | :--- | :--- | :--- |
-| unbatched 10 writes | 732,296.38 | 0.0014 | 0.0027 |
-| flat batch | 199,914.54 | 0.0050 | 0.0098 |
-| nested batch (3 levels) | 199,934.63 | 0.0050 | 0.0097 |
+| unbatched 10 writes | 1,176,507.62 | 0.0008 | 0.0011 |
+| flat batch | 313,124.17 | 0.0032 | 0.0035 |
+| nested batch (3 levels) | 308,885.99 | 0.0032 | 0.0036 |
 
 ---
 
@@ -88,9 +88,9 @@ Measurements for internal scheduling and execution context management.
 
 | Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :--- | :--- | :--- | :--- |
-| 1 to 1 propagation (Depth 1000) | 29,276.65 | 0.0342 | 0.0873 |
-| 1 to N propagation (Fan Out 1000) | 12,418.48 | 0.0805 | 0.1207 |
-| N to 1 propagation (Fan In 1000) | 122,288.19 | 0.0082 | 0.0212 |
+| 1 to 1 propagation (Depth 1000) | 17,166.31 | 0.0583 | 0.1310 |
+| 1 to N propagation (Fan Out 1000) | 12,484.66 | 0.0801 | 0.1158 |
+| N to 1 propagation (Fan In 1000) | 94,319.66 | 0.0106 | 0.0303 |
 
 ---
 
@@ -100,23 +100,23 @@ Measurements for internal scheduling and execution context management.
 
 | Pattern | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :--- | :--- | :--- | :--- |
-| deep chain (100 levels) | 211,298.63 | 0.0047 | 0.0153 |
-| diamond pattern (1 → 10 → 10 → 1) | 808,408.18 | 0.0012 | 0.0034 |
-| pyramid pattern (50 levels) | 302,080.55 | 0.0033 | 0.0097 |
+| deep chain (100 levels) | 227,628.80 | 0.0044 | 0.0131 |
+| diamond pattern (1 → 10 → 10 → 1) | 901,795.50 | 0.0011 | 0.0020 |
+| pyramid pattern (50 levels) | 323,696.18 | 0.0031 | 0.0061 |
 
 ### Data Grid Operations (1000 Rows)
 
 | Scenario | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :--- | :--- | :--- | :--- |
-| [Vanilla] Toggle Sort | 5,026.56 | 0.1989 | 0.2441 |
-| [Atom] Toggle Sort | 9,543.15 | 0.1048 | 0.2423 |
-| [Vanilla] Switch Filter | 400,502.12 | 0.0025 | 0.0030 |
-| [Atom] Switch Filter | 347,791.25 | 0.0029 | 0.0056 |
+| [Vanilla] Toggle Sort | 4,520.70 | 0.2212 | 0.2570 |
+| [Atom] Toggle Sort | 8,147.80 | 0.1227 | 0.3110 |
+| [Vanilla] Switch Filter | 446,577.67 | 0.0022 | 0.0028 |
+| [Atom] Switch Filter | 331,569.62 | 0.0030 | 0.0061 |
 
 ### Memory and Lifecycle
 
 | Scenario | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :--- | :--- | :--- | :--- |
-| heavy component lifecycle (mount→update→unmount) | 77,616.78 | 0.0129 | 0.0253 |
-| subscription churn (1K cycles) | 11,345.86 | 0.0881 | 2.6938 |
-| create and dispose 1000 units | 855.33 | 1.1691 | 4.7246 |
+| heavy component lifecycle (mount→update→unmount) | 71,486.59 | 0.0140 | 0.0293 |
+| subscription churn (1K cycles) | 31,307.07 | 0.0319 | 0.1424 |
+| create and dispose 1000 units | 829.88 | 1.2050 | 1.8575 |

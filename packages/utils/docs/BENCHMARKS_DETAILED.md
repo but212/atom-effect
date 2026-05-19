@@ -2,8 +2,8 @@
 
 This document provides raw data and detailed breakdowns for the `@but212/atom-effect-utils` performance suite.
 
-**Last Updated**: 2026-05-10
-**Version**: v0.32.1
+**Last Updated**: 2026-05-19
+**Version**: v0.33.0
 
 - **Runtime**: Node.js v22.x
 - **Infrastructure**: ubuntu-latest (GitHub Actions)
@@ -16,22 +16,22 @@ This document provides raw data and detailed breakdowns for the `@but212/atom-ef
 
 | Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :--- | :--- | :--- | :--- |
-| Literal assignment | 411,397.35 | 0.0024 | 0.0046 |
-| Null check | 426,317.32 | 0.0023 | 0.0023 |
-| Nullish coalescing (mixed) | 224,589.64 | 0.0045 | 0.0079 |
-| Inline ternary map | 420,416.40 | 0.0024 | 0.0028 |
-| If-Else branch (mixed) | 233,634.89 | 0.0043 | 0.0046 |
+| Literal assignment | 420,448.80 | 0.0024 | 0.0029 |
+| Null check | 419,654.88 | 0.0024 | 0.0024 |
+| Nullish coalescing (mixed) | 231,713.62 | 0.0043 | 0.0050 |
+| Inline ternary map | 405,060.15 | 0.0025 | 0.0066 |
+| If-Else branch (mixed) | 213,775.70 | 0.0047 | 0.0105 |
 
 ### Option Operations
 
 | Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :--- | :--- | :--- | :--- |
-| Some creation | 253,729.06 | 0.0039 | 0.0046 |
-| isSome | 293,255.83 | 0.0034 | 0.0036 |
-| unwrapOr (mixed) | 171,674.38 | 0.0058 | 0.0065 |
-| map | 244,916.07 | 0.0041 | 0.0045 |
-| match (mixed) | 181,223.36 | 0.0055 | 0.0064 |
-| fromNullable (mixed) | 173,806.55 | 0.0058 | 0.0065 |
+| Some creation | 223,956.55 | 0.0045 | 0.0051 |
+| isSome | 259,798.64 | 0.0038 | 0.0043 |
+| unwrapOr (mixed) | 172,296.08 | 0.0058 | 0.0097 |
+| map | 213,512.75 | 0.0047 | 0.0055 |
+| match (mixed) | 168,124.92 | 0.0059 | 0.0101 |
+| fromNullable (mixed) | 167,395.23 | 0.0060 | 0.0108 |
 
 ---
 
@@ -39,9 +39,9 @@ This document provides raw data and detailed breakdowns for the `@but212/atom-ef
 
 | Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :--- | :--- | :--- | :--- |
-| Result.ok creation | 231,797.51 | 0.0043 | 0.0083 |
-| Result.match (mixed) | 184,095.76 | 0.0054 | 0.0070 |
-| Result.tryCatch (mixed) | 4,443.34 | 0.2251 | 0.3185 |
+| Result.ok creation | 259,249.37 | 0.0039 | 0.0067 |
+| Result.match (mixed) | 182,703.34 | 0.0055 | 0.0070 |
+| Result.tryCatch (mixed) | 4,290.75 | 0.2331 | 0.2849 |
 
 ---
 
@@ -49,13 +49,13 @@ This document provides raw data and detailed breakdowns for the `@but212/atom-ef
 
 | Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :--- | :--- | :--- | :--- |
-| push (small, x100) | 331,711.49 | 0.0030 | 0.0059 |
-| push (large, x10) | 47,790.66 | 0.0209 | 0.0355 |
-| has (x100) | 174,982.10 | 0.0057 | 0.0062 |
-| forEach (x100) | 69,763.17 | 0.0143 | 0.0236 |
-| compact (x100) | 39,083.22 | 0.0256 | 0.0365 |
-| some (early exit, x100) | 341,605.00 | 0.0029 | 0.0029 |
-| some (full scan, x100) | 104,573.81 | 0.0096 | 0.0175 |
+| push (small, x100) | 343,757.59 | 0.0029 | 0.0044 |
+| push (large, x10) | 50,582.83 | 0.0198 | 0.0303 |
+| has (x100) | 185,123.11 | 0.0054 | 0.0061 |
+| forEach (x100) | 70,102.99 | 0.0143 | 0.0236 |
+| compact (x100) | 33,097.96 | 0.0302 | 0.0420 |
+| some (early exit, x100) | 354,550.26 | 0.0028 | 0.0028 |
+| some (full scan, x100) | 106,575.81 | 0.0094 | 0.0173 |
 
 ---
 
@@ -63,9 +63,9 @@ This document provides raw data and detailed breakdowns for the `@but212/atom-ef
 
 | Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :--- | :--- | :--- | :--- |
-| isPromise: native promise | 290,555.62 | 0.0034 | 0.0070 |
-| isPromise: thenable | 276,260.28 | 0.0036 | 0.0070 |
-| isPromise: object | 287,849.49 | 0.0035 | 0.0035 |
-| isOption: true | 282,765.16 | 0.0035 | 0.0062 |
-| isOption: false | 290,306.60 | 0.0034 | 0.0039 |
-| isPromise: mixed data | 163,432.77 | 0.0061 | 0.0112 |
+| isPromise: native promise | 301,138.28 | 0.0033 | 0.0040 |
+| isPromise: thenable | 307,815.63 | 0.0032 | 0.0035 |
+| isPromise: object | 294,456.26 | 0.0034 | 0.0034 |
+| isOption: true | 303,878.37 | 0.0033 | 0.0040 |
+| isOption: false | 305,554.75 | 0.0033 | 0.0033 |
+| isPromise: mixed data | 177,842.23 | 0.0056 | 0.0058 |

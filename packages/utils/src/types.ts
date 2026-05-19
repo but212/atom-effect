@@ -15,34 +15,6 @@ export type Equal<X, Y> =
   (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2 ? true : false;
 
 /**
- * Logic: Conditional Branching
- * A structural alternative to the ternary operator (`? :`) for complex type logic.
- *
- * Why:
- * - Improves readability in deeply nested type transformations.
- * - Makes the intent of "branching" explicit like a control flow statement.
- */
-export type If<Condition extends boolean, Then, Else> = Condition extends true ? Then : Else;
-
-/**
- * Logic: Boolean Operations
- * Fundamental primitives for type-level logic gates.
- */
-export type Not<T extends boolean> = T extends true ? false : true;
-
-export type And<T extends boolean, U extends boolean> = T extends true
-  ? U extends true
-    ? true
-    : false
-  : false;
-
-export type Or<T extends boolean, U extends boolean> = T extends true
-  ? true
-  : U extends true
-    ? true
-    : false;
-
-/**
  * Utility type that merges a union of object types into a single flattened object type.
  * It combines {@link UnionToIntersection} and {@link Prettify} for a clean, readable result.
  *

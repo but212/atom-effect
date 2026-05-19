@@ -95,7 +95,7 @@ Update your `<script>` tags to use the explicit UMD bundle:
 
 ```html
 <!-- Before -->
-<script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.32.1/index.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.33.0/index.js"></script>
 
 <!-- After (Recommended) -->
 <script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.33.0/dist/atom-effect-jquery.min.js"></script>
