@@ -164,7 +164,11 @@ export function collectErrorsRecursive(startNode: ReactiveNodeBase, stopOnFirst:
     if (deps && (deps.flags & BUFFER_FLAGS.HAS_COMPUTEDS) !== 0) {
       for (let i = 0, len = deps.slots.length; i < len; i++) {
         const link = deps.slots.at(i);
-        if (link?.node.isComputed && walk(link.node as unknown as ReactiveNodeBase)) {
+        if (
+          link &&
+          (link.node.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) !== 0 &&
+          walk(link.node as unknown as ReactiveNodeBase)
+        ) {
           return true;
         }
       }
@@ -231,7 +235,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
     this.#computation = computation;
     this.#defaultValue = 'defaultValue' in options ? options.defaultValue : (NO_DEFAULT_VALUE as T);
     this.#onError = options.onError ?? null;
-    this.#notifyCallback = this.execute.bind(this);
+    this.#notifyCallback = () => this.execute();
 
     debug.attachDebugInfo(this, 'computed', this.id, options.name);
 

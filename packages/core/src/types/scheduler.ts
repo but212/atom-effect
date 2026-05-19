@@ -34,7 +34,7 @@ export interface SchedulerJobObject {
    * Discriminator (0: Function, 1: Object) used for low-overhead dispatching.
    * @internal
    */
-  _k?: (typeof KIND)[keyof typeof KIND] | undefined;
+  _k?: typeof KIND.Obj | undefined;
 }
 
 /**
@@ -56,16 +56,14 @@ export interface SchedulerJobFunction {
    * Discriminator used for low-overhead dispatching.
    * @internal
    */
-  _k?: (typeof KIND)[keyof typeof KIND] | undefined;
+  _k?: typeof KIND.Fn | undefined;
 }
 
 /**
  * Unified type for any unit of work managed by the scheduler.
  * @internal
  */
-export type SchedulerJob =
-  | (SchedulerJobFunction & { _k?: typeof KIND.Fn | undefined })
-  | (SchedulerJobObject & { _k?: typeof KIND.Obj | undefined });
+export type SchedulerJob = SchedulerJobFunction | SchedulerJobObject;
 
 /**
  * Role: Pre-Allocated Job Buffer

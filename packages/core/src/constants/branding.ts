@@ -62,6 +62,6 @@ export const BRAND_MASK = BrandFlags.Atom | BrandFlags.Computed | BrandFlags.Eff
  */
 export const BRAND_IDENTITY_MAP = {
   [BrandFlags.Atom]: { type: 'atom', prefix: 'atom_' },
-  [BrandFlags.Computed]: { type: 'computed', prefix: 'calc_' },
+  [BrandFlags.Atom | BrandFlags.Computed]: { type: 'computed', prefix: 'calc_' },
   [BrandFlags.Effect]: { type: 'effect', prefix: 'fx_' },
 } as const satisfies Record<number, { type: string; prefix: string }>;

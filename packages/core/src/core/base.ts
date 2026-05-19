@@ -110,19 +110,6 @@ export function createTrackingContextObject(): TrackingContext {
 export const trackingContext = createTrackingContext();
 
 /**
- * Logic: Strategy Dispatch
- * Table-driven notification strategies to avoid branching in hot-path loops.
- * @internal
- */
-const NOTIFIER_STRATEGY: Record<
-  SubscriberKind,
-  (sub: Subscription<unknown>, newValue?: unknown, oldValue?: unknown) => void
-> = {
-  [KIND.Fn]: (sub, n, o) => (sub.t as (n?: unknown, o?: unknown) => void)(n, o),
-  [KIND.Obj]: (sub) => (sub.t as Subscriber).execute(),
-};
-
-/**
  * Executes a scope where reactive dependencies are suppressed.
  *
  * When to use:
@@ -255,7 +242,14 @@ export function nodeSubscribe<T>(node: ReactiveNode<T>, listener: SubscriberTarg
   }
 
   slots.push(link);
-  return () => nodeUnsubscribe(node, link as Subscription<T>);
+  let n: ReactiveNode<T> | undefined = node;
+  return () => {
+    if (n && link) {
+      nodeUnsubscribe(n, link);
+      n = undefined;
+      link = undefined;
+    }
+  };
 }
 
 /** @internal */
@@ -263,8 +257,9 @@ export function nodeUnsubscribe<T>(node: ReactiveNode<T>, link: Subscription<T>)
   const slots = node._storage.slots;
   if (slots === null) return;
 
-  slots.remove(link);
-  slots.compact();
+  if (slots.remove(link)) {
+    slots.compact();
+  }
 }
 
 /**
@@ -297,8 +292,6 @@ export function nodeNotifySubscribers<T>(
   slots.lock();
   try {
     const len = slots.length;
-    const fnStrategy = NOTIFIER_STRATEGY[KIND.Fn];
-    const objStrategy = NOTIFIER_STRATEGY[KIND.Obj];
     const fnKind = KIND.Fn;
 
     for (let i = 0; i < len; i++) {
@@ -307,9 +300,9 @@ export function nodeNotifySubscribers<T>(
 
       try {
         if (sub.k === fnKind) {
-          fnStrategy(sub as Subscription<unknown>, newValue, oldValue);
+          (sub.t as (n?: unknown, o?: unknown) => void)(newValue, oldValue);
         } else {
-          objStrategy(sub as Subscription<unknown>, newValue, oldValue);
+          (sub.t as Subscriber).execute();
         }
       } catch (e) {
         console.error(`${LOG_PREFIX} Subscriber failed on node ${node.id}:`, e);

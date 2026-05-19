@@ -43,12 +43,6 @@ export const nextSmi = (v: number): number => {
   return next === 0 ? 1 : next;
 };
 
-/** @internal */
-const JOB_EXECUTORS: Record<number, (job: SchedulerJob) => void> = {
-  [KIND.Fn]: (job) => (job as SchedulerJobFunction)(),
-  [KIND.Obj]: (job) => (job as SchedulerJobObject).execute(),
-};
-
 /**
  * Role: Central orchestrator for the reactive task lifecycle.
  *
@@ -187,14 +181,18 @@ class ReactiveScheduler implements SchedulerState {
     if (this.#current === active) this.#current = this.#active;
 
     this.nextEpoch();
-    const executors = JOB_EXECUTORS;
+    const fnKind = KIND.Fn;
 
     for (let i = 0; i < count; i++) {
       const job = jobs[i]!;
       jobs[i] = undefined;
 
       try {
-        executors[job._k!]!(job);
+        if (job._k === fnKind) {
+          (job as SchedulerJobFunction)();
+        } else {
+          (job as SchedulerJobObject).execute();
+        }
       } catch (e) {
         console.error(
           new SchedulerError('Error occurred during scheduler execution', { cause: e })

@@ -56,6 +56,10 @@ describe('Debug System', () => {
     it('should fall back to "type_id" pattern for unnamed nodes', () => {
       const a = track(atom(0));
       expect(debug.getDebugName(a)).toMatch(/^atom_\d+$/);
+
+      const c = track(computed(() => 0));
+      expect(debug.getDebugName(c)).toMatch(/^calc_\d+$/);
+      expect(debug.getDebugType(c)).toBe('computed');
     });
 
     it('should remain inert when debugging is disabled or input is invalid', () => {

@@ -43,7 +43,8 @@ interface Branded {
 function isBranded<T>(obj: unknown, flag: number): obj is T {
   if (!obj || (typeof obj !== 'object' && typeof obj !== 'function')) return false;
 
-  return !!((obj as Branded)[BRAND]! & flag);
+  const brand = (obj as Branded)[BRAND];
+  return brand !== undefined && (brand & flag) !== 0;
 }
 
 /**

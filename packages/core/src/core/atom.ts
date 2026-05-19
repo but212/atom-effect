@@ -58,7 +58,7 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
   _trackEpoch: number = 0;
   _trackCount: number = 0;
   _error: Error | null = null;
-  readonly kind: typeof KIND.Obj = KIND.Obj;
+  _k: typeof KIND.Obj = KIND.Obj;
   readonly id: DependencyId = generateId() & SMI_MAX;
 
   _storage: {
