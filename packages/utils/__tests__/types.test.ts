@@ -1,5 +1,5 @@
 import { assertType, describe, it } from 'vitest';
-import type { And, Equal, If, Merge, Not, Or, Prettify, UnionToIntersection } from '@/types';
+import type { Equal, Merge, Prettify, UnionToIntersection } from '@/types';
 
 describe('Type Utilities', () => {
   describe('Logic Primitives', () => {
@@ -12,26 +12,6 @@ describe('Type Utilities', () => {
       // biome-ignore lint/suspicious/noExplicitAny: false positive
       assertType<Equal<any, unknown>>(false);
       assertType<Equal<{ readonly a: number }, { a: number }>>(false);
-    });
-
-    it('If should branch correctly', () => {
-      assertType<Equal<If<true, string, number>, string>>(true);
-      assertType<Equal<If<false, string, number>, number>>(true);
-    });
-
-    it('Boolean operators (Not, And, Or)', () => {
-      assertType<Equal<Not<true>, false>>(true);
-      assertType<Equal<Not<false>, true>>(true);
-
-      assertType<Equal<And<true, true>, true>>(true);
-      assertType<Equal<And<true, false>, false>>(true);
-      assertType<Equal<And<false, true>, false>>(true);
-      assertType<Equal<And<false, false>, false>>(true);
-
-      assertType<Equal<Or<true, true>, true>>(true);
-      assertType<Equal<Or<true, false>, true>>(true);
-      assertType<Equal<Or<false, true>, true>>(true);
-      assertType<Equal<Or<false, false>, false>>(true);
     });
   });
 

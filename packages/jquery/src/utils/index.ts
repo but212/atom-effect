@@ -12,17 +12,7 @@
 
 import type { RouteDefinition } from '@/types';
 
-/**
- * Logic: Async Identification
- * Identifies thenable objects to ensure uniform handling of both native
- * Promises and third-party async primitives across different environments.
- *
- * @internal
- */
-export const isPromise = <T>(v: unknown): v is Promise<T> =>
-  v !== null &&
-  (typeof v === 'object' || typeof v === 'function') &&
-  typeof (v as PromiseLike<T>).then === 'function';
+export { isPromise } from '@but212/atom-effect-utils';
 
 /**
  * Generates a concise, human-readable CSS selector for a DOM element.
