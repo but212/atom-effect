@@ -322,6 +322,18 @@ class BindingRegistry {
    * nodes if the DOM structure shifts during the iteration cycle.
    */
   cleanupDescendants(root: Element | DocumentFragment | ShadowRoot): void {
+    // Fast-path: Exit early if no bound elements or shadow hosts exist in the subtree.
+    if (root.nodeType === 1) {
+      const el = root as Element;
+      const hasBound = el.getElementsByClassName(MARK_BOUND).length > 0;
+      const hasShadow = el.getElementsByClassName(MARK_SHADOW).length > 0;
+      if (!hasBound && !hasShadow) {
+        return;
+      }
+    } else if (!root.querySelector(`.${MARK_BOUND}, .${MARK_SHADOW}`)) {
+      return;
+    }
+
     const nodes = root.querySelectorAll(`.${MARK_BOUND}`);
 
     for (const node of nodes) {

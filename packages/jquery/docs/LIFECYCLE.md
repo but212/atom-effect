@@ -43,6 +43,8 @@ The library utilizes a **Reference Counting** strategy within the `ContextEngine
 
 Sequential or redundant calls to `cleanup()` or `teardown()` on the same node must be side-effect free. Once a node enters the `DESTROYED` state, subsequent operations should not re-initialize reactive resources.
 
+- **Fast-Path Check**: The teardown process leverages `getElementsByClassName` to verify the presence of active reactive elements before attempting any tree traversal. If no bound descendants exist, the cleanup exits immediately to reduce CPU cycles during general DOM manipulation.
+
 ### 2. Context Consistency
 
 Operations that mutate the DOM structure or release component state must trigger a version bump in the `ContextEngine`. This ensures that late-bound injection proxies re-evaluate their provider hierarchy, preventing "ghost" context references.

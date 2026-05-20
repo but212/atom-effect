@@ -383,6 +383,57 @@ export function bindVal(
 }
 
 /**
+ * Global registry for tracking radio group elements context-sensitively.
+ * Encapsulates nested mappings inside a single unified structure.
+ * @internal
+ */
+class RadioRegistry {
+  readonly #groups = new WeakMap<Node, Map<string, Set<HTMLInputElement>>>();
+
+  public register(element: HTMLInputElement): Node | undefined {
+    if (element.type !== 'radio' || !element.name) return undefined;
+    const root: Node = element.form || element.ownerDocument || document;
+
+    let nameMap = this.#groups.get(root);
+    if (!nameMap) {
+      nameMap = new Map<string, Set<HTMLInputElement>>();
+      this.#groups.set(root, nameMap);
+    }
+
+    let set = nameMap.get(element.name);
+    if (!set) {
+      set = new Set<HTMLInputElement>();
+      nameMap.set(element.name, set);
+    }
+    set.add(element);
+    return root;
+  }
+
+  public unregister(element: HTMLInputElement, root: Node): void {
+    if (element.type !== 'radio' || !element.name) return;
+
+    const nameMap = this.#groups.get(root);
+    if (nameMap) {
+      const set = nameMap.get(element.name);
+      if (set) {
+        set.delete(element);
+        if (set.size === 0) {
+          nameMap.delete(element.name);
+        }
+      }
+    }
+  }
+
+  public getGroup(element: HTMLInputElement, root?: Node): Set<HTMLInputElement> | undefined {
+    if (element.type !== 'radio' || !element.name) return undefined;
+    const actualRoot: Node = root || element.form || element.ownerDocument || document;
+    return this.#groups.get(actualRoot)?.get(element.name);
+  }
+}
+
+const radioRegistry = new RadioRegistry();
+
+/**
  * Synchronizes the visual state of a radio button group.
  *
  * Logic: Native radio buttons do not fire 'change' events when they are
@@ -395,10 +446,20 @@ export function bindVal(
  */
 function syncRadios(element: HTMLInputElement): void {
   if (element.type === 'radio' && element.name) {
-    (element.form ? $(element.form) : $(document))
-      .find(`input[type="radio"][name="${$.escapeSelector(element.name)}"]`)
-      .not(element)
-      .trigger('change.atomRadioSync');
+    const set = radioRegistry.getGroup(element);
+
+    if (set && set.size > 0) {
+      for (const el of set) {
+        if (el !== element) {
+          $(el).trigger('change.atomRadioSync');
+        }
+      }
+    } else {
+      (element.form ? $(element.form) : $(document))
+        .find(`input[type="radio"][name="${$.escapeSelector(element.name)}"]`)
+        .not(element)
+        .trigger('change.atomRadioSync');
+    }
   }
 }
 
@@ -414,6 +475,11 @@ export function bindChecked(element: HTMLElement, atom: WritableAtom<boolean>): 
   const inputElement = element;
   const $element = $(inputElement);
 
+  let radioRoot: Node | undefined;
+  if (inputElement.type === 'radio') {
+    radioRoot = radioRegistry.register(inputElement);
+  }
+
   const onChange = () => {
     if (atom.peek() !== inputElement.checked) {
       atom.value = inputElement.checked;
@@ -423,7 +489,12 @@ export function bindChecked(element: HTMLElement, atom: WritableAtom<boolean>): 
   (onChange as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
 
   $element.on('change change.atomRadioSync', onChange);
-  registry.onCleanup(inputElement, () => $element.off('change change.atomRadioSync', onChange));
+  registry.onCleanup(inputElement, () => {
+    if (inputElement.type === 'radio' && radioRoot) {
+      radioRegistry.unregister(inputElement, radioRoot);
+    }
+    $element.off('change change.atomRadioSync', onChange);
+  });
 
   registry.trackEffect(
     inputElement,

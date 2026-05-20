@@ -30,11 +30,25 @@ const IS_BROWSER = typeof window !== 'undefined';
  * to avoid polluting the global DOM or reactive graph with debug metadata.
  */
 class DebugController {
+  #enabled = false;
+
   /** Global toggle to activate or deactivate the diagnostic system. */
-  public enabled: boolean;
+  public get enabled(): boolean {
+    return this.#enabled;
+  }
+
+  public set enabled(val: boolean) {
+    this.#enabled = val;
+    if (!val) {
+      this.#styleInjected = false;
+      this.#lastCheckTime = 0;
+    }
+  }
 
   /** Logic: Resilience - Prevents redundant style block injections. */
   #styleInjected = false;
+
+  #lastCheckTime = 0;
 
   /**
    * Optimization: Memory Safety
@@ -161,7 +175,13 @@ class DebugController {
     if (!IS_BROWSER) return;
 
     // Resilience: Verify physical presence in case the DOM was cleared (e.g., between tests).
-    const isPresent = document.querySelector(`style[${ATTR_MARKER}]`) || this.#checkAdoptedStyles();
+    // Throttle check frequency to once every 1000ms to eliminate hot-path performance overhead.
+    const now = Date.now();
+    let isPresent = true;
+    if (!this.#styleInjected || now - this.#lastCheckTime > 1000) {
+      isPresent = !!(document.querySelector(`style[${ATTR_MARKER}]`) || this.#checkAdoptedStyles());
+      this.#lastCheckTime = now;
+    }
 
     if (this.#styleInjected && isPresent) return;
 

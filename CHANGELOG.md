@@ -1,5 +1,21 @@
 # Changelog
 
+## [Unreleased]
+
+### jQuery
+
+#### Changed
+
+- Optimized context resolution in `ContextEngine.discover` by implementing a direct parent-pointer DOM walk crossing Shadow DOM boundaries, falling back to bubbling `CustomEvent` dispatch.
+- Integrated `sanitizeCache` into `batchSanitize` to skip parsing and attribute scrubbing for cached dynamic HTML templates.
+- Optimized `cleanupDescendants` in the binding registry using an O(1) class-presence check (`getElementsByClassName`) to skip expensive recursive `querySelectorAll` scans on clean, non-reactive DOM subtrees.
+- Replaced global DOM searches (`$(element.form).find` / `$(document).find`) during radio button synchronization with a scoped `WeakMap` lookup cache of active radio elements grouped by form or document contexts, improving checked-state sync performance to O(1).
+- Throttled debug diagnostics style block insertion checks to a maximum frequency of once every 1000ms, eliminating performance overhead during hot sequential DOM updates.
+
+#### Fixed
+
+- Hardened the sanitization engine in `sanitize.ts` with early-return fast paths for URIs, entity decoding, and normalization, and optimized attribute iteration to avoid intermediate array allocations.
+
 ## [0.33.0]
 
 ### Core & Infrastructure

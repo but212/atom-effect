@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import $ from '@/index';
+import { sanitizeCache, sanitizeHtml } from '@/utils/sanitize';
 
 // ─── Security Test Kit ───────────────────────────────────────────────────────
 
@@ -261,6 +262,28 @@ describe('Atom-Effect: Security Specification', () => {
       const result = await TestKit.sanitizeUpdate('<b>Safe</b>', '<img src=x onerror=alert(1)>');
       expect(result).not.toContain('onerror=');
       expect(result).toContain('data-unsafe-attr="onerror"');
+    });
+  });
+
+  describe('sanitizeCache FIFO eviction strategy', () => {
+    it('should evict the oldest cache entry and store new entries when size exceeds 1000', () => {
+      // Clear cache first to have a clean state
+      sanitizeCache.clear();
+
+      // Generate 1000 cache entries
+      for (let i = 0; i < 1000; i++) {
+        sanitizeHtml(`<div>Template ${i}</div>`);
+      }
+      expect(sanitizeCache.size).toBe(1000);
+      expect(sanitizeCache.has('<div>Template 0</div>')).toBe(true);
+
+      // Add one more entry (1001st) to trigger eviction
+      sanitizeHtml('<div>Template 1000</div>');
+      expect(sanitizeCache.size).toBe(1000);
+      // The oldest entry ('<div>Template 0</div>') should be evicted
+      expect(sanitizeCache.has('<div>Template 0</div>')).toBe(false);
+      // The new entry should be present
+      expect(sanitizeCache.has('<div>Template 1000</div>')).toBe(true);
     });
   });
 });
