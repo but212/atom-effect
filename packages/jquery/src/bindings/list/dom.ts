@@ -198,8 +198,27 @@ function batchSanitize(parts: string[]): string[] {
       hash = (hash * 31 + s.charCodeAt(j)) | 0;
     }
   }
-  const sepId = Math.abs(hash).toString(36);
-  const sep = `<template data-atom-sep="s${sepId}"></template>`;
+  let sepId = Math.abs(hash).toString(36);
+  let sep = `<template data-atom-sep="s${sepId}"></template>`;
+
+  let collision = true;
+  let attempts = 0;
+  while (collision && attempts < 10) {
+    collision = false;
+    for (let i = 0; i < len; i++) {
+      if (parts[i]!.includes(sep)) {
+        collision = true;
+        break;
+      }
+    }
+    if (collision) {
+      attempts++;
+      hash = (hash * 31 + attempts) | 0;
+      sepId = Math.abs(hash).toString(36);
+      sep = `<template data-atom-sep="s${sepId}"></template>`;
+    }
+  }
+
   return sanitizeHtml(parts.join(sep)).split(sep);
 }
 
