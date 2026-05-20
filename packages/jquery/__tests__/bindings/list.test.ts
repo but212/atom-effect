@@ -471,4 +471,38 @@ describe('$.atomList (Integration)', () => {
     expect($ul.find('li').text()).toBe('2');
     $ul.remove();
   });
+
+  it('should handle batchSanitize separator collisions gracefully', async () => {
+    const originalIncludes = String.prototype.includes;
+    let mockCollisionTriggered = false;
+
+    // Spy and intercept includes on String.prototype to simulate a separator collision
+    String.prototype.includes = function (this: string, searchString: string, position?: number) {
+      if (searchString.startsWith('<template data-atom-sep="s') && !mockCollisionTriggered) {
+        mockCollisionTriggered = true;
+        return true; // Force collision
+      }
+      return originalIncludes.call(this, searchString, position);
+    };
+
+    try {
+      const items = $.atom(['item1', 'item2']);
+      const $container = $('<div>').appendTo(document.body);
+
+      $container.atomList(items, {
+        key: (item: string) => item,
+        render: (item) => `<span>${item}</span>`,
+      });
+
+      await $.nextTick();
+
+      expect(mockCollisionTriggered).toBe(true);
+      expect($container.find('span').length).toBe(2);
+      expect($container.find('span').eq(0).text()).toBe('item1');
+      expect($container.find('span').eq(1).text()).toBe('item2');
+      $container.remove();
+    } finally {
+      String.prototype.includes = originalIncludes;
+    }
+  });
 });

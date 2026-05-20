@@ -180,6 +180,53 @@ export function renderItems<T>(
 }
 
 /**
+ * Optimization: Zero-allocation string hashing.
+ * Computes a 32-bit polynomial rolling hash over an array of strings.
+ */
+function computeHash(strings: string[], salt = 0): number {
+  let hash = salt;
+  const len = strings.length;
+  for (let i = 0; i < len; i++) {
+    const s = strings[i]!;
+    const sLen = s.length;
+    for (let j = 0; j < sLen; j++) {
+      hash = (hash * 31 + s.charCodeAt(j)) | 0;
+    }
+  }
+  return hash;
+}
+
+/**
+ * Generates a unique, safe, and deterministic sentinel template separator.
+ * Performs collision checking and resolves potential collisions iteratively.
+ */
+function getSafeSeparator(parts: string[]): string {
+  let hash = computeHash(parts);
+  let attempts = 0;
+  while (attempts < 10) {
+    const sepId = Math.abs(hash).toString(36);
+    const sep = `<template data-atom-sep="s${sepId}"></template>`;
+
+    let hasCollision = false;
+    const len = parts.length;
+    for (let i = 0; i < len; i++) {
+      if (parts[i]!.includes(sep)) {
+        hasCollision = true;
+        break;
+      }
+    }
+
+    if (!hasCollision) return sep;
+
+    attempts++;
+    hash = computeHash(parts, attempts);
+  }
+
+  // Extreme fallback (mathematically highly improbable)
+  return `<template data-atom-sep="s${Math.random().toString(36).slice(2)}"></template>`;
+}
+
+/**
  * Optimization: Batched Sanitization
  * Sanitizes multiple fragments in a single pass using a sentinel separator.
  *
@@ -189,36 +236,7 @@ export function renderItems<T>(
  */
 function batchSanitize(parts: string[]): string[] {
   if (parts.length === 1) return [sanitizeHtml(parts[0]!)];
-  let hash = 0;
-  const len = parts.length;
-  for (let i = 0; i < len; i++) {
-    const s = parts[i]!;
-    const sLen = s.length;
-    for (let j = 0; j < sLen; j++) {
-      hash = (hash * 31 + s.charCodeAt(j)) | 0;
-    }
-  }
-  let sepId = Math.abs(hash).toString(36);
-  let sep = `<template data-atom-sep="s${sepId}"></template>`;
-
-  let collision = true;
-  let attempts = 0;
-  while (collision && attempts < 10) {
-    collision = false;
-    for (let i = 0; i < len; i++) {
-      if (parts[i]!.includes(sep)) {
-        collision = true;
-        break;
-      }
-    }
-    if (collision) {
-      attempts++;
-      hash = (hash * 31 + attempts) | 0;
-      sepId = Math.abs(hash).toString(36);
-      sep = `<template data-atom-sep="s${sepId}"></template>`;
-    }
-  }
-
+  const sep = getSafeSeparator(parts);
   return sanitizeHtml(parts.join(sep)).split(sep);
 }
 
