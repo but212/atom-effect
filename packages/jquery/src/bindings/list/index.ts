@@ -101,6 +101,13 @@ export function applyListBinding<T>(
     setupEvents(ctx, $c, eventBindings);
   }
 
+  instances.set(element, { fx, ctx });
+  registry.trackEffect(element, fx);
+  registry.onCleanup(element, () => {
+    ctx.dispose();
+    instances.delete(element);
+  });
+
   return { fx, ctx };
 }
 
@@ -128,15 +135,7 @@ export function applyListBinding<T>(
  */
 function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptions<T>): JQuery {
   for (let i = 0, len = this.length; i < len; i++) {
-    const element = this[i]!;
-    const { fx, ctx } = applyListBinding(element, source, options);
-
-    instances.set(element, { fx, ctx });
-    registry.trackEffect(element, fx);
-    registry.onCleanup(element, () => {
-      ctx.dispose();
-      instances.delete(element);
-    });
+    applyListBinding(this[i]!, source, options);
   }
   return this;
 }
@@ -182,6 +181,9 @@ function normalizeEvents<T>(events: ListOptions<T>['events']): EventBinding[] {
  * @internal
  */
 function setupEvents<T>(ctx: ListContext<T>, $container: JQuery, bindings: EventBinding[]): void {
+  const containerEl = $container[0];
+  if (!containerEl || containerEl.nodeType !== 1) return;
+
   for (let i = 0, len = bindings.length; i < len; i++) {
     const { type, selector, callback } = bindings[i]!;
 
@@ -189,16 +191,9 @@ function setupEvents<T>(ctx: ListContext<T>, $container: JQuery, bindings: Event
       `${type}.atomList`,
       selector,
       function (this: HTMLElement, e: JQuery.TriggeredEvent) {
-        const target = (this as HTMLElement).closest?.('[data-atom-key]') as HTMLElement | null;
-        if (!target) return;
-
-        const rawKey = target.getAttribute('data-atom-key');
-        if (rawKey === null) return;
-
-        const index = ctx.getIndex(rawKey);
-        if (index !== undefined) {
-          // Execution: 'this' is the triggered element, first arg is the reactive item.
-          callback.call(target, ctx.snapshots[index]!.item, index, e);
+        const resolved = ctx.resolveEventTarget(this, containerEl);
+        if (resolved) {
+          callback.call(resolved.target, resolved.item, resolved.index, e);
         }
       }
     );

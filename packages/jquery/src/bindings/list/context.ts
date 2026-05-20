@@ -154,6 +154,31 @@ export class ListContext<T> {
   }
 
   /**
+   * Resolves the nearest active list item's DOM element, its index, and the corresponding item
+   * from a starting element, searching up to the container limit.
+   */
+  resolveEventTarget(
+    start: Element,
+    container: Element
+  ): { target: HTMLElement; index: number; item: T } | null {
+    let current: Element | null = start;
+    while (current && current !== container) {
+      const rawKey = current.getAttribute('data-atom-key');
+      if (rawKey !== null) {
+        const index = this.getIndex(rawKey);
+        if (index !== undefined) {
+          const snapshot = this.#snapshots[index];
+          if (snapshot) {
+            return { target: current as HTMLElement, index, item: snapshot.item };
+          }
+        }
+      }
+      current = current.parentElement;
+    }
+    return null;
+  }
+
+  /**
    * Full cleanup of state and DOM references.
    */
   dispose(): void {
