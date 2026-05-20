@@ -32,10 +32,7 @@ describe('Mounting: Component Initialization', () => {
       }
 
       for (let i = 0; i < 100; i++) {
-        const $el = elements[i];
-        if ($el) {
-          $el.atomMount(CounterComponent, { initialCount: i, label: 'Counter' });
-        }
+        elements[i]!.atomMount(CounterComponent, { initialCount: i, label: 'Counter' });
       }
 
       cleanupContainer($c);
@@ -72,10 +69,7 @@ describe('Mounting: Component Teardown', () => {
       }
 
       for (let i = 0; i < 100; i++) {
-        const $el = elements[i];
-        if ($el) {
-          $el.atomUnmount();
-        }
+        elements[i]!.atomUnmount();
       }
 
       cleanupContainer($c);

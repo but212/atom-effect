@@ -16,10 +16,7 @@ describe('Batching: Basic Operations', () => {
     () => {
       batch(() => {
         for (let i = 0; i < REPEATS; i++) {
-          const at = atoms[i];
-          if (at) {
-            at.value++;
-          }
+          atoms[i]!.value++;
         }
       });
     },
@@ -54,10 +51,7 @@ describe('Batching: Nesting Overhead', () => {
     `unbatched ${REPEATS} writes`,
     () => {
       for (let i = 0; i < REPEATS; i++) {
-        const at = atoms[i];
-        if (at) {
-          at.value++;
-        }
+        atoms[i]!.value++;
       }
     },
     microBenchOptions
@@ -68,10 +62,7 @@ describe('Batching: Nesting Overhead', () => {
     () => {
       batch(() => {
         for (let i = 0; i < REPEATS; i++) {
-          const at = atoms[i];
-          if (at) {
-            at.value++;
-          }
+          atoms[i]!.value++;
         }
       });
     },
@@ -85,10 +76,7 @@ describe('Batching: Nesting Overhead', () => {
         batch(() =>
           batch(() => {
             for (let i = 0; i < REPEATS; i++) {
-              const at = atoms[i];
-              if (at) {
-                at.value++;
-              }
+              atoms[i]!.value++;
             }
           })
         )

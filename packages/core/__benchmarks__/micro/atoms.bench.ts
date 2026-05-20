@@ -33,11 +33,9 @@ describe('Atoms: Core Operations', () => {
     () => {
       let sum = 0;
       for (let i = 0; i < REPEATS; i++) {
-        const at = atoms[i];
-        if (at) {
-          at.value++;
-          sum += at.value;
-        }
+        const at = atoms[i]!;
+        at.value++;
+        sum += at.value;
       }
       keep(sum);
     },
@@ -50,10 +48,7 @@ describe('Atoms: Core Operations', () => {
       untracked(() => {
         let sum = 0;
         for (let i = 0; i < REPEATS; i++) {
-          const at = atoms[i];
-          if (at) {
-            sum += at.value;
-          }
+          sum += atoms[i]!.value;
         }
         keep(sum);
       });

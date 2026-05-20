@@ -85,7 +85,7 @@ describe('Effect Factory: Runner Synchronous vs Asynchronous', () => {
         val.value = Promise.resolve(`async-${i}`);
       }
 
-      // Wait a microtask tick for async runner processing
+      // Hand over execution to the event loop (macrotask) to allow async runners to process
       await new Promise<void>((resolve) => {
         setTimeout(resolve, 0);
       });
