@@ -238,7 +238,7 @@ $('#search').atomVal(queryAtom, { debounce: 300 });
 
 Two-way synchronization for checkbox and radio inputs.
 
-- **Radio Groups**: Synchronizes all radio inputs sharing the same `name` attribute.
+- **Radio Groups**: Synchronizes all radio inputs sharing the same `name` attribute. Internally utilizes a memory-safe `WeakMap` cache of active elements to skip global DOM query scans (`$(document).find`) and achieve O(1) synchronization lookups.
 
 ```javascript
 $('#agree').atomChecked(isAgreedAtom);
@@ -463,5 +463,5 @@ const nav = $.atomNav({
 When enabled via `$.debug.enabled = true`:
 
 - **Console Diagnostics**: Logs node updates and specific DOM operations.
-- **Visual Highlighting**: Outlines updated elements using `requestAnimationFrame` for performance profiling.
+- **Visual Highlighting**: Outlines updated elements using `requestAnimationFrame` for performance profiling. Style checks are throttled to 1000ms intervals to eliminate profiling overhead during high-frequency sequential updates.
 - **Precision**: Logs structural paths utilizing the `tag#id.class` format.

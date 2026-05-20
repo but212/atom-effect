@@ -173,7 +173,14 @@ const DOM = {
   /** Retrieves all attributes from the prototype to ensure integrity. */
   getAttributes: (el: Element) => {
     const getter = _get(Element.prototype, 'attributes');
-    return Array.from((getter ? _call(getter, el) : el.attributes) as NamedNodeMap);
+    const attrs = (getter ? _call(getter, el) : el.attributes) as NamedNodeMap;
+    const len = attrs.length;
+    const arr = new Array(len);
+    for (let i = 0; i < len; i++) {
+      const a = attrs[i]!;
+      arr[i] = { name: a.name, value: a.value };
+    }
+    return arr;
   },
   /** Sets an attribute bypassing instance-level shadowing. */
   setAttribute: (el: Element, key: string, val: string) =>
@@ -207,6 +214,7 @@ const DOM = {
 const Guard = {
   /** Resolves HTML entities to their literal characters. */
   decodeEntities(val: string): string {
+    if (!val.includes('&')) return val;
     return val
       .replace(REGEX.NUMERIC_ENTITY, (_, hex, dec) => {
         const cp = hex ? parseInt(hex, 16) : parseInt(dec, 10);
@@ -222,11 +230,13 @@ const Guard = {
    */
   normalize(val: string): string {
     if (typeof val !== 'string') return '';
+    if (!val.includes('&') && !REGEX.CONTROL_CHARS.test(val)) return val;
     return this.decodeEntities(this.decodeEntities(val)).replace(REGEX.CONTROL_CHARS, '');
   },
 
   /** Validates if a URI contains dangerous protocols or data types. */
   isDangerousUri(val: string): boolean {
+    if (!val.includes(':') && !val.includes('&')) return false;
     const clean = this.normalize(val).replace(/\s+/g, '');
     return REGEX.PROTOCOL.test(clean) || REGEX.DATA_URI.test(clean);
   },
@@ -357,13 +367,19 @@ const DEFENSE_RULES: DefenseRule[] = [
  */
 function scrubElement(el: HTMLElement, policy: SanitizationPolicy): void {
   const attrs = DOM.getAttributes(el);
-  const detectedEvents = attrs
-    .filter((a) => a.name.toLowerCase().startsWith('on'))
-    .map((a) => a.name);
+  let detectedEvents: string[] | null = null;
 
-  for (const { name, value } of attrs) {
+  for (let i = 0, len = attrs.length; i < len; i++) {
+    const { name, value } = attrs[i]!;
     const key = name.toLowerCase();
-    for (const rule of DEFENSE_RULES) {
+
+    if (key.startsWith('on')) {
+      if (!detectedEvents) detectedEvents = [];
+      detectedEvents.push(name);
+    }
+
+    for (let r = 0, rLen = DEFENSE_RULES.length; r < rLen; r++) {
+      const rule = DEFENSE_RULES[r]!;
       if (rule.match(key, value, policy)) {
         rule.action(el, name, value, policy);
         break;
@@ -371,7 +387,7 @@ function scrubElement(el: HTMLElement, policy: SanitizationPolicy): void {
     }
   }
 
-  if (detectedEvents.length) {
+  if (detectedEvents && detectedEvents.length > 0) {
     DOM.setAttribute(el, 'data-unsafe-attr', detectedEvents.join(','));
   }
 }
@@ -455,6 +471,12 @@ function walkTree(root: Node, policy: SanitizationPolicy): void {
 }
 
 /**
+ * @internal
+ * Optimization: Bounded cache for sanitized HTML strings.
+ */
+export const sanitizeCache = new Map<string, string>();
+
+/**
  * Sanitizes an HTML string based on a security policy.
  *
  * When to use:
@@ -479,6 +501,15 @@ export function sanitizeHtml(
   policy: SanitizationPolicy = DEFAULT_POLICY
 ): string {
   if (!html) return '';
+  if (policy === DEFAULT_POLICY) {
+    const cached = sanitizeCache.get(html);
+    if (cached !== undefined) return cached;
+    const sanitized = _sanitize(String(html), policy);
+    if (sanitizeCache.size < 1000) {
+      sanitizeCache.set(html, sanitized);
+    }
+    return sanitized;
+  }
   return _sanitize(String(html), policy);
 }
 

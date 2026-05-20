@@ -383,6 +383,49 @@ export function bindVal(
 }
 
 /**
+ * Global weak map to cache radio input elements by their form context and name.
+ * Prevents expensive global DOM queries during radio group status synchronization.
+ * @internal
+ */
+const radioGroups = new WeakMap<Node, Map<string, Set<HTMLInputElement>>>();
+
+/** @internal */
+function registerRadio(element: HTMLInputElement): void {
+  if (element.type !== 'radio' || !element.name) return;
+  const root: Node = element.form || element.ownerDocument || document;
+
+  let nameMap = radioGroups.get(root);
+  if (!nameMap) {
+    nameMap = new Map<string, Set<HTMLInputElement>>();
+    radioGroups.set(root, nameMap);
+  }
+
+  let set = nameMap.get(element.name);
+  if (!set) {
+    set = new Set<HTMLInputElement>();
+    nameMap.set(element.name, set);
+  }
+  set.add(element);
+}
+
+/** @internal */
+function unregisterRadio(element: HTMLInputElement): void {
+  if (element.type !== 'radio' || !element.name) return;
+  const root: Node = element.form || element.ownerDocument || document;
+
+  const nameMap = radioGroups.get(root);
+  if (nameMap) {
+    const set = nameMap.get(element.name);
+    if (set) {
+      set.delete(element);
+      if (set.size === 0) {
+        nameMap.delete(element.name);
+      }
+    }
+  }
+}
+
+/**
  * Synchronizes the visual state of a radio button group.
  *
  * Logic: Native radio buttons do not fire 'change' events when they are
@@ -395,10 +438,22 @@ export function bindVal(
  */
 function syncRadios(element: HTMLInputElement): void {
   if (element.type === 'radio' && element.name) {
-    (element.form ? $(element.form) : $(document))
-      .find(`input[type="radio"][name="${$.escapeSelector(element.name)}"]`)
-      .not(element)
-      .trigger('change.atomRadioSync');
+    const root: Node = element.form || element.ownerDocument || document;
+    const nameMap = radioGroups.get(root);
+    const set = nameMap?.get(element.name);
+
+    if (set && set.size > 0) {
+      for (const el of set) {
+        if (el !== element) {
+          $(el).trigger('change.atomRadioSync');
+        }
+      }
+    } else {
+      (element.form ? $(element.form) : $(document))
+        .find(`input[type="radio"][name="${$.escapeSelector(element.name)}"]`)
+        .not(element)
+        .trigger('change.atomRadioSync');
+    }
   }
 }
 
@@ -414,6 +469,10 @@ export function bindChecked(element: HTMLElement, atom: WritableAtom<boolean>): 
   const inputElement = element;
   const $element = $(inputElement);
 
+  if (inputElement.type === 'radio') {
+    registerRadio(inputElement);
+  }
+
   const onChange = () => {
     if (atom.peek() !== inputElement.checked) {
       atom.value = inputElement.checked;
@@ -423,7 +482,12 @@ export function bindChecked(element: HTMLElement, atom: WritableAtom<boolean>): 
   (onChange as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
 
   $element.on('change change.atomRadioSync', onChange);
-  registry.onCleanup(inputElement, () => $element.off('change change.atomRadioSync', onChange));
+  registry.onCleanup(inputElement, () => {
+    if (inputElement.type === 'radio') {
+      unregisterRadio(inputElement);
+    }
+    $element.off('change change.atomRadioSync', onChange);
+  });
 
   registry.trackEffect(
     inputElement,

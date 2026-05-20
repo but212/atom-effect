@@ -178,6 +178,27 @@ export const ContextEngine = (() => {
      */
     discover(target: HTMLElement, key: string | symbol): Option<unknown> {
       let found: Option<unknown> = Option.none;
+
+      // Fast-path: direct parent pointer walk crossing Shadow DOM boundaries
+      let curr: Node | null = target;
+      while (curr) {
+        const state = nodeStateMap.get(curr);
+        if (state?.providers?.has(key)) {
+          found = Option.some(state.providers.get(key));
+          break;
+        }
+        if (curr instanceof ShadowRoot) {
+          curr = curr.host;
+        } else {
+          curr = curr.parentNode;
+        }
+      }
+
+      if (Option.isSome(found)) {
+        return found;
+      }
+
+      // Fallback path: event-based resolution
       const event = new CustomEvent<ContextRequestDetail>(CONTEXT_REQUEST, {
         detail: {
           key,

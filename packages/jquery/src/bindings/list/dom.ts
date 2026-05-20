@@ -14,7 +14,7 @@ import $ from 'jquery';
 import { SYSTEM_LIST } from '@/constants';
 import type { ListOptions } from '@/types';
 import { debug } from '@/utils/debug';
-import { sanitizeHtml } from '@/utils/sanitize';
+import { sanitizeCache, sanitizeHtml } from '@/utils/sanitize';
 import type { ListContext } from './context';
 import { ItemState, type PlaceCallbacks, type PreparedDiff } from './types';
 import { cleanupNodes, setAtomKey, wrap } from './utils';
@@ -235,9 +235,35 @@ function getSafeSeparator(parts: string[]): string {
  * for many small fragments.
  */
 function batchSanitize(parts: string[]): string[] {
-  if (parts.length === 1) return [sanitizeHtml(parts[0]!)];
+  const len = parts.length;
+  const result = new Array(len);
+  let allCached = true;
+  for (let i = 0; i < len; i++) {
+    const part = parts[i]!;
+    const cached = sanitizeCache.get(part);
+    if (cached !== undefined) {
+      result[i] = cached;
+    } else {
+      allCached = false;
+      break;
+    }
+  }
+  if (allCached) return result;
+
+  if (len === 1) {
+    const sanitized = sanitizeHtml(parts[0]!);
+    return [sanitized];
+  }
   const sep = getSafeSeparator(parts);
-  return sanitizeHtml(parts.join(sep)).split(sep);
+  const sanitizedList = sanitizeHtml(parts.join(sep)).split(sep);
+  for (let i = 0; i < len; i++) {
+    const part = parts[i]!;
+    const sanitized = sanitizedList[i]!;
+    if (sanitizeCache.size < 1000) {
+      sanitizeCache.set(part, sanitized);
+    }
+  }
+  return sanitizedList;
 }
 
 /**

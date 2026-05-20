@@ -36,6 +36,8 @@ class DebugController {
   /** Logic: Resilience - Prevents redundant style block injections. */
   #styleInjected = false;
 
+  #lastCheckTime = 0;
+
   /**
    * Optimization: Memory Safety
    * Uses `WeakMap` to store active animations. This ensures that visual tracking
@@ -161,7 +163,13 @@ class DebugController {
     if (!IS_BROWSER) return;
 
     // Resilience: Verify physical presence in case the DOM was cleared (e.g., between tests).
-    const isPresent = document.querySelector(`style[${ATTR_MARKER}]`) || this.#checkAdoptedStyles();
+    // Throttle check frequency to once every 1000ms to eliminate hot-path performance overhead.
+    const now = Date.now();
+    let isPresent = true;
+    if (!this.#styleInjected || now - this.#lastCheckTime > 1000) {
+      isPresent = !!(document.querySelector(`style[${ATTR_MARKER}]`) || this.#checkAdoptedStyles());
+      this.#lastCheckTime = now;
+    }
 
     if (this.#styleInjected && isPresent) return;
 
