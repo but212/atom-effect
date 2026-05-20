@@ -472,9 +472,28 @@ function walkTree(root: Node, policy: SanitizationPolicy): void {
 
 /**
  * @internal
- * Optimization: Bounded cache for sanitized HTML strings.
+ * Optimization: Bounded cache for sanitized HTML strings using a FIFO eviction policy.
  */
-export const sanitizeCache = new Map<string, string>();
+class FIFOCache<K, V> extends Map<K, V> {
+  readonly #limit: number;
+
+  constructor(limit = 1000) {
+    super();
+    this.#limit = limit;
+  }
+
+  override set(key: K, value: V): this {
+    if (this.size >= this.#limit && !this.has(key)) {
+      const firstKey = this.keys().next().value;
+      if (firstKey !== undefined) {
+        this.delete(firstKey);
+      }
+    }
+    return super.set(key, value);
+  }
+}
+
+export const sanitizeCache = new FIFOCache<string, string>();
 
 /**
  * Sanitizes an HTML string based on a security policy.
@@ -505,9 +524,7 @@ export function sanitizeHtml(
     const cached = sanitizeCache.get(html);
     if (cached !== undefined) return cached;
     const sanitized = _sanitize(String(html), policy);
-    if (sanitizeCache.size < 1000) {
-      sanitizeCache.set(html, sanitized);
-    }
+    sanitizeCache.set(html, sanitized);
     return sanitized;
   }
   return _sanitize(String(html), policy);

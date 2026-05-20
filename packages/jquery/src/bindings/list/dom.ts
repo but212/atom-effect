@@ -259,9 +259,7 @@ function batchSanitize(parts: string[]): string[] {
   for (let i = 0; i < len; i++) {
     const part = parts[i]!;
     const sanitized = sanitizedList[i]!;
-    if (sanitizeCache.size < 1000) {
-      sanitizeCache.set(part, sanitized);
-    }
+    sanitizeCache.set(part, sanitized);
   }
   return sanitizedList;
 }

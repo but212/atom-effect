@@ -191,6 +191,41 @@ describe('Chainable Methods: Two-Way Bindings', () => {
 
     $form.remove();
   });
+
+  it('atomChecked: radio unregistration handles detached elements correctly without memory leaks', async () => {
+    const val1 = $.atom(true);
+    const val2 = $.atom(false);
+    const $form = $('<form>').appendTo(document.body);
+    const $radio1 = $('<input type="radio" name="leak-test" value="A">').appendTo($form);
+    const $radio2 = $('<input type="radio" name="leak-test" value="B">').appendTo($form);
+
+    $radio1.atomChecked(val1);
+    $radio2.atomChecked(val2);
+    await $.nextTick();
+
+    // Detach the element from the form/DOM before unbinding
+    $radio1.detach();
+
+    // Perform unbind (which triggers cleanup)
+    $radio1.atomUnbind();
+    await $.nextTick();
+
+    // Attach a spy event handler to the detached element after unbinding
+    const spy = vi.fn();
+    $radio1.on('change.atomRadioSync', spy);
+
+    // Trigger changes on the peer radio button (which triggers syncRadios internally)
+    const radio2El = $radio2[0] as HTMLInputElement;
+    radio2El.checked = true;
+    $radio2.trigger('change');
+    await $.nextTick();
+
+    // If unregistration was successful and there is no memory leak,
+    // the detached radio1 should NOT receive event synchronization.
+    expect(spy).not.toHaveBeenCalled();
+
+    $form.remove();
+  });
 });
 
 describe('atomBind: Integrated Binding', () => {

@@ -383,47 +383,55 @@ export function bindVal(
 }
 
 /**
- * Global weak map to cache radio input elements by their form context and name.
- * Prevents expensive global DOM queries during radio group status synchronization.
+ * Global registry for tracking radio group elements context-sensitively.
+ * Encapsulates nested mappings inside a single unified structure.
  * @internal
  */
-const radioGroups = new WeakMap<Node, Map<string, Set<HTMLInputElement>>>();
+class RadioRegistry {
+  readonly #groups = new WeakMap<Node, Map<string, Set<HTMLInputElement>>>();
 
-/** @internal */
-function registerRadio(element: HTMLInputElement): void {
-  if (element.type !== 'radio' || !element.name) return;
-  const root: Node = element.form || element.ownerDocument || document;
+  public register(element: HTMLInputElement): Node | undefined {
+    if (element.type !== 'radio' || !element.name) return undefined;
+    const root: Node = element.form || element.ownerDocument || document;
 
-  let nameMap = radioGroups.get(root);
-  if (!nameMap) {
-    nameMap = new Map<string, Set<HTMLInputElement>>();
-    radioGroups.set(root, nameMap);
+    let nameMap = this.#groups.get(root);
+    if (!nameMap) {
+      nameMap = new Map<string, Set<HTMLInputElement>>();
+      this.#groups.set(root, nameMap);
+    }
+
+    let set = nameMap.get(element.name);
+    if (!set) {
+      set = new Set<HTMLInputElement>();
+      nameMap.set(element.name, set);
+    }
+    set.add(element);
+    return root;
   }
 
-  let set = nameMap.get(element.name);
-  if (!set) {
-    set = new Set<HTMLInputElement>();
-    nameMap.set(element.name, set);
-  }
-  set.add(element);
-}
+  public unregister(element: HTMLInputElement, root: Node): void {
+    if (element.type !== 'radio' || !element.name) return;
 
-/** @internal */
-function unregisterRadio(element: HTMLInputElement): void {
-  if (element.type !== 'radio' || !element.name) return;
-  const root: Node = element.form || element.ownerDocument || document;
-
-  const nameMap = radioGroups.get(root);
-  if (nameMap) {
-    const set = nameMap.get(element.name);
-    if (set) {
-      set.delete(element);
-      if (set.size === 0) {
-        nameMap.delete(element.name);
+    const nameMap = this.#groups.get(root);
+    if (nameMap) {
+      const set = nameMap.get(element.name);
+      if (set) {
+        set.delete(element);
+        if (set.size === 0) {
+          nameMap.delete(element.name);
+        }
       }
     }
   }
+
+  public getGroup(element: HTMLInputElement, root?: Node): Set<HTMLInputElement> | undefined {
+    if (element.type !== 'radio' || !element.name) return undefined;
+    const actualRoot: Node = root || element.form || element.ownerDocument || document;
+    return this.#groups.get(actualRoot)?.get(element.name);
+  }
 }
+
+const radioRegistry = new RadioRegistry();
 
 /**
  * Synchronizes the visual state of a radio button group.
@@ -438,9 +446,7 @@ function unregisterRadio(element: HTMLInputElement): void {
  */
 function syncRadios(element: HTMLInputElement): void {
   if (element.type === 'radio' && element.name) {
-    const root: Node = element.form || element.ownerDocument || document;
-    const nameMap = radioGroups.get(root);
-    const set = nameMap?.get(element.name);
+    const set = radioRegistry.getGroup(element);
 
     if (set && set.size > 0) {
       for (const el of set) {
@@ -469,8 +475,9 @@ export function bindChecked(element: HTMLElement, atom: WritableAtom<boolean>): 
   const inputElement = element;
   const $element = $(inputElement);
 
+  let radioRoot: Node | undefined;
   if (inputElement.type === 'radio') {
-    registerRadio(inputElement);
+    radioRoot = radioRegistry.register(inputElement);
   }
 
   const onChange = () => {
@@ -483,8 +490,8 @@ export function bindChecked(element: HTMLElement, atom: WritableAtom<boolean>): 
 
   $element.on('change change.atomRadioSync', onChange);
   registry.onCleanup(inputElement, () => {
-    if (inputElement.type === 'radio') {
-      unregisterRadio(inputElement);
+    if (inputElement.type === 'radio' && radioRoot) {
+      radioRegistry.unregister(inputElement, radioRoot);
     }
     $element.off('change change.atomRadioSync', onChange);
   });

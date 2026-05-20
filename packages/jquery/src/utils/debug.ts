@@ -30,8 +30,20 @@ const IS_BROWSER = typeof window !== 'undefined';
  * to avoid polluting the global DOM or reactive graph with debug metadata.
  */
 class DebugController {
+  #enabled = false;
+
   /** Global toggle to activate or deactivate the diagnostic system. */
-  public enabled: boolean;
+  public get enabled(): boolean {
+    return this.#enabled;
+  }
+
+  public set enabled(val: boolean) {
+    this.#enabled = val;
+    if (!val) {
+      this.#styleInjected = false;
+      this.#lastCheckTime = 0;
+    }
+  }
 
   /** Logic: Resilience - Prevents redundant style block injections. */
   #styleInjected = false;
