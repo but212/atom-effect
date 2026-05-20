@@ -6,7 +6,19 @@
  * Provides internal helpers for multi-dependency state merging.
  */
 
+import { SMI_MAX } from '@/constants';
 import type { Dependency, MergedDependencyValue } from '@/types';
+
+/**
+ * Optimization: SMI-safe Arithmetic
+ * Why: Wraps integers to stay within V8's 31-bit signed range (SMI) to avoid
+ * heap allocation and maintain high-performance object property access.
+ * @internal
+ */
+export const nextSmi = (v: number): number => {
+  const next = (v + 1) & SMI_MAX;
+  return next === 0 ? 1 : next;
+};
 
 /**
  * Role: Aggregates the values of multiple object-based atoms into a single snapshot.
