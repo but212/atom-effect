@@ -27,7 +27,7 @@ import type {
   Subscription,
   TrackingContext,
 } from '@/types';
-import { AtomError, wrapError } from '@/utils';
+import { AtomError, nextSmi, wrapError } from '@/utils';
 import {
   BUFFER_FLAGS,
   claimExisting,
@@ -37,7 +37,7 @@ import {
   isBufferShallowDirty,
 } from './buffers';
 
-import { nextEpoch, nextSmi } from './scheduler';
+import { nextEpoch } from './scheduler';
 
 /** @internal */
 export function createTrackingContext(): TrackingContext {

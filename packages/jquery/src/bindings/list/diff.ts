@@ -14,7 +14,7 @@ import { shallowEqual } from '@but212/atom-effect-utils';
 import { SYSTEM_LIST } from '@/constants';
 import type { ListKey, ListKeyFn, ListOptions } from '@/types';
 import { debug } from '@/utils/debug';
-import type { ListContext } from './context';
+import type { ListSnapshot } from './context';
 import { type DiffSlot, ItemState, type PreparedDiff } from './types';
 
 /**
@@ -27,20 +27,23 @@ import { type DiffSlot, ItemState, type PreparedDiff } from './types';
  * Uses head/tail fast-forward passes to achieve O(1) performance for common
  * append/prepend operations.
  *
- * @param ctx - Persistent state containing historical DOM and keys.
+ * @param snapshots - Sequential snapshot of the previous render state.
+ * @param removingKeys - Keys currently undergoing asynchronous exit animations.
+ * @param oldIndexMap - Inverse lookup for O(1) index retrieval from a key.
  * @param items - The new data array from the source atom.
  *
  * @internal
  */
 export function buildIndices<T>(
-  ctx: ListContext<T>,
+  snapshots: ListSnapshot<T>[],
+  removingKeys: Set<ListKey>,
+  oldIndexMap: Map<ListKey, number>,
   items: T[],
   itemCount: number,
   getKey: ListKeyFn<T>,
   update: ListOptions<T>['update'],
   isEqual: ListOptions<T>['isEqual']
 ): PreparedDiff<T> {
-  const { snapshots, removingKeys, keyToIndex: oldIndexMap } = ctx;
   const oldLen = snapshots.length;
   const newIndexMap = new Map<ListKey, number>();
   const eq = isEqual || shallowEqual;

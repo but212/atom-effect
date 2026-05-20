@@ -189,7 +189,17 @@ export function renderItems<T>(
  */
 function batchSanitize(parts: string[]): string[] {
   if (parts.length === 1) return [sanitizeHtml(parts[0]!)];
-  const sep = `<template data-atom-sep="s${Math.random().toString(36).slice(2)}"></template>`;
+  let hash = 0;
+  const len = parts.length;
+  for (let i = 0; i < len; i++) {
+    const s = parts[i]!;
+    const sLen = s.length;
+    for (let j = 0; j < sLen; j++) {
+      hash = (hash * 31 + s.charCodeAt(j)) | 0;
+    }
+  }
+  const sepId = Math.abs(hash).toString(36);
+  const sep = `<template data-atom-sep="s${sepId}"></template>`;
   return sanitizeHtml(parts.join(sep)).split(sep);
 }
 

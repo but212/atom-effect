@@ -73,7 +73,16 @@ export function applyListBinding<T>(
       const isInitial = ctx.snapshots.length === 0 && ctx.removingKeys.size === 0;
 
       // Pipeline: Diff -> Render -> Cleanup -> Place
-      const diff = buildIndices(ctx, items, count, getKey, update, isEqual);
+      const diff = buildIndices(
+        ctx.snapshots,
+        ctx.removingKeys,
+        ctx.keyToIndex,
+        items,
+        count,
+        getKey,
+        update,
+        isEqual
+      );
       ctx.keyToIndex = diff.keyToIndex;
 
       const fragment = renderItems(diff, options, isInitial);
