@@ -158,22 +158,21 @@ export class ListContext<T> {
    * from a starting element, searching up to the container limit.
    */
   resolveEventTarget(
-    start: HTMLElement,
-    container: HTMLElement
+    start: Element,
+    container: Element
   ): { target: HTMLElement; index: number; item: T } | null {
-    let current: HTMLElement | null = start;
-    while (current) {
+    let current: Element | null = start;
+    while (current && current !== container) {
       const rawKey = current.getAttribute('data-atom-key');
       if (rawKey !== null) {
         const index = this.getIndex(rawKey);
         if (index !== undefined) {
           const snapshot = this.#snapshots[index];
           if (snapshot) {
-            return { target: current, index, item: snapshot.item };
+            return { target: current as HTMLElement, index, item: snapshot.item };
           }
         }
       }
-      if (current === container) break;
       current = current.parentElement;
     }
     return null;

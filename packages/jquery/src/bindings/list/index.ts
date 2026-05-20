@@ -191,7 +191,7 @@ function setupEvents<T>(ctx: ListContext<T>, $container: JQuery, bindings: Event
       `${type}.atomList`,
       selector,
       function (this: HTMLElement, e: JQuery.TriggeredEvent) {
-        const resolved = ctx.resolveEventTarget(this, containerEl as HTMLElement);
+        const resolved = ctx.resolveEventTarget(this, containerEl);
         if (resolved) {
           callback.call(resolved.target, resolved.item, resolved.index, e);
         }
