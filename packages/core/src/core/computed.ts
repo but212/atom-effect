@@ -604,14 +604,8 @@ export function computed<T>(
   fn: () => Promise<T>,
   options: ComputedOptions<T> & { defaultValue: T }
 ): ComputedAtom<T>;
-export function computed<T>(
-  fn: () => Promise<T>,
-  options?: ComputedOptions<T>
-): ComputedAtom<T>;
-export function computed<T>(
-  fn: () => T,
-  options?: ComputedOptions<T>
-): ComputedAtom<T>;
+export function computed<T>(fn: () => Promise<T>, options?: ComputedOptions<T>): ComputedAtom<T>;
+export function computed<T>(fn: () => T, options?: ComputedOptions<T>): ComputedAtom<T>;
 export function computed<T>(
   fn: () => T | Promise<T>,
   options: ComputedOptions<T> = {}
