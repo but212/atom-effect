@@ -11,7 +11,7 @@
  * tracking and notification logic to ensure architectural purity.
  */
 
-import { SlotBuffer } from '@but212/atom-effect-utils';
+import { Result, SlotBuffer } from '@but212/atom-effect-utils';
 import { COMPUTED_STATE_FLAGS, ERROR_MESSAGES, IS_DEV, KIND, LOG_PREFIX } from '@/constants';
 import type {
   AtomErrorConstructor,
@@ -28,6 +28,7 @@ import type {
   TrackingContext,
 } from '@/types';
 import { AtomError, nextSmi, wrapError } from '@/utils';
+
 import {
   BUFFER_FLAGS,
   claimExisting,
@@ -217,7 +218,10 @@ export function nextVersion(v: number): number {
  *
  * @internal
  */
-export function nodeSubscribe<T>(node: ReactiveNode<T>, listener: SubscriberTarget<T>): () => void {
+export function nodeSubscribe<T>(
+  node: ReactiveNode<T>,
+  listener: SubscriberTarget<T>
+): Result<() => void, Error> {
   let link: Subscription<T> | undefined;
 
   if (typeof listener === 'function') {
@@ -226,30 +230,33 @@ export function nodeSubscribe<T>(node: ReactiveNode<T>, listener: SubscriberTarg
     link = createSubscription(KIND.Obj, listener);
   }
 
-  if (!link)
-    throw wrapError(
-      new TypeError('Invalid subscriber'),
-      AtomError,
-      ERROR_MESSAGES.ATOM_SUBSCRIBER_MUST_BE_FUNCTION
+  if (!link) {
+    return Result.err(
+      wrapError(
+        new TypeError('Invalid subscriber'),
+        AtomError,
+        ERROR_MESSAGES.ATOM_SUBSCRIBER_MUST_BE_FUNCTION
+      )
     );
+  }
 
   node._storage.slots ??= new SlotBuffer<Subscription<T>>();
   const slots = node._storage.slots;
 
   if (nodeHasSubscription(node, listener)) {
     if (IS_DEV) console.warn(`${LOG_PREFIX} Duplicate subscription ignored on node ${node.id}`);
-    return () => {};
+    return Result.ok(() => {});
   }
 
   slots.push(link);
   let n: ReactiveNode<T> | undefined = node;
-  return () => {
+  return Result.ok(() => {
     if (n && link) {
       nodeUnsubscribe(n, link);
       n = undefined;
       link = undefined;
     }
-  };
+  });
 }
 
 /** @internal */

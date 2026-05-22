@@ -13,6 +13,7 @@
  */
 
 import type { SlotBuffer } from '@but212/atom-effect-utils';
+import { Result } from '@but212/atom-effect-utils';
 import {
   AsyncState,
   BRAND,
@@ -104,23 +105,23 @@ export function resolveComputedResult<T>(
   value: T,
   error: Error | null,
   defaultValue: T
-): T {
-  if ((flags & COMPUTED_STATE_FLAGS.RESOLVED) !== 0) return value;
+): Result<T, Error> {
+  if ((flags & COMPUTED_STATE_FLAGS.RESOLVED) !== 0) return Result.ok(value);
 
   const hasDefault = defaultValue !== (NO_DEFAULT_VALUE as T);
   const asyncState = flags & STATE_MASKS.ASYNC_UNRESOLVED_MASK;
 
   // Logic: Synchronous/Resolved fallback
-  if (asyncState === 0) return value;
+  if (asyncState === 0) return Result.ok(value);
 
   // Logic: Async Priority Handling
-  if (hasDefault) return defaultValue;
+  if (hasDefault) return Result.ok(defaultValue);
 
   if (asyncState === COMPUTED_STATE_FLAGS.REJECTED) {
-    throw error ?? new Error('REJECTED without error');
+    return Result.err(error ?? new Error('REJECTED without error'));
   }
 
-  throw new ComputedError(ERROR_MESSAGES.COMPUTED_ASYNC_PENDING_NO_DEFAULT);
+  return Result.err(new ComputedError(ERROR_MESSAGES.COMPUTED_ASYNC_PENDING_NO_DEFAULT));
 }
 
 /**
@@ -180,6 +181,13 @@ export function collectErrorsRecursive(startNode: ReactiveNodeBase, stopOnFirst:
   return collected;
 }
 
+function validateComputation(computation: unknown): Result<void, Error> {
+  if (typeof computation !== 'function') {
+    return Result.err(new ComputedError(ERROR_MESSAGES.COMPUTED_MUST_BE_FUNCTION));
+  }
+  return Result.ok(undefined);
+}
+
 /**
  * Role: Implementation of a derived reactive value.
  *
@@ -226,8 +234,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
   #notifyCallback: () => void;
 
   constructor(computation: () => T | Promise<T>, options: ComputedOptions<T> = {}) {
-    if (typeof computation !== 'function')
-      throw new ComputedError(ERROR_MESSAGES.COMPUTED_MUST_BE_FUNCTION);
+    Result.unwrap(validateComputation(computation));
 
     this.#value = undefined as T;
 
@@ -278,11 +285,16 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
 
     if (this.#isStable()) return this.#value;
 
-    this.#ensureNotDisposed();
+    return Result.unwrap(this.#checkValueState());
+  }
+
+  #checkValueState(): Result<T, Error> {
+    const checkDisposed = this.#ensureNotDisposed();
+    if (Result.isErr(checkDisposed)) return checkDisposed;
 
     if ((this.flags & COMPUTED_STATE_FLAGS.RECOMPUTING) !== 0) {
-      if (this.#defaultValue !== (NO_DEFAULT_VALUE as T)) return this.#defaultValue;
-      throw new ComputedError(ERROR_MESSAGES.COMPUTED_CIRCULAR_DEPENDENCY);
+      if (this.#defaultValue !== (NO_DEFAULT_VALUE as T)) return Result.ok(this.#defaultValue);
+      return Result.err(new ComputedError(ERROR_MESSAGES.COMPUTED_CIRCULAR_DEPENDENCY));
     }
 
     if (shouldRecompute(this.flags, this._storage.deps!)) {
@@ -292,6 +304,13 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
     }
 
     return resolveComputedResult(this.flags, this.#value, this._error, this.#defaultValue);
+  }
+
+  #ensureNotDisposed(): Result<void, Error> {
+    if ((this.flags & COMPUTED_STATE_FLAGS.DISPOSED) !== 0) {
+      return Result.err(new ComputedError(ERROR_MESSAGES.COMPUTED_DISPOSED));
+    }
+    return Result.ok(undefined);
   }
 
   /**
@@ -308,12 +327,6 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
       COMPUTED_STATE_FLAGS.RECOMPUTING;
     return (this.flags & STABLE_MASK) === COMPUTED_STATE_FLAGS.RESOLVED;
   }
-
-  #ensureNotDisposed(): void {
-    if ((this.flags & COMPUTED_STATE_FLAGS.DISPOSED) !== 0)
-      throw new ComputedError(ERROR_MESSAGES.COMPUTED_DISPOSED);
-  }
-
   /**
    * Reads the current cached value without triggering reactive tracking.
    */
@@ -381,7 +394,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
   }
 
   subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
-    return nodeSubscribe(this, listener);
+    return Result.unwrap(nodeSubscribe(this, listener));
   }
 
   subscriberCount(): number {
@@ -573,6 +586,17 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
  * ```
  */
 export function computed<T>(fn: () => T, options?: ComputedOptions<T>): ComputedAtom<T>;
+export function computed<T>(
+  fn: () => Promise<T>,
+  options: ComputedOptions<T> & { defaultValue: T }
+): ComputedAtom<T>;
+export function computed<T>(
+  fn: () => T | Promise<T>,
+  options: ComputedOptions<T> = {}
+): ComputedAtom<T> {
+  return Result.unwrap(createComputedAtom(fn, options));
+}
+
 /**
  * Creates an asynchronous reactive computation.
  *
@@ -583,15 +607,13 @@ export function computed<T>(fn: () => T, options?: ComputedOptions<T>): Computed
  * A `defaultValue` is mandatory for async computations to provide a valid
  * state while the Promise is PENDING.
  */
-export function computed<T>(
-  fn: () => Promise<T>,
-  options: ComputedOptions<T> & { defaultValue: T }
-): ComputedAtom<T>;
-export function computed<T>(
+function createComputedAtom<T>(
   fn: () => T | Promise<T>,
   options: ComputedOptions<T> = {}
-): ComputedAtom<T> {
-  return new ComputedAtomImpl(fn, options);
+): Result<ComputedAtom<T>, Error> {
+  const validation = validateComputation(fn);
+  if (Result.isErr(validation)) return validation;
+  return Result.ok(new ComputedAtomImpl(fn, options));
 }
 
 /**

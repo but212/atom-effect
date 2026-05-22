@@ -12,6 +12,7 @@
  * V8 de-optimization in high-frequency hot paths.
  */
 
+import { Result } from '@but212/atom-effect-utils';
 import {
   ERROR_MESSAGES,
   IS_DEV,
@@ -83,8 +84,14 @@ class ReactiveScheduler implements SchedulerState {
     return this.#onOverflow;
   }
   set maxFlushIterations(v) {
-    if (v < SCHEDULER_CONFIG.MIN_FLUSH_ITERATIONS) throw new SchedulerError('Invalid limit.');
+    Result.unwrap(this.#validateFlushIterations(v));
     this.#maxFlushIterations = v;
+  }
+  #validateFlushIterations(v: number): Result<void, Error> {
+    if (v < SCHEDULER_CONFIG.MIN_FLUSH_ITERATIONS) {
+      return Result.err(new SchedulerError('Invalid limit.'));
+    }
+    return Result.ok(undefined);
   }
   set onOverflow(v) {
     this.#onOverflow = v;
@@ -179,7 +186,14 @@ class ReactiveScheduler implements SchedulerState {
         if (job._k === fnKind) {
           (job as SchedulerJobFunction)();
         } else {
-          (job as SchedulerJobObject).execute();
+          const res = (job as SchedulerJobObject).execute() as unknown as Result<unknown, unknown>;
+          if (res && typeof res === 'object' && 'ok' in res && !res.ok) {
+            console.error(
+              new SchedulerError('Error occurred during scheduler execution', {
+                cause: res.error,
+              })
+            );
+          }
         }
       } catch (e) {
         console.error(
@@ -236,12 +250,12 @@ class ReactiveScheduler implements SchedulerState {
   }
 
   /** @internal - Tracks the number of jobs executed in the current cycle. */
-  incrementFlushExecutionCount(): number {
-    if (!this.#sessionActive) return 0;
+  incrementFlushExecutionCount(): Result<number, Error> {
+    if (!this.#sessionActive) return Result.ok(0);
     const count = ++this.#sessionExecutionCount;
-    if (count <= SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH) return count;
+    if (count <= SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH) return Result.ok(count);
 
-    throw new Error(`${LOG_PREFIX} Infinite loop detected: limit exceeded.`);
+    return Result.err(new Error(`${LOG_PREFIX} Infinite loop detected: limit exceeded.`));
   }
 
   resetFlushState(): void {
@@ -264,17 +278,17 @@ class ReactiveScheduler implements SchedulerState {
    * Adds a job to the current active buffer and triggers an asynchronous
    * microtask flush if the system is currently idle.
    */
-  schedule(callback: SchedulerJob): void {
+  schedule(callback: SchedulerJob): Result<void, Error> {
     if (IS_DEV) {
       if (
         typeof callback !== 'function' &&
         (!callback || typeof (callback as SchedulerJobObject).execute !== 'function')
       ) {
-        throw new SchedulerError(ERROR_MESSAGES.SCHEDULER_CALLBACK_MUST_BE_FUNCTION);
+        return Result.err(new SchedulerError(ERROR_MESSAGES.SCHEDULER_CALLBACK_MUST_BE_FUNCTION));
       }
     }
 
-    if (callback._nextEpoch === this.#epoch) return;
+    if (callback._nextEpoch === this.#epoch) return Result.ok(undefined);
     callback._nextEpoch = this.#epoch;
 
     if (callback._k === undefined) {
@@ -298,6 +312,7 @@ class ReactiveScheduler implements SchedulerState {
         }
       });
     }
+    return Result.ok(undefined);
   }
 
   flushSync(): void {
@@ -353,7 +368,7 @@ export const schedulerIncrementFlushExecutionCount = (state: SchedulerState) =>
 export const schedulerResetFlushState = (state: SchedulerState) => state.resetFlushState();
 /** @internal */
 export const schedulerSchedule = (state: SchedulerState, callback: SchedulerJob) =>
-  state.schedule(callback);
+  Result.unwrap(state.schedule(callback));
 /** @internal */
 export const schedulerFlushSync = (state: SchedulerState) => state.flushSync();
 /** @internal */
@@ -377,7 +392,8 @@ export const currentEpoch = (): number => scheduler.epoch;
 export const currentFlushEpoch = (): number => scheduler.sessionEpoch;
 export const startFlush = (): boolean => scheduler.startFlush();
 export const endFlush = (): void => scheduler.endFlush();
-export const incrementFlushExecutionCount = (): number => scheduler.incrementFlushExecutionCount();
+export const incrementFlushExecutionCount = (): number =>
+  Result.unwrap(scheduler.incrementFlushExecutionCount());
 export const resetFlushState = (): void => scheduler.resetFlushState();
 
 /**
@@ -407,9 +423,15 @@ export const resetFlushState = (): void => scheduler.resetFlushState();
  * }); // Effect runs once here.
  * ```
  */
+function validateBatchFunction(fn: unknown): Result<void, Error> {
+  if (IS_DEV && typeof fn !== 'function') {
+    return Result.err(new TypeError(ERROR_MESSAGES.BATCH_CALLBACK_MUST_BE_FUNCTION));
+  }
+  return Result.ok(undefined);
+}
+
 export function batch<T>(fn: () => T): T {
-  if (IS_DEV && typeof fn !== 'function')
-    throw new TypeError(ERROR_MESSAGES.BATCH_CALLBACK_MUST_BE_FUNCTION);
+  Result.unwrap(validateBatchFunction(fn));
 
   scheduler.startBatch();
   try {

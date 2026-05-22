@@ -13,6 +13,7 @@
  */
 
 import type { SlotBuffer } from '@but212/atom-effect-utils';
+import { Result } from '@but212/atom-effect-utils';
 import {
   BRAND,
   BrandFlags,
@@ -50,12 +51,7 @@ import type {
 import { debug, EffectError, generateId } from '@/utils';
 import { isPromise } from '@/utils/type-guards';
 import { createDepBuffer, disposeAll, prepareTracking } from './buffers';
-import {
-  currentFlushEpoch,
-  incrementFlushExecutionCount,
-  scheduler,
-  schedulerSchedule,
-} from './scheduler';
+import { currentFlushEpoch, scheduler, schedulerSchedule } from './scheduler';
 
 /**
  * Role: State container for monitoring effect execution health.
@@ -103,24 +99,26 @@ export function createEffectBudgetState(
  */
 export function validateEffectBudget(
   state: EffectBudgetState,
-  currentFlushEpoch: number,
-  onAbort: (type: 'per-effect' | 'global') => never
-): void {
+  currentFlushEpoch: number
+): Result<void, Error> {
   if (state.lastFlushEpoch !== currentFlushEpoch) {
     state.lastFlushEpoch = currentFlushEpoch;
     state.loopCount = 0;
   }
 
   if (++state.loopCount > state.maxPerFlush) {
-    onAbort('per-effect');
+    const message = ABORT_MESSAGES['per-effect'](state);
+    return Result.err(new EffectError(message));
   }
 
   // Constraint: Global safeguard against aggregate scheduler instability.
-  if (incrementFlushExecutionCount() > SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH) {
-    onAbort('global');
+  const globalCount = scheduler.incrementFlushExecutionCount();
+  if (Result.isErr(globalCount)) {
+    return globalCount as unknown as Result<void, Error>;
   }
 
   state.totalExecutions++;
+  return Result.ok(undefined);
 }
 
 /**
@@ -133,24 +131,22 @@ export function validateEffectBudget(
  *
  * @internal
  */
-export function checkEffectFrequencyLimit(
-  state: EffectBudgetState,
-  onLimitExceeded: () => never
-): void {
+export function checkEffectFrequencyLimit(state: EffectBudgetState): Result<void, Error> {
   const limit = state.maxPerSecond;
-  if (!Number.isFinite(limit)) return;
+  if (!Number.isFinite(limit)) return Result.ok(undefined);
 
   const now = Date.now();
 
   if (now - state.windowStart >= DEBUG_CONFIG.EFFECT_FREQUENCY_WINDOW) {
     state.windowStart = now;
     state.windowCount = 1;
-    return;
+    return Result.ok(undefined);
   }
 
   if (++state.windowCount > limit) {
-    onLimitExceeded();
+    return Result.err(new EffectError(ERROR_MESSAGES.EFFECT_FREQUENCY_LIMIT_EXCEEDED));
   }
+  return Result.ok(undefined);
 }
 
 const ABORT_MESSAGES = {
@@ -159,6 +155,13 @@ const ABORT_MESSAGES = {
   global: (_state: EffectBudgetState) =>
     'Infinite loop detected (global): exceeded total execution limit per flush.',
 } as const;
+
+function validateEffectFunction(fn: unknown): Result<void, Error> {
+  if (typeof fn !== 'function') {
+    return Result.err(new EffectError(ERROR_MESSAGES.EFFECT_MUST_BE_FUNCTION));
+  }
+  return Result.ok(undefined);
+}
 
 /**
  * Role: Orchestrator for a reactive side-effect.
@@ -210,6 +213,7 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
   #sync: boolean;
 
   constructor(fn: EffectFunction, options: EffectOptions = {}) {
+    Result.unwrap(validateEffectFunction(fn));
     this.#fn = fn;
     this.#onError = options.onError ?? null;
     this.#sync = options.sync ?? false;
@@ -229,8 +233,10 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
 
   /** Triggers the effect execution immediately. */
   public run(): void {
-    if (this.isDisposed) throw new EffectError(ERROR_MESSAGES.EFFECT_DISPOSED);
-    this.execute(true);
+    if (this.isDisposed) {
+      throw new EffectError(ERROR_MESSAGES.EFFECT_DISPOSED);
+    }
+    Result.unwrap(this.execute(true));
   }
 
   /**
@@ -272,8 +278,10 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
    * Logic: Execution Lifecycle Orchestration
    * Synchronizes the effect state with its captured dependencies.
    */
-  public execute(force = false): void {
-    if (!this.#prepareExecution(force)) return;
+  public execute(force = false): Result<void, Error> {
+    const prep = this.#prepareExecution(force);
+    if (Result.isErr(prep)) return prep;
+    if (!prep.value) return Result.ok(undefined);
 
     this.#execCleanup();
 
@@ -304,24 +312,27 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
     }
 
     this.flags &= ~EFFECT_STATE_FLAGS.EXECUTING;
+    return Result.ok(undefined);
   }
 
-  #prepareExecution(force: boolean): boolean {
+  #prepareExecution(force: boolean): Result<boolean, Error> {
     const flags = this.flags;
-    if ((flags & (EFFECT_STATE_FLAGS.DISPOSED | EFFECT_STATE_FLAGS.EXECUTING)) !== 0) return false;
+    if ((flags & (EFFECT_STATE_FLAGS.DISPOSED | EFFECT_STATE_FLAGS.EXECUTING)) !== 0)
+      return Result.ok(false);
 
     // Logic: Selective Skipping
     // Execution is skipped if the effect is not 'forced', has no dependencies
     // yet, and its dependencies haven't changed (dirty check). This minimizes
     // redundant computations during the flush cycle.
     const deps = this._storage.deps!;
-    if (!(force || deps.slots.length === 0 || nodeIsDirty(this))) return false;
+    if (!(force || deps.slots.length === 0 || nodeIsDirty(this))) return Result.ok(false);
 
-    this.#validateBudget();
+    const budgetRes = this.#validateBudget();
+    if (Result.isErr(budgetRes)) return budgetRes as unknown as Result<boolean, Error>;
     debug.trackUpdate(this.id, debug.getDebugName(this));
 
     this.flags |= EFFECT_STATE_FLAGS.EXECUTING;
-    return true;
+    return Result.ok(true);
   }
 
   /** Registers a dependency during the tracking session. */
@@ -397,30 +408,24 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
     }
   }
 
-  #validateBudget(): void {
-    validateEffectBudget(this.#budget, currentFlushEpoch(), (type) => this.#abortExecution(type));
+  #validateBudget(): Result<void, Error> {
+    const budgetRes = validateEffectBudget(this.#budget, currentFlushEpoch());
+    if (Result.isErr(budgetRes)) {
+      this.dispose();
+      console.error(budgetRes.error);
+      return budgetRes;
+    }
 
     if (IS_DEV) {
-      checkEffectFrequencyLimit(this.#budget, () => {
-        const err = new EffectError(ERROR_MESSAGES.EFFECT_FREQUENCY_LIMIT_EXCEEDED);
+      const freqRes = checkEffectFrequencyLimit(this.#budget);
+      if (Result.isErr(freqRes)) {
+        const err = freqRes.error;
         this.dispose();
         this.#handleExecutionError(err);
-        throw err;
-      });
+        return freqRes;
+      }
     }
-  }
-
-  /**
-   * Logic: Safety Interruption
-   * Terminates the effect and signals a terminal failure to prevent
-   * system-wide instability from infinite loops.
-   */
-  #abortExecution(type: keyof typeof ABORT_MESSAGES): never {
-    const message = ABORT_MESSAGES[type](this.#budget);
-    const error = new EffectError(message);
-    this.dispose();
-    console.error(error);
-    throw error;
+    return Result.ok(undefined);
   }
 
   #handleExecutionError(
@@ -463,13 +468,20 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
  * sub.dispose(); // Stops the effect
  * ```
  */
-export function effect(fn: EffectFunction, options: EffectOptions = {}): EffectObject {
-  if (typeof fn !== 'function') {
-    throw new EffectError(ERROR_MESSAGES.EFFECT_MUST_BE_FUNCTION);
-  }
+function createEffect(
+  fn: EffectFunction,
+  options: EffectOptions = {}
+): Result<EffectObject, Error> {
+  const validation = validateEffectFunction(fn);
+  if (Result.isErr(validation)) return validation;
 
   const effectInstance = new EffectImpl(fn, options);
-  effectInstance.execute();
+  const execRes = effectInstance.execute();
+  if (Result.isErr(execRes)) return execRes as unknown as Result<EffectObject, Error>;
 
-  return effectInstance;
+  return Result.ok(effectInstance);
+}
+
+export function effect(fn: EffectFunction, options: EffectOptions = {}): EffectObject {
+  return Result.unwrap(createEffect(fn, options));
 }

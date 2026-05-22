@@ -11,7 +11,7 @@
  * infinite recursive updates.
  */
 
-import type { Prettify } from '@but212/atom-effect-utils';
+import type { Prettify, Result } from '@but212/atom-effect-utils';
 import type { KIND, SCHEDULER_STATE } from '@/constants';
 
 /**
@@ -121,9 +121,9 @@ export type SchedulerState = Prettify<{
   nextEpoch(): number;
   startFlush(): boolean;
   endFlush(): void;
-  incrementFlushExecutionCount(): number;
+  incrementFlushExecutionCount(): Result<number, Error>;
   resetFlushState(): void;
-  schedule(callback: SchedulerJob): void;
+  schedule(callback: SchedulerJob): Result<void, Error>;
   flushSync(): void;
   startBatch(): void;
   endBatch(): void;

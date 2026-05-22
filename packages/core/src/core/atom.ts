@@ -12,6 +12,7 @@
  */
 
 import type { SlotBuffer } from '@but212/atom-effect-utils';
+import { Result } from '@but212/atom-effect-utils';
 import {
   ATOM_STATE_FLAGS,
   BRAND,
@@ -147,7 +148,7 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
    * @returns A disposal function to unsubscribe the listener.
    */
   subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
-    return nodeSubscribe(this, listener);
+    return Result.unwrap(nodeSubscribe(this, listener));
   }
 
   /**
