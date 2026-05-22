@@ -120,6 +120,10 @@ export interface ComputedAtom<T = unknown> extends ReadonlyAtom<T> {
   readonly isPending: boolean;
   /** True if the node has resolved to a valid value at least once. */
   readonly isResolved: boolean;
+  /** True if the most recent computation was rejected (async or sync). */
+  readonly isRejected: boolean;
+  /** True if the node has been permanently disposed. */
+  readonly isDisposed: boolean;
   /** True if the current value is safe to read (resolved and error-free). */
   readonly isValid: boolean;
 
