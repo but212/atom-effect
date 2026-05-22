@@ -100,6 +100,39 @@ describe('Computed', () => {
       expect(c.lastError?.message).toContain('computation_failed');
       expect(consoleError).toHaveBeenCalled(); // Internal handler error caught
     });
+
+    it('should recover from stack overflow without leaving RECOMPUTING flag dirty', () => {
+      const start = atom(0);
+      let depthTarget = computed(() => start.value);
+      for (let i = 0; i < 1500; i++) {
+        const prev = depthTarget;
+        depthTarget = computed(() => prev.value + 1);
+      }
+
+      // First evaluation triggers stack overflow (RangeError) internally or during computation.
+      // We expect it to throw a RangeError or a ComputedError wrapping RangeError.
+      let firstError: unknown;
+      try {
+        depthTarget.value;
+      } catch (e) {
+        firstError = e;
+      }
+
+      expect(firstError).toBeDefined();
+      expect((firstError as Error).message).not.toContain('Circular dependency');
+
+      // Second evaluation: should still fail due to stack overflow,
+      // NOT because of 'Circular dependency detected' which indicates state corruption.
+      let secondError: unknown;
+      try {
+        depthTarget.value;
+      } catch (e) {
+        secondError = e;
+      }
+
+      expect(secondError).toBeDefined();
+      expect((secondError as Error).message).not.toContain('Circular dependency');
+    });
   });
 
   describe('Asynchronous Flows', () => {

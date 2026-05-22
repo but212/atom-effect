@@ -47,6 +47,7 @@ const FLAGS = {
   RECOMPUTING: 1 << (OFFSET.COMPUTED + 1),
   HAS_ERROR: 1 << (OFFSET.COMPUTED + 2),
   FORCE_COMPUTE: 1 << (OFFSET.COMPUTED + 3),
+  CHECKING_DIRTY: 1 << (OFFSET.COMPUTED + 4),
 
   // Async States (Bits 16-23): Asynchronous lifecycle tracking
   IDLE: 1 << (OFFSET.ASYNC + 0),
@@ -83,6 +84,8 @@ export const STATE_MASKS = Object.freeze({
   COMPUTED_RECOMPUTE_NEEDED_MASK: FLAGS.IDLE | FLAGS.FORCE_COMPUTE,
   /** Captures both synchronous and asynchronous error states. */
   ERROR_MASK: FLAGS.REJECTED | FLAGS.HAS_ERROR,
+  /** Captures circular evaluation states (recomputing or checking dirty). */
+  CYCLIC_OR_RECOMPUTING_MASK: FLAGS.RECOMPUTING | FLAGS.CHECKING_DIRTY,
   /** Captures the primary reactive lifecycle states. */
   LIFECYCLE_MASK:
     FLAGS.IDLE | FLAGS.DIRTY | FLAGS.PENDING | FLAGS.RESOLVED | FLAGS.REJECTED | FLAGS.HAS_ERROR,
@@ -114,6 +117,7 @@ export const COMPUTED_STATE_FLAGS = Object.freeze({
   RECOMPUTING: FLAGS.RECOMPUTING,
   HAS_ERROR: FLAGS.HAS_ERROR,
   FORCE_COMPUTE: FLAGS.FORCE_COMPUTE,
+  CHECKING_DIRTY: FLAGS.CHECKING_DIRTY,
 } as const satisfies Record<string, number>);
 
 /**

@@ -292,15 +292,28 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
     const checkDisposed = this.#ensureNotDisposed();
     if (Result.isErr(checkDisposed)) return checkDisposed;
 
-    if ((this.flags & COMPUTED_STATE_FLAGS.RECOMPUTING) !== 0) {
+    const flags = this.flags;
+    if ((flags & STATE_MASKS.CYCLIC_OR_RECOMPUTING_MASK) !== 0) {
       if (this.#defaultValue !== (NO_DEFAULT_VALUE as T)) return Result.ok(this.#defaultValue);
       return Result.err(new ComputedError(ERROR_MESSAGES.COMPUTED_CIRCULAR_DEPENDENCY));
     }
 
-    if (shouldRecompute(this.flags, this._storage.deps!)) {
-      this.#recompute();
-    } else {
-      this.flags &= ~COMPUTED_STATE_FLAGS.DIRTY;
+    this.flags = flags | COMPUTED_STATE_FLAGS.CHECKING_DIRTY;
+    try {
+      const deps = this._storage.deps!;
+      const isAwaitingAsync = (this.flags & STATE_MASKS.ASYNC_UNRESOLVED_MASK) !== 0;
+      const needsRecompute =
+        (this.flags & STATE_MASKS.COMPUTED_RECOMPUTE_NEEDED_MASK) !== 0 ||
+        (!isAwaitingAsync && deps.slots.size === 0) ||
+        isBufferDirty(deps);
+
+      if (needsRecompute) {
+        this.#recompute();
+      } else {
+        this.flags &= ~COMPUTED_STATE_FLAGS.DIRTY;
+      }
+    } finally {
+      this.flags &= ~COMPUTED_STATE_FLAGS.CHECKING_DIRTY;
     }
 
     return resolveComputedResult(this.flags, this.#value, this._error, this.#defaultValue);
@@ -448,33 +461,35 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
     this.flags = apply(this.flags, TRANSITION.TO_RECOMPUTING);
     const prevDepth = trackingContext.stack.length;
 
-    nodeStartTracking(this);
-    prepareTracking(this._storage.deps!);
-
-    let val: T | Promise<T> | undefined;
-    let hasError = false;
-    let errorToThrow: unknown;
-
     try {
-      val = runInTrackingContext(trackingContext, this, this.#computation);
-    } catch (e) {
-      // Impact: Preserves tracking context integrity if the computation fails.
-      rollbackTrackingSubscriber(trackingContext, prevDepth);
-      hasError = true;
-      errorToThrow = e;
+      nodeStartTracking(this);
+      prepareTracking(this._storage.deps!);
+
+      let val: T | Promise<T> | undefined;
+      let hasError = false;
+      let errorToThrow: unknown;
+
+      try {
+        val = runInTrackingContext(trackingContext, this, this.#computation);
+      } catch (e) {
+        // Impact: Preserves tracking context integrity if the computation fails.
+        rollbackTrackingSubscriber(trackingContext, prevDepth);
+        hasError = true;
+        errorToThrow = e;
+      }
+
+      nodeCommitDeps(this);
+
+      if (hasError) {
+        this.#handleError(errorToThrow, ERROR_MESSAGES.COMPUTED_COMPUTATION_FAILED, false);
+      } else if (isPromise(val!)) {
+        this.#handleAsyncComputation(val as Promise<T>);
+      } else {
+        this.#finalizeResolution(val as T);
+      }
+    } finally {
+      this.flags &= ~COMPUTED_STATE_FLAGS.RECOMPUTING;
     }
-
-    nodeCommitDeps(this);
-
-    if (hasError) {
-      this.#handleError(errorToThrow, ERROR_MESSAGES.COMPUTED_COMPUTATION_FAILED, false);
-    } else if (isPromise(val!)) {
-      this.#handleAsyncComputation(val as Promise<T>);
-    } else {
-      this.#finalizeResolution(val as T);
-    }
-
-    this.flags &= ~COMPUTED_STATE_FLAGS.RECOMPUTING;
   }
 
   /**

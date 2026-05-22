@@ -4,6 +4,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
+import { COMPUTED_STATE_FLAGS } from '@/constants';
 import { createDependencyLink } from '@/core/base';
 import {
   claimExisting,
@@ -13,6 +14,7 @@ import {
   depBufferTruncateFrom,
   disposeAll,
   insertNew,
+  isBufferDirty,
 } from '@/core/buffers';
 import type { Dependency } from '@/index';
 import type { DependencyLink } from '@/types';
@@ -145,5 +147,24 @@ describe('DepBuffer: Reuse & Lifecycle', () => {
 
     insertNew(buf, 0, createLink(d1, 1, vi.fn()));
     expect(buf.slots.size).toBe(1);
+  });
+
+  it('isBufferDirty: should not swallow system-level exceptions', () => {
+    const buf = createDepBuffer();
+
+    const systemErrorDep = {
+      id: 999,
+      version: 1,
+      flags: COMPUTED_STATE_FLAGS.IS_COMPUTED,
+      get value() {
+        throw new RangeError('Maximum call stack size exceeded');
+      },
+      subscribe: vi.fn(() => vi.fn()),
+    } as unknown as Dependency;
+
+    depBufferPush(buf, createLink(systemErrorDep, 1));
+
+    // Calling isBufferDirty should propagate the RangeError, not swallow it
+    expect(() => isBufferDirty(buf)).toThrow(RangeError);
   });
 });
