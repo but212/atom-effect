@@ -78,6 +78,38 @@ describe('SlotBuffer', () => {
       buf.push(2); // Should occupy index 1
       expect(buf.at(1)).toBe(2);
     });
+
+    it('should shrink physical capacity when tail overflow items are removed', () => {
+      const buf = new SlotBuffer<number>();
+      for (let i = 0; i < 6; i++) {
+        buf.push(i);
+      }
+      // [0, 1, 2, 3, 4, 5]
+
+      buf.remove(4); // ov[0] becomes null, i.e. [null, 5]
+      buf.remove(5); // ov[1] becomes null, triggers shrinkPhysicalSizeFrom
+
+      expect(buf.length).toBe(4);
+      expect(buf.size).toBe(4);
+    });
+
+    it('should reuse free indices when pushing new items after removals', () => {
+      const buf = new SlotBuffer<number>();
+      for (let i = 0; i < 10; i++) {
+        buf.push(i);
+      }
+
+      // Remove elements to populate free indices
+      buf.remove(8);
+      buf.remove(9);
+
+      // Verify free indices are reused in lifo order
+      const idx1 = buf.push(99);
+      const idx2 = buf.push(100);
+
+      expect(idx1).toBe(9);
+      expect(idx2).toBe(8);
+    });
   });
 
   describe('Manual Indexing & Truncation', () => {
@@ -139,6 +171,25 @@ describe('SlotBuffer', () => {
       buf.compact();
       expect(buf.at(0)).toBe(1);
       expect(buf.at(1)).toBe(2);
+    });
+
+    it('should correctly compact fast-lane gaps without data corruption', () => {
+      const buf = new SlotBuffer<string>();
+      buf.push('a'); // index 0
+      buf.push('b'); // index 1
+
+      buf.remove('a'); // s0 becomes null, s1 is 'b'. mask = 0b0010
+
+      buf.compact();
+
+      expect(buf.at(0)).toBe('b');
+      expect(buf.size).toBe(1);
+      expect(buf.length).toBe(1);
+
+      const items: string[] = [];
+      buf.forEach((item) => items.push(item));
+      expect(items).toEqual(['b']);
+      expect(buf.has('b')).toBe(true);
     });
   });
 
