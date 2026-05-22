@@ -55,7 +55,24 @@ counter.dispose();
 
 ---
 
-## `computed<T>(fn: () => T | Promise<T>, options?: ComputedOptions)`
+## `computed` Overloads
+
+```typescript
+export function computed<T>(
+  fn: () => Promise<T>,
+  options: ComputedOptions<T> & { defaultValue: T }
+): ComputedAtom<T>;
+
+export function computed<T>(
+  fn: () => Promise<T>,
+  options?: ComputedOptions<T>
+): ComputedAtom<T>;
+
+export function computed<T>(
+  fn: () => T,
+  options?: ComputedOptions<T>
+): ComputedAtom<T>;
+```
 
 Creates a derived reactive node that automatically re-calculates its value when its dependencies change.
 
@@ -91,16 +108,29 @@ console.log(double.value); // 2
 
 ### Async Support
 
-Asynchronous computations require a `defaultValue` to be provided via options, which is returned while the Promise is pending.
+Asynchronous computations can be defined by returning a `Promise`. The returned node is typed as `ComputedAtom<T>` (not `ComputedAtom<Promise<T>>`), so accessing `.value` returns the resolved value of type `T`.
 
-```typescript
-const userId = atom(123);
+* **With `defaultValue` (Recommended)**: The `defaultValue` is returned while the Promise is pending.
+  ```typescript
+  const userId = atom(123);
 
-const userData = computed(async () => {
-  const response = await fetch(`/api/users/${userId.value}`);
-  return response.json();
-}, { defaultValue: { loading: true } });
-```
+  const userData = computed(async () => {
+    const response = await fetch(`/api/users/${userId.value}`);
+    return response.json();
+  }, { defaultValue: { loading: true } });
+  ```
+* **Without `defaultValue`**: Accessing `.value` while the Promise is pending will throw a `ComputedError`. Once resolved, the value can be read normally.
+  ```typescript
+  const p = computed(async () => {
+    await sleep(10);
+    return 1;
+  });
+
+  p.value; // ❌ Throws ComputedError: Async computation pending with no default value
+  
+  // After resolving...
+  p.value; // ➔ 1 (Successful read)
+  ```
 
 > [!IMPORTANT]
 > **Async Dependency Tracking**: Only dependencies accessed **before** the first `await` are tracked. Dependencies accessed after an `await` will return their current value but will not trigger re-evaluations when they change.
@@ -109,7 +139,7 @@ const userData = computed(async () => {
 
 - `name`: (Optional) A debugging identifier.
 - `equal`: Custom equality check for the result to suppress redundant downstream updates.
-- `defaultValue`: Mandatory for async computations; used while a Promise is pending.
+- `defaultValue`: Recommended fallback value for async computations; returned while a Promise is pending. If omitted, accessing `.value` during the pending state throws a `ComputedError`.
 - `lazy`: (Default: `true`) If `false`, the computation runs immediately upon creation.
 - `onError`: `(error: Error) => void`. Callback executed when the computation fails.
 
