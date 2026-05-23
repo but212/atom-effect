@@ -128,6 +128,17 @@ describe('SlotBuffer', () => {
       expect(buf.at(10)).toBeNull();
     });
 
+    it('should reuse free indices when gaps are created via setAt(index, null)', () => {
+      const buf = new SlotBuffer<number>();
+      buf.push(10);
+      buf.push(20);
+
+      buf.setAt(0, null);
+
+      const index = buf.push(30);
+      expect(index).toBe(0);
+    });
+
     it('should truncate items and reset boundaries with truncateFrom()', () => {
       const buf = new SlotBuffer<number>();
       for (let i = 0; i < 10; i++) buf.push(i);
@@ -138,6 +149,21 @@ describe('SlotBuffer', () => {
       expect(buf.at(4)).toBe(4);
       expect(buf.at(5)).toBeNull();
       expect(buf.at(9)).toBeNull();
+    });
+
+    it('should keep free indices below the truncation index', () => {
+      const buf = new SlotBuffer<number>();
+      buf.push(10);
+      buf.push(20);
+      buf.push(30);
+      buf.push(40);
+      buf.remove(10); // index 0 is a hole
+      buf.remove(30); // index 2 is a hole
+
+      buf.truncateFrom(3); // truncates index 3 (40)
+      // Index 0 and 2 are still below 3, so they should be preserved!
+      const idx = buf.push(50);
+      expect(idx).toBe(2); // Should reuse index 2 (LIFO)
     });
   });
 
@@ -206,6 +232,40 @@ describe('SlotBuffer', () => {
       expect(collected).toEqual([0, 2, 4]);
     });
 
+    it('should not pass null to callback when items are removed during forEach', () => {
+      const buf = new SlotBuffer<number>();
+      buf.push(10);
+      buf.push(20);
+
+      const items: number[] = [];
+      buf.forEach((item) => {
+        items.push(item);
+        if (item === 10) {
+          buf.remove(20);
+        }
+      });
+
+      expect(items).toEqual([10]);
+    });
+
+    it('should not corrupt iteration or pass null when compacted during forEach', () => {
+      const buf = new SlotBuffer<number>();
+      buf.push(10);
+      buf.push(20);
+      buf.push(30);
+      buf.remove(20); // [10, null, 30]
+
+      const items: number[] = [];
+      buf.forEach((item) => {
+        items.push(item);
+        if (item === 10) {
+          buf.compact();
+        }
+      });
+
+      expect(items).toEqual([10, 30]);
+    });
+
     it('should perform early-exit with some()', () => {
       const buf = new SlotBuffer<number>();
       for (let i = 0; i < 10; i++) buf.push(i);
@@ -258,6 +318,16 @@ describe('SlotBuffer', () => {
 
       buf.unlock();
       expect(buf.isLocked).toBe(false);
+    });
+
+    it('should not allow negative lockCount', () => {
+      const buf = new SlotBuffer<number>();
+      buf.unlock(); // unbalanced unlock
+
+      expect(buf.isLocked).toBe(false);
+
+      buf.lock();
+      expect(buf.isLocked).toBe(true);
     });
   });
 });
