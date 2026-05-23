@@ -20,12 +20,11 @@ export * from '@/types';
  * to minimize iteration overhead in hot paths like reactive diffing.
  */
 export function shallowEqual(a: unknown, b: unknown): boolean {
-  if (a === b) return true;
+  if (Object.is(a, b)) return true;
 
-  const state =
-    (a !== null && typeof a === 'object' ? 1 : 0) | (b !== null && typeof b === 'object' ? 2 : 0);
-
-  if (state !== 3) return false;
+  if (typeof a !== 'object' || a === null || typeof b !== 'object' || b === null) {
+    return false;
+  }
 
   const objA = a as Record<string, unknown>;
   const objB = b as Record<string, unknown>;
