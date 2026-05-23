@@ -27,6 +27,28 @@ import type { DebugConfig, DependencyId, NodeMetadata } from '@/types';
 /** Shared no-op function to reduce memory pressure in production. @internal */
 const noop = () => {};
 
+/** Helper to resolve fallback node identity structurally. @internal */
+const getFallbackIdentity = (obj: object, id: DependencyId): { name: string; type: string } => {
+  const brand = (obj as { [BRAND]?: number })[BRAND];
+  const info = brand !== undefined ? BRAND_IDENTITY_MAP[brand & BRAND_MASK] : undefined;
+  const type = info?.type ?? 'unknown';
+  const prefix = info?.prefix ?? `${type}_`;
+  return { name: `${prefix}${id}`, type };
+};
+
+/** Helper to check if a name is a generated fallback name. @internal */
+const isFallbackName = (name: string, type: string, id: DependencyId): boolean => {
+  return (
+    name === `${type}_${id}` ||
+    name === `unknown_${id}` ||
+    name === `atom_${id}` ||
+    name === `calc_${id}` ||
+    name === `fx_${id}` ||
+    name === `effect_${id}` ||
+    name === `computed_${id}`
+  );
+};
+
 /**
  * Role: Diagnostic Engine (Development)
  * Encapsulates development-only diagnostic state and provides high-performance
@@ -40,15 +62,17 @@ class DevDebugEngine implements DebugConfig {
   #cleanupScheduled = false;
   #failureCleanupScheduled = false;
 
+  #pruneNode(id: DependencyId): void {
+    this.#registry.delete(id);
+    this.#updateCounts.delete(id);
+  }
+
   /**
    * Logic: Automatic Metadata Cleanup
    * Monitors node lifecycle to prune internal registries when reactive nodes
    * are garbage collected, preventing memory leaks in long-running dev sessions.
    */
-  #finalizer = new FinalizationRegistry((id: DependencyId) => {
-    this.#registry.delete(id);
-    this.#updateCounts.delete(id);
-  });
+  #finalizer = new FinalizationRegistry((id: DependencyId) => this.#pruneNode(id));
 
   enabled = true;
   warnInfiniteLoop = DEBUG_CONFIG.WARN_INFINITE_LOOP;
@@ -70,23 +94,13 @@ class DevDebugEngine implements DebugConfig {
       return undefined;
     }
 
-    const meta = this.#registry.get(id);
-    if (meta) return meta;
-
-    const brand = (obj as { [BRAND]?: number })[BRAND];
-    const info = brand !== undefined ? BRAND_IDENTITY_MAP[brand & BRAND_MASK] : undefined;
-
-    const type = info?.type ?? 'unknown';
-    const prefix = info?.prefix ?? `${type}_`;
-
-    return { name: `${prefix}${id}`, type };
+    return this.#registry.get(id) ?? getFallbackIdentity(obj, id);
   }
 
   #getOrCreateMetadata(obj: object, id: DependencyId): NodeMetadata {
     let entry = this.#registry.get(id);
     if (!entry) {
-      const identity = this.#resolveIdentity(obj)!;
-      entry = { name: identity.name, type: identity.type };
+      entry = getFallbackIdentity(obj, id);
       this.#registry.set(id, entry);
     }
     return entry;
@@ -109,6 +123,9 @@ class DevDebugEngine implements DebugConfig {
   }
 
   registerNode(node: object & { id: DependencyId }): void {
+    if (!this.enabled || node === null || typeof node !== 'object' || node.id === undefined) {
+      return;
+    }
     const id = node.id;
     const entry = this.#getOrCreateMetadata(node, id);
 
@@ -117,14 +134,21 @@ class DevDebugEngine implements DebugConfig {
   }
 
   attachDebugInfo(obj: object, type: string, id: DependencyId, customName?: string): void {
-    if (!this.enabled || (customName === undefined && !this.trackGraph)) return;
+    if (!this.enabled) return;
+    const hasEntry = this.#registry.has(id);
+    if (!hasEntry && customName === undefined && !this.trackGraph) return;
+    if (obj === null || typeof obj !== 'object' || id === undefined) return;
 
     let entry = this.#registry.get(id);
     if (!entry) {
       entry = { name: customName ?? `${type}_${id}`, type };
       this.#registry.set(id, entry);
     } else {
-      if (customName !== undefined) entry.name = customName;
+      if (customName !== undefined) {
+        entry.name = customName;
+      } else if (isFallbackName(entry.name, entry.type, id)) {
+        entry.name = `${type}_${id}`;
+      }
       entry.type = type;
     }
 
@@ -185,11 +209,12 @@ class DevDebugEngine implements DebugConfig {
   }
 
   dumpGraph(): Record<string, unknown>[] {
-    if (this.#registry.size === 0) return [];
+    if (!this.enabled || this.#registry.size === 0) return [];
 
     const result: Record<string, unknown>[] = [];
     for (const [id, meta] of this.#registry) {
-      if (this.trackGraph && meta.ref?.deref() === undefined) {
+      if (meta.ref?.deref() === undefined) {
+        this.#pruneNode(id);
         continue;
       }
       result.push({
