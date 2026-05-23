@@ -290,28 +290,18 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
     prepareTracking(deps);
     const prevDepth = trackingContext.stack.length;
 
-    let val: unknown;
-    let hasError = false;
-    let errorObj: unknown;
-
     try {
-      val = runInTrackingContext(trackingContext, this, this.#fn);
+      const val = runInTrackingContext(trackingContext, this, this.#fn);
+      nodeCommitDeps(this);
+      this.#handleResult(val);
     } catch (e) {
       // Impact: Preserves tracking context integrity if the effect crashes.
       rollbackTrackingSubscriber(trackingContext, prevDepth);
-      hasError = true;
-      errorObj = e;
+      this.#handleExecutionError(e);
+    } finally {
+      this.flags &= ~EFFECT_STATE_FLAGS.EXECUTING;
     }
 
-    nodeCommitDeps(this);
-
-    if (hasError) {
-      this.#handleExecutionError(errorObj);
-    } else {
-      this.#handleResult(val);
-    }
-
-    this.flags &= ~EFFECT_STATE_FLAGS.EXECUTING;
     return Result.ok(undefined);
   }
 
