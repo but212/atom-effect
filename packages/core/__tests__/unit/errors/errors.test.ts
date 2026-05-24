@@ -4,6 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { ERROR_STRATEGIES, type ErrorStrategy } from '@/constants';
 import {
   AtomError,
   type AtomErrorJSON,
@@ -23,9 +24,11 @@ import {
 } from '@/index';
 
 describe('Error Handling System', () => {
-  // ── Error Classes & Constructor ─────────────────────────────────────────────
+  const [brandStrategy, fallbackStrategy] = ERROR_STRATEGIES as [ErrorStrategy, ErrorStrategy];
 
-  describe('Error Hierarchy', () => {
+  // ── Error Classes & Hierarchy ─────────────────────────────────────────────
+
+  describe('Error Hierarchy & Integrity', () => {
     const errorTypes = [
       { Class: AtomError, name: 'AtomError', recoverable: true, tag: 'AtomError' },
       { Class: ComputedError, name: 'ComputedError', recoverable: true, tag: 'ComputedError' },
@@ -49,7 +52,7 @@ describe('Error Handling System', () => {
       expect(err.recoverable).toBe(defaultRecoverable);
       expect(err.cause).toBe(cause);
 
-      // Override & Code (Merged: removed separate it blocks)
+      // Override & Code
       const custom = new Class('msg', {
         cause: null,
         recoverable: !defaultRecoverable,
@@ -57,6 +60,12 @@ describe('Error Handling System', () => {
       });
       expect(custom.recoverable).toBe(!defaultRecoverable);
       expect(custom.code).toBe('ERR_CODE');
+    });
+
+    it('verifies initial error state integrity of computed atoms', () => {
+      const c = computed(() => 42);
+      expect(c.errors).toEqual([]);
+      expect(Object.isFrozen(c.errors)).toBe(true);
     });
   });
 
@@ -125,11 +134,71 @@ describe('Error Handling System', () => {
     });
   });
 
-  // ── Maintenance ─────────────────────────────────────────────────────────────
+  // ── Error Extraction Strategies ───────────────────────────────────────────
 
-  it('verifies initial error state integrity', () => {
-    const c = computed(() => 42);
-    expect(c.errors).toEqual([]);
-    expect(Object.isFrozen(c.errors)).toBe(true);
+  describe('Error Extraction Strategies', () => {
+    it('should not stringify missing name and message properties on brand-based errors to literal "undefined" strings', () => {
+      const customBrandError = { _tag: 'CustomError' };
+
+      expect(brandStrategy.test(customBrandError)).toBe(true);
+
+      const meta = brandStrategy.fetch(customBrandError);
+
+      expect(meta.name).not.toBe('undefined');
+      expect(meta.message).not.toBe('undefined');
+    });
+
+    it('should respect custom recoverable properties on standard Error objects in fallback strategy', () => {
+      const stdError = new Error('Some standard error');
+      (stdError as Error & { recoverable?: boolean }).recoverable = false;
+
+      expect(fallbackStrategy.test(stdError)).toBe(true);
+
+      const meta = fallbackStrategy.fetch(stdError);
+
+      expect(meta.recoverable).toBe(false);
+    });
+
+    it('should not throw during Strategy 1 test check when e._tag property getter throws an error', () => {
+      const throwingObject = {};
+      Object.defineProperty(throwingObject, '_tag', {
+        get() {
+          throw new Error('Getter execution failed');
+        },
+        enumerable: true,
+        configurable: true,
+      });
+
+      let isBrandError = false;
+      expect(() => {
+        isBrandError = brandStrategy.test(throwingObject);
+      }).not.toThrow();
+      expect(isBrandError).toBe(false);
+    });
+
+    it('should not throw during Strategy 1 test check when e._tag toString throws', () => {
+      const throwingObject = {
+        _tag: {
+          toString() {
+            throw new Error('toString execution failed');
+          },
+        },
+      };
+
+      let isBrandError = false;
+      expect(() => {
+        isBrandError = brandStrategy.test(throwingObject);
+      }).not.toThrow();
+      expect(isBrandError).toBe(false);
+    });
+
+    it('should validate and sanitize code property type to avoid type pollution', () => {
+      const customBrandError = { _tag: 'CustomError', code: 500 };
+
+      const meta = brandStrategy.fetch(customBrandError);
+
+      expect(typeof meta.code).not.toBe('number');
+      expect(meta.code).toBe('500');
+    });
   });
 });
