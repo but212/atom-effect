@@ -88,7 +88,7 @@ class ReactiveScheduler implements SchedulerState {
     this.#maxFlushIterations = v;
   }
   #validateFlushIterations(v: number): Result<void, Error> {
-    if (v < SCHEDULER_CONFIG.MIN_FLUSH_ITERATIONS) {
+    if (!Number.isInteger(v) || v < SCHEDULER_CONFIG.MIN_FLUSH_ITERATIONS) {
       return Result.err(new SchedulerError('Invalid limit.'));
     }
     return Result.ok(undefined);

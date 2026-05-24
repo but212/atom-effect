@@ -17,7 +17,7 @@ import type { SchedulerConfig } from '../types';
  *
  * @internal
  */
-export const SCHEDULER_STATE = {
+export const SCHEDULER_STATE = Object.freeze({
   IDLE: 0,
   /** Currently executing the reactive update loop. */
   PROCESSING: 1 << 0,
@@ -25,7 +25,7 @@ export const SCHEDULER_STATE = {
   FLUSHING_SYNC: 1 << 1,
   /** Accumulating updates to be processed in a single batch. */
   BATCHING: 1 << 2,
-} as const satisfies Record<string, number>;
+} as const satisfies Record<string, number>);
 
 /**
  * Global configuration and stability thresholds for the Scheduler.
@@ -35,7 +35,7 @@ export const SCHEDULER_STATE = {
  * stability. Modifying them can lead to main-thread freezes or memory leaks
  * in complex dependency graphs.
  */
-export const SCHEDULER_CONFIG = Object.freeze({
+const config = {
   /**
    * Why: Prevents runaway effects or infinite re-computations from
    * permanently freezing the main thread.
@@ -72,4 +72,18 @@ export const SCHEDULER_CONFIG = Object.freeze({
    * size exceeds this threshold, releasing memory back to the heap.
    */
   BATCH_QUEUE_SHRINK_THRESHOLD: 1000,
-} as const satisfies SchedulerConfig);
+} as const satisfies SchedulerConfig;
+
+// Validate configuration invariants at initialization
+if (
+  config.MIN_FLUSH_ITERATIONS <= 0 ||
+  config.MAX_FLUSH_ITERATIONS < config.MIN_FLUSH_ITERATIONS ||
+  config.MAX_EXECUTIONS_PER_FLUSH < config.MAX_EXECUTIONS_PER_EFFECT ||
+  config.MAX_EXECUTIONS_PER_SECOND <= 0 ||
+  config.MAX_EXECUTIONS_PER_EFFECT <= 0 ||
+  config.BATCH_QUEUE_SHRINK_THRESHOLD <= 0
+) {
+  throw new Error('[SchedulerConfig] Invariant violation: Invalid scheduler configuration values.');
+}
+
+export const SCHEDULER_CONFIG = Object.freeze(config);

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { SCHEDULER_STATE } from '@/constants';
 import {
   aeNextTick,
   batch,
@@ -155,7 +156,7 @@ describe('Scheduler Engine', () => {
     });
   });
 
-  describe('Resilience & Safety', () => {
+  describe('Resilience & Error Handling', () => {
     it('isolates job errors to prevent scheduler lockup', async () => {
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
       const fail = vi.fn(() => {
@@ -195,17 +196,58 @@ describe('Scheduler Engine', () => {
       schedulerSetMaxFlushIterations(scheduler, originalMax);
       consoleError.mockRestore();
     });
+  });
 
-    it('validates configuration and inputs', () => {
+  describe('Configuration & Boundary Validation', () => {
+    it('should ensure SCHEDULER_STATE is runtime-frozen to prevent mutation', () => {
+      expect(Object.isFrozen(SCHEDULER_STATE)).toBe(true);
+    });
+
+    it('should ensure SCHEDULER_CONFIG is runtime-frozen to prevent mutation', () => {
+      expect(Object.isFrozen(SCHEDULER_CONFIG)).toBe(true);
+    });
+
+    it('should enforce sanity invariants on SCHEDULER_CONFIG values', () => {
+      expect(SCHEDULER_CONFIG.MIN_FLUSH_ITERATIONS).toBeGreaterThan(0);
+      expect(SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS).toBeGreaterThan(
+        SCHEDULER_CONFIG.MIN_FLUSH_ITERATIONS
+      );
+      expect(SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH).toBeGreaterThanOrEqual(
+        SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_EFFECT
+      );
+      expect(SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_SECOND).toBeGreaterThan(0);
+      expect(SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_EFFECT).toBeGreaterThan(0);
+      expect(SCHEDULER_CONFIG.BATCH_QUEUE_SHRINK_THRESHOLD).toBeGreaterThan(0);
+    });
+
+    it('rejects invalid scheduler callback types', () => {
       expect(() => schedulerSchedule(scheduler, null as unknown as () => void)).toThrow(
         SchedulerError
       );
-      expect(() => schedulerSetMaxFlushIterations(scheduler, 0)).toThrow();
+    });
 
+    it('warns on unbalanced endBatch calls', () => {
       const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       schedulerEndBatch(scheduler); // Unbalanced call
       expect(consoleWarn).toHaveBeenCalled();
       consoleWarn.mockRestore();
+    });
+
+    describe('maxFlushIterations boundaries', () => {
+      it('rejects values below MIN_FLUSH_ITERATIONS', () => {
+        expect(() => schedulerSetMaxFlushIterations(scheduler, 0)).toThrow();
+        expect(() =>
+          schedulerSetMaxFlushIterations(scheduler, SCHEDULER_CONFIG.MIN_FLUSH_ITERATIONS - 1)
+        ).toThrow();
+      });
+
+      it('rejects NaN values', () => {
+        expect(() => schedulerSetMaxFlushIterations(scheduler, Number.NaN)).toThrow();
+      });
+
+      it('rejects non-integer decimal values', () => {
+        expect(() => schedulerSetMaxFlushIterations(scheduler, 10.5)).toThrow();
+      });
     });
   });
 });
