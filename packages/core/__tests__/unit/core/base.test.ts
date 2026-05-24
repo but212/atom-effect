@@ -1,7 +1,16 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { untracked } from '@/core/base';
+import {
+  createTrackingContext,
+  nodeHasSubscription,
+  nodeNotifySubscribers,
+  nodeTrackDependency,
+  nodeUnsubscribe,
+  rollbackTrackingSubscriber,
+  untracked,
+} from '@/core/base';
 import { aeNextTick, scheduler, schedulerEndBatch, schedulerIsBatching } from '@/core/scheduler';
 import { atom, computed, effect } from '@/index';
+import type { Dependency, DependencyTracker, ReactiveNode, Subscription } from '@/types';
 import { sleep } from '../../utils/test-helpers';
 
 describe('Tracking Engine', () => {
@@ -101,6 +110,90 @@ describe('Tracking Engine', () => {
       expect(parentRuns).toBe(1);
 
       parent.dispose();
+    });
+  });
+
+  describe('Internal Engine Robustness & Edge Cases', () => {
+    function createMockNodeWithUndefinedSlots(): ReactiveNode<void> {
+      return {
+        _storage: {
+          slots: undefined,
+          deps: null,
+        },
+      } as unknown as ReactiveNode<void>;
+    }
+
+    describe('rollbackTrackingSubscriber', () => {
+      it('safely limits target depth to stack size when depth is out of bounds', () => {
+        const context = createTrackingContext();
+        // Stack is empty (length 0). Attempt to rollback to depth 1.
+        rollbackTrackingSubscriber(context, 1);
+
+        // Under robust implementation, target depth is bounded to stack.length,
+        // so context.current remains null (not undefined).
+        expect(context.current).toBeNull();
+      });
+
+      it('safely limits target depth to zero when depth is negative', () => {
+        const context = createTrackingContext();
+
+        // Under robust implementation, negative depth is clamped to zero
+        // and does not throw RangeError.
+        expect(() => {
+          rollbackTrackingSubscriber(context, -1);
+        }).not.toThrow();
+      });
+    });
+
+    describe('Subscription robustness with undefined slots', () => {
+      const mockLink = { k: 0, t: () => {} } as unknown as Subscription<void>;
+
+      it('handles undefined slots gracefully in nodeUnsubscribe without throwing TypeError', () => {
+        const mockNode = createMockNodeWithUndefinedSlots();
+        expect(() => {
+          nodeUnsubscribe(mockNode, mockLink);
+        }).not.toThrow();
+      });
+
+      it('handles undefined slots gracefully in nodeNotifySubscribers without throwing TypeError', () => {
+        const mockNode = createMockNodeWithUndefinedSlots();
+        expect(() => {
+          nodeNotifySubscribers(mockNode, undefined, undefined);
+        }).not.toThrow();
+      });
+
+      it('handles undefined slots gracefully in nodeHasSubscription without throwing TypeError', () => {
+        const mockNode = createMockNodeWithUndefinedSlots();
+        expect(() => {
+          nodeHasSubscription(mockNode, () => {});
+        }).not.toThrow();
+      });
+    });
+
+    describe('nodeTrackDependency safety', () => {
+      it('handles null dependency buffer gracefully in nodeTrackDependency without throwing TypeError', () => {
+        const mockTracker = {
+          _trackEpoch: 1,
+          _trackCount: 0,
+          _storage: {
+            slots: null,
+            deps: null,
+          },
+        } as unknown as DependencyTracker & ReactiveNode<void>;
+
+        const mockDep = {
+          _lastSeenEpoch: 0,
+          version: 1,
+          isComputed: false,
+          subscribe: () => () => {},
+        } as unknown as Dependency;
+
+        // Under robust implementation, if deps buffer is null/undefined, it returns early
+        // instead of crashing on tracker._storage.deps! assertion.
+        expect(() => {
+          nodeTrackDependency(mockTracker, mockDep, () => {});
+        }).not.toThrow();
+      });
     });
   });
 });
