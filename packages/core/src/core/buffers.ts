@@ -72,11 +72,7 @@ export function claimExisting(state: DepBufferState, dep: Dependency, trackIndex
   slots.setAt(trackIndex, link);
   slots.setAt(existingIndex, temp);
 
-  const map = state.map;
-  if (map) {
-    map.set(dep, trackIndex);
-    if (temp?.unsub) map.set(temp.node, existingIndex);
-  }
+  mapSwap(state, dep, trackIndex, temp, existingIndex);
 
   return true;
 }
@@ -116,25 +112,21 @@ export function depBufferSetAt(
   item: DependencyLink | null
 ): void {
   const old = state.slots.at(index);
+  if (old === item) return;
   state.slots.setAt(index, item);
 
-  const map = state.map;
-  if (map) {
-    if (old) map.delete(old.node);
-    if (item?.unsub) map.set(item.node, index);
-  } else if (item?.unsub) {
-    ensureMap(state);
-    state.map?.set(item.node, index);
+  if (old) {
+    mapUnregister(state, old.node, index);
+  }
+  if (item) {
+    mapRegister(state, item, index);
   }
 }
 
 /** @internal */
 export function depBufferPush(state: DepBufferState, item: DependencyLink): number {
   const idx = state.slots.push(item);
-  if (item.unsub) {
-    ensureMap(state);
-    state.map?.set(item.node, idx);
-  }
+  mapRegister(state, item, idx);
   return idx;
 }
 
@@ -151,6 +143,63 @@ function ensureMap(state: DepBufferState): void {
       if (link?.unsub) map.set(link.node, i);
     }
     state.map = map;
+  }
+}
+
+/**
+ * Registers a dependency link in the lookup map.
+ */
+function mapRegister(state: DepBufferState, link: DependencyLink, index: number): void {
+  if (link.unsub) {
+    ensureMap(state);
+    state.map?.set(link.node, index);
+  }
+}
+
+/**
+ * Unregisters or updates the map index for a dependency when a slot is overwritten or truncated.
+ * Searches backwards from limitIndex - 1 to find another valid slot.
+ */
+function mapUnregister(
+  state: DepBufferState,
+  node: Dependency,
+  currentIndex: number,
+  limitIndex = currentIndex
+): void {
+  const map = state.map;
+  if (map && map.get(node) === currentIndex) {
+    const slots = state.slots;
+    for (let i = limitIndex - 1; i >= 0; i--) {
+      const link = slots.at(i);
+      if (link?.node === node && link.unsub) {
+        map.set(node, i);
+        return;
+      }
+    }
+    map.delete(node);
+  }
+}
+
+/**
+ * Updates the map indices when two dependency slots are swapped.
+ */
+function mapSwap(
+  state: DepBufferState,
+  depA: Dependency,
+  idxA: number,
+  linkB: DependencyLink | null,
+  idxB: number
+): void {
+  const map = state.map;
+  if (!map) return;
+
+  map.set(depA, idxA);
+
+  if (linkB?.unsub) {
+    const currentIdx = map.get(linkB.node);
+    if (currentIdx === undefined || currentIdx < idxB) {
+      map.set(linkB.node, idxB);
+    }
   }
 }
 
@@ -195,10 +244,8 @@ function checkDirty(state: DepBufferState, deep: boolean): boolean {
           dep.value;
         }
       } catch (e) {
-        if (e instanceof RangeError || e instanceof ReferenceError || e instanceof SyntaxError) {
-          throw e;
-        }
         trackEvaluationFailure(dep.id);
+        throw e;
       }
     }
 
@@ -220,12 +267,10 @@ export function depBufferTruncateFrom(state: DepBufferState, index: number): voi
   const len = slots.length;
   if (index >= len) return;
 
-  const map = state.map;
   for (let i = index; i < len; i++) {
     const link = slots.at(i);
     if (link) {
-      // Surgical removal: delete from map before clearing the slot to maintain consistency.
-      if (map) map.delete(link.node);
+      mapUnregister(state, link.node, i, index);
       if (link.unsub) {
         try {
           link.unsub();
@@ -239,7 +284,7 @@ export function depBufferTruncateFrom(state: DepBufferState, index: number): voi
 
   // Memory cleanup: If the buffer shrinks below the threshold, discard the map
   // to free up memory on long-lived atoms.
-  if (map && index <= BUFFER_CONFIG.MAP_THRESHOLD) {
+  if (state.map && index <= BUFFER_CONFIG.MAP_THRESHOLD) {
     state.map = null;
   }
 }
