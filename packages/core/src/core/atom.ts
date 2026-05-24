@@ -39,7 +39,7 @@ import type {
   Subscription,
   WritableAtom,
 } from '@/types';
-import { debug, generateId } from '@/utils';
+import { AtomError, debug, generateId } from '@/utils';
 import { scheduler, schedulerIsBatching, schedulerSchedule } from './scheduler';
 
 /**
@@ -78,14 +78,15 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
   readonly [BRAND] = BrandFlags.Atom | BrandFlags.Writable;
 
   constructor(initialValue: T, options: AtomOptions<T>) {
+    const opts = options ?? {};
     this.#value = initialValue;
-    this.#equal = options.equal ?? DEFAULT_EQUAL;
+    this.#equal = opts.equal ?? DEFAULT_EQUAL;
 
-    if (options.sync) {
+    if (opts.sync) {
       this.flags |= ATOM_STATE_FLAGS.SYNC;
     }
 
-    if (IS_DEV) debug.attachDebugInfo(this, 'atom', this.id, options.name);
+    if (IS_DEV) debug.attachDebugInfo(this, 'atom', this.id, opts.name);
   }
 
   // ReactiveNode Personality Traits (Declarative Data)
@@ -116,6 +117,7 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
    * a dependent of this atom.
    */
   get value(): T {
+    if (this.isDisposed) return undefined as unknown as T;
     const ctx = trackingContext.current;
     if (ctx) ctx.addDependency(this);
     return this.#value;
@@ -260,6 +262,16 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
   }
 }
 
+function validateAtomOptions<T>(options: unknown): Result<void, Error> {
+  if (options != null && typeof options === 'object') {
+    const opts = options as AtomOptions<T>;
+    if (opts.equal !== undefined && typeof opts.equal !== 'function') {
+      return Result.err(new AtomError('options.equal must be a function'));
+    }
+  }
+  return Result.ok(undefined);
+}
+
 /**
  * Creates a reactive atom to manage mutable state.
  *
@@ -284,5 +296,7 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
  * ```
  */
 export function atom<T>(initialValue: T, options: AtomOptions<T> = {}): WritableAtom<T> {
+  const validation = validateAtomOptions(options);
+  Result.unwrap(validation);
   return new AtomImpl(initialValue, options);
 }

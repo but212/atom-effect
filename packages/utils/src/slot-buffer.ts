@@ -332,7 +332,7 @@ export class SlotBuffer<T> {
 
   /** Logic: Finds a vacant slot using the free index stack or physical append. */
   #rawAdd(item: T): number {
-    const reuseIdx = this.#freeIndices.pop();
+    const reuseIdx = this.isLocked ? undefined : this.#freeIndices.pop();
     if (reuseIdx !== undefined) {
       this.#rawWrite(reuseIdx, item);
       return reuseIdx;
@@ -356,6 +356,7 @@ export class SlotBuffer<T> {
    * Logic: Only triggers if the removed item was at the physical tail of the buffer.
    */
   #shrinkPhysicalSizeFrom(index: number): void {
+    if (this.isLocked) return;
     if (index !== this.#count - 1) return;
     this.#count--;
 

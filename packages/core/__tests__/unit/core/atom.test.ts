@@ -3,7 +3,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { AtomError, aeNextTick, atom, batch, globalScheduler } from '@/index';
+import { AtomError, aeNextTick, atom, batch, computed, globalScheduler } from '@/index';
 
 describe('Atom', () => {
   afterEach(() => {
@@ -39,6 +39,11 @@ describe('Atom', () => {
 
       // Valid subscriber with execute method should not throw
       expect(() => a.subscribe({ execute: vi.fn() })).not.toThrow();
+    });
+
+    it('throws AtomError on initialization if invalid equal option is provided', () => {
+      // @ts-expect-error Testing invalid option
+      expect(() => atom(0, { equal: 'invalid' })).toThrow(AtomError);
     });
   });
 
@@ -176,6 +181,32 @@ describe('Atom', () => {
       a.value = 2;
       expect(globalScheduler.queueSize).toBe(0);
     });
+
+    it('should not notify a newly added subscriber due to slot reuse during the same notification cycle', () => {
+      const a = atom(0, { sync: true });
+      const log: string[] = [];
+
+      // Subscribe S1
+      a.subscribe(() => {
+        log.push('s1');
+        // Unsubscribe S2 and subscribe S3
+        unsub2();
+        a.subscribe(() => {
+          log.push('s3');
+        });
+      });
+
+      // Subscribe S2
+      const unsub2 = a.subscribe(() => {
+        log.push('s2');
+      });
+
+      a.value = 1;
+
+      // S3 was subscribed *during* the execution of S1's callback.
+      // Even though S3 was placed in slot 1 (reusing S2's slot), it should NOT be notified of the current change.
+      expect(log).toEqual(['s1']);
+    });
   });
 
   describe('Subscription Lifecycles & Disposal Behavior', () => {
@@ -237,6 +268,31 @@ describe('Atom', () => {
       const a = atom(42);
       a.dispose();
       expect(a.peek()).toBeUndefined();
+    });
+
+    it('should not retain disposed atoms in computed/effect dependency buffers', () => {
+      const a = atom(42);
+      a.dispose();
+
+      const c = computed(() => {
+        return a.value;
+      });
+
+      // Trigger evaluation
+      c.value;
+
+      // Access dependencies
+      // biome-ignore lint/suspicious/noExplicitAny: Accessing internal storage for dependency validation
+      const deps = (c as any)._storage.deps;
+      if (deps) {
+        const slots = deps.slots;
+        for (let i = 0; i < slots.length; i++) {
+          const link = slots.at(i);
+          if (link && link.node === a) {
+            throw new Error('Disposed atom retained in dependencies');
+          }
+        }
+      }
     });
   });
 
