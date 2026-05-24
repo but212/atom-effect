@@ -127,6 +127,7 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
    * fails the equality check. Triggers downstream notifications.
    */
   set value(newValue: T) {
+    if (this.isDisposed) return;
     if (this.#equal(this.#value, newValue)) return;
 
     const oldValue = this.#value;
@@ -148,7 +149,12 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
    * @returns A disposal function to unsubscribe the listener.
    */
   subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
-    return Result.unwrap(nodeSubscribe(this, listener));
+    const unsub = Result.unwrap(nodeSubscribe(this, listener));
+    if (this.isDisposed) {
+      unsub();
+      return () => {};
+    }
+    return unsub;
   }
 
   /**

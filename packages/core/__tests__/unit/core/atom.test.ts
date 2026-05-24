@@ -3,7 +3,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { AtomError, aeNextTick, atom, batch } from '@/index';
+import { AtomError, aeNextTick, atom, batch, globalScheduler } from '@/index';
 
 describe('Atom', () => {
   afterEach(() => {
@@ -164,9 +164,21 @@ describe('Atom', () => {
       expect(log).toEqual([1, 1]);
       expect(a.subscriberCount()).toBe(1);
     });
+
+    it('should not leave redundant jobs in the scheduler after synchronous re-entrant updates', () => {
+      const a = atom(1, { sync: true });
+      a.subscribe((nv) => {
+        if (nv === 2) {
+          a.value = 3;
+        }
+      });
+
+      a.value = 2;
+      expect(globalScheduler.queueSize).toBe(0);
+    });
   });
 
-  describe('Subscription Lifecycles & Dispositions', () => {
+  describe('Subscription Lifecycles & Disposal Behavior', () => {
     it('manages counts, duplicate warnings, and unsubscription idempotently', () => {
       const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const a = atom(0);
@@ -198,6 +210,33 @@ describe('Atom', () => {
       a.value = 99;
       await aeNextTick();
       expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('should not allow value update or retention after disposal', () => {
+      const a = atom<{ data: string } | null>({ data: 'initial' });
+      a.dispose();
+      a.value = { data: 'leak' };
+      expect(a.peek()).toBeUndefined();
+    });
+
+    it('should not allow or retain subscriptions after disposal', () => {
+      const a = atom(0);
+      a.dispose();
+      const unsub = a.subscribe(() => {});
+      expect(a.subscriberCount()).toBe(0);
+      expect(() => unsub()).not.toThrow();
+    });
+
+    it('should return undefined on read access after disposal', () => {
+      const a = atom(42);
+      a.dispose();
+      expect(a.value).toBeUndefined();
+    });
+
+    it('should return undefined on peek after disposal', () => {
+      const a = atom(42);
+      a.dispose();
+      expect(a.peek()).toBeUndefined();
     });
   });
 
