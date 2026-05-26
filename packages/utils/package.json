@@ -27,9 +27,9 @@
   },
   "devDependencies": {
     "@but212/atom-effect-configs": "workspace:*",
-    "tinybench": "^6.0.1",
+    "tinybench": "^6.0.2",
     "typescript": "^6.0.3",
-    "vite": "^8.0.12",
-    "vitest": "^4.1.6"
+    "vite": "^8.0.14",
+    "vitest": "^4.1.7"
   }
 }
