@@ -10,7 +10,7 @@
  * reconciliation to provide a single-page application experience within JQuery.
  */
 
-import { Option, Result } from '@but212/atom-effect-utils';
+import { Result } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import {
   type ContentState,
@@ -35,53 +35,6 @@ interface NavState {
   url: string;
   type: NavigationType;
 }
-
-/** @internal */
-interface NavSpec {
-  historyMethod: 'pushState' | 'replaceState' | null;
-  isInitial: boolean;
-}
-
-/**
- * Logic: History Transition Config
- * Defines the mapping between reactive navigation types and their
- * respective browser History API operations.
- * @internal
- */
-const NAV_SPECS = {
-  push: { historyMethod: 'pushState', isInitial: false },
-  replace: { historyMethod: 'replaceState', isInitial: false },
-  init: { historyMethod: null, isInitial: true },
-  pop: { historyMethod: null, isInitial: false },
-} as const satisfies Record<NavigationType, NavSpec>;
-
-/**
- * Logic: Data-to-DOM Registry
- * Defines how specific parts of the fetched content state are applied to the browser environment.
- */
-const SYNC_REGISTRY = [
-  {
-    key: 'title',
-    apply: (win, _, val, opts) => {
-      const title = val as string | null;
-      if (opts.syncTitle && title !== null && win.document.title !== title) {
-        win.document.title = title;
-      }
-    },
-  },
-  { key: 'meta', apply: (win, _, val) => syncMetaData(win, val as Record<string, string>) },
-  {
-    key: 'attributes',
-    apply: (_, $target, val) => {
-      const el = $target[0] as HTMLElement | undefined;
-      if (el && val) updateAttributes(el, val as Record<string, string>);
-    },
-  },
-  { key: 'html', apply: (_, $target, val) => $target.html(val as string) },
-] as const satisfies Array<{
-  key: keyof ContentState;
-  apply: (win: Window, $target: JQuery, value: unknown, options: { syncTitle: boolean }) => void;
-}>;
 
 /**
  * Logic: DOM Reconciliation
@@ -112,33 +65,20 @@ function reconcileDOM(params: {
     // Constraint: Clean up internal atom bindings within the target before replacing HTML
     $target.children().atomUnbind();
 
-    for (const sync of SYNC_REGISTRY) {
-      const val = state[sync.key];
-      sync.apply(win, $target, val, { syncTitle });
+    if (syncTitle && state.title !== null && win.document.title !== state.title) {
+      win.document.title = state.title;
     }
+    if (state.meta) {
+      syncMetaData(win, state.meta);
+    }
+    const el = $target[0] as HTMLElement | undefined;
+    if (el && state.attributes) {
+      updateAttributes(el, state.attributes);
+    }
+    $target.html(state.html);
 
     onMount?.($target, url);
   });
-}
-
-/**
- * Logic: History Synchronization
- * Performs an atomic update of the browser history and the internal reactive intent.
- */
-function commitNavigation(params: {
-  url: string;
-  type: NavigationType;
-  win: Window;
-  state: { value: NavState };
-}): void {
-  const { url, type, win, state } = params;
-  const spec = NAV_SPECS[type];
-  if (spec.historyMethod) {
-    $.batch(() => {
-      win.history[spec.historyMethod!](null, '', url);
-      state.value = { url, type };
-    });
-  }
 }
 
 /** @internal */
@@ -157,72 +97,9 @@ function initNavAtoms(win: Window) {
 
 /** @internal */
 function resolveTargetSelector(target: unknown, $target: JQuery): string | undefined {
-  return Option.unwrapOr(
-    Option.map(
-      Option.fromNullable(typeof target === 'string' ? target : $target.attr('id')),
-      (id) => (id.startsWith('#') ? id : `#${$.escapeSelector(id)}`)
-    ),
-    undefined
-  );
-}
-
-/** @internal */
-function getNavigationPolicies(params: {
-  target: URL;
-  current: URL;
-  type: NavigationType;
-  win: Window;
-  url: string;
-  isSamePath: boolean;
-  options: AtomNavOptions;
-  state: ReturnType<typeof initNavAtoms>;
-  hasError: ReadonlyAtom<boolean>;
-  $target: JQuery;
-  signal: AbortSignal;
-}): Array<() => boolean | Promise<boolean>> {
-  const { target, current, type, win, url, isSamePath, options, state, hasError, $target, signal } =
-    params;
-
-  return [
-    () => {
-      if (target.origin !== current.origin) {
-        win.location.assign(url);
-        return false;
-      }
-      return true;
-    },
-    () => {
-      const isSameLoc = isSamePath && target.hash === current.hash;
-      if (isSameLoc && type === 'push') {
-        if (hasError.peek()) {
-          state.fetchVersion.value++;
-        } else if (url.includes('#')) {
-          performScroll(win, target.hash.slice(1), true);
-        }
-        return false;
-      }
-      return true;
-    },
-    () => {
-      const { onBeforeLoad } = options;
-      if (!isSamePath && onBeforeLoad) {
-        return (async () => {
-          state.pendingHooks.value++;
-          try {
-            const ok = await onBeforeLoad(url, signal);
-            return !(signal.aborted || ok === false);
-          } finally {
-            state.pendingHooks.value = Math.max(0, state.pendingHooks.value - 1);
-          }
-        })();
-      }
-      return true;
-    },
-    () => {
-      const container = $target[0];
-      return !(container && !navCoordinator.canLeaveWithin(container));
-    },
-  ];
+  const id = typeof target === 'string' ? target : $target.attr('id');
+  if (!id) return undefined;
+  return id.startsWith('#') ? id : `#${$.escapeSelector(id)}`;
 }
 
 /**
@@ -319,9 +196,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
 
   const renewAbortSignal = (): AbortController => {
     _navController?.abort();
-    if ('abort' in content && typeof (content as { abort: Function }).abort === 'function') {
-      (content as { abort: Function }).abort();
-    }
+    (content as { abort?: () => void }).abort?.();
     const controller = new AbortController();
     _navController = controller;
     return controller;
@@ -337,8 +212,6 @@ export function atomNav(options: AtomNavOptions): AtomNav {
       const { url, pathAndSearch, hash, type } = normalized.value;
       const rendered = $.untracked(() => state.rendered.value);
 
-      const spec = NAV_SPECS[type];
-
       /**
        * Optimization: Hash-only Transition
        * Skips the full fetch-reconcile cycle if the navigation only involves
@@ -348,7 +221,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
         $.untracked(() => {
           if (hash) performScroll(win, hash);
 
-          if (spec.isInitial) {
+          if (type === 'init') {
             options.onMount?.($target, url);
             state.intent.value = { ...state.intent.peek(), type: 'push' };
           } else if (url !== rendered.url) {
@@ -455,17 +328,10 @@ export function atomNav(options: AtomNavOptions): AtomNav {
     { signal: _lifecycleController.signal }
   );
 
-  const navStatus = $.computed(
-    () => {
-      if (content.isPending || state.pendingHooks.value > 0) return 'pending';
-      if (content.hasError) return 'error';
-      return 'idle';
-    },
-    { name: 'nav:status' }
-  );
-
-  const isPending = $.computed(() => navStatus.value === 'pending', { name: 'nav:isPending' });
-  const hasError = $.computed(() => navStatus.value === 'error', { name: 'nav:hasError' });
+  const isPending = $.computed(() => content.isPending || state.pendingHooks.value > 0, {
+    name: 'nav:isPending',
+  });
+  const hasError = $.computed(() => content.hasError, { name: 'nav:hasError' });
 
   // Logic: Public API Implementation
   const navigator: AtomNav = {
@@ -486,30 +352,45 @@ export function atomNav(options: AtomNavOptions): AtomNav {
       const path = target.pathname + target.search;
       const isSamePath = path === current.pathname + current.search;
 
-      const policies = getNavigationPolicies({
-        target,
-        current,
-        type,
-        win,
-        url,
-        isSamePath,
-        options,
-        state,
-        hasError,
-        $target,
-        signal,
-      });
+      // 1. Origin check
+      if (target.origin !== current.origin) {
+        win.location.assign(url);
+        return;
+      }
 
-      for (let i = 0, len = policies.length; i < len; i++) {
-        const result = policies[i]!();
-        if (result instanceof Promise) {
-          if (!(await result)) return;
-        } else if (!result) {
-          return;
+      // 2. Same-path / hash transition optimization
+      if (isSamePath && target.hash === current.hash && type === 'push') {
+        if (hasError.peek()) {
+          state.fetchVersion.value++;
+        } else if (url.includes('#')) {
+          performScroll(win, target.hash.slice(1), true);
+        }
+        return;
+      }
+
+      // 3. onBeforeLoad hook check
+      if (!isSamePath && options.onBeforeLoad) {
+        state.pendingHooks.value++;
+        try {
+          const ok = await options.onBeforeLoad(url, signal);
+          if (signal.aborted || ok === false) return;
+        } finally {
+          state.pendingHooks.value = Math.max(0, state.pendingHooks.value - 1);
         }
       }
 
-      commitNavigation({ url: path + target.hash, type, win, state: state.intent });
+      // 4. Leave guard check
+      const container = $target[0];
+      if (container && !navCoordinator.canLeaveWithin(container)) {
+        return;
+      }
+
+      // 5. Commit history and update intent
+      $.batch(() => {
+        const historyMethod = type === 'replace' ? 'replaceState' : 'pushState';
+        win.history[historyMethod](null, '', path + target.hash);
+        state.intent.value = { url: path + target.hash, type };
+      });
     },
 
     /**
@@ -530,7 +411,6 @@ export function atomNav(options: AtomNavOptions): AtomNav {
         state.rendered,
         normalized,
         navigator.currentUrl,
-        navStatus,
         isPending,
         hasError,
       ];
