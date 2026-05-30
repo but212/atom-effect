@@ -51,26 +51,61 @@ export type ErrorStrategy = {
  * Data-driven strategies for extracting metadata from different error types.
  * @internal
  */
+const toSafeString = (val: unknown, fallback = ''): string => {
+  try {
+    return val !== undefined && val !== null ? String(val) : fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+const toSafeStringOrUndefined = (val: unknown): string | undefined => {
+  try {
+    return val !== undefined && val !== null ? String(val) : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+const toSafeBoolean = (val: unknown, fallback: boolean): boolean =>
+  typeof val === 'boolean' ? val : fallback;
+
 export const ERROR_STRATEGIES: readonly ErrorStrategy[] = [
   {
     /** Logic: Brand-based check for system errors */
-    test: (e: unknown): boolean =>
-      typeof e === 'object' && e !== null && '_tag' in e && String(e._tag).endsWith('Error'),
-    fetch: (e: unknown) => ({
-      name: String((e as Record<string, unknown>).name),
-      message: String((e as Record<string, unknown>).message),
-      recoverable: Boolean((e as Record<string, unknown>).recoverable),
-      code: (e as Record<string, unknown>).code as string | undefined,
-    }),
+    test: (e: unknown): boolean => {
+      try {
+        return (
+          typeof e === 'object' &&
+          e !== null &&
+          '_tag' in e &&
+          String((e as Record<string, unknown>)._tag).endsWith('Error')
+        );
+      } catch {
+        return false;
+      }
+    },
+    fetch: (e: unknown) => {
+      const obj = e as Record<string, unknown>;
+      return {
+        name: toSafeString(obj.name),
+        message: toSafeString(obj.message),
+        recoverable: Boolean(obj.recoverable),
+        code: toSafeStringOrUndefined(obj.code),
+      };
+    },
   },
   {
     /** Logic: Fallback for standard JavaScript Errors */
     test: (e: unknown): e is Error => e instanceof Error,
-    fetch: (e: unknown) => ({
-      name: (e as Error).name,
-      message: (e as Error).message,
-      recoverable: true,
-      code: (e as Record<string, unknown>).code as string | undefined,
-    }),
+    fetch: (e: unknown) => {
+      const err = e as Error & Record<string, unknown>;
+      return {
+        name: err.name,
+        message: err.message,
+        recoverable: toSafeBoolean(err.recoverable, true),
+        code: toSafeStringOrUndefined(err.code),
+      };
+    },
   },
 ];

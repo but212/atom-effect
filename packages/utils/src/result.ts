@@ -53,8 +53,12 @@ const VOID_SUCCESS = Object.freeze({
  */
 function toError(e: unknown): Error {
   if (e instanceof Error) return e;
-  const message = typeof e === 'string' ? e : String(e ?? 'Unknown error');
-  return new Error(message, { cause: e });
+  try {
+    const message = typeof e === 'string' ? e : String(e ?? 'Unknown error');
+    return new Error(message, { cause: e });
+  } catch {
+    return new Error('Unknown error (failed to stringify caught value)', { cause: e });
+  }
 }
 
 /**
@@ -64,15 +68,15 @@ export const Result = {
   /**
    * Creates a successful Result.
    */
-  ok: <T, E = never>(value: T): Result<T, E> => {
-    if ((value as unknown) === undefined) return VOID_SUCCESS as unknown as Result<T, E>;
-    return {
-      ok: true,
-      value,
-      error: undefined,
-      [RESULT_SYMBOL]: true,
-    } as Ok<T>;
-  },
+  ok: <T, E = never>(value: T): Result<T, E> =>
+    value === undefined
+      ? (VOID_SUCCESS as unknown as Result<T, E>)
+      : ({
+          ok: true,
+          value,
+          error: undefined,
+          [RESULT_SYMBOL]: true,
+        } as Ok<T>),
 
   /**
    * Creates a failed Result.
@@ -113,7 +117,7 @@ export const Result = {
    * Extracts the value if Ok, otherwise throws with a custom message.
    */
   expect: <T, E>(res: Result<T, E>, msg: string): T => {
-    if (!res.ok) throw new Error(msg);
+    if (!res.ok) throw new Error(msg, { cause: res.error });
     return res.value;
   },
 
@@ -135,7 +139,7 @@ export const Result = {
   map: <T, E, U>(res: Result<T, E>, fn: (val: T) => U): Result<U, E> => {
     if (!res.ok) return res as unknown as Result<U, E>;
     const next = fn(res.value);
-    return (next as unknown) === res.value ? (res as unknown as Result<U, E>) : Result.ok(next);
+    return Object.is(next, res.value) ? (res as unknown as Result<U, E>) : Result.ok(next);
   },
 
   /**
@@ -164,15 +168,12 @@ export const Result = {
   /**
    * Wraps an asynchronous operation into a Result-bearing Promise.
    */
-  tryAsync: <T, E = Error>(fn: () => PromiseLike<T>): Promise<Result<T, E>> => {
+  tryAsync: async <T, E = Error>(fn: () => PromiseLike<T>): Promise<Result<T, E>> => {
     try {
-      const p = fn();
-      return Promise.resolve(p).then(
-        (value) => Result.ok<T, E>(value),
-        (error) => Result.err<T, E>(toError(error) as unknown as E)
-      );
+      const value = await fn();
+      return Result.ok<T, E>(value);
     } catch (e) {
-      return Promise.resolve(Result.err<T, E>(toError(e) as unknown as E));
+      return Result.err<T, E>(toError(e) as unknown as E);
     }
   },
 
