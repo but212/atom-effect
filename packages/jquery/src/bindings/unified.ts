@@ -7,7 +7,6 @@
  */
 
 import { effect, untracked } from '@but212/atom-effect';
-import { Option } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { applyInputBinding } from '@/bindings/input-binding';
 import { SYSTEM_BINDING, SYSTEM_SECURITY } from '@/constants';
@@ -88,10 +87,7 @@ export function bindText<T = unknown>(
     element,
     value,
     (val) => {
-      const textContent = Option.unwrapOr(
-        Option.map(Option.fromNullable(formatter), (fn: Function) => fn(val)),
-        String(val ?? '')
-      );
+      const textContent = formatter ? formatter(val) : String(val ?? '');
       if (element.textContent !== textContent) {
         element.textContent = textContent;
       }
@@ -249,14 +245,16 @@ export function bindAttr(
         const meta = metaMap[name];
         if (!meta) continue;
 
-        const attrVal = Option.unwrapOr(
-          Option.map(Option.fromNullable(value), (val) => {
-            if (val === true) return meta.isAria ? 'true' : name;
-            if (val === false) return meta.isAria ? 'false' : null;
-            return String(val);
-          }),
-          null
-        );
+        let attrVal: string | null = null;
+        if (value !== null && value !== undefined) {
+          if (value === true) {
+            attrVal = meta.isAria ? 'true' : name;
+          } else if (value === false) {
+            attrVal = meta.isAria ? 'false' : null;
+          } else {
+            attrVal = String(value);
+          }
+        }
 
         // 2. Validate and Apply
         if (attrVal !== null && isDangerousUrl(name, attrVal as string)) {

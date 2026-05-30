@@ -34,7 +34,7 @@ import { debug } from '@/utils/debug';
  * - Perform manual DOM measurements after reactive changes.
  * - Coordinate external library initializations dependent on current DOM state.
  */
-export const nextTick = (): Promise<void> => aeNextTick();
+export const nextTick = aeNextTick;
 
 /**
  * Logic: Unified Reactive Namespace

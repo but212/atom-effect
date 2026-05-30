@@ -96,6 +96,19 @@ describe('jQuery Patch (Lifecycle & Events)', () => {
       $el.trigger('click');
       expect(count).toBe(1); // Should not increase
 
+      // Verify unbinding with event map containing ORIGINAL handler works
+      let mapCount = 0;
+      const mapHandler = () => {
+        mapCount++;
+      };
+      $el.on({ click: mapHandler });
+      $el.trigger('click');
+      expect(mapCount).toBe(1);
+
+      $el.off({ click: mapHandler });
+      $el.trigger('click');
+      expect(mapCount).toBe(1); // Should not increase
+
       // 2. Special handler (boolean false) compatibility
       let submitCount = 0;
       const form = $('<form>')
