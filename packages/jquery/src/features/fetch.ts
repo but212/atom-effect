@@ -10,10 +10,10 @@
  * dependency tracking, concurrency control, and lifecycle-bound cancellation.
  */
 
-import { computed } from '@but212/atom-effect';
+import { type ComputedAtom, computed } from '@but212/atom-effect';
 import { Result } from '@but212/atom-effect-utils';
 import $ from 'jquery';
-import type { ComputedAtom, FetchError, FetchOptions } from '@/types';
+import type { FetchError, FetchOptions } from '@/types';
 
 /**
  * Logic: Priority Resolution

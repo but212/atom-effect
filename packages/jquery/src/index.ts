@@ -121,12 +121,17 @@ export function cleanup(element: HTMLElement | JQuery): void {
 $.extend({ initAEJ });
 
 export type {
+  ComputedAtom,
+  ReadonlyAtom,
+  WritableAtom,
+} from '@but212/atom-effect';
+
+export type {
   AtomComponentController,
   AtomNav,
   AtomNavOptions,
   BindingOptions,
   ComponentFn,
-  ComputedAtom,
   CssBindings,
   CssValue,
   EffectCleanup,
@@ -138,13 +143,11 @@ export type {
   ListOptions,
   PrimitiveValue,
   ReactiveValue,
-  ReadonlyAtom,
   RouteConfig,
   RouteDefinition,
   RouteLifecycle,
   Router,
   ValOptions,
-  WritableAtom,
 } from '@/types';
 
 export default $;

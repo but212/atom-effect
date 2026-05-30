@@ -38,9 +38,6 @@ export const SYSTEM_ROUTE = {
   } as const) satisfies Partial<RouteConfig>,
   ERRORS: {
     NOT_FOUND: (n: string) => `Route "${n}" not found`,
-    TEMPLATE_NOT_FOUND: (s: string) => `Template "${s}" not found`,
-    TARGET_NOT_FOUND: (s: string) => `Target "${s}" not found`,
-    MALFORMED_URI: (r: string) => `Malformed URI: ${r}`,
   },
 } as const;
 
@@ -65,7 +62,6 @@ export const SYSTEM_BINDING = {
     MISSING_CONDITION: (m: string) => `[${m}] condition required.`,
     UPDATER_ERROR: (d: string, s?: boolean) => `Updater failed: "${d}"${s ? ' (static)' : ''}`,
     CLEANUP_ERROR: (i?: string) => `Binding cleanup error${i ? `: ${i}` : ''}`,
-    PARSE_ERROR: (d?: string) => `Parse error${d ? `: ${d}` : ''}`,
   },
 } as const;
 
@@ -116,8 +112,6 @@ export const SYSTEM_SECURITY = {
   /** Security: Targets common script-capable protocols in URI strings. */
   DANGEROUS_PROTOCOL_PATTERN: '(?:javascript|vbscript)',
   ERRORS: {
-    UNSAFE_CONTENT: () => 'Unsafe content neutralized.',
-    BLOCKED_CSS_VALUE: (p: string) => `Blocked CSS: "${p}".`,
     BLOCKED_EVENT_HANDLER: (n: string) => `Blocked handler: "${n}".`,
     BLOCKED_PROTOCOL: (n: string) => `Blocked protocol: "${n}".`,
     BLOCKED_PROP: (n: string) => `Blocked prop: "${n}".`,
@@ -136,7 +130,6 @@ export const SYSTEM_LIST = {
 export const SYSTEM_MOUNT = {
   PREFIX: '[atom-mount]',
   ERRORS: {
-    ERROR: (n?: string) => `Mount error${n ? ` in <${n}>` : ''}`,
     CLEANUP_ERROR: (n?: string) => `Cleanup error${n ? ` in <${n}>` : ''}`,
   },
 } as const;

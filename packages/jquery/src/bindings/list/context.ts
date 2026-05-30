@@ -9,7 +9,8 @@
  * (exit animations) to maintain visual stability and prevent memory leaks.
  */
 
-import type { EffectObject, ListKey } from '@/types';
+import type { EffectObject } from '@but212/atom-effect';
+import type { ListKey } from '@/types';
 import { setAtomKey } from './utils';
 
 /**

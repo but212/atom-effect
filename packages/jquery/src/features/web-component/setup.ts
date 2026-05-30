@@ -12,12 +12,12 @@
  * testing and allows for granular optimization of DOM-heavy operations.
  */
 
-import { isAtom } from '@but212/atom-effect';
+import { type Disposable, isAtom } from '@but212/atom-effect';
 import type { SlotBuffer } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { SYSTEM_COMPONENT } from '@/constants';
 import { HYDRATION_MARKER } from '@/core/symbols';
-import type { Disposable, ReactiveValue, ReadonlyAtom } from '@/types';
+import type { ReactiveValue, ReadonlyAtom } from '@/types';
 import { flattenToFormData } from '@/utils';
 import { resolveValue } from './utils';
 

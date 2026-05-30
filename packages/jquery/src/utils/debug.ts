@@ -41,14 +41,11 @@ class DebugController {
     this.#enabled = val;
     if (!val) {
       this.#styleInjected = false;
-      this.#lastCheckTime = 0;
     }
   }
 
   /** Logic: Resilience - Prevents redundant style block injections. */
   #styleInjected = false;
-
-  #lastCheckTime = 0;
 
   /**
    * Optimization: Memory Safety
@@ -164,26 +161,11 @@ class DebugController {
   }
 
   /**
-   * Logic: Lazy & Resilient Style Injection
+   * Logic: Lazy Style Injection
    * Injects CSS required for visual debugging only when the first highlight occurs.
-   *
-   * Optimization: Modern API Preference
-   * Prioritizes `adoptedStyleSheets` for cleaner DOM and better performance
-   * in supporting browsers, with a fallback to standard `<style>` elements.
    */
   #injectStyle(): void {
-    if (!IS_BROWSER) return;
-
-    // Resilience: Verify physical presence in case the DOM was cleared (e.g., between tests).
-    // Throttle check frequency to once every 1000ms to eliminate hot-path performance overhead.
-    const now = Date.now();
-    let isPresent = true;
-    if (!this.#styleInjected || now - this.#lastCheckTime > 1000) {
-      isPresent = !!(document.querySelector(`style[${ATTR_MARKER}]`) || this.#checkAdoptedStyles());
-      this.#lastCheckTime = now;
-    }
-
-    if (this.#styleInjected && isPresent) return;
+    if (!IS_BROWSER || this.#styleInjected) return;
 
     const css = `
       [${ATTR_MARKER}] { outline: 0px solid transparent; transition: outline 0.1s ease-out; }
@@ -193,32 +175,11 @@ class DebugController {
       }
     `.replace(/\s+/g, ' ');
 
-    if ('adoptedStyleSheets' in document && 'replaceSync' in CSSStyleSheet.prototype) {
-      const sheet = new CSSStyleSheet();
-      sheet.replaceSync(css);
-      document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
-    } else {
-      const style = document.createElement('style');
-      style.setAttribute(ATTR_MARKER, '');
-      style.textContent = css;
-      document.head.appendChild(style);
-    }
+    const style = document.createElement('style');
+    style.setAttribute(ATTR_MARKER, '');
+    style.textContent = css;
+    document.head.appendChild(style);
     this.#styleInjected = true;
-  }
-
-  /** Logic: Deep Inspection - Scans adopted stylesheets for existing diagnostic rules. */
-  #checkAdoptedStyles(): boolean {
-    if (!('adoptedStyleSheets' in document)) return false;
-
-    const doc = document as Document & { adoptedStyleSheets: readonly CSSStyleSheet[] };
-
-    return doc.adoptedStyleSheets.some((s: CSSStyleSheet) => {
-      try {
-        return Array.from(s.cssRules).some((r: CSSRule) => r.cssText.includes(ATTR_MARKER));
-      } catch {
-        return false;
-      }
-    });
   }
 
   /** Logic: Environment Resolution - Determines initial state based on global flags or NODE_ENV. */

@@ -10,10 +10,10 @@
  * while maintaining memory safety via automated lifecycle cleanup.
  */
 
-import { effect, untracked } from '@but212/atom-effect';
+import { type EffectObject, effect, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
 import { registry } from '@/core/registry';
-import type { EffectObject, ListKey, ListKeyFn, ListOptions, ReadonlyAtom } from '@/types';
+import type { ListKey, ListKeyFn, ListOptions, ReadonlyAtom } from '@/types';
 import { getSelector } from '@/utils';
 import { ListContext } from './context';
 import { buildIndices } from './diff';

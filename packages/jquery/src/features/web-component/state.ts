@@ -11,10 +11,11 @@
  * preventing memory leaks even in complex "move" scenarios (DOM re-parenting).
  */
 
+import type { Disposable } from '@but212/atom-effect';
 import { SlotBuffer } from '@but212/atom-effect-utils';
 import { disableAutoCleanupFor } from '@/core/registry';
 import { CLEANUP_MARKER, HYDRATION_MARKER } from '@/core/symbols';
-import type { Disposable, WritableAtom } from '@/types';
+import type { WritableAtom } from '@/types';
 import { resolveShadowRoot } from './utils';
 
 /**

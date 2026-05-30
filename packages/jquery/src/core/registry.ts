@@ -7,9 +7,9 @@
  * through a combination of WeakMap storage and MutationObserver safety nets.
  */
 
+import type { EffectObject } from '@but212/atom-effect';
 import { SlotBuffer } from '@but212/atom-effect-utils';
 import { SYSTEM_BINDING, SYSTEM_CORE, SYSTEM_MOUNT } from '@/constants';
-import type { EffectObject } from '@/types';
 import { getSelector } from '@/utils';
 import { debug } from '@/utils/debug';
 

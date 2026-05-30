@@ -29,16 +29,15 @@ export { isPromise } from '@but212/atom-effect-utils';
  * @internal
  */
 export function getSelector(el: Element): string {
-  const { localName: tag, id, className } = el;
+  const tag = el.localName;
+  const id = el.id;
+  const classStr = el.getAttribute('class');
+  const type = (el as HTMLInputElement).type;
+
   let res = tag;
   if (id) {
     res += `#${id}`;
   }
-
-  const classStr =
-    typeof className === 'string'
-      ? className
-      : (className as unknown as SVGAnimatedString)?.baseVal;
 
   if (classStr) {
     const trimmed = classStr.trim().replace(/\s+/g, '.');
@@ -47,7 +46,6 @@ export function getSelector(el: Element): string {
     }
   }
 
-  const type = (el as { type?: string }).type;
   if (type && type !== 'text') {
     res += `.${type}`;
   }
@@ -61,7 +59,7 @@ export function getSelector(el: Element): string {
  * @internal
  */
 export const isTemplateRoute = (r: RouteDefinition): boolean =>
-  r !== null && typeof r === 'object' && typeof r.template === 'string';
+  r && typeof r === 'object' && typeof r.template === 'string';
 
 /**
  * Logic: Render Type Guard
@@ -69,7 +67,7 @@ export const isTemplateRoute = (r: RouteDefinition): boolean =>
  * @internal
  */
 export const isRenderRoute = (r: RouteDefinition): boolean =>
-  r !== null && typeof r === 'object' && typeof r.render === 'function';
+  r && typeof r === 'object' && typeof r.render === 'function';
 
 /**
  * Logic: Nested Serialization

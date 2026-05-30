@@ -12,13 +12,19 @@
  * and reactive tracking across the DOM tree.
  */
 
-import { BRAND, BrandFlags, isAtom, isWritable, untracked } from '@but212/atom-effect';
+import {
+  BRAND,
+  BrandFlags,
+  type EffectObject,
+  isAtom,
+  isWritable,
+  untracked,
+} from '@but212/atom-effect';
 import $ from 'jquery';
 import { CONTEXT_REQUEST, type ContextRequestDetail } from '@/core/symbols';
 import type {
   AtomComponentController,
   AtomComponentStatic,
-  EffectObject,
   ReadonlyAtom,
   WritableAtom,
 } from '@/types';
