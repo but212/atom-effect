@@ -353,26 +353,8 @@ class ReactiveScheduler implements SchedulerState {
 export const scheduler = new ReactiveScheduler();
 
 /** @internal */
-export const schedulerFlushQueues = (state: SchedulerState) =>
-  (state as ReactiveScheduler).flushQueues();
-/** @internal */
-export const schedulerNextEpoch = (state: SchedulerState) => state.nextEpoch();
-/** @internal */
-export const schedulerStartFlush = (state: SchedulerState) => state.startFlush();
-/** @internal */
-export const schedulerEndFlush = (state: SchedulerState) => state.endFlush();
-/** @internal */
-export const schedulerIncrementFlushExecutionCount = (state: SchedulerState) =>
-  state.incrementFlushExecutionCount();
-/** @internal */
-export const schedulerResetFlushState = (state: SchedulerState) => state.resetFlushState();
-/** @internal */
 export const schedulerSchedule = (state: SchedulerState, callback: SchedulerJob) =>
   Result.unwrap(state.schedule(callback));
-/** @internal */
-export const schedulerFlushSync = (state: SchedulerState) => state.flushSync();
-/** @internal */
-export const schedulerStartBatch = (state: SchedulerState) => state.startBatch();
 /** @internal */
 export const schedulerEndBatch = (state: SchedulerState) => state.endBatch();
 /** @internal */
@@ -387,14 +369,7 @@ export const schedulerQueueSize = (state: SchedulerState) => state.queueSize;
 
 /** Returns the next reactive epoch identifier. */
 export const nextEpoch = (): number => scheduler.nextEpoch();
-/** Returns the current system epoch. */
-export const currentEpoch = (): number => scheduler.epoch;
 export const currentFlushEpoch = (): number => scheduler.sessionEpoch;
-export const startFlush = (): boolean => scheduler.startFlush();
-export const endFlush = (): void => scheduler.endFlush();
-export const incrementFlushExecutionCount = (): number =>
-  Result.unwrap(scheduler.incrementFlushExecutionCount());
-export const resetFlushState = (): void => scheduler.resetFlushState();
 
 /**
  * Logic: Atomic Update Batching
