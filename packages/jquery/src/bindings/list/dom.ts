@@ -17,7 +17,7 @@ import { debug } from '@/utils/debug';
 import { sanitizeCache, sanitizeHtml } from '@/utils/sanitize';
 import type { ListContext } from './context';
 import { ItemState, type PlaceCallbacks, type PreparedDiff } from './types';
-import { cleanupNodes, setAtomKey, wrap } from './utils';
+import { cleanupNodes, setAtomKey } from './utils';
 
 /**
  * Optimization: Zero-allocation
@@ -28,19 +28,14 @@ import { cleanupNodes, setAtomKey, wrap } from './utils';
  * Directly iterates over JQuery objects to avoid `.get()` or `Array.from()`.
  */
 export function insertOrAppend(
-  elOrJq: Element | JQuery | undefined,
+  $el: JQuery | undefined,
   nextNode: Node | null,
   container: Element
 ): void {
-  if (!elOrJq) return;
+  if (!$el) return;
 
-  if (elOrJq instanceof Element) {
-    container.insertBefore(elOrJq, nextNode);
-    return;
-  }
-
-  for (let i = 0, len = elOrJq.length; i < len; i++) {
-    const el = elOrJq[i];
+  for (let i = 0, len = $el.length; i < len; i++) {
+    const el = $el[i];
     if (el) container.insertBefore(el, nextNode);
   }
 }
@@ -75,7 +70,7 @@ export function handleEmpty<T>(
     for (let i = 0; i < len; i++) {
       const row = snapshots[i]!;
       if (row.node) {
-        ctx.remove(row.key, wrap(row.node as Element | JQuery<Element>));
+        ctx.remove(row.key, row.node);
       }
     }
   }
@@ -167,13 +162,12 @@ export function renderItems<T>(
 
     const oldNode = slot.node;
     if (slot.state === ItemState.ForceReplace && oldNode) {
-      cleanupNodes(oldNode as Element | JQuery);
-      const $old = wrap(oldNode as Element | JQuery<Element>);
-      $old.first().before($el);
-      $old.remove();
+      cleanupNodes(oldNode);
+      oldNode.first().before($el);
+      oldNode.remove();
     }
 
-    slot.node = $el.length === 1 ? ($el[0] as Element) : $el;
+    slot.node = $el;
   }
 
   return null;
@@ -273,7 +267,7 @@ export function cleanupRemoved<T>(ctx: ListContext<T>): void {
   for (let i = 0, len = snapshots.length; i < len; i++) {
     const row = snapshots[i]!;
     if (row.node && !keyToIndex.has(row.key)) {
-      ctx.remove(row.key, wrap(row.node as Element | JQuery<Element>));
+      ctx.remove(row.key, row.node);
     }
   }
 }
@@ -306,7 +300,7 @@ export function placeItems<T>(
         if (!el) break;
         const slot = slots[i]!;
         el.setAttribute('data-atom-key', String(slot.key));
-        slot.node = el;
+        slot.node = $(el) as unknown as JQuery;
         slot.state = ItemState.Existing;
         el = el.nextElementSibling;
       }
@@ -317,10 +311,10 @@ export function placeItems<T>(
         const { key, item } = slot;
 
         el.setAttribute('data-atom-key', String(key));
-        slot.node = el;
+        const $el = $(el) as unknown as JQuery;
+        slot.node = $el;
         slot.state = ItemState.Existing;
 
-        const $el = $(el) as unknown as JQuery;
         if (bind) bind($el, item, i);
         if (onAdd) {
           onAdd($el);
@@ -337,15 +331,11 @@ export function placeItems<T>(
   if (ctx.snapshots.length === 0 && ctx.removingKeys.size === 0) {
     const frag = document.createDocumentFragment();
     for (let i = 0; i < count; i++) {
-      const node = slots[i]!.node;
-      if (!node) continue;
-      if (node instanceof Element) {
-        frag.appendChild(node);
-      } else {
-        for (let j = 0, jLen = node.length; j < jLen; j++) {
-          const entry = node[j];
-          if (entry) frag.appendChild(entry);
-        }
+      const $node = slots[i]!.node;
+      if (!$node) continue;
+      for (let j = 0, jLen = $node.length; j < jLen; j++) {
+        const entry = $node[j];
+        if (entry) frag.appendChild(entry);
       }
     }
     container.innerHTML = '';
@@ -360,12 +350,12 @@ export function placeItems<T>(
       const node = slot.node;
       if (!node) continue;
 
-      const first = node instanceof Element ? node : node[0];
+      const first = node[0];
       if (first) {
         if (idx !== -1 && idx < min) {
           min = idx;
         } else {
-          insertOrAppend(node as Element | JQuery, next, container);
+          insertOrAppend(node, next, container);
         }
         next = first;
       }
@@ -381,20 +371,19 @@ export function placeItems<T>(
 
     switch (state) {
       case ItemState.Existing:
-        if (update) update(wrap(node as Element | JQuery<Element>), item, i);
+        if (update) update(node, item, i);
         break;
       case ItemState.New: {
-        const $el = wrap(node as Element | JQuery<Element>);
-        if (bind) bind($el, item, i);
+        if (bind) bind(node, item, i);
         if (onAdd) {
-          onAdd($el);
+          onAdd(node);
           ctx.removingKeys.delete(key);
-          debug.domUpdated(SYSTEM_LIST.PREFIX, $el, 'list.add', item);
+          debug.domUpdated(SYSTEM_LIST.PREFIX, node, 'list.add', item);
         }
         break;
       }
       case ItemState.ForceReplace:
-        if (bind) bind(wrap(node as Element | JQuery<Element>), item, i);
+        if (bind) bind(node, item, i);
         break;
     }
   }
