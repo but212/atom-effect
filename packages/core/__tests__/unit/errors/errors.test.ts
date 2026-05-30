@@ -200,5 +200,22 @@ describe('Error Handling System', () => {
       expect(typeof meta.code).not.toBe('number');
       expect(meta.code).toBe('500');
     });
+
+    it('should tolerate null-prototype metadata values during error extraction', () => {
+      const nullPrototypeValue = Object.create(null);
+      const customBrandError = {
+        _tag: 'CustomError',
+        name: nullPrototypeValue,
+        message: nullPrototypeValue,
+        code: nullPrototypeValue,
+      };
+
+      expect(() => brandStrategy.fetch(customBrandError)).not.toThrow();
+
+      const meta = brandStrategy.fetch(customBrandError);
+      expect(meta.name).toBe('');
+      expect(meta.message).toBe('');
+      expect(meta.code).toBeUndefined();
+    });
   });
 });

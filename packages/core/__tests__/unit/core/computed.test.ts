@@ -467,6 +467,16 @@ describe('Computed', () => {
       expect(() => unsub()).not.toThrow();
     });
 
+    it('should not retain subscriptions after disposal', () => {
+      const c = computed(() => 1);
+      c.dispose();
+
+      const unsub = c.subscribe(() => {});
+
+      expect(c.subscriberCount()).toBe(0);
+      expect(() => unsub()).not.toThrow();
+    });
+
     it('should prevent dependency leakage through meta-state access', () => {
       const dep = atom(0);
       const child = computed(() => dep.value);

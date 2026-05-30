@@ -401,6 +401,16 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
   }
 
   subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
+    if (this.isDisposed) {
+      if (
+        typeof listener !== 'function' &&
+        (listener == null || typeof listener.execute !== 'function')
+      ) {
+        Result.unwrap(nodeSubscribe(this, listener));
+      }
+      return () => {};
+    }
+
     return Result.unwrap(nodeSubscribe(this, listener));
   }
 

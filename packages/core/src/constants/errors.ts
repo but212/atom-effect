@@ -51,11 +51,21 @@ export type ErrorStrategy = {
  * Data-driven strategies for extracting metadata from different error types.
  * @internal
  */
-const toSafeString = (val: unknown, fallback = ''): string =>
-  val !== undefined && val !== null ? String(val) : fallback;
+const toSafeString = (val: unknown, fallback = ''): string => {
+  try {
+    return val !== undefined && val !== null ? String(val) : fallback;
+  } catch {
+    return fallback;
+  }
+};
 
-const toSafeStringOrUndefined = (val: unknown): string | undefined =>
-  val !== undefined && val !== null ? String(val) : undefined;
+const toSafeStringOrUndefined = (val: unknown): string | undefined => {
+  try {
+    return val !== undefined && val !== null ? String(val) : undefined;
+  } catch {
+    return undefined;
+  }
+};
 
 const toSafeBoolean = (val: unknown, fallback: boolean): boolean =>
   typeof val === 'boolean' ? val : fallback;
