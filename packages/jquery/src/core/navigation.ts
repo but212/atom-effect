@@ -210,46 +210,6 @@ export function isNavigationClick(e: MouseEvent | JQuery.TriggeredEvent): boolea
 }
 
 /**
- * Logic: Link Interception Rules
- * Priority-ordered heuristics for deciding whether to hijack a link click.
- * @internal
- */
-const INTERCEPT_RULES: Array<{
-  match: (el: Element, win: Window) => boolean;
-  result: boolean;
-}> = [
-  { match: (el) => el.getAttribute('data-nav') === 'false', result: false },
-  { match: (el) => ['data-ignore', 'download'].some((a) => el.hasAttribute(a)), result: false },
-  {
-    match: (el) =>
-      el.getAttribute('rel') === 'external' || (el as HTMLAnchorElement).rel === 'external',
-    result: false,
-  },
-  { match: (el) => ['data-route', 'data-path'].some((a) => el.hasAttribute(a)), result: true },
-  {
-    match: (el) => !!el.getAttribute('target') && el.getAttribute('target') !== '_self',
-    result: false,
-  },
-  { match: (el) => el.tagName.toUpperCase() !== 'A', result: false },
-  {
-    match: (el, win) => {
-      // Logic: If origins differ or protocol isn't web-standard, let the browser handle it.
-      const a = el as HTMLAnchorElement;
-      const hrefAttr = a.getAttribute('href');
-      if (!hrefAttr || hrefAttr[0] === '#') return true;
-
-      const loc = win.location;
-      if (a.origin !== loc.origin || !/^https?:/.test(a.protocol)) return true;
-
-      // Note: Pure hash changes within the same path should NOT be intercepted
-      // by the router to allow native hashchange behavior.
-      return a.pathname === loc.pathname && a.search === loc.search && a.hash.startsWith('#');
-    },
-    result: false,
-  },
-];
-
-/**
  * Logic: Router Interception Decision
  * Determines if a click should be hijacked by the SPA engine or left to
  * the browser's native navigation.
@@ -259,9 +219,30 @@ const INTERCEPT_RULES: Array<{
  * (cross-origin checks) over automatic PJAX tracking.
  */
 export function isInterceptee(el: Element, win: Window = window): boolean {
-  for (const rule of INTERCEPT_RULES) {
-    if (rule.match(el, win)) return rule.result;
+  if (el.getAttribute('data-nav') === 'false') return false;
+  if (el.hasAttribute('data-ignore') || el.hasAttribute('download')) return false;
+  if (el.getAttribute('rel') === 'external' || (el as HTMLAnchorElement).rel === 'external')
+    return false;
+  if (el.hasAttribute('data-route') || el.hasAttribute('data-path')) return true;
+
+  const target = el.getAttribute('target');
+  if (target && target !== '_self') return false;
+
+  if (el.tagName.toUpperCase() !== 'A') return false;
+
+  const a = el as HTMLAnchorElement;
+  const hrefAttr = a.getAttribute('href');
+  if (!hrefAttr || hrefAttr[0] === '#') return false;
+
+  const loc = win.location;
+  if (a.origin !== loc.origin || !/^https?:/.test(a.protocol)) return false;
+
+  // Note: Pure hash changes within the same path should NOT be intercepted
+  // by the router to allow native hashchange behavior.
+  if (a.pathname === loc.pathname && a.search === loc.search && a.hash.startsWith('#')) {
+    return false;
   }
+
   return true;
 }
 

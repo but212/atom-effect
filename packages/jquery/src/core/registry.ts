@@ -51,6 +51,15 @@ export interface BindingRecord {
   teardown?: (() => void) | undefined;
 }
 
+const RECORD_KEY = Symbol.for('aej:record');
+const SHADOW_KEY = Symbol.for('aej:shadow');
+const KEPT_KEY = Symbol.for('aej:kept');
+const IGNORED_KEY = Symbol.for('aej:ignored');
+
+type RegistryMetadata = Record<symbol, unknown>;
+type RegistryNode = Node & RegistryMetadata;
+type RegistryElement = Element & RegistryMetadata;
+
 /**
  * Logic: Central Lifecycle Engine
  * Manages the mapping between DOM elements and their reactive resources.
@@ -63,14 +72,6 @@ export interface BindingRecord {
  * @internal
  */
 class BindingRegistry {
-  #records = new WeakMap<Element, BindingRecord>();
-
-  #kept = new WeakSet<Node>();
-
-  #ignored = new WeakSet<Node>();
-
-  #shadows = new WeakMap<Element, ShadowRoot>();
-
   #autoCleanupScheduled = false;
 
   /**
@@ -78,12 +79,12 @@ class BindingRegistry {
    * Marks a node to preserve its reactive resources even if detached.
    */
   keep(node: Node): void {
-    this.#kept.add(node);
+    (node as RegistryNode)[KEPT_KEY] = true;
   }
 
   /** Determines if a node is marked for resource preservation. */
   isKept(node: Node): boolean {
-    return this.#kept.has(node);
+    return !!(node as RegistryNode)[KEPT_KEY];
   }
 
   /**
@@ -91,12 +92,12 @@ class BindingRegistry {
    * Prevents automated cleanup during complex multi-step DOM manipulations.
    */
   markIgnored(node: Node): void {
-    this.#ignored.add(node);
+    (node as RegistryNode)[IGNORED_KEY] = true;
   }
 
   /** Determines if a node is currently marked to be ignored. */
   isIgnored(node: Node): boolean {
-    return this.#ignored.has(node);
+    return !!(node as RegistryNode)[IGNORED_KEY];
   }
 
   /**
@@ -104,7 +105,7 @@ class BindingRegistry {
    * @internal
    */
   unmarkIgnored(node: Node): void {
-    this.#ignored.delete(node);
+    delete (node as RegistryNode)[IGNORED_KEY];
   }
 
   /** @internal */
@@ -123,10 +124,10 @@ class BindingRegistry {
    * and immediately reconnected without state loss.
    */
   deferCleanup(node: Node): void {
-    this.#ignored.add(node);
+    (node as RegistryNode)[IGNORED_KEY] = true;
     queueMicrotask(() => {
       if (node.isConnected) {
-        this.#ignored.delete(node);
+        delete (node as RegistryNode)[IGNORED_KEY];
       } else {
         this.cleanupTree(node);
       }
@@ -141,7 +142,7 @@ class BindingRegistry {
    * @internal
    */
   registerShadow(host: Element, sr: ShadowRoot): void {
-    this.#shadows.set(host, sr);
+    (host as RegistryElement)[SHADOW_KEY] = sr;
   }
 
   /**
@@ -175,7 +176,9 @@ class BindingRegistry {
    * @internal
    */
   getShadow(host: Element): ShadowRoot | null {
-    return host.shadowRoot ?? this.#shadows.get(host) ?? null;
+    return (
+      host.shadowRoot ?? ((host as RegistryElement)[SHADOW_KEY] as ShadowRoot | undefined) ?? null
+    );
   }
 
   /**
@@ -194,10 +197,11 @@ class BindingRegistry {
       enableAutoCleanup(document.body);
     }
 
-    let record = this.#records.get(element);
+    const registryElement = element as RegistryElement;
+    let record = registryElement[RECORD_KEY] as BindingRecord | undefined;
     if (!record) {
       record = {};
-      this.#records.set(element, record);
+      registryElement[RECORD_KEY] = record;
       this.#safeMark(element, MARK_BOUND);
     }
     return record;
@@ -255,7 +259,7 @@ class BindingRegistry {
 
   /** Determines if an element has any active bindings. */
   hasBind(element: Element): boolean {
-    return this.#records.has(element);
+    return RECORD_KEY in element;
   }
 
   /**
@@ -264,16 +268,16 @@ class BindingRegistry {
    * @param node - The node to clean up.
    */
   cleanup(node: Node): void {
-    this.#kept.delete(node);
-    this.#ignored.delete(node);
+    delete (node as RegistryNode)[KEPT_KEY];
+    delete (node as RegistryNode)[IGNORED_KEY];
 
     if (node.nodeType !== 1) return;
-    const element = node as Element;
+    const element = node as RegistryElement;
 
-    const record = this.#records.get(element);
+    const record = element[RECORD_KEY] as BindingRecord | undefined;
 
     if (record) {
-      this.#records.delete(element);
+      delete element[RECORD_KEY];
       element.classList.remove(MARK_BOUND);
 
       // Logic: Component Teardown
@@ -290,7 +294,7 @@ class BindingRegistry {
       // Logic: Atomic Cleanup Tasks
       // Disposes of individual effects and low-level reactive bindings.
       if (record.tasks) {
-        record.tasks.forEach((cleanupFunction) => cleanupFunction());
+        record.tasks.forEach((cleanupFunction: () => void) => cleanupFunction());
         record.tasks.dispose();
       }
     } else {
