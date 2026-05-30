@@ -13,7 +13,6 @@
  */
 
 import { BRAND, BrandFlags, isAtom, isWritable, untracked } from '@but212/atom-effect';
-import { Option } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { CONTEXT_REQUEST, type ContextRequestDetail } from '@/core/symbols';
 import type {
@@ -176,34 +175,24 @@ export const ContextEngine = (() => {
      * Resolves a context key by dispatching a bubbling DOM event.
      * Contract: This method RELIES on synchronous event dispatch.
      */
-    discover(target: HTMLElement, key: string | symbol): Option<unknown> {
-      let found: Option<unknown> = Option.none;
-
+    discover(target: HTMLElement, key: string | symbol): unknown | undefined {
       // Fast-path: direct parent pointer walk crossing Shadow DOM boundaries
       let curr: Node | null = target;
       while (curr) {
         const state = nodeStateMap.get(curr);
         if (state?.providers?.has(key)) {
-          found = Option.some(state.providers.get(key));
-          break;
+          return state.providers.get(key);
         }
-        if (curr instanceof ShadowRoot) {
-          curr = curr.host;
-        } else {
-          curr = curr.parentNode;
-        }
-      }
-
-      if (Option.isSome(found)) {
-        return found;
+        curr = curr instanceof ShadowRoot ? curr.host : curr.parentNode;
       }
 
       // Fallback path: event-based resolution
+      let found: unknown | undefined;
       const event = new CustomEvent<ContextRequestDetail>(CONTEXT_REQUEST, {
         detail: {
           key,
           callback: (atom) => {
-            found = Option.some(atom);
+            found = atom;
           },
         },
         bubbles: true,
@@ -229,13 +218,12 @@ export function createContextProxy<T>(target: HTMLElement, key: string | symbol)
   const resolve = (isPeek: boolean) => {
     if (isPeek) ContextEngine.version.peek();
     else ContextEngine.version.value;
-    return untracked(() => ContextEngine.discover(target, key)) as Option<WritableAtom<T> | T>;
+    return untracked(() => ContextEngine.discover(target, key)) as WritableAtom<T> | T | undefined;
   };
 
   const getLiveValue = (isPeek: boolean) => {
-    const res = resolve(isPeek);
-    if (Option.isNone(res)) return null as T;
-    const p = Option.unwrap(res);
+    const p = resolve(isPeek);
+    if (p === undefined) return null as T;
     return (isAtom(p) ? (isPeek ? p.peek() : p.value) : p) as T;
   };
 
@@ -250,10 +238,9 @@ export function createContextProxy<T>(target: HTMLElement, key: string | symbol)
       return getLiveValue(false);
     },
     set value(v: T) {
-      const res = resolve(true);
-      if (Option.isSome(res)) {
-        const p = Option.unwrap(res);
-        if (isWritable(p)) p.value = v;
+      const p = resolve(true);
+      if (p !== undefined && isWritable(p)) {
+        p.value = v;
       }
     },
     peek() {

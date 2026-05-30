@@ -11,10 +11,10 @@
  * preventing memory leaks even in complex "move" scenarios (DOM re-parenting).
  */
 
-import { Option, SlotBuffer } from '@but212/atom-effect-utils';
+import { SlotBuffer } from '@but212/atom-effect-utils';
 import { disableAutoCleanupFor } from '@/core/registry';
 import { CLEANUP_MARKER, HYDRATION_MARKER } from '@/core/symbols';
-import type { EffectObject, WritableAtom } from '@/types';
+import type { Disposable, WritableAtom } from '@/types';
 import { resolveShadowRoot } from './utils';
 
 /**
@@ -25,16 +25,16 @@ import { resolveShadowRoot } from './utils';
  */
 export class ComponentState {
   /** The root node (host or shadowRoot) where bindings and styles are applied. */
-  root: Option<Node & { [CLEANUP_MARKER]?: boolean }> = Option.none;
+  root: (Node & { [CLEANUP_MARKER]?: boolean }) | null = null;
 
   /** Guards against double-initialization of the same host element. */
   isInitialized = false;
 
   /**
-   * A buffer for all reactive effects created during setup.
+   * A buffer for all reactive effects and observers created during setup.
    * Disposed as a single unit in `dispose()`.
    */
-  effects = new SlotBuffer<EffectObject>();
+  effects = new SlotBuffer<Disposable>();
 
   /** Set of nodes that have been processed by the hydration engine. */
   hydratedNodes = new Set<Element>();
@@ -56,8 +56,8 @@ export class ComponentState {
   slotsAtom: WritableAtom<Record<string, Node[]>> | null = null;
   /** Memoized lenses into `slotsAtom`. */
   slotLenses = new Map<string, WritableAtom<Node[]>>();
-  /** Tracks listeners to allow precise removal during teardown. */
-  slotListeners = new Map<string, (e: Event) => void>();
+  /** Tracks listener to allow precise removal during teardown. */
+  slotListener: ((e: Event) => void) | null = null;
 
   /** References to constructable stylesheets that must be removed from the root. */
   appliedStyles: CSSStyleSheet[] = [];
@@ -90,17 +90,17 @@ export class ComponentState {
     this.attributeAtom = null;
     this.attributeLenses.clear();
 
-    // 4. Slot Cleanup (Remove listeners from ShadowRoot)
-    const sr = resolveShadowRoot(this.host, Option.toNullable(this.root));
-    if (sr) {
-      this.slotListeners.forEach((l) => sr.removeEventListener('slotchange', l));
+    // 4. Slot Cleanup (Remove listener from ShadowRoot)
+    const sr = resolveShadowRoot(this.host, this.root);
+    if (sr && this.slotListener) {
+      sr.removeEventListener('slotchange', this.slotListener);
     }
-    this.slotListeners.clear();
+    this.slotListener = null;
     this.slotsAtom = null;
     this.slotLenses.clear();
 
     // 5. Root Node Reset (Styles & Registry)
-    const rootNode = Option.toNullable(this.root);
+    const rootNode = this.root;
     if (rootNode) {
       // Reason: We must filter our styles out of adoptedStyleSheets rather than
       // resetting the array, as other libraries might have added their own sheets.
@@ -123,7 +123,7 @@ export class ComponentState {
       }
     }
 
-    this.root = Option.none;
+    this.root = null;
     this.isInitialized = false;
   }
 }

@@ -60,16 +60,3 @@ export type MatchResult = Option<{
   readonly route: CompiledRoute;
   readonly params: Record<string, string>;
 }>;
-
-/**
- * Logic: Route Matcher Entry
- * A single registration in the route matcher containing metadata and
- * specific matching logic.
- */
-export interface MatchEntry {
-  readonly pattern: string;
-  readonly def: RouteDefinition;
-
-  /** Executes the matching logic against a given path. */
-  readonly match: (path: string) => MatchResult;
-}

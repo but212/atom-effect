@@ -13,7 +13,6 @@
  */
 
 import { isAtom } from '@but212/atom-effect';
-import { Option } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { SYSTEM_COMPONENT } from '@/constants';
 import { enableAutoCleanup, registry } from '@/core/registry';
@@ -99,7 +98,7 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
   const controller: AtomComponentController = {
     host: element,
     get root() {
-      return Option.toNullable(state.root);
+      return state.root;
     },
     get internals() {
       return internals;
@@ -133,10 +132,10 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
      */
     get slots() {
       if (!state.slotsAtom) {
-        const sr = resolveShadowRoot(element, Option.toNullable(state.root));
+        const sr = resolveShadowRoot(element, state.root);
         const { atom, listener } = SetupFeatures.slots(sr);
         state.slotsAtom = atom;
-        if (sr) state.slotListeners.set('all', listener);
+        if (sr) state.slotListener = listener;
       }
       return (name: string) => {
         const key = name === 'default' ? '' : name;
@@ -150,7 +149,7 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
     },
 
     $: ((selector, context) => {
-      const ctx = context ?? Option.toNullable(state.root) ?? element;
+      const ctx = context ?? state.root ?? element;
       if (typeof selector !== 'string') return $(selector) as unknown as JQuery;
       return ctx instanceof DocumentFragment
         ? ($(ctx.querySelectorAll(selector)) as unknown as JQuery)
@@ -168,22 +167,22 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
     setup(options: Parameters<AtomComponentController['setup']>[0]) {
       if (state.isInitialized) {
         const incoming = options instanceof Node ? options : options?.shadowRoot;
-        if (incoming && incoming !== Option.toNullable(state.root))
+        if (incoming && incoming !== state.root)
           throw new Error('Call teardown() first to change the root.');
         return;
       }
 
       const config =
         options instanceof Node ? { shadowRoot: options as ShadowRoot } : (options ?? {});
-      const srOpt = Option.fromNullable(config.shadowRoot ?? element.shadowRoot);
+      const sr = config.shadowRoot ?? element.shadowRoot ?? null;
 
-      Option.map(srOpt, (sr) => {
+      if (sr) {
         registry.markHost(element);
         registry.registerShadow(element, sr);
-      });
+      }
 
-      const rootNode = Option.unwrapOr(srOpt, element) as Node & { [CLEANUP_MARKER]?: boolean };
-      state.root = Option.some(rootNode);
+      const rootNode = (sr ?? element) as Node & { [CLEANUP_MARKER]?: boolean };
+      state.root = rootNode;
 
       if (!rootNode[CLEANUP_MARKER]) {
         enableAutoCleanup(rootNode as Element);
@@ -191,10 +190,9 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       }
 
       if (!state.slotsAtom) {
-        const sr = Option.toNullable(srOpt);
         const { atom, listener } = SetupFeatures.slots(sr);
         state.slotsAtom = atom;
-        if (sr) state.slotListeners.set('all', listener);
+        if (sr) state.slotListener = listener;
       }
 
       if (config.dispatch) SetupFeatures.dispatch(element, config.dispatch, state.effects);
