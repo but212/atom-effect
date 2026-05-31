@@ -54,13 +54,10 @@ function resolveArgs<V>(
   keyOrMap: string | Record<string, V>,
   value: V | undefined
 ): Record<string, V> | null {
-  if (typeof keyOrMap === 'object' && keyOrMap !== null) {
-    return keyOrMap;
+  if (typeof keyOrMap === 'string') {
+    return value !== undefined ? { [keyOrMap]: value } : null;
   }
-  if (typeof keyOrMap === 'string' && value !== undefined) {
-    return { [keyOrMap]: value };
-  }
-  return null;
+  return keyOrMap || null;
 }
 
 /**
@@ -201,9 +198,9 @@ $.fn.atomCss = function (
   source?: AsyncReactiveValue<string | number>,
   unit?: string
 ): JQuery {
-  const value: CssValue | undefined =
+  const value =
     source !== undefined && unit ? [source as AsyncReactiveValue<number>, unit] : source;
-  const map = resolveArgs<CssValue>(propOrMap, value);
+  const map = resolveArgs<CssValue>(propOrMap, value as CssValue);
 
   if (!map) {
     console.warn(`${SYSTEM_BINDING.PREFIX} ${SYSTEM_BINDING.ERRORS.MISSING_SOURCE('atomCss')}`);
@@ -409,20 +406,17 @@ const BINDING_TASKS: BindingTask[] = [
  */
 $.fn.atomBind = function <T>(this: JQuery, options: BindingOptions<T>): JQuery {
   const opt = options as Record<string, unknown>;
-
-  // Check if there are any valid tasks to run.
   const activeTasks: BindingTask[] = [];
-  for (let i = 0, len = BINDING_TASKS.length; i < len; i++) {
+
+  for (let i = 0; i < BINDING_TASKS.length; i++) {
     const task = BINDING_TASKS[i]!;
-    if (opt[task.key] !== undefined) {
-      activeTasks.push(task);
-    }
+    if (opt[task.key] !== undefined) activeTasks.push(task);
   }
 
   if (activeTasks.length === 0) return this;
 
   return atomEachElement(this, (el) => {
-    for (let i = 0, len = activeTasks.length; i < len; i++) {
+    for (let i = 0; i < activeTasks.length; i++) {
       const task = activeTasks[i]!;
       task.run(el, opt[task.key]);
     }

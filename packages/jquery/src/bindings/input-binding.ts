@@ -44,29 +44,18 @@ interface BindingStrategy<T> {
  */
 const STRATEGIES = {
   multipleSelect: {
-    read: (el: FormElement): unknown => {
-      if (!(el instanceof HTMLSelectElement)) return [];
-      const options = el.selectedOptions;
-      const result: string[] = [];
-      for (let i = 0, len = options.length; i < len; i++) {
-        result.push(options[i]!.value);
-      }
-      return result;
-    },
+    read: (el: FormElement): unknown =>
+      el instanceof HTMLSelectElement ? Array.from(el.selectedOptions, (opt) => opt.value) : [],
     write: (_: FormElement, $el: JQuery, value: unknown) => {
       $el.val(value as string[]);
     },
     equal: (a: unknown, b: unknown, baseEqual: (a: unknown, b: unknown) => boolean) => {
       if (baseEqual(a, b)) return true;
       if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
-      for (let i = 0, len = a.length; i < len; i++) {
-        if (!Object.is(a[i], b[i])) return false;
-      }
-      return true;
+      return a.every((val, i) => Object.is(val, b[i]));
     },
     format: (v: unknown, custom?: (v: unknown) => string) => {
-      if (custom) return custom(v);
-      return Array.isArray(v) ? v.join(',') : String(v ?? '');
+      return custom ? custom(v) : Array.isArray(v) ? v.join(',') : String(v ?? '');
     },
   } as BindingStrategy<unknown>,
 
@@ -125,11 +114,9 @@ class InputBinding<T> {
   static #instanceCounter = 0;
 
   #$element: JQuery;
-  #readValue: () => T;
-  #writeToDom: (value: T, formatted: string) => void;
-  #areEqual: (a: T, b: T) => boolean;
-  #formatValue: (value: T) => string;
-  #eventNamespace: string;
+  #element: FormElement;
+  #strategy: BindingStrategy<T>;
+  #eventNamespace = `.atomBind-${++InputBinding.#instanceCounter}`;
   #abortController = new AbortController();
 
   #flags = BindingFlags.None;
@@ -142,24 +129,31 @@ class InputBinding<T> {
     this.#atom = atom;
     this.#options = options;
     this.#$element = $element;
-    this.#eventNamespace = `.atomBind-${++InputBinding.#instanceCounter}`;
-    const element = $element[0] as FormElement;
-    const isMultipleSelect =
-      element.tagName === 'SELECT' && (element as HTMLSelectElement).multiple;
+    this.#element = $element[0] as FormElement;
 
-    const strategy = (
+    const isMultipleSelect =
+      this.#element.tagName === 'SELECT' && (this.#element as HTMLSelectElement).multiple;
+    this.#strategy = (
       isMultipleSelect ? STRATEGIES.multipleSelect : STRATEGIES.default
     ) as BindingStrategy<T>;
-    const parse = options.parse;
-    const baseEqual = options.equal ?? Object.is;
-
-    this.#readValue = () => (strategy as BindingStrategy<T>).read(element, this.#$element, parse);
-    this.#writeToDom = (value, formatted) =>
-      strategy.write(element, this.#$element, value, formatted);
-    this.#areEqual = (a, b) => strategy.equal(a, b, baseEqual);
-    this.#formatValue = (value) => strategy.format(value, options.format);
 
     this.#initializeEvents();
+  }
+
+  #readValue(): T {
+    return this.#strategy.read(this.#element, this.#$element, this.#options.parse);
+  }
+
+  #writeToDom(value: T, formatted: string): void {
+    this.#strategy.write(this.#element, this.#$element, value, formatted);
+  }
+
+  #areEqual(a: T, b: T): boolean {
+    return this.#strategy.equal(a, b, this.#options.equal ?? Object.is);
+  }
+
+  #formatValue(value: T): string {
+    return this.#strategy.format(value, this.#options.format);
   }
 
   /** Normalizes and attaches all required DOM event listeners for the binding. */
@@ -182,17 +176,21 @@ class InputBinding<T> {
           }
         : syncToAtomDelegate;
 
-    const onFocus = () => (this.#flags |= BindingFlags.Focused);
+    const onFocus = () => {
+      this.#flags |= BindingFlags.Focused;
+    };
     const onBlur = () => this.#handleBlur();
 
-    [onFocus, onBlur, handleInput].forEach(markInternal);
+    markInternal(onFocus);
+    markInternal(onBlur);
+    markInternal(handleInput);
 
     const rawEventNames = this.#options.event ?? SYSTEM_BINDING.INPUT_DEFAULTS.event;
-    const names = rawEventNames.trim().split(/\s+/);
-    let eventNames = '';
-    for (let i = 0, len = names.length; i < len; i++) {
-      eventNames += (i > 0 ? ' ' : '') + names[i] + namespace;
-    }
+    const eventNames = rawEventNames
+      .trim()
+      .split(/\s+/)
+      .map((n) => n + namespace)
+      .join(' ');
 
     // Use jQuery .on() for compatibility with $el.trigger().
     this.#$element
@@ -263,8 +261,7 @@ class InputBinding<T> {
     // "1.0" in DOM vs 1 in Atom) to avoid disruptive formatting while the user is typing.
     if (this.#flags & BindingFlags.Focused) return true;
 
-    const element = this.#$element[0] as FormElement;
-    return this.#formatValue(atomValue) === element.value;
+    return this.#formatValue(atomValue) === this.#element.value;
   }
 
   /** Cleans up all event listeners and timers associated with the binding. */

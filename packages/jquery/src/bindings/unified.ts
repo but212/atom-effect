@@ -41,18 +41,13 @@ function toKebab(str: string): string {
  * Returns a validation result indicating if the property/attribute is safe,
  * allowing the caller to handle side effects like logging.
  */
-function checkBindingSafety(
-  name: string,
-  isProperty: boolean
-): { ok: true } | { ok: false; error: string } {
-  const lowerName = name.toLowerCase();
-  if (lowerName.startsWith('on')) {
-    return { ok: false, error: SYSTEM_SECURITY.ERRORS.BLOCKED_EVENT_HANDLER(name) };
-  }
+function checkBindingSafety(name: string, isProperty: boolean): string | null {
+  const lower = name.toLowerCase();
+  if (lower.startsWith('on')) return SYSTEM_SECURITY.ERRORS.BLOCKED_EVENT_HANDLER(name);
   if (isProperty && (SYSTEM_SECURITY.DANGEROUS_PROPS as readonly string[]).includes(name)) {
-    return { ok: false, error: SYSTEM_SECURITY.ERRORS.BLOCKED_PROP(name) };
+    return SYSTEM_SECURITY.ERRORS.BLOCKED_PROP(name);
   }
-  return { ok: true };
+  return null;
 }
 
 /**
@@ -62,9 +57,9 @@ function checkBindingSafety(
  */
 function getSafeEntries<T>(map: Record<string, T>, isProperty: boolean): [string, T][] {
   return Object.entries(map).filter(([name]) => {
-    const res = checkBindingSafety(name, isProperty);
-    if (!res.ok) {
-      console.warn(`${SYSTEM_BINDING.PREFIX} ${res.error}`);
+    const err = checkBindingSafety(name, isProperty);
+    if (err) {
+      console.warn(`${SYSTEM_BINDING.PREFIX} ${err}`);
       return false;
     }
     return true;
@@ -185,17 +180,17 @@ export function bindCss(element: HTMLElement, cssMap: Record<string, CssValue>):
   const metaMap: Record<string, string> = {};
   const prev = new Map<string, string>();
 
-  Object.entries(cssMap).forEach(([property, value]) => {
+  for (const [property, value] of Object.entries(cssMap)) {
     const [source, unit] = Array.isArray(value) ? value : [value, ''];
     reactiveMap[property] = source;
     metaMap[property] = unit;
-  });
+  }
 
   registerMapEffect(
     element,
     reactiveMap,
     (states) => {
-      Object.entries(states).forEach(([property, value]) => {
+      for (const [property, value] of Object.entries(states)) {
         const unit = metaMap[property] ?? '';
         const str = unit ? `${value}${unit}` : String(value);
 
@@ -205,7 +200,7 @@ export function bindCss(element: HTMLElement, cssMap: Record<string, CssValue>):
           }
           prev.set(property, str);
         }
-      });
+      }
     },
     'css'
   );
@@ -247,10 +242,8 @@ export function bindAttr(
 
         let attrVal: string | null = null;
         if (value !== null && value !== undefined) {
-          if (value === true) {
-            attrVal = meta.isAria ? 'true' : name;
-          } else if (value === false) {
-            attrVal = meta.isAria ? 'false' : null;
+          if (typeof value === 'boolean') {
+            attrVal = value ? (meta.isAria ? 'true' : name) : meta.isAria ? 'false' : null;
           } else {
             attrVal = String(value);
           }
@@ -389,43 +382,40 @@ class RadioRegistry {
   readonly #groups = new WeakMap<Node, Map<string, Set<HTMLInputElement>>>();
 
   public register(element: HTMLInputElement): Node | undefined {
-    if (element.type !== 'radio' || !element.name) return undefined;
-    const root: Node = element.form || element.ownerDocument || document;
+    if (element.type !== 'radio' || !element.name) return;
+    const root = element.form || element.ownerDocument || document;
 
     let nameMap = this.#groups.get(root);
     if (!nameMap) {
-      nameMap = new Map<string, Set<HTMLInputElement>>();
+      nameMap = new Map();
       this.#groups.set(root, nameMap);
     }
 
     let set = nameMap.get(element.name);
     if (!set) {
-      set = new Set<HTMLInputElement>();
+      set = new Set();
       nameMap.set(element.name, set);
     }
+
     set.add(element);
     return root;
   }
 
   public unregister(element: HTMLInputElement, root: Node): void {
     if (element.type !== 'radio' || !element.name) return;
-
     const nameMap = this.#groups.get(root);
-    if (nameMap) {
-      const set = nameMap.get(element.name);
-      if (set) {
-        set.delete(element);
-        if (set.size === 0) {
-          nameMap.delete(element.name);
-        }
-      }
+    const set = nameMap?.get(element.name);
+    if (set) {
+      set.delete(element);
+      if (set.size === 0) nameMap?.delete(element.name);
     }
   }
 
   public getGroup(element: HTMLInputElement, root?: Node): Set<HTMLInputElement> | undefined {
-    if (element.type !== 'radio' || !element.name) return undefined;
-    const actualRoot: Node = root || element.form || element.ownerDocument || document;
-    return this.#groups.get(actualRoot)?.get(element.name);
+    if (element.type !== 'radio' || !element.name) return;
+    return this.#groups
+      .get(root || element.form || element.ownerDocument || document)
+      ?.get(element.name);
   }
 }
 

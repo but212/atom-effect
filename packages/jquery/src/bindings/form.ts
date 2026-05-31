@@ -70,17 +70,9 @@ function getNextToggleValue(
   if (!isCheck) return val;
   if (!Array.isArray(current)) return checked;
 
-  const s = new Set<string>();
-  const len = current.length;
-  for (let i = 0; i < len; i++) {
-    s.add(String(current[i]));
-  }
-
-  if (checked) {
-    s.add(val);
-  } else {
-    s.delete(val);
-  }
+  const s = new Set(current.map(String));
+  if (checked) s.add(val);
+  else s.delete(val);
   return Array.from(s);
 }
 
@@ -93,13 +85,7 @@ function getNextToggleValue(
  */
 function isToggleChecked(v: unknown, val: string, isCheck: boolean): boolean {
   if (!isCheck) return String(v) === val;
-  if (!Array.isArray(v)) return !!v;
-
-  const len = v.length;
-  for (let i = 0; i < len; i++) {
-    if (String(v[i]) === val) return true;
-  }
-  return false;
+  return Array.isArray(v) ? v.some((item) => String(item) === val) : !!v;
 }
 
 /**
@@ -118,49 +104,33 @@ function createInterceptedLens<T extends object>(
 ): WritableAtom<unknown> {
   const { transform, onChange } = options;
 
-  /**
-   * Logic: Reactive Proxy Node
-   * Reason: Preserves unique identity (id, version) compatible with core library's
-   * internal WeakMaps while tracking the base lens.
-   */
   const intercepted = computed(() => baseLens.value) as unknown as WritableAtom<unknown>;
+  const desc = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(intercepted), 'value');
 
-  const proto = Object.getPrototypeOf(intercepted);
-  const descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
-
-  const newDescriptor: PropertyDescriptor = {
-    set(val: unknown) {
-      let transformed = val;
-      try {
-        transformed = transform ? transform(name, val) : val;
-      } catch (err) {
-        console.error(`[bindForm] Transform error in field "${name}":`, err);
-      }
-
-      baseLens.value = transformed as PathValue<T, Paths<T>>;
-
-      if (onChange) {
+  if (desc) {
+    Object.defineProperty(intercepted, 'value', {
+      ...desc,
+      set(val: unknown) {
+        let transformed = val;
         try {
-          untracked(() => onChange(name, transformed));
+          transformed = transform ? transform(name, val) : val;
         } catch (err) {
-          console.error(`[bindForm] onChange error in field "${name}":`, err);
+          console.error(`[bindForm] Transform error in field "${name}":`, err);
         }
-      }
-    },
-    configurable: true,
-  };
 
-  if (descriptor?.get) {
-    newDescriptor.get = descriptor.get;
+        baseLens.value = transformed as PathValue<T, Paths<T>>;
+
+        if (onChange) {
+          try {
+            untracked(() => onChange(name, transformed));
+          } catch (err) {
+            console.error(`[bindForm] onChange error in field "${name}":`, err);
+          }
+        }
+      },
+    });
   }
 
-  Object.defineProperty(intercepted, 'value', newDescriptor);
-
-  /**
-   * Logic: Cascading Disposal
-   * Constraint: Disposing the proxy must propagate to the underlying lens
-   * to release root subscriptions and prevent memory leaks.
-   */
   const originalDispose = intercepted.dispose;
   intercepted.dispose = () => {
     originalDispose.call(intercepted);
@@ -265,10 +235,8 @@ class FormBinder<T extends object> {
    */
   public bindSubtree(el: Element): void {
     if (el === this.#form) {
-      const elements = this.#form.elements;
-      const len = elements.length;
-      for (let i = 0; i < len; i++) {
-        this.#bindField(elements[i]! as Element);
+      for (const control of this.#form.elements) {
+        this.#bindField(control);
       }
       return;
     }
@@ -280,9 +248,8 @@ class FormBinder<T extends object> {
 
     const targets = (el as HTMLElement).querySelectorAll?.(SELECTOR);
     if (targets) {
-      const len = targets.length;
-      for (let i = 0; i < len; i++) {
-        this.#bindField(targets[i]! as Element);
+      for (const target of targets) {
+        this.#bindField(target);
       }
     }
   }
@@ -397,17 +364,11 @@ class FormBinder<T extends object> {
    * during rapid DOM mutations.
    */
   #observe(): void {
-    const observer = new MutationObserver((ms) => {
-      const mLen = ms.length;
-      for (let i = 0; i < mLen; i++) {
-        const m = ms[i]!;
+    const observer = new MutationObserver((mutations) => {
+      for (const m of mutations) {
         if (m.type === 'childList') {
-          const added = m.addedNodes;
-          const jLen = added.length;
-          for (let j = 0; j < jLen; j++) {
-            const node = added[j]!;
+          for (const node of m.addedNodes) {
             if (node.nodeType === 1) {
-              // Node.ELEMENT_NODE
               this.bindSubtree(node as Element);
             }
           }
