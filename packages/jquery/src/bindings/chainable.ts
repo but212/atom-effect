@@ -54,13 +54,11 @@ function resolveArgs<V>(
   keyOrMap: string | Record<string, V>,
   value: V | undefined
 ): Record<string, V> | null {
-  if (typeof keyOrMap === 'object' && keyOrMap !== null) {
-    return keyOrMap;
-  }
-  if (typeof keyOrMap === 'string' && value !== undefined) {
-    return { [keyOrMap]: value };
-  }
-  return null;
+  return typeof keyOrMap === 'string'
+    ? value !== undefined
+      ? { [keyOrMap]: value }
+      : null
+    : keyOrMap || null;
 }
 
 /**
@@ -116,12 +114,22 @@ $.fn.atomHtml = function (source: AsyncReactiveValue<string>): JQuery {
  * @param errorMsg - Error message to display if arguments are invalid.
  * @internal
  */
-function createChainableMethod<V>(
-  binder: (el: HTMLElement, map: Record<string, V>) => void,
-  errorMsg: string
+function createChainableMethod<V, O = V>(
+  binder: (el: HTMLElement, map: Record<string, O>) => void,
+  errorMsg: string,
+  transformValue?: (v: V, extra?: unknown) => O
 ) {
-  return function (this: JQuery, keyOrMap: string | Record<string, V>, value?: V): JQuery {
-    const map = resolveArgs(keyOrMap, value);
+  return function (
+    this: JQuery,
+    keyOrMap: string | Record<string, V>,
+    value?: V,
+    extra?: unknown
+  ): JQuery {
+    const resolvedValue =
+      transformValue && value !== undefined
+        ? transformValue(value, extra)
+        : (value as unknown as O);
+    const map = resolveArgs<O>(keyOrMap as string | Record<string, O>, resolvedValue);
     if (!map) {
       console.warn(`${SYSTEM_BINDING.PREFIX} ${errorMsg}`);
       return this;
@@ -195,23 +203,12 @@ $.fn.atomProp = createChainableMethod(
  * $('.box').atomCss('width', widthAtom, 'px');
  * ```
  */
-$.fn.atomCss = function (
-  this: JQuery,
-  propOrMap: string | CssBindings,
-  source?: AsyncReactiveValue<string | number>,
-  unit?: string
-): JQuery {
-  const value: CssValue | undefined =
-    source !== undefined && unit ? [source as AsyncReactiveValue<number>, unit] : source;
-  const map = resolveArgs<CssValue>(propOrMap, value);
-
-  if (!map) {
-    console.warn(`${SYSTEM_BINDING.PREFIX} ${SYSTEM_BINDING.ERRORS.MISSING_SOURCE('atomCss')}`);
-    return this;
-  }
-
-  return atomEachElement(this, (el) => bindCss(el, map as CssBindings));
-};
+$.fn.atomCss = createChainableMethod<AsyncReactiveValue<string | number> | CssValue, CssValue>(
+  bindCss,
+  SYSTEM_BINDING.ERRORS.MISSING_SOURCE('atomCss'),
+  (source, unit) =>
+    unit ? [source as AsyncReactiveValue<number>, unit as string] : (source as CssValue)
+);
 
 /**
  * Controls the visibility of elements based on a reactive condition.
@@ -409,20 +406,12 @@ const BINDING_TASKS: BindingTask[] = [
  */
 $.fn.atomBind = function <T>(this: JQuery, options: BindingOptions<T>): JQuery {
   const opt = options as Record<string, unknown>;
-
-  // Check if there are any valid tasks to run.
-  const activeTasks: BindingTask[] = [];
-  for (let i = 0, len = BINDING_TASKS.length; i < len; i++) {
-    const task = BINDING_TASKS[i]!;
-    if (opt[task.key] !== undefined) {
-      activeTasks.push(task);
-    }
-  }
+  const activeTasks = BINDING_TASKS.filter((task) => opt[task.key] !== undefined);
 
   if (activeTasks.length === 0) return this;
 
   return atomEachElement(this, (el) => {
-    for (let i = 0, len = activeTasks.length; i < len; i++) {
+    for (let i = 0; i < activeTasks.length; i++) {
       const task = activeTasks[i]!;
       task.run(el, opt[task.key]);
     }

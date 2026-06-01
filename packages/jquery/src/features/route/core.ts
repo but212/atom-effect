@@ -10,195 +10,101 @@ import { untracked } from '@but212/atom-effect';
 import { Option, Result } from '@but212/atom-effect-utils';
 import { normalizePath, parseQuery, resolveAnchorPath, splitPath } from '@/core/navigation';
 import type { RouteDefinition, Router } from '@/types';
-import type { MatchEntry, MatchResult, UrlAdapter } from './types';
+import type { MatchResult, UrlAdapter } from './types';
 
 /**
  * Logic: Modern History API Adapter
  * Orchestrates URL synchronization using the standard window.history API.
  */
-const HISTORY_ADAPTER: UrlAdapter = {
-  get: (base) => {
-    let p = location.pathname;
-    // Constraint: Strips the base path to ensure route matching is relative to the app root.
-    if (base && p.startsWith(base)) p = p.substring(base.length);
-    return {
-      path: normalizePath(p),
-      query: parseQuery(location.search.substring(1)),
-      url: location.pathname + location.search,
-    };
-  },
-  commit: (fullPath, base) => {
-    const { route, query } = splitPath(fullPath);
-    const url = new URL(route, `${location.origin}${base}/`.replace(/\/+$/, '/'));
-    Option.map(query, (q) => (url.search = q));
-    const urlStr = url.pathname + url.search;
-    Result.tryCatch(() => history.pushState(null, '', urlStr));
-    return { path: normalizePath(route), query: Object.fromEntries(url.searchParams), url: urlStr };
-  },
-  revert: (prev) => {
-    // Reason: Prevents redundant state pushes if the location already matches the target.
-    if (location.pathname + location.search !== prev) {
-      Result.tryCatch(() => history.replaceState(null, '', prev));
-    }
-  },
-  resolveAnchor: (el, base) => resolveAnchorPath(el, base),
-  setupListener: (h) => {
-    window.addEventListener('popstate', h);
-    return () => window.removeEventListener('popstate', h);
-  },
-};
-
-/**
- * Logic: Legacy Hash Adapter
- * Compatibility mode for static hosting or environments without
- * server-side URL rewrite support.
- */
-const HASH_ADAPTER: UrlAdapter = {
-  get: () => {
-    const { route, query } = splitPath(location.hash.slice(1));
-    return { path: route, query: parseQuery(Option.unwrapOr(query, '')), url: location.hash };
-  },
-  commit: (fullPath) => {
-    const { route, query } = splitPath(fullPath);
-    const url = `#${Option.isSome(query) ? `${route}?${Option.unwrap(query)}` : route}`;
-    location.hash = url;
-    return { path: normalizePath(route), query: parseQuery(Option.unwrapOr(query, '')), url };
-  },
-  revert: (prev) => {
-    if (location.hash !== prev) location.hash = prev;
-  },
-  resolveAnchor: (el, base) => HISTORY_ADAPTER.resolveAnchor(el, base),
-  setupListener: (h) => {
-    window.addEventListener('hashchange', h);
-    return () => window.removeEventListener('hashchange', h);
-  },
-};
-
 /**
  * Logic: URL Adapter Factory
  * Creates a URL adapter based on the application's routing strategy.
- *
- * When to use:
- * - Use 'history' for clean URLs (requires server-side fallback).
- * - Use 'hash' for legacy support or zero-config static hosting.
  */
-export const createAdapter = (mode: 'history' | 'hash', basePath?: string) => {
-  const adapter = mode === 'history' ? HISTORY_ADAPTER : HASH_ADAPTER;
+export function createAdapter(mode: 'history' | 'hash', basePath?: string): UrlAdapter {
   const base = basePath ? `/${normalizePath(basePath)}` : '';
-  return {
-    get: () => adapter.get(base),
-    commit: (path: string) => adapter.commit(path, base),
-    revert: (prev: string) => adapter.revert(prev),
-    resolveAnchor: (el: Element) => adapter.resolveAnchor(el, base),
-    setupListener: (h: () => void) => adapter.setupListener(h),
-  };
-};
 
-export interface RouteMatcher {
-  readonly exact: Map<string, MatchEntry>;
-  readonly dynamic: MatchEntry[];
+  if (mode === 'history') {
+    return {
+      get: () => {
+        let p = location.pathname;
+        if (base && p.startsWith(base)) p = p.substring(base.length);
+        return {
+          path: normalizePath(p),
+          query: parseQuery(location.search.substring(1)),
+          url: location.pathname + location.search,
+        };
+      },
+      commit: (fullPath) => {
+        const { route, query } = splitPath(fullPath);
+        const url = new URL(route, `${location.origin}${base}/`.replace(/\/+$/, '/'));
+        Option.map(query, (q) => (url.search = q));
+        const urlStr = url.pathname + url.search;
+        Result.tryCatch(() => history.pushState(null, '', urlStr));
+        return {
+          path: normalizePath(route),
+          query: Object.fromEntries(url.searchParams),
+          url: urlStr,
+        };
+      },
+      revert: (prev) => {
+        if (location.pathname + location.search !== prev) {
+          Result.tryCatch(() => history.replaceState(null, '', prev));
+        }
+      },
+      resolveAnchor: (el) => resolveAnchorPath(el, base),
+      setupListener: (h) => {
+        window.addEventListener('popstate', h);
+        return () => window.removeEventListener('popstate', h);
+      },
+    };
+  }
+
+  return {
+    get: () => {
+      const { route, query } = splitPath(location.hash.slice(1));
+      return { path: route, query: parseQuery(Option.unwrapOr(query, '')), url: location.hash };
+    },
+    commit: (fullPath) => {
+      const { route, query } = splitPath(fullPath);
+      const url = `#${Option.isSome(query) ? `${route}?${Option.unwrap(query)}` : route}`;
+      location.hash = url;
+      return { path: normalizePath(route), query: parseQuery(Option.unwrapOr(query, '')), url };
+    },
+    revert: (prev) => {
+      if (location.hash !== prev) location.hash = prev;
+    },
+    resolveAnchor: (el) => resolveAnchorPath(el, base),
+    setupListener: (h) => {
+      window.addEventListener('hashchange', h);
+      return () => window.removeEventListener('hashchange', h);
+    },
+  };
 }
 
-const SUPPORTS_URL_PATTERN = typeof URLPattern !== 'undefined';
+export interface RouteMatcher {
+  readonly exact: Map<string, RouteDefinition>;
+  readonly dynamic: Array<{
+    readonly pattern: string;
+    readonly def: RouteDefinition;
+    readonly regex: RegExp;
+    readonly paramNames: string[];
+  }>;
+}
 
 /**
- * Optimization: Tiered Route Compilation
- * Routes are compiled into the most efficient matcher possible based on
- * pattern complexity and browser capability.
- *
- * Reason: Minimizes matching overhead by prioritizing O(1) lookups for
- * static routes and leveraging native URLPattern API where available.
+ * Optimization: Dynamic Route Compilation
+ * Compiles a route pattern containing parameters into a RegExp for matching
+ * and extracts parameter names.
  */
-const COMPILERS: Array<{
-  test: (pattern: string) => boolean;
-  compile: (pattern: string, def: RouteDefinition) => MatchEntry;
-}> = [
-  // Tier 1: Static Routes
-  // Logic: Direct string equality for patterns without placeholders.
-  {
-    test: (p) => !p.includes(':'),
-    compile: (pattern, def) => {
-      const result = Option.some({ route: { pattern, def }, params: {} });
-      return {
-        pattern,
-        def,
-        match: (path) => (path === pattern ? result : Option.none),
-      };
-    },
-  },
-  // Tier 2: Native URLPattern API
-  // Logic: Leverages modern browser internals for high-performance complex matching.
-  {
-    test: () => SUPPORTS_URL_PATTERN,
-    compile: (pattern, def) => {
-      const urlPattern = new URLPattern({ pathname: `/${pattern}` });
-      return {
-        pattern,
-        def,
-        match: (path) => {
-          const result = urlPattern.exec({ pathname: `/${path}` });
-          if (!result) return Option.none;
-          const params: Record<string, string> = {};
-          const groups = result.pathname.groups;
-          for (const key in groups) {
-            if (Object.hasOwn(groups, key)) {
-              const val = groups[key];
-              if (val != null) params[key] = val;
-            }
-          }
-          return Option.some({ route: { pattern, def }, params });
-        },
-      };
-    },
-  },
-  // Tier 3: Regex Fallback
-  // Logic: Robust, universal matching for legacy browsers or complex edge cases.
-  {
-    test: () => true,
-    compile: (pattern, def) => {
-      const paramNames: string[] = [];
-      const regex = new RegExp(
-        `^${pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/:(\w+)/g, (_, name) => {
-          paramNames.push(name);
-          return '([^/]+)';
-        })}$`
-      );
-      return {
-        pattern,
-        def,
-        match: (path) => {
-          const match = path.match(regex);
-          if (!match) return Option.none;
-          const params: Record<string, string> = {};
-          for (let i = 0, len = paramNames.length; i < len; i++) {
-            const val = match[i + 1] || '';
-            if (val.indexOf('%') !== -1) {
-              try {
-                params[paramNames[i]!] = decodeURIComponent(val);
-                continue;
-              } catch {
-                /* fallback to raw value if decoding fails */
-              }
-            }
-            params[paramNames[i]!] = val;
-          }
-          return Option.some({ route: { pattern, def }, params });
-        },
-      };
-    },
-  },
-];
-
-/**
- * Logic: Adaptive Compilation
- * Selects and executes the optimal compiler for a given pattern.
- */
-function compile(pattern: string, def: RouteDefinition): MatchEntry {
-  for (let i = 0, len = COMPILERS.length; i < len; i++) {
-    const compiler = COMPILERS[i]!;
-    if (compiler.test(pattern)) return compiler.compile(pattern, def);
-  }
-  return COMPILERS.at(-1)!.compile(pattern, def);
+function compileDynamicRoute(pattern: string, def: RouteDefinition) {
+  const paramNames: string[] = [];
+  const regex = new RegExp(
+    `^${pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/:(\w+)/g, (_, name) => {
+      paramNames.push(name);
+      return '([^/]+)';
+    })}$`
+  );
+  return { pattern, def, regex, paramNames };
 }
 
 /**
@@ -207,16 +113,18 @@ function compile(pattern: string, def: RouteDefinition): MatchEntry {
  * lookups for static paths while preserving order for dynamic patterns.
  */
 export function createRouteMatcher(routes: Record<string, RouteDefinition>): RouteMatcher {
-  const exact = new Map<string, MatchEntry>();
-  const dynamic: MatchEntry[] = [];
+  const exact = new Map<string, RouteDefinition>();
+  const dynamic: RouteMatcher['dynamic'] = [];
   for (const path in routes) {
     if (Object.hasOwn(routes, path)) {
       const def = routes[path];
       if (def === undefined) continue;
       const normalized = normalizePath(path);
-      const entry = compile(normalized, def);
-      if (normalized.includes(':')) dynamic.push(entry);
-      else exact.set(normalized, entry);
+      if (normalized.includes(':')) {
+        dynamic.push(compileDynamicRoute(normalized, def));
+      } else {
+        exact.set(normalized, def);
+      }
     }
   }
   return { exact, dynamic };
@@ -227,11 +135,29 @@ export function createRouteMatcher(routes: Record<string, RouteDefinition>): Rou
  * Attempts to match a path against the compiled routing table.
  */
 export function matchRoute(matcher: RouteMatcher, path: string): MatchResult {
-  const exactMatch = matcher.exact.get(path);
-  if (exactMatch) return exactMatch.match(path);
+  const exactDef = matcher.exact.get(path);
+  if (exactDef) {
+    return Option.some({ route: { pattern: path, def: exactDef }, params: {} });
+  }
   for (let i = 0, len = matcher.dynamic.length; i < len; i++) {
-    const result = matcher.dynamic[i]!.match(path);
-    if (Option.isSome(result)) return result;
+    const item = matcher.dynamic[i]!;
+    const match = path.match(item.regex);
+    if (match) {
+      const params: Record<string, string> = {};
+      for (let j = 0, pLen = item.paramNames.length; j < pLen; j++) {
+        const val = match[j + 1] || '';
+        if (val.indexOf('%') !== -1) {
+          try {
+            params[item.paramNames[j]!] = decodeURIComponent(val);
+            continue;
+          } catch {
+            /* fallback to raw value if decoding fails */
+          }
+        }
+        params[item.paramNames[j]!] = val;
+      }
+      return Option.some({ route: { pattern: item.pattern, def: item.def }, params });
+    }
   }
   return Option.none;
 }

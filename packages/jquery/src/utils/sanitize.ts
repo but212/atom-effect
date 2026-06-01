@@ -80,42 +80,37 @@ export const DEFAULT_POLICY: SanitizationPolicy = {
 };
 
 /**
- * Logic: Security Dictionaries
- * Lookup maps for HTML entity normalization and values targeted for
- * DOM Clobbering prevention.
+ * Map of safe replacements for common HTML entities.
  * @internal
  */
-const DICT = {
-  /** Map of safe replacements for common HTML entities. */
-  ENTITIES: {
-    colon: ':',
-    tab: '\t',
-    newline: '\n',
-    lt: '<',
-    gt: '>',
-    amp: '&',
-    quot: '"',
-    apos: "'",
-  } as Record<string, string>,
-  /** Values targeted for DOM Clobbering prevention. */
-  CLOBBER: {
-    ATTRS: ['id', 'name'],
-    VALUES: [
-      'attributes',
-      'tagname',
-      'nodename',
-      'innerhtml',
-      'parentnode',
-      'childnodes',
-      'lastchild',
-      'firstchild',
-      'nextsibling',
-      'previoussibling',
-    ],
-  },
-  /** SVG/SMIL attributes that can be used for XSS via animation. */
-  SENSITIVE: ['attributename', 'from', 'to', 'values'],
-} as const;
+const ENTITIES: Record<string, string> = {
+  colon: ':',
+  tab: '\t',
+  newline: '\n',
+  lt: '<',
+  gt: '>',
+  amp: '&',
+  quot: '"',
+  apos: "'",
+};
+
+/** Values targeted for DOM Clobbering prevention. @internal */
+const CLOBBER_ATTRS = new Set(['id', 'name']);
+const CLOBBER_VALUES = new Set([
+  'attributes',
+  'tagname',
+  'nodename',
+  'innerhtml',
+  'parentnode',
+  'childnodes',
+  'lastchild',
+  'firstchild',
+  'nextsibling',
+  'previoussibling',
+]);
+
+/** SVG/SMIL attributes that can be used for XSS via animation. @internal */
+const SENSITIVE_ATTRS = new Set(['attributename', 'from', 'to', 'values']);
 
 /**
  * Logic: Security Pattern Library
@@ -131,9 +126,9 @@ const REGEX = {
   NUMERIC_ENTITY: /&#x([0-9a-f]+);?|&#([0-9]+);?/gi,
   /**
    * Security: Normalization
-   * Captures named HTML entities defined in DICT.ENTITIES to reveal hidden tags/protocols.
+   * Captures named HTML entities defined in ENTITIES to reveal hidden tags/protocols.
    */
-  NAMED_ENTITY: new RegExp(`&(${Object.keys(DICT.ENTITIES).join('|')});?`, 'gi'),
+  NAMED_ENTITY: new RegExp(`&(${Object.keys(ENTITIES).join('|')});?`, 'gi'),
   /**
    * Security: Filter Evasion
    * Captures control characters often used to break regex-based filters.
@@ -174,13 +169,7 @@ const DOM = {
   getAttributes: (el: Element) => {
     const getter = _get(Element.prototype, 'attributes');
     const attrs = (getter ? _call(getter, el) : el.attributes) as NamedNodeMap;
-    const len = attrs.length;
-    const arr = new Array(len);
-    for (let i = 0; i < len; i++) {
-      const a = attrs[i]!;
-      arr[i] = { name: a.name, value: a.value };
-    }
-    return arr;
+    return Array.from(attrs, ({ name, value }) => ({ name, value }));
   },
   /** Sets an attribute bypassing instance-level shadowing. */
   setAttribute: (el: Element, key: string, val: string) =>
@@ -220,7 +209,7 @@ const Guard = {
         const cp = hex ? parseInt(hex, 16) : parseInt(dec, 10);
         return cp >= 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : '';
       })
-      .replace(REGEX.NAMED_ENTITY, (_, name) => DICT.ENTITIES[name.toLowerCase()] ?? '');
+      .replace(REGEX.NAMED_ENTITY, (_, name) => ENTITIES[name.toLowerCase()] ?? '');
   },
 
   /**
@@ -275,90 +264,57 @@ function _sanitize(html: string, policy: SanitizationPolicy): string {
   return serializer.innerHTML;
 }
 
-/** @internal */
-interface DefenseRule {
-  match: (key: string, val: string, policy: SanitizationPolicy) => boolean;
-  action: (el: HTMLElement, key: string, val: string, policy: SanitizationPolicy) => void;
-}
+/**
+ * @internal
+ * Logic: Special attribute handlers for style, srcdoc, and srcset.
+ */
+const SPECIAL_ATTRIBUTES: Record<
+  string,
+  (el: HTMLElement, name: string, value: string, policy: SanitizationPolicy) => void
+> = {
+  style(el, name, value) {
+    const safeStyles = value
+      .split(';')
+      .map((p) => p.trim())
+      .filter((p) => p && !Guard.isDangerousCss(p));
+    DOM.setAttribute(
+      el,
+      name,
+      safeStyles.length ? `${safeStyles.join('; ')};` : 'data-unsafe-css:'
+    );
+  },
+  srcdoc(el, name, value, policy) {
+    DOM.setAttribute(el, name, _sanitize(value, policy));
+  },
+  srcset(el, name, value) {
+    const parts = value.split(',').map((part) => {
+      const trimmed = part.trim();
+      if (!trimmed) return part;
+      const [url, ...meta] = trimmed.split(/\s+/);
+      return Guard.isDangerousUri(url!)
+        ? ['data-unsafe-protocol:', ...meta].join(' ')
+        : [Guard.normalize(url!), ...meta].join(' ');
+    });
+    DOM.setAttribute(el, name, parts.join(', '));
+  },
+};
 
 /**
  * @internal
- * Orchestrates attribute-level defense logic.
- *
- * Logic: Rule Specificity & Priority
- * Rules are ordered from most specific (e.g., Style, URL) to most general (Catch-all).
- * This ensures that data with potential for partial recovery (like CSS) is sanitized
- * rather than discarded, while still enforcing a strict security boundary.
+ * Predicates to identify dangerous attributes and values.
  */
-const DEFENSE_RULES: DefenseRule[] = [
-  {
-    // Logic: Style Sanitization
-    // Filters CSS properties to allow safe styles while neutralizing dangerous declarations.
-    match: (k, _v, _p) => k === 'style',
-    action: (el, k, v) => {
-      const safeStyles = v
-        .split(';')
-        .map((p) => p.trim())
-        .filter((p) => p && !Guard.isDangerousCss(p));
-      DOM.setAttribute(el, k, safeStyles.length ? `${safeStyles.join('; ')};` : 'data-unsafe-css:');
-    },
-  },
-  {
-    // Logic: HTML Sinks (srcdoc)
-    // Performs recursive sanitization on srcdoc content to ensure nested safety.
-    match: (k) => k === 'srcdoc',
-    action: (el, k, v, p) => DOM.setAttribute(el, k, _sanitize(v, p)),
-  },
-  {
-    // Logic: Multi-URI Attributes (srcset)
-    // Validates each URI segment within a srcset attribute.
-    match: (k) => k === 'srcset',
-    action: (el, k, v) => {
-      const parts = v.split(',').map((part) => {
-        const trimmed = part.trim();
-        if (!trimmed) return part;
-        const [url, ...meta] = trimmed.split(/\s+/);
-        return Guard.isDangerousUri(url!)
-          ? ['data-unsafe-protocol:', ...meta].join(' ')
-          : [Guard.normalize(url!), ...meta].join(' ');
-      });
-      DOM.setAttribute(el, k, parts.join(', '));
-    },
-  },
-  {
-    // Logic: URI Enforcement
-    // Enforces protocol white-listing on URI-carrying attributes.
-    match: (k, v, p) => p.urlAttributes.includes(k) && Guard.isDangerousUri(v),
-    action: (el, k) => DOM.setAttribute(el, k, 'data-unsafe-protocol:'),
-  },
-  {
-    // Security: DOM Clobbering / SVG Injection
-    // Blocks attributes that attempt to shadow native element properties or trigger SMIL-based XSS.
-    match: (k, v, _p) =>
-      ((DICT.SENSITIVE as readonly string[]).includes(k) &&
-        (v.startsWith('on') || Guard.isDangerousUri(v))) ||
-      ((DICT.CLOBBER.ATTRS as readonly string[]).includes(k) &&
-        (DICT.CLOBBER.VALUES as readonly string[]).includes(v.toLowerCase())),
-    action: (el, k) => DOM.removeAttribute(el, k),
-  },
-  {
-    // Security: Event Handlers
-    // Blocks all inline event handlers (on*).
-    match: (k, _v, _p) => k.startsWith('on'),
-    action: (el, k) => DOM.removeAttribute(el, k),
-  },
-  {
-    // Security: Catch-all Protection
-    // Identifies and blocks malicious keywords in both attribute names and values.
-    match: (k, v, _p) =>
-      k.includes('javascript') ||
-      k.includes('expression') ||
-      Guard.isDangerousUri(v) ||
-      v.includes('javascript') ||
-      v.includes('expression'),
-    action: (el, k) => DOM.removeAttribute(el, k),
-  },
-];
+const isClobbered = (key: string, lowerVal: string) =>
+  CLOBBER_ATTRS.has(key) && CLOBBER_VALUES.has(lowerVal);
+
+const isSensitiveSvg = (key: string, val: string) =>
+  SENSITIVE_ATTRS.has(key) && (val.startsWith('on') || Guard.isDangerousUri(val));
+
+const isDangerousContent = (key: string, val: string, lowerVal: string) =>
+  key.includes('javascript') ||
+  key.includes('expression') ||
+  lowerVal.includes('javascript') ||
+  lowerVal.includes('expression') ||
+  Guard.isDangerousUri(val);
 
 /**
  * @internal
@@ -369,25 +325,44 @@ function scrubElement(el: HTMLElement, policy: SanitizationPolicy): void {
   const attrs = DOM.getAttributes(el);
   let detectedEvents: string[] | null = null;
 
-  for (let i = 0, len = attrs.length; i < len; i++) {
-    const { name, value } = attrs[i]!;
+  for (const { name, value } of attrs) {
     const key = name.toLowerCase();
+    const lowerVal = value.toLowerCase();
 
+    // 1. Event Handlers
     if (key.startsWith('on')) {
       if (!detectedEvents) detectedEvents = [];
       detectedEvents.push(name);
+      DOM.removeAttribute(el, name);
+      continue;
     }
 
-    for (let r = 0, rLen = DEFENSE_RULES.length; r < rLen; r++) {
-      const rule = DEFENSE_RULES[r]!;
-      if (rule.match(key, value, policy)) {
-        rule.action(el, name, value, policy);
-        break;
+    // 2. Special attributes (style, srcdoc, srcset)
+    const specialHandler = SPECIAL_ATTRIBUTES[key];
+    if (specialHandler) {
+      specialHandler(el, name, value, policy);
+      continue;
+    }
+
+    // 3. Registered URL attributes
+    if (policy.urlAttributes.includes(key)) {
+      if (Guard.isDangerousUri(value)) {
+        DOM.setAttribute(el, name, 'data-unsafe-protocol:');
       }
+      continue;
+    }
+
+    // 4. Security Blocks (DOM Clobbering, SVG Injection, & general dangerous patterns)
+    if (
+      isClobbered(key, lowerVal) ||
+      isSensitiveSvg(key, value) ||
+      isDangerousContent(key, value, lowerVal)
+    ) {
+      DOM.removeAttribute(el, name);
     }
   }
 
-  if (detectedEvents && detectedEvents.length > 0) {
+  if (detectedEvents?.length) {
     DOM.setAttribute(el, 'data-unsafe-attr', detectedEvents.join(','));
   }
 }
@@ -520,14 +495,15 @@ export function sanitizeHtml(
   policy: SanitizationPolicy = DEFAULT_POLICY
 ): string {
   if (!html) return '';
-  if (policy === DEFAULT_POLICY) {
-    const cached = sanitizeCache.get(html);
-    if (cached !== undefined) return cached;
-    const sanitized = _sanitize(String(html), policy);
-    sanitizeCache.set(html, sanitized);
-    return sanitized;
+  const rawHtml = String(html);
+  if (policy !== DEFAULT_POLICY) return _sanitize(rawHtml, policy);
+
+  let sanitized = sanitizeCache.get(rawHtml);
+  if (sanitized === undefined) {
+    sanitized = _sanitize(rawHtml, policy);
+    sanitizeCache.set(rawHtml, sanitized);
   }
-  return _sanitize(String(html), policy);
+  return sanitized;
 }
 
 /**

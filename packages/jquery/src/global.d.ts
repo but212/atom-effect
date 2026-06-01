@@ -11,7 +11,18 @@
  * primitives and DOM-bound extensions.
  */
 
-import type { EffectOptions, Paths, PathValue } from '@but212/atom-effect';
+import type {
+  ComputedAtom,
+  ComputedOptions,
+  Dependency,
+  EffectObject,
+  EffectOptions,
+  MergedDependencyValue,
+  Paths,
+  PathValue,
+  ReadonlyAtom,
+  WritableAtom,
+} from '@but212/atom-effect';
 import type {
   AEJConfig,
   AsyncReactiveValue,
@@ -20,23 +31,16 @@ import type {
   AtomOptions,
   BindingOptions,
   ComponentFn,
-  ComputedAtom,
-  ComputedOptions,
   CssBindings,
-  Dependency,
   DisposableWritableAtom,
-  EffectObject,
   EffectResult,
   FetchOptions,
   FormOptions,
   ListOptions,
-  MergedDependencyValue,
   PrimitiveValue,
-  ReadonlyAtom,
   RouteConfig,
   Router,
   ValOptions,
-  WritableAtom,
 } from './types';
 
 declare global {

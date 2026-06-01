@@ -25,36 +25,8 @@ import {
 import { registry } from '@/core/registry';
 import type { RouteConfig, RouteDefinition, Router } from '@/types';
 import { debug } from '@/utils/debug';
-import { type createAdapter, getRoutePattern, type RouteMatcher } from './core';
-
-type RenderStrategy = (
-  container: HTMLElement,
-  def: RouteDefinition,
-  routeName: string,
-  params: Record<string, string>,
-  onUnmount: (fn: () => void) => void,
-  router: Router
-) => void;
-
-/**
- * Logic: Polymorphic Rendering Strategies
- * Decouples the route definition from the mounting mechanism.
- * Supports both manual JS rendering (for component-based views) and
- * declarative HTML templates.
- */
-const RENDER_STRATEGIES: Record<string, RenderStrategy> = {
-  render: (container, def, routeName, params, onUnmount, router) => {
-    def.render?.(container, routeName, params, onUnmount, router);
-  },
-  template: (container, def, _, __, onUnmount, router) => {
-    if (!def.template) return;
-    const tmpl = document.querySelector(def.template);
-    if (tmpl instanceof HTMLTemplateElement) {
-      container.appendChild(tmpl.content.cloneNode(true));
-      def.onMount?.($(container).children(), onUnmount, router);
-    }
-  },
-};
+import { getRoutePattern, type RouteMatcher } from './core';
+import type { UrlAdapter } from './types';
 
 /**
  * State container for a specific routing target.
@@ -62,7 +34,7 @@ const RENDER_STRATEGIES: Record<string, RenderStrategy> = {
 export interface RouteRenderer {
   $target: JQuery<HTMLElement>;
   config: Required<RouteConfig> & { routes: Record<string, RouteDefinition> };
-  urlAdapter: ReturnType<typeof createAdapter>;
+  urlAdapter: UrlAdapter;
   cleanups: SlotBuffer<() => void>;
   previousPath: string;
 }
@@ -74,7 +46,7 @@ export interface RouteRenderer {
 export function createRouteRenderer(
   $target: JQuery<HTMLElement>,
   config: Required<RouteConfig> & { routes: Record<string, RouteDefinition> },
-  urlAdapter: ReturnType<typeof createAdapter>
+  urlAdapter: UrlAdapter
 ): RouteRenderer {
   return { $target, config, urlAdapter, cleanups: new SlotBuffer(), previousPath: '' };
 }
@@ -111,10 +83,14 @@ export function renderRoute(
   container.replaceChildren();
   const onUnmount = (fn: () => void) => renderer.cleanups.push(fn);
 
-  const strategy = def.render ? 'render' : def.template ? 'template' : null;
-  const handler = strategy ? RENDER_STRATEGIES[strategy] : null;
-  if (handler) {
-    handler(container, def, routeName, params, onUnmount, router);
+  if (def.render) {
+    def.render(container, routeName, params, onUnmount, router);
+  } else if (def.template) {
+    const tmpl = document.querySelector(def.template);
+    if (tmpl instanceof HTMLTemplateElement) {
+      container.appendChild(tmpl.content.cloneNode(true));
+      def.onMount?.($(container).children(), onUnmount, router);
+    }
   }
 
   // Security & DX: Validate that all components in the new view are registered.
@@ -169,93 +145,53 @@ export function runRendererCleanups(renderer: RouteRenderer) {
 }
 
 /**
- * State container for the navigation link tracker.
- */
-export interface RouteScanner {
-  config: Required<RouteConfig> & { routes: Record<string, RouteDefinition> };
-  matcher: RouteMatcher;
-  urlAdapter: ReturnType<typeof createAdapter>;
-  activeClass: string;
-  trackedLinks: Set<Element>;
-  pathCache: WeakMap<Element, string>;
-  activeStateCache: WeakMap<Element, boolean>;
-  linkObserver?: MutationObserver;
-}
-
-/**
- * Logic: Scanner State Initialization
- * Creates a scanner state for document-wide link tracking.
- */
-export function createRouteScanner(
-  config: Required<RouteConfig> & { routes: Record<string, RouteDefinition> },
-  matcher: RouteMatcher,
-  urlAdapter: ReturnType<typeof createAdapter>,
-  activeClass: string
-): RouteScanner {
-  return {
-    config,
-    matcher,
-    urlAdapter,
-    activeClass,
-    trackedLinks: new Set(),
-    pathCache: new WeakMap(),
-    activeStateCache: new WeakMap(),
-  };
-}
-
-/**
  * Logic: Reactive Link Tracking
  * Initializes reactive tracking for navigation links across the entire document.
- *
- * When to use:
- * - Call once during application bootstrap to enable automatic "active"
- *   styling for all links matching the navigation spec.
- *
- * Logic: Lifecycle Management
- * 1. Uses MutationObserver to detect links injected via AJAX or templates.
- * 2. Binds reactive effects to each link to toggle classes based on current route.
- * 3. Automatically cleans up effects when elements are removed from the DOM.
  */
-export function setupRouteScanner(scanner: RouteScanner, currentRouteAtom: ReadonlyAtom<string>) {
+export function setupRouteScanner(
+  matcher: RouteMatcher,
+  urlAdapter: UrlAdapter,
+  activeClass: string,
+  currentRouteAtom: ReadonlyAtom<string>
+) {
+  const trackedLinks = new Set<Element>();
+  const pathCache = new WeakMap<Element, string>();
+  const activeStateCache = new WeakMap<Element, boolean>();
+
   const resolvePath = (el: Element, stripQuery = false) => {
     const attr = el.getAttribute('data-route');
-    const path = attr || scanner.urlAdapter.resolveAnchor(el);
+    const path = attr || urlAdapter.resolveAnchor(el);
     if (!path) return '';
     return stripQuery ? splitPath(path).route : path;
   };
 
-  const currentPatternAtom = computed(() =>
-    getRoutePattern(scanner.matcher, currentRouteAtom.value)
-  );
+  const currentPatternAtom = computed(() => getRoutePattern(matcher, currentRouteAtom.value));
 
   const updateActive = (el: Element, current: string, pattern: string) => {
-    // Optimization: Structural Caching
-    // Reason: Prevents expensive DOM attribute reads and layout-triggering
-    // class toggles during rapid navigation intent changes.
-    const path = scanner.pathCache.get(el) || resolvePath(el, true);
+    const path = pathCache.get(el) || resolvePath(el, true);
     const active = path === current || path === pattern;
-    if (scanner.activeStateCache.get(el) === active) return;
-    scanner.activeStateCache.set(el, active);
-    updateActiveState({ el, active, activeClass: scanner.activeClass });
+    if (activeStateCache.get(el) === active) return;
+    activeStateCache.set(el, active);
+    updateActiveState({ el, active, activeClass });
   };
 
   const trackLink = (el: Element) => {
     const path = resolvePath(el, true);
-    scanner.pathCache.set(el, path);
+    pathCache.set(el, path);
 
-    if (scanner.trackedLinks.has(el)) {
+    if (trackedLinks.has(el)) {
       updateActive(el, currentRouteAtom.peek(), currentPatternAtom.peek());
       return;
     }
 
-    scanner.trackedLinks.add(el);
+    trackedLinks.add(el);
     const sub = effect(() => {
       updateActive(el, currentRouteAtom.value, currentPatternAtom.value);
     });
 
     // Cleanup: Leverages the registry to ensure memory is released when the link is destroyed.
     registry.onCleanup(el, () => {
-      scanner.trackedLinks.delete(el);
+      trackedLinks.delete(el);
       sub.dispose();
     });
   };
@@ -264,7 +200,7 @@ export function setupRouteScanner(scanner: RouteScanner, currentRouteAtom: Reado
 
   // Logic: Dynamic Content Support
   // Handles scenarios where links are added dynamically (e.g., list rendering or async components).
-  scanner.linkObserver = new MutationObserver((mutations) => {
+  const linkObserver = new MutationObserver((mutations) => {
     for (const m of mutations) {
       if (m.type === 'childList') {
         m.addedNodes.forEach((node) => {
@@ -278,7 +214,7 @@ export function setupRouteScanner(scanner: RouteScanner, currentRouteAtom: Reado
     }
   });
 
-  scanner.linkObserver.observe(document.body || document.documentElement, {
+  linkObserver.observe(document.body || document.documentElement, {
     childList: true,
     subtree: true,
     attributes: true,
@@ -286,7 +222,7 @@ export function setupRouteScanner(scanner: RouteScanner, currentRouteAtom: Reado
   });
 
   scan();
-  return { scan, resolvePath };
+  return { scan, resolvePath, disconnect: () => linkObserver.disconnect() };
 }
 
 /**

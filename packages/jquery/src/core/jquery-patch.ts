@@ -71,41 +71,31 @@ const unwrapHandler = (fn: EventHandler): EventHandler => {
 };
 
 /**
- * Optimization: Event Map Batching
- * Normalizes and wraps all handlers within a jQuery event map.
+ * Normalizes all handlers within a jQuery event map using a processor function.
  * Uses a for-in loop to avoid intermediate entry arrays for speed.
  * @internal
  */
-function wrapEventMap(
-  map: Record<string, JQueryEventHandler | undefined>
+function processEventMap(
+  map: Record<string, JQueryEventHandler | undefined>,
+  processor: (fn: EventHandler) => EventHandler
 ): Record<string, JQueryEventHandler | undefined> {
   const result: Record<string, JQueryEventHandler | undefined> = {};
   for (const key in map) {
     if (Object.hasOwn(map, key)) {
       const fn = map[key];
-      result[key] = typeof fn === 'function' ? wrapHandler(fn) : fn;
+      result[key] = typeof fn === 'function' ? processor(fn) : fn;
     }
   }
   return result;
 }
 
-/**
- * Normalizes and unwraps all handlers within a jQuery event map.
- * Optimized with a for-in loop.
- * @internal
- */
-function unwrapEventMap(
-  map: Record<string, JQueryEventHandler | undefined>
-): Record<string, JQueryEventHandler | undefined> {
-  const result: Record<string, JQueryEventHandler | undefined> = {};
-  for (const key in map) {
-    if (Object.hasOwn(map, key)) {
-      const fn = map[key];
-      result[key] = typeof fn === 'function' ? wrapHandler(fn) : fn;
-    }
-  }
-  return result;
-}
+/** @internal */
+const wrapEventMap = (map: Record<string, JQueryEventHandler | undefined>) =>
+  processEventMap(map, wrapHandler);
+
+/** @internal */
+const unwrapEventMap = (map: Record<string, JQueryEventHandler | undefined>) =>
+  processEventMap(map, unwrapHandler);
 
 /**
  * Logic: Argument Interception

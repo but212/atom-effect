@@ -12,12 +12,12 @@
  * testing and allows for granular optimization of DOM-heavy operations.
  */
 
-import { isAtom } from '@but212/atom-effect';
+import { type Disposable, isAtom } from '@but212/atom-effect';
 import type { SlotBuffer } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { SYSTEM_COMPONENT } from '@/constants';
 import { HYDRATION_MARKER } from '@/core/symbols';
-import type { EffectObject, ReactiveValue, ReadonlyAtom } from '@/types';
+import type { ReactiveValue, ReadonlyAtom } from '@/types';
 import { flattenToFormData } from '@/utils';
 import { resolveValue } from './utils';
 
@@ -40,7 +40,7 @@ export const SetupFeatures = {
   dispatch(
     el: HTMLElement,
     mappings: Record<string, ReactiveValue<unknown>>,
-    effects: SlotBuffer<EffectObject>
+    effects: SlotBuffer<Disposable>
   ) {
     for (const [name, source] of Object.entries(mappings)) {
       effects.push(
@@ -81,7 +81,7 @@ export const SetupFeatures = {
   aria(
     internals: ElementInternals,
     aria: Record<string, ReadonlyAtom<unknown>>,
-    effects: SlotBuffer<EffectObject>
+    effects: SlotBuffer<Disposable>
   ) {
     for (const [prop, atom] of Object.entries(aria)) {
       effects.push(
@@ -107,8 +107,7 @@ export const SetupFeatures = {
   hydrate(
     root: ParentNode,
     bindings: Record<string, ReadonlyAtom<unknown>>,
-    effects: SlotBuffer<EffectObject>,
-    hydratedNodes: Set<Element>
+    effects: SlotBuffer<Disposable>
   ) {
     const { BIND, LEGACY_BIND } = SYSTEM_COMPONENT.ATTRS;
     const selector = `[${BIND}],[${LEGACY_BIND}]`;
@@ -131,7 +130,11 @@ export const SetupFeatures = {
           })
         );
         target[HYDRATION_MARKER] = true;
-        hydratedNodes.add(node);
+        effects.push({
+          dispose: () => {
+            delete target[HYDRATION_MARKER];
+          },
+        });
       }
     };
 
@@ -153,7 +156,7 @@ export const SetupFeatures = {
   parts(
     root: ParentNode,
     parts: Record<string, ReadonlyAtom<unknown>>,
-    effects: SlotBuffer<EffectObject>
+    effects: SlotBuffer<Disposable>
   ) {
     const attr = SYSTEM_COMPONENT.ATTRS.PART;
     const apply = (node: Element) => {
@@ -171,9 +174,8 @@ export const SetupFeatures = {
             } else if (Array.isArray(val)) {
               normalized = val.join(' ');
             } else if (typeof val === 'object' && val !== null) {
-              normalized = Object.entries(val as Record<string, boolean>)
-                .filter(([, active]) => active)
-                .map(([name]) => name)
+              normalized = Object.keys(val)
+                .filter((k) => (val as Record<string, boolean>)[k])
                 .join(' ');
             } else {
               normalized = '';
@@ -197,7 +199,7 @@ export const SetupFeatures = {
     root: ParentNode,
     selector: string,
     apply: (n: Element) => void,
-    effects: SlotBuffer<EffectObject>
+    effects: SlotBuffer<Disposable>
   ) {
     // Phase 1: Initial sync for already existing nodes
     if (root instanceof Element && root.matches(selector)) apply(root);
@@ -223,7 +225,7 @@ export const SetupFeatures = {
 
     obs.observe(root, { childList: true, subtree: true });
     // Disposal: The observer is disconnected when the component effect scope is disposed.
-    effects.push($.effect(() => () => obs.disconnect()));
+    effects.push({ dispose: () => obs.disconnect() });
   },
 
   /**
@@ -245,12 +247,12 @@ export const SetupFeatures = {
       | ReadonlyAtom<ValidityStateFlags | string>
       | ((val: unknown) => ValidityStateFlags | string)
       | undefined,
-    effects: SlotBuffer<EffectObject>
+    effects: SlotBuffer<Disposable>
   ) {
-    const valAtom =
-      value && (isAtom(value) ? value : (value as { val: ReadonlyAtom<unknown> }).val);
+    const isAtomVal = isAtom(value);
+    const valAtom = value && (isAtomVal ? value : (value as { val: ReadonlyAtom<unknown> }).val);
     const stateAtom =
-      value && !isAtom(value) ? (value as { state?: ReadonlyAtom<unknown> }).state : null;
+      value && !isAtomVal ? (value as { state?: ReadonlyAtom<unknown> }).state : null;
 
     effects.push(
       $.effect(() => {
@@ -305,12 +307,11 @@ export const SetupFeatures = {
     atom: ReadonlyAtom<Record<string, string | null>>;
     observer: MutationObserver;
   } {
-    const getObserved = () =>
+    const observed =
       (host.constructor as typeof HTMLElement & { observedAttributes?: string[] })
         .observedAttributes || [];
 
     const snapshot = () => {
-      const observed = getObserved();
       const res: Record<string, string | null> = {};
       if (observed.length > 0) {
         for (const name of observed) {
@@ -332,7 +333,6 @@ export const SetupFeatures = {
     });
 
     const options: MutationObserverInit = { attributes: true };
-    const observed = getObserved();
     if (observed.length > 0) options.attributeFilter = observed;
 
     observer.observe(host, options);
@@ -349,10 +349,10 @@ export const SetupFeatures = {
     atom: ReadonlyAtom<Record<string, Node[]>>;
     listener: (e: Event) => void;
   } {
-    const snapshot = (targetSr: ShadowRoot | null) => {
+    const snapshot = () => {
       const next: Record<string, Node[]> = {};
-      if (targetSr) {
-        const slots = targetSr.querySelectorAll('slot');
+      if (root) {
+        const slots = root.querySelectorAll('slot');
         for (const s of slots) {
           next[s.name || ''] = s.assignedNodes();
         }
@@ -360,17 +360,17 @@ export const SetupFeatures = {
       return next;
     };
 
-    const atom = $.atom(snapshot(root));
+    const atom = $.atom(snapshot());
 
     const listener = (e: Event) => {
       const target = e.target as HTMLSlotElement;
-      const current = { ...atom.peek() };
-      current[target.name || ''] = target.assignedNodes();
-      atom.value = current;
+      atom.value = {
+        ...atom.peek(),
+        [target.name || '']: target.assignedNodes(),
+      };
     };
 
     if (root) {
-      atom.value = snapshot(root);
       root.addEventListener('slotchange', listener);
     }
 

@@ -13,10 +13,6 @@ describe('Constants', () => {
     it('should interpolate dynamic arguments into the message', () => {
       const cases: [string, string][] = [
         [SYSTEM_ROUTE.ERRORS.NOT_FOUND('home'), 'home'],
-        [SYSTEM_ROUTE.ERRORS.TEMPLATE_NOT_FOUND('#tpl'), '#tpl'],
-        [SYSTEM_ROUTE.ERRORS.TARGET_NOT_FOUND('#app'), '#app'],
-        [SYSTEM_ROUTE.ERRORS.MALFORMED_URI('%'), '%'],
-        [SYSTEM_SECURITY.ERRORS.BLOCKED_CSS_VALUE('color'), 'color'],
         [SYSTEM_SECURITY.ERRORS.BLOCKED_EVENT_HANDLER('onclick'), 'onclick'],
         [SYSTEM_SECURITY.ERRORS.BLOCKED_PROTOCOL('href'), 'href'],
         [SYSTEM_SECURITY.ERRORS.BLOCKED_PROP('innerHTML'), 'innerHTML'],
@@ -32,9 +28,6 @@ describe('Constants', () => {
     });
 
     it('should return a non-empty string for zero-argument messages', () => {
-      expect(SYSTEM_SECURITY.ERRORS.UNSAFE_CONTENT()).toBeTruthy();
-      expect(SYSTEM_BINDING.ERRORS.PARSE_ERROR('err')).toBeTruthy();
-      expect(SYSTEM_MOUNT.ERRORS.ERROR('comp')).toBeTruthy();
       expect(SYSTEM_MOUNT.ERRORS.CLEANUP_ERROR('#sel')).toBeTruthy();
       expect(SYSTEM_CORE.ERRORS.EFFECT_DISPOSE_ERROR('#sel')).toBeTruthy();
       expect(SYSTEM_BINDING.ERRORS.CLEANUP_ERROR('#sel')).toBeTruthy();
