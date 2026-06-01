@@ -47,52 +47,35 @@ interface NavState {
  * Reason: Prevents memory leaks and 'ghost' reactive effects from elements
  * that are no longer in the document but still registered in the registry.
  */
-function reconcileDOM(params: {
-  $target: JQuery;
-  state: ContentState;
-  url: string;
-  previousUrl: string;
-  win: Window;
-  syncTitle: boolean;
-  onMount?: ((el: JQuery, url: string) => void) | undefined;
-  onUnmount?: ((el: JQuery, url: string) => void) | undefined;
-}): void {
-  const { $target, state, url, previousUrl, win, syncTitle, onMount, onUnmount } = params;
-
+function reconcileDOM(
+  $target: JQuery,
+  state: ContentState,
+  url: string,
+  previousUrl: string,
+  win: Window,
+  options: AtomNavOptions
+): void {
   $.untracked(() => {
-    onUnmount?.($target, previousUrl);
+    options.onUnmount?.($target, previousUrl);
 
     // Constraint: Clean up internal atom bindings within the target before replacing HTML
     $target.children().atomUnbind();
 
+    const syncTitle = options.syncTitle ?? true;
     if (syncTitle && state.title !== null && win.document.title !== state.title) {
       win.document.title = state.title;
     }
     if (state.meta) {
       syncMetaData(win, state.meta);
     }
-    const el = $target[0] as HTMLElement | undefined;
+    const el = $target[0];
     if (el && state.attributes) {
       updateAttributes(el, state.attributes);
     }
     $target.html(state.html);
 
-    onMount?.($target, url);
+    options.onMount?.($target, url);
   });
-}
-
-/** @internal */
-function initNavAtoms(win: Window) {
-  const initialUrlObj = new URL(win.location.href);
-  const initialUrl = initialUrlObj.pathname + initialUrlObj.search + initialUrlObj.hash;
-  const initialPath = initialUrlObj.pathname + initialUrlObj.search;
-
-  return {
-    intent: $.atom<NavState>({ url: initialUrl, type: 'init' }, { name: 'nav:intent' }),
-    rendered: $.atom({ url: initialUrl, path: initialPath }, { name: 'nav:rendered' }),
-    fetchVersion: $.atom(0, { name: 'nav:version' }),
-    pendingHooks: $.atom(0, { name: 'nav:hook-pending' }),
-  };
 }
 
 /** @internal */
@@ -132,7 +115,7 @@ function resolveTargetSelector(target: unknown, $target: JQuery): string | undef
  * ```
  */
 export function atomNav(options: AtomNavOptions): AtomNav {
-  const { target, selector = 'a[data-nav]', headers = {}, syncTitle = true } = options;
+  const { target, selector = 'a[data-nav]', headers = {} } = options;
   const win = options.window ?? (window as Window & typeof globalThis);
   const $target =
     typeof target === 'string'
@@ -143,17 +126,16 @@ export function atomNav(options: AtomNavOptions): AtomNav {
 
   $target.attr('data-atom-nav-target', 'true');
 
-  const state = initNavAtoms(win);
-  const targetSelector = resolveTargetSelector(target, $target);
+  const initialUrlObj = new URL(win.location.href);
+  const initialUrl = initialUrlObj.pathname + initialUrlObj.search + initialUrlObj.hash;
+  const initialPath = initialUrlObj.pathname + initialUrlObj.search;
 
-  const normalized = $.computed(
-    () => {
-      const { url, type } = state.intent.value;
-      const { pathAndSearch, hash } = getUrlParts(url, win.location.href);
-      return { url, pathAndSearch, hash, type };
-    },
-    { name: 'nav:normalized' }
-  );
+  const intent = $.atom<NavState>({ url: initialUrl, type: 'init' }, { name: 'nav:intent' });
+  const rendered = $.atom({ url: initialUrl, path: initialPath }, { name: 'nav:rendered' });
+  const fetchVersion = $.atom(0, { name: 'nav:version' });
+  const pendingHooks = $.atom(0, { name: 'nav:hook-pending' });
+
+  const targetSelector = resolveTargetSelector(target, $target);
 
   /**
    * Logic: Fragment Fetch Pipeline
@@ -161,8 +143,9 @@ export function atomNav(options: AtomNavOptions): AtomNav {
    */
   const content = $.atomFetch<ContentState>(
     () => {
-      state.fetchVersion.value;
-      return normalized.value.pathAndSearch;
+      fetchVersion.value;
+      const { pathAndSearch } = getUrlParts(intent.value.url, win.location.href);
+      return pathAndSearch;
     },
     {
       name: 'nav:content',
@@ -180,11 +163,6 @@ export function atomNav(options: AtomNavOptions): AtomNav {
           redirectUrl: xhr?.getResponseHeader?.('X-PJAX-URL') ?? undefined,
           title: xhr?.getResponseHeader?.('X-PJAX-Title') ?? undefined,
         });
-        /**
-         * Security: Content Sanitization
-         * Ensures that the fetched fragment is sanitized before injection to
-         * prevent XSS from untrusted or compromised server responses.
-         */
         return { ...result, html: sanitizeHtml(result.html).trim() };
       },
     }
@@ -209,23 +187,19 @@ export function atomNav(options: AtomNavOptions): AtomNav {
    */
   const mainEffect = $.effect(
     (): undefined => {
-      const { url, pathAndSearch, hash, type } = normalized.value;
-      const rendered = $.untracked(() => state.rendered.value);
+      const { url, type } = intent.value;
+      const { pathAndSearch, hash } = getUrlParts(url, win.location.href);
+      const curRendered = $.untracked(() => rendered.value);
 
-      /**
-       * Optimization: Hash-only Transition
-       * Skips the full fetch-reconcile cycle if the navigation only involves
-       * changing the URL hash within the same resource path.
-       */
-      if (pathAndSearch === rendered.path) {
+      if (pathAndSearch === curRendered.path) {
         $.untracked(() => {
           if (hash) performScroll(win, hash);
 
           if (type === 'init') {
             options.onMount?.($target, url);
-            state.intent.value = { ...state.intent.peek(), type: 'push' };
-          } else if (url !== rendered.url) {
-            state.rendered.value = { ...rendered, url };
+            intent.value = { ...intent.peek(), type: 'push' };
+          } else if (url !== curRendered.url) {
+            rendered.value = { ...curRendered, url };
           }
         });
         return undefined;
@@ -236,8 +210,6 @@ export function atomNav(options: AtomNavOptions): AtomNav {
       if (content.hasError) {
         const error = content.lastError;
         if (error instanceof Error && error.name === 'AbortError') return undefined;
-        // Logic: Error Recovery
-        // If the PJAX fetch fails, fallback to a full page reload unless overridden.
         if ((options.onError?.(error, url) ?? true) !== false) {
           win.location.assign(url);
         }
@@ -247,7 +219,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
       if (!content.isResolved || content.isPending) return undefined;
 
       const isRedirect = !!(pjaxState.redirectUrl && pjaxState.redirectUrl !== url);
-      const previousUrl = rendered.url;
+      const previousUrl = curRendered.url;
 
       let finalUrl = isRedirect ? (pjaxState.redirectUrl as string) : url;
       if (isRedirect && hash && !finalUrl.includes('#')) {
@@ -255,28 +227,19 @@ export function atomNav(options: AtomNavOptions): AtomNav {
       }
 
       const { pathAndSearch: finalPath } = getUrlParts(finalUrl, win.location.href);
-      const isNewTarget = finalPath !== rendered.path;
+      const isNewTarget = finalPath !== curRendered.path;
 
       $.batch(() => {
         if (isRedirect) {
           win.history.replaceState(null, '', finalUrl);
-          state.intent.value = { url: finalUrl, type: 'push' };
+          intent.value = { url: finalUrl, type: 'push' };
         }
 
         if (isNewTarget || isRedirect) {
-          reconcileDOM({
-            $target,
-            state: pjaxState,
-            url: finalUrl,
-            previousUrl,
-            win,
-            syncTitle,
-            onMount: options.onMount,
-            onUnmount: options.onUnmount,
-          });
+          reconcileDOM($target, pjaxState, finalUrl, previousUrl, win, options);
         }
 
-        const prevUrlObj = Result.unwrap(getAbsoluteUrl(rendered.url, win.location.href));
+        const prevUrlObj = Result.unwrap(getAbsoluteUrl(curRendered.url, win.location.href));
         const { shouldScroll, resetScroll } = getScrollDecision({
           hash,
           type,
@@ -286,7 +249,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
         });
 
         if (shouldScroll) performScroll(win, hash, resetScroll);
-        state.rendered.value = { url: finalUrl, path: finalPath };
+        rendered.value = { url: finalUrl, path: finalPath };
       });
 
       return undefined;
@@ -297,7 +260,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
   const handlePopState = (): void => {
     renewAbortSignal();
     const loc = win.location;
-    state.intent.value = { url: loc.pathname + loc.search + loc.hash, type: 'pop' };
+    intent.value = { url: loc.pathname + loc.search + loc.hash, type: 'pop' };
   };
 
   win.addEventListener('popstate', handlePopState, { signal: _lifecycleController.signal });
@@ -310,14 +273,14 @@ export function atomNav(options: AtomNavOptions): AtomNav {
       const el = (e.target as Element).closest<HTMLAnchorElement>(selector);
       if (!el) return;
 
-      const myId = $target.attr('id');
       const targetAttr = el.dataset.target;
-      const isExplicitTarget = !!(targetAttr && myId && targetAttr === `#${myId}`);
-
-      if (targetAttr && !isExplicitTarget) return;
-      if (!isExplicitTarget) {
-        const closestNavTarget = $(el).closest('[data-atom-nav-target="true"]')[0];
-        if (closestNavTarget && closestNavTarget !== $target[0]) return;
+      const myId = $target.attr('id');
+      const isExplicit = !!(targetAttr && myId && targetAttr === `#${myId}`);
+      if (targetAttr) {
+        if (!isExplicit) return;
+      } else {
+        const closest = $(el).closest('[data-atom-nav-target="true"]')[0];
+        if (closest && closest !== $target[0]) return;
       }
 
       if (isNavigationClick(e) && isInterceptee(el, win)) {
@@ -328,14 +291,14 @@ export function atomNav(options: AtomNavOptions): AtomNav {
     { signal: _lifecycleController.signal }
   );
 
-  const isPending = $.computed(() => content.isPending || state.pendingHooks.value > 0, {
+  const isPending = $.computed(() => content.isPending || pendingHooks.value > 0, {
     name: 'nav:isPending',
   });
   const hasError = $.computed(() => content.hasError, { name: 'nav:hasError' });
 
   // Logic: Public API Implementation
   const navigator: AtomNav = {
-    currentUrl: $.computed(() => state.rendered.value.url, { name: 'nav:public-url' }),
+    currentUrl: $.computed(() => rendered.value.url, { name: 'nav:public-url' }),
     isPending,
     hasError,
 
@@ -352,51 +315,42 @@ export function atomNav(options: AtomNavOptions): AtomNav {
       const path = target.pathname + target.search;
       const isSamePath = path === current.pathname + current.search;
 
-      // 1. Origin check
       if (target.origin !== current.origin) {
         win.location.assign(url);
         return;
       }
 
-      // 2. Same-path / hash transition optimization
       if (isSamePath && target.hash === current.hash && type === 'push') {
         if (hasError.peek()) {
-          state.fetchVersion.value++;
+          fetchVersion.value++;
         } else if (url.includes('#')) {
           performScroll(win, target.hash.slice(1), true);
         }
         return;
       }
 
-      // 3. onBeforeLoad hook check
       if (!isSamePath && options.onBeforeLoad) {
-        state.pendingHooks.value++;
+        pendingHooks.value++;
         try {
           const ok = await options.onBeforeLoad(url, signal);
           if (signal.aborted || ok === false) return;
         } finally {
-          state.pendingHooks.value = Math.max(0, state.pendingHooks.value - 1);
+          pendingHooks.value = Math.max(0, pendingHooks.value - 1);
         }
       }
 
-      // 4. Leave guard check
       const container = $target[0];
       if (container && !navCoordinator.canLeaveWithin(container)) {
         return;
       }
 
-      // 5. Commit history and update intent
       $.batch(() => {
         const historyMethod = type === 'replace' ? 'replaceState' : 'pushState';
         win.history[historyMethod](null, '', path + target.hash);
-        state.intent.value = { url: path + target.hash, type };
+        intent.value = { url: path + target.hash, type };
       });
     },
 
-    /**
-     * Cleanup: Resource Disposal
-     * Unbinds all event listeners, stops pending fetches, and removes target markers.
-     */
     destroy() {
       _lifecycleController.abort();
       _navController?.abort();
@@ -405,11 +359,10 @@ export function atomNav(options: AtomNavOptions): AtomNav {
       $target.removeAttr('data-atom-nav-target');
 
       const atoms = [
-        state.intent,
-        state.fetchVersion,
-        state.pendingHooks,
-        state.rendered,
-        normalized,
+        intent,
+        fetchVersion,
+        pendingHooks,
+        rendered,
         navigator.currentUrl,
         isPending,
         hasError,
@@ -418,7 +371,6 @@ export function atomNav(options: AtomNavOptions): AtomNav {
     },
   };
 
-  // Logic: Automatic Lifecycle Coordination
   if ($target[0]) {
     navCoordinator.register($target[0], 'nav');
     registry.onCleanup($target[0], () => navigator.destroy());

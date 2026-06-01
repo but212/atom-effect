@@ -119,22 +119,6 @@ class BindingRegistry {
   }
 
   /**
-   * Logic: Move-Aware Deferred Cleanup
-   * Defers cleanup to a microtask to allow elements to be disconnected
-   * and immediately reconnected without state loss.
-   */
-  deferCleanup(node: Node): void {
-    (node as RegistryNode)[IGNORED_KEY] = true;
-    queueMicrotask(() => {
-      if (node.isConnected) {
-        delete (node as RegistryNode)[IGNORED_KEY];
-      } else {
-        this.cleanupTree(node);
-      }
-    });
-  }
-
-  /**
    * Registers a ShadowRoot to a host element for AEJ lifecycle tracking.
    *
    * @param host - The host element.

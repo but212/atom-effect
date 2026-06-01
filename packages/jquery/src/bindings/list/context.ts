@@ -47,25 +47,18 @@ export class ListContext<T> {
 
   /** Target container element. */
   readonly $container: JQuery;
-  /** Selector for the container. */
-  readonly containerSelector: string;
   /** Optional removal lifecycle hook. */
   readonly onRemove: (($el: JQuery) => Promise<void> | void) | undefined;
 
-  constructor(
-    $container: JQuery,
-    containerSelector: string,
-    onRemove: (($el: JQuery) => Promise<void> | void) | undefined
-  ) {
+  constructor($container: JQuery, onRemove: (($el: JQuery) => Promise<void> | void) | undefined) {
     this.$container = $container;
-    this.containerSelector = containerSelector;
     this.onRemove = onRemove;
   }
 
   /**
    * Retrieves the index of a key, handling string-to-number normalization.
    */
-  getIndex(key: ListKey | string): number | undefined {
+  getIndex(key: string): number | undefined {
     const idx = this.keyToIndex.get(key as ListKey);
     if (idx !== undefined) return idx;
     const n = Number(key);

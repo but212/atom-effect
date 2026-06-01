@@ -107,8 +107,7 @@ export const SetupFeatures = {
   hydrate(
     root: ParentNode,
     bindings: Record<string, ReadonlyAtom<unknown>>,
-    effects: SlotBuffer<Disposable>,
-    hydratedNodes: Set<Element>
+    effects: SlotBuffer<Disposable>
   ) {
     const { BIND, LEGACY_BIND } = SYSTEM_COMPONENT.ATTRS;
     const selector = `[${BIND}],[${LEGACY_BIND}]`;
@@ -131,7 +130,11 @@ export const SetupFeatures = {
           })
         );
         target[HYDRATION_MARKER] = true;
-        hydratedNodes.add(node);
+        effects.push({
+          dispose: () => {
+            delete target[HYDRATION_MARKER];
+          },
+        });
       }
     };
 

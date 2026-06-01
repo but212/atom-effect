@@ -12,6 +12,9 @@ import { atomEachElement } from '@/core/dom';
 import { registry } from '@/core/registry';
 import type { ComponentFn } from '@/types';
 
+/** Shared read-only default props to prevent redundant allocations across components */
+const EMPTY_PROPS = Object.freeze({});
+
 /**
  * Logic: Component Lifecycle Orchestration
  * Initializes and mounts a reactive UI component onto a jQuery collection.
@@ -23,12 +26,11 @@ import type { ComponentFn } from '@/types';
  * 3. Registration: Teardown hooks are registered for automatic execution on DOM removal.
  */
 $.fn.atomMount = function <P>(this: JQuery, component: ComponentFn<P>, props?: P): JQuery {
+  const resolvedProps = props ?? (EMPTY_PROPS as P);
   return atomEachElement(this, (element) => {
     registry.cleanupTree(element);
 
-    const hook = untracked(() =>
-      batch(() => component($(element), props || (Object.freeze({}) as P)))
-    );
+    const hook = untracked(() => batch(() => component($(element), resolvedProps)));
     const teardown = typeof hook === 'function' ? hook : hook?.unmount;
     if (teardown) {
       registry.setTeardown(element, teardown);

@@ -60,12 +60,7 @@ export function buildIndices<T>(
     const item = items[startIndex]!;
     const k = getKey(item, startIndex);
     const oldRow = snapshots[startIndex]!;
-    const oldKey = oldRow.key;
-    const oldNode = oldRow.node;
-
-    if (oldKey !== k || !oldNode || !eq(oldRow.item, item)) {
-      break;
-    }
+    if (oldRow.key !== k || !oldRow.node || !eq(oldRow.item, item)) break;
 
     slots[startIndex] = {
       key: k,
@@ -73,11 +68,9 @@ export function buildIndices<T>(
       state: ItemState.Unchanged,
       oldIndex: startIndex,
       targetIndex: startIndex,
-      node: oldNode,
+      node: oldRow.node,
     };
-
-    newIndexMap.set(k, startIndex);
-    startIndex++;
+    newIndexMap.set(k, startIndex++);
   }
 
   // Logic: PASS 2 — Tail Fast-Forward
@@ -85,12 +78,7 @@ export function buildIndices<T>(
     const item = items[newEndIndex]!;
     const k = getKey(item, newEndIndex);
     const oldRow = snapshots[oldEndIndex]!;
-    const oldKey = oldRow.key;
-    const oldNode = oldRow.node;
-
-    if (oldKey !== k || !oldNode || !eq(oldRow.item, item)) {
-      break;
-    }
+    if (oldRow.key !== k || !oldRow.node || !eq(oldRow.item, item)) break;
 
     slots[newEndIndex] = {
       key: k,
@@ -98,17 +86,14 @@ export function buildIndices<T>(
       state: ItemState.Unchanged,
       oldIndex: oldEndIndex,
       targetIndex: newEndIndex,
-      node: oldNode,
+      node: oldRow.node,
     };
-
-    newIndexMap.set(k, newEndIndex);
+    newIndexMap.set(k, newEndIndex--);
     oldEndIndex--;
-    newEndIndex--;
   }
 
   // Logic: PASS 3 — Middle-Range Reconciliation
-  const hasRemovingKeys = removingKeys.size > 0;
-
+  const hasRemoving = removingKeys.size > 0;
   for (let i = startIndex; i <= newEndIndex; i++) {
     const item = items[i]!;
     const k = getKey(item, i);
@@ -129,8 +114,7 @@ export function buildIndices<T>(
     newIndexMap.set(k, i);
 
     const foundIdx = oldIndexMap.get(k);
-    const oldIdx =
-      foundIdx !== undefined && (!hasRemovingKeys || !removingKeys.has(k)) ? foundIdx : -1;
+    const oldIdx = foundIdx !== undefined && (!hasRemoving || !removingKeys.has(k)) ? foundIdx : -1;
 
     if (oldIdx === -1) {
       const slot: DiffSlot<T> = {
@@ -143,22 +127,20 @@ export function buildIndices<T>(
       };
       slots[i] = slot;
       toRender.push(slot);
-      continue;
+    } else {
+      const oldRow = snapshots[oldIdx]!;
+      const needsForceReplace = !update && !eq(oldRow.item, item);
+      const slot: DiffSlot<T> = {
+        key: k,
+        item,
+        state: needsForceReplace ? ItemState.ForceReplace : ItemState.Existing,
+        oldIndex: oldIdx,
+        targetIndex: i,
+        node: oldRow.node!,
+      };
+      slots[i] = slot;
+      if (needsForceReplace) toRender.push(slot);
     }
-
-    const oldRow = snapshots[oldIdx]!;
-    const needsForceReplace = !update && !eq(oldRow.item, item);
-    const slot: DiffSlot<T> = {
-      key: k,
-      item,
-      state: needsForceReplace ? ItemState.ForceReplace : ItemState.Existing,
-      oldIndex: oldIdx,
-      targetIndex: i,
-      node: oldRow.node!,
-    };
-
-    slots[i] = slot;
-    if (needsForceReplace) toRender.push(slot);
   }
 
   return { slots, toRender, keyToIndex: newIndexMap };

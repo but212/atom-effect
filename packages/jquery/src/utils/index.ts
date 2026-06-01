@@ -10,8 +10,6 @@
  * inconsistencies (e.g. SVG classNames) and normalize data for reactive state access.
  */
 
-import type { RouteDefinition } from '@/types';
-
 export { isPromise } from '@but212/atom-effect-utils';
 
 /**
@@ -52,22 +50,6 @@ export function getSelector(el: Element): string {
 
   return res;
 }
-
-/**
- * Logic: Template Type Guard
- * Determines if a route definition is configured to use a template selector.
- * @internal
- */
-export const isTemplateRoute = (r: RouteDefinition): boolean =>
-  r && typeof r === 'object' && typeof r.template === 'string';
-
-/**
- * Logic: Render Type Guard
- * Determines if a route definition is configured with a custom render function.
- * @internal
- */
-export const isRenderRoute = (r: RouteDefinition): boolean =>
-  r && typeof r === 'object' && typeof r.render === 'function';
 
 /**
  * Logic: Nested Serialization

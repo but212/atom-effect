@@ -36,13 +36,13 @@ export const ItemState = {
    * Logic: The key has been identified in the previous state, but its position
    * or data may require a patch or an update callback execution.
    */
-  Existing: 1 << 0,
+  Existing: 1,
 
   /**
    * Logic: The item's key was not found in the previous state.
    * Action: A fresh DOM node must be created and inserted.
    */
-  New: 1 << 1,
+  New: 2,
 
   /**
    * Logic: The key matched, but the item's data has changed and no custom
@@ -50,7 +50,7 @@ export const ItemState = {
    * Action: Requires a full destruction of the existing node followed by a
    * re-creation to ensure the DOM accurately reflects the new data.
    */
-  ForceReplace: 1 << 2,
+  ForceReplace: 3,
 } as const;
 
 export type ItemState = (typeof ItemState)[keyof typeof ItemState];

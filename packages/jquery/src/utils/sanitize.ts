@@ -169,13 +169,7 @@ const DOM = {
   getAttributes: (el: Element) => {
     const getter = _get(Element.prototype, 'attributes');
     const attrs = (getter ? _call(getter, el) : el.attributes) as NamedNodeMap;
-    const len = attrs.length;
-    const arr = new Array(len);
-    for (let i = 0; i < len; i++) {
-      const a = attrs[i]!;
-      arr[i] = { name: a.name, value: a.value };
-    }
-    return arr;
+    return Array.from(attrs, ({ name, value }) => ({ name, value }));
   },
   /** Sets an attribute bypassing instance-level shadowing. */
   setAttribute: (el: Element, key: string, val: string) =>
@@ -307,6 +301,23 @@ const SPECIAL_ATTRIBUTES: Record<
 
 /**
  * @internal
+ * Predicates to identify dangerous attributes and values.
+ */
+const isClobbered = (key: string, lowerVal: string) =>
+  CLOBBER_ATTRS.has(key) && CLOBBER_VALUES.has(lowerVal);
+
+const isSensitiveSvg = (key: string, val: string) =>
+  SENSITIVE_ATTRS.has(key) && (val.startsWith('on') || Guard.isDangerousUri(val));
+
+const isDangerousContent = (key: string, val: string, lowerVal: string) =>
+  key.includes('javascript') ||
+  key.includes('expression') ||
+  lowerVal.includes('javascript') ||
+  lowerVal.includes('expression') ||
+  Guard.isDangerousUri(val);
+
+/**
+ * @internal
  * Logic: Attribute Scrubbing
  * Iterates through all attributes of an element and applies defense rules.
  */
@@ -314,9 +325,9 @@ function scrubElement(el: HTMLElement, policy: SanitizationPolicy): void {
   const attrs = DOM.getAttributes(el);
   let detectedEvents: string[] | null = null;
 
-  for (let i = 0, len = attrs.length; i < len; i++) {
-    const { name, value } = attrs[i]!;
+  for (const { name, value } of attrs) {
     const key = name.toLowerCase();
+    const lowerVal = value.toLowerCase();
 
     // 1. Event Handlers
     if (key.startsWith('on')) {
@@ -341,30 +352,17 @@ function scrubElement(el: HTMLElement, policy: SanitizationPolicy): void {
       continue;
     }
 
-    // 4. DOM Clobbering / SVG Injection
-    const lowerValue = value.toLowerCase();
-    const isClobber = CLOBBER_ATTRS.has(key) && CLOBBER_VALUES.has(lowerValue);
-    const isSensitive =
-      SENSITIVE_ATTRS.has(key) && (value.startsWith('on') || Guard.isDangerousUri(value));
-
-    if (isClobber || isSensitive) {
-      DOM.removeAttribute(el, name);
-      continue;
-    }
-
-    // 5. Catch-all safety boundary (javascript, expression, etc.)
+    // 4. Security Blocks (DOM Clobbering, SVG Injection, & general dangerous patterns)
     if (
-      key.includes('javascript') ||
-      key.includes('expression') ||
-      lowerValue.includes('javascript') ||
-      lowerValue.includes('expression') ||
-      Guard.isDangerousUri(value)
+      isClobbered(key, lowerVal) ||
+      isSensitiveSvg(key, value) ||
+      isDangerousContent(key, value, lowerVal)
     ) {
       DOM.removeAttribute(el, name);
     }
   }
 
-  if (detectedEvents && detectedEvents.length > 0) {
+  if (detectedEvents?.length) {
     DOM.setAttribute(el, 'data-unsafe-attr', detectedEvents.join(','));
   }
 }
@@ -497,14 +495,15 @@ export function sanitizeHtml(
   policy: SanitizationPolicy = DEFAULT_POLICY
 ): string {
   if (!html) return '';
-  if (policy === DEFAULT_POLICY) {
-    const cached = sanitizeCache.get(html);
-    if (cached !== undefined) return cached;
-    const sanitized = _sanitize(String(html), policy);
-    sanitizeCache.set(html, sanitized);
-    return sanitized;
+  const rawHtml = String(html);
+  if (policy !== DEFAULT_POLICY) return _sanitize(rawHtml, policy);
+
+  let sanitized = sanitizeCache.get(rawHtml);
+  if (sanitized === undefined) {
+    sanitized = _sanitize(rawHtml, policy);
+    sanitizeCache.set(rawHtml, sanitized);
   }
-  return _sanitize(String(html), policy);
+  return sanitized;
 }
 
 /**

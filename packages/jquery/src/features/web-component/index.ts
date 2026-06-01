@@ -15,7 +15,7 @@
 import { isAtom } from '@but212/atom-effect';
 import $ from 'jquery';
 import { SYSTEM_COMPONENT } from '@/constants';
-import { enableAutoCleanup, registry } from '@/core/registry';
+import { disableAutoCleanupFor, enableAutoCleanup, registry } from '@/core/registry';
 import { CLEANUP_MARKER, CONTEXT_REQUEST, type ContextRequestDetail } from '@/core/symbols';
 import type {
   AtomComponentController,
@@ -113,7 +113,7 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       if (!state.attributeAtom) {
         const { atom, observer } = SetupFeatures.attributes(element);
         state.attributeAtom = atom;
-        state.attributeObserver = observer;
+        state.effects.push({ dispose: () => observer.disconnect() });
       }
       return (name: string) => {
         let lens = state.attributeLenses.get(name);
@@ -135,13 +135,18 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
         const sr = resolveShadowRoot(element, state.root);
         const { atom, listener } = SetupFeatures.slots(sr);
         state.slotsAtom = atom;
-        if (sr) state.slotListener = listener;
+        if (sr) {
+          state.slotListenerAttached = true;
+          state.effects.push({ dispose: () => sr.removeEventListener('slotchange', listener) });
+        }
       }
       return (name: string) => {
         const key = name === 'default' ? '' : name;
         let lens = state.slotLenses.get(key);
         if (!lens) {
-          lens = $.atomLens(state.slotsAtom!, key);
+          lens = $.computed(() => state.slotsAtom!.value[key] ?? []) as unknown as WritableAtom<
+            Node[]
+          >;
           state.slotLenses.set(key, lens);
         }
         return lens;
@@ -187,24 +192,57 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       if (!rootNode[CLEANUP_MARKER]) {
         enableAutoCleanup(rootNode as Element);
         rootNode[CLEANUP_MARKER] = true;
+        state.effects.push({
+          dispose: () => {
+            disableAutoCleanupFor(rootNode as Element);
+            rootNode[CLEANUP_MARKER] = false;
+          },
+        });
       }
 
       if (!state.slotsAtom) {
         const { atom, listener } = SetupFeatures.slots(sr);
         state.slotsAtom = atom;
-        if (sr) state.slotListener = listener;
+        if (sr) {
+          state.slotListenerAttached = true;
+          state.effects.push({ dispose: () => sr.removeEventListener('slotchange', listener) });
+        }
+      } else if (sr && !state.slotListenerAttached) {
+        const listener = (e: Event) => {
+          const target = e.target as HTMLSlotElement;
+          state.slotsAtom!.value = {
+            ...state.slotsAtom!.peek(),
+            [target.name || '']: target.assignedNodes(),
+          };
+        };
+        sr.addEventListener('slotchange', listener);
+        state.effects.push({ dispose: () => sr.removeEventListener('slotchange', listener) });
+        state.slotListenerAttached = true;
+
+        const next: Record<string, Node[]> = {};
+        for (const s of sr.querySelectorAll('slot')) {
+          next[s.name || ''] = s.assignedNodes();
+        }
+        state.slotsAtom.value = next;
       }
 
       if (config.dispatch) SetupFeatures.dispatch(element, config.dispatch, state.effects);
-      if (config.bind)
-        SetupFeatures.hydrate(rootNode as Element, config.bind, state.effects, state.hydratedNodes);
+      if (config.bind) SetupFeatures.hydrate(rootNode as Element, config.bind, state.effects);
 
       if (
         config.styles &&
         supportsConstructableStylesheets &&
         (rootNode instanceof ShadowRoot || rootNode instanceof Document)
       ) {
-        state.appliedStyles = SetupFeatures.styles(rootNode, config.styles.map(getOrCreateSheet));
+        const sheets = config.styles.map(getOrCreateSheet);
+        SetupFeatures.styles(rootNode, sheets);
+        state.effects.push({
+          dispose: () => {
+            rootNode.adoptedStyleSheets = rootNode.adoptedStyleSheets.filter(
+              (s) => !sheets.includes(s)
+            );
+          },
+        });
       }
 
       if (config.aria && internals) SetupFeatures.aria(internals, config.aria, state.effects);

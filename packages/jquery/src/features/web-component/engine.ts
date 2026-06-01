@@ -120,15 +120,15 @@ export const ContextEngine = (() => {
 
       const ctrl = nodeStateMap.get(el)?.controller;
       if (ctrl) {
-        ctrl.setup({
-          ...(specs.aejStyles && { styles: specs.aejStyles }),
-          ...(specs.aejBind && { bind: specs.aejBind }),
-          ...(specs.aejAria && { aria: specs.aejAria }),
-          ...(specs.aejParts && { parts: specs.aejParts }),
-          ...(specs.aejDispatch && { dispatch: specs.aejDispatch }),
-          ...(specs.aejValue && { value: specs.aejValue }),
-          ...(specs.aejValidation && { validation: specs.aejValidation }),
-        });
+        const opts: Parameters<AtomComponentController['setup']>[0] = {};
+        if (specs.aejStyles !== undefined) opts.styles = specs.aejStyles;
+        if (specs.aejBind !== undefined) opts.bind = specs.aejBind;
+        if (specs.aejAria !== undefined) opts.aria = specs.aejAria;
+        if (specs.aejParts !== undefined) opts.parts = specs.aejParts;
+        if (specs.aejDispatch !== undefined) opts.dispatch = specs.aejDispatch;
+        if (specs.aejValue !== undefined) opts.value = specs.aejValue;
+        if (specs.aejValidation !== undefined) opts.validation = specs.aejValidation;
+        ctrl.setup(opts);
       }
     }
   };
@@ -137,20 +137,19 @@ export const ContextEngine = (() => {
     if (observer || typeof document === 'undefined') return;
     observer = new MutationObserver((mutations) => {
       let needsBump = false;
-      for (const m of mutations) {
-        if (m.addedNodes.length > 0) {
+      for (const { addedNodes, removedNodes } of mutations) {
+        if (addedNodes.length) {
           needsBump = true;
-          for (const node of m.addedNodes) {
+          for (const node of addedNodes) {
             if (node instanceof HTMLElement) {
               init(node);
-              const children = node.querySelectorAll('*');
-              for (const child of children) {
+              for (const child of node.querySelectorAll('*')) {
                 init(child as HTMLElement);
               }
             }
           }
         }
-        if (m.removedNodes.length > 0) needsBump = true;
+        if (removedNodes.length) needsBump = true;
       }
       if (needsBump) bump();
     });
@@ -221,38 +220,34 @@ export const ContextEngine = (() => {
  * @internal
  */
 export function createContextProxy<T>(target: HTMLElement, key: string | symbol): WritableAtom<T> {
-  const resolve = (isPeek: boolean) => {
-    if (isPeek) ContextEngine.version.peek();
-    else ContextEngine.version.value;
-    return untracked(() => ContextEngine.discover(target, key)) as WritableAtom<T> | T | undefined;
-  };
+  let sharedAtom: ReadonlyAtom<T> | null = null;
 
-  const getLiveValue = (isPeek: boolean) => {
-    const p = resolve(isPeek);
+  const resolve = (isPeek: boolean) => {
+    if (!isPeek) ContextEngine.version.value;
+    const p = untracked(() => ContextEngine.discover(target, key));
     if (p === undefined) return null as T;
     return (isAtom(p) ? (isPeek ? p.peek() : p.value) : p) as T;
   };
 
-  let sharedAtom: ReadonlyAtom<T> | null = null;
   const getShared = () => {
-    if (!sharedAtom) sharedAtom = $.computed(() => getLiveValue(false));
+    if (!sharedAtom) sharedAtom = $.computed(() => resolve(false));
     return sharedAtom;
   };
 
   return {
     get value() {
-      return getLiveValue(false);
+      return resolve(false);
     },
     set value(v: T) {
-      const p = resolve(true);
+      const p = untracked(() => ContextEngine.discover(target, key));
       if (p !== undefined && isWritable(p)) {
         p.value = v;
       }
     },
     peek() {
-      return getLiveValue(true);
+      return resolve(true);
     },
-    subscribe: (fn) => {
+    subscribe(fn) {
       ContextEngine.retain();
       const unsub = getShared().subscribe(fn);
       return () => {
@@ -261,7 +256,7 @@ export function createContextProxy<T>(target: HTMLElement, key: string | symbol)
       };
     },
     subscriberCount: () => (sharedAtom ? sharedAtom.subscriberCount() : 0),
-    dispose: () => {
+    dispose() {
       if (sharedAtom) {
         sharedAtom.dispose();
         sharedAtom = null;

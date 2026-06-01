@@ -146,6 +146,28 @@ describe('Web Component Features', () => {
       expect(slots('default').value[0]).toBe(child);
     });
 
+    it('should track assigned nodes when slots is accessed before setup is called (late-bound)', async () => {
+      const el = defineAndCreate(
+        'slot-late-sync',
+        class extends HTMLElement {
+          connectedCallback() {
+            const slots = $.useAtomComponent(this).slots;
+            expect(slots('default').value.length).toBe(0);
+
+            const sr = this.attachShadow({ mode: 'open' });
+            sr.innerHTML = '<slot></slot>';
+            $.useAtomComponent(this).setup(sr);
+          }
+        }
+      );
+      document.body.appendChild(el);
+
+      const child = document.createElement('span');
+      el.appendChild(child);
+      await $.nextTick();
+      expect(el.aej.slots('default').value[0]).toBe(child);
+    });
+
     it('should support closed shadow roots if provided to setup', async () => {
       const el = defineAndCreate(
         'closed-sr',

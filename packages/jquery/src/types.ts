@@ -12,12 +12,10 @@
 
 import type {
   AtomOptions as BaseAtomOptions,
+  EffectCleanup,
   ReadonlyAtom,
   WritableAtom,
 } from '@but212/atom-effect';
-
-/** A function that performs cleanup tasks for a reactive effect or component. */
-export type EffectCleanup = () => void;
 
 /**
  * Role: Lifecycle Teardown
@@ -49,12 +47,7 @@ export type EqualFn<T> = (a: T, b: T) => boolean;
  * @example
  * const count = atom(0, { name: 'counter', sync: true });
  */
-export interface AtomOptions extends BaseAtomOptions {
-  /** Optional name for debugging and diagnostic purposes. */
-  name?: string;
-  /** Whether to trigger updates synchronously. Default is false (batched). */
-  sync?: boolean;
-}
+export type AtomOptions<T = unknown> = BaseAtomOptions<T>;
 
 /**
  * Logic: Polymorphic Input
@@ -606,4 +599,4 @@ export interface AtomComponentStatic {
     | ((val: unknown) => ValidityStateFlags | string);
 }
 
-export type { ReadonlyAtom, WritableAtom };
+export type { EffectCleanup, ReadonlyAtom, WritableAtom };

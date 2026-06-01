@@ -16,83 +16,70 @@ import type { MatchResult, UrlAdapter } from './types';
  * Logic: Modern History API Adapter
  * Orchestrates URL synchronization using the standard window.history API.
  */
-const HISTORY_ADAPTER: UrlAdapter = {
-  get: (base) => {
-    let p = location.pathname;
-    // Constraint: Strips the base path to ensure route matching is relative to the app root.
-    if (base && p.startsWith(base)) p = p.substring(base.length);
-    return {
-      path: normalizePath(p),
-      query: parseQuery(location.search.substring(1)),
-      url: location.pathname + location.search,
-    };
-  },
-  commit: (fullPath, base) => {
-    const { route, query } = splitPath(fullPath);
-    const url = new URL(route, `${location.origin}${base}/`.replace(/\/+$/, '/'));
-    Option.map(query, (q) => (url.search = q));
-    const urlStr = url.pathname + url.search;
-    Result.tryCatch(() => history.pushState(null, '', urlStr));
-    return { path: normalizePath(route), query: Object.fromEntries(url.searchParams), url: urlStr };
-  },
-  revert: (prev) => {
-    // Reason: Prevents redundant state pushes if the location already matches the target.
-    if (location.pathname + location.search !== prev) {
-      Result.tryCatch(() => history.replaceState(null, '', prev));
-    }
-  },
-  resolveAnchor: (el, base) => resolveAnchorPath(el, base),
-  setupListener: (h) => {
-    window.addEventListener('popstate', h);
-    return () => window.removeEventListener('popstate', h);
-  },
-};
-
-/**
- * Logic: Legacy Hash Adapter
- * Compatibility mode for static hosting or environments without
- * server-side URL rewrite support.
- */
-const HASH_ADAPTER: UrlAdapter = {
-  get: () => {
-    const { route, query } = splitPath(location.hash.slice(1));
-    return { path: route, query: parseQuery(Option.unwrapOr(query, '')), url: location.hash };
-  },
-  commit: (fullPath) => {
-    const { route, query } = splitPath(fullPath);
-    const url = `#${Option.isSome(query) ? `${route}?${Option.unwrap(query)}` : route}`;
-    location.hash = url;
-    return { path: normalizePath(route), query: parseQuery(Option.unwrapOr(query, '')), url };
-  },
-  revert: (prev) => {
-    if (location.hash !== prev) location.hash = prev;
-  },
-  resolveAnchor: (el, base) => HISTORY_ADAPTER.resolveAnchor(el, base),
-  setupListener: (h) => {
-    window.addEventListener('hashchange', h);
-    return () => window.removeEventListener('hashchange', h);
-  },
-};
-
 /**
  * Logic: URL Adapter Factory
  * Creates a URL adapter based on the application's routing strategy.
- *
- * When to use:
- * - Use 'history' for clean URLs (requires server-side fallback).
- * - Use 'hash' for legacy support or zero-config static hosting.
  */
-export const createAdapter = (mode: 'history' | 'hash', basePath?: string) => {
-  const adapter = mode === 'history' ? HISTORY_ADAPTER : HASH_ADAPTER;
+export function createAdapter(mode: 'history' | 'hash', basePath?: string): UrlAdapter {
   const base = basePath ? `/${normalizePath(basePath)}` : '';
+
+  if (mode === 'history') {
+    return {
+      get: () => {
+        let p = location.pathname;
+        if (base && p.startsWith(base)) p = p.substring(base.length);
+        return {
+          path: normalizePath(p),
+          query: parseQuery(location.search.substring(1)),
+          url: location.pathname + location.search,
+        };
+      },
+      commit: (fullPath) => {
+        const { route, query } = splitPath(fullPath);
+        const url = new URL(route, `${location.origin}${base}/`.replace(/\/+$/, '/'));
+        Option.map(query, (q) => (url.search = q));
+        const urlStr = url.pathname + url.search;
+        Result.tryCatch(() => history.pushState(null, '', urlStr));
+        return {
+          path: normalizePath(route),
+          query: Object.fromEntries(url.searchParams),
+          url: urlStr,
+        };
+      },
+      revert: (prev) => {
+        if (location.pathname + location.search !== prev) {
+          Result.tryCatch(() => history.replaceState(null, '', prev));
+        }
+      },
+      resolveAnchor: (el) => resolveAnchorPath(el, base),
+      setupListener: (h) => {
+        window.addEventListener('popstate', h);
+        return () => window.removeEventListener('popstate', h);
+      },
+    };
+  }
+
   return {
-    get: () => adapter.get(base),
-    commit: (path: string) => adapter.commit(path, base),
-    revert: (prev: string) => adapter.revert(prev),
-    resolveAnchor: (el: Element) => adapter.resolveAnchor(el, base),
-    setupListener: (h: () => void) => adapter.setupListener(h),
+    get: () => {
+      const { route, query } = splitPath(location.hash.slice(1));
+      return { path: route, query: parseQuery(Option.unwrapOr(query, '')), url: location.hash };
+    },
+    commit: (fullPath) => {
+      const { route, query } = splitPath(fullPath);
+      const url = `#${Option.isSome(query) ? `${route}?${Option.unwrap(query)}` : route}`;
+      location.hash = url;
+      return { path: normalizePath(route), query: parseQuery(Option.unwrapOr(query, '')), url };
+    },
+    revert: (prev) => {
+      if (location.hash !== prev) location.hash = prev;
+    },
+    resolveAnchor: (el) => resolveAnchorPath(el, base),
+    setupListener: (h) => {
+      window.addEventListener('hashchange', h);
+      return () => window.removeEventListener('hashchange', h);
+    },
   };
-};
+}
 
 export interface RouteMatcher {
   readonly exact: Map<string, RouteDefinition>;

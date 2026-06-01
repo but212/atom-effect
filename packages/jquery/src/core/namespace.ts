@@ -7,7 +7,6 @@
  */
 
 import {
-  aeNextTick,
   atom,
   atomLens,
   batch,
@@ -20,6 +19,7 @@ import {
   lensFor,
   mergeAtoms,
   mergeLenses,
+  aeNextTick as nextTick,
   untracked,
 } from '@but212/atom-effect';
 import { isPromise } from '@but212/atom-effect-utils';
@@ -34,7 +34,7 @@ import { debug } from '@/utils/debug';
  * - Perform manual DOM measurements after reactive changes.
  * - Coordinate external library initializations dependent on current DOM state.
  */
-export const nextTick = aeNextTick;
+export { nextTick };
 
 /**
  * Logic: Unified Reactive Namespace

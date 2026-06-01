@@ -56,10 +56,7 @@ function createAsyncRunner<T>(
 ) {
   let latestId = 0;
   let isDisposed = false;
-
-  registry.onCleanup(el, () => {
-    isDisposed = true;
-  });
+  let cleanupRegistered = false;
 
   const runUpdate = (value: T, isAsync: boolean) => {
     if (isDisposed) return;
@@ -86,10 +83,15 @@ function createAsyncRunner<T>(
     const currentId = ++latestId;
 
     if (!isPromise(value)) {
-      if (currentId === latestId) {
-        runUpdate(value, false);
-      }
+      runUpdate(value, false);
       return;
+    }
+
+    if (!cleanupRegistered) {
+      registry.onCleanup(el, () => {
+        isDisposed = true;
+      });
+      cleanupRegistered = true;
     }
 
     value.then(

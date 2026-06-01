@@ -28,12 +28,11 @@ import {
   resolveNavigation,
   resolveRoute,
 } from './core';
+import type { UrlAdapter } from './types';
 import {
   createRouteRenderer,
-  createRouteScanner,
   discoverRoutes,
   type RouteRenderer,
-  type RouteScanner,
   renderRoute,
   runRendererCleanups,
   setupRouteInterceptor,
@@ -53,10 +52,9 @@ export class RouterImpl implements Router {
 
   readonly #matcher: RouteMatcher;
   readonly #config: Required<RouteConfig> & { routes: Record<string, RouteDefinition> };
-  readonly #urlAdapter: ReturnType<typeof createAdapter>;
+  readonly #urlAdapter: UrlAdapter;
   readonly #$target: JQuery<HTMLElement>;
 
-  readonly #scanner: RouteScanner;
   readonly #renderer: RouteRenderer;
 
   readonly #locationAtom: WritableAtom<RouteLocation>;
@@ -90,7 +88,7 @@ export class RouterImpl implements Router {
       beforeTransition: config.beforeTransition ?? (() => {}),
       afterTransition: config.afterTransition ?? (() => {}),
       ...config,
-      routes: config.routes ?? {},
+      routes: { ...config.routes },
     } as Required<RouteConfig> & { routes: Record<string, RouteDefinition> };
 
     const t = this.#config.target;
@@ -100,30 +98,18 @@ export class RouterImpl implements Router {
 
     const discovery = discoverRoutes();
 
-    // Logic: Manifest Supplement
-    // Merges declarative template-based routes with explicit JS configuration.
-    // Preserves metadata (like titles) from templates unless overridden in JS.
-    for (const path in discovery.routes) {
-      if (Object.hasOwn(discovery.routes, path)) {
-        const discovered = discovery.routes[path]!;
-        if (this.#config.routes[path]) {
-          const userDef = this.#config.routes[path]!;
-          if (!userDef.title && discovered.title) userDef.title = discovered.title;
-          if (!userDef.template && discovered.template) userDef.template = discovered.template;
-        } else {
-          this.#config.routes[path] = discovered;
-        }
+    for (const [path, discovered] of Object.entries(discovery.routes)) {
+      const userDef = this.#config.routes[path];
+      if (userDef) {
+        if (discovered.title !== undefined) userDef.title ||= discovered.title;
+        if (discovered.template !== undefined) userDef.template ||= discovered.template;
+      } else {
+        this.#config.routes[path] = discovered;
       }
     }
     this.#config.default ??= discovery.default ?? '';
 
     this.#matcher = createRouteMatcher(this.#config.routes);
-    this.#scanner = createRouteScanner(
-      this.#config,
-      this.#matcher,
-      this.#urlAdapter,
-      this.#config.activeClass
-    );
     this.#renderer = createRouteRenderer(this.#$target, this.#config, this.#urlAdapter);
 
     const initState = this.#urlAdapter.get();
@@ -176,12 +162,19 @@ export class RouterImpl implements Router {
     });
     this.#cleanups.push(() => renderSub.dispose());
 
-    const { resolvePath } = setupRouteScanner(this.#scanner, this.currentRoute);
-    this.#cleanups.push(() => this.#scanner.linkObserver?.disconnect());
+    const scanner = setupRouteScanner(
+      this.#matcher,
+      this.#urlAdapter,
+      this.#config.activeClass,
+      this.currentRoute
+    );
+    this.#cleanups.push(() => scanner.disconnect());
 
     if (this.#config.autoBindLinks) {
       this.#cleanups.push(
-        setupRouteInterceptor(this.#config, this.#matcher, resolvePath, (p) => this.navigate(p))
+        setupRouteInterceptor(this.#config, this.#matcher, scanner.resolvePath, (p) =>
+          this.navigate(p)
+        )
       );
     }
 
@@ -271,6 +264,16 @@ export class RouterImpl implements Router {
     }
   }
 
+  #revertUrl(prevUrl: string) {
+    const state = this.#stateAtom.peek();
+    this.#stateAtom.value = { ...state, isTransitioning: true };
+    try {
+      this.#urlAdapter.revert(prevUrl);
+    } finally {
+      this.#stateAtom.value = { ...this.#stateAtom.peek(), isTransitioning: false };
+    }
+  }
+
   /**
    * Logic: Browser-Initiated Synchronization
    * Handles external URL changes (e.g., Back/Forward button) and validates
@@ -286,12 +289,7 @@ export class RouterImpl implements Router {
     // Constraint: Guard Enforcement
     // If the current view refuses to unmount, we force the browser URL back to the previous state.
     if (!this.#canLeave()) {
-      this.#stateAtom.value = { ...state, isTransitioning: true };
-      try {
-        this.#urlAdapter.revert(state.previousUrl);
-      } finally {
-        this.#stateAtom.value = { ...this.#stateAtom.peek(), isTransitioning: false };
-      }
+      this.#revertUrl(state.previousUrl);
       return;
     }
 
@@ -303,19 +301,12 @@ export class RouterImpl implements Router {
       this
     );
 
-    batch(() => {
-      if (resolved.success) {
-        this.#updateState(resolved.path!, resolved.query!, resolved.params!);
-      } else {
-        // Guard failure on browser-initiated navigation (Back/Forward).
-        this.#stateAtom.value = { ...state, isTransitioning: true };
-        try {
-          this.#urlAdapter.revert(state.previousUrl);
-        } finally {
-          this.#stateAtom.value = { ...this.#stateAtom.peek(), isTransitioning: false };
-        }
-      }
-    });
+    if (resolved.success) {
+      this.#updateState(resolved.path!, resolved.query!, resolved.params!);
+    } else {
+      // Guard failure on browser-initiated navigation (Back/Forward).
+      this.#revertUrl(state.previousUrl);
+    }
   }
 
   /**

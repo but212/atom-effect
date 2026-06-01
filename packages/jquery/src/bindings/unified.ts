@@ -136,8 +136,7 @@ export function bindClass(
 
   for (const key in classMap) {
     if (Object.hasOwn(classMap, key)) {
-      const trimmed = key.trim();
-      tokensMap.set(key, trimmed.includes(' ') ? trimmed.split(/\s+/).filter(Boolean) : [trimmed]);
+      tokensMap.set(key, key.trim().split(/\s+/).filter(Boolean));
     }
   }
 
@@ -149,7 +148,12 @@ export function bindClass(
       const activeTokens = new Set<string>();
       for (const [key, isActive] of Object.entries(states)) {
         if (isActive) {
-          tokensMap.get(key)?.forEach((t) => activeTokens.add(t));
+          const tokens = tokensMap.get(key);
+          if (tokens) {
+            for (let i = 0; i < tokens.length; i++) {
+              activeTokens.add(tokens[i]!);
+            }
+          }
         }
       }
 
@@ -224,11 +228,11 @@ export function bindAttr(
 ): void {
   const safeEntries = getSafeEntries(attrMap, false);
   const safeMap = Object.fromEntries(safeEntries);
-  const metaMap: Record<string, { isAria: boolean }> = {};
+  const isAriaMap: Record<string, boolean> = {};
   const prev: Record<string, string | null> = {};
 
   for (const [name] of safeEntries) {
-    metaMap[name] = { isAria: name.toLowerCase().startsWith('aria-') };
+    isAriaMap[name] = name.toLowerCase().startsWith('aria-');
     prev[name] = element.getAttribute(name);
   }
 
@@ -237,13 +241,13 @@ export function bindAttr(
     safeMap,
     (states) => {
       for (const [name, value] of Object.entries(states)) {
-        const meta = metaMap[name];
-        if (!meta) continue;
+        if (!(name in isAriaMap)) continue;
+        const isAria = isAriaMap[name]!;
 
         let attrVal: string | null = null;
         if (value !== null && value !== undefined) {
           if (typeof value === 'boolean') {
-            attrVal = value ? (meta.isAria ? 'true' : name) : meta.isAria ? 'false' : null;
+            attrVal = value ? (isAria ? 'true' : name) : isAria ? 'false' : null;
           } else {
             attrVal = String(value);
           }
@@ -404,10 +408,16 @@ class RadioRegistry {
   public unregister(element: HTMLInputElement, root: Node): void {
     if (element.type !== 'radio' || !element.name) return;
     const nameMap = this.#groups.get(root);
-    const set = nameMap?.get(element.name);
+    if (!nameMap) return;
+    const set = nameMap.get(element.name);
     if (set) {
       set.delete(element);
-      if (set.size === 0) nameMap?.delete(element.name);
+      if (set.size === 0) {
+        nameMap.delete(element.name);
+        if (nameMap.size === 0) {
+          this.#groups.delete(root);
+        }
+      }
     }
   }
 
@@ -436,17 +446,12 @@ function syncRadios(element: HTMLInputElement): void {
   if (element.type === 'radio' && element.name) {
     const set = radioRegistry.getGroup(element);
 
-    if (set && set.size > 0) {
+    if (set) {
       for (const el of set) {
         if (el !== element) {
           $(el).trigger('change.atomRadioSync');
         }
       }
-    } else {
-      (element.form ? $(element.form) : $(document))
-        .find(`input[type="radio"][name="${$.escapeSelector(element.name)}"]`)
-        .not(element)
-        .trigger('change.atomRadioSync');
     }
   }
 }
@@ -460,39 +465,36 @@ export function bindChecked(element: HTMLElement, atom: WritableAtom<boolean>): 
     console.warn(`${SYSTEM_BINDING.PREFIX} atomChecked called on non-input element`);
     return;
   }
-  const inputElement = element;
-  const $element = $(inputElement);
 
-  let radioRoot: Node | undefined;
-  if (inputElement.type === 'radio') {
-    radioRoot = radioRegistry.register(inputElement);
-  }
+  const $element = $(element);
+  const isRadio = element.type === 'radio';
+  const radioRoot = isRadio ? radioRegistry.register(element) : undefined;
 
   const onChange = () => {
-    if (atom.peek() !== inputElement.checked) {
-      atom.value = inputElement.checked;
-      syncRadios(inputElement);
+    if (atom.peek() !== element.checked) {
+      atom.value = element.checked;
+      syncRadios(element);
     }
   };
   (onChange as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
 
   $element.on('change change.atomRadioSync', onChange);
-  registry.onCleanup(inputElement, () => {
-    if (inputElement.type === 'radio' && radioRoot) {
-      radioRegistry.unregister(inputElement, radioRoot);
+  registry.onCleanup(element, () => {
+    if (isRadio && radioRoot) {
+      radioRegistry.unregister(element, radioRoot);
     }
     $element.off('change change.atomRadioSync', onChange);
   });
 
   registry.trackEffect(
-    inputElement,
+    element,
     effect(() => {
       const isChecked = !!atom.value;
       untracked(() => {
-        if (inputElement.checked !== isChecked) {
-          inputElement.checked = isChecked;
-          debug.domUpdated(SYSTEM_BINDING.PREFIX, inputElement, 'checked', isChecked);
-          if (isChecked) syncRadios(inputElement);
+        if (element.checked !== isChecked) {
+          element.checked = isChecked;
+          debug.domUpdated(SYSTEM_BINDING.PREFIX, element, 'checked', isChecked);
+          if (isChecked) syncRadios(element);
         }
       });
     })

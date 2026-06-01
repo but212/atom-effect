@@ -34,15 +34,7 @@ const PARSER = new DOMParser();
  * Ensures consistent path matching by stripping redundant slashes.
  * @internal
  */
-export const normalizePath = (path: string): string => {
-  const len = path.length;
-  if (len === 0) return path;
-  let start = 0;
-  while (start < len && path[start] === '/') start++;
-  let end = len;
-  while (end > start && path[end - 1] === '/') end--;
-  return start === 0 && end === len ? path : path.slice(start, end);
-};
+export const normalizePath = (path: string): string => path.replace(/^\/+|\/+$/g, '');
 
 /**
  * Logic: Path & Query Separation
@@ -51,13 +43,9 @@ export const normalizePath = (path: string): string => {
  */
 export const splitPath = (path: string): { route: string; query: Option<string> } => {
   const idx = path.indexOf('?');
-  if (idx === -1) {
-    return { route: normalizePath(path), query: Option.none };
-  }
-  return {
-    route: normalizePath(path.substring(0, idx)),
-    query: Option.some(path.substring(idx + 1)),
-  };
+  return idx === -1
+    ? { route: normalizePath(path), query: Option.none }
+    : { route: normalizePath(path.slice(0, idx)), query: Option.some(path.slice(idx + 1)) };
 };
 
 /** @internal */
@@ -118,12 +106,8 @@ export function syncMetaData(win: Window, meta?: Record<string, string>): void {
 
     const target = el || head.appendChild(doc.createElement(s.tag));
     if (!el) {
-      const sAttrs = s.staticAttrs as Record<string, string>;
-      for (const k in sAttrs) {
-        if (Object.hasOwn(sAttrs, k)) {
-          const val = sAttrs[k];
-          if (val !== undefined) target.setAttribute(k, val);
-        }
+      for (const [k, val] of Object.entries(s.staticAttrs)) {
+        target.setAttribute(k, val);
       }
     }
     if (target.getAttribute(s.attr) !== value) {
@@ -141,22 +125,15 @@ export function syncMetaData(win: Window, meta?: Record<string, string>): void {
  * prevent breaking persistent DOM references.
  */
 export function updateAttributes(el: HTMLElement, next: Record<string, string>): void {
-  const attrs = el.attributes;
-  for (let i = attrs.length - 1; i >= 0; i--) {
-    const attr = attrs[i];
-    if (!attr) continue;
-    const name = attr.name;
-    if (!ATTR_PRESERVE.has(name) && !Object.hasOwn(next, name)) {
-      el.removeAttribute(name);
+  for (const attr of [...el.attributes]) {
+    if (!ATTR_PRESERVE.has(attr.name) && !Object.hasOwn(next, attr.name)) {
+      el.removeAttribute(attr.name);
     }
   }
 
-  for (const name in next) {
-    if (Object.hasOwn(next, name)) {
-      const value = next[name];
-      if (value !== undefined && el.getAttribute(name) !== value) {
-        el.setAttribute(name, value);
-      }
+  for (const [name, value] of Object.entries(next)) {
+    if (value !== undefined && el.getAttribute(name) !== value) {
+      el.setAttribute(name, value);
     }
   }
 }
@@ -219,15 +196,19 @@ export function isNavigationClick(e: MouseEvent | JQuery.TriggeredEvent): boolea
  * (cross-origin checks) over automatic PJAX tracking.
  */
 export function isInterceptee(el: Element, win: Window = window): boolean {
-  if (el.getAttribute('data-nav') === 'false') return false;
-  if (el.hasAttribute('data-ignore') || el.hasAttribute('download')) return false;
-  if (el.getAttribute('rel') === 'external' || (el as HTMLAnchorElement).rel === 'external')
+  if (
+    el.getAttribute('data-nav') === 'false' ||
+    el.hasAttribute('data-ignore') ||
+    el.hasAttribute('download') ||
+    el.getAttribute('rel') === 'external' ||
+    (el as HTMLAnchorElement).rel === 'external'
+  ) {
     return false;
+  }
   if (el.hasAttribute('data-route') || el.hasAttribute('data-path')) return true;
 
   const target = el.getAttribute('target');
   if (target && target !== '_self') return false;
-
   if (el.tagName.toUpperCase() !== 'A') return false;
 
   const a = el as HTMLAnchorElement;
@@ -237,13 +218,7 @@ export function isInterceptee(el: Element, win: Window = window): boolean {
   const loc = win.location;
   if (a.origin !== loc.origin || !/^https?:/.test(a.protocol)) return false;
 
-  // Note: Pure hash changes within the same path should NOT be intercepted
-  // by the router to allow native hashchange behavior.
-  if (a.pathname === loc.pathname && a.search === loc.search && a.hash.startsWith('#')) {
-    return false;
-  }
-
-  return true;
+  return !(a.pathname === loc.pathname && a.search === loc.search && a.hash.startsWith('#'));
 }
 
 /** @internal */

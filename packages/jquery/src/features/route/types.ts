@@ -27,16 +27,16 @@ export type URLState = {
  */
 export interface UrlAdapter {
   /** Retrieves the current path and query from the browser. */
-  readonly get: (base: string) => URLState;
+  readonly get: () => URLState;
 
   /** Updates the browser URL and returns the new state. */
-  readonly commit: (fullPath: string, base: string) => URLState;
+  readonly commit: (fullPath: string) => URLState;
 
   /** Rolls back the browser URL to a previous state (used when navigation is rejected). */
   readonly revert: (previousUrl: string) => void;
 
   /** Resolves an anchor element's destination relative to the base path. */
-  readonly resolveAnchor: (el: Element, base: string) => string;
+  readonly resolveAnchor: (el: Element) => string;
 
   /** Sets up a listener for browser navigation events (popstate or hashchange). */
   readonly setupListener: (handler: () => void) => () => void;

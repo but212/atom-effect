@@ -14,7 +14,6 @@ import { type EffectObject, effect, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
 import { registry } from '@/core/registry';
 import type { ListKey, ListKeyFn, ListOptions, ReadonlyAtom } from '@/types';
-import { getSelector } from '@/utils';
 import { ListContext } from './context';
 import { buildIndices } from './diff';
 import { cleanupRemoved, handleEmpty, placeItems, renderItems } from './dom';
@@ -59,7 +58,7 @@ export function applyListBinding<T>(
   const callbacks: PlaceCallbacks<T> = { bind, update, onAdd, onRemove, events };
   const eventBindings = normalizeEvents(events);
 
-  const ctx = new ListContext<T>($c, getSelector(element), onRemove);
+  const ctx = new ListContext<T>($c, onRemove);
 
   const fx = effect(() => {
     // Accessing .value establishes the reactive dependency.
@@ -151,21 +150,11 @@ function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptio
  * @internal
  */
 function normalizeEvents<T>(events: ListOptions<T>['events']): EventBinding[] {
-  return Object.entries(events || {}).map(([eventKey, callback]) => {
-    const trimmed = eventKey.trim();
+  return Object.entries(events || {}).map(([key, callback]) => {
+    const trimmed = key.trim();
     const spaceIdx = trimmed.indexOf(' ');
-
-    let type: string;
-    let selector: string;
-
-    if (spaceIdx === -1) {
-      type = trimmed;
-      selector = '> *';
-    } else {
-      type = trimmed.substring(0, spaceIdx);
-      selector = trimmed.substring(spaceIdx + 1).trim() || '> *';
-    }
-
+    const type = spaceIdx === -1 ? trimmed : trimmed.slice(0, spaceIdx);
+    const selector = spaceIdx === -1 ? '> *' : trimmed.slice(spaceIdx + 1).trim() || '> *';
     return { type, selector, callback: callback as Function };
   });
 }
@@ -184,9 +173,7 @@ function setupEvents<T>(ctx: ListContext<T>, $container: JQuery, bindings: Event
   const containerEl = $container[0];
   if (!containerEl || containerEl.nodeType !== 1) return;
 
-  for (let i = 0, len = bindings.length; i < len; i++) {
-    const { type, selector, callback } = bindings[i]!;
-
+  for (const { type, selector, callback } of bindings) {
     $container.on(
       `${type}.atomList`,
       selector,

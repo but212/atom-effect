@@ -21,11 +21,7 @@ import { registry } from '@/core/registry';
  * @internal
  */
 export function setAtomKey($el: JQuery, key: string | null): void {
-  if (key === null) {
-    $el.removeAttr('data-atom-key');
-  } else {
-    $el.attr('data-atom-key', key);
-  }
+  key === null ? $el.removeAttr('data-atom-key') : $el.attr('data-atom-key', key);
 }
 
 /**
@@ -42,8 +38,7 @@ export function setAtomKey($el: JQuery, key: string | null): void {
  * @internal
  */
 export function cleanupNodes($el: JQuery): void {
-  for (let i = 0, len = $el.length; i < len; i++) {
-    const el = $el[i];
-    if (el) registry.cleanupTree(el);
+  for (let i = 0; i < $el.length; i++) {
+    if ($el[i]) registry.cleanupTree($el[i]!);
   }
 }

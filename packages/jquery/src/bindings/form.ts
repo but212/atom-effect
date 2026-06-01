@@ -12,8 +12,6 @@
  */
 
 import {
-  computed,
-  type Disposable,
   effect,
   lensFor,
   mergeLenses,
@@ -103,23 +101,23 @@ function createInterceptedLens<T extends object>(
   options: FormOptions<unknown>
 ): WritableAtom<unknown> {
   const { transform, onChange } = options;
-
-  const intercepted = computed(() => baseLens.value) as unknown as WritableAtom<unknown>;
-  const desc = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(intercepted), 'value');
-
-  if (desc) {
-    Object.defineProperty(intercepted, 'value', {
-      ...desc,
-      set(val: unknown) {
+  return new Proxy(baseLens, {
+    get(target, prop) {
+      if (prop === 'value') return target.value;
+      const val = Reflect.get(target, prop, target);
+      return typeof val === 'function' ? val.bind(target) : val;
+    },
+    set(target, prop, val) {
+      if (prop === 'value') {
         let transformed = val;
-        try {
-          transformed = transform ? transform(name, val) : val;
-        } catch (err) {
-          console.error(`[bindForm] Transform error in field "${name}":`, err);
+        if (transform) {
+          try {
+            transformed = transform(name, val);
+          } catch (err) {
+            console.error(`[bindForm] Transform error in field "${name}":`, err);
+          }
         }
-
-        baseLens.value = transformed as PathValue<T, Paths<T>>;
-
+        target.value = transformed as PathValue<T, Paths<T>>;
         if (onChange) {
           try {
             untracked(() => onChange(name, transformed));
@@ -127,20 +125,11 @@ function createInterceptedLens<T extends object>(
             console.error(`[bindForm] onChange error in field "${name}":`, err);
           }
         }
-      },
-    });
-  }
-
-  const originalDispose = intercepted.dispose;
-  intercepted.dispose = () => {
-    originalDispose.call(intercepted);
-    const disposable = baseLens as Partial<Disposable>;
-    if (typeof disposable.dispose === 'function') {
-      disposable.dispose();
-    }
-  };
-
-  return intercepted;
+        return true;
+      }
+      return Reflect.set(target, prop, val, target);
+    },
+  }) as unknown as WritableAtom<unknown>;
 }
 
 /**
@@ -159,12 +148,7 @@ function syncValidationEffect(
   return effect(() => {
     try {
       const res = validate(atom.value);
-      let msg = '';
-      if (typeof res === 'string') {
-        msg = res;
-      } else if (res === false) {
-        msg = 'Invalid';
-      }
+      const msg = typeof res === 'string' ? res : res === false ? 'Invalid' : '';
       (control as HTMLInputElement).setCustomValidity?.(msg);
     } catch (err) {
       console.error(`Validation error in field "${name}":`, err);
@@ -189,204 +173,6 @@ function syncToggleEffect(
     const checked = isToggleChecked(atom.value, val, isCheck);
     if (el.checked !== checked) el.checked = checked;
   });
-}
-
-/**
- * Role: Form Lifecycle Orchestrator
- *
- * Logic: Hybrid Discovery
- * Combines initial scanning with a MutationObserver to maintain bindings for
- * dynamically added elements or attribute changes.
- *
- * @internal
- */
-class FormBinder<T extends object> {
-  /** A map of field names to their corresponding reactive entries. */
-  #entries = new Map<string, FieldEntry>();
-  /** A mapping of DOM elements to their current 'name' identifier for reconciliation. */
-  #names = new WeakMap<Element, string>();
-
-  /** The target form element. */
-  #form: HTMLFormElement;
-  /** The writable atom containing the form's state object. */
-  #atom: WritableAtom<T>;
-  /** Configuration for transformations and change callbacks. */
-  #options: FormOptions<unknown>;
-
-  constructor(form: HTMLFormElement, atom: WritableAtom<T>, options: FormOptions<unknown> = {}) {
-    this.#form = form;
-    this.#atom = atom;
-    this.#options = options;
-    this.#init();
-  }
-
-  /** Initializes the binder by scanning the form and starting the mutation observer. */
-  #init(): void {
-    this.bindSubtree(this.#form);
-    this.#observe();
-  }
-
-  /**
-   * Scans a DOM subtree for form controls and establishes reactive bindings.
-   *
-   * Optimization: Loop invariant hoisting
-   * Caches collection lengths and uses guard clauses to minimize branching
-   * in deep subtree scans.
-   */
-  public bindSubtree(el: Element): void {
-    if (el === this.#form) {
-      for (const control of this.#form.elements) {
-        this.#bindField(control);
-      }
-      return;
-    }
-
-    if (el.matches?.(SELECTOR)) {
-      this.#bindField(el);
-      return;
-    }
-
-    const targets = (el as HTMLElement).querySelectorAll?.(SELECTOR);
-    if (targets) {
-      for (const target of targets) {
-        this.#bindField(target);
-      }
-    }
-  }
-
-  /**
-   * Establishes a two-way binding for an individual form control.
-   *
-   * Logic: Field Identification
-   * Identification is based on the control's `name` attribute. If the name
-   * changes, the previous binding is cleaned up.
-   *
-   * Optimization: Minimized Map lookups
-   * Reduces WeakMap access from 3 to 1 in the hot path of field reconciliation.
-   */
-  #bindField(el: Element): void {
-    const control = el as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
-    const name = control.name || el.getAttribute('name');
-    if (!name) return;
-
-    const oldName = this.#names.get(control);
-    if (oldName === name) return;
-
-    if (oldName !== undefined) {
-      registry.cleanup(control);
-    }
-
-    const entry = this.#ensureField(name);
-    this.#names.set(control, name);
-
-    registry.onCleanup(control, () => this.#unbindField(control, name));
-
-    if (
-      control instanceof HTMLInputElement &&
-      (control.type === 'radio' || control.type === 'checkbox')
-    ) {
-      this.#bindToggle(control, entry.atom, control.value, control.type === 'checkbox');
-    } else {
-      bindVal(control, entry.atom, this.#options);
-    }
-
-    this.#applyValidation(control, name, entry.atom);
-  }
-
-  #applyValidation(
-    control: HTMLFormElement['elements'][number],
-    name: string,
-    atom: WritableAtom<unknown>
-  ): void {
-    const validate = this.#options.validation?.[name];
-    if (!validate) return;
-
-    registry.trackEffect(control, syncValidationEffect(control as Element, name, atom, validate));
-  }
-
-  #bindToggle(
-    el: HTMLInputElement,
-    atom: WritableAtom<unknown>,
-    val: string,
-    isCheck: boolean
-  ): void {
-    const handler = () => {
-      atom.value = getNextToggleValue(atom.peek(), el.checked, val, isCheck);
-    };
-
-    (handler as unknown as { [INTERNAL_HANDLER]: boolean })[INTERNAL_HANDLER] = true;
-    $(el).on('change', handler);
-    registry.onCleanup(el, () => $(el).off('change', handler));
-
-    registry.trackEffect(el, syncToggleEffect(el, atom, val, isCheck));
-  }
-
-  /**
-   * Retrieves or creates a reactive entry for a specific field name.
-   *
-   * Logic: Path Transformation
-   * Flat HTML 'name' attributes are converted into dot-separated paths
-   * compatible with the structural sharing engine.
-   */
-  #ensureField(name: string): FieldEntry {
-    let entry = this.#entries.get(name);
-    if (entry) {
-      entry.refCount++;
-      return entry;
-    }
-
-    const dotPath = normalizePath(name);
-    const baseLens = lensFor(this.#atom)(dotPath as Paths<T>);
-    const atom = createInterceptedLens(name, baseLens, this.#options);
-
-    entry = { atom, name, refCount: 1 };
-    this.#entries.set(name, entry);
-    return entry;
-  }
-
-  #unbindField(el: Element, name: string): void {
-    const entry = this.#entries.get(name);
-    if (entry && --entry.refCount <= 0) {
-      const disposableAtom = entry.atom as Partial<{ dispose: () => void }>;
-      if (typeof disposableAtom.dispose === 'function') {
-        disposableAtom.dispose();
-      }
-      this.#entries.delete(name);
-    }
-    registry.cleanup(el);
-  }
-
-  /**
-   * Monitors the form for structural changes using a MutationObserver.
-   *
-   * Optimization: Numeric constant comparison
-   * Uses numeric constants for `nodeType` checks to avoid property access overhead
-   * during rapid DOM mutations.
-   */
-  #observe(): void {
-    const observer = new MutationObserver((mutations) => {
-      for (const m of mutations) {
-        if (m.type === 'childList') {
-          for (const node of m.addedNodes) {
-            if (node.nodeType === 1) {
-              this.bindSubtree(node as Element);
-            }
-          }
-        } else if (m.attributeName === 'name') {
-          this.bindSubtree(m.target as Element);
-        }
-      }
-    });
-
-    observer.observe(this.#form, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['name'],
-    });
-
-    registry.onCleanup(this.#form, () => observer.disconnect());
-  }
 }
 
 /**
@@ -423,7 +209,136 @@ export function bindForm<T extends object>(
   atom: WritableAtom<T> | WritableAtom<unknown>[],
   options: FormOptions<unknown> = {}
 ): void {
-  const targetAtom = Array.isArray(atom) ? mergeLenses(...atom) : atom;
+  const targetAtom = (Array.isArray(atom) ? mergeLenses(...atom) : atom) as WritableAtom<T>;
   registry.cleanup(form);
-  new FormBinder(form, targetAtom as WritableAtom<T>, options);
+
+  const entries = new Map<string, FieldEntry>();
+  const names = new WeakMap<Element, string>();
+
+  const unbindField = (el: Element, name: string): void => {
+    const entry = entries.get(name);
+    if (entry && --entry.refCount <= 0) {
+      const disposableAtom = entry.atom as Partial<{ dispose: () => void }>;
+      if (typeof disposableAtom.dispose === 'function') {
+        disposableAtom.dispose();
+      }
+      entries.delete(name);
+    }
+    registry.cleanup(el);
+  };
+
+  const ensureField = (name: string): FieldEntry => {
+    let entry = entries.get(name);
+    if (entry) {
+      entry.refCount++;
+      return entry;
+    }
+
+    const dotPath = normalizePath(name);
+    const baseLens = lensFor(targetAtom)(dotPath as Paths<T>);
+    const atom = createInterceptedLens(name, baseLens, options);
+
+    entry = { atom, name, refCount: 1 };
+    entries.set(name, entry);
+    return entry;
+  };
+
+  const applyValidation = (
+    control: HTMLFormElement['elements'][number],
+    name: string,
+    atom: WritableAtom<unknown>
+  ): void => {
+    const validate = options.validation?.[name];
+    if (!validate) return;
+
+    registry.trackEffect(control, syncValidationEffect(control as Element, name, atom, validate));
+  };
+
+  const bindToggle = (
+    el: HTMLInputElement,
+    atom: WritableAtom<unknown>,
+    val: string,
+    isCheck: boolean
+  ): void => {
+    const handler = () => {
+      atom.value = getNextToggleValue(atom.peek(), el.checked, val, isCheck);
+    };
+
+    (handler as unknown as { [INTERNAL_HANDLER]: boolean })[INTERNAL_HANDLER] = true;
+    $(el).on('change', handler);
+    registry.onCleanup(el, () => $(el).off('change', handler));
+
+    registry.trackEffect(el, syncToggleEffect(el, atom, val, isCheck));
+  };
+
+  const bindField = (el: Element): void => {
+    const control = el as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+    const name = control.name || el.getAttribute('name');
+    if (!name) return;
+
+    const oldName = names.get(control);
+    if (oldName === name) return;
+
+    if (oldName !== undefined) {
+      registry.cleanup(control);
+    }
+
+    const entry = ensureField(name);
+    names.set(control, name);
+
+    registry.onCleanup(control, () => unbindField(control, name));
+
+    if (
+      control instanceof HTMLInputElement &&
+      (control.type === 'radio' || control.type === 'checkbox')
+    ) {
+      bindToggle(control, entry.atom, control.value, control.type === 'checkbox');
+    } else {
+      bindVal(control, entry.atom, options);
+    }
+
+    applyValidation(control, name, entry.atom);
+  };
+
+  const bindSubtree = (el: Element): void => {
+    if (el === form) {
+      for (const control of form.elements) {
+        bindField(control);
+      }
+    } else if (el.matches?.(SELECTOR)) {
+      bindField(el);
+    } else {
+      const targets = el.querySelectorAll?.(SELECTOR);
+      if (targets) {
+        for (const target of targets) {
+          bindField(target);
+        }
+      }
+    }
+  };
+
+  bindSubtree(form);
+
+  const observer = new MutationObserver((mutations) => {
+    for (const m of mutations) {
+      if (m.type === 'childList') {
+        for (const node of m.addedNodes) {
+          if (node.nodeType === 1) {
+            bindSubtree(node as Element);
+          }
+        }
+      } else if (m.attributeName === 'name') {
+        bindSubtree(m.target as Element);
+      }
+    }
+  });
+
+  observer.observe(form, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['name'],
+  });
+
+  registry.onCleanup(form, () => observer.disconnect());
 }
