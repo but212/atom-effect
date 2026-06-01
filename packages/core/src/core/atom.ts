@@ -77,16 +77,15 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
   /** @internal */
   readonly [BRAND] = BrandFlags.Atom | BrandFlags.Writable;
 
-  constructor(initialValue: T, options: AtomOptions<T>) {
-    const opts = options ?? {};
+  constructor(initialValue: T, options?: AtomOptions<T>) {
     this.#value = initialValue;
-    this.#equal = opts.equal ?? DEFAULT_EQUAL;
+    this.#equal = options?.equal ?? DEFAULT_EQUAL;
 
-    if (opts.sync) {
+    if (options?.sync) {
       this.flags |= ATOM_STATE_FLAGS.SYNC;
     }
 
-    if (IS_DEV) debug.attachDebugInfo(this, 'atom', this.id, opts.name);
+    if (IS_DEV) debug.attachDebugInfo(this, 'atom', this.id, options?.name);
   }
 
   // ReactiveNode Personality Traits (Declarative Data)
@@ -151,17 +150,11 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
    * @returns A disposal function to unsubscribe the listener.
    */
   subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
+    const unsub = Result.unwrap(nodeSubscribe(this, listener));
     if (this.isDisposed) {
-      if (
-        typeof listener !== 'function' &&
-        (listener == null || typeof listener.execute !== 'function')
-      ) {
-        Result.unwrap(nodeSubscribe(this, listener));
-      }
+      unsub();
       return () => {};
     }
-
-    const unsub = Result.unwrap(nodeSubscribe(this, listener));
     return unsub;
   }
 
@@ -189,7 +182,7 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
     this.flags |= SCHED;
 
     if ((flags & ATOM_STATE_FLAGS.SYNC) !== 0 && !schedulerIsBatching(scheduler)) {
-      if (!slots?.isLocked) this.#flushNotifications();
+      if (!slots.isLocked) this.#flushNotifications();
     } else {
       schedulerSchedule(scheduler, this);
     }

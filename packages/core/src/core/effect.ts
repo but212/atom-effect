@@ -53,142 +53,19 @@ import { isPromise } from '@/utils/type-guards';
 import { createDepBuffer, disposeAll, prepareTracking } from './buffers';
 import { currentFlushEpoch, scheduler, schedulerSchedule } from './scheduler';
 
-/**
- * Role: State container for monitoring effect execution health.
- * @internal
- */
-export interface EffectBudgetState {
-  loopCount: number;
-  lastFlushEpoch: number;
-  windowCount: number;
-  windowStart: number;
-  totalExecutions: number;
-  readonly maxPerFlush: number;
-  readonly maxPerSecond: number;
-}
-
-/**
- * Role: Factory for initializing effect budget monitors.
- * @internal
- */
-export function createEffectBudgetState(
-  maxPerFlush: number,
-  maxPerSecond: number
-): EffectBudgetState {
-  return {
-    loopCount: 0,
-    lastFlushEpoch: EPOCH_CONSTANTS.UNINITIALIZED,
-    windowCount: 0,
-    windowStart: 0,
-    totalExecutions: 0,
-    maxPerFlush,
-    maxPerSecond,
-  };
-}
-
-/**
- * Logic: Execution Budget Validation
- * Enforces limits on the number of times an effect can fire within a single
- * flush cycle to prevent runaway reactive loops that would hang the main thread.
- *
- * Constraint: Global Safeguard
- * Implements a secondary limit on total executions across all effects to protect
- * against aggregate scheduler instability.
- *
- * @internal
- */
-export function validateEffectBudget(
-  state: EffectBudgetState,
-  currentFlushEpoch: number
-): Result<void, Error> {
-  if (state.lastFlushEpoch !== currentFlushEpoch) {
-    state.lastFlushEpoch = currentFlushEpoch;
-    state.loopCount = 0;
-  }
-
-  if (++state.loopCount > state.maxPerFlush) {
-    const message = ABORT_MESSAGES['per-effect'](state);
-    return Result.err(new EffectError(message));
-  }
-
-  // Constraint: Global safeguard against aggregate scheduler instability.
-  const globalCount = scheduler.incrementFlushExecutionCount();
-  if (Result.isErr(globalCount)) {
-    return globalCount as unknown as Result<void, Error>;
-  }
-
-  state.totalExecutions++;
-  return Result.ok(undefined);
-}
-
-/**
- * Logic: Frequency Throttling
- * Detects effects firing at a frequency suggesting unintentional rapid updates.
- *
- * Caution: Performance Degradation
- * High-frequency updates can saturate the main thread even if they don't
- * trigger an infinite loop. This check is only active in development.
- *
- * @internal
- */
-export function checkEffectFrequencyLimit(state: EffectBudgetState): Result<void, Error> {
-  const limit = state.maxPerSecond;
-  if (!Number.isFinite(limit)) return Result.ok(undefined);
-
-  const now = Date.now();
-
-  if (now - state.windowStart >= DEBUG_CONFIG.EFFECT_FREQUENCY_WINDOW) {
-    state.windowStart = now;
-    state.windowCount = 1;
-    return Result.ok(undefined);
-  }
-
-  if (++state.windowCount > limit) {
-    return Result.err(new EffectError(ERROR_MESSAGES.EFFECT_FREQUENCY_LIMIT_EXCEEDED));
-  }
-  return Result.ok(undefined);
-}
-
-const ABORT_MESSAGES = {
-  'per-effect': (state: EffectBudgetState) =>
-    `Infinite loop detected (per-effect): executed ${state.loopCount} times in current flush.`,
-  global: (_state: EffectBudgetState) =>
-    'Infinite loop detected (global): exceeded total execution limit per flush.',
-} as const;
-
-function validateEffectFunction(fn: unknown): Result<void, Error> {
-  if (typeof fn !== 'function') {
-    return Result.err(new EffectError(ERROR_MESSAGES.EFFECT_MUST_BE_FUNCTION));
-  }
-  return Result.ok(undefined);
-}
-
-/**
- * Role: Orchestrator for a reactive side-effect.
- *
- * Optimization: Monomorphic Access
- * Uses public fields for core engine properties to ensure consistent V8 hidden
- * class shapes (monomorphic access) in the reactive hot-path.
- *
- * Logic: ES2022 Private Fields
- * Encapsulates internal state (budgets, cleanup handles) using private fields
- * to prevent accidental tampering and maintain clear ownership.
- *
- * @internal
- */
 class EffectImpl implements EffectObject, DependencyTracker, Subscriber, ReactiveNode<void> {
-  // Optimization: Engine-exposed state (Public JS fields)
-  public flags: number = 0;
-  public version: number = 0;
-  public _lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
-  public _nextEpoch: number | undefined = undefined;
-  public _trackEpoch: number = 0;
-  public _trackCount: number = 0;
-  public _error: Error | null = null;
-  public _k: typeof KIND.Obj = KIND.Obj;
-  public readonly id: DependencyId = generateId() & SMI_MAX;
+  // Optimization: Engine-exposed state (JS fields)
+  flags: number = 0;
+  version: number = 0;
+  _lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
+  _nextEpoch: number | undefined = undefined;
+  _trackEpoch: number = 0;
+  _trackCount: number = 0;
+  _error: Error | null = null;
+  _k: typeof KIND.Obj = KIND.Obj;
+  readonly id: DependencyId = generateId() & SMI_MAX;
 
-  public _storage: {
+  _storage: {
     slots: SlotBuffer<Subscription<void>> | null;
     deps: DepBufferState | null;
   } = {
@@ -197,42 +74,49 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
   };
 
   /** @internal */
-  public readonly [BRAND] = BrandFlags.Effect;
+  readonly [BRAND] = BrandFlags.Effect;
 
   // Logic: Concurrency Control
   // Session IDs ensure that cleanup handles from asynchronous operations are
   // discarded if a new tracking cycle starts before the Promise resolves.
   #trackSessionId = 0;
-  #budget: EffectBudgetState;
   #cleanup: (() => void) | null = null;
 
   #fn: EffectFunction;
   #onError: ((error: unknown) => void) | null;
   #notifyCallback: () => void;
 
-  #sync: boolean;
+  #maxPerFlush: number;
+  #maxPerSecond: number;
+  #loopCount = 0;
+  #lastFlushEpoch = EPOCH_CONSTANTS.UNINITIALIZED;
+  #windowCount = 0;
+  #windowStart = 0;
+  #totalExecutions = 0;
 
   constructor(fn: EffectFunction, options: EffectOptions = {}) {
-    Result.unwrap(validateEffectFunction(fn));
+    if (typeof fn !== 'function') {
+      throw new EffectError(ERROR_MESSAGES.EFFECT_MUST_BE_FUNCTION);
+    }
     this.#fn = fn;
     this.#onError = options.onError ?? null;
-    this.#sync = options.sync ?? false;
 
-    const maxPerSecond =
+    this.#maxPerSecond =
       options.maxExecutionsPerSecond ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_SECOND;
-    const maxPerFlush = options.maxExecutionsPerFlush ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_EFFECT;
+    this.#maxPerFlush = options.maxExecutionsPerFlush ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_EFFECT;
 
-    this.#budget = createEffectBudgetState(maxPerFlush, maxPerSecond);
+    this.#notifyCallback =
+      (options.sync ?? false) ? () => this.execute() : () => schedulerSchedule(scheduler, this);
 
-    this.#notifyCallback = this.#sync
-      ? () => this.execute()
-      : () => schedulerSchedule(scheduler, this);
-
-    debug.attachDebugInfo(this, 'effect', this.id, options.name);
+    if (IS_DEV) debug.attachDebugInfo(this, 'effect', this.id, options.name);
   }
 
+  // ReactiveNode Personality Traits (Declarative Data)
+  readonly isComputed = false;
+  readonly isRejected = false;
+
   /** Triggers the effect execution immediately. */
-  public run(): void {
+  run(): void {
     if (this.isDisposed) {
       throw new EffectError(ERROR_MESSAGES.EFFECT_DISPOSED);
     }
@@ -243,17 +127,17 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
    * Logic: Final Resource Release
    * Releases all dependencies and executes the current cleanup handle.
    */
-  public dispose(): void {
+  dispose(): void {
     if (this.isDisposed) return;
     this.flags |= EFFECT_STATE_FLAGS.DISPOSED;
 
     this.#execCleanup();
-    if (this._storage.deps) disposeAll(this._storage.deps!);
+    if (this._storage.deps) disposeAll(this._storage.deps);
   }
 
   /** Total executions since initialization. */
   get executionCount(): number {
-    return this.#budget.totalExecutions;
+    return this.#totalExecutions;
   }
 
   /** Returns true if the effect is currently executing its function. */
@@ -266,19 +150,11 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
     return (this.flags & EFFECT_STATE_FLAGS.DISPOSED) !== 0;
   }
 
-  get isComputed(): boolean {
-    return false;
-  }
-
-  get isRejected(): boolean {
-    return false;
-  }
-
   /**
    * Logic: Execution Lifecycle Orchestration
    * Synchronizes the effect state with its captured dependencies.
    */
-  public execute(force = false): Result<void, Error> {
+  execute(force = false): Result<void, Error> {
     const prep = this.#prepareExecution(force);
     if (Result.isErr(prep)) return prep;
     if (!prep.value) return Result.ok(undefined);
@@ -319,14 +195,14 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
 
     const budgetRes = this.#validateBudget();
     if (Result.isErr(budgetRes)) return budgetRes as unknown as Result<boolean, Error>;
-    debug.trackUpdate(this.id, debug.getDebugName(this));
+    if (IS_DEV) debug.trackUpdate(this.id, debug.getDebugName(this));
 
     this.flags |= EFFECT_STATE_FLAGS.EXECUTING;
     return Result.ok(true);
   }
 
   /** Registers a dependency during the tracking session. */
-  public addDependency(dep: Dependency): void {
+  addDependency(dep: Dependency): void {
     if (!this.isExecuting) return;
     nodeTrackDependency(this, dep, this.#notifyCallback);
   }
@@ -399,22 +275,47 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
   }
 
   #validateBudget(): Result<void, Error> {
-    const budgetRes = validateEffectBudget(this.#budget, currentFlushEpoch());
-    if (Result.isErr(budgetRes)) {
-      this.dispose();
-      console.error(budgetRes.error);
-      return budgetRes;
+    const epoch = currentFlushEpoch();
+    if (this.#lastFlushEpoch !== epoch) {
+      this.#lastFlushEpoch = epoch;
+      this.#loopCount = 0;
     }
 
+    if (++this.#loopCount > this.#maxPerFlush) {
+      const err = new EffectError(
+        `Infinite loop detected (per-effect): executed ${this.#loopCount} times in current flush.`
+      );
+      this.dispose();
+      console.error(err);
+      return Result.err(err);
+    }
+
+    // Constraint: Global safeguard against aggregate scheduler instability.
+    const globalCount = scheduler.incrementFlushExecutionCount();
+    if (Result.isErr(globalCount)) {
+      this.dispose();
+      console.error(globalCount.error);
+      return globalCount as unknown as Result<void, Error>;
+    }
+
+    this.#totalExecutions++;
+
     if (IS_DEV) {
-      const freqRes = checkEffectFrequencyLimit(this.#budget);
-      if (Result.isErr(freqRes)) {
-        const err = freqRes.error;
-        this.dispose();
-        this.#handleExecutionError(err);
-        return freqRes;
+      const limit = this.#maxPerSecond;
+      if (Number.isFinite(limit)) {
+        const now = Date.now();
+        if (now - this.#windowStart >= DEBUG_CONFIG.EFFECT_FREQUENCY_WINDOW) {
+          this.#windowStart = now;
+          this.#windowCount = 1;
+        } else if (++this.#windowCount > limit) {
+          const err = new EffectError(ERROR_MESSAGES.EFFECT_FREQUENCY_LIMIT_EXCEEDED);
+          this.dispose();
+          this.#handleExecutionError(err);
+          return Result.err(err);
+        }
       }
     }
+
     return Result.ok(undefined);
   }
 
@@ -458,20 +359,11 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
  * sub.dispose(); // Stops the effect
  * ```
  */
-function createEffect(
-  fn: EffectFunction,
-  options: EffectOptions = {}
-): Result<EffectObject, Error> {
-  const validation = validateEffectFunction(fn);
-  if (Result.isErr(validation)) return validation;
-
-  const effectInstance = new EffectImpl(fn, options);
-  const execRes = effectInstance.execute();
-  if (Result.isErr(execRes)) return execRes as unknown as Result<EffectObject, Error>;
-
-  return Result.ok(effectInstance);
-}
-
 export function effect(fn: EffectFunction, options: EffectOptions = {}): EffectObject {
-  return Result.unwrap(createEffect(fn, options));
+  if (typeof fn !== 'function') {
+    throw new EffectError(ERROR_MESSAGES.EFFECT_MUST_BE_FUNCTION);
+  }
+  const effectInstance = new EffectImpl(fn, options);
+  Result.unwrap(effectInstance.execute());
+  return effectInstance;
 }

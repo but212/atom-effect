@@ -50,8 +50,6 @@ class ReactiveScheduler implements SchedulerState {
 
   #active: JobBuffer = { items: [], size: 0 };
   #standby: JobBuffer = { items: [], size: 0 };
-  #batch: JobBuffer = { items: [], size: 0 };
-  #current: JobBuffer = this.#active;
 
   #onOverflow: ((droppedCount: number) => void) | null = null;
 
@@ -78,7 +76,7 @@ class ReactiveScheduler implements SchedulerState {
     return this.#sessionExecutionCount;
   }
   get queueSize() {
-    return this.#active.size + this.#batch.size;
+    return this.#active.size;
   }
   get onOverflow() {
     return this.#onOverflow;
@@ -98,42 +96,8 @@ class ReactiveScheduler implements SchedulerState {
   }
 
   /**
-   * Logic: Batch Integration
-   * Moves jobs from the temporary batch queue to the active processing queue.
-   */
-  #mergeBatchQueue(): void {
-    const batch = this.#batch;
-    const queueSize = batch.size;
-    if (queueSize === 0) return;
-
-    const epoch = this.nextEpoch();
-    const bItems = batch.items;
-    const active = this.#active;
-    const targetItems = active.items;
-    let currentSize = active.size;
-
-    for (let i = 0; i < queueSize; i++) {
-      const job = bItems[i]!;
-      bItems[i] = undefined;
-
-      // Optimization: Avoid redundant re-queuing within the same epoch.
-      if (job._nextEpoch !== epoch) {
-        job._nextEpoch = epoch;
-        targetItems[currentSize++] = job;
-      }
-    }
-
-    active.size = currentSize;
-    batch.size = 0;
-
-    if (bItems.length > SCHEDULER_CONFIG.BATCH_QUEUE_SHRINK_THRESHOLD) {
-      bItems.length = 0;
-    }
-  }
-
-  /**
    * Logic: Queue Exhaustion
-   * Continues flushing until both active and batch queues are empty.
+   * Continues flushing until active queue is empty.
    *
    * Constraint: Loop Guard
    * Throws an error if the number of iterations exceeds the limit to prevent
@@ -143,19 +107,13 @@ class ReactiveScheduler implements SchedulerState {
     let iterations = 0;
     const max = this.#maxFlushIterations;
 
-    while (this.#active.size > 0 || this.#batch.size > 0) {
+    while (this.#active.size > 0) {
       if (++iterations > max) {
         this.#handleFlushOverflow();
         return;
       }
 
-      if (this.#batch.size > 0) {
-        this.#mergeBatchQueue();
-      }
-
-      if (this.#active.size > 0) {
-        this.#processQueue();
-      }
+      this.#processQueue();
     }
   }
 
@@ -173,7 +131,6 @@ class ReactiveScheduler implements SchedulerState {
     this.#active = this.#standby;
     this.#standby = active;
     this.#active.size = 0;
-    if (this.#current === active) this.#current = this.#active;
 
     this.nextEpoch();
     const fnKind = KIND.Fn;
@@ -204,7 +161,7 @@ class ReactiveScheduler implements SchedulerState {
   }
 
   #handleFlushOverflow(): void {
-    const droppedCount = this.#active.size + this.#batch.size;
+    const droppedCount = this.#active.size;
     console.error(
       new SchedulerError(
         ERROR_MESSAGES.SCHEDULER_FLUSH_OVERFLOW(this.#maxFlushIterations, droppedCount)
@@ -215,8 +172,6 @@ class ReactiveScheduler implements SchedulerState {
     this.#active.items.length = 0;
     this.#standby.size = 0;
     this.#standby.items.length = 0;
-    this.#batch.size = 0;
-    this.#batch.items.length = 0;
 
     if (this.#onOverflow) {
       try {
@@ -275,7 +230,7 @@ class ReactiveScheduler implements SchedulerState {
 
   /**
    * Logic: Job Scheduling
-   * Adds a job to the current active buffer and triggers an asynchronous
+   * Adds a job to the active buffer and triggers an asynchronous
    * microtask flush if the system is currently idle.
    */
   schedule(callback: SchedulerJob): Result<void, Error> {
@@ -295,14 +250,14 @@ class ReactiveScheduler implements SchedulerState {
       callback._k = typeof callback === 'function' ? KIND.Fn : KIND.Obj;
     }
 
-    const target = this.#current;
+    const target = this.#active;
     target.items[target.size++] = callback;
 
     if ((this.#state & SCHEDULER_STATE.PROCESSING) === 0) {
       this.#state |= SCHEDULER_STATE.PROCESSING;
       queueMicrotask(() => {
         try {
-          if (this.#active.size === 0 && this.#batch.size === 0) return;
+          if (this.#active.size === 0) return;
           this.flushQueues();
         } catch (e) {
           resetTrackingContext(trackingContext);
@@ -316,7 +271,7 @@ class ReactiveScheduler implements SchedulerState {
   }
 
   flushSync(): void {
-    if (this.#active.size === 0 && this.#batch.size === 0) return;
+    if (this.#active.size === 0) return;
 
     const prevState = this.#state;
     this.#state |= SCHEDULER_STATE.FLUSHING_SYNC;
@@ -330,7 +285,6 @@ class ReactiveScheduler implements SchedulerState {
   startBatch(): void {
     this.#batchDepth++;
     this.#state |= SCHEDULER_STATE.BATCHING;
-    this.#current = this.#batch;
   }
 
   endBatch(): void {
@@ -341,7 +295,6 @@ class ReactiveScheduler implements SchedulerState {
 
     if (--this.#batchDepth === 0) {
       this.#state &= ~SCHEDULER_STATE.BATCHING;
-      this.#current = this.#active;
       if ((this.#state & SCHEDULER_STATE.FLUSHING_SYNC) === 0) {
         this.flushSync();
       }

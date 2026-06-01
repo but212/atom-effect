@@ -47,40 +47,29 @@ export type ErrorStrategy = {
   };
 };
 
-/**
- * Data-driven strategies for extracting metadata from different error types.
- * @internal
- */
-const toSafeString = (val: unknown, fallback = ''): string => {
+const toStr = (val: unknown, fallback = ''): string => {
   try {
-    return val !== undefined && val !== null ? String(val) : fallback;
+    return val != null ? String(val) : fallback;
   } catch {
     return fallback;
   }
 };
 
-const toSafeStringOrUndefined = (val: unknown): string | undefined => {
+const toStrOrUndef = (val: unknown): string | undefined => {
   try {
-    return val !== undefined && val !== null ? String(val) : undefined;
+    return val != null ? String(val) : undefined;
   } catch {
     return undefined;
   }
 };
-
-const toSafeBoolean = (val: unknown, fallback: boolean): boolean =>
-  typeof val === 'boolean' ? val : fallback;
 
 export const ERROR_STRATEGIES: readonly ErrorStrategy[] = [
   {
     /** Logic: Brand-based check for system errors */
     test: (e: unknown): boolean => {
       try {
-        return (
-          typeof e === 'object' &&
-          e !== null &&
-          '_tag' in e &&
-          String((e as Record<string, unknown>)._tag).endsWith('Error')
-        );
+        const tag = (e as Record<string, unknown>)?._tag;
+        return typeof tag === 'string' && tag.endsWith('Error');
       } catch {
         return false;
       }
@@ -88,10 +77,10 @@ export const ERROR_STRATEGIES: readonly ErrorStrategy[] = [
     fetch: (e: unknown) => {
       const obj = e as Record<string, unknown>;
       return {
-        name: toSafeString(obj.name),
-        message: toSafeString(obj.message),
-        recoverable: Boolean(obj.recoverable),
-        code: toSafeStringOrUndefined(obj.code),
+        name: toStr(obj.name),
+        message: toStr(obj.message),
+        recoverable: !!obj.recoverable,
+        code: toStrOrUndef(obj.code),
       };
     },
   },
@@ -103,8 +92,8 @@ export const ERROR_STRATEGIES: readonly ErrorStrategy[] = [
       return {
         name: err.name,
         message: err.message,
-        recoverable: toSafeBoolean(err.recoverable, true),
-        code: toSafeStringOrUndefined(err.code),
+        recoverable: typeof err.recoverable === 'boolean' ? err.recoverable : true,
+        code: toStrOrUndef(err.code),
       };
     },
   },
