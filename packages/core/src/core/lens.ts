@@ -156,10 +156,11 @@ function cloneAndSet(container: object, key: string, value: unknown): object {
   if (container instanceof Map) {
     return new Map(container as Map<unknown, unknown>).set(key, value);
   }
-  const next = Object.assign(Object.create(Object.getPrototypeOf(container)), container) as Record<
-    string,
-    unknown
-  >;
+  const proto = Object.getPrototypeOf(container);
+  if (proto === Object.prototype || proto === null) {
+    return { ...container, [key]: value };
+  }
+  const next = Object.assign(Object.create(proto), container) as Record<string, unknown>;
   next[key] = value;
   return next;
 }

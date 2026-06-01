@@ -236,7 +236,11 @@ function checkDirty(state: DepBufferState, deep: boolean): boolean {
       // Logic: Accessing .value on a computed dependency triggers its internal
       // check/refresh logic. If it throws, we track it for debugging.
       try {
-        trackingContext.current ? untracked(() => dep.value) : dep.value;
+        if (trackingContext.current) {
+          untracked(() => dep.value);
+        } else {
+          dep.value;
+        }
       } catch (e) {
         trackEvaluationFailure(dep.id);
         throw e;
