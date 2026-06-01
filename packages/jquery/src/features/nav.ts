@@ -62,7 +62,7 @@ function reconcileDOM(
     $target.children().atomUnbind();
 
     const syncTitle = options.syncTitle ?? true;
-    if (syncTitle && state.title !== null && win.document.title !== state.title) {
+    if (syncTitle && state.title != null && win.document.title !== state.title) {
       win.document.title = state.title;
     }
     if (state.meta) {
