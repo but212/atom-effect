@@ -148,12 +148,13 @@ export class SchedulerError extends AtomError {
 export function getErrorChain(error: unknown): Array<unknown> {
   const chain: Array<unknown> = [];
   const seen = new Set<unknown>();
-  let current: unknown = error;
-
-  while (current != null && !seen.has(current)) {
-    chain.push(current);
-    seen.add(current);
-    current = (current as { cause?: unknown })?.cause;
+  for (
+    let curr = error;
+    curr != null && !seen.has(curr);
+    curr = (curr as { cause?: unknown }).cause
+  ) {
+    chain.push(curr);
+    seen.add(curr);
   }
   return chain;
 }
@@ -186,24 +187,15 @@ export function serializeError(
 
   seen.add(error);
 
-  if (error instanceof AtomError) {
-    return {
-      name: error.name,
-      message: error.message,
-      code: error.code,
-      recoverable: error.recoverable,
-      stack: error.stack,
-      cause: serializeError(error.cause, seen),
-    };
-  }
-
   if (error instanceof Error) {
+    const err = error as Error & Record<string, unknown>;
     return {
-      name: error.name,
-      message: error.message,
-      stack: error.stack,
-      cause: serializeError((error as Error & { cause?: unknown }).cause, seen),
-      recoverable: true,
+      name: err.name,
+      message: err.message,
+      stack: err.stack,
+      cause: serializeError(err.cause, seen),
+      recoverable: typeof err.recoverable === 'boolean' ? err.recoverable : true,
+      code: typeof err.code === 'string' ? err.code : undefined,
     };
   }
 
@@ -243,16 +235,13 @@ export function wrapError(
  * @internal
  */
 function getErrorMetadata(error: unknown) {
-  for (const strategy of ERROR_STRATEGIES) {
-    if (strategy.test(error)) {
-      return strategy.fetch(error as never);
-    }
-  }
-
-  return {
-    name: 'Unexpected error',
-    message: String(error),
-    recoverable: true,
-    code: undefined,
-  };
+  const strategy = ERROR_STRATEGIES.find((s) => s.test(error));
+  return strategy
+    ? strategy.fetch(error as never)
+    : {
+        name: 'Unexpected error',
+        message: String(error),
+        recoverable: true,
+        code: undefined,
+      };
 }

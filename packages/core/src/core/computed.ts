@@ -67,76 +67,16 @@ import {
 } from './buffers';
 
 /**
- * Logic: State Transition Descriptors
- * Pure bitmask configurations for atomic state transitions within the engine.
- * @internal
- */
-const TRANSITION = {
-  TO_RECOMPUTING: {
-    clear: COMPUTED_STATE_FLAGS.FORCE_COMPUTE,
-    set: COMPUTED_STATE_FLAGS.RECOMPUTING,
-  },
-  TO_RESOLVED: {
-    clear: STATE_MASKS.LIFECYCLE_MASK | COMPUTED_STATE_FLAGS.RECOMPUTING,
-    set: COMPUTED_STATE_FLAGS.RESOLVED,
-  },
-  TO_PENDING: {
-    clear: STATE_MASKS.LIFECYCLE_MASK | COMPUTED_STATE_FLAGS.RECOMPUTING,
-    set: COMPUTED_STATE_FLAGS.PENDING,
-  },
-  TO_REJECTED: {
-    clear: STATE_MASKS.LIFECYCLE_MASK | COMPUTED_STATE_FLAGS.RECOMPUTING,
-    set: COMPUTED_STATE_FLAGS.REJECTED | COMPUTED_STATE_FLAGS.HAS_ERROR,
-  },
-} as const;
-
-/** @internal - Helper to apply state transitions. */
-const apply = (f: number, t: { readonly clear: number; readonly set: number }) =>
-  (f & ~t.clear) | t.set;
-
-/**
- * Logic: Result Resolution
- * Determines the final value or error to return based on the node's current
- * lifecycle flags and cached result.
- * @internal
- */
-export function resolveComputedResult<T>(
-  flags: number,
-  value: T,
-  error: Error | null,
-  defaultValue: T
-): Result<T, Error> {
-  if ((flags & COMPUTED_STATE_FLAGS.RESOLVED) !== 0) return Result.ok(value);
-
-  const hasDefault = defaultValue !== (NO_DEFAULT_VALUE as T);
-  const asyncState = flags & STATE_MASKS.ASYNC_UNRESOLVED_MASK;
-
-  // Logic: Synchronous/Resolved fallback
-  if (asyncState === 0) return Result.ok(value);
-
-  // Logic: Async Priority Handling
-  if (hasDefault) return Result.ok(defaultValue);
-
-  if (asyncState === COMPUTED_STATE_FLAGS.REJECTED) {
-    return Result.err(error ?? new Error('REJECTED without error'));
-  }
-
-  return Result.err(new ComputedError(ERROR_MESSAGES.COMPUTED_ASYNC_PENDING_NO_DEFAULT));
-}
-
-/**
  * Logic: Re-computation Heuristics
  * Validates whether a node requires re-evaluation based on its state flags
  * and the recursive dirty state of its dependency buffer.
  * @internal
  */
 export function shouldRecompute(flags: number, deps: DepBufferState): boolean {
-  const isAwaitingAsync = (flags & STATE_MASKS.ASYNC_UNRESOLVED_MASK) !== 0;
-
   return (
     (flags & STATE_MASKS.COMPUTED_RECOMPUTE_NEEDED_MASK) !== 0 ||
     isBufferDirty(deps) ||
-    (!isAwaitingAsync && deps.slots.size === 0)
+    ((flags & STATE_MASKS.ASYNC_UNRESOLVED_MASK) === 0 && deps.slots.size === 0)
   );
 }
 
@@ -178,13 +118,6 @@ export function collectErrorsRecursive(startNode: ReactiveNodeBase, stopOnFirst:
 
   walk(startNode);
   return collected;
-}
-
-function validateComputation(computation: unknown): Result<void, Error> {
-  if (typeof computation !== 'function') {
-    return Result.err(new ComputedError(ERROR_MESSAGES.COMPUTED_MUST_BE_FUNCTION));
-  }
-  return Result.ok(undefined);
 }
 
 /**
@@ -287,8 +220,9 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
   }
 
   #checkValueState(): Result<T, Error> {
-    const checkDisposed = this.#ensureNotDisposed();
-    if (Result.isErr(checkDisposed)) return checkDisposed;
+    if (this.isDisposed) {
+      return Result.err(new ComputedError(ERROR_MESSAGES.COMPUTED_DISPOSED));
+    }
 
     const flags = this.flags;
     if ((flags & STATE_MASKS.CYCLIC_OR_RECOMPUTING_MASK) !== 0) {
@@ -298,10 +232,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
 
     this.flags = flags | COMPUTED_STATE_FLAGS.CHECKING_DIRTY;
     try {
-      const deps = this._storage.deps!;
-      const needsRecompute = shouldRecompute(this.flags, deps);
-
-      if (needsRecompute) {
+      if (shouldRecompute(this.flags, this._storage.deps!)) {
         this.#recompute();
       } else {
         this.flags &= ~COMPUTED_STATE_FLAGS.DIRTY;
@@ -310,14 +241,18 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
       this.flags &= ~COMPUTED_STATE_FLAGS.CHECKING_DIRTY;
     }
 
-    return resolveComputedResult(this.flags, this.#value, this._error, this.#defaultValue);
-  }
+    const nextFlags = this.flags;
+    if ((nextFlags & COMPUTED_STATE_FLAGS.RESOLVED) !== 0) return Result.ok(this.#value);
 
-  #ensureNotDisposed(): Result<void, Error> {
-    if (this.isDisposed) {
-      return Result.err(new ComputedError(ERROR_MESSAGES.COMPUTED_DISPOSED));
+    const hasDefault = this.#defaultValue !== (NO_DEFAULT_VALUE as T);
+    if ((nextFlags & STATE_MASKS.ASYNC_UNRESOLVED_MASK) === 0) return Result.ok(this.#value);
+    if (hasDefault) return Result.ok(this.#defaultValue);
+
+    if ((nextFlags & COMPUTED_STATE_FLAGS.REJECTED) !== 0) {
+      return Result.err(this._error ?? new Error('REJECTED without error'));
     }
-    return Result.ok(undefined);
+
+    return Result.err(new ComputedError(ERROR_MESSAGES.COMPUTED_ASYNC_PENDING_NO_DEFAULT));
   }
 
   /**
@@ -401,17 +336,12 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
   }
 
   subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
+    const unsub = Result.unwrap(nodeSubscribe(this, listener));
     if (this.isDisposed) {
-      if (
-        typeof listener !== 'function' &&
-        (listener == null || typeof listener.execute !== 'function')
-      ) {
-        Result.unwrap(nodeSubscribe(this, listener));
-      }
+      unsub();
       return () => {};
     }
-
-    return Result.unwrap(nodeSubscribe(this, listener));
+    return unsub;
   }
 
   subscriberCount(): number {
@@ -461,7 +391,8 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
     // Constraint: Prevent re-entrant synchronous calls.
     if ((this.flags & COMPUTED_STATE_FLAGS.RECOMPUTING) !== 0) return;
 
-    this.flags = apply(this.flags, TRANSITION.TO_RECOMPUTING);
+    this.flags =
+      (this.flags & ~COMPUTED_STATE_FLAGS.FORCE_COMPUTE) | COMPUTED_STATE_FLAGS.RECOMPUTING;
     const prevDepth = trackingContext.stack.length;
 
     try {
@@ -504,7 +435,9 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
    * to discard results from computation cycles that are no longer valid.
    */
   #handleAsyncComputation(promise: Promise<T>): void {
-    this.flags = apply(this.flags, TRANSITION.TO_PENDING);
+    this.flags =
+      (this.flags & ~(STATE_MASKS.LIFECYCLE_MASK | COMPUTED_STATE_FLAGS.RECOMPUTING)) |
+      COMPUTED_STATE_FLAGS.PENDING;
     nodeNotifySubscribers(this, undefined, undefined);
 
     const sessionId = ++this.#sessionCounter;
@@ -530,7 +463,9 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
 
   #handleError(error: unknown, message: string, shouldThrow = false): void {
     nodeHandleError(this, error, ComputedError, message, this.#onError);
-    this.flags = apply(this.flags, TRANSITION.TO_REJECTED);
+    this.flags =
+      (this.flags & ~(STATE_MASKS.LIFECYCLE_MASK | COMPUTED_STATE_FLAGS.RECOMPUTING)) |
+      (COMPUTED_STATE_FLAGS.REJECTED | COMPUTED_STATE_FLAGS.HAS_ERROR);
     if (shouldThrow) throw this._error;
   }
 
@@ -547,7 +482,9 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
 
     this.#value = value;
     this._error = null;
-    this.flags = apply(this.flags, TRANSITION.TO_RESOLVED);
+    this.flags =
+      (flags & ~(STATE_MASKS.LIFECYCLE_MASK | COMPUTED_STATE_FLAGS.RECOMPUTING)) |
+      COMPUTED_STATE_FLAGS.RESOLVED;
   }
 
   /** @internal - Interface for the global scheduler. */
@@ -616,26 +553,10 @@ export function computed<T>(
   fn: () => T | Promise<T>,
   options: ComputedOptions<T> = {}
 ): ComputedAtom<T> {
-  return Result.unwrap(createComputedAtom(fn, options));
-}
-
-/**
- * Creates an asynchronous reactive computation.
- *
- * When to use:
- * - For logic involving fetch, database queries, or long-running tasks.
- *
- * Attention:
- * A `defaultValue` is mandatory for async computations to provide a valid
- * state while the Promise is PENDING.
- */
-function createComputedAtom<T>(
-  fn: () => T | Promise<T>,
-  options: ComputedOptions<T> = {}
-): Result<ComputedAtom<T>, Error> {
-  const validation = validateComputation(fn);
-  if (Result.isErr(validation)) return validation;
-  return Result.ok(new ComputedAtomImpl(fn, options));
+  if (typeof fn !== 'function') {
+    throw new ComputedError(ERROR_MESSAGES.COMPUTED_MUST_BE_FUNCTION);
+  }
+  return new ComputedAtomImpl(fn, options);
 }
 
 /**
