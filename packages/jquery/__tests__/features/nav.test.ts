@@ -444,18 +444,30 @@ describe('$.atomNav', () => {
   describe('Edge Cases', () => {
     it('should prevent infinite loops when onMount triggers navigation', async () => {
       harness.mockAjax({ data: 'Content' });
-      let count = 0;
+      let mountCount = 0;
+      let scheduledNavigation = Promise.resolve();
       let nav: AtomNav | undefined;
+
       nav = await harness.create({
         onMount: () => {
-          count++;
-          if (count === 1 && nav) nav.navigate('/');
+          mountCount++;
+          if (mountCount === 1) {
+            scheduledNavigation = new Promise<void>((resolve) => {
+              setTimeout(async () => {
+                await nav?.navigate('/');
+                resolve();
+              }, 0);
+            });
+          }
         },
       });
 
-      await nav.navigate('/');
+      const navigateSpy = vi.spyOn(nav, 'navigate');
+      await scheduledNavigation;
       await $.nextTick();
-      expect(count).toBe(1);
+
+      expect(navigateSpy).toHaveBeenCalledWith('/');
+      expect(mountCount).toBe(1);
     });
 
     it('should correctly intercept cross-page hash links', async () => {
