@@ -171,14 +171,23 @@ class BindingRegistry {
    * the auto-cleanup safety net is active before the first binding is applied.
    */
   #getOrCreateRecord(element: Element): BindingRecord {
-    if (
-      isAutoCleanupEnabled &&
-      !this.#autoCleanupScheduled &&
-      typeof document !== 'undefined' &&
-      document.body
-    ) {
-      this.#autoCleanupScheduled = true;
-      enableAutoCleanup(document.body);
+    if (isAutoCleanupEnabled && !this.#autoCleanupScheduled && typeof document !== 'undefined') {
+      if (document.body) {
+        this.#autoCleanupScheduled = true;
+        enableAutoCleanup(document.body);
+      } else {
+        const initCleanup = () => {
+          if (document.body && !this.#autoCleanupScheduled) {
+            this.#autoCleanupScheduled = true;
+            enableAutoCleanup(document.body);
+          }
+          if (this.#autoCleanupScheduled) {
+            document.removeEventListener('DOMContentLoaded', initCleanup);
+          }
+        };
+        document.addEventListener('DOMContentLoaded', initCleanup);
+        queueMicrotask(initCleanup);
+      }
     }
 
     const registryElement = element as RegistryElement;
