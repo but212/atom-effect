@@ -12,7 +12,7 @@ import { SlotBuffer } from '@but212/atom-effect-utils';
 import { SYSTEM_BINDING, SYSTEM_CORE, SYSTEM_MOUNT } from '@/constants';
 import { getSelector } from '@/utils';
 import { debug } from '@/utils/debug';
-import { getOrCreateRootObserver, rootObserversMap } from './observer';
+import { getOrCreateRootObserver } from './observer';
 
 /** Global flag determining if the automated MutationObserver safety net is active. */
 let isAutoCleanupEnabled = true;
