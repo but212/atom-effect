@@ -188,6 +188,19 @@ describe('Web Component Features', () => {
       await $.nextTick();
       expect(el.aej.slots('default').value[0]).toBe(child);
     });
+
+    it('should handle slot access safely after teardown when slotsAtom is disposed', () => {
+      const el = document.createElement('div');
+      const ctrl = $.useAtomComponent(el);
+      const s = ctrl.slots('default');
+
+      expect(s.value).toEqual([]);
+
+      ctrl.teardown();
+
+      expect(() => s.value).not.toThrow();
+      expect(s.value).toEqual([]);
+    });
   });
 
   describe('Declarative Features (Hydration & Styles)', () => {

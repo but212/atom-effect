@@ -52,11 +52,8 @@ export class ComponentState {
    * Deterministically releases all reactive resources, observers, and event listeners.
    */
   dispose() {
-    const len = this.effects.length;
-    for (let i = 0; i < len; i++) {
-      const e = this.effects.at(i);
-      if (e) e.dispose();
-    }
+    // biome-ignore lint/complexity/noForEach: SlotBuffer optimized iteration
+    this.effects.forEach((e) => e.dispose());
     this.effects.dispose();
 
     // 2. Attribute Reset

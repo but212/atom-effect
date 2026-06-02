@@ -354,11 +354,8 @@ export class RouterImpl implements Router {
     if (state.isDestroyed) return;
     this.#stateAtom.value = { ...state, isDestroyed: true };
     runRendererCleanups(this.#renderer);
-    const len = this.#cleanups.length;
-    for (let i = 0; i < len; i++) {
-      const fn = this.#cleanups.at(i);
-      if (fn) Result.tryCatch(fn);
-    }
+    // biome-ignore lint/complexity/noForEach: SlotBuffer optimized iteration
+    this.#cleanups.forEach((fn: () => void) => Result.tryCatch(fn));
     this.#cleanups.dispose();
   }
 }

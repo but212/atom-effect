@@ -147,7 +147,7 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
         const key = name === 'default' ? '' : name;
         let lens = state.slotLenses.get(key);
         if (!lens) {
-          lens = $.computed(() => state.slotsAtom?.value[key] ?? []) as unknown as WritableAtom<
+          lens = $.computed(() => state.slotsAtom?.value?.[key] ?? []) as unknown as WritableAtom<
             Node[]
           >;
           state.slotLenses.set(key, lens);
