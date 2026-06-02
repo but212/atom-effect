@@ -6,9 +6,8 @@
  * overhead for small atoms and lookup performance for complex computations.
  */
 
-import { SlotBuffer } from '@but212/atom-effect-utils';
 import { BUFFER_CONFIG, COMPUTED_STATE_FLAGS, IS_DEV, LOG_PREFIX } from '@/constants';
-import type { DepBufferState, Dependency, DependencyLink } from '@/types';
+import type { Dependency, DependencyLink, ReactiveDependencyTracker } from '@/types';
 import { trackEvaluationFailure } from '@/utils/debug';
 import { trackingContext, untracked } from './base';
 
@@ -18,25 +17,9 @@ export const BUFFER_FLAGS = {
   HAS_COMPUTEDS: 1 << 0,
 } as const;
 
-/**
- * Internal state for tracking dependencies.
- * Slots are used for ordered iteration; map is initialized lazily for fast lookups in large buffers.
- */
 /** @internal */
-export class DependencyBuffer implements DepBufferState {
-  slots = new SlotBuffer<DependencyLink>();
-  map: Map<Dependency, number> | null = null;
-  flags = BUFFER_FLAGS.NONE;
-}
-
-/** @internal */
-export function createDepBuffer(): DepBufferState {
-  return new DependencyBuffer();
-}
-
-/** @internal */
-export function prepareTracking(state: DepBufferState): void {
-  state.flags &= ~BUFFER_FLAGS.HAS_COMPUTEDS;
+export function prepareTracking(state: ReactiveDependencyTracker): void {
+  state._depFlags &= ~BUFFER_FLAGS.HAS_COMPUTEDS;
 }
 
 /**
@@ -49,8 +32,12 @@ export function prepareTracking(state: DepBufferState): void {
  * to align the "active" dependencies at the start of the buffer.
  */
 /** @internal */
-export function claimExisting(state: DepBufferState, dep: Dependency, trackIndex: number): boolean {
-  const slots = state.slots;
+export function claimExisting(
+  state: ReactiveDependencyTracker,
+  dep: Dependency,
+  trackIndex: number
+): boolean {
+  const slots = state._depSlots;
   if (slots.length <= trackIndex) return false;
 
   const current = slots.at(trackIndex);
@@ -81,13 +68,17 @@ export function claimExisting(state: DepBufferState, dep: Dependency, trackIndex
 /**
  * Searches for a dependency in the buffer, preferring the Map if available.
  */
-function findExistingIndex(state: DepBufferState, dep: Dependency, start: number): number {
-  if (state.map) {
-    const idx = state.map.get(dep);
+function findExistingIndex(
+  state: ReactiveDependencyTracker,
+  dep: Dependency,
+  start: number
+): number {
+  if (state._depMap) {
+    const idx = state._depMap.get(dep);
     return idx !== undefined && idx >= start ? idx : -1;
   }
 
-  const slots = state.slots;
+  const slots = state._depSlots;
   for (let i = start + 1, len = slots.length; i < len; i++) {
     const link = slots.at(i);
     if (link?.node === dep && link.unsub) return i;
@@ -100,21 +91,25 @@ function findExistingIndex(state: DepBufferState, dep: Dependency, start: number
  * occupant to the end of the buffer for potential reuse or later truncation.
  */
 /** @internal */
-export function insertNew(state: DepBufferState, trackIdx: number, link: DependencyLink): void {
-  const occupant = state.slots.at(trackIdx);
+export function insertNew(
+  state: ReactiveDependencyTracker,
+  trackIdx: number,
+  link: DependencyLink
+): void {
+  const occupant = state._depSlots.at(trackIdx);
   depBufferSetAt(state, trackIdx, link);
   if (occupant !== null) depBufferPush(state, occupant);
 }
 
 /** @internal */
 export function depBufferSetAt(
-  state: DepBufferState,
+  state: ReactiveDependencyTracker,
   index: number,
   item: DependencyLink | null
 ): void {
-  const old = state.slots.at(index);
+  const old = state._depSlots.at(index);
   if (old === item) return;
-  state.slots.setAt(index, item);
+  state._depSlots.setAt(index, item);
 
   if (old) {
     mapUnregister(state, old.node, index);
@@ -125,8 +120,8 @@ export function depBufferSetAt(
 }
 
 /** @internal */
-export function depBufferPush(state: DepBufferState, item: DependencyLink): number {
-  const idx = state.slots.push(item);
+export function depBufferPush(state: ReactiveDependencyTracker, item: DependencyLink): number {
+  const idx = state._depSlots.push(item);
   mapRegister(state, item, idx);
   return idx;
 }
@@ -135,25 +130,25 @@ export function depBufferPush(state: DepBufferState, item: DependencyLink): numb
  * Initializes the lookup map only when the dependency count hits MAP_THRESHOLD.
  * This saves memory for the vast majority of small/simple reactive nodes.
  */
-function ensureMap(state: DepBufferState): void {
-  if (state.map || state.slots.length <= BUFFER_CONFIG.MAP_THRESHOLD) return;
+function ensureMap(state: ReactiveDependencyTracker): void {
+  if (state._depMap || state._depSlots.length <= BUFFER_CONFIG.MAP_THRESHOLD) return;
 
   const map = new Map<Dependency, number>();
-  const slots = state.slots;
+  const slots = state._depSlots;
   for (let i = 0; i < slots.length; i++) {
     const link = slots.at(i);
     if (link?.unsub) map.set(link.node, i);
   }
-  state.map = map;
+  state._depMap = map;
 }
 
 /**
  * Registers a dependency link in the lookup map.
  */
-function mapRegister(state: DepBufferState, link: DependencyLink, index: number): void {
+function mapRegister(state: ReactiveDependencyTracker, link: DependencyLink, index: number): void {
   if (!link.unsub) return;
   ensureMap(state);
-  state.map?.set(link.node, index);
+  state._depMap?.set(link.node, index);
 }
 
 /**
@@ -161,15 +156,15 @@ function mapRegister(state: DepBufferState, link: DependencyLink, index: number)
  * Searches backwards from limitIndex - 1 to find another valid slot.
  */
 function mapUnregister(
-  state: DepBufferState,
+  state: ReactiveDependencyTracker,
   node: Dependency,
   currentIndex: number,
   limitIndex = currentIndex
 ): void {
-  const map = state.map;
+  const map = state._depMap;
   if (!map || map.get(node) !== currentIndex) return;
 
-  const slots = state.slots;
+  const slots = state._depSlots;
   for (let i = limitIndex - 1; i >= 0; i--) {
     const link = slots.at(i);
     if (link?.node === node && link.unsub) {
@@ -184,13 +179,13 @@ function mapUnregister(
  * Updates the map indices when two dependency slots are swapped.
  */
 function mapSwap(
-  state: DepBufferState,
+  state: ReactiveDependencyTracker,
   depA: Dependency,
   idxA: number,
   linkB: DependencyLink | null,
   idxB: number
 ): void {
-  const map = state.map;
+  const map = state._depMap;
   if (!map) return;
 
   map.set(depA, idxA);
@@ -206,7 +201,7 @@ function mapSwap(
  *
  * @internal
  */
-export function isBufferDirty(state: DepBufferState): boolean {
+export function isBufferDirty(state: ReactiveDependencyTracker): boolean {
   return checkDirty(state, true);
 }
 
@@ -215,12 +210,12 @@ export function isBufferDirty(state: DepBufferState): boolean {
  *
  * @internal
  */
-export function isBufferShallowDirty(state: DepBufferState): boolean {
+export function isBufferShallowDirty(state: ReactiveDependencyTracker): boolean {
   return checkDirty(state, false);
 }
 
-function checkDirty(state: DepBufferState, deep: boolean): boolean {
-  const slots = state.slots;
+function checkDirty(state: ReactiveDependencyTracker, deep: boolean): boolean {
+  const slots = state._depSlots;
   const len = slots.length;
   if (len === 0) return false;
 
@@ -262,8 +257,8 @@ function checkDirty(state: DepBufferState, deep: boolean): boolean {
  *
  * @internal
  */
-export function depBufferTruncateFrom(state: DepBufferState, index: number): void {
-  const slots = state.slots;
+export function depBufferTruncateFrom(state: ReactiveDependencyTracker, index: number): void {
+  const slots = state._depSlots;
   const len = slots.length;
   if (index >= len) return;
 
@@ -284,8 +279,8 @@ export function depBufferTruncateFrom(state: DepBufferState, index: number): voi
 
   // Memory cleanup: If the buffer shrinks below the threshold, discard the map
   // to free up memory on long-lived atoms.
-  if (state.map && index <= BUFFER_CONFIG.MAP_THRESHOLD) {
-    state.map = null;
+  if (state._depMap && index <= BUFFER_CONFIG.MAP_THRESHOLD) {
+    state._depMap = null;
   }
 }
 
@@ -294,7 +289,7 @@ export function depBufferTruncateFrom(state: DepBufferState, index: number): voi
  *
  * @internal
  */
-export function disposeAll(state: DepBufferState): void {
+export function disposeAll(state: ReactiveDependencyTracker): void {
   depBufferTruncateFrom(state, 0);
-  state.flags &= ~BUFFER_FLAGS.HAS_COMPUTEDS;
+  state._depFlags &= ~BUFFER_FLAGS.HAS_COMPUTEDS;
 }

@@ -12,8 +12,7 @@
  * to ensure high-performance propagation through the dependency graph.
  */
 
-import type { SlotBuffer } from '@but212/atom-effect-utils';
-import { Result } from '@but212/atom-effect-utils';
+import { Result, SlotBuffer } from '@but212/atom-effect-utils';
 import {
   AsyncState,
   BRAND,
@@ -47,24 +46,19 @@ import type {
   AsyncStateType,
   ComputedAtom,
   ComputedOptions,
-  DepBufferState,
   Dependency,
   DependencyId,
+  DependencyLink,
   MergedDependencyValue,
+  ReactiveDependencyTracker,
   ReactiveNode,
   ReactiveNodeBase,
   Subscriber,
-  Subscription,
+  SubscriberTarget,
 } from '@/types';
 import { ComputedError, debug, generateId, mergeAtomValues, NO_DEFAULT_VALUE } from '@/utils';
 import { isPromise } from '@/utils/type-guards';
-import {
-  BUFFER_FLAGS,
-  createDepBuffer,
-  disposeAll,
-  isBufferDirty,
-  prepareTracking,
-} from './buffers';
+import { BUFFER_FLAGS, disposeAll, isBufferDirty, prepareTracking } from './buffers';
 
 /**
  * Logic: Re-computation Heuristics
@@ -72,11 +66,11 @@ import {
  * and the recursive dirty state of its dependency buffer.
  * @internal
  */
-export function shouldRecompute(flags: number, deps: DepBufferState): boolean {
+export function shouldRecompute(flags: number, tracker: ReactiveDependencyTracker): boolean {
   return (
     (flags & STATE_MASKS.COMPUTED_RECOMPUTE_NEEDED_MASK) !== 0 ||
-    isBufferDirty(deps) ||
-    ((flags & STATE_MASKS.ASYNC_UNRESOLVED_MASK) === 0 && deps.slots.size === 0)
+    isBufferDirty(tracker) ||
+    ((flags & STATE_MASKS.ASYNC_UNRESOLVED_MASK) === 0 && tracker._depSlots.size === 0)
   );
 }
 
@@ -101,9 +95,9 @@ export function collectErrorsRecursive(startNode: ReactiveNodeBase, stopOnFirst:
       if (stopOnFirst) return true;
     }
 
-    const deps = node._storage.deps;
-    if (deps && (deps.flags & BUFFER_FLAGS.HAS_COMPUTEDS) !== 0) {
-      const slots = deps.slots;
+    const tracker = node as unknown as Partial<ReactiveDependencyTracker>;
+    if (tracker._depSlots && tracker._depFlags !== undefined && (tracker._depFlags & BUFFER_FLAGS.HAS_COMPUTEDS)) {
+      const slots = tracker._depSlots;
       const len = slots.length;
       for (let i = 0; i < len; i++) {
         const link = slots.at(i);
@@ -133,7 +127,9 @@ export function collectErrorsRecursive(startNode: ReactiveNodeBase, stopOnFirst:
  *
  * @internal
  */
-class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T> {
+class ComputedAtomImpl<T>
+  implements ComputedAtom<T>, Subscriber, ReactiveNode<T>, ReactiveDependencyTracker
+{
   // Logic: Engine-exposed state (Public fields for monomorphic performance)
   public flags: number =
     COMPUTED_STATE_FLAGS.IS_COMPUTED | COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE;
@@ -146,13 +142,10 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
   public _k: typeof KIND.Obj = KIND.Obj;
   public readonly id: DependencyId = generateId() & SMI_MAX;
 
-  public _storage: {
-    slots: SlotBuffer<Subscription<T>> | null;
-    deps: DepBufferState | null;
-  } = {
-    slots: null,
-    deps: createDepBuffer(),
-  };
+  public _slots: SlotBuffer<SubscriberTarget<T>> | null = null;
+  public _depSlots: SlotBuffer<DependencyLink>;
+  public _depMap: Map<Dependency, number> | null = null;
+  public _depFlags: number = BUFFER_FLAGS.NONE;
 
   /** @internal */
   public readonly [BRAND] = BrandFlags.Atom | BrandFlags.Computed;
@@ -169,6 +162,8 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
   #notifyCallback: () => void;
 
   constructor(computation: () => T | Promise<T>, options: ComputedOptions<T> = {}) {
+    this._depSlots = new SlotBuffer<DependencyLink>();
+
     this.#value = undefined as T;
 
     this.#equal = options.equal ?? DEFAULT_EQUAL;
@@ -235,8 +230,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
 
     this.flags = flags | COMPUTED_STATE_FLAGS.CHECKING_DIRTY;
     try {
-      const deps = this._storage.deps;
-      if (deps && shouldRecompute(this.flags, deps)) {
+      if (shouldRecompute(this.flags, this)) {
         this.#recompute();
       } else {
         this.flags &= ~COMPUTED_STATE_FLAGS.DIRTY;
@@ -302,8 +296,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
     trackingContext.current?.addDependency(this);
 
     if ((this.flags & STATE_MASKS.ERROR_MASK) !== 0) return true;
-    const deps = this._storage.deps;
-    if (!deps || !(deps.flags & BUFFER_FLAGS.HAS_COMPUTEDS)) return false;
+    if (!(this._depFlags & BUFFER_FLAGS.HAS_COMPUTEDS)) return false;
 
     return untracked(() => collectErrorsRecursive(this, true).length > 0);
   }
@@ -318,8 +311,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
   get errors(): readonly Error[] {
     trackingContext.current?.addDependency(this);
 
-    const deps = this._storage.deps;
-    if (!deps || !(deps.flags & BUFFER_FLAGS.HAS_COMPUTEDS)) {
+    if (!(this._depFlags & BUFFER_FLAGS.HAS_COMPUTEDS)) {
       return this._error ? Object.freeze([this._error]) : EMPTY_ERROR_ARRAY;
     }
 
@@ -370,11 +362,9 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
     const flags = this.flags;
     if ((flags & COMPUTED_STATE_FLAGS.DISPOSED) !== 0) return;
 
-    if (this._storage.deps) {
-      disposeAll(this._storage.deps);
-    }
+    disposeAll(this);
 
-    this._storage.slots?.clear();
+    this._slots?.clear();
     this.flags =
       COMPUTED_STATE_FLAGS.DISPOSED | COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE;
 
@@ -405,9 +395,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
 
     try {
       nodeStartTracking(this);
-      if (this._storage.deps) {
-        prepareTracking(this._storage.deps);
-      }
+      prepareTracking(this);
 
       let val: T | Promise<T> | undefined;
       let hasError = false;

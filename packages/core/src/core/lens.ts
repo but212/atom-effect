@@ -14,6 +14,7 @@
  * by blacklisting sensitive keys like `__proto__`.
  */
 
+import type { SlotBuffer } from '@but212/atom-effect-utils';
 import { shallowEqual } from '@but212/atom-effect-utils';
 import {
   ATOM_STATE_FLAGS,
@@ -27,7 +28,6 @@ import {
 } from '@/constants';
 import { batch } from '@/index';
 import type {
-  DepBufferState,
   Equal,
   MergedDependencyValue,
   ReactiveNode,
@@ -217,7 +217,7 @@ export function getPathValue(source: unknown, parts: string[]): unknown {
  *
  * @internal
  */
-abstract class BaseLens implements ReactiveNodeBase {
+abstract class BaseLens<T = unknown> implements ReactiveNodeBase {
   flags = 0;
   version = 0;
   _lastSeenEpoch = EPOCH_CONSTANTS.UNINITIALIZED;
@@ -227,7 +227,7 @@ abstract class BaseLens implements ReactiveNodeBase {
   _error: Error | null = null;
   _k = KIND.Obj;
   readonly id = generateId() & SMI_MAX;
-  _storage: { slots: null; deps: DepBufferState | null } = { slots: null, deps: null };
+  _slots: SlotBuffer<SubscriberTarget<T>> | null = null;
 
   get isDisposed() {
     return (this.flags & ATOM_STATE_FLAGS.DISPOSED) !== 0;
@@ -244,8 +244,8 @@ abstract class BaseLens implements ReactiveNodeBase {
 }
 
 class LensImpl<T extends object, P extends string>
-  extends BaseLens
-  implements WritableAtom<PathValue<T, P>>, ReactiveNode<void>
+  extends BaseLens<PathValue<T, P>>
+  implements WritableAtom<PathValue<T, P>>, ReactiveNode<PathValue<T, P>>
 {
   #root: WritableAtom<T>;
   #path: P;
@@ -392,8 +392,8 @@ export function atomLens<T extends object, P extends Paths<T>>(
  * @internal
  */
 class MergedLensImpl<L extends WritableAtom<unknown>[]>
-  extends BaseLens
-  implements WritableAtom<MergedDependencyValue<L>>, ReactiveNode<void>
+  extends BaseLens<MergedDependencyValue<L>>
+  implements WritableAtom<MergedDependencyValue<L>>, ReactiveNode<MergedDependencyValue<L>>
 {
   #lenses: L;
   #listeners = new Set<SubscriberTarget<MergedDependencyValue<L>>>();
