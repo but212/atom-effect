@@ -162,6 +162,8 @@ export function nodeTrackDependency(
   dep: Dependency,
   notifyCallback: () => void
 ): void {
+  if (!tracker._depSlots) return;
+
   const trackEpoch = tracker._trackEpoch;
 
   if (dep._lastSeenEpoch === trackEpoch) return;

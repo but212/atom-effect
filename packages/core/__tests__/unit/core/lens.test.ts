@@ -353,7 +353,7 @@ describe('Lens System', () => {
       expect(merged.subscriberCount()).toBe(1);
 
       // Setting merged value
-      (merged as any).value = { x: 3, y: 4 };
+      merged.value = [3, 4] as unknown as [number, number];
 
       mergedUnsub();
       expect(merged.subscriberCount()).toBe(0);

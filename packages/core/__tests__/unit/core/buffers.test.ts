@@ -3,10 +3,12 @@
  * @description High-density verification of core business logic (reuse, lifecycle, logical size).
  */
 
+import { SlotBuffer } from '@but212/atom-effect-utils';
 import { describe, expect, it, vi } from 'vitest';
 import { COMPUTED_STATE_FLAGS } from '@/constants';
 import { createDependencyLink } from '@/core/base';
 import {
+  BUFFER_FLAGS,
   claimExisting,
   depBufferPush,
   depBufferSetAt,
@@ -14,9 +16,7 @@ import {
   disposeAll,
   insertNew,
   isBufferDirty,
-  BUFFER_FLAGS
 } from '@/core/buffers';
-import { SlotBuffer } from '@but212/atom-effect-utils';
 import type { Dependency } from '@/index';
 import type { DependencyLink, ReactiveDependencyTracker } from '@/types';
 
@@ -34,7 +34,7 @@ function createDepBuffer(): ReactiveDependencyTracker {
     _error: null,
     isRejected: false,
     id: 1,
-    _slots: null
+    _slots: null,
   };
 }
 
