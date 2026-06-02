@@ -56,7 +56,11 @@ export class RootObserver {
         for (const m of mutations) {
           for (const node of m.removedNodes) {
             for (const cb of this.#removalCallbacks) {
-              cb(node);
+              try {
+                cb(node);
+              } catch (error) {
+                console.error('Error in onNodeRemoved callback:', error);
+              }
             }
           }
         }
@@ -68,12 +72,24 @@ export class RootObserver {
           for (const node of m.addedNodes) {
             if (node instanceof Element) {
               for (const record of this.#additionCallbacks) {
-                if (node.matches(record.selector)) {
-                  record.callback(node);
-                }
-                const children = node.querySelectorAll(record.selector);
-                for (const child of children) {
-                  record.callback(child);
+                try {
+                  if (node.matches(record.selector)) {
+                    try {
+                      record.callback(node);
+                    } catch (error) {
+                      console.error('Error in onNodeAdded callback:', error);
+                    }
+                  }
+                  const children = node.querySelectorAll(record.selector);
+                  for (const child of children) {
+                    try {
+                      record.callback(child);
+                    } catch (error) {
+                      console.error('Error in onNodeAdded callback:', error);
+                    }
+                  }
+                } catch (error) {
+                  console.error('Error querying or processing onNodeAdded:', error);
                 }
               }
             }

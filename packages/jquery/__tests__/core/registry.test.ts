@@ -174,5 +174,43 @@ describe('Binding Registry', () => {
       await $.nextTick();
       expect($el.text()).toBe('leaked');
     });
+
+    it('should not disconnect active node addition observers when disableAutoCleanup is called', async () => {
+      const root = document.createElement('div');
+      document.body.appendChild(root);
+
+      // 1. Initialize auto-cleanup on root
+      $.initAEJ({ autoCleanup: { root } });
+
+      // 2. Register an unrelated addition observer on the same root
+      const { getOrCreateRootObserver } = await import('@/core/observer');
+      const observer = getOrCreateRootObserver(root);
+      const addedList: Element[] = [];
+      const unsub = observer.onNodeAdded('.test-node', (el) => {
+        addedList.push(el);
+      });
+
+      // 3. Disable auto-cleanup globally (this should only unsubscribe auto-cleanup)
+      $.initAEJ({ autoCleanup: false });
+
+      // 4. Verify that the RootObserver is still alive in the map
+      const { rootObserversMap } = await import('@/core/observer');
+      expect(rootObserversMap.has(root)).toBe(true);
+
+      // 5. Verify that addition callback still fires when target element is added
+      const target = document.createElement('div');
+      target.className = 'test-node';
+      root.appendChild(target);
+
+      await vi.waitFor(() => {
+        return addedList.length > 0;
+      });
+
+      expect(addedList).toContain(target);
+
+      // Cleanup
+      unsub();
+      expect(rootObserversMap.has(root)).toBe(false);
+    });
   });
 });

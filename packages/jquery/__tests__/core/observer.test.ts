@@ -110,4 +110,63 @@ describe('RootObserver Engine', () => {
       expect(rootObserversMap.has(root)).toBe(false);
     });
   });
+
+  describe('Error Isolation', () => {
+    it('should isolate errors in onNodeAdded callbacks, allowing others to execute', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const observer = getOrCreateRootObserver(root);
+      const executedList: string[] = [];
+
+      const unsub1 = observer.onNodeAdded('.test-target', () => {
+        throw new Error('first callback crash');
+      });
+      const unsub2 = observer.onNodeAdded('.test-target', () => {
+        executedList.push('second');
+      });
+
+      const child = document.createElement('div');
+      child.className = 'test-target';
+      root.appendChild(child);
+
+      await vi.waitFor(() => {
+        return executedList.length > 0;
+      });
+
+      expect(executedList).toContain('second');
+      expect(consoleSpy).toHaveBeenCalled();
+
+      unsub1();
+      unsub2();
+      consoleSpy.mockRestore();
+    });
+
+    it('should isolate errors in onNodeRemoved callbacks, allowing others to execute', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const observer = getOrCreateRootObserver(root);
+      const executedList: string[] = [];
+
+      const child = document.createElement('div');
+      root.appendChild(child);
+
+      const unsub1 = observer.onNodeRemoved(() => {
+        throw new Error('first removal crash');
+      });
+      const unsub2 = observer.onNodeRemoved(() => {
+        executedList.push('second');
+      });
+
+      child.remove();
+
+      await vi.waitFor(() => {
+        return executedList.length > 0;
+      });
+
+      expect(executedList).toContain('second');
+      expect(consoleSpy).toHaveBeenCalled();
+
+      unsub1();
+      unsub2();
+      consoleSpy.mockRestore();
+    });
+  });
 });

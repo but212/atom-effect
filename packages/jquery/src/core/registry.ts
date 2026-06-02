@@ -404,10 +404,6 @@ export function disableAutoCleanup(): void {
     unsub();
   }
   cleanupUnsubsMap.clear();
-  for (const observer of rootObserversMap.values()) {
-    observer.disconnect();
-  }
-  rootObserversMap.clear();
   registry.setAutoCleanupScheduled(false);
 }
 
