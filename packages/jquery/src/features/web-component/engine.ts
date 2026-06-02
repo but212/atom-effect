@@ -270,6 +270,6 @@ if (typeof window !== 'undefined') {
   (window as unknown as { __AEJ_INTERNAL__: DebugPortal }).__AEJ_INTERNAL__ = {
     nodeStateMap,
     sheetCache,
-    version: '0.33.0',
+    version: '0.33.1',
   };
 }

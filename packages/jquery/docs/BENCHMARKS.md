@@ -6,12 +6,12 @@ Benchmarking suite for `@but212/atom-effect-jquery` to measure DOM binding perfo
 
 | Category | Key Metric | Value | Technical Context |
 | ---------- | ---------- | ----- | ------- |
-| **Text Binding** | Update (100el × 50) | 1,020.3 ops/sec | Direct text node synchronization |
-| **Class Binding** | Toggle (100el × 100) | 1,010.3 ops/sec | Class list manipulation |
-| **List Render** | Reconciliation (100 items) | 578.3 ops/sec | Keyed 3-pass reconciliation |
-| **Input (DOM→Atom)** | 100 events | 1,870.6 ops/sec | Direct event-to-atom synchronization |
-| **Todo App** | Full workflow | 20,327.3 ops/sec | Batch-optimized workflow execution |
-| **Dashboard** | Fan-in chain | 3,649.1 ops/sec | Multi-level propagation chain |
+| **Text Binding** | Update (100el × 50) | 980.8 ops/sec | Direct text node synchronization |
+| **Class Binding** | Toggle (100el × 100) | 992.1 ops/sec | Class list manipulation |
+| **List Render** | Reconciliation (100 items) | 2,435.0 ops/sec | Keyed 3-pass reconciliation |
+| **Input (DOM→Atom)** | 100 events | 1,963.6 ops/sec | Direct event-to-atom synchronization |
+| **Todo App** | Full workflow | 19,055.4 ops/sec | Batch-optimized workflow execution |
+| **Dashboard** | Fan-in chain | 1,885.1 ops/sec | Multi-level propagation chain |
 
 ---
 
@@ -74,8 +74,8 @@ Located in `__benchmarks__/macro/`, these test combined DOM scenarios:
 
 ## Latest Results
 
-**Version**: v0.33.0
-**Last Updated**: 2026-05-19
+**Version**: v0.33.1
+**Last Updated**: 2026-06-02
 **Environment**:
 
 - **Node.js**: v22.x
@@ -90,13 +90,13 @@ Located in `__benchmarks__/macro/`, these test combined DOM scenarios:
 
 | Benchmark | Result | Technical Context |
 | ---------- | ------ | -------- |
-| atomText update (100el × 50) | 1,020.3 ops/sec | Frequency for 5,000 total text node updates |
-| atomClass toggle (100el × 100) | 1,010.3 ops/sec | Frequency for 10,000 total class list toggles |
-| atomList reconciliation (100 items) | 578.3 ops/sec | Frequency for 100-item reconciliation cycles |
-| atomVal DOM→Atom (100 events) | 1,870.6 ops/sec | Frequency for 100 sequential input events |
-| Todo full workflow | 20,327.3 ops/sec | Frequency for combined CRUD operations |
-| Dashboard fan-in | 3,649.1 ops/sec | Frequency for multi-level fan-in propagation |
-| atomForm O(1) Scaling | 1.13M ops/sec | Validates consistent performance across form sizes |
+| atomText update (100el × 50) | 980.8 ops/sec | Frequency for 5,000 total text node updates |
+| atomClass toggle (100el × 100) | 992.1 ops/sec | Frequency for 10,000 total class list toggles |
+| atomList reconciliation (100 items) | 2,435.0 ops/sec | Frequency for 100-item reconciliation cycles |
+| atomVal DOM→Atom (100 events) | 1,963.6 ops/sec | Frequency for 100 sequential input events |
+| Todo full workflow | 19,055.4 ops/sec | Frequency for combined CRUD operations |
+| Dashboard fan-in | 1,885.1 ops/sec | Frequency for multi-level fan-in propagation |
+| atomForm O(1) Scaling | 406.9K ops/sec | Validates consistent performance across form sizes |
 
 ## Contributing Benchmarks
 

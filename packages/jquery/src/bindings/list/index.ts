@@ -175,7 +175,7 @@ function normalizeEvents<T>(events: ListOptions<T>['events']): EventBinding[] {
  */
 function setupEvents<T>(ctx: ListContext<T>, $container: JQuery, bindings: EventBinding[]): void {
   const containerEl = $container[0];
-  if (!containerEl || containerEl.nodeType !== 1) return;
+  if (containerEl?.nodeType !== 1) return;
 
   for (const { type, selector, callback } of bindings) {
     $container.on(
