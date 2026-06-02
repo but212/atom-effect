@@ -16,6 +16,7 @@ import { type Disposable, isAtom } from '@but212/atom-effect';
 import type { SlotBuffer } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { SYSTEM_COMPONENT } from '@/constants';
+import { getOrCreateRootObserver } from '@/core/observer';
 import { HYDRATION_MARKER } from '@/core/symbols';
 import type { ReactiveValue, ReadonlyAtom } from '@/types';
 import { flattenToFormData } from '@/utils';
@@ -208,24 +209,12 @@ export const SetupFeatures = {
       apply(node);
     }
 
-    // Phase 2: Live monitoring for future nodes
-    const obs = new MutationObserver((mutations) => {
-      for (const m of mutations) {
-        for (const node of m.addedNodes) {
-          if (node instanceof Element) {
-            if (node.matches(selector)) apply(node);
-            const children = node.querySelectorAll(selector);
-            for (const child of children) {
-              apply(child);
-            }
-          }
-        }
-      }
-    });
+    // Phase 2: Live monitoring for future nodes via RootObserver
+    const observer = getOrCreateRootObserver(root);
+    const unsubscribe = observer.onNodeAdded(selector, apply);
 
-    obs.observe(root, { childList: true, subtree: true });
-    // Disposal: The observer is disconnected when the component effect scope is disposed.
-    effects.push({ dispose: () => obs.disconnect() });
+    // Disposal: The node addition subscription is unregistered when the component effect scope is disposed.
+    effects.push({ dispose: unsubscribe });
   },
 
   /**

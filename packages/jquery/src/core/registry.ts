@@ -12,6 +12,7 @@ import { SlotBuffer } from '@but212/atom-effect-utils';
 import { SYSTEM_BINDING, SYSTEM_CORE, SYSTEM_MOUNT } from '@/constants';
 import { getSelector } from '@/utils';
 import { debug } from '@/utils/debug';
+import { getOrCreateRootObserver } from './observer';
 
 /** Global flag determining if the automated MutationObserver safety net is active. */
 let isAutoCleanupEnabled = true;
@@ -364,8 +365,8 @@ class BindingRegistry {
 /** The global instance of the BindingRegistry. */
 export const registry = new BindingRegistry();
 
-/** Mapping of root nodes to their associated MutationObservers for auto-cleanup. */
-const observerMap = new Map<Node, MutationObserver>();
+/** Registration record mapping roots to their cleanup function un-subscriptions. */
+const cleanupUnsubsMap = new Map<Node, () => void>();
 
 /**
  * Logic: DOM Safety Net
@@ -373,29 +374,25 @@ const observerMap = new Map<Node, MutationObserver>();
  * that bypass jQuery's internal hooks.
  */
 export function enableAutoCleanup(root: Element | ShadowRoot | DocumentFragment): void {
-  if (observerMap.has(root)) return;
+  if (cleanupUnsubsMap.has(root)) return;
 
-  const observer = new MutationObserver((mutations) => {
-    for (const m of mutations) {
-      for (const node of m.removedNodes) {
-        // Condition: Clean up only elements that are genuinely disconnected
-        // from the document and are not marked for preservation.
-        if (node.nodeType !== 1 || (node as Element).isConnected) {
-          continue;
-        }
-
-        const element = node as Element;
-        if (registry.isKept(element) || registry.isIgnored(element)) {
-          continue;
-        }
-
-        registry.cleanupTree(element);
-      }
+  const observer = getOrCreateRootObserver(root);
+  const unsub = observer.onNodeRemoved((node) => {
+    // Condition: Clean up only elements that are genuinely disconnected
+    // from the document and are not marked for preservation.
+    if (node.nodeType !== 1 || (node as Element).isConnected) {
+      return;
     }
+
+    const element = node as Element;
+    if (registry.isKept(element) || registry.isIgnored(element)) {
+      return;
+    }
+
+    registry.cleanupTree(element);
   });
 
-  observer.observe(root, { childList: true, subtree: true });
-  observerMap.set(root, observer);
+  cleanupUnsubsMap.set(root, unsub);
 }
 
 /**
@@ -403,10 +400,10 @@ export function enableAutoCleanup(root: Element | ShadowRoot | DocumentFragment)
  * @internal
  */
 export function disableAutoCleanup(): void {
-  for (const observer of observerMap.values()) {
-    observer.disconnect();
+  for (const unsub of cleanupUnsubsMap.values()) {
+    unsub();
   }
-  observerMap.clear();
+  cleanupUnsubsMap.clear();
   registry.setAutoCleanupScheduled(false);
 }
 
@@ -416,9 +413,9 @@ export function disableAutoCleanup(): void {
  * prevent memory leaks when components are permanently removed.
  */
 export function disableAutoCleanupFor(root: Node): void {
-  const observer = observerMap.get(root);
-  if (observer) {
-    observer.disconnect();
-    observerMap.delete(root);
+  const unsub = cleanupUnsubsMap.get(root);
+  if (unsub) {
+    unsub();
+    cleanupUnsubsMap.delete(root);
   }
 }
